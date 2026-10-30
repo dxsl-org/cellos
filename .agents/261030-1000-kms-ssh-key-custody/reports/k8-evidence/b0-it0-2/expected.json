@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "nonce": "1ca0ab933eaad354",
+  "keys": {
+    "ka16": {
+      "fp": "SHA256:E4gWmBqPcktcVe38t3hYIE3dyMCFiU8ab/+foHZJiwc",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBd+DVefLIeLPTm4sZWCokeponFnp97YtHf46upGU3Y0 kssh-ka16",
+      "blob_prefix": "aa4875895848cc29",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "kl4": {
+      "fp": "SHA256:O4qNasc03DGJyg7tYr3bdtIOMqp3KbThzol9ns3ZMyI",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDm8+Omf2gw1NJnE/kc702146PWeKvX/h70Yyd0ALkDl kssh-kl4",
+      "blob_prefix": "93752d41a28411ef",
+      "blob_len": 274,
+      "rounds": 4,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "kp0": {
+      "fp": "SHA256:6IWx0ZRhoSfE8dIfjD2qV94aiwBWcB5iRjhEYbSpR7Q",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFdEhEJZ/0HbneRKtchZAzdxaS/rdL13eeezGA+6dyvE kssh-kp0",
+      "blob_prefix": "dc64bb16c57db76a",
+      "blob_len": 234,
+      "rounds": 0,
+      "cipher": "none",
+      "kdf": "none",
+      "custody": "plain"
+    },
+    "kr1": {
+      "fp": "SHA256:ZrprjbS0+0j57kUO/nKiRahr/nqe4+mFNwP+Gl/TcRM",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMJHh1gIZp5SEX5ndDEZJQomc4gDSo+pcVuX25BXtT4G kssh-kr1",
+      "blob_prefix": "020ee3b2bc159f9b",
+      "blob_len": 274,
+      "rounds": 1,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "kr64": {
+      "fp": "SHA256:TkL76zJAyvsCe5H8o9QXnGJbTFip78MsAHF8ADu3ZF0",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGv2gvZ5Z/hzndZCW7Bg+McOWVKbsN8lGMut0Zi/b8ih kssh-kr64",
+      "blob_prefix": "96b454317789603b",
+      "blob_len": 274,
+      "rounds": 64,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "bad-aes128": {
+      "fp": "SHA256:mhxmcC+nwi5TJBphYVYd8Yc/yh9kd+lqersBUXaq2rw",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG5sKROSXF5c8DgPDHnPlvwKtTt7GQ9Pc3dq49sfPfvv kssh-bad-aes128",
+      "blob_prefix": "66ebfd7c3d18bb1c",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes128-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "bad-chacha": {
+      "fp": "SHA256:tw19RLFj1oHFbmBB0x8pW4gOZA3sX0D2KlkpdjdUMW4",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM8xF0Xk9mEnP44d6Zoxif3V1jvz8n1TYa/2Dyr2moFN kssh-bad-chacha",
+      "blob_prefix": "1dd275f250c7ed77",
+      "blob_len": 301,
+      "rounds": 16,
+      "cipher": "chacha20-poly1305@openssh.com",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    }
+  },
+  "calibrate": true,
+  "keyb": {
+    "fp": "SHA256:ARn4nzFXtT7ivpc8KDY3EgDBj2xG65SALA8i9QXXEkk",
+    "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAteF4tl1s/Qn9+k5jeTPQevzR4u/l0wD/vKJPoeEpjU kssh-kb"
+  },
+  "raw": {
+    "sha256": "36f6fc411dcf09dbd492de7de1287458c52b12b4f66234ef29c3919095594d6c",
+    "len": 4096
+  }
+}

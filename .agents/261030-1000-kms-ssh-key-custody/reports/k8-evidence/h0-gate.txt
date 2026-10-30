@@ -1,0 +1,36 @@
+H0 gate final run: 2026-10-30T05:11:42Z HEAD=c513e60a81d8be41e45264a137e678556697cd77
+== judge_tests rc=0 :: python3 scripts/test_kssh_judge.py
+Ran 100 tests in 24.501s
+OK
+== judge_selftest rc=0 :: python3 scripts/kssh_judge.py selftest
+== cellos_sign rc=0 :: python3 scripts/test_cellos_sign.py
+Ran 71 tests in 0.313s
+OK
+== assemble rc=0 :: python3 scripts/test_assemble_x86_image.py
+Ran 40 tests in 0.446s
+OK
+== canonical_drive rc=0 :: python3 scripts/test_phase10_canonical_drive.py
+Ran 27 tests in 3.866s
+OK
+== candidate_import rc=0 :: python3 scripts/test_phase10_candidate_import.py
+Ran 18 tests in 0.122s
+OK
+== bash_n rc=0 :: bash -n scripts/qemu-phase09-ssh-test.sh scripts/phase09_ssh_fixture.sh
+== sign_policy rc=0 :: python3 scripts/sign-policy.py --out /tmp/k8-h0/POLICY.BIN
+4ee6f63ea8211b6c05c70d2fe8d18114e556692412e81ca596a836ebcb56c579  /tmp/k8-h0/POL
+2169
+== cellbox_default rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p app-cellbox
+test result: ok. 226 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+== cellbox_kssh_faults rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p app-cellbox --features kssh-faults
+test result: ok. 239 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+== cellbox_p09_kssh rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p app-cellbox --features p09-faults,kssh-faults
+test result: ok. 239 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+== admin rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p app-kms-ssh-admin
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+== kms_feature rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p service-kms --features ssh-dev-custody
+test result: ok. 122 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 19.44s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+== kms_default rc=0 :: cargo test --offline --locked --target x86_64-unknown-linux-gnu -p service-kms
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+== ceiling rc=0 :: python3 scripts/cellbox-ceiling-diff.py --baseline-ref 2f0bc06599808be3ab0e4b3df0d79ea08c5317aa

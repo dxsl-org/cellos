@@ -1,0 +1,10 @@
+C-host control (H0), host OpenSSH_9.6p1 client vs the loopback fixture OpenSSH_9.9p2 (cellbox-p09-sshd:5bdd6545..., `start --kssh`), LogLevel VERBOSE.
+Source files: c-host.out (client side), sshd.log (docker logs), chost.sh (the exact commands). Strings fixed for kssh_judge.py SSHD_PATTERNS:
+connection start        Connection from 172.17.0.1 port N on 172.17.0.2 port {22|2222|2223} rdomain ""
+accepted publickey      Accepted key ED25519 SHA256:FP found at /fixture/authorized_keys_{main|b}:1 ; Postponed publickey for tester from H port N ssh2 [preauth] ; Accepted publickey for tester from H port N ssh2: ED25519 SHA256:FP ; User child is on pid ; Starting session: command for tester from H port N id 0 ; Received disconnect ... ; Disconnected from user tester H port N
+probe-ok (no signature) Accepted key ... found at ... ; Postponed publickey for tester from H port N ssh2 [preauth] ; Connection closed by authenticating user tester H port N [preauth]   (no `Accepted publickey`)
+probe-rejected          Failed publickey for tester from H port N ssh2: ED25519 SHA256:FP ; Connection closed by authenticating user tester H port N [preauth]   (key not authorized on that server)
+closed (no auth)        kex_exchange_identification: Connection closed by remote host ; Connection closed by H port N
+Results: c1 key A main port accepted (rc 0); c2 key B main port refused (255, Permission denied (publickey,password)); c3 probe of A.pub without signature = probe-ok shape; c4 key B on port 2223 accepted; c5 key A on port 2223 refused (Failed publickey); c6 TCP connect/close = closed; c7 unauthorized probe on 2223 = Failed publickey.
+Note: through Docker the guest/host source address is always the docker gateway 172.17.0.1.
+Real guest runs (b0-it0-2/-3, b0-if-1/-2) produced exactly these forms; the judge classified every guest connection with them.

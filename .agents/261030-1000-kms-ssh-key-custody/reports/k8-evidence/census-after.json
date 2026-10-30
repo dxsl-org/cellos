@@ -1,0 +1,1887 @@
+{
+ "paths": 470,
+ "method": "protected census: {path: {size, sha256}} (same as common.protected_paths)",
+ "present": {
+  "/home/dmin/cellos/build/cellos-repeat-x86.iso": {
+   "size": 23476224,
+   "sha256": "15c90cd9783e6fb3bb4aa3b814e9f823a667689edaa97d4c53e3600c4bff34d7"
+  },
+  "/home/dmin/cellos/build/cellos-repeat-x86.qcow2": {
+   "size": 16777216,
+   "sha256": "581befef13312334168bd42e2e490a6ea3f77b9824ab67ca8f49d1a32d954861"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64-desktop-fixture.iso": {
+   "size": 23607296,
+   "sha256": "6af523ec0277d91b9a5daaca14655b2ec2983854f158944db64cbb6bf0d0c91a"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64-desktop-wip.qcow2": {
+   "size": 16973824,
+   "sha256": "9aa29105101e8b0464ba39338967b7442bbe572d54891742d455f5f438478381"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64-desktop.qcow2": {
+   "size": 16777216,
+   "sha256": "0f662dfb6e6b8e0a446d5f945ad0579b4837a2d710d49b3a4d249270a414d676"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64-embedded.qcow2": {
+   "size": 11730944,
+   "sha256": "4b964a1dc9d55b97964c0373030e8ffeb33a593222d73954f23d47200972c012"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64-test.qcow2": {
+   "size": 12779520,
+   "sha256": "9ff58ab150456e77d67beec136e47d8b147c5d5748b8003208708a7f5805ca55"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64.iso": {
+   "size": 23476224,
+   "sha256": "b9a08fcb9050b5dd5c89cafa059c5ba20820f8bec4957fdc38d93cbf9d585b76"
+  },
+  "/home/dmin/cellos/build/cellos-x86_64.qcow2": {
+   "size": 16777216,
+   "sha256": "1fd9ac0dee70f5edd6d042fa33f0b9b4f2fe32c5ee66b14ea21da8816f85ea72"
+  },
+  "/home/dmin/cellos/build/desktop-fixture-isoroot/boot/kernel.elf": {
+   "size": 19736128,
+   "sha256": "fc9d2414516a08ea78150fe10a6900b58ea5451c8dbfd7436d0d84abfbbfe9be"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-overlap/image.iso": {
+   "size": 27000832,
+   "sha256": "4d98f2215d3dab0fbb6d02f7f30cd8d4c01f19488baf2f8de4bb9d97a82cc43f"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "15401d70a67e9c0fcdb4e7ee7c28d0de76efa92d55dc7cd6f3647fb6cc33a614"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-overlap/kernel.elf": {
+   "size": 23128688,
+   "sha256": "15401d70a67e9c0fcdb4e7ee7c28d0de76efa92d55dc7cd6f3647fb6cc33a614"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-retention/image.iso": {
+   "size": 27000832,
+   "sha256": "0676fb6fe38b1674dcbe26ddfa212eb3e6f210b225cadb2644d143fb5ff648ba"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "940a82e66be4b238886ec2abc14a39b4410aa08b4b556401cf0a1037d6532d9c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-retention/kernel.elf": {
+   "size": 23128688,
+   "sha256": "940a82e66be4b238886ec2abc14a39b4410aa08b4b556401cf0a1037d6532d9c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-yield/image.iso": {
+   "size": 27000832,
+   "sha256": "1d3666f9fd101794c1a059df54369093bcec104a22b2429f8eda3ba2fdfd76f8"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "7d7b8ee04673125a2f6f94438ab6e1d0474685f66e647bc51c79e08e931013a3"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r2-20261014/g1-yield/kernel.elf": {
+   "size": 23128688,
+   "sha256": "7d7b8ee04673125a2f6f94438ab6e1d0474685f66e647bc51c79e08e931013a3"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-overlap/image.iso": {
+   "size": 27000832,
+   "sha256": "536e45abb91717a236198dca9e4132b4d508f1aa1686ecfe0f865e71902bdd92"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "15401d70a67e9c0fcdb4e7ee7c28d0de76efa92d55dc7cd6f3647fb6cc33a614"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-overlap/kernel.elf": {
+   "size": 23128688,
+   "sha256": "15401d70a67e9c0fcdb4e7ee7c28d0de76efa92d55dc7cd6f3647fb6cc33a614"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-retention/image.iso": {
+   "size": 27000832,
+   "sha256": "66275f58d2b770b08dfd0aac5fb6b38d9a7b6c4752b422696744fe8064ede0cd"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "940a82e66be4b238886ec2abc14a39b4410aa08b4b556401cf0a1037d6532d9c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-retention/kernel.elf": {
+   "size": 23128688,
+   "sha256": "940a82e66be4b238886ec2abc14a39b4410aa08b4b556401cf0a1037d6532d9c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-yield/image.iso": {
+   "size": 27000832,
+   "sha256": "0288a5816b3df149fbb80b1eada763d0f71282c80f7eed2c44ce6116a95f6ab6"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23128688,
+   "sha256": "7d7b8ee04673125a2f6f94438ab6e1d0474685f66e647bc51c79e08e931013a3"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r3-20261014/g1-yield/kernel.elf": {
+   "size": 23128688,
+   "sha256": "7d7b8ee04673125a2f6f94438ab6e1d0474685f66e647bc51c79e08e931013a3"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/image.iso": {
+   "size": 27019264,
+   "sha256": "cbfa073c94d22eaf2631c16c543be70f174e76e6f16da4e5c5309612310d468a"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23147864,
+   "sha256": "6e34d0d8cc1f8cb726deffc3a695b4ed2b978ec307d82872fb90f7642a122e32"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-overlap/kernel.elf": {
+   "size": 23147864,
+   "sha256": "6e34d0d8cc1f8cb726deffc3a695b4ed2b978ec307d82872fb90f7642a122e32"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/image.iso": {
+   "size": 27019264,
+   "sha256": "efc8b6a08ee732f50fdb6fd14010aa034d6975b7059cf651999d2b8beaf63c1c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23147864,
+   "sha256": "85571b10472606d6033afd0f77f7c6da35517bd554047c20f7a2b0eecb000128"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-retention/kernel.elf": {
+   "size": 23147864,
+   "sha256": "85571b10472606d6033afd0f77f7c6da35517bd554047c20f7a2b0eecb000128"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/image.iso": {
+   "size": 27019264,
+   "sha256": "accce3372c83a0fcc8f43160b5629f25be3011119c62602b01ddd0cc1e241d45"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23147864,
+   "sha256": "43e84b1a14b54903cd6371fc59c21fce5c6032f3ac6b36c166c8ec72ad221831"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r4-20261014/g1-yield/kernel.elf": {
+   "size": 23147864,
+   "sha256": "43e84b1a14b54903cd6371fc59c21fce5c6032f3ac6b36c166c8ec72ad221831"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-overlap/image.iso": {
+   "size": 27021312,
+   "sha256": "59abe48e6fb8bfd52bce84e6a16519039c7badf6574faa7d229e60938aa4c302"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23148816,
+   "sha256": "1c34417ee35e5a4df890a06fa45915da8414c09b7eed1db7902430cdafd8361e"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-overlap/kernel.elf": {
+   "size": 23148816,
+   "sha256": "1c34417ee35e5a4df890a06fa45915da8414c09b7eed1db7902430cdafd8361e"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-retention/image.iso": {
+   "size": 27021312,
+   "sha256": "1eed6b3e1a66e44d56a92ee269497665c189b2bf2fdbcd3edb7dc3af181ef368"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23148816,
+   "sha256": "d3ac1e99cc5daae3932c55b5422cc30efe192b4362e556d542ad2358db243ae0"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-retention/kernel.elf": {
+   "size": 23148816,
+   "sha256": "d3ac1e99cc5daae3932c55b5422cc30efe192b4362e556d542ad2358db243ae0"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-yield/image.iso": {
+   "size": 27021312,
+   "sha256": "090624c4d3b4bd5991908324c3fb90b09703aea86502450e0569b214eae00fdb"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23148816,
+   "sha256": "5e1c1d3295e003562af00695f717d3a703ff93734e7b244d80db7e7be9b45705"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r5-20261014/g1-yield/kernel.elf": {
+   "size": 23148816,
+   "sha256": "5e1c1d3295e003562af00695f717d3a703ff93734e7b244d80db7e7be9b45705"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-overlap/image.iso": {
+   "size": 27021312,
+   "sha256": "eb96798c70b7b9d7f995d2e6711eb76cb49441deac2b2d86d25765fcd8a5ad59"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23148744,
+   "sha256": "87e716d670c72a204a00a235ec11f193f2eac502c60ef22c3d5b8f55574d3448"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-overlap/kernel.elf": {
+   "size": 23148744,
+   "sha256": "87e716d670c72a204a00a235ec11f193f2eac502c60ef22c3d5b8f55574d3448"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-retention/image.iso": {
+   "size": 27021312,
+   "sha256": "fe86ae0ffb52ba0269a56be64972e041fd6e878e58821d5417886af44bbe4ae2"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23148744,
+   "sha256": "25fc3b915135dc0f392dadd1881e76acdfaefd857fc34bdfb60b2a507f7e64a8"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-retention/kernel.elf": {
+   "size": 23148744,
+   "sha256": "25fc3b915135dc0f392dadd1881e76acdfaefd857fc34bdfb60b2a507f7e64a8"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-yield/image.iso": {
+   "size": 27021312,
+   "sha256": "03d7353757b4b9596fbbdba433ddb2dd1a7c9237f4780e9af4bf6f6eba420d06"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23148744,
+   "sha256": "240b242ca69fd07be598b5fcae2f4a1fe136a4f5a74477feb36903e8e8a47802"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r6-20261014/g1-yield/kernel.elf": {
+   "size": 23148744,
+   "sha256": "240b242ca69fd07be598b5fcae2f4a1fe136a4f5a74477feb36903e8e8a47802"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-overlap/image.iso": {
+   "size": 27021312,
+   "sha256": "cd0023a4fa834475054e19f295d5171db91f06c04fde89f271a0fba5ce6b6269"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "d04b417f002ea7bba75cdbf64784af8ebb97a8d8bb684694897743eb888fe55d"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-overlap/kernel.elf": {
+   "size": 23148968,
+   "sha256": "d04b417f002ea7bba75cdbf64784af8ebb97a8d8bb684694897743eb888fe55d"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-retention/image.iso": {
+   "size": 27021312,
+   "sha256": "1a4f33b5be019a13b36a0088af326edc06b77e10ee0c8c7b29e2687aee14d83a"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "660beafc635474dd4e711690c170de955c3ab36fef410dfdd2f44493785a141c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-retention/kernel.elf": {
+   "size": 23148968,
+   "sha256": "660beafc635474dd4e711690c170de955c3ab36fef410dfdd2f44493785a141c"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-yield/image.iso": {
+   "size": 27021312,
+   "sha256": "5b1c78b8dc061a48646f433c42bfd0f0e3dd360e2a32001efa18c340c3b056db"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "62b55a907b2684545584cc6f7cf40228543f673013b23e74562d4b9a88685796"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r7-20261014/g1-yield/kernel.elf": {
+   "size": 23148968,
+   "sha256": "62b55a907b2684545584cc6f7cf40228543f673013b23e74562d4b9a88685796"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-overlap/image.iso": {
+   "size": 27021312,
+   "sha256": "00947fd70bdb0af11522109547824b655053ea7ebc4ed749ae2253a2c973cf33"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-overlap/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "1f7f5deaa0954e3b498a296cadbfe8c4bbd9552f6c5abd3696a19d3955faa264"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-overlap/kernel.elf": {
+   "size": 23148968,
+   "sha256": "1f7f5deaa0954e3b498a296cadbfe8c4bbd9552f6c5abd3696a19d3955faa264"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-retention/image.iso": {
+   "size": 27021312,
+   "sha256": "91736d37f45f3a0477e3b5bd1bbddff60f2cb1010f9d803478bdf00cebdf7892"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-retention/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "7aa7add5a35f680a97762a0a76e68c92d86a659204ca656e9114b1f610b8e8ba"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-retention/kernel.elf": {
+   "size": 23148968,
+   "sha256": "7aa7add5a35f680a97762a0a76e68c92d86a659204ca656e9114b1f610b8e8ba"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-yield/image.iso": {
+   "size": 27021312,
+   "sha256": "ac2211f68b1fbf6fae80b7937bc9792de398df9a708bc0a8c7d2f308118da37f"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-yield/iso-root/boot/kernel.elf": {
+   "size": 23148968,
+   "sha256": "aa2383b474a12a12737e8ccea55ef431569c50064b61653079aa33191d60a37e"
+  },
+  "/home/dmin/cellos/build/g1-intel-private-r8-20261014/g1-yield/kernel.elf": {
+   "size": 23148968,
+   "sha256": "aa2383b474a12a12737e8ccea55ef431569c50064b61653079aa33191d60a37e"
+  },
+  "/home/dmin/cellos/build/p01-blocker-closure/1/image.iso": {
+   "size": 12525568,
+   "sha256": "13483d9dc5a6a8c8c50e2531369092001904752bdebbc9c3c305e2781cb953b1"
+  },
+  "/home/dmin/cellos/build/p01-blocker-closure/1/iso-root/boot/kernel.elf": {
+   "size": 8653480,
+   "sha256": "f37a46cae13861de958cc089a10993631a4d447a3ca551a91ebc6041208c8cc3"
+  },
+  "/home/dmin/cellos/build/p01-blocker-closure/1/kernel.elf": {
+   "size": 8653480,
+   "sha256": "f37a46cae13861de958cc089a10993631a4d447a3ca551a91ebc6041208c8cc3"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/0/image.iso": {
+   "size": 12615680,
+   "sha256": "5c82165f26a2ed8ee03e7c8f59b822bad03b9a3d78cb0c8ceefd55762f5e961c"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/0/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "233ac6bbec1f0e2457bb3413ec086b3491d56f2b196d2141a20eecc42f70f21b"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/0/kernel.elf": {
+   "size": 8743712,
+   "sha256": "233ac6bbec1f0e2457bb3413ec086b3491d56f2b196d2141a20eecc42f70f21b"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/1/image.iso": {
+   "size": 12615680,
+   "sha256": "802da016d24015d0e5df9017b57807be6bd080ce90b9d523977aff51f695024e"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/1/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "d64d3c071e893cd27f4e179e7c5a841edc320268141f374a9ee82ba082030ec5"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/1/kernel.elf": {
+   "size": 8743712,
+   "sha256": "d64d3c071e893cd27f4e179e7c5a841edc320268141f374a9ee82ba082030ec5"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/4/image.iso": {
+   "size": 12615680,
+   "sha256": "33e67b20db6837dc5691858567a132c97b7ea2ea542929043f66e5ceb42de109"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/4/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "de4c26e06ba185497ad0f6c6b6d1d2b80e3b8a9807c453e70fa6c154b2c425ec"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/4/kernel.elf": {
+   "size": 8743712,
+   "sha256": "de4c26e06ba185497ad0f6c6b6d1d2b80e3b8a9807c453e70fa6c154b2c425ec"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/8/image.iso": {
+   "size": 12615680,
+   "sha256": "60b802a32f6ef53ed985c39f0cf98c46a1a2987100a7d2da232ea702e7defa76"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/8/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "03b8a0ded1d8653674fd11b75d5d314f39bc2d298c10107bb980fbcd2748dc60"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/8/kernel.elf": {
+   "size": 8743712,
+   "sha256": "03b8a0ded1d8653674fd11b75d5d314f39bc2d298c10107bb980fbcd2748dc60"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/denied/image.iso": {
+   "size": 12615680,
+   "sha256": "a4ab26f2558f544b9045f4c5772b8f793277a6ca50feeeed59b9c8ea72581d5c"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/denied/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "c1ba7d7322ebbeb56224935207c61cb76d20885f895104f9c891552e4270b7cd"
+  },
+  "/home/dmin/cellos/build/p01-budget-measurement/denied/kernel.elf": {
+   "size": 8743712,
+   "sha256": "c1ba7d7322ebbeb56224935207c61cb76d20885f895104f9c891552e4270b7cd"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/0/image.iso": {
+   "size": 13606912,
+   "sha256": "f3e732bcd1287c661eca4f910ebe247fb3b29a1e984485348482cca08826d188"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/0/iso-root/boot/kernel.elf": {
+   "size": 9735536,
+   "sha256": "b6f4b4cac1fb77ac7bdcf0cbc3c01ed77987d3969fc28e8ea2c5593aa73c32fa"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/0/kernel.elf": {
+   "size": 9735536,
+   "sha256": "b6f4b4cac1fb77ac7bdcf0cbc3c01ed77987d3969fc28e8ea2c5593aa73c32fa"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/1/image.iso": {
+   "size": 13606912,
+   "sha256": "a7fe81188f561976fc40440d9ca4fe2621b0008d78ad43b8ee6ef704f6079c5c"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/1/iso-root/boot/kernel.elf": {
+   "size": 9735536,
+   "sha256": "606d2eeacb993387d51a8068fe72cf25825c72e2a567669b1642e50fe016b583"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/1/kernel.elf": {
+   "size": 9735536,
+   "sha256": "606d2eeacb993387d51a8068fe72cf25825c72e2a567669b1642e50fe016b583"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/4/image.iso": {
+   "size": 13606912,
+   "sha256": "10321b7168b45b8d0d61a512e0601774c85d25bf9dfa2d1e8b421c54a0182333"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/4/iso-root/boot/kernel.elf": {
+   "size": 9735536,
+   "sha256": "2c8f61316d116ae44cc2faf575becb3dfa5bc6727c6ea132b3efa3d29271a39f"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/4/kernel.elf": {
+   "size": 9735536,
+   "sha256": "2c8f61316d116ae44cc2faf575becb3dfa5bc6727c6ea132b3efa3d29271a39f"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/8/image.iso": {
+   "size": 13606912,
+   "sha256": "d52c7581cd69be9f83b7eed1923d35accdf47a786097ac47b97a5684026844df"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/8/iso-root/boot/kernel.elf": {
+   "size": 9735536,
+   "sha256": "78a1238368e985c612e179401f0ded73bda4fc48779fe1f040dec98f0e1d7483"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/8/kernel.elf": {
+   "size": 9735536,
+   "sha256": "78a1238368e985c612e179401f0ded73bda4fc48779fe1f040dec98f0e1d7483"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/denied/image.iso": {
+   "size": 13606912,
+   "sha256": "ee97fbcf17df9486d36448cec6c968b08629d97de9251b179abbe42dfd4fbcae"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/denied/iso-root/boot/kernel.elf": {
+   "size": 9735536,
+   "sha256": "ec328295fbc159ce432b971c0957168fa6c0e8e5f80681c6fd6cf2ce0aee097b"
+  },
+  "/home/dmin/cellos/build/p01-budget-stage-ownership/denied/kernel.elf": {
+   "size": 9735536,
+   "sha256": "ec328295fbc159ce432b971c0957168fa6c0e8e5f80681c6fd6cf2ce0aee097b"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/0/image.iso": {
+   "size": 18604032,
+   "sha256": "c4435f1e3a4d6f47013f30e3e43f59ab30d8119891defb12fd931eca1b8f9808"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/0/iso-root/boot/kernel.elf": {
+   "size": 14732648,
+   "sha256": "0bcd8be4c1c5414e7ae6b65f4eea6e8123e4c49daf142d117ca6fc2e8623d462"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/0/kernel.elf": {
+   "size": 14732648,
+   "sha256": "0bcd8be4c1c5414e7ae6b65f4eea6e8123e4c49daf142d117ca6fc2e8623d462"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/1/image.iso": {
+   "size": 18604032,
+   "sha256": "0ce33e3998cd69300e6ac05dafaa947edf04e5dc60d65de8bb7ed98c9432d3dc"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/1/iso-root/boot/kernel.elf": {
+   "size": 14732648,
+   "sha256": "60d46b95e0f776186e9389339b582dc3dd5e613c72b5c75694fb5c2d2452ca43"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/1/kernel.elf": {
+   "size": 14732648,
+   "sha256": "60d46b95e0f776186e9389339b582dc3dd5e613c72b5c75694fb5c2d2452ca43"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/4/image.iso": {
+   "size": 18604032,
+   "sha256": "c597d620e0a55d0d9699a76e5f5cbc100746ae3865cb6fcb45bbf3f17abf559e"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/4/iso-root/boot/kernel.elf": {
+   "size": 14732648,
+   "sha256": "f723d0d35aa22aa0058e50bcf2bdea1d1cf4597371e9ede47a467cc36eb61b79"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/4/kernel.elf": {
+   "size": 14732648,
+   "sha256": "f723d0d35aa22aa0058e50bcf2bdea1d1cf4597371e9ede47a467cc36eb61b79"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/8/image.iso": {
+   "size": 18604032,
+   "sha256": "3866cb671933f409b74436e0ddf6c5f1cbcd03b664947ed8cd8ba21dcec15082"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/8/iso-root/boot/kernel.elf": {
+   "size": 14732648,
+   "sha256": "54a2fe70605ff4c3e71c7a0ebe204a2b80ce06f199d17bfc7a9c70b3bc273954"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/8/kernel.elf": {
+   "size": 14732648,
+   "sha256": "54a2fe70605ff4c3e71c7a0ebe204a2b80ce06f199d17bfc7a9c70b3bc273954"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/denied/image.iso": {
+   "size": 18604032,
+   "sha256": "879b733b8953a2ba61dbfb1a2baae74ef760de6f01bfab6284201a151212c418"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/denied/iso-root/boot/kernel.elf": {
+   "size": 14732648,
+   "sha256": "9267527d21c528722e9d743562fc0c43a1eead384346308e75ddb52ee333c4a2"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology/denied/kernel.elf": {
+   "size": 14732648,
+   "sha256": "9267527d21c528722e9d743562fc0c43a1eead384346308e75ddb52ee333c4a2"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/0/image.iso": {
+   "size": 19394560,
+   "sha256": "a693724ff69ef727ec286b54d77dfe729836e240732f987ca38fd7353e127695"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/0/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "75a0014e386eb5186867563f0f30046d36ead444e94dcb075706b40ae4f2d01a"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/0/kernel.elf": {
+   "size": 15523464,
+   "sha256": "75a0014e386eb5186867563f0f30046d36ead444e94dcb075706b40ae4f2d01a"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/1/image.iso": {
+   "size": 19394560,
+   "sha256": "c33d8d183894a2cf3250326f0c47ca06087c5999c2799e1effd5be75c4066aeb"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/1/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "f277949ff633549449f33ece6f2fa0b2e6c1db115798f887ff5f0869a2f3846e"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/1/kernel.elf": {
+   "size": 15523464,
+   "sha256": "f277949ff633549449f33ece6f2fa0b2e6c1db115798f887ff5f0869a2f3846e"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/4/image.iso": {
+   "size": 19394560,
+   "sha256": "ec836efc2e0a67e804b67cad8bcadb42e36b83f50ddcd64e046102cd300f11c5"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/4/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "736d315c8eb8d67db3241c2dc125cb59cfc94f668e98cd47b38418d02fc87d74"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/4/kernel.elf": {
+   "size": 15523464,
+   "sha256": "736d315c8eb8d67db3241c2dc125cb59cfc94f668e98cd47b38418d02fc87d74"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/8/image.iso": {
+   "size": 19394560,
+   "sha256": "68317f0cb0c0e13c6eca41682418444085d295aa79b5369c6370d57bb1e58869"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/8/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "c6fcea95f1ba96f363d5f2f1f1186d6a66fd78fd108227aeb5734df9a431da3a"
+  },
+  "/home/dmin/cellos/build/p01-capacity-topology-runs/8/kernel.elf": {
+   "size": 15523464,
+   "sha256": "c6fcea95f1ba96f363d5f2f1f1186d6a66fd78fd108227aeb5734df9a431da3a"
+  },
+  "/home/dmin/cellos/build/p01-closure/0/image.iso": {
+   "size": 11370496,
+   "sha256": "b02b2652232721789f5df85fb9ff6a0092a772c5a799928f18d4f251b42ed7b8"
+  },
+  "/home/dmin/cellos/build/p01-closure/0/iso-root/boot/kernel.elf": {
+   "size": 7499400,
+   "sha256": "1a607dd0274bb14f0483576bef06b5fd984870a86bcf476111c1aa3ba1cc1ad7"
+  },
+  "/home/dmin/cellos/build/p01-closure/0/kernel.elf": {
+   "size": 7499400,
+   "sha256": "1a607dd0274bb14f0483576bef06b5fd984870a86bcf476111c1aa3ba1cc1ad7"
+  },
+  "/home/dmin/cellos/build/p01-closure/1/image.iso": {
+   "size": 11370496,
+   "sha256": "59d259786978fdc4d55338e0cfb49dcbbdffd85b032b06e16286f60f0ee20026"
+  },
+  "/home/dmin/cellos/build/p01-closure/1/iso-root/boot/kernel.elf": {
+   "size": 7499400,
+   "sha256": "4145d9323a5bbc815902595e7cce5b547ce6875428f25a8ba6730955f983faf8"
+  },
+  "/home/dmin/cellos/build/p01-closure/1/kernel.elf": {
+   "size": 7499400,
+   "sha256": "4145d9323a5bbc815902595e7cce5b547ce6875428f25a8ba6730955f983faf8"
+  },
+  "/home/dmin/cellos/build/p01-closure/4/image.iso": {
+   "size": 11370496,
+   "sha256": "949e6d3c501bb9d40bbc697f38527894e1bb7d9695408af014667cde1304a989"
+  },
+  "/home/dmin/cellos/build/p01-closure/4/iso-root/boot/kernel.elf": {
+   "size": 7499400,
+   "sha256": "576627019d361c548b3c38b2d43efcb89f24240c8bf374508617d931878eb4ec"
+  },
+  "/home/dmin/cellos/build/p01-closure/4/kernel.elf": {
+   "size": 7499400,
+   "sha256": "576627019d361c548b3c38b2d43efcb89f24240c8bf374508617d931878eb4ec"
+  },
+  "/home/dmin/cellos/build/p01-closure/8/image.iso": {
+   "size": 11370496,
+   "sha256": "707a5587459a55f0f6a441bb69a28bb76d6e81e063538fc0c109fb60e9f59160"
+  },
+  "/home/dmin/cellos/build/p01-closure/8/iso-root/boot/kernel.elf": {
+   "size": 7499400,
+   "sha256": "4fbac8580007651d166afa56f9e0827355915467317a95a09efbf221b9092056"
+  },
+  "/home/dmin/cellos/build/p01-closure/8/kernel.elf": {
+   "size": 7499400,
+   "sha256": "4fbac8580007651d166afa56f9e0827355915467317a95a09efbf221b9092056"
+  },
+  "/home/dmin/cellos/build/p01-closure/denied/image.iso": {
+   "size": 11370496,
+   "sha256": "05f72032fe1c0ada8cb2aa9a7005d4da8e033fd97248032ae500a1521ecfb30a"
+  },
+  "/home/dmin/cellos/build/p01-closure/denied/iso-root/boot/kernel.elf": {
+   "size": 7499400,
+   "sha256": "88001e9c25e9eb46c2e050d1bbf3d9c411c253127879b43663f3c7b6692deaac"
+  },
+  "/home/dmin/cellos/build/p01-closure/denied/kernel.elf": {
+   "size": 7499400,
+   "sha256": "88001e9c25e9eb46c2e050d1bbf3d9c411c253127879b43663f3c7b6692deaac"
+  },
+  "/home/dmin/cellos/build/p01-configured-x86-iso-root/boot/kernel.elf": {
+   "size": 7271424,
+   "sha256": "c7004993664feab4891d05f2c4e37e6517bd61f897e0f87e4705d8bf2b06f1e1"
+  },
+  "/home/dmin/cellos/build/p01-configured-x86.iso": {
+   "size": 11143168,
+   "sha256": "d45de50bcc24751c50c832a44a4073bd2fb3b2a5043b7c69f49608920c1f6fda"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-contention/0/image.iso": {
+   "size": 11137024,
+   "sha256": "e357f1f718d3881e71ebad88f24ff375b95aa91afb1ed0c3b1cc9101594527db"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-contention/0/iso-root/boot/kernel.elf": {
+   "size": 7264760,
+   "sha256": "ef9ace2ec89d987c7570da13d5b5f4b07fbfaf960f72f9aac5c204457fd1e1ca"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-contention/0/kernel.elf": {
+   "size": 7264760,
+   "sha256": "ef9ace2ec89d987c7570da13d5b5f4b07fbfaf960f72f9aac5c204457fd1e1ca"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-full/0/image.iso": {
+   "size": 11137024,
+   "sha256": "3e45912b999f2fdd101e7acbcd2d498fb24a56d9d5c2f7da5d0527323d3e1678"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-full/0/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "b586b848452728e6a739fea9c9cf63a3b6556a867165b7aa7c246fceb39b7db9"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-full/0/kernel.elf": {
+   "size": 7264664,
+   "sha256": "b586b848452728e6a739fea9c9cf63a3b6556a867165b7aa7c246fceb39b7db9"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-late/0/image.iso": {
+   "size": 11137024,
+   "sha256": "7f8e5765ce8ca71804b3d807bafe32e8c5c0ebd1253c44fcc9264c9608c881df"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-late/0/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "2732d8afa2dc9564aa21ee2f5baa17d2c6df7105dfa1bc6e7c6c30e344b17319"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-late/0/kernel.elf": {
+   "size": 7264664,
+   "sha256": "2732d8afa2dc9564aa21ee2f5baa17d2c6df7105dfa1bc6e7c6c30e344b17319"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-unready/0/image.iso": {
+   "size": 11137024,
+   "sha256": "975f1fb935bb52363d947993ed463ac996d7b26e2838ec0774efb52b363af178"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-unready/0/iso-root/boot/kernel.elf": {
+   "size": 7264760,
+   "sha256": "c2a464d2fbf28d56e5398ad67903f386a93dc5bf99788566e1d5bff1990f22c9"
+  },
+  "/home/dmin/cellos/build/p01-final-fault-unready/0/kernel.elf": {
+   "size": 7264760,
+   "sha256": "c2a464d2fbf28d56e5398ad67903f386a93dc5bf99788566e1d5bff1990f22c9"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/0/image.iso": {
+   "size": 26912768,
+   "sha256": "d87bc53bd809e05589e8a9cb63795c32e82223368a0919c5514ed556c5501084"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/0/iso-root/boot/kernel.elf": {
+   "size": 23041280,
+   "sha256": "4d999b5033700877f061e027d22afc85efd02bf61a81d22b221e510152b9511e"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/0/kernel.elf": {
+   "size": 23041280,
+   "sha256": "4d999b5033700877f061e027d22afc85efd02bf61a81d22b221e510152b9511e"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/1/image.iso": {
+   "size": 26912768,
+   "sha256": "59e6812f90fa7fe624561f8e4847c3cd6ef032287be0ada4734bb8a202714165"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/1/iso-root/boot/kernel.elf": {
+   "size": 23041280,
+   "sha256": "068e64cc6dfa75af7b33765102d60a4eea517e878f1d98aa79ec7055a243c9f9"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/1/kernel.elf": {
+   "size": 23041280,
+   "sha256": "068e64cc6dfa75af7b33765102d60a4eea517e878f1d98aa79ec7055a243c9f9"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/4/image.iso": {
+   "size": 26912768,
+   "sha256": "45ff5c77824ffb038afa60cdf909ec08de97c15f1bf2f296f5403210dcf28fe5"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/4/iso-root/boot/kernel.elf": {
+   "size": 23041280,
+   "sha256": "2289fdf3b1c6c021d922a811430741589fd4335108ef7063b74d739949d7ed95"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/4/kernel.elf": {
+   "size": 23041280,
+   "sha256": "2289fdf3b1c6c021d922a811430741589fd4335108ef7063b74d739949d7ed95"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/8/image.iso": {
+   "size": 26912768,
+   "sha256": "fd5566b047db1e73705c7e2320c21ab096c8a6f3815f63135036f7449483d764"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/8/iso-root/boot/kernel.elf": {
+   "size": 23041280,
+   "sha256": "9d9098c2bb97a3027623a22bfc0a0eae1e4217bee1545d28de2e1511a9988be1"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/8/kernel.elf": {
+   "size": 23041280,
+   "sha256": "9d9098c2bb97a3027623a22bfc0a0eae1e4217bee1545d28de2e1511a9988be1"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/denied/image.iso": {
+   "size": 26912768,
+   "sha256": "eb5445b88e71e0434f803905fbef837a77a047bb29625124311fcaab16f370f5"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/denied/iso-root/boot/kernel.elf": {
+   "size": 23041280,
+   "sha256": "87ecb28aa72b7e190bd3ce552555d0585271566ee953fc7a678acbe295869855"
+  },
+  "/home/dmin/cellos/build/p01-g0-vtd-20261014/denied/kernel.elf": {
+   "size": 23041280,
+   "sha256": "87ecb28aa72b7e190bd3ce552555d0585271566ee953fc7a678acbe295869855"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/0/image.iso": {
+   "size": 25290752,
+   "sha256": "565b76d672ce44c8dfe6095051649079a319b065a41cb90ef9b21caccf6fe91e"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/0/iso-root/boot/kernel.elf": {
+   "size": 21418384,
+   "sha256": "6473f5cbbab537b95e3e16aba2180fe39b18baa8c02f7e5174ad020cee80fb42"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/0/kernel.elf": {
+   "size": 21418384,
+   "sha256": "6473f5cbbab537b95e3e16aba2180fe39b18baa8c02f7e5174ad020cee80fb42"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/1/image.iso": {
+   "size": 25290752,
+   "sha256": "2eeebd8604dda28f97968acb0031c7766d889e0dff84268b44fdfc04f4894c10"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/1/iso-root/boot/kernel.elf": {
+   "size": 21418384,
+   "sha256": "2396171ada1e1785cae86507e3d043bbdc009a0d848be2bc7dea5acc2e11c853"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/1/kernel.elf": {
+   "size": 21418384,
+   "sha256": "2396171ada1e1785cae86507e3d043bbdc009a0d848be2bc7dea5acc2e11c853"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/4/image.iso": {
+   "size": 25290752,
+   "sha256": "900b6fdd86f19b447f6a61600b2b32e979df706240709b6d841a330c3136aeac"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/4/iso-root/boot/kernel.elf": {
+   "size": 21418384,
+   "sha256": "6f40373b7cc189cefe673b2bc820a4e35e0279cd6be2ff0ef28f8268c1ba07ff"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/4/kernel.elf": {
+   "size": 21418384,
+   "sha256": "6f40373b7cc189cefe673b2bc820a4e35e0279cd6be2ff0ef28f8268c1ba07ff"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/8/image.iso": {
+   "size": 25290752,
+   "sha256": "e2aa6f4ab392ab25384a7976677bc3d44f4a914aababf923a5f634365f5afa18"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/8/iso-root/boot/kernel.elf": {
+   "size": 21418384,
+   "sha256": "d77332bc71667999a442350e22d543bbebc20ba87f04046195c7eed74f62ec89"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/8/kernel.elf": {
+   "size": 21418384,
+   "sha256": "d77332bc71667999a442350e22d543bbebc20ba87f04046195c7eed74f62ec89"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/denied/image.iso": {
+   "size": 25290752,
+   "sha256": "5833a448b9685337a6a197f7be6f3484c928bb9aa64f7a9be4f714826d9953e3"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/denied/iso-root/boot/kernel.elf": {
+   "size": 21418384,
+   "sha256": "d0b568676b890abe239a33809b8d9487a23c945295e67744c1e2e171c773b9cb"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-descriptor-trees/denied/kernel.elf": {
+   "size": 21418384,
+   "sha256": "d0b568676b890abe239a33809b8d9487a23c945295e67744c1e2e171c773b9cb"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/0/image.iso": {
+   "size": 19527680,
+   "sha256": "a0aee3f2a8e82e5abea90f8ad1cc1a2a96ecc7f5f834dc26c87b63d9a8cf0194"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/0/iso-root/boot/kernel.elf": {
+   "size": 15655760,
+   "sha256": "10f612a28379017a0a831a325eb1289e5146e0eb6c0bdb3a66cd17f23961b204"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/0/kernel.elf": {
+   "size": 15655760,
+   "sha256": "10f612a28379017a0a831a325eb1289e5146e0eb6c0bdb3a66cd17f23961b204"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/1/image.iso": {
+   "size": 19527680,
+   "sha256": "ef1be99f7c5acde279dd34bc2ccd5ada2b150f276bd6087b31dfa0caa8086d50"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/1/iso-root/boot/kernel.elf": {
+   "size": 15655760,
+   "sha256": "51d0714d7177d4d41fa68322c23d6596ec884d58f946d53a1feff5dc6aaa2a50"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/1/kernel.elf": {
+   "size": 15655760,
+   "sha256": "51d0714d7177d4d41fa68322c23d6596ec884d58f946d53a1feff5dc6aaa2a50"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/4/image.iso": {
+   "size": 19527680,
+   "sha256": "b99b82deb0aa6e130f8312f314f5ed31e1f6af0b59ca06c592061e2ee5615e16"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/4/iso-root/boot/kernel.elf": {
+   "size": 15655760,
+   "sha256": "592d468ec17191090c63ee5bf4887705d16fe127a4314a70e30a1bc34ecfac88"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/4/kernel.elf": {
+   "size": 15655760,
+   "sha256": "592d468ec17191090c63ee5bf4887705d16fe127a4314a70e30a1bc34ecfac88"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/8/image.iso": {
+   "size": 19527680,
+   "sha256": "33d410c9db8b9fcc58cc79eb4ec8b9586edf81f8f782b1478f10898c052cc1d6"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/8/iso-root/boot/kernel.elf": {
+   "size": 15655760,
+   "sha256": "43ef997585f3e53113893a5ffef22cfcd4c6d9299d5eb66bbffe45623f01bb9e"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/8/kernel.elf": {
+   "size": 15655760,
+   "sha256": "43ef997585f3e53113893a5ffef22cfcd4c6d9299d5eb66bbffe45623f01bb9e"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/denied/image.iso": {
+   "size": 19527680,
+   "sha256": "399b39fe8837b84523daf5dde36fb7a24ae956df7f4973b74abd4157669e8354"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/denied/iso-root/boot/kernel.elf": {
+   "size": 15655760,
+   "sha256": "51f3c874d53ed3a1d602416663c74c957b25163c7beed8777d3eeff172befe22"
+  },
+  "/home/dmin/cellos/build/p01-noncpu-root-lifetimes-corrected/denied/kernel.elf": {
+   "size": 15655760,
+   "sha256": "51f3c874d53ed3a1d602416663c74c957b25163c7beed8777d3eeff172befe22"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/0/image.iso": {
+   "size": 11358208,
+   "sha256": "3d19980313ea6a98116e2c26669a86f6f8c9df41b59c539d1e609f2ddb66d964"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/0/iso-root/boot/kernel.elf": {
+   "size": 7487360,
+   "sha256": "97ae8a248be1a1c259fd6169f4417f29738c83d3f9f76abb8b481c6c241618de"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/0/kernel.elf": {
+   "size": 7487360,
+   "sha256": "97ae8a248be1a1c259fd6169f4417f29738c83d3f9f76abb8b481c6c241618de"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/1/image.iso": {
+   "size": 11358208,
+   "sha256": "c55b534743fe1985312af3126953473735020e3329449a9e36b7211f029e34cf"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/1/iso-root/boot/kernel.elf": {
+   "size": 7487360,
+   "sha256": "5631d0e1974df9c70548dc369e551671e59bd79924f958d4a8305ca82208a9c8"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/1/kernel.elf": {
+   "size": 7487360,
+   "sha256": "5631d0e1974df9c70548dc369e551671e59bd79924f958d4a8305ca82208a9c8"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/4/image.iso": {
+   "size": 11358208,
+   "sha256": "7046970c399ede8f2a35394bc82197fa323dff72d80d15e0452b0609a99a08a3"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/4/iso-root/boot/kernel.elf": {
+   "size": 7487360,
+   "sha256": "f55099ab072e030485d7ae65287edf10ed381a9c646dc9f8fe1328097f917222"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/4/kernel.elf": {
+   "size": 7487360,
+   "sha256": "f55099ab072e030485d7ae65287edf10ed381a9c646dc9f8fe1328097f917222"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/8/image.iso": {
+   "size": 11358208,
+   "sha256": "2285b3a78acfb2fbdca56a7758c71a2c3a0472413ee6322dd916ff02ade5b7e7"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/8/iso-root/boot/kernel.elf": {
+   "size": 7487360,
+   "sha256": "c2b671b9d1da51a3d477c86610d0619aa69f905bd1b1169f172c7ca0e8643a4f"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/8/kernel.elf": {
+   "size": 7487360,
+   "sha256": "c2b671b9d1da51a3d477c86610d0619aa69f905bd1b1169f172c7ca0e8643a4f"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/denied/image.iso": {
+   "size": 11358208,
+   "sha256": "5d8dcdfd60363f032c45b252f7a0821560cbe70383b070e954a2a499b4c833b0"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/denied/iso-root/boot/kernel.elf": {
+   "size": 7487360,
+   "sha256": "0c536debdea20b638a7c9cfff8e7f144cf916af022c0f50e1bd1595940271c7d"
+  },
+  "/home/dmin/cellos/build/p01-ownership-ledgers-corrected/denied/kernel.elf": {
+   "size": 7487360,
+   "sha256": "0c536debdea20b638a7c9cfff8e7f144cf916af022c0f50e1bd1595940271c7d"
+  },
+  "/home/dmin/cellos/build/p01-pinned-x86-iso-root/boot/kernel.elf": {
+   "size": 6910976,
+   "sha256": "fb9172279fab2d862070a731ebcfe696d387262b0d521f261fabca60580b31ed"
+  },
+  "/home/dmin/cellos/build/p01-pinned-x86.iso": {
+   "size": 10782720,
+   "sha256": "b182259920e87bce5263b1ccb982d087576fa26157e1ac2e3cf54e8ab1e46258"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census/1/image.iso": {
+   "size": 12587008,
+   "sha256": "c7aefc4190988c645012feba0e9ab11fcf8aee6a8f4639be3619e790d072954b"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census/1/iso-root/boot/kernel.elf": {
+   "size": 8714728,
+   "sha256": "3b150dd2bcb76ce959811d07862bf4c0013e37e710d190cea5c02a52c5ac67f1"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census/1/kernel.elf": {
+   "size": 8714728,
+   "sha256": "3b150dd2bcb76ce959811d07862bf4c0013e37e710d190cea5c02a52c5ac67f1"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census-corrected/1/image.iso": {
+   "size": 12582912,
+   "sha256": "873141d1f873ab0f7909fc947dac2f27f004eb85e4cff9f182c5a3d0e32e5584"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census-corrected/1/iso-root/boot/kernel.elf": {
+   "size": 8711328,
+   "sha256": "c217fde3c1b131010eb7fee62fe7f8c1fb0ccdba0444d1434e45b785105cfeee"
+  },
+  "/home/dmin/cellos/build/p01-prearm-census-corrected/1/kernel.elf": {
+   "size": 8711328,
+   "sha256": "c217fde3c1b131010eb7fee62fe7f8c1fb0ccdba0444d1434e45b785105cfeee"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/0/image.iso": {
+   "size": 11137024,
+   "sha256": "d2c50489d595195e179ac0d24937f51af8ecd8cff1781bbec3eeee4c8771f8f8"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/0/iso-root/boot/kernel.elf": {
+   "size": 7264864,
+   "sha256": "cf072677d1f74b2ee6f6cb61ec1edf6bff0adc42c00317e907200bba3abc6f2d"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/0/kernel.elf": {
+   "size": 7264864,
+   "sha256": "cf072677d1f74b2ee6f6cb61ec1edf6bff0adc42c00317e907200bba3abc6f2d"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/1/image.iso": {
+   "size": 11137024,
+   "sha256": "7490224bd8be0da64a73c0d6526c1cf5131e74841a9ceb9b7fb18ee45a190f2a"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/1/iso-root/boot/kernel.elf": {
+   "size": 7264864,
+   "sha256": "d2c999d4833ba7cbee312c862fdd4f374fa84afb66e99729a5a428f29ae7fa83"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/1/kernel.elf": {
+   "size": 7264864,
+   "sha256": "d2c999d4833ba7cbee312c862fdd4f374fa84afb66e99729a5a428f29ae7fa83"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/4/image.iso": {
+   "size": 11137024,
+   "sha256": "ac40b9330d9d53fe2cb0d2441438e7a13db4716605ddc5dcad8c9fc71ad6304e"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/4/iso-root/boot/kernel.elf": {
+   "size": 7264864,
+   "sha256": "59b6061aebcb43d530559f048783329831f9db1e33d77cac23285f2cfdaae429"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/4/kernel.elf": {
+   "size": 7264864,
+   "sha256": "59b6061aebcb43d530559f048783329831f9db1e33d77cac23285f2cfdaae429"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/8/image.iso": {
+   "size": 11137024,
+   "sha256": "edc5e1313755c42fe2eaeaef6d66dd89fcbdbf280e3a44ff4aa4ae8ad69e8719"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/8/iso-root/boot/kernel.elf": {
+   "size": 7264864,
+   "sha256": "b9759ebcf88d15199e54119e9844ebd2817a871bb3af6e6dab0ef859fca0859c"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/8/kernel.elf": {
+   "size": 7264864,
+   "sha256": "b9759ebcf88d15199e54119e9844ebd2817a871bb3af6e6dab0ef859fca0859c"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/denied/image.iso": {
+   "size": 11137024,
+   "sha256": "31501097d50b537c2742f3b408a7a5fe1ebcd381d18298a5051048980a4f1d3a"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/denied/iso-root/boot/kernel.elf": {
+   "size": 7264864,
+   "sha256": "0d92e0123e033eabdb74202e930f58600f6e22c8140d5c5f4cdb2ebd5137cd0c"
+  },
+  "/home/dmin/cellos/build/p01-private-corrected/denied/kernel.elf": {
+   "size": 7264864,
+   "sha256": "0d92e0123e033eabdb74202e930f58600f6e22c8140d5c5f4cdb2ebd5137cd0c"
+  },
+  "/home/dmin/cellos/build/p01-private-final/0/image.iso": {
+   "size": 11137024,
+   "sha256": "e05ccb5561754d2bfa5277fd0b38dc2c81f23c6b00879c2d67eb68934769ad3a"
+  },
+  "/home/dmin/cellos/build/p01-private-final/0/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "55f6ab64ca1f1228162b23f76245de3f5de97fe7e334a8cce7964a9aff806684"
+  },
+  "/home/dmin/cellos/build/p01-private-final/0/kernel.elf": {
+   "size": 7264664,
+   "sha256": "55f6ab64ca1f1228162b23f76245de3f5de97fe7e334a8cce7964a9aff806684"
+  },
+  "/home/dmin/cellos/build/p01-private-final/1/image.iso": {
+   "size": 11137024,
+   "sha256": "71cbfb0ee1781e5c13bd7fb3241234e431760e566ce1dfc06a4f18d02b0e6079"
+  },
+  "/home/dmin/cellos/build/p01-private-final/1/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "1dd79f502a990cca1fb01aafea51f17a7ce0c592dee6c596c6f30315070058c9"
+  },
+  "/home/dmin/cellos/build/p01-private-final/1/kernel.elf": {
+   "size": 7264664,
+   "sha256": "1dd79f502a990cca1fb01aafea51f17a7ce0c592dee6c596c6f30315070058c9"
+  },
+  "/home/dmin/cellos/build/p01-private-final/4/image.iso": {
+   "size": 11137024,
+   "sha256": "251878d44f5c54651a0a2439eb794d647626f53407dbb14330c7c47036c7c662"
+  },
+  "/home/dmin/cellos/build/p01-private-final/4/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "3eef0b3f8055ea687a50d44622852d25273b40131b2da2b32785a759c483a3ca"
+  },
+  "/home/dmin/cellos/build/p01-private-final/4/kernel.elf": {
+   "size": 7264664,
+   "sha256": "3eef0b3f8055ea687a50d44622852d25273b40131b2da2b32785a759c483a3ca"
+  },
+  "/home/dmin/cellos/build/p01-private-final/8/image.iso": {
+   "size": 11137024,
+   "sha256": "4f2580c36554baf050650d3bcd71120feb94f6b595b98eb2a0fad5ed9bfbe123"
+  },
+  "/home/dmin/cellos/build/p01-private-final/8/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "e808fad7deda4d783e992a020b8aabbc036c6edb00ef305d9cf5f33549bb967e"
+  },
+  "/home/dmin/cellos/build/p01-private-final/8/kernel.elf": {
+   "size": 7264664,
+   "sha256": "e808fad7deda4d783e992a020b8aabbc036c6edb00ef305d9cf5f33549bb967e"
+  },
+  "/home/dmin/cellos/build/p01-private-final/denied/image.iso": {
+   "size": 11137024,
+   "sha256": "2f56ffc0945fa5925cd9bb9214cb2ba2076d87512bbbe9fe9eb8414e7b5660cf"
+  },
+  "/home/dmin/cellos/build/p01-private-final/denied/iso-root/boot/kernel.elf": {
+   "size": 7264664,
+   "sha256": "c382a5cbbd32937bd812432294eb3aabda6e52a8a354b27d3f4c54c6ebc1a0b7"
+  },
+  "/home/dmin/cellos/build/p01-private-final/denied/kernel.elf": {
+   "size": 7264664,
+   "sha256": "c382a5cbbd32937bd812432294eb3aabda6e52a8a354b27d3f4c54c6ebc1a0b7"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/0/image.iso": {
+   "size": 11137024,
+   "sha256": "e78cf1a3f119355af9c4f645c1cf8044a7821346b1129b86ec1bf694562fa081"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/0/iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "2175cdf09b6552f200617694b119fbee3e0714bc339a5e6e5c8e572d48fd9175"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/0/kernel.elf": {
+   "size": 7264952,
+   "sha256": "2175cdf09b6552f200617694b119fbee3e0714bc339a5e6e5c8e572d48fd9175"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/1/image.iso": {
+   "size": 11137024,
+   "sha256": "2ae62c6ecff5a7e68863337ce643fc9725efaab7fbfbc03de381a7996ab199fd"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/1/iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "753b0e9b511b601d94482ca6b7e3d4a47d6bc840ce191597e5015c6098504753"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/1/kernel.elf": {
+   "size": 7264952,
+   "sha256": "753b0e9b511b601d94482ca6b7e3d4a47d6bc840ce191597e5015c6098504753"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/4/image.iso": {
+   "size": 11137024,
+   "sha256": "83bf541159d92b7f71e8999ee6652842e08a3da33a4b0fd2e56f1875f7e8ec50"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/4/iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "559a0bffb5aa194b3e79a865f84b96166f321317acde6f0d68ed2235dcf79f21"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/4/kernel.elf": {
+   "size": 7264952,
+   "sha256": "559a0bffb5aa194b3e79a865f84b96166f321317acde6f0d68ed2235dcf79f21"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/8/image.iso": {
+   "size": 11137024,
+   "sha256": "26fdd7dcdce19f2252b2f1b22b3f5005de974f953990f192ebc45901aee89303"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/8/iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "ab1438e1e654ef7433fcbac416e6f356d16f9938380c427854d4efc04a8abcaf"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/8/kernel.elf": {
+   "size": 7264952,
+   "sha256": "ab1438e1e654ef7433fcbac416e6f356d16f9938380c427854d4efc04a8abcaf"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/denied/image.iso": {
+   "size": 11137024,
+   "sha256": "e68b502be365b2f8ed2fda52cc9f3343c0b37acf48a6d29555b8c224e2407e05"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/denied/iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "8b040fef00b11a2eebb241626aa693b1222966de21f15595ff3916f94582e8bc"
+  },
+  "/home/dmin/cellos/build/p01-private-reviewed/denied/kernel.elf": {
+   "size": 7264952,
+   "sha256": "8b040fef00b11a2eebb241626aa693b1222966de21f15595ff3916f94582e8bc"
+  },
+  "/home/dmin/cellos/build/p01-private-smoke-iso-root/boot/kernel.elf": {
+   "size": 7264952,
+   "sha256": "1714233a8adb990ce4a7edc6ff221f0d7c6d6ac3cdffc6daffe290d6a40ff1b3"
+  },
+  "/home/dmin/cellos/build/p01-private-smoke.iso": {
+   "size": 11137024,
+   "sha256": "466024e5539b939beaf675f64c50ece91cf8dd91501513c728a02837c131a4b1"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/0/image.iso": {
+   "size": 11145216,
+   "sha256": "917431adb97b0c9c746260b27565c14a4279c7ace200f52b0f84c31fa9b033d9"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/0/iso-root/boot/kernel.elf": {
+   "size": 7272904,
+   "sha256": "4490217c305680997e16449da6c78e75205551ca31e02068b044caf95182ec69"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/0/kernel.elf": {
+   "size": 7272904,
+   "sha256": "4490217c305680997e16449da6c78e75205551ca31e02068b044caf95182ec69"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/1/image.iso": {
+   "size": 11145216,
+   "sha256": "eaae24f67e716f10b41761de7aa012ebe84d41f280622f6f0fedc56ed6ca82b5"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/1/iso-root/boot/kernel.elf": {
+   "size": 7272904,
+   "sha256": "f79bcba376fb2a4c30baeb3aaa4b87921b357e719a0f8d7b8472cf3b1e5781f2"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/1/kernel.elf": {
+   "size": 7272904,
+   "sha256": "f79bcba376fb2a4c30baeb3aaa4b87921b357e719a0f8d7b8472cf3b1e5781f2"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/4/image.iso": {
+   "size": 11145216,
+   "sha256": "8d90fd3ad006e97b10da7b0acb8333a7004ca4466388cff09388bdda8ffc50cf"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/4/iso-root/boot/kernel.elf": {
+   "size": 7272904,
+   "sha256": "5143a4172fc12ed3362aded5b44f9e9925be652cc109d80c6dc15af201af48aa"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/4/kernel.elf": {
+   "size": 7272904,
+   "sha256": "5143a4172fc12ed3362aded5b44f9e9925be652cc109d80c6dc15af201af48aa"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/8/image.iso": {
+   "size": 11145216,
+   "sha256": "407d29f9b161044958628df4a4af5f12e70e3b4c348168a5125b2265d0adce18"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/8/iso-root/boot/kernel.elf": {
+   "size": 7272904,
+   "sha256": "a8f8fd27fe34931a4806ad266d99c40d39cf5beec29d4bb29e2e8efce2ae1edf"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/8/kernel.elf": {
+   "size": 7272904,
+   "sha256": "a8f8fd27fe34931a4806ad266d99c40d39cf5beec29d4bb29e2e8efce2ae1edf"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/denied/image.iso": {
+   "size": 11145216,
+   "sha256": "6d2105a9aba47b364ab74dcbd9ab70d4577a1087c59677868429c824c3ead83f"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/denied/iso-root/boot/kernel.elf": {
+   "size": 7272904,
+   "sha256": "f2d22b2bf04e9d92ce2e2b49918397d30738b736299369a18d11db2e61dd2b8e"
+  },
+  "/home/dmin/cellos/build/p01-resource-coherent/denied/kernel.elf": {
+   "size": 7272904,
+   "sha256": "f2d22b2bf04e9d92ce2e2b49918397d30738b736299369a18d11db2e61dd2b8e"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins/1/image.iso": {
+   "size": 11466752,
+   "sha256": "ce176041e5c25feab8679c191e99eb811c859b838b6c7c0770d5bd22a5039368"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins/1/iso-root/boot/kernel.elf": {
+   "size": 7595416,
+   "sha256": "4d9412fd241ba63d556f8b07412932494d14b49e49d1c8b0bbaabcb48b0739ea"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins/1/kernel.elf": {
+   "size": 7595416,
+   "sha256": "4d9412fd241ba63d556f8b07412932494d14b49e49d1c8b0bbaabcb48b0739ea"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins-corrected/1/image.iso": {
+   "size": 11466752,
+   "sha256": "b1cd115c0c256a0633faadeea26f7908aed6e48a07685fa5f45a65d917f78a1f"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins-corrected/1/iso-root/boot/kernel.elf": {
+   "size": 7595416,
+   "sha256": "a56ebbb735087e0ee0d6ff3c33456c90e818c607dfa205702e8d1f2157ee04a9"
+  },
+  "/home/dmin/cellos/build/p01-runtime-joins-corrected/1/kernel.elf": {
+   "size": 7595416,
+   "sha256": "a56ebbb735087e0ee0d6ff3c33456c90e818c607dfa205702e8d1f2157ee04a9"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners/1/image.iso": {
+   "size": 12611584,
+   "sha256": "8cdd2352d531d5fa3d04ed6da7495a2c3f32634a446f989f56a7249377831b33"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners/1/iso-root/boot/kernel.elf": {
+   "size": 8739672,
+   "sha256": "9692c3be69d163ab64470342b7f0e3bde3412104e4f1541c02ad0a3a06eca79f"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners/1/kernel.elf": {
+   "size": 8739672,
+   "sha256": "9692c3be69d163ab64470342b7f0e3bde3412104e4f1541c02ad0a3a06eca79f"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners-final/1/image.iso": {
+   "size": 12615680,
+   "sha256": "7434fb03669ac39eab087cd9f3726989a31bd8752ad6d68b1dc1c72a639ef007"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners-final/1/iso-root/boot/kernel.elf": {
+   "size": 8743712,
+   "sha256": "d64d3c071e893cd27f4e179e7c5a841edc320268141f374a9ee82ba082030ec5"
+  },
+  "/home/dmin/cellos/build/p01-semantic-owners-final/1/kernel.elf": {
+   "size": 8743712,
+   "sha256": "d64d3c071e893cd27f4e179e7c5a841edc320268141f374a9ee82ba082030ec5"
+  },
+  "/home/dmin/cellos/build/p01-service-x86-iso-root/boot/kernel.elf": {
+   "size": 7271424,
+   "sha256": "972d52c570d0e1f20e41e7aacb88a7e4deeb28a84eea0ed9b31f12fd4e06afa8"
+  },
+  "/home/dmin/cellos/build/p01-service-x86.iso": {
+   "size": 11143168,
+   "sha256": "eb09fc3019ba90bd042ed854333231f189942366118e1a5b0c1f123922e7a4e2"
+  },
+  "/home/dmin/cellos/build/p01-source-validity/1/image.iso": {
+   "size": 11366400,
+   "sha256": "f784b38d2ce06d64a4d0aef984e63004263c45276f6aae61154a2f3a05e4e157"
+  },
+  "/home/dmin/cellos/build/p01-source-validity/1/iso-root/boot/kernel.elf": {
+   "size": 7495560,
+   "sha256": "cb2709843f0f455b233995c56ee5b8cd0c43d7e30366c831e42ce1197b3f9dca"
+  },
+  "/home/dmin/cellos/build/p01-source-validity/1/kernel.elf": {
+   "size": 7495560,
+   "sha256": "cb2709843f0f455b233995c56ee5b8cd0c43d7e30366c831e42ce1197b3f9dca"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/0/image.iso": {
+   "size": 19394560,
+   "sha256": "62be140c2ebdd4951fe71610bf45d85a2484bbdec544fa50bb95bf539c2b7ba3"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/0/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "eb4d142d8710b6cfb7743135bfad026ec441cdc55abe1e5859747ac3777a1f43"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/0/kernel.elf": {
+   "size": 15523464,
+   "sha256": "eb4d142d8710b6cfb7743135bfad026ec441cdc55abe1e5859747ac3777a1f43"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/1/image.iso": {
+   "size": 19394560,
+   "sha256": "fbea8e668d93b394219285fba7a01504d8fec855a56e830c7ebe31aee2238233"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/1/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "4ca446350e9576af400356e68f3010ff131cc0ec3de59aa10d55697732b4c0b8"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/1/kernel.elf": {
+   "size": 15523464,
+   "sha256": "4ca446350e9576af400356e68f3010ff131cc0ec3de59aa10d55697732b4c0b8"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/4/image.iso": {
+   "size": 19394560,
+   "sha256": "dd7693c06661a97aaa5d64f1d5cf3c44cee11ba26680b15b3497e031034f13ca"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/4/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "501b37d08a3fe4fb91ccf6fa9c5a5d5b82406f21d00b9c6788ae8aa1c3e3961a"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/4/kernel.elf": {
+   "size": 15523464,
+   "sha256": "501b37d08a3fe4fb91ccf6fa9c5a5d5b82406f21d00b9c6788ae8aa1c3e3961a"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/8/image.iso": {
+   "size": 19394560,
+   "sha256": "dd79dae45fe0e6ef6d10a4c2d54c87bb083a5578ae89eca59c2f7b7baf7fa2b3"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/8/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "97f229c37f2eaf40c3c0ad6efffcf190dd46a05761d4526ad38eb3d12f76fe38"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/8/kernel.elf": {
+   "size": 15523464,
+   "sha256": "97f229c37f2eaf40c3c0ad6efffcf190dd46a05761d4526ad38eb3d12f76fe38"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/denied/image.iso": {
+   "size": 19394560,
+   "sha256": "4550a1d58ab1ef371ae8e4dca82caa149d96cb2a91a1f760ce96e0687497ac1b"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/denied/iso-root/boot/kernel.elf": {
+   "size": 15523464,
+   "sha256": "f243732b55d9b81f806160a362222bf54b7cc8b0753dbc10058ccde39388d09d"
+  },
+  "/home/dmin/cellos/build/p01-topology-runs-exact/denied/kernel.elf": {
+   "size": 15523464,
+   "sha256": "f243732b55d9b81f806160a362222bf54b7cc8b0753dbc10058ccde39388d09d"
+  },
+  "/home/dmin/cellos/build/p01-vtd-structures/0/image.iso": {
+   "size": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/home/dmin/cellos/build/p01-vtd-structures/0/iso-root/boot/kernel.elf": {
+   "size": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/home/dmin/cellos/build/p01-vtd-structures/0/kernel.elf": {
+   "size": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/home/dmin/cellos/build/rpi3-gate/generic/kernel.elf": {
+   "size": 60761400,
+   "sha256": "4fd72aef16dbf423e40ae5a946216bbae5ce865929508143d154f72aaaffbadd"
+  },
+  "/home/dmin/cellos/build/tier3-hostile-current/iso-root/boot/kernel.elf": {
+   "size": 64886776,
+   "sha256": "6d0739c68e0541a5e6e8a7014ef8905f0d29d1efd291199830313cb87dbb41bd"
+  },
+  "/home/dmin/cellos/build/tier3-hostile-segmax/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "698efc397ee68c0ec9abb90ca5d04b38e58f9a7c667402eac7b17892af3eedc3"
+  },
+  "/home/dmin/cellos/build/tier3-nginx-segmax/iso-root/boot/kernel.elf": {
+   "size": 60696112,
+   "sha256": "816ae095a483e2b442689fb25671d39040f3e445b4673b69e4a48f5bbe59dc10"
+  },
+  "/home/dmin/cellos/build/tier3-persistence-isolated/iso-root/boot/kernel.elf": {
+   "size": 64886776,
+   "sha256": "cf4839f2833901eba639b54b7a4ffc144444aedec5fa7a6a4d44bae4907f26bd"
+  },
+  "/home/dmin/cellos/build/tier3-python-nettrace/iso-root/boot/kernel.elf": {
+   "size": 60696112,
+   "sha256": "2b706d1952f75e41855f0b445c6721b2228b2ae900ee2424b05f23f38204004e"
+  },
+  "/home/dmin/cellos/build/tier3-python-segmax/iso-root/boot/kernel.elf": {
+   "size": 60696112,
+   "sha256": "47b8ae46dd869e0e51664366d51180b31d8faa112d87733c87c6cd881c10288d"
+  },
+  "/home/dmin/cellos/build/tier3-qemu-stability-1790640945358/vicell-x86-virtio-e2e.iso": {
+   "size": 68759552,
+   "sha256": "b79c25af6beb7c22685c233a7257cba305a15a08102d1c27ff173773a9e12b34"
+  },
+  "/home/dmin/cellos/build/tier3-segmax-after/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "156f9b151cf7576cc8cdec31bbce82c324ddfecd44c2a6d5c18faf95b8e22854"
+  },
+  "/home/dmin/cellos/build/tier3-segmax-before/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "555fec44d2da0762b382c8ff41eddc301b5b0a8cb65a3d5655a47d7a075ecb95"
+  },
+  "/home/dmin/cellos/build/tier3-segmax-bulk/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "8db6d3d9c849ec0b291810ee0d2fda4435cd5f8c91db52148e2e64947efd9a9d"
+  },
+  "/home/dmin/cellos/build/tier3-segmax-neighbor/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "4b29ce31e86467bde38453d6e0f62ddef8c67ce614e2b39a0b5e295e01337c8e"
+  },
+  "/home/dmin/cellos/build/tier3-segmax-trace/iso-root/boot/kernel.elf": {
+   "size": 64890416,
+   "sha256": "60824ce7fd313aebea88811e68650547cdcd2d003d285387b97ac630e15925f4"
+  },
+  "/home/dmin/cellos/build/tier3-stability-current-1790644936314/iso-root/boot/kernel.elf": {
+   "size": 64886776,
+   "sha256": "e449500e0323523c786caf6cb65b4904ae6071745fef16234a12bf916ad0a7cd"
+  },
+  "/home/dmin/cellos/build/tier3-stability-current-1790644936314/virtio-e2e.iso": {
+   "size": 68757504,
+   "sha256": "53342d11e209ee8e55ba0bca2a4199c148a13b0261fe543cce88c64eb53b1c84"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-hostile-current.iso": {
+   "size": 68757504,
+   "sha256": "de47c980dc85c8b0bb8d0f15f456488df03116c8bb0cee72dcfd2da8de0c4df9"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-hostile-segmax.iso": {
+   "size": 68761600,
+   "sha256": "eef729372441b621328a0731f213c441f1b243772fb3b6262f40e901d5729ca3"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-nginx-segmax.iso": {
+   "size": 64567296,
+   "sha256": "a6141f288a341eed73ffcfbf8d0d98005d26536e68eacef396613425f5e7222f"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-persistence-isolated.iso": {
+   "size": 68757504,
+   "sha256": "997bfbfa5bcf9f98afc799049df4c94f4279b02332a9d5f9b66b49684ca8ab55"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-python-nettrace.iso": {
+   "size": 64567296,
+   "sha256": "02b9c03fd6897b0e3be2ac9078ffb315d83ab6acc768869be775ecb6ea024e57"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-python-segmax.iso": {
+   "size": 64567296,
+   "sha256": "68ed56e48eed23e3ecac178388f0daadcb9c2a57fa345479ccd1df0090845564"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-segmax-after.iso": {
+   "size": 68761600,
+   "sha256": "9e81c9656250c68c60e3fb1f84e7b731d3bc05ad7e1175ef916b27ba9a80837d"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-segmax-before.iso": {
+   "size": 68761600,
+   "sha256": "c391c59058e1ea691f81e9c46dc83ebd607fe824f6639c676b8dfc8948123d5f"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-segmax-bulk.iso": {
+   "size": 68761600,
+   "sha256": "e07c0ff1a8b3831aebeccd41a21b5535bfd52a345cb663b2e718856f5d34c222"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-segmax-neighbor.iso": {
+   "size": 68761600,
+   "sha256": "ea3319131f6473e437e963ac2ac95463e376988e455f9ead840015222254e083"
+  },
+  "/home/dmin/cellos/build/vicell-tier3-segmax-trace.iso": {
+   "size": 68761600,
+   "sha256": "9b7a63c1509d0377cdf4e6ec94c0a4b9c85b326cbddb6899c307a8c2d753489b"
+  },
+  "/home/dmin/cellos/build/vicell-x86-c2c-lifecycle.iso": {
+   "size": 10727424,
+   "sha256": "b1cdb20d519c145591ad05de3b6a22bf62259ed6475e152a0ca41d464310343a"
+  },
+  "/home/dmin/cellos/build/vicell-x86-c2c-render.iso": {
+   "size": 10829824,
+   "sha256": "4004f799c46522d83efc7cf2331f022929d83f16389f21d4afac8668abc9f8e7"
+  },
+  "/home/dmin/cellos/build/vicell-x86-domain-test.iso": {
+   "size": 11147264,
+   "sha256": "b1ceb12be64f01194ebf284352346e5bafd1f14b73e03bf43abd060e590b9f64"
+  },
+  "/home/dmin/cellos/build/vicell-x86-hv-hostile.iso": {
+   "size": 68139008,
+   "sha256": "1d21112d351563bcbcf66e6b56f08eb2bc6b6c8aedd0989d11bdeb533491509a"
+  },
+  "/home/dmin/cellos/build/vicell-x86-hv-ondemand.iso": {
+   "size": 68765696,
+   "sha256": "8961fbf5982bc49feea5cefb9f21a0e302291ed3e4b1dd4b2b4c7a977ad61a40"
+  },
+  "/home/dmin/cellos/build/vicell-x86-hv-regress.iso": {
+   "size": 68765696,
+   "sha256": "aec825cdd0db8b9308b2bd9f9a61e9e5227ec7ba3f7601daee7562f23573fc0d"
+  },
+  "/home/dmin/cellos/build/vicell-x86-hv.iso": {
+   "size": 68763648,
+   "sha256": "5f8ff259607a6abcf6c73f8847223a1eaff3f86dd166d97636c2879d0e66f68f"
+  },
+  "/home/dmin/cellos/build/vicell-x86-mmio-smoke.iso": {
+   "size": 68153344,
+   "sha256": "4643b19529279f20fcdba6243fbf2a63ce6c31bfa93660a9dd601ac7df5d8744"
+  },
+  "/home/dmin/cellos/build/vicell-x86-nginx-regression.iso": {
+   "size": 64563200,
+   "sha256": "71586a40037adf2635dcede6d14ffcc05a7bf8460283540cad8f508825f83a03"
+  },
+  "/home/dmin/cellos/build/vicell-x86-nginx.iso": {
+   "size": 64567296,
+   "sha256": "c2c2de225abd6558b4e4ff4acee43eccd232f043a9c292c9dcd920adfb37594a"
+  },
+  "/home/dmin/cellos/build/vicell-x86-prod-refusal.iso": {
+   "size": 10043392,
+   "sha256": "e05535e53b47ef3ccbd825e616f02644625e7f5a33e781f59b4ecd4a5a2616b8"
+  },
+  "/home/dmin/cellos/build/vicell-x86-python.iso": {
+   "size": 64563200,
+   "sha256": "fc2afc48c7a3e2b63bd48a1ad70d71114f120a476cfd2c292b4aff5d016d0fb7"
+  },
+  "/home/dmin/cellos/build/vicell-x86-virtio-e2e.iso": {
+   "size": 68761600,
+   "sha256": "c17a951a4253f44dbfd5b89779f83732d974ed722928d77dca7f26eaaf3f402e"
+  },
+  "/home/dmin/cellos/build/vicell-x86-virtio-hostile.iso": {
+   "size": 68763648,
+   "sha256": "c8cfd6cc7aa68c878bfc8e76c671520e2f86746e13b6c91626f2d4b382a4516c"
+  },
+  "/home/dmin/cellos/build/vicell-x86.iso": {
+   "size": 15063040,
+   "sha256": "eb1cb8130476120a2f25ab63f6d1ef45036d497722005ffef93e62433abfef09"
+  },
+  "/home/dmin/cellos/build/x86-backend-evidence/fixed-iso-root/boot/kernel.elf": {
+   "size": 6218856,
+   "sha256": "30ff0078277641ac6b0e7ca8fdc54ddb763705c1248a676f7e01576ed79b7ce2"
+  },
+  "/home/dmin/cellos/build/x86-backend-evidence/vicell-x86-hpet-fixed.iso": {
+   "size": 10090496,
+   "sha256": "cd5fc9380e35dd8a55b2668ee7ae37ead7eafb6fdc8d16c6105c967d90915446"
+  },
+  "/home/dmin/cellos/build/x86-c2c-lifecycle-iso-root/boot/kernel.elf": {
+   "size": 6856040,
+   "sha256": "e3991809725426415b53c7c3c225fc6a125e13cb3cb80f719a72003242477050"
+  },
+  "/home/dmin/cellos/build/x86-c2c-render-iso-root/boot/kernel.elf": {
+   "size": 6958976,
+   "sha256": "8554a1062e5f6a661fb44093497b1e2bd814109d8cc374fd07e17f15a2009d54"
+  },
+  "/home/dmin/cellos/build/x86-domain-test-iso-root/boot/kernel.elf": {
+   "size": 7275520,
+   "sha256": "ae916b7c9b63e401efb08bac23da7e9665ba26733a11c8a97ca914b2cf3eb941"
+  },
+  "/home/dmin/cellos/build/x86-idt-test/iso-root/boot/kernel.elf": {
+   "size": 5553776,
+   "sha256": "b0b2059ed13c974a5e01d6321d01dcdccaf1d00662adcb93a1d061ce2fd979b6"
+  },
+  "/home/dmin/cellos/build/x86-idt-test/vicell-x86-idt-test.iso": {
+   "size": 9424896,
+   "sha256": "6f9bd25fe6d1e437de8818f83ea3976b7beee2bd67704d6992ca6079109395a9"
+  },
+  "/home/dmin/cellos/build/x86-iso-extracted/boot/kernel.elf": {
+   "size": 5178968,
+   "sha256": "449c5b25ca74d0c1ed59ddf0ca7373d8dba67ad73a080e66e5ee890fde5e34f1"
+  },
+  "/home/dmin/cellos/build/x86-iso-root/boot/kernel.elf": {
+   "size": 19602560,
+   "sha256": "dbd862d6791c9f37e3ae3f066639975dc4c8f9e938212a99d0b95e97feb67731"
+  },
+  "/home/dmin/cellos/build/x86-nginx-gate/iso-root/boot/kernel.elf": {
+   "size": 60696384,
+   "sha256": "8852dba88105b04f7222225f0251e737376bcd4ff591e76c9809f1a50483adf4"
+  },
+  "/home/dmin/cellos/build/x86-nginx-regression/iso-root/boot/kernel.elf": {
+   "size": 60692472,
+   "sha256": "8149c109f5bf9304fdb43824592dd26b7b48cb7f0e9c82c72a4580a34e46e906"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/iso-root/boot/kernel.elf": {
+   "size": 6157592,
+   "sha256": "9834d15833c85c33ce8330323f0dc74614ce436e3aee1694784bc8a4edde00c5"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/iso-root-default/boot/kernel.elf": {
+   "size": 6181096,
+   "sha256": "63a26109e4aa42df82dfd96972df6b37a9ea444c203168e0632389e6106d9d57"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/iso-root-p05/boot/kernel.elf": {
+   "size": 6185424,
+   "sha256": "2c664a37fbd8529b8bd3acfaa2622b71bcb412067f86d9898255ad097fbd6068"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci-b-fix.iso": {
+   "size": 10029056,
+   "sha256": "e0fa7cd73e2a6b4b9188eb6f97b24ee4187eb03361985a9196c83b648da49a63"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci-b-verify.iso": {
+   "size": 10029056,
+   "sha256": "cd863358f8ba3664445076fbce67afc7c6519d4fb660a2e5381c8a369a165c69"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci-b.iso": {
+   "size": 10029056,
+   "sha256": "97f3084724bb2b8cfaea1d42f32cf9005d70a2dea3df22b1c24ff29066ab02a2"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci-fix.iso": {
+   "size": 10029056,
+   "sha256": "a0e419f2fa27d0f1b48008a2e21ae1f63571f0d575bf4e8f5bc7e4b3f979500e"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci-verify.iso": {
+   "size": 10029056,
+   "sha256": "5f4eda5e33924d57636e3013667ecd9e2348cf262f5603be6cf884c9c205b620"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-ahci.iso": {
+   "size": 10029056,
+   "sha256": "7ca3c8da0f3b2ac4b751b61a825943b978fac93cc740c6572b67478f72f344ed"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-default.iso": {
+   "size": 10047488,
+   "sha256": "e2c45c71fae1c7bc55844115410834d9f999b0fd6439dac9280f3ae16c1e86eb"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-default2.iso": {
+   "size": 10049536,
+   "sha256": "84bfab9e7e9c76f76177995ce26321645a2a80a66216629e1085052ba830281d"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-igb-fix.iso": {
+   "size": 10029056,
+   "sha256": "1391f435e09036620741b90800d17b95e787373d250ce521f239e195a47666b0"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-igb-narrow.iso": {
+   "size": 10029056,
+   "sha256": "38824ca8b928a52ad5da39002c3ef9129736321f9f73c104b85c1640a9488e61"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-igb-verify.iso": {
+   "size": 10029056,
+   "sha256": "a5ecdfdf50576b3a45d24b6bad3a67e52088d4e247d4b3f09c503d83dc449ff0"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-igb.iso": {
+   "size": 10029056,
+   "sha256": "eb3b3120de3e1f99b1d175772ab0c1f7e8d12abd03c64639f5543f4380fe89b0"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc-p05.iso": {
+   "size": 10057728,
+   "sha256": "273a3be0dda2d6f2aea25ad83a9ddd4b37709da4bbdf2cd5acbe84be41eb3dc8"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-pc.iso": {
+   "size": 10057728,
+   "sha256": "273a3be0dda2d6f2aea25ad83a9ddd4b37709da4bbdf2cd5acbe84be41eb3dc8"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-verify3.iso": {
+   "size": 10029056,
+   "sha256": "0dc6b13525c097e2172da910ae60f97af8c3391b37613cef445553e8f8f3e14b"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci-b-fix.iso": {
+   "size": 10029056,
+   "sha256": "ac5f5e46774eccfadb375eef7f7dca2e510ff3070494d06102954d3c4ac4ebb7"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci-b-verify.iso": {
+   "size": 10029056,
+   "sha256": "ad2f68dcca68f5b21bf08398bc5f37561b64352fa4fb1c8b6723ad8124a5b72b"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci-b.iso": {
+   "size": 10029056,
+   "sha256": "538353fcd7242928df364bac4f3a76dacc15f251cc771791f7429c026b3741e9"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci-verify.iso": {
+   "size": 10029056,
+   "sha256": "297806c8f2ba25a56bdf343259b17b60835ed515f1c51a1581ea840964855481"
+  },
+  "/home/dmin/cellos/build/x86-pc-lane/vicell-x86-xhci.iso": {
+   "size": 10029056,
+   "sha256": "fba814d442838d28d7a2aea913ddd99aef8ec018ea1cf366395f623561984e20"
+  },
+  "/home/dmin/cellos/build/x86-prod-check-iso/boot/kernel.elf": {
+   "size": 6167216,
+   "sha256": "42e3c8989e5cd65c1549ab673a56d0018bb565c74388319e36b7dd06544d39b2"
+  },
+  "/home/dmin/cellos/build/x86-prod-refusal-iso-root/boot/kernel.elf": {
+   "size": 6171312,
+   "sha256": "5eb2db9141c7104e6e5b3a551a8895c19dcbee47fed77b3273c71606bb011bf1"
+  },
+  "/home/dmin/cellos/build/x86-python-gate/iso-root/boot/kernel.elf": {
+   "size": 60692472,
+   "sha256": "7660ac1609d4c3462c8357db8451e24851ed1ea74e1d3eccff3af2567b8c00ef"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "7daad83d13530631ceea747ab2cb87b963927b8d29055a0b53cb8519df613309"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-ab/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "d1c2feb90c1de05ecb374eac810bf78d37dfd57b9c906af902a081d430cafb52"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-fx/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "5e85954e49cacc8e35507e0ef0face1d0c6c7988ebbd205824153a38fcaa3b2e"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-iv/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "7d368ffd4406147ee9f62285b1098fcb8bfc0708a7f810fdc37e6814e9faa153"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-rg/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "105ab49a3d6025d167f6b0c77c7e07c62b1a1bdb10f56dc00e9d5b6bc72b99cd"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-vc/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "9aa16b061b02110f6c68107fd9d11bbe28f8e43322087d9c0a19496cea93d7e9"
+  },
+  "/home/dmin/cellos/build/x86-virtio-e2e-vf/iso-root/boot/kernel.elf": {
+   "size": 64890320,
+   "sha256": "5a2141ca1245d72dae4608162f5da632da91298a9e54f81b74e577bbe508ee61"
+  },
+  "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/autoload.toml": {
+   "size": 358,
+   "sha256": "db4350656ff38522e029ab6f0328c6404d5e2362fe4d371c396426361d04ee6a"
+  },
+  "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/services.toml": {
+   "size": 897,
+   "sha256": "eff37d25775ecf1eea7012290db0a3f4994d69b35318ce621b0cfd6bc503f160"
+  },
+  "/home/dmin/cellos/kernel/src/embedded-x86_64/boot-config/system.toml": {
+   "size": 128,
+   "sha256": "74ecea5cd57faacfa1e32d1b006870eb3a85dea5e0b4f9e95753a57ceb147293"
+  },
+  "/home/dmin/cellos/kernel/src/embedded-x86_64/init": {
+   "size": 406976,
+   "sha256": "c0bd14580fda0d697a2edd66b19168107fa6877a190bc06c1a8a482b467b23f3"
+  },
+  "/home/dmin/cellos/kernel/src/embedded-x86_64/kernel_fs.img": {
+   "size": 25165824,
+   "sha256": "3848cefb25f0e7c4abc67feccf3d8886292e25da60a88b4633552651292479ec"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/app-init": {
+   "size": 393152,
+   "sha256": "0c2f607bb29e090b31c7820290aafc1974c818c0610d216f00b5f88a10104104"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/app-init.d": {
+   "size": 7311,
+   "sha256": "38ee363bbc81f772cecd0ee846dad4362b351c47b80eb950e92e3385df36501a"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/app-shell": {
+   "size": 881120,
+   "sha256": "225fb29f45a6bf486357dac791dd4ea9cc76e9120f2edae047d2bbe2acbedf90"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/app-shell.d": {
+   "size": 8763,
+   "sha256": "00e062a08933f43e714c446afc3f0fb8cf8745d697afefbbbe55a169b5e61840"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/cellbox": {
+   "size": 3083840,
+   "sha256": "006b85041eb1ccbbb117df08b3f92a9c4d1ed63b42357dcc556a4e969835a1f4"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/cellbox.d": {
+   "size": 14396,
+   "sha256": "513dc14da9400530079a10d95f9d072d2f67ce71d2c18922b37496691cbbceb0"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/cellos-kernel": {
+   "size": 28182592,
+   "sha256": "dfbe8c555f54cf15293a8a59eead841d5c417b2faadb2e422ca97aa19744dc1a"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/cellos-kernel.d": {
+   "size": 16757,
+   "sha256": "189914e72c355da55298dc540629781030b881e975c5bc661a1bccb99d90a5d7"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/chrome": {
+   "size": 1147232,
+   "sha256": "67cb3a9f1da7d040707637bd852008f4716255614f9588ce54c8647d8bbb9826"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/chrome.d": {
+   "size": 10575,
+   "sha256": "79e61afea99abaa1dc2c4b40dce760c399fb46198199d9b07a681ae30bb89ba3"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/desktop": {
+   "size": 1168336,
+   "sha256": "4d2af9bdf0eda2b779bea9e63dc6fb0f0c467c3e329d25d46d9cf52a284b797f"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/desktop.d": {
+   "size": 11538,
+   "sha256": "3833ebcb15c8010d103704fd6600178d31cf8b45fddeceb91985f3605d4eba65"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/fb-console": {
+   "size": 588592,
+   "sha256": "2df20ca6c9532df83aeb8c1bbf681ec81b4f3dcb9a45ae7b6e109dd60544bde4"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/fb-console.d": {
+   "size": 6768,
+   "sha256": "c58249ecaa7c6dd8cbf309cc712dd3a45e8d2a52b24d16f387b65c855b11a9bd"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/files": {
+   "size": 1178056,
+   "sha256": "b5fb7ab90c01ff78716275178b5b385e3e30fbde12ffa5c030aef7f32d1daa71"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/files.d": {
+   "size": 11740,
+   "sha256": "aaf303a12f16ccfe6683027e646f9e95aaaac70e92839764860757e9a7f3ac34"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libterminal_sdk.d": {
+   "size": 7552,
+   "sha256": "1961db4524a47334f7d207d10465ae778eb11a3442c6d797a1db55f2841e798c"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libterminal_sdk.rlib": {
+   "size": 1389282,
+   "sha256": "b9d1f6b98ac95ad1aec0424954e9252e54702dfc48200ff212b04068aaaf99c6"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libtui_cellos.d": {
+   "size": 7463,
+   "sha256": "3c5118596e7b71d85cf0bbc947ef09bb416832dc0b2302e289bf7e8b84a4ec94"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libtui_cellos.rlib": {
+   "size": 218616,
+   "sha256": "e2abcf71835f44d2d1861d9bd828a47923adb6b711d0c62da4a529104a5d5e37"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvigrep.d": {
+   "size": 1634,
+   "sha256": "af2c292ebfc8eb1c4bb8b4d314608b1121f857e08fc4acc0c4632733a33aab89"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvigrep.rlib": {
+   "size": 3740592,
+   "sha256": "6919ebcdd8ece04017a6e09b5266c980955ad7e9f2181c71a505dd6109196a42"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvissh.d": {
+   "size": 1677,
+   "sha256": "c77ff64d4becaa2438165efe903265a7c78c876097d6e28a62ce634c5095a5f0"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvissh.rlib": {
+   "size": 367190,
+   "sha256": "4334662337cf0001c00f00f76bbdac85c5c55f89103d6c5ca964266d51c1979d"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvitui.d": {
+   "size": 7699,
+   "sha256": "d7618360ed6ab749be1961cab0931f8dca7eba9b149c2e8eb3a4e5af0ae09f81"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/libvitui.rlib": {
+   "size": 335980,
+   "sha256": "5174f683b70cbc956b149a099f502a818ef4db24a550776aaa3cc5135de897f5"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/ocel": {
+   "size": 4341728,
+   "sha256": "6e42e195c59e5f17a0c611bce8b2f9b04cb24ef0bf537b004be53bc228c6bbf3"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/ocel-quickjs": {
+   "size": 919272,
+   "sha256": "692841b87d684d872c794ae8a66850e269ddcfeecff5f6e065ca147926fe8c65"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/ocel-quickjs.d": {
+   "size": 7384,
+   "sha256": "09a40853345b7767fabcea5ffbbd50811f8f6bec7e8b648fb0c26794e6dfe7be"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/ocel.d": {
+   "size": 12271,
+   "sha256": "4ab02f83aaa3560c058bf55c07a0ad4d2763b2327e4312d7f5f927029226025d"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase02-session-child": {
+   "size": 117376,
+   "sha256": "2a2e92e2c9b755689485580f26f9223b78423455acda85e6dce988421ea47e54"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase02-session-child.d": {
+   "size": 7781,
+   "sha256": "3d9468cee140e4c0278bfc918ba51becc7ebbd780ccc2271be32048ba594597f"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase02-session-parent": {
+   "size": 163304,
+   "sha256": "76d3d0408ee8c0068ed0f3f9b5b8654dc45c6f127ee752ea4b46c204911c4c1d"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase02-session-parent.d": {
+   "size": 7785,
+   "sha256": "fbc27dcfe6a4e4084747fea476aeb4bedf00a756ffa334ac056daf71d10b3d67"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase04-terminal-driver": {
+   "size": 193696,
+   "sha256": "d509df37ddadec5cfe27dca24e1aab00167aca0de2a26b796bd3a2c4dfe79d61"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/phase04-terminal-driver.d": {
+   "size": 8249,
+   "sha256": "5fe075929d1f8743d91973dfb5a440448f7b350ab089af89f3febe59e70d9ee8"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-compositor": {
+   "size": 112064,
+   "sha256": "2fe61691d9f6e0112a0940744ddb9e0c6d1f9a7f9e41ef6b0b337d348f65b8a5"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-compositor.d": {
+   "size": 8528,
+   "sha256": "668bb247c13fe779e81e5f1edce179ea032c3d0c385547ba3fd426e7a5284bc5"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-input": {
+   "size": 167200,
+   "sha256": "fe971bbf2efadf9933c159f452a47a3389a98819b9ddb499c6b15a6050324493"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-input.d": {
+   "size": 9550,
+   "sha256": "d798c2a505bdf227997cdcfb6832b450130c72327c541c83d28b05b11dc4ab60"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-net": {
+   "size": 805536,
+   "sha256": "58af54dbb0eae829451d448d9b5045af08892ca8ffb9af792d307272b1d58f65"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-net.d": {
+   "size": 8107,
+   "sha256": "acf765d618e7dcfe06f9a8b53576cede3de6d02616a69ca5619fa2052e8f644a"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-sshd": {
+   "size": 197048,
+   "sha256": "502fc7312f93ba861cf2ff082f7c37304580219621891a2e08e39e181afb37e3"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-sshd.d": {
+   "size": 6974,
+   "sha256": "dcefffb7a973220f1a5f626e18f005e5e11db44f169252175799bf4e6853fd6a"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-vfs": {
+   "size": 613400,
+   "sha256": "907bacfcc1821b418b2616abbb8c132cf008e8d19f27fc87b7b2f5a021634fd7"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/service-vfs.d": {
+   "size": 10447,
+   "sha256": "36246130c185c80332c20e9a78bbddc3f9b73c6cf828af3f4e7885c102f3a1f0"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/terminal": {
+   "size": 950760,
+   "sha256": "018db0ccfcc813247fa2aa400484e71ed7a410b09edfd64f188cc7df4d8530ad"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/terminal.d": {
+   "size": 12826,
+   "sha256": "5ddc8f2f716c3c7e3d60d03119f07af8e3d1e5f5586d6c109394ff17d4ce3415"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/top-load": {
+   "size": 86840,
+   "sha256": "cf2906c1857b059692db441b907432cc4a9cd21b767c7f66e9b4fea0e7d770c2"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/top-load.d": {
+   "size": 7783,
+   "sha256": "507aed81b9b035efa61896c5862b2d268020a241098afb8a21f8c63d977fd287"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/vm-runner": {
+   "size": 38848,
+   "sha256": "ad3b8ecd264685d0d3a53057c9f580b38e6c234bf16d544a8a87784bc6479b3e"
+  },
+  "/home/dmin/cellos/target/x86_64-unknown-none/release/vm-runner.d": {
+   "size": 6764,
+   "sha256": "9e07bcff6cc7951b2b74d6b1abaf4492ced0ef7ede3d6722640176eb3073cc64"
+  },
+  "/home/dmin/cellos/kernel/src/main.rs": {
+   "size": 80532,
+   "sha256": "a9636fee1f3b63b89a1058c5053d9cf446b84aede4cb10808362823539408c64"
+  }
+ },
+ "missing": []
+}

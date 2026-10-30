@@ -1,0 +1,9 @@
+38f799d49ccccdc71b4d5502d8fb000b8f1f1d9276a029d47289b5cf2ccea925  /tmp/cellbox-phase09-kssh-b0/cells-target/x86_64-unknown-none/release/cellbox
+4fa7ab178cf9aa74b2e1d631757647e9e005fa9d07a4d1e7216163e7ac3c3c4c  /tmp/cellbox-phase09-kssh-b0/kernel-target/x86_64-unknown-none/release/cellos-kernel
+85acbb78e08875fb3863abf1ba8a49d5ae5089d8145679aec0564615707aa967  /tmp/cellbox-phase09-kssh-b0/phase09.iso
+251cfd466fb2c35e9da54df4063b41301e83747710b5412095bcc120860762e8  /tmp/cellbox-phase09-kssh-b0/embedded/kernel_fs.img
+99a44faf8ccf6fdae2c2b665331bdf814dfe167a5b1f2ccf1da91fb6a5b2ba39  /tmp/cellbox-phase09-kssh-b0/cells-target/x86_64-unknown-none/release/service-kms
+0857fbc8d200b7ae065875d20f9a88552e7ddd01c66d723ba9137f1a72b18e3b  /tmp/cellbox-phase09-kssh-b0/cells-target/x86_64-unknown-none/release/kms-ssh-admin
+058f5e61a7f7da9c9af1217966395f93a8e5357c83998cd6cbead03efe17fcc4  /tmp/cellbox-phase09-kssh-b0/cells-target/x86_64-unknown-none/release/phase04-terminal-driver
+4ee6f63ea8211b6c05c70d2fe8d18114e556692412e81ca596a836ebcb56c579  /tmp/cellbox-phase09-kssh-b0/scratch/POLICY.BIN
+dea8c02a81afa7455f217f7e41ccc046f02f81cdde840012f3e7bbe01a01baaf  /tmp/cellbox-phase09-kssh-b0/keys/cell.pub

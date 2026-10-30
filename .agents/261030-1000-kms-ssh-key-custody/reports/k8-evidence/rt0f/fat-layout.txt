@@ -1,0 +1,92 @@
+Checking: /tmp/cellbox-phase09-kssh-rt0f/embedded/kernel_fs.img
+Size: 12582912 bytes (12288 KB)
+Sig: 55aa (should be 55aa)
+FS type: b'  FAT16 '
+BPS=512 SPC=1 RES=1 FAT_CNT=2 ROOT_ENT=512 FAT_SZ=128
+Root dir at 131584, Data area at 147968
+  --- root ---
+    LFN[1] 'bin'
+    SFN BIN~1         -> LFN 'bin'  attr=10 clus=2 sz=0
+    LFN[1] 'etc'
+    SFN ETC~1         -> LFN 'etc'  attr=10 clus=4 sz=0
+    LFN[1] 'kssh'
+    SFN KSSH~1        -> LFN 'kssh'  attr=10 clus=6 sz=0
+    LFN[1] 'p09'
+    SFN P09~1         -> LFN 'p09'  attr=10 clus=8 sz=0
+    SFN POLICY.BIN           attr=20 clus=16275 sz=2169
+bin dir (SFN='BIN~1') at cluster 2, offset 147968
+  --- /bin ---
+    SFN .                    attr=10 clus=2 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellbox'
+    SFN CELLBO~1      -> LFN 'cellbox'  attr=20 clus=9 sz=3151872
+    LFN[1] 'vfs'
+    SFN VFS~1         -> LFN 'vfs'  attr=20 clus=6165 sz=613632
+    LFN[1] 'config'
+    SFN CONFIG~1      -> LFN 'config'  attr=20 clus=7364 sz=47464
+    LFN[1] 'input'
+    SFN INPUT~1       -> LFN 'input'  attr=20 clus=7457 sz=167328
+    LFN[1] 'platform'
+    SFN PLATFO~1      -> LFN 'platform'  attr=20 clus=7784 sz=38576
+    LFN[1] 'nvme'
+    SFN NVME~1        -> LFN 'nvme'  attr=20 clus=7860 sz=40880
+    LFN[1] 'e1000'
+    SFN E1000~1       -> LFN 'e1000'  attr=20 clus=7940 sz=29752
+    LFN[1] 'net'
+    SFN NET~1         -> LFN 'net'  attr=20 clus=7999 sz=491208
+    LFN[1] 'echo'
+    SFN ECHO~1        -> LFN 'echo'  attr=20 clus=8959 sz=30376
+    LFN[2] 'nal-driver'
+    LFN[1] 'phase04-termi'
+    SFN PHASE0~1      -> LFN 'phase04-terminal-driver'  attr=20 clus=9019 sz=267760
+    LFN[1] 'kms'
+    SFN KMS~1         -> LFN 'kms'  attr=20 clus=9542 sz=170408
+    LFN[2] ''
+    LFN[1] 'kms-ssh-admin'
+    SFN KMS-SS~1      -> LFN 'kms-ssh-admin'  attr=20 clus=9875 sz=124296
+    LFN[1] 'cellbox-ssh'
+    SFN CELLBO~2      -> LFN 'cellbox-ssh'  attr=20 clus=10118 sz=3151872
+etc dir (SFN='ETC~1') at cluster 4, offset 148992
+  --- /etc ---
+    SFN .                    attr=10 clus=4 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'cellos'
+    SFN CELLOS~1      -> LFN 'cellos'  attr=10 clus=5 sz=0
+cellos dir (SFN='CELLOS~1') at cluster 5, offset 149504
+  --- /etc/cellos ---
+    SFN .                    attr=10 clus=5 sz=0
+    SFN ..                   attr=10 clus=4 sz=0
+    LFN[1] 'system.toml'
+    SFN SYSTEM~1.TOM  -> LFN 'system.toml'  attr=20 clus=16295 sz=128
+    LFN[2] ''
+    LFN[1] 'services.toml'
+    SFN SERVIC~1.TOM  -> LFN 'services.toml'  attr=20 clus=16296 sz=696
+    LFN[2] ''
+    LFN[1] 'autoload.toml'
+    SFN AUTOLO~1.TOM  -> LFN 'autoload.toml'  attr=20 clus=16298 sz=215
+kssh dir (SFN='KSSH~1') at cluster 6, offset 150016
+  --- /kssh ---
+    SFN .                    attr=10 clus=6 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'kssh.conf'
+    SFN KSSH~1.CON    -> LFN 'kssh.conf'  attr=20 clus=16280 sz=651
+    LFN[1] 'ka16.key'
+    SFN KA16~1.KEY    -> LFN 'ka16.key'  attr=20 clus=16282 sz=444
+    LFN[1] 'kl4.key'
+    SFN KL4~1.KEY     -> LFN 'kl4.key'  attr=20 clus=16283 sz=444
+    LFN[1] 'kp0.key'
+    SFN KP0~1.KEY     -> LFN 'kp0.key'  attr=20 clus=16284 sz=387
+    LFN[2] 'y'
+    LFN[1] 'bad-aes128.ke'
+    SFN BAD-AE~1.KEY  -> LFN 'bad-aes128.key'  attr=20 clus=16285 sz=444
+    LFN[2] 'y'
+    LFN[1] 'bad-chacha.ke'
+    SFN BAD-CH~1.KEY  -> LFN 'bad-chacha.key'  attr=20 clus=16286 sz=480
+    LFN[1] 'raw.bin'
+    SFN RAW~1.BIN     -> LFN 'raw.bin'  attr=20 clus=16287 sz=4096
+p09 dir (SFN='P09~1') at cluster 8, offset 151040
+  --- /p09 ---
+    SFN .                    attr=10 clus=8 sz=0
+    SFN ..                   attr=10 clus=0 sz=0
+    LFN[1] 'ssh.conf'
+    SFN SSH~1.CON     -> LFN 'ssh.conf'  attr=20 clus=16274 sz=88

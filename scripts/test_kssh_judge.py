@@ -215,13 +215,25 @@ class SequenceTests(unittest.TestCase):
     def test_unknown_attempt_id(self):
         self.assertEqual(self.cmp(["s00", "zz"], ["accepted-pw"])["unknown_attempts"], ["zz"])
 
-    def test_s06d_optional_non_acceptance_and_acceptance_is_flagged(self):
-        a = ["s06d", "s02"]
-        self.assertTrue(self.cmp(a, ["accepted-pk:" + FPS["ka16"]])["ok"])
-        self.assertTrue(self.cmp(a, ["probe-rejected", "accepted-pk:" + FPS["ka16"]])["ok"])
-        r = self.cmp(a, ["accepted-pk:" + FPS["ka16"], "accepted-pk:" + FPS["ka16"]])
-        self.assertFalse(r["ok"])
-        self.assertTrue(r["optional_accepted"])
+    def test_s06d_none_and_typed_probe_ok_and_acceptance_is_flagged(self):
+        a = ["s06d", "s06d-typed", "s02"]
+        ka = "accepted-pk:" + FPS["ka16"]
+        self.assertEqual(J.EXPECTED_CONNECTIONS["t0"]["s06d"], [])
+        self.assertEqual(J.EXPECTED_CONNECTIONS["t0"]["s06d-typed"], ["probe-ok"])
+        r = self.cmp(a, ["probe-ok", ka])
+        self.assertTrue(r["ok"], r)
+        self.assertFalse(r["optional_accepted"])
+        # s06d (direct launch) made a connection: mismatch, not an acceptance
+        r = self.cmp(a, ["probe-ok", "probe-ok", ka])
+        self.assertEqual((r["ok"], r["attempt"], r["optional_accepted"]), (False, "s02", False))
+        # typed form made no connection: plain mismatch
+        r = self.cmp(a, [ka])
+        self.assertEqual((r["ok"], r["optional_accepted"]), (False, False))
+        # an acceptance for either attempt
+        for got in ([ka, "probe-ok", ka], ["probe-ok", ka, ka], [ka, ka]):
+            r = self.cmp(a, got)
+            self.assertFalse(r["ok"], got)
+            self.assertTrue(r["optional_accepted"], got)
 
     def test_calibration_attempts(self):
         self.assertTrue(self.cmp(["cal-R1", "cal-R16", "cal-R64"], ["probe-ok"] * 3)["ok"])
@@ -241,6 +253,9 @@ class SequenceTests(unittest.TestCase):
         self.assertTrue(r["ok"], r)
 
 
+ZERO_SHA = hashlib.sha256(bytes(1048576)).hexdigest()
+
+
 class SerialTests(unittest.TestCase):
     def test_parse(self):
         text = "\n".join([
@@ -257,6 +272,16 @@ class SerialTests(unittest.TestCase):
         self.assertEqual(S["obs"][0]["kv"], {"fp": "SHA256:xyz", "prefix": "0123456789abcdef"})
         self.assertEqual(S["obs"][-1]["kv"], {"unlock-ms": "1234"})
         self.assertEqual(S["terminal"], ["FAIL failures=1 checks=3"])
+
+    def test_attempt_segments_and_test_config_lines(self):
+        S = J.parse_serial("\n".join([
+            "USER: P04 INFO p09-case kssh-s11", "USER: P04 INFO kssh-attempt s11", "USER: P04 INFO ssh-test-config rekey=lane",
+            "USER: P04 INFO ssh-rekeys 3", "USER: P04 PASS kssh-s11", "USER: P04 INFO ssh-test-config kssh-faults=on",
+            "USER: P04 INFO kssh-attempt s02", "USER: P04 INFO kssh-attempt s03", "USER: P04 INFO ssh-rekeys 0"]))
+        self.assertEqual([s["id"] for s in S["segments"]], ["s11", "s02", "s03"])
+        self.assertEqual(S["segments"][0]["lines"], ["INFO ssh-test-config rekey=lane", "INFO ssh-rekeys 3"])
+        self.assertEqual(S["segments"][1]["lines"], [])
+        self.assertEqual(len(S["test_config"]), 2)
 
 
 # ---------------------------------------------------------------------------------- keys fixture
@@ -286,7 +311,7 @@ class KeyGenTests(KeysCase):
             self.assertTrue((self.stage / f"{name}.key").read_bytes().startswith(b"-----BEGIN OPENSSH PRIVATE KEY-----\n"))
             self.assertNotIn(b"\r", (self.stage / f"{name}.key").read_bytes())
         self.assertEqual((self.stage / "raw.bin").stat().st_size, 4096)
-        self.assertEqual(len((self.stage / "authdir/authorized_keys_main").read_text().splitlines()), 3)
+        self.assertEqual(len((self.stage / "authdir/authorized_keys_main").read_text().splitlines()), 5)  # + kr1, kr64
         self.assertEqual(len((self.stage / "authdir/authorized_keys_b").read_text().splitlines()), 1)
 
     def test_fingerprints_equal_ssh_keygen(self):
@@ -415,6 +440,16 @@ class KeyGenTests(KeysCase):
     def test_second_gen_into_same_dir_refused(self):
         with self.assertRaisesRegex(K.KeyError_, "already holds"):
             K.gen(self.keys, self.tmp / "stage6")
+
+    def test_calibration_keys_are_authorized_only_with_calibrate(self):
+        main = (self.stage / "authdir/authorized_keys_main").read_text().splitlines()
+        self.assertEqual(main, [self.exp["keys"][n]["pub"] for n in ("ka16", "kl4", "kp0", "kr1", "kr64")])
+        self.assertNotIn(self.exp["keyb"]["pub"], main)
+        plain = self.tmp / "nocal"
+        exp = K.gen(plain / "keys", plain / "stage")
+        main = (plain / "stage/authdir/authorized_keys_main").read_text().splitlines()
+        self.assertEqual(main, [exp["keys"][n]["pub"] for n in ("ka16", "kl4", "kp0")])
+        self.assertFalse((plain / "stage/kr1.key").exists())
 
     def test_canaries_contain_every_secret(self):
         can = dict(K.canaries(self.keys))
@@ -608,7 +643,7 @@ class ClassTests(unittest.TestCase):
 FP_HOST = "SHA256:cONn2eJlrd6p5aQzoj+EKOthgBXRtv+n46chw14RSLo"
 ATTEMPTS_BEFORE = {  # marker -> attempt ids typed before it
     "t0": {"kssh-s00": ["s00"], "kssh-s10": ["s10-changed", "s10-untrusted"], "kssh-s04a": ["s04a"], "kssh-s04b": ["s04b"],
-           "kssh-s06d": ["s06d"], "kssh-s02": ["s02"], "kssh-s02p": ["s02p"], "kssh-s03": ["s03"], "kssh-s03b": ["s03b"],
+           "kssh-s06d": ["s06d", "s06d-typed"], "kssh-s02": ["s02"], "kssh-s02p": ["s02p"], "kssh-s03": ["s03"], "kssh-s03b": ["s03b"],
            "kssh-s02x": ["s02x"], "kssh-s08": [f"s08-w{i}" for i in range(1, 6)] + ["s08-locked", "s08-ok"],
            "kssh-s15": ["s15-i", "s15-iii", "s15-iv"]},
     "f": {"kssh-s00": ["s00"], "kssh-s05a": ["s05a"], "kssh-s05b": ["s05b"], "kssh-s05c": ["s05c"], "kssh-s02": ["s02"],
@@ -645,7 +680,7 @@ def sshd_lines(cls, port, listener=22):
 class EvidenceCase(KeysCase):
     """Synthetic evidence directories for the judge, built from the contract tables."""
 
-    def build(self, mode="t0", name="ev"):
+    def build(self, mode="t0", name="ev", calibrate=False):
         ev = self.tmp / f"{name}-{secrets.token_hex(3)}"
         ev.mkdir()
         fps = {n: e["fp"] for n, e in self.exp["keys"].items()}
@@ -657,6 +692,13 @@ class EvidenceCase(KeysCase):
         for marker in J.MARKERS[mode]:
             for attempt in ATTEMPTS_BEFORE[mode].get(marker, []):
                 serial.append(f"USER: P04 INFO kssh-attempt {attempt}")
+                if mode == "f":
+                    serial += ["USER: P04 INFO ssh-test-config rekey=lane", "USER: P04 INFO ssh-test-config kssh-faults=on"]
+                    if attempt == "s11":
+                        serial += ["USER: P04 INFO ssh-rekeys 64",
+                                   f"USER: P04 INFO ssh-bytes stdout=1048576 sha256={ZERO_SHA} peak_pending=2048 peak_chunk=16384"]
+                    else:
+                        serial.append("USER: P04 INFO ssh-rekeys 0")
                 for cls in J.EXPECTED_CONNECTIONS[mode][attempt]:
                     if cls.startswith("accepted-pk:"):
                         cls = "accepted-pk:" + fps[cls.split(":", 1)[1]]
@@ -667,10 +709,15 @@ class EvidenceCase(KeysCase):
             if marker == "kssh-s03":
                 serial.append("USER: P04 INFO kssh-obs s03 unlock-ms=2345")
             serial.append(f"USER: P04 PASS {marker}")
+            if marker == "kssh-s01" and calibrate:  # real-run order: R1, R64, R16
+                for r in (1, 64, 16):
+                    serial.append(f"USER: P04 INFO kssh-attempt cal-R{r}")
+                    sshd += sshd_lines("probe-ok", port)
+                    port += 1
         serial.append(f"USER: P04-TERMINAL: PASS checks={len(J.MARKERS[mode])}")
         self.write(ev, serial, sshd)
         (ev / "qemu-argv.txt").write_text("qemu-system-x86_64 -machine q35 -accel tcg -netdev user,id=net0 -device e1000,netdev=net0 -drive file=x.img\n")
-        (ev / "p09-ledger.txt").write_text("p09x-kssh-login\n" if mode == "t0" else "p09x-kssh-rekey\n")
+        (ev / "p09-ledger.txt").write_text("p09x-kssh-login\n" * 3 if mode == "t0" else "p09x-kssh-login\np09x-kssh-rekey\n")
         (ev / "census-compare.json").write_text(json.dumps({"equal": 470, "missing": 0, "changed": 0, "baseline_present": 470}))
         return ev
 
@@ -749,12 +796,134 @@ class JudgeTests(EvidenceCase):
         ev = self.build()
         (ev / "p09-ledger.txt").unlink()
         self.assertFalse(self.run_judge(ev)[2]["verdict.json"]["checks"]["remote-ledger"]["pass"])
-        ev = self.build()
-        (ev / "p09-ledger.txt").write_text("p09x-kssh-login\np09x-kssh-login\n")
-        self.assertFalse(self.run_judge(ev)[2]["verdict.json"]["checks"]["remote-ledger"]["pass"])
+        for bad in ("p09x-kssh-login\np09x-kssh-login\n", "p09x-kssh-login\n" * 4, "p09x-kssh-login\n" * 3 + "p09x-other\n"):
+            ev = self.build()
+            (ev / "p09-ledger.txt").write_text(bad)
+            self.assertFalse(self.run_judge(ev)[2]["verdict.json"]["checks"]["remote-ledger"]["pass"], bad)
+        for bad in ("p09x-kssh-login\n", "p09x-kssh-rekey\n", "p09x-kssh-login\np09x-kssh-rekey\np09x-kssh-rekey\n",
+                    "p09x-kssh-login\np09x-kssh-rekey\np09x-other\n"):
+            ev = self.build("f")
+            (ev / "p09-ledger.txt").write_text(bad)
+            self.assertFalse(self.run_judge(ev, "f", "rt0f")[2]["verdict.json"]["checks"]["remote-ledger"]["pass"], bad)
+        ev = self.build()  # non-p09x lines are not ledger entries
+        (ev / "p09-ledger.txt").write_text("noise\n" + "p09x-kssh-login\n" * 3)
+        self.assertTrue(self.run_judge(ev)[2]["verdict.json"]["checks"]["remote-ledger"]["pass"])
+
+    def test_session_a_close_is_an_expected_final_marker(self):
+        for mode, set_ in (("t0", "rt0"), ("f", "rt0f")):
+            ev = self.build(mode)
+            rc, out, f = self.run_judge(ev, mode, set_)
+            self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+            self.assertIn("PASS marker:session-a-close", out)
+            self.edit(ev, lambda s, h: ([l for l in s if "PASS session-a-close" not in l], h))
+            self.assertFalse(self.run_judge(ev, mode, set_)[2]["verdict.json"]["checks"]["marker:session-a-close"]["pass"])
+
+    def test_calibration_attempts_follow_serial_order(self):
+        ev = self.build(calibrate=True)
+        rc, out, f = self.run_judge(ev, set_="b0")
+        self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+        self.assertEqual([a for a in f["verdict.json"]["observations"]["attempts"] if a.startswith("cal-")],
+                         ["cal-R1", "cal-R64", "cal-R16"])
+        ev = self.build("f", calibrate=True)
+        self.assertEqual(self.klass(self.run_judge(ev, "f", "b0")[2]), "A")
+
+    def f_run(self, mutate):
         ev = self.build("f")
-        (ev / "p09-ledger.txt").write_text("p09x-kssh-login\n")
-        self.assertFalse(self.run_judge(ev, "f", "rt0f")[2]["verdict.json"]["checks"]["remote-ledger"]["pass"])
+        self.edit(ev, lambda s, h: (mutate(s), h))
+        return self.run_judge(ev, "f", "rt0f")
+
+    @staticmethod
+    def in_segment(lines, attempt, fn):
+        """Apply `fn(line) -> [lines]` to the lines of one attempt's serial segment only."""
+        out, cur = [], None
+        for l in lines:
+            m = re.search(r"P04 INFO kssh-attempt (\S+)", l)
+            if m:
+                cur = m.group(1)
+            elif re.search(r"P04 (PASS|FAIL) ", l):
+                cur = None
+            out += fn(l) if cur == attempt else [l]
+        return out
+
+    def test_zero_mib_digest_constant(self):
+        self.assertEqual(J.ZERO_MIB_SHA256, "30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58")
+        self.assertEqual(J.ZERO_MIB_SHA256, hashlib.sha256(bytes(1048576)).hexdigest())
+
+    def test_f_clean_run_passes_the_new_oracles(self):
+        rc, out, f = self.f_run(lambda s: s)
+        c = f["verdict.json"]["checks"]
+        self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+        self.assertTrue(c["s11-rekey-and-sink"]["pass"])
+        self.assertTrue(c["kssh-faults-announced"]["pass"])
+        self.assertNotIn("t0-no-test-config", c)
+
+    def test_s11_rekey_and_sink_failures(self):
+        sink = f"USER: P04 INFO ssh-bytes stdout=1048576 sha256={ZERO_SHA} peak_pending=2048 peak_chunk=16384"
+        cases = {
+            "no rekeys": lambda l: [] if l.endswith("ssh-rekeys 64") else [l],
+            "zero rekeys": lambda l: [l.replace("ssh-rekeys 64", "ssh-rekeys 0")],
+            "two rekeys": lambda l: [l, l] if l.endswith("ssh-rekeys 64") else [l],
+            "wrong digest": lambda l: [l.replace(ZERO_SHA, "a" * 64)],
+            "short stdout": lambda l: [l.replace("stdout=1048576", "stdout=1048575")],
+            "pending over": lambda l: [l.replace("peak_pending=2048", "peak_pending=2049")],
+            "chunk over": lambda l: [l.replace("peak_chunk=16384", "peak_chunk=16385")],
+            "two sinks": lambda l: [l, l] if l == sink else [l],
+            "no sink": lambda l: [] if l == sink else [l],
+        }
+        for name, fn in cases.items():
+            rc, out, f = self.f_run(lambda s, fn=fn: self.in_segment(s, "s11", fn))
+            c = f["verdict.json"]["checks"]["s11-rekey-and-sink"]
+            self.assertFalse(c["pass"], name)
+            self.assertEqual(self.klass(f), "D", name)  # after the first sign epoch a D stays D
+        # bounds exactly at the limit pass; the oracle looks only inside the s11 segment
+        rc, out, f = self.f_run(lambda s: self.in_segment(s, "s02", lambda l: [l.replace("ssh-rekeys 0", "ssh-rekeys 7")]))
+        self.assertTrue(f["verdict.json"]["checks"]["s11-rekey-and-sink"]["pass"])
+
+    def test_faults_announced_exactly_once_for_the_fault_attempts(self):
+        on = "USER: P04 INFO ssh-test-config kssh-faults=on"
+        for attempt in ("s05a", "s05b", "s05c", "s02", "s11"):
+            for name, fn in (("missing", lambda l: [] if l == on else [l]), ("twice", lambda l: [l, l] if l == on else [l])):
+                rc, out, f = self.f_run(lambda s, a=attempt, fn=fn: self.in_segment(s, a, fn))
+                self.assertFalse(f["verdict.json"]["checks"]["kssh-faults-announced"]["pass"], (attempt, name))
+        # s00 is not part of the contract: its announcement is not judged
+        rc, out, f = self.f_run(lambda s: self.in_segment(s, "s00", lambda l: [] if l == on else [l]))
+        self.assertTrue(f["verdict.json"]["checks"]["kssh-faults-announced"]["pass"])
+        # an announcement belonging to another attempt's segment does not count
+        rc, out, f = self.f_run(lambda s: [l for l in s if l != on])
+        self.assertFalse(f["verdict.json"]["checks"]["kssh-faults-announced"]["pass"])
+
+    def test_t0_any_test_config_line_is_class_d(self):
+        for line in ("USER: P04 INFO ssh-test-config kssh-faults=on", "USER: P04 INFO ssh-test-config rekey=lane"):
+            ev = self.build()
+            self.edit(ev, lambda s, h, line=line: (s[:6] + [line] + s[6:], h))
+            rc, out, f = self.run_judge(ev)
+            c = f["verdict.json"]["checks"]["t0-no-test-config"]
+            self.assertFalse(c["pass"])
+            self.assertIn("faults-build-in-product-image", c["detail"])
+            self.assertEqual((rc, self.klass(f)), (1, "D"), out)
+        ev = self.build()
+        c = self.run_judge(ev)[2]["verdict.json"]["checks"]
+        self.assertTrue(c["t0-no-test-config"]["pass"])
+        self.assertNotIn("kssh-faults-announced", c)
+        self.assertNotIn("s11-rekey-and-sink", c)
+
+    def test_s06d_and_typed_form_connections(self):
+        ev = self.build()
+        c = self.run_judge(ev)[2]["verdict.json"]["checks"]
+        self.assertTrue(c["s06d-no-acceptance"]["pass"])
+        self.assertTrue(c["sshd-connection-sequence"]["pass"])
+        self.assertEqual(ATTEMPTS_BEFORE["t0"]["kssh-s06d"], ["s06d", "s06d-typed"])
+
+        def drop_typed(s, h):  # the typed form made no connection: ordinary mismatch, not an acceptance
+            j = next(k for k, l in enumerate(h) if "Accepted publickey" in l) - 4  # head of s02's connection
+            return s, h[:j - 3] + h[j:]  # the 3 lines (head, Postponed, closed) before it are s06d-typed's
+
+        ev = self.build()
+        self.edit(ev, drop_typed)
+        c = self.run_judge(ev)[2]["verdict.json"]["checks"]
+        self.assertFalse(c["sshd-connection-sequence"]["pass"])
+        self.assertIn("attempt s06d-typed", c["sshd-connection-sequence"]["detail"])
+        self.assertTrue(c["s06d-no-acceptance"]["pass"])
 
     def test_policy_shape_absent(self):
         ev = self.build()

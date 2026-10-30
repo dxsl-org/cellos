@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "nonce": "351cd60d5afe7d82",
+  "keys": {
+    "ka16": {
+      "fp": "SHA256:7Hf6kE1YXbZjcUjOulrAiis8N9HG4DrW9PifVAe9d4s",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP9dkCyRz6oexnxMLNcxKLWfN3nv4LWMxXQI10p1IRIL kssh-ka16",
+      "blob_prefix": "379c271d94526af2",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "kl4": {
+      "fp": "SHA256:IaKUaK+4er2vhlR0EonOF5q9MXvRW0IrRpACyUiuofA",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJkgCxJ5QORD3olAw+9bKgiQLbZ01khbBIk0bxVzreSX kssh-kl4",
+      "blob_prefix": "775738ff8885dae2",
+      "blob_len": 274,
+      "rounds": 4,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "kp0": {
+      "fp": "SHA256:2PylgKZztZmmHoMhzrrCVS9iY44jM/pj3iSOzdrCLHA",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAsFmi2WQOHePfLqstkRdvmIWCB+Lo8h5MIJFiQfbg8V kssh-kp0",
+      "blob_prefix": "ce17b24d02059e09",
+      "blob_len": 234,
+      "rounds": 0,
+      "cipher": "none",
+      "kdf": "none",
+      "custody": "plain"
+    },
+    "bad-aes128": {
+      "fp": "SHA256:yEQvPFJNrmmuM4PEdRznUf53CHX+kdHxJhn4Wh/NOEY",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8cfd/C71v6GqX4z9rat/dVEMX+UMj0vN4t4UolXKGC kssh-bad-aes128",
+      "blob_prefix": "5eface0a26a33649",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes128-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "bad-chacha": {
+      "fp": "SHA256:T5LUhoKCPdNVbS6LB0hSX5Y5EHeGPfROYM8sF1wFzQ0",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhs1arRLtEunn3Oge9+i/+qYgmqgSnv5KcXq9jQWV4v kssh-bad-chacha",
+      "blob_prefix": "0bd87a33b72602e4",
+      "blob_len": 301,
+      "rounds": 16,
+      "cipher": "chacha20-poly1305@openssh.com",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    }
+  },
+  "calibrate": false,
+  "keyb": {
+    "fp": "SHA256:t5Us2IrT7p3BpjrHeDDnZnIBsBPg3voigH6Y1/34cyg",
+    "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBrx/KONMG1JeJTo2TXN5LcRKW34XP1ybMH7L3f93QD7 kssh-kb"
+  },
+  "raw": {
+    "sha256": "e3197ef2a123cac39bd1ea9c2aae589922e582c2197c1c7eaa3b1f6059acf802",
+    "len": 4096
+  }
+}

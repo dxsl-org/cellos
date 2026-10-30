@@ -972,33 +972,104 @@ fn s06c() -> Res {
     )
 }
 
-/// S06d: the same ELF launched as `/bin/cellbox ssh ...` (not the `/bin/cellbox-ssh` edge)
-/// must not reach a signature: kms_denied, a spawn refusal, or any refusal with no prompt.
+/// How a refused (or not) ssh attempt looks, for `s06d-form` / `s06d-typed form`.
+fn refusal_form(seen: bool, ran: bool, err: &str) -> String {
+    if seen {
+        String::from("prompt-shown")
+    } else if err.contains("ssh: not permitted to use the key service") {
+        String::from("kms_denied")
+    } else if ran {
+        String::from("ran")
+    } else if err.trim().is_empty() {
+        String::from("silent-refusal")
+    } else {
+        format!("refused:{}", clip(err.trim().lines().next().unwrap_or("")).replace(' ', "_"))
+    }
+}
+
+/// S06d: the same ELF (`/bin/cellbox`, argv `ssh ...`) launched by the driver itself, a
+/// non-shell caller on no `/bin/cellbox-ssh` edge, carries no sign flag: it must end without
+/// a passphrase prompt, stdout or success (expected: `kms_denied`, no sshd connection).
+/// The typed `/bin/cellbox ssh ...` form is only an observation (the shell strips the
+/// prefix, so it is the ordinary ssh path).
 fn s06d(a: &mut Term, c: &mut Ctx) -> Res {
+    let r = s06d_direct(c);
+    let typed = s06d_typed(a, c);
+    println(&format!("P04 INFO kssh-obs s06d-typed form={typed}"));
+    r
+}
+
+fn s06d_direct(c: &mut Ctx) -> Res {
+    println("P04 INFO kssh-attempt s06d");
+    let mut b = Term::open(24, 80).map_err(|s| format!("open {s:?}"))?;
+    let port = format!("{}", c.conf.main);
+    let argv = ["ssh", "--user", "tester", "--auth", "publickey", "--identity", "ka16", "-p", &port, HOST, "--command", "true"];
+    let launched = b.host.launch("/bin/cellbox", &argv, &[]);
+    let mut seen = false;
+    let mut ended = Err(String::from("not launched"));
+    if launched.is_ok() {
+        // The attachment is only driven while polling; a child that never attaches (or exits
+        // first) ends this wait early or at its bound.
+        let _ = b.host.wait_attached(5_000);
+        let end = now_ms() + SSH_MS;
+        ended = loop {
+            b.pump();
+            if !seen && b.stderr_text().contains("Enter passphrase") {
+                // Never answered: Escape only.
+                seen = true;
+                let _ = press(&mut b, ESCAPE);
+            }
+            match b.host.poll_child() {
+                Ok(ChildPoll::Exited) => {
+                    b.pump();
+                    break Ok(());
+                }
+                Ok(ChildPoll::Running) => {}
+                Err(status) => break Err(format!("poll {status:?}")),
+            }
+            if now_ms() >= end {
+                break Err(String::from("exit-timeout"));
+            }
+            let _ = sys_set_timer(1);
+        };
+    }
+    let out = strip_ansi(&b.out);
+    let err = b.stderr_text();
+    let hits = c.hits;
+    scan(&b, c, "s06d");
+    let withheld = c.hits != hits;
+    let code = b.host.exit_code();
+    let closed = b.host.close();
+    let ran = code == Some(0);
+    let form = if withheld { String::from("withheld") } else { refusal_form(seen, ran, &err) };
+    println(&format!("P04 INFO kssh-obs s06d-form={form}"));
+    verdict(
+        &[
+            ("launched", launched.is_ok()),
+            ("ended", ended.is_ok()),
+            ("no-prompt", !seen),
+            ("no-stdout", out.trim().is_empty()),
+            ("not-success", !ran),
+            ("closed", closed.is_ok()),
+        ],
+        format!("form={form} launch={launched:?} end={ended:?} exit={code:?} close={closed:?}"),
+    )
+}
+
+/// The typed form: observation only (one sshd probe, Escape at the prompt).
+fn s06d_typed(a: &mut Term, c: &mut Ctx) -> String {
     let cmd = format!(
         "/bin/cellbox ssh --user tester --auth publickey --identity ka16 -p {} {HOST} --command true",
         c.conf.main
     );
-    let mut s = spec("s06d", cmd, "ka16", Typed::Never);
+    let mut s = spec("s06d-typed", cmd, "ka16", Typed::Escape);
     s.rec = false;
-    let p = attempt_pk(a, c, &s)?;
-    let form = if p.seen {
-        String::from("prompt-shown")
-    } else if p.err_has("ssh: not permitted to use the key service") {
-        String::from("kms_denied")
-    } else if p.st == "st=0" {
-        String::from("ran")
-    } else if p.err.trim().is_empty() {
-        String::from("silent-refusal")
-    } else {
-        let line = p.err.trim().lines().next().unwrap_or("");
-        format!("refused:{}", clip(line).replace(' ', "_"))
-    };
-    println(&format!("P04 INFO kssh-obs s06d-form={form}"));
-    verdict(
-        &[("no-prompt", !p.seen), ("refused", p.st != "st=0"), ("no-stdout", p.out.is_empty())],
-        format!("form={form} {}", p.describe()),
-    )
+    s.ms = PROMPT_MS;
+    match attempt_pk(a, c, &s) {
+        Ok(p) if p.withheld => String::from("withheld"),
+        Ok(p) => refusal_form(p.seen, p.st == "st=0", &p.err),
+        Err(why) => format!("error:{}", clip(&why).replace(' ', "_")),
+    }
 }
 
 /// S02 (and S02', S08's final login): a login with the stored key.

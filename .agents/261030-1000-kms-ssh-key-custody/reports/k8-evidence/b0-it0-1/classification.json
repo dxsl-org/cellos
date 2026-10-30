@@ -1,0 +1,12 @@
+{
+  "class": "C",
+  "reasons": [
+    "D:marker:kssh-s06d: FAIL failed=[\"no-prompt\"] form=prompt-shown st=255 seen=true prompts=1 ms=3022 code=- err=Enter passphrase for key 'ka16': .ssh: unlock cancelled",
+    "C:no-unexpected-markers: ['session-a-close']",
+    "D:p04-terminal-pass: FAIL failures=1 checks=23 fails=1",
+    "D:sshd-connection-sequence: index 1: attempt cal-R1 expected probe-ok got probe-rejected (port 52442); expected 22 actual 22",
+    "D:remote-ledger: p09x-kssh-login x3"
+  ],
+  "first_sign_epoch_passed": false,
+  "no_evidence_value": true
+}

@@ -1,0 +1,199 @@
+== b0-if-1: class A checks=45 failed=[] reasons=[]
+   [ INFO] [policy] loaded + verified (59 entries, flags 0x00)
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL
+   [ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+   [kms] fail-closed node identity service starting
+   [kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf
+   P04 PASS shell-prompt
+   P04 PASS kssh-conf
+   P04 INFO kssh-obs conf mode=f calibrate=false keys=3
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s00
+   P04 INFO kssh-obs s01 fp=SHA256:7Hf6kE1YXbZjcUjOulrAiis8N9HG4DrW9PifVAe9d4s prefix=379c271d94526af2
+   P04 PASS kssh-s01
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05a
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05b
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05c
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s02
+   P04 INFO ssh-rekeys 64
+   P04 INFO ssh-bytes stdout=1048576 sha256=30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58 peak_pending=2048 peak_chunk=16384
+   P04 PASS kssh-s11
+   P04 INFO kssh-obs transcripts scans=10 hits=0 canaries=11
+   P04 PASS kssh-transcripts
+   P04 PASS session-a-close
+== b0-if-2: class A checks=47 failed=[] reasons=[]
+   [ INFO] [policy] loaded + verified (59 entries, flags 0x00)
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL
+   [ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+   [kms] fail-closed node identity service starting
+   [kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf
+   P04 PASS shell-prompt
+   P04 PASS kssh-conf
+   P04 INFO kssh-obs conf mode=f calibrate=false keys=3
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s00
+   P04 INFO kssh-obs s01 fp=SHA256:o76cNJNmDJrVtM6cRE9OUBV80q80MoHruxzir5vsuko prefix=d9e60c826e6d05dd
+   P04 PASS kssh-s01
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05a
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05b
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s05c
+   P04 INFO ssh-rekeys 0
+   P04 PASS kssh-s02
+   P04 INFO ssh-rekeys 64
+   P04 INFO ssh-bytes stdout=1048576 sha256=30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58 peak_pending=2048 peak_chunk=16384
+   P04 PASS kssh-s11
+   P04 INFO kssh-obs transcripts scans=10 hits=0 canaries=11
+   P04 PASS kssh-transcripts
+   P04 PASS session-a-close
+== b0-it0-1: class C checks=55 failed=['marker:kssh-s06d', 'no-unexpected-markers', 'p04-terminal-pass', 'sshd-connection-sequence', 'remote-ledger'] reasons=['D:marker:kssh-s06d: FAIL failed=["no-prompt"] form=prompt-shown st=255 seen=true prompts=1 ms=3022 code=- err=Enter passphrase for key \'ka16\': .ssh: unlock cancelled', "C:no-unexpected-markers: ['session-a-close']", 'D:p04-terminal-pass: FAIL failures=1 checks=23 fails=1', 'D:sshd-connection-sequence: index 1: attempt cal-R1 expected probe-ok got probe-rejected (port 52442); expected 22 actual 22', 'D:remote-ledger: p09x-kssh-login x3']
+   [ INFO] [policy] loaded + verified (59 entries, flags 0x00)
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL
+   [ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+   [kms] fail-closed node identity service starting
+   [kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf
+   P04 PASS shell-prompt
+   P04 PASS kssh-conf
+   P04 INFO kssh-obs conf mode=t0 calibrate=true keys=5
+   P04 PASS kssh-s00
+   P04 PASS kssh-s01a
+   P04 INFO kssh-obs s01b fmt-ms aes128=584 chacha=584
+   P04 PASS kssh-s01b
+   P04 INFO kssh-obs s01 fp=SHA256:YM7Sc2Iy5RvMgeYUJRnqICxnLvh1gY5laiMG8ETJJOQ prefix=c100a999ae1601a2
+   P04 PASS kssh-s01
+   P04 INFO kssh-obs kdf rounds=1 ms=0
+   P04 INFO kssh-obs kdf-error cal-R1 st=255 seen=false prompts=0 ms=2692 code=auth_failed err=ssh: authentication failed
+   P04 INFO kssh-obs kdf rounds=64 ms=0
+   P04 INFO kssh-obs kdf-error cal-R64 st=255 seen=false prompts=0 ms=2692 code=auth_failed err=ssh: authentication failed
+   P04 INFO kssh-obs cal-R16 ms=3256 enter-ms=267
+   P04 INFO kssh-obs kdf rounds=16 ms=267
+   P04 INFO kssh-obs delete-word-echo echoed=0
+   P04 PASS kssh-s09
+   P04 PASS kssh-s10
+   P04 PASS kssh-s04a
+   P04 PASS kssh-s04b
+   P04 PASS kssh-s06a
+   P04 INFO kssh-obs s06b-sent=4096
+   P04 INFO kssh-obs s06b reach=full code=2
+   P04 PASS kssh-s06b
+   P04 INFO kssh-obs s06c flags-op25=silent flags-sign=silent control=code=2
+   P04 PASS kssh-s06c
+   P04 INFO kssh-obs s06d-form=prompt-shown
+   P04 FAIL kssh-s06d failed=["no-prompt"] form=prompt-shown st=255 seen=true prompts=1 ms=3022 code=- err=Enter passphrase for key 'ka16': .ssh: unlock cancelled
+   P04 PASS kssh-s02
+   P04 PASS kssh-s02p
+   P04 INFO kssh-obs unlock-ms ms=277
+   P04 PASS kssh-s03
+   P04 PASS kssh-s03b
+   P04 PASS kssh-s02x
+   P04 INFO kssh-obs s08 fail-ms=95,96,95,97,95 locked-ms=67
+   P04 PASS kssh-s08
+   P04 PASS kssh-s15
+   P04 INFO kssh-obs transcripts scans=51 hits=0 canaries=50
+   P04 PASS kssh-transcripts
+   P04 PASS session-a-close
+== b0-it0-2: class A checks=57 failed=[] reasons=[]
+   [ INFO] [policy] loaded + verified (59 entries, flags 0x00)
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL
+   [ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+   [kms] fail-closed node identity service starting
+   [kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf
+   P04 PASS shell-prompt
+   P04 PASS kssh-conf
+   P04 INFO kssh-obs conf mode=t0 calibrate=true keys=5
+   P04 PASS kssh-s00
+   P04 PASS kssh-s01a
+   P04 INFO kssh-obs s01b fmt-ms aes128=583 chacha=572
+   P04 PASS kssh-s01b
+   P04 INFO kssh-obs s01 fp=SHA256:E4gWmBqPcktcVe38t3hYIE3dyMCFiU8ab/+foHZJiwc prefix=aa4875895848cc29
+   P04 PASS kssh-s01
+   P04 INFO kssh-obs cal-R1 ms=3004 enter-ms=63
+   P04 INFO kssh-obs kdf rounds=1 ms=63
+   P04 INFO kssh-obs cal-R64 ms=3788 enter-ms=865
+   P04 INFO kssh-obs kdf rounds=64 ms=865
+   P04 INFO kssh-obs cal-R16 ms=3175 enter-ms=255
+   P04 INFO kssh-obs kdf rounds=16 ms=255
+   P04 INFO kssh-obs delete-word-echo echoed=0
+   P04 PASS kssh-s09
+   P04 PASS kssh-s10
+   P04 PASS kssh-s04a
+   P04 PASS kssh-s04b
+   P04 PASS kssh-s06a
+   P04 INFO kssh-obs s06b-sent=4096
+   P04 INFO kssh-obs s06b reach=full code=2
+   P04 PASS kssh-s06b
+   P04 INFO kssh-obs s06c flags-op25=silent flags-sign=silent control=code=2
+   P04 PASS kssh-s06c
+   P04 INFO kssh-obs s06d-form=kms_denied
+   P04 INFO kssh-obs s06d-typed form=prompt-shown
+   P04 PASS kssh-s06d
+   P04 PASS kssh-s02
+   P04 PASS kssh-s02p
+   P04 INFO kssh-obs unlock-ms ms=254
+   P04 PASS kssh-s03
+   P04 PASS kssh-s03b
+   P04 PASS kssh-s02x
+   P04 INFO kssh-obs s08 fail-ms=94,94,92,94,94 locked-ms=45
+   P04 PASS kssh-s08
+   P04 PASS kssh-s15
+   P04 INFO kssh-obs transcripts scans=52 hits=0 canaries=50
+   P04 PASS kssh-transcripts
+   P04 PASS session-a-close
+== b0-it0-3: class A checks=58 failed=[] reasons=[]
+   [ INFO] [policy] loaded + verified (59 entries, flags 0x00)
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL — an older waiter erased its replacement
+   [ERROR] [selftest] COMPLETION-QUEUE: FAIL
+   [ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+   [kms] fail-closed node identity service starting
+   [kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf
+   P04 PASS shell-prompt
+   P04 PASS kssh-conf
+   P04 INFO kssh-obs conf mode=t0 calibrate=true keys=5
+   P04 PASS kssh-s00
+   P04 PASS kssh-s01a
+   P04 INFO kssh-obs s01b fmt-ms aes128=582 chacha=582
+   P04 PASS kssh-s01b
+   P04 INFO kssh-obs s01 fp=SHA256:PPJXlNDqrbh2w6RQCzYc34qA73qyOmIe1z0PCoKKRjw prefix=48811eabc6e15289
+   P04 PASS kssh-s01
+   P04 INFO kssh-obs cal-R1 ms=3804 enter-ms=72
+   P04 INFO kssh-obs kdf rounds=1 ms=72
+   P04 INFO kssh-obs cal-R64 ms=4607 enter-ms=865
+   P04 INFO kssh-obs kdf rounds=64 ms=865
+   P04 INFO kssh-obs cal-R16 ms=3262 enter-ms=244
+   P04 INFO kssh-obs kdf rounds=16 ms=244
+   P04 INFO kssh-obs delete-word-echo echoed=0
+   P04 PASS kssh-s09
+   P04 PASS kssh-s10
+   P04 PASS kssh-s04a
+   P04 PASS kssh-s04b
+   P04 PASS kssh-s06a
+   P04 INFO kssh-obs s06b-sent=4096
+   P04 INFO kssh-obs s06b reach=full code=2
+   P04 PASS kssh-s06b
+   P04 INFO kssh-obs s06c flags-op25=silent flags-sign=silent control=code=2
+   P04 PASS kssh-s06c
+   P04 INFO kssh-obs s06d-form=kms_denied
+   P04 INFO kssh-obs s06d-typed form=prompt-shown
+   P04 PASS kssh-s06d
+   P04 PASS kssh-s02
+   P04 PASS kssh-s02p
+   P04 INFO kssh-obs unlock-ms ms=267
+   P04 PASS kssh-s03
+   P04 PASS kssh-s03b
+   P04 PASS kssh-s02x
+   P04 INFO kssh-obs s08 fail-ms=95,94,95,104,95 locked-ms=54
+   P04 PASS kssh-s08
+   P04 PASS kssh-s15
+   P04 INFO kssh-obs transcripts scans=52 hits=0 canaries=50
+   P04 PASS kssh-transcripts
+   P04 PASS session-a-close

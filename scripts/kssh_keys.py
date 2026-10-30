@@ -314,7 +314,7 @@ def gen(keys_dir, stage_dir, calibrate: bool = False) -> dict:
             for name in list(MAIN_KEYS + (CAL_KEYS if calibrate else ())) + list(BAD_KEYS):
                 _write_new(stage / f"{name}.key", (keys / name).read_bytes())
             _write_new(authdir / "authorized_keys_main", "".join(
-                exp["keys"][n]["pub"] + "\n" for n in MAIN_KEYS).encode(), exclusive=False)
+                exp["keys"][n]["pub"] + "\n" for n in MAIN_KEYS + (CAL_KEYS if calibrate else ())).encode(), exclusive=False)
             _write_new(authdir / "authorized_keys_b", (exp["keyb"]["pub"] + "\n").encode(), exclusive=False)
             _write_new(keys / "secrets.json", json.dumps(sec, indent=2).encode() + b"\n")
             _write_new(keys / "expected.json", json.dumps(exp, indent=2).encode() + b"\n")

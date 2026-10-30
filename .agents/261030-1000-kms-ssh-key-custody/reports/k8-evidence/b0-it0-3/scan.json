@@ -1,0 +1,45 @@
+{
+  "canaries": 98,
+  "forms": 878,
+  "targets": [
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/evidence/serial.raw.log",
+      "size": 47506,
+      "hits": []
+    },
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/evidence/serial.log",
+      "size": 47506,
+      "hits": []
+    },
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/evidence/sshd.log",
+      "size": 9363,
+      "hits": []
+    },
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/evidence/p09-ledger.txt",
+      "size": 48,
+      "hits": []
+    },
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/evidence/qemu-argv.txt",
+      "size": 469,
+      "hits": []
+    },
+    {
+      "path": "/tmp/cellbox-phase09-kssh-b0/trust-fixture.img",
+      "size": 577372160,
+      "hits": []
+    }
+  ],
+  "expected_public_strings": {
+    "kms-posture-banner": true,
+    "fp-a": true,
+    "accepted-publickey": true,
+    "policy-loaded-line": true
+  },
+  "judge_outputs_scanned": true,
+  "trust_disk": true,
+  "no_evidence_value": true
+}

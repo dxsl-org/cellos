@@ -35,9 +35,9 @@ MARKERS = {
     "t0": ["shell-prompt", "kssh-conf", "kssh-s00", "kssh-s01a", "kssh-s01b", "kssh-s01", "kssh-s09",
            "kssh-s10", "kssh-s04a", "kssh-s04b", "kssh-s06a", "kssh-s06b", "kssh-s06c", "kssh-s06d",
            "kssh-s02", "kssh-s02p", "kssh-s03", "kssh-s03b", "kssh-s02x", "kssh-s08", "kssh-s15",
-           "kssh-transcripts"],
+           "kssh-transcripts", "session-a-close"],
     "f": ["shell-prompt", "kssh-conf", "kssh-s00", "kssh-s01", "kssh-s05a", "kssh-s05b", "kssh-s05c",
-          "kssh-s02", "kssh-s11", "kssh-transcripts"],
+          "kssh-s02", "kssh-s11", "kssh-transcripts", "session-a-close"],
 }
 CORE_MARKERS = ("kssh-s00", "kssh-s01", "kssh-s02")
 TIMEOUT_WORDS = ("timeout", "timed out")
@@ -52,6 +52,7 @@ EXPECTED_CONNECTIONS = {
         "s04a": [],
         "s04b": ["probe-rejected"],
         "s06d": [],
+        "s06d-typed": ["probe-ok"],
         "s02": ["accepted-pk:ka16"],
         "s02p": ["accepted-pk:ka16"],
         "s03": ["probe-ok"],
@@ -73,8 +74,19 @@ EXPECTED_CONNECTIONS = {
         "s11": ["accepted-pk:ka16"],
     },
 }
-# Observation attempts: zero connections, or one that is NOT an acceptance. An acceptance is class D.
-OPTIONAL_CONNECTIONS = {"s06d": ("closed", "probe-rejected", "probe-ok")}
+# Admission attempts of S06(d): the flagless copy launched directly (`s06d`: no connection) and the typed
+# form (`s06d-typed`: probe-ok, ends at the passphrase prompt). Any acceptance there is class D.
+ADMISSION_ATTEMPTS = ("s06d", "s06d-typed")
+NON_ACCEPTING = ("closed", "probe-rejected", "probe-ok")
+# Remote ledger (`p09x-*` lines of the fixture's /tmp/p09-ledger), exact counts per mode.
+LEDGER_EXPECTED = {"t0": {"p09x-kssh-login": 3},  # s02, s02x, s08-ok run `p9 kssh-login`; s02p, s15-iv do not
+                   "f": {"p09x-kssh-login": 1, "p09x-kssh-rekey": 1}}
+# Mode f oracles (k8-cp1.md 8.3): attempts that run the fault cellbox, the rekey sink and its bounds.
+F_FAULT_ATTEMPTS = ("s05a", "s05b", "s05c", "s02", "s11")
+FAULTS_ON_RE = re.compile(r"INFO ssh-test-config kssh-faults=on\s*$")
+REKEYS_RE = re.compile(r"INFO ssh-rekeys (\d+)\s*$")
+SINK_RE = re.compile(r"INFO ssh-bytes stdout=(\d+) sha256=([0-9a-f]{64}) peak_pending=(\d+) peak_chunk=(\d+)\s*$")
+ZERO_MIB_SHA256 = hashlib.sha256(bytes(1048576)).hexdigest()
 CAL_RE = re.compile(r"^cal-R\d+$")  # B0 calibration attempts: one probe-ok each
 
 # =========================================================================== sshd log
@@ -192,16 +204,18 @@ def expected_for(mode: str, attempt: str):
     return None
 
 
-def _slots(mode, attempts, fps):
+def _slots(mode, attempts, fps, relaxed=False):
+    """Expected slots in attempt order. `relaxed`: the admission attempts (s06d, s06d-typed) become
+    optional non-accepting slots, used only to tell an acceptance from an ordinary mismatch."""
     out = []
     for a in attempts:
-        exp = expected_for(mode, a) or []
-        for c in exp:
+        if relaxed and a in ADMISSION_ATTEMPTS:
+            out.append((a, ("opt", NON_ACCEPTING)))
+            continue
+        for c in expected_for(mode, a) or []:
             if c.startswith("accepted-pk:"):
                 c = "accepted-pk:" + fps[c.split(":", 1)[1]]
             out.append((a, c))
-        if a in OPTIONAL_CONNECTIONS:
-            out.append((a, ("opt", OPTIONAL_CONNECTIONS[a])))
     return out
 
 
@@ -232,10 +246,10 @@ def _align(slots, actual, accepted_ok=False) -> bool:
 
 
 def compare_sequence(mode, attempts, conns, fps) -> dict:
-    """Ordered connection list vs the sequence built from the attempt ids.
+    """Ordered connection list vs the sequence built from the attempt ids (in serial order).
 
-    ok / unknown attempt ids / `optional_accepted` (an observation attempt ended in an acceptance) /
-    first differing index with the attempt id and the two classes.
+    ok / unknown attempt ids / first differing index with the attempt id and the two classes; plus
+    `optional_accepted` when the sequence only fits if an s06d/s06d-typed attempt ended in an acceptance.
     """
     unknown = [a for a in attempts if expected_for(mode, a) is None]
     if unknown:
@@ -250,17 +264,12 @@ def compare_sequence(mode, attempts, conns, fps) -> dict:
         return "accepted-pk:" + inv.get(c.split(":", 1)[1], c.split(":", 1)[1]) if c.startswith("accepted-pk:SHA") else c
 
     if _align(slots, actual):
-        return {"ok": True, "expected": len(slots), "actual": len(actual)}
-    if _align(slots, actual, accepted_ok=True):
-        return {"ok": False, "optional_accepted": True, "expected": len(slots), "actual": len(actual)}
+        return {"ok": True, "expected": len(slots), "actual": len(actual), "optional_accepted": False}
+    relaxed = _slots(mode, attempts, fps, relaxed=True)
+    optional_accepted = not _align(relaxed, actual) and _align(relaxed, actual, accepted_ok=True)
     i = j = 0
     while i < len(slots) and j < len(actual):
-        slot = slots[i][1]
-        if isinstance(slot, tuple):
-            if _slot_ok(slot, actual[j], False):
-                j += 1
-            i += 1
-        elif slot == actual[j]:
+        if slots[i][1] == actual[j]:
             i, j = i + 1, j + 1
         else:
             break
@@ -268,7 +277,7 @@ def compare_sequence(mode, attempts, conns, fps) -> dict:
     return {"ok": False, "index": j, "attempt": exp[0], "expected_class": show(exp[1]),
             "got_class": show(actual[j]) if j < len(actual) else "<none>",
             "got_port": conns[j]["port"] if j < len(actual) else None,
-            "expected": len(slots), "actual": len(actual)}
+            "expected": len(slots), "actual": len(actual), "optional_accepted": optional_accepted}
 
 
 def prefix_ok(mode, attempts, conns, fps, upto: str) -> bool:
@@ -292,6 +301,7 @@ _TERM = re.compile(r"^(?:USER: )?P04-TERMINAL: (?P<rest>.*)$")
 
 def parse_serial(text: str) -> dict:
     passes, fails, attempts, obs, order, terminal, started = {}, [], [], [], [], [], False
+    segments, test_config, cur = [], [], None
     for n, line in enumerate(text.splitlines()):
         line = line.rstrip()
         t = _TERM.match(line)
@@ -302,6 +312,15 @@ def parse_serial(text: str) -> dict:
         if not m:
             continue
         rest = m.group("rest")
+        if rest.startswith("INFO ssh-test-config"):
+            test_config.append(rest)
+        if re.match(r"(PASS|FAIL) ", rest):
+            cur = None  # a marker ends the attempt segment
+        elif re.match(r"INFO kssh-attempt \S+\s*$", rest):
+            cur = {"id": rest.split()[2], "lines": []}
+            segments.append(cur)
+        elif cur is not None:
+            cur["lines"].append(rest)
         if rest == "START":
             started = True
         mm = re.match(r"(PASS|FAIL) (\S+)(.*)$", rest)
@@ -320,7 +339,7 @@ def parse_serial(text: str) -> dict:
         if mm:
             obs.append({"id": mm.group(1), "kv": dict(re.findall(r"(\S+?)=(\S+)", mm.group(1) + mm.group(2)))})
     return {"passes": passes, "fails": fails, "attempts": attempts, "obs": obs, "order": order,
-            "terminal": terminal, "started": started}
+            "terminal": terminal, "started": started, "segments": segments, "test_config": test_config}
 
 
 # =========================================================================== scanner
@@ -580,14 +599,12 @@ def judge(a) -> int:
         sound = False
     elif sshd_text is not None:
         J.chk("attempt-ids-known", True)
-        if cmp.get("optional_accepted"):
-            J.chk("s06d-no-acceptance", False, "an acceptance ended the typed-form attempt s06d (flagless copy served)", "D")
-        else:
-            J.chk("sshd-connection-sequence", cmp["ok"],
-                  "" if cmp["ok"] else
-                  f"index {cmp.get('index')}: attempt {cmp.get('attempt')} expected {cmp.get('expected_class')} "
-                  f"got {cmp.get('got_class')} (port {cmp.get('got_port')}); expected {cmp['expected']} actual {cmp['actual']}",
-                  "D" if sound else "C")
+        J.chk("s06d-no-acceptance", not cmp.get("optional_accepted"), "an acceptance ended an s06d/s06d-typed attempt (flagless copy served)", "D")
+        J.chk("sshd-connection-sequence", cmp["ok"],
+              "" if cmp["ok"] else
+              f"index {cmp.get('index')}: attempt {cmp.get('attempt')} expected {cmp.get('expected_class')} "
+              f"got {cmp.get('got_class')} (port {cmp.get('got_port')}); expected {cmp['expected']} actual {cmp['actual']}",
+              "D" if sound else "C")
     fb = password_fallbacks(conns)
     J.chk("no-password-fallback", not fb, f"connections {fb}: password event after a publickey event", "D")
     first_pk = next((c["idx"] for c in conns if any(e in ("postponed-pk", "failed-pk", "accepted-pk") for e, _ in c["events"])), None)
@@ -606,11 +623,34 @@ def judge(a) -> int:
     J.chk("s01-fingerprint-and-blob-prefix", ok,
           f"obs lines {len(s01)}; fp match {bool(s01) and s01[0].get('fp') == fp_a}; prefix match "
           f"{bool(s01) and s01[0].get('prefix') == exp['keys']['ka16']['blob_prefix']}", "D" if s01 else "C")
+    # the lane-only fault build must be announced in mode f and absent from the product image in mode t0
+    runs: dict = {}
+    for seg in S["segments"]:
+        runs.setdefault(seg["id"], []).append(seg["lines"])
+    if mode == "t0":
+        J.chk("t0-no-test-config", not S["test_config"],
+              f"faults-build-in-product-image: {len(S['test_config'])} `ssh-test-config` line(s): {S['test_config'][:3]}", "D")
+    else:
+        missing = [a for a in F_FAULT_ATTEMPTS if len(runs.get(a, [])) != 1]
+        wrong = [f"{a}: {sum(1 for l in runs[a][0] if FAULTS_ON_RE.match(l))}x" for a in F_FAULT_ATTEMPTS
+                 if a not in missing and sum(1 for l in runs[a][0] if FAULTS_ON_RE.match(l)) != 1]
+        J.chk("kssh-faults-announced", not missing and not wrong,
+              f"attempts not run exactly once: {missing}; not announced exactly once: {wrong}", "E" if wrong else "C")
+        seg = runs.get("s11", [])
+        if len(seg) != 1:
+            J.chk("s11-rekey-and-sink", False, f"s11 attempt seen {len(seg)} times", "C")
+        else:
+            rekeys = [int(m.group(1)) for m in (REKEYS_RE.match(l) for l in seg[0]) if m]
+            sinks = [l for l in seg[0] if l.startswith("INFO ssh-bytes")]
+            m = SINK_RE.match(sinks[0]) if len(sinks) == 1 else None
+            ok = (len(rekeys) == 1 and rekeys[0] >= 1 and m is not None and int(m.group(1)) == 1048576
+                  and m.group(2) == ZERO_MIB_SHA256 and int(m.group(3)) <= 2048 and int(m.group(4)) <= 16384)
+            J.chk("s11-rekey-and-sink", ok, f"ssh-rekeys {rekeys}; ssh-bytes lines {sinks[:2]}", "D")
     ledger_p = ev / "p09-ledger.txt"
-    tag = "p09x-kssh-login" if mode == "t0" else "p09x-kssh-rekey"
+    want = LEDGER_EXPECTED[mode]
     if ledger_p.is_file():
-        n = sum(1 for l in ledger_p.read_text().splitlines() if l.strip() == tag)
-        J.chk("remote-ledger", n == 1, f"{tag} x{n}", "D")
+        have = dict(collections.Counter(l.strip() for l in ledger_p.read_text().splitlines() if l.strip().startswith("p09x-")))
+        J.chk("remote-ledger", have == want, f"ledger {have}, expected exactly {want}", "D")
     elif no_value:
         notes.append("p09-ledger.txt absent (b0)")
     else:

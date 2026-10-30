@@ -1,0 +1,340 @@
+{
+  "set": "rt0f",
+  "mode": "f",
+  "policy_shape": "loaded",
+  "no_evidence_value": false,
+  "checks": {
+    "fixture-fp-format": {
+      "pass": true,
+      "detail": "SHA256:T8kCboXPoWrG7uIVP678x2KUKeBQJb4o8UzL9vXqsoY"
+    },
+    "evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s01": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s05a": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s05b": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s05c": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s02": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-s11": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-s01', 'kssh-s05a', 'kssh-s05b', 'kssh-s05c', 'kssh-s02', 'kssh-s11', 'kssh-transcripts', 'session-a-close']"
+    },
+    "no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=11 fails=0"
+    },
+    "banner-dev-posture": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-custody` (wrong build booted?)"
+    },
+    "kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt0f/serial.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt0f/phase09.iso -boot d -no-reboot -ne"
+    },
+    "sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "s06d-no-acceptance": {
+      "pass": true,
+      "detail": "an acceptance ended an s06d/s06d-typed attempt (flagless copy served)"
+    },
+    "sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "['accepted-pk:SHA256:fhQOenLuiU+S+QClW5aXRjE1gY50F/C+o60gxcsdwYY', 'accepted-pk:SHA256:fhQOenLuiU+S+QClW5aXRjE1gY50F/C+o60gxcsdwYY']"
+    },
+    "s01-fingerprint-and-blob-prefix": {
+      "pass": true,
+      "detail": "obs lines 1; fp match True; prefix match True"
+    },
+    "kssh-faults-announced": {
+      "pass": true,
+      "detail": "attempts not run exactly once: []; not announced exactly once: []"
+    },
+    "s11-rekey-and-sink": {
+      "pass": true,
+      "detail": "ssh-rekeys [64]; ssh-bytes lines ['INFO ssh-bytes stdout=1048576 sha256=30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58 peak_pending=2048 peak_chunk=16384']"
+    },
+    "remote-ledger": {
+      "pass": true,
+      "detail": "ledger {'p09x-kssh-login': 1, 'p09x-kssh-rekey': 1}, expected exactly {'p09x-kssh-login': 1, 'p09x-kssh-rekey': 1}"
+    },
+    "census-drift": {
+      "pass": true,
+      "detail": "{'equal': 470, 'missing': 0, 'changed': 0, 'baseline_present': 470}"
+    },
+    "driver-no-scan-hit": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "scan-controls": {
+      "pass": true,
+      "detail": "{'pre': True, 'post': True}"
+    },
+    "trust-disk-scanned": {
+      "pass": true,
+      "detail": "/tmp/cellbox-phase09-kssh-rt0f/trust-fixture.img"
+    },
+    "no-canary-in-targets": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "scan-expected-public-strings": {
+      "pass": true,
+      "detail": "[]"
+    }
+  },
+  "observations": {
+    "attempts": [
+      "s00",
+      "s05a",
+      "s05b",
+      "s05c",
+      "s02",
+      "s11"
+    ],
+    "unlock_ms": [],
+    "unlock_ms_bounds": null,
+    "kdf": [],
+    "kdf64_le_10s": null,
+    "obs": [
+      {
+        "id": "conf",
+        "kv": {
+          "mode": "f",
+          "calibrate": "false",
+          "keys": "3"
+        }
+      },
+      {
+        "id": "s05a",
+        "kv": {
+          "ms": "3255",
+          "enter-ms": "296"
+        }
+      },
+      {
+        "id": "s05b",
+        "kv": {
+          "ms": "3245",
+          "enter-ms": "267"
+        }
+      },
+      {
+        "id": "s05c",
+        "kv": {
+          "ms": "3276",
+          "enter-ms": "265"
+        }
+      },
+      {
+        "id": "s02",
+        "kv": {
+          "ms": "3326",
+          "enter-ms": "306"
+        }
+      },
+      {
+        "id": "s11",
+        "kv": {
+          "ms": "12632",
+          "enter-ms": "9621"
+        }
+      },
+      {
+        "id": "transcripts",
+        "kv": {
+          "scans": "10",
+          "hits": "0",
+          "canaries": "11"
+        }
+      }
+    ],
+    "policy_loaded_line": true,
+    "fixture_fp": "SHA256:T8kCboXPoWrG7uIVP678x2KUKeBQJb4o8UzL9vXqsoY"
+  },
+  "notes": [],
+  "sshd_connections": [
+    {
+      "idx": 0,
+      "port": 60872,
+      "listener": 22,
+      "class": "accepted-pw",
+      "events": [
+        "accepted-pw",
+        "session",
+        "info",
+        "closed",
+        "info"
+      ]
+    },
+    {
+      "idx": 1,
+      "port": 60888,
+      "listener": 22,
+      "class": "probe-ok",
+      "events": [
+        "postponed-pk",
+        "closed"
+      ]
+    },
+    {
+      "idx": 2,
+      "port": 60892,
+      "listener": 22,
+      "class": "probe-ok",
+      "events": [
+        "postponed-pk",
+        "closed"
+      ]
+    },
+    {
+      "idx": 3,
+      "port": 54454,
+      "listener": 22,
+      "class": "probe-ok",
+      "events": [
+        "postponed-pk",
+        "closed"
+      ]
+    },
+    {
+      "idx": 4,
+      "port": 54470,
+      "listener": 22,
+      "class": "accepted-pk:SHA256:fhQOenLuiU+S+QClW5aXRjE1gY50F/C+o60gxcsdwYY",
+      "events": [
+        "postponed-pk",
+        "accepted-pk",
+        "session",
+        "info",
+        "closed",
+        "info"
+      ]
+    },
+    {
+      "idx": 5,
+      "port": 34600,
+      "listener": 2222,
+      "class": "accepted-pk:SHA256:fhQOenLuiU+S+QClW5aXRjE1gY50F/C+o60gxcsdwYY",
+      "events": [
+        "postponed-pk",
+        "accepted-pk",
+        "session",
+        "info",
+        "closed",
+        "info"
+      ]
+    }
+  ],
+  "sshd_ignored_lines": 20
+}
