@@ -1760,6 +1760,11 @@ jobs:
       - name: Unit-test the KMS SSH exclusion checker
         run: python3 scripts/test_check_ssh_dev_persist_exclusion.py
 
+      # Phase 02 owns this script; the job only runs its tests, so the five KSSH marker
+      # names stay in its frozen set (scripts/check-production-relay-image.py).
+      - name: Unit-test the production relay image checker
+        run: python3 scripts/test_check_production_relay_image.py
+
       - name: Host tests (ssh-dev-custody, ssh-dev-persist)
         run: |
           cargo test -p service-kms --features ssh-dev-custody \

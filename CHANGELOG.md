@@ -1153,3 +1153,5 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Kernel boot self-test `COMPLETION-QUEUE` row `waiter_cleanup_preserves_siblings` now follows the multi-waiter contract (the old row failed since N04, 2026-10-16); the boot prints `COMPLETION-QUEUE: PASS`.
 
 - Net owner-death reclaim (NET-OD): the kernel lets the registry-bound Net provider watch the cell it serves, `TryRecv` delivers owner deaths, and the Net service aborts (RST) the dead owner's TCP sockets with a drain ledger (UDP/listeners removed at once). Fixes a Ctrl-C-cancelled `cellbox ssh` leaving its connection ESTABLISHED. Host tests only; QEMU proof pending the Tier-3 rerun CP1.
+
+- Production relay-image checker: `FROZEN_DEV_MARKERS` gains the five KSSH dev-posture names (`CELLOS-KSSH-T1-DEV-ROOT-v1`, `DEV_POSTURE ssh-dev-custody`, `DEV_POSTURE ssh-dev-persist`, `ssh-dev-custody`, `ssh-dev-persist`), so a candidate carrying the custody or persist KMS build is rejected (exit 1); CI runs the checker's tests. See `.agents/261110-1200-cellbox-followups/phase02-marker-dossier.md`.

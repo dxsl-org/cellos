@@ -39,6 +39,9 @@ FORBIDDEN_MARKERS = tuple(
 )
 FROZEN_DEV_MARKERS = [
     "AWS_DEV_SIGNED_TIME",
+    "CELLOS-KSSH-T1-DEV-ROOT-v1",
+    "DEV_POSTURE ssh-dev-custody",
+    "DEV_POSTURE ssh-dev-persist",
     "DEV_REFERENCE",
     "SLB9672",
     "SOFTWARE_HARNESS",
@@ -51,6 +54,8 @@ FROZEN_DEV_MARKERS = [
     "development-stm32-authority",
     "root-stream",
     "slb9672-dev-anchor",
+    "ssh-dev-custody",
+    "ssh-dev-persist",
     "stm32h573i-dk-dev-authority",
     "vf2-root-stream",
 ]

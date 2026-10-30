@@ -56,6 +56,14 @@ class DevMarkerRejectionTests(unittest.TestCase):
             CHECKER.DEV_MARKER_NAMES,
         )
 
+    def test_kssh_dev_custody_handoff_is_frozen(self) -> None:
+        self.assertLessEqual(
+            {"CELLOS-KSSH-T1-DEV-ROOT-v1", "DEV_POSTURE ssh-dev-custody",
+             "DEV_POSTURE ssh-dev-persist", "ssh-dev-custody",
+             "ssh-dev-persist"},
+            CHECKER.DEV_MARKER_NAMES,
+        )
+
     def run_checker(self, kms_features: str, artifact_payloads: list[bytes]):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
@@ -114,6 +122,34 @@ class DevMarkerRejectionTests(unittest.TestCase):
                     f"contains forbidden DEV marker: {marker}",
                     completed.stderr,
                 )
+
+    def test_kssh_custody_and_persist_artifacts_exit_one_naming_markers(self) -> None:
+        clean = b"qualified-candidate"
+        banners = {
+            "ssh-dev-custody": (
+                b"[kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf",
+                ["DEV_POSTURE ssh-dev-custody", "ssh-dev-custody"],
+            ),
+            "ssh-dev-persist": (
+                b"[kms] DEV_POSTURE ssh-dev-persist: wrapped identity persisted to "
+                b"/srv, dev root key co-resident, no rollback or crash-durability claim "
+                b"CELLOS-KSSH-T1-DEV-ROOT-v1 PUBLIC CONSTANT NOT A SECRET",
+                ["CELLOS-KSSH-T1-DEV-ROOT-v1", "DEV_POSTURE ssh-dev-persist",
+                 "ssh-dev-persist"],
+            ),
+        }
+        for variant, (payload, names) in banners.items():
+            for slot in range(3):
+                with self.subTest(variant=variant, slot=slot):
+                    payloads = [clean, clean, clean]
+                    payloads[slot] = payload
+                    completed = self.run_checker("hardware-relay-provider", payloads)
+                    self.assertEqual(completed.returncode, 1)
+                    for name in names:
+                        self.assertIn(
+                            f"contains forbidden DEV marker: {name}",
+                            completed.stderr,
+                        )
 
     def test_dev_marker_split_across_chunk_boundary_is_detected(self) -> None:
         clean = b"qualified-candidate"

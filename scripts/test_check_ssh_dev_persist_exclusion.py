@@ -91,6 +91,19 @@ class MarkerTests(unittest.TestCase):
             ],
         )
 
+    def test_every_marker_is_in_the_production_checker_frozen_set(self) -> None:
+        # Read-only import of the Phase 02 checker: B1 hand-off (the production
+        # checker rejects the same five names), so a removal there fails here too.
+        path = Path(__file__).with_name("check-production-relay-image.py")
+        spec = importlib.util.spec_from_file_location("production_relay_checker", path)
+        assert spec is not None and spec.loader is not None
+        production = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(production)
+        self.assertLessEqual(
+            {marker.decode("ascii") for marker in CHECKER.MARKERS},
+            production.DEV_MARKER_NAMES,
+        )
+
     def test_a_marker_split_across_a_chunk_boundary_is_detected(self) -> None:
         for marker in CHECKER.MARKERS:
             with self.subTest(marker=marker):
