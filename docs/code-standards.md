@@ -69,6 +69,26 @@
   output, normalize ECDSA output to low-S, and self-verify before returning it.
   Provider failure never falls back to another key, provider, or weaker path.
 
+#### KMS SSH Custody Boundary
+
+- KMS holds at most one ed25519 SSH identity per store (Law 1: no caller-selected
+  key or algorithm). A signing request carries the session id, the username and
+  the expected 32-byte public key (a confirmation that must equal the stored
+  key, never a selector); KMS reconstructs the RFC 4252 userauth input and never
+  accepts a raw message, prehash or algorithm choice.
+- SSH opcodes 15-24 are append-only; opcodes 1-14 and errors 1-26 never change.
+  Import (admin class), unlock and sign (login class) are separate caller
+  classes; the SSH sign right is a kernel-attested caller flag, not a registered
+  service TID, and an admin caller is never `cellbox-ssh`.
+- A passphrase-wrapped identity is unlocked per login: one staged secret
+  authorizes exactly one signature and is zeroized afterwards. The only accepted
+  encrypted container is `openssh-key-v1` with bcrypt (rounds 1..64, salt
+  16..64 bytes) and AES-256-CTR, checked before any KDF work.
+- Until KMS behaviour lands (KSSH K5) every SSH opcode answers
+  `SshKeyUnavailable` after attested-caller validation. This is a status, not a
+  feature. SSH custody is `DEV_POSTURE` (volatile T0, persistent T1) and is never
+  reported as production-qualified.
+
 #### Development Silo Provider Boundary
 
 - Silo is not a public SDK or general cryptographic API. Do not add direct
