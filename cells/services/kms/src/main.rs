@@ -16,8 +16,12 @@ ostd::cell_main!(cell_main);
 
 fn cell_main() {
     ostd::io::println("[kms] fail-closed node identity service starting");
-    #[cfg(feature = "ssh-dev-custody")]
+    #[cfg(all(feature = "ssh-dev-custody", not(feature = "ssh-dev-persist")))]
     ostd::io::println("[kms] DEV_POSTURE ssh-dev-custody: volatile single-identity ssh leaf");
+    #[cfg(feature = "ssh-dev-persist")]
+    ostd::io::println(
+        "[kms] DEV_POSTURE ssh-dev-persist: wrapped identity persisted to /srv, dev root key co-resident, no rollback or crash-durability claim",
+    );
     boot_probe_store();
     let mut service_state = KmsService::new();
     #[cfg(feature = "development-silo-provider")]

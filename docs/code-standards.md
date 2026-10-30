@@ -84,10 +84,16 @@
   authorizes exactly one signature and is zeroized afterwards. The only accepted
   encrypted container is `openssh-key-v1` with bcrypt (rounds 1..64, salt
   16..64 bytes) and AES-256-CTR, checked before any KDF work.
-- Until KMS behaviour lands (KSSH K5) every SSH opcode answers
-  `SshKeyUnavailable` after attested-caller validation. This is a status, not a
-  feature. SSH custody is `DEV_POSTURE` (volatile T0, persistent T1) and is never
-  reported as production-qualified.
+- KMS SSH custody (KSSH K5) is behind the opt-in `ssh-dev-custody` feature; a
+  default build answers every SSH opcode `SshKeyUnavailable` after
+  attested-caller validation, which is a status, not a feature. T0 holds the
+  identity in RAM (`DevPostureVolatile`). The opt-in `ssh-dev-persist` feature
+  (T1, x86_64 bare metal only, implies `ssh-dev-custody`) persists only
+  passphrase-wrapped identities, as MAC-framed records in
+  `/srv/cellos/kms/ssh-{a,b}.bin`; a `Plain` identity is never written. SSH
+  custody is `DEV_POSTURE`, never reported as production-qualified, and T1 makes
+  no rollback-protection and no crash or power-loss durability claim (its dev
+  root MAC key is a public constant).
 
 #### Development Silo Provider Boundary
 

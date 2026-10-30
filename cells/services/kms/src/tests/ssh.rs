@@ -27,6 +27,8 @@ mod import;
 mod kdf_cost;
 mod mutation;
 mod parser;
+#[cfg(feature = "ssh-dev-persist")]
+mod persist;
 mod stack;
 mod store;
 mod unlock_sign;

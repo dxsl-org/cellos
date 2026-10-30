@@ -26,7 +26,7 @@ pub struct KmsService {
     last_tls_request_id: u64,
     pub(super) lifecycle: crate::lifecycle::RelayLifecycle,
     #[cfg(feature = "ssh-dev-custody")]
-    pub(crate) ssh: crate::ssh::SshLeaf<crate::ssh::NoPersist>,
+    pub(crate) ssh: crate::ssh::SshLeaf<crate::ssh::Persister>,
     #[cfg(test)]
     protected_lifecycle: Option<crate::lifecycle::ProtectedRelayState>,
 }
@@ -53,7 +53,7 @@ impl KmsService {
             next_service_binding_epoch: 1,
             last_tls_request_id: 0,
             #[cfg(feature = "ssh-dev-custody")]
-            ssh: crate::ssh::SshLeaf::serving(crate::ssh::NoPersist),
+            ssh: crate::ssh::new_leaf(),
             #[cfg(test)]
             protected_lifecycle: None,
         }

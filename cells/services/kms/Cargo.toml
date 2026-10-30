@@ -18,6 +18,11 @@ k1-fallback = []
 # default; build.rs refuses it under CELLOS_PRODUCTION and lib.rs excludes it from
 # hardware-relay-provider.
 ssh-dev-custody = ["dep:bcrypt-pbkdf", "dep:blowfish", "dep:aes", "dep:ctr", "dep:zeroize", "dep:ed25519-dalek"]
+# Opt-in T1 on top of it (DEV_POSTURE, x86_64 bare metal only): the passphrase-wrapped
+# identity is persisted to /srv/cellos/kms/ssh-{a,b}.bin through the VFS. No rollback or
+# crash-durability claim. Implies ssh-dev-custody, so every guard on that feature (the
+# hardware-relay-provider exclusion and the CELLOS_PRODUCTION refusal) applies here too.
+ssh-dev-persist = ["ssh-dev-custody"]
 
 [[bin]]
 name = "service-kms"

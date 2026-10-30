@@ -73,6 +73,15 @@ compile_error!(
      hardware relay build"
 );
 
+#[cfg(all(
+    feature = "ssh-dev-persist",
+    not(test),
+    not(all(target_arch = "x86_64", target_os = "none"))
+))]
+compile_error!(
+    "service-kms: ssh-dev-persist is restricted to the x86_64 bare-metal development lane"
+);
+
 #[cfg(test)]
 extern crate std;
 

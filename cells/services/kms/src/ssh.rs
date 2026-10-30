@@ -22,6 +22,8 @@ pub(crate) mod floor;
 pub(crate) mod import;
 pub(crate) mod limits;
 pub(crate) mod parser;
+#[cfg(feature = "ssh-dev-persist")]
+pub(crate) mod persist;
 pub(crate) mod sign;
 pub(crate) mod store;
 pub(crate) mod unlock;
@@ -77,6 +79,7 @@ pub(crate) trait SshPersist {
 }
 
 /// T0: nothing is persisted.
+#[cfg_attr(all(feature = "ssh-dev-persist", not(test)), allow(dead_code))]
 pub(crate) struct NoPersist;
 
 impl SshPersist for NoPersist {
@@ -91,6 +94,30 @@ impl SshPersist for NoPersist {
     fn tombstone(&mut self, _next_revision: u64) -> Result<Stored, PersistError> {
         Ok(Stored::VolatileOnly)
     }
+}
+
+/// The persister of the running service: `NoPersist` (T0), or the VFS-backed
+/// `FilePersister` in a T1 (`ssh-dev-persist`) bare-metal build. Host tests
+/// always get `NoPersist` so the K5 suite keeps asserting volatile behaviour;
+/// the file persister is tested at the leaf level with in-memory fakes.
+#[cfg(not(all(feature = "ssh-dev-persist", not(test))))]
+pub(crate) type Persister = NoPersist;
+#[cfg(all(feature = "ssh-dev-persist", not(test)))]
+pub(crate) type Persister = persist::FilePersister<persist::blob_io::VfsBlobIo>;
+
+/// The leaf the service starts with.
+#[cfg(not(all(feature = "ssh-dev-persist", not(test))))]
+pub(crate) fn new_leaf() -> SshLeaf<Persister> {
+    SshLeaf::serving(NoPersist)
+}
+
+/// T1: the store is loaded lazily on the first admitted SSH opcode, never at
+/// boot, so a missing VFS cannot block startup.
+#[cfg(all(feature = "ssh-dev-persist", not(test)))]
+pub(crate) fn new_leaf() -> SshLeaf<Persister> {
+    SshLeaf::new(persist::FilePersister::new(
+        persist::blob_io::VfsBlobIo::new(),
+    ))
 }
 
 /// Leaf serving state. T0 uses `Serving` (and `Unavailable` when the handle
@@ -136,6 +163,7 @@ impl<P: SshPersist> SshLeaf<P> {
     }
 
     /// A leaf that is serving an empty store from the start (T0).
+    #[cfg_attr(all(feature = "ssh-dev-persist", not(test)), allow(dead_code))]
     pub(crate) fn serving(persist: P) -> Self {
         Self::with_state(persist, LeafState::Serving)
     }
