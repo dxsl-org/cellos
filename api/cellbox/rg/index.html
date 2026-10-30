@@ -4,7 +4,7 @@
 <li><a href="args/index.html" title="mod cellbox::rg::args"><code>args</code></a> parses the frozen argv surface at admission (status 2 before any
 effect);</li>
 <li><a href="fn.producer.html" title="fn cellbox::rg::producer"><code>producer</code></a> / <a href="fn.stdin_producer.html" title="fn cellbox::rg::stdin_producer"><code>stdin_producer</code></a> compile the matcher and globs and return a
-pull-based [<code>RowSource</code>] of <code>cellbox.search.line</code> records. Nothing touches
+pull-based <a href="../../text_engine/pipeline/trait.RowSource.html" title="trait text_engine::pipeline::RowSource"><code>RowSource</code></a> of <code>cellbox.search.line</code> records. Nothing touches
 the VFS until the first pull;</li>
 <li><code>tree</code> adapts <code>ostd::clients::VfsClient</code> to <code>vigrep::walk::ViSearchTree</code>
 (per-directory reopen with one cached parent handle);</li>

@@ -2,8 +2,8 @@
     vfs: &amp;mut <a class="struct" href="../manager/struct.VfsManager.html" title="struct service_vfs::manager::VfsManager">VfsManager</a>,
     dst: &amp;str,
     bytes: &amp;[u8],
-    expect: SaveExpect,
-) -&gt; SaveOutcome</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Publish <code>bytes</code> at a service-owned <code>dst</code> (the SSH host-trust store) through the same
+    expect: <a class="enum" href="../../api/services/ipc/enum.SaveExpect.html" title="enum api::services::ipc::SaveExpect">SaveExpect</a>,
+) -&gt; <a class="enum" href="../../api/services/ipc/enum.SaveOutcome.html" title="enum api::services::ipc::SaveOutcome">SaveOutcome</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Publish <code>bytes</code> at a service-owned <code>dst</code> (the SSH host-trust store) through the same
 staging, read-back seal and conditional publication (<code>publish_if</code> against <code>expect</code>)
 as a caller’s save. It runs on the service’s own authority: no caller access rule or
 quota applies, the destination’s own bounds do. Unpublished staging is removed.</p>

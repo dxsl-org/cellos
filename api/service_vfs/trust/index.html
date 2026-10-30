@@ -2,7 +2,7 @@
 <p>The store is one file the VFS keeps under a path no caller may read or write
 (<code>access::rules</code>), seeded by the provisioner (D79-10). <code>TrustLookup</code> compares the
 caller’s configured host identifier, port, algorithm and complete key blob with it
-and answers one [<code>api::ipc::ssh_trust</code>] code; the store’s contents never leave the
+and answers one <a href="../../api/services/ipc/ssh_trust/index.html" title="mod api::services::ipc::ssh_trust"><code>api::ipc::ssh_trust</code></a> code; the store’s contents never leave the
 service. Only a caller holding the attested outbound-connect right may ask.</p>
 <p>Store format v1 (UTF-8 text, LF line ends, no comments or blank lines):</p>
 <div class="example-wrap"><pre class="language-text"><code>cellos-ssh-trust v1

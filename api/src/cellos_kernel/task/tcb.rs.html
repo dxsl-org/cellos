@@ -387,582 +387,591 @@
 <a href=#387 id=387 data-nosnippet>387</a>    /// attests `CALLER_FLAG_CONFIG_WRITE` from the Cell root's copy; service-config
 <a href=#388 id=388 data-nosnippet>388</a>    /// enforces it. Threads inherit it through the same `CapSet` copy.
 <a href=#389 id=389 data-nosnippet>389</a>    </span><span class="kw">pub </span>config_write: bool,
-<a href=#390 id=390 data-nosnippet>390</a>
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="doccomment">/// MMIO device-class capability bitmask (`DEV_*` from
-<a href=#392 id=392 data-nosnippet>392</a>    /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
-<a href=#393 id=393 data-nosnippet>393</a>    /// A cell may `sys_request_mmio` only ranges whose matching device class is
-<a href=#394 id=394 data-nosnippet>394</a>    /// present here. `0` = no MMIO access.
-<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">pub </span>mmio_devices: u8,
-<a href=#396 id=396 data-nosnippet>396</a>
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="doccomment">/// Block-I/O partition range grants (Milestone 2.5 P03) — bitmask:
-<a href=#398 id=398 data-nosnippet>398</a>    /// bit 0 = P1 FAT32 (`MANIFEST_FLAG_PART_DATA`), bit 1 = P4 littlefs
-<a href=#399 id=399 data-nosnippet>399</a>    /// (`MANIFEST_FLAG_PART_LFS`). Checked by `check_block_access` for every
-<a href=#400 id=400 data-nosnippet>400</a>    /// raw block syscall, on top of `block_io_cap`. P2 (cell table) and P3
-<a href=#401 id=401 data-nosnippet>401</a>    /// (snapshot) have no bit — those ranges are kernel-only by construction.
-<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">pub </span>block_regions: u8,
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="doccomment">/// KSSH K3 sign right (`CapSet::kms_ssh_sign`). `attested_identity_of`
+<a href=#391 id=391 data-nosnippet>391</a>    /// attests `CALLER_FLAG_KMS_SSH_SIGN` from the Cell root's copy; service-kms
+<a href=#392 id=392 data-nosnippet>392</a>    /// enforces it. Threads inherit it through the same `CapSet` copy.
+<a href=#393 id=393 data-nosnippet>393</a>    </span><span class="kw">pub </span>kms_ssh_sign: bool,
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="doccomment">/// KSSH K3 admin right (`CapSet::kms_ssh_admin`), attested as
+<a href=#395 id=395 data-nosnippet>395</a>    /// `CALLER_FLAG_KMS_SSH_ADMIN` from the Cell root's copy. No edge grants it yet.
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">pub </span>kms_ssh_admin: bool,
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="doccomment">/// MMIO device-class capability bitmask (`DEV_*` from
+<a href=#399 id=399 data-nosnippet>399</a>    /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
+<a href=#400 id=400 data-nosnippet>400</a>    /// A cell may `sys_request_mmio` only ranges whose matching device class is
+<a href=#401 id=401 data-nosnippet>401</a>    /// present here. `0` = no MMIO access.
+<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">pub </span>mmio_devices: u8,
 <a href=#403 id=403 data-nosnippet>403</a>
-<a href=#404 id=404 data-nosnippet>404</a>    <span class="doccomment">/// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
-<a href=#405 id=405 data-nosnippet>405</a>    /// On other architectures this field exists but is always 0 and never consulted.
-<a href=#406 id=406 data-nosnippet>406</a>    /// Key assignment: 0 = trusted-core cells (block_io/network/spawn/hypervisor),
-<a href=#407 id=407 data-nosnippet>407</a>    ///                 1 = standard Tier-1 Rust cells,
-<a href=#408 id=408 data-nosnippet>408</a>    ///                 2 = Tier-1b C/FFI cells (mlibc, DOOM).
-<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">pub </span>pku_key: u8,
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="doccomment">/// Block-I/O partition range grants (Milestone 2.5 P03) — bitmask:
+<a href=#405 id=405 data-nosnippet>405</a>    /// bit 0 = P1 FAT32 (`MANIFEST_FLAG_PART_DATA`), bit 1 = P4 littlefs
+<a href=#406 id=406 data-nosnippet>406</a>    /// (`MANIFEST_FLAG_PART_LFS`). Checked by `check_block_access` for every
+<a href=#407 id=407 data-nosnippet>407</a>    /// raw block syscall, on top of `block_io_cap`. P2 (cell table) and P3
+<a href=#408 id=408 data-nosnippet>408</a>    /// (snapshot) have no bit — those ranges are kernel-only by construction.
+<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">pub </span>block_regions: u8,
 <a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a>    <span class="doccomment">/// Precomputed PKRU register value for this cell's key domain.
-<a href=#412 id=412 data-nosnippet>412</a>    /// Written to CPU_LOCAL.pku_value by the scheduler before ring-3 re-entry,
-<a href=#413 id=413 data-nosnippet>413</a>    /// then loaded into PKRU by the asm exit paths (`__trap_exit` / `syscall_entry`).
-<a href=#414 id=414 data-nosnippet>414</a>    /// Always 0 on non-x86_64 targets (and for trusted-core cells on x86_64).
-<a href=#415 id=415 data-nosnippet>415</a>    </span><span class="kw">pub </span>pku_value: u32,
-<a href=#416 id=416 data-nosnippet>416</a>
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="doccomment">/// Scheduling priority tier.  Higher value = higher priority.
-<a href=#418 id=418 data-nosnippet>418</a>    /// See `api::TaskPriority` for the three defined levels.
-<a href=#419 id=419 data-nosnippet>419</a>    </span><span class="kw">pub </span>priority: u8,
-<a href=#420 id=420 data-nosnippet>420</a>
-<a href=#421 id=421 data-nosnippet>421</a>    <span class="doccomment">/// Cluster participation mode parsed from `__ViCell_cluster` ELF section.
-<a href=#422 id=422 data-nosnippet>422</a>    /// `0` = Isolated (default, no section present).  See `api::cluster::ClusterMode`.
-<a href=#423 id=423 data-nosnippet>423</a>    ///
-<a href=#424 id=424 data-nosnippet>424</a>    /// Invariant: a task with `cluster_mode != 0` MUST have `priority != RealTime (2)`.
-<a href=#425 id=425 data-nosnippet>425</a>    /// The `SpawnPinned` handler enforces this at spawn time.
-<a href=#426 id=426 data-nosnippet>426</a>    </span><span class="kw">pub </span>cluster_mode: u8,
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="doccomment">/// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
+<a href=#412 id=412 data-nosnippet>412</a>    /// On other architectures this field exists but is always 0 and never consulted.
+<a href=#413 id=413 data-nosnippet>413</a>    /// Key assignment: 0 = trusted-core cells (block_io/network/spawn/hypervisor),
+<a href=#414 id=414 data-nosnippet>414</a>    ///                 1 = standard Tier-1 Rust cells,
+<a href=#415 id=415 data-nosnippet>415</a>    ///                 2 = Tier-1b C/FFI cells (mlibc, DOOM).
+<a href=#416 id=416 data-nosnippet>416</a>    </span><span class="kw">pub </span>pku_key: u8,
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="doccomment">/// Precomputed PKRU register value for this cell's key domain.
+<a href=#419 id=419 data-nosnippet>419</a>    /// Written to CPU_LOCAL.pku_value by the scheduler before ring-3 re-entry,
+<a href=#420 id=420 data-nosnippet>420</a>    /// then loaded into PKRU by the asm exit paths (`__trap_exit` / `syscall_entry`).
+<a href=#421 id=421 data-nosnippet>421</a>    /// Always 0 on non-x86_64 targets (and for trusted-core cells on x86_64).
+<a href=#422 id=422 data-nosnippet>422</a>    </span><span class="kw">pub </span>pku_value: u32,
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="doccomment">/// Scheduling priority tier.  Higher value = higher priority.
+<a href=#425 id=425 data-nosnippet>425</a>    /// See `api::TaskPriority` for the three defined levels.
+<a href=#426 id=426 data-nosnippet>426</a>    </span><span class="kw">pub </span>priority: u8,
 <a href=#427 id=427 data-nosnippet>427</a>
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="doccomment">/// FNV-1a-64 cluster routing identifier from `__ViCell_cluster`.
-<a href=#429 id=429 data-nosnippet>429</a>    /// `0` when `cluster_mode == Isolated`.  NOT a credential — routing only.
-<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">pub </span>cluster_id: u64,
-<a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a>    <span class="doccomment">/// Per-Cell syscall allowlist.  Each bit corresponds to a syscall via
-<a href=#433 id=433 data-nosnippet>433</a>    /// `api::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
-<a href=#434 id=434 data-nosnippet>434</a>    /// used when the Cell ELF does not embed a `__ViCell_syscalls` section).
-<a href=#435 id=435 data-nosnippet>435</a>    </span><span class="kw">pub </span>syscall_allowlist: u64,
-<a href=#436 id=436 data-nosnippet>436</a>
-<a href=#437 id=437 data-nosnippet>437</a>    <span class="doccomment">/// Watchdog: consecutive 10 ms scheduler ticks this task has been Running
-<a href=#438 id=438 data-nosnippet>438</a>    /// WITHOUT voluntarily blocking. Incremented each tick it is found Running in
-<a href=#439 id=439 data-nosnippet>439</a>    /// `pick_next`, reset to 0 the moment it blocks (Recv/Send/Sleep/etc). A
-<a href=#440 id=440 data-nosnippet>440</a>    /// runaway (infinite loop, never yields) climbs until it crosses the watchdog
-<a href=#441 id=441 data-nosnippet>441</a>    /// budget and is terminated — preventing livelock ("alive but paralyzed").
-<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">pub </span>run_ticks: u32,
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="doccomment">/// Cluster participation mode parsed from `__ViCell_cluster` ELF section.
+<a href=#429 id=429 data-nosnippet>429</a>    /// `0` = Isolated (default, no section present).  See `api::cluster::ClusterMode`.
+<a href=#430 id=430 data-nosnippet>430</a>    ///
+<a href=#431 id=431 data-nosnippet>431</a>    /// Invariant: a task with `cluster_mode != 0` MUST have `priority != RealTime (2)`.
+<a href=#432 id=432 data-nosnippet>432</a>    /// The `SpawnPinned` handler enforces this at spawn time.
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="kw">pub </span>cluster_mode: u8,
+<a href=#434 id=434 data-nosnippet>434</a>
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="doccomment">/// FNV-1a-64 cluster routing identifier from `__ViCell_cluster`.
+<a href=#436 id=436 data-nosnippet>436</a>    /// `0` when `cluster_mode == Isolated`.  NOT a credential — routing only.
+<a href=#437 id=437 data-nosnippet>437</a>    </span><span class="kw">pub </span>cluster_id: u64,
+<a href=#438 id=438 data-nosnippet>438</a>
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="doccomment">/// Per-Cell syscall allowlist.  Each bit corresponds to a syscall via
+<a href=#440 id=440 data-nosnippet>440</a>    /// `api::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
+<a href=#441 id=441 data-nosnippet>441</a>    /// used when the Cell ELF does not embed a `__ViCell_syscalls` section).
+<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">pub </span>syscall_allowlist: u64,
 <a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="doccomment">/// Cumulative scheduler ticks charged to this task while it was the running
-<a href=#445 id=445 data-nosnippet>445</a>    /// task at a scheduler accounting point. This is the kernel-exported CPU
-<a href=#446 id=446 data-nosnippet>446</a>    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
-<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">pub </span>cpu_run_ticks: u64,
-<a href=#448 id=448 data-nosnippet>448</a>
-<a href=#449 id=449 data-nosnippet>449</a>    <span class="doccomment">/// Exact on-CPU nanoseconds on the `GetTime(0)` monotonic clock (Phase 06
-<a href=#450 id=450 data-nosnippet>450</a>    /// S6-1, K1). Charged at every scheduler pass on this task's hart for the
-<a href=#451 id=451 data-nosnippet>451</a>    /// interval since that hart's previous pass; never reset within the task's
-<a href=#452 id=452 data-nosnippet>452</a>    /// lifetime. `TelemetrySnapshot` adds the still-running interval in its row.
-<a href=#453 id=453 data-nosnippet>453</a>    </span><span class="kw">pub </span>cpu_ns: u64,
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a>    <span class="doccomment">/// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
-<a href=#456 id=456 data-nosnippet>456</a>    /// message did not arrive in time). For an RT control loop this is its missed-cycle
-<a href=#457 id=457 data-nosnippet>457</a>    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
-<a href=#458 id=458 data-nosnippet>458</a>    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
-<a href=#459 id=459 data-nosnippet>459</a>    </span><span class="kw">pub </span>deadline_misses: u32,
-<a href=#460 id=460 data-nosnippet>460</a>
-<a href=#461 id=461 data-nosnippet>461</a>    <span class="doccomment">/// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
-<a href=#462 id=462 data-nosnippet>462</a>    /// for the current non-yielding episode, so the early-warning audit fires once per
-<a href=#463 id=463 data-nosnippet>463</a>    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
-<a href=#464 id=464 data-nosnippet>464</a>    </span><span class="kw">pub </span>rt_overrun_warned: bool,
-<a href=#465 id=465 data-nosnippet>465</a>
-<a href=#466 id=466 data-nosnippet>466</a>    <span class="doccomment">/// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
-<a href=#467 id=467 data-nosnippet>467</a>    /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
-<a href=#468 id=468 data-nosnippet>468</a>    /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
-<a href=#469 id=469 data-nosnippet>469</a>    /// = heartbeat disabled (the default; most cells don't opt in).
-<a href=#470 id=470 data-nosnippet>470</a>    </span><span class="kw">pub </span>heartbeat_deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#471 id=471 data-nosnippet>471</a>
-<a href=#472 id=472 data-nosnippet>472</a>    <span class="doccomment">/// Per-cell virtual memory area list for demand-paging.
-<a href=#473 id=473 data-nosnippet>473</a>    ///
-<a href=#474 id=474 data-nosnippet>474</a>    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
-<a href=#475 id=475 data-nosnippet>475</a>    /// The #PF handler consults this list when a user-mode page fault occurs to
-<a href=#476 id=476 data-nosnippet>476</a>    /// decide whether to map the page on demand or kill the cell.
-<a href=#477 id=477 data-nosnippet>477</a>    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
-<a href=#478 id=478 data-nosnippet>478</a>    /// (those arches use identity-mapped segments today).
-<a href=#479 id=479 data-nosnippet>479</a>    </span><span class="kw">pub </span>vma: <span class="kw">crate</span>::memory::vma::VmaList,
-<a href=#480 id=480 data-nosnippet>480</a>
-<a href=#481 id=481 data-nosnippet>481</a>    <span class="doccomment">/// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
-<a href=#482 id=482 data-nosnippet>482</a>    /// finished deserializing state and is ready to receive IPC.
-<a href=#483 id=483 data-nosnippet>483</a>    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
-<a href=#484 id=484 data-nosnippet>484</a>    </span><span class="kw">pub </span>hotswap_ready: bool,
-<a href=#485 id=485 data-nosnippet>485</a>
-<a href=#486 id=486 data-nosnippet>486</a>    <span class="doccomment">/// Frozen source task this replacement was minted from. Set by the
-<a href=#487 id=487 data-nosnippet>487</a>    /// SpawnReplacement syscall and consumed only by the atomic cutover.
-<a href=#488 id=488 data-nosnippet>488</a>    </span><span class="kw">pub </span>hotswap_source_tid: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#489 id=489 data-nosnippet>489</a>
-<a href=#490 id=490 data-nosnippet>490</a>    <span class="doccomment">/// Permanently rejects non-supervisor IPC to an old provider after its
-<a href=#491 id=491 data-nosnippet>491</a>    /// mailbox and service identity have moved to a replacement.
-<a href=#492 id=492 data-nosnippet>492</a>    </span><span class="kw">pub </span>hotswap_ingress_closed: bool,
-<a href=#493 id=493 data-nosnippet>493</a>
-<a href=#494 id=494 data-nosnippet>494</a>    <span class="doccomment">/// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
-<a href=#495 id=495 data-nosnippet>495</a>    /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
-<a href=#496 id=496 data-nosnippet>496</a>    /// Prevents a compromised Supervisor Cell from disabling the restart tree.
-<a href=#497 id=497 data-nosnippet>497</a>    </span><span class="kw">pub </span>is_critical: bool,
-<a href=#498 id=498 data-nosnippet>498</a>
-<a href=#499 id=499 data-nosnippet>499</a>    <span class="doccomment">/// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
-<a href=#500 id=500 data-nosnippet>500</a>    ///
-<a href=#501 id=501 data-nosnippet>501</a>    /// Callers that `sys_send` to a Frozen task have their message copied here
-<a href=#502 id=502 data-nosnippet>502</a>    /// (owned buffer; Law 2) and return immediately with `Ok(0)` — they are NOT
-<a href=#503 id=503 data-nosnippet>503</a>    /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
-<a href=#504 id=504 data-nosnippet>504</a>    /// this queue to the new cell before the old cell is terminated.
-<a href=#505 id=505 data-nosnippet>505</a>    /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
-<a href=#506 id=506 data-nosnippet>506</a>    </span><span class="kw">pub </span>pending_msgs: PendingMailbox,
-<a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="doccomment">/// Epoch of the cell this task belongs to, attested to services alongside
-<a href=#509 id=509 data-nosnippet>509</a>    /// `cell_id` (see `api::caller_identity`).
-<a href=#510 id=510 data-nosnippet>510</a>    ///
-<a href=#511 id=511 data-nosnippet>511</a>    /// A service that holds state against a `CellId` — an open handle, a pending
-<a href=#512 id=512 data-nosnippet>512</a>    /// read, a quota ledger row — must not hand that state to a *different* cell
-<a href=#513 id=513 data-nosnippet>513</a>    /// that later shows up under the same id. `CellId` is `CellId(tid)` and the
-<a href=#514 id=514 data-nosnippet>514</a>    /// scheduler's `next_task_id` only ever increments, so ids are not recycled
-<a href=#515 id=515 data-nosnippet>515</a>    /// today; this epoch is what keeps the guarantee if that ever changes,
-<a href=#516 id=516 data-nosnippet>516</a>    /// because it is minted fresh per cell and never reused.
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="doccomment">/// Watchdog: consecutive 10 ms scheduler ticks this task has been Running
+<a href=#445 id=445 data-nosnippet>445</a>    /// WITHOUT voluntarily blocking. Incremented each tick it is found Running in
+<a href=#446 id=446 data-nosnippet>446</a>    /// `pick_next`, reset to 0 the moment it blocks (Recv/Send/Sleep/etc). A
+<a href=#447 id=447 data-nosnippet>447</a>    /// runaway (infinite loop, never yields) climbs until it crosses the watchdog
+<a href=#448 id=448 data-nosnippet>448</a>    /// budget and is terminated — preventing livelock ("alive but paralyzed").
+<a href=#449 id=449 data-nosnippet>449</a>    </span><span class="kw">pub </span>run_ticks: u32,
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a>    <span class="doccomment">/// Cumulative scheduler ticks charged to this task while it was the running
+<a href=#452 id=452 data-nosnippet>452</a>    /// task at a scheduler accounting point. This is the kernel-exported CPU
+<a href=#453 id=453 data-nosnippet>453</a>    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
+<a href=#454 id=454 data-nosnippet>454</a>    </span><span class="kw">pub </span>cpu_run_ticks: u64,
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>    <span class="doccomment">/// Exact on-CPU nanoseconds on the `GetTime(0)` monotonic clock (Phase 06
+<a href=#457 id=457 data-nosnippet>457</a>    /// S6-1, K1). Charged at every scheduler pass on this task's hart for the
+<a href=#458 id=458 data-nosnippet>458</a>    /// interval since that hart's previous pass; never reset within the task's
+<a href=#459 id=459 data-nosnippet>459</a>    /// lifetime. `TelemetrySnapshot` adds the still-running interval in its row.
+<a href=#460 id=460 data-nosnippet>460</a>    </span><span class="kw">pub </span>cpu_ns: u64,
+<a href=#461 id=461 data-nosnippet>461</a>
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="doccomment">/// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
+<a href=#463 id=463 data-nosnippet>463</a>    /// message did not arrive in time). For an RT control loop this is its missed-cycle
+<a href=#464 id=464 data-nosnippet>464</a>    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
+<a href=#465 id=465 data-nosnippet>465</a>    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
+<a href=#466 id=466 data-nosnippet>466</a>    </span><span class="kw">pub </span>deadline_misses: u32,
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="doccomment">/// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
+<a href=#469 id=469 data-nosnippet>469</a>    /// for the current non-yielding episode, so the early-warning audit fires once per
+<a href=#470 id=470 data-nosnippet>470</a>    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
+<a href=#471 id=471 data-nosnippet>471</a>    </span><span class="kw">pub </span>rt_overrun_warned: bool,
+<a href=#472 id=472 data-nosnippet>472</a>
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="doccomment">/// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
+<a href=#474 id=474 data-nosnippet>474</a>    /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
+<a href=#475 id=475 data-nosnippet>475</a>    /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
+<a href=#476 id=476 data-nosnippet>476</a>    /// = heartbeat disabled (the default; most cells don't opt in).
+<a href=#477 id=477 data-nosnippet>477</a>    </span><span class="kw">pub </span>heartbeat_deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#478 id=478 data-nosnippet>478</a>
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="doccomment">/// Per-cell virtual memory area list for demand-paging.
+<a href=#480 id=480 data-nosnippet>480</a>    ///
+<a href=#481 id=481 data-nosnippet>481</a>    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
+<a href=#482 id=482 data-nosnippet>482</a>    /// The #PF handler consults this list when a user-mode page fault occurs to
+<a href=#483 id=483 data-nosnippet>483</a>    /// decide whether to map the page on demand or kill the cell.
+<a href=#484 id=484 data-nosnippet>484</a>    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
+<a href=#485 id=485 data-nosnippet>485</a>    /// (those arches use identity-mapped segments today).
+<a href=#486 id=486 data-nosnippet>486</a>    </span><span class="kw">pub </span>vma: <span class="kw">crate</span>::memory::vma::VmaList,
+<a href=#487 id=487 data-nosnippet>487</a>
+<a href=#488 id=488 data-nosnippet>488</a>    <span class="doccomment">/// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
+<a href=#489 id=489 data-nosnippet>489</a>    /// finished deserializing state and is ready to receive IPC.
+<a href=#490 id=490 data-nosnippet>490</a>    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
+<a href=#491 id=491 data-nosnippet>491</a>    </span><span class="kw">pub </span>hotswap_ready: bool,
+<a href=#492 id=492 data-nosnippet>492</a>
+<a href=#493 id=493 data-nosnippet>493</a>    <span class="doccomment">/// Frozen source task this replacement was minted from. Set by the
+<a href=#494 id=494 data-nosnippet>494</a>    /// SpawnReplacement syscall and consumed only by the atomic cutover.
+<a href=#495 id=495 data-nosnippet>495</a>    </span><span class="kw">pub </span>hotswap_source_tid: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="doccomment">/// Permanently rejects non-supervisor IPC to an old provider after its
+<a href=#498 id=498 data-nosnippet>498</a>    /// mailbox and service identity have moved to a replacement.
+<a href=#499 id=499 data-nosnippet>499</a>    </span><span class="kw">pub </span>hotswap_ingress_closed: bool,
+<a href=#500 id=500 data-nosnippet>500</a>
+<a href=#501 id=501 data-nosnippet>501</a>    <span class="doccomment">/// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
+<a href=#502 id=502 data-nosnippet>502</a>    /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
+<a href=#503 id=503 data-nosnippet>503</a>    /// Prevents a compromised Supervisor Cell from disabling the restart tree.
+<a href=#504 id=504 data-nosnippet>504</a>    </span><span class="kw">pub </span>is_critical: bool,
+<a href=#505 id=505 data-nosnippet>505</a>
+<a href=#506 id=506 data-nosnippet>506</a>    <span class="doccomment">/// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
+<a href=#507 id=507 data-nosnippet>507</a>    ///
+<a href=#508 id=508 data-nosnippet>508</a>    /// Callers that `sys_send` to a Frozen task have their message copied here
+<a href=#509 id=509 data-nosnippet>509</a>    /// (owned buffer; Law 2) and return immediately with `Ok(0)` — they are NOT
+<a href=#510 id=510 data-nosnippet>510</a>    /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
+<a href=#511 id=511 data-nosnippet>511</a>    /// this queue to the new cell before the old cell is terminated.
+<a href=#512 id=512 data-nosnippet>512</a>    /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
+<a href=#513 id=513 data-nosnippet>513</a>    </span><span class="kw">pub </span>pending_msgs: PendingMailbox,
+<a href=#514 id=514 data-nosnippet>514</a>
+<a href=#515 id=515 data-nosnippet>515</a>    <span class="doccomment">/// Epoch of the cell this task belongs to, attested to services alongside
+<a href=#516 id=516 data-nosnippet>516</a>    /// `cell_id` (see `api::caller_identity`).
 <a href=#517 id=517 data-nosnippet>517</a>    ///
-<a href=#518 id=518 data-nosnippet>518</a>    /// Threads override the freshly minted value with their cell's (see
-<a href=#519 id=519 data-nosnippet>519</a>    /// `Scheduler::spawn_thread`) so a thread is indistinguishable from its cell
-<a href=#520 id=520 data-nosnippet>520</a>    /// to any check that keys on identity — which is the point of the whole
-<a href=#521 id=521 data-nosnippet>521</a>    /// attestation: `CellId(tid)` was misattributing threads.
-<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">pub </span>cell_generation: u64,
-<a href=#523 id=523 data-nosnippet>523</a>
-<a href=#524 id=524 data-nosnippet>524</a>    <span class="doccomment">/// Directory handles this task's spawner named for it, with the spawner's
-<a href=#525 id=525 data-nosnippet>525</a>    /// attested identity (see [`api::dir_handles`]).
-<a href=#526 id=526 data-nosnippet>526</a>    ///
-<a href=#527 id=527 data-nosnippet>527</a>    /// The kernel is a courier here and nothing more. It does not know what any
-<a href=#528 id=528 data-nosnippet>528</a>    /// of these handles refer to, cannot tell a live one from a revoked one, and
-<a href=#529 id=529 data-nosnippet>529</a>    /// must never treat this as a second record of filesystem authority — the
-<a href=#530 id=530 data-nosnippet>530</a>    /// filesystem service owns that, and a second copy would drift in the
-<a href=#531 id=531 data-nosnippet>531</a>    /// direction of silently widening what a cell may reach. The only claim the
-<a href=#532 id=532 data-nosnippet>532</a>    /// kernel makes about this field is provenance: *this* spawner named *these*
-<a href=#533 id=533 data-nosnippet>533</a>    /// values at spawn.
-<a href=#534 id=534 data-nosnippet>534</a>    ///
-<a href=#535 id=535 data-nosnippet>535</a>    /// Bounded inline at [`api::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
-<a href=#536 id=536 data-nosnippet>536</a>    /// caller-supplied count never sizes an allocation.
-<a href=#537 id=537 data-nosnippet>537</a>    ///
-<a href=#538 id=538 data-nosnippet>538</a>    /// Set once, under the scheduler lock that creates the task, before it can
-<a href=#539 id=539 data-nosnippet>539</a>    /// be scheduled. It is never updated afterwards: authority fixed at creation
-<a href=#540 id=540 data-nosnippet>540</a>    /// is what makes it auditable.
-<a href=#541 id=541 data-nosnippet>541</a>    </span><span class="kw">pub </span>inherited_dirs: api::dir_handles::InheritedDirHandles,
-<a href=#542 id=542 data-nosnippet>542</a>
-<a href=#543 id=543 data-nosnippet>543</a>    <span class="doccomment">/// Directory handles this task has named for the next cell it spawns.
+<a href=#518 id=518 data-nosnippet>518</a>    /// A service that holds state against a `CellId` — an open handle, a pending
+<a href=#519 id=519 data-nosnippet>519</a>    /// read, a quota ledger row — must not hand that state to a *different* cell
+<a href=#520 id=520 data-nosnippet>520</a>    /// that later shows up under the same id. `CellId` is `CellId(tid)` and the
+<a href=#521 id=521 data-nosnippet>521</a>    /// scheduler's `next_task_id` only ever increments, so ids are not recycled
+<a href=#522 id=522 data-nosnippet>522</a>    /// today; this epoch is what keeps the guarantee if that ever changes,
+<a href=#523 id=523 data-nosnippet>523</a>    /// because it is minted fresh per cell and never reused.
+<a href=#524 id=524 data-nosnippet>524</a>    ///
+<a href=#525 id=525 data-nosnippet>525</a>    /// Threads override the freshly minted value with their cell's (see
+<a href=#526 id=526 data-nosnippet>526</a>    /// `Scheduler::spawn_thread`) so a thread is indistinguishable from its cell
+<a href=#527 id=527 data-nosnippet>527</a>    /// to any check that keys on identity — which is the point of the whole
+<a href=#528 id=528 data-nosnippet>528</a>    /// attestation: `CellId(tid)` was misattributing threads.
+<a href=#529 id=529 data-nosnippet>529</a>    </span><span class="kw">pub </span>cell_generation: u64,
+<a href=#530 id=530 data-nosnippet>530</a>
+<a href=#531 id=531 data-nosnippet>531</a>    <span class="doccomment">/// Directory handles this task's spawner named for it, with the spawner's
+<a href=#532 id=532 data-nosnippet>532</a>    /// attested identity (see [`api::dir_handles`]).
+<a href=#533 id=533 data-nosnippet>533</a>    ///
+<a href=#534 id=534 data-nosnippet>534</a>    /// The kernel is a courier here and nothing more. It does not know what any
+<a href=#535 id=535 data-nosnippet>535</a>    /// of these handles refer to, cannot tell a live one from a revoked one, and
+<a href=#536 id=536 data-nosnippet>536</a>    /// must never treat this as a second record of filesystem authority — the
+<a href=#537 id=537 data-nosnippet>537</a>    /// filesystem service owns that, and a second copy would drift in the
+<a href=#538 id=538 data-nosnippet>538</a>    /// direction of silently widening what a cell may reach. The only claim the
+<a href=#539 id=539 data-nosnippet>539</a>    /// kernel makes about this field is provenance: *this* spawner named *these*
+<a href=#540 id=540 data-nosnippet>540</a>    /// values at spawn.
+<a href=#541 id=541 data-nosnippet>541</a>    ///
+<a href=#542 id=542 data-nosnippet>542</a>    /// Bounded inline at [`api::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
+<a href=#543 id=543 data-nosnippet>543</a>    /// caller-supplied count never sizes an allocation.
 <a href=#544 id=544 data-nosnippet>544</a>    ///
-<a href=#545 id=545 data-nosnippet>545</a>    /// Staged by `SpawnSetDirs` and consumed by the next cell this task creates,
-<a href=#546 id=546 data-nosnippet>546</a>    /// then cleared — including when that spawn fails, so a set can never attach
-<a href=#547 id=547 data-nosnippet>547</a>    /// to a later unrelated child. Empty means "pass nothing on", which is what
-<a href=#548 id=548 data-nosnippet>548</a>    /// every task that never calls `SpawnSetDirs` does.
-<a href=#549 id=549 data-nosnippet>549</a>    </span><span class="kw">pub </span>staged_dirs: api::dir_handles::DirHandleSet,
-<a href=#550 id=550 data-nosnippet>550</a>
-<a href=#551 id=551 data-nosnippet>551</a>    <span class="doccomment">/// This cell's completion queue, or `None` until something reserves a slot.
-<a href=#552 id=552 data-nosnippet>552</a>    ///
-<a href=#553 id=553 data-nosnippet>553</a>    /// Kernel-owned heap memory, never a grant: a cell cannot unregister or free
-<a href=#554 id=554 data-nosnippet>554</a>    /// it, so a completion always has somewhere to land and appending needs no
-<a href=#555 id=555 data-nosnippet>555</a>    /// address resolution. Threads of one cell share the handle, and the queue
-<a href=#556 id=556 data-nosnippet>556</a>    /// dies with the last reference to it — see [`crate::task::completion`].
-<a href=#557 id=557 data-nosnippet>557</a>    </span><span class="kw">pub </span>completion: <span class="prelude-ty">Option</span>&lt;alloc::sync::Arc&lt;<span class="kw">crate</span>::task::completion::CompletionQueue&gt;&gt;,
-<a href=#558 id=558 data-nosnippet>558</a>    <span class="doccomment">/// Queue slot held by an in-progress `WaitCompletion` syscall.
+<a href=#545 id=545 data-nosnippet>545</a>    /// Set once, under the scheduler lock that creates the task, before it can
+<a href=#546 id=546 data-nosnippet>546</a>    /// be scheduled. It is never updated afterwards: authority fixed at creation
+<a href=#547 id=547 data-nosnippet>547</a>    /// is what makes it auditable.
+<a href=#548 id=548 data-nosnippet>548</a>    </span><span class="kw">pub </span>inherited_dirs: api::dir_handles::InheritedDirHandles,
+<a href=#549 id=549 data-nosnippet>549</a>
+<a href=#550 id=550 data-nosnippet>550</a>    <span class="doccomment">/// Directory handles this task has named for the next cell it spawns.
+<a href=#551 id=551 data-nosnippet>551</a>    ///
+<a href=#552 id=552 data-nosnippet>552</a>    /// Staged by `SpawnSetDirs` and consumed by the next cell this task creates,
+<a href=#553 id=553 data-nosnippet>553</a>    /// then cleared — including when that spawn fails, so a set can never attach
+<a href=#554 id=554 data-nosnippet>554</a>    /// to a later unrelated child. Empty means "pass nothing on", which is what
+<a href=#555 id=555 data-nosnippet>555</a>    /// every task that never calls `SpawnSetDirs` does.
+<a href=#556 id=556 data-nosnippet>556</a>    </span><span class="kw">pub </span>staged_dirs: api::dir_handles::DirHandleSet,
+<a href=#557 id=557 data-nosnippet>557</a>
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="doccomment">/// This cell's completion queue, or `None` until something reserves a slot.
 <a href=#559 id=559 data-nosnippet>559</a>    ///
-<a href=#560 id=560 data-nosnippet>560</a>    /// Kept outside `TaskState` because a deferred source wake changes the state
-<a href=#561 id=561 data-nosnippet>561</a>    /// to `Ready` before the syscall has released its reservation. Task exit
-<a href=#562 id=562 data-nosnippet>562</a>    /// takes this field and defers TIMER release outside the scheduler lock.
-<a href=#563 id=563 data-nosnippet>563</a>    </span><span class="kw">pub </span>completion_wait: <span class="prelude-ty">Option</span>&lt;CompletionWait&gt;,
-<a href=#564 id=564 data-nosnippet>564</a>}
-<a href=#565 id=565 data-nosnippet>565</a>
-<a href=#566 id=566 data-nosnippet>566</a><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#567 id=567 data-nosnippet>567</a></span><span class="kw">pub struct </span>CompletionWait {
-<a href=#568 id=568 data-nosnippet>568</a>    <span class="kw">pub </span>source: u32,
-<a href=#569 id=569 data-nosnippet>569</a>    <span class="kw">pub </span>slot: <span class="kw">crate</span>::task::completion::SlotId,
-<a href=#570 id=570 data-nosnippet>570</a>}
-<a href=#571 id=571 data-nosnippet>571</a>
-<a href=#572 id=572 data-nosnippet>572</a><span class="doccomment">/// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
-<a href=#573 id=573 data-nosnippet>573</a>/// "generation not attested on this path".
-<a href=#574 id=574 data-nosnippet>574</a>/// A real spinlock keeps allocation unique across harts, including RV32 where
-<a href=#575 id=575 data-nosnippet>575</a>/// the portable 64-bit atomic fallback only masks local interrupts.
-<a href=#576 id=576 data-nosnippet>576</a></span><span class="kw">static </span>NEXT_CELL_GENERATION: <span class="kw">crate</span>::sync::Spinlock&lt;u64&gt; = <span class="kw">crate</span>::sync::Spinlock::new(<span class="number">1</span>);
-<a href=#577 id=577 data-nosnippet>577</a>
-<a href=#578 id=578 data-nosnippet>578</a><span class="kw">fn </span>next_cell_generation() -&gt; u64 {
-<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">let </span><span class="kw-2">mut </span>next = NEXT_CELL_GENERATION.lock();
-<a href=#580 id=580 data-nosnippet>580</a>    <span class="kw">let </span>generation = <span class="kw-2">*</span>next;
-<a href=#581 id=581 data-nosnippet>581</a>    <span class="kw-2">*</span>next = generation
-<a href=#582 id=582 data-nosnippet>582</a>        .checked_add(<span class="number">1</span>)
-<a href=#583 id=583 data-nosnippet>583</a>        .expect(<span class="string">"cell generation space exhausted"</span>);
-<a href=#584 id=584 data-nosnippet>584</a>    generation
-<a href=#585 id=585 data-nosnippet>585</a>}
-<a href=#586 id=586 data-nosnippet>586</a>
-<a href=#587 id=587 data-nosnippet>587</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#588 id=588 data-nosnippet>588</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>cell_generation_snapshot() -&gt; u64 {
-<a href=#589 id=589 data-nosnippet>589</a>    <span class="kw-2">*</span>NEXT_CELL_GENERATION.lock()
-<a href=#590 id=590 data-nosnippet>590</a>}
-<a href=#591 id=591 data-nosnippet>591</a>
-<a href=#592 id=592 data-nosnippet>592</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#593 id=593 data-nosnippet>593</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>restore_cell_generation_for_test(next: u64) {
-<a href=#594 id=594 data-nosnippet>594</a>    <span class="kw-2">*</span>NEXT_CELL_GENERATION.lock() = next;
-<a href=#595 id=595 data-nosnippet>595</a>}
-<a href=#596 id=596 data-nosnippet>596</a>
-<a href=#597 id=597 data-nosnippet>597</a><span class="kw">impl </span>Task {
-<a href=#598 id=598 data-nosnippet>598</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
-<a href=#599 id=599 data-nosnippet>599</a>        <span class="self">Self </span>{
-<a href=#600 id=600 data-nosnippet>600</a>            id,
-<a href=#601 id=601 data-nosnippet>601</a>            cell_id,
-<a href=#602 id=602 data-nosnippet>602</a>            root_tid: id,
-<a href=#603 id=603 data-nosnippet>603</a>            name: String::from(name),
-<a href=#604 id=604 data-nosnippet>604</a>            state: TaskState::Ready,
-<a href=#605 id=605 data-nosnippet>605</a>            context: Context::default(),
-<a href=#606 id=606 data-nosnippet>606</a>            <span class="attr">#[cfg(all(
-<a href=#607 id=607 data-nosnippet>607</a>                feature = <span class="string">"native-domains"</span>,
-<a href=#608 id=608 data-nosnippet>608</a>                any(
-<a href=#609 id=609 data-nosnippet>609</a>                    target_arch = <span class="string">"riscv64"</span>,
-<a href=#610 id=610 data-nosnippet>610</a>                    target_arch = <span class="string">"aarch64"</span>,
-<a href=#611 id=611 data-nosnippet>611</a>                    target_arch = <span class="string">"x86_64"
-<a href=#612 id=612 data-nosnippet>612</a>                </span>)
-<a href=#613 id=613 data-nosnippet>613</a>            ))]
-<a href=#614 id=614 data-nosnippet>614</a>            </span>address_space: TaskAddressSpace::Sas,
-<a href=#615 id=615 data-nosnippet>615</a>            <span class="attr">#[cfg(all(
-<a href=#616 id=616 data-nosnippet>616</a>                feature = <span class="string">"native-domains"</span>,
-<a href=#617 id=617 data-nosnippet>617</a>                any(
-<a href=#618 id=618 data-nosnippet>618</a>                    target_arch = <span class="string">"riscv64"</span>,
-<a href=#619 id=619 data-nosnippet>619</a>                    target_arch = <span class="string">"aarch64"</span>,
-<a href=#620 id=620 data-nosnippet>620</a>                    target_arch = <span class="string">"x86_64"
-<a href=#621 id=621 data-nosnippet>621</a>                </span>)
-<a href=#622 id=622 data-nosnippet>622</a>            ))]
-<a href=#623 id=623 data-nosnippet>623</a>            </span>has_dynamic_stack_mapping: <span class="bool-val">false</span>,
-<a href=#624 id=624 data-nosnippet>624</a>            trap_frame: ViTrapFrame::default(),
-<a href=#625 id=625 data-nosnippet>625</a>            pipe_handles: alloc::collections::BTreeSet::new(),
-<a href=#626 id=626 data-nosnippet>626</a>            tls_base: <span class="number">0</span>,
-<a href=#627 id=627 data-nosnippet>627</a>            staged_argv: <span class="prelude-val">None</span>,
-<a href=#628 id=628 data-nosnippet>628</a>            inherited_argv: <span class="prelude-val">None</span>,
-<a href=#629 id=629 data-nosnippet>629</a>            child_context: <span class="prelude-val">None</span>,
-<a href=#630 id=630 data-nosnippet>630</a>            child_stdio: [api::cell_session::ObjectRefV1::ZERO; <span class="number">4</span>],
-<a href=#631 id=631 data-nosnippet>631</a>            allowed_drivers,
-<a href=#632 id=632 data-nosnippet>632</a>            leases: alloc::collections::BTreeMap::new(),
-<a href=#633 id=633 data-nosnippet>633</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
-<a href=#634 id=634 data-nosnippet>634</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
-<a href=#635 id=635 data-nosnippet>635</a>            next_grant_id: <span class="number">1</span>,
-<a href=#636 id=636 data-nosnippet>636</a>            open_files: alloc::collections::BTreeMap::new(),
-<a href=#637 id=637 data-nosnippet>637</a>            current_caller: <span class="prelude-val">None</span>,
-<a href=#638 id=638 data-nosnippet>638</a>            current_caller_cell_id: <span class="number">0</span>,
-<a href=#639 id=639 data-nosnippet>639</a>            current_caller_cell_generation: <span class="number">0</span>,
-<a href=#640 id=640 data-nosnippet>640</a>            current_caller_request_generation: <span class="number">0</span>,
-<a href=#641 id=641 data-nosnippet>641</a>            next_caller_request_generation: <span class="number">1</span>,
-<a href=#642 id=642 data-nosnippet>642</a>            current_async_op: <span class="number">0</span>,
-<a href=#643 id=643 data-nosnippet>643</a>            async_operations: <span class="kw">super</span>::async_ipc::Operations::new(),
-<a href=#644 id=644 data-nosnippet>644</a>            reply_value: <span class="prelude-val">None</span>,
-<a href=#645 id=645 data-nosnippet>645</a>            cwd: String::from(<span class="string">"/"</span>),
-<a href=#646 id=646 data-nosnippet>646</a>            kernel_stack: <span class="prelude-val">None</span>,
-<a href=#647 id=647 data-nosnippet>647</a>            user_stack: <span class="prelude-val">None</span>,
-<a href=#648 id=648 data-nosnippet>648</a>            segment_mem: <span class="prelude-val">None</span>,
-<a href=#649 id=649 data-nosnippet>649</a>            stack_quota_charge: <span class="number">0</span>,
-<a href=#650 id=650 data-nosnippet>650</a>            waiters: Vec::new(),
-<a href=#651 id=651 data-nosnippet>651</a>            exit_code: <span class="prelude-val">None</span>,
-<a href=#652 id=652 data-nosnippet>652</a>            pending_deaths: Vec::new(),
-<a href=#653 id=653 data-nosnippet>653</a>            pending_owner_deaths: Vec::new(),
-<a href=#654 id=654 data-nosnippet>654</a>            pending_exit_reason: <span class="prelude-val">None</span>,
-<a href=#655 id=655 data-nosnippet>655</a>            pending_future: <span class="prelude-val">None</span>,
-<a href=#656 id=656 data-nosnippet>656</a>            block_io_cap: <span class="prelude-val">None</span>,
-<a href=#657 id=657 data-nosnippet>657</a>            network_cap: <span class="prelude-val">None</span>,
-<a href=#658 id=658 data-nosnippet>658</a>            spawn_cap: <span class="prelude-val">None</span>,
-<a href=#659 id=659 data-nosnippet>659</a>            hypervisor_cap: <span class="prelude-val">None</span>,
-<a href=#660 id=660 data-nosnippet>660</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#661 id=661 data-nosnippet>661</a>            </span>development_silo_registration_cap: <span class="prelude-val">None</span>,
-<a href=#662 id=662 data-nosnippet>662</a>            supervisor_cap: <span class="prelude-val">None</span>,
-<a href=#663 id=663 data-nosnippet>663</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
-<a href=#664 id=664 data-nosnippet>664</a>            serial_port_cap: <span class="prelude-val">None</span>,
-<a href=#665 id=665 data-nosnippet>665</a>            platform_cap: <span class="prelude-val">None</span>,
-<a href=#666 id=666 data-nosnippet>666</a>            usb_driver_cap: <span class="prelude-val">None</span>,
-<a href=#667 id=667 data-nosnippet>667</a>            net_resolve: <span class="bool-val">false</span>,
-<a href=#668 id=668 data-nosnippet>668</a>            net_connect: <span class="bool-val">false</span>,
-<a href=#669 id=669 data-nosnippet>669</a>            net_listen: <span class="bool-val">false</span>,
-<a href=#670 id=670 data-nosnippet>670</a>            net_l2: <span class="bool-val">false</span>,
-<a href=#671 id=671 data-nosnippet>671</a>            observe_tasks: <span class="bool-val">false</span>,
-<a href=#672 id=672 data-nosnippet>672</a>            observe_memory: <span class="bool-val">false</span>,
-<a href=#673 id=673 data-nosnippet>673</a>            vfs_mutate: <span class="bool-val">false</span>,
-<a href=#674 id=674 data-nosnippet>674</a>            config_write: <span class="bool-val">false</span>,
-<a href=#675 id=675 data-nosnippet>675</a>            mmio_devices: <span class="number">0</span>,
-<a href=#676 id=676 data-nosnippet>676</a>            block_regions: <span class="number">0</span>,
-<a href=#677 id=677 data-nosnippet>677</a>            pku_key: <span class="number">0</span>,
-<a href=#678 id=678 data-nosnippet>678</a>            pku_value: <span class="number">0</span>,
-<a href=#679 id=679 data-nosnippet>679</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
-<a href=#680 id=680 data-nosnippet>680</a>            cluster_mode: <span class="number">0</span>,
-<a href=#681 id=681 data-nosnippet>681</a>            cluster_id: <span class="number">0</span>,
-<a href=#682 id=682 data-nosnippet>682</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
-<a href=#683 id=683 data-nosnippet>683</a>            </span>run_ticks: <span class="number">0</span>,
-<a href=#684 id=684 data-nosnippet>684</a>            cpu_run_ticks: <span class="number">0</span>,
-<a href=#685 id=685 data-nosnippet>685</a>            cpu_ns: <span class="number">0</span>,
-<a href=#686 id=686 data-nosnippet>686</a>            deadline_misses: <span class="number">0</span>,
-<a href=#687 id=687 data-nosnippet>687</a>            rt_overrun_warned: <span class="bool-val">false</span>,
-<a href=#688 id=688 data-nosnippet>688</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
-<a href=#689 id=689 data-nosnippet>689</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
-<a href=#690 id=690 data-nosnippet>690</a>            hotswap_ready: <span class="bool-val">false</span>,
-<a href=#691 id=691 data-nosnippet>691</a>            hotswap_source_tid: <span class="prelude-val">None</span>,
-<a href=#692 id=692 data-nosnippet>692</a>            hotswap_ingress_closed: <span class="bool-val">false</span>,
-<a href=#693 id=693 data-nosnippet>693</a>            is_critical: <span class="bool-val">false</span>,
-<a href=#694 id=694 data-nosnippet>694</a>            pending_msgs: PendingMailbox::new(),
-<a href=#695 id=695 data-nosnippet>695</a>            cell_generation: next_cell_generation(),
-<a href=#696 id=696 data-nosnippet>696</a>            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
-<a href=#697 id=697 data-nosnippet>697</a>            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
-<a href=#698 id=698 data-nosnippet>698</a>            completion: <span class="prelude-val">None</span>,
-<a href=#699 id=699 data-nosnippet>699</a>            completion_wait: <span class="prelude-val">None</span>,
-<a href=#700 id=700 data-nosnippet>700</a>        }
-<a href=#701 id=701 data-nosnippet>701</a>    }
-<a href=#702 id=702 data-nosnippet>702</a>
-<a href=#703 id=703 data-nosnippet>703</a>    <span class="attr">#[cfg(all(
-<a href=#704 id=704 data-nosnippet>704</a>        feature = <span class="string">"native-domains"</span>,
-<a href=#705 id=705 data-nosnippet>705</a>        any(
-<a href=#706 id=706 data-nosnippet>706</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#707 id=707 data-nosnippet>707</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#708 id=708 data-nosnippet>708</a>            target_arch = <span class="string">"x86_64"
-<a href=#709 id=709 data-nosnippet>709</a>        </span>)
-<a href=#710 id=710 data-nosnippet>710</a>    ))]
-<a href=#711 id=711 data-nosnippet>711</a>    #[allow(dead_code)]
-<a href=#712 id=712 data-nosnippet>712</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bind_address_space(
-<a href=#713 id=713 data-nosnippet>713</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#714 id=714 data-nosnippet>714</a>        address_space: Arc&lt;<span class="kw">crate</span>::memory::address_space::AddressSpace&gt;,
-<a href=#715 id=715 data-nosnippet>715</a>    ) {
-<a href=#716 id=716 data-nosnippet>716</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(<span class="self">self</span>.address_space, TaskAddressSpace::Sas));
-<a href=#717 id=717 data-nosnippet>717</a>        <span class="self">self</span>.address_space = TaskAddressSpace::Domain(address_space);
-<a href=#718 id=718 data-nosnippet>718</a>    }
-<a href=#719 id=719 data-nosnippet>719</a>
-<a href=#720 id=720 data-nosnippet>720</a>    <span class="attr">#[cfg(all(
-<a href=#721 id=721 data-nosnippet>721</a>        feature = <span class="string">"native-domains"</span>,
-<a href=#722 id=722 data-nosnippet>722</a>        any(
-<a href=#723 id=723 data-nosnippet>723</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#724 id=724 data-nosnippet>724</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#725 id=725 data-nosnippet>725</a>            target_arch = <span class="string">"x86_64"
-<a href=#726 id=726 data-nosnippet>726</a>        </span>)
-<a href=#727 id=727 data-nosnippet>727</a>    ))]
-<a href=#728 id=728 data-nosnippet>728</a>    #[cfg(all(
-<a href=#729 id=729 data-nosnippet>729</a>        feature = <span class="string">"test-hooks"</span>,
-<a href=#730 id=730 data-nosnippet>730</a>        any(
-<a href=#731 id=731 data-nosnippet>731</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#732 id=732 data-nosnippet>732</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#733 id=733 data-nosnippet>733</a>            target_arch = <span class="string">"x86_64"
-<a href=#734 id=734 data-nosnippet>734</a>        </span>)
-<a href=#735 id=735 data-nosnippet>735</a>    ))]
-<a href=#736 id=736 data-nosnippet>736</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bind_address_space_for_test(
-<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#738 id=738 data-nosnippet>738</a>        address_space: Arc&lt;<span class="kw">crate</span>::memory::address_space::AddressSpace&gt;,
-<a href=#739 id=739 data-nosnippet>739</a>    ) {
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="self">self</span>.bind_address_space(address_space);
-<a href=#741 id=741 data-nosnippet>741</a>    }
-<a href=#742 id=742 data-nosnippet>742</a>
-<a href=#743 id=743 data-nosnippet>743</a>    <span class="doccomment">/// Acquire the fail-closed execution pin for this task's root. Sas tasks
-<a href=#744 id=744 data-nosnippet>744</a>    /// carry no private root and pass trivially. Must run under `SCHEDULER`
-<a href=#745 id=745 data-nosnippet>745</a>    /// before the task is dequeued or attributed: a Dying root rejects here,
-<a href=#746 id=746 data-nosnippet>746</a>    /// while retirement after a successful pin is legal and drain-safe.
-<a href=#747 id=747 data-nosnippet>747</a>    </span><span class="attr">#[cfg(all(
-<a href=#748 id=748 data-nosnippet>748</a>        feature = <span class="string">"native-domains"</span>,
-<a href=#749 id=749 data-nosnippet>749</a>        any(
-<a href=#750 id=750 data-nosnippet>750</a>            target_arch = <span class="string">"riscv64"</span>,
-<a href=#751 id=751 data-nosnippet>751</a>            target_arch = <span class="string">"aarch64"</span>,
-<a href=#752 id=752 data-nosnippet>752</a>            target_arch = <span class="string">"x86_64"
-<a href=#753 id=753 data-nosnippet>753</a>        </span>)
-<a href=#754 id=754 data-nosnippet>754</a>    ))]
-<a href=#755 id=755 data-nosnippet>755</a>    #[allow(dead_code)]
-<a href=#756 id=756 data-nosnippet>756</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>begin_execution(
-<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#758 id=758 data-nosnippet>758</a>        hart_id: usize,
-<a href=#759 id=759 data-nosnippet>759</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::memory::address_space::AddressSpaceError&gt; {
-<a href=#760 id=760 data-nosnippet>760</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.address_space {
-<a href=#761 id=761 data-nosnippet>761</a>            TaskAddressSpace::Sas =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#762 id=762 data-nosnippet>762</a>            TaskAddressSpace::Domain(space) =&gt; space.begin_execution(hart_id),
-<a href=#763 id=763 data-nosnippet>763</a>        }
-<a href=#764 id=764 data-nosnippet>764</a>    }
-<a href=#765 id=765 data-nosnippet>765</a>
-<a href=#766 id=766 data-nosnippet>766</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
-<a href=#767 id=767 data-nosnippet>767</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
-<a href=#768 id=768 data-nosnippet>768</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
-<a href=#769 id=769 data-nosnippet>769</a>
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span>lease = Lease {
-<a href=#771 id=771 data-nosnippet>771</a>            id,
-<a href=#772 id=772 data-nosnippet>772</a>            ptr,
-<a href=#773 id=773 data-nosnippet>773</a>            len,
-<a href=#774 id=774 data-nosnippet>774</a>            attributes,
-<a href=#775 id=775 data-nosnippet>775</a>        };
-<a href=#776 id=776 data-nosnippet>776</a>
-<a href=#777 id=777 data-nosnippet>777</a>        <span class="attr">#[cfg(cellos_p01_trace)]
-<a href=#778 id=778 data-nosnippet>778</a>        </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
-<a href=#779 id=779 data-nosnippet>779</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>)), <span class="kw">crate</span>::memory::heap::p01_owner::TASK_FIELDS);
-<a href=#780 id=780 data-nosnippet>780</a>        <span class="self">self</span>.leases.insert(id, lease);
-<a href=#781 id=781 data-nosnippet>781</a>        id
-<a href=#782 id=782 data-nosnippet>782</a>    }
-<a href=#783 id=783 data-nosnippet>783</a>
-<a href=#784 id=784 data-nosnippet>784</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
-<a href=#785 id=785 data-nosnippet>785</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
-<a href=#786 id=786 data-nosnippet>786</a>    }
-<a href=#787 id=787 data-nosnippet>787</a>
-<a href=#788 id=788 data-nosnippet>788</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
-<a href=#789 id=789 data-nosnippet>789</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
-<a href=#790 id=790 data-nosnippet>790</a>    }
-<a href=#791 id=791 data-nosnippet>791</a>
-<a href=#792 id=792 data-nosnippet>792</a>    <span class="comment">// --- Grant Table Methods ---
-<a href=#793 id=793 data-nosnippet>793</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
-<a href=#794 id=794 data-nosnippet>794</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
-<a href=#795 id=795 data-nosnippet>795</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="attr">#[cfg(cellos_p01_trace)]
-<a href=#797 id=797 data-nosnippet>797</a>        </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
-<a href=#798 id=798 data-nosnippet>798</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>)), <span class="kw">crate</span>::memory::heap::p01_owner::TASK_FIELDS);
-<a href=#799 id=799 data-nosnippet>799</a>        <span class="self">self</span>.grant_table.insert(
-<a href=#800 id=800 data-nosnippet>800</a>            id,
-<a href=#801 id=801 data-nosnippet>801</a>            GrantEntry {
-<a href=#802 id=802 data-nosnippet>802</a>                ptr,
-<a href=#803 id=803 data-nosnippet>803</a>                len,
-<a href=#804 id=804 data-nosnippet>804</a>                flags,
-<a href=#805 id=805 data-nosnippet>805</a>                sender_id,
-<a href=#806 id=806 data-nosnippet>806</a>            },
-<a href=#807 id=807 data-nosnippet>807</a>        );
-<a href=#808 id=808 data-nosnippet>808</a>        id
-<a href=#809 id=809 data-nosnippet>809</a>    }
-<a href=#810 id=810 data-nosnippet>810</a>
-<a href=#811 id=811 data-nosnippet>811</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
-<a href=#812 id=812 data-nosnippet>812</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
-<a href=#813 id=813 data-nosnippet>813</a>    }
-<a href=#814 id=814 data-nosnippet>814</a>
-<a href=#815 id=815 data-nosnippet>815</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
-<a href=#816 id=816 data-nosnippet>816</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
-<a href=#817 id=817 data-nosnippet>817</a>    }
-<a href=#818 id=818 data-nosnippet>818</a>
-<a href=#819 id=819 data-nosnippet>819</a>    <span class="kw">pub fn </span>set_current_caller_context(
-<a href=#820 id=820 data-nosnippet>820</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#821 id=821 data-nosnippet>821</a>        sender_tid: usize,
-<a href=#822 id=822 data-nosnippet>822</a>        sender_cell_id: u64,
-<a href=#823 id=823 data-nosnippet>823</a>        sender_generation: u64,
-<a href=#824 id=824 data-nosnippet>824</a>    ) {
-<a href=#825 id=825 data-nosnippet>825</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">Some</span>(sender_tid);
-<a href=#826 id=826 data-nosnippet>826</a>        <span class="self">self</span>.current_caller_cell_id = sender_cell_id;
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="self">self</span>.current_caller_cell_generation = sender_generation;
-<a href=#828 id=828 data-nosnippet>828</a>        <span class="self">self</span>.current_caller_request_generation = <span class="self">self</span>.next_caller_request_generation;
-<a href=#829 id=829 data-nosnippet>829</a>        <span class="self">self</span>.next_caller_request_generation = <span class="self">self</span>.next_caller_request_generation.saturating_add(<span class="number">1</span>);
-<a href=#830 id=830 data-nosnippet>830</a>        <span class="self">self</span>.current_async_op = <span class="number">0</span>;
-<a href=#831 id=831 data-nosnippet>831</a>    }
-<a href=#832 id=832 data-nosnippet>832</a>
-<a href=#833 id=833 data-nosnippet>833</a>    <span class="kw">pub fn </span>set_received_caller_context(
-<a href=#834 id=834 data-nosnippet>834</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#835 id=835 data-nosnippet>835</a>        sender_tid: usize,
-<a href=#836 id=836 data-nosnippet>836</a>        sender_cell_id: u64,
-<a href=#837 id=837 data-nosnippet>837</a>        sender_generation: u64,
-<a href=#838 id=838 data-nosnippet>838</a>    ) {
-<a href=#839 id=839 data-nosnippet>839</a>        <span class="self">self</span>.set_received_request_context(sender_tid, sender_cell_id, sender_generation, <span class="number">0</span>);
+<a href=#560 id=560 data-nosnippet>560</a>    /// Kernel-owned heap memory, never a grant: a cell cannot unregister or free
+<a href=#561 id=561 data-nosnippet>561</a>    /// it, so a completion always has somewhere to land and appending needs no
+<a href=#562 id=562 data-nosnippet>562</a>    /// address resolution. Threads of one cell share the handle, and the queue
+<a href=#563 id=563 data-nosnippet>563</a>    /// dies with the last reference to it — see [`crate::task::completion`].
+<a href=#564 id=564 data-nosnippet>564</a>    </span><span class="kw">pub </span>completion: <span class="prelude-ty">Option</span>&lt;alloc::sync::Arc&lt;<span class="kw">crate</span>::task::completion::CompletionQueue&gt;&gt;,
+<a href=#565 id=565 data-nosnippet>565</a>    <span class="doccomment">/// Queue slot held by an in-progress `WaitCompletion` syscall.
+<a href=#566 id=566 data-nosnippet>566</a>    ///
+<a href=#567 id=567 data-nosnippet>567</a>    /// Kept outside `TaskState` because a deferred source wake changes the state
+<a href=#568 id=568 data-nosnippet>568</a>    /// to `Ready` before the syscall has released its reservation. Task exit
+<a href=#569 id=569 data-nosnippet>569</a>    /// takes this field and defers TIMER release outside the scheduler lock.
+<a href=#570 id=570 data-nosnippet>570</a>    </span><span class="kw">pub </span>completion_wait: <span class="prelude-ty">Option</span>&lt;CompletionWait&gt;,
+<a href=#571 id=571 data-nosnippet>571</a>}
+<a href=#572 id=572 data-nosnippet>572</a>
+<a href=#573 id=573 data-nosnippet>573</a><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#574 id=574 data-nosnippet>574</a></span><span class="kw">pub struct </span>CompletionWait {
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="kw">pub </span>source: u32,
+<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">pub </span>slot: <span class="kw">crate</span>::task::completion::SlotId,
+<a href=#577 id=577 data-nosnippet>577</a>}
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a><span class="doccomment">/// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
+<a href=#580 id=580 data-nosnippet>580</a>/// "generation not attested on this path".
+<a href=#581 id=581 data-nosnippet>581</a>/// A real spinlock keeps allocation unique across harts, including RV32 where
+<a href=#582 id=582 data-nosnippet>582</a>/// the portable 64-bit atomic fallback only masks local interrupts.
+<a href=#583 id=583 data-nosnippet>583</a></span><span class="kw">static </span>NEXT_CELL_GENERATION: <span class="kw">crate</span>::sync::Spinlock&lt;u64&gt; = <span class="kw">crate</span>::sync::Spinlock::new(<span class="number">1</span>);
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a><span class="kw">fn </span>next_cell_generation() -&gt; u64 {
+<a href=#586 id=586 data-nosnippet>586</a>    <span class="kw">let </span><span class="kw-2">mut </span>next = NEXT_CELL_GENERATION.lock();
+<a href=#587 id=587 data-nosnippet>587</a>    <span class="kw">let </span>generation = <span class="kw-2">*</span>next;
+<a href=#588 id=588 data-nosnippet>588</a>    <span class="kw-2">*</span>next = generation
+<a href=#589 id=589 data-nosnippet>589</a>        .checked_add(<span class="number">1</span>)
+<a href=#590 id=590 data-nosnippet>590</a>        .expect(<span class="string">"cell generation space exhausted"</span>);
+<a href=#591 id=591 data-nosnippet>591</a>    generation
+<a href=#592 id=592 data-nosnippet>592</a>}
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#595 id=595 data-nosnippet>595</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>cell_generation_snapshot() -&gt; u64 {
+<a href=#596 id=596 data-nosnippet>596</a>    <span class="kw-2">*</span>NEXT_CELL_GENERATION.lock()
+<a href=#597 id=597 data-nosnippet>597</a>}
+<a href=#598 id=598 data-nosnippet>598</a>
+<a href=#599 id=599 data-nosnippet>599</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#600 id=600 data-nosnippet>600</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>restore_cell_generation_for_test(next: u64) {
+<a href=#601 id=601 data-nosnippet>601</a>    <span class="kw-2">*</span>NEXT_CELL_GENERATION.lock() = next;
+<a href=#602 id=602 data-nosnippet>602</a>}
+<a href=#603 id=603 data-nosnippet>603</a>
+<a href=#604 id=604 data-nosnippet>604</a><span class="kw">impl </span>Task {
+<a href=#605 id=605 data-nosnippet>605</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
+<a href=#606 id=606 data-nosnippet>606</a>        <span class="self">Self </span>{
+<a href=#607 id=607 data-nosnippet>607</a>            id,
+<a href=#608 id=608 data-nosnippet>608</a>            cell_id,
+<a href=#609 id=609 data-nosnippet>609</a>            root_tid: id,
+<a href=#610 id=610 data-nosnippet>610</a>            name: String::from(name),
+<a href=#611 id=611 data-nosnippet>611</a>            state: TaskState::Ready,
+<a href=#612 id=612 data-nosnippet>612</a>            context: Context::default(),
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="attr">#[cfg(all(
+<a href=#614 id=614 data-nosnippet>614</a>                feature = <span class="string">"native-domains"</span>,
+<a href=#615 id=615 data-nosnippet>615</a>                any(
+<a href=#616 id=616 data-nosnippet>616</a>                    target_arch = <span class="string">"riscv64"</span>,
+<a href=#617 id=617 data-nosnippet>617</a>                    target_arch = <span class="string">"aarch64"</span>,
+<a href=#618 id=618 data-nosnippet>618</a>                    target_arch = <span class="string">"x86_64"
+<a href=#619 id=619 data-nosnippet>619</a>                </span>)
+<a href=#620 id=620 data-nosnippet>620</a>            ))]
+<a href=#621 id=621 data-nosnippet>621</a>            </span>address_space: TaskAddressSpace::Sas,
+<a href=#622 id=622 data-nosnippet>622</a>            <span class="attr">#[cfg(all(
+<a href=#623 id=623 data-nosnippet>623</a>                feature = <span class="string">"native-domains"</span>,
+<a href=#624 id=624 data-nosnippet>624</a>                any(
+<a href=#625 id=625 data-nosnippet>625</a>                    target_arch = <span class="string">"riscv64"</span>,
+<a href=#626 id=626 data-nosnippet>626</a>                    target_arch = <span class="string">"aarch64"</span>,
+<a href=#627 id=627 data-nosnippet>627</a>                    target_arch = <span class="string">"x86_64"
+<a href=#628 id=628 data-nosnippet>628</a>                </span>)
+<a href=#629 id=629 data-nosnippet>629</a>            ))]
+<a href=#630 id=630 data-nosnippet>630</a>            </span>has_dynamic_stack_mapping: <span class="bool-val">false</span>,
+<a href=#631 id=631 data-nosnippet>631</a>            trap_frame: ViTrapFrame::default(),
+<a href=#632 id=632 data-nosnippet>632</a>            pipe_handles: alloc::collections::BTreeSet::new(),
+<a href=#633 id=633 data-nosnippet>633</a>            tls_base: <span class="number">0</span>,
+<a href=#634 id=634 data-nosnippet>634</a>            staged_argv: <span class="prelude-val">None</span>,
+<a href=#635 id=635 data-nosnippet>635</a>            inherited_argv: <span class="prelude-val">None</span>,
+<a href=#636 id=636 data-nosnippet>636</a>            child_context: <span class="prelude-val">None</span>,
+<a href=#637 id=637 data-nosnippet>637</a>            child_stdio: [api::cell_session::ObjectRefV1::ZERO; <span class="number">4</span>],
+<a href=#638 id=638 data-nosnippet>638</a>            allowed_drivers,
+<a href=#639 id=639 data-nosnippet>639</a>            leases: alloc::collections::BTreeMap::new(),
+<a href=#640 id=640 data-nosnippet>640</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
+<a href=#641 id=641 data-nosnippet>641</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
+<a href=#642 id=642 data-nosnippet>642</a>            next_grant_id: <span class="number">1</span>,
+<a href=#643 id=643 data-nosnippet>643</a>            open_files: alloc::collections::BTreeMap::new(),
+<a href=#644 id=644 data-nosnippet>644</a>            current_caller: <span class="prelude-val">None</span>,
+<a href=#645 id=645 data-nosnippet>645</a>            current_caller_cell_id: <span class="number">0</span>,
+<a href=#646 id=646 data-nosnippet>646</a>            current_caller_cell_generation: <span class="number">0</span>,
+<a href=#647 id=647 data-nosnippet>647</a>            current_caller_request_generation: <span class="number">0</span>,
+<a href=#648 id=648 data-nosnippet>648</a>            next_caller_request_generation: <span class="number">1</span>,
+<a href=#649 id=649 data-nosnippet>649</a>            current_async_op: <span class="number">0</span>,
+<a href=#650 id=650 data-nosnippet>650</a>            async_operations: <span class="kw">super</span>::async_ipc::Operations::new(),
+<a href=#651 id=651 data-nosnippet>651</a>            reply_value: <span class="prelude-val">None</span>,
+<a href=#652 id=652 data-nosnippet>652</a>            cwd: String::from(<span class="string">"/"</span>),
+<a href=#653 id=653 data-nosnippet>653</a>            kernel_stack: <span class="prelude-val">None</span>,
+<a href=#654 id=654 data-nosnippet>654</a>            user_stack: <span class="prelude-val">None</span>,
+<a href=#655 id=655 data-nosnippet>655</a>            segment_mem: <span class="prelude-val">None</span>,
+<a href=#656 id=656 data-nosnippet>656</a>            stack_quota_charge: <span class="number">0</span>,
+<a href=#657 id=657 data-nosnippet>657</a>            waiters: Vec::new(),
+<a href=#658 id=658 data-nosnippet>658</a>            exit_code: <span class="prelude-val">None</span>,
+<a href=#659 id=659 data-nosnippet>659</a>            pending_deaths: Vec::new(),
+<a href=#660 id=660 data-nosnippet>660</a>            pending_owner_deaths: Vec::new(),
+<a href=#661 id=661 data-nosnippet>661</a>            pending_exit_reason: <span class="prelude-val">None</span>,
+<a href=#662 id=662 data-nosnippet>662</a>            pending_future: <span class="prelude-val">None</span>,
+<a href=#663 id=663 data-nosnippet>663</a>            block_io_cap: <span class="prelude-val">None</span>,
+<a href=#664 id=664 data-nosnippet>664</a>            network_cap: <span class="prelude-val">None</span>,
+<a href=#665 id=665 data-nosnippet>665</a>            spawn_cap: <span class="prelude-val">None</span>,
+<a href=#666 id=666 data-nosnippet>666</a>            hypervisor_cap: <span class="prelude-val">None</span>,
+<a href=#667 id=667 data-nosnippet>667</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#668 id=668 data-nosnippet>668</a>            </span>development_silo_registration_cap: <span class="prelude-val">None</span>,
+<a href=#669 id=669 data-nosnippet>669</a>            supervisor_cap: <span class="prelude-val">None</span>,
+<a href=#670 id=670 data-nosnippet>670</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
+<a href=#671 id=671 data-nosnippet>671</a>            serial_port_cap: <span class="prelude-val">None</span>,
+<a href=#672 id=672 data-nosnippet>672</a>            platform_cap: <span class="prelude-val">None</span>,
+<a href=#673 id=673 data-nosnippet>673</a>            usb_driver_cap: <span class="prelude-val">None</span>,
+<a href=#674 id=674 data-nosnippet>674</a>            net_resolve: <span class="bool-val">false</span>,
+<a href=#675 id=675 data-nosnippet>675</a>            net_connect: <span class="bool-val">false</span>,
+<a href=#676 id=676 data-nosnippet>676</a>            net_listen: <span class="bool-val">false</span>,
+<a href=#677 id=677 data-nosnippet>677</a>            net_l2: <span class="bool-val">false</span>,
+<a href=#678 id=678 data-nosnippet>678</a>            observe_tasks: <span class="bool-val">false</span>,
+<a href=#679 id=679 data-nosnippet>679</a>            observe_memory: <span class="bool-val">false</span>,
+<a href=#680 id=680 data-nosnippet>680</a>            vfs_mutate: <span class="bool-val">false</span>,
+<a href=#681 id=681 data-nosnippet>681</a>            config_write: <span class="bool-val">false</span>,
+<a href=#682 id=682 data-nosnippet>682</a>            kms_ssh_sign: <span class="bool-val">false</span>,
+<a href=#683 id=683 data-nosnippet>683</a>            kms_ssh_admin: <span class="bool-val">false</span>,
+<a href=#684 id=684 data-nosnippet>684</a>            mmio_devices: <span class="number">0</span>,
+<a href=#685 id=685 data-nosnippet>685</a>            block_regions: <span class="number">0</span>,
+<a href=#686 id=686 data-nosnippet>686</a>            pku_key: <span class="number">0</span>,
+<a href=#687 id=687 data-nosnippet>687</a>            pku_value: <span class="number">0</span>,
+<a href=#688 id=688 data-nosnippet>688</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
+<a href=#689 id=689 data-nosnippet>689</a>            cluster_mode: <span class="number">0</span>,
+<a href=#690 id=690 data-nosnippet>690</a>            cluster_id: <span class="number">0</span>,
+<a href=#691 id=691 data-nosnippet>691</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
+<a href=#692 id=692 data-nosnippet>692</a>            </span>run_ticks: <span class="number">0</span>,
+<a href=#693 id=693 data-nosnippet>693</a>            cpu_run_ticks: <span class="number">0</span>,
+<a href=#694 id=694 data-nosnippet>694</a>            cpu_ns: <span class="number">0</span>,
+<a href=#695 id=695 data-nosnippet>695</a>            deadline_misses: <span class="number">0</span>,
+<a href=#696 id=696 data-nosnippet>696</a>            rt_overrun_warned: <span class="bool-val">false</span>,
+<a href=#697 id=697 data-nosnippet>697</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
+<a href=#698 id=698 data-nosnippet>698</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
+<a href=#699 id=699 data-nosnippet>699</a>            hotswap_ready: <span class="bool-val">false</span>,
+<a href=#700 id=700 data-nosnippet>700</a>            hotswap_source_tid: <span class="prelude-val">None</span>,
+<a href=#701 id=701 data-nosnippet>701</a>            hotswap_ingress_closed: <span class="bool-val">false</span>,
+<a href=#702 id=702 data-nosnippet>702</a>            is_critical: <span class="bool-val">false</span>,
+<a href=#703 id=703 data-nosnippet>703</a>            pending_msgs: PendingMailbox::new(),
+<a href=#704 id=704 data-nosnippet>704</a>            cell_generation: next_cell_generation(),
+<a href=#705 id=705 data-nosnippet>705</a>            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
+<a href=#706 id=706 data-nosnippet>706</a>            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
+<a href=#707 id=707 data-nosnippet>707</a>            completion: <span class="prelude-val">None</span>,
+<a href=#708 id=708 data-nosnippet>708</a>            completion_wait: <span class="prelude-val">None</span>,
+<a href=#709 id=709 data-nosnippet>709</a>        }
+<a href=#710 id=710 data-nosnippet>710</a>    }
+<a href=#711 id=711 data-nosnippet>711</a>
+<a href=#712 id=712 data-nosnippet>712</a>    <span class="attr">#[cfg(all(
+<a href=#713 id=713 data-nosnippet>713</a>        feature = <span class="string">"native-domains"</span>,
+<a href=#714 id=714 data-nosnippet>714</a>        any(
+<a href=#715 id=715 data-nosnippet>715</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#716 id=716 data-nosnippet>716</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#717 id=717 data-nosnippet>717</a>            target_arch = <span class="string">"x86_64"
+<a href=#718 id=718 data-nosnippet>718</a>        </span>)
+<a href=#719 id=719 data-nosnippet>719</a>    ))]
+<a href=#720 id=720 data-nosnippet>720</a>    #[allow(dead_code)]
+<a href=#721 id=721 data-nosnippet>721</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bind_address_space(
+<a href=#722 id=722 data-nosnippet>722</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#723 id=723 data-nosnippet>723</a>        address_space: Arc&lt;<span class="kw">crate</span>::memory::address_space::AddressSpace&gt;,
+<a href=#724 id=724 data-nosnippet>724</a>    ) {
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(<span class="self">self</span>.address_space, TaskAddressSpace::Sas));
+<a href=#726 id=726 data-nosnippet>726</a>        <span class="self">self</span>.address_space = TaskAddressSpace::Domain(address_space);
+<a href=#727 id=727 data-nosnippet>727</a>    }
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="attr">#[cfg(all(
+<a href=#730 id=730 data-nosnippet>730</a>        feature = <span class="string">"native-domains"</span>,
+<a href=#731 id=731 data-nosnippet>731</a>        any(
+<a href=#732 id=732 data-nosnippet>732</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#733 id=733 data-nosnippet>733</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#734 id=734 data-nosnippet>734</a>            target_arch = <span class="string">"x86_64"
+<a href=#735 id=735 data-nosnippet>735</a>        </span>)
+<a href=#736 id=736 data-nosnippet>736</a>    ))]
+<a href=#737 id=737 data-nosnippet>737</a>    #[cfg(all(
+<a href=#738 id=738 data-nosnippet>738</a>        feature = <span class="string">"test-hooks"</span>,
+<a href=#739 id=739 data-nosnippet>739</a>        any(
+<a href=#740 id=740 data-nosnippet>740</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#741 id=741 data-nosnippet>741</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#742 id=742 data-nosnippet>742</a>            target_arch = <span class="string">"x86_64"
+<a href=#743 id=743 data-nosnippet>743</a>        </span>)
+<a href=#744 id=744 data-nosnippet>744</a>    ))]
+<a href=#745 id=745 data-nosnippet>745</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bind_address_space_for_test(
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#747 id=747 data-nosnippet>747</a>        address_space: Arc&lt;<span class="kw">crate</span>::memory::address_space::AddressSpace&gt;,
+<a href=#748 id=748 data-nosnippet>748</a>    ) {
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="self">self</span>.bind_address_space(address_space);
+<a href=#750 id=750 data-nosnippet>750</a>    }
+<a href=#751 id=751 data-nosnippet>751</a>
+<a href=#752 id=752 data-nosnippet>752</a>    <span class="doccomment">/// Acquire the fail-closed execution pin for this task's root. Sas tasks
+<a href=#753 id=753 data-nosnippet>753</a>    /// carry no private root and pass trivially. Must run under `SCHEDULER`
+<a href=#754 id=754 data-nosnippet>754</a>    /// before the task is dequeued or attributed: a Dying root rejects here,
+<a href=#755 id=755 data-nosnippet>755</a>    /// while retirement after a successful pin is legal and drain-safe.
+<a href=#756 id=756 data-nosnippet>756</a>    </span><span class="attr">#[cfg(all(
+<a href=#757 id=757 data-nosnippet>757</a>        feature = <span class="string">"native-domains"</span>,
+<a href=#758 id=758 data-nosnippet>758</a>        any(
+<a href=#759 id=759 data-nosnippet>759</a>            target_arch = <span class="string">"riscv64"</span>,
+<a href=#760 id=760 data-nosnippet>760</a>            target_arch = <span class="string">"aarch64"</span>,
+<a href=#761 id=761 data-nosnippet>761</a>            target_arch = <span class="string">"x86_64"
+<a href=#762 id=762 data-nosnippet>762</a>        </span>)
+<a href=#763 id=763 data-nosnippet>763</a>    ))]
+<a href=#764 id=764 data-nosnippet>764</a>    #[allow(dead_code)]
+<a href=#765 id=765 data-nosnippet>765</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>begin_execution(
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#767 id=767 data-nosnippet>767</a>        hart_id: usize,
+<a href=#768 id=768 data-nosnippet>768</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::memory::address_space::AddressSpaceError&gt; {
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.address_space {
+<a href=#770 id=770 data-nosnippet>770</a>            TaskAddressSpace::Sas =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#771 id=771 data-nosnippet>771</a>            TaskAddressSpace::Domain(space) =&gt; space.begin_execution(hart_id),
+<a href=#772 id=772 data-nosnippet>772</a>        }
+<a href=#773 id=773 data-nosnippet>773</a>    }
+<a href=#774 id=774 data-nosnippet>774</a>
+<a href=#775 id=775 data-nosnippet>775</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
+<a href=#777 id=777 data-nosnippet>777</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
+<a href=#778 id=778 data-nosnippet>778</a>
+<a href=#779 id=779 data-nosnippet>779</a>        <span class="kw">let </span>lease = Lease {
+<a href=#780 id=780 data-nosnippet>780</a>            id,
+<a href=#781 id=781 data-nosnippet>781</a>            ptr,
+<a href=#782 id=782 data-nosnippet>782</a>            len,
+<a href=#783 id=783 data-nosnippet>783</a>            attributes,
+<a href=#784 id=784 data-nosnippet>784</a>        };
+<a href=#785 id=785 data-nosnippet>785</a>
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#787 id=787 data-nosnippet>787</a>        </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
+<a href=#788 id=788 data-nosnippet>788</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>)), <span class="kw">crate</span>::memory::heap::p01_owner::TASK_FIELDS);
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="self">self</span>.leases.insert(id, lease);
+<a href=#790 id=790 data-nosnippet>790</a>        id
+<a href=#791 id=791 data-nosnippet>791</a>    }
+<a href=#792 id=792 data-nosnippet>792</a>
+<a href=#793 id=793 data-nosnippet>793</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
+<a href=#794 id=794 data-nosnippet>794</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
+<a href=#795 id=795 data-nosnippet>795</a>    }
+<a href=#796 id=796 data-nosnippet>796</a>
+<a href=#797 id=797 data-nosnippet>797</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
+<a href=#799 id=799 data-nosnippet>799</a>    }
+<a href=#800 id=800 data-nosnippet>800</a>
+<a href=#801 id=801 data-nosnippet>801</a>    <span class="comment">// --- Grant Table Methods ---
+<a href=#802 id=802 data-nosnippet>802</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
+<a href=#803 id=803 data-nosnippet>803</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
+<a href=#804 id=804 data-nosnippet>804</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
+<a href=#805 id=805 data-nosnippet>805</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#806 id=806 data-nosnippet>806</a>        </span><span class="kw">let </span>_semantic = <span class="kw">crate</span>::memory::heap::p01_owner::creation(
+<a href=#807 id=807 data-nosnippet>807</a>            <span class="prelude-val">Some</span>(<span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>)), <span class="kw">crate</span>::memory::heap::p01_owner::TASK_FIELDS);
+<a href=#808 id=808 data-nosnippet>808</a>        <span class="self">self</span>.grant_table.insert(
+<a href=#809 id=809 data-nosnippet>809</a>            id,
+<a href=#810 id=810 data-nosnippet>810</a>            GrantEntry {
+<a href=#811 id=811 data-nosnippet>811</a>                ptr,
+<a href=#812 id=812 data-nosnippet>812</a>                len,
+<a href=#813 id=813 data-nosnippet>813</a>                flags,
+<a href=#814 id=814 data-nosnippet>814</a>                sender_id,
+<a href=#815 id=815 data-nosnippet>815</a>            },
+<a href=#816 id=816 data-nosnippet>816</a>        );
+<a href=#817 id=817 data-nosnippet>817</a>        id
+<a href=#818 id=818 data-nosnippet>818</a>    }
+<a href=#819 id=819 data-nosnippet>819</a>
+<a href=#820 id=820 data-nosnippet>820</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
+<a href=#821 id=821 data-nosnippet>821</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
+<a href=#822 id=822 data-nosnippet>822</a>    }
+<a href=#823 id=823 data-nosnippet>823</a>
+<a href=#824 id=824 data-nosnippet>824</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
+<a href=#825 id=825 data-nosnippet>825</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
+<a href=#826 id=826 data-nosnippet>826</a>    }
+<a href=#827 id=827 data-nosnippet>827</a>
+<a href=#828 id=828 data-nosnippet>828</a>    <span class="kw">pub fn </span>set_current_caller_context(
+<a href=#829 id=829 data-nosnippet>829</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#830 id=830 data-nosnippet>830</a>        sender_tid: usize,
+<a href=#831 id=831 data-nosnippet>831</a>        sender_cell_id: u64,
+<a href=#832 id=832 data-nosnippet>832</a>        sender_generation: u64,
+<a href=#833 id=833 data-nosnippet>833</a>    ) {
+<a href=#834 id=834 data-nosnippet>834</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">Some</span>(sender_tid);
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="self">self</span>.current_caller_cell_id = sender_cell_id;
+<a href=#836 id=836 data-nosnippet>836</a>        <span class="self">self</span>.current_caller_cell_generation = sender_generation;
+<a href=#837 id=837 data-nosnippet>837</a>        <span class="self">self</span>.current_caller_request_generation = <span class="self">self</span>.next_caller_request_generation;
+<a href=#838 id=838 data-nosnippet>838</a>        <span class="self">self</span>.next_caller_request_generation = <span class="self">self</span>.next_caller_request_generation.saturating_add(<span class="number">1</span>);
+<a href=#839 id=839 data-nosnippet>839</a>        <span class="self">self</span>.current_async_op = <span class="number">0</span>;
 <a href=#840 id=840 data-nosnippet>840</a>    }
 <a href=#841 id=841 data-nosnippet>841</a>
-<a href=#842 id=842 data-nosnippet>842</a>    <span class="doccomment">/// Commit caller identity and bounded-operation token together. Preserving
-<a href=#843 id=843 data-nosnippet>843</a>    /// VFS's outer grant authority must also preserve its operation token, even
-<a href=#844 id=844 data-nosnippet>844</a>    /// when a nested dependency reply happens to have the same sender TID.
-<a href=#845 id=845 data-nosnippet>845</a>    </span><span class="kw">pub fn </span>set_received_request_context(
-<a href=#846 id=846 data-nosnippet>846</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#847 id=847 data-nosnippet>847</a>        sender_tid: usize,
-<a href=#848 id=848 data-nosnippet>848</a>        sender_cell_id: u64,
-<a href=#849 id=849 data-nosnippet>849</a>        sender_generation: u64,
-<a href=#850 id=850 data-nosnippet>850</a>        token: usize,
-<a href=#851 id=851 data-nosnippet>851</a>    ) {
-<a href=#852 id=852 data-nosnippet>852</a>        <span class="comment">// VFS may perform nested IPC while serving a request. Its outer caller
-<a href=#853 id=853 data-nosnippet>853</a>        // remains the authority for grants and owner-death watches until VFS
-<a href=#854 id=854 data-nosnippet>854</a>        // sends that caller's response; a storage reply must not replace it.
-<a href=#855 id=855 data-nosnippet>855</a>        </span><span class="kw">if </span><span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize)
-<a href=#856 id=856 data-nosnippet>856</a>            &amp;&amp; <span class="self">self</span>.current_caller.is_some()
-<a href=#857 id=857 data-nosnippet>857</a>        {
-<a href=#858 id=858 data-nosnippet>858</a>            <span class="kw">return</span>;
-<a href=#859 id=859 data-nosnippet>859</a>        }
-<a href=#860 id=860 data-nosnippet>860</a>        <span class="self">self</span>.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
-<a href=#861 id=861 data-nosnippet>861</a>        <span class="self">self</span>.current_async_op = token;
-<a href=#862 id=862 data-nosnippet>862</a>    }
-<a href=#863 id=863 data-nosnippet>863</a>
-<a href=#864 id=864 data-nosnippet>864</a>    <span class="doccomment">/// Drop VFS's public request context and return the exact lease identity
-<a href=#865 id=865 data-nosnippet>865</a>    /// that must be released after the scheduler lock is dropped.
-<a href=#866 id=866 data-nosnippet>866</a>    </span><span class="kw">pub fn </span>begin_receive_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mask: usize) -&gt; <span class="prelude-ty">Option</span>&lt;(usize, u64)&gt; {
-<a href=#867 id=867 data-nosnippet>867</a>        <span class="comment">// VFS uses a wildcard receive only at its public request loop. Masked
-<a href=#868 id=868 data-nosnippet>868</a>        // receives are nested dependency replies and keep the outer authority.
-<a href=#869 id=869 data-nosnippet>869</a>        </span><span class="kw">if </span>mask == <span class="number">0 </span>&amp;&amp; <span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
-<a href=#870 id=870 data-nosnippet>870</a>            <span class="kw">let </span>dropped = <span class="self">self
-<a href=#871 id=871 data-nosnippet>871</a>                </span>.current_caller
-<a href=#872 id=872 data-nosnippet>872</a>                .map(|grant_owner| (grant_owner, <span class="self">self</span>.current_caller_request_generation));
-<a href=#873 id=873 data-nosnippet>873</a>            <span class="self">self</span>.clear_current_caller_context();
-<a href=#874 id=874 data-nosnippet>874</a>            <span class="kw">return </span>dropped;
-<a href=#875 id=875 data-nosnippet>875</a>        }
-<a href=#876 id=876 data-nosnippet>876</a>        <span class="prelude-val">None
-<a href=#877 id=877 data-nosnippet>877</a>    </span>}
-<a href=#878 id=878 data-nosnippet>878</a>
-<a href=#879 id=879 data-nosnippet>879</a>    <span class="doccomment">/// Whether a receive mask may dequeue a tokenized VFS owner-death event.
-<a href=#880 id=880 data-nosnippet>880</a>    ///
-<a href=#881 id=881 data-nosnippet>881</a>    /// Owner death is routed on VFS's public plane only. Its root TID and
-<a href=#882 id=882 data-nosnippet>882</a>    /// subscription token identify the event after this predicate succeeds;
-<a href=#883 id=883 data-nosnippet>883</a>    /// neither is a sender match and therefore neither can authorize a masked
-<a href=#884 id=884 data-nosnippet>884</a>    /// backend receive.
-<a href=#885 id=885 data-nosnippet>885</a>    </span><span class="attr">#[inline]
-<a href=#886 id=886 data-nosnippet>886</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>owner_death_matches_receive_mask(mask: usize) -&gt; bool {
-<a href=#887 id=887 data-nosnippet>887</a>        mask == <span class="number">0
-<a href=#888 id=888 data-nosnippet>888</a>    </span>}
-<a href=#889 id=889 data-nosnippet>889</a>
-<a href=#890 id=890 data-nosnippet>890</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#891 id=891 data-nosnippet>891</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
-<a href=#892 id=892 data-nosnippet>892</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
-<a href=#893 id=893 data-nosnippet>893</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
-<a href=#894 id=894 data-nosnippet>894</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
-<a href=#895 id=895 data-nosnippet>895</a>        <span class="self">self</span>.current_async_op = <span class="number">0</span>;
-<a href=#896 id=896 data-nosnippet>896</a>    }
-<a href=#897 id=897 data-nosnippet>897</a>
-<a href=#898 id=898 data-nosnippet>898</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
-<a href=#899 id=899 data-nosnippet>899</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#900 id=900 data-nosnippet>900</a>        sender_tid: usize,
-<a href=#901 id=901 data-nosnippet>901</a>        request_generation: u64,
-<a href=#902 id=902 data-nosnippet>902</a>    ) -&gt; bool {
-<a href=#903 id=903 data-nosnippet>903</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
-<a href=#904 id=904 data-nosnippet>904</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
-<a href=#905 id=905 data-nosnippet>905</a>        {
-<a href=#906 id=906 data-nosnippet>906</a>            <span class="self">self</span>.clear_current_caller_context();
-<a href=#907 id=907 data-nosnippet>907</a>            <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#908 id=908 data-nosnippet>908</a>        }
-<a href=#909 id=909 data-nosnippet>909</a>        <span class="bool-val">false
-<a href=#910 id=910 data-nosnippet>910</a>    </span>}
-<a href=#911 id=911 data-nosnippet>911</a>}
-<a href=#912 id=912 data-nosnippet>912</a>
-<a href=#913 id=913 data-nosnippet>913</a><span class="kw">impl </span>Drop <span class="kw">for </span>Task {
-<a href=#914 id=914 data-nosnippet>914</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#915 id=915 data-nosnippet>915</a>        <span class="attr">#[cfg(cellos_p01_trace)]
-<a href=#916 id=916 data-nosnippet>916</a>        </span><span class="kw">crate</span>::p01_resources::prepare_drop(<span class="self">self</span>);
-<a href=#917 id=917 data-nosnippet>917</a>        <span class="attr">#[cfg(all(
-<a href=#918 id=918 data-nosnippet>918</a>            feature = <span class="string">"native-domains"</span>,
-<a href=#919 id=919 data-nosnippet>919</a>            any(
-<a href=#920 id=920 data-nosnippet>920</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#921 id=921 data-nosnippet>921</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#922 id=922 data-nosnippet>922</a>                target_arch = <span class="string">"x86_64"
-<a href=#923 id=923 data-nosnippet>923</a>            </span>)
-<a href=#924 id=924 data-nosnippet>924</a>        ))]
-<a href=#925 id=925 data-nosnippet>925</a>        </span><span class="kw">if </span><span class="self">self</span>.has_dynamic_stack_mapping {
-<a href=#926 id=926 data-nosnippet>926</a>            <span class="attr">#[cfg_attr(not(cellos_p01_trace), allow(unused_mut))]
-<a href=#927 id=927 data-nosnippet>927</a>            </span><span class="kw">if let </span>(TaskAddressSpace::Domain(space), <span class="prelude-val">Some</span>(<span class="kw-2">mut </span>kernel_stack), <span class="prelude-val">Some</span>(<span class="kw-2">mut </span>user_stack)) = (
-<a href=#928 id=928 data-nosnippet>928</a>                <span class="kw-2">&amp;</span><span class="self">self</span>.address_space,
-<a href=#929 id=929 data-nosnippet>929</a>                <span class="self">self</span>.kernel_stack.take(),
-<a href=#930 id=930 data-nosnippet>930</a>                <span class="self">self</span>.user_stack.take(),
-<a href=#931 id=931 data-nosnippet>931</a>            ) {
-<a href=#932 id=932 data-nosnippet>932</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = space.unmap_existing_task_stacks(<span class="kw-2">&amp;</span>kernel_stack, <span class="kw-2">&amp;</span>user_stack) {
-<a href=#933 id=933 data-nosnippet>933</a>                    <span class="comment">// The tag's invalidation is unconfirmed, so a remote hart may
-<a href=#934 id=934 data-nosnippet>934</a>                    // still resolve these stack addresses and walk into the
-<a href=#935 id=935 data-nosnippet>935</a>                    // backing frames. The unmap retained the tables it owns; the
-<a href=#936 id=936 data-nosnippet>936</a>                    // backing is this Task's, and the one thing it must not do is
-<a href=#937 id=937 data-nosnippet>937</a>                    // hand it to the allocator now. Leaking it here is the loud,
-<a href=#938 id=938 data-nosnippet>938</a>                    // counted half of the fail-closed contract: the frames are
-<a href=#939 id=939 data-nosnippet>939</a>                    // never reused, and the log says which teardown did it.
-<a href=#940 id=940 data-nosnippet>940</a>                    </span><span class="kw">let </span>pages = kernel_stack.pages + user_stack.pages;
-<a href=#941 id=941 data-nosnippet>941</a>                    <span class="kw">crate</span>::memory::deferred_release::note_leaked_stack_frames(pages);
-<a href=#942 id=942 data-nosnippet>942</a>                    <span class="attr">#[cfg(cellos_p01_trace)]
-<a href=#943 id=943 data-nosnippet>943</a>                    </span>{
-<a href=#944 id=944 data-nosnippet>944</a>                        <span class="kw">let </span>owner = <span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>);
-<a href=#945 id=945 data-nosnippet>945</a>                        <span class="comment">// Unlike the existing runtime leak counter, include guard frames.
-<a href=#946 id=946 data-nosnippet>946</a>                        </span><span class="kw">crate</span>::p01_retained::begin(<span class="prelude-val">Some</span>(owner), kernel_stack.base,
-<a href=#947 id=947 data-nosnippet>947</a>                            kernel_stack.pages + kernel_stack.guard_pages,
-<a href=#948 id=948 data-nosnippet>948</a>                            <span class="kw">crate</span>::p01_retained::Reason::TaskStackForget);
-<a href=#949 id=949 data-nosnippet>949</a>                        <span class="kw">crate</span>::p01_retained::begin(<span class="prelude-val">Some</span>(owner), user_stack.base,
-<a href=#950 id=950 data-nosnippet>950</a>                            user_stack.pages + user_stack.guard_pages,
-<a href=#951 id=951 data-nosnippet>951</a>                            <span class="kw">crate</span>::p01_retained::Reason::TaskStackForget);
-<a href=#952 id=952 data-nosnippet>952</a>                        <span class="kw">crate</span>::p01_resources::retained(owner, <span class="number">1</span>);
-<a href=#953 id=953 data-nosnippet>953</a>                        <span class="kw">crate</span>::p01_resources::finish(kernel_stack.p01_obligation.take(), <span class="number">5</span>);
-<a href=#954 id=954 data-nosnippet>954</a>                        <span class="kw">crate</span>::p01_resources::finish(user_stack.p01_obligation.take(), <span class="number">5</span>);
-<a href=#955 id=955 data-nosnippet>955</a>                    }
-<a href=#956 id=956 data-nosnippet>956</a>                    <span class="macro">log::error!</span>(
-<a href=#957 id=957 data-nosnippet>957</a>                        <span class="string">"[aspace] task stack teardown deferred ({:?}): {} frame(s) withheld from the allocator until the tag's invalidation is confirmed"</span>,
-<a href=#958 id=958 data-nosnippet>958</a>                        error,
-<a href=#959 id=959 data-nosnippet>959</a>                        pages
-<a href=#960 id=960 data-nosnippet>960</a>                    );
-<a href=#961 id=961 data-nosnippet>961</a>                    core::mem::forget(kernel_stack);
-<a href=#962 id=962 data-nosnippet>962</a>                    core::mem::forget(user_stack);
-<a href=#963 id=963 data-nosnippet>963</a>                }
-<a href=#964 id=964 data-nosnippet>964</a>            }
-<a href=#965 id=965 data-nosnippet>965</a>        }
-<a href=#966 id=966 data-nosnippet>966</a>    }
-<a href=#967 id=967 data-nosnippet>967</a>}
+<a href=#842 id=842 data-nosnippet>842</a>    <span class="kw">pub fn </span>set_received_caller_context(
+<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#844 id=844 data-nosnippet>844</a>        sender_tid: usize,
+<a href=#845 id=845 data-nosnippet>845</a>        sender_cell_id: u64,
+<a href=#846 id=846 data-nosnippet>846</a>        sender_generation: u64,
+<a href=#847 id=847 data-nosnippet>847</a>    ) {
+<a href=#848 id=848 data-nosnippet>848</a>        <span class="self">self</span>.set_received_request_context(sender_tid, sender_cell_id, sender_generation, <span class="number">0</span>);
+<a href=#849 id=849 data-nosnippet>849</a>    }
+<a href=#850 id=850 data-nosnippet>850</a>
+<a href=#851 id=851 data-nosnippet>851</a>    <span class="doccomment">/// Commit caller identity and bounded-operation token together. Preserving
+<a href=#852 id=852 data-nosnippet>852</a>    /// VFS's outer grant authority must also preserve its operation token, even
+<a href=#853 id=853 data-nosnippet>853</a>    /// when a nested dependency reply happens to have the same sender TID.
+<a href=#854 id=854 data-nosnippet>854</a>    </span><span class="kw">pub fn </span>set_received_request_context(
+<a href=#855 id=855 data-nosnippet>855</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#856 id=856 data-nosnippet>856</a>        sender_tid: usize,
+<a href=#857 id=857 data-nosnippet>857</a>        sender_cell_id: u64,
+<a href=#858 id=858 data-nosnippet>858</a>        sender_generation: u64,
+<a href=#859 id=859 data-nosnippet>859</a>        token: usize,
+<a href=#860 id=860 data-nosnippet>860</a>    ) {
+<a href=#861 id=861 data-nosnippet>861</a>        <span class="comment">// VFS may perform nested IPC while serving a request. Its outer caller
+<a href=#862 id=862 data-nosnippet>862</a>        // remains the authority for grants and owner-death watches until VFS
+<a href=#863 id=863 data-nosnippet>863</a>        // sends that caller's response; a storage reply must not replace it.
+<a href=#864 id=864 data-nosnippet>864</a>        </span><span class="kw">if </span><span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize)
+<a href=#865 id=865 data-nosnippet>865</a>            &amp;&amp; <span class="self">self</span>.current_caller.is_some()
+<a href=#866 id=866 data-nosnippet>866</a>        {
+<a href=#867 id=867 data-nosnippet>867</a>            <span class="kw">return</span>;
+<a href=#868 id=868 data-nosnippet>868</a>        }
+<a href=#869 id=869 data-nosnippet>869</a>        <span class="self">self</span>.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+<a href=#870 id=870 data-nosnippet>870</a>        <span class="self">self</span>.current_async_op = token;
+<a href=#871 id=871 data-nosnippet>871</a>    }
+<a href=#872 id=872 data-nosnippet>872</a>
+<a href=#873 id=873 data-nosnippet>873</a>    <span class="doccomment">/// Drop VFS's public request context and return the exact lease identity
+<a href=#874 id=874 data-nosnippet>874</a>    /// that must be released after the scheduler lock is dropped.
+<a href=#875 id=875 data-nosnippet>875</a>    </span><span class="kw">pub fn </span>begin_receive_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mask: usize) -&gt; <span class="prelude-ty">Option</span>&lt;(usize, u64)&gt; {
+<a href=#876 id=876 data-nosnippet>876</a>        <span class="comment">// VFS uses a wildcard receive only at its public request loop. Masked
+<a href=#877 id=877 data-nosnippet>877</a>        // receives are nested dependency replies and keep the outer authority.
+<a href=#878 id=878 data-nosnippet>878</a>        </span><span class="kw">if </span>mask == <span class="number">0 </span>&amp;&amp; <span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
+<a href=#879 id=879 data-nosnippet>879</a>            <span class="kw">let </span>dropped = <span class="self">self
+<a href=#880 id=880 data-nosnippet>880</a>                </span>.current_caller
+<a href=#881 id=881 data-nosnippet>881</a>                .map(|grant_owner| (grant_owner, <span class="self">self</span>.current_caller_request_generation));
+<a href=#882 id=882 data-nosnippet>882</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#883 id=883 data-nosnippet>883</a>            <span class="kw">return </span>dropped;
+<a href=#884 id=884 data-nosnippet>884</a>        }
+<a href=#885 id=885 data-nosnippet>885</a>        <span class="prelude-val">None
+<a href=#886 id=886 data-nosnippet>886</a>    </span>}
+<a href=#887 id=887 data-nosnippet>887</a>
+<a href=#888 id=888 data-nosnippet>888</a>    <span class="doccomment">/// Whether a receive mask may dequeue a tokenized VFS owner-death event.
+<a href=#889 id=889 data-nosnippet>889</a>    ///
+<a href=#890 id=890 data-nosnippet>890</a>    /// Owner death is routed on VFS's public plane only. Its root TID and
+<a href=#891 id=891 data-nosnippet>891</a>    /// subscription token identify the event after this predicate succeeds;
+<a href=#892 id=892 data-nosnippet>892</a>    /// neither is a sender match and therefore neither can authorize a masked
+<a href=#893 id=893 data-nosnippet>893</a>    /// backend receive.
+<a href=#894 id=894 data-nosnippet>894</a>    </span><span class="attr">#[inline]
+<a href=#895 id=895 data-nosnippet>895</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>owner_death_matches_receive_mask(mask: usize) -&gt; bool {
+<a href=#896 id=896 data-nosnippet>896</a>        mask == <span class="number">0
+<a href=#897 id=897 data-nosnippet>897</a>    </span>}
+<a href=#898 id=898 data-nosnippet>898</a>
+<a href=#899 id=899 data-nosnippet>899</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#900 id=900 data-nosnippet>900</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
+<a href=#901 id=901 data-nosnippet>901</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
+<a href=#903 id=903 data-nosnippet>903</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
+<a href=#904 id=904 data-nosnippet>904</a>        <span class="self">self</span>.current_async_op = <span class="number">0</span>;
+<a href=#905 id=905 data-nosnippet>905</a>    }
+<a href=#906 id=906 data-nosnippet>906</a>
+<a href=#907 id=907 data-nosnippet>907</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
+<a href=#908 id=908 data-nosnippet>908</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#909 id=909 data-nosnippet>909</a>        sender_tid: usize,
+<a href=#910 id=910 data-nosnippet>910</a>        request_generation: u64,
+<a href=#911 id=911 data-nosnippet>911</a>    ) -&gt; bool {
+<a href=#912 id=912 data-nosnippet>912</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
+<a href=#913 id=913 data-nosnippet>913</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
+<a href=#914 id=914 data-nosnippet>914</a>        {
+<a href=#915 id=915 data-nosnippet>915</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#916 id=916 data-nosnippet>916</a>            <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#917 id=917 data-nosnippet>917</a>        }
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="bool-val">false
+<a href=#919 id=919 data-nosnippet>919</a>    </span>}
+<a href=#920 id=920 data-nosnippet>920</a>}
+<a href=#921 id=921 data-nosnippet>921</a>
+<a href=#922 id=922 data-nosnippet>922</a><span class="kw">impl </span>Drop <span class="kw">for </span>Task {
+<a href=#923 id=923 data-nosnippet>923</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#925 id=925 data-nosnippet>925</a>        </span><span class="kw">crate</span>::p01_resources::prepare_drop(<span class="self">self</span>);
+<a href=#926 id=926 data-nosnippet>926</a>        <span class="attr">#[cfg(all(
+<a href=#927 id=927 data-nosnippet>927</a>            feature = <span class="string">"native-domains"</span>,
+<a href=#928 id=928 data-nosnippet>928</a>            any(
+<a href=#929 id=929 data-nosnippet>929</a>                target_arch = <span class="string">"riscv64"</span>,
+<a href=#930 id=930 data-nosnippet>930</a>                target_arch = <span class="string">"aarch64"</span>,
+<a href=#931 id=931 data-nosnippet>931</a>                target_arch = <span class="string">"x86_64"
+<a href=#932 id=932 data-nosnippet>932</a>            </span>)
+<a href=#933 id=933 data-nosnippet>933</a>        ))]
+<a href=#934 id=934 data-nosnippet>934</a>        </span><span class="kw">if </span><span class="self">self</span>.has_dynamic_stack_mapping {
+<a href=#935 id=935 data-nosnippet>935</a>            <span class="attr">#[cfg_attr(not(cellos_p01_trace), allow(unused_mut))]
+<a href=#936 id=936 data-nosnippet>936</a>            </span><span class="kw">if let </span>(TaskAddressSpace::Domain(space), <span class="prelude-val">Some</span>(<span class="kw-2">mut </span>kernel_stack), <span class="prelude-val">Some</span>(<span class="kw-2">mut </span>user_stack)) = (
+<a href=#937 id=937 data-nosnippet>937</a>                <span class="kw-2">&amp;</span><span class="self">self</span>.address_space,
+<a href=#938 id=938 data-nosnippet>938</a>                <span class="self">self</span>.kernel_stack.take(),
+<a href=#939 id=939 data-nosnippet>939</a>                <span class="self">self</span>.user_stack.take(),
+<a href=#940 id=940 data-nosnippet>940</a>            ) {
+<a href=#941 id=941 data-nosnippet>941</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = space.unmap_existing_task_stacks(<span class="kw-2">&amp;</span>kernel_stack, <span class="kw-2">&amp;</span>user_stack) {
+<a href=#942 id=942 data-nosnippet>942</a>                    <span class="comment">// The tag's invalidation is unconfirmed, so a remote hart may
+<a href=#943 id=943 data-nosnippet>943</a>                    // still resolve these stack addresses and walk into the
+<a href=#944 id=944 data-nosnippet>944</a>                    // backing frames. The unmap retained the tables it owns; the
+<a href=#945 id=945 data-nosnippet>945</a>                    // backing is this Task's, and the one thing it must not do is
+<a href=#946 id=946 data-nosnippet>946</a>                    // hand it to the allocator now. Leaking it here is the loud,
+<a href=#947 id=947 data-nosnippet>947</a>                    // counted half of the fail-closed contract: the frames are
+<a href=#948 id=948 data-nosnippet>948</a>                    // never reused, and the log says which teardown did it.
+<a href=#949 id=949 data-nosnippet>949</a>                    </span><span class="kw">let </span>pages = kernel_stack.pages + user_stack.pages;
+<a href=#950 id=950 data-nosnippet>950</a>                    <span class="kw">crate</span>::memory::deferred_release::note_leaked_stack_frames(pages);
+<a href=#951 id=951 data-nosnippet>951</a>                    <span class="attr">#[cfg(cellos_p01_trace)]
+<a href=#952 id=952 data-nosnippet>952</a>                    </span>{
+<a href=#953 id=953 data-nosnippet>953</a>                        <span class="kw">let </span>owner = <span class="kw">crate</span>::p01_resources::owner(<span class="self">self</span>);
+<a href=#954 id=954 data-nosnippet>954</a>                        <span class="comment">// Unlike the existing runtime leak counter, include guard frames.
+<a href=#955 id=955 data-nosnippet>955</a>                        </span><span class="kw">crate</span>::p01_retained::begin(<span class="prelude-val">Some</span>(owner), kernel_stack.base,
+<a href=#956 id=956 data-nosnippet>956</a>                            kernel_stack.pages + kernel_stack.guard_pages,
+<a href=#957 id=957 data-nosnippet>957</a>                            <span class="kw">crate</span>::p01_retained::Reason::TaskStackForget);
+<a href=#958 id=958 data-nosnippet>958</a>                        <span class="kw">crate</span>::p01_retained::begin(<span class="prelude-val">Some</span>(owner), user_stack.base,
+<a href=#959 id=959 data-nosnippet>959</a>                            user_stack.pages + user_stack.guard_pages,
+<a href=#960 id=960 data-nosnippet>960</a>                            <span class="kw">crate</span>::p01_retained::Reason::TaskStackForget);
+<a href=#961 id=961 data-nosnippet>961</a>                        <span class="kw">crate</span>::p01_resources::retained(owner, <span class="number">1</span>);
+<a href=#962 id=962 data-nosnippet>962</a>                        <span class="kw">crate</span>::p01_resources::finish(kernel_stack.p01_obligation.take(), <span class="number">5</span>);
+<a href=#963 id=963 data-nosnippet>963</a>                        <span class="kw">crate</span>::p01_resources::finish(user_stack.p01_obligation.take(), <span class="number">5</span>);
+<a href=#964 id=964 data-nosnippet>964</a>                    }
+<a href=#965 id=965 data-nosnippet>965</a>                    <span class="macro">log::error!</span>(
+<a href=#966 id=966 data-nosnippet>966</a>                        <span class="string">"[aspace] task stack teardown deferred ({:?}): {} frame(s) withheld from the allocator until the tag's invalidation is confirmed"</span>,
+<a href=#967 id=967 data-nosnippet>967</a>                        error,
+<a href=#968 id=968 data-nosnippet>968</a>                        pages
+<a href=#969 id=969 data-nosnippet>969</a>                    );
+<a href=#970 id=970 data-nosnippet>970</a>                    core::mem::forget(kernel_stack);
+<a href=#971 id=971 data-nosnippet>971</a>                    core::mem::forget(user_stack);
+<a href=#972 id=972 data-nosnippet>972</a>                }
+<a href=#973 id=973 data-nosnippet>973</a>            }
+<a href=#974 id=974 data-nosnippet>974</a>        }
+<a href=#975 id=975 data-nosnippet>975</a>    }
+<a href=#976 id=976 data-nosnippet>976</a>}
 </code></pre></div></section></main></body></html>

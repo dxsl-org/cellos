@@ -2,15 +2,15 @@
     // Required method
     fn <a href="#tymethod.round_trip" class="fn">round_trip</a>&lt;'r&gt;(
         &amp;mut self,
-        request: &amp;AiRequest&lt;'_&gt;,
+        request: &amp;<a class="enum" href="../../ai_proto/enum.AiRequest.html" title="enum ai_proto::AiRequest">AiRequest</a>&lt;'_&gt;,
         reply: &amp;'r mut [u8],
-    ) -&gt; Result&lt;AiResponse&lt;'r&gt;, <a class="enum" href="../enum.AiClientError.html" title="enum ai_sdk::AiClientError">AiClientError</a>&gt;;
+    ) -&gt; Result&lt;<a class="enum" href="../../ai_proto/enum.AiResponse.html" title="enum ai_proto::AiResponse">AiResponse</a>&lt;'r&gt;, <a class="enum" href="../enum.AiClientError.html" title="enum ai_sdk::AiClientError">AiClientError</a>&gt;;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>One request/reply round trip to the inference service.</p>
 </div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.round_trip" class="method"><a class="src rightside" href="../../src/ai_sdk/transport.rs.html#23-27">Source</a><h4 class="code-header">fn <a href="#tymethod.round_trip" class="fn">round_trip</a>&lt;'r&gt;(
     &amp;mut self,
-    request: &amp;AiRequest&lt;'_&gt;,
+    request: &amp;<a class="enum" href="../../ai_proto/enum.AiRequest.html" title="enum ai_proto::AiRequest">AiRequest</a>&lt;'_&gt;,
     reply: &amp;'r mut [u8],
-) -&gt; Result&lt;AiResponse&lt;'r&gt;, <a class="enum" href="../enum.AiClientError.html" title="enum ai_sdk::AiClientError">AiClientError</a>&gt;</h4></section></summary><div class="docblock"><p>Send <code>request</code>, receive its reply into <code>reply</code>, and decode it.</p>
+) -&gt; Result&lt;<a class="enum" href="../../ai_proto/enum.AiResponse.html" title="enum ai_proto::AiResponse">AiResponse</a>&lt;'r&gt;, <a class="enum" href="../enum.AiClientError.html" title="enum ai_sdk::AiClientError">AiClientError</a>&gt;</h4></section></summary><div class="docblock"><p>Send <code>request</code>, receive its reply into <code>reply</code>, and decode it.</p>
 <p><code>reply</code> is caller-owned so the decoded response can borrow message text without copying:
 the caller keeps the buffer alive for exactly as long as the returned value.</p>
 <p>A transport must answer with the reply to <em>this</em> request or fail — it never fabricates a

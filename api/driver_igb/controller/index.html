@@ -14,7 +14,7 @@ must set <code>DEXT | DTYP_DATA</code> or the model treats it as a legacy descri
 than a re-run of the e1000 controller.</p>
 <p>Law 4 exception: <code>unsafe</code> is used for DMA descriptor and buffer access. Every
 <code>unsafe</code> block carries a <code>// SAFETY:</code> comment. MMIO goes through the
-bounds-checked [<code>MmioRegion</code>], so a bad offset returns <code>Err</code>, never a stray
+bounds-checked <a href="../../ostd/mmio/struct.MmioRegion.html" title="struct ostd::mmio::MmioRegion"><code>MmioRegion</code></a>, so a bad offset returns <code>Err</code>, never a stray
 access.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.IgbController.html" title="struct driver_igb::controller::IgbController">IgbController</a></dt><dt><a class="struct" href="struct.RxDesc.html" title="struct driver_igb::controller::RxDesc">RxDesc</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Advanced receive descriptor. Programming uses <code>buf_addr</code> (offset 0); a
 completion writes <code>status_error</code> (offset 8) and <code>length</code> (offset 12).</dd><dt><a class="struct" href="struct.TxDesc.html" title="struct driver_igb::controller::TxDesc">TxDesc</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Advanced transmit descriptor. <code>status</code> shares offset 12 with

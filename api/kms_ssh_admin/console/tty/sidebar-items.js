@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FOREVER","SLICE_MS"],"fn":["note","refuse_without_terminal"],"struct":["Source","Tty"]};

@@ -3,7 +3,7 @@
 only to the registering principal. <code>DECISION_PENDING</code> is not consumed; a final decision
 is returned once (a later collect is <code>Stale</code>), and its lane (the confirmation Ref) is
 then retired. Compare every binding, including <code>descriptor_sha256</code> against
-[<code>trust_descriptor_sha256</code>] of the own record, before acting on it.</dd><dt><a class="fn" href="fn.now_ns.html" title="fn service_vfs::trust::first::owner::now_ns">now_ns</a></dt><dd>Receiver-monotonic nanoseconds, checked rather than architecture-guessed.</dd><dt><a class="fn" href="fn.register.html" title="fn service_vfs::trust::first::owner::register">register</a></dt><dd>VFS → input: register one first-trust descriptor (<code>InputOp::RegisterTrustChallenge</code>);
+<a href="../../../../ostd/session/fn.trust_descriptor_sha256.html" title="fn ostd::session::trust_descriptor_sha256"><code>trust_descriptor_sha256</code></a> of the own record, before acting on it.</dd><dt><a class="fn" href="fn.now_ns.html" title="fn service_vfs::trust::first::owner::now_ns">now_ns</a></dt><dd>Receiver-monotonic nanoseconds, checked rather than architecture-guessed.</dd><dt><a class="fn" href="fn.register.html" title="fn service_vfs::trust::first::owner::register">register</a></dt><dd>VFS → input: register one first-trust descriptor (<code>InputOp::RegisterTrustChallenge</code>);
 returns the input-issued confirmation Ref the confirming client presents to
 <code>BeginTrustConfirmation</code>. Input admits only the live registered VFS task. The request
 lane is the single-use challenge Ref; it is kept only while the outcome is

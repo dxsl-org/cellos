@@ -52,7 +52,7 @@ network, bit2 spawn, bit3 hypervisor, bit4 pcie_driver, bit5 platform,
 bit6 supervisor, bit7 mmio_devices changed, bit8 block_regions changed,
 bit9 net_resolve, bit10 net_connect, bit11 net_listen, bit12 net_l2,
 bit13 observe_tasks, bit14 observe_memory, bit15 vfs_mutate,
-bit16 config_write).</p>
+bit16 config_write, bit17 kms_ssh_sign, bit18 kms_ssh_admin).</p>
 </div><section id="variant.CapRevoked" class="variant"><a href="#variant.CapRevoked" class="anchor">§</a><h3 class="code-header">CapRevoked = 20</h3></section><div class="docblock"><p>Runtime revocation: a SpawnCap holder stripped capabilities from a live cell.
 Payload: <code>encode_u32x2(target_tid, cap_mask)</code> where <code>cap_mask</code> matches
 <code>api::syscall::cap_mask</code> constants (bit0=block_io, bit1=network, bit2=spawn,

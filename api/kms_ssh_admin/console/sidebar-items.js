@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DRAIN_MAX","WORD_MAX"],"enum":["Block","Next","Word"],"fn":["drain_paste","end_line_seen","is_submit","plain_key","read_block","read_word"],"mod":["tty"],"trait":["Console","Events"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BEGIN","BLOB_MAX","BODY_MAX","END","TEXT_MAX"],"enum":["ArmorError"],"fn":["base64_byte","decode","for_each_line"]};

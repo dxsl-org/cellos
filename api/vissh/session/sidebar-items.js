@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CHUNK"],"enum":["Dispatch","Ending","Input","Mode","Phase","Point","Trust"],"fn":["run"],"struct":["Outcome","Peaks","RekeyPolicy"],"trait":["Local"]};
+window.SIDEBAR_ITEMS = {"constant":["CHUNK"],"enum":["AuthKind","Credential","Dispatch","Ending","Input","Mode","Phase","Point","Trust"],"fn":["run"],"struct":["Outcome","Peaks","RekeyPolicy","SignRequest","Signed"],"trait":["Local"]};

@@ -139,4 +139,47 @@
 <a href=#139 id=139 data-nosnippet>139</a>    }
 <a href=#140 id=140 data-nosnippet>140</a>    <span class="prelude-val">Ok</span>(caller)
 <a href=#141 id=141 data-nosnippet>141</a>}
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a><span class="doccomment">/// Admission for the SSH leaf (opcodes 15-24): the shared trailer validation
+<a href=#144 id=144 data-nosnippet>144</a>/// plus a nonzero cell id. A real Cell is never `0` (`CallerIdentity::
+<a href=#145 id=145 data-nosnippet>145</a>/// from_trailer` already refuses it); the extra check is defence in depth for
+<a href=#146 id=146 data-nosnippet>146</a>/// synthetic callers. No supervisor authority is implied or consulted.
+<a href=#147 id=147 data-nosnippet>147</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>attested_caller(
+<a href=#148 id=148 data-nosnippet>148</a>    sender: usize,
+<a href=#149 id=149 data-nosnippet>149</a>    caller: <span class="prelude-ty">Option</span>&lt;CallerIdentity&gt;,
+<a href=#150 id=150 data-nosnippet>150</a>) -&gt; <span class="prelude-ty">Result</span>&lt;CallerIdentity, KmsErrorCode&gt; {
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span>caller = validated_caller(sender, caller)<span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">if </span>caller.cell_id == <span class="number">0 </span>{
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(KmsErrorCode::CallerUnattested);
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="prelude-val">Ok</span>(caller)
+<a href=#156 id=156 data-nosnippet>156</a>}
+<a href=#157 id=157 data-nosnippet>157</a>
+<a href=#158 id=158 data-nosnippet>158</a><span class="doccomment">/// Caller class for the SSH leaf.
+<a href=#159 id=159 data-nosnippet>159</a></span><span class="attr">#[cfg(feature = <span class="string">"ssh-dev-custody"</span>)]
+<a href=#160 id=160 data-nosnippet>160</a>#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#161 id=161 data-nosnippet>161</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">enum </span>SshClass {
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// Holds `CALLER_FLAG_KMS_SSH_SIGN` (the `cellbox-ssh` Cell): signing and
+<a href=#163 id=163 data-nosnippet>163</a>    /// unlock only.
+<a href=#164 id=164 data-nosnippet>164</a>    </span>Login,
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Holds `CALLER_FLAG_KMS_SSH_ADMIN`: import and delete. The kernel grants
+<a href=#166 id=166 data-nosnippet>166</a>    /// this flag to no Cell until K7 admits an admin Cell, so the class is
+<a href=#167 id=167 data-nosnippet>167</a>    /// fail-closed in every real build; the supervisor is not an admin caller.
+<a href=#168 id=168 data-nosnippet>168</a>    </span>Admin,
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Neither flag, or both: the sign and admin rights are never held by one
+<a href=#170 id=170 data-nosnippet>170</a>    /// Cell, so a caller with both is refused everywhere.
+<a href=#171 id=171 data-nosnippet>171</a>    </span>Denied,
+<a href=#172 id=172 data-nosnippet>172</a>}
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a><span class="doccomment">/// Classify an attested caller from the kernel-attested flag word.
+<a href=#175 id=175 data-nosnippet>175</a></span><span class="attr">#[cfg(feature = <span class="string">"ssh-dev-custody"</span>)]
+<a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>classify_ssh(caller: <span class="kw-2">&amp;</span>CallerIdentity) -&gt; SshClass {
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>sign = caller.flags &amp; api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN != <span class="number">0</span>;
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>admin = caller.flags &amp; api::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN != <span class="number">0</span>;
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">match </span>(sign, admin) {
+<a href=#180 id=180 data-nosnippet>180</a>        (<span class="bool-val">true</span>, <span class="bool-val">false</span>) =&gt; SshClass::Login,
+<a href=#181 id=181 data-nosnippet>181</a>        (<span class="bool-val">false</span>, <span class="bool-val">true</span>) =&gt; SshClass::Admin,
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">_ </span>=&gt; SshClass::Denied,
+<a href=#183 id=183 data-nosnippet>183</a>    }
+<a href=#184 id=184 data-nosnippet>184</a>}
 </code></pre></div></section></main></body></html>

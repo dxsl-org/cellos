@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["install_entropy"],"mod":["args","client","session"]};
+window.SIDEBAR_ITEMS = {"fn":["install_entropy"],"mod":["args","client","session","userauth"]};

@@ -2,7 +2,7 @@
 <p>The supervisor (init) respawns a dead service under a NEW tid. Clients that
 addressed the service by its old tid would break. This registry adds an
 indirection: the supervisor registers each service’s tid under a well-known
-<code>service_id</code> ([<code>api::syscall::service</code>]) and re-registers the new tid on
+<code>service_id</code> (<a href="../../../api/abi/syscall/service/index.html" title="mod api::abi::syscall::service"><code>api::syscall::service</code></a>) and re-registers the new tid on
 respawn; a client resolves <code>service_id → tid</code> right before sending, so it
 reconnects transparently. Keeping the map in the kernel (the never-die core)
 means it survives any service’s death, and a dead provider is auto-cleared
@@ -11,8 +11,8 @@ client retries) instead of a stale tid.</p>
 <p>Each entry also records the provider’s <strong>Cell identity</strong> — <code>(cell_id, generation)</code>. A tid says where to send; it is not an identity, because a
 <code>CellId</code> slot may be reused later while the generation cannot. Recording the
 identity here is what lets <code>LookupServiceBound</code> answer with a binding instead
-of a bare tid, and it is the same axis [<code>api::caller_identity::CallerIdentity</code>]
-and [<code>api::cell_owner::CellOwner</code>] already use — one identity concept, not two.
+of a bare tid, and it is the same axis <a href="../../../api/abi/caller_identity/struct.CallerIdentity.html" title="struct api::abi::caller_identity::CallerIdentity"><code>api::caller_identity::CallerIdentity</code></a>
+and <a href="../../../api/abi/cell_owner/struct.CellOwner.html" title="struct api::abi::cell_owner::CellOwner"><code>api::cell_owner::CellOwner</code></a> already use — one identity concept, not two.
 A provider whose recorded identity is not live (<code>cell_id == 0</code> or
 <code>generation == 0</code>) is <strong>not bindable</strong> and is reported as “no live provider”,
 so the kernel never states a binding it cannot stand behind.</p>

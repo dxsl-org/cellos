@@ -17,31 +17,31 @@
     height: u32,
 ) -&gt; Result&lt;(), String&gt;</h4></section><section id="method.native_browser_layout" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#36-59">Source</a><h4 class="code-header">fn <a href="#method.native_browser_layout" class="fn">native_browser_layout</a>(
     &amp;mut self,
-    mutations: &amp;[DomMutation],
-    node: NodeId,
-    fonts: &amp;mut TextFonts,
+    mutations: &amp;[<a class="enum" href="../dom_arena/enum.DomMutation.html" title="enum dom_arena::DomMutation">DomMutation</a>],
+    node: <a class="struct" href="../dom_arena/struct.NodeId.html" title="struct dom_arena::NodeId">NodeId</a>,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
     parsing_complete: bool,
-) -&gt; Result&lt;BrowserFrame, JsError&gt;</h4></section><section id="method.eval_browser_script" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#61-66">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.eval_browser_script" class="fn">eval_browser_script</a>(
+) -&gt; Result&lt;<a class="struct" href="../dom_arena/struct.BrowserFrame.html" title="struct dom_arena::BrowserFrame">BrowserFrame</a>, <a class="struct" href="../dom_arena/struct.JsError.html" title="struct dom_arena::JsError">JsError</a>&gt;</h4></section><section id="method.eval_browser_script" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#61-66">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.eval_browser_script" class="fn">eval_browser_script</a>(
     &amp;mut self,
     runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
     source: &amp;str,
-    node: NodeId,
-    fonts: &amp;mut TextFonts,
+    node: <a class="struct" href="../dom_arena/struct.NodeId.html" title="struct dom_arena::NodeId">NodeId</a>,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
-) -&gt; Result&lt;String, JsError&gt;</h4></section><section id="method.dispatch_browser_event" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#68-73">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.dispatch_browser_event" class="fn">dispatch_browser_event</a>(
+) -&gt; Result&lt;String, <a class="struct" href="../dom_arena/struct.JsError.html" title="struct dom_arena::JsError">JsError</a>&gt;</h4></section><section id="method.dispatch_browser_event" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#68-73">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.dispatch_browser_event" class="fn">dispatch_browser_event</a>(
     &amp;mut self,
     runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    event: &amp;DomEvent,
-    fonts: &amp;mut TextFonts,
+    event: &amp;<a class="struct" href="../dom_arena/struct.DomEvent.html" title="struct dom_arena::DomEvent">DomEvent</a>,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
-) -&gt; Result&lt;(), JsError&gt;</h4></section><details class="toggle method-toggle" open><summary><section id="method.drain_browser_output" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#77-105">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.drain_browser_output" class="fn">drain_browser_output</a>(
+) -&gt; Result&lt;(), <a class="struct" href="../dom_arena/struct.JsError.html" title="struct dom_arena::JsError">JsError</a>&gt;</h4></section><details class="toggle method-toggle" open><summary><section id="method.drain_browser_output" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#77-105">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.drain_browser_output" class="fn">drain_browser_output</a>(
     &amp;mut self,
     runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
 ) -&gt; Result&lt;bool, String&gt;</h4></section></summary><div class="docblock"><p>Drain mutations before any further engine command; an invalid batch closes
@@ -49,14 +49,14 @@ the context instead of allowing native and engine DOMs to diverge.</p>
 </div></details><section id="method.pump_browser_frame" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#107-127">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.pump_browser_frame" class="fn">pump_browser_frame</a>(
     &amp;mut self,
     runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
     parsing_complete: bool,
 ) -&gt; Result&lt;(), String&gt;</h4></section><section id="method.install_browser_resource" class="method"><a class="src rightside" href="../src/ocel/browser_runtime.rs.html#129-188">Source</a><h4 class="code-header">fn <a href="#method.install_browser_resource" class="fn">install_browser_resource</a>(
     &amp;mut self,
     completion: &amp;mut <a class="struct" href="browser/struct.BrowserCompletion.html" title="struct ocel::browser::BrowserCompletion">BrowserCompletion</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     width: u32,
     height: u32,
     memory_limit: usize,
@@ -65,14 +65,14 @@ the context instead of allowing native and engine DOMs to diverge.</p>
     viewport_w: u32,
     viewport_h: u32,
     js_runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
 ) -&gt; Self</h4></section><section id="method.resident_bytes" class="method"><a class="src rightside" href="../src/ocel/main.rs.html#127-133">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.resident_bytes" class="fn">resident_bytes</a>(&amp;self) -&gt; usize</h4></section></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Tab-2" class="impl"><a class="src rightside" href="../src/ocel/main.rs.html#146-305">Source</a><a href="#impl-Tab-2" class="anchor">§</a><h3 class="code-header">impl <a class="struct" href="struct.Tab.html" title="struct ocel::Tab">Tab</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.install_loaded" class="method"><a class="src rightside" href="../src/ocel/main.rs.html#154-304">Source</a><h4 class="code-header">pub(crate) fn <a href="#method.install_loaded" class="fn">install_loaded</a>(
     &amp;mut self,
     loaded: <a class="struct" href="loader/struct.LoadedDocument.html" title="struct ocel::loader::LoadedDocument">LoadedDocument</a>,
     viewport_w: u32,
     viewport_h: u32,
     js_runtime: &amp;mut <a class="struct" href="js/bridge/struct.Tier2JsBridge.html" title="struct ocel::js::bridge::Tier2JsBridge">Tier2JsBridge</a>,
-    fonts: &amp;mut TextFonts,
+    fonts: &amp;mut <a class="struct" href="../ostd/typography/struct.TextFonts.html" title="struct ostd::typography::TextFonts">TextFonts</a>,
     install: <a class="enum" href="enum.Install.html" title="enum ocel::Install">Install</a>,
 ) -&gt; (String, &amp;'static str)</h4></section></summary><div class="docblock"><p>Install a completed load; navigation never waits for network IPC here.</p>
 <p><code>Install::Reader</code> is the reader-mode navigation path: the DOM arena is kept
