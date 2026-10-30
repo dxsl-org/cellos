@@ -14,14 +14,22 @@
 # Stages:
 #   --stage boot   build and sign everything, assemble the ISO, boot ONCE, stop QEMU as soon as
 #                  the B1/B2/C1/C2 gates are all satisfied (or on a STOP condition or the
-#                  window), judge and archive text evidence. No scenario beyond the driver's
-#                  readiness wait runs.
-#   --build-only   with --stage boot: stop after the ISO is assembled (no QEMU).
-#   --stage full   (T3-D, after a recorded CP2) is not implemented in this script yet.
+#                  window), judge and archive text evidence. The driver's readiness wait is the
+#                  only thing that has to run (T3-B/C).
+#   --stage full   (T3-D) the same image, but QEMU runs until the driver prints `P04-TERMINAL:`
+#                  (the reused ssh scenarios plus the three guest-only ones) or the window ends;
+#                  judged by `tier3_ssh_guest_judge.py full`. Budget: at most two evidence runs;
+#                  a token `RUN_CONSUMED-N` is claimed with O_EXCL under evidence/t3-d-runs/
+#                  just before QEMU starts (the second only for a host/environment error, never
+#                  for a marker FAIL: no fix-and-rerun without a new CP1).
+#   --build-only   stop after the ISO is assembled (no QEMU, no token).
 #
-# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot [--build-only]
-# Optional: TIER3_BOOT_WINDOW (seconds, default 3600 = the 60 minute T3-B limit),
-#           TIER3_EVIDENCE_OUT (default .agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc).
+# Usage: CELLBOX_TIER3_WORK=/tmp/cellbox-tier3-XXXX bash scripts/qemu-tier3-ssh-guest-x86.sh --stage boot|full [--build-only]
+# Optional: TIER3_BOOT_WINDOW (seconds; default 3600 for boot = the 60 minute T3-B limit, 7200 for
+#           full; never above the 14400 s = 4 h hard cap),
+#           TIER3_LINGER (seconds to keep running after the gates, default 3),
+#           TIER3_EVIDENCE_OUT (default .agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc for boot,
+#           .../t3-d for full).
 set -euo pipefail
 
 STAGE=""
@@ -34,9 +42,8 @@ while (($#)); do
     esac
 done
 case "$STAGE" in
-    boot) ;;
-    full) echo "FAIL: --stage full is T3-D and is not part of this script version" >&2; exit 1 ;;
-    *) echo "FAIL: --stage boot is required" >&2; exit 1 ;;
+    boot|full) ;;
+    *) echo "FAIL: --stage boot or --stage full is required" >&2; exit 1 ;;
 esac
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,9 +53,12 @@ case "$W" in /tmp/cellbox-tier3-*) ;; *) echo "FAIL: work directory must be /tmp
 [[ -d "$W" && ! -L "$W" ]] || { echo "FAIL: work directory missing or a symlink: $W" >&2; exit 1; }
 [[ "$(stat -c %u "$W")" == "$(id -u)" ]] || { echo "FAIL: work directory not owned by this uid" >&2; exit 1; }
 chmod 700 "$W"
-WINDOW="${TIER3_BOOT_WINDOW:-3600}"
+if [[ "$STAGE" == full ]]; then WINDOW="${TIER3_BOOT_WINDOW:-7200}"; else WINDOW="${TIER3_BOOT_WINDOW:-3600}"; fi
+[[ "$WINDOW" =~ ^[0-9]+$ ]] && (( WINDOW > 0 && WINDOW <= 14400 )) || { echo "FAIL: window must be 1..14400 seconds (4 h hard cap)" >&2; exit 1; }
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-OUT="${TIER3_EVIDENCE_OUT:-$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-bc}"
+if [[ "$STAGE" == full ]]; then OUT_NAME=t3-d; else OUT_NAME=t3-bc; fi
+OUT="${TIER3_EVIDENCE_OUT:-$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/$OUT_NAME}"
+TOKEN_DIR="$ROOT/.agents/261110-0900-tier3-guest-endpoint/evidence/t3-d-runs"
 QEMU_BIN="${HOME}/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64"
 QEMU_SHA=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe
 FEATURES="phase02-terminal-profile,phase04-driver-profile"
@@ -258,12 +268,24 @@ if [[ "$BUILD_ONLY" == 1 ]]; then
     exit 0
 fi
 ! pgrep -x qemu-system-x86 >/dev/null || pfail "a QEMU process is already running"
+if [[ "$STAGE" == full ]]; then
+    # Budget accounting (cp1-draft.md section 5: at most two full runs), claimed with O_EXCL.
+    mkdir -p "$TOKEN_DIR"
+    TOKEN=""
+    for n in 1 2; do
+        if ( set -o noclobber; printf 'stage=full run=%s head=%s window=%s\n' "$n" "$(git rev-parse HEAD)" "$WINDOW" > "$TOKEN_DIR/RUN_CONSUMED-$n" ) 2>/dev/null; then
+            TOKEN="$TOKEN_DIR/RUN_CONSUMED-$n"; break
+        fi
+    done
+    [[ -n "$TOKEN" ]] || pfail "both full-run tokens exist: the T3-D budget of two runs is spent"
+    pf "token=$TOKEN claimed"
+fi
 
-echo "==> Booting the private ISO once (one user netdev, one loopback hostfwd to the guest)"
+echo "==> Running the private ISO ($STAGE stage; one user netdev, one loopback hostfwd to the guest)"
 BOOT_RC=0
-"$PYTHON_BIN" - "$ISO" "$EVIDENCE" "$WINDOW" "$TRUST_DISK" "$PORT" "$QEMU_BIN" "$FP" "$W" <<'PY' || BOOT_RC=$?
+"$PYTHON_BIN" - "$ISO" "$EVIDENCE" "$WINDOW" "$TRUST_DISK" "$PORT" "$QEMU_BIN" "$FP" "$W" "$STAGE" <<'PY' || BOOT_RC=$?
 import json, os, re, select, socket, subprocess, sys, time
-iso, evidence, window, trust_disk, port, qemu_bin, fp, work = sys.argv[1:9]
+iso, evidence, window, trust_disk, port, qemu_bin, fp, work, stage = sys.argv[1:10]
 window = int(window)
 sock_path = os.path.join(work, "serial.sock")
 try: os.unlink(sock_path)
@@ -315,6 +337,7 @@ PAT = {
     "guest-fail": r"\[guest-uart\].*TIER3_SSHD_FAIL",
     "ssh-guest-ready": r"P04 INFO ssh-guest-ready attempts=\d+",
     "ssh-guest-never": r"P04 INFO ssh-guest-ready never",
+    "driver-terminal": r"P04-TERMINAL:",
 }
 FATAL = [r"KERNEL PANIC", r"\[fault\] Cell", r"create_vm failed", r"\[hv-x86\] .*guest triple-fault"]
 timeline, c1, scans = {}, {"attempts": [], "ok": False}, 0
@@ -361,11 +384,17 @@ try:
                 keyscan = None
                 if rec["match"]:
                     c1["ok"] = True; c1["ok_s"] = rec["ended_s"]
-        if c1["ok"] and "ssh-guest-ready" in timeline:
-            verdict = "gates-satisfied"; break
-        if "ssh-guest-never" in timeline and c1["ok"]:
-            verdict = "c2-never"; break
-    end = time.monotonic() + 3
+        if stage == "full":
+            # T3-D: the driver's own terminal verdict ends the run (B/C are re-judged from the same log).
+            if "driver-terminal" in timeline:
+                verdict = "driver-verdict"; break
+        else:
+            if c1["ok"] and "ssh-guest-ready" in timeline:
+                verdict = "gates-satisfied"; break
+            if "ssh-guest-never" in timeline and c1["ok"]:
+                verdict = "c2-never"; break
+    # TIER3_LINGER (seconds, default 3): keep reading after the gates so a confirmation boot can watch the scenarios that follow.
+    end = time.monotonic() + float(os.environ.get("TIER3_LINGER", "3"))
     while time.monotonic() < end and proc.poll() is None:
         pump(0.3)
     sighted(text())
@@ -389,12 +418,12 @@ cmp -s "$EVIDENCE/protected-before.txt" "$EVIDENCE/protected-after.txt" || echo 
 
 echo "==> Judging and archiving"
 JUDGE_RC=0
-"$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py boot --evidence "$EVIDENCE" --keys "$KEYS" --fingerprint "$FP" \
+"$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py "$STAGE" --evidence "$EVIDENCE" --keys "$KEYS" --fingerprint "$FP" \
     --port "$PORT" --head "$(git rev-parse HEAD)" || JUDGE_RC=$?
 "$PYTHON_BIN" scripts/tier3_ssh_guest_judge.py archive --src "$EVIDENCE" --dst "$OUT" --keys "$KEYS" \
     || { echo "FAIL: archive scan refused the evidence (STOP-5; secrets kept in $W for inspection)" >&2; exit 1; }
 if [[ "${TIER3_KEEP_SECRETS:-0}" != 1 ]]; then
     rm -rf "$KEYS" "$SCRATCH" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$W/guest" "$W/guest-stage" "$W/serial.sock"
 fi
-echo "Tier-3 boot stage: boot rc $BOOT_RC, judge exit $JUDGE_RC; evidence archived at $OUT"
+echo "Tier-3 $STAGE stage: qemu supervisor rc $BOOT_RC, judge exit $JUDGE_RC; evidence archived at $OUT"
 exit "$JUDGE_RC"

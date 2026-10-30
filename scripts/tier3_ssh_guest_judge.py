@@ -13,6 +13,12 @@ Subcommands (host-testable, no QEMU needed; see scripts/test_tier3_ssh_guest_jud
            plus the QEMU argv invariant, pinned hashes, no inbound sshd in the outer image, no secret
            anywhere, protected-path digests unchanged. Writes verdict.json and names the STOP rule
            of cp1-draft.md section 5 that applies when a gate fails.
+  full     The T3-D run: everything `boot` judges (B1, B2, C1, C2 are re-proved at the start of every
+           full run), plus the driver's markers (each required marker PASS exactly once, no FAIL,
+           the three guest-only scenarios included), `P04-TERMINAL: PASS`, the guest sshd's own log
+           accounting (accepted/failed passwords before and after the guest scenarios, one session
+           per connection) and the no-replay ledger rule. A marker FAIL is reported as the stop
+           rule `MARKER-FAIL`: no fix-and-rerun without a new CP1.
   archive  Copy the text evidence to the repository after a secret scan (STOP-5): refuses to copy
            anything when a seed, password or host private key is found in any candidate file.
 
@@ -35,6 +41,13 @@ PINS = {
 EXPECTED_CPU = "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed"
 FATAL_HOST = [r"KERNEL PANIC", r"\[fault\] Cell", r"create_vm failed", r"\[hv-x86\] .*guest triple-fault"]
 HV_BAD = re.compile(r"\[hv-x86\] .*(fail|error|unexpected|unhandled|guest exited)", re.I)
+S93 = ["ssh-conf", "ssh-refusals", "ssh-changed-host-key", "ssh-first-trust-no", "ssh-first-trust-paste-refused",
+       "ssh-first-trust-yes", "ssh-first-trust-known-after", "ssh-wrong-password", "ssh-exec-bytes", "ssh-exec-stdin-eof",
+       "ssh-exec-signal", "ssh-pty-shell", "ssh-pty-resize", "ssh-pty-escape-disconnect", "ssh-shell-alive", "shell-long-line"]
+GUEST_MARKERS = ["ssh-guest-cancel-producer", "ssh-guest-fault-may-have-run", "ssh-guest-no-replay-ledger"]
+EXPECTED_MARKERS = ["shell-prompt"] + S93 + GUEST_MARKERS + ["session-a-close"]
+MAX_WINDOW_S = 4 * 3600  # cp1-draft.md section 5: hard cap per run
+FIXTURE_KERNEL_FEATURES = "phase02-terminal-profile,phase04-driver-profile"
 ARCHIVE_FILES = [
     "serial.log", "qemu-argv.txt", "timeline.json", "c1-keyscan.json", "verdict.json", "fat-layout.txt",
     "provenance.sha256", "provenance-build.txt", "initramfs-audit.json", "preflight.txt", "preflight.final.txt",
@@ -85,7 +98,63 @@ def guest_lines(text):
     return [l for l in text.splitlines() if "[guest-uart]" in l]
 
 
-def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None):
+def full_checks(chk, ev: Path, log: str, host, guest):
+    """T3-D checks on the driver's markers and the guest sshd's log (serial order is time order)."""
+    passes, fails = {}, []
+    for line in host:
+        m = re.search(r"P04 (PASS|FAIL) (\S+)(.*)$", line)
+        if m:
+            if m.group(1) == "PASS":
+                passes[m.group(2)] = passes.get(m.group(2), 0) + 1
+            else:
+                fails.append((m.group(2), m.group(3).strip()[:160]))
+    chk("D:driver-started", any("P04 START" in l for l in host))
+    for name in EXPECTED_MARKERS:
+        chk("D:marker:" + name, passes.get(name) == 1 and not any(f[0] == name for f in fails),
+            "missing" if name not in passes else ("duplicate" if passes[name] != 1 else "FAIL present"))
+    chk("D:no-unexpected-markers", set(passes) <= set(EXPECTED_MARKERS), sorted(set(passes) - set(EXPECTED_MARKERS)))
+    chk("D:no-FAIL-markers", not fails, fails)
+    finals = re.findall(r"P04-TERMINAL: (PASS|FAIL)\S*(?: failures=\d+)? checks=(\d+)", log)
+    chk("D:driver-final-verdict", finals == [("PASS", str(len(EXPECTED_MARKERS)))], finals)
+    chk("D:boot-ceiling-selftest-pass", "[selftest] boot-ceiling: PASS" in log)
+    chk("D:trust-store-volume-mounted", "[vfs] CellosFS Native mounted at existing volume" in log)
+    chk("D:no-weak-entropy", "serving WEAK xorshift32" not in log)
+    chk("D:fixture-kernel-features-recorded",
+        FIXTURE_KERNEL_FEATURES in (ev / "provenance-build.txt").read_text(errors="replace")
+        if (ev / "provenance-build.txt").exists() else False)
+    # The guest sshd's log, split where the driver opens the first guest-only scenario.
+    lines = log.splitlines()
+    split = next((i for i, l in enumerate(lines) if "P04 INFO p09-case ssh-guest-cancel-producer" in l), None)
+    chk("D:guest-scenarios-started", split is not None)
+    before, after = ("\n".join(lines[:split]), "\n".join(lines[split:])) if split is not None else (log, "")
+
+    def n(pat, text):
+        return len(re.findall(pat, text))
+
+    chk("D:sshd-saw-guest-connections", n(r"Connection from 10\.0\.2\.2 port \d+", log) >= 10)
+    chk("D:sshd-accepted-password-six-before-guest-scenarios", n(r"Accepted password for tester", before) == 6,
+        n(r"Accepted password for tester", before))
+    chk("D:sshd-failed-password-once-before-guest-scenarios", n(r"Failed password for tester", before) == 1,
+        n(r"Failed password for tester", before))
+    logins = re.findall(r"P04 INFO ssh-guest-logins (\d+)", log)
+    acc_after = n(r"Accepted password for tester", after)
+    chk("D:guest-scenario-logins-accounted", len(logins) == 1 and 4 <= acc_after <= int(logins[0]) and n(r"Failed password for tester", after) == 0,
+        {"driver_logins": logins, "accepted_after": acc_after, "failed_after": n(r"Failed password for tester", after)})
+    ledger = re.findall(r"P04 INFO ssh-guest-ledger selfkill=(\d+) lines=(\d+)", log)
+    chk("D:no-replay-ledger-exactly-one-selfkill", len(ledger) == 1 and ledger[0][0] == "1" and int(ledger[0][1]) >= 1, ledger)
+    chk("D:selfkill-dispatch-reported", n(r"P04 INFO ssh-guest-selfkill dispatch=(accepted|may_have_run)\b", log) == 1)
+    # One session request per connection: the sshd log never starts two sessions on one connection.
+    by_port, starts = {}, 0
+    for l in guest:
+        m = re.search(r"Starting session: \S+ .*?from \S+ port (\d+)", l)
+        if m:
+            by_port[m.group(1)] = by_port.get(m.group(1), 0) + 1
+            starts += 1
+    chk("D:sshd-one-session-per-connection", starts >= 10 and all(v == 1 for v in by_port.values()), {"sessions": starts, "max": max(by_port.values(), default=0)})
+    return passes, fails
+
+
+def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", carry=None, stage: str = "boot"):
     """Return (verdict dict, stop rule or None). Pure function of the evidence directory.
 
     `carry` (re-judging after the run's keys were deleted): the earlier verdict's checks, from
@@ -193,7 +262,12 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
     # Protected paths
     before, after = read("protected-before.txt"), read("protected-after.txt")
     chk("protected-paths-and-cargo-lock-unchanged", bool(before) and before == after)
-    chk("run-ended-by-gates", tl.get("verdict") == "gates-satisfied", tl.get("verdict"))
+    if stage == "boot":
+        chk("run-ended-by-gates", tl.get("verdict") == "gates-satisfied", tl.get("verdict"))
+    else:
+        chk("run-ended-by-driver-verdict", tl.get("verdict") == "driver-verdict", tl.get("verdict"))
+        chk("window-within-4h-cap", 0 < int(tl.get("window_s", 0)) <= MAX_WINDOW_S, tl.get("window_s"))
+        full_checks(chk, ev, log, host, guest)
 
     # STOP classification (cp1-draft.md section 5)
     b1 = all(v["pass"] for k, v in checks.items() if k.startswith("B1:"))
@@ -213,11 +287,13 @@ def judge_boot(ev: Path, secrets, fingerprint: str, port: str, head: str = "", c
         stop = "STOP-3"
     elif not c2ok:
         stop = "STOP-4"
+    elif stage == "full" and not all(v["pass"] for k, v in checks.items() if k.startswith("D:")):
+        stop = "MARKER-FAIL"
     gates = {"B1": b1, "B2": b2, "C1": c1ok, "C2": c2ok}
     ok = all(v["pass"] for v in checks.values())
     verdict = {
         "head": head, "pass": ok, "stop_rule": stop, "gates": gates, "guest_kernel": ver,
-        "time_to_listening_s": order.get("listening"), "time_to_ssh_guest_ready_s": order.get("ssh-guest-ready"),
+        "stage": stage, "time_to_listening_s": order.get("listening"), "time_to_ssh_guest_ready_s": order.get("ssh-guest-ready"),
         "timeline_s": order, "run_verdict": tl.get("verdict"), "checks": checks,
     }
     return verdict, stop
@@ -234,13 +310,14 @@ def cmd_boot(a):
         if not secrets:
             print("FAIL: no secrets found under --keys (cannot scan)", file=sys.stderr)
             return 2
-    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry)
+    verdict, stop = judge_boot(ev, secrets, a.fingerprint, a.port, a.head, carry, "full" if a.cmd == "full" else "boot")
     out = Path(a.verdict_out) if a.verdict_out else ev / "verdict.json"
     out.write_text(json.dumps(verdict, indent=2) + "\n")
     for n, v in verdict["checks"].items():
         print(("PASS " if v["pass"] else "FAIL ") + n + ("" if v["pass"] else "  <- " + v["detail"]))
     print("gates:", verdict["gates"], "stop_rule:", stop, "time_to_listening_s:", verdict["time_to_listening_s"])
-    print("PASS: Tier-3 boot stage B1 B2 C1 C2" if verdict["pass"] else "FAIL: Tier-3 boot stage (%s)" % (stop or "see checks"))
+    label = "full run (T3-D)" if a.cmd == "full" else "boot stage B1 B2 C1 C2"
+    print(("PASS: Tier-3 " + label) if verdict["pass"] else "FAIL: Tier-3 %s (%s)" % (label, stop or "see checks"))
     return 0 if verdict["pass"] else 1
 
 
@@ -269,15 +346,16 @@ def cmd_archive(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    b = sub.add_parser("boot")
-    b.add_argument("--evidence", required=True)
-    b.add_argument("--keys", default="")
-    b.add_argument("--carry-secret-checks-from", default="", help="earlier verdict.json whose secret-scan checks are carried over (keys already deleted)")
-    b.add_argument("--verdict-out", default="", help="write the verdict here instead of EVIDENCE/verdict.json")
-    b.add_argument("--fingerprint", required=True)
-    b.add_argument("--port", required=True)
-    b.add_argument("--head", default="")
-    b.set_defaults(fn=cmd_boot)
+    for name in ("boot", "full"):
+        b = sub.add_parser(name)
+        b.add_argument("--evidence", required=True)
+        b.add_argument("--keys", default="")
+        b.add_argument("--carry-secret-checks-from", default="", help="earlier verdict.json whose secret-scan checks are carried over (keys already deleted)")
+        b.add_argument("--verdict-out", default="", help="write the verdict here instead of EVIDENCE/verdict.json")
+        b.add_argument("--fingerprint", required=True)
+        b.add_argument("--port", required=True)
+        b.add_argument("--head", default="")
+        b.set_defaults(fn=cmd_boot)
     r = sub.add_parser("archive")
     r.add_argument("--src", required=True)
     r.add_argument("--dst", required=True)

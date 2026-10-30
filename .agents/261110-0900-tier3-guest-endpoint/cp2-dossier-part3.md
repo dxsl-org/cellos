@@ -1,0 +1,7 @@
+# T3-D full run (one planned run, consumed)
+
+Date 2026-10-30. Lane `scripts/qemu-tier3-ssh-guest-x86.sh --stage full`, evidence `evidence/t3-d/`. Verdict: **MARKER-FAIL** (gates B1/B2/C1/C2 true; listening at 11.8 s). 20 of 21 driver markers PASS, including the reused scenarios (password login, refusals, changed host key, first-trust, exec bytes/stdin EOF/signal, PTY/resize/escape, wrong password), `ssh-guest-fault-may-have-run` (exit 255, outcome unknown, dispatch accepted, no retry) and `ssh-guest-no-replay-ledger` (exactly one `p09x-selfkill` line). Judge: sshd saw guest connections, 6 accepted + 1 failed password before guest scenarios, one session per connection, no weak entropy, no secret.
+
+Failed marker: `ssh-guest-cancel-producer`. The client side was correct (st=130, outcome=cancelled, dispatch=accepted, error_code=cancelled, 1.76 s). The follow-up `p9 gone` returned `p09-alive` (exit 9) on all three attempts, i.e. the guest `yes` producer was still alive 20 s after the cancel. The guest sshd log shows no `Connection closed`/`Close session` for the cancelled connection (port 42770): the guest never observed the consumer close. Cause not determined (client cancel not closing the TCP connection, FIN not traversing slirp hostfwd/nested virtio-net, or sshd behaviour); the run has no data to separate these.
+
+Consequences (CP1 section 5): no rerun after a marker FAIL without a new CP1. No acceptance row is edited. The "producer traffic stops on consumer close" half of CBX-23 is NOT shown at this ceiling.

@@ -22,12 +22,13 @@ use super::*;
 #[cfg(feature = "kssh")] pub(crate) mod kssh;
 #[cfg(feature = "guest")] pub(crate) mod guest;
 
-/// The guest build waits for nested-TCG OpenSSH: every deadline of a scenario is raised.
-/// Provisional until the T3-B timing is recorded.
+/// The guest build talks to OpenSSH inside nested TCG: the per-case deadline is raised from the
+/// 120 s of the Docker fixture to 300 s. T3-B measured a full SSH exchange at 1-2 s, so this is a
+/// margin of two orders of magnitude, not an expected duration.
 #[cfg(not(feature = "guest"))]
 const SSH_MS: u64 = 120_000;
 #[cfg(feature = "guest")]
-const SSH_MS: u64 = 600_000;
+const SSH_MS: u64 = 300_000;
 /// Bulk sink cases (MiB through the throttled consumer under TCG).
 const BULK_MS: u64 = 900_000;
 /// Request/KEX deadline cases: 30 s budgets plus the 5 s hook hold and login.
@@ -363,9 +364,12 @@ pub(crate) fn ssh_checks(a: &mut Term) {
     check("ssh-shell-alive", alive.as_deref() == Ok(&[String::from("p09-alive")][..]), &format!("{alive:?}"));
     shell_long_line(a);
 
-    // The S9-6 group needs the Docker fixture's hooks and sinks; the guest build has none.
+    // The S9-6 group needs the Docker fixture's hooks and sinks; the guest build has none and
+    // runs its own three guest-only scenarios instead.
     #[cfg(not(feature = "guest"))]
     s96_checks(a, &f);
+    #[cfg(feature = "guest")]
+    guest::guest_checks(a, &f);
 }
 
 /// Field names of the shell's `completion` line, in order (C2).

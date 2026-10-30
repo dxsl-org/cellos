@@ -47,7 +47,43 @@ SHA = {
 }
 
 
-def make_run(root: Path, serial=SERIAL, argv=ARGV, c1_ok=True, verdict="gates-satisfied", layout="/bin/hypervisor\n"):
+def full_serial(skip=(), dup=(), fail=(), extra="", logins=4, accepted_after=4, selfkill=1, final="PASS checks=21", accepted_before=6):
+    """A passing T3-D serial log: the boot-stage lines plus the 16 reused markers, the three guest
+    scenarios and the guest sshd's log lines, with knobs to break one rule at a time."""
+    out = ["[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)",
+           "[vfs] CellosFS Native mounted at existing volume", SERIAL.rstrip("\n"), "P04 START", "P04 PASS shell-prompt"]
+    port = [50000]
+
+    def session(ok=True):
+        port[0] += 2
+        out.append('[guest-uart] Connection from 10.0.2.2 port %d on 10.0.2.16 port 22 rdomain ""' % port[0])
+        if ok:
+            out.append("[guest-uart] Accepted password for tester from 10.0.2.2 port %d ssh2" % port[0])
+            out.append("[guest-uart] Starting session: command for tester from 10.0.2.2 port %d id 0" % port[0])
+        else:
+            out.append("[guest-uart] Failed password for tester from 10.0.2.2 port %d ssh2" % port[0])
+
+    for name in J.S93:
+        if name == "ssh-first-trust-yes":
+            for _ in range(accepted_before):
+                session()
+            session(ok=False)
+        if name not in skip:
+            out.append("P04 %s %s" % ("FAIL" if name in fail else "PASS", name))
+        if name in dup:
+            out.append("P04 PASS " + name)
+    out.append("P04 INFO p09-case ssh-guest-cancel-producer")
+    for _ in range(accepted_after):
+        session()
+    for name in J.GUEST_MARKERS:
+        if name not in skip:
+            out.append("P04 %s %s" % ("FAIL" if name in fail else "PASS", name))
+    out += ["P04 INFO ssh-guest-selfkill dispatch=accepted", "P04 INFO ssh-guest-ledger selfkill=%d lines=1" % selfkill,
+            "P04 INFO ssh-guest-logins %d" % logins, "P04 PASS session-a-close", "P04-TERMINAL: " + final, extra]
+    return "\n".join(l for l in out if l) + "\n"
+
+
+def make_run(root: Path, serial=SERIAL, argv=ARGV, c1_ok=True, verdict="gates-satisfied", layout="/bin/hypervisor\n", full=False):
     ev, keys = root / "ev", root / "keys"
     (ev / "boot-config").mkdir(parents=True)
     keys.mkdir()
@@ -63,6 +99,11 @@ def make_run(root: Path, serial=SERIAL, argv=ARGV, c1_ok=True, verdict="gates-sa
     (ev / "provenance.sha256").write_text("".join("%s  /w/%s\n" % (h, n) for n, h in SHA.items()))
     (ev / "fat-layout.txt").write_text(layout)
     (ev / "boot-config" / "autoload.toml").write_text('[[cells]]\nname = "hypervisor"\npath = "/bin/hypervisor"\n')
+    if full:
+        tl = json.loads((ev / "timeline.json").read_text())
+        tl.update({"verdict": "driver-verdict", "window_s": 7200})
+        (ev / "timeline.json").write_text(json.dumps(tl))
+    (ev / "provenance-build.txt").write_text("kernel features phase02-terminal-profile,phase04-driver-profile; lane-only\n")
     (ev / "protected-before.txt").write_text("a  kernel\n")
     (ev / "protected-after.txt").write_text("a  kernel\n")
     return ev, keys
@@ -196,6 +237,89 @@ class BootJudge(unittest.TestCase):
     def test_run_must_end_by_gates(self):
         v, _ = self.judge(verdict="window-expired")
         self.assertIn("run-ended-by-gates", self.failed(v))
+
+
+class FullJudge(unittest.TestCase):
+    def judge(self, serial=None, **kw):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=serial if serial is not None else full_serial(), verdict="driver-verdict", full=True, **kw)
+            return J.judge_boot(ev, J.secrets_from(keys), FP, PORT, "head", stage="full")
+
+    def failed(self, v):
+        return {k for k, c in v["checks"].items() if not c["pass"]}
+
+    def test_pass(self):
+        v, stop = self.judge()
+        self.assertTrue(v["pass"], self.failed(v))
+        self.assertIsNone(stop)
+        self.assertEqual(v["stage"], "full")
+
+    def test_missing_marker_is_marker_fail(self):
+        for name in ("ssh-pty-resize", "ssh-guest-fault-may-have-run"):
+            v, stop = self.judge(serial=full_serial(skip=(name,)))
+            self.assertIn("D:marker:" + name, self.failed(v))
+            self.assertEqual(stop, "MARKER-FAIL")
+
+    def test_duplicate_and_fail_markers(self):
+        v, stop = self.judge(serial=full_serial(dup=("ssh-exec-bytes",)))
+        self.assertIn("D:marker:ssh-exec-bytes", self.failed(v))
+        v, stop = self.judge(serial=full_serial(fail=("ssh-guest-cancel-producer",)))
+        self.assertIn("D:no-FAIL-markers", self.failed(v))
+        self.assertEqual(stop, "MARKER-FAIL")
+
+    def test_unexpected_marker_fails(self):
+        v, _ = self.judge(serial=full_serial(extra="P04 PASS ssh-fault-before-request"))
+        self.assertIn("D:no-unexpected-markers", self.failed(v))
+
+    def test_driver_final_verdict(self):
+        for final in ("FAIL failures=1 checks=21", "PASS checks=20"):
+            v, _ = self.judge(serial=full_serial(final=final))
+            self.assertIn("D:driver-final-verdict", self.failed(v), final)
+
+    def test_replayed_selfkill_fails(self):
+        v, stop = self.judge(serial=full_serial(selfkill=2))
+        self.assertIn("D:no-replay-ledger-exactly-one-selfkill", self.failed(v))
+        v, _ = self.judge(serial=full_serial(selfkill=0))
+        self.assertIn("D:no-replay-ledger-exactly-one-selfkill", self.failed(v))
+
+    def test_sshd_log_accounting(self):
+        v, _ = self.judge(serial=full_serial(accepted_before=5))
+        self.assertIn("D:sshd-accepted-password-six-before-guest-scenarios", self.failed(v))
+        v, _ = self.judge(serial=full_serial(accepted_after=3))
+        self.assertIn("D:guest-scenario-logins-accounted", self.failed(v))
+        v, _ = self.judge(serial=full_serial(accepted_after=5, logins=4))
+        self.assertIn("D:guest-scenario-logins-accounted", self.failed(v))
+        v, _ = self.judge(serial=full_serial(accepted_after=5, logins=5))  # one retried follow-up is accounted
+        self.assertTrue(v["pass"], self.failed(v))
+
+    def test_second_session_on_one_connection_fails(self):
+        dup = "[guest-uart] Starting session: command for tester from 10.0.2.2 port 50002 id 1"
+        v, _ = self.judge(serial=full_serial(extra=dup))
+        self.assertIn("D:sshd-one-session-per-connection", self.failed(v))
+
+    def test_boot_checks_still_apply_in_full(self):
+        v, stop = self.judge(serial=full_serial().replace("[hv-x86] vCPU ready — entering run loop\n", ""))
+        self.assertEqual(stop, "STOP-1")
+
+    def test_window_cap(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=full_serial(), verdict="driver-verdict", full=True)
+            tl = json.loads((ev / "timeline.json").read_text()); tl["window_s"] = 20000
+            (ev / "timeline.json").write_text(json.dumps(tl))
+            v, _ = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, stage="full")
+            self.assertIn("window-within-4h-cap", self.failed(v))
+
+    def test_run_must_end_by_driver_verdict(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev, keys = make_run(Path(d), serial=full_serial(), verdict="window-expired", full=True)
+            tl = json.loads((ev / "timeline.json").read_text()); tl["verdict"] = "window-expired"
+            (ev / "timeline.json").write_text(json.dumps(tl))
+            v, _ = J.judge_boot(ev, J.secrets_from(keys), FP, PORT, stage="full")
+            self.assertIn("run-ended-by-driver-verdict", self.failed(v))
+
+    def test_secret_in_full_log_is_stop5(self):
+        v, stop = self.judge(serial=full_serial(extra="[guest-uart] x %s" % PASSWORD))
+        self.assertEqual(stop, "STOP-5")
 
 
 class Archive(unittest.TestCase):

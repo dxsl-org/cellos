@@ -10,6 +10,19 @@
 //! credential with a message that names the key it was shown. The route is ready when that
 //! message carries exactly the fingerprint the lane recorded from the guest's host key
 //! (`/p09/ssh.conf`). No password is ever typed here.
+//!
+//! Scenarios (T3-D, after the reused password scenarios of the parent module; the S9-6 group
+//! needs the Docker fixture's hooks and sinks and is not run). They use the guest-side helper
+//! `p9` of `scripts/prepare-tier3-sshd-initramfs-x86.sh` and the guest's own sshd as the only
+//! fault injector, so the cell client is the unmodified product `cellbox`:
+//! - `ssh-guest-cancel-producer`: an endless guest producer (`p9 produce`) is cancelled from the
+//!   client; a second login proves the guest process is gone ("producer traffic stops on
+//!   consumer close").
+//! - `ssh-guest-fault-may-have-run`: `p9 selfkill` writes one ledger line and kills its own sshd
+//!   session process; the client reports exit 255 and a `completion` record with outcome
+//!   `unknown`, and does not retry.
+//! - `ssh-guest-no-replay-ledger`: a later login reads `/tmp/p09-ledger`: exactly one
+//!   `p09x-selfkill` line.
 
 use super::*;
 
@@ -19,7 +32,7 @@ const READY_MS: u64 = 3_600_000;
 const RETRY_MS: u64 = 10_000;
 
 /// Wait until a client connection through `10.0.2.2:PORT` shows the guest's host key.
-pub(crate) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
+pub(super) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
     let end = now_ms() + READY_MS;
     let mut attempts: u32 = 0;
     while now_ms() < end {
@@ -38,4 +51,80 @@ pub(crate) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
     }
     println(&format!("P04 INFO ssh-guest-ready never attempts={attempts}"));
     false
+}
+
+/// Run `cmd` on the guest to the prompt (a fresh login each time); retried up to twice when the
+/// command did not exit 0 (a follow-up read must not fail the scenario on a transient). Counts
+/// every attempt in `logins`.
+fn follow_up(t: &mut Term, f: &Fixture, cmd: &str, logins: &mut u32) -> Result<Run, String> {
+    let mut last = Err(String::from("no attempt"));
+    for _ in 0..3 {
+        *logins += 1;
+        last = case(t, "ssh-guest-follow-up", &ssh_line(f.port, &format!("10.0.2.2 --command '{cmd}'")), &f.password, SSH_MS,
+            |_| Ok(()));
+        if last.as_ref().is_ok_and(|run| run.st == "st=0") {
+            break;
+        }
+        sleep_ms(2000);
+    }
+    last
+}
+
+/// The three guest-only scenarios, in order. Prints `P04 INFO ssh-guest-logins N` (every
+/// password login the driver made here) for the judge's accounting of the guest's sshd log.
+pub(super) fn guest_checks(a: &mut Term, f: &Fixture) {
+    let pw = f.password.as_str();
+    let mut logins: u32 = 0;
+
+    // 1. Producer traffic stops on consumer close.
+    logins += 1;
+    let r = case(a, "ssh-guest-cancel-producer", &ssh_line(f.port, "10.0.2.2 --command 'echo p09-started; p9 produce'"), pw,
+        SSH_MS, |t| {
+            wait_stdout(t, b"p09-started")?;
+            sleep_ms(500);
+            t.host.submit_key(0x63, CTRL, 1).map_err(|s| format!("ctrl-c {s:?}"))
+        });
+    let cancelled = r.as_ref().is_ok_and(|run| {
+        run.st == "st=130"
+            && run.rec_has(&[("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "cancelled"),
+                ("remote_status", "null"), ("remote_signal", "null")])
+    });
+    let gone = follow_up(a, f, "p9 gone", &mut logins);
+    let gone_ok = gone.as_ref().is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
+    check(
+        "ssh-guest-cancel-producer",
+        cancelled && gone_ok,
+        &format!("cancel: {} | follow-up: {}", describe(&r), describe(&gone)),
+    );
+
+    // 2. A session lost after dispatch: unknown outcome, exit 255, no automatic retry.
+    logins += 1;
+    let r = case(a, "ssh-guest-fault-may-have-run", &ssh_line(f.port, "10.0.2.2 --command 'p9 selfkill'"), pw, SSH_MS, |_| Ok(()));
+    if let Some(Ok(rec)) = r.as_ref().ok().map(|run| &run.rec) {
+        println(&format!("P04 INFO ssh-guest-selfkill dispatch={}", field(rec, "dispatch").unwrap_or("?")));
+    }
+    judge(
+        "ssh-guest-fault-may-have-run",
+        &r,
+        "st=255",
+        &[("mode", "exec"), ("outcome", "unknown"), ("remote_status", "null"), ("remote_signal", "null")],
+        |run| {
+            // The command's own `sleep 20` after the kill must not be what ended the session.
+            run.rec.as_ref().is_ok_and(|rec| matches!(field(rec, "dispatch"), Some("accepted" | "may_have_run"))) && run.ms < 18_000
+        },
+    );
+
+    // 3. The ledger: the dispatched command ran once; the client did not replay it.
+    let ledger = follow_up(a, f, "cat /tmp/p09-ledger", &mut logins);
+    let (selfkill, lines) = match &ledger {
+        Ok(run) if run.st == "st=0" => {
+            let text = String::from_utf8_lossy(&run.out).into_owned();
+            let all: Vec<&str> = text.lines().map(str::trim).filter(|l| l.starts_with("p09x-")).collect();
+            (all.iter().filter(|l| **l == "p09x-selfkill").count(), all.len())
+        }
+        _ => (usize::MAX, 0),
+    };
+    println(&format!("P04 INFO ssh-guest-ledger selfkill={selfkill} lines={lines}"));
+    check("ssh-guest-no-replay-ledger", selfkill == 1, &describe(&ledger));
+    println(&format!("P04 INFO ssh-guest-logins {logins}"));
 }

@@ -80,12 +80,40 @@ LogLevel VERBOSE
 PerSourcePenalties no
 LoginGraceTime 900
 CONF
-# S9-6 remote helper, same text as the fixture's: `p9 TAG` appends `p09x-TAG` to the ledger.
+# Remote helper `p9` (the fixture's text plus the three guest-only verbs of T3-D):
+#   p9 TAG        append `p09x-TAG` to the ledger /tmp/p09-ledger (one line per execution)
+#   p9 selfkill   write the ledger line `p09x-selfkill`, then SIGKILL the nearest ancestor that is
+#                 this connection's sshd session process (the client loses the session after
+#                 dispatch: outcome unknown), then sleep so nothing ends the command normally
+#   p9 produce    record this pid in /tmp/p09-prod.pid and `exec yes` (an endless producer)
+#   p9 gone       wait up to 20 s for the pid in /tmp/p09-prod.pid to be gone (or a zombie)
 cat > "$STAGE/p9" <<'HELPER'
 #!/bin/sh
 case "$1" in
 drain) echo p09x-exit-before-drain >> /tmp/p09-ledger; (sleep 2; yes p09drain | head -c 262144) & exit 3 ;;
 bulk) head -c 8388608 /dev/urandom > /tmp/b && sha256sum /tmp/b >&2 && cat /tmp/b ;;
+selfkill)
+    echo p09x-selfkill >> /tmp/p09-ledger
+    t=$$
+    while :; do
+        t=$(sed 's/^[0-9]* (.*) [A-Za-z] \([0-9]*\) .*/\1/' "/proc/$t/stat" 2>/dev/null) || break
+        [ "${t:-0}" -gt 1 ] || break
+        case "$(tr '\000' ' ' < "/proc/$t/cmdline" 2>/dev/null)" in
+            sshd-session*|"sshd: "*) kill -KILL "$t"; break ;;
+        esac
+    done
+    sleep 20 ;;
+produce) echo $$ > /tmp/p09-prod.pid; exec yes p09y ;;
+gone)
+    read -r pid < /tmp/p09-prod.pid
+    i=0
+    while [ "$i" -lt 20 ]; do
+        s=$(cut -d' ' -f3 "/proc/$pid/stat" 2>/dev/null)
+        case "$s" in ""|Z) echo p09-gone; exit 0 ;; esac
+        sleep 1
+        i=$((i + 1))
+    done
+    echo p09-alive; exit 9 ;;
 *) echo "p09x-$1" >> /tmp/p09-ledger ;;
 esac
 HELPER

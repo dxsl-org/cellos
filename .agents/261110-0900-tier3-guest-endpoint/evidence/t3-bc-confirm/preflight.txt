@@ -1,0 +1,6 @@
+stage=boot build_only=0 window=3600 head=ac03f419fa3080f88c397b19ba02fd5ffb671b8b
+dirty files (all inside the closure): scripts/qemu-tier3-ssh-guest-x86.sh
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe QEMU emulator version 10.2.0
+tmp-free-kb=723730416 python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+apk pins match
+hostfwd loopback port=43067 guest host key fingerprint=SHA256:DQRVqP1N9xgXl2emA8JzluXq3OkvXSAnZ6EiU+tqqoI
