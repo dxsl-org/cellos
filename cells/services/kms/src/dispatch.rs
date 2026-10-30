@@ -1,6 +1,8 @@
 mod enrollment;
 mod node_identity;
 mod relay;
+#[cfg(feature = "ssh-dev-custody")]
+mod ssh;
 
 use api::caller_identity::CallerIdentity;
 use types::kms::{
@@ -8,7 +10,7 @@ use types::kms::{
 };
 
 use crate::auth::{
-    authorize_supervisor, register_broker, register_service_net, BrokerBinding, ServiceNetBinding,
+    register_broker, register_service_net, BrokerBinding, ServiceNetBinding,
     ServiceRegistrySnapshot,
 };
 use crate::reply::SuccessPayload;
@@ -23,6 +25,8 @@ pub struct KmsService {
     next_service_binding_epoch: u64,
     last_tls_request_id: u64,
     pub(super) lifecycle: crate::lifecycle::RelayLifecycle,
+    #[cfg(feature = "ssh-dev-custody")]
+    pub(crate) ssh: crate::ssh::SshLeaf<crate::ssh::NoPersist>,
     #[cfg(test)]
     protected_lifecycle: Option<crate::lifecycle::ProtectedRelayState>,
 }
@@ -48,6 +52,8 @@ impl KmsService {
             next_binding_epoch: 1,
             next_service_binding_epoch: 1,
             last_tls_request_id: 0,
+            #[cfg(feature = "ssh-dev-custody")]
+            ssh: crate::ssh::SshLeaf::serving(crate::ssh::NoPersist),
             #[cfg(test)]
             protected_lifecycle: None,
         }
@@ -195,12 +201,27 @@ impl KmsService {
             KmsOpcode::GetRelayActivePublicKey => {
                 self.get_relay_active_public_key(&request, sender, caller, registry)
             }
-            // Opcodes 15-24 (single SSH identity custody). The service has no
-            // SSH leaf yet, so every one of them is admitted through the
-            // attested-caller check and then answered `SshKeyUnavailable`.
-            // There is deliberately no storage, parser, KDF, signer, or key
-            // handling behind these arms; they are the status-honest answer of
-            // a build without the leaf, not an implementation of it.
+            // Opcodes 15-24 (single SSH identity custody). With the opt-in
+            // `ssh-dev-custody` feature the leaf serves them (volatile T0
+            // store); the default build has no leaf, so every one of them is
+            // admitted through the attested-caller check and then answered
+            // `SshKeyUnavailable`. There is deliberately no storage, parser,
+            // KDF, signer, or key handling behind the default-build arm.
+            #[cfg(feature = "ssh-dev-custody")]
+            KmsOpcode::BeginSshKeyImport
+            | KmsOpcode::ImportSshKeyChunk
+            | KmsOpcode::CommitSshKeyImport
+            | KmsOpcode::AbortSshKeyImport
+            | KmsOpcode::GetSshKeyStatus
+            | KmsOpcode::DeleteSshKey
+            | KmsOpcode::SignSshUserauth
+            | KmsOpcode::BeginSshUnlock
+            | KmsOpcode::SshUnlockChunk
+            | KmsOpcode::AbortSshUnlock => {
+                self.ssh
+                    .handle(opcode, request.payload().unwrap_or(&[]), sender, caller)
+            }
+            #[cfg(not(feature = "ssh-dev-custody"))]
             KmsOpcode::BeginSshKeyImport
             | KmsOpcode::ImportSshKeyChunk
             | KmsOpcode::CommitSshKeyImport
@@ -271,37 +292,20 @@ fn require_empty(request: &KmsRequestV1) -> Result<(), KmsErrorCode> {
         .ok_or(KmsErrorCode::ProviderFailure)
 }
 
-/// Answer for opcodes 15-24 while the SSH leaf is not served.
+/// Answer for opcodes 15-24 in a build without the SSH leaf.
 ///
-/// Admission is the existing attested-caller validation only (missing trailer,
-/// zero generation, or a `sender_tid` that is not the receive sender is
-/// `CallerUnattested`). The Admin and Login caller classes are not defined yet,
-/// so no class is checked and the payload is not parsed. Nothing is read or
-/// written before the typed `SshKeyUnavailable` answer.
+/// Admission is the attested-caller validation only (missing trailer, zero
+/// generation, a zero cell id, or a `sender_tid` that is not the receive
+/// sender is `CallerUnattested`). No class is checked and the payload is not
+/// parsed. Nothing is read or written before the typed `SshKeyUnavailable`
+/// answer.
+#[cfg(not(feature = "ssh-dev-custody"))]
 fn ssh_leaf_unavailable(
     sender: usize,
     caller: Option<CallerIdentity>,
 ) -> Result<SuccessPayload, KmsErrorCode> {
-    admit_attested_caller(sender, caller)?;
+    crate::auth::attested_caller(sender, caller)?;
     Err(KmsErrorCode::SshKeyUnavailable)
-}
-
-/// Run only the caller-trailer validation shared by every KMS opcode.
-///
-/// `validated_caller` is private to `auth`; `authorize_supervisor` runs it
-/// first and then compares the live supervisor tid, which is made vacuous here
-/// by passing the sender itself. No supervisor authority is implied.
-fn admit_attested_caller(
-    sender: usize,
-    caller: Option<CallerIdentity>,
-) -> Result<(), KmsErrorCode> {
-    authorize_supervisor(sender, caller, Some(sender))?;
-    // A zero cell id is never a live Cell principal; refuse it with the same
-    // typed error as a missing trailer (refusal matrix row 1).
-    if caller.is_some_and(|caller| caller.cell_id == 0) {
-        return Err(KmsErrorCode::CallerUnattested);
-    }
-    Ok(())
 }
 
 /// Boot only from authenticated protected lifecycle state and a strictly
@@ -324,7 +328,7 @@ fn boot_lifecycle() -> crate::lifecycle::RelayLifecycle {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "ssh-dev-custody")))]
 mod ssh_unavailable_tests {
     use super::*;
     use crate::storage::FixtureRelayProvider;

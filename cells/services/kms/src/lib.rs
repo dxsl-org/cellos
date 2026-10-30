@@ -67,6 +67,12 @@ compile_error!(
 ))]
 compile_error!("service-kms: vf2-root-stream is only valid with development-stm32-authority");
 
+#[cfg(all(feature = "ssh-dev-custody", feature = "hardware-relay-provider"))]
+compile_error!(
+    "service-kms: ssh-dev-custody is a development custody posture and is excluded from the \
+     hardware relay build"
+);
+
 #[cfg(test)]
 extern crate std;
 
@@ -74,6 +80,8 @@ mod auth;
 mod dispatch;
 mod lifecycle;
 mod reply;
+#[cfg(feature = "ssh-dev-custody")]
+mod ssh;
 mod storage;
 
 pub use auth::{BrokerBinding, ServiceNetBinding, ServiceRegistrySnapshot};

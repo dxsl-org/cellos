@@ -9,6 +9,8 @@ mod operations;
 mod root;
 mod root_invariants;
 mod root_sequence;
+#[cfg(feature = "ssh-dev-custody")]
+mod ssh;
 mod storage;
 mod tls_signing;
 

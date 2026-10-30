@@ -139,3 +139,46 @@ fn validated_caller(
     }
     Ok(caller)
 }
+
+/// Admission for the SSH leaf (opcodes 15-24): the shared trailer validation
+/// plus a nonzero cell id. A real Cell is never `0` (`CallerIdentity::
+/// from_trailer` already refuses it); the extra check is defence in depth for
+/// synthetic callers. No supervisor authority is implied or consulted.
+pub(crate) fn attested_caller(
+    sender: usize,
+    caller: Option<CallerIdentity>,
+) -> Result<CallerIdentity, KmsErrorCode> {
+    let caller = validated_caller(sender, caller)?;
+    if caller.cell_id == 0 {
+        return Err(KmsErrorCode::CallerUnattested);
+    }
+    Ok(caller)
+}
+
+/// Caller class for the SSH leaf.
+#[cfg(feature = "ssh-dev-custody")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SshClass {
+    /// Holds `CALLER_FLAG_KMS_SSH_SIGN` (the `cellbox-ssh` Cell): signing and
+    /// unlock only.
+    Login,
+    /// Holds `CALLER_FLAG_KMS_SSH_ADMIN`: import and delete. The kernel grants
+    /// this flag to no Cell until K7 admits an admin Cell, so the class is
+    /// fail-closed in every real build; the supervisor is not an admin caller.
+    Admin,
+    /// Neither flag, or both: the sign and admin rights are never held by one
+    /// Cell, so a caller with both is refused everywhere.
+    Denied,
+}
+
+/// Classify an attested caller from the kernel-attested flag word.
+#[cfg(feature = "ssh-dev-custody")]
+pub(crate) fn classify_ssh(caller: &CallerIdentity) -> SshClass {
+    let sign = caller.flags & api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN != 0;
+    let admin = caller.flags & api::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN != 0;
+    match (sign, admin) {
+        (true, false) => SshClass::Login,
+        (false, true) => SshClass::Admin,
+        _ => SshClass::Denied,
+    }
+}

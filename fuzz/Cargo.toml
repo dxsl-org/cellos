@@ -19,6 +19,12 @@ path = "src/vfs_path.rs"
 test = false
 doc = false
 
+[[bin]]
+name = "kms_ssh_parser"
+path = "src/kms_ssh_parser.rs"
+test = false
+doc = false
+
 [dependencies]
 libfuzzer-sys = "0.4"
 types = { path = "../libs/types", version = "0.1.0" }

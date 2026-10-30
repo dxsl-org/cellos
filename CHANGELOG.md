@@ -1132,3 +1132,5 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 [0.2.0]: https://github.com/dxsl-org/Cellos/releases/tag/v0.2.0
 
 - KSSH K3: additive caller flags `KMS_SSH_SIGN` (1<<6) and `KMS_SSH_ADMIN` (1<<7), kernel `CapSet` fields, reviewed `/bin/cellbox-ssh` edge, policy v8 with signer parity (host tests only, DEV_POSTURE; approval `.agents/261030-1000-kms-ssh-key-custody/k3-cp2-approval.md`).
+
+- KSSH K5: KMS T0 volatile SSH custody (own OpenSSH-v1 parser with pre-KDF allowlist, bcrypt-pbkdf unwrap, ed25519 signing, one identity per store, fail-closed admin until K7) behind opt-in feature `ssh-dev-custody`; default build unchanged; `Cargo.lock` +3 packages. Host tests only, DEV_POSTURE; KDF target cost and fuzz run still open (`reports/k5-cp2-dossier.md`).

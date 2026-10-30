@@ -3,6 +3,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
     println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_ARCH");
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_DEVELOPMENT_SILO_PROVIDER");
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_SSH_DEV_CUSTODY");
     println!("cargo:rerun-if-env-changed=CELLOS_PRODUCTION");
     let development_silo = std::env::var_os("CARGO_FEATURE_DEVELOPMENT_SILO_PROVIDER").is_some();
     if development_silo && std::env::var_os("CELLOS_PRODUCTION").is_some() {
@@ -13,6 +14,11 @@ fn main() {
             || std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("none"))
     {
         panic!("development-silo-provider requires the AArch64 bare-metal QEMU target");
+    }
+    if std::env::var_os("CARGO_FEATURE_SSH_DEV_CUSTODY").is_some()
+        && std::env::var_os("CELLOS_PRODUCTION").is_some()
+    {
+        panic!("ssh-dev-custody is forbidden in production builds");
     }
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("none") {
         cell_build::emit_linker_script();
