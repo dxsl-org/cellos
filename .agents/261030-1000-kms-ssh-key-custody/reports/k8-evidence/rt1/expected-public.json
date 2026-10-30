@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "nonce": "61cb269cf23d72b6",
+  "keys": {
+    "ka16": {
+      "fp": "SHA256:d1odGlsArctCKNooaDp9DpRCBeBDIpSmiUvQsWzwoZw",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAnxGsEw0/0P5V1CzQWQCL7H+Omt5gYOoevwPXiJxerp kssh-ka16",
+      "blob_prefix": "6603ed22e302e207",
+      "blob_len": 2162,
+      "rounds": 16,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped",
+      "comment_len": 1900,
+      "comment_via": "container-rewrite"
+    },
+    "kp0": {
+      "fp": "SHA256:avc2D2wBRO9aRaaA4PsNfS1P4XoquTajiYrmp1CU7IU",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFV74c8ER9mVjf/Lm9Dovxchl6afwE61M5gfXlzYR13 kssh-kp0",
+      "blob_prefix": "56f154dafe4cf936",
+      "blob_len": 234,
+      "rounds": 0,
+      "cipher": "none",
+      "kdf": "none",
+      "custody": "plain"
+    },
+    "bad-aes128": {
+      "fp": "SHA256:IXnsAVvHSnnwV1tqJpdh+zLHeuGbnDxLR6sDU77knT0",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOaQ5P+1NEMOMDIIInAg1hk1daDdh11KqCRoFnnHcoXG kssh-bad-aes128",
+      "blob_prefix": "7450d7693fe80a69",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes128-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "bad-chacha": {
+      "fp": "SHA256:gVr3DINdQ2qts3Fy6+ZMg3AibsCin3Oq/geA0Zqgqks",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINSHAlz6P1z3BnGc7RrAk/89XL0bofYlfN/3EjkU+woP kssh-bad-chacha",
+      "blob_prefix": "3c5a609ae93786cd",
+      "blob_len": 301,
+      "rounds": 16,
+      "cipher": "chacha20-poly1305@openssh.com",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    }
+  },
+  "calibrate": false,
+  "mode": "t1",
+  "comment_len": 1900,
+  "record": {
+    "name": "ka16",
+    "pub": "09f11ac130d3fd0fe55d42cd059008bec7f8e9ade6060ea1ebf03d7889c5eae9",
+    "rounds": 16,
+    "blob_prefix": "6603ed22e302e207",
+    "comment_len": 1900,
+    "comment_via": "container-rewrite",
+    "salt_len": 16,
+    "salt_sha256": "a55431491fc67beed9c46360e461368bb4cd8b18499e7e2be0a66c078f189e59",
+    "ct_len": 2032,
+    "ct_sha256": "bc545269c1ec6a2fa47bc3681184cb1cee6a007df5337360b23c475f27176c6a"
+  },
+  "raw": {
+    "sha256": "80737cda55751afd59df1285dcd2a0fc8fba0317bc0c8971ff5dfd4105a191c8",
+    "len": 4096
+  }
+}

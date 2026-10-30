@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "nonce": "f1395a98d9df1a36",
+  "keys": {
+    "ka16": {
+      "fp": "SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQIjF008DOjMOu+xU1dEhZy082Y7Rj4w6x0l2NuB6c6 kssh-ka16",
+      "blob_prefix": "ec5687e033bd0f59",
+      "blob_len": 2162,
+      "rounds": 16,
+      "cipher": "aes256-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped",
+      "comment_len": 1900,
+      "comment_via": "container-rewrite"
+    },
+    "kp0": {
+      "fp": "SHA256:nY6DDRdoIArEwDpe+TiHQuI2BgmdRfB2wmRNzou1I+Y",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqw5e5W3qIbdSqGGmuRnqyrPIgPLxsMcFQGBFbrrS0y kssh-kp0",
+      "blob_prefix": "dc3d756dec4b8377",
+      "blob_len": 234,
+      "rounds": 0,
+      "cipher": "none",
+      "kdf": "none",
+      "custody": "plain"
+    },
+    "bad-aes128": {
+      "fp": "SHA256:mDXeQicJwNUFEZ2kqdD0Bz3MEaBA8W9fUt7fQ9DqMJc",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM3MWyMc2rL2yeYfaQwbs+BETWJKqcoGRFVA26tdGEO/ kssh-bad-aes128",
+      "blob_prefix": "b70d3664d4258367",
+      "blob_len": 274,
+      "rounds": 16,
+      "cipher": "aes128-ctr",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    },
+    "bad-chacha": {
+      "fp": "SHA256:Zx3cBDUzXV+YAMdWP3FihyMgNjHVJhbZV6TLpdkW+FU",
+      "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPC2zolqwcHVUX6ictEuHwYjl3jg/aV9RLaOUSpuAehg kssh-bad-chacha",
+      "blob_prefix": "d228d2a57c1120ff",
+      "blob_len": 301,
+      "rounds": 16,
+      "cipher": "chacha20-poly1305@openssh.com",
+      "kdf": "bcrypt",
+      "custody": "passphrase-wrapped"
+    }
+  },
+  "calibrate": false,
+  "mode": "t1",
+  "comment_len": 1900,
+  "record": {
+    "name": "ka16",
+    "pub": "f4088c5d34f033a330ebbec54d5d121672d3cd98ed18f8c3ac7497636e07a73a",
+    "rounds": 16,
+    "blob_prefix": "ec5687e033bd0f59",
+    "comment_len": 1900,
+    "comment_via": "container-rewrite",
+    "salt_len": 16,
+    "salt_sha256": "904d9f354d30c3f22f6e92733b40b38edf1430ddfba23c584af9899c8156753d",
+    "ct_len": 2032,
+    "ct_sha256": "f88ff9240ac7926266027166bad94d60b5f2e701f7ab484601f51cdf0c1e3580"
+  },
+  "raw": {
+    "sha256": "126d9f7bcc18d46d01088e2d133a48d21091571a8703096065de43338c023b02",
+    "len": 4096
+  }
+}

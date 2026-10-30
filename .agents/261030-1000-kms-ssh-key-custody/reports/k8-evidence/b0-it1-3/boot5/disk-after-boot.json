@@ -1,0 +1,34 @@
+{
+  "image": "S1r",
+  "sha256": "af05bd64d6498095bcdf70bd6336547b11d6a4c17da90f7c9a0662bf0f5ce182",
+  "size": 577372160,
+  "records": {
+    "valid": [
+      {
+        "offset": 476721152,
+        "slot": 0,
+        "state": 1,
+        "revision": 1,
+        "name": "ka16",
+        "digest": "8b8641cac1fe80744305e6f290611442a53c3f84324a30203d6002cd38e352a7",
+        "ct_len": 2032,
+        "ct_sha256": "f88ff9240ac7926266027166bad94d60b5f2e701f7ab484601f51cdf0c1e3580",
+        "equals_predicted": true,
+        "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+        "count": 1
+      }
+    ],
+    "invalid": [],
+    "v1": []
+  },
+  "record_verdict": {
+    "expect": "r1",
+    "ok": true,
+    "reasons": []
+  },
+  "ciphertext_found": true,
+  "scan": {
+    "hits": [],
+    "controls_ok": true
+  }
+}

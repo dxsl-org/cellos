@@ -1,0 +1,4 @@
+K8 RT1 development phase: S10 protected census (470 paths, baseline .agents/261020-1750-cellbox-cli/reports/s10-9-evidence/measurement-runs/cand-headless/census-before.json)
+start of development (before any edit):  equal=470 missing=0 changed=0 baseline_present=470
+end of development (after H0 and B0 1-3): equal=470 missing=0 changed=0 baseline_present=470
+The three B0 sequences additionally recorded their own census-before/after/compare under b0-it1-N/ (all 470 equal).

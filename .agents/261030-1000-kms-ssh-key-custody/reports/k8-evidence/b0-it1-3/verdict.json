@@ -1,0 +1,2941 @@
+{
+  "set": "b0",
+  "mode": "t1",
+  "policy_shape": "loaded",
+  "no_evidence_value": true,
+  "checks": {
+    "keyset-mode-t1": {
+      "pass": true,
+      "detail": "expected.json has no t1 record expectation"
+    },
+    "fixture-fp-format": {
+      "pass": true,
+      "detail": "SHA256:AteGE57Jf/942TikU3i6nE0hs2UGhzMLDI0qiGuWYUo"
+    },
+    "boots-json": {
+      "pass": true,
+      "detail": "boots.json missing/unreadable or for another set (judged --set b0)"
+    },
+    "t1-disk-controls": {
+      "pass": true,
+      "detail": "controls.json disk part: 6 entr(y/ies), ok=True"
+    },
+    "b1:evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b1:evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b1:evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b1:evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "b1:driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "b1:marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-role": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s01a": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s01b": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s01": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s09": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-s02": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-s01a', 'kssh-s01b', 'kssh-s01', 'kssh-s09', 'kssh-s02', 'kssh-transcripts', 'session-a-close']"
+    },
+    "b1:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b1:no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b1:p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "b1:p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=11 fails=0"
+    },
+    "b1:banner-dev-posture-persist": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+    },
+    "b1:banner-no-custody": {
+      "pass": true,
+      "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+    },
+    "b1:kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b1:policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "b1:boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b1:no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "b1:no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "b1:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+    },
+    "b1:qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot1.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+    },
+    "b1:sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "b1:attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "b1:no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "b1:no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "b1:accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "b1:accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+    },
+    "b1:conf-observed-t1": {
+      "pass": true,
+      "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+    },
+    "b1:s01-fingerprint-and-blob-prefix": {
+      "pass": true,
+      "detail": "obs lines 1; fp match True; prefix match True"
+    },
+    "b1:t1-ms-frame-bound": {
+      "pass": true,
+      "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+    },
+    "b1:transcripts-clean": {
+      "pass": true,
+      "detail": "1 transcripts obs line(s): scans=17 hits=0"
+    },
+    "b1:t0-no-test-config": {
+      "pass": true,
+      "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+    },
+    "b1:driver-no-scan-hit": {
+      "pass": true,
+      "detail": "None"
+    },
+    "b1:remote-ledger": {
+      "pass": true,
+      "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+    },
+    "b1:qemu-clean-exit": {
+      "pass": true,
+      "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+    },
+    "b1:boot-json-identity": {
+      "pass": true,
+      "detail": "n=1 disk_image=D0"
+    },
+    "b1:driver-verdict": {
+      "pass": true,
+      "detail": "verdict driver-verdict"
+    },
+    "b1:sshd-slice-settled": {
+      "pass": true,
+      "detail": "docker logs did not settle: slice boundaries unproven"
+    },
+    "b2:evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b2:evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b2:evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b2:evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "b2:driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "b2:marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-role": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-t1-load": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-t1-opaque": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-s02r": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-t1-s08": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-t1-opaque', 'kssh-s02r', 'kssh-t1-s08', 'kssh-transcripts', 'session-a-close']"
+    },
+    "b2:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b2:no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b2:p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "b2:p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=10 fails=0"
+    },
+    "b2:banner-dev-posture-persist": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+    },
+    "b2:banner-no-custody": {
+      "pass": true,
+      "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+    },
+    "b2:kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b2:policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "b2:boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b2:no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "b2:no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "b2:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+    },
+    "b2:qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot2.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+    },
+    "b2:sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "b2:attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "b2:no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "b2:no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "b2:accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "b2:accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+    },
+    "b2:conf-observed-t1": {
+      "pass": true,
+      "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+    },
+    "b2:t1-load-facts": {
+      "pass": true,
+      "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+    },
+    "b2:t1-opaque": {
+      "pass": true,
+      "detail": "1 t1-opaque obs line(s): cat_st=1 cat_leak=false (a record file served to a non-KMS cell is a finding)"
+    },
+    "b2:t1-ms-frame-bound": {
+      "pass": true,
+      "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+    },
+    "b2:transcripts-clean": {
+      "pass": true,
+      "detail": "1 transcripts obs line(s): scans=13 hits=0"
+    },
+    "b2:t0-no-test-config": {
+      "pass": true,
+      "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+    },
+    "b2:driver-no-scan-hit": {
+      "pass": true,
+      "detail": "None"
+    },
+    "b2:remote-ledger": {
+      "pass": true,
+      "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+    },
+    "b2:qemu-clean-exit": {
+      "pass": true,
+      "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+    },
+    "b2:boot-json-identity": {
+      "pass": true,
+      "detail": "n=2 disk_image=D0"
+    },
+    "b2:driver-verdict": {
+      "pass": true,
+      "detail": "verdict driver-verdict"
+    },
+    "b2:sshd-slice-settled": {
+      "pass": true,
+      "detail": "docker logs did not settle: slice boundaries unproven"
+    },
+    "b3:evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b3:evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b3:evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b3:evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "b3:driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "b3:marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-role": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-t1-load": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-s02x": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-t1-del": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-t1-plain": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-s15": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-s02x', 'kssh-t1-del', 'kssh-t1-plain', 'kssh-s15', 'kssh-transcripts', 'session-a-close']"
+    },
+    "b3:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b3:no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b3:p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "b3:p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=11 fails=0"
+    },
+    "b3:banner-dev-posture-persist": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+    },
+    "b3:banner-no-custody": {
+      "pass": true,
+      "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+    },
+    "b3:kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b3:policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "b3:boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b3:no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "b3:no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "b3:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+    },
+    "b3:qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot3.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+    },
+    "b3:sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "b3:attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "b3:no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "b3:no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "b3:accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "b3:accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU', 'accepted-pk:SHA256:nY6DDRdoIArEwDpe+TiHQuI2BgmdRfB2wmRNzou1I+Y']"
+    },
+    "b3:conf-observed-t1": {
+      "pass": true,
+      "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+    },
+    "b3:t1-load-facts": {
+      "pass": true,
+      "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+    },
+    "b3:t1-ms-frame-bound": {
+      "pass": true,
+      "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+    },
+    "b3:transcripts-clean": {
+      "pass": true,
+      "detail": "1 transcripts obs line(s): scans=11 hits=0"
+    },
+    "b3:t0-no-test-config": {
+      "pass": true,
+      "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+    },
+    "b3:driver-no-scan-hit": {
+      "pass": true,
+      "detail": "None"
+    },
+    "b3:remote-ledger": {
+      "pass": true,
+      "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+    },
+    "b3:qemu-clean-exit": {
+      "pass": true,
+      "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+    },
+    "b3:boot-json-identity": {
+      "pass": true,
+      "detail": "n=3 disk_image=D0"
+    },
+    "b3:driver-verdict": {
+      "pass": true,
+      "detail": "verdict driver-verdict"
+    },
+    "b3:sshd-slice-settled": {
+      "pass": true,
+      "detail": "docker logs did not settle: slice boundaries unproven"
+    },
+    "b4:evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b4:evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b4:evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b4:evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "b4:driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "b4:marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:kssh-role": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:kssh-t1-absent": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-absent', 'kssh-transcripts', 'session-a-close']"
+    },
+    "b4:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b4:no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b4:p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "b4:p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=7 fails=0"
+    },
+    "b4:banner-dev-posture-persist": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+    },
+    "b4:banner-no-custody": {
+      "pass": true,
+      "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+    },
+    "b4:kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b4:policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "b4:boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b4:no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "b4:no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "b4:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+    },
+    "b4:qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot4.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+    },
+    "b4:sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "b4:attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "b4:no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "b4:no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "b4:accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "b4:accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b4:conf-observed-t1": {
+      "pass": true,
+      "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+    },
+    "b4:t1-ms-frame-bound": {
+      "pass": true,
+      "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+    },
+    "b4:transcripts-clean": {
+      "pass": true,
+      "detail": "1 transcripts obs line(s): scans=7 hits=0"
+    },
+    "b4:t0-no-test-config": {
+      "pass": true,
+      "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+    },
+    "b4:driver-no-scan-hit": {
+      "pass": true,
+      "detail": "None"
+    },
+    "b4:remote-ledger": {
+      "pass": true,
+      "detail": "ledger {}, expected exactly {}"
+    },
+    "b4:qemu-clean-exit": {
+      "pass": true,
+      "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+    },
+    "b4:boot-json-identity": {
+      "pass": true,
+      "detail": "n=4 disk_image=D0"
+    },
+    "b4:driver-verdict": {
+      "pass": true,
+      "detail": "verdict driver-verdict"
+    },
+    "b4:sshd-slice-settled": {
+      "pass": true,
+      "detail": "docker logs did not settle: slice boundaries unproven"
+    },
+    "b5:evidence-file:serial.raw.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b5:evidence-file:serial.log": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b5:evidence-file:qemu-argv.txt": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b5:evidence-file:sshd.log": {
+      "pass": true,
+      "detail": "missing: sshd oracle cannot attribute"
+    },
+    "b5:driver-started": {
+      "pass": true,
+      "detail": "no `P04 START`"
+    },
+    "b5:marker:shell-prompt": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-conf": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-s00": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-role": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-t1-load": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-t1-revert": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:kssh-transcripts": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:marker:session-a-close": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:markers-in-order": {
+      "pass": true,
+      "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-t1-revert', 'kssh-transcripts', 'session-a-close']"
+    },
+    "b5:no-unexpected-markers": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b5:no-FAIL-markers-outside-list": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "b5:p04-terminal-line": {
+      "pass": true,
+      "detail": "1 `P04-TERMINAL:` lines"
+    },
+    "b5:p04-terminal-pass": {
+      "pass": true,
+      "detail": "PASS checks=8 fails=0"
+    },
+    "b5:banner-dev-posture-persist": {
+      "pass": true,
+      "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+    },
+    "b5:banner-no-custody": {
+      "pass": true,
+      "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+    },
+    "b5:kms-identity-service": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b5:policy-loaded": {
+      "pass": true,
+      "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+    },
+    "b5:boot-ceiling-selftest": {
+      "pass": true,
+      "detail": "missing"
+    },
+    "b5:no-weak-entropy": {
+      "pass": true,
+      "detail": "weak entropy fallback served"
+    },
+    "b5:no-panic": {
+      "pass": true,
+      "detail": "panic/page fault in serial"
+    },
+    "b5:trust-store-volume-mounted": {
+      "pass": true,
+      "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+    },
+    "b5:qemu-one-user-netdev-no-forward": {
+      "pass": true,
+      "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot5.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+    },
+    "b5:sshd-wording-recognised": {
+      "pass": true,
+      "detail": "unclassified connections [], orphan auth lines 0"
+    },
+    "b5:attempt-ids-known": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:sshd-connection-sequence": {
+      "pass": true,
+      "detail": ""
+    },
+    "b5:no-password-fallback": {
+      "pass": true,
+      "detail": "connections []: password event after a publickey event"
+    },
+    "b5:no-accepted-password-after-publickey": {
+      "pass": true,
+      "detail": "connections []"
+    },
+    "b5:accepted-publickey-clean": {
+      "pass": true,
+      "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+    },
+    "b5:accepted-fingerprints-known": {
+      "pass": true,
+      "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+    },
+    "b5:conf-observed-t1": {
+      "pass": true,
+      "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+    },
+    "b5:t1-load-facts": {
+      "pass": true,
+      "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+    },
+    "b5:t1-ms-frame-bound": {
+      "pass": true,
+      "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+    },
+    "b5:transcripts-clean": {
+      "pass": true,
+      "detail": "1 transcripts obs line(s): scans=5 hits=0"
+    },
+    "b5:t0-no-test-config": {
+      "pass": true,
+      "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+    },
+    "b5:driver-no-scan-hit": {
+      "pass": true,
+      "detail": "None"
+    },
+    "b5:remote-ledger": {
+      "pass": true,
+      "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+    },
+    "b5:qemu-clean-exit": {
+      "pass": true,
+      "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+    },
+    "b5:boot-json-identity": {
+      "pass": true,
+      "detail": "n=5 disk_image=S1r"
+    },
+    "b5:driver-verdict": {
+      "pass": true,
+      "detail": "verdict driver-verdict"
+    },
+    "b5:sshd-slice-settled": {
+      "pass": true,
+      "detail": "docker logs did not settle: slice boundaries unproven"
+    },
+    "t1-role-sequence": {
+      "pass": true,
+      "detail": "no boot ran"
+    },
+    "t1-reload-equals-replay": {
+      "pass": true,
+      "detail": "boot 2 {'keys': '1', 'readiness': 'Ready', 'posture': 'persistent', 'custody': 'wrapped', 'fp': 'SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU'}; boot 5 {'keys': '1', 'readiness': 'Ready', 'posture': 'persistent', 'custody': 'wrapped', 'fp': 'SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU'}"
+    },
+    "t1-no-import-after-boot1": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-argv-equal-modulo-disk": {
+      "pass": true,
+      "detail": "1 distinct normalised argv over boots [1, 2, 3, 4, 5]"
+    },
+    "t1-iso-same": {
+      "pass": true,
+      "detail": "boots.json iso 6f1d9d0c658c; per boot ['6f1d9d0c658c', '6f1d9d0c658c', '6f1d9d0c658c', '6f1d9d0c658c', '6f1d9d0c658c']"
+    },
+    "t1-s1-pristine": {
+      "pass": true,
+      "detail": "s1 / s1r before boot 5 / s1 after boot 5: ['af05bd64d649', 'af05bd64d649', 'af05bd64d649']"
+    },
+    "checker-exits": {
+      "pass": true,
+      "detail": "checker.txt {'persist': 0, 'custody': 1, 'none': 1}, expected {'persist': 0, 'custody': 1, 'none': 1}"
+    },
+    "t1-disk-records:d0-before": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:d0-before": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-records:after-boot1": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:after-boot1": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-records:after-boot2": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:after-boot2": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-records:after-boot3": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:after-boot3": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-records:after-boot4": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:after-boot4": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-records:after-boot5": {
+      "pass": true,
+      "detail": ""
+    },
+    "t1-disk-scan:after-boot5": {
+      "pass": true,
+      "detail": ""
+    },
+    "scan-controls": {
+      "pass": true,
+      "detail": "{'pre': True, 'post': True}"
+    },
+    "no-canary-in-targets": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "no-ciphertext-or-header-in-serial-or-logs": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "scan-expected-public-strings": {
+      "pass": true,
+      "detail": "[]"
+    },
+    "census-drift": {
+      "pass": true,
+      "detail": "{'equal': 470, 'missing': 0, 'changed': 0, 'baseline_present': 470}"
+    },
+    "t1-five-boot-totals": {
+      "pass": true,
+      "detail": "{'accepted-pw': 5, 'accepted-pk-a': 4, 'accepted-pk-p': 1, 'probe-ok': 6, 'ledger-login': 4}, expected {'accepted-pw': 5, 'accepted-pk-a': 4, 'accepted-pk-p': 1, 'probe-ok': 6, 'ledger-login': 4}"
+    }
+  },
+  "sequence": {
+    "planned": 5,
+    "boots_run": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "boots_unrun": [],
+    "stopped": null
+  },
+  "boots": {
+    "1": {
+      "ran": true,
+      "checks": {
+        "evidence-file:serial.raw.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:serial.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:qemu-argv.txt": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:sshd.log": {
+          "pass": true,
+          "detail": "missing: sshd oracle cannot attribute"
+        },
+        "driver-started": {
+          "pass": true,
+          "detail": "no `P04 START`"
+        },
+        "marker:shell-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-conf": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s00": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-role": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s01a": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s01b": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s01": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s09": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s02": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-transcripts": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:session-a-close": {
+          "pass": true,
+          "detail": ""
+        },
+        "markers-in-order": {
+          "pass": true,
+          "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-s01a', 'kssh-s01b', 'kssh-s01', 'kssh-s09', 'kssh-s02', 'kssh-transcripts', 'session-a-close']"
+        },
+        "no-unexpected-markers": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-FAIL-markers-outside-list": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "p04-terminal-line": {
+          "pass": true,
+          "detail": "1 `P04-TERMINAL:` lines"
+        },
+        "p04-terminal-pass": {
+          "pass": true,
+          "detail": "PASS checks=11 fails=0"
+        },
+        "banner-dev-posture-persist": {
+          "pass": true,
+          "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+        },
+        "banner-no-custody": {
+          "pass": true,
+          "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+        },
+        "kms-identity-service": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "policy-loaded": {
+          "pass": true,
+          "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+        },
+        "boot-ceiling-selftest": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "no-weak-entropy": {
+          "pass": true,
+          "detail": "weak entropy fallback served"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "panic/page fault in serial"
+        },
+        "trust-store-volume-mounted": {
+          "pass": true,
+          "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+        },
+        "qemu-one-user-netdev-no-forward": {
+          "pass": true,
+          "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot1.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+        },
+        "sshd-wording-recognised": {
+          "pass": true,
+          "detail": "unclassified connections [], orphan auth lines 0"
+        },
+        "attempt-ids-known": {
+          "pass": true,
+          "detail": ""
+        },
+        "sshd-connection-sequence": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-password-fallback": {
+          "pass": true,
+          "detail": "connections []: password event after a publickey event"
+        },
+        "no-accepted-password-after-publickey": {
+          "pass": true,
+          "detail": "connections []"
+        },
+        "accepted-publickey-clean": {
+          "pass": true,
+          "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+        },
+        "accepted-fingerprints-known": {
+          "pass": true,
+          "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+        },
+        "conf-observed-t1": {
+          "pass": true,
+          "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+        },
+        "s01-fingerprint-and-blob-prefix": {
+          "pass": true,
+          "detail": "obs lines 1; fp match True; prefix match True"
+        },
+        "t1-ms-frame-bound": {
+          "pass": true,
+          "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+        },
+        "transcripts-clean": {
+          "pass": true,
+          "detail": "1 transcripts obs line(s): scans=17 hits=0"
+        },
+        "t0-no-test-config": {
+          "pass": true,
+          "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+        },
+        "driver-no-scan-hit": {
+          "pass": true,
+          "detail": "None"
+        },
+        "remote-ledger": {
+          "pass": true,
+          "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+        },
+        "qemu-clean-exit": {
+          "pass": true,
+          "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+        },
+        "boot-json-identity": {
+          "pass": true,
+          "detail": "n=1 disk_image=D0"
+        },
+        "driver-verdict": {
+          "pass": true,
+          "detail": "verdict driver-verdict"
+        },
+        "sshd-slice-settled": {
+          "pass": true,
+          "detail": "docker logs did not settle: slice boundaries unproven"
+        }
+      },
+      "markers_passed": [
+        "shell-prompt",
+        "kssh-conf",
+        "kssh-s00",
+        "kssh-role",
+        "kssh-s01a",
+        "kssh-s01b",
+        "kssh-s01",
+        "kssh-s09",
+        "kssh-s02",
+        "kssh-transcripts",
+        "session-a-close"
+      ],
+      "attempts": [
+        "s00",
+        "s02"
+      ],
+      "t1_ms": [
+        {
+          "op": "first-status",
+          "ms": 281
+        },
+        {
+          "op": "import",
+          "ms": 742
+        }
+      ],
+      "t1_load": null,
+      "t1_opaque": null,
+      "t1_import": [
+        "kbad",
+        "kbad",
+        "kbad",
+        "ka16",
+        "ka16",
+        "kx"
+      ],
+      "role_obs": [
+        1
+      ],
+      "role_file": 1,
+      "ledger": {
+        "p09x-kssh-login": 1
+      },
+      "policy_loaded_line": true,
+      "sshd_connections": [
+        {
+          "idx": 0,
+          "port": 60170,
+          "listener": 22,
+          "class": "accepted-pw",
+          "events": [
+            "accepted-pw",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 1,
+          "port": 46924,
+          "listener": 22,
+          "class": "accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU",
+          "events": [
+            "postponed-pk",
+            "accepted-pk",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        }
+      ],
+      "sshd_ignored_lines": 6,
+      "obs": [
+        {
+          "id": "conf",
+          "kv": {
+            "mode": "t1",
+            "calibrate": "false",
+            "keys": "2"
+          }
+        },
+        {
+          "id": "role",
+          "kv": {
+            "n": "1"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "first-status",
+            "ms": "281"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "import",
+            "ms": "742"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "kbad"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "kbad"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "kbad"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "ka16"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "ka16"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "kx"
+          }
+        },
+        {
+          "id": "s01b",
+          "kv": {
+            "aes128": "593",
+            "chacha": "583"
+          }
+        },
+        {
+          "id": "delete-word-echo",
+          "kv": {
+            "echoed": "0"
+          }
+        },
+        {
+          "id": "s02",
+          "kv": {
+            "ms": "3275",
+            "enter-ms": "324"
+          }
+        },
+        {
+          "id": "transcripts",
+          "kv": {
+            "scans": "17",
+            "hits": "0",
+            "canaries": "62"
+          }
+        }
+      ]
+    },
+    "2": {
+      "ran": true,
+      "checks": {
+        "evidence-file:serial.raw.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:serial.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:qemu-argv.txt": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:sshd.log": {
+          "pass": true,
+          "detail": "missing: sshd oracle cannot attribute"
+        },
+        "driver-started": {
+          "pass": true,
+          "detail": "no `P04 START`"
+        },
+        "marker:shell-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-conf": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s00": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-role": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-load": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-opaque": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s02r": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-s08": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-transcripts": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:session-a-close": {
+          "pass": true,
+          "detail": ""
+        },
+        "markers-in-order": {
+          "pass": true,
+          "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-t1-opaque', 'kssh-s02r', 'kssh-t1-s08', 'kssh-transcripts', 'session-a-close']"
+        },
+        "no-unexpected-markers": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-FAIL-markers-outside-list": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "p04-terminal-line": {
+          "pass": true,
+          "detail": "1 `P04-TERMINAL:` lines"
+        },
+        "p04-terminal-pass": {
+          "pass": true,
+          "detail": "PASS checks=10 fails=0"
+        },
+        "banner-dev-posture-persist": {
+          "pass": true,
+          "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+        },
+        "banner-no-custody": {
+          "pass": true,
+          "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+        },
+        "kms-identity-service": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "policy-loaded": {
+          "pass": true,
+          "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+        },
+        "boot-ceiling-selftest": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "no-weak-entropy": {
+          "pass": true,
+          "detail": "weak entropy fallback served"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "panic/page fault in serial"
+        },
+        "trust-store-volume-mounted": {
+          "pass": true,
+          "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+        },
+        "qemu-one-user-netdev-no-forward": {
+          "pass": true,
+          "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot2.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+        },
+        "sshd-wording-recognised": {
+          "pass": true,
+          "detail": "unclassified connections [], orphan auth lines 0"
+        },
+        "attempt-ids-known": {
+          "pass": true,
+          "detail": ""
+        },
+        "sshd-connection-sequence": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-password-fallback": {
+          "pass": true,
+          "detail": "connections []: password event after a publickey event"
+        },
+        "no-accepted-password-after-publickey": {
+          "pass": true,
+          "detail": "connections []"
+        },
+        "accepted-publickey-clean": {
+          "pass": true,
+          "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+        },
+        "accepted-fingerprints-known": {
+          "pass": true,
+          "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+        },
+        "conf-observed-t1": {
+          "pass": true,
+          "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+        },
+        "t1-load-facts": {
+          "pass": true,
+          "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+        },
+        "t1-opaque": {
+          "pass": true,
+          "detail": "1 t1-opaque obs line(s): cat_st=1 cat_leak=false (a record file served to a non-KMS cell is a finding)"
+        },
+        "t1-ms-frame-bound": {
+          "pass": true,
+          "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+        },
+        "transcripts-clean": {
+          "pass": true,
+          "detail": "1 transcripts obs line(s): scans=13 hits=0"
+        },
+        "t0-no-test-config": {
+          "pass": true,
+          "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+        },
+        "driver-no-scan-hit": {
+          "pass": true,
+          "detail": "None"
+        },
+        "remote-ledger": {
+          "pass": true,
+          "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+        },
+        "qemu-clean-exit": {
+          "pass": true,
+          "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+        },
+        "boot-json-identity": {
+          "pass": true,
+          "detail": "n=2 disk_image=D0"
+        },
+        "driver-verdict": {
+          "pass": true,
+          "detail": "verdict driver-verdict"
+        },
+        "sshd-slice-settled": {
+          "pass": true,
+          "detail": "docker logs did not settle: slice boundaries unproven"
+        }
+      },
+      "markers_passed": [
+        "shell-prompt",
+        "kssh-conf",
+        "kssh-s00",
+        "kssh-role",
+        "kssh-t1-load",
+        "kssh-t1-opaque",
+        "kssh-s02r",
+        "kssh-t1-s08",
+        "kssh-transcripts",
+        "session-a-close"
+      ],
+      "attempts": [
+        "s00",
+        "s02r",
+        "s08-w1",
+        "s08-w2",
+        "s08-w3",
+        "s08-w4",
+        "s08-w5",
+        "s08-locked"
+      ],
+      "t1_ms": [
+        {
+          "op": "reload",
+          "ms": 120
+        }
+      ],
+      "t1_load": {
+        "keys": "1",
+        "readiness": "Ready",
+        "posture": "persistent",
+        "custody": "wrapped",
+        "fp": "SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU"
+      },
+      "t1_opaque": {
+        "cat_st": "1",
+        "cat_leak": "false",
+        "ls_st": "1",
+        "ls": "error"
+      },
+      "t1_import": [],
+      "role_obs": [
+        2
+      ],
+      "role_file": 2,
+      "ledger": {
+        "p09x-kssh-login": 1
+      },
+      "policy_loaded_line": true,
+      "sshd_connections": [
+        {
+          "idx": 0,
+          "port": 35818,
+          "listener": 22,
+          "class": "accepted-pw",
+          "events": [
+            "accepted-pw",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 1,
+          "port": 35834,
+          "listener": 22,
+          "class": "accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU",
+          "events": [
+            "postponed-pk",
+            "accepted-pk",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 2,
+          "port": 35844,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        },
+        {
+          "idx": 3,
+          "port": 38082,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        },
+        {
+          "idx": 4,
+          "port": 38090,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        },
+        {
+          "idx": 5,
+          "port": 38102,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        },
+        {
+          "idx": 6,
+          "port": 36884,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        },
+        {
+          "idx": 7,
+          "port": 36892,
+          "listener": 22,
+          "class": "probe-ok",
+          "events": [
+            "postponed-pk",
+            "closed"
+          ]
+        }
+      ],
+      "sshd_ignored_lines": 12,
+      "obs": [
+        {
+          "id": "conf",
+          "kv": {
+            "mode": "t1",
+            "calibrate": "false",
+            "keys": "2"
+          }
+        },
+        {
+          "id": "role",
+          "kv": {
+            "n": "2"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "reload",
+            "ms": "120"
+          }
+        },
+        {
+          "id": "t1-opaque",
+          "kv": {
+            "cat_st": "1",
+            "cat_leak": "false",
+            "ls_st": "1",
+            "ls": "error"
+          }
+        },
+        {
+          "id": "s02r",
+          "kv": {
+            "ms": "3282",
+            "enter-ms": "313"
+          }
+        },
+        {
+          "id": "s08-w1",
+          "kv": {
+            "ms": "3210",
+            "enter-ms": "253"
+          }
+        },
+        {
+          "id": "s08-w2",
+          "kv": {
+            "ms": "3191",
+            "enter-ms": "254"
+          }
+        },
+        {
+          "id": "s08-w3",
+          "kv": {
+            "ms": "3232",
+            "enter-ms": "256"
+          }
+        },
+        {
+          "id": "s08-w4",
+          "kv": {
+            "ms": "3202",
+            "enter-ms": "254"
+          }
+        },
+        {
+          "id": "s08-w5",
+          "kv": {
+            "ms": "3201",
+            "enter-ms": "255"
+          }
+        },
+        {
+          "id": "s08-locked",
+          "kv": {
+            "ms": "3011",
+            "enter-ms": "41"
+          }
+        },
+        {
+          "id": "s08",
+          "kv": {
+            "fail-ms": "253,254,256,254,255",
+            "locked-ms": "41"
+          }
+        },
+        {
+          "id": "transcripts",
+          "kv": {
+            "scans": "13",
+            "hits": "0",
+            "canaries": "3"
+          }
+        }
+      ]
+    },
+    "3": {
+      "ran": true,
+      "checks": {
+        "evidence-file:serial.raw.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:serial.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:qemu-argv.txt": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:sshd.log": {
+          "pass": true,
+          "detail": "missing: sshd oracle cannot attribute"
+        },
+        "driver-started": {
+          "pass": true,
+          "detail": "no `P04 START`"
+        },
+        "marker:shell-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-conf": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s00": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-role": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-load": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s02x": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-del": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-plain": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s15": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-transcripts": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:session-a-close": {
+          "pass": true,
+          "detail": ""
+        },
+        "markers-in-order": {
+          "pass": true,
+          "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-s02x', 'kssh-t1-del', 'kssh-t1-plain', 'kssh-s15', 'kssh-transcripts', 'session-a-close']"
+        },
+        "no-unexpected-markers": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-FAIL-markers-outside-list": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "p04-terminal-line": {
+          "pass": true,
+          "detail": "1 `P04-TERMINAL:` lines"
+        },
+        "p04-terminal-pass": {
+          "pass": true,
+          "detail": "PASS checks=11 fails=0"
+        },
+        "banner-dev-posture-persist": {
+          "pass": true,
+          "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+        },
+        "banner-no-custody": {
+          "pass": true,
+          "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+        },
+        "kms-identity-service": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "policy-loaded": {
+          "pass": true,
+          "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+        },
+        "boot-ceiling-selftest": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "no-weak-entropy": {
+          "pass": true,
+          "detail": "weak entropy fallback served"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "panic/page fault in serial"
+        },
+        "trust-store-volume-mounted": {
+          "pass": true,
+          "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+        },
+        "qemu-one-user-netdev-no-forward": {
+          "pass": true,
+          "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot3.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+        },
+        "sshd-wording-recognised": {
+          "pass": true,
+          "detail": "unclassified connections [], orphan auth lines 0"
+        },
+        "attempt-ids-known": {
+          "pass": true,
+          "detail": ""
+        },
+        "sshd-connection-sequence": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-password-fallback": {
+          "pass": true,
+          "detail": "connections []: password event after a publickey event"
+        },
+        "no-accepted-password-after-publickey": {
+          "pass": true,
+          "detail": "connections []"
+        },
+        "accepted-publickey-clean": {
+          "pass": true,
+          "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+        },
+        "accepted-fingerprints-known": {
+          "pass": true,
+          "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU', 'accepted-pk:SHA256:nY6DDRdoIArEwDpe+TiHQuI2BgmdRfB2wmRNzou1I+Y']"
+        },
+        "conf-observed-t1": {
+          "pass": true,
+          "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+        },
+        "t1-load-facts": {
+          "pass": true,
+          "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+        },
+        "t1-ms-frame-bound": {
+          "pass": true,
+          "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+        },
+        "transcripts-clean": {
+          "pass": true,
+          "detail": "1 transcripts obs line(s): scans=11 hits=0"
+        },
+        "t0-no-test-config": {
+          "pass": true,
+          "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+        },
+        "driver-no-scan-hit": {
+          "pass": true,
+          "detail": "None"
+        },
+        "remote-ledger": {
+          "pass": true,
+          "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+        },
+        "qemu-clean-exit": {
+          "pass": true,
+          "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+        },
+        "boot-json-identity": {
+          "pass": true,
+          "detail": "n=3 disk_image=D0"
+        },
+        "driver-verdict": {
+          "pass": true,
+          "detail": "verdict driver-verdict"
+        },
+        "sshd-slice-settled": {
+          "pass": true,
+          "detail": "docker logs did not settle: slice boundaries unproven"
+        }
+      },
+      "markers_passed": [
+        "shell-prompt",
+        "kssh-conf",
+        "kssh-s00",
+        "kssh-role",
+        "kssh-t1-load",
+        "kssh-s02x",
+        "kssh-t1-del",
+        "kssh-t1-plain",
+        "kssh-s15",
+        "kssh-transcripts",
+        "session-a-close"
+      ],
+      "attempts": [
+        "s00",
+        "s02x",
+        "s15-iv"
+      ],
+      "t1_ms": [
+        {
+          "op": "reload",
+          "ms": 120
+        },
+        {
+          "op": "delete",
+          "ms": 1053
+        }
+      ],
+      "t1_load": {
+        "keys": "1",
+        "readiness": "Ready",
+        "posture": "persistent",
+        "custody": "wrapped",
+        "fp": "SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU"
+      },
+      "t1_opaque": null,
+      "t1_import": [
+        "kp0"
+      ],
+      "role_obs": [
+        3
+      ],
+      "role_file": 3,
+      "ledger": {
+        "p09x-kssh-login": 1
+      },
+      "policy_loaded_line": true,
+      "sshd_connections": [
+        {
+          "idx": 0,
+          "port": 51872,
+          "listener": 22,
+          "class": "accepted-pw",
+          "events": [
+            "accepted-pw",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 1,
+          "port": 51882,
+          "listener": 22,
+          "class": "accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU",
+          "events": [
+            "postponed-pk",
+            "accepted-pk",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 2,
+          "port": 60406,
+          "listener": 22,
+          "class": "accepted-pk:SHA256:nY6DDRdoIArEwDpe+TiHQuI2BgmdRfB2wmRNzou1I+Y",
+          "events": [
+            "postponed-pk",
+            "accepted-pk",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        }
+      ],
+      "sshd_ignored_lines": 10,
+      "obs": [
+        {
+          "id": "conf",
+          "kv": {
+            "mode": "t1",
+            "calibrate": "false",
+            "keys": "2"
+          }
+        },
+        {
+          "id": "role",
+          "kv": {
+            "n": "3"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "reload",
+            "ms": "120"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "delete",
+            "ms": "1053"
+          }
+        },
+        {
+          "id": "s02x",
+          "kv": {
+            "ms": "3283",
+            "enter-ms": "314"
+          }
+        },
+        {
+          "id": "t1-del",
+          "kv": {
+            "posture": "persistent"
+          }
+        },
+        {
+          "id": "t1-import",
+          "kv": {
+            "name": "kp0"
+          }
+        },
+        {
+          "id": "s15",
+          "kv": {
+            "raw-len": "4096"
+          }
+        },
+        {
+          "id": "transcripts",
+          "kv": {
+            "scans": "11",
+            "hits": "0",
+            "canaries": "8"
+          }
+        }
+      ]
+    },
+    "4": {
+      "ran": true,
+      "checks": {
+        "evidence-file:serial.raw.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:serial.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:qemu-argv.txt": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:sshd.log": {
+          "pass": true,
+          "detail": "missing: sshd oracle cannot attribute"
+        },
+        "driver-started": {
+          "pass": true,
+          "detail": "no `P04 START`"
+        },
+        "marker:shell-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-conf": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s00": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-role": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-absent": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-transcripts": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:session-a-close": {
+          "pass": true,
+          "detail": ""
+        },
+        "markers-in-order": {
+          "pass": true,
+          "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-absent', 'kssh-transcripts', 'session-a-close']"
+        },
+        "no-unexpected-markers": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-FAIL-markers-outside-list": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "p04-terminal-line": {
+          "pass": true,
+          "detail": "1 `P04-TERMINAL:` lines"
+        },
+        "p04-terminal-pass": {
+          "pass": true,
+          "detail": "PASS checks=7 fails=0"
+        },
+        "banner-dev-posture-persist": {
+          "pass": true,
+          "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+        },
+        "banner-no-custody": {
+          "pass": true,
+          "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+        },
+        "kms-identity-service": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "policy-loaded": {
+          "pass": true,
+          "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+        },
+        "boot-ceiling-selftest": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "no-weak-entropy": {
+          "pass": true,
+          "detail": "weak entropy fallback served"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "panic/page fault in serial"
+        },
+        "trust-store-volume-mounted": {
+          "pass": true,
+          "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+        },
+        "qemu-one-user-netdev-no-forward": {
+          "pass": true,
+          "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot4.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+        },
+        "sshd-wording-recognised": {
+          "pass": true,
+          "detail": "unclassified connections [], orphan auth lines 0"
+        },
+        "attempt-ids-known": {
+          "pass": true,
+          "detail": ""
+        },
+        "sshd-connection-sequence": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-password-fallback": {
+          "pass": true,
+          "detail": "connections []: password event after a publickey event"
+        },
+        "no-accepted-password-after-publickey": {
+          "pass": true,
+          "detail": "connections []"
+        },
+        "accepted-publickey-clean": {
+          "pass": true,
+          "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+        },
+        "accepted-fingerprints-known": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "conf-observed-t1": {
+          "pass": true,
+          "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+        },
+        "t1-ms-frame-bound": {
+          "pass": true,
+          "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+        },
+        "transcripts-clean": {
+          "pass": true,
+          "detail": "1 transcripts obs line(s): scans=7 hits=0"
+        },
+        "t0-no-test-config": {
+          "pass": true,
+          "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+        },
+        "driver-no-scan-hit": {
+          "pass": true,
+          "detail": "None"
+        },
+        "remote-ledger": {
+          "pass": true,
+          "detail": "ledger {}, expected exactly {}"
+        },
+        "qemu-clean-exit": {
+          "pass": true,
+          "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+        },
+        "boot-json-identity": {
+          "pass": true,
+          "detail": "n=4 disk_image=D0"
+        },
+        "driver-verdict": {
+          "pass": true,
+          "detail": "verdict driver-verdict"
+        },
+        "sshd-slice-settled": {
+          "pass": true,
+          "detail": "docker logs did not settle: slice boundaries unproven"
+        }
+      },
+      "markers_passed": [
+        "shell-prompt",
+        "kssh-conf",
+        "kssh-s00",
+        "kssh-role",
+        "kssh-t1-absent",
+        "kssh-transcripts",
+        "session-a-close"
+      ],
+      "attempts": [
+        "s00",
+        "s04a-ka16",
+        "s04a-kp0"
+      ],
+      "t1_ms": [],
+      "t1_load": null,
+      "t1_opaque": null,
+      "t1_import": [],
+      "role_obs": [
+        4
+      ],
+      "role_file": 4,
+      "ledger": {},
+      "policy_loaded_line": true,
+      "sshd_connections": [
+        {
+          "idx": 0,
+          "port": 48110,
+          "listener": 22,
+          "class": "accepted-pw",
+          "events": [
+            "accepted-pw",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        }
+      ],
+      "sshd_ignored_lines": 2,
+      "obs": [
+        {
+          "id": "conf",
+          "kv": {
+            "mode": "t1",
+            "calibrate": "false",
+            "keys": "2"
+          }
+        },
+        {
+          "id": "role",
+          "kv": {
+            "n": "4"
+          }
+        },
+        {
+          "id": "t1-absent",
+          "kv": {
+            "posture": "volatile"
+          }
+        },
+        {
+          "id": "transcripts",
+          "kv": {
+            "scans": "7",
+            "hits": "0",
+            "canaries": "3"
+          }
+        }
+      ]
+    },
+    "5": {
+      "ran": true,
+      "checks": {
+        "evidence-file:serial.raw.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:serial.log": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:qemu-argv.txt": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "evidence-file:sshd.log": {
+          "pass": true,
+          "detail": "missing: sshd oracle cannot attribute"
+        },
+        "driver-started": {
+          "pass": true,
+          "detail": "no `P04 START`"
+        },
+        "marker:shell-prompt": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-conf": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-s00": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-role": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-load": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-t1-revert": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:kssh-transcripts": {
+          "pass": true,
+          "detail": ""
+        },
+        "marker:session-a-close": {
+          "pass": true,
+          "detail": ""
+        },
+        "markers-in-order": {
+          "pass": true,
+          "detail": "order seen: ['shell-prompt', 'kssh-conf', 'kssh-s00', 'kssh-role', 'kssh-t1-load', 'kssh-t1-revert', 'kssh-transcripts', 'session-a-close']"
+        },
+        "no-unexpected-markers": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "no-FAIL-markers-outside-list": {
+          "pass": true,
+          "detail": "[]"
+        },
+        "p04-terminal-line": {
+          "pass": true,
+          "detail": "1 `P04-TERMINAL:` lines"
+        },
+        "p04-terminal-pass": {
+          "pass": true,
+          "detail": "PASS checks=8 fails=0"
+        },
+        "banner-dev-posture-persist": {
+          "pass": true,
+          "detail": "no `[kms] DEV_POSTURE ssh-dev-persist ...` banner (wrong build booted?)"
+        },
+        "banner-no-custody": {
+          "pass": true,
+          "detail": "`[kms] DEV_POSTURE ssh-dev-custody` printed: the T0 build booted"
+        },
+        "kms-identity-service": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "policy-loaded": {
+          "pass": true,
+          "detail": "missing `[policy] loaded + verified (59 entries, flags 0x00)`"
+        },
+        "boot-ceiling-selftest": {
+          "pass": true,
+          "detail": "missing"
+        },
+        "no-weak-entropy": {
+          "pass": true,
+          "detail": "weak entropy fallback served"
+        },
+        "no-panic": {
+          "pass": true,
+          "detail": "panic/page fault in serial"
+        },
+        "trust-store-volume-mounted": {
+          "pass": true,
+          "detail": "missing `[vfs] CellosFS Native mounted at existing volume`"
+        },
+        "qemu-one-user-netdev-no-forward": {
+          "pass": true,
+          "detail": "qemu-system-x86_64 -machine q35 -accel tcg -cpu qemu64,+pdpe1gb,+rdrand,+rdseed -m 256M -display none -chardev socket,id=ser0,path=/tmp/cellbox-phase09-kssh-rt1/serial-boot5.sock,server=on,wait=off -serial chardev:ser0 -monitor none -cdrom /tmp/cellbox-phase09-kssh-rt1/phase09.iso -boot d -no-reboot"
+        },
+        "sshd-wording-recognised": {
+          "pass": true,
+          "detail": "unclassified connections [], orphan auth lines 0"
+        },
+        "attempt-ids-known": {
+          "pass": true,
+          "detail": ""
+        },
+        "sshd-connection-sequence": {
+          "pass": true,
+          "detail": ""
+        },
+        "no-password-fallback": {
+          "pass": true,
+          "detail": "connections []: password event after a publickey event"
+        },
+        "no-accepted-password-after-publickey": {
+          "pass": true,
+          "detail": "connections []"
+        },
+        "accepted-publickey-clean": {
+          "pass": true,
+          "detail": "an accepted-pk connection also has password lines or two Accepted lines"
+        },
+        "accepted-fingerprints-known": {
+          "pass": true,
+          "detail": "['accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU']"
+        },
+        "conf-observed-t1": {
+          "pass": true,
+          "detail": "conf obs [{'mode': 't1', 'calibrate': 'false', 'keys': '2'}]"
+        },
+        "t1-load-facts": {
+          "pass": true,
+          "detail": "1 t1-load obs line(s); keys/readiness/posture/custody/fp-match: ('1', 'ready', 'persistent', 'wrapped') True"
+        },
+        "t1-ms-frame-bound": {
+          "pass": true,
+          "detail": "K6 frame bound (5000 ms) exceeded by single status calls: []"
+        },
+        "transcripts-clean": {
+          "pass": true,
+          "detail": "1 transcripts obs line(s): scans=5 hits=0"
+        },
+        "t0-no-test-config": {
+          "pass": true,
+          "detail": "faults-build-in-product-image: 0 `ssh-test-config` line(s): []"
+        },
+        "driver-no-scan-hit": {
+          "pass": true,
+          "detail": "None"
+        },
+        "remote-ledger": {
+          "pass": true,
+          "detail": "ledger {'p09x-kssh-login': 1}, expected exactly {'p09x-kssh-login': 1}"
+        },
+        "qemu-clean-exit": {
+          "pass": true,
+          "detail": "qemu {'clean': True, 'escalated': False, 'rc': 0, 'signal': 'SIGTERM'}: a QEMU that needed SIGKILL (or is still alive) leaves a non-quiescent disk"
+        },
+        "boot-json-identity": {
+          "pass": true,
+          "detail": "n=5 disk_image=S1r"
+        },
+        "driver-verdict": {
+          "pass": true,
+          "detail": "verdict driver-verdict"
+        },
+        "sshd-slice-settled": {
+          "pass": true,
+          "detail": "docker logs did not settle: slice boundaries unproven"
+        }
+      },
+      "markers_passed": [
+        "shell-prompt",
+        "kssh-conf",
+        "kssh-s00",
+        "kssh-role",
+        "kssh-t1-load",
+        "kssh-t1-revert",
+        "kssh-transcripts",
+        "session-a-close"
+      ],
+      "attempts": [
+        "s00",
+        "s02r"
+      ],
+      "t1_ms": [
+        {
+          "op": "reload",
+          "ms": 119
+        }
+      ],
+      "t1_load": {
+        "keys": "1",
+        "readiness": "Ready",
+        "posture": "persistent",
+        "custody": "wrapped",
+        "fp": "SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU"
+      },
+      "t1_opaque": null,
+      "t1_import": [],
+      "role_obs": [
+        5
+      ],
+      "role_file": 5,
+      "ledger": {
+        "p09x-kssh-login": 1
+      },
+      "policy_loaded_line": true,
+      "sshd_connections": [
+        {
+          "idx": 0,
+          "port": 34784,
+          "listener": 22,
+          "class": "accepted-pw",
+          "events": [
+            "accepted-pw",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        },
+        {
+          "idx": 1,
+          "port": 34790,
+          "listener": 22,
+          "class": "accepted-pk:SHA256:2wb+o/94XbYm/QU4ziLldINLudeH82K34AT6pwj76qU",
+          "events": [
+            "postponed-pk",
+            "accepted-pk",
+            "session",
+            "info",
+            "closed",
+            "info"
+          ]
+        }
+      ],
+      "sshd_ignored_lines": 6,
+      "obs": [
+        {
+          "id": "conf",
+          "kv": {
+            "mode": "t1",
+            "calibrate": "false",
+            "keys": "2"
+          }
+        },
+        {
+          "id": "role",
+          "kv": {
+            "n": "5"
+          }
+        },
+        {
+          "id": "t1-ms",
+          "kv": {
+            "op": "reload",
+            "ms": "119"
+          }
+        },
+        {
+          "id": "s02r",
+          "kv": {
+            "ms": "3271",
+            "enter-ms": "314"
+          }
+        },
+        {
+          "id": "transcripts",
+          "kv": {
+            "scans": "5",
+            "hits": "0",
+            "canaries": "3"
+          }
+        }
+      ]
+    }
+  },
+  "images": [
+    {
+      "image": "d0-before",
+      "disk": "D0-before",
+      "sha256": "49bd43ba84cd5fa66067f095f270e9250dbc64fec42f873fb871a384f809129f",
+      "size": 577372160,
+      "expect": "none",
+      "record_ok": true,
+      "valid": [],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": false,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot1",
+      "disk": "D0",
+      "sha256": "af05bd64d6498095bcdf70bd6336547b11d6a4c17da90f7c9a0662bf0f5ce182",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot2",
+      "disk": "D0",
+      "sha256": "af05bd64d6498095bcdf70bd6336547b11d6a4c17da90f7c9a0662bf0f5ce182",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot3",
+      "disk": "D0",
+      "sha256": "e139153e979e879c87391f29ebae0e1c067f6adee74e3501580f554211435793",
+      "size": 577372160,
+      "expect": "r1r2",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        },
+        {
+          "slot": 1,
+          "state": 0,
+          "revision": 2,
+          "name": "",
+          "equals_predicted": null,
+          "offset": 476728384
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot4",
+      "disk": "D0",
+      "sha256": "e139153e979e879c87391f29ebae0e1c067f6adee74e3501580f554211435793",
+      "size": 577372160,
+      "expect": "r1r2",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        },
+        {
+          "slot": 1,
+          "state": 0,
+          "revision": 2,
+          "name": "",
+          "equals_predicted": null,
+          "offset": 476728384
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot5",
+      "disk": "S1r",
+      "sha256": "af05bd64d6498095bcdf70bd6336547b11d6a4c17da90f7c9a0662bf0f5ce182",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    }
+  ],
+  "observations": {
+    "t1_ms": {
+      "1": [
+        {
+          "op": "first-status",
+          "ms": 281
+        },
+        {
+          "op": "import",
+          "ms": 742
+        }
+      ],
+      "2": [
+        {
+          "op": "reload",
+          "ms": 120
+        }
+      ],
+      "3": [
+        {
+          "op": "reload",
+          "ms": 120
+        },
+        {
+          "op": "delete",
+          "ms": 1053
+        }
+      ],
+      "4": [],
+      "5": [
+        {
+          "op": "reload",
+          "ms": 119
+        }
+      ]
+    },
+    "fixture_fp": "SHA256:AteGE57Jf/942TikU3i6nE0hs2UGhzMLDI0qiGuWYUo",
+    "comment_len": 1900,
+    "comment_via": "container-rewrite"
+  },
+  "notes": []
+}

@@ -1,0 +1,26 @@
+K8 RT1 H0 gate (offline, before any VM). HEAD 07c436ef4 + the RT1 closure (see frozen-sources-rt1.sha256). Run 2026-10-30 by RT1Impl.
+
+python3 scripts/test_kssh_judge.py                     Ran 169 tests OK   (100 T0/F tests + 69 T1 tests)
+python3 scripts/test_kssh_records.py                   Ran 49 tests OK
+python3 scripts/test_kssh_boots.py                     Ran 49 tests OK
+python3 scripts/test_check_ssh_dev_persist_exclusion.py Ran 13 tests OK
+python3 scripts/test_phase10_canonical_drive.py        Ran 27 tests OK    (guard of the edited runner; re-run after the last runner edit)
+python3 scripts/test_phase10_candidate_import.py       Ran 18 tests OK    (guard of the edited runner; re-run after the last runner edit)
+python3 scripts/test_cellos_sign.py                    Ran 71 tests OK
+python3 scripts/test_assemble_x86_image.py             Ran 40 tests OK
+bash -n scripts/qemu-phase09-ssh-test.sh               ok
+python3 scripts/kssh_judge.py selftest                 8 of 8 PASS
+python3 scripts/sign-policy.py --out X                 wrote 2169 bytes, sha256 4ee6f63ea8211b6c...56c579 (the unchanged v8 blob; round trip decoded by sign-policy itself)
+
+cargo (offline, locked, private CARGO_TARGET_DIR=/tmp/rt1-h0-target, host x86_64-unknown-linux-gnu):
+  -p service-kms --features ssh-dev-persist --lib      191 passed, 0 failed, 1 ignored   (baseline 191 + 1)
+  -p service-kms --features ssh-dev-custody            122 passed, 0 failed, 1 ignored   (baseline 122 + 1)
+  -p service-kms                                       65 passed                         (baseline 65)
+  -p app-cellbox                                       226 passed                        (baseline 226)
+  -p app-kms-ssh-admin                                 71 passed                         (baseline 71)
+cargo build --release --locked --offline --target x86_64-unknown-none -Z build-std=core,alloc (private target dir, lane flags):
+  -p service-kms --features ssh-dev-persist            Finished
+  -p app-phase04-terminal-driver --features kssh       Finished, no warning in ssh/kssh.rs
+
+Census (S10-9 protected set, 470 paths): start of development equal 470 / missing 0 / changed 0; end equal 470 / missing 0 / changed 0.
+Cargo.lock, kernel/**, cells/services/** (KMS and VFS included), libs/**, cells/tools/**, tools/**, config/**, assembler, signing, fixture script: byte-identical (frozen-sources-rt1.sha256 verifies; git status lists only the RT1 closure).

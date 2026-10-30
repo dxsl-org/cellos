@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """KSSH K8 lane: run-time TEST key material, `kssh.conf`, and canary derivation.
 
-    python3 scripts/kssh_keys.py gen  --dir KEYS --stage STAGE [--calibrate]
-    python3 scripts/kssh_keys.py conf --dir KEYS --stage STAGE --mode t0|f --ports MAIN REKEY B \
+    python3 scripts/kssh_keys.py gen  --dir KEYS --stage STAGE [--calibrate] [--mode t0|f|t1]
+    python3 scripts/kssh_keys.py conf --dir KEYS --stage STAGE --mode t0|f|t1 --ports MAIN REKEY B \
             --hostfp SHA256:.. --password-file F [--calibrate]
 
 Stdlib plus the host `ssh-keygen` (OpenSSH 9.x). Everything is TEST material that exists for
@@ -10,7 +10,11 @@ one evidence run. `--dir` is refused when it lies inside a git work tree or is n
 `umask 077` is set, and nothing is ever printed that came from a secret.
 
 Importable (used by kssh_judge.py): `load_secrets`, `canaries`, `forms`, `parse_conf`,
-`blob_prefix`, `parse_container`, `decode_armor`.
+`blob_prefix`, `parse_container`, `decode_armor`, `public_expected`.
+
+Mode t1 (RT1, K4b persistent custody): keys `ka16` (wrapped, rounds 16, 1,900-byte comment) and
+`kp0` (plain) plus the two malformed variants, no key B, no kl4, no calibration keys; `expected.json`
+gains `mode: t1` and the `record` expectation the host record oracle predicts from.
 
 Known host-side exposure (TEST keys only): ssh-keygen receives a passphrase through `-N`/`-P`
 on its argument vector, visible in the process list for a few milliseconds on this host.
@@ -41,6 +45,11 @@ MAIN_KEYS = ("ka16", "kl4", "kp0")
 CAL_KEYS = ("kr1", "kr64")
 BAD_KEYS = {"bad-aes128": "aes128-ctr", "bad-chacha": "chacha20-poly1305@openssh.com"}
 KEY_FILE_NAMES = MAIN_KEYS + CAL_KEYS + tuple(BAD_KEYS)
+T1_KEYS = ("ka16", "kp0")
+T1_COMMENT_LEN = 1900
+OSSH_BLOCK_PLAIN = 8
+# Serial/log leak needles of mode t1: the 8-byte K4b record headers (magic `CKMS`, version 2, slot, kind, state).
+LEAK_HEADERS = (("leak-hdr:a", b"CKMS\x02\x00\x01\x01"), ("leak-hdr:b", b"CKMS\x02\x01\x01\x00"))
 
 
 class KeyError_(Exception):
@@ -94,7 +103,8 @@ def blob_prefix(blob: bytes) -> str:
 
 
 def parse_container(blob: bytes) -> dict:
-    """Parse openssh-key-v1. Unencrypted private sections are parsed too (`seed`, `pub`)."""
+    """Parse openssh-key-v1. Unencrypted private sections are parsed too (`seed`, `pub`, `comment_len`);
+    encrypted ones return `salt`, `rounds` and `ct` (the encrypted private section, without any AEAD tag)."""
     if not blob.startswith(MAGIC):
         raise KeyError_("openssh-key-v1: bad magic")
     w = _Wire(blob[len(MAGIC):])
@@ -111,6 +121,8 @@ def parse_container(blob: bytes) -> dict:
         out["salt"], out["rounds"] = o.string(), o.u32()
     elif kdf != "none":
         raise KeyError_("openssh-key-v1: unknown kdf")
+    if cipher != "none":
+        out["ct"] = priv
     pw = _Wire(pubblob)
     if pw.string() != b"ssh-ed25519":
         raise KeyError_("not an ed25519 key")
@@ -122,13 +134,35 @@ def parse_container(blob: bytes) -> dict:
             raise KeyError_("openssh-key-v1: check integers differ")
         if p.string() != b"ssh-ed25519":
             raise KeyError_("openssh-key-v1: key type mismatch")
-        pub, expanded, _comment = p.string(), p.string(), p.string()
+        pub, expanded, comment = p.string(), p.string(), p.string()
         pad = p.rest()
         if len(expanded) != 64 or expanded[32:] != pub or pub != out["pub"] \
                 or pad != bytes(range(1, len(pad) + 1)):
             raise KeyError_("openssh-key-v1: inconsistent private section")
         out["seed"], out["expanded"] = expanded[:32], expanded
+        out["comment_len"] = len(comment)
     return out
+
+
+def _wire_string(b: bytes) -> bytes:
+    return len(b).to_bytes(4, "big") + b
+
+
+def plain_container_with_comment(parsed: dict, comment: bytes) -> bytes:
+    """Armored unencrypted openssh-key-v1 of the key in `parsed` (from `parse_container`) with `comment`.
+
+    ssh-keygen -C silently truncates the comment at 1,023 bytes on OpenSSH 9.6; the container is plain
+    wire format, so the longer comment is written here and ssh-keygen -p then wraps the result.
+    """
+    check = secrets.token_bytes(4)
+    sec = check + check + _wire_string(b"ssh-ed25519") + _wire_string(parsed["pub"]) \
+        + _wire_string(parsed["expanded"]) + _wire_string(comment)
+    sec += bytes(range(1, (-len(sec) % OSSH_BLOCK_PLAIN) + 1))
+    blob = MAGIC + _wire_string(b"none") + _wire_string(b"none") + _wire_string(b"") + (1).to_bytes(4, "big") \
+        + _wire_string(parsed["pubblob"]) + _wire_string(sec)
+    body = base64.b64encode(blob)
+    lines = [body[i:i + 70] for i in range(0, len(body), 70)]
+    return b"-----BEGIN OPENSSH PRIVATE KEY-----\n" + b"\n".join(lines) + b"\n-----END OPENSSH PRIVATE KEY-----\n"
 
 
 def fp_of_pub_line(line: str) -> str:
@@ -215,12 +249,49 @@ def raw_bin(nonce: str) -> bytes:
     return bytes(raw)
 
 
-def _gen_plain(work: Path) -> tuple[bytes, dict, str]:
-    """A fresh unencrypted ed25519 key at `work`; returns (armored text, parsed, public key line)."""
-    _keygen("-q", "-t", "ed25519", "-N", "", "-C", "", "-f", str(work))
-    Path(str(work) + ".pub").unlink(missing_ok=True)
-    text = work.read_bytes()
-    parsed = parse_container(decode_armor(text))
+def _random_comment(n: int) -> str:
+    """`n` printable ASCII bytes, fresh per run (letters, digits and a few separators; no spaces or quotes)."""
+    return "".join(secrets.choice(ALNUM + "._-+=:") for _ in range(n))
+
+
+def _gen_plain(work: Path, comment_len: int = 0, info: dict | None = None) -> tuple[bytes, dict, str]:
+    """A fresh unencrypted ed25519 key at `work`; returns (armored text, parsed, public key line).
+
+    `comment_len`: wanted private-section comment length (0: empty comment). Tried with `ssh-keygen -C`; when
+    that does not give exactly this length (OpenSSH 9.6 truncates at 1,023 bytes) the unencrypted container is
+    rewritten with the full comment, and when that does not verify either an ordinary comment is used. `info`
+    receives `comment_len` (what the key really carries) and `comment_via`.
+    """
+    def fresh(comment: str):
+        _keygen("-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", str(work))
+        Path(str(work) + ".pub").unlink(missing_ok=True)
+        text = work.read_bytes()
+        return text, parse_container(decode_armor(text))
+
+    via = "empty"
+    if comment_len:
+        try:
+            text, parsed = fresh(_random_comment(comment_len))
+            via = "ssh-keygen-C"
+            if parsed["comment_len"] != comment_len:
+                work.unlink()
+                text, parsed = fresh("")
+                text = plain_container_with_comment(parsed, _random_comment(comment_len).encode())
+                _write_new(work, text, exclusive=False)
+                parsed = parse_container(decode_armor(text))
+                via = "container-rewrite"
+            if parsed["comment_len"] != comment_len:
+                raise KeyError_("comment length not reached")
+            _keygen("-y", "-f", str(work))  # ssh-keygen reads the result back
+        except KeyError_:
+            if work.exists():
+                work.unlink()
+            via = "ordinary-fallback"
+            text, parsed = fresh("kssh-comment")
+    else:
+        text, parsed = fresh("")
+    if info is not None:
+        info.update({"comment_len": parsed["comment_len"], "comment_via": via})
     if parsed["cipher"] != "none" or parsed["kdf"] != "none":
         raise KeyError_("ssh-keygen -N '' did not write an unencrypted key")
     line = _keygen("-y", "-f", str(work)).split()
@@ -231,12 +302,13 @@ def _gen_plain(work: Path) -> tuple[bytes, dict, str]:
 
 
 def _build_key(keys: Path, name: str, rounds: int, cipher: str | None, passphrase: str | None,
-               sec: dict, exp: dict) -> str:
+               sec: dict, exp: dict, comment_len: int = 0) -> str:
     """Generate one key. `rounds == 0`: plain. Returns the public key line."""
     work = keys / f".work-{name}"
     final = keys / name
     try:
-        text, plain, pub_line = _gen_plain(work)
+        cinfo: dict = {}
+        text, plain, pub_line = _gen_plain(work, comment_len, cinfo)
         seed = plain["seed"].hex()
         if passphrase is None:
             os.replace(work, final)
@@ -269,13 +341,22 @@ def _build_key(keys: Path, name: str, rounds: int, cipher: str | None, passphras
             "rounds": got["rounds"], "cipher": got["cipher"], "kdf": got["kdf"],
             "custody": "plain" if passphrase is None else "passphrase-wrapped",
         }
+        if comment_len:
+            exp["keys"][name].update(cinfo)
         return pub_line
     finally:
         if work.exists():
             _wipe(work)
 
 
-def gen(keys_dir, stage_dir, calibrate: bool = False) -> dict:
+def gen(keys_dir, stage_dir, calibrate: bool = False, mode: str = "t0") -> dict:
+    """Generate one key set. `mode` t1 (RT1): ka16 + kp0 + the two malformed variants, `record` expectation,
+    no key B / kl4 / calibration keys; t0 and f are the same set (the T0 behaviour)."""
+    if mode not in ("t0", "f", "t1"):
+        raise KeyError_("mode must be t0, f or t1")
+    t1 = mode == "t1"
+    if t1 and calibrate:
+        raise KeyError_("--calibrate is refused in mode t1")
     old = os.umask(0o077)
     try:
         keys = prepare_dir(keys_dir, strict_mode=True, what="--dir")
@@ -287,35 +368,49 @@ def gen(keys_dir, stage_dir, calibrate: bool = False) -> dict:
         nonce = secrets.token_hex(8)
         sec = {"version": 1, "nonce": nonce, "keys": {}}
         exp = {"version": 1, "nonce": nonce, "keys": {}, "calibrate": bool(calibrate)}
+        if t1:
+            exp["mode"] = "t1"
+        main_keys = T1_KEYS if t1 else MAIN_KEYS + (CAL_KEYS if calibrate else ())
         created: list[Path] = []
         try:
             pubs = {}
-            for name in MAIN_KEYS + (CAL_KEYS if calibrate else ()):
+            for name in main_keys:
                 if name == "kp0":
                     pubs[name] = _build_key(keys, name, 0, None, None, sec, exp)
                 else:
-                    pubs[name] = _build_key(keys, name, WRAPPED_ROUNDS[name], None, _random_alnum(), sec, exp)
+                    pubs[name] = _build_key(keys, name, WRAPPED_ROUNDS[name], None, _random_alnum(), sec, exp,
+                                            T1_COMMENT_LEN if t1 and name == "ka16" else 0)
                     sec["keys"][name]["wrong"] = _random_alnum()
                 created.append(keys / name)
             for name, cipher in BAD_KEYS.items():
                 _build_key(keys, name, 16, cipher, _random_alnum(), sec, exp)
                 created.append(keys / name)
-            # Key B: public half only; the private half never survives this block.
-            work = keys / ".work-kb"
-            try:
-                _text, _parsed, kb_line = _gen_plain(work)
-            finally:
-                _wipe(work)
-            (keys / "kb.pub").write_text(f"{kb_line} kssh-kb\n")
-            exp["keyb"] = {"fp": ssh_fingerprint(keys / "kb.pub"), "pub": f"{kb_line} kssh-kb"}
+            if t1:
+                got = parse_container(decode_armor((keys / "ka16").read_bytes()))
+                ka = exp["keys"]["ka16"]
+                exp["comment_len"] = ka["comment_len"]
+                exp["record"] = {"name": "ka16", "pub": got["pub"].hex(), "rounds": got["rounds"],
+                                 "salt": got["salt"].hex(), "ct": got["ct"].hex(), "blob_prefix": ka["blob_prefix"],
+                                 "comment_len": ka["comment_len"], "comment_via": ka["comment_via"]}
+            else:
+                # Key B: public half only; the private half never survives this block.
+                work = keys / ".work-kb"
+                try:
+                    _text, _parsed, kb_line = _gen_plain(work)
+                finally:
+                    _wipe(work)
+                (keys / "kb.pub").write_text(f"{kb_line} kssh-kb\n")
+                exp["keyb"] = {"fp": ssh_fingerprint(keys / "kb.pub"), "pub": f"{kb_line} kssh-kb"}
             raw = raw_bin(nonce)
             exp["raw"] = {"sha256": hashlib.sha256(raw).hexdigest(), "len": len(raw)}
             _write_new(stage / "raw.bin", raw)
-            for name in list(MAIN_KEYS + (CAL_KEYS if calibrate else ())) + list(BAD_KEYS):
+            for name in list(main_keys) + list(BAD_KEYS):
                 _write_new(stage / f"{name}.key", (keys / name).read_bytes())
             _write_new(authdir / "authorized_keys_main", "".join(
-                exp["keys"][n]["pub"] + "\n" for n in MAIN_KEYS + (CAL_KEYS if calibrate else ())).encode(), exclusive=False)
-            _write_new(authdir / "authorized_keys_b", (exp["keyb"]["pub"] + "\n").encode(), exclusive=False)
+                exp["keys"][n]["pub"] + "\n" for n in main_keys).encode(), exclusive=False)
+            # the unchanged fixture helper wants a non-empty second file: in t1 it repeats ka16 and is unused
+            auth_b = exp["keys"]["ka16"]["pub"] if t1 else exp["keyb"]["pub"]
+            _write_new(authdir / "authorized_keys_b", (auth_b + "\n").encode(), exclusive=False)
             _write_new(keys / "secrets.json", json.dumps(sec, indent=2).encode() + b"\n")
             _write_new(keys / "expected.json", json.dumps(exp, indent=2).encode() + b"\n")
         except BaseException:
@@ -339,8 +434,8 @@ def load_expected(keys_dir) -> dict:
 
 
 def build_conf(keys_dir, mode: str, ports, hostfp: str, password: str, calibrate: bool) -> str:
-    if mode not in ("t0", "f"):
-        raise KeyError_("mode must be t0 or f")
+    if mode not in ("t0", "f", "t1"):
+        raise KeyError_("mode must be t0, f or t1")
     ports = [int(p) for p in ports]
     if len(ports) != 3 or not all(0 < p < 65536 for p in ports):
         raise KeyError_("ports must be MAIN REKEY B in 1..65535")
@@ -349,18 +444,24 @@ def build_conf(keys_dir, mode: str, ports, hostfp: str, password: str, calibrate
     if not password or re.search(r"\s", password):
         raise KeyError_("password must be non-empty and contain no whitespace")
     sec, exp = load_secrets(keys_dir), load_expected(keys_dir)
+    t1 = mode == "t1"
+    if t1 != (exp.get("mode") == "t1"):
+        raise KeyError_("the key set mode (t1 or t0/f) does not match --mode")
+    if calibrate and t1:
+        raise KeyError_("--calibrate is refused in mode t1")
     if calibrate and not exp.get("calibrate"):
         raise KeyError_("--calibrate: the key set was generated without calibration keys")
     out = ["kssh-conf 1", f"mode {mode}", f"calibrate {int(bool(calibrate))}",
            "ports {} {} {}".format(*ports), f"hostfp {hostfp}", f"password {password}",
            f"nonce {sec['nonce']}", f"raw sha256={exp['raw']['sha256']} len={exp['raw']['len']}"]
-    for name in MAIN_KEYS + (CAL_KEYS if calibrate else ()):
+    for name in T1_KEYS if t1 else MAIN_KEYS + (CAL_KEYS if calibrate else ()):
         k, e = sec["keys"][name], exp["keys"][name]
         pw, wrong = k["passphrase"], k["wrong"]
         if (name == "kp0") != (pw is None):
             raise KeyError_(f"{name}: passphrase presence does not match its custody")
         out.append(f"key {name} {e['fp']} {pw or '-'} {wrong or '-'} {e['blob_prefix']} {e['rounds']}")
-    out.append(f"keyb {exp['keyb']['fp']}")
+    if not t1:
+        out.append(f"keyb {exp['keyb']['fp']}")
     text = "\n".join(out) + "\n"
     if any(len(l.encode()) >= 400 for l in out):
         raise KeyError_("a conf line is 400 bytes or longer")
@@ -478,8 +579,13 @@ def extra_canaries(path, hint: str | None = None) -> list:
     return out
 
 
-def canaries(keys_dir, extra_files=()) -> list:
-    """[(label, bytes)] of everything secret in one run (see k8-cp1.md section 9)."""
+def canaries(keys_dir, extra_files=(), leak: bool = False) -> list:
+    """[(label, bytes)] of everything secret in one run (see k8-cp1.md section 9).
+
+    `leak=True` (serial/log scans of mode t1) adds what must never reach a log: the wrapped ciphertext of
+    ka16 (`leak-ct:ka16`) and the 8-byte K4b record headers. `leak=False` (disk scans) omits them: the
+    ciphertext and the record headers are expected on disk.
+    """
     keys = Path(keys_dir)
     sec = load_secrets(keys)
     out = [("magic", MAGIC)]
@@ -499,6 +605,16 @@ def canaries(keys_dir, extra_files=()) -> list:
     for extra in extra_files:
         path, hint = extra if isinstance(extra, tuple) else (extra, None)
         out += extra_canaries(path, hint)
+    if leak:
+        rec = load_expected(keys).get("record")
+        if rec and rec.get("ct"):
+            ct, name = bytes.fromhex(rec["ct"]), rec.get("name", "ka16")
+            out.append((f"leak-ct:{name}", ct))
+            # fragments: a truncated or interleaved dump of the record must not slip through on the whole-ciphertext needle
+            mid = len(ct) // 2
+            out += [(f"leak-ct:{name}:head", ct[:32]), (f"leak-ct:{name}:mid", ct[mid - 16:mid + 16]),
+                    (f"leak-ct:{name}:tail", ct[-32:])]
+        out += list(LEAK_HEADERS)
     return [(l, d) for l, d in out if len(d) >= MIN_CANARY]
 
 
@@ -507,6 +623,17 @@ def parse_pub_ed25519(pubblob: bytes) -> bytes:
     if w.string() != b"ssh-ed25519":
         raise KeyError_("not an ed25519 public key")
     return w.string()
+
+
+def public_expected(exp: dict) -> dict:
+    """expected.json for the archive: `record.salt` / `record.ct` replaced by length + SHA-256 (no ciphertext)."""
+    out = json.loads(json.dumps(exp))
+    rec = out.get("record")
+    if rec:
+        for field in ("salt", "ct"):
+            raw = bytes.fromhex(rec.pop(field))
+            rec[f"{field}_len"], rec[f"{field}_sha256"] = len(raw), hashlib.sha256(raw).hexdigest()
+    return out
 
 
 # --------------------------------------------------------------------------- CLI
@@ -518,10 +645,11 @@ def main(argv=None) -> int:
     g.add_argument("--dir", required=True)
     g.add_argument("--stage", required=True)
     g.add_argument("--calibrate", action="store_true")
+    g.add_argument("--mode", choices=("t0", "f", "t1"), default="t0")
     c = sub.add_parser("conf")
     c.add_argument("--dir", required=True)
     c.add_argument("--stage", required=True)
-    c.add_argument("--mode", required=True, choices=("t0", "f"))
+    c.add_argument("--mode", required=True, choices=("t0", "f", "t1"))
     c.add_argument("--ports", required=True, nargs=3, type=int, metavar=("MAIN", "REKEY", "B"))
     c.add_argument("--hostfp", required=True)
     c.add_argument("--password-file", required=True)
@@ -529,8 +657,10 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         if a.cmd == "gen":
-            exp = gen(a.dir, a.stage, a.calibrate)
-            print("kssh_keys gen ok: " + " ".join(f"{n}={e['fp']}" for n, e in exp["keys"].items()) + f" keyb={exp['keyb']['fp']}")
+            exp = gen(a.dir, a.stage, a.calibrate, a.mode)
+            tail = f" keyb={exp['keyb']['fp']}" if "keyb" in exp else f" comment_len={exp['comment_len']}" \
+                f" comment_via={exp['record']['comment_via']}"
+            print("kssh_keys gen ok: " + " ".join(f"{n}={e['fp']}" for n, e in exp["keys"].items()) + tail)
         else:
             old = os.umask(0o077)
             try:

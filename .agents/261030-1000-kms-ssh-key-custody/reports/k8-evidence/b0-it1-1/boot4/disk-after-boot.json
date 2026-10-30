@@ -1,0 +1,47 @@
+{
+  "image": "D0",
+  "sha256": "cdb2de5f40127d9820438d50f0d099fe5102375daa737f8e12181852f2949157",
+  "size": 577372160,
+  "records": {
+    "valid": [
+      {
+        "offset": 476721152,
+        "slot": 0,
+        "state": 1,
+        "revision": 1,
+        "name": "ka16",
+        "digest": "8a27b3cb7385ca46f4d93e9e46ced584bb320161ec5abb94472e8015051bcd4a",
+        "ct_len": 2032,
+        "ct_sha256": "2786d0e9cc68030fb9305cd84597f122dd61dad5cd79804f80a3333cf813fc35",
+        "equals_predicted": true,
+        "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+        "count": 1
+      },
+      {
+        "offset": 476728384,
+        "slot": 1,
+        "state": 0,
+        "revision": 2,
+        "name": "",
+        "digest": "164080321c5eaf463197081d0db46c77680c9aca39550c58471bd355cef8fd3c",
+        "ct_len": 0,
+        "ct_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "equals_predicted": null,
+        "previous": "8a27b3cb7385ca46f4d93e9e46ced584bb320161ec5abb94472e8015051bcd4a",
+        "count": 1
+      }
+    ],
+    "invalid": [],
+    "v1": []
+  },
+  "record_verdict": {
+    "expect": "r1r2",
+    "ok": true,
+    "reasons": []
+  },
+  "ciphertext_found": true,
+  "scan": {
+    "hits": [],
+    "controls_ok": true
+  }
+}

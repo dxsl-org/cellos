@@ -1,0 +1,20 @@
+set=b0 variant=it1 faults=0 calibrate=0 persist=1 kms-feature=ssh-dev-persist accel=tcg window=1800
+head=07c436ef473d4a8087d0b48d8aecb8eee4099981
+k3-k7 commits are ancestors of HEAD
+dirty files (all inside the K8 closure): CHANGELOG.md cells/tests/phase04-terminal-driver/src/ssh/kssh.rs scripts/kssh_judge.py scripts/kssh_keys.py scripts/qemu-phase09-ssh-test.sh scripts/test_kssh_judge.py scripts/kssh_boots.py scripts/kssh_records.py scripts/test_kssh_boots.py scripts/test_kssh_records.py
+dirty-digest=8316fc96e41dd249d902ec2184fd12c47c897a93c33c5b8a33b1260ddecff800
+fixture-image=cellbox-p09-sshd:5bdd6545f8fc9568d110f3c8f59f2b6fd80d0a6b570a9ca882e0e4ccc1fde0dd present
+tmp-free-kb=728742948
+python=Python 3.12.3 ssh=OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+tree digests recorded (frozen-trees.txt)
+b0-boot=it1-1 of 3
+service-vfs: built with default features, no test-hooks (cargo fingerprint service-vfs-825deda56515271b)
+exclusion checker on the signed service-kms: persist 0, custody 1, none 1 (checker.txt)
+F1: exactly the 7 known items (private per-run waiver applies), F5 OK
+qemu=/home/dmin/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 sha256=169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe version=QEMU emulator version 10.2.0
+token=/home/dmin/cellos/.agents/261030-1000-kms-ssh-key-custody/reports/k8-evidence/B0_BOOT-it1-1 claimed
+kssh_boots.py exit 0 (0 = five boots, 1 = stopped by a STOP rule, 2 = host error)
+POST: no frozen-sources-rt1.sha256 present (rehearsal): freeze not compared
+POST: tree digests equal before and after
+POST: dirty-digest=595d325e60a16dedef83a2ce9488636aba03bdd0817b9abec15208f960a3d971
+POST: ok=1

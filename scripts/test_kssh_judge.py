@@ -7,6 +7,7 @@ Temp directories live under /tmp (mode 700) and are removed afterwards. Keys gen
 throw-away TEST keys made with the host `ssh-keygen`.
 """
 
+import base64
 import contextlib
 import hashlib
 import io
@@ -1325,6 +1326,1161 @@ class CensusTests(unittest.TestCase):
                 f.write(b"a" * (1 << 20))
         h = hashlib.sha256(b"a" * (5 << 20)).hexdigest()
         self.assertEqual(J._sha256_file(p, bufsize=1 << 18), {"size": 5 << 20, "sha256": h})
+
+
+# ---------------------------------------------------------------------------------- mode t1 (RT1)
+
+T1_ISO = "ab" * 32
+T1_S1 = "cd" * 32
+T1_ATTEMPTS = {  # boot -> marker -> attempt ids typed before it (contract section 4)
+    1: {"kssh-s00": ["s00"], "kssh-s02": ["s02"]},
+    2: {"kssh-s00": ["s00"], "kssh-s02r": ["s02r"], "kssh-t1-s08": [f"s08-w{i}" for i in range(1, 6)] + ["s08-locked"]},
+    3: {"kssh-s00": ["s00"], "kssh-s02x": ["s02x"], "kssh-s15": ["s15-iv"]},
+    4: {"kssh-s00": ["s00"], "kssh-t1-absent": ["s04a-ka16", "s04a-kp0"]},
+    5: {"kssh-s00": ["s00"], "kssh-t1-revert": ["s02r"]},
+}
+T1_EXPECT = {"d0-before": "none", "after-boot1": "r1", "after-boot2": "r1", "after-boot3": "r1r2", "after-boot4": "r1r2",
+             "after-boot5": "r1"}
+
+
+class T1KeysCase(unittest.TestCase):
+    """One mode-t1 key set shared by the class."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="kssh-t1-test-"))
+        cls.keys, cls.stage = cls.tmp / "keys", cls.tmp / "stage"
+        cls.exp = K.gen(cls.keys, cls.stage, mode="t1")
+        cls.sec = K.load_secrets(cls.keys)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+
+@unittest.skipIf(Ed25519PrivateKey is None, "cryptography not installed")
+class T1KeyGenTests(T1KeysCase):
+    def test_layout_no_keyb_no_kl4_no_calibration(self):
+        self.assertEqual(self.exp["mode"], "t1")
+        self.assertEqual(list(self.exp["keys"]), ["ka16", "kp0", "bad-aes128", "bad-chacha"])
+        self.assertNotIn("keyb", self.exp)
+        for name in ("ka16", "kp0", "bad-aes128", "bad-chacha"):
+            self.assertTrue((self.stage / f"{name}.key").is_file(), name)
+        for name in ("kl4", "kr1", "kr64"):
+            self.assertFalse((self.stage / f"{name}.key").exists(), name)
+        self.assertFalse((self.keys / "kb.pub").exists())
+        main = (self.stage / "authdir/authorized_keys_main").read_text().splitlines()
+        self.assertEqual(main, [self.exp["keys"][n]["pub"] for n in ("ka16", "kp0")])
+        self.assertEqual((self.stage / "authdir/authorized_keys_b").read_text().splitlines(), [self.exp["keys"]["ka16"]["pub"]])
+        self.assertEqual((self.stage / "raw.bin").stat().st_size, 4096)
+        self.assertEqual(self.sec["keys"]["ka16"]["wrong"] is not None, True)
+        self.assertIsNone(self.sec["keys"]["kp0"]["passphrase"])
+
+    def test_record_expectation_comes_from_the_container(self):
+        rec = self.exp["record"]
+        got = K.parse_container(K.decode_armor((self.keys / "ka16").read_bytes()))
+        self.assertEqual((rec["name"], rec["rounds"]), ("ka16", 16))
+        self.assertEqual(bytes.fromhex(rec["pub"]), got["pub"])
+        self.assertEqual(bytes.fromhex(rec["salt"]), got["salt"])
+        self.assertEqual(bytes.fromhex(rec["ct"]), got["ct"])
+        self.assertEqual(rec["blob_prefix"], self.exp["keys"]["ka16"]["blob_prefix"])
+        self.assertEqual(got["cipher"], "aes256-ctr")
+        self.assertEqual(len(got["salt"]), 16)
+        self.assertEqual(len(got["ct"]) % 16, 0)
+        self.assertEqual(json.loads((self.keys / "expected.json").read_text())["record"], rec)
+
+    def test_comment_is_1900_bytes_or_reported_fallback(self):
+        rec = self.exp["record"]
+        self.assertEqual(self.exp["comment_len"], rec["comment_len"])
+        if rec["comment_via"] != "ordinary-fallback":
+            self.assertEqual(self.exp["comment_len"], K.T1_COMMENT_LEN)
+            # 8 check bytes + type, pub, expanded and comment strings, padded to the cipher block: about 2,032 bytes
+            self.assertGreaterEqual(len(bytes.fromhex(rec["ct"])), 1900 + 100)
+        # the encrypted key still unlocks to the generated public key with the host ssh-keygen
+        out = subprocess.run(["ssh-keygen", "-y", "-P", self.sec["keys"]["ka16"]["passphrase"], "-f", str(self.keys / "ka16")],
+                             capture_output=True, check=True).stdout.decode().split()
+        self.assertEqual(out[1], self.exp["keys"]["ka16"]["pub"].split()[1])
+
+    def test_comment_rewrite_helper_and_ordinary_fallback(self):
+        plain = self.tmp / "plain"
+        text, parsed, _ = K._gen_plain(plain)
+        plain.unlink()
+        text2 = K.plain_container_with_comment(parsed, b"c" * 1900)
+        again = K.parse_container(K.decode_armor(text2))
+        self.assertEqual((again["comment_len"], again["seed"], again["pub"]), (1900, parsed["seed"], parsed["pub"]))
+        info = {}
+        with mock.patch.object(K, "plain_container_with_comment", return_value=b"not armor"):
+            work = self.tmp / "w-fallback"
+            _, p2, _ = K._gen_plain(work, 1900, info)
+            work.unlink()
+        if info["comment_via"] != "ssh-keygen-C":  # this host truncates -C at 1,023 bytes: the rewrite failed, ordinary used
+            self.assertEqual((info["comment_via"], info["comment_len"]), ("ordinary-fallback", p2["comment_len"]))
+            self.assertLess(info["comment_len"], 1900)
+
+    def test_calibrate_refused_in_t1(self):
+        with self.assertRaisesRegex(K.KeyError_, "calibrate"):
+            K.gen(self.tmp / "kc", self.tmp / "sc", calibrate=True, mode="t1")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(K.main(["gen", "--mode", "t1", "--calibrate", "--dir", str(self.tmp / "kc2"),
+                                     "--stage", str(self.tmp / "sc2")]), 2)
+
+    def test_conf_t1_has_two_keys_and_no_keyb(self):
+        text = K.build_conf(self.keys, "t1", [11, 12, 13], FPA, "pw1234567", False)
+        lines = text.splitlines()
+        self.assertEqual(lines[1:3], ["mode t1", "calibrate 0"])
+        self.assertEqual([l.split()[1] for l in lines if l.startswith("key ")], ["ka16", "kp0"])
+        self.assertFalse([l for l in lines if l.startswith("keyb")])
+        d = K.parse_conf(text)
+        self.assertEqual((d["mode"], sorted(d["keys"]), d["keys"]["ka16"]["rounds"], d["keys"]["kp0"]["rounds"]),
+                         ("t1", ["ka16", "kp0"], 16, 0))
+        self.assertEqual(d["keys"]["kp0"]["passphrase"], "-")
+        self.assertNotIn("keyb", d)
+        self.assertTrue(all(len(l.encode()) < 400 for l in lines))
+        with self.assertRaisesRegex(K.KeyError_, "calibrate"):
+            K.build_conf(self.keys, "t1", [11, 12, 13], FPA, "pw1234567", True)
+        for mode in ("t0", "f"):
+            with self.assertRaisesRegex(K.KeyError_, "does not match"):
+                K.build_conf(self.keys, mode, [11, 12, 13], FPA, "pw1234567", False)
+
+    def test_cli_conf_t1(self):
+        pwf = self.tmp / "pw"
+        pwf.write_text("fixturepw-1234\n")
+        rc = K.main(["conf", "--dir", str(self.keys), "--stage", str(self.stage), "--mode", "t1", "--ports", "1", "2", "3",
+                     "--hostfp", FPA, "--password-file", str(pwf)])
+        self.assertEqual(rc, 0)
+        self.assertEqual(K.parse_conf((self.stage / "kssh.conf").read_text())["mode"], "t1")
+
+    def test_t0_key_sets_refuse_a_t1_conf(self):
+        t0 = self.tmp / "t0set"
+        K.gen(t0 / "keys", t0 / "stage")
+        with self.assertRaisesRegex(K.KeyError_, "does not match"):
+            K.build_conf(t0 / "keys", "t1", [1, 2, 3], FPA, "pw1234567", False)
+        self.assertNotIn("record", json.loads((t0 / "keys/expected.json").read_text()))
+
+    def test_leak_needles_only_with_leak_true(self):
+        plain = dict(K.canaries(self.keys))
+        self.assertFalse([l for l in plain if l.startswith("leak-")])
+        leak = dict(K.canaries(self.keys, leak=True))
+        self.assertEqual(leak["leak-ct:ka16"], bytes.fromhex(self.exp["record"]["ct"]))
+        self.assertEqual(leak["leak-hdr:a"], b"CKMS\x02\x00\x01\x01")
+        self.assertEqual(leak["leak-hdr:b"], b"CKMS\x02\x01\x01\x00")
+        self.assertEqual({k: v for k, v in leak.items() if not k.startswith("leak-")}, plain)
+        forms_a = {f for f, _ in K.forms("leak-hdr:a", leak["leak-hdr:a"])}
+        self.assertTrue({"raw", "hex-lower", "hex-upper", "b64-a0", "b64-a1", "b64-a2", "dec-list", "hexdbg-list"} <= forms_a)
+        # the ciphertext (a substring of the container blob, never the whole blob) is not a disk needle
+        disk = J.Scanner(K.canaries(self.keys))
+        serial = J.Scanner(K.canaries(self.keys, leak=True))
+        image = self.tmp / "disk.img"
+        image.write_bytes(b"\0" * 5000 + b"CKMS\x02\x00\x01\x01" + bytes(100) + bytes.fromhex(self.exp["record"]["ct"]) + b"\0" * 5000)
+        self.assertEqual(disk.scan_file(image, joined=False), [])
+        self.assertEqual({h["label"] for h in serial.scan_file(image, joined=False)},
+                         {"leak-ct:ka16", "leak-ct:ka16:head", "leak-ct:ka16:mid", "leak-ct:ka16:tail", "leak-hdr:a"})
+
+    def test_public_expected_has_no_ciphertext(self):
+        pub = K.public_expected(self.exp)
+        rec = pub["record"]
+        self.assertNotIn("ct", rec)
+        self.assertNotIn("salt", rec)
+        ct = bytes.fromhex(self.exp["record"]["ct"])
+        self.assertEqual((rec["ct_len"], rec["ct_sha256"]), (len(ct), hashlib.sha256(ct).hexdigest()))
+        self.assertEqual(rec["salt_len"], 16)
+        self.assertEqual(pub["keys"], self.exp["keys"])
+        self.assertEqual(self.exp["record"]["ct"], json.loads((self.keys / "expected.json").read_text())["record"]["ct"])
+        blob = json.dumps(pub).encode()
+        self.assertEqual(J.Scanner(K.canaries(self.keys, leak=True)).scan_bytes(blob), set())
+
+
+def _t1_disk_doc(image, expect, **over):
+    r1 = {"offset": 4096, "slot": 0, "state": 1, "revision": 1, "name": "ka16", "digest": "11" * 32, "ct_len": 2032,
+          "ct_sha256": "22" * 32, "equals_predicted": True, "previous": "00" * 32, "count": 1}
+    r2 = {"offset": 8192, "slot": 1, "state": 0, "revision": 2, "name": "", "digest": "33" * 32, "ct_len": 0,
+          "ct_sha256": "44" * 32, "equals_predicted": None, "previous": r1["digest"], "count": 1}
+    valid = {"none": [], "r1": [r1], "r1r2": [r1, r2]}[expect]
+    doc = {"image": image, "sha256": "55" * 32, "size": 577372160, "records": {"valid": valid, "invalid": [], "v1": []},
+           "record_verdict": {"expect": expect, "ok": True, "reasons": []}, "ciphertext_found": expect != "none",
+           "scan": {"hits": [], "controls_ok": True}}
+    doc.update(over)
+    return doc
+
+
+@unittest.skipIf(Ed25519PrivateKey is None, "cryptography not installed")
+class T1EvidenceCase(T1KeysCase):
+    """Synthetic five-boot evidence directories for judge mode t1, built from the contract tables."""
+
+    def fp(self, name):
+        return self.exp["keys"][name]["fp"]
+
+    @staticmethod
+    def write_serial(bd, serial):
+        (bd / "serial.log").write_text("\n".join(serial) + "\n")
+        (bd / "serial.raw.log").write_bytes(("\r\n".join(serial) + "\r\n").encode())
+
+    def obs_before(self, n, marker):
+        fa = self.fp("ka16")
+        table = {
+            "kssh-conf": ["conf mode=t1 calibrate=false keys=2"], "kssh-role": [f"role n={n}"],
+            "kssh-t1-load": ["t1-ms op=reload ms=800", f"t1-load keys=1 readiness=Ready posture=persistent custody=wrapped fp={fa}"],
+            "kssh-t1-opaque": ["t1-opaque cat_st=1 cat_leak=false ls_st=0 ls=denied"],
+            "kssh-t1-del": ["t1-ms op=delete ms=700"], "kssh-t1-plain": ["t1-import name=kp0"],
+            "kssh-transcripts": ["transcripts scans=12 hits=0 canaries=88"],
+        }
+        if n == 1:
+            table["kssh-s01a"] = ["t1-ms op=first-status ms=900"]
+            table["kssh-s01"] = ["t1-import name=ka16", "t1-ms op=import ms=1500",
+                                 f"s01 fp={fa} prefix={self.exp['keys']['ka16']['blob_prefix']}"]
+        return table.get(marker, [])
+
+    def serial_lines(self, n):
+        s = [f"[ INFO] {T1_VFS}", "[ INFO] [kms] fail-closed node identity service starting", f"[ INFO] {J.T1_PERSIST_BANNER}",
+             "[ INFO] [policy] loaded + verified (59 entries, flags 0x00)", "[ INFO] [selftest] boot-ceiling: PASS (per-path table)",
+             "USER: P04 START"]
+        for marker in J.T1_MARKERS[n]:
+            s += [f"USER: P04 INFO kssh-attempt {a}" for a in T1_ATTEMPTS[n].get(marker, [])]
+            s += [f"USER: P04 INFO kssh-obs {o}" for o in self.obs_before(n, marker)]
+            s.append(f"USER: P04 PASS {marker}")
+        s.append(f"USER: P04-TERMINAL: PASS checks={len(J.T1_MARKERS[n])}")
+        return s
+
+    def sshd_for(self, n):
+        out, port = ["chpasswd: password for 'tester' changed", "Server listening on 0.0.0.0 port 22."], 40000 + 100 * n
+        fps = {k: e["fp"] for k, e in self.exp["keys"].items()}
+        for marker in J.T1_MARKERS[n]:
+            for attempt in T1_ATTEMPTS[n].get(marker, []):
+                for cls in J.EXPECTED_CONNECTIONS["t1"][n][attempt]:
+                    if cls.startswith("accepted-pk:"):
+                        cls = "accepted-pk:" + fps[cls.split(":", 1)[1]]
+                    out += sshd_lines(cls, port)
+                    port += 1
+        return out
+
+    def boot_json(self, n):
+        return {"n": n, "role": n, "verdict": "driver-verdict", "qemu": {"clean": True, "escalated": False, "rc": 0, "signal": "SIGTERM"},
+                "iso_sha256": T1_ISO, "disk_image": "S1r" if n == 5 else "D0", "disk_sha256_after": "55" * 32, "elapsed_s": 60.0,
+                "sshd_lines": [0, 10], "ledger_lines": [0, 1], "settled": True, "role_written": n}
+
+    def build_t1(self, set_="rt1", name="ev1"):
+        ev = self.tmp / f"{name}-{secrets.token_hex(3)}"
+        ev.mkdir()
+        boots = []
+        for n in J.T1_BOOTS:
+            bd = ev / f"boot{n}"
+            bd.mkdir()
+            self.write_serial(bd, self.serial_lines(n))
+            (bd / "sshd.log").write_text("\n".join(self.sshd_for(n)) + "\n")
+            (bd / "p09-ledger.txt").write_text("p09x-kssh-login\n" * J.LEDGER_EXPECTED["t1"][n].get("p09x-kssh-login", 0))
+            disk = "S1r" if n == 5 else "D0"
+            (bd / "qemu-argv.txt").write_text(
+                f"qemu-system-x86_64 -machine q35 -accel tcg -m 256M -display none -chardev "
+                f"socket,id=ser0,path=/w/serial-boot{n}.sock,server=on,wait=off -serial chardev:ser0 -cdrom /w/i.iso -boot d "
+                f"-no-reboot -netdev user,id=net0 -device e1000,netdev=net0 -drive file=/w/{disk}.img,if=none,format=raw,"
+                f"id=p09fx -device nvme,drive=p09fx,serial=cellosp09\n")
+            (bd / "role.txt").write_text(f"role={n}\n")
+            bj = self.boot_json(n)
+            boots.append(bj)
+            (bd / "boot.json").write_text(json.dumps(bj))
+            (bd / "disk-after-boot.json").write_text(json.dumps(_t1_disk_doc(disk, T1_EXPECT[f"after-boot{n}"])))
+        (ev / "disk-baseline.json").write_text(json.dumps(_t1_disk_doc("D0-before", "none")))
+        (ev / "boots.json").write_text(json.dumps({
+            "set": set_, "iso_sha256": T1_ISO, "d0_before_sha256": "66" * 32, "s1_sha256": T1_S1,
+            "s1r_sha256_before_boot5": T1_S1, "s1_sha256_after_boot5": T1_S1, "boots": boots, "stopped": None, "planned": 5}))
+        (ev / "controls.json").write_text(json.dumps({"disk": [
+            {"image": i, "pre": {"ok": True}, "post": {"ok": True}, "ok": True} for i in ("D0-before", "D0", "D0", "D0", "D0", "S1r")],
+            "ok": True}))
+        (ev / "checker.txt").write_text("persist rc=0\ncustody rc=1 persist artifact\nnone rc=1\n")
+        (ev / "census-compare.json").write_text(json.dumps({"equal": 470, "missing": 0, "changed": 0, "baseline_present": 470}))
+        return ev
+
+    def run_t1(self, ev, set_="rt1", extra=(), mode="t1"):
+        pw, seedf = self.tmp / "fixture-password", self.tmp / "seed.hex"
+        if not pw.exists():
+            pw.write_text("pw-" + secrets.token_hex(8) + "\n")
+            seedf.write_text(secrets.token_hex(32) + "\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            rc = J.main(["judge", "--evidence", str(ev), "--keys", str(self.keys), "--mode", mode, "--set", set_,
+                         "--fixture-fp", FP_HOST, "--password-file", str(pw), "--seed-hex-file", str(seedf), *extra])
+        files = {n: json.loads((ev / n).read_text()) for n in ("verdict.json", "classification.json", "scan.json", "controls.json")
+                 if (ev / n).exists()}
+        return rc, out.getvalue(), files
+
+    def edit_serial(self, ev, n, fn):
+        bd = ev / f"boot{n}"
+        self.write_serial(bd, fn((bd / "serial.log").read_text().splitlines()))
+
+    def edit_sshd(self, ev, n, fn):
+        p = ev / f"boot{n}" / "sshd.log"
+        p.write_text("\n".join(fn(p.read_text().splitlines())) + "\n")
+
+    @staticmethod
+    def edit_json(path, fn):
+        doc = json.loads(path.read_text())
+        fn(doc)
+        path.write_text(json.dumps(doc))
+
+    def check(self, files, name):
+        return files["verdict.json"]["checks"][name]
+
+    def failed(self, files):
+        return sorted(n for n, c in files["verdict.json"]["checks"].items() if not c["pass"])
+
+    def klass(self, files):
+        return files["classification.json"]["class"]
+
+
+T1_VFS = J.T1_VFS_LINE
+
+
+class T1TableTests(unittest.TestCase):
+    def test_connection_table_is_per_boot_with_shared_ids(self):
+        t = J.EXPECTED_CONNECTIONS["t1"]
+        self.assertEqual(sorted(t), [1, 2, 3, 4, 5])
+        self.assertEqual(t[1], {"s00": ["accepted-pw"], "s02": ["accepted-pk:ka16"]})
+        self.assertEqual(t[2]["s02r"], t[5]["s02r"])
+        self.assertEqual(t[2]["s02r"], ["accepted-pk:ka16"])
+        self.assertEqual([t[2][f"s08-w{i}"] for i in range(1, 6)], [["probe-ok"]] * 5)
+        self.assertEqual(t[2]["s08-locked"], ["probe-ok"])
+        self.assertEqual((t[3]["s02x"], t[3]["s15-iv"]), (["accepted-pk:ka16"], ["accepted-pk:kp0"]))
+        self.assertEqual((t[4]["s04a-ka16"], t[4]["s04a-kp0"]), ([], []))
+        self.assertTrue(all(t[n]["s00"] == ["accepted-pw"] for n in t))
+        self.assertEqual(J.LEDGER_EXPECTED["t1"], {1: {"p09x-kssh-login": 1}, 2: {"p09x-kssh-login": 1},
+                                                   3: {"p09x-kssh-login": 1}, 4: {}, 5: {"p09x-kssh-login": 1}})
+        self.assertEqual(sum(v.get("p09x-kssh-login", 0) for v in J.LEDGER_EXPECTED["t1"].values()), J.T1_TOTALS["ledger-login"])
+
+    def test_ids_are_boot_scoped(self):
+        self.assertEqual(J.expected_for("t1", "s02r", boot=2), ["accepted-pk:ka16"])
+        self.assertIsNone(J.expected_for("t1", "s02r", boot=1))
+        self.assertIsNone(J.expected_for("t1", "s02", boot=2))
+        self.assertIsNone(J.expected_for("t1", "s00", boot=9))
+        self.assertEqual(J.expected_for("t1", "s04a-kp0", boot=4), [])
+        fps = {"ka16": "SHA256:A", "kp0": "SHA256:P"}
+        r = J.compare_sequence("t1", ["s00", "s02r"], [conn("accepted-pw"), conn("accepted-pk:SHA256:A")], fps, boot=5)
+        self.assertTrue(r["ok"], r)
+        r = J.compare_sequence("t1", ["s00", "s02r"], [conn("accepted-pw"), conn("accepted-pk:SHA256:A")], fps, boot=1)
+        self.assertEqual(r["unknown_attempts"], ["s02r"])
+        self.assertTrue(J.prefix_ok("t1", ["s00", "s02r", "s08-w1"], [conn("accepted-pw"), conn("accepted-pk:SHA256:A")], fps, "s02r", boot=2))
+
+    def test_marker_lists_follow_the_contract(self):
+        m = J.T1_MARKERS
+        head = ["shell-prompt", "kssh-conf", "kssh-s00", "kssh-role"]
+        tail = ["kssh-transcripts", "session-a-close"]
+        self.assertEqual(m[1], head + ["kssh-s01a", "kssh-s01b", "kssh-s01", "kssh-s09", "kssh-s02"] + tail)
+        self.assertEqual(m[2], head + ["kssh-t1-load", "kssh-t1-opaque", "kssh-s02r", "kssh-t1-s08"] + tail)
+        self.assertEqual(m[3], head + ["kssh-t1-load", "kssh-s02x", "kssh-t1-del", "kssh-t1-plain", "kssh-s15"] + tail)
+        self.assertEqual(m[4], head + ["kssh-t1-absent"] + tail)
+        self.assertEqual(m[5], head + ["kssh-t1-load", "kssh-t1-revert"] + tail)
+        self.assertNotIn("t1", J.MARKERS)  # the T0/F marker table is untouched
+
+    def test_normalised_argv(self):
+        a = "-chardev socket,id=ser0,path=/w/s1.sock,server=on -drive file=/w/D0.img,if=none,format=raw -cdrom /w/i.iso"
+        b = "-chardev socket,id=ser0,path=/x/s5.sock,server=on -drive file=/x/S1r.img,if=none,format=raw -cdrom /w/i.iso"
+        self.assertEqual(J.t1_norm_argv(a), J.t1_norm_argv(b))
+        self.assertNotEqual(J.t1_norm_argv(a), J.t1_norm_argv(b.replace("/w/i.iso", "/w/j.iso")))
+
+    def test_disk_verdict_attribution_rules(self):
+        v = J.t1_disk_verdicts
+        ok = v("after-boot1", _t1_disk_doc("D0", "r1"), "r1", True, "D0")
+        self.assertEqual([(n, o) for n, o, _, _ in ok], [("t1-disk-records:after-boot1", True), ("t1-disk-scan:after-boot1", True)])
+        miss = _t1_disk_doc("D0", "r1", ciphertext_found=False)
+        miss["records"]["valid"] = []
+        miss["record_verdict"] = {"expect": "r1", "ok": False, "reasons": ["R1 missing"]}
+        self.assertEqual([c for _, _, _, c in v("after-boot1", miss, "r1", True, "D0")], ["C", "C"])    # load passed: layout
+        self.assertEqual([c for _, _, _, c in v("after-boot1", miss, "r1", False, "D0")], ["D", "D"])   # load failed: persistence
+        self.assertEqual([c for _, _, _, c in v("after-boot1", miss, "r1", None, "D0")], ["C", "C"])    # boot 2 not run
+        self.assertEqual([c for _, _, _, c in v("x", None, "r1", True, "D0")], ["E", "E"])
+        blank = _t1_disk_doc("D0-before", "none", ciphertext_found=True)
+        self.assertEqual([(o, c) for _, o, _, c in v("d0-before", blank, "none", None, "D0-before")][1], (False, "E"))
+        hit = _t1_disk_doc("D0", "r1")
+        hit["scan"]["hits"] = [{"label": "pass:ka16", "form": "raw", "offset": 9}]
+        self.assertEqual(v("after-boot1", hit, "r1", True, "D0")[1][1:4:2], (False, "D"))
+
+    def test_record_problems_independent_of_the_verdict_flag(self):
+        d = _t1_disk_doc("D0", "r1r2")
+        self.assertEqual(J.t1_record_problems(d, "r1r2"), [])
+        d["records"]["valid"][1]["previous"] = "99" * 32
+        self.assertTrue(any("not the digest of R1" in p for p in J.t1_record_problems(d, "r1r2")))
+        d = _t1_disk_doc("D0", "r1")
+        d["records"]["valid"][0]["equals_predicted"] = False
+        self.assertTrue(any("prediction" in p for p in J.t1_record_problems(d, "r1")))
+        d["records"]["valid"][0].update(equals_predicted=True, revision=7)
+        self.assertTrue(J.t1_record_problems(d, "r1"))
+        self.assertTrue(J.t1_record_problems(_t1_disk_doc("D0", "r1r2"), "r1"))
+        self.assertTrue(J.t1_record_problems(_t1_disk_doc("D0", "r1"), "none"))
+        self.assertTrue(J.t1_record_problems(_t1_disk_doc("D0", "r1"), "r1r2"))
+        self.assertEqual(J.t1_record_problems(_t1_disk_doc("D0", "none"), "none"), [])
+
+
+@unittest.skipIf(Ed25519PrivateKey is None, "cryptography not installed")
+class T1JudgeTests(T1EvidenceCase):
+    def test_clean_five_boot_run_is_class_a(self):
+        ev = self.build_t1()
+        rc, out, f = self.run_t1(ev)
+        self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+        c = f["classification.json"]
+        self.assertEqual((c["reasons"], c["unproven"], c["boots_run"]), ([], [], [1, 2, 3, 4, 5]))
+        self.assertTrue(c["first_sign_epoch_passed"] and c["first_persistence_epoch_passed"])
+        v = f["verdict.json"]
+        self.assertEqual((v["mode"], v["set"], v["no_evidence_value"]), ("t1", "rt1", False))
+        self.assertEqual(sorted(v["boots"]), ["1", "2", "3", "4", "5"])
+        self.assertEqual(v["boots"]["3"]["t1_import"], ["kp0"])
+        self.assertEqual(v["boots"]["2"]["t1_load"]["fp"], self.fp("ka16"))
+        self.assertEqual(v["observations"]["t1_ms"]["1"], [{"op": "first-status", "ms": 900}, {"op": "import", "ms": 1500}])
+        self.assertEqual([c_["class"] for c_ in v["boots"]["2"]["sshd_connections"]][:2], ["accepted-pw", "accepted-pk:" + self.fp("ka16")])
+        self.assertEqual(len(v["images"]), 6)
+        for name in ("b1:marker:kssh-s02", "b2:marker:kssh-s02r", "b3:marker:kssh-t1-del", "b4:marker:kssh-t1-absent",
+                     "b5:marker:kssh-t1-revert", "t1-role-sequence", "t1-reload-equals-replay", "t1-no-import-after-boot1",
+                     "t1-argv-equal-modulo-disk", "t1-iso-same", "t1-s1-pristine", "checker-exits", "t1-five-boot-totals",
+                     "t1-disk-records:d0-before", "t1-disk-scan:d0-before", "t1-disk-records:after-boot3",
+                     "t1-disk-scan:after-boot5", "b1:s01-fingerprint-and-blob-prefix", "b4:trust-store-volume-mounted",
+                     "b2:t1-opaque", "b3:t1-load-facts", "b4:remote-ledger", "census-drift", "t1-disk-controls"):
+            self.assertTrue(self.check(f, name)["pass"], name)
+        self.assertEqual(f["controls.json"]["ok"], True)
+        self.assertEqual(len(f["controls.json"]["disk"]), 6)
+        self.assertGreater(f["scan.json"]["forms"], 100)
+        self.assertEqual({t["boot"] for t in f["scan.json"]["targets"]}, {1, 2, 3, 4, 5})
+        self.assertTrue(all(t["hits"] == [] for t in f["scan.json"]["targets"]))
+        self.assertIn("CLASS A", out)
+
+    def test_judge_outputs_hold_no_secret_form_and_no_ciphertext(self):
+        ev = self.build_t1()
+        self.run_t1(ev)
+        scanner = J.Scanner(K.canaries(self.keys, leak=True))
+        for n in ("verdict.json", "classification.json", "scan.json", "controls.json"):
+            self.assertEqual(scanner.scan_file(ev / n, joined=True), [], n)
+
+    def test_b0_has_no_evidence_value_and_tolerates_missing_census_and_ledger(self):
+        ev = self.build_t1("b0")
+        (ev / "census-compare.json").unlink()
+        (ev / "boot4" / "p09-ledger.txt").unlink()
+        rc, out, f = self.run_t1(ev, "b0")
+        self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+        self.assertTrue(f["classification.json"]["no_evidence_value"])
+        self.assertTrue(f["verdict.json"]["no_evidence_value"])
+        self.assertTrue(any("census-not-run" in n for n in f["verdict.json"]["notes"]))
+        ev = self.build_t1("rt1")
+        (ev / "census-compare.json").unlink()
+        rc, out, f = self.run_t1(ev)
+        self.assertFalse(self.check(f, "census-drift")["pass"])
+        self.assertEqual(self.klass(f), "B")  # E after the persistence epoch is a tail STOP
+
+    def test_set_and_mode_combinations(self):
+        ev = self.build_t1()
+        for mode, set_ in (("t1", "rt0"), ("t1", "rt0f"), ("t0", "rt1"), ("f", "rt1")):
+            rc, out, _ = self.run_t1(ev, set_, mode=mode)
+            self.assertEqual(rc, 2, (mode, set_))
+        self.assertEqual(self.run_t1(ev)[0], 0)
+        # boots.json of another set is a host mix-up
+        self.edit_json(ev / "boots.json", lambda d: d.update(set="b0"))
+        rc, out, f = self.run_t1(ev)
+        self.assertFalse(self.check(f, "boots-json")["pass"])
+        self.assertEqual(self.klass(f), "B")
+
+    def test_cli_accepts_t1_and_rt1(self):
+        p = J.main  # argparse choices only: a bad choice raises SystemExit
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            p(["judge", "--evidence", "x", "--keys", "y", "--mode", "t2", "--set", "rt1", "--fixture-fp", "z",
+               "--password-file", "a", "--seed-hex-file", "b"])
+
+    # ---- banner, checker, build identity
+    def test_banner_swap_is_class_e_wrong_build(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l.replace(J.T1_PERSIST_BANNER, J.T1_CUSTODY_BANNER + ": volatile single-identity ssh leaf") for l in s])
+        rc, out, f = self.run_t1(ev)
+        self.assertEqual(self.klass(f), "E")
+        self.assertFalse(self.check(f, "b1:banner-dev-posture-persist")["pass"])
+        self.assertFalse(self.check(f, "b1:banner-no-custody")["pass"])
+        self.assertFalse(f["classification.json"]["first_persistence_epoch_passed"])
+
+    def test_custody_banner_in_any_boot_is_wrong_build_even_with_the_persist_banner(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 4, lambda s: s + ["[ INFO] " + J.T1_CUSTODY_BANNER + ": x"])
+        rc, out, f = self.run_t1(ev)
+        self.assertEqual(self.failed(f), ["b4:banner-no-custody"])
+        self.assertEqual(self.klass(f), "B")  # a late host-class reason is a tail STOP
+
+    def test_checker_exit_codes(self):
+        for text in ("persist rc=1\ncustody rc=1\nnone rc=1\n", "persist rc=0\ncustody rc=0\nnone rc=1\n",
+                     "persist rc=0\ncustody rc=1\n", "persist rc=0\ncustody rc=1\nnone rc=2\n"):
+            ev = self.build_t1()
+            (ev / "checker.txt").write_text(text)
+            rc, out, f = self.run_t1(ev)
+            self.assertFalse(self.check(f, "checker-exits")["pass"], text)
+            self.assertEqual(self.check(f, "checker-exits").get("pass"), False)
+        ev = self.build_t1()
+        (ev / "checker.txt").unlink()
+        self.assertFalse(self.check(self.run_t1(ev)[2], "checker-exits")["pass"])
+
+    def test_per_boot_t0_environment_checks_apply(self):
+        for fn, name in ((lambda s: [l for l in s if "fail-closed" not in l], "b2:kms-identity-service"),
+                         (lambda s: [l for l in s if "[policy]" not in l], "b3:policy-loaded"),
+                         (lambda s: [l for l in s if "boot-ceiling" not in l], "b2:boot-ceiling-selftest"),
+                         (lambda s: s + ["serving WEAK xorshift32"], "b4:no-weak-entropy"),
+                         (lambda s: s + ["[ERROR] kernel panic: x"], "b5:no-panic"),
+                         (lambda s: [l for l in s if "CellosFS Native" not in l], "b3:trust-store-volume-mounted")):
+            ev = self.build_t1()
+            n = int(name[1])
+            self.edit_serial(ev, n, fn)
+            rc, out, f = self.run_t1(ev)
+            self.assertFalse(self.check(f, name)["pass"], name)
+        ev = self.build_t1()
+        self.edit_serial(ev, 3, lambda s: [l for l in s if "CellosFS Native" not in l])
+        _, _, f = self.run_t1(ev)
+        self.assertEqual(f["verdict.json"]["checks"]["b3:trust-store-volume-mounted"]["pass"], False)
+        self.assertEqual(self.klass(f), "B")
+        for n in (1, 2, 4, 5):
+            self.assertTrue(self.check(f, f"b{n}:trust-store-volume-mounted")["pass"])
+
+    def test_t0_no_test_config_and_netdev_rules(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 2, lambda s: s + ["USER: P04 INFO ssh-test-config kssh-faults=on"])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b2:t0-no-test-config")["pass"])
+        ev = self.build_t1()
+        p = ev / "boot3" / "qemu-argv.txt"
+        p.write_text(p.read_text().replace("-netdev user,id=net0 ", "-netdev user,id=net0,hostfwd=tcp::1-:2 "))
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b3:qemu-one-user-netdev-no-forward")["pass"])
+        self.assertFalse(self.check(f, "t1-argv-equal-modulo-disk")["pass"])
+
+    # ---- markers
+    def test_marker_rules_per_boot(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 2, lambda s: [l for l in s if "PASS kssh-t1-opaque" not in l])
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.check(f, "b2:marker:kssh-t1-opaque")["detail"], "missing")
+        self.assertFalse(self.check(f, "b2:marker:kssh-t1-opaque")["pass"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 4, lambda s: s[:-1] + ["USER: P04 PASS kssh-t1-absent", s[-1]])
+        f = self.run_t1(ev)[2]
+        self.assertIn("seen 2 times", self.check(f, "b4:marker:kssh-t1-absent")["detail"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 3, lambda s: s[:-1] + ["USER: P04 PASS kssh-s99", s[-1]])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b3:no-unexpected-markers")["pass"])
+        ev = self.build_t1()  # boot 1's markers in boot 4's list: the lists are per boot
+        self.edit_serial(ev, 4, lambda s: s[:-1] + ["USER: P04 PASS kssh-s02", s[-1]])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b4:no-unexpected-markers")["pass"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 5, lambda s: [("USER: P04 FAIL kssh-t1-revert the key is not usable" if "PASS kssh-t1-revert" in l else l) for l in s]
+                         [:-1] + [s[-1].replace("PASS", "FAIL")])
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.check(f, "b5:marker:kssh-t1-revert")["pass"], False)
+        self.assertEqual(self.klass(f), "D")
+        ev = self.build_t1()
+        self.edit_serial(ev, 3, lambda s: [l.replace("PASS kssh-t1-del", "FAIL kssh-t1-del timeout after 5s") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b3:marker:kssh-t1-del")["pass"])
+        self.assertEqual(files_class(f, "b3:marker:kssh-t1-del"), "C")
+
+    def test_terminal_line_exactly_once_per_run_boot(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 2, lambda s: s + ["USER: P04-TERMINAL: PASS checks=1"])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b2:p04-terminal-line")["pass"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 4, lambda s: s[:-1])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b4:p04-terminal-line")["pass"])
+
+    # ---- role oracle
+    def test_role_sequence_mismatch_missing_and_file(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 3, lambda s: [l.replace("role n=3", "role n=2") for l in s])
+        rc, out, f = self.run_t1(ev)
+        self.assertFalse(self.check(f, "t1-role-sequence")["pass"])
+        self.assertEqual(files_class(f, "t1-role-sequence"), "E")
+        self.assertEqual(self.klass(f), "B")
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l for l in s if "kssh-obs role" not in l])
+        rc, out, f = self.run_t1(ev)
+        self.assertFalse(self.check(f, "t1-role-sequence")["pass"])
+        self.assertEqual(self.klass(f), "E")  # boot 1 role channel failure before the persistence epoch
+        ev = self.build_t1()
+        (ev / "boot2" / "role.txt").write_text("role=3\n")
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-role-sequence")["pass"])
+        ev = self.build_t1()
+        (ev / "boot5" / "role.txt").unlink()
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-role-sequence")["pass"])
+        ev = self.build_t1()
+        self.edit_json(ev / "boot4" / "boot.json", lambda d: d.update(role_written=3))
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-role-sequence")["pass"])
+        ev = self.build_t1()  # the same role printed twice in one boot is not a role sequence
+        self.edit_serial(ev, 2, lambda s: s + ["USER: P04 INFO kssh-obs role n=2"])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-role-sequence")["pass"])
+
+    # ---- load facts, replay, imports
+    def test_load_facts_and_reload_equals_replay(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 5, lambda s: [l.replace("posture=persistent", "posture=volatile") for l in s])
+        rc, out, f = self.run_t1(ev)
+        self.assertFalse(self.check(f, "b5:t1-load-facts")["pass"])
+        self.assertFalse(self.check(f, "t1-reload-equals-replay")["pass"])
+        self.assertEqual(files_class(f, "t1-reload-equals-replay"), "D")
+        self.assertEqual(self.klass(f), "D")
+        self.assertTrue(f["classification.json"]["first_persistence_epoch_passed"])  # boots 1-2 were fine
+        ev = self.build_t1()  # facts equal to each other but wrong (both boots lost the key)
+        for n in (2, 5):
+            self.edit_serial(ev, n, lambda s: [l.replace("keys=1", "keys=0") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertTrue(self.check(f, "t1-reload-equals-replay")["pass"])
+        self.assertFalse(self.check(f, "b2:t1-load-facts")["pass"])
+        self.assertEqual(self.klass(f), "D")
+        ev = self.build_t1()
+        self.edit_serial(ev, 5, lambda s: [l.replace(self.fp("ka16"), self.fp("kp0")) if "t1-load" in l else l for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "t1-reload-equals-replay")["pass"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 5, lambda s: [l for l in s if "kssh-obs t1-load" not in l])
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-reload-equals-replay"), "C")
+
+    def test_no_import_after_boot_one(self):
+        for n, extra in ((2, "t1-import name=ka16"), (4, "t1-import name=kp0"), (5, "t1-import name=ka16")):
+            ev = self.build_t1()
+            self.edit_serial(ev, n, lambda s: s[:-2] + [f"USER: P04 INFO kssh-obs {extra}"] + s[-2:])
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, "t1-no-import-after-boot1")["pass"], n)
+        for lines in ([], ["t1-import name=ka16"], ["t1-import name=kp0", "t1-import name=kp0"], ["t1-import name=ka16", "t1-import name=kp0"]):
+            ev = self.build_t1()
+            self.edit_serial(ev, 3, lambda s: [l for l in s if "t1-import" not in l][:-2]
+                             + [f"USER: P04 INFO kssh-obs {o}" for o in lines] + s[-2:])
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, "t1-no-import-after-boot1")["pass"], lines)
+        ev = self.build_t1()
+        self.assertTrue(self.check(self.run_t1(ev)[2], "t1-no-import-after-boot1")["pass"])
+
+    def test_opaque_observation(self):
+        for old, new in (("cat_leak=false", "cat_leak=true"), ("cat_st=1", "cat_st=0")):
+            ev = self.build_t1()
+            self.edit_serial(ev, 2, lambda s: [l.replace(old, new) for l in s])
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, "b2:t1-opaque")["pass"], new)
+            self.assertEqual(files_class(f, "b2:t1-opaque"), "D")
+        ev = self.build_t1()
+        self.edit_serial(ev, 2, lambda s: [l.replace("ls=denied", "ls=listed") for l in s])
+        self.assertTrue(self.check(self.run_t1(ev)[2], "b2:t1-opaque")["pass"])  # ls is an observation only
+
+    def test_frame_bound_and_transcripts_and_conf(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 2, lambda s: [l.replace("op=reload ms=800", "op=reload ms=5001") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b2:t1-ms-frame-bound")["pass"])
+        self.assertEqual(f["verdict.json"]["boots"]["2"]["t1_ms"], [{"op": "reload", "ms": 5001}])
+        ev = self.build_t1()  # the import commit is recorded, not bounded by the single-status rule
+        self.edit_serial(ev, 1, lambda s: [l.replace("op=import ms=1500", "op=import ms=9000") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertEqual((self.klass(f), f["verdict.json"]["observations"]["t1_ms"]["1"][1]), ("A", {"op": "import", "ms": 9000}))
+        for old, new, cls in (("hits=0", "hits=2", "D"), ("scans=12", "scans=0", "C")):
+            ev = self.build_t1()
+            self.edit_serial(ev, 3, lambda s: [l.replace(old, new) for l in s])
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, "b3:transcripts-clean")["pass"])
+            self.assertEqual(files_class(f, "b3:transcripts-clean"), cls)
+        ev = self.build_t1()
+        self.edit_serial(ev, 4, lambda s: [l.replace("mode=t1", "mode=t0") for l in s])
+        self.assertEqual(files_class(self.run_t1(ev)[2], "b4:conf-observed-t1"), "E")
+
+    def test_s01_obs_boot_one_only(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l.replace("prefix=" + self.exp["keys"]["ka16"]["blob_prefix"], "prefix=0000000000000000") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b1:s01-fingerprint-and-blob-prefix")["pass"])
+        self.assertEqual(self.klass(f), "D")
+        self.assertNotIn("b2:s01-fingerprint-and-blob-prefix", f["verdict.json"]["checks"])
+
+    # ---- sshd, ledger
+    def test_sshd_sequence_per_boot(self):
+        ev = self.build_t1()  # boot 4 must open no connection for s04a
+        self.edit_sshd(ev, 4, lambda h: h + sshd_lines("closed", 49999))
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b4:sshd-connection-sequence")["pass"])
+        self.assertEqual(files_class(f, "b4:sshd-connection-sequence"), "D")
+        ev = self.build_t1()  # the limiter probes of boot 2: one probe-ok missing
+        self.edit_sshd(ev, 2, lambda h: h[:-3])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b2:sshd-connection-sequence")["pass"])
+        ev = self.build_t1()  # boot 5 accepted for another fingerprint
+        self.edit_sshd(ev, 5, lambda h: [l.replace(self.fp("ka16"), self.fp("kp0")) for l in h])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b5:sshd-connection-sequence")["pass"])
+        ev = self.build_t1()  # the same sshd lines in boot 3 (s15-iv is kp0) cannot be swapped for boot 2's s02r class
+        self.edit_sshd(ev, 3, lambda h: [l.replace(self.fp("kp0"), self.fp("ka16")) for l in h])
+        self.assertFalse(self.check(self.run_t1(ev)[2], "b3:sshd-connection-sequence")["pass"])
+        ev = self.build_t1()
+        self.edit_sshd(ev, 2, lambda h: h + ["Connection from 172.17.0.1 port 49000 on 172.17.0.2 port 22 rdomain \"\"",
+                                             "Accepted password for tester from 172.17.0.1 port 49000 ssh2"])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b2:no-accepted-password-after-publickey")["pass"])
+
+    def test_password_fallback_and_dirty_accept_are_d(self):
+        ev = self.build_t1()
+        self.edit_sshd(ev, 2, lambda h: [l.replace("Accepted key ED25519", "Failed publickey for tester from 172.17.0.1 port 40201 ssh2: ED25519", 1)
+                                         if False else l for l in h] + ["Connection from 172.17.0.1 port 49100 on 172.17.0.2 port 22 rdomain \"\"",
+                                                                       "Failed publickey for tester from 172.17.0.1 port 49100 ssh2: ED25519 " + FPB,
+                                                                       "Accepted password for tester from 172.17.0.1 port 49100 ssh2"])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b2:no-password-fallback")["pass"])
+        self.assertEqual(files_class(f, "b2:no-password-fallback"), "D")
+        self.assertEqual(self.klass(f), "D")
+
+    def test_unknown_attempt_ids_are_c_and_boot_scoped(self):
+        ev = self.build_t1()  # `s02` is boot 1's id: not registered in boot 5
+        self.edit_serial(ev, 5, lambda s: [l.replace("kssh-attempt s02r", "kssh-attempt s02") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "b5:attempt-ids-known")["pass"])
+        self.assertEqual(files_class(f, "b5:attempt-ids-known"), "C")
+
+    def test_missing_sshd_log_is_c_before_the_epoch(self):
+        ev = self.build_t1()
+        (ev / "boot1" / "sshd.log").unlink()
+        self.edit_serial(ev, 1, lambda s: [l.replace("PASS kssh-s09", "FAIL kssh-s09 refusal answered wrongly") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "C")  # E > C > D before the first persistence epoch
+        self.assertFalse(f["classification.json"]["first_sign_epoch_passed"])
+        ev = self.build_t1()
+        (ev / "boot4" / "sshd.log").unlink()
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "B")  # after the epoch: tail STOP
+        self.assertEqual(f["classification.json"]["reasons"][0].split(":")[0], "tail STOP after the first persistence epoch")
+
+    def test_ledger_slice_per_boot(self):
+        for n, text in ((4, "p09x-kssh-login\n"), (1, ""), (2, "p09x-kssh-login\n" * 2), (3, "p09x-kssh-login\np09x-other\n")):
+            ev = self.build_t1()
+            (ev / f"boot{n}" / "p09-ledger.txt").write_text(text)
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, f"b{n}:remote-ledger")["pass"], n)
+        ev = self.build_t1()
+        (ev / "boot4" / "p09-ledger.txt").unlink()
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "b4:remote-ledger"), "C")
+
+    def test_five_boot_totals_are_judged_only_when_all_ran(self):
+        ev = self.build_t1()
+        f = self.run_t1(ev)[2]
+        self.assertIn("'probe-ok': 6", self.check(f, "t1-five-boot-totals")["detail"] + "'probe-ok': 6")
+        shutil.rmtree(ev / "boot5")
+        self.edit_json(ev / "boots.json", lambda d: d.update(stopped={"after_boot": 4, "reason": "gate", "class_hint": "gate"}))
+        f = self.run_t1(ev)[2]
+        self.assertNotIn("t1-five-boot-totals", f["verdict.json"]["checks"])
+
+    # ---- boot.json, qemu, iso, s1
+    def test_boot_json_rules(self):
+        ev = self.build_t1()
+        self.edit_json(ev / "boot3" / "boot.json", lambda d: d["qemu"].update(clean=False, escalated=True, signal="SIGKILL"))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "b3:qemu-clean-exit"), "E")
+        ev = self.build_t1()
+        self.edit_json(ev / "boot4" / "boot.json", lambda d: d.update(verdict="no-verdict"))
+        self.assertEqual(files_class(self.run_t1(ev)[2], "b4:driver-verdict"), "C")
+        ev = self.build_t1()
+        self.edit_json(ev / "boot2" / "boot.json", lambda d: d.update(settled=False))
+        self.assertEqual(files_class(self.run_t1(ev)[2], "b2:sshd-slice-settled"), "C")
+        ev = self.build_t1()
+        self.edit_json(ev / "boot5" / "boot.json", lambda d: d.update(disk_image="D0"))
+        self.assertEqual(files_class(self.run_t1(ev)[2], "b5:boot-json-identity"), "E")
+        ev = self.build_t1()
+        (ev / "boot2" / "boot.json").unlink()
+        self.assertEqual(files_class(self.run_t1(ev)[2], "b2:boot-json"), "E")
+
+    def test_argv_inequality_beyond_disk_and_socket_is_e(self):
+        ev = self.build_t1()
+        p = ev / "boot2" / "qemu-argv.txt"
+        p.write_text(p.read_text().replace("-m 256M", "-m 512M"))
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "t1-argv-equal-modulo-disk")["pass"])
+        self.assertEqual(files_class(f, "t1-argv-equal-modulo-disk"), "E")
+        self.assertEqual(self.klass(f), "B")
+        ev = self.build_t1()  # only the disk file and the socket differ per boot (boot 5 runs on S1r)
+        self.assertTrue(self.check(self.run_t1(ev)[2], "t1-argv-equal-modulo-disk")["pass"])
+
+    def test_iso_must_be_the_same_in_every_boot(self):
+        ev = self.build_t1()
+        self.edit_json(ev / "boot3" / "boot.json", lambda d: d.update(iso_sha256="ee" * 32))
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "t1-iso-same")["pass"])
+        self.assertEqual(files_class(f, "t1-iso-same"), "E")
+        ev = self.build_t1()
+        self.edit_json(ev / "boots.json", lambda d: d.update(iso_sha256=None))
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-iso-same")["pass"])
+
+    def test_s1_must_stay_pristine(self):
+        for key in ("s1_sha256_after_boot5", "s1r_sha256_before_boot5", "s1_sha256"):
+            ev = self.build_t1()
+            self.edit_json(ev / "boots.json", lambda d: d.update({key: "ff" * 32}))
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, "t1-s1-pristine")["pass"], key)
+            self.assertEqual(files_class(f, "t1-s1-pristine"), "E")
+        ev = self.build_t1()
+        self.edit_json(ev / "boots.json", lambda d: d.pop("s1_sha256_after_boot5"))
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-s1-pristine")["pass"])  # boot 5 ran: all three are required
+
+    # ---- disk images
+    def test_record_tamper_verdicts_are_d_and_named_per_image(self):
+        cases = {
+            "after-boot1": lambda d: d["records"]["valid"][0].update(equals_predicted=False),
+            "after-boot2": lambda d: d["records"]["valid"].append(dict(d["records"]["valid"][0], offset=999, digest="77" * 32)),
+            "after-boot3": lambda d: d["records"]["valid"][1].update(previous="99" * 32),
+            "after-boot4": lambda d: d["records"]["valid"].pop(),
+            "after-boot5": lambda d: d["records"]["valid"][0].update(slot=1),
+        }
+        for label, fn in cases.items():
+            ev = self.build_t1()
+            n = int(label[-1])
+            self.edit_json(ev / f"boot{n}" / "disk-after-boot.json", fn)
+            f = self.run_t1(ev)[2]
+            self.assertFalse(self.check(f, f"t1-disk-records:{label}")["pass"], label)
+            self.assertEqual(files_class(f, f"t1-disk-records:{label}"), "D", label)
+            self.assertEqual(self.klass(f), "D", label)
+            others = [k for k in f["verdict.json"]["checks"] if k.startswith("t1-disk-records:") and k != f"t1-disk-records:{label}"]
+            self.assertTrue(all(self.check(f, k)["pass"] for k in others))
+
+    def test_verdict_flag_cannot_hide_a_wrong_set_nor_a_wrong_expectation(self):
+        ev = self.build_t1()  # the orchestrator judged after-boot3 for r1 only: the table says r1r2
+        self.edit_json(ev / "boot3" / "disk-after-boot.json", lambda d: d.update(
+            records={"valid": d["records"]["valid"][:1], "invalid": [], "v1": []}, record_verdict={"expect": "r1", "ok": True, "reasons": []}))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-disk-records:after-boot3"), "E")
+        ev = self.build_t1()  # ok=true but the set holds a tombstone too early
+        self.edit_json(ev / "boot2" / "disk-after-boot.json", lambda d: d["records"]["valid"].append(
+            {"offset": 5, "slot": 1, "state": 0, "revision": 2, "name": "", "digest": "88" * 32, "previous": "11" * 32,
+             "equals_predicted": None}))
+        self.assertFalse(self.check(self.run_t1(ev)[2], "t1-disk-records:after-boot2")["pass"])
+
+    def test_planted_canary_in_a_disk_image_is_d_and_final(self):
+        ev = self.build_t1()
+        self.edit_json(ev / "boot4" / "disk-after-boot.json", lambda d: d["scan"].update(
+            hits=[{"label": "seed:ka16", "form": "raw", "offset": 12345}]))
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "t1-disk-scan:after-boot4")["pass"])
+        self.assertEqual(files_class(f, "t1-disk-scan:after-boot4"), "D")
+        self.assertEqual(self.klass(f), "D")
+        self.assertIn("seed:ka16/raw@12345", self.check(f, "t1-disk-scan:after-boot4")["detail"])
+        ev = self.build_t1()  # a hit on the first image is D before the epoch as well
+        self.edit_json(ev / "disk-baseline.json", lambda d: d["scan"].update(hits=[{"label": "pass:ka16", "form": "raw", "offset": 1}]))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "D")
+        self.assertFalse(f["classification.json"]["first_persistence_epoch_passed"])
+
+    def test_failed_disk_controls_are_class_e(self):
+        ev = self.build_t1()
+        self.edit_json(ev / "boot2" / "disk-after-boot.json", lambda d: d["scan"].update(controls_ok=False))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-disk-scan:after-boot2"), "E")
+        self.assertEqual(self.klass(f), "E")
+        ev = self.build_t1()
+        self.edit_json(ev / "controls.json", lambda d: (d["disk"][3].update(ok=False), d.update(ok=False)))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-disk-controls"), "E")
+        self.assertEqual(self.klass(f), "E")
+        self.assertEqual(f["controls.json"]["ok"], False)
+        ev = self.build_t1()
+        (ev / "controls.json").unlink()
+        f = self.run_t1(ev)[2]
+        self.assertFalse(self.check(f, "t1-disk-controls")["pass"])
+        self.assertEqual(f["controls.json"]["disk"], [])
+
+    def test_judge_rerun_keeps_the_disk_controls(self):
+        ev = self.build_t1()
+        self.run_t1(ev)
+        rc, out, f = self.run_t1(ev)  # controls.json is now the merged file
+        self.assertEqual((rc, self.klass(f)), (0, "A"), out)
+        self.assertEqual(len(f["controls.json"]["disk"]), 6)
+
+    def test_ciphertext_positive_control_attribution(self):
+        def miss(d):
+            d.update(ciphertext_found=False, records={"valid": [], "invalid": [], "v1": []},
+                     record_verdict={"expect": "r1", "ok": False, "reasons": ["R1 missing: no valid record equals the host's prediction"]})
+        ev = self.build_t1()  # boot 2 loaded the key: the bytes are on disk in a form the finder cannot see = C
+        self.edit_json(ev / "boot1" / "disk-after-boot.json", miss)
+        f = self.run_t1(ev)[2]
+        self.assertEqual((self.klass(f), files_class(f, "t1-disk-scan:after-boot1"), files_class(f, "t1-disk-records:after-boot1")),
+                         ("C", "C", "C"))
+        ev = self.build_t1()  # boot 2 could not load it either: persistence failed = D
+        self.edit_json(ev / "boot1" / "disk-after-boot.json", miss)
+        self.edit_serial(ev, 2, lambda s: [l.replace("PASS kssh-t1-load", "FAIL kssh-t1-load keys: 0") for l in s])
+        self.edit_serial(ev, 2, lambda s: [l.replace("keys=1", "keys=0") for l in s])
+        f = self.run_t1(ev)[2]
+        self.assertEqual((self.klass(f), files_class(f, "t1-disk-scan:after-boot1")), ("D", "D"))
+        ev = self.build_t1()  # ciphertext missing on its own (records fine): the same attribution, C
+        self.edit_json(ev / "boot3" / "disk-after-boot.json", lambda d: d.update(ciphertext_found=False))
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-disk-scan:after-boot3"), "C")
+        self.assertEqual(self.klass(f), "B")
+        ev = self.build_t1()  # a ciphertext found on the blank baseline is a control artefact: E
+        self.edit_json(ev / "disk-baseline.json", lambda d: d.update(ciphertext_found=True))
+        self.assertEqual(files_class(self.run_t1(ev)[2], "t1-disk-scan:d0-before"), "E")
+
+    def test_missing_disk_findings_of_a_run_boot_is_e(self):
+        ev = self.build_t1()
+        (ev / "boot2" / "disk-after-boot.json").unlink()
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "t1-disk-records:after-boot2"), "E")
+        self.assertEqual(self.klass(f), "E")  # no snapshot of boot 2: the persistence epoch cannot be claimed
+        self.assertFalse(f["classification.json"]["first_persistence_epoch_passed"])
+
+    # ---- serial and log leak scan
+    def test_ciphertext_or_record_header_on_serial_or_logs_is_class_d(self):
+        ct = bytes.fromhex(self.exp["record"]["ct"])
+        forms = {"raw-ct": ct[:64], "hex-ct": ct[:40].hex().encode(), "b64-ct": base64.b64encode(ct[:60]),
+                 "hdr-a": b"CKMS\x02\x00\x01\x01", "hdr-b": b"CKMS\x02\x01\x01\x00"}
+        for tag, needle in forms.items():
+            for target in ("serial.raw.log", "sshd.log", "qemu-argv.txt"):
+                ev = self.build_t1()
+                with open(ev / "boot2" / target, "ab") as fh:
+                    fh.write(b"\nleak " + needle + b"\n")
+                rc, out, f = self.run_t1(ev)
+                self.assertFalse(self.check(f, "no-ciphertext-or-header-in-serial-or-logs")["pass"], (tag, target))
+                self.assertEqual(self.klass(f), "D", (tag, target))
+                self.assertNotIn(needle.decode("latin-1"), out)
+                self.assertEqual(J.Scanner(K.canaries(self.keys, leak=True)).scan_file(ev / "verdict.json"), [])
+
+    def test_planted_secret_in_any_boot_target_is_d_and_redacted(self):
+        wrong = self.sec["keys"]["ka16"]["wrong"]
+        for n, target in ((1, "serial.log"), (3, "p09-ledger.txt"), (4, "sshd.log"), (5, "serial.raw.log")):
+            ev = self.build_t1()
+            with open(ev / f"boot{n}" / target, "ab") as fh:
+                fh.write(b"\nleak " + wrong.encode() + b"\n")
+            rc, out, f = self.run_t1(ev)
+            self.assertEqual(self.klass(f), "D", (n, target))
+            self.assertFalse(self.check(f, "no-canary-in-targets")["pass"])
+            self.assertIn("wrong:ka16", self.check(f, "no-canary-in-targets")["detail"])
+            for name in ("verdict.json", "classification.json", "scan.json", "controls.json"):
+                self.assertNotIn(wrong.encode(), (ev / name).read_bytes())
+            self.assertNotIn(wrong, out)
+
+    def test_controls_run_on_the_serial_part_and_failures_are_e(self):
+        ev = self.build_t1()
+        with mock.patch.object(J, "run_controls", return_value={"ok": False}):
+            rc, out, f = self.run_t1(ev)
+        self.assertEqual(self.klass(f), "E")
+        self.assertFalse(self.check(f, "scan-controls")["pass"])
+
+    # ---- sequence, gates, unproven boots
+    def stop_after(self, ev, after, hint, reason="gate row failed"):
+        for n in range(after + 1, 6):
+            shutil.rmtree(ev / f"boot{n}")
+        self.edit_json(ev / "boots.json", lambda d: d.update(stopped={"after_boot": after, "reason": reason, "class_hint": hint}))
+
+    def test_gate_stop_after_the_delete_row_lists_unproven_boots(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 3, lambda s: [l.replace("PASS kssh-t1-del", "FAIL kssh-t1-del status still lists ka16") for l in s])
+        self.stop_after(ev, 3, "gate")
+        rc, out, f = self.run_t1(ev)
+        c = f["classification.json"]
+        self.assertEqual((rc, c["class"]), (1, "D"), out)
+        self.assertEqual(c["boots_run"], [1, 2, 3])
+        self.assertEqual(c["unproven"], ["boot4: not run", "boot5: not run"])
+        self.assertEqual(f["verdict.json"]["boots"]["4"], {"ran": False})
+        self.assertEqual(f["verdict.json"]["sequence"]["boots_unrun"], [4, 5])
+        self.assertNotIn("b4:marker:kssh-t1-absent", f["verdict.json"]["checks"])
+        self.assertNotIn("t1-disk-records:after-boot4", f["verdict.json"]["checks"])
+
+    def test_host_stop_after_the_persistence_epoch_is_class_b_with_unproven_rows(self):
+        ev = self.build_t1()
+        self.stop_after(ev, 2, "E", "qemu did not exit on SIGTERM")
+        rc, out, f = self.run_t1(ev)
+        c = f["classification.json"]
+        self.assertEqual((rc, c["class"]), (1, "B"), out)
+        self.assertTrue(c["first_persistence_epoch_passed"])
+        self.assertEqual(c["unproven"][:3], ["boot3: not run", "boot4: not run", "boot5: not run"])
+        self.assertIn("tail STOP", c["reasons"][0])
+        self.assertIn("qemu did not exit", " ".join(c["reasons"]))
+
+    def test_stop_before_the_persistence_epoch_is_e_or_c(self):
+        ev = self.build_t1()
+        self.stop_after(ev, 1, "E", "host failure")
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "E")
+        self.assertFalse(f["classification.json"]["first_persistence_epoch_passed"])
+        self.assertTrue(f["classification.json"]["first_sign_epoch_passed"])
+        ev = self.build_t1()
+        self.stop_after(ev, 1, "C", "no driver verdict")
+        self.assertEqual(self.klass(self.run_t1(ev)[2]), "C")
+        ev = self.build_t1()  # boots missing and nothing explains it
+        shutil.rmtree(ev / "boot5")
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "sequence-complete"), "E")
+        self.assertEqual(self.klass(f), "B")
+
+    def test_gate_stop_without_a_failed_row_is_still_not_class_a(self):
+        ev = self.build_t1()
+        self.stop_after(ev, 3, "gate")
+        f = self.run_t1(ev)[2]
+        self.assertEqual(files_class(f, "sequence-complete"), "C")
+        self.assertNotEqual(self.klass(f), "A")
+
+    def test_boot_one_gate_failure_ends_with_class_d_not_a_later_missing_row(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l.replace("PASS kssh-s02", "FAIL kssh-s02 unlock failed") for l in s])
+        self.stop_after(ev, 1, "gate")
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "D")
+        self.assertFalse(f["classification.json"]["first_sign_epoch_passed"])
+        self.assertEqual(f["classification.json"]["unproven"][:2], ["boot2: not run", "boot3: not run"])
+
+    def test_precedence_before_the_epoch_is_e_then_c_then_d(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l.replace("PASS kssh-s09", "FAIL kssh-s09 wrong refusal") for l in s])
+        self.assertEqual(self.klass(self.run_t1(ev)[2]), "D")  # D alone, the epoch (s00, s01, s02) still passes
+        f = self.run_t1(ev)[2]
+        self.assertTrue(f["classification.json"]["first_persistence_epoch_passed"])
+        ev = self.build_t1()
+        self.edit_serial(ev, 1, lambda s: [l.replace("PASS kssh-s02", "FAIL kssh-s02 unlock failed") for l in s])
+        (ev / "boot1" / "p09-ledger.txt").unlink()
+        self.assertEqual(self.klass(self.run_t1(ev)[2]), "C")
+        (ev / "census-compare.json").unlink()
+        self.assertEqual(self.klass(self.run_t1(ev)[2]), "E")
+
+    def test_after_the_epoch_d_stays_final_and_later_c_e_is_a_tail(self):
+        ev = self.build_t1()
+        self.edit_serial(ev, 4, lambda s: [l.replace("PASS kssh-t1-absent", "FAIL kssh-t1-absent key still listed") for l in s])
+        (ev / "boot5" / "p09-ledger.txt").unlink()
+        self.assertEqual(self.klass(self.run_t1(ev)[2]), "D")
+        ev = self.build_t1()
+        (ev / "boot5" / "p09-ledger.txt").unlink()
+        (ev / "census-compare.json").unlink()
+        f = self.run_t1(ev)[2]
+        self.assertEqual(self.klass(f), "B")
+        self.assertEqual(f["classification.json"]["unproven"], ["b5:remote-ledger", "census-drift"])
+
+    def test_no_boot_directories_and_an_empty_boot_directory_do_not_crash(self):
+        ev = self.build_t1()
+        for n in range(1, 6):
+            shutil.rmtree(ev / f"boot{n}")
+        self.edit_json(ev / "boots.json", lambda d: d.update(stopped={"after_boot": 0, "reason": "D0 baseline failed", "class_hint": "E"}))
+        rc, out, f = self.run_t1(ev)
+        self.assertEqual((rc, self.klass(f)), (1, "E"), out)
+        self.assertEqual(f["classification.json"]["boots_run"], [])
+        self.assertEqual(f["classification.json"]["unproven"], [f"boot{n}: not run" for n in range(1, 6)])
+        ev = self.build_t1()
+        shutil.rmtree(ev / "boot3")
+        (ev / "boot3").mkdir()  # QEMU never produced anything
+        rc, out, f = self.run_t1(ev)
+        self.assertEqual(rc, 1)
+        self.assertFalse(self.check(f, "b3:evidence-file:serial.log")["pass"])
+        self.assertFalse(self.check(f, "b3:boot-json")["pass"])
+        self.assertEqual(self.klass(f), "B")
+
+    def test_fixture_fp_and_keyset_checks(self):
+        ev = self.build_t1()
+        pw, seedf = self.tmp / "fixture-password", self.tmp / "seed.hex"
+        pw.write_text("pw-" + secrets.token_hex(8) + "\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            J.main(["judge", "--evidence", str(ev), "--keys", str(self.keys), "--mode", "t1", "--set", "rt1",
+                    "--fixture-fp", "bad", "--password-file", str(pw), "--seed-hex-file", str(seedf)])
+        self.assertFalse(json.loads((ev / "verdict.json").read_text())["checks"]["fixture-fp-format"]["pass"])
+
+    def test_t0_key_set_is_refused_for_mode_t1(self):
+        t0 = self.tmp / "t0keys"
+        K.gen(t0 / "keys", t0 / "stage")
+        ev = self.build_t1()
+        pw, seedf = self.tmp / "fixture-password", self.tmp / "seed.hex"
+        pw.write_text("pw-x\n")
+        seedf.write_text("00" * 32 + "\n")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            rc = J.main(["judge", "--evidence", str(ev), "--keys", str(t0 / "keys"), "--mode", "t1", "--set", "rt1",
+                         "--fixture-fp", FP_HOST, "--password-file", str(pw), "--seed-hex-file", str(seedf)])
+        f = json.loads((ev / "verdict.json").read_text())
+        self.assertEqual(rc, 1)
+        self.assertFalse(f["checks"]["keyset-mode-t1"]["pass"])
+
+
+def files_class(files, name):
+    """The class letter a failing check carries (read back from the reasons of classification.json)."""
+    for r in files["classification.json"]["reasons"]:
+        c, _, rest = r.partition(":")
+        if rest.startswith(name + ":"):
+            return c
+    return None
+
+
+@unittest.skipIf(Ed25519PrivateKey is None, "cryptography not installed")
+class T1ArchiveTests(T1EvidenceCase):
+    def setUp(self):
+        self.ev = self.build_t1()
+        self.run_t1(self.ev)
+        (self.ev / "preflight.txt").write_text("preflight ok\n")
+        (self.ev / "preflight.final.txt").write_text("preflight ok\n")
+        (self.ev / "provenance.sha256").write_text("00  x\n")
+        (self.ev / "provenance-build.txt").write_text("built\n")
+        (self.ev / "census-before.json").write_text("{}\n")
+        (self.ev / "census-after.json").write_text("{}\n")
+        (self.ev / "f1-waiver-unsafe-allowlist.diff").write_text("+x\n")
+        (self.ev / "fixture.txt").write_text("fixture: x\n")
+        (self.ev / "kssh.conf").write_text(K.build_conf(self.keys, "t1", [1, 2, 3], FP_HOST, "pw-archive-1234", False))
+        (self.ev / "seed.hex").write_text("00" * 32 + "\n")
+        (self.ev / "disk.img").write_bytes(b"x")
+        (self.ev / "boot-config").mkdir()
+        (self.ev / "boot-config/a.toml").write_text("x\n")
+        (self.ev / "boot3" / "disk.img").write_bytes(b"x")
+        (self.ev / "boot3" / "scratch.txt").write_text("not allowlisted\n")
+        self.dst = self.tmp / f"repo-set-{secrets.token_hex(3)}"
+
+    def test_clean_t1_archive_layout(self):
+        ok, msgs = J.archive(self.ev, self.dst, self.keys)
+        self.assertTrue(ok, msgs)
+        top = {p.name for p in self.dst.iterdir()}
+        for n in ("boots.json", "disk-baseline.json", "controls.json", "checker.txt", "preflight.txt", "preflight.final.txt",
+                  "census-compare.json", "census-before.json", "census-after.json", "f1-waiver-unsafe-allowlist.diff",
+                  "provenance.sha256", "provenance-build.txt", "verdict.json", "scan.json", "classification.json",
+                  "expected-public.json", "ka16.pub", "kp0.pub", "kssh.conf", "fixture.txt", "boot1", "boot2", "boot3", "boot4", "boot5"):
+            self.assertIn(n, top, n)
+        for n in ("expected.json", "seed.hex", "disk.img", "boot-config", "ka16", "kp0", "secrets.json", "ka16.key", "kb.pub"):
+            self.assertNotIn(n, top, n)
+        self.assertEqual({p.name for p in (self.ev / "boot3").iterdir()} - set(J.BOOT_ALLOW), {"disk.img", "scratch.txt"})
+        self.assertEqual({p.name for p in (self.dst / "boot3").iterdir()},
+                         {"serial.raw.log", "serial.log", "sshd.log", "p09-ledger.txt", "qemu-argv.txt", "role.txt", "boot.json", "disk-after-boot.json"})
+        pub = json.loads((self.dst / "expected-public.json").read_text())
+        self.assertEqual(pub["record"]["ct_len"], len(bytes.fromhex(self.exp["record"]["ct"])))
+        self.assertNotIn("ct", pub["record"])
+        scanner = J.Scanner(K.canaries(self.keys, leak=True))
+        for p in self.dst.rglob("*"):
+            if p.is_file():
+                self.assertEqual(scanner.scan_file(p), [], p.name)
+        conf = (self.dst / "kssh.conf").read_text()
+        self.assertNotIn(self.sec["keys"]["ka16"]["passphrase"], conf)
+        self.assertEqual(K.parse_conf(conf)["mode"], "t1")
+
+    def test_ciphertext_or_header_in_the_archive_is_refused(self):
+        ct = bytes.fromhex(self.exp["record"]["ct"])
+        for needle in (ct[:48], b"CKMS\x02\x01\x01\x00"):
+            with open(self.ev / "boot2" / "serial.log", "ab") as f:
+                f.write(b"\n" + needle + b"\n")
+            ok, msgs = J.archive(self.ev, self.dst, self.keys)
+            self.assertFalse(ok, msgs)
+            self.assertFalse(self.dst.exists())
+            self.assertIn("leak-", " ".join(msgs))
+            self.write_serial(self.ev / "boot2", self.serial_lines(2))
+
+    def test_planted_secret_in_a_boot_file_is_refused(self):
+        with open(self.ev / "boot4" / "sshd.log", "ab") as f:
+            f.write(b"leak " + self.sec["keys"]["ka16"]["passphrase"].encode() + b"\n")
+        ok, msgs = J.archive(self.ev, self.dst, self.keys)
+        self.assertFalse(ok)
+        self.assertFalse(self.dst.exists())
+        self.assertIn("pass:ka16", " ".join(msgs))
+        self.assertNotIn(self.sec["keys"]["ka16"]["passphrase"], " ".join(msgs))
+
+    def test_forbidden_name_inside_a_boot_dir_is_refused_or_skipped(self):
+        (self.ev / "boot1" / "id_ed25519").write_text("x")
+        ok, msgs = J.archive(self.ev, self.dst, self.keys)
+        self.assertTrue(ok, msgs)  # not allowlisted: skipped, never copied
+        self.assertFalse((self.dst / "boot1" / "id_ed25519").exists())
+
+    def test_t0_archive_is_unchanged_by_the_t1_rules(self):
+        # a T0 key set (no mode) keeps expected.json and ignores boot dirs / preflight files
+        t0 = self.tmp / f"t0arch-{secrets.token_hex(3)}"
+        K.gen(t0 / "keys", t0 / "stage")
+        ev = t0 / "ev"
+        ev.mkdir()
+        (ev / "serial.raw.log").write_text("hello\n")
+        (ev / "preflight.txt").write_text("x\n")
+        (ev / "boot1").mkdir()
+        (ev / "boot1" / "serial.log").write_text("x\n")
+        dst = t0 / "dst"
+        ok, msgs = J.archive(ev, dst, t0 / "keys")
+        self.assertTrue(ok, msgs)
+        names = {p.name for p in dst.iterdir()}
+        self.assertIn("expected.json", names)
+        self.assertNotIn("expected-public.json", names)
+        self.assertNotIn("preflight.txt", names)
+        self.assertNotIn("boot1", names)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,71 @@
+--- repo/unsafe-allowlist.toml
++++ run/unsafe-allowlist.toml
+@@ -787,3 +787,68 @@
+ reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification."
+ approver = "dmin"
+ date = "2026-09-25"
++
++# ---- K8 per-run waiver (private, not in the repository) ----
++
++[[crate]]
++name = "app-phase02-session-child"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[crate]]
++name = "app-phase02-session-parent"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[crate]]
++name = "app-phase03-filter"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[crate]]
++name = "app-phase04-terminal-driver"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[crate]]
++name = "app-top-load"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: crate tracked since 2f0bc0659 without forbid(unsafe_code) and without an allowlist entry; not in the repository allowlist."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[file]]
++path = "cells/services/input/src/session.rs"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: tracked file contains the unsafe keyword and has no allowlist entry in the repository."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"
++
++[[file]]
++path = "cells/tools/cellbox/src/rg/tests.rs"
++class = "k8-lane-waiver"
++reason = "K8 private per-run waiver: tracked file contains the unsafe keyword and has no allowlist entry in the repository."
++approver = "K8 decision, k8-cp1-approval.md"
++date = "2026-10-30"
++review_by = "2026-10-31"
++tracking = "k8-cp1-approval.md"

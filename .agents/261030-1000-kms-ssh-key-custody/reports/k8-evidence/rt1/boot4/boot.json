@@ -1,0 +1,25 @@
+{
+  "n": 4,
+  "role": 4,
+  "verdict": "driver-verdict",
+  "qemu": {
+    "clean": true,
+    "escalated": false,
+    "rc": 0,
+    "signal": "SIGTERM"
+  },
+  "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+  "disk_image": "D0",
+  "disk_sha256_after": "cd3067a31faf350584bfc57963a00442c89375652840aead02c0427f1f7d7920",
+  "elapsed_s": 15.9,
+  "sshd_lines": [
+    99,
+    107
+  ],
+  "ledger_lines": [
+    3,
+    3
+  ],
+  "settled": true,
+  "role_written": 4
+}

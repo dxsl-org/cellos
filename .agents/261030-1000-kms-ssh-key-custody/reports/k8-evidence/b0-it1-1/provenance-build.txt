@@ -1,0 +1,1 @@
+variant it1: service-kms --features ssh-dev-persist, app-kms-ssh-admin, phase04-terminal-driver --features kssh, cellbox --features "" (empty = product cellbox); lane image, never a product or promoted image

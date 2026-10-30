@@ -1,0 +1,311 @@
+{
+  "canaries": 101,
+  "forms": 865,
+  "targets": [
+    {
+      "boot": 1,
+      "path": "boot1/serial.raw.log",
+      "size": 26600,
+      "hits": []
+    },
+    {
+      "boot": 1,
+      "path": "boot1/serial.log",
+      "size": 26600,
+      "hits": []
+    },
+    {
+      "boot": 1,
+      "path": "boot1/sshd.log",
+      "size": 1207,
+      "hits": []
+    },
+    {
+      "boot": 1,
+      "path": "boot1/p09-ledger.txt",
+      "size": 16,
+      "hits": []
+    },
+    {
+      "boot": 1,
+      "path": "boot1/qemu-argv.txt",
+      "size": 478,
+      "hits": []
+    },
+    {
+      "boot": 2,
+      "path": "boot2/serial.raw.log",
+      "size": 26014,
+      "hits": []
+    },
+    {
+      "boot": 2,
+      "path": "boot2/serial.log",
+      "size": 26014,
+      "hits": []
+    },
+    {
+      "boot": 2,
+      "path": "boot2/sshd.log",
+      "size": 3253,
+      "hits": []
+    },
+    {
+      "boot": 2,
+      "path": "boot2/p09-ledger.txt",
+      "size": 16,
+      "hits": []
+    },
+    {
+      "boot": 2,
+      "path": "boot2/qemu-argv.txt",
+      "size": 478,
+      "hits": []
+    },
+    {
+      "boot": 3,
+      "path": "boot3/serial.raw.log",
+      "size": 24333,
+      "hits": []
+    },
+    {
+      "boot": 3,
+      "path": "boot3/serial.log",
+      "size": 24333,
+      "hits": []
+    },
+    {
+      "boot": 3,
+      "path": "boot3/sshd.log",
+      "size": 1996,
+      "hits": []
+    },
+    {
+      "boot": 3,
+      "path": "boot3/p09-ledger.txt",
+      "size": 16,
+      "hits": []
+    },
+    {
+      "boot": 3,
+      "path": "boot3/qemu-argv.txt",
+      "size": 478,
+      "hits": []
+    },
+    {
+      "boot": 4,
+      "path": "boot4/serial.raw.log",
+      "size": 22278,
+      "hits": []
+    },
+    {
+      "boot": 4,
+      "path": "boot4/serial.log",
+      "size": 22278,
+      "hits": []
+    },
+    {
+      "boot": 4,
+      "path": "boot4/sshd.log",
+      "size": 423,
+      "hits": []
+    },
+    {
+      "boot": 4,
+      "path": "boot4/p09-ledger.txt",
+      "size": 0,
+      "hits": []
+    },
+    {
+      "boot": 4,
+      "path": "boot4/qemu-argv.txt",
+      "size": 478,
+      "hits": []
+    },
+    {
+      "boot": 5,
+      "path": "boot5/serial.raw.log",
+      "size": 21465,
+      "hits": []
+    },
+    {
+      "boot": 5,
+      "path": "boot5/serial.log",
+      "size": 21465,
+      "hits": []
+    },
+    {
+      "boot": 5,
+      "path": "boot5/sshd.log",
+      "size": 1209,
+      "hits": []
+    },
+    {
+      "boot": 5,
+      "path": "boot5/p09-ledger.txt",
+      "size": 16,
+      "hits": []
+    },
+    {
+      "boot": 5,
+      "path": "boot5/qemu-argv.txt",
+      "size": 468,
+      "hits": []
+    }
+  ],
+  "images": [
+    {
+      "image": "d0-before",
+      "disk": "D0-before",
+      "sha256": "95824167ee3233d0b0462c735538247f1a768783aba514af9f992712fcbced1d",
+      "size": 577372160,
+      "expect": "none",
+      "record_ok": true,
+      "valid": [],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": false,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot1",
+      "disk": "D0",
+      "sha256": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot2",
+      "disk": "D0",
+      "sha256": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot3",
+      "disk": "D0",
+      "sha256": "cd3067a31faf350584bfc57963a00442c89375652840aead02c0427f1f7d7920",
+      "size": 577372160,
+      "expect": "r1r2",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        },
+        {
+          "slot": 1,
+          "state": 0,
+          "revision": 2,
+          "name": "",
+          "equals_predicted": null,
+          "offset": 476728384
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot4",
+      "disk": "D0",
+      "sha256": "cd3067a31faf350584bfc57963a00442c89375652840aead02c0427f1f7d7920",
+      "size": 577372160,
+      "expect": "r1r2",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        },
+        {
+          "slot": 1,
+          "state": 0,
+          "revision": 2,
+          "name": "",
+          "equals_predicted": null,
+          "offset": 476728384
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    },
+    {
+      "image": "after-boot5",
+      "disk": "S1r",
+      "sha256": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "size": 577372160,
+      "expect": "r1",
+      "record_ok": true,
+      "valid": [
+        {
+          "slot": 0,
+          "state": 1,
+          "revision": 1,
+          "name": "ka16",
+          "equals_predicted": true,
+          "offset": 476721152
+        }
+      ],
+      "invalid": 0,
+      "v1": 0,
+      "ciphertext_found": true,
+      "hits": 0,
+      "controls_ok": true
+    }
+  ],
+  "expected_public_strings": {
+    "kms-persist-banner": true,
+    "fp-a": true,
+    "accepted-publickey": true,
+    "policy-loaded-line": true
+  },
+  "judge_outputs_scanned": true,
+  "no_evidence_value": false
+}

@@ -1,0 +1,20 @@
+{
+  "image": "D0-before",
+  "sha256": "95824167ee3233d0b0462c735538247f1a768783aba514af9f992712fcbced1d",
+  "size": 577372160,
+  "records": {
+    "valid": [],
+    "invalid": [],
+    "v1": []
+  },
+  "record_verdict": {
+    "expect": "none",
+    "ok": true,
+    "reasons": []
+  },
+  "ciphertext_found": false,
+  "scan": {
+    "hits": [],
+    "controls_ok": true
+  }
+}

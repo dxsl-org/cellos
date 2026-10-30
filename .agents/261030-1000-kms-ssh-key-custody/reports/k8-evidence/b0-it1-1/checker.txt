@@ -1,0 +1,13 @@
+persist rc=0
+    PASS: --expect persist
+custody rc=1
+    FAIL: expected feature missing: ssh-dev-custody
+    FAIL: forbidden feature: ssh-dev-persist
+    FAIL: expected marker missing: DEV_POSTURE ssh-dev-custody
+    FAIL: forbidden marker present: CELLOS-KSSH-T1-DEV-ROOT-v1
+    FAIL: forbidden marker present: DEV_POSTURE ssh-dev-persist
+none rc=1
+    FAIL: forbidden feature: ssh-dev-persist
+    FAIL: forbidden marker present: CELLOS-KSSH-T1-DEV-ROOT-v1
+    FAIL: forbidden marker present: DEV_POSTURE ssh-dev-persist
+    FAIL: forbidden marker present: ssh-dev-persist

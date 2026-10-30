@@ -8,6 +8,10 @@
 //! S08, S15; `f` (the fault cellbox) runs S00, S01, S05a-c, S02, S11. `calibrate 1` adds the
 //! KDF timing attempts after S01.
 //!
+//! `t1` (RT1, `k8-rt1-amendment.md` sections 7.2, 8): the same ISO boots five times; S00
+//! fetches the boot role N (1..5) from the fixture and the driver runs the scenarios of
+//! role N (`role1`..`role5`) against the persistent key store.
+//!
 //! Secrecy: no key text, passphrase, WRONG value, password or conf line is ever formatted
 //! into a `P04` line. Key-bearing steps use `send` + `wait_prompt` (never `Term::run`, whose
 //! diagnostics echo stderr), their errors are withheld when the transcript scan hits, and
@@ -28,6 +32,8 @@ const F_MARKERS: [&str; 9] = [
     "kssh-conf", "kssh-s00", "kssh-s01", "kssh-s05a", "kssh-s05b", "kssh-s05c", "kssh-s02", "kssh-s11",
     "kssh-transcripts",
 ];
+/// Markers of mode t1 before the role is known (a bad conf or no role).
+const T1_PRE_MARKERS: [&str; 4] = ["kssh-conf", "kssh-s00", "kssh-role", "kssh-transcripts"];
 
 /// KDF-bearing attempts: the KDF under TCG is unmeasured, so the bound is generous (the
 /// client's own sign bound is 60 s and its auth budget 120 s; the driver must outlast both).
@@ -55,6 +61,7 @@ struct KeyConf {
 
 struct Conf {
     f_mode: bool,
+    t1: bool,
     calibrate: bool,
     main: u16,
     rekey: u16,
@@ -82,6 +89,7 @@ fn parse_conf(lines: &[String]) -> Result<Conf, &'static str> {
         return Err("header");
     }
     let mut f_mode = None;
+    let mut t1 = false;
     let mut calibrate = None;
     let mut ports = None;
     let (mut hostfp, mut password, mut nonce, mut raw, mut keyb) = (None, None, None, None, None);
@@ -89,8 +97,18 @@ fn parse_conf(lines: &[String]) -> Result<Conf, &'static str> {
     for line in &lines[1..] {
         let words: Vec<&str> = line.split(' ').collect();
         match words.as_slice() {
-            ["mode", "t0"] => f_mode = Some(false),
-            ["mode", "f"] => f_mode = Some(true),
+            ["mode", "t0"] => {
+                f_mode = Some(false);
+                t1 = false;
+            }
+            ["mode", "f"] => {
+                f_mode = Some(true);
+                t1 = false;
+            }
+            ["mode", "t1"] => {
+                f_mode = Some(false);
+                t1 = true;
+            }
             ["calibrate", "0"] => calibrate = Some(false),
             ["calibrate", "1"] => calibrate = Some(true),
             ["ports", a, b, c] => {
@@ -124,6 +142,7 @@ fn parse_conf(lines: &[String]) -> Result<Conf, &'static str> {
     let (raw_sha, raw_len) = raw.ok_or("raw")?;
     let conf = Conf {
         f_mode: f_mode.ok_or("mode")?,
+        t1,
         calibrate: calibrate.ok_or("calibrate")?,
         main,
         rekey,
@@ -139,8 +158,11 @@ fn parse_conf(lines: &[String]) -> Result<Conf, &'static str> {
     if !is_hex(&conf.raw_sha, 64) || conf.raw_len == 0 || main == 0 || rekey == 0 || b == 0 {
         return Err("raw/ports");
     }
-    let mut want: Vec<&str> = alloc::vec!["ka16"];
-    if !conf.f_mode {
+    if conf.t1 && conf.calibrate {
+        return Err("t1 calibrate");
+    }
+    let mut want: Vec<&str> = if conf.t1 { alloc::vec!["ka16", "kp0"] } else { alloc::vec!["ka16"] };
+    if !conf.f_mode && !conf.t1 {
         want.extend(["kl4", "kp0"]);
     }
     if conf.calibrate {
@@ -159,10 +181,24 @@ fn parse_conf(lines: &[String]) -> Result<Conf, &'static str> {
     Ok(conf)
 }
 
-/// Whether the conf names mode `f`, even when the rest of it did not parse (picks the
-/// marker list to skip).
-fn mode_hint_f(lines: &[String]) -> bool {
-    lines.iter().any(|l| l == "mode f")
+/// The mode the conf names, even when the rest of it did not parse (picks the marker list to
+/// skip).
+#[derive(Clone, Copy)]
+enum ModeHint {
+    T0,
+    F,
+    T1,
+}
+
+fn mode_hint(lines: &[String]) -> ModeHint {
+    lines
+        .iter()
+        .find_map(|l| match l.as_str() {
+            "mode f" => Some(ModeHint::F),
+            "mode t1" => Some(ModeHint::T1),
+            _ => None,
+        })
+        .unwrap_or(ModeHint::T0)
 }
 
 // ---------------------------------------------------------------------------------------
@@ -561,6 +597,9 @@ fn admin(a: &mut Term, c: &mut Ctx, cmd: &str) -> Result<Adm, String> {
 /// `kms-ssh-admin import NAME` with `text` pasted at the prompt (nothing is echoed).
 fn admin_import(a: &mut Term, c: &mut Ctx, name: &str, text: &str) -> Result<Adm, String> {
     let id = format!("import {name}");
+    if c.conf.t1 {
+        println(&format!("P04 INFO kssh-obs t1-import name={name}"));
+    }
     let start = now_ms();
     let r = (|| {
         a.send(&format!("kms-ssh-admin import {name}"))?;
@@ -640,6 +679,9 @@ fn s00(a: &mut Term, c: &mut Ctx) -> Res {
 /// S01a: `kms-ssh-admin status` on the empty store.
 fn s01a(a: &mut Term, c: &mut Ctx) -> Res {
     let r = admin(a, c, "kms-ssh-admin status")?;
+    if c.conf.t1 {
+        println(&format!("P04 INFO kssh-obs t1-ms op=first-status ms={}", r.ms));
+    }
     verdict(
         &[
             ("st0", r.st == "st=0"),
@@ -688,6 +730,10 @@ fn s01(a: &mut Term, c: &mut Ctx) -> Res {
         (key.fp.clone(), key.prefix.clone())
     };
     let imp = admin_import(a, c, "ka16", &text)?;
+    let posture = if c.conf.t1 { POSTURE_PERSISTENT } else { POSTURE_VOLATILE };
+    if c.conf.t1 {
+        println(&format!("P04 INFO kssh-obs t1-ms op=import ms={}", imp.ms));
+    }
     let (got_fp, got_prefix) = imported_facts(&imp.out);
     println(&format!(
         "P04 INFO kssh-obs s01 fp={} prefix={}",
@@ -696,26 +742,29 @@ fn s01(a: &mut Term, c: &mut Ctx) -> Res {
     ));
     let one = admin(a, c, "kms-ssh-admin status ka16")?;
     let leaf = admin(a, c, "kms-ssh-admin status")?;
-    verdict(
-        &[
-            ("st0", imp.st == "st=0"),
-            ("imported", has_line(&imp.out, "kms-ssh-admin: imported key 'ka16'")),
-            ("wrapped", has_line(&imp.out, "  custody: passphrase-wrapped")),
-            ("fp", got_fp.as_deref() == Some(fp.as_str())),
-            ("blob-prefix", got_prefix.as_deref() == Some(prefix.as_str())),
-            ("posture", has_line(&imp.out, "  posture: DEV_POSTURE volatile: lost when the key service restarts")),
-            ("status-ka16", one.st == "st=0" && kv(&one.out, "  fingerprint: ") == Some(fp.as_str())),
-            ("keys1", leaf.st == "st=0" && has_line(&leaf.out, "  keys: 1")),
-        ],
-        format!("{} | {} | {}", imp.describe(), one.describe(), leaf.describe()),
-    )
+    let mut conds = alloc::vec![
+        ("st0", imp.st == "st=0"),
+        ("imported", has_line(&imp.out, "kms-ssh-admin: imported key 'ka16'")),
+        ("wrapped", has_line(&imp.out, "  custody: passphrase-wrapped")),
+        ("fp", got_fp.as_deref() == Some(fp.as_str())),
+        ("blob-prefix", got_prefix.as_deref() == Some(prefix.as_str())),
+        ("posture", has_line(&imp.out, posture)),
+        ("status-ka16", one.st == "st=0" && kv(&one.out, "  fingerprint: ") == Some(fp.as_str())),
+        ("keys1", leaf.st == "st=0" && has_line(&leaf.out, "  keys: 1")),
+    ];
+    if c.conf.t1 {
+        conds.push(("status-custody", has_line(&one.out, "  custody: passphrase-wrapped")));
+        conds.push(("status-posture", has_line(&one.out, posture)));
+    }
+    verdict(&conds, format!("{} | {} | {}", imp.describe(), one.describe(), leaf.describe()))
 }
 
 /// S09: admin refusals and a cancelled delete leave the store unchanged.
 fn s09(a: &mut Term, c: &mut Ctx) -> Res {
     let fp = c.key("ka16")?.fp.clone();
     let ka16 = key_text(a, c, "ka16")?;
-    let kl4 = key_text(a, c, "kl4")?;
+    // The second key for the store-full refusal: `kl4` in T0, `kp0` in T1 (no `kl4` there).
+    let kl4 = key_text(a, c, if c.conf.t1 { "kp0" } else { "kl4" })?;
     let same = admin_import(a, c, "ka16", &ka16)?;
     let other = admin_import(a, c, "kx", &kl4)?;
     let nope = admin(a, c, "kms-ssh-admin delete nope")?;
@@ -1230,6 +1279,357 @@ fn s15(a: &mut Term, c: &mut Ctx) -> Res {
 }
 
 // ---------------------------------------------------------------------------------------
+// Mode t1 (RT1: persistent custody across five boots)
+// ---------------------------------------------------------------------------------------
+
+const POSTURE_VOLATILE: &str = "  posture: DEV_POSTURE volatile: lost when the key service restarts";
+const POSTURE_PERSISTENT: &str = "  posture: DEV_POSTURE persistent: no rollback or crash-durability claim";
+
+/// `persistent`, `volatile` or `?` from the posture line of an admin status.
+fn posture_word(lines: &[String]) -> &'static str {
+    if has_line(lines, POSTURE_PERSISTENT) {
+        "persistent"
+    } else if has_line(lines, POSTURE_VOLATILE) {
+        "volatile"
+    } else {
+        "?"
+    }
+}
+
+/// A public value for an obs line: itself when it is a short token of plain characters.
+fn public_word(text: &str) -> String {
+    let ok = !text.is_empty()
+        && text.len() <= 64
+        && text.bytes().all(|b| b.is_ascii_alphanumeric() || b":+/=_-.".contains(&b));
+    if ok {
+        String::from(text)
+    } else {
+        String::from("?")
+    }
+}
+
+/// The number of an `st=N` status word, or `?`.
+fn st_number(st: &str) -> String {
+    match st.strip_prefix("st=") {
+        Some(n) if !n.is_empty() && n.len() <= 3 && n.bytes().all(|b| b.is_ascii_digit()) => String::from(n),
+        _ => String::from("?"),
+    }
+}
+
+/// S00 in mode t1: the password login that also fetches the boot role (`role=N` then
+/// `kssh-s00` on stdout). The role is `Some` only for a clean login of that shape.
+fn s00_t1(a: &mut Term, c: &mut Ctx) -> (Res, Option<u32>) {
+    println("P04 INFO kssh-attempt s00");
+    let f = Fixture {
+        port: c.conf.main,
+        fp: c.conf.hostfp.clone(),
+        password: c.conf.password.clone(),
+        rekey_port: Some(c.conf.rekey),
+    };
+    let r = (|| {
+        login(a, &f, &format!("{HOST} --command 'cat /tmp/kssh-role; echo kssh-s00'"), &f.password)?;
+        a.wait_prompt(SSH_MS)
+    })();
+    if let Err(why) = guard(a, c, "s00", r) {
+        return (Err(why), None);
+    }
+    let out = out_lines(a);
+    let err = a.stderr_text();
+    scan(a, c, "s00");
+    let st = match status(a) {
+        Ok(st) => st,
+        Err(why) => return (Err(why), None),
+    };
+    let role = match out.as_slice() {
+        [first, last] if last == "kssh-s00" => first
+            .strip_prefix("role=")
+            .filter(|n| (1..=3).contains(&n.len()) && n.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|n| n.parse::<u32>().ok()),
+        _ => None,
+    }
+    .filter(|_| st == "st=0");
+    let res = verdict(
+        &[("st0", st == "st=0"), ("stdout", role.is_some())],
+        format!("{st} out={} err={}", out.len(), clip(err.trim())),
+    );
+    (res, role)
+}
+
+/// Mode t1 scenario list: S00 and the role, then the scenarios of role N.
+fn t1_run(a: &mut Term, c: &mut Ctx) {
+    let (r, role) = s00_t1(a, c);
+    fin("kssh-s00", r);
+    if let Some(n) = role {
+        println(&format!("P04 INFO kssh-obs role n={n}"));
+    }
+    let Some(n) = role.filter(|n| (1..=5).contains(n)) else {
+        // Without a role no scenario list is known: the boot ends here.
+        check("kssh-role", false, "no valid role in the S00 stdout");
+        return;
+    };
+    check("kssh-role", true, &format!("role={n}"));
+    match n {
+        1 => role1(a, c),
+        2 => role2(a, c),
+        3 => role3(a, c),
+        4 => role4(a, c),
+        _ => role5(a, c),
+    }
+}
+
+/// Boot 1: first load of the blank store, refusals, wrapped import, login.
+fn role1(a: &mut Term, c: &mut Ctx) {
+    fin("kssh-s01a", s01a(a, c));
+    fin("kssh-s01b", s01b(a, c));
+    fin("kssh-s01", s01(a, c));
+    fin("kssh-s09", s09(a, c));
+    fin("kssh-s02", s02(a, c, "s02", "ka16"));
+}
+
+/// Boot 2: the key survived the reboot (no import), opaque namespace, login, limiter.
+fn role2(a: &mut Term, c: &mut Ctx) {
+    fin("kssh-t1-load", t1_load(a, c));
+    fin("kssh-t1-opaque", t1_opaque(a, c));
+    fin("kssh-s02r", s02(a, c, "s02r", "ka16"));
+    fin("kssh-t1-s08", t1_s08(a, c));
+}
+
+/// Boot 3: reload, login after the limiter, delete, plain import, pipeline login.
+fn role3(a: &mut Term, c: &mut Ctx) {
+    fin("kssh-t1-load", t1_load(a, c));
+    fin("kssh-s02x", s02(a, c, "s02x", "ka16"));
+    fin("kssh-t1-del", t1_del(a, c));
+    fin("kssh-t1-plain", t1_plain(a, c));
+    fin("kssh-s15", s15_t1(a, c));
+}
+
+/// Boot 4: the deleted key and the plain key are absent.
+fn role4(a: &mut Term, c: &mut Ctx) {
+    fin("kssh-t1-absent", t1_absent(a, c));
+}
+
+/// Boot 5 (the end-of-boot-1 disk): the key deleted in boot 3 loads and signs again.
+fn role5(a: &mut Term, c: &mut Ctx) {
+    fin("kssh-t1-load", t1_load(a, c));
+    fin("kssh-t1-revert", s02(a, c, "s02r", "ka16"));
+}
+
+/// The reload facts (boots 2, 3, 5): the first KMS contact of the boot is `status` (the
+/// lazy load), then `status ka16`; no import anywhere. The obs line holds public values only
+/// and no timing, so boot 2 and boot 5 compare equal.
+fn t1_load(a: &mut Term, c: &mut Ctx) -> Res {
+    let fp = c.key("ka16")?.fp.clone();
+    let leaf = admin(a, c, "kms-ssh-admin status")?;
+    println(&format!("P04 INFO kssh-obs t1-ms op=reload ms={}", leaf.ms));
+    let one = admin(a, c, "kms-ssh-admin status ka16")?;
+    let named = one.st == "st=0";
+    let got_fp = kv(&one.out, "  fingerprint: ").filter(|_| named);
+    let custody = match kv(&one.out, "  custody: ").filter(|_| named) {
+        Some("passphrase-wrapped") => "wrapped",
+        Some("plain") => "plain",
+        _ => "none",
+    };
+    println(&format!(
+        "P04 INFO kssh-obs t1-load keys={} readiness={} posture={} custody={custody} fp={}",
+        kv(&leaf.out, "  keys: ").map_or_else(|| String::from("?"), public_word),
+        kv(&leaf.out, "  readiness: ").map_or_else(|| String::from("?"), public_word),
+        posture_word(&leaf.out),
+        got_fp.map_or_else(|| String::from("-"), public_word)
+    ));
+    verdict(
+        &[
+            ("leaf-st0", leaf.st == "st=0"),
+            ("leaf", has_line(&leaf.out, "kms-ssh-admin: key service ssh leaf")),
+            ("ready", has_line(&leaf.out, "  readiness: Ready")),
+            ("keys1", has_line(&leaf.out, "  keys: 1")),
+            ("posture", has_line(&leaf.out, POSTURE_PERSISTENT)),
+            ("status-ka16", named),
+            ("wrapped", has_line(&one.out, "  custody: passphrase-wrapped")),
+            ("fp", got_fp == Some(fp.as_str())),
+        ],
+        format!("{} | {}", leaf.describe(), one.describe()),
+    )
+}
+
+/// A shell command observed through the transcript: the admin-style result and whether the
+/// raw transcript (stdout or stderr) holds the record magic `CKMS`.
+fn shell_probe(a: &mut Term, c: &mut Ctx, cmd: &str) -> Result<(Adm, bool), String> {
+    let start = now_ms();
+    let r = (|| {
+        a.send(cmd)?;
+        a.wait_prompt(SSH_MS)
+    })();
+    guard(a, c, cmd, r)?;
+    let leak = find(&a.out, b"CKMS").is_some() || find(&a.err, b"CKMS").is_some();
+    let r = adm_finish(a, c, cmd, start);
+    Ok((guard(a, c, cmd, r)?, leak))
+}
+
+/// The K4b authority rule, observed from the shell: the key file is unreadable and shows no
+/// record bytes; the listing outcome is only recorded.
+fn t1_opaque(a: &mut Term, c: &mut Ctx) -> Res {
+    let (cat, leak) = shell_probe(a, c, "cat /srv/cellos/kms/ssh-a.bin")?;
+    let (ls, _) = shell_probe(a, c, "ls /srv/cellos/kms")?;
+    let ls_form = if ls.st == "st=0" {
+        if ls.out.iter().any(|l| !l.trim().is_empty()) {
+            "listed"
+        } else {
+            "empty"
+        }
+    } else {
+        let err = ls.err.to_ascii_lowercase();
+        if err.contains("denied") || err.contains("permission") || err.contains("not permitted") {
+            "denied"
+        } else {
+            "error"
+        }
+    };
+    println(&format!(
+        "P04 INFO kssh-obs t1-opaque cat_st={} cat_leak={leak} ls_st={} ls={ls_form}",
+        st_number(&cat.st),
+        st_number(&ls.st)
+    ));
+    verdict(
+        &[("cat-nonzero", st_number(&cat.st) != "0" && cat.st.starts_with("st=")), ("cat-no-record", !leak)],
+        format!("{} | {}", cat.describe(), ls.describe()),
+    )
+}
+
+/// The limiter on the persisted key: five wrong passphrases, then the correct one is refused
+/// as locked (no reset here: the key stays locked to the end of the boot).
+fn t1_s08(a: &mut Term, c: &mut Ctx) -> Res {
+    let mut conds: Vec<(&str, bool)> = Vec::new();
+    let mut notes: Vec<String> = Vec::new();
+    let (pass, wrong) = (c.pass("ka16")?, c.wrong("ka16")?);
+    let cmd = pk_cmd(c.conf.main, "ka16", HOST, &format!("p9 kssh-login; echo {}", c.token()));
+
+    let mut fail_ms = Vec::new();
+    for n in 1..=5 {
+        let id = format!("s08-w{n}");
+        let p = attempt_pk(a, c, &spec(&id, cmd.clone(), "ka16", Typed::Pass(&wrong)))?;
+        fail_ms.push(p.enter_ms.unwrap_or(0));
+        conds.push(("wrong-refused", refused_after_prompt(&p, "unlock failed", "unlock_failed").iter().all(|(_, ok)| *ok)));
+        notes.push(format!("w{n}:{}", p.describe()));
+    }
+    let locked = attempt_pk(a, c, &spec("s08-locked", cmd, "ka16", Typed::Pass(&pass)))?;
+    println(&format!(
+        "P04 INFO kssh-obs s08 fail-ms={} locked-ms={}",
+        fail_ms.iter().map(|m| format!("{m}")).collect::<Vec<_>>().join(","),
+        locked.enter_ms.unwrap_or(0)
+    ));
+    conds.push((
+        "sixth-locked",
+        refused_after_prompt(&locked, "too many failed unlocks; key locked", "unlock_locked").iter().all(|(_, ok)| *ok),
+    ));
+    notes.push(format!("locked:{}", locked.describe()));
+    verdict(&conds, notes.join(" | "))
+}
+
+/// Delete `ka16` (the persisted key); the tombstone is checked on the host after the boot.
+fn t1_del(a: &mut Term, c: &mut Ctx) -> Res {
+    let (del, echoed) = admin_delete(a, c, "ka16", "delete")?;
+    println(&format!("P04 INFO kssh-obs t1-ms op=delete ms={}", del.ms));
+    let leaf = admin(a, c, "kms-ssh-admin status")?;
+    let one = admin(a, c, "kms-ssh-admin status ka16")?;
+    println(&format!("P04 INFO kssh-obs t1-del posture={}", posture_word(&leaf.out)));
+    verdict(
+        &[
+            ("prompted", echoed.is_some()),
+            ("st0", del.st == "st=0"),
+            ("deleted", has_line(&del.out, "kms-ssh-admin: deleted key 'ka16'")),
+            ("keys0", leaf.st == "st=0" && has_line(&leaf.out, "  keys: 0")),
+            ("gone-st1", one.st == "st=1"),
+            ("gone-msg", one.err.contains("kms-ssh-admin: no such key")),
+        ],
+        format!("{} | {} | {}", del.describe(), leaf.describe(), one.describe()),
+    )
+}
+
+/// Import the plain key into the now empty store: volatile, never written to the disk.
+fn t1_plain(a: &mut Term, c: &mut Ctx) -> Res {
+    let fp = c.key("kp0")?.fp.clone();
+    let text = key_text(a, c, "kp0")?;
+    let imp = admin_import(a, c, "kp0", &text)?;
+    let (got_fp, _) = imported_facts(&imp.out);
+    let one = admin(a, c, "kms-ssh-admin status kp0")?;
+    verdict(
+        &[
+            ("st0", imp.st == "st=0"),
+            ("imported", has_line(&imp.out, "kms-ssh-admin: imported key 'kp0'")),
+            ("plain", has_line(&imp.out, "  custody: plain")),
+            (
+                "plain-warning",
+                has_line(&imp.out, "  WARNING: unencrypted key held by the key service (development posture)"),
+            ),
+            ("fp", got_fp.as_deref() == Some(fp.as_str())),
+            ("posture", has_line(&imp.out, POSTURE_VOLATILE)),
+            ("status-kp0", one.st == "st=0" && kv(&one.out, "  fingerprint: ") == Some(fp.as_str())),
+            ("status-plain", has_line(&one.out, "  custody: plain")),
+            ("status-posture", has_line(&one.out, POSTURE_VOLATILE)),
+        ],
+        format!("{} | {}", imp.describe(), one.describe()),
+    )
+}
+
+/// S15's pipeline login with the plain key (`s15-iv` of T0: no prompt, raw.bin hash back).
+fn s15_t1(a: &mut Term, c: &mut Ctx) -> Res {
+    let main = c.conf.main;
+    let feed = "cat /kssh/raw.bin | ";
+    let four = attempt_pk(
+        a,
+        c,
+        &spec(
+            "s15-iv",
+            format!("{feed}{}", pk_cmd(main, "kp0", HOST, "cat > /tmp/kssh-in; sha256sum /tmp/kssh-in")),
+            "kp0",
+            Typed::Never,
+        ),
+    )?;
+    let sha = sha256_word(&four.out.join(" ")).map(String::from);
+    println(&format!("P04 INFO kssh-obs s15 raw-len={}", c.conf.raw_len));
+    verdict(
+        &[
+            ("iv-st0", four.st == "st=0"),
+            ("iv-no-prompt", !four.seen && four.prompts == 0 && !four.err_has("password: ")),
+            ("iv-sha", sha.as_deref() == Some(c.conf.raw_sha.as_str())),
+            ("iv-rec", four.rec.is_ok()),
+        ],
+        four.describe(),
+    )
+}
+
+/// Boot 4: neither the deleted wrapped key nor the plain key exists; both identities are
+/// refused before any network traffic.
+fn t1_absent(a: &mut Term, c: &mut Ctx) -> Res {
+    let main = c.conf.main;
+    let leaf = admin(a, c, "kms-ssh-admin status")?;
+    let named_ka16 = admin(a, c, "kms-ssh-admin status ka16")?;
+    let named_kp0 = admin(a, c, "kms-ssh-admin status kp0")?;
+    println(&format!("P04 INFO kssh-obs t1-absent posture={}", posture_word(&leaf.out)));
+    let ka16 = attempt_pk(a, c, &spec("s04a-ka16", pk_cmd(main, "ka16", HOST, "true"), "ka16", Typed::Never))?;
+    let kp0 = attempt_pk(a, c, &spec("s04a-kp0", pk_cmd(main, "kp0", HOST, "true"), "kp0", Typed::Never))?;
+    verdict(
+        &[
+            ("leaf-st0", leaf.st == "st=0"),
+            ("ready", has_line(&leaf.out, "  readiness: Ready")),
+            ("keys0", has_line(&leaf.out, "  keys: 0")),
+            ("posture", has_line(&leaf.out, POSTURE_VOLATILE)),
+            ("ka16-gone", named_ka16.st == "st=1" && named_ka16.err.contains("kms-ssh-admin: no such key")),
+            ("kp0-gone", named_kp0.st == "st=1" && named_kp0.err.contains("kms-ssh-admin: no such key")),
+            ("ka16-st255", ka16.st == "st=255"),
+            ("ka16-msg", ka16.err_has("ssh: no such identity 'ka16'")),
+            ("ka16-no-prompt", !ka16.seen && !ka16.err_has("password: ")),
+            ("ka16-code", rec_code(&ka16.rec) == "identity_unknown"),
+            ("kp0-st255", kp0.st == "st=255"),
+            ("kp0-msg", kp0.err_has("ssh: no such identity 'kp0'")),
+            ("kp0-no-prompt", !kp0.seen && !kp0.err_has("password: ")),
+            ("kp0-code", rec_code(&kp0.rec) == "identity_unknown"),
+        ],
+        format!("{} | {} | {}", leaf.describe(), ka16.describe(), kp0.describe()),
+    )
+}
+
+// ---------------------------------------------------------------------------------------
 // F mode (fault cellbox)
 // ---------------------------------------------------------------------------------------
 
@@ -1340,8 +1740,12 @@ pub(crate) fn kssh_checks(a: &mut Term) {
         println("P04 INFO ssh-network-ready never");
     }
     let lines = read_lines(a, "/kssh/kssh.conf");
-    let hint_f = lines.as_ref().is_ok_and(|l| mode_hint_f(l));
-    let markers: &[&str] = if hint_f { &F_MARKERS } else { &T0_MARKERS };
+    let hint = lines.as_ref().map_or(ModeHint::T0, |l| mode_hint(l));
+    let markers: &[&str] = match hint {
+        ModeHint::F => &F_MARKERS,
+        ModeHint::T1 => &T1_PRE_MARKERS,
+        ModeHint::T0 => &T0_MARKERS,
+    };
     let parsed = match &lines {
         Ok(lines) => parse_conf(lines),
         Err(why) => Err(*why),
@@ -1353,13 +1757,23 @@ pub(crate) fn kssh_checks(a: &mut Term) {
     };
     println(&format!(
         "P04 INFO kssh-obs conf mode={} calibrate={} keys={}",
-        if conf.f_mode { "f" } else { "t0" },
+        if conf.f_mode {
+            "f"
+        } else if conf.t1 {
+            "t1"
+        } else {
+            "t0"
+        },
         conf.calibrate,
         conf.keys.len()
     ));
-    let (f_mode, do_calibrate) = (conf.f_mode, conf.calibrate);
+    let (f_mode, do_calibrate, t1) = (conf.f_mode, conf.calibrate, conf.t1);
     let mut c = Ctx::new(conf);
     let c = &mut c;
+    if t1 {
+        t1_run(a, c);
+        return transcripts(a, c);
+    }
 
     fin("kssh-s00", s00(a, c));
     if f_mode {
@@ -1396,7 +1810,11 @@ pub(crate) fn kssh_checks(a: &mut Term) {
         fin("kssh-s15", s15(a, c));
     }
 
-    // The last transcripts, then the counts.
+    transcripts(a, c);
+}
+
+/// The last transcripts, then the counts.
+fn transcripts(a: &mut Term, c: &mut Ctx) {
     scan(a, c, "end");
     println(&format!(
         "P04 INFO kssh-obs transcripts scans={} hits={} canaries={}",

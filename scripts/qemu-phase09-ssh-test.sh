@@ -49,11 +49,19 @@
 # value), rt0 (I-T0) and rt0f (I-F) (evidence: one boot each, a RUN_CONSUMED token is created with
 # O_EXCL before QEMU starts). The verdict is scripts/kssh_judge.py; the text evidence is archived
 # under reports/k8-evidence/ (override: KSSH_EVIDENCE_OUT). A missing fixture image exits 3 (not a run).
+#
+# KSSH K8 RT1 (T1 persistent custody, k8-rt1-amendment.md): `--kssh --persist [--set b0|rt1]` is the I-T1 variant. /bin/kms is
+# service-kms --features ssh-dev-persist (its own cargo invocation); the sibling checker runs on the signed artifact; then
+# scripts/kssh_boots.py runs FIVE boots of the one ISO on one NVMe fixture disk (the boot role is a file in the running Docker
+# fixture, a disk revert precedes boot 5) in place of the single-boot step. Sets: b0 (a rehearsal sequence, at most 3, no evidence
+# value; tokens B0_BOOT-it1-N) and rt1 (the evidence sequence; token RUN_CONSUMED-k8-rt1 is claimed with O_EXCL before boot 1).
+# frozen-sources-rt1.sha256 is the freeze file of persist mode (the T0 freeze file is historical and not checked there).
 set -euo pipefail
 
 CANDIDATE=""
 NO_FAULTS=0
 KSSH=0
+PERSIST=0
 KFAULTS=0
 KSET=b0
 KSET_GIVEN=0
@@ -67,8 +75,9 @@ while (($#)); do
         --kssh) KSSH=1; shift ;;
         --faults) KFAULTS=1; shift ;;
         --calibrate) CALIBRATE=1; shift ;;
+        --persist) PERSIST=1; shift ;;
         --set)
-            [[ $# -ge 2 ]] || { echo "FAIL: --set needs b0|rt0|rt0f" >&2; exit 1; }
+            [[ $# -ge 2 ]] || { echo "FAIL: --set needs b0|rt0|rt0f|rt1" >&2; exit 1; }
             KSET="$2"; KSET_GIVEN=1; shift 2 ;;
         *) echo "FAIL: unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -77,16 +86,18 @@ if [[ -n "$CANDIDATE" && "$NO_FAULTS" != 1 ]]; then
     echo "FAIL: --candidate needs --no-faults (the candidate cellbox has no p09-faults; L5f stays lane-only)" >&2
     exit 1
 fi
-if [[ "$KSSH" != 1 && ( "$KFAULTS" == 1 || "$CALIBRATE" == 1 || "$KSET_GIVEN" == 1 ) ]]; then
+if [[ "$KSSH" != 1 && ( "$KFAULTS" == 1 || "$CALIBRATE" == 1 || "$KSET_GIVEN" == 1 || "$PERSIST" == 1 ) ]]; then
     echo "FAIL: --faults/--set/--calibrate need --kssh" >&2; exit 1
 fi
 if [[ "$KSSH" == 1 ]]; then
     [[ -z "$CANDIDATE" && "$NO_FAULTS" != 1 ]] || { echo "FAIL: --kssh excludes --candidate and --no-faults" >&2; exit 1; }
+    [[ "$PERSIST" != 1 || ( "$KFAULTS" != 1 && "$CALIBRATE" != 1 ) ]] || { echo "FAIL: --persist excludes --faults and --calibrate" >&2; exit 1; }
     case "$KSET" in
         b0) ;;
-        rt0) [[ "$KFAULTS" != 1 ]] || { echo "FAIL: set rt0 is the I-T0 variant (no --faults)" >&2; exit 1; } ;;
+        rt0) [[ "$KFAULTS" != 1 && "$PERSIST" != 1 ]] || { echo "FAIL: set rt0 is the I-T0 variant (no --faults, no --persist)" >&2; exit 1; } ;;
         rt0f) [[ "$KFAULTS" == 1 ]] || { echo "FAIL: set rt0f is the I-F variant (needs --faults)" >&2; exit 1; } ;;
-        *) echo "FAIL: --set must be b0, rt0 or rt0f" >&2; exit 1 ;;
+        rt1) [[ "$PERSIST" == 1 ]] || { echo "FAIL: set rt1 is the I-T1 variant (needs --persist)" >&2; exit 1; } ;;
+        *) echo "FAIL: --set must be b0, rt0, rt0f or rt1" >&2; exit 1 ;;
     esac
     [[ "$CALIBRATE" != 1 || "$KSET" == b0 ]] || { echo "FAIL: --calibrate is B0 only" >&2; exit 1; }
 fi
@@ -102,6 +113,7 @@ ACCEL="${PHASE09_ACCEL:-tcg}"
 case "$ACCEL" in tcg|kvm) ;; *) echo "FAIL: PHASE09_ACCEL must be tcg or kvm" >&2; exit 1 ;; esac
 WINDOW="${PHASE09_BOOT_WINDOW:-3600}"
 [[ "$KSSH" != 1 || -n "${PHASE09_BOOT_WINDOW:-}" ]] || WINDOW=7200
+[[ "$PERSIST" != 1 || -n "${PHASE09_BOOT_WINDOW:-}" ]] || WINDOW=1800
 [[ "$KSSH" != 1 || "$ACCEL" == tcg ]] || { echo "FAIL: the K8 lane qualifies on TCG only" >&2; exit 1; }
 FEATURES="phase02-terminal-profile,phase04-driver-profile"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -124,9 +136,11 @@ CENSUS_BASE="$ROOT/.agents/261020-1750-cellbox-cli/reports/s10-9-evidence/measur
 CEILING_BASELINE=2f0bc06599808be3ab0e4b3df0d79ea08c5317aa
 VARIANT=it0
 [[ "$KFAULTS" != 1 ]] || VARIANT=if
+KMS_FEATURE=ssh-dev-custody
+[[ "$PERSIST" != 1 ]] || { VARIANT=it1; KMS_FEATURE=ssh-dev-persist; }
 
 rm -rf "$EMBEDDED" "$EVIDENCE" "$ISO" "$W/iso-root" "$PRIVATE_CONFIG" "$SCRATCH" "$FIXTURE" "$KSTAGE" \
-    "$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel"
+    "$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel" "$W/S1.img" "$W/S1r.img"
 # K8: every run gets a fresh TEST key set (kssh_keys.py refuses to overwrite one).
 [[ "$KSSH" != 1 ]] || rm -rf "$KEYS"
 mkdir -p "$EMBEDDED" "$KEYS" "$EVIDENCE" "$PRIVATE_CONFIG" "$SCRATCH" "$FIXTURE" "$KSTAGE"
@@ -138,14 +152,14 @@ if [[ "$KSSH" == 1 ]]; then
     : > "$PF"
     pf() { printf '%s\n' "$*" | tee -a "$PF"; }
     pfail() { pf "PREFLIGHT FAIL: $*"; exit "${2:-1}"; }
-    pf "set=$KSET variant=$VARIANT faults=$KFAULTS calibrate=$CALIBRATE accel=$ACCEL window=$WINDOW"
+    pf "set=$KSET variant=$VARIANT faults=$KFAULTS calibrate=$CALIBRATE persist=$PERSIST kms-feature=$KMS_FEATURE accel=$ACCEL window=$WINDOW"
     pf "head=$(git rev-parse HEAD)"
-    for c in 47a9d5bda 236b79915 297a89a9e 070f0d0a1; do
+    for c in 47a9d5bda 236b79915 297a89a9e 070f0d0a1 55a31fa97 86076fc66; do
         git merge-base --is-ancestor "$c" HEAD || pfail "K3-K7 commit $c is not an ancestor of HEAD"
     done
     pf "k3-k7 commits are ancestors of HEAD"
     DIRTY="$(git status --porcelain -uall | cut -c4-)"
-    BAD="$(printf '%s\n' "$DIRTY" | grep -Ev '^$|^(scripts/(qemu-phase09-ssh-test\.sh|phase09_ssh_fixture\.sh|kssh_keys\.py|kssh_judge\.py|test_kssh_judge\.py)|cells/tests/phase04-terminal-driver/(Cargo\.toml|src/main\.rs|src/ssh\.rs|src/ssh/kssh\.rs)|cells/tools/cellbox/(Cargo\.toml|src/ssh\.rs|src/ssh/faults\.rs)|CHANGELOG\.md|cells/tools/kms-ssh-admin/src/(main\.rs|tests/armor\.rs)|\.agents/261030-1000-kms-ssh-key-custody/.*)$' || true)"
+    BAD="$(printf '%s\n' "$DIRTY" | grep -Ev '^$|^(scripts/(qemu-phase09-ssh-test\.sh|phase09_ssh_fixture\.sh|kssh_keys\.py|kssh_judge\.py|test_kssh_judge\.py|kssh_boots\.py|kssh_records\.py|test_kssh_boots\.py|test_kssh_records\.py)|cells/tests/phase04-terminal-driver/(Cargo\.toml|src/main\.rs|src/ssh\.rs|src/ssh/kssh\.rs)|cells/tools/cellbox/(Cargo\.toml|src/ssh\.rs|src/ssh/faults\.rs)|CHANGELOG\.md|cells/tools/kms-ssh-admin/src/(main\.rs|tests/armor\.rs)|\.agents/261030-1000-kms-ssh-key-custody/.*)$' || true)"
     [[ -z "$BAD" ]] || pfail "working tree has changes outside the K8 closure: $(printf '%s' "$BAD" | tr '\n' ' ')"
     pf "dirty files (all inside the K8 closure): $(printf '%s' "$DIRTY" | tr '\n' ' ')"
     pf "dirty-digest=$( { git status --porcelain -uall; git diff HEAD; } | sha256sum | cut -d' ' -f1)"
@@ -160,19 +174,37 @@ if [[ "$KSSH" == 1 ]]; then
     pf "tmp-free-kb=$FREE_KB"
     pf "python=$($PYTHON_BIN --version 2>&1) ssh=$(ssh -V 2>&1)"
     mkdir -p "$K8_OUT"
+    FREEZE=frozen-sources.sha256
+    [[ "$PERSIST" != 1 ]] || FREEZE=frozen-sources-rt1.sha256
+    if [[ "$PERSIST" == 1 ]]; then
+        # RT1 preflight additions (k8-rt1-amendment.md 12.2 items 8, 15, 17, 18; 15 and 16 are checked after the builds).
+        WREAL="$(realpath -m -- "$W")"
+        case "$WREAL/" in "$ROOT"/*) pfail "work directory $WREAL lies inside the repository" ;; esac
+        [[ "$KSET" == b0 || "$WREAL" == /tmp/cellbox-phase09-kssh-rt1 ]] || pfail "set rt1 needs CELLBOX_PHASE09_WORK=/tmp/cellbox-phase09-kssh-rt1 (amendment 12.2 item 8)"
+        [[ "$(stat -c %a "$W")" == 700 ]] || pfail "work directory $W is not mode 700"
+        tree_digests() {
+            local d
+            for d in cells/services/kms cells/tools/kms-ssh-admin libs/ostd libs/vissh libs/terminal libs/types/src/kms libs/api/src \
+                libs/cellos-fs cells/services/vfs cells/tools/cellbox cells/tests/phase04-terminal-driver; do
+                printf '%s %s\n' "$(cd "$ROOT" && find "$d" -type f -not -path '*/target/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" "$d"
+            done
+        }
+        tree_digests > "$EVIDENCE/frozen-trees.txt"
+        pf "tree digests recorded (frozen-trees.txt)"
+    fi
     if [[ "$KSET" == b0 ]]; then
         n=1
         while [[ -e "$K8_OUT/B0_BOOT-$VARIANT-$n" ]]; do n=$((n + 1)); done
-        (( n <= 3 )) || pfail "B0 budget: at most 3 boots per variant are authorized ($VARIANT)"
+        (( n <= 3 )) || pfail "B0 budget: at most 3 boots/sequences per variant are authorized ($VARIANT)"
         B0_N=$n
         pf "b0-boot=$VARIANT-$B0_N of 3"
     else
         [[ ! -e "$K8_OUT/RUN_CONSUMED-k8-$KSET" ]] || pfail "RUN_CONSUMED-k8-$KSET exists: one evidence run per set, no rerun"
-        [[ -s "$K8_OUT/frozen-sources.sha256" ]] || pfail "frozen-sources.sha256 missing (required for an evidence set)"
+        [[ -s "$K8_OUT/$FREEZE" ]] || pfail "$FREEZE missing (required for an evidence set)"
     fi
-    if [[ -s "$K8_OUT/frozen-sources.sha256" ]]; then
-        (cd "$ROOT" && sha256sum --quiet -c "$K8_OUT/frozen-sources.sha256") || pfail "frozen sources changed since frozen-sources.sha256"
-        pf "frozen-sources.sha256 matches"
+    if [[ -s "$K8_OUT/$FREEZE" ]]; then
+        (cd "$ROOT" && sha256sum --quiet -c "$K8_OUT/$FREEZE") || pfail "frozen sources changed since $FREEZE"
+        pf "$FREEZE matches"
     fi
 fi
 
@@ -211,7 +243,7 @@ if [[ -z "$CANDIDATE" ]]; then
         # the ssh-dev-custody feature is not unified into other packages; the booted `[kms]`
         # banner is the control. CELLOS_PRODUCTION would trip service-kms's build.rs guard.
         env -u CELLOS_PRODUCTION CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
-            -p service-kms --features ssh-dev-custody
+            -p service-kms --features "$KMS_FEATURE"
         env -u CELLOS_PRODUCTION CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
             -p app-kms-ssh-admin
         if [[ "$KFAULTS" == 1 ]]; then
@@ -268,6 +300,7 @@ trap cleanup EXIT
 if [[ "$KSSH" == 1 ]]; then
     echo "==> Generating TEST keys under $KEYS (never leaves $W except as public evidence)"
     GEN_ARGS=(--dir "$KEYS" --stage "$KSTAGE")
+    [[ "$PERSIST" != 1 ]] || GEN_ARGS+=(--mode t1)
     [[ "$CALIBRATE" != 1 ]] || GEN_ARGS+=(--calibrate)
     "$PYTHON_BIN" scripts/kssh_keys.py gen "${GEN_ARGS[@]}"
     bash scripts/phase09_ssh_fixture.sh start "$FIXTURE" --kssh "$KSTAGE/authdir" | tee "$EVIDENCE/fixture.txt"
@@ -285,7 +318,7 @@ if [[ "$KSSH" == 1 ]]; then
     PORT_B="$(cat "$FIXTURE/port_b")"
     install -m 600 "$FIXTURE/host_ed25519" "$KEYS/fixture-host-key"
     cp "$FIXTURE/sshd_config_b" "$EVIDENCE/"
-    if [[ "$KFAULTS" == 1 ]]; then KMODE=f; else KMODE=t0; fi
+    if [[ "$KFAULTS" == 1 ]]; then KMODE=f; elif [[ "$PERSIST" == 1 ]]; then KMODE=t1; else KMODE=t0; fi
     CONF_ARGS=(--dir "$KEYS" --stage "$KSTAGE" --mode "$KMODE" --ports "$PORT" "$REKEY_PORT" "$PORT_B"
         --hostfp "$FP" --password-file "$KEYS/fixture-password")
     [[ "$CALIBRATE" != 1 ]] || CONF_ARGS+=(--calibrate)
@@ -323,11 +356,36 @@ diff.write_text("".join(difflib.unified_diff(base.splitlines(True), (base + extr
 print("private F1 allowlist: %d crate and %d file waivers" % (len(CRATES), len(FILES)))
 PY
     SIGN_EXTRA=(--allowlist "$ALLOWLIST")
+    [[ "$PERSIST" != 1 ]] || mv "$EVIDENCE/unsafe-allowlist.diff" "$EVIDENCE/f1-waiver-unsafe-allowlist.diff"
 fi
 SEED_HEX="$(cat "$KEYS/seed.hex")"
 CELLBOX_PRIVATE_FIXTURE_SIGNING=1 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
     "${SIGN_EXTRA[@]}" --seed-hex "$SEED_HEX" --sign "${CELL_BINARIES[@]}" "$REL/app-init"
 unset SEED_HEX
+if [[ "$PERSIST" == 1 ]]; then
+    # RT1 preflight items 15-17 (k8-rt1-amendment.md 12.2), on the exact signed artifacts the image receives.
+    VFS_FP="$(ls "$REL"/.fingerprint/service-vfs-*/bin-service-vfs.json 2>/dev/null | head -1 || true)"
+    [[ -n "$VFS_FP" ]] || pfail "no cargo fingerprint of service-vfs under $REL"
+    "$PYTHON_BIN" -c 'import json,sys; sys.exit(1 if "test-hooks" in json.load(open(sys.argv[1]))["features"] else 0)' "$VFS_FP" \
+        || pfail "service-vfs was built with test-hooks (RT1 needs the default-feature VFS)"
+    pf "service-vfs: built with default features, no test-hooks (cargo fingerprint $(basename "$(dirname "$VFS_FP")"))"
+    : > "$EVIDENCE/checker.txt"
+    for expect in persist custody none; do
+        rc=0
+        "$PYTHON_BIN" scripts/check-ssh-dev-persist-exclusion.py --kms-features ssh-dev-persist --kms-artifact "$REL/service-kms" \
+            --expect "$expect" > "$SCRATCH/checker-$expect.out" 2>&1 || rc=$?
+        printf '%s rc=%s\n' "$expect" "$rc" >> "$EVIDENCE/checker.txt"
+        sed 's/^/    /' "$SCRATCH/checker-$expect.out" >> "$EVIDENCE/checker.txt"
+        case "$expect:$rc" in persist:0|custody:1|none:1) ;; *) pfail "exclusion checker --expect $expect exited $rc on the signed service-kms (wanted persist 0, custody 1, none 1)" ;; esac
+    done
+    pf "exclusion checker on the signed service-kms: persist 0, custody 1, none 1 (checker.txt)"
+    SIGN_CHECK="$("$PYTHON_BIN" scripts/cellos-sign --check 2>&1 || true)"
+    printf '%s\n' "$SIGN_CHECK" | grep -q '^OK:   F5' || pfail "cellos-sign --check: F5 is not OK"
+    F1_ITEMS="$(printf '%s\n' "$SIGN_CHECK" | grep -E '^  \[(attribute|token)\] ' | sed -E 's/^  \[(attribute|token)\] ([^ ]+) ::.*/\2/' | sort | tr '\n' ' ')"
+    [[ "$F1_ITEMS" == "app-cellbox app-phase02-session-child app-phase02-session-parent app-phase03-filter app-phase04-terminal-driver app-top-load service-input " ]] \
+        || pfail "F1 lists items other than the 7 known ones: $F1_ITEMS"
+    pf "F1: exactly the 7 known items (private per-run waiver applies), F5 OK"
+fi
 
 FAT_ARGS=()
 for i in "${!CELL_BINARIES[@]}"; do
@@ -342,6 +400,7 @@ if [[ "$KSSH" == 1 ]]; then
     bake_policy "$SCRATCH/POLICY.BIN"
     FAT_ARGS+=("$SCRATCH/POLICY.BIN" /POLICY.BIN)
     KSSH_FILES=(kssh.conf ka16.key kl4.key kp0.key bad-aes128.key bad-chacha.key raw.bin)
+    [[ "$PERSIST" != 1 ]] || KSSH_FILES=(kssh.conf ka16.key kp0.key bad-aes128.key bad-chacha.key raw.bin)
     [[ "$CALIBRATE" != 1 ]] || KSSH_FILES+=(kr1.key kr64.key)
     for f in "${KSSH_FILES[@]}"; do
         [[ -s "$KSTAGE/$f" ]] || { echo "FAIL: missing kssh stage file $f" >&2; exit 1; }
@@ -398,7 +457,9 @@ for name in cellbox cellbox-ssh net e1000 phase04-terminal-driver ssh.conf; do
     grep -Fq -- "-> LFN '$name'" "$EVIDENCE/fat-layout.txt" || { echo "FAIL: image misses $name" >&2; exit 1; }
 done
 if [[ "$KSSH" == 1 ]]; then
-    for name in kms kms-ssh-admin kssh.conf ka16.key kl4.key kp0.key bad-aes128.key bad-chacha.key raw.bin; do
+    LAYOUT_NAMES=(kms kms-ssh-admin kssh.conf ka16.key kl4.key kp0.key bad-aes128.key bad-chacha.key raw.bin)
+    [[ "$PERSIST" != 1 ]] || LAYOUT_NAMES=(kms kms-ssh-admin kssh.conf ka16.key kp0.key bad-aes128.key bad-chacha.key raw.bin)
+    for name in "${LAYOUT_NAMES[@]}"; do
         grep -Fq -- "-> LFN '$name'" "$EVIDENCE/fat-layout.txt" || { echo "FAIL: image misses $name" >&2; exit 1; }
     done
     assert_policy_in_image "$EVIDENCE/fat-layout.txt"
@@ -437,8 +498,8 @@ if [[ -n "$CANDIDATE" ]]; then
     "$PYTHON_BIN" scripts/phase10_candidate_import.py annotate --evidence "$EVIDENCE" \
         --kernel-features "default+$FEATURES" --cellbox-features "default (no p09-faults)"
 elif [[ "$KSSH" == 1 ]]; then
-    printf 'variant %s: service-kms --features ssh-dev-custody, app-kms-ssh-admin, phase04-terminal-driver --features kssh, cellbox --features "%s" (empty = product cellbox); lane image, never a product or promoted image\n' \
-        "$VARIANT" "$CELLBOX_FEATURES" > "$EVIDENCE/provenance-build.txt"
+    printf 'variant %s: service-kms --features %s, app-kms-ssh-admin, phase04-terminal-driver --features kssh, cellbox --features "%s" (empty = product cellbox); lane image, never a product or promoted image\n' \
+        "$VARIANT" "$KMS_FEATURE" "$CELLBOX_FEATURES" > "$EVIDENCE/provenance-build.txt"
 elif [[ "$NO_FAULTS" == 1 ]]; then
     printf 'cellbox: lane build app-cellbox, default features (--no-faults: no p09-faults; S9-6 not judged)\n' \
         > "$EVIDENCE/provenance-build.txt"
@@ -468,6 +529,15 @@ if [[ "$KSSH" == 1 ]]; then
     pf "token=$TOKEN claimed"
     cp "$PF" "$EVIDENCE/preflight.final.txt"
 fi
+if [[ "$PERSIST" == 1 ]]; then
+    echo "==> Booting the private ISO five times on one fixture disk (scripts/kssh_boots.py; one user netdev, no restrict, no forwards)"
+    BOOTS_RC=0
+    "$PYTHON_BIN" scripts/kssh_boots.py run --iso "$ISO" --disk "$TRUST_DISK" --container "$CONTAINER" --out "$EVIDENCE" \
+        --keys "$KEYS" --work "$W" --set "$KSET" --accel "$ACCEL" --window "$WINDOW" \
+        --extra-secret-file "$KEYS/seed.hex" --extra-secret-file "$KEYS/fixture-password" --extra-secret-file "$KEYS/fixture-host-key" \
+        || BOOTS_RC=$?
+    pf "kssh_boots.py exit $BOOTS_RC (0 = five boots, 1 = stopped by a STOP rule, 2 = host error)"
+else
 echo "==> Booting private ISO (one user netdev, no restrict, no forwards)"
 "$PYTHON_BIN" - "$ISO" "$EVIDENCE" "$ACCEL" "$WINDOW" "$TRUST_DISK" "$CONTAINER" <<'PY'
 import json, os, re, select, socket, subprocess, sys, time
@@ -578,18 +648,43 @@ PY
 if ! docker exec "$CONTAINER" sh -c 'cat /tmp/p09-ledger 2>/dev/null || true' > "$EVIDENCE/p09-ledger.txt"; then
     rm -f "$EVIDENCE/p09-ledger.txt"
 fi
+fi
 bash scripts/phase09_ssh_fixture.sh stop "$FIXTURE"
 trap 'rm -f "$KEYS/fixture-password"' EXIT
-cp "$FIXTURE/sshd.log" "$EVIDENCE/sshd.log"
+if [[ "$PERSIST" == 1 ]]; then
+    cp "$FIXTURE/sshd.log" "$EVIDENCE/sshd-full.log"
+else
+    cp "$FIXTURE/sshd.log" "$EVIDENCE/sshd.log"
+fi
 
 if [[ "$KSSH" == 1 ]]; then
     echo "==> KSSH census after the set, evaluation, archive"
     "$PYTHON_BIN" scripts/kssh_judge.py census --baseline "$CENSUS_BASE" --out "$EVIDENCE/census-after.json" --compare-baseline "$EVIDENCE/census-compare.json" \
         || echo "WARN: census after the set differs from the S10-9 baseline (class E, see census-compare.json)"
+    if [[ "$PERSIST" == 1 ]]; then
+        # "hash before = hash after" (amendment 4.3): the freeze file, the tree digests, and nothing else of the closure moved during the run.
+        POST_OK=1
+        if [[ -s "$K8_OUT/$FREEZE" ]]; then
+            (cd "$ROOT" && sha256sum --quiet -c "$K8_OUT/$FREEZE") && pf "POST: $FREEZE matches after the run" || { POST_OK=0; pf "POST: FREEZE DRIFT: $FREEZE no longer matches (class E)"; }
+        else
+            pf "POST: no $FREEZE present (rehearsal): freeze not compared"
+        fi
+        tree_digests > "$EVIDENCE/frozen-trees-after.txt"
+        if cmp -s "$EVIDENCE/frozen-trees.txt" "$EVIDENCE/frozen-trees-after.txt"; then
+            pf "POST: tree digests equal before and after"
+        else
+            POST_OK=0; pf "POST: TREE DIGEST DRIFT (class E)"
+        fi
+        pf "POST: dirty-digest=$( { git status --porcelain -uall; git diff HEAD; } | sha256sum | cut -d' ' -f1)"
+        pf "POST: ok=$POST_OK"
+        cp "$PF" "$EVIDENCE/preflight.final.txt"
+    fi
     JUDGE_RC=0
+    JUDGE_EXTRA=(--trust-disk "$TRUST_DISK")
+    [[ "$PERSIST" != 1 ]] || JUDGE_EXTRA=()
     "$PYTHON_BIN" scripts/kssh_judge.py judge --evidence "$EVIDENCE" --keys "$KEYS" --mode "$KMODE" --set "$KSET" \
         --fixture-fp "$FP" --password-file "$KEYS/fixture-password" --seed-hex-file "$KEYS/seed.hex" \
-        --fixture-host-key "$KEYS/fixture-host-key" --trust-disk "$TRUST_DISK" --policy-shape loaded || JUDGE_RC=$?
+        --fixture-host-key "$KEYS/fixture-host-key" "${JUDGE_EXTRA[@]}" --policy-shape loaded || JUDGE_RC=$?
     case "$KSET" in
         b0) SETDIR="b0-$VARIANT-$B0_N" ;;
         *) SETDIR="$KSET" ;;
@@ -598,7 +693,7 @@ if [[ "$KSSH" == 1 ]]; then
         --extra-secret-file "$KEYS/seed.hex" --extra-secret-file "$KEYS/fixture-password" --extra-secret-file "$KEYS/fixture-host-key" \
         || { echo "FAIL: archive scan refused the evidence (secrets kept in $W for inspection)" >&2; exit 1; }
     if [[ "${KSSH_KEEP_SECRETS:-0}" != 1 ]]; then
-        rm -rf "$KEYS" "$KSTAGE" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$SCRATCH"
+        rm -rf "$KEYS" "$KSTAGE" "$ISO" "$TRUST_DISK" "$EMBEDDED" "$W/iso-root" "$SCRATCH" "$W/S1.img" "$W/S1r.img" "$W"/serial-boot*.sock
     fi
     echo "KSSH set $KSET ($VARIANT): judge exit $JUDGE_RC; evidence archived at $K8_OUT/$SETDIR"
     exit "$JUDGE_RC"

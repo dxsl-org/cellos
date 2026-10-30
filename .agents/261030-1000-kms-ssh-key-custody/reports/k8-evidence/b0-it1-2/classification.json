@@ -1,0 +1,15 @@
+{
+  "class": "A",
+  "reasons": [],
+  "first_sign_epoch_passed": true,
+  "first_persistence_epoch_passed": true,
+  "boots_run": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "unproven": [],
+  "no_evidence_value": true
+}

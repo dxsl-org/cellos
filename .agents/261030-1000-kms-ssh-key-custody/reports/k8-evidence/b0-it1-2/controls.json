@@ -1,0 +1,438 @@
+{
+  "serial": {
+    "pre": {
+      "ok": true,
+      "all-forms": {
+        "forms": 870,
+        "missing": []
+      },
+      "all-forms-small-chunk": {
+        "forms": 870,
+        "missing": []
+      },
+      "wrapped": {
+        "canaries": 87,
+        "missing": []
+      },
+      "decoys": {
+        "planted": 159,
+        "false_hits": []
+      }
+    },
+    "post": {
+      "ok": true,
+      "all-forms": {
+        "forms": 870,
+        "missing": []
+      },
+      "all-forms-small-chunk": {
+        "forms": 870,
+        "missing": []
+      },
+      "wrapped": {
+        "canaries": 87,
+        "missing": []
+      },
+      "decoys": {
+        "planted": 159,
+        "false_hits": []
+      }
+    },
+    "ok": true
+  },
+  "disk": [
+    {
+      "image": "D0-before",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    },
+    {
+      "image": "D0",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    },
+    {
+      "image": "D0",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    },
+    {
+      "image": "D0",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    },
+    {
+      "image": "D0",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    },
+    {
+      "image": "S1r",
+      "region_bytes": 3145728,
+      "pre": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "post": {
+        "ok": true,
+        "all-forms": {
+          "forms": 812,
+          "missing": []
+        },
+        "all-forms-small-chunk": {
+          "forms": 812,
+          "missing": []
+        },
+        "wrapped": {
+          "canaries": 84,
+          "missing": []
+        },
+        "decoys": {
+          "planted": 159,
+          "false_hits": []
+        },
+        "disk-unaligned": {
+          "forms": 812,
+          "plants": 802,
+          "unaligned_plants": 802,
+          "missing": []
+        },
+        "disk-straddle": {
+          "forms": 812,
+          "chunk": 12972,
+          "missing": []
+        }
+      },
+      "ok": true
+    }
+  ],
+  "disk_ok": true,
+  "ok": true,
+  "no_evidence_value": true
+}

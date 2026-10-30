@@ -1,0 +1,137 @@
+{
+  "set": "rt1",
+  "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+  "d0_before_sha256": "95824167ee3233d0b0462c735538247f1a768783aba514af9f992712fcbced1d",
+  "s1_sha256": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+  "s1r_sha256_before_boot5": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+  "s1_sha256_after_boot5": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+  "boots": [
+    {
+      "n": 1,
+      "role": 1,
+      "verdict": "driver-verdict",
+      "qemu": {
+        "clean": true,
+        "escalated": false,
+        "rc": 0,
+        "signal": "SIGTERM"
+      },
+      "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+      "disk_image": "D0",
+      "disk_sha256_after": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "elapsed_s": 23.4,
+      "sshd_lines": [
+        7,
+        26
+      ],
+      "ledger_lines": [
+        0,
+        1
+      ],
+      "settled": true,
+      "role_written": 1
+    },
+    {
+      "n": 2,
+      "role": 2,
+      "verdict": "driver-verdict",
+      "qemu": {
+        "clean": true,
+        "escalated": false,
+        "rc": 0,
+        "signal": "SIGTERM"
+      },
+      "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+      "disk_image": "D0",
+      "disk_sha256_after": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "elapsed_s": 34.4,
+      "sshd_lines": [
+        26,
+        69
+      ],
+      "ledger_lines": [
+        1,
+        2
+      ],
+      "settled": true,
+      "role_written": 2
+    },
+    {
+      "n": 3,
+      "role": 3,
+      "verdict": "driver-verdict",
+      "qemu": {
+        "clean": true,
+        "escalated": false,
+        "rc": 0,
+        "signal": "SIGTERM"
+      },
+      "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+      "disk_image": "D0",
+      "disk_sha256_after": "cd3067a31faf350584bfc57963a00442c89375652840aead02c0427f1f7d7920",
+      "elapsed_s": 20.3,
+      "sshd_lines": [
+        69,
+        99
+      ],
+      "ledger_lines": [
+        2,
+        3
+      ],
+      "settled": true,
+      "role_written": 3
+    },
+    {
+      "n": 4,
+      "role": 4,
+      "verdict": "driver-verdict",
+      "qemu": {
+        "clean": true,
+        "escalated": false,
+        "rc": 0,
+        "signal": "SIGTERM"
+      },
+      "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+      "disk_image": "D0",
+      "disk_sha256_after": "cd3067a31faf350584bfc57963a00442c89375652840aead02c0427f1f7d7920",
+      "elapsed_s": 15.9,
+      "sshd_lines": [
+        99,
+        107
+      ],
+      "ledger_lines": [
+        3,
+        3
+      ],
+      "settled": true,
+      "role_written": 4
+    },
+    {
+      "n": 5,
+      "role": 5,
+      "verdict": "driver-verdict",
+      "qemu": {
+        "clean": true,
+        "escalated": false,
+        "rc": 0,
+        "signal": "SIGTERM"
+      },
+      "iso_sha256": "e68c1ff69b85eda8d22181c11f5b3133c30c7b6d5dfe40090f16fe2928555841",
+      "disk_image": "S1r",
+      "disk_sha256_after": "31a1aeb1911d6c63acc7451d0163271891335800cd98abb257c09b6c903054cb",
+      "elapsed_s": 15.1,
+      "sshd_lines": [
+        107,
+        126
+      ],
+      "ledger_lines": [
+        3,
+        4
+      ],
+      "settled": true,
+      "role_written": 5
+    }
+  ],
+  "stopped": null,
+  "planned": 5
+}
