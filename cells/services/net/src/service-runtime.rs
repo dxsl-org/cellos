@@ -307,23 +307,72 @@ fn handle_ready_wait(
     true
 }
 
-/// FIN queues output before the close. Closed completes normally; the finite
-/// deadline is an explicit abort of a peer that never acknowledges or closes.
-fn reap_graceful_closes(table: &mut SocketTable, sockets: &mut SocketSet<'_>) {
-    let now = sys_get_time();
-    for _ in 0..8 {
+/// What a graceful-close ledger entry needs from the reaper this turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GracefulEnd {
+    /// Nothing is owed on the wire: free the slot.
+    Free,
+    /// The peer must be told: `abort()` (one RST), drain through the abort ledger.
+    Abort,
+    /// Still closing and inside its deadline.
+    Keep,
+}
+
+fn graceful_end(state: smoltcp::socket::tcp::State, rst_owed: bool, expired: bool) -> GracefulEnd {
+    use smoltcp::socket::tcp::State;
+    match state {
+        State::Closed if rst_owed => GracefulEnd::Abort, // smoltcp already aborted it and still owes the RST
+        State::Closed => GracefulEnd::Free,              // peer FIN/ACK done, peer RST, or never connected
+        State::TimeWait if expired => GracefulEnd::Free, // both FINs exchanged and acked: a clean end
+        State::TimeWait => GracefulEnd::Keep,            // smoltcp's own 10 s timer finishes it
+        _ if expired => GracefulEnd::Abort,              // FinWait1/FinWait2/Closing/LastAck (and any state not expected after close())
+        _ => GracefulEnd::Keep,
+    }
+}
+
+/// Graceful closes finished per loop turn.
+const GRACEFUL_REAP_PER_TURN: usize = 8;
+
+/// FIN queues output before the close. A finished close frees the slot; the finite
+/// deadline is an explicit abort of a peer that never acknowledges or closes: one RST,
+/// then the abort ledger waits until it has left. `now` is passed in so the deadline is
+/// testable. Returns how many sockets were aborted this turn.
+fn reap_graceful_closes(table: &mut SocketTable, sockets: &mut SocketSet<'_>, now: u64) -> usize {
+    let mut aborted = 0;
+    for _ in 0..GRACEFUL_REAP_PER_TURN {
         let next = table.graceful_closes().find_map(|(cap, deadline)| {
-            let done = table
-                .get_unchecked(cap)
-                .is_none_or(|h| sockets.get_mut::<smoltcp::socket::tcp::Socket>(h).state()
-                    == smoltcp::socket::tcp::State::Closed);
-            (done || now >= deadline).then_some(cap)
+            let end = match table.get_unchecked(cap) {
+                None => GracefulEnd::Free,
+                Some(handle) => {
+                    let socket = sockets.get::<smoltcp::socket::tcp::Socket>(handle);
+                    graceful_end(socket.state(), socket.remote_endpoint().is_some(), now >= deadline)
+                }
+            };
+            (end != GracefulEnd::Keep).then_some((cap, end))
         });
-        let Some(cap) = next else { break };
-        if let Some(h) = table.remove_internal(cap) {
-            sockets.remove(h);
+        let Some((cap, end)) = next else { break };
+        if end == GracefulEnd::Abort {
+            if let Some(handle) = table.get_unchecked(cap) {
+                let socket = sockets.get_mut::<smoltcp::socket::tcp::Socket>(handle);
+                socket.abort();
+                if socket.remote_endpoint().is_some() {
+                    table.graceful_to_abort(cap, now.saturating_add(ABORT_DRAIN_TICKS));
+                    aborted += 1;
+                    continue;
+                }
+            }
+        }
+        if let Some(handle) = table.remove_internal(cap) {
+            sockets.remove(handle);
         }
     }
+    aborted
+}
+
+/// One line per reaper turn that aborted something (normal clients finish inside the
+/// deadline, so it appears only for stuck peers; same rule as the owner-death line).
+fn graceful_deadline_line(aborted: usize) -> Option<String> {
+    (aborted > 0).then(|| alloc::format!("[net] graceful close deadline: aborted {aborted} TCP"))
 }
 
 /// An aborted socket is finished once its RST has left (smoltcp clears the
@@ -663,7 +712,10 @@ pub(crate) fn run() {
         dev_clock.poll(&mut iface, &mut sockets, local_ip != [0; 4]);
         tls_pending.poll(&mut iface, &mut device, &mut sockets, &mut table, &mut tls_table);
         poll_resolves(&resolver, &mut pending_dns, &mut sockets);
-        reap_graceful_closes(&mut table, &mut sockets);
+        let graceful_aborted = reap_graceful_closes(&mut table, &mut sockets, sys_get_time());
+        if let Some(line) = graceful_deadline_line(graceful_aborted) {
+            println(&line);
+        }
         reap_aborted(&mut table, &mut sockets, sys_get_time());
         drain_ready_waits(&mut pending_ready, &mut sockets, &table);
 

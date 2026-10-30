@@ -192,9 +192,19 @@ impl SocketTable {
         self.udp_caps.contains(&cap)
     }
 
-    /// Queue FIN once and retain the first drain deadline.
+    /// Queue FIN once and retain the first drain deadline. A cap whose RST is already
+    /// owed stays out of this ledger (a cap is in at most one).
     pub fn begin_graceful_close(&mut self, cap: u64, deadline_ticks: u64) {
-        self.graceful_closes.entry(cap).or_insert(deadline_ticks);
+        if !self.aborts.contains_key(&cap) {
+            self.graceful_closes.entry(cap).or_insert(deadline_ticks);
+        }
+    }
+
+    /// The graceful deadline passed and the socket was aborted: its RST is owed. Moves
+    /// the cap from the graceful ledger to the abort ledger (first abort deadline wins).
+    pub fn graceful_to_abort(&mut self, cap: u64, deadline_ticks: u64) {
+        self.graceful_closes.remove(&cap);
+        self.begin_abort(cap, deadline_ticks);
     }
 
     pub fn is_graceful_closing(&self, cap: u64) -> bool {

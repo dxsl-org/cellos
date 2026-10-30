@@ -107,14 +107,18 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
     }
 }
 
-fn cleanup_owner(
+/// Remove every surface, view and registered-grant frame created by `dead_tid`
+/// and queue the freed screen area for repaint. Returns how many surfaces were
+/// removed. Idempotent: a tid with nothing left removes nothing.
+pub(crate) fn cleanup_owner(
     dead_tid: usize,
     input: &mut InputState,
     table: &mut SurfaceTable,
     frames: &mut crate::surface_table::FrameRegistry,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
-) {
+) -> usize {
+    let mut removed = 0;
     let _ = frames.cleanup_owner(dead_tid);
     for cap in table.caps_owned_by(dead_tid) {
         let Some(surface) = table.get(cap) else {
@@ -125,6 +129,7 @@ fn cleanup_owner(
         input.remove_surface(cap);
         z_order.remove(cap);
         let _ = table.remove(cap);
+        removed += 1;
         for index in 0..grant_ids.len() {
             let Some(reg_id) = grant_ids[index] else {
                 continue;
@@ -138,4 +143,5 @@ fn cleanup_owner(
             None => freed_rect,
         });
     }
+    removed
 }

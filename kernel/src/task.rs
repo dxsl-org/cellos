@@ -369,6 +369,22 @@ pub enum IpcSendError {
     Backpressure,
 }
 
+/// A `Retiring` or `Terminated` task is a tombstone: dispatch-visible so stale
+/// remote contexts see a terminal state, but never a receiver. `exit_task`
+/// sweeps `Sending` senders once at exit, so a send that lands on a tombstone
+/// afterwards would park its sender forever.
+fn ipc_target_is_tombstone(task: &Task) -> bool {
+    matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+}
+
+/// Whether `target_id` is absent or a tombstone, i.e. nothing can receive from it.
+fn ipc_target_gone(sched: &Scheduler, target_id: usize) -> bool {
+    sched
+        .tasks
+        .get(&target_id)
+        .is_none_or(|task| ipc_target_is_tombstone(task))
+}
+
 fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) -> bool {
     // Lock order is SCHEDULER -> service registry. PauseService releases the
     // registry lock before checking scheduler drain state.
@@ -2313,7 +2329,7 @@ pub fn ipc_send(
     let caller_view = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(IpcSendError::TargetGone)?;
-        if !sched.tasks.contains_key(&target_id) {
+        if ipc_target_gone(sched, target_id) {
             log::debug!("IPC: Target Task {} not found (cell exited)", target_id);
             return Err(IpcSendError::TargetGone);
         }
@@ -2353,7 +2369,7 @@ pub fn ipc_send_kernel(
     let header = {
         let guard = SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(IpcSendError::TargetGone)?;
-        if !sched.tasks.contains_key(&target_id) || !sched.tasks.contains_key(&caller_id) {
+        if ipc_target_gone(sched, target_id) || !sched.tasks.contains_key(&caller_id) {
             return Err(IpcSendError::TargetGone);
         }
         if paused_target_rejects(sched, caller_id, target_id) {
@@ -2382,7 +2398,7 @@ pub fn ipc_send_kernel(
 
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(IpcSendError::TargetGone)?;
-    if !sched.tasks.contains_key(&target_id) {
+    if ipc_target_gone(sched, target_id) {
         return Err(IpcSendError::TargetGone);
     }
     if paused_target_rejects(sched, caller_id, target_id) {

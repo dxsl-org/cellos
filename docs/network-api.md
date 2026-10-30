@@ -195,15 +195,45 @@ of that generation and tells the peer the connection is gone:
 - **Graceful close in flight is preserved.** A cap already in the
   `TcpCloseGraceful` ledger keeps its own FIN-and-reap path: a client that asks
   for a graceful close and exits right after the reply (`cellbox ssh` does) still
-  flushes its output before the FIN.
+  flushes its output before the FIN, and a stuck one ends with an RST at its own
+  deadline (next subsection).
 - **Log.** One line per owner death that reclaimed something:
   `[net] owner death: cell C gen G: aborted A TCP, released U other` (normal
   clients close their sockets first, so it appears only for leaks).
 
-Not changed by owner death handling: the graceful-close deadline still removes a
-socket silently (not an abort); legacy `TcpClose` and dropping a `TcpStream`
+Not changed by owner death handling: legacy `TcpClose` and dropping a `TcpStream`
 stay silent on the wire; TLS handshake-in-flight sockets are dropped silently;
 no TCP keepalive or user timeout is set on any socket.
+
+### Graceful close and its deadline
+
+`TcpCloseGraceful` queues a FIN behind the output already queued, replies `Ok`
+and starts a 10 s deadline (nominal, at the assumed 10 MHz tick rate; a repeated
+request keeps the first deadline). The cap stays in the graceful-close ledger
+until the close finishes or the deadline passes. At the deadline the net cell
+decides by TCP state:
+
+| State at the deadline | Action | Wire |
+|---|---|---|
+| `FIN-WAIT-1`, `FIN-WAIT-2`, `CLOSING`, `LAST-ACK` (our FIN not acknowledged, or the peer neither closed nor drained) | `abort()`, cap moved to the abort ledger | one RST |
+| `CLOSED` with an RST already owed | cap moved to the abort ledger | the owed RST |
+| `TIME-WAIT` (clean end; smoltcp's own timer still running) | freed | none |
+| `CLOSED` with nothing owed (closed in time, peer RST, never connected) | freed | none |
+| any state before the deadline | kept | none |
+
+The RST leaves on the next network turn after the deadline (one to two turns,
+about 0.1-0.3 s nominally); the slot is freed once it has left, or after
+`ABORT_DRAIN_TICKS`. Output not yet acknowledged and data the owner never read
+are discarded by the abort. The FIN is not retransmitted beyond the deadline.
+A close that finishes in time is unchanged (flush, FIN, orderly end). One line is
+logged per network turn that aborted something:
+`[net] graceful close deadline: aborted N TCP` (stuck peers only).
+
+Before this behaviour the deadline removed the socket silently; the peer was
+then reset only by its own next segment (an RST from the interface for an
+unknown connection), which showed up late and at the peer's rhythm, for example
+the Tier-3 control flow's RST 11-23 s after its FIN. Legacy `TcpClose` is still
+silent.
 
 ---
 

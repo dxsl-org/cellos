@@ -305,3 +305,36 @@ fn remove_internal_clears_the_abort_ledger_and_the_budget_returns() {
     assert!(table.owned_cap(owner).is_none());
     assert!(table.can_insert(owner), "the budget is back to baseline");
 }
+
+#[test]
+fn graceful_to_abort_keeps_a_cap_in_at_most_one_ledger() {
+    let (_device, mut iface) = interface();
+    let mut sockets = SocketSet::new(alloc::vec::Vec::new());
+    let owner = SocketOwner { cell_id: 10, generation: 1 };
+    let mut table = SocketTable::new();
+    let handle = connecting_handle(&mut sockets, &mut iface);
+    let cap = table.insert(handle, owner).expect("cap");
+
+    table.begin_graceful_close(cap, 100);
+    assert!(table.is_graceful_closing(cap));
+    table.graceful_to_abort(cap, 500);
+    assert!(!table.is_graceful_closing(cap));
+    assert_eq!(table.aborting().collect::<alloc::vec::Vec<_>>(), [(cap, 500)]);
+
+    // A repeated graceful request on an aborting cap is ignored.
+    table.begin_graceful_close(cap, 900);
+    assert_eq!(table.graceful_closes().count(), 0);
+    // The first abort deadline wins.
+    table.graceful_to_abort(cap, 700);
+    assert_eq!(table.aborting().collect::<alloc::vec::Vec<_>>(), [(cap, 500)]);
+
+    // The owner reclaim skips a cap that is already aborting.
+    assert_eq!(table.abort_owner(owner, &mut sockets, 1_000), (0, 0));
+    assert!(table.is_aborting(cap));
+
+    // Removing it clears both ledgers and the budget returns.
+    assert!(table.remove_internal(cap).is_some());
+    assert_eq!(table.aborting().count(), 0);
+    assert_eq!(table.graceful_closes().count(), 0);
+    assert!(table.can_insert(owner));
+}

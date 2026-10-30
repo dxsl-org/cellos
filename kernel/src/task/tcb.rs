@@ -326,7 +326,7 @@ pub struct Task {
     /// regardless of mask, preserving the public NotifyOnExit contract.
     pub pending_deaths: Vec<(usize, usize)>,
     /// Root-owner death events of registered watchers (the VFS cell and the
-    /// registered NET provider cell), kept separate from generic task watches.
+    /// live `OWNER_WATCH_SERVICES` providers), kept separate from generic task watches.
     ///
     /// The opaque watch token never crosses the syscall ABI: it binds this queued
     /// event to the exact subscription so a stale cancellation cannot affect a
@@ -890,7 +890,7 @@ impl Task {
     /// Whether a receive mask may dequeue a tokenized owner-death event.
     ///
     /// Owner death is routed on a registered watcher's public plane only (VFS,
-    /// NET). Its root TID and subscription token identify the event after this
+    /// the `OWNER_WATCH_SERVICES` providers). Its root TID and subscription token identify the event after this
     /// predicate succeeds; neither is a sender match and therefore neither can
     /// authorize a masked backend receive.
     #[inline]

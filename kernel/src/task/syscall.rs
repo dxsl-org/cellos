@@ -10584,7 +10584,7 @@ mod tests {
 
     /// The watching cell (receive context already set to the client, as the
     /// kernel does on delivery) and two live, published client principals.
-    fn net_watch_scheduler() -> Scheduler {
+    fn owner_watch_scheduler() -> Scheduler {
         let mut sched = Scheduler::new();
         let mut watcher = alloc::boxed::Box::new(Task::new(
             NET_TID,
@@ -10617,11 +10617,11 @@ mod tests {
         sched
     }
 
-    /// One `watch_live_cell_owner` call by the NET watcher with exactly
+    /// One `watch_live_cell_owner` call by the watcher cell with exactly
     /// `registry` published (and `pause` applied) for the duration of the call
     /// only: the global registry is shared with tests that do not take
     /// `TEST_STATE_LOCK`.
-    fn net_watch(
+    fn owner_watch(
         sched: &mut Scheduler,
         registry: &[(u16, usize, u64, u64)],
         pause: Option<(u16, usize)>,
@@ -10641,7 +10641,7 @@ mod tests {
         result
     }
 
-    fn assert_net_watch(
+    fn assert_owner_watch(
         label: &str,
         want: bool,
         registry: &[(u16, usize, u64, u64)],
@@ -10650,28 +10650,52 @@ mod tests {
         cell: u64,
         generation: u64,
     ) {
-        let mut sched = net_watch_scheduler();
+        let mut sched = owner_watch_scheduler();
         mutate(&mut sched);
-        let granted = net_watch(&mut sched, registry, pause, cell, generation);
+        let granted = owner_watch(&mut sched, registry, pause, cell, generation);
         assert_eq!(granted.is_some(), want, "{label}");
         // A refusal installs nothing.
         assert_eq!(sched.cell_owner_watch_count(), usize::from(want), "{label}");
     }
 
-    /// The grant is the registry-bound live NET provider cell serving exactly
-    /// the principal it names; everything else (and the VFS rule) is as before.
-    #[test]
-    fn net_owner_watch_grant_matrix() {
-        use api::syscall::service::{CONFIG, INPUT, KMS, NET, VFS};
+    /// Every service id the registry can bind that is not in the owner-watch table.
+    fn services_outside_owner_watch_table() -> alloc::vec::Vec<u16> {
+        use api::syscall::service as s;
+        [
+            s::VFS,
+            s::NET,
+            s::INPUT,
+            s::CONFIG,
+            s::COMPOSITOR,
+            s::SILO,
+            s::HOTSWAP_DEMO,
+            s::NET_BROKER,
+            s::BLOCK_DRIVER,
+            s::NIC_DRIVER,
+            s::SUPERVISOR,
+            s::GPU_DRIVER,
+            s::KMS,
+            s::AI,
+            s::OCEL_JS,
+        ]
+        .into_iter()
+        .filter(|id| !crate::task::scheduler::OWNER_WATCH_SERVICES.contains(id))
+        .collect()
+    }
+
+    /// The grant for one table service: its Active registry-bound provider
+    /// cell serving exactly the principal it names. `service` is the only
+    /// registration in play, so the case proves that service's own entry.
+    fn assert_owner_watch_grant_for(service: u16) {
         let _guard = crate::TEST_STATE_LOCK.lock();
-        let net = [(NET, NET_TID, NET_CELL, NET_GEN)];
+        let bound = [(service, NET_TID, NET_CELL, NET_GEN)];
         let nothing = |_: &mut Scheduler| {};
 
-        // Granted: the Active NET binding, the attested serving context, a live
+        // Granted: the Active binding, the attested serving context, a live
         // client generation. The watch names the client root.
-        let mut sched = net_watch_scheduler();
-        let (owner, token) = net_watch(&mut sched, &net, None, CLIENT_CELL, CLIENT_GEN)
-            .expect("registered NET watcher serving the client");
+        let mut sched = owner_watch_scheduler();
+        let (owner, token) = owner_watch(&mut sched, &bound, None, CLIENT_CELL, CLIENT_GEN)
+            .expect("registered watcher serving the client");
         assert_eq!(
             owner,
             api::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID as u64)
@@ -10687,57 +10711,53 @@ mod tests {
         sched.cancel_cell_owner_watch(NET_TID, token);
         assert_eq!(sched.cell_owner_watch_count(), 0);
 
-        assert_net_watch("baseline", true, &net, None, nothing, CLIENT_CELL, CLIENT_GEN);
-        // Unregistered NET: refused.
-        assert_net_watch("unregistered", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
-        // Another service's provider with the same Cell identity is not NET.
-        for service in [CONFIG, INPUT, KMS, VFS] {
-            assert_net_watch(
-                "other service provider",
-                false,
-                &[(service, NET_TID, NET_CELL, NET_GEN)],
-                None,
-                nothing,
-                CLIENT_CELL,
-                CLIENT_GEN,
-            );
-        }
-        // Hot-swap quiesce: a Paused NET binding is refused.
-        assert_net_watch("paused", false, &net, Some((NET, NET_TID)), nothing, CLIENT_CELL, CLIENT_GEN);
-        // NET re-registered to another provider (tid, cell, generation).
-        assert_net_watch(
+        assert_owner_watch("baseline", true, &bound, None, nothing, CLIENT_CELL, CLIENT_GEN);
+        // Unregistered: refused.
+        assert_owner_watch("unregistered", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        // Hot-swap quiesce: a Paused binding is refused.
+        assert_owner_watch(
+            "paused",
+            false,
+            &bound,
+            Some((service, NET_TID)),
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        // Re-registered to another provider (tid, cell, generation).
+        assert_owner_watch(
             "re-registered to another provider",
             false,
-            &[(NET, FOREIGN_TID, 47, 6)],
+            &[(service, FOREIGN_TID, 47, 6)],
             None,
             nothing,
             CLIENT_CELL,
             CLIENT_GEN,
         );
         // Same CellId, other generation: the stale watcher generation cannot hold it.
-        assert_net_watch(
+        assert_owner_watch(
             "stale watcher generation",
             false,
-            &[(NET, NET_TID, NET_CELL, NET_GEN + 1)],
+            &[(service, NET_TID, NET_CELL, NET_GEN + 1)],
             None,
             nothing,
             CLIENT_CELL,
             CLIENT_GEN,
         );
-        assert_net_watch(
+        assert_owner_watch(
             "other watcher cell",
             false,
-            &[(NET, NET_TID, NET_CELL + 1, NET_GEN)],
+            &[(service, NET_TID, NET_CELL + 1, NET_GEN)],
             None,
             nothing,
             CLIENT_CELL,
             CLIENT_GEN,
         );
         // Cell 0 is the kernel's allocation, never a provider binding.
-        assert_net_watch(
+        assert_owner_watch(
             "cell 0",
             false,
-            &[(NET, NET_TID, 0, NET_GEN)],
+            &[(service, NET_TID, 0, NET_GEN)],
             None,
             |sched| {
                 sched.tasks.get_mut(&NET_TID).expect("watcher").cell_id = CellId(0);
@@ -10746,10 +10766,10 @@ mod tests {
             CLIENT_GEN,
         );
         // The attested serving context must name the principal asked for.
-        assert_net_watch(
+        assert_owner_watch(
             "serving another cell",
             false,
-            &net,
+            &bound,
             None,
             |sched| {
                 sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_id = OTHER_CELL;
@@ -10757,16 +10777,16 @@ mod tests {
             CLIENT_CELL,
             CLIENT_GEN,
         );
-        assert_net_watch("asking for another cell", false, &net, None, nothing, OTHER_CELL, OTHER_GEN);
-        assert_net_watch("no serving context", false, &net, None, |sched| {
+        assert_owner_watch("asking for another cell", false, &bound, None, nothing, OTHER_CELL, OTHER_GEN);
+        assert_owner_watch("no serving context", false, &bound, None, |sched| {
             sched.tasks.get_mut(&NET_TID).expect("watcher").clear_current_caller_context();
         }, CLIENT_CELL, CLIENT_GEN);
         // Stale client generation: asked for, or recorded, but never live.
-        assert_net_watch("stale client generation", false, &net, None, nothing, CLIENT_CELL, CLIENT_GEN + 1);
-        assert_net_watch(
+        assert_owner_watch("stale client generation", false, &bound, None, nothing, CLIENT_CELL, CLIENT_GEN + 1);
+        assert_owner_watch(
             "serving a dead generation",
             false,
-            &net,
+            &bound,
             None,
             |sched| {
                 sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_generation =
@@ -10776,17 +10796,94 @@ mod tests {
             CLIENT_GEN + 1,
         );
         // Dead client root.
-        assert_net_watch("dead client root", false, &net, None, |sched| {
+        assert_owner_watch("dead client root", false, &bound, None, |sched| {
             assert!(sched.tasks.remove(&CLIENT_TID).is_some());
         }, CLIENT_CELL, CLIENT_GEN);
+    }
+
+    /// The grant is the registry-bound live provider cell of a table service
+    /// serving exactly the principal it names; everything else (and the VFS
+    /// rule) is as before.
+    #[test]
+    fn owner_watch_grant_matrix() {
+        use api::syscall::service::{COMPOSITOR, NET};
+        for &service in &crate::task::scheduler::OWNER_WATCH_SERVICES {
+            assert_owner_watch_grant_for(service);
+        }
+
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let nothing = |_: &mut Scheduler| {};
+        // Another service's provider with the same Cell identity is not a table
+        // service, whichever table service the matrix is exercising.
+        for service in services_outside_owner_watch_table() {
+            assert_owner_watch(
+                "other service provider",
+                false,
+                &[(service, NET_TID, NET_CELL, NET_GEN)],
+                None,
+                nothing,
+                CLIENT_CELL,
+                CLIENT_GEN,
+            );
+        }
+        // A watcher bound to neither table service (both bound elsewhere) is
+        // refused; a binding of one table service gives no right to the cell
+        // that holds another service's binding.
+        assert_owner_watch(
+            "every table service bound to another provider",
+            false,
+            &[(NET, FOREIGN_TID, 47, 6), (COMPOSITOR, FOREIGN_TID + 1, 48, 7)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_owner_watch(
+            "NET bound to the watcher, COMPOSITOR bound elsewhere",
+            true,
+            &[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, FOREIGN_TID, 47, 6)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_owner_watch(
+            "COMPOSITOR bound to the watcher, NET bound elsewhere",
+            true,
+            &[(COMPOSITOR, NET_TID, NET_CELL, NET_GEN), (NET, FOREIGN_TID, 47, 6)],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_owner_watch(
+            "both bound to the watcher, one paused",
+            true,
+            &[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, NET_TID, NET_CELL, NET_GEN)],
+            Some((NET, NET_TID)),
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
 
         // Regression: the registered VFS cell is granted exactly as before, with
-        // no NET registration, and is held to the same serving-context proof.
+        // no service registration, and is held to the same serving-context proof.
         crate::fast_ipc::set_vfs_handler_cell(NET_CELL as usize);
-        assert_net_watch("vfs cell", true, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
-        assert_net_watch("vfs cell, other principal", false, &[], None, nothing, OTHER_CELL, OTHER_GEN);
+        assert_owner_watch("vfs cell", true, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch("vfs cell, other principal", false, &[], None, nothing, OTHER_CELL, OTHER_GEN);
         crate::fast_ipc::clear_vfs_if_cell(NET_CELL as usize);
-        assert_net_watch("vfs cleared", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch("vfs cleared", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+    }
+
+    /// Tripwire: who may hold an owner watch is an explicit owner decision.
+    /// Adding a service here is a reviewed change with its own consumer and
+    /// grant-matrix coverage, never a silent widening.
+    #[test]
+    fn owner_watch_services_are_an_explicit_table() {
+        assert_eq!(
+            crate::task::scheduler::OWNER_WATCH_SERVICES,
+            [api::syscall::service::NET, api::syscall::service::COMPOSITOR]
+        );
     }
 
     /// `TryRecv` takes a queued owner death only for the wildcard mask, FIFO,

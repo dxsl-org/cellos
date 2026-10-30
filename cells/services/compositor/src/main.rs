@@ -20,6 +20,7 @@ mod cursor_state;
 mod framebuffer;
 mod input_handler;
 mod message_handler;
+mod owner_watch;
 mod pointer_router;
 mod render;
 mod surface_table;
@@ -30,7 +31,9 @@ use api::display::Rect;
 use framebuffer::ScreenFb;
 use input_handler::{connect_to_input, handle_input_event, InputState};
 use ostd::io::println;
-use ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_recv, SyscallResult};
+use ostd::syscall::{
+    sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_recv_attested, SyscallResult,
+};
 use render::render_frame;
 use surface_table::SurfaceTable;
 use z_order::ZOrder;
@@ -56,6 +59,26 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     }
     buf
 }
+
+/// The kernel half of [`owner_watch::WatchSys`]: valid only inside the receive
+/// turn of the message being served (the kernel binds the grant to it).
+#[cfg(not(test))]
+#[cfg(target_os = "none")]
+struct KernelWatch;
+
+#[cfg(not(test))]
+#[cfg(target_os = "none")]
+impl owner_watch::WatchSys for KernelWatch {
+    fn watch(&mut self, cell_id: u64, generation: u64) -> Option<(usize, u64)> {
+        ostd::syscall::sys_watch_cell_owner(cell_id, generation)
+            .map(|(owner, token)| (owner.root_tid as usize, token))
+    }
+
+    fn cancel(&mut self, token: u64) {
+        ostd::syscall::sys_cancel_cell_owner_watch(token);
+    }
+}
+
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 
@@ -94,50 +117,103 @@ pub fn main() {
         }
     }
 
-    let mut buf = [0u8; 512];
+    // The kernel writes the 32-byte caller identity at the END of this buffer;
+    // the 512-byte request window at its start is never overwritten.
+    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut watches = owner_watch::OwnerWatches::new();
     // Resolution hotplug: check every 5 s; reconstruct ScreenFb on change.
     let mut last_res_check_ms: u64 = 0;
 
     loop {
         // The receive syscall only writes the payload; clear its reusable tail so
-        // fixed-frame decoders never inspect bytes from an earlier sender.
+        // fixed-frame decoders never inspect bytes from an earlier sender and a
+        // death record (which carries no trailer) reads as unattributed.
         buf.fill(0);
 
-        match sys_recv(0, &mut buf) {
+        match sys_recv_attested(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
-                if input.input_tid != 0 && sender == input.input_tid && buf[0] == INPUT_EVENT_OPCODE
-                {
-                    // On MouseMove, update_cursor sets pending_dirty = union(old, new)
-                    // so the frame is repainted at the interval tick.
-                    handle_input_event(
-                        &buf,
-                        &mut input,
-                        fb.width,
-                        fb.height,
-                        Rect {
-                            x: 0,
-                            y: 0,
-                            w: fb.width,
-                            h: fb.height.saturating_sub(36),
-                        },
-                        &mut table,
-                        &mut z_order,
-                        &mut pending_dirty,
-                    );
-                } else {
-                    message_handler::handle_message(
-                        &buf,
-                        sender,
-                        message_handler::MessageContext::new(
-                            fb.width,
-                            fb.height,
+                match owner_watch::classify(&buf, sender, &mut watches) {
+                    // Unattributed and not a watched cell's death (e.g. a
+                    // zero-trailer leftover of a client that was already reclaimed).
+                    owner_watch::Incoming::Drop => {}
+                    owner_watch::Incoming::OwnerDeath(dead) => {
+                        let removed = owner_watch::reclaim(
+                            &dead,
                             &mut input,
                             &mut table,
                             &mut frames,
                             &mut z_order,
                             &mut pending_dirty,
-                        ),
-                    );
+                        );
+                        if let Some(line) = owner_watch::death_line(&dead, removed) {
+                            println(&line);
+                        }
+                    }
+                    owner_watch::Incoming::Serve(identity) => {
+                        if let Some(request) = buf.first_chunk::<512>() {
+                            if input.input_tid != 0
+                                && sender == input.input_tid
+                                && request[0] == INPUT_EVENT_OPCODE
+                            {
+                                // On MouseMove, update_cursor sets pending_dirty = union(old, new)
+                                // so the frame is repainted at the interval tick.
+                                handle_input_event(
+                                    request,
+                                    &mut input,
+                                    fb.width,
+                                    fb.height,
+                                    Rect {
+                                        x: 0,
+                                        y: 0,
+                                        w: fb.width,
+                                        h: fb.height.saturating_sub(36),
+                                    },
+                                    &mut table,
+                                    &mut z_order,
+                                    &mut pending_dirty,
+                                );
+                            } else {
+                                // Watch the cell before dispatch: the kernel grants the
+                                // watch only while this message is the one being served.
+                                if owner_watch::creates_owned_state(request[0]) {
+                                    let admission =
+                                        watches.admit(&identity, sender, &mut KernelWatch);
+                                    for stale in &admission.stale {
+                                        let removed = owner_watch::reclaim(
+                                            stale,
+                                            &mut input,
+                                            &mut table,
+                                            &mut frames,
+                                            &mut z_order,
+                                            &mut pending_dirty,
+                                        );
+                                        if let Some(line) = owner_watch::death_line(stale, removed)
+                                        {
+                                            println(&line);
+                                        }
+                                    }
+                                    if admission.unavailable {
+                                        println(
+                                            "[compositor] owner death watch unavailable; window reclaim deferred",
+                                        );
+                                    }
+                                }
+                                message_handler::handle_message(
+                                    request,
+                                    sender,
+                                    message_handler::MessageContext::new(
+                                        fb.width,
+                                        fb.height,
+                                        &mut input,
+                                        &mut table,
+                                        &mut frames,
+                                        &mut z_order,
+                                        &mut pending_dirty,
+                                    ),
+                                );
+                            }
+                        }
+                    }
                 }
             }
             _ => ostd::task::yield_now(),
