@@ -1,5 +1,6 @@
 //! One connection, one session channel (command-contracts §4.2/§4.3): host trust before
-//! any credential, password authentication, then a PTY shell or one exec command.
+//! any credential, password or publickey authentication (exclusive: no fallback from one
+//! to the other), then a PTY shell or one exec command.
 //!
 //! S9-6: the rekey policy is the embedder's ([`RekeyPolicy`]); every KEX (the first and
 //! each rekey, from either side) must finish within its deadline; a rekey's host key must
@@ -10,10 +11,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use sunset::packets::WinChange;
-use sunset::{ChanData, ChanHandle, CliEvent, CliSessionExit, Client, Event, PubKey, Pty, RekeyLimits, Runner};
+use sunset::{ChanData, ChanHandle, CliEvent, CliSessionExit, Client, Event, OwnedSig, PubKey, Pty, RekeyLimits, Runner, SignKey};
 use zeroize::Zeroize;
 
 use crate::client::{pump, ClientError, HostKey, Transport, TransportError, RECV_CHUNK};
+use crate::sunset::ed25519_dalek::VerifyingKey;
+use crate::userauth;
 
 /// D03 trust lookup result (abi-vfs-telemetry §4), and the end of a first-trust
 /// confirmation.
@@ -39,6 +42,64 @@ pub enum Mode {
     Pty { term: &'static str, rows: u16, cols: u16 },
     /// One non-PTY command string, sent byte-for-byte.
     Exec(String),
+}
+
+/// How the session authenticates. Exactly one method is tried, once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthKind {
+    /// Ask [`Local::password`] once.
+    Password,
+    /// Offer [`Local::identity`] and sign through [`Local::sign`]. The password method is
+    /// never offered, not even after the server refuses the key.
+    PublicKey,
+}
+
+/// Why a publickey login ended before the server decided. Every one is a local refusal:
+/// nothing was signed for the server (or the signature was not sent), so the login is
+/// `NotSent` and in the `Auth` phase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Credential {
+    /// The key service is not available.
+    Unavailable,
+    /// The key service refuses this caller.
+    Denied,
+    /// The key service does not hold the named identity.
+    UnknownIdentity,
+    /// The user cancelled the passphrase prompt.
+    UnlockCancelled,
+    /// The identity is passphrase-wrapped and there is no terminal to ask on.
+    UnlockNeedsTerminal,
+    /// The key service could not unlock the identity (wrong passphrase, corrupt key, ...).
+    UnlockFailed,
+    /// Too many failed unlocks: the identity is locked.
+    UnlockLocked,
+    /// The key service did not answer in time.
+    Timeout,
+    /// The key service answered something this client does not accept.
+    Protocol,
+    /// The key service signed a different input than the one Sunset asked for.
+    InputMismatch,
+    /// The key service returned a signature that does not verify.
+    BadSignature,
+}
+
+/// What the key service is asked to sign: the typed state of one userauth attempt. The
+/// session already compared Sunset's own serialisation with the RFC 4252 construction
+/// this client builds ([`userauth::signing_input`]) and `message_sha256` is the digest of
+/// those exact bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignRequest<'a> {
+    pub session_id: [u8; 32],
+    pub username: &'a str,
+    pub message_sha256: [u8; 32],
+}
+
+/// The key service's answer: the raw `R || S` signature and the digest of the input it
+/// signed (which must equal [`SignRequest::message_sha256`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Signed {
+    pub signature: [u8; 64],
+    pub message_sha256: [u8; 32],
 }
 
 /// One unit of local input for the channel.
@@ -108,6 +169,14 @@ pub trait Local {
     /// Ask once for the password, after the host key was trusted. Write it into
     /// `secret` and return true, or return false to cancel. `secret` is wiped after use.
     fn password(&mut self, secret: &mut String) -> bool;
+    /// Publickey only, called once after the host key was trusted and the server listed
+    /// publickey: the 32-byte ed25519 public key to offer. A refusal ends the login with
+    /// that [`Credential`]. Never called in password mode.
+    fn identity(&mut self) -> Result<[u8; 32], Credential>;
+    /// Publickey only, called once after the server accepted the key (so an identity the
+    /// server does not know never costs a passphrase): produce the signature for `r`.
+    /// Never called in password mode.
+    fn sign(&mut self, r: &SignRequest<'_>) -> Result<Signed, Credential>;
     /// Fill `buf` with local input.
     fn input(&mut self, buf: &mut [u8]) -> Input;
     /// Remote standard output (or, in PTY mode, the whole terminal output).
@@ -144,6 +213,8 @@ pub enum Ending {
     HostKey(Trust, HostKey),
     /// Authentication was refused or cancelled.
     Auth,
+    /// Publickey authentication ended locally before the server decided (see [`Credential`]).
+    Credential(Credential),
     /// The server refused the shell/exec request.
     RequestRefused,
     /// The local user disconnected.
@@ -190,14 +261,14 @@ impl Outcome {
 /// Largest channel data read at once (§4.2: chunks of at most 16 KiB).
 pub const CHUNK: usize = 16 * 1024;
 
-pub fn run<T: Transport, L: Local>(t: &mut T, local: &mut L, user: &str, mode: &Mode, policy: &RekeyPolicy) -> Outcome {
+pub fn run<T: Transport, L: Local>(t: &mut T, local: &mut L, user: &str, auth: AuthKind, mode: &Mode, policy: &RekeyPolicy) -> Outcome {
     let mut runner: Runner<'static, Client> = Runner::new_client_owned();
     runner.set_rekey_limits(policy.limits);
     let mut state = State {
-        dispatch: Dispatch::NotSent, chan: None, exit: None, password_asked: false, eof_sent: false,
-        host: None, clock: RekeyClock::default(), peaks: Peaks::default(),
+        dispatch: Dispatch::NotSent, chan: None, exit: None, password_asked: false, key_offered: false, signed: false,
+        identity: None, eof_sent: false, host: None, clock: RekeyClock::default(), peaks: Peaks::default(),
     };
-    let ending = drive(&mut runner, t, local, user, mode, policy, &mut state).unwrap_or_else(|e| match e {
+    let ending = drive(&mut runner, t, local, user, auth, mode, policy, &mut state).unwrap_or_else(|e| match e {
         ClientError::Transport(TransportError::TimedOut) => Ending::TimedOut,
         ClientError::Transport(_) | ClientError::Ended => Ending::TransportLost,
         ClientError::Protocol(sunset::Error::NoAuthMethods) => Ending::Auth,
@@ -221,6 +292,12 @@ struct State {
     chan: Option<ChanHandle>,
     exit: Option<Ending>,
     password_asked: bool,
+    /// Publickey: the identity was offered to the server.
+    key_offered: bool,
+    /// Publickey: a signature was sent to the server.
+    signed: bool,
+    /// Publickey: the key offered.
+    identity: Option<[u8; 32]>,
     eof_sent: bool,
     /// The host key accepted at the first KEX; every rekey must offer exactly it.
     host: Option<HostKey>,
@@ -293,6 +370,7 @@ fn drive<T: Transport, L: Local>(
     t: &mut T,
     local: &mut L,
     user: &str,
+    auth: AuthKind,
     mode: &Mode,
     policy: &RekeyPolicy,
     st: &mut State,
@@ -348,7 +426,12 @@ fn drive<T: Transport, L: Local>(
             }
             Ok(Event::Cli(CliEvent::Username(u))) => u.username(user)?,
             Ok(Event::Cli(CliEvent::Password(p))) => {
-                if st.password_asked {
+                if auth == AuthKind::PublicKey {
+                    // Exclusive auth: once the key is skipped or refused Sunset falls back to
+                    // the password method; that fallback is closed here.
+                    p.skip()?;
+                    stop = Some(Ending::Auth);
+                } else if st.password_asked {
                     // Exclusive auth, no retry: a second request means the first failed.
                     p.skip()?;
                     stop = Some(Ending::Auth);
@@ -364,8 +447,42 @@ fn drive<T: Transport, L: Local>(
                     }
                 }
             }
-            Ok(Event::Cli(CliEvent::Pubkey(p))) => p.skip()?,
-            Ok(Event::Cli(CliEvent::AgentSign(s))) => s.skip()?,
+            Ok(Event::Cli(CliEvent::Pubkey(p))) => match auth {
+                AuthKind::Password => p.skip()?,
+                // The server refused the key or its signature: nothing else is offered.
+                AuthKind::PublicKey if st.key_offered => {
+                    let _ = p.skip();
+                    stop = Some(Ending::Auth);
+                }
+                AuthKind::PublicKey => {
+                    let offered = local.identity().and_then(|key| {
+                        VerifyingKey::from_bytes(&key).map(|verifying| (key, verifying)).map_err(|_| Credential::Protocol)
+                    });
+                    match offered {
+                        Ok((key, verifying)) => {
+                            st.key_offered = true;
+                            st.identity = Some(key);
+                            p.pubkey(SignKey::AgentEd25519(verifying))?;
+                        }
+                        Err(credential) => {
+                            let _ = p.skip();
+                            stop = Some(Ending::Credential(credential));
+                        }
+                    }
+                }
+            },
+            Ok(Event::Cli(CliEvent::AgentSign(s))) => match (auth, st.identity, st.signed) {
+                (AuthKind::PublicKey, Some(key), false) => match answer_sign(s, local, user, &key)? {
+                    None => st.signed = true,
+                    Some(credential) => stop = Some(Ending::Credential(credential)),
+                },
+                // Password mode cannot raise this; a second request means the first
+                // signature was refused.
+                _ => {
+                    let _ = s.skip();
+                    stop = Some(Ending::Auth);
+                }
+            },
             Ok(Event::Cli(CliEvent::Authenticated)) => {
                 local.progress(Phase::Request, st.dispatch);
                 point = Some(Point::BeforeRequest);
@@ -409,7 +526,7 @@ fn drive<T: Transport, L: Local>(
             Ok(Event::Cli(CliEvent::Banner(_))) => {}
             Ok(Event::Cli(CliEvent::Defunct)) => {
                 return Ok(st.exit.take().unwrap_or(match st.dispatch {
-                    Dispatch::NotSent if !st.password_asked => Ending::Error(String::from("server closed the connection")),
+                    Dispatch::NotSent if !(st.password_asked || st.signed) => Ending::Error(String::from("server closed the connection")),
                     Dispatch::NotSent => Ending::Auth,
                     _ => Ending::Unknown,
                 }));
@@ -526,4 +643,49 @@ fn drive<T: Transport, L: Local>(
             t.idle()?;
         }
     }
+}
+
+/// Answer the server's accepted key with a signature from the local side, or say why not.
+/// Sunset's own serialisation of the signed message must equal the RFC 4252 construction
+/// this crate builds from the same three values the key service signs for (session id,
+/// user name, key); the key service's reply must carry the digest of exactly those bytes
+/// and a signature that verifies. Anything else skips the key without sending a signature.
+fn answer_sign<L: Local>(
+    s: sunset::event::RequestSign<'_, '_>,
+    local: &mut L,
+    user: &str,
+    identity: &[u8; 32],
+) -> Result<Option<Credential>, ClientError> {
+    let mut msg = [0u8; 256];
+    let written = s.message().and_then(|m| sunset::sshwire::write_ssh(&mut msg, &m));
+    let mut session_id = [0u8; 32];
+    let expected = match written {
+        Ok(n) if n >= 36 && msg[..4] == [0, 0, 0, 32] => {
+            session_id.copy_from_slice(&msg[4..36]);
+            userauth::signing_input(&session_id, user, identity).filter(|e| e.as_slice() == &msg[..n]).map(|_| n)
+        }
+        _ => None,
+    };
+    let Some(n) = expected else {
+        let _ = s.skip();
+        return Ok(Some(Credential::InputMismatch));
+    };
+    let request = SignRequest { session_id, username: user, message_sha256: userauth::digest(&msg[..n]) };
+    let signed = match local.sign(&request) {
+        Ok(signed) => signed,
+        Err(credential) => {
+            let _ = s.skip();
+            return Ok(Some(credential));
+        }
+    };
+    if signed.message_sha256 != request.message_sha256 {
+        let _ = s.skip();
+        return Ok(Some(Credential::InputMismatch));
+    }
+    if !userauth::verify(identity, &msg[..n], &signed.signature) {
+        let _ = s.skip();
+        return Ok(Some(Credential::BadSignature));
+    }
+    s.signed(&OwnedSig::Ed25519(signed.signature))?;
+    Ok(None)
 }

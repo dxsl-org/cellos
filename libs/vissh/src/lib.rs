@@ -14,6 +14,7 @@ extern crate alloc;
 pub mod args;
 pub mod client;
 pub mod session;
+pub mod userauth;
 
 pub use sunset;
 

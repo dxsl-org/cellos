@@ -2,18 +2,32 @@
 
 mod relay;
 mod relay_enroll;
+mod ssh;
+
+pub use ssh::{SSH_FRAME_TICKS, SSH_SIGN_TICKS};
+/// The K2 SSH custody types and bounds a caller needs, so `cellbox` and the admin cell
+/// depend on `ostd` alone (no extra `types` edge).
+pub use types::kms::{
+    ssh_chunk_count, validate_ssh_key_name, validate_ssh_username, KmsCustodyPosture, KmsErrorCode,
+    KmsSshKeyCustody, KmsWireError, SshChunkAckPayload, SshKeyStatusPayload, SshSignResponsePayload,
+    SshTransferBeginResponsePayload, KMS_SSH_CHUNK_LEN, KMS_SSH_IMPORT_MAX_LEN,
+    KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX, KMS_SSH_SESSION_ID_LEN,
+    KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
+};
 
 use crate::{syscall, task};
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use types::kms::{
-    AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsErrorCode, KmsOpcode,
-    KmsRequestV1, KmsResponseV1, KmsWireError, NodeIdentityHandle, NodeIdentityStatusPayload,
+    AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsOpcode,
+    KmsRequestV1, KmsResponseV1, NodeIdentityHandle, NodeIdentityStatusPayload,
     NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload, RelayP256StatusPayload,
     RotateNodeIdentityReason, RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload,
     ServiceNetBindingPayload, KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C,
 };
 
 const FIRST_REQUEST_ID: u32 = 1;
+/// First payload `request_id` (nonzero; the service requires each to exceed its floor).
+const FIRST_PAYLOAD_ID: u64 = 1;
 
 /// Failure returned by a KMS IPC round trip.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,12 +39,22 @@ pub enum KmsClientError {
     InvalidPayload,
     Wire(KmsWireError),
     Service(KmsErrorCode),
+    /// No reply inside the bound of a bounded (SSH) call. The client is poisoned: a late
+    /// reply would otherwise be taken for the next call's, so every later call returns
+    /// this too, without sending anything.
+    Timeout,
 }
 
 /// Synchronous client for opaque node-identity operations.
 pub struct KmsClient {
     tid: usize,
     next_request_id: AtomicU32,
+    /// Payload `request_id` of KMS opcodes 15, 20, 21 and 22: nonzero and strictly
+    /// increasing within this client (the service keeps a per-principal floor).
+    next_payload_id: AtomicU64,
+    poisoned: AtomicBool,
+    #[cfg(test)]
+    script: Option<scripted::Script>,
 }
 
 impl KmsClient {
@@ -41,6 +65,10 @@ impl KmsClient {
                 return Ok(Self {
                     tid,
                     next_request_id: AtomicU32::new(FIRST_REQUEST_ID),
+                    next_payload_id: AtomicU64::new(FIRST_PAYLOAD_ID),
+                    poisoned: AtomicBool::new(false),
+                    #[cfg(test)]
+                    script: None,
                 });
             }
             task::yield_now();
@@ -178,6 +206,104 @@ impl KmsClient {
         Ok(response)
     }
 
+    /// Next payload `request_id` (opcodes 15, 20, 21, 22): nonzero, strictly increasing.
+    fn next_payload_id(&self) -> Result<u64, KmsClientError> {
+        self.next_payload_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| KmsClientError::InvalidPayload)
+    }
+
+    /// Bounded twin of [`Self::call_opcode`] for the SSH opcodes.
+    fn call_ssh(
+        &self,
+        opcode: KmsOpcode,
+        payload: &[u8],
+        ticks: u64,
+    ) -> Result<KmsResponseV1, KmsClientError> {
+        if self.poisoned.load(Ordering::Acquire) {
+            return Err(KmsClientError::Timeout);
+        }
+        let request_id = self
+            .next_request_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1).filter(|next| *next != 0)
+            })
+            .map_err(|_| KmsClientError::InvalidPayload)?;
+        let mut request =
+            KmsRequestV1::new(opcode, request_id, payload).map_err(KmsClientError::Wire)?;
+        self.call_bounded(&mut request, ticks)
+    }
+
+    /// `sys_send`, then a receive bounded by `ticks` scheduler ticks (10 ms each). A frame
+    /// the service cannot decode gets no reply at all, so the unbounded receive of
+    /// [`Self::call`] would block forever. The request's payload and the frame built from
+    /// it are wiped once sent (an unlock chunk carries passphrase bytes). A timeout poisons
+    /// the client: a late reply must never be taken for the next call's.
+    fn call_bounded(
+        &self,
+        request: &mut KmsRequestV1,
+        ticks: u64,
+    ) -> Result<KmsResponseV1, KmsClientError> {
+        if self.poisoned.load(Ordering::Acquire) {
+            return Err(KmsClientError::Timeout);
+        }
+        let frame = Wiped(request.to_bytes());
+        crate::session::zeroize(&mut request.payload);
+        let reply = self.exchange(&frame.0, ticks);
+        drop(frame);
+        let bytes = match reply {
+            Ok(bytes) => bytes,
+            Err(KmsClientError::Timeout) => {
+                self.poisoned.store(true, Ordering::Release);
+                return Err(KmsClientError::Timeout);
+            }
+            Err(error) => return Err(error),
+        };
+        let response = KmsResponseV1::from_bytes(&bytes).map_err(KmsClientError::Wire)?;
+        if response.opcode().map_err(KmsClientError::Wire)?
+            != request.opcode().map_err(KmsClientError::Wire)?
+            || response.request_id != request.request_id
+        {
+            return Err(KmsClientError::MismatchedResponse);
+        }
+        if let Some(code) = response.error_code().map_err(KmsClientError::Wire)? {
+            return Err(KmsClientError::Service(code));
+        }
+        Ok(response)
+    }
+
+    /// One request frame out, one reply frame in, or `Timeout`. The only place the SSH
+    /// path touches the kernel, so host tests replace it with a script.
+    fn exchange(
+        &self,
+        frame: &[u8; KMS_MESSAGE_LEN],
+        ticks: u64,
+    ) -> Result<[u8; KMS_MESSAGE_LEN], KmsClientError> {
+        #[cfg(test)]
+        if let Some(script) = &self.script {
+            return script.exchange(frame, ticks);
+        }
+        match syscall::sys_send(self.tid, frame) {
+            syscall::SyscallResult::Ok(_) => {}
+            syscall::SyscallResult::Err(_) => return Err(KmsClientError::Ipc),
+        }
+        let mut bytes = [0u8; KMS_MESSAGE_LEN];
+        match syscall::sys_recv_timeout(self.tid, &mut bytes, ticks) {
+            syscall::SyscallResult::Ok(0) => {
+                // One non-blocking drain: a reply that raced the deadline is taken here
+                // so the service's own blocking send is not left waiting on this Cell.
+                let mut late = [0u8; KMS_MESSAGE_LEN];
+                let _ = syscall::sys_try_recv(self.tid, &mut late);
+                Err(KmsClientError::Timeout)
+            }
+            syscall::SyscallResult::Ok(sender) if sender == self.tid => Ok(bytes),
+            syscall::SyscallResult::Ok(_) => Err(KmsClientError::WrongSender),
+            syscall::SyscallResult::Err(_) => Err(KmsClientError::Ipc),
+        }
+    }
+
     fn decode_payload<T>(
         &self,
         response: &KmsResponseV1,
@@ -194,6 +320,62 @@ impl KmsClient {
             Ok(())
         } else {
             Err(KmsClientError::InvalidPayload)
+        }
+    }
+}
+
+/// A stack buffer wiped (volatile) on every exit path, built from an existing array.
+struct Wiped<const N: usize>([u8; N]);
+
+impl<const N: usize> Drop for Wiped<N> {
+    fn drop(&mut self) {
+        crate::session::zeroize(&mut self.0);
+    }
+}
+
+/// Host-test seam: replaces the kernel round trip with a scripted service.
+#[cfg(test)]
+mod scripted {
+    use super::{KmsClient, KmsClientError, AtomicBool, AtomicU32, AtomicU64, FIRST_PAYLOAD_ID, FIRST_REQUEST_ID};
+    use super::KMS_MESSAGE_LEN;
+    use alloc::boxed::Box;
+    use alloc::vec::Vec;
+    use core::cell::RefCell;
+
+    /// Receives each request frame; `None` means the service stays silent.
+    pub type Responder = Box<dyn FnMut(&[u8; KMS_MESSAGE_LEN]) -> Option<[u8; KMS_MESSAGE_LEN]>>;
+
+    pub struct Script {
+        pub sent: RefCell<Vec<([u8; KMS_MESSAGE_LEN], u64)>>,
+        responder: RefCell<Responder>,
+    }
+
+    impl Script {
+        pub fn exchange(
+            &self,
+            frame: &[u8; KMS_MESSAGE_LEN],
+            ticks: u64,
+        ) -> Result<[u8; KMS_MESSAGE_LEN], KmsClientError> {
+            self.sent.borrow_mut().push((*frame, ticks));
+            (*self.responder.borrow_mut())(frame).ok_or(KmsClientError::Timeout)
+        }
+    }
+
+    impl KmsClient {
+        /// A client whose round trips go to `responder`.
+        pub fn scripted(responder: Responder) -> Self {
+            Self {
+                tid: 1,
+                next_request_id: AtomicU32::new(FIRST_REQUEST_ID),
+                next_payload_id: AtomicU64::new(FIRST_PAYLOAD_ID),
+                poisoned: AtomicBool::new(false),
+                script: Some(Script { sent: RefCell::new(Vec::new()), responder: RefCell::new(responder) }),
+            }
+        }
+
+        /// Every request frame sent so far.
+        pub fn sent_frames(&self) -> Vec<([u8; KMS_MESSAGE_LEN], u64)> {
+            self.script.as_ref().map(|s| s.sent.borrow().clone()).unwrap_or_default()
         }
     }
 }

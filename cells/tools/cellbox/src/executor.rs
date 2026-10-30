@@ -1424,10 +1424,13 @@ fn exec_simple(cmd: &Cmd, jobs: &mut Jobs) -> i32 {
                 .redirects
                 .iter()
                 .any(|redirect| matches!(redirect, Redirect::StdoutTo(_) | Redirect::StdoutAppend(_)))
-            && matches!(
+            && (matches!(
                 typed::classify_command(core::slice::from_ref(&first.text)),
                 typed::CmdClass::External
-            );
+            ) || (first.text == "ssh"
+                // A publickey exec is an external byte stage: with its stdout redirected it is
+                // a one-stage pipeline (every other ssh keeps the foreground launch).
+                && typed::is_ssh_stage(&cmd.argv.iter().map(|word| word.text.clone()).collect::<Vec<String>>())));
         if typed::might_be_typed(&first.text, &args) || redirected_external {
             let stage = match stage_input(cmd) {
                 Ok(stage) => stage,
@@ -3884,6 +3887,8 @@ fn setup_failure(status: Status) -> StartFailure {
 struct ExtStage {
     name: String,
     child: Option<PipeChild>,
+    /// An `ssh` publickey stage: it carries a completion stream whose record the shell keeps.
+    ssh: bool,
 }
 
 /// One run of consecutive external stages inside one pipeline Operation.
@@ -3958,7 +3963,7 @@ impl ExtRun {
             pipeline: Some(pipeline),
             stages: commands
                 .iter()
-                .map(|command| ExtStage { name: command.argv[0].clone(), child: None })
+                .map(|command| ExtStage { name: command.argv[0].clone(), child: None, ssh: typed::is_ssh_stage(&command.argv) })
                 .collect(),
             statuses: Vec::new(),
             input: None,
@@ -4048,14 +4053,22 @@ impl ExtRun {
                 (Some(reader), Some(writer))
             };
             let words = &commands[index].argv;
-            let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
-            let path = external_path(&words[0]);
+            let ssh = typed::is_ssh_stage(words);
+            // An ssh stage is the client Cell: `/bin/cellbox-ssh` with `ssh` as argv[0] (its
+            // entry keys on it) and a completion stream, so that it leaves the record the
+            // contract requires for every ssh run.
+            let (path, args): (String, Vec<&str>) = if ssh {
+                (String::from(crate::ssh::SSH_PATH), crate::ssh::stage_argv(words))
+            } else {
+                (external_path(&words[0]), words[1..].iter().map(String::as_str).collect())
+            };
             let spec = PipeSpec {
                 path: &path,
                 argv: &args,
                 cwd: cwd.as_bytes(),
                 environment: &[],
                 cwd_source: None,
+                completion: ssh,
             };
             let spawned = match self.pipeline.as_ref() {
                 Some(pipeline) => pipeline.spawn(index, &spec, stdin_for_stage, stdout_for_stage, error_writer),
@@ -4422,7 +4435,7 @@ impl ExtRun {
                         }
                         waited = child.wait_status();
                     }
-                    match waited {
+                    let code = match waited {
                         Ok(record) => typed::reaped_status(Some(record.exit_code), record.reason, self.cancelled),
                         Err(status) => {
                             let _ = syscall::sys_log(&alloc::format!(
@@ -4430,7 +4443,17 @@ impl ExtRun {
                             ));
                             typed::reaped_status(None, 0, self.cancelled)
                         }
+                    };
+                    if stage.ssh {
+                        // The ssh Cell's lifecycle record: whatever it wrote before it ended
+                        // (read before the pipeline operation is closed; a torn trailing
+                        // frame is ignored). The newest ssh stage's record is the shell's.
+                        let mut frames = [0u8; 4096];
+                        let n = child.read_completion(&mut frames).unwrap_or(0);
+                        let record = api::services::ssh_completion::last_frame(&frames[..n]);
+                        set_ssh_completion(crate::ssh::settle(record, code, api::services::ssh_completion::Mode::Exec));
                     }
+                    code
                 }
                 None if index < self.not_started => typed::UPSTREAM_NOT_STARTED_STATUS,
                 None => 0,

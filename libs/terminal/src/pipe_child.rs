@@ -61,6 +61,12 @@ pub struct PipeSpec<'a>{
     /// Existing VFS directory grant to derive the child's cwd from (never an
     /// ambient path lookup when present).
     pub cwd_source:Option<ObjectRefV1>,
+    /// Give the stage a write-only completion-record stream in slot 5 (what a foreground
+    /// child gets from `spawn_foreground_with_completion`): the stream is created in the
+    /// pipeline's root Operation, so a stage stopped by the kernel never takes a record it
+    /// already wrote away, and the reader end stays in the returned [`PipeChild`]
+    /// ([`PipeChild::read_completion`]). The child takes it with [`crate::completion_writer`].
+    pub completion:bool,
 }
 
 /// Pure pre-effect validation. Returns the exact immutable context length.
@@ -73,7 +79,7 @@ pub(crate) fn validate(spec:&PipeSpec<'_>)->Result<usize,Status>{
     if argv_len>ARGV_MAX||spec.cwd.len()>CWD_MAX||env_len>ENV_MAX||spec.environment.len()>ENV_ENTRIES_MAX{return Err(Status::QuotaExceeded)}
     if spec.argv.iter().any(|a|a.as_bytes().contains(&0))||spec.cwd.contains(&0){return Err(Status::Malformed)}
     if !spec.cwd.is_empty()&&spec.cwd_source.is_none()&&core::str::from_utf8(spec.cwd).is_err(){return Err(Status::UnsupportedInput)}
-    let grant_count=3+usize::from(!spec.cwd.is_empty());
+    let grant_count=3+usize::from(!spec.cwd.is_empty())+usize::from(spec.completion);
     Ok(48+argv_len+spec.cwd.len()+env_len+grant_count*40)
 }
 
@@ -121,7 +127,7 @@ fn wait_deadline(now_ns:u64)->Result<u64,Status>{now_ns.checked_add(WAIT_BUDGET_
 /// A committed pipeline stage. Keep it alive until the stage is reaped and drop it
 /// before closing its stage Operation: it keeps a dynamically admitted cwd
 /// directory open, and dropping it lets VFS settle the child's cwd receipt.
-pub struct PipeChild{child:ChildRefV1,operation:OperationRef,_cwd:Option<CwdLease>}
+pub struct PipeChild{child:ChildRefV1,operation:OperationRef,_cwd:Option<CwdLease>,completion:Option<Endpoint>}
 impl PipeChild{
     pub fn child(&self)->ChildRefV1{self.child}
     pub fn root_tid(&self)->usize{self.child.root_tid as usize}
@@ -143,6 +149,17 @@ impl PipeChild{
     /// when the kernel stopped the child (a cancelled Operation) instead of the
     /// child exiting by itself, and `exit_code` is then meaningless.
     pub fn wait_status(&self)->Result<ChildStatus,Status>{wait_child_status(self.operation,self.child)}
+    /// Nonblocking drain of the stage's completion stream (see [`PipeSpec::completion`]):
+    /// copies everything currently buffered, up to `out.len()`, and returns the byte count.
+    /// Nothing buffered, writer end-of-stream, and a stage spawned without a completion
+    /// stream all read as `Ok(0)`; only real stream errors fail. Read after the stage is
+    /// reaped and before [`Pipeline::close`], which releases the stream with its Operation.
+    pub fn read_completion(&self,out:&mut[u8])->Result<usize,Status>{
+        let Some(reader)=self.completion else{return Ok(0)};
+        let mut total=0;
+        while total<out.len(){match reader.read(&mut out[total..],0){Ok(n)=>total+=n,Err(Status::WouldBlock|Status::Eof)=>break,Err(e)=>return Err(e)}}
+        Ok(total)
+    }
 }
 
 /// One `QueryChild` of `child` under its preparing `operation`.
@@ -258,8 +275,13 @@ impl Pipeline{
     pub fn spawn(&self,stage:usize,spec:&PipeSpec<'_>,stdin:Option<Endpoint>,stdout:Endpoint,stderr:Endpoint)->Result<PipeChild,Status>{
         let operation=*self.stages.get(stage).ok_or(Status::Malformed)?;
         let context_len=validate(spec)?;
+        // The completion stream hangs from the root, which no stage can cancel.
+        let completion=if spec.completion{Some(self.operation.create_stream(STREAM_CAPACITY)?)}else{None};
         let mut committing=false;
-        let result=Self::prepare(operation,spec,context_len,stdin,stdout,stderr,&mut committing);
+        let result=Self::prepare(operation,spec,context_len,(stdin,stdout,stderr),completion,&mut committing);
+        if result.is_err(){
+            if let Some((reader,writer))=completion{let _=reader.close();let _=writer.close();}
+        }
         match result{
             Err(_) if committing=>{let _=operation.cancel(5);}
             // Before commit, a stage whose Operation the kernel cancelled lost its
@@ -271,7 +293,8 @@ impl Pipeline{
         result
     }
 
-    fn prepare(operation:Operation,spec:&PipeSpec<'_>,context_len:usize,stdin:Option<Endpoint>,stdout:Endpoint,stderr:Endpoint,committing:&mut bool)->Result<PipeChild,Status>{
+    fn prepare(operation:Operation,spec:&PipeSpec<'_>,context_len:usize,stdio:(Option<Endpoint>,Endpoint,Endpoint),completion:Option<(Endpoint,Endpoint)>,committing:&mut bool)->Result<PipeChild,Status>{
+        let (stdin,stdout,stderr)=stdio;
         // Endpoint copies owned by this call, declared before `prepared` so an
         // unpublished child is aborted first. `empty_reader` (the reader of the empty
         // stdin stream) outlives the commit; `delegated` is closed only while the
@@ -293,6 +316,11 @@ impl Pipeline{
         let stdin_copy=stdin_source.delegate(&prepared,EndpointRights::READ_ONLY)?;delegated.push(stdin_copy);
         let stdout_copy=stdout.delegate(&prepared,EndpointRights::WRITE_DELEGATE)?;delegated.push(stdout_copy);
         let stderr_copy=stderr.delegate(&prepared,EndpointRights::WRITE_DELEGATE)?;delegated.push(stderr_copy);
+        // Completion stream: the writer is delegated write-only; the reader stays here.
+        let completion_copy=match completion{
+            Some((_,writer))=>{let copy=writer.delegate(&prepared,EndpointRights::WRITE_ONLY)?;delegated.push(copy);Some(copy)}
+            None=>None,
+        };
 
         let mut cwd_lease=None;let mut reservation=None;let mut child_cwd=None;
         let vfs_owner=if spec.cwd.is_empty(){None}else{Some(ostd::session::service_binding(api::syscall::service::VFS)?)};
@@ -321,9 +349,11 @@ impl Pipeline{
         }
 
         let endpoint_grant=|slot:GrantSlot,copy:Endpoint,rights:EndpointRights|Grant::endpoint(slot,copy.reference().raw(),rights.bits() as u16);
-        let mut grants=[endpoint_grant(GrantSlot::Stdin,stdin_copy,EndpointRights::READ_ONLY)?,endpoint_grant(GrantSlot::Stdout,stdout_copy,EndpointRights::WRITE_DELEGATE)?,endpoint_grant(GrantSlot::Stderr,stderr_copy,EndpointRights::WRITE_DELEGATE)?,Grant{kind:1,rights:0,slot:GrantSlot::Stdin,owner_service:0,object:ObjectRefV1::ZERO}];
+        let mut grants=[endpoint_grant(GrantSlot::Stdin,stdin_copy,EndpointRights::READ_ONLY)?,endpoint_grant(GrantSlot::Stdout,stdout_copy,EndpointRights::WRITE_DELEGATE)?,endpoint_grant(GrantSlot::Stderr,stderr_copy,EndpointRights::WRITE_DELEGATE)?,Grant{kind:1,rights:0,slot:GrantSlot::Stdin,owner_service:0,object:ObjectRefV1::ZERO},Grant{kind:1,rights:0,slot:GrantSlot::Stdin,owner_service:0,object:ObjectRefV1::ZERO}];
+        // Ascending slot order: stdio (0..=2), cwd (4), completion (5).
         let mut count=3;
-        if let Some(grant)=child_cwd{grants[3]=Grant::cwd(grant)?;count=4;}
+        if let Some(grant)=child_cwd{grants[count]=Grant::cwd(grant)?;count+=1;}
+        if let Some(copy)=completion_copy{grants[count]=endpoint_grant(GrantSlot::Completion,copy,EndpointRights::WRITE_ONLY)?;count+=1;}
         let context=ChildContext::new(operation.reference().raw(),spec.argv,spec.cwd,spec.environment,&grants[..count])?;
         if context.as_bytes().len()!=context_len{return Err(Status::Malformed)}
         prepared.write_context(&context)?;
@@ -340,7 +370,9 @@ impl Pipeline{
         let child=prepared.commit()?;
         // The child holds its own reader of the empty stream now.
         empty_reader.close_all();
-        Ok(PipeChild{child,operation:operation.reference(),_cwd:cwd_lease})
+        // The child holds its own writer now: it is the sole completion writer.
+        if let Some((_,writer))=completion{let _=writer.close();}
+        Ok(PipeChild{child,operation:operation.reference(),_cwd:cwd_lease,completion:completion.map(|(reader,_)|reader)})
     }
 }
 
@@ -399,7 +431,7 @@ impl Drop for CwdLease{fn drop(&mut self){
 mod tests{
     use super::*;
     fn spec<'a>(argv:&'a[&'a str],cwd:&'a[u8],environment:&'a[(&'a str,&'a str)])->PipeSpec<'a>{
-        PipeSpec{path:"/bin/cat",argv,cwd,environment,cwd_source:None}
+        PipeSpec{path:"/bin/cat",argv,cwd,environment,cwd_source:None,completion:false}
     }
     #[test]
     fn context_length_matches_the_session_formula(){
@@ -407,6 +439,20 @@ mod tests{
         assert_eq!(validate(&spec(&["cat","-n"],b"",&[])),Ok(48+7+4+3+3*40));
         // cwd adds its bytes and one grant; env counts 4 + key + value.
         assert_eq!(validate(&spec(&["a"],b"/tmp",&[("K","vv")])),Ok(48+7+2+4+(4+1+2)+4*40));
+    }
+    #[test]
+    fn the_completion_stream_adds_exactly_one_grant(){
+        let mut with=spec(&["ssh","h"],b"",&[]);
+        let without=with;
+        with.completion=true;
+        let plain=validate(&without).unwrap();
+        assert_eq!(validate(&with),Ok(plain+40));
+        // Together with a cwd: two extra grants over the three stdio ones.
+        let mut both=spec(&["ssh","h"],b"/tmp",&[]);
+        let cwd_only=validate(&both).unwrap();
+        both.completion=true;
+        assert_eq!(validate(&both),Ok(cwd_only+40));
+        assert_eq!(cwd_only,48+7+4+2+4+4*40);
     }
     #[test]
     fn argv_over_512_bytes_is_refused(){

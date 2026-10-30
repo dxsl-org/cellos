@@ -475,6 +475,38 @@ fn completion_writer_is_the_slot_5_endpoint_on_the_context_operation() {
     assert!(completion_writer(&without).is_none());
 }
 
+#[test]
+fn pipeline_stage_context_carries_the_completion_slot_only_when_requested() {
+    use crate::context::{ChildContext, Grant, GrantSlot};
+    use crate::pipe_child::{validate, PipeSpec};
+    use api::cell_session::ObjectRefV1;
+    let operation = ObjectRefV1 { id: 9, generation: 1 };
+    let r = |id| ObjectRefV1 { id, generation: 3 };
+    let argv = ["ssh", "--user", "u", "--command", "true"];
+    let environment: [(&str, &str); 0] = [];
+    for (cwd, completion) in [(false, false), (false, true), (true, false), (true, true)] {
+        let path: &[u8] = if cwd { b"/home/user" } else { b"" };
+        // Ascending slot order, as the stage launch builds them: stdio, cwd, completion.
+        let mut grants = std::vec![
+            Grant::endpoint(GrantSlot::Stdin, r(1), crate::EndpointRights::READ_ONLY.bits() as u16).unwrap(),
+            Grant::endpoint(GrantSlot::Stdout, r(2), crate::EndpointRights::WRITE_DELEGATE.bits() as u16).unwrap(),
+            Grant::endpoint(GrantSlot::Stderr, r(3), crate::EndpointRights::WRITE_DELEGATE.bits() as u16).unwrap(),
+        ];
+        if cwd { grants.push(Grant::cwd(r(5)).unwrap()); }
+        if completion {
+            grants.push(Grant::endpoint(GrantSlot::Completion, r(6), crate::EndpointRights::WRITE_ONLY.bits() as u16).unwrap());
+        }
+        let context = ChildContext::new(operation, &argv, path, &environment, &grants).unwrap();
+        let spec = PipeSpec { path: "/bin/cellbox-ssh", argv: &argv, cwd: path, environment: &environment, cwd_source: None, completion };
+        assert_eq!(validate(&spec), Ok(context.as_bytes().len()), "cwd {cwd} completion {completion}");
+        assert_eq!(context.completion_grant().is_some(), completion);
+        assert_eq!(context.grants().count(), 3 + usize::from(cwd) + usize::from(completion));
+        // The stage never has a control grant: that is how a child tells a pipeline stage
+        // from a terminal foreground.
+        assert!(context.grants().all(|g| g.slot != GrantSlot::Control));
+    }
+}
+
 fn event_frame(sequence: u64, epoch: u64, kind: u16, payload: &[u8]) -> Vec<u8> {
     use api::services::session::EventHeaderV1;
     let mut bytes = std::vec![0; 24 + payload.len()];

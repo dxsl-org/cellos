@@ -10,12 +10,16 @@ use std::rc::Rc;
 
 use common::*;
 use vissh::client::{HostKey, Transport, TransportError};
-use vissh::session::{run, Dispatch, Ending, Input, Local, Mode, Phase, Point, RekeyPolicy, Trust, CHUNK};
-use vissh::sunset::{ChanData, ChanHandle, Event, KeyType, RekeyLimits, Runner, ServEvent, Server, SignKey};
+use vissh::session::{run, AuthKind, Credential, Dispatch, Ending, Input, Local, Mode, Phase, Point, RekeyPolicy, SignRequest, Signed, Trust, CHUNK};
+use vissh::sunset::ed25519_dalek::{Signer, SigningKey};
+use vissh::sunset::{ChanData, ChanHandle, Event, KeyType, PubKey, RekeyLimits, Runner, ServEvent, Server, SignKey};
+use vissh::userauth;
 
 #[derive(Default)]
 struct Seen {
     passwords: u32,
+    /// `PubkeyAuth` events: the query for the key, then the signed request.
+    pubkey_events: u32,
     command: Option<String>,
     execs: u32,
     stdin: Vec<u8>,
@@ -41,6 +45,12 @@ struct ToServer {
     killed: Rc<Cell<bool>>,
     /// The server has seen the exec request (read by the local side, write-ahead check).
     exec_seen: Rc<Cell<bool>>,
+    /// The one public key this server authorizes.
+    authorized: Option<[u8; 32]>,
+    /// Offered authentication methods `(password, publickey)`.
+    methods: (bool, bool),
+    /// Refuse the signed request although the key query was accepted.
+    refuse_signed: bool,
 }
 
 impl ToServer {
@@ -60,6 +70,9 @@ impl ToServer {
             clock: 0,
             killed: Rc::new(Cell::new(false)),
             exec_seen: Rc::new(Cell::new(false)),
+            authorized: None,
+            methods: (true, true),
+            refuse_signed: false,
         }
     }
 
@@ -72,10 +85,18 @@ impl ToServer {
                     self.key = next;
                 }
             }
-            Ok(Event::Serv(ServEvent::FirstAuth(a))) => a.reject().unwrap(),
+            Ok(Event::Serv(ServEvent::FirstAuth(mut a))) => {
+                a.set_auth_methods(self.methods.0, self.methods.1).unwrap();
+                a.reject().unwrap()
+            }
             Ok(Event::Serv(ServEvent::PasswordAuth(a))) => {
                 self.seen.passwords += 1;
                 if a.password().unwrap() == "right" { a.allow().unwrap() } else { a.reject().unwrap() }
+            }
+            Ok(Event::Serv(ServEvent::PubkeyAuth(a))) => {
+                self.seen.pubkey_events += 1;
+                let known = matches!(a.pubkey(), Ok(PubKey::Ed25519(k)) if Some(k.key.0) == self.authorized);
+                if known && !(self.refuse_signed && self.seen.pubkey_events >= 2) { a.allow().unwrap() } else { a.reject().unwrap() }
             }
             Ok(Event::Serv(ServEvent::OpenSession(o))) => accepted = Some(o.accept().unwrap()),
             Ok(Event::Serv(ServEvent::SessionExec(x))) => {
@@ -165,6 +186,7 @@ struct Me {
     kill_at: Option<Point>,
     killed: Rc<Cell<bool>>,
     exec_seen: Rc<Cell<bool>>,
+    pk: Pk,
 }
 
 impl Me {
@@ -173,6 +195,7 @@ impl Me {
             trust, confirm: Trust::Refused, confirmed: 0, password, asked: 0, keys: Vec::new(),
             stdin: b"a\0\xff".to_vec(), expect: b"a\0\xff".to_vec(), sent_eof: false, stdout: Vec::new(), stderr: Vec::new(),
             progress: Vec::new(), points: Vec::new(), kill_at: None, killed: Rc::new(Cell::new(false)), exec_seen: Rc::new(Cell::new(false)),
+            pk: Pk::default(),
         }
     }
     /// Share the server's fault cells.
@@ -191,6 +214,54 @@ impl Me {
     }
 }
 
+/// What the local side does for publickey: the offered key, and how it signs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Sign {
+    /// A correct signature over the exact input.
+    #[default]
+    Good,
+    /// A correct signature over the input of another session.
+    OtherSession,
+    /// A correct signature over the input of another user name.
+    OtherUser,
+    /// A correct signature, but the reported digest is of other bytes.
+    WrongDigest,
+    /// Bytes that are no signature.
+    Garbage,
+    /// A refusal from the key service.
+    Refuse(Credential),
+}
+
+#[derive(Default)]
+struct Pk {
+    identity: Option<Result<[u8; 32], Credential>>,
+    sign: Sign,
+    identity_calls: u32,
+    sign_calls: u32,
+    requests: Vec<([u8; 32], String, [u8; 32])>,
+}
+
+/// A fixed test seed, never a generated key.
+fn test_key() -> SigningKey {
+    SigningKey::from_bytes(&[0x42; 32])
+}
+
+fn test_public() -> [u8; 32] {
+    test_key().verifying_key().to_bytes()
+}
+
+impl Me {
+    /// Publickey with the fixed test key and a correct signer.
+    fn publickey(mut self) -> Self {
+        self.pk.identity = Some(Ok(test_public()));
+        self
+    }
+    fn signing(mut self, sign: Sign) -> Self {
+        self.pk.sign = sign;
+        self
+    }
+}
+
 impl Local for Me {
     fn trust(&mut self, key: &HostKey) -> Trust {
         self.keys.push(key.clone());
@@ -201,6 +272,25 @@ impl Local for Me {
         assert_eq!(self.asked, 0, "before any credential");
         self.confirmed += 1;
         self.confirm
+    }
+    fn identity(&mut self) -> Result<[u8; 32], Credential> {
+        self.pk.identity_calls += 1;
+        self.pk.identity.unwrap_or(Err(Credential::Unavailable))
+    }
+    fn sign(&mut self, r: &SignRequest<'_>) -> Result<Signed, Credential> {
+        self.pk.sign_calls += 1;
+        self.pk.requests.push((r.session_id, r.username.to_string(), r.message_sha256));
+        let public = test_public();
+        let input = |session: &[u8; 32], user: &str| userauth::signing_input(session, user, &public).unwrap();
+        let (signed, reported) = match self.pk.sign {
+            Sign::Refuse(credential) => return Err(credential),
+            Sign::Good => (input(&r.session_id, r.username), r.message_sha256),
+            Sign::OtherSession => (input(&[0xAB; 32], r.username), r.message_sha256),
+            Sign::OtherUser => (input(&r.session_id, "someone"), r.message_sha256),
+            Sign::WrongDigest => (input(&r.session_id, r.username), [0x77; 32]),
+            Sign::Garbage => return Ok(Signed { signature: [0x11; 64], message_sha256: r.message_sha256 }),
+        };
+        Ok(Signed { signature: test_key().sign(&signed).to_bytes(), message_sha256: reported })
     }
     fn password(&mut self, secret: &mut String) -> bool {
         self.asked += 1;
@@ -248,7 +338,7 @@ impl Local for Me {
 }
 
 fn exec(t: &mut ToServer, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
-    run(t, me, "tester", &Mode::Exec("cmd".into()), policy)
+    run(t, me, "tester", AuthKind::Password, &Mode::Exec("cmd".into()), policy)
 }
 
 const PROD: &RekeyPolicy = &RekeyPolicy::PRODUCTION;
@@ -310,7 +400,7 @@ fn exec_sends_exact_command_keeps_streams_apart_and_reports_lifecycle_write_ahea
     let mut t = ToServer::new();
     let mut me = Me::new(Trust::KnownExact, "right").wired(&t);
     let cmd = "printf 'x y'; exit 7 # \u{e9}";
-    let out = run(&mut t, &mut me, "tester", &Mode::Exec(cmd.into()), PROD);
+    let out = run(&mut t, &mut me, "tester", AuthKind::Password, &Mode::Exec(cmd.into()), PROD);
     assert_eq!(out.ending, Ending::Disconnected, "{out:?}");
     assert_eq!((out.dispatch, out.rekeys), (Dispatch::Accepted, 0));
     assert_eq!(t.seen.command.as_deref(), Some(cmd));
@@ -340,7 +430,7 @@ fn a_silent_peer_times_out_before_anything_is_sent() {
         fn now_ms(&mut self) -> u64 { 0 }
     }
     let mut me = Me::new(Trust::KnownExact, "right");
-    let out = run(&mut Silent(0), &mut me, "tester", &Mode::Exec("true".into()), PROD);
+    let out = run(&mut Silent(0), &mut me, "tester", AuthKind::Password, &Mode::Exec("true".into()), PROD);
     assert_eq!((out.ending, out.dispatch, me.keys.len()), (Ending::TimedOut, Dispatch::NotSent, 0));
 }
 
@@ -359,7 +449,7 @@ fn a_stalled_key_exchange_ends_at_its_own_deadline() {
     let mut me = Me::new(Trust::KnownExact, "right");
     let policy = RekeyPolicy { kex_ms: 500, ..RekeyPolicy::PRODUCTION };
     let mut stalled = Stalled(0);
-    let out = run(&mut stalled, &mut me, "tester", &Mode::Exec("true".into()), &policy);
+    let out = run(&mut stalled, &mut me, "tester", AuthKind::Password, &Mode::Exec("true".into()), &policy);
     assert_eq!((out.ending, out.dispatch), (Ending::TimedOut, Dispatch::NotSent));
     assert!(stalled.0 >= 500 && stalled.0 < 10_000, "ended at the KEX deadline, clock {}", stalled.0);
 }
@@ -447,5 +537,187 @@ fn interruption_at_each_point_reports_dispatch_and_never_replays() {
         // may have run, though this server never saw it.
         assert_eq!(t.seen.execs, u32::from(point == Point::Accepted), "{point:?}");
         assert_eq!(me.points.last(), Some(&point));
+    }
+}
+
+// ---- publickey (K6): the local side signs, the in-memory Sunset server verifies ----
+
+fn pk_server() -> ToServer {
+    let mut t = ToServer::new();
+    t.authorized = Some(test_public());
+    t
+}
+
+fn login_with(t: &mut ToServer, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
+    run(t, me, "tester", AuthKind::PublicKey, &Mode::Exec("cmd".into()), policy)
+}
+
+fn login(t: &mut ToServer, me: &mut Me) -> vissh::session::Outcome {
+    login_with(t, me, PROD)
+}
+
+/// The login stopped before the server decided: nothing ran, no password was asked.
+fn assert_refused_locally(out: &vissh::session::Outcome, me: &Me, t: &ToServer, credential: Credential) {
+    assert_eq!(out.ending, Ending::Credential(credential), "{out:?}");
+    assert_eq!(out.dispatch, Dispatch::NotSent);
+    assert_eq!(me.progress.last(), Some(&(Phase::Auth, Dispatch::NotSent)));
+    assert_eq!((me.asked, t.seen.passwords, t.seen.command.as_deref()), (0, 0, None));
+}
+
+#[test]
+fn publickey_login_signs_through_the_local_side_and_the_server_verifies_the_signature() {
+    let mut t = pk_server();
+    let mut me = Me::new(Trust::KnownExact, "unused").wired(&t).publickey();
+    let out = login(&mut t, &mut me);
+    assert_eq!((out.ending.clone(), out.dispatch), (Ending::Disconnected, Dispatch::Accepted), "{out:?}");
+    // One identity call, one signature, no password anywhere; the server saw the key
+    // query and then the signed request (which it verified against its own session id).
+    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords), (1, 1, 0, 0));
+    assert_eq!(t.seen.pubkey_events, 2);
+    assert_eq!(t.seen.command.as_deref(), Some("cmd"));
+    assert_eq!(me.stdout, b"out:a\0\xff");
+    // What the key service was asked: the connection's session id, the user name and the
+    // digest of the RFC 4252 input built independently of Sunset.
+    let (session, user, digest) = &me.pk.requests[0];
+    assert_eq!((user.as_str(), *session == [0u8; 32]), ("tester", false));
+    let input = userauth::signing_input(session, "tester", &test_public()).unwrap();
+    assert_eq!(*digest, userauth::digest(&input));
+    assert_eq!(&me.progress[..3], [(Phase::Trust, Dispatch::NotSent), (Phase::Auth, Dispatch::NotSent), (Phase::Request, Dispatch::NotSent)]);
+    assert_eq!(me.keys.len(), 1);
+}
+
+#[test]
+fn a_signature_for_another_session_or_user_never_reaches_the_server() {
+    // The server would refuse either; the client refuses first, on its own verification
+    // of the key service's answer, so exactly one `sign` call is made, the signed request
+    // is never sent (the server saw only the key query) and no password is offered.
+    for sign in [Sign::OtherSession, Sign::OtherUser, Sign::Garbage] {
+        let mut t = pk_server();
+        let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(sign);
+        let out = login(&mut t, &mut me);
+        assert_refused_locally(&out, &me, &t, Credential::BadSignature);
+        assert_eq!((me.pk.sign_calls, t.seen.pubkey_events), (1, 1), "{sign:?}");
+    }
+}
+
+#[test]
+fn a_digest_of_other_bytes_is_an_input_mismatch_before_anything_is_sent() {
+    let mut t = pk_server();
+    let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(Sign::WrongDigest);
+    let out = login(&mut t, &mut me);
+    assert_refused_locally(&out, &me, &t, Credential::InputMismatch);
+    assert_eq!((me.pk.sign_calls, t.seen.pubkey_events), (1, 1));
+}
+
+#[test]
+fn a_refusal_of_identity_or_signing_ends_the_login_with_that_credential() {
+    for credential in [Credential::UnknownIdentity, Credential::Denied, Credential::Unavailable, Credential::Protocol] {
+        let mut t = pk_server();
+        let mut me = Me::new(Trust::KnownExact, "right");
+        me.pk.identity = Some(Err(credential));
+        let out = login(&mut t, &mut me);
+        assert_refused_locally(&out, &me, &t, credential);
+        // No key was offered: the server never saw a publickey request.
+        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 0, 0));
+    }
+    for credential in [Credential::UnlockCancelled, Credential::UnlockFailed, Credential::UnlockLocked, Credential::Timeout, Credential::UnlockNeedsTerminal] {
+        let mut t = pk_server();
+        let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(Sign::Refuse(credential));
+        let out = login(&mut t, &mut me);
+        assert_refused_locally(&out, &me, &t, credential);
+        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 1, 1));
+    }
+    // A key that is not a valid curve point is refused as a protocol error.
+    let mut t = pk_server();
+    let mut me = Me::new(Trust::KnownExact, "right");
+    me.pk.identity = Some(Ok([0x02; 32]));
+    let out = login(&mut t, &mut me);
+    assert_refused_locally(&out, &me, &t, Credential::Protocol);
+}
+
+#[test]
+fn a_server_without_publickey_ends_auth_with_no_identity_and_no_password_prompt() {
+    let mut t = pk_server();
+    t.methods = (true, false);
+    let mut me = Me::new(Trust::KnownExact, "right").publickey();
+    let out = login(&mut t, &mut me);
+    assert_eq!(out.ending, Ending::Auth, "{out:?}");
+    assert_eq!(out.dispatch, Dispatch::NotSent);
+    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (0, 0, 0, 0, 0));
+}
+
+#[test]
+fn a_server_that_does_not_know_the_key_never_costs_a_signature_or_a_password() {
+    let mut t = ToServer::new();
+    let mut me = Me::new(Trust::KnownExact, "right").publickey();
+    let out = login(&mut t, &mut me);
+    assert_eq!(out.ending, Ending::Auth, "{out:?}");
+    assert_eq!(out.dispatch, Dispatch::NotSent);
+    // The key was offered once; `sign` (the passphrase prompt) was never reached.
+    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (1, 0, 0, 0, 1));
+}
+
+#[test]
+fn a_refused_signature_is_tried_once_and_nothing_else_is_offered() {
+    let mut t = pk_server();
+    t.refuse_signed = true;
+    let mut me = Me::new(Trust::KnownExact, "right").publickey();
+    let out = login(&mut t, &mut me);
+    assert_eq!(out.ending, Ending::Auth, "{out:?}");
+    assert_eq!(out.dispatch, Dispatch::NotSent);
+    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (1, 1, 0, 0, 2));
+    assert_eq!(t.seen.command, None);
+}
+
+#[test]
+fn an_untrusted_or_changed_host_key_never_reaches_identity_or_sign() {
+    for (trust, confirm) in [(Trust::Mismatch, Trust::Refused), (Trust::Denied, Trust::Refused), (Trust::Unavailable, Trust::Refused), (Trust::Unknown, Trust::Refused), (Trust::Unknown, Trust::NoConfirmation)] {
+        let mut t = pk_server();
+        let mut me = Me::new(trust, "right").publickey();
+        me.confirm = confirm;
+        let out = login(&mut t, &mut me);
+        assert!(matches!(out.ending, Ending::HostKey(..)), "{out:?}");
+        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked), (0, 0, 0));
+        for _ in 0..20 {
+            t.step();
+        }
+        assert_eq!(t.seen.pubkey_events, 0);
+    }
+}
+
+#[test]
+fn password_mode_with_both_methods_offered_never_touches_the_key() {
+    let mut t = pk_server();
+    let mut me = Me::new(Trust::KnownExact, "right").wired(&t).publickey();
+    let out = exec(&mut t, &mut me, PROD);
+    assert_eq!((out.ending, out.dispatch), (Ending::Disconnected, Dispatch::Accepted));
+    // `Pubkey`/`AgentSign` skipped, the password asked once.
+    assert_eq!((me.asked, t.seen.passwords), (1, 1));
+    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (0, 0, 0));
+}
+
+#[test]
+fn a_publickey_session_rekeys_without_a_second_authentication() {
+    let mut t = pk_server();
+    let mut me = Me::new(Trust::KnownExact, "right").publickey().with_stdin(bulk());
+    let policy = RekeyPolicy { limits: RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 }, ..RekeyPolicy::PRODUCTION };
+    let out = login_with(&mut t, &mut me, &policy);
+    assert_eq!(out.ending, Ending::Disconnected, "{out:?}");
+    assert!(out.rekeys >= 1, "{out:?}");
+    // The host key rule holds as in password mode: one trust decision, one signature.
+    assert_eq!((me.keys.len(), me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 1, 1, 2));
+    assert_eq!(&me.stdout[4..], &bulk()[..]);
+}
+
+#[test]
+fn sunsets_own_message_equals_the_rfc_4252_construction_for_every_user_name_length() {
+    // `answer_sign` compares Sunset's serialisation with `userauth::signing_input` byte for
+    // byte; a login that reaches the server proves they agree, here at the length extremes.
+    for user in ["u", "a.b_c-9", "tester", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
+        let mut t = pk_server();
+        let mut me = Me::new(Trust::KnownExact, "unused").wired(&t).publickey();
+        let out = run(&mut t, &mut me, user, AuthKind::PublicKey, &Mode::Exec("cmd".into()), PROD);
+        assert_eq!((out.ending.clone(), out.dispatch), (Ending::Disconnected, Dispatch::Accepted), "{user}: {out:?}");
+        assert_eq!((me.pk.requests[0].1.as_str(), t.seen.pubkey_events), (user, 2));
     }
 }

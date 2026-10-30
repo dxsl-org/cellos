@@ -139,8 +139,17 @@ pub fn classify_command(argv: &[String]) -> CmdClass {
         return if crate::edit::valid_args(&argv[1..]) { CmdClass::Session } else { CmdClass::Builtin };
     }
     if prog == "ssh" {
-        // Bad argv is not a session: the built-in prints usage and exits 2.
-        return if vissh::args::parse_owned(&argv[1..]).is_ok() { CmdClass::Session } else { CmdClass::Builtin };
+        // Bad argv is not a session: the built-in prints usage and exits 2. A publickey
+        // exec asks for nothing on a terminal (a wrapped key and an unknown host are
+        // refused by the child), so it may run as an external byte stage; every other
+        // parsable ssh (password, PTY shell) is an interactive session.
+        return match vissh::args::parse_owned(&argv[1..]) {
+            Err(_) => CmdClass::Builtin,
+            Ok(parsed) if matches!(parsed.auth, vissh::args::Auth::PublicKey { .. }) && parsed.command.is_some() => {
+                CmdClass::External
+            }
+            Ok(_) => CmdClass::Session,
+        };
     }
     if BUILTINS.contains(&prog) {
         return CmdClass::Builtin;
@@ -149,6 +158,12 @@ pub fn classify_command(argv: &[String]) -> CmdClass {
         return CmdClass::Function;
     }
     CmdClass::External
+}
+
+/// True for an `ssh` command that runs as an external byte stage (publickey with
+/// `--command`): its stage is launched from `/bin/cellbox-ssh` with `ssh` as argv[0].
+pub fn is_ssh_stage(argv: &[String]) -> bool {
+    argv.first().is_some_and(|prog| prog == "ssh") && classify_command(argv) == CmdClass::External
 }
 
 enum Class {
@@ -371,7 +386,10 @@ fn check_external(stage: &StageIn) -> Result<(), String> {
     if stage.argv.iter().any(|arg| arg.contains('\0')) {
         return reject(format!("`{}`: arguments cannot contain NUL", name));
     }
-    if !argv_fits(&stage.argv[1..]) {
+    // The child sees `ssh` as argv[0] (its entry keys on it), so an ssh stage's argument
+    // list is the whole command; any other external passes only what follows its name.
+    let fits = if is_ssh_stage(&stage.argv) { argv_fits(&stage.argv) } else { argv_fits(&stage.argv[1..]) };
+    if !fits {
         return reject(format!(
             "`{}`: argument list exceeds the {}-byte child launch limit",
             name, EXTERNAL_ARGV_LIMIT
@@ -745,6 +763,8 @@ pub fn background_refusal(stage: &StageIn) -> Option<String> {
             Some(stateful_message(name, "in the background (functions run in the shell context)"))
         }
         Class::Other(CmdClass::Session) => Some(session_message(name)),
+        // An ssh stage is still a session in the background: never detached.
+        Class::Other(CmdClass::External) if is_ssh_stage(&stage.argv) => Some(session_message(name)),
         Class::Cat(_) | Class::Other(CmdClass::Builtin | CmdClass::External) => None,
     }
 }
@@ -2121,6 +2141,80 @@ mod tests {
         assert!(rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["/bin/echo", &long])])
             .contains("512-byte"));
         rejected(&[stage(&["/bin/echo", "a\0b"]), stage(&["/bin/cat"])]);
+    }
+
+    fn ssh(auth: &[&str], tail: &[&str]) -> Vec<String> {
+        let mut words = vec!["ssh", "--user", "tester"];
+        words.extend_from_slice(auth);
+        words.extend_from_slice(&["gateway"]);
+        words.extend_from_slice(tail);
+        words.into_iter().map(String::from).collect()
+    }
+
+    const KEY: [&str; 4] = ["--auth", "publickey", "--identity", "work-1"];
+    const PASSWORD: [&str; 2] = ["--auth", "password"];
+
+    #[test]
+    fn only_a_publickey_exec_is_an_external_ssh_stage() {
+        // Publickey with a command needs nothing on the terminal: an external byte stage.
+        assert_eq!(classify_command(&ssh(&KEY, &["--command", "cat > f"])), CmdClass::External);
+        assert!(is_ssh_stage(&ssh(&KEY, &["--command", "cat > f"])));
+        // Every other parsable form is an interactive session: publickey PTY, password in
+        // either mode.
+        for words in [ssh(&KEY, &[]), ssh(&PASSWORD, &[]), ssh(&PASSWORD, &["--command", "true"])] {
+            assert_eq!(classify_command(&words), CmdClass::Session, "{words:?}");
+            assert!(!is_ssh_stage(&words));
+        }
+        // Bad argv is not a session: the built-in prints the usage and exits 2.
+        for words in [vec![String::from("ssh")], ssh(&["--auth", "publickey"], &["--command", "c"])] {
+            assert_eq!(classify_command(&words), CmdClass::Builtin, "{words:?}");
+            assert!(!is_ssh_stage(&words));
+        }
+        // The program name decides: another command is never an ssh stage.
+        assert!(!is_ssh_stage(&[String::from("/bin/cat")]));
+    }
+
+    #[test]
+    fn an_ssh_publickey_exec_may_join_a_byte_pipeline_and_nothing_else_of_ssh_may() {
+        let exec = ssh(&KEY, &["--command", "cat > f"]);
+        let stage_of = |words: &Vec<String>| StageIn { argv: words.clone(), redirects: Vec::new() };
+        // `cat FILE | ssh ...`: the exact bytes of the file feed the stage.
+        let plan = match admit(&[stage(&["cat", "/tmp/blob"]), stage_of(&exec)]) {
+            Admission::Bytes(plan) => plan,
+            other => panic!("{:?}", other),
+        };
+        assert_eq!((plan.head, plan.prefix), (ByteHead::Cat(String::from("/tmp/blob")), 1));
+        // Alone with an output redirect it is a one-stage byte pipeline into the file.
+        let plan = match admit(&[with(stage_of(&exec), RedirKind::Out, "/tmp/out")]) {
+            Admission::Bytes(plan) => plan,
+            other => panic!("{:?}", other),
+        };
+        assert_eq!((plan.head, plan.prefix, plan.output), (ByteHead::None, 0, Some((String::from("/tmp/out"), false))));
+        // Alone and not redirected it keeps the foreground launch.
+        assert!(matches!(admit(&[stage_of(&exec)]), Admission::Legacy));
+        // An ssh stage may follow and feed other externals.
+        assert!(matches!(admit(&[stage_of(&exec), stage(&["/bin/cat"])]), Admission::Bytes(_)));
+        // Password mode and a publickey PTY session are not stages.
+        for words in [ssh(&PASSWORD, &["--command", "true"]), ssh(&KEY, &[])] {
+            let message = rejected(&[stage(&["cat", "/tmp/blob"]), stage_of(&words)]);
+            assert!(message.contains("interactive session"), "{message}");
+            assert!(matches!(admit(&[with(stage_of(&words), RedirKind::Out, "/tmp/out")]), Admission::Reject(_)));
+        }
+        // A built-in cannot consume the output of an external, ssh included.
+        assert!(rejected(&[stage_of(&exec), stage(&["grep", "x"])]).contains("cannot consume"));
+        // Without a terminal session the legacy composition is unchanged.
+        assert!(matches!(admit_legacy(&[stage(&["cat", "/tmp/blob"]), stage_of(&exec)]), Admission::Legacy));
+        // The child sees `ssh` plus every argument: that whole list has to fit one launch.
+        let long = ssh(&KEY, &["--command", &"x".repeat(600)]);
+        assert!(rejected(&[stage(&["cat", "/tmp/blob"]), stage_of(&long)]).contains("512-byte"));
+    }
+
+    #[test]
+    fn an_ssh_exec_never_runs_in_the_background() {
+        // External commands may run detached; an ssh stage is still a session.
+        assert!(background_refusal(&StageIn { argv: ssh(&KEY, &["--command", "true"]), redirects: Vec::new() }).is_some());
+        assert!(background_refusal(&StageIn { argv: ssh(&PASSWORD, &["--command", "true"]), redirects: Vec::new() }).is_some());
+        assert!(background_refusal(&stage(&["/bin/cat"])).is_none());
     }
 
     #[test]

@@ -15,8 +15,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use api::services::ssh_completion as sc;
+use ostd::clients::kms::{KmsClient, KmsClientError, KmsErrorCode, KmsSshKeyCustody, SshSignResponsePayload};
 use vissh::args::{self, Host};
-use vissh::session::{Dispatch, Ending, Outcome, Phase};
+use vissh::session::{Credential, Dispatch, Ending, Outcome, Phase, SignRequest, Signed};
 
 /// Install path of the cellbox ELF that carries the ssh client rights.
 pub const SSH_PATH: &str = "/bin/cellbox-ssh";
@@ -142,6 +143,8 @@ pub fn completion(outcome: &Outcome, mode: sc::Mode, phase: sc::Phase, session_l
         Ending::TimedOut => (O::Timeout, "timeout", phase),
         Ending::TransportLost => (uncertain, "transport_lost", phase),
         Ending::Unknown => (O::Unknown, "no_exit_status", phase),
+        // A publickey refusal is local: nothing was signed for the server.
+        Ending::Credential(credential) => (O::LocalError, credential_code(*credential), sc::Phase::Auth),
         Ending::HostKey(trust, _) => (O::LocalError, match trust {
             Trust::Mismatch => "host_key_mismatch",
             Trust::Unknown | Trust::Refused => "host_key_refused",
@@ -236,6 +239,7 @@ pub fn report(outcome: &Outcome, host: &Host, port: u16) -> (i32, Option<String>
         Ending::HostKey(Trust::NoConfirmation, _) => String::from(NO_FRONTEND),
         Ending::HostKey(Trust::Denied, _) => String::from("host trust lookup denied"),
         Ending::HostKey(_, _) => String::from("host trust store unavailable"),
+        Ending::Credential(credential) => credential_message(*credential, None),
         Ending::Auth => String::from("authentication failed"),
         Ending::RequestRefused => String::from("server refused the session request"),
         Ending::Disconnected => String::from("disconnected"),
@@ -246,6 +250,127 @@ pub fn report(outcome: &Outcome, host: &Host, port: u16) -> (i32, Option<String>
         Ending::Error(e) => e.clone(),
     };
     (REMOTE_FAILURE, Some(message))
+}
+
+/// Longest passphrase (or password) this client takes: the wire bound of the KMS unlock
+/// (`KMS_SSH_SECRET_MAX`) and of the password prompt.
+pub const MAX_SECRET: usize = 1024;
+
+/// Whether `text` may be appended to a secret that already holds `held` bytes: within the
+/// bound, and no NUL (§4.1: typed text only).
+pub fn secret_accepts(held: usize, text: &str) -> bool {
+    held + text.len() <= MAX_SECRET && !text.contains('\0')
+}
+
+/// Completion `error_code` of a publickey refusal (free ASCII text of at most 32 bytes,
+/// `ssh_completion.rs`). None of these, nor their messages, carries key, passphrase,
+/// session id or signature bytes.
+pub fn credential_code(credential: Credential) -> &'static str {
+    match credential {
+        Credential::Unavailable => "kms_unavailable",
+        Credential::Denied => "kms_denied",
+        Credential::UnknownIdentity => "identity_unknown",
+        Credential::UnlockCancelled => "unlock_cancelled",
+        Credential::UnlockNeedsTerminal => "unlock_needs_terminal",
+        Credential::UnlockFailed => "unlock_failed",
+        Credential::UnlockLocked => "unlock_locked",
+        Credential::Timeout => "kms_timeout",
+        Credential::Protocol => "kms_protocol",
+        Credential::InputMismatch => "kms_input_mismatch",
+        Credential::BadSignature => "kms_bad_signature",
+    }
+}
+
+/// The local message of a publickey refusal. `key_id` is the name the user typed.
+pub fn credential_message(credential: Credential, key_id: Option<&str>) -> String {
+    match credential {
+        Credential::Unavailable => String::from("key service is not available"),
+        Credential::Denied => String::from("not permitted to use the key service"),
+        Credential::UnknownIdentity => match key_id {
+            Some(key_id) => format!("no such identity '{key_id}'"),
+            None => String::from("no such identity"),
+        },
+        Credential::UnlockCancelled => String::from("unlock cancelled"),
+        Credential::UnlockNeedsTerminal => String::from("encrypted key needs an interactive terminal"),
+        Credential::UnlockFailed => String::from("unlock failed"),
+        Credential::UnlockLocked => String::from("too many failed unlocks; key locked"),
+        Credential::Timeout => String::from("key service did not answer"),
+        Credential::Protocol => String::from("key service protocol error"),
+        Credential::InputMismatch => String::from("key service signed a different input"),
+        Credential::BadSignature => String::from("key service returned an invalid signature"),
+    }
+}
+
+/// What a failed key-service call means for the login. A wrong passphrase, a corrupt blob
+/// and a key mismatch are one code (`SshUnlockFailed`): there is no oracle to tell apart.
+pub fn credential_of(error: &KmsClientError) -> Credential {
+    match error {
+        KmsClientError::ServiceNotFound | KmsClientError::Service(KmsErrorCode::SshKeyUnavailable) => {
+            Credential::Unavailable
+        }
+        KmsClientError::Service(KmsErrorCode::CallerUnattested | KmsErrorCode::PermissionDenied) => Credential::Denied,
+        KmsClientError::Service(KmsErrorCode::SshKeyNotFound) => Credential::UnknownIdentity,
+        KmsClientError::Service(KmsErrorCode::SshUnlockFailed) => Credential::UnlockFailed,
+        KmsClientError::Service(KmsErrorCode::SshUnlockLocked) => Credential::UnlockLocked,
+        KmsClientError::Service(KmsErrorCode::InvalidSignature) => Credential::BadSignature,
+        KmsClientError::Timeout => Credential::Timeout,
+        // `SshUnlockRequired`, `InvalidRequest`, `SshOrderInvalid`, `SshHandleInvalid`, any
+        // other code, and every wire or IPC error.
+        _ => Credential::Protocol,
+    }
+}
+
+/// The two key-service calls a login makes after the preflight, so that the unlock and
+/// sign sequence runs under host tests with a scripted service.
+pub trait KeyService {
+    /// Stage the passphrase for the next signature (Begin and the ordered chunks).
+    fn stage_secret(&self, public_key: &[u8; 32], secret: &[u8]) -> Result<(), KmsClientError>;
+    /// Sign the userauth challenge.
+    fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError>;
+}
+
+impl KeyService for KmsClient {
+    fn stage_secret(&self, public_key: &[u8; 32], secret: &[u8]) -> Result<(), KmsClientError> {
+        self.ssh_stage_secret(public_key, secret)
+    }
+    fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError> {
+        self.ssh_sign_userauth(public_key, session_id, username.as_bytes())
+    }
+}
+
+/// One signature: for a passphrase-wrapped identity first ask for the passphrase (once,
+/// no re-prompt), stage it and wipe it; then sign. A plain identity skips the unlock. An
+/// empty passphrase is not representable on the wire (`secret_len` is 1..=1,024), so it is
+/// `unlock_failed` locally, without a key-service call. A staged secret is consumed by the
+/// sign (success or failure), so nothing is aborted afterwards.
+pub fn kms_sign<K: KeyService>(
+    kms: &K,
+    public_key: &[u8; 32],
+    custody: KmsSshKeyCustody,
+    request: &SignRequest<'_>,
+    passphrase: impl FnOnce() -> Result<String, Credential>,
+) -> Result<Signed, Credential> {
+    if custody == KmsSshKeyCustody::PassphraseWrapped {
+        let mut secret = passphrase()?;
+        let staged = if secret.is_empty() {
+            Err(Credential::UnlockFailed)
+        } else {
+            kms.stage_secret(public_key, secret.as_bytes()).map_err(|error| credential_of(&error))
+        };
+        ostd::session::zeroize_string(&mut secret);
+        staged?;
+    }
+    let signed = kms
+        .sign(public_key, &request.session_id, request.username)
+        .map_err(|error| credential_of(&error))?;
+    Ok(Signed { signature: signed.signature, message_sha256: signed.message_sha256 })
+}
+
+/// The argv of an ssh pipeline stage launched from [`SSH_PATH`]: the child's entry keys on
+/// `ssh` as argv[0] ([`SSH_ENTRY`]) and parses what follows, so the stage gets the whole
+/// command with its program name first.
+pub fn stage_argv(words: &[String]) -> Vec<&str> {
+    core::iter::once(SSH_ENTRY).chain(words.iter().skip(1).map(String::as_str)).collect()
 }
 
 #[cfg(test)]
@@ -264,7 +389,8 @@ mod child {
     use terminal_sdk::session::TerminalSession;
     use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};
     use vissh::client::{HostKey, Transport, TransportError};
-    use vissh::session::{self, Dispatch, Input, Local, Mode, Phase, RekeyPolicy, Trust};
+    use ostd::clients::kms::{validate_ssh_key_name, validate_ssh_username};
+    use vissh::session::{self, AuthKind, Dispatch, Input, Local, Mode, Phase, RekeyPolicy, Trust};
     #[cfg(feature = "p09-faults")]
     use vissh::session::Point;
     use zeroize::Zeroize;
@@ -274,7 +400,8 @@ mod child {
     /// channel open and request until the server's reply.
     const AUTH_MS: u64 = 120_000;
     const REQUEST_MS: u64 = 30_000;
-    const MAX_PASSWORD: usize = 1024;
+    /// Longest wait for one prompt event; the prompt re-checks its deadline between them.
+    const PROMPT_SLICE_MS: u64 = 1_000;
     const ENTER: u32 = 0x110001;
     const ESCAPE: u32 = 0x110002;
     const BACKSPACE: u32 = 0x110003;
@@ -383,6 +510,94 @@ mod child {
         }
     }
 
+    /// How one secret prompt ended.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Secret {
+        Given,
+        /// Escape, end of input, an interrupt, a refused character, or a lost terminal.
+        Cancelled,
+        /// The phase budget or `--timeout` passed while the prompt was open.
+        TimedOut,
+    }
+
+    /// What the key-service preflight learned about the named identity, and the connection
+    /// that learned it (the same client signs later, so its payload ids keep increasing).
+    struct Identity {
+        client: KmsClient,
+        key_id: String,
+        public_key: [u8; 32],
+        custody: KmsSshKeyCustody,
+    }
+
+    impl Identity {
+        /// One signature; `passphrase(key_id)` asks for the passphrase of a wrapped identity.
+        fn sign(
+            &self,
+            request: &SignRequest<'_>,
+            passphrase: impl FnOnce(&str) -> Result<String, Credential>,
+        ) -> Result<Signed, Credential> {
+            kms_sign(&self.client, &self.public_key, self.custody, request, || passphrase(&self.key_id))
+        }
+    }
+
+    /// Ask the key service about the identity before any network traffic (a status query is
+    /// not an authentication attempt, so trust-before-signature is unaffected). A wrapped
+    /// identity in a pipeline stage is refused here: its passphrase needs a terminal.
+    fn preflight(key_id: &str, staged: bool) -> Result<Identity, Credential> {
+        if !validate_ssh_key_name(key_id.as_bytes()) {
+            return Err(Credential::UnknownIdentity);
+        }
+        let client = KmsClient::connect().map_err(|error| credential_of(&error))?;
+        let status = client.ssh_key_status(key_id.as_bytes()).map_err(|error| credential_of(&error))?;
+        if staged && status.custody == KmsSshKeyCustody::PassphraseWrapped {
+            return Err(Credential::UnlockNeedsTerminal);
+        }
+        Ok(Identity { client, key_id: String::from(key_id), public_key: status.public_key, custody: status.custody })
+    }
+
+    /// The VFS trust store's answer for `key` of `host:port`.
+    fn lookup_trust(host: &str, port: u16, key: &HostKey) -> Trust {
+        match VfsClient::new().trust_lookup(host, port, key.algorithm, &key.blob()) {
+            Ok(api::ipc::ssh_trust::KNOWN_EXACT) => Trust::KnownExact,
+            Ok(api::ipc::ssh_trust::UNKNOWN) => Trust::Unknown,
+            Ok(api::ipc::ssh_trust::MISMATCH) => Trust::Mismatch,
+            Ok(api::ipc::ssh_trust::DENIED) => Trust::Denied,
+            _ => Trust::Unavailable,
+        }
+    }
+
+    /// Phase budgets (§4.2): trust runs on the connect deadline, then auth, request (channel
+    /// open to the server's reply) and running (none but `--timeout`); every change is
+    /// recorded write-ahead on the shell's completion stream.
+    fn advance(deadline: &Deadline, completion: Option<Endpoint>, mode: sc::Mode, current: &mut sc::Phase, phase: Phase, dispatch: Dispatch) {
+        let next = record_phase(phase);
+        if next != *current {
+            let budget = match phase {
+                Phase::Trust => None,
+                Phase::Auth => Some(now_ms().saturating_add(AUTH_MS)),
+                Phase::Request => Some(now_ms().saturating_add(REQUEST_MS)),
+                Phase::Running => Some(u64::MAX),
+            };
+            if let Some(at) = budget {
+                deadline.phase.set(at);
+            }
+            *current = next;
+        }
+        write_all(completion, &progress_record(mode, *current, dispatch).encode());
+    }
+
+    /// Blocking write of all of `data`; false when the stream failed or closed.
+    fn push(out: Option<Endpoint>, mut data: &[u8]) -> bool {
+        let Some(out) = out else { return true };
+        while !data.is_empty() {
+            match out.write(data, FOREVER) {
+                Ok(n) if n > 0 && n <= data.len() => data = &data[n..],
+                _ => return false,
+            }
+        }
+        true
+    }
+
     /// The local terminal side: trust through the VFS, the password under the input
     /// owner's echo-off lease, then raw (PTY) or canonical (exec) input.
     struct Term<'s, 'd> {
@@ -404,6 +619,10 @@ mod child {
         phase: sc::Phase,
         /// The local terminal session itself is gone (§4.2: status 125, `session_lost`).
         session_lost: bool,
+        /// Publickey: what the preflight learned (and the key-service connection).
+        identity: Option<Identity>,
+        /// A secret prompt ran into the phase budget or `--timeout`.
+        prompt_timeout: bool,
         #[cfg(feature = "p09-faults")]
         faults: faults::Faults,
     }
@@ -422,9 +641,43 @@ mod child {
             }
         }
 
-        /// Write-ahead lifecycle frame for the shell (newest whole frame wins).
-        fn record(&self, record: &sc::CompletionV1) {
-            write_all(self.completion, &record.encode());
+        /// Prompt on stderr, then read one secret line under the input owner's separate
+        /// echo-off lease (typed text only, Escape cancels, bounded by [`MAX_SECRET`] and
+        /// by the remaining phase budget). `secret` is wiped unless it was given.
+        fn ask_secret(&mut self, prompt: &str, secret: &mut String) -> Secret {
+            self.write(true, prompt.as_bytes());
+            let got = match self.session.set_mode(2, 0) {
+                Ok(mut guard) => {
+                    let got = read_secret(guard.session(), secret, self.deadline);
+                    let released = guard.release().is_ok();
+                    Ok(if released { got } else { Secret::Cancelled })
+                }
+                Err(status) => Err(status),
+            };
+            let got = match got {
+                Ok(got) => got,
+                Err(status) => {
+                    self.note(status);
+                    return Secret::Cancelled;
+                }
+            };
+            self.write(true, b"\n");
+            if got != Secret::Given {
+                secret.zeroize();
+            }
+            if got == Secret::TimedOut {
+                self.prompt_timeout = true;
+            }
+            got
+        }
+
+        /// The passphrase of the wrapped identity `key_id`, asked once (no re-prompt).
+        fn passphrase(&mut self, key_id: &str) -> Result<String, Credential> {
+            let mut secret = String::new();
+            match self.ask_secret(&format!("Enter passphrase for key '{key_id}': "), &mut secret) {
+                Secret::Given => Ok(secret),
+                Secret::Cancelled | Secret::TimedOut => Err(Credential::UnlockCancelled),
+            }
         }
 
         fn write(&mut self, stderr: bool, mut data: &[u8]) {
@@ -583,14 +836,7 @@ mod child {
 
     impl Local for Term<'_, '_> {
         fn trust(&mut self, key: &HostKey) -> Trust {
-            let code = VfsClient::new().trust_lookup(&self.host, self.port, key.algorithm, &key.blob());
-            match code {
-                Ok(api::ipc::ssh_trust::KNOWN_EXACT) => Trust::KnownExact,
-                Ok(api::ipc::ssh_trust::UNKNOWN) => Trust::Unknown,
-                Ok(api::ipc::ssh_trust::MISMATCH) => Trust::Mismatch,
-                Ok(api::ipc::ssh_trust::DENIED) => Trust::Denied,
-                _ => Trust::Unavailable,
-            }
+            lookup_trust(&self.host, self.port, key)
         }
 
         /// First trust (S9-4c): VFS registers a challenge for this exact key and session;
@@ -611,27 +857,16 @@ mod child {
 
         fn password(&mut self, secret: &mut String) -> bool {
             let prompt = format!("{}@{}'s password: ", self.user, self.host);
-            self.write(true, prompt.as_bytes());
-            let ok = match self.session.set_mode(2, 0) {
-                Ok(mut guard) => {
-                    let ok = read_secret(guard.session(), secret);
-                    let released = guard.release().is_ok();
-                    Ok(ok && released)
-                }
-                Err(status) => Err(status),
-            };
-            let ok = match ok {
-                Ok(ok) => ok,
-                Err(status) => {
-                    self.note(status);
-                    return false;
-                }
-            };
-            self.write(true, b"\n");
-            if !ok {
-                secret.zeroize();
-            }
-            ok
+            self.ask_secret(&prompt, secret) == Secret::Given
+        }
+
+        fn identity(&mut self) -> Result<[u8; 32], Credential> {
+            self.identity.as_ref().map(|identity| identity.public_key).ok_or(Credential::Unavailable)
+        }
+
+        fn sign(&mut self, request: &SignRequest<'_>) -> Result<Signed, Credential> {
+            let identity = self.identity.take().ok_or(Credential::Unavailable)?;
+            identity.sign(request, |key_id| self.passphrase(key_id))
         }
 
         fn input(&mut self, buf: &mut [u8]) -> Input {
@@ -664,20 +899,7 @@ mod child {
         /// Phase budgets (§4.2): trust runs on the connect deadline, then auth, request
         /// (channel open to the server's reply) and running (none but `--timeout`).
         fn progress(&mut self, phase: Phase, dispatch: Dispatch) {
-            let next = record_phase(phase);
-            if next != self.phase {
-                let budget = match phase {
-                    Phase::Trust => None,
-                    Phase::Auth => Some(now_ms().saturating_add(AUTH_MS)),
-                    Phase::Request => Some(now_ms().saturating_add(REQUEST_MS)),
-                    Phase::Running => Some(u64::MAX),
-                };
-                if let Some(at) = budget {
-                    self.deadline.phase.set(at);
-                }
-                self.phase = next;
-            }
-            self.record(&progress_record(self.mode, self.phase, dispatch));
+            advance(self.deadline, self.completion, self.mode, &mut self.phase, phase, dispatch);
         }
 
         fn stderr(&mut self, data: &[u8]) {
@@ -692,12 +914,122 @@ mod child {
         }
     }
 
-    /// One line under the echo-off lease: text, Backspace, Enter; Escape cancels.
-    /// Pasted text is refused (§4.1: no newline/NUL, typed only).
-    fn read_secret(session: &mut TerminalSession, secret: &mut String) -> bool {
+    /// The local side of a pipeline stage (publickey exec): host trust through the VFS, then
+    /// the stage's own stdin, stdout and stderr streams, byte for byte. There is no terminal:
+    /// nothing is prompted, an unknown host key is refused (`host_key_no_frontend`) and a
+    /// wrapped identity was refused by the preflight (`unlock_needs_terminal`).
+    struct PipeTerm<'d> {
+        stdin: Option<Endpoint>,
+        stdout: Option<Endpoint>,
+        stderr: Option<Endpoint>,
+        host: String,
+        port: u16,
+        deadline: &'d Deadline,
+        identity: Option<Identity>,
+        completion: Option<Endpoint>,
+        mode: sc::Mode,
+        phase: sc::Phase,
+        stdin_ended: bool,
+        /// The stage's output (or input) stream failed: end the session.
+        broken: bool,
+    }
+
+    impl Local for PipeTerm<'_> {
+        fn trust(&mut self, key: &HostKey) -> Trust {
+            lookup_trust(&self.host, self.port, key)
+        }
+
+        /// First-trust confirmation needs the input owner's terminal prompt.
+        fn confirm_unknown(&mut self, _key: &HostKey) -> Trust {
+            Trust::NoConfirmation
+        }
+
+        /// Password mode is never a pipeline stage; this cannot be reached.
+        fn password(&mut self, _secret: &mut String) -> bool {
+            false
+        }
+
+        fn identity(&mut self) -> Result<[u8; 32], Credential> {
+            self.identity.as_ref().map(|identity| identity.public_key).ok_or(Credential::Unavailable)
+        }
+
+        fn sign(&mut self, request: &SignRequest<'_>) -> Result<Signed, Credential> {
+            let identity = self.identity.take().ok_or(Credential::Unavailable)?;
+            identity.sign(request, |_| Err(Credential::UnlockNeedsTerminal))
+        }
+
+        /// The upstream stage's bytes, unchanged; one EOF when the stream ends.
+        fn input(&mut self, buf: &mut [u8]) -> Input {
+            if self.broken {
+                return Input::Disconnect;
+            }
+            if self.stdin_ended {
+                return Input::Eof;
+            }
+            let Some(stdin) = self.stdin else {
+                self.stdin_ended = true;
+                return Input::Eof;
+            };
+            if buf.is_empty() {
+                return Input::Idle;
+            }
+            match stdin.read(buf, 0) {
+                Ok(n) if n > 0 && n <= buf.len() => Input::Data(n),
+                Ok(_) | Err(api::cell_session::Status::WouldBlock | api::cell_session::Status::TimedOut) => Input::Idle,
+                Err(api::cell_session::Status::Eof) => {
+                    self.stdin_ended = true;
+                    Input::Eof
+                }
+                Err(_) => {
+                    self.broken = true;
+                    Input::Disconnect
+                }
+            }
+        }
+
+        fn stdout(&mut self, data: &[u8]) {
+            if !push(self.stdout, data) {
+                self.broken = true;
+            }
+        }
+
+        /// Remote stderr is a diagnostic stream here, never data.
+        fn stderr(&mut self, data: &[u8]) {
+            let _ = push(self.stderr, data);
+        }
+
+        fn resized(&mut self) -> Option<(u16, u16)> {
+            None
+        }
+
+        fn progress(&mut self, phase: Phase, dispatch: Dispatch) {
+            advance(self.deadline, self.completion, self.mode, &mut self.phase, phase, dispatch);
+        }
+    }
+
+    /// One line under the echo-off lease: text, Backspace, Enter; Escape cancels. Pasted
+    /// text is refused (§4.1: no newline/NUL, typed only). The wait is bounded by the
+    /// remaining phase budget and `--timeout` (K6 O-K6-6), also for the password.
+    fn read_secret(session: &mut TerminalSession, secret: &mut String, deadline: &Deadline) -> Secret {
         let mut paste = false;
         loop {
-            let Ok(mut event) = session.next_event(u64::MAX) else { return false };
+            let remaining_ms = deadline.at().saturating_sub(now_ms());
+            if remaining_ms == 0 {
+                return Secret::TimedOut;
+            }
+            // The monotonic clock bounds each wait; without it the wait is a poll.
+            let until = ostd::session::monotonic_ns()
+                .map_or(0, |now| now.saturating_add(remaining_ms.min(PROMPT_SLICE_MS).saturating_mul(1_000_000)));
+            let mut event = match session.next_event(until) {
+                Ok(event) => event,
+                Err(api::cell_session::Status::TimedOut | api::cell_session::Status::WouldBlock) => {
+                    if until == 0 {
+                        let _ = ostd::syscall::sys_set_timer(1);
+                    }
+                    continue;
+                }
+                Err(_) => return Secret::Cancelled,
+            };
             let done = match &event.kind {
                 EventKind::PasteBegin => {
                     paste = true;
@@ -708,33 +1040,34 @@ mod child {
                     None
                 }
                 EventKind::Text(text) if !paste => {
-                    if secret.len() + text.len() > MAX_PASSWORD || text.contains('\0') {
-                        Some(false)
-                    } else {
+                    if secret_accepts(secret.len(), text) {
                         secret.push_str(text);
                         None
+                    } else {
+                        Some(Secret::Cancelled)
                     }
                 }
                 EventKind::Key { code, modifiers, pressed: 1 | 2 } if !paste => match *code {
-                    _ if crate::executor::submits_line(*code, *modifiers) => Some(true),
-                    ESCAPE if *modifiers == 0 => Some(false),
+                    _ if crate::executor::submits_line(*code, *modifiers) => Some(Secret::Given),
+                    ESCAPE if *modifiers == 0 => Some(Secret::Cancelled),
                     BACKSPACE if *modifiers == 0 => {
                         secret.pop();
                         None
                     }
                     _ => None,
                 },
-                EventKind::Interrupt | EventKind::Eof => Some(false),
+                EventKind::Interrupt | EventKind::Eof => Some(Secret::Cancelled),
                 _ => None,
             };
             event.scrub();
-            if let Some(ok) = done {
-                return ok;
+            if let Some(done) = done {
+                return done;
             }
         }
     }
 
-    /// Entry of `/bin/cellbox-ssh ssh ...`.
+    /// Entry of `/bin/cellbox-ssh ssh ...`: a foreground child with the terminal session, or
+    /// (publickey exec only) a pipeline stage on the stage's own stdin, stdout and stderr.
     pub fn run(context: &ChildContext) -> i32 {
         let stderr = granted(context, GrantSlot::Stderr);
         let completion = terminal_sdk::completion_writer(context);
@@ -757,13 +1090,45 @@ mod child {
             Ok(parsed) => parsed,
             Err(e) => return refuse(USAGE_STATUS, "usage", &format!("{e}")),
         };
-        if matches!(parsed.auth, args::Auth::PublicKey { .. }) {
-            return refuse(REMOTE_FAILURE, "publickey_unavailable", "publickey authentication is not available yet");
-        }
-        let mut session = match TerminalSession::from_own_context(context) {
-            Ok(session) => session,
-            Err(_) => return refuse(REMOTE_FAILURE, "no_terminal", "an interactive terminal session is required"),
+        let key_id = match &parsed.auth {
+            args::Auth::PublicKey { key_id } => Some(key_id.clone()),
+            args::Auth::Password => None,
         };
+        // A foreground child has a control grant (slot 3); a pipeline stage never does. Only a
+        // publickey exec may run as a stage: password and PTY sessions need the terminal.
+        let staged = !context.grants().any(|g| g.slot == GrantSlot::Control);
+        if staged && !(key_id.is_some() && parsed.command.is_some()) {
+            return refuse(REMOTE_FAILURE, "no_terminal", "an interactive terminal session is required");
+        }
+        let mut session = if staged {
+            None
+        } else {
+            match TerminalSession::from_own_context(context) {
+                Ok(session) => Some(session),
+                Err(_) => return refuse(REMOTE_FAILURE, "no_terminal", "an interactive terminal session is required"),
+            }
+        };
+        // Publickey: the key service is asked about the identity before any network traffic,
+        // so an unknown KEY_ID never touches the network or the server's login-grace slot.
+        let identity = match &key_id {
+            Some(key_id) => {
+                if !validate_ssh_username(parsed.user.as_bytes()) {
+                    return refuse(
+                        USAGE_STATUS,
+                        "usage",
+                        "publickey authentication needs a user name of 1 to 31 characters from [A-Za-z0-9._-]",
+                    );
+                }
+                match preflight(key_id, staged) {
+                    Ok(identity) => Some(identity),
+                    Err(credential) => {
+                        return refuse(REMOTE_FAILURE, credential_code(credential), &credential_message(credential, Some(key_id)));
+                    }
+                }
+            }
+            None => None,
+        };
+        let auth = if key_id.is_some() { AuthKind::PublicKey } else { AuthKind::Password };
         if !vissh::install_entropy(kernel_entropy) {
             return refuse(REMOTE_FAILURE, "entropy", "entropy source already installed");
         }
@@ -800,40 +1165,69 @@ mod child {
             let _ = net.tcp_close_graceful(socket);
             return timed_out();
         }
-        let size = session.capabilities().map(|c| (c.rows, c.cols)).ok().filter(|&(r, c)| r > 0 && c > 0).unwrap_or((24, 80));
-        let mode = match &parsed.command {
-            Some(cmd) => Mode::Exec(cmd.clone()),
-            None => Mode::Pty { term: "cellos-vt1", rows: size.0, cols: size.1 },
-        };
         let mut transport = NetTransport { net, socket, deadline: &deadline };
-        let mut term = Term {
-            session: &mut session,
-            raw: None,
-            host: format!("{}", parsed.host),
-            port: parsed.port,
-            user: parsed.user.clone(),
-            pty: parsed.command.is_none(),
-            escape: Escape::default(),
-            size,
-            pending_resize: None,
-            deadline: &deadline,
-            stdin_ended: false,
-            completion,
-            mode: rmode,
-            phase: sc::Phase::Connect,
-            session_lost: false,
-            #[cfg(feature = "p09-faults")]
-            faults: faults::Faults::new(parsed.command.as_deref()),
+        let (mut outcome, phase, lost, prompt_timeout) = match session.as_mut() {
+            Some(session) => {
+                let size = session.capabilities().map(|c| (c.rows, c.cols)).ok().filter(|&(r, c)| r > 0 && c > 0).unwrap_or((24, 80));
+                let mode = match &parsed.command {
+                    Some(cmd) => Mode::Exec(cmd.clone()),
+                    None => Mode::Pty { term: "cellos-vt1", rows: size.0, cols: size.1 },
+                };
+                let mut term = Term {
+                    session,
+                    raw: None,
+                    host: format!("{}", parsed.host),
+                    port: parsed.port,
+                    user: parsed.user.clone(),
+                    pty: parsed.command.is_none(),
+                    escape: Escape::default(),
+                    size,
+                    pending_resize: None,
+                    deadline: &deadline,
+                    stdin_ended: false,
+                    completion,
+                    mode: rmode,
+                    phase: sc::Phase::Connect,
+                    session_lost: false,
+                    identity,
+                    prompt_timeout: false,
+                    #[cfg(feature = "p09-faults")]
+                    faults: faults::Faults::new(parsed.command.as_deref()),
+                };
+                let outcome = session::run(&mut transport, &mut term, &parsed.user, auth, &mode, &policy);
+                // Leave raw mode before any local message.
+                if let Some(mut raw) = term.raw.take() {
+                    let _ = raw.leave(term.session);
+                }
+                #[cfg(feature = "p09-faults")]
+                term.faults.finish(&outcome);
+                (outcome, term.phase, term.session_lost, term.prompt_timeout)
+            }
+            None => {
+                let mode = Mode::Exec(parsed.command.clone().unwrap_or_default());
+                let mut term = PipeTerm {
+                    stdin: granted(context, GrantSlot::Stdin),
+                    stdout: granted(context, GrantSlot::Stdout),
+                    stderr,
+                    host: format!("{}", parsed.host),
+                    port: parsed.port,
+                    deadline: &deadline,
+                    identity,
+                    completion,
+                    mode: rmode,
+                    phase: sc::Phase::Connect,
+                    stdin_ended: false,
+                    broken: false,
+                };
+                let outcome = session::run(&mut transport, &mut term, &parsed.user, auth, &mode, &policy);
+                (outcome, term.phase, false, false)
+            }
         };
-        let outcome = session::run(&mut transport, &mut term, &parsed.user, &mode, &policy);
-        // Leave raw mode before any local message.
-        if let Some(mut raw) = term.raw.take() {
-            let _ = raw.leave(term.session);
+        // A secret prompt that ran into the phase budget or `--timeout` is a timeout, not a
+        // refusal (the prompt itself ended the wait).
+        if prompt_timeout && matches!(outcome.ending, Ending::Auth | Ending::Credential(_)) {
+            outcome.ending = Ending::TimedOut;
         }
-        #[cfg(feature = "p09-faults")]
-        term.faults.finish(&outcome);
-        let (phase, lost) = (term.phase, term.session_lost);
-        drop(term);
         // FIN, not a silent discard: the server must see the connection end (a peer left
         // half-open waits out its login grace time and penalises this source).
         let _ = transport.net.tcp_close_graceful(socket);
