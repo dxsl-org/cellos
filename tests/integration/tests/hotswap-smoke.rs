@@ -81,6 +81,13 @@ fn hotswap_cli_preserves_demo_state() {
         return;
     }
     let mut qemu = boot_with_demo_service();
+    // Regression: an idle app_entry service must outlive its 5 s heartbeat interval.
+    std::thread::sleep(std::time::Duration::from_secs(7));
+    assert!(
+        !qemu.dump().contains("missed liveness deadline"),
+        "idle demo-v1 was killed by the heartbeat watchdog\n{}",
+        qemu.dump()
+    );
     qemu.send_line("bench hotswap-prime");
     expect(&mut qemu, "[hotswap-prime] ready (v1 counter=5)", "demo-v1 not primed");
 

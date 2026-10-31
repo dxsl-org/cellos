@@ -154,6 +154,8 @@ pub struct AppContext {
     vfs_client: Option<crate::clients::VfsClient>,
     net_client: Option<crate::clients::NetClient>,
     input_client: Option<crate::clients::InputClient>,
+    /// Armed heartbeat interval in ticks; 0 = no watchdog.
+    heartbeat_ticks: u64,
 }
 
 impl AppContext {
@@ -164,19 +166,49 @@ impl AppContext {
             vfs_client: None,
             net_client: None,
             input_client: None,
+            heartbeat_ticks: 0,
+        }
+    }
+
+    /// One bounded wait of the event loop: `Some(Some(tid))` an event, `Some(None)`
+    /// the wait elapsed, `None` a receive error.
+    ///
+    /// With a heartbeat armed the kernel only extends the deadline on an explicit
+    /// `Heartbeat` syscall, so the loop re-arms it before every wait and never
+    /// blocks longer than half the interval. An idle service therefore stays
+    /// alive, while a handler that hangs for a whole interval is still killed.
+    fn wait_once(&mut self, max_ticks: Option<u64>) -> Option<Option<usize>> {
+        let wait = match (self.heartbeat_ticks, max_ticks) {
+            (0, None) => None,
+            (0, Some(t)) => Some(t),
+            (h, None) => Some((h / 2).max(1)),
+            (h, Some(t)) => Some(t.min((h / 2).max(1))),
+        };
+        if self.heartbeat_ticks > 0 {
+            syscall::sys_heartbeat(self.heartbeat_ticks);
+        }
+        let result = match wait {
+            None => syscall::sys_recv(0, &mut self.recv_buf),
+            Some(ticks) => syscall::sys_recv_timeout(0, &mut self.recv_buf, ticks),
+        };
+        match result {
+            syscall::SyscallResult::Ok(0) if wait.is_some() => Some(None),
+            syscall::SyscallResult::Ok(tid) => Some(Some(tid)),
+            syscall::SyscallResult::Err(_) => None,
         }
     }
 
     /// Run the IPC event loop, calling `handler` for every incoming event.
     ///
-    /// Blocks indefinitely.  The handler receives `&mut AppContext` so it can call
-    /// [`send`][AppContext::send], [`lookup_service`][AppContext::lookup_service], etc.
+    /// Blocks until events arrive. The handler receives `&mut AppContext` so it can
+    /// call [`send`][AppContext::send], [`lookup_service`][AppContext::lookup_service],
+    /// etc. An armed heartbeat is kept alive while idle (see [`Self::arm_heartbeat`]).
     pub fn run(&mut self, mut handler: impl FnMut(&mut AppContext, AppEvent)) -> ! {
         loop {
-            let result = syscall::sys_recv(0, &mut self.recv_buf);
-            let sender_tid = match result {
-                syscall::SyscallResult::Ok(tid) => tid,
-                syscall::SyscallResult::Err(_) => {
+            let sender_tid = match self.wait_once(None) {
+                Some(Some(tid)) => tid,
+                Some(None) => continue,
+                None => {
                     syscall::sys_yield();
                     continue;
                 }
@@ -191,27 +223,34 @@ impl AppContext {
     /// Run the IPC event loop with a per-iteration receive timeout.
     ///
     /// `timeout_ticks` is the maximum scheduler ticks to wait (one tick ≈ 10 ms).
-    /// When the deadline elapses the handler is called with [`AppEvent::Timeout`].
+    /// When that much time passes without an event the handler is called with
+    /// [`AppEvent::Timeout`]; heartbeat refreshes in between do not shorten it.
     pub fn run_with_timeout(
         &mut self,
         timeout_ticks: u64,
         mut handler: impl FnMut(&mut AppContext, AppEvent),
     ) -> ! {
+        let mut remaining = timeout_ticks.max(1);
         loop {
-            let result = syscall::sys_recv_timeout(0, &mut self.recv_buf, timeout_ticks);
-            let sender_tid = match result {
-                syscall::SyscallResult::Ok(0) => {
-                    handler(self, AppEvent::Timeout);
-                    continue;
-                }
-                syscall::SyscallResult::Ok(tid) => tid,
-                syscall::SyscallResult::Err(_) => {
-                    syscall::sys_yield();
-                    continue;
-                }
+            let wait = match self.heartbeat_ticks {
+                0 => remaining,
+                h => remaining.min((h / 2).max(1)),
             };
-            let event = Self::parse_event_owned(sender_tid, &self.recv_buf);
-            handler(self, event);
+            match self.wait_once(Some(wait)) {
+                Some(Some(tid)) => {
+                    remaining = timeout_ticks.max(1);
+                    let event = Self::parse_event_owned(tid, &self.recv_buf);
+                    handler(self, event);
+                }
+                Some(None) => {
+                    remaining -= wait;
+                    if remaining == 0 {
+                        remaining = timeout_ticks.max(1);
+                        handler(self, AppEvent::Timeout);
+                    }
+                }
+                None => syscall::sys_yield(),
+            }
         }
     }
 
@@ -254,10 +293,13 @@ impl AppContext {
 
     /// Arm (or re-arm) the kernel watchdog heartbeat for this cell.
     ///
-    /// The cell must call a syscall (any syscall) within `ticks` scheduler ticks
-    /// (1 tick ≈ 10 ms) or the kernel terminates and restarts it.  Pass `0` to
-    /// disable the heartbeat.  Called automatically by [`CellRuntime::run`].
-    pub fn arm_heartbeat(&self, ticks: u64) {
+    /// The kernel terminates the cell when no `Heartbeat` syscall arrives within
+    /// `ticks` scheduler ticks (1 tick ≈ 10 ms); other syscalls do not count. The
+    /// event loops ([`Self::run`], [`Self::run_with_timeout`]) re-arm it on every
+    /// iteration, so only a handler stuck for a whole interval is killed. Pass `0`
+    /// to disable. Called automatically by [`CellRuntime::run`].
+    pub fn arm_heartbeat(&mut self, ticks: u64) {
+        self.heartbeat_ticks = ticks;
         syscall::sys_heartbeat(ticks);
     }
 

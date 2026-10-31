@@ -197,13 +197,14 @@ impl CellRuntime {
     ///
     /// Never returns.
     pub fn run(self, handler: impl FnMut(&mut AppContext, AppEvent)) -> ! {
-        if self.heartbeat_ticks > 0 {
-            crate::syscall::sys_heartbeat(self.heartbeat_ticks);
-        }
         if let Some(usage) = self.help_text {
             crate::args::check_help(usage);
         }
         let mut ctx = AppContext::new();
+        if self.heartbeat_ticks > 0 {
+            // The event loop re-arms it on every iteration (see AppContext::run).
+            ctx.arm_heartbeat(self.heartbeat_ticks);
+        }
         ctx.run_with_lifecycle(handler)
     }
 }

@@ -9,6 +9,7 @@ actual image artifacts; each cell's inline name/path/after fields guide selectio
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import json
 import os
@@ -16,6 +17,7 @@ import mmap
 from pathlib import Path
 import re
 import struct
+import sys
 import tempfile
 
 try:
@@ -158,10 +160,30 @@ def generate_configs(files, features="", template_dir=None):
         raise ValueError("combined services/autoload exceeds 32 cells")
     for name, cells in selected_blocks.items():
         text = headers[name] + "".join("\n[[cells]]\n" + cell["block"] + "\n" for cell in cells)
-        raw = text.encode("utf-8")
+        raw = stamp(text.encode("utf-8"))
         validate_syntax(raw, "generated " + name + ".toml")
         result[CONFIG_PATH + "/" + name + ".toml"] = raw
     return result
+
+
+STAMP_PREFIX = b"# cellos-generated sha256="
+
+
+def stamp(body):
+    """Append a trailer recording the generator's exact output."""
+    return body + STAMP_PREFIX + hashlib.sha256(body).hexdigest().encode() + b"\n"
+
+
+def is_unmodified_generated(raw):
+    """True when `raw` is generator output nobody edited since (trailer matches).
+
+    Such a file carries no operator decision, so a rebuild regenerates it for the
+    current packaging features instead of preserving a stale selection.
+    """
+    head, separator, trailer = raw.rpartition(STAMP_PREFIX)
+    if not separator or not trailer.endswith(b"\n"):
+        return False
+    return hashlib.sha256(head).hexdigest().encode() == trailer[:-1]
 
 
 def image_files(image, base_lba=0, wanted=None):
@@ -312,6 +334,9 @@ def main():
             preserved = image_files(args.preserve_persistent, args.base_lba, wanted)
             args.output_dir.mkdir(parents=True, exist_ok=True)
             for path, raw in preserved.items():
+                if is_unmodified_generated(raw):
+                    continue  # untouched generator output: regenerate for current features
+                print("generate-boot-config: preserving operator-edited " + path, file=sys.stderr)
                 (args.output_dir / Path(path).name).write_bytes(raw)
         return
     image = args.refresh_image or args.extract_image
