@@ -15,36 +15,6 @@ const WAIT_TICKS: usize = 500;
 const CUTOVER_WINDOW_TICKS: usize = 1_600;
 const UNAUTHORIZED_DENIED_STATUS: [u8; 3] = [OP_STATUS, 0, 0xFD];
 
-pub fn run() {
-    println("[hotswap-supervisor-runtime] START");
-    let Some(old_tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
-        fail("demo-v1 is not registered");
-    };
-    for _ in 0..5 {
-        if !expect_reply(old_tid, b"inc", b"ok") {
-            fail("demo-v1 increment failed");
-        }
-    }
-    println("[hotswap-supervisor-runtime] counter primed to 5");
-    if !spawn_cached_sender_probe(old_tid) {
-        fail("cannot spawn cached-sender probe");
-    }
-
-    if sys_lookup_service(service::SUPERVISOR).is_none() {
-        fail("supervisor is not registered");
-    }
-    println("[hotswap-supervisor-runtime] ready for CLI trigger (v1 counter=5)");
-
-    let Some(new_tid) = wait_for_hotswap_demo_replacement_ticks(old_tid, WAIT_TICKS) else {
-        fail("replacement is not registered");
-    };
-    if read_counter(new_tid, b"v2:") != Some(6) {
-        fail("replacement did not apply the drained increment");
-    }
-    println("[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=6)");
-    ostd::syscall::sys_exit(0);
-}
-
 pub fn run_unauthorized_probe() {
     println("[hotswap-unauthorized-runtime] START");
     let Some(old_tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
@@ -192,7 +162,7 @@ pub(super) fn read_counter(tid: usize, expected_prefix: &[u8; 3]) -> Option<u32>
     ))
 }
 
-fn spawn_cached_sender_probe(old_tid: usize) -> bool {
+pub(super) fn spawn_cached_sender_probe(old_tid: usize) -> bool {
     let role = alloc::format!("hotswap-cached-inc:{old_tid}");
     sys_set_spawn_args(&role);
     matches!(
@@ -213,13 +183,6 @@ fn probe_fail(message: &str) -> ! {
 fn unauthorized_fail(message: &str) -> ! {
     println(&alloc::format!(
         "[hotswap-unauthorized-runtime] FAIL ({message})"
-    ));
-    ostd::syscall::sys_exit(1)
-}
-
-fn fail(message: &str) -> ! {
-    println(&alloc::format!(
-        "[hotswap-supervisor-runtime] FAIL ({message})"
     ));
     ostd::syscall::sys_exit(1)
 }

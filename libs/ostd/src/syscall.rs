@@ -1750,8 +1750,10 @@ pub fn sys_net_rx(buf: &mut [u8]) -> usize {
 
 /// Stash serialized cell state in the kernel under `key`.
 ///
-/// A replacement instance recovers it with [`sys_state_restore`] after a
-/// hot-swap or respawn. Returns the number of bytes stored.
+/// The entry belongs to this Cell incarnation: no other Cell can read, overwrite
+/// or clear it. A supervisor `SpawnReplacement` seals it to the replacement, which
+/// then restores it with [`sys_state_restore`]. Returns the bytes stored, or 0 when
+/// refused (key owned by someone else or sealed, per-owner or table cap, no heap).
 pub fn sys_state_stash(key: u64, bytes: &[u8]) -> usize {
     // SAFETY: bytes is a valid immutable slice; the kernel copies it out.
     let ret = unsafe {
@@ -1772,7 +1774,9 @@ pub fn sys_state_stash(key: u64, bytes: &[u8]) -> usize {
 
 /// Restore previously stashed state for `key` into `buf`.
 ///
-/// Returns the number of bytes written (0 if nothing was stashed for `key`).
+/// Allowed for the owner while the entry is open and for the sealed replacement.
+/// Returns the bytes written, or 0 when absent or not yours. With an empty `buf`
+/// it returns the stored length (also for a supervisor) without copying bytes.
 pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
     // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len().
     let ret = unsafe {
@@ -1791,10 +1795,9 @@ pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
     }
 }
 
-/// Delete the kernel stash entry for `key`, freeing its slot toward the MAX_ENTRIES cap.
-///
-/// Call this after a successful [`sys_state_restore`] to avoid accumulating stale entries.
-/// No-op when the key is absent — always safe to call.
+/// Delete the kernel stash entry for `key` (owner, sealed replacement = consume,
+/// or supervisor = abort). Absent keys succeed; a foreign entry is refused and
+/// left in place.
 pub fn sys_state_stash_clear(key: u64) {
     // SAFETY: pure register syscall — no memory pointers; the kernel removes the entry
     // from its BTreeMap and drops the Vec<u8> (or no-ops when key is absent).

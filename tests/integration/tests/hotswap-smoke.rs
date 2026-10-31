@@ -1,12 +1,13 @@
 //! Userspace hotswap smoke tests.
 //!
-//! QEMU-level tests verify shell spawnability plus the userspace Supervisor +
-//! CLI hotswap path that preserves demo state across cutover.
+//! QEMU-level tests verify the userspace Supervisor + CLI hotswap path that
+//! preserves demo state across cutover. The demo provider is a supervised service
+//! started by init, not a shell background job; every shell step is foreground.
 //!
 //! # Prerequisites
 //! - `qemu-system-riscv64` on PATH
-//! - `./gen_disk.ps1` run (disk_v3.img present)
-//! - Kernel and both demo cells built in release mode
+//! - image built with the demo service and supervisor:
+//!   `CELLOS_INIT_FEATURES=input,hotswap-demo bash scripts/gen-disk-ci.sh`
 
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
@@ -55,113 +56,45 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok)
 }
 
-/// P04: hotswap-demo-v1 spawns and prints its startup banner.
-///
-/// The shell's `exec` command prints "exec: process spawned (pid N)" followed
-/// by the cell's own banner message, then waits for the cell to exit.
-/// hotswap-demo-v1 is a long-running service so the test only waits for the
-/// banner — it does NOT wait for the shell prompt to return.
-///
-/// This verifies:
-/// - The cell ELF loads and relocates correctly (cell-build linker script).
-/// - The `spawn = true` manifest is accepted by the kernel (no capability error).
-/// - `AppEvent::Init` fires and the println reaches the UART.
-#[test]
-fn hotswap_demo_v1_spawns_and_announces() {
-    if !prerequisites_ok() {
-        return;
-    }
-
+/// Boot the hotswap image, wait for the shell and for the demo provider, which
+/// init starts as a supervised service (packaging feature `hotswap-demo`).
+/// A long-running provider is a service, never a shell background job.
+fn boot_with_demo_service() -> QemuRunner {
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("[hotswap-demo-v1] ready", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("demo-v1 service not started: {e}\n{}", qemu.dump()));
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
-
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Send char-by-char to avoid UART FIFO overflow (>16 bytes drops chars).
-    for b in b"hotswap-demo-v1 &" {
-        qemu.send_bytes(&[*b]);
-        std::thread::sleep(std::time::Duration::from_millis(25));
-    }
-    qemu.send_bytes(b"\n");
-    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "demo-v1 banner not seen: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
+    qemu
 }
 
-/// P04: hotswap-demo-v2 spawns and prints its startup banner.
-///
-/// Verifies the v2 cell compiles, links, and boots cleanly.
-/// Schema-version and the "v2:" response prefix are tested at the unit level.
-#[test]
-fn hotswap_demo_v2_spawns_and_announces() {
-    if !prerequisites_ok() {
-        return;
-    }
-
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
-
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    for b in b"hotswap-demo-v2 &" {
-        qemu.send_bytes(&[*b]);
-        std::thread::sleep(std::time::Duration::from_millis(25));
-    }
-    qemu.send_bytes(b"\n");
-    qemu.wait_for("[hotswap-demo-v2] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "demo-v2 banner not seen: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
+fn expect(qemu: &mut QemuRunner, marker: &str, what: &str) {
+    qemu.wait_for(marker, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("{what}: {e}\n{}", qemu.dump()));
 }
 
-/// The shell-level `hotswap` CLI can drive the Supervisor through a full demo
-/// replacement while preserving the demo counter.
+/// The shell-level `hotswap` CLI drives the Supervisor through a full demo
+/// replacement while preserving the demo counter; each step is foreground.
 #[test]
 fn hotswap_cli_preserves_demo_state() {
     if !prerequisites_ok() {
         return;
     }
-
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
-    qemu.send_line("hotswap-demo-v1 &");
-    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
-
-    qemu.send_line("bench hotswap-cli-probe &");
-    qemu.wait_for("[hotswap-cli-probe] ready (v1 counter=5)", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("CLI probe did not prime demo-v1: {e}\n{}", qemu.dump()));
+    let mut qemu = boot_with_demo_service();
+    qemu.send_line("bench hotswap-prime");
+    expect(&mut qemu, "[hotswap-prime] ready (v1 counter=5)", "demo-v1 not primed");
 
     qemu.send_line("hotswap hotswap-demo /bin/hotswap-demo-v2");
-    qemu.wait_for("[hotswap-demo-v2] state restored from v1", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("restore not processed: {e}\n{}", qemu.dump()));
-    qemu.wait_for("[hotswap-demo-v2] SpawnCap retained", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("replacement capability was dropped: {e}\n{}", qemu.dump()));
-    qemu.wait_for(
+    expect(&mut qemu, "[hotswap-demo-v2] state restored from v1", "restore not processed");
+    expect(&mut qemu, "[hotswap-demo-v2] SpawnCap retained", "replacement capability was dropped");
+    expect(
+        &mut qemu,
         "hotswap: success: supervisor swapped service 'hotswap-demo' to /bin/hotswap-demo-v2",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| panic!("hotswap CLI did not report success: {e}\n{}", qemu.dump()));
-    qemu.wait_for(
-        "[hotswap-cli-probe] PASS (v1 counter=5 -> v2 counter=5)",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "CLI probe did not confirm preserved state: {e}\n{}",
-            qemu.dump()
-        )
-    });
+        "hotswap CLI did not report success",
+    );
+
+    qemu.send_line("bench hotswap-verify 5");
+    expect(&mut qemu, "[hotswap-verify] PASS (v2 counter=5)", "state not preserved");
 }
 
 /// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
@@ -171,48 +104,31 @@ fn supervisor_hotswap_preserves_demo_state() {
     if !prerequisites_ok() {
         return;
     }
-
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
-    qemu.send_line("hotswap-demo-v1 &");
-    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
-
-    qemu.send_line("bench hotswap-supervisor &");
-    qemu.wait_for(
-        "[hotswap-supervisor-runtime] ready for CLI trigger (v1 counter=5)",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "bench did not arm the CLI trigger witness: {e}\n{}",
-            qemu.dump()
-        )
-    });
+    let mut qemu = boot_with_demo_service();
+    qemu.send_line("bench hotswap-prime cached");
+    expect(
+        &mut qemu,
+        "[hotswap-prime] ready (v1 counter=5, cached sender armed)",
+        "cached-sender witness not armed",
+    );
 
     qemu.send_line("hotswap hotswap-demo /bin/hotswap-demo-v2");
-    qemu.wait_for(
+    expect(
+        &mut qemu,
         "hotswap: success: supervisor swapped service 'hotswap-demo' to /bin/hotswap-demo-v2",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| panic!("hotswap CLI did not report success: {e}\n{}", qemu.dump()));
-    qemu.wait_for("[hotswap-demo-v1] state stashed", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("snapshot not processed: {e}\n{}", qemu.dump()));
-    qemu.wait_for(
+        "hotswap CLI did not report success",
+    );
+    expect(&mut qemu, "[hotswap-demo-v1] state stashed", "snapshot not processed");
+    expect(
+        &mut qemu,
         "[hotswap-cached-sender] PASS: frozen FIFO drained in order; post-cutover old tid rejected",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| panic!("atomic cached-TID cutover failed: {e}\n{}", qemu.dump()));
-    qemu.wait_for("[hotswap-demo-v2] state restored from v1", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("restore not processed: {e}\n{}", qemu.dump()));
-    qemu.wait_for("[hotswap-demo-v2] SpawnCap retained", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("replacement capability was dropped: {e}\n{}", qemu.dump()));
-    qemu.wait_for(
-        "[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=6)",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| panic!("state-preserving swap failed: {e}\n{}", qemu.dump()));
+        "atomic cached-TID cutover failed",
+    );
+    expect(&mut qemu, "[hotswap-demo-v2] state restored from v1", "restore not processed");
+    expect(&mut qemu, "[hotswap-demo-v2] SpawnCap retained", "replacement capability was dropped");
+
+    qemu.send_line("bench hotswap-verify 6");
+    expect(&mut qemu, "[hotswap-verify] PASS (v2 counter=6)", "drained increment not applied");
 }
 
 /// A non-CLI sender cannot coerce the supervisor into swapping a service.
@@ -221,25 +137,13 @@ fn supervisor_rejects_unauthorized_hotswap_sender() {
     if !prerequisites_ok() {
         return;
     }
-
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
-    qemu.send_line("hotswap-demo-v1 &");
-    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
-
+    let mut qemu = boot_with_demo_service();
     qemu.send_line("bench hotswap-unauthorized");
-    qemu.wait_for(
+    expect(
+        &mut qemu,
         "[hotswap-unauthorized-runtime] PASS (direct bench sender denied; tid unchanged)",
-        CMD_TIMEOUT,
-    )
-    .unwrap_or_else(|e| {
-        panic!(
-            "unauthorized direct sender was not denied: {e}\n{}",
-            qemu.dump()
-        )
-    });
+        "unauthorized direct sender was not denied",
+    );
 }
 
 /// The boot primitive guard proves sender requeue. The bench role then proves a

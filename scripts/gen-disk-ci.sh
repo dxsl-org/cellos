@@ -337,6 +337,9 @@ if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
 fi
 add_kfs "$REL/hotswap-demo-v1"      "/bin/hotswap-demo-v1"
 add_kfs "$REL/hotswap-demo-v2"      "/bin/hotswap-demo-v2"
+# The cellbox foreground launch reads the boot ramdisk; the hotswap CLI must be
+# there, next to the demos it drives (a cell-table-only copy fails with Io).
+add_kfs "$REL/hotswap"              "/bin/hotswap"
 add_kfs "$REL/backend-supervisor"   "/bin/backend-supervisor"
 add_kfs "$REL/free"                 "/bin/free"
 add_kfs "$REL/bench"                "/bin/bench"
@@ -438,8 +441,10 @@ config_args=()
 for row in "${table_args[@]:1}"; do
     config_args+=(--config-artifact "$row")
 done
+# `cellbox sh` opens an authenticated serial session owned by the input service;
+# without `input` in the autoload plan the shell exits (NotFound) and no prompt appears.
 "$PYTHON_BIN" tools/mkfat32.py \
-    --config-features "${CELLOS_INIT_FEATURES:-}" \
+    --config-features "${CELLOS_INIT_FEATURES:-input}" \
     --config-output-dir "$EMBED_DIR/boot-config" \
     "${config_args[@]}" "${kfs_args[@]}"
 

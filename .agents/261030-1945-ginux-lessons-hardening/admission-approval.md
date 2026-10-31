@@ -29,3 +29,7 @@ Retained gates: fatal NMI/#DF/#MC policy unchanged; resumable NMI not admitted; 
 - 2026-10-31: domain (`build-x86_64-domain-test-ci.sh`) and C2C lifecycle lanes refuse to build at baseline: `ROLLOUT BLOCKED: unqualified Cellbox/terminal artifact` (Cellbox rollout containment, other owner). Not usable as regression lanes in this slice.
 - 2026-10-31: `hal/core/Cargo.toml` added: forwards `x86-smep`/`x86-smap`/`x86-umip` from the kernel to `hal-x86` (features only, same pattern as `x86-idt-cpl3-test`).
 - 2026-10-31: the baseline CPL3 half of the IDT fixture also fails (HEAD + `init_sse` fix only: `X86-IDT-SELFTEST: FAIL` after spawning A/B). Cause: commit `775686575` gated `yield_cpu` on `X86_BOOT_COMPLETE`, set only in `start_secondaries`, but the fixture runs inside `task::init`. Fixture-only fix (cfg `x86-idt-cpl3-test`): `kernel/src/task/smp.rs` gains `x86_idt_fixture_uniprocessor_ready()`, called from `kernel/src/task/x86_idt_cpl3.rs` before the first yield. Production builds are unchanged.
+
+## Admission 2 (2026-10-31)
+
+User selected all remaining phases: 09A, 02, 03, 05, 06, 07, 08, 09B, 09C. WIP stays one implementation slice; order 09A → 07 → 08 → 09B → 09C with 02/03/05/06 between kernel slices. Each slice records its exact file set here before editing. 09A changes stash syscall semantics: it needs a Law-1 CP1 approval of an exact design text before code; selecting the phase is not that approval.

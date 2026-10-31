@@ -34,17 +34,17 @@ fn stash_key_for(swap_id: u64) -> u64 {
 
 // ── Poll helpers ──────────────────────────────────────────────────────────────
 
-/// Poll until `sys_state_restore(key)` returns > 0, yielding between iterations.
+/// Poll until the stash entry for `key` exists, yielding between iterations.
 ///
-/// Returns `Ok(())` when the stash entry appears.
+/// Uses the empty-buffer status probe (`sys_state_restore(key, &mut [])` returns the
+/// stored length): the supervisor may see that state exists, never its bytes.
 /// Returns `Err(SnapshotTimeout)` after `MAX_ITERS` yields without success.
 ///
 /// A stash miss is tolerated (cell that doesn't implement ViStateTransfer never
 /// stashes anything); the hotswap continues with an empty stash.
 fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
-    let mut probe = [0u8; 1];
     for _ in 0..MAX_ITERS {
-        if sys_state_restore(key, &mut probe) > 0 {
+        if sys_state_restore(key, &mut []) > 0 {
             return Ok(());
         }
         sys_yield();

@@ -1675,6 +1675,21 @@ fn live_cell_identity(tid: usize) -> Option<(u64, u64)> {
         .map(|t| (t.cell_id.0, t.cell_generation))
 }
 
+/// The caller's incarnation for the state stash; a task without a live record
+/// owns nothing and is refused.
+fn stash_incarnation(tid: usize) -> Result<crate::cell::state_stash::Incarnation, SyscallError> {
+    live_cell_identity(tid)
+        .map(|(cell, generation)| crate::cell::state_stash::Incarnation { cell, generation })
+        .ok_or(SyscallError::PermissionDenied)
+}
+
+/// Whether any live task still belongs to `inc` (stash reclamation).
+fn incarnation_is_live(inc: crate::cell::state_stash::Incarnation) -> bool {
+    super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+        sched.tasks.values().any(|t| t.cell_id.0 == inc.cell && t.cell_generation == inc.generation)
+    })
+}
+
 /// Per-cell block-I/O range gate (Milestone 2.5 P03).
 ///
 /// Replaces the old global `sector >= CELL_TABLE_BASE_LBA` check: the caller's
@@ -7487,13 +7502,14 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     caller_id, &bytes,
                 ));
             }
+            let owner = stash_incarnation(caller_id)?;
             let bytes = read_user_slice(
                 caller_id,
                 buf_ptr,
                 buf_len,
                 crate::cell::state_stash::MAX_STASH_LEN,
             )?;
-            Ok(crate::cell::state_stash::stash(raw_key, &bytes))
+            Ok(crate::cell::state_stash::stash(owner, raw_key, &bytes, incarnation_is_live))
         }
         Syscall::StateRestore {
             key,
@@ -7520,12 +7536,18 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
                 return Ok(n);
             }
+            let reader = stash_incarnation(caller_id)?;
+            // Empty buffer: length probe only (owner, destination or supervisor).
+            if buf_len == 0 {
+                let supervisor = caller_has_supervisor(caller_id);
+                return Ok(crate::cell::state_stash::status(reader, supervisor, key as u64));
+            }
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(buf_len)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
-            let n = crate::cell::state_stash::restore(key as u64, &mut kbuf);
+            let n = crate::cell::state_stash::restore(reader, key as u64, &mut kbuf);
             if n > 0 {
                 write_user_slice(
                     caller_id,
@@ -7536,13 +7558,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             }
             Ok(n)
         }
-        // 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
-        // No-op when the key is absent (idempotent). Returns 0 always.
+        // 412: StateStashClear — owner (open), sealed destination (consume) or a
+        // supervisor (abort). Absent keys succeed; a foreign entry is refused.
         Syscall::StateStashClear { key } => {
             if key as u64 == SPAWN_ARGV_KEY {
                 crate::cell::state_stash::discard_spawn_argv(caller_id);
             } else {
-                crate::cell::state_stash::remove(key as u64);
+                let caller = stash_incarnation(caller_id)?;
+                let supervisor = caller_has_supervisor(caller_id);
+                crate::cell::state_stash::clear(caller, supervisor, key as u64)
+                    .map_err(|()| SyscallError::PermissionDenied)?;
             }
             Ok(0)
         }
@@ -7700,6 +7725,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             )?;
             let replacement = crate::cell::hotswap::reserve_frozen_replacement(old_tid)
                 .ok_or(SyscallError::PermissionDenied)?;
+            let old_incarnation = stash_incarnation(old_tid)?;
             let request =
                 match governed_replacement_request(caller_id, profile.child_ceiling, replacement) {
                     Ok(request) => request,
@@ -7727,6 +7753,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
+            // Hand the frozen incarnation's stash entries to exactly this
+            // replacement: the old writer is fenced, only the new one may read.
+            if let Ok(new_incarnation) = stash_incarnation(task_id) {
+                crate::cell::state_stash::seal_for_replacement(old_incarnation, new_incarnation);
+            }
             Ok(task_id)
         }
 

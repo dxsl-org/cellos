@@ -19,6 +19,14 @@ path = "/bin/hypervisor"
 service_id = 14
 restart = "always"
 
+# Hotswap test image only (packaging feature `hotswap-demo`): the demo provider runs as a
+# supervised service, never as a shell background job. Not restarted: the supervisor
+# replaces it with /bin/hotswap-demo-v2.
+[[cells]]
+name = "hotswap-demo"
+path = "/bin/hotswap-demo-v1"
+restart = "never"
+
 [[cells]]
 name = "cellbox"
 path = "/bin/cellbox"

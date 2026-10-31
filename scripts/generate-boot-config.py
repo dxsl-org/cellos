@@ -55,7 +55,9 @@ def selected(path, features):
     if path == "/bin/virtio-net":
         return not board
     if path == "/bin/supervisor":
-        return bool(features & {"supervisor", "hostile-backend-recovery"})
+        return bool(features & {"supervisor", "hostile-backend-recovery", "hotswap-demo"})
+    if path == "/bin/hotswap-demo-v1":
+        return "hotswap-demo" in features
     if path == "/bin/net-broker":
         return "c2c-broker" in features
     if path == "/bin/silo":

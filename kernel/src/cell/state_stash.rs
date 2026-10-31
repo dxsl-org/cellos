@@ -1,29 +1,63 @@
 //! Kernel state stash for hot migration.
 //!
 //! A Cell about to be replaced serialises its state and `stash`es it under a
-//! well-known key; the replacement instance `restore`s it on startup. Keeping
-//! the bytes in the kernel (not a file) means the transfer works before the
-//! VFS is reachable and outlives the old cell's address space. This is the
-//! standalone state-transfer primitive; it is independent of the IPC-based
-//! orchestrator in `hotswap.rs`.
+//! key; the replacement instance `restore`s it on startup. Keeping the bytes in
+//! the kernel (not a file) means the transfer works before the VFS is reachable
+//! and outlives the old cell's address space.
+//!
+//! Every entry belongs to the incarnation that first wrote it (Phase 09A,
+//! `.agents/261030-1945-ginux-lessons-hardening/phase-09a-cp1.md`): only that
+//! owner may write, read or clear it while it is `Open`. `SpawnReplacement`
+//! seals the old incarnation's entries to the new one; from then on only that
+//! destination may read or clear (consume) them. A supervisor may query the
+//! length or abort, never read the bytes. A guessed key grants nothing. This is
+//! byte transport only: business revision/fencing belongs to the provider's
+//! own state authority.
 
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 /// Upper bound on a single stashed blob (1 MB) — bounds kernel memory held on
-/// a cell's behalf for one slot. Raised from 64 KB to accommodate full cell
-/// state serialization for hot-migration (Phase 03).
+/// a cell's behalf for one slot.
 pub const MAX_STASH_LEN: usize = 1024 * 1024;
 
 /// Upper bound on the number of distinct stash slots. Caps total kernel memory
-/// the stash can hold (≤ MAX_ENTRIES × MAX_STASH_LEN) so a misbehaving cell
-/// cannot exhaust the heap by stashing under unboundedly many keys.
+/// the stash can hold (≤ MAX_ENTRIES × MAX_STASH_LEN).
 pub const MAX_ENTRIES: usize = 64;
 
-/// Key → serialized state bytes. Keys are cell-chosen (typically a stable
-/// FNV hash of the cell name), so a replacement instance reads the same slot.
-static STASH: Spinlock<BTreeMap<u64, Vec<u8>>> = Spinlock::new(BTreeMap::new());
+/// Slots one incarnation may own, so one Cell cannot fill the table.
+pub const MAX_ENTRIES_PER_OWNER: usize = 8;
+
+/// A Cell incarnation: logical id plus the generation of this instance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Incarnation {
+    pub cell: u64,
+    pub generation: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Phase {
+    Open,
+    Sealed { destination: Incarnation },
+}
+
+struct Entry {
+    owner: Incarnation,
+    phase: Phase,
+    bytes: Vec<u8>,
+}
+
+impl Entry {
+    fn readable_by(&self, caller: Incarnation) -> bool {
+        match self.phase {
+            Phase::Open => self.owner == caller,
+            Phase::Sealed { destination } => destination == caller,
+        }
+    }
+}
+
+static STASH: Spinlock<BTreeMap<u64, Entry>> = Spinlock::new(BTreeMap::new());
 
 /// Upper bound for a command line carried by one launch transaction.
 pub(crate) const MAX_SPAWN_ARGV_LEN: usize = 512;
@@ -100,118 +134,118 @@ pub(crate) fn discard_spawn_argv(task_id: usize) {
     }
 }
 
-/// Store `bytes` under `key`, replacing any previous value. Returns the number
-/// of bytes stored (clamped to [`MAX_STASH_LEN`]), or 0 if the stash is full
-/// (at [`MAX_ENTRIES`] distinct keys) and `key` is not already present.
-pub fn stash(key: u64, bytes: &[u8]) -> usize {
-    let mut map = STASH.lock();
-    if map.len() >= MAX_ENTRIES && !map.contains_key(&key) {
-        log::warn!(
-            "[state-stash] full ({} entries); rejecting new key",
-            MAX_ENTRIES
-        );
-        return 0;
+/// Store `bytes` under `key` for `caller`. Returns the bytes stored (clamped to
+/// [`MAX_STASH_LEN`]) or 0 when refused: the key belongs to another incarnation
+/// or is sealed, the caller already owns [`MAX_ENTRIES_PER_OWNER`] slots, the
+/// table is full even after dropping open slots of dead owners, or no heap.
+///
+/// `is_live` answers whether an incarnation still exists. It is called with the
+/// stash lock released, so it may take the scheduler lock.
+pub fn stash(caller: Incarnation, key: u64, bytes: &[u8], is_live: impl Fn(Incarnation) -> bool) -> usize {
+    if STASH.lock().len() >= MAX_ENTRIES {
+        reclaim_dead_owners(is_live);
     }
     let n = bytes.len().min(MAX_STASH_LEN);
     // Fallible copy: an entry can be up to MAX_STASH_LEN, and `to_vec` allocates
     // infallibly — a full heap would halt the kernel instead of refusing the stash.
-    let mut entry: Vec<u8> = Vec::new();
-    if entry.try_reserve_exact(n).is_err() {
+    let mut data: Vec<u8> = Vec::new();
+    if data.try_reserve_exact(n).is_err() {
         log::warn!("[stash] no heap for {} byte entry — refused", n);
         return 0;
     }
-    entry.extend_from_slice(&bytes[..n]);
-    map.insert(key, entry);
-    n
+    data.extend_from_slice(&bytes[..n]);
+    let mut map = STASH.lock();
+    match map.get_mut(&key) {
+        Some(entry) if entry.owner == caller && entry.phase == Phase::Open => {
+            entry.bytes = data;
+            n
+        }
+        Some(_) => 0,
+        None => {
+            let owned = map.values().filter(|e| e.owner == caller).count();
+            if owned >= MAX_ENTRIES_PER_OWNER || map.len() >= MAX_ENTRIES {
+                log::warn!("[state-stash] refused new key: owner holds {owned}, table {}", map.len());
+                return 0;
+            }
+            map.insert(key, Entry { owner: caller, phase: Phase::Open, bytes: data });
+            n
+        }
+    }
 }
 
-/// Copy stashed bytes for `key` into `buf`. Returns the number of bytes written
-/// (0 if no state is stashed). The stash entry is left in place so multiple
-/// readers (or a retry) can recover it.
-pub fn restore(key: u64, buf: &mut [u8]) -> usize {
+/// Drop `Open` entries whose owner no longer exists, and sealed entries whose
+/// destination no longer exists. Liveness is checked without the stash lock.
+fn reclaim_dead_owners(is_live: impl Fn(Incarnation) -> bool) {
+    let holders: Vec<(u64, Incarnation)> = STASH
+        .lock()
+        .iter()
+        .map(|(key, e)| (*key, match e.phase {
+            Phase::Open => e.owner,
+            Phase::Sealed { destination } => destination,
+        }))
+        .collect();
+    let dead: Vec<(u64, Incarnation)> = holders.into_iter().filter(|(_, h)| !is_live(*h)).collect();
+    let mut map = STASH.lock();
+    for (key, holder) in dead {
+        // Re-check under the lock: the slot may have changed hands meanwhile.
+        let still = map.get(&key).is_some_and(|e| match e.phase {
+            Phase::Open => e.owner == holder,
+            Phase::Sealed { destination } => destination == holder,
+        });
+        if still {
+            map.remove(&key);
+        }
+    }
+}
+
+/// Copy the bytes for `key` into `buf` when `caller` may read them (owner while
+/// open, destination once sealed). Returns the bytes copied, 0 when refused or
+/// absent. The entry stays until cleared.
+pub fn restore(caller: Incarnation, key: u64, buf: &mut [u8]) -> usize {
     let guard = STASH.lock();
-    let Some(bytes) = guard.get(&key) else {
+    let Some(entry) = guard.get(&key).filter(|e| e.readable_by(caller)) else {
         return 0;
     };
-    let n = bytes.len().min(buf.len());
-    buf[..n].copy_from_slice(&bytes[..n]);
+    let n = entry.bytes.len().min(buf.len());
+    buf[..n].copy_from_slice(&entry.bytes[..n]);
     n
 }
 
-/// Remove and discard the entry for `key`, freeing its slot.
-///
-/// Used for one-shot keys (per-spawn argv personal slots) so they do not
-/// accumulate toward [`MAX_ENTRIES`]. No-op when `key` is absent.
-pub fn remove(key: u64) {
-    STASH.lock().remove(&key);
+/// Stored length of `key` for an authorized reader or a supervisor; 0 otherwise.
+/// No bytes are returned: this is the coordinator's readiness probe.
+pub fn status(caller: Incarnation, supervisor: bool, key: u64) -> usize {
+    STASH
+        .lock()
+        .get(&key)
+        .filter(|e| supervisor || e.readable_by(caller))
+        .map_or(0, |e| e.bytes.len())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StashError {
-    Full,
-    StaleEpoch,
-    InvalidKey,
-    OutOfMemory,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VersionedStashEntry {
-    pub epoch: u64,
-    pub cell_id: u64,
-    pub generation: u64,
-    pub data: Vec<u8>,
-}
-
-static VERSIONED_STASH: Spinlock<BTreeMap<u64, VersionedStashEntry>> = Spinlock::new(BTreeMap::new());
-
-/// Store `bytes` with monotonic epoch checking, preventing stale writers from overwriting
-/// a newer replacement instance's committed watermark.
-pub fn stash_versioned(
-    key: u64,
-    cell_id: u64,
-    generation: u64,
-    epoch: u64,
-    bytes: &[u8],
-) -> Result<usize, StashError> {
-    if key == 0 {
-        return Err(StashError::InvalidKey);
-    }
-    let mut map = VERSIONED_STASH.lock();
-    if let Some(existing) = map.get(&key) {
-        if existing.epoch >= epoch {
-            return Err(StashError::StaleEpoch);
+/// Remove `key`: the owner while open, the destination once sealed (consume), or
+/// a supervisor (abort). Absent keys succeed; anything else is refused.
+pub fn clear(caller: Incarnation, supervisor: bool, key: u64) -> Result<(), ()> {
+    let mut map = STASH.lock();
+    match map.get(&key) {
+        None => Ok(()),
+        Some(entry) if supervisor || entry.readable_by(caller) => {
+            map.remove(&key);
+            Ok(())
         }
-    } else if map.len() >= MAX_ENTRIES {
-        return Err(StashError::Full);
+        Some(_) => Err(()),
     }
-    let n = bytes.len().min(MAX_STASH_LEN);
-    let mut data = Vec::new();
-    data.try_reserve_exact(n).map_err(|_| StashError::OutOfMemory)?;
-    data.extend_from_slice(&bytes[..n]);
-    map.insert(
-        key,
-        VersionedStashEntry {
-            epoch,
-            cell_id,
-            generation,
-            data,
-        },
-    );
-    Ok(n)
 }
 
-/// Restore stashed bytes along with their committed epoch watermark.
-pub fn restore_versioned(key: u64, buf: &mut [u8]) -> Option<(u64, usize)> {
-    let guard = VERSIONED_STASH.lock();
-    let entry = guard.get(&key)?;
-    let n = entry.data.len().min(buf.len());
-    buf[..n].copy_from_slice(&entry.data[..n]);
-    Some((entry.epoch, n))
-}
-
-/// Remove versioned entry for `key`.
-pub fn remove_versioned(key: u64) {
-    VERSIONED_STASH.lock().remove(&key);
+/// Seal every open entry of `old` to `new`, at the replacement spawn. After this
+/// the old incarnation can neither write nor read them. Returns the count sealed.
+pub fn seal_for_replacement(old: Incarnation, new: Incarnation) -> usize {
+    let mut sealed = 0;
+    for entry in STASH.lock().values_mut() {
+        if entry.owner == old && entry.phase == Phase::Open {
+            entry.phase = Phase::Sealed { destination: new };
+            sealed += 1;
+        }
+    }
+    sealed
 }
 
 #[cfg(feature = "test-hooks")]
@@ -219,7 +253,7 @@ pub(crate) fn snapshot() -> alloc::vec::Vec<(u64, Vec<u8>)> {
     STASH
         .lock()
         .iter()
-        .map(|(key, bytes)| (*key, bytes.clone()))
+        .map(|(key, entry)| (*key, entry.bytes.clone()))
         .collect()
 }
 
@@ -229,15 +263,18 @@ pub(crate) fn snapshot() -> alloc::vec::Vec<(u64, Vec<u8>)> {
 /// afterwards so it never collides with a real cell's state.
 pub fn self_test() {
     const SCRATCH_KEY: u64 = 0xFFFF_FFFF_FFFF_FFFEu64;
+    let kernel = Incarnation { cell: u64::MAX, generation: u64::MAX };
+    let stranger = Incarnation { cell: u64::MAX - 1, generation: 1 };
     let sentinel: [u8; 8] = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0x12, 0x34];
-    stash(SCRATCH_KEY, &sentinel);
+    stash(kernel, SCRATCH_KEY, &sentinel, |_| true);
     let mut buf = [0u8; 8];
-    let n = restore(SCRATCH_KEY, &mut buf);
+    let n = restore(kernel, SCRATCH_KEY, &mut buf);
+    let foreign = restore(stranger, SCRATCH_KEY, &mut [0u8; 8]);
     STASH.lock().remove(&SCRATCH_KEY);
-    if n == 8 && buf == sentinel {
-        log::info!("state-stash: round-trip OK");
+    if n == 8 && buf == sentinel && foreign == 0 {
+        log::info!("state-stash: round-trip OK, foreign read refused");
     } else {
-        log::error!("state-stash: round-trip FAILED (n={}, buf={:?})", n, buf);
+        log::error!("state-stash: round-trip FAILED (n={}, foreign={}, buf={:?})", n, foreign, buf);
     }
 }
 
@@ -245,41 +282,100 @@ pub fn self_test() {
 mod tests {
     use super::*;
 
+    const A: Incarnation = Incarnation { cell: 0x7a01, generation: 3 };
+    const A_NEXT: Incarnation = Incarnation { cell: 0x7a01, generation: 4 };
+    const B: Incarnation = Incarnation { cell: 0x7b01, generation: 1 };
+    const MALLORY: Incarnation = Incarnation { cell: 0x7c01, generation: 1 };
+
+    fn guard() -> impl Drop {
+        let g = crate::TEST_STATE_LOCK.lock();
+        STASH.lock().clear();
+        g
+    }
+
     #[test]
-    fn stash_restore_round_trip() {
-        let key = 42u64;
-        let data = [1u8, 2, 3, 4, 5];
-        assert_eq!(stash(key, &data), 5);
+    fn owner_round_trip_and_overwrite() {
+        let _g = guard();
+        assert_eq!(stash(A, 42, &[1, 2, 3, 4, 5], |_| true), 5);
+        assert_eq!(stash(A, 42, &[9, 8], |_| true), 2);
         let mut out = [0u8; 5];
-        assert_eq!(restore(key, &mut out), 5);
-        assert_eq!(out, data);
+        assert_eq!(restore(A, 42, &mut out), 2);
+        assert_eq!(&out[..2], &[9, 8]);
     }
 
     #[test]
-    fn restore_missing_key_returns_zero() {
-        let mut out = [0u8; 8];
-
-        assert_eq!(restore(0xDEAD_0000_0000_0001, &mut out), 0);
+    fn guessed_key_grants_nothing() {
+        let _g = guard();
+        stash(A, 0x00A3_0000_0000_0001, b"secret", |_| true);
+        let mut out = [0u8; 6];
+        assert_eq!(restore(MALLORY, 0x00A3_0000_0000_0001, &mut out), 0);
+        assert_eq!(status(MALLORY, false, 0x00A3_0000_0000_0001), 0);
+        assert_eq!(stash(MALLORY, 0x00A3_0000_0000_0001, b"forged", |_| true), 0);
+        assert_eq!(clear(MALLORY, false, 0x00A3_0000_0000_0001), Err(()));
+        assert_eq!(restore(A, 0x00A3_0000_0000_0001, &mut out), 6);
+        assert_eq!(&out, b"secret");
     }
+
+    #[test]
+    fn a_later_incarnation_is_not_the_owner() {
+        let _g = guard();
+        stash(A, 7, b"old", |_| true);
+        assert_eq!(restore(A_NEXT, 7, &mut [0u8; 3]), 0);
+        assert_eq!(clear(A_NEXT, false, 7), Err(()));
+    }
+
+    #[test]
+    fn sealing_hands_the_entry_to_the_destination_only() {
+        let _g = guard();
+        stash(A, 7, b"state", |_| true);
+        stash(B, 8, b"other", |_| true);
+        assert_eq!(seal_for_replacement(A, A_NEXT), 1);
+        let mut out = [0u8; 5];
+        assert_eq!(restore(A, 7, &mut out), 0, "old incarnation lost access");
+        assert_eq!(stash(A, 7, b"late!", |_| true), 0, "old writer fenced");
+        assert_eq!(restore(MALLORY, 7, &mut out), 0);
+        assert_eq!(restore(A_NEXT, 7, &mut out), 5);
+        assert_eq!(&out, b"state");
+        assert_eq!(restore(A_NEXT, 7, &mut out), 5, "repeatable until consumed");
+        assert_eq!(clear(A_NEXT, false, 7), Ok(()));
+        assert_eq!(restore(A_NEXT, 7, &mut out), 0, "consumed");
+        assert_eq!(restore(B, 8, &mut out), 5, "other owners unaffected");
+    }
+
+    #[test]
+    fn supervisor_sees_length_and_may_abort_but_never_reads() {
+        let _g = guard();
+        stash(A, 9, b"payload", |_| true);
+        assert_eq!(status(MALLORY, true, 9), 7);
+        assert_eq!(status(MALLORY, false, 9), 0);
+        assert_eq!(restore(MALLORY, 9, &mut [0u8; 7]), 0);
+        assert_eq!(clear(MALLORY, true, 9), Ok(()));
+        assert_eq!(status(A, false, 9), 0);
+    }
+
+    #[test]
+    fn one_owner_cannot_fill_the_table_and_dead_owners_are_reclaimed() {
+        let _g = guard();
+        for key in 0..MAX_ENTRIES_PER_OWNER as u64 {
+            assert_eq!(stash(A, 100 + key, b"x", |_| true), 1);
+        }
+        assert_eq!(stash(A, 999, b"x", |_| true), 0);
+        for i in 0..(MAX_ENTRIES - MAX_ENTRIES_PER_OWNER) as u64 {
+            let owner = Incarnation { cell: 0x9000 + i, generation: 1 };
+            assert_eq!(stash(owner, 1000 + i, b"x", |_| true), 1);
+        }
+        assert_eq!(stash(B, 5000, b"x", |_| true), 0, "table full of live owners");
+        assert_eq!(stash(B, 5000, b"x", |i| i != A), 1, "A's dead slots reclaimed");
+        assert_eq!(restore(A, 100, &mut [0u8; 1]), 0);
+    }
+
     #[test]
     fn spawn_argv_is_private_and_one_shot() {
+        let _g = guard();
         const TID: usize = 0x1234;
         const FORMER_DERIVED_KEY: u64 = 0x0061_7267_7600_0000 ^ ((TID as u64) << 32);
-
         assert_eq!(stage_spawn_argv(TID, b"argv"), 0);
-
-        let mut ambient = [0u8; 4];
-        assert_eq!(restore(FORMER_DERIVED_KEY, &mut ambient), 0);
+        assert_eq!(restore(A, FORMER_DERIVED_KEY, &mut [0u8; 4]), 0);
         assert_eq!(take_spawn_argv(TID), None);
-    }
-
-    #[test]
-    fn stash_overwrites_previous() {
-        let key = 7u64;
-        stash(key, &[9u8; 4]);
-        stash(key, &[1u8, 2]);
-        let mut out = [0u8; 4];
-        assert_eq!(restore(key, &mut out), 2);
-        assert_eq!(&out[..2], &[1u8, 2]);
     }
 }

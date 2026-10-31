@@ -452,8 +452,14 @@ fn cell_main() {
         "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         "peer-death-guard" => scenarios::smp::run_peer_death_guard(),
-        "hotswap-cli-probe" => scenarios::hotswap_cli_probe::run(),
-        "hotswap-supervisor" => scenarios::hotswap_supervisor::run(),
+        "hotswap-prime" => scenarios::hotswap_cli_probe::prime(argv.get(1).map(|a| a.as_str()) == Some("cached")),
+        "hotswap-verify" => match argv.get(1).and_then(|a| a.parse::<u32>().ok()) {
+            Some(expected) => scenarios::hotswap_cli_probe::verify(expected),
+            None => {
+                println("[hotswap-verify] FAIL (usage: bench hotswap-verify N)");
+                ostd::syscall::sys_exit(2);
+            }
+        },
         "hotswap-unauthorized" => scenarios::hotswap_supervisor::run_unauthorized_probe(),
         "snapshot-authority" => scenarios::snapshot_authority::run(),
         "init-giveup" => scenarios::init_giveup::run(),

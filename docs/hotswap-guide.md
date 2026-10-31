@@ -17,6 +17,17 @@ Live-replace a running Cell with a new version without losing session state.
 No messages are lost during the swap.  The user session continues from where
 it was before the upgrade.
 
+### Who can read the stashed state (2026-10-31)
+
+The kernel stash entry belongs to the Cell incarnation that wrote it. A guessed
+key gives another Cell nothing: reads return 0, writes and clears are refused.
+`SpawnReplacement` seals the old incarnation's entries to the replacement; from
+then on only the replacement reads them, and clearing them consumes them. The
+old instance can no longer write (fenced). The supervisor sees only whether state
+exists (`sys_state_restore(key, &mut [])` returns the length) and may abort with
+clear; it never receives the bytes. A Cell restarted any other way does not
+inherit its predecessor's stash.
+
 ---
 
 ## Implementing `ViStateTransfer`
