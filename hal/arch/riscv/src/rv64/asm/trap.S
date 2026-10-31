@@ -139,6 +139,11 @@ __trap_entry_hart1:
     csrw satp, t1
     sfence.vma zero, zero
 .Lroot_settled:
+    # Every instruction from __trap_entry up to here only saves the frame.
+    # A fault whose sepc lies in that range means the save itself faulted:
+    # the kernel stack ran into its guard (see trap.rs, stack overflow).
+    .global __trap_save_end
+__trap_save_end:
 
     mv a0, sp               # a0 = &ViTrapFrame (borrowed, not owned)
     call vi_trap_handler    # Rust function with Vi prefix

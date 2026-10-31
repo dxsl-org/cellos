@@ -51,3 +51,9 @@ File set: `tests/unit_cspace_smoke.rs` (deleted, never compiled), `kernel/src/ce
 User: "kiểm tra hoàn thành 3 việc còn lại của phase 07". (a) Private 1/2-hart authority witness (Phase 07 step 3/4, test-hooks only); (b) signed-boot-manifest ADR, status Proposed (step 5); (c) receive-path CP1 draft (design only; Law-1, no code without approval).
 
 File set: new `kernel/src/cell/provenance_selftest.rs` (cfg `test-hooks` + riscv64), `kernel/src/cell/mod.rs` (module line), `kernel/src/main.rs` (primary call after the TLB fixture), `kernel/src/task/smp.rs` (secondary call after the TLB fixture), new `tests/integration/tests/authority-provenance.rs`, `tests/integration/Cargo.toml` if tests need registration, new ADR under `docs/adr/`, new `phase-07c-receive-cp1.md`, `CHANGELOG.md`, this plan directory. Production (non-test-hooks) builds unchanged.
+
+## Slice R1 (2026-10-31): RV64 kernel stack overflow diagnosis
+
+User: "xử lý rủi ro trap entry trước". A kernel stack overflow makes every S-mode trap fault again while saving its frame, so the eventually-reported fault carries `sepc` inside the trap save sequence and misleading satp/stval. Fix: classify that signature in the Rust kernel-exception path and panic with an explicit "kernel stack overflow" message. HAL/kernel internal, no ABI or Law-1 delta.
+
+File set: `hal/arch/riscv/src/rv64/asm/trap.S` (export a save-end label), `hal/arch/riscv/src/rv64/trap.rs`, a test-hooks overflow fixture if needed for evidence, `CHANGELOG.md`, this plan directory.
