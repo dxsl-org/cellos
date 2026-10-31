@@ -358,6 +358,10 @@ add_kfs "$REL/nc"                   "/bin/nc"
 add_kfs "$REL/curl"                 "/bin/curl"
 add_kfs "$REL/wget"                 "/bin/wget"
 add_kfs "$REL/mqtt"                 "/bin/mqtt"
+# Tier-2 witnesses (tests/integration/tests/tier2_fault_isolation.rs), launched
+# from the shell as session domain children (ADR-0019 §2.1 amendment).
+add_kfs "$REL/tier2-smoke"          "/bin/tier2-smoke"
+add_kfs "$REL/tier2-exploit"        "/bin/tier2-exploit"
 if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_kfs "$REL/capacity-probe"   "/bin/capacity-probe"
     # Heavy cells for the D5 gate's M-resident baselines; same guard as the probe

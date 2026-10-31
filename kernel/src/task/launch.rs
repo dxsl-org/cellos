@@ -195,65 +195,11 @@ pub fn publish_prepared(
     if let Some(replacement) = state.replacement.take() {
         replacement.commit_into(&mut task);
     }
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
     if state.is_domain {
-        // ADR-0019 §2.1 — the single on-path admission control. The lease is
-        // taken before anything is created and re-checked immediately before the
-        // task becomes runnable, so a concurrent drain either linearizes before
-        // this admission or is observed by it. A denial is final: no task, no
-        // domain, and no SAS fallback.
+        // ADR-0019 §2.1: the one admission policy (see `admit_and_bind_domain`).
         let path = state.measurement.as_ref().map_or("", |measurement| measurement.path.as_str());
-        let lease = crate::loader::domain_admission::admit_for_launch(path, state.granted)?;
-        if let (Some(ks), Some(us), Some(seg)) =
-            (&task.kernel_stack, &task.user_stack, &task.segment_mem)
-        {
-            let domain = crate::memory::address_space::create_cell_domain(ks, us, seg,
-                #[cfg(cellos_p01_trace)] crate::p01_resources::owner(&task))
-                .map_err(|_| ViError::OutOfMemory)?;
-            if !lease.remains_enabled() {
-                return Err(crate::loader::domain_admission::drain_refusal());
-            }
-            #[cfg(target_arch = "riscv64")]
-            let arch_tag = "SATP";
-            #[cfg(target_arch = "aarch64")]
-            let arch_tag = "TTBR0";
-            #[cfg(target_arch = "x86_64")]
-            let arch_tag = "CR3";
-            log::warn!(
-                "[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)",
-                task.name,
-                arch_tag
-            );
-            task.bind_address_space(domain);
-        } else {
-            log::error!(
-                "[domain] cannot create Tier 2 domain for '{}': missing stacks or segments",
-                task.name
-            );
-            return Err(ViError::InvalidInput);
-        }
-    }
-    #[cfg(not(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    )))]
-    if state.is_domain {
-        log::error!(
-            "[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration",
-            task.name
-        );
-        return Err(ViError::NotSupported);
+        admit_and_bind_domain(&mut task, path, state.granted)?;
+        log_domain_admitted(&task.name);
     }
 
     #[cfg(cellos_p01_trace)]
@@ -358,6 +304,104 @@ impl Drop for PublicationClaim {
     }
 }
 
+#[cfg(feature = "native-domains")]
+type DomainLease = crate::loader::domain_admission::DomainAdmissionLease;
+/// Builds without a domain backend never hold a lease: every domain request is
+/// refused with `NotSupported` before one could exist.
+#[cfg(not(feature = "native-domains"))]
+#[derive(Clone, Copy)]
+enum DomainLease {}
+#[cfg(not(feature = "native-domains"))]
+impl DomainLease {
+    fn remains_enabled(self) -> bool {
+        match self {}
+    }
+}
+
+/// Session-path wrappers around the ADR-0019 refusals, so `cell_session` needs
+/// no domain-backend knowledge. Without a backend there is no domain grant and
+/// a domain child never reaches commit.
+pub(crate) fn domain_grant_records_live() -> bool {
+    #[cfg(feature = "native-domains")]
+    return crate::task::syscall::domain_grant_records_live();
+    #[cfg(not(feature = "native-domains"))]
+    false
+}
+pub(crate) fn refuse_while_domain_grant_live() -> Result<(), ViError> {
+    #[cfg(feature = "native-domains")]
+    return crate::loader::domain_admission::refuse_while_domain_grant_live();
+    #[cfg(not(feature = "native-domains"))]
+    Ok(())
+}
+pub(crate) fn audit_domain_live_grant_refusal() {
+    #[cfg(feature = "native-domains")]
+    let _ = crate::loader::domain_admission::live_grant_refusal();
+}
+pub(crate) fn audit_domain_drain_refusal() {
+    #[cfg(feature = "native-domains")]
+    let _ = crate::loader::domain_admission::drain_refusal();
+}
+/// ADR-0019 §2.1, the single admission policy applied at every publication
+/// point (`publish_prepared` and `SessionPublication`): take the lease before
+/// anything is created, build the private root, recheck the lease, bind. A
+/// denial is final: no domain and no SAS fallback. The caller still rechecks
+/// the returned lease immediately before the task becomes runnable.
+#[cfg(all(
+    feature = "native-domains",
+    any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+))]
+fn admit_and_bind_domain(
+    task: &mut super::Task,
+    path: &str,
+    granted: super::cap::CapSet,
+) -> Result<DomainLease, ViError> {
+    let lease = crate::loader::domain_admission::admit_for_launch(path, granted)?;
+    let (Some(ks), Some(us), Some(seg)) = (&task.kernel_stack, &task.user_stack, &task.segment_mem)
+    else {
+        log::error!(
+            "[domain] cannot create Tier 2 domain for '{}': missing stacks or segments",
+            task.name
+        );
+        return Err(ViError::InvalidInput);
+    };
+    let domain = crate::memory::address_space::create_cell_domain(ks, us, seg,
+        #[cfg(cellos_p01_trace)] crate::p01_resources::owner(task))
+        .map_err(|_| ViError::OutOfMemory)?;
+    if !lease.remains_enabled() {
+        return Err(crate::loader::domain_admission::drain_refusal());
+    }
+    task.bind_address_space(domain);
+    Ok(lease)
+}
+
+#[cfg(not(all(
+    feature = "native-domains",
+    any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+)))]
+fn admit_and_bind_domain(
+    task: &mut super::Task,
+    _path: &str,
+    _granted: super::cap::CapSet,
+) -> Result<DomainLease, ViError> {
+    log::error!(
+        "[domain] Tier 2 Native Domain requested for '{}' but unsupported on this architecture/configuration",
+        task.name
+    );
+    Err(ViError::NotSupported)
+}
+
+fn log_domain_admitted(name: &str) {
+    #[cfg(target_arch = "riscv64")]
+    let arch_tag = "SATP";
+    #[cfg(target_arch = "aarch64")]
+    let arch_tag = "TTBR0";
+    #[cfg(target_arch = "x86_64")]
+    let arch_tag = "CR3";
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+    let arch_tag = "none";
+    log::warn!("[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)", name, arch_tag);
+}
+
 /// The task, quota, CSpace, measurement-log and ready-queue slots remain
 /// detached promises until the single session owner transaction commits. This
 /// is not a second live-owner table: the Cell owner slot is `Reserved`, which
@@ -371,6 +415,9 @@ pub(crate) struct SessionPublication {
     measurement: crate::measurement_log::PublicationReservation,
     ready: super::hart_local::ready::PublicationReservation,
     claim: PublicationClaim,
+    /// ADR-0019 lease of a domain child, rechecked in `current()` under the same
+    /// SCHEDULER section as `publish`; `None` for an ordinary child.
+    domain_lease: Option<DomainLease>,
 }
 impl SessionPublication {
     /// Every fallible allocation, quota, owner-slot, log and ready-queue claim
@@ -385,8 +432,9 @@ impl SessionPublication {
             .map(|t| (t.cell_id.0 as usize, t.cell_generation))
             .ok_or(ViError::PermissionDenied)?;
         // A session child is an ordinary governed path launch: never a boot
-        // singleton, domain, hotswap replacement, or service route publisher.
-        if prepared.requested_cell_id() != CellId(0) || state.is_domain || state.platform.is_some()
+        // singleton, hotswap replacement, or service route publisher. A domain
+        // child goes through the same ADR-0019 policy as `publish_prepared`.
+        if prepared.requested_cell_id() != CellId(0) || state.platform.is_some()
             || state.replacement.is_some() || state.routes.block_io || state.routes.input {
             return Err(ViError::PermissionDenied);
         }
@@ -409,6 +457,12 @@ impl SessionPublication {
         task.pku_value = state.pku_value;
         task.is_critical = state.is_critical;
         state.granted.apply_to(&mut task);
+        let domain_lease = if state.is_domain {
+            let path = state.measurement.as_ref().map_or("", |m| m.path.as_str());
+            Some(admit_and_bind_domain(&mut task, path, state.granted)?)
+        } else {
+            None
+        };
         #[cfg(feature = "test-hooks")]
         { task.development_silo_registration_cap = state.routes.development_silo
             .then(super::cap::DevelopmentSiloRegistrationCap::new); }
@@ -423,11 +477,21 @@ impl SessionPublication {
         let ready = super::hart_local::ready::PublicationReservation::reserve(state.priority)?;
         sched.reserve_session_owner(owner)?;
         sched.next_task_id = next;
-        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim })
+        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim, domain_lease })
+    }
+    /// Whether this child is a Tier-2 domain (its commit needs the live-grant
+    /// preflight, ADR-0019 §2.1).
+    pub(crate) fn is_domain(&self) -> bool {
+        self.domain_lease.is_some()
     }
     pub(crate) fn current(&self, sched: &super::scheduler::Scheduler) -> bool {
         if !sched.session_owner_reserved(self.owner)
             || self.state.caller.as_ref().is_none_or(|a| !authority_is_current(sched, a)) {
+            return false;
+        }
+        // A drain since `reserve` invalidates the lease: the child must not
+        // become runnable inside a policy generation that no longer admits it.
+        if self.domain_lease.is_some_and(|lease| !lease.remains_enabled()) {
             return false;
         }
         let Some(caller) = self.state.caller.as_ref().and_then(|a| sched.tasks.get(&a.tid)) else { return false; };
@@ -443,6 +507,9 @@ impl SessionPublication {
     /// row, log entry and ready entry was promised in `reserve`.
     pub(crate) fn publish(mut self, sched: &mut super::scheduler::Scheduler) {
         let tid = self.owner.root_tid as usize;
+        if self.domain_lease.is_some() {
+            log_domain_admitted(&self.task.name);
+        }
         #[cfg(cellos_p01_trace)]
         {
             crate::memory::heap::p01_owner::adopt_task(&self.task);

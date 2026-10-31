@@ -29,14 +29,11 @@ use ostd::io::println;
 const ECHO_IP: [u8; 4] = [10, 0, 2, 2];
 const ECHO_PORT: u16 = 10009;
 
-// No `tier = PROTECTION_CLASS_FFI` for now: the shell's session launch refuses
-// Tier-2 domain children (`kernel/src/task/launch.rs`, `SessionPublication::
-// reserve`), so the FFI class made this cell unlaunchable from `cellbox`. It
-// returns once session publication admits domains (ginux-lessons follow-up P1).
 api::declare_manifest!(
     block_io = false,
     network = false,
-    spawn = false
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_FFI
 );
 // Add only the file trio needed by the fstat smoke to the existing restrictive set.
 api::declare_syscalls![

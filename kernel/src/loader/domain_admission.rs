@@ -231,8 +231,10 @@ fn artifact_eligible(path: &str, granted: CapSet) -> bool {
 
 /// Build the request for a domain-class launch from the state the loader holds.
 ///
-/// The only caller is `task::launch::publish_prepared`, the single publication
-/// point for ELF tasks; a second admission path would defeat ADR-0019 §2.1.
+/// Reached only through `task::launch::admit_and_bind_domain`, which every ELF
+/// publication point uses (`publish_prepared` and the Cell-session
+/// `SessionPublication`): one admission policy, applied on every path (ADR-0019
+/// §2.1 as amended 2026-10-31). A path that bypassed it would defeat §2.1.
 pub(crate) fn evaluate_for_launch(
     path: &str,
     granted: CapSet,
@@ -279,12 +281,18 @@ pub(crate) fn refuse_while_domain_grant_live() -> Result<(), ViError> {
     if !crate::task::syscall::domain_grant_records_live() {
         return Ok(());
     }
+    Err(live_grant_refusal())
+}
+
+/// Audit and return the live-grant denial. For a caller that already queried
+/// the grant tables before taking SCHEDULER and must refuse under it.
+pub(crate) fn live_grant_refusal() -> ViError {
     let denial = DomainAdmissionDenial::LiveDomainGrant;
     crate::audit::log_event(
         crate::audit::AuditEvent::CellSpawnDenied,
         &crate::audit::encode_u32x2(0, denial.audit_code()),
     );
-    Err(denial.error())
+    denial.error()
 }
 
 /// Refuse a launch whose lease died between creation and publication.

@@ -104,6 +104,11 @@ pub(crate) struct State {
     dead_rings: Vec<usize>, dead_overflow: bool,
     /// Rotating drain positions so budgeted drains never starve later records.
     drain_operation_cursor: u64, drain_prepared_cursor: usize,
+    /// Set by `dispatch` for one CommitChild (selector 13) request: whether a
+    /// domain-backed grant record was live when queried *before* SCHEDULER was
+    /// taken (grant tables are only ever locked before SCHEDULER). A domain
+    /// child is refused while one is (ADR-0019 §2.1). Reset after the request.
+    commit_domain_grant_live: bool,
 }
 fn receipt_service(kind: u16) -> u16 {
     if kind == 1 || kind == GRANT_KIND_INPUT_FRONTEND { api::syscall::service::INPUT } else { api::syscall::service::VFS }
@@ -124,7 +129,8 @@ impl State {
     pub(crate) const fn new() -> Self { Self { next: 1, terminal_next: 1,
         operations: Vec::new(), endpoints: Vec::new(), prepared: Vec::new(), receipts: Vec::new(),
         bootstraps: Vec::new(), ledgers: Vec::new(), pass: 0, pending_cancels: 0, cascading: false,
-        dead_rings: Vec::new(), dead_overflow: false, drain_operation_cursor: 0, drain_prepared_cursor: 0 } }
+        dead_rings: Vec::new(), dead_overflow: false, drain_operation_cursor: 0, drain_prepared_cursor: 0,
+        commit_domain_grant_live: false } }
     fn mint(&mut self) -> Result<Ref> {
         let id = self.next;
         self.next = id.checked_add(1).ok_or(Status::QuotaExceeded)?;
@@ -1245,7 +1251,19 @@ impl State {
                     && rr.object == object && rr.bound && rr.state == 0
             }) { return Err(Status::InvalidChild); }
         }
-        if !self.prepared[pi].publication.as_ref().is_some_and(|p| p.current(sched)) { return Err(Status::Revoked); }
+        if !self.prepared[pi].publication.as_ref().is_some_and(|p| p.current(sched)) {
+            if self.prepared[pi].publication.as_ref().is_some_and(|p| p.is_domain()) {
+                // A drain or authority change since prepare: audited like a
+                // `publish_prepared` drain refusal, no SAS fallback.
+                super::launch::audit_domain_drain_refusal();
+            }
+            return Err(Status::Revoked);
+        }
+        if self.commit_domain_grant_live
+            && self.prepared[pi].publication.as_ref().is_some_and(|p| p.is_domain()) {
+            super::launch::audit_domain_live_grant_refusal();
+            return Err(Status::Denied);
+        }
         let mut receipt_indices: [Option<usize>; 3] = [None; 3];
         for n in 0..3 {
             let named = self.prepared[pi].receipts[n];
@@ -1622,6 +1640,9 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
     let body = &request[HEADER_LEN..];
     let selector = header.selector;
     let ledgered = mutating(selector, body);
+    // ADR-0019 §2.1 live-grant preflight for a domain commit: the grant tables
+    // may only be queried before SCHEDULER is taken.
+    let commit_domain_grant_live = selector == 13 && super::launch::domain_grant_records_live();
     let (principal, operation) = {
         let _kernel = KernelAllocationContext::enter();
         let mut guard = super::SCHEDULER.lock();
@@ -1645,9 +1666,11 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
             }
         }
         if !matches!(selector, 5 | 6 | 10) {
+            sched.cell_session.commit_domain_grant_live = commit_domain_grant_live;
             let outcome = with_state(sched, |state, sched| {
                 state.execute(sched, principal, selector, body, &mut result[HEADER_LEN..])
             });
+            sched.cell_session.commit_domain_grant_live = false;
             let len = render(header, outcome, result);
             if ledgered { sched.cell_session.finish_request(principal, operation, header.request_id, &result[..len]); }
             sweep(sched);
@@ -1707,6 +1730,11 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
     let (prepared, state) = request.prepare_session_path(path).map_err(vi)?;
     if super::system_ticks() as u64 >= deadline { return Err(Status::TimedOut); }
     let _kernel = KernelAllocationContext::enter();
+    // ADR-0019 §2.1 live-grant preflight for a domain child, before SCHEDULER
+    // (grant-table → SCHEDULER lock order), exactly as `publish_prepared` does.
+    if state.is_domain {
+        super::launch::refuse_while_domain_grant_live().map_err(vi)?;
+    }
     let mut guard = super::SCHEDULER.lock(); let sched = guard.as_mut().ok_or(Status::Revoked)?;
     if resolve_actor(sched, caller)? != principal { return Err(Status::Revoked); }
     sched.cell_session.op_active(principal, operation)?;

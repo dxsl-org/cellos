@@ -576,6 +576,8 @@ if (Test-Path $nc_bin)              { $kfs_args += @($nc_bin,              "/bin
 if (Test-Path $curl_bin)            { $kfs_args += @($curl_bin,            "/bin/curl") }
 if (Test-Path $wget_bin)            { $kfs_args += @($wget_bin,            "/bin/wget") }
 if (Test-Path $mqtt_bin)            { $kfs_args += @($mqtt_bin,            "/bin/mqtt") }
+if (Test-Path $tier2_smoke_bin)     { $kfs_args += @($tier2_smoke_bin,     "/bin/tier2-smoke") }
+if (Test-Path $tier2_exploit_bin)   { $kfs_args += @($tier2_exploit_bin,   "/bin/tier2-exploit") }
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
     $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
 }

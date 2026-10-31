@@ -46,12 +46,12 @@ line is never evidence.
 
 **Current runner evidence: 2026-10-31, RV64.** The three posix-shim-test runners,
 `tests/integration/tests/boot.rs::posix_shim_fstat`, `::posix_shim_getentropy` and
-`::posix_shim_net`, pass on the RV64 boot suite of 2026-10-31. For that run,
-`posix-shim-test` is launched from the shell as a non-domain Cell with
-`NET_CLIENT` rights. Its FFI protection tier is removed for now, because session
-publication refuses domain children
-(`cells/tests/posix-shim-test/src/main.rs:32-35`). The tier comes back once
-session publication admits domains. A row cites a runner only when that runner
+`::posix_shim_net`, pass on the RV64 boot suite of 2026-10-31. `posix-shim-test`
+keeps its FFI protection tier and is launched from the shell as a Tier-2 paged
+domain with `NET_CLIENT` rights (serial: `[domain] admitted cell 'posix-shim-test'
+to Tier 2 Paged Domain (SATP isolation)`; ADR-0019 §2.1 amendment of 2026-10-31).
+`tests/integration/tests/tier2_fault_isolation.rs::tier2_posix_ffi_execution_runs_in_paged_domain`
+passes as well. A row cites a runner only when that runner
 asserts the row's behaviour, and the row is then `partial`, because no runner
 covers a symbol's full subset and refusals:
 

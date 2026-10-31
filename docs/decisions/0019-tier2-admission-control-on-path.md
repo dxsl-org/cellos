@@ -1,6 +1,6 @@
 # ADR-0019 — One Tier 2 admission control, on the path
 
-> **Status**: Accepted 2026-09-22.
+> **Status**: Accepted 2026-09-22. Amended 2026-10-31 (§2.1, publication points).
 > **Supersedes**: None. Amends Spec 22 §4 and the Tier 2 statements in
 > `docs/app-development-guide.md`.
 
@@ -40,6 +40,27 @@ code that creates the domain, before any task or domain is published. The loader
 policy generation lease across every fallible step of admission and re-check it before
 publication, so a concurrent `DRAINING` linearizes either before or after the admission —
 never inside it. A denial is final: it never falls back to SAS.
+
+**Amendment 2026-10-31 (§2.1, publication points).** "Exactly one control" means one
+admission *policy*, not one call site. Every ELF publication point applies the same
+sequence through `task::launch::admit_and_bind_domain`:
+
+1. live-grant preflight before SCHEDULER;
+2. lease;
+3. private root;
+4. lease recheck;
+5. bind;
+6. a final recheck immediately before the task becomes runnable.
+
+Today there are two publication points:
+
+- `publish_prepared`;
+- the Cell-session `SessionPublication` behind `PrepareChild`/`CommitChild`. Here steps 1–5
+  run at prepare, while step 6 and a second live-grant preflight run at commit, under the
+  same SCHEDULER section as `publish`.
+
+A new publication point must reuse that function rather than reimplement admission.
+Approved by the user (P1 CP1, `.agents/261030-1945-ginux-lessons-hardening/p1-session-domain-admission-cp1.md`).
 
 ### 2.2 The cargo feature selects capability, never admission
 

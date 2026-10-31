@@ -262,6 +262,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - a closed consumer stops the producer with kernel reason 3, reported 141.
 
 ### Changed
+- The shell can launch Tier-2 domain cells (P1; CP1 `.agents/261030-1945-ginux-lessons-hardening/p1-session-domain-admission-cp1.md`, option A approved by the user 2026-10-31; ADR-0019 §2.1 amended).
+  - **Problem.** `SessionPublication::reserve` refused every domain child, so no FFI/UNTRUSTED cell could be started from `cellbox`.
+  - **Kernel.** Both publication points now call one shared ADR-0019 sequence, `task::launch::admit_and_bind_domain`: lease, private root, lease recheck, bind.
+    - `publish_prepared` is unchanged in behaviour.
+    - The session path runs the live-grant preflight before SCHEDULER, in `prepare_child`, and runs the sequence in `reserve`.
+    - At commit, a second live-grant preflight is queried before SCHEDULER by `dispatch` and applied under it. `current()` rechecks the lease in the same SCHEDULER section as `publish`. A drain or a live domain grant since prepare refuses the commit, audited, with no SAS fallback.
+  - **Builds without `native-domains`** keep refusing with `NotSupported`; that configuration still has its 3 pre-existing build errors and no new ones.
+  - **`posix-shim-test`** gets its `PROTECTION_CLASS_FFI` tier back. `tier2-smoke` and `tier2-exploit` join VIFS1 so the shell can launch them.
+  - **Evidence:**
+    - serial `[domain] admitted cell 'posix-shim-test' to Tier 2 Paged Domain (SATP isolation)` followed by `POSIX-FSTAT: OK` and `POSIX-ENTROPY: OK`;
+    - `tier2-fault-isolation` 5/5, previously refused at launch: page fault, kernel and peer memory isolation, positive execution, POSIX FFI in a paged domain;
+    - `posix_shim_*` 3/3; RV64 boot suite 51/65, the same 14 failures as before;
+    - RV64 `atomic-publication` 1/1 and `authority-provenance` 2/2; kernel host tests 309/309;
+    - x86 candidate `ahci-x86` 8/8, `nvme-x86` 4/4, `x86_64-boot` 9/9.
+  - **Gap against the CP1 evidence plan:** no new kernel host tests for the session drain and live-grant paths. Session publication builds page tables and is not host-reachable, so these paths are covered only by the runtime lanes above.
+  - **Still unlaunchable from the shell:** other disk-only Tier-2 apps such as `tetris-c` and `doom`, which still fail with `Io` because the program is only on disk and the kernel cannot read P2 on QEMU.
 - RV64: the shell can launch external programs again; 11 boot-suite tests now pass (RV64 boot suite 51/65, was 40/65). Fixes, from the RCA below:
   - **`Io`.** The shell's foreground launch (`PrepareChild`, path route) resolves only through the kernel loader (VIFS1 + P2), and on QEMU the kernel cannot read P2. `scripts/gen-disk-ci.sh` and `gen_disk.ps1` now also place `/bin/shutdown`, `/bin/posix-shim-test`, `/bin/nc`, `/bin/curl`, `/bin/wget` and `/bin/mqtt` in VIFS1, the same treatment `hotswap` and `bench` already had.
   - **Unsigned network tools.** Both signing lists named the package `app-net-tools` instead of its binaries, so `curl`, `wget`, `nc`, `mqtt` and `ping` were never signed. They were admitted as Tier-2 domains, which session publication refuses (`Denied`). Each binary is now signed.
