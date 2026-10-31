@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Device-specific quiescence without SAS availability regression"
-status: pending
+status: done (08A 6ee14c3cb, 08B f54615c85, 08C f0edc9338; QEMU/TCG evidence only)
 priority: P1
 dependencies: [1]
 tier: thinking
