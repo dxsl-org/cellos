@@ -59,3 +59,5 @@ User: "xử lý rủi ro trap entry trước". A kernel stack overflow makes eve
 File set: `hal/arch/riscv/src/rv64/asm/trap.S` (export a save-end label), `hal/arch/riscv/src/rv64/trap.rs`, a test-hooks overflow fixture if needed for evidence, `CHANGELOG.md`, this plan directory.
 
 - 2026-10-31 R2: per-hart overflow stack in `hal/arch/riscv/src/rv64/asm/trap.S` + `trap.rs` (`vi_kernel_stack_overflow`); same file set as R1.
+
+- 2026-10-31 Phase 08A (CP1 phase-08a-cp1.md approved by user: typed block outcome 0x00/0x01/0x02): libs/types (block_wire), cells/drivers/{ahci,nvme,virtio-blk}/src/{dispatch,controller,main,device}.rs, cells/services/vfs/src/{blk_router,block_stream,page_cache,disk_cellosfs,backend_fat}.rs, AHCI Cargo.toml test-hooks feature, tests/integration (08A witness), CHANGELOG.md.

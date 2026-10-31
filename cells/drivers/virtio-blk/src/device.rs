@@ -14,11 +14,12 @@ extern crate alloc;
 
 use core::ptr::NonNull;
 use ostd::syscall::{sys_grant_alloc, sys_grant_free};
+use types::block_wire::BlockOutcome;
 use virtio_drivers::{
     device::blk::VirtIOBlk,
     transport::mmio::{MmioTransport, VirtIOHeader},
     transport::{DeviceType, Transport},
-    BufferDirection, Hal, PhysAddr,
+    BufferDirection, Error as VirtioError, Hal, PhysAddr,
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -113,20 +114,35 @@ pub struct BlkDevice {
     blk: CellBlk,
 }
 
+/// Classify a blocking virtio-drivers request result by issue certainty.
+///
+/// The blocking request adds the descriptors, notifies the queue and spins
+/// for the used entry. Only `QueueFull` and `DmaError` are raised strictly
+/// before descriptors are published and the device notified; every other error
+/// (device `IOERR`/`UNSUPP` status, a used-ring mismatch) arrives after the
+/// notify, so the device may already have acted on the request.
+fn outcome(result: Result<(), VirtioError>) -> Result<(), BlockOutcome> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(VirtioError::QueueFull | VirtioError::DmaError) => Err(BlockOutcome::NotIssued),
+        Err(_) => Err(BlockOutcome::Indeterminate),
+    }
+}
+
 impl BlkDevice {
-    /// Read one 512-byte sector. Returns `true` on success.
-    pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> bool {
-        self.blk.read_blocks(sector as usize, buf).is_ok()
+    /// Read one 512-byte sector.
+    pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
+        outcome(self.blk.read_blocks(sector as usize, buf))
     }
 
-    /// Write one 512-byte sector. Returns `true` on success.
-    pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> bool {
-        self.blk.write_blocks(sector as usize, buf).is_ok()
+    /// Write one 512-byte sector.
+    pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), BlockOutcome> {
+        outcome(self.blk.write_blocks(sector as usize, buf))
     }
 
-    /// Send a VirtIO FLUSH request. Returns `true` on success.
-    pub fn flush(&mut self) -> bool {
-        self.blk.flush().is_ok()
+    /// Send a VirtIO FLUSH request.
+    pub fn flush(&mut self) -> Result<(), BlockOutcome> {
+        outcome(self.blk.flush())
     }
 }
 

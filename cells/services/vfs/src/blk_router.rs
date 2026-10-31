@@ -16,8 +16,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::syscall::{
     sys_blk_read, sys_blk_write, sys_lookup_service, sys_recv, sys_send, SyscallResult,
 };
-
-const SECTOR_SIZE: usize = 512;
+use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
 
 /// Sentinel: block Driver Cell not yet probed.
 const NOT_PROBED: usize = 0;
@@ -62,9 +61,9 @@ fn forget_driver(tid: usize) {
 /// back to the kernel block path (`sys_blk_read`) for MMC-backed real boards.
 pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
     if let Some(tid) = driver_tid() {
-        // Read request: [op=0 (2B)] [sector (8B)] — 10 bytes.
+        // Read request: [op (2B)] [sector (8B)] — 10 bytes.
         let mut req = [0u8; 10];
-        req[0..2].copy_from_slice(&0u16.to_le_bytes());
+        req[0..2].copy_from_slice(&block_wire::OP_READ.to_le_bytes());
         req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
         if let SyscallResult::Err(_) = sys_send(tid, &req) {
             forget_driver(tid);
@@ -87,7 +86,7 @@ pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
                 return false;
             }
         }
-        if reply[0] != 0 {
+        if !BlockOutcome::from_byte(reply[0]).is_completed() {
             return false;
         }
         buf.copy_from_slice(&reply[1..1 + SECTOR_SIZE]);
@@ -98,62 +97,69 @@ pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
 }
 
 /// Write one 512-byte sector at absolute LBA `abs_lba`.
-pub fn blk_write(abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> bool {
-    if let Some(tid) = driver_tid() {
-        // Write request: [op=1 (2B)] [sector (8B)] [data (512B)] = 522 bytes.
+///
+/// `Indeterminate` means the driver may have issued the write: the caller must
+/// not replay it. A send the kernel refused never reached the driver
+/// (`NotIssued`); a send followed by a missing reply (driver died while the
+/// request was parked) may have been issued. The kernel fallback path reports
+/// only success or failure, so its failure is `Indeterminate`.
+pub fn blk_write(abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> BlockOutcome {
+    let outcome = if let Some(tid) = driver_tid() {
+        // Write request: [op (2B)] [sector (8B)] [data (512B)] = 522 bytes.
         let mut req = [0u8; 10 + SECTOR_SIZE];
-        req[0..2].copy_from_slice(&1u16.to_le_bytes());
+        req[0..2].copy_from_slice(&block_wire::OP_WRITE.to_le_bytes());
         req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
         req[10..10 + SECTOR_SIZE].copy_from_slice(data);
-        if let SyscallResult::Err(_) = sys_send(tid, &req) {
-            forget_driver(tid);
-            return false;
-        }
-        let mut reply = [0u8; 1];
-        // Same as blk_read: only `Ok(tid)` is a reply, and an unanswered write
-        // that reads as success is worse than an unanswered read - the page cache
-        // is write-through, so the filesystem believes a sector reached the
-        // device that never arrived.
-        match sys_recv(tid, &mut reply) {
-            SyscallResult::Ok(from) if from == tid => {}
-            _ => {
-                forget_driver(tid);
-                return false;
-            }
-        }
-        reply[0] == 0
+        exchange_status(tid, &req)
+    } else if sys_blk_write(abs_lba, data) {
+        BlockOutcome::Completed
     } else {
-        sys_blk_write(abs_lba, data)
+        BlockOutcome::Indeterminate
+    };
+    if outcome == BlockOutcome::Indeterminate {
+        ostd::io::println(&alloc::format!(
+            "[blk-router] write lba={} indeterminate; not replayed",
+            abs_lba
+        ));
     }
+    outcome
 }
 
-/// Flush all dirty data for the block device.
-pub fn blk_flush() -> bool {
-    if let Some(tid) = driver_tid() {
-        // Flush request: [op=2 (2B)] = 2 bytes.
-        let mut req = [0u8; 2];
-        req[0..2].copy_from_slice(&2u16.to_le_bytes());
-        if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_send(tid, &req) {
-            return false;
-        }
-        let mut reply = [0u8; 1];
-        // `sys_recv` returns Ok(tid) for a reply and Ok(dead_tid) when the driver
-        // cell died while this was parked - the Err arm that used to be checked
-        // here never fires, so a dead driver read as a rejected flush.
-        match ostd::syscall::sys_recv(tid, &mut reply) {
-            ostd::syscall::SyscallResult::Ok(from) if from == tid => {}
-            other => {
-                ostd::io::println(&alloc::format!("[blk-router] flush recv failed: {:?}", other));
-                forget_driver(tid);
-                return false;
-            }
-        }
-        if reply[0] != 0 {
-            ostd::io::println("[blk-router] flush rejected by block driver");
-        }
-        reply[0] == 0
+/// Flush all dirty data for the block device. Outcome rules as [`blk_write`].
+pub fn blk_flush() -> BlockOutcome {
+    let outcome = if let Some(tid) = driver_tid() {
+        exchange_status(tid, &block_wire::OP_FLUSH.to_le_bytes())
+    } else if ostd::syscall::sys_blk_flush() {
+        BlockOutcome::Completed
     } else {
-        ostd::syscall::sys_blk_flush()
+        BlockOutcome::Indeterminate
+    };
+    if !outcome.is_completed() {
+        ostd::io::println(&alloc::format!("[blk-router] flush {:?}", outcome));
+    }
+    outcome
+}
+
+/// Send a write/flush request and decode its one-byte status reply.
+fn exchange_status(tid: usize, req: &[u8]) -> BlockOutcome {
+    if let SyscallResult::Err(_) = sys_send(tid, req) {
+        forget_driver(tid);
+        return BlockOutcome::NotIssued;
+    }
+    let mut reply = [0u8; 1];
+    // Only `Ok(tid)` is a reply: the kernel delivers a driver cell's death as
+    // `Ok(dead_tid)`, and an unanswered write read as success would make the
+    // write-through page cache believe a sector reached the device.
+    match sys_recv(tid, &mut reply) {
+        SyscallResult::Ok(from) if from == tid => BlockOutcome::from_byte(reply[0]),
+        other => {
+            ostd::io::println(&alloc::format!(
+                "[blk-router] driver reply missing after send: {:?}",
+                other
+            ));
+            forget_driver(tid);
+            BlockOutcome::Indeterminate
+        }
     }
 }
 
@@ -174,17 +180,21 @@ pub fn blk_read_sectors(abs_lba: u64, count: u32, buf: &mut [u8]) -> bool {
 }
 
 /// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` from `data`.
-pub fn blk_write_sectors(abs_lba: u64, count: u32, data: &[u8]) -> bool {
+///
+/// Stops at the first sector that does not complete and returns its outcome;
+/// earlier sectors stay written.
+pub fn blk_write_sectors(abs_lba: u64, count: u32, data: &[u8]) -> BlockOutcome {
     if data.len() < (count as usize) * SECTOR_SIZE {
-        return false;
+        return BlockOutcome::NotIssued;
     }
     for i in 0..count {
         let off = (i as usize) * SECTOR_SIZE;
         let mut tmp = [0u8; SECTOR_SIZE];
         tmp.copy_from_slice(&data[off..off + SECTOR_SIZE]);
-        if !blk_write(abs_lba + i as u64, &tmp) {
-            return false;
+        let outcome = blk_write(abs_lba + i as u64, &tmp);
+        if !outcome.is_completed() {
+            return outcome;
         }
     }
-    true
+    BlockOutcome::Completed
 }

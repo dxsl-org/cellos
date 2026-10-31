@@ -143,7 +143,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let len = if let Some(state) = STATE.lock().as_mut() {
                 dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
             } else {
-                reply[0] = 1;
+                reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
                 1 // not initialised
             };
             let _ = sys_send(sender_tid, &reply[..len]);

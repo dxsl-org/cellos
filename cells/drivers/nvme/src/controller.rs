@@ -12,6 +12,7 @@ use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio::MmioRegion;
+use types::block_wire::BlockOutcome;
 use types::{ViError, ViResult};
 
 use crate::queue::{Queue, SqEntry};
@@ -420,7 +421,17 @@ impl NvmeController {
 
     // ── I/O command submit + poll ─────────────────────────────────────────────
 
-    fn submit_io(&mut self, opc: u8, nsid: u32, lba: u64, nlb: u16, prp1: u64) -> ViResult<()> {
+    /// The SQ tail doorbell is the issue point and nothing before it can fail,
+    /// so every error here is `Indeterminate`: the controller may already have
+    /// executed the command.
+    fn submit_io(
+        &mut self,
+        opc: u8,
+        nsid: u32,
+        lba: u64,
+        nlb: u16,
+        prp1: u64,
+    ) -> Result<(), BlockOutcome> {
         let depth = self.io.depth as usize;
         let tail = self.io.sq_tail as usize;
         let cid = self.io.next_cid();
@@ -451,7 +462,7 @@ impl NvmeController {
                     "[nvme] io timeout opc={} lba={} cid={} after {} (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})\n",
                     opc, lba, cid, spent, self.io.cq.head, self.io.sq_tail, self.io.cq.phase, raw, depth
                 ));
-                return Err(ViError::IO);
+                return Err(BlockOutcome::Indeterminate);
             }
         };
         note_slow(&wait, "io", opc);
@@ -462,23 +473,23 @@ impl NvmeController {
                     "[nvme] io error opc={} lba={} nlb={} status={}", opc, lba, nlb, status
                 ));
             }
-            return Err(ViError::IO);
+            return Err(BlockOutcome::Indeterminate);
         }
         Ok(())
     }
 
     /// Read one 512-byte sector into `buf` (must be DMA-capable).
-    pub fn read_sector(&mut self, sector: u64, buf_phys: u64) -> ViResult<()> {
+    pub fn read_sector(&mut self, sector: u64, buf_phys: u64) -> Result<(), BlockOutcome> {
         self.submit_io(NVM_OPC_READ, 1, sector, 0, buf_phys)
     }
 
     /// Write one 512-byte sector from `buf` (must be DMA-capable).
-    pub fn write_sector(&mut self, sector: u64, buf_phys: u64) -> ViResult<()> {
+    pub fn write_sector(&mut self, sector: u64, buf_phys: u64) -> Result<(), BlockOutcome> {
         self.submit_io(NVM_OPC_WRITE, 1, sector, 0, buf_phys)
     }
 
     /// Send an NVMe flush command for the namespace.
-    pub fn flush(&mut self) -> ViResult<()> {
+    pub fn flush(&mut self) -> Result<(), BlockOutcome> {
         self.submit_io(NVM_OPC_FLUSH, 1, 0, 0, 0)
     }
 }

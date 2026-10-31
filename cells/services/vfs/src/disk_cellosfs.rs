@@ -38,7 +38,7 @@ impl BlockDevice for CellosPartitionDisk {
             return Err(FsError::PartitionOverflow);
         }
         let abs_lba = self.base_lba + block * 8;
-        if blk_write_sectors(abs_lba, 8, buf) {
+        if blk_write_sectors(abs_lba, 8, buf).is_completed() {
             Ok(())
         } else {
             Err(FsError::IoError)
@@ -46,7 +46,7 @@ impl BlockDevice for CellosPartitionDisk {
     }
 
     fn flush(&mut self) -> Result<(), FsError> {
-        if blk_flush() {
+        if blk_flush().is_completed() {
             Ok(())
         } else {
             Err(FsError::IoError)

@@ -63,7 +63,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let len = if let Some(dev) = STATE.lock().as_mut() {
                 dispatch::handle(dev, data.as_ref(), &mut reply)
             } else {
-                reply[0] = 1; // not initialised
+                reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte(); // not initialised
                 1
             };
             // Blocking send: the VFS client issues sys_send + a blocking sys_recv(tid),

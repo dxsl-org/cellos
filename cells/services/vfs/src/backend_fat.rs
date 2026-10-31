@@ -415,7 +415,7 @@ impl FsBackend for FatBackend {
     }
 
     fn sync(&mut self, _path: &str) -> bool {
-        crate::blk_router::blk_flush()
+        crate::blk_router::blk_flush().is_completed()
     }
 
     fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {

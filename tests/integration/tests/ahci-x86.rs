@@ -441,3 +441,88 @@ fn ahci_and_nvme_both_register_x86() {
         output
     );
 }
+
+/// Phase 08A witness: the block outcome carries issue certainty from the AHCI
+/// driver to the VFS write path, and only a proven `NotIssued` write is retried.
+///
+/// Needs the private fault-injection ISO (`bash scripts/x86/make-ahci-fault-iso.sh`)
+/// named by `VICELL_AHCI_FAULT_ISO`; its `/bin/ahci` faults one write per payload
+/// marker (`cells/drivers/ahci/src/fault_inject.rs`). Skips when the variable is
+/// unset: the production ISO has no injection seam to drive.
+///
+/// One boot, three files on the SATA FAT32 volume:
+/// - `F08A-OK`: completed control, readable back.
+/// - `F08A-NI`: refused before `PxCI` once, then retried by VFS and completed;
+///   readable back.
+/// - `F08A-IND`: issued, completion suppressed. The caller sees the
+///   `Indeterminate` outcome and nothing re-issues that payload.
+#[test]
+fn ahci_write_outcome_issue_certainty_x86() {
+    let Ok(iso) = std::env::var("VICELL_AHCI_FAULT_ISO") else {
+        eprintln!(
+            "SKIP ahci_write_outcome_issue_certainty_x86: VICELL_AHCI_FAULT_ISO unset \
+             (build: bash scripts/x86/make-ahci-fault-iso.sh)"
+        );
+        return;
+    };
+    assert!(PathBuf::from(&iso).exists(), "VICELL_AHCI_FAULT_ISO={iso} does not exist");
+    let python = python_binary().expect("Python 3 formats the FAT32 fixture");
+    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    for marker in [
+        "[driver_cell] block driver registered",
+        "[vfs] FAT32 /mnt/sd volume mounted",
+        "Cellos >",
+    ] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+
+    // Run one shell command; return the serial output it produced.
+    let run = |qemu: &mut QemuRunner, command: &str, expect: &str| -> String {
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(command);
+        qemu.wait_for_after(expect, checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?}: {e}\n{}", qemu.dump()));
+        qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?} prompt: {e}\n{}", qemu.dump()));
+        qemu.dump().get(checkpoint..).unwrap_or_default().to_string()
+    };
+
+    run(&mut qemu, "vwrite /mnt/sd/ok.txt F08A-OK-control", "Cellos >");
+    run(&mut qemu, "vcat /mnt/sd/ok.txt", "F08A-OK-control");
+
+    let not_issued = run(&mut qemu, "vwrite /mnt/sd/ni.txt F08A-NI-retried", "outcome=Completed");
+    assert!(
+        not_issued.contains("[ahci] fault-inject: WRITE DMA EXT refused before issue")
+            && not_issued.contains("outcome=NotIssued"),
+        "NotIssued control did not refuse before issue then complete on retry:\n{not_issued}"
+    );
+    run(&mut qemu, "vcat /mnt/sd/ni.txt", "F08A-NI-retried");
+
+    let indeterminate = run(&mut qemu, "vwrite /mnt/sd/ind.txt F08A-IND-once", "not replayed");
+    assert!(
+        indeterminate
+            .contains("[ahci] fault-inject: WRITE DMA EXT completion suppressed after PxCI")
+            && indeterminate.contains("outcome=Indeterminate"),
+        "the marked write was not issued and reported Indeterminate:\n{indeterminate}"
+    );
+    assert_eq!(
+        indeterminate.matches("outcome=Indeterminate").count(),
+        1,
+        "the Indeterminate write reached the driver more than once:\n{indeterminate}"
+    );
+    // A later write must not drag the uncertain payload back to the device either.
+    run(&mut qemu, "vwrite /mnt/sd/after.txt F08A-OK-after", "Cellos >");
+    let output = qemu.dump();
+    assert!(
+        !output.contains("REPLAY of indeterminate write"),
+        "an Indeterminate write was re-issued:\n{output}"
+    );
+    let evidence: Vec<&str> = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("fault-inject") || line.contains("[blk-router]"))
+        .collect();
+    println!("08A witness evidence: {evidence:#?}");
+}

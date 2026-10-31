@@ -14,6 +14,7 @@
 
 use crate::blk_router::{blk_flush, blk_read, blk_write};
 use crate::page_cache::PageCache;
+use types::block_wire::BlockOutcome;
 
 const SECTOR_SIZE: u64 = 512;
 
@@ -70,7 +71,7 @@ impl fatfs::Write for BlockStream {
                 // Full-sector write — no need to read first.
                 let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !blk_write(self.base_lba + sector, &full) {
+                if !blk_write(self.base_lba + sector, &full).is_completed() {
                     return Err(());
                 }
             } else {
@@ -80,7 +81,7 @@ impl fatfs::Write for BlockStream {
                     return Err(());
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !blk_write(self.base_lba + sector, &sec) {
+                if !blk_write(self.base_lba + sector, &sec).is_completed() {
                     return Err(());
                 }
             }
@@ -93,7 +94,7 @@ impl fatfs::Write for BlockStream {
 
     /// Issue a flush command so prior writes reach the backing disk image.
     fn flush(&mut self) -> Result<(), ()> {
-        if blk_flush() {
+        if blk_flush().is_completed() {
             Ok(())
         } else {
             Err(())
@@ -138,12 +139,17 @@ impl BlockStream {
 
     /// Write one 512-byte sector directly to disk, bypassing the page cache.
     /// Called by `PageCache::write_sector`, which writes through device-first.
-    /// `sector` is partition-relative. Retried for the same reason as
-    /// [`BlockStream::read_raw_sector`]; a re-write of identical bytes is safe.
+    /// `sector` is partition-relative.
+    ///
+    /// Retried only while the driver proves the write was never issued. An
+    /// `Indeterminate` write is not replayed: the device may already hold it
+    /// (or part of it), and a replay is a second, unrequested medium write.
     pub fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
         for _ in 0..RAW_IO_ATTEMPTS {
-            if blk_write(self.base_lba + sector, data) {
-                return true;
+            match blk_write(self.base_lba + sector, data) {
+                BlockOutcome::Completed => return true,
+                BlockOutcome::NotIssued => continue,
+                BlockOutcome::Indeterminate => return false,
             }
         }
         false
@@ -227,7 +233,7 @@ impl fatfs::Write for CachedBlockStream {
     }
 
     fn flush(&mut self) -> Result<(), ()> {
-        if blk_flush() {
+        if blk_flush().is_completed() {
             Ok(())
         } else {
             Err(())

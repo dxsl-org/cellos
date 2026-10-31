@@ -21,6 +21,7 @@ use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio::MmioRegion;
+use types::block_wire::BlockOutcome;
 use types::{ViError, ViResult};
 
 // ── Generic host control (ABAR offsets) ───────────────────────────────────────
@@ -148,6 +149,9 @@ pub struct AhciController {
     _fis: AuthorizedDma<DmaBuf>,
     cmd_table: AuthorizedDma<DmaBuf>,
     identify: AuthorizedDma<DmaBuf>,
+    /// Fault-injection builds only: what to do to the next issued command.
+    #[cfg(feature = "fault-inject")]
+    inject_next: crate::fault_inject::Inject,
 }
 
 impl AhciController {
@@ -241,6 +245,8 @@ impl AhciController {
             _fis: fis,
             cmd_table,
             identify,
+            #[cfg(feature = "fault-inject")]
+            inject_next: crate::fault_inject::Inject::None,
         };
         ctrl.identify()?;
         // Word 0 is the ATA general-configuration word: 0x0040 means a fixed,
@@ -296,6 +302,12 @@ impl AhciController {
             }
         }
         self.sectors()
+    }
+
+    /// Fault-injection builds only: arm `inject` for the next issued command.
+    #[cfg(feature = "fault-inject")]
+    pub fn inject_next(&mut self, inject: crate::fault_inject::Inject) {
+        self.inject_next = inject;
     }
 }
 
@@ -376,19 +388,19 @@ impl AhciController {
     ///
     /// `iova` must be the device-visible address of an authorized DMA buffer
     /// (one PRDT entry covers that single page).
-    pub fn read_sector(&mut self, lba: u64, iova: u64) -> ViResult<()> {
+    pub fn read_sector(&mut self, lba: u64, iova: u64) -> Result<(), BlockOutcome> {
         self.ensure_live()?;
         self.issue_dma(ATA_CMD_READ_DMA_EXT, lba, iova, false, "READ DMA EXT")
     }
 
     /// Write one 512-byte sector at the given 48-bit LBA from `iova`.
-    pub fn write_sector(&mut self, lba: u64, iova: u64) -> ViResult<()> {
+    pub fn write_sector(&mut self, lba: u64, iova: u64) -> Result<(), BlockOutcome> {
         self.ensure_live()?;
         self.issue_dma(ATA_CMD_WRITE_DMA_EXT, lba, iova, true, "WRITE DMA EXT")
     }
 
     /// Drain the device's write cache (FLUSH CACHE EXT, non-data).
-    pub fn flush(&mut self) -> ViResult<()> {
+    pub fn flush(&mut self) -> Result<(), BlockOutcome> {
         self.ensure_live()?;
         let p = self.port_offset();
         // Non-data command: PRDTL 0, and no PRDT entry programmed. The HBA only
@@ -415,7 +427,7 @@ impl AhciController {
         iova: u64,
         write: bool,
         what: &str,
-    ) -> ViResult<()> {
+    ) -> Result<(), BlockOutcome> {
         let p = self.port_offset();
         let tag = 0u8;
 
@@ -427,7 +439,7 @@ impl AhciController {
                 "[ahci] port={} tag={} {} rejected: LBA {} >= capacity {} sectors\n",
                 self.port, tag, what, lba, capacity
             ));
-            return Err(ViError::InvalidInput);
+            return Err(BlockOutcome::NotIssued);
         }
         // Only 48 bits of LBA exist in the FIS; an LBA that needs more cannot be
         // expressed, so it is out of range by definition.
@@ -436,7 +448,7 @@ impl AhciController {
                 "[ahci] port={} tag={} {} rejected: LBA {} exceeds 48 bits\n",
                 self.port, tag, what, lba
             ));
-            return Err(ViError::InvalidInput);
+            return Err(BlockOutcome::NotIssued);
         }
 
         // Command header slot 0: CFL=5 DWORDs, direction bit, PRDTL=1 entry.
@@ -472,20 +484,36 @@ impl AhciController {
 
     /// Clear latched port errors, kick PxCI bit `tag`, and poll it back to 0.
     ///
-    /// Any device fault or timeout is a typed `ViError::IO` naming the port and
-    /// tag; a stall is never reported as success.
-    fn issue_and_wait(&mut self, p: usize, tag: u8, what: &str) -> ViResult<()> {
-        wr(&self.mmio, p + PX_SERR, 0xFFFF_FFFF)?;
-        wr(&self.mmio, p + PX_IS, 0xFFFF_FFFF)?;
+    /// The `PxCI` write is the issue point. A failure before it is `NotIssued`;
+    /// a timeout, device fault or register error after it is `Indeterminate`,
+    /// because the HBA may already have moved the data. A stall is never
+    /// reported as success.
+    fn issue_and_wait(&mut self, p: usize, tag: u8, what: &str) -> Result<(), BlockOutcome> {
+        #[cfg(feature = "fault-inject")]
+        let inject = core::mem::replace(&mut self.inject_next, crate::fault_inject::Inject::None);
+        #[cfg(feature = "fault-inject")]
+        if inject == crate::fault_inject::Inject::RefuseBeforeIssue {
+            let _ = print_fmt(format_args!(
+                "[ahci] fault-inject: {} refused before issue\n",
+                what
+            ));
+            return Err(BlockOutcome::NotIssued);
+        }
+        let not_issued = |_| BlockOutcome::NotIssued;
+        wr(&self.mmio, p + PX_SERR, 0xFFFF_FFFF).map_err(not_issued)?;
+        wr(&self.mmio, p + PX_IS, 0xFFFF_FFFF).map_err(not_issued)?;
         // The fence makes the command structure writes visible before the HBA is
         // told to fetch them.
         fence(Ordering::SeqCst);
         let bit = 1u32 << tag;
-        wr(&self.mmio, p + PX_CI, bit)?;
+        // `MmioRegion` refuses an out-of-bounds offset before touching the
+        // device, so an error here means nothing was issued.
+        wr(&self.mmio, p + PX_CI, bit).map_err(not_issued)?;
 
+        let indeterminate = |_| BlockOutcome::Indeterminate;
         let mut spins = 0u64;
         loop {
-            if rd(&self.mmio, p + PX_CI)? & bit == 0 {
+            if rd(&self.mmio, p + PX_CI).map_err(indeterminate)? & bit == 0 {
                 break;
             }
             match poll_tick(spins, POLL_LIMIT, "") {
@@ -495,36 +523,48 @@ impl AhciController {
                         "[ahci] port={} tag={} {} timeout after {} polls\n",
                         self.port, tag, what, POLL_LIMIT
                     ));
-                    // Retire the slot before returning: the caller (VFS) retries,
-                    // and tag 0's structures are shared with that retry.
+                    // Retire the slot before returning: tag 0's structures are
+                    // shared with the next request.
                     self.recover_after_fault(p);
-                    return Err(ViError::IO);
+                    return Err(BlockOutcome::Indeterminate);
                 }
             }
         }
 
-        let is = rd(&self.mmio, p + PX_IS)?;
-        let tfd = rd(&self.mmio, p + PX_TFD)?;
+        #[cfg(feature = "fault-inject")]
+        if inject == crate::fault_inject::Inject::SuppressCompletion {
+            // The command really ran; the driver acts as if its completion was
+            // never observed, taking the timeout path.
+            let _ = print_fmt(format_args!(
+                "[ahci] fault-inject: {} completion suppressed after PxCI\n",
+                what
+            ));
+            self.recover_after_fault(p);
+            return Err(BlockOutcome::Indeterminate);
+        }
+
+        let is = rd(&self.mmio, p + PX_IS).map_err(indeterminate)?;
+        let tfd = rd(&self.mmio, p + PX_TFD).map_err(indeterminate)?;
         if tfd & TFD_ERR != 0 || is & IS_FATAL != 0 {
             let _ = print_fmt(format_args!(
                 "[ahci] port={} tag={} {} device fault: PxIS=0x{:08x} PxTFD=0x{:08x}\n",
                 self.port, tag, what, is, tfd
             ));
             self.recover_after_fault(p);
-            return Err(ViError::IO);
+            return Err(BlockOutcome::Indeterminate);
         }
         fence(Ordering::Acquire);
         Ok(())
     }
 
     /// Refuse a request on a controller that could not be recovered.
-    fn ensure_live(&self) -> ViResult<()> {
+    fn ensure_live(&self) -> Result<(), BlockOutcome> {
         if self.faulted {
             let _ = print_fmt(format_args!(
                 "[ahci] port={} controller faulted; request refused\n",
                 self.port
             ));
-            return Err(ViError::IO);
+            return Err(BlockOutcome::NotIssued);
         }
         Ok(())
     }
@@ -532,7 +572,7 @@ impl AhciController {
     /// Retire the outstanding slot after a timeout or a fatal port error.
     ///
     /// Single-slot design: tag 0's command structures are shared with the next
-    /// request, so leaving the HBA owning the slot would let a caller's retry
+    /// request, so leaving the HBA owning the slot would let the next command
     /// race a still-running DMA. Stop the engine (which retires the slot), clear
     /// the latched error bits and restart it; if the restart does not come back
     /// clean, poison the controller so nothing reuses those structures.
