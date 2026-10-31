@@ -57,3 +57,5 @@ File set: new `kernel/src/cell/provenance_selftest.rs` (cfg `test-hooks` + riscv
 User: "xử lý rủi ro trap entry trước". A kernel stack overflow makes every S-mode trap fault again while saving its frame, so the eventually-reported fault carries `sepc` inside the trap save sequence and misleading satp/stval. Fix: classify that signature in the Rust kernel-exception path and panic with an explicit "kernel stack overflow" message. HAL/kernel internal, no ABI or Law-1 delta.
 
 File set: `hal/arch/riscv/src/rv64/asm/trap.S` (export a save-end label), `hal/arch/riscv/src/rv64/trap.rs`, a test-hooks overflow fixture if needed for evidence, `CHANGELOG.md`, this plan directory.
+
+- 2026-10-31 R2: per-hart overflow stack in `hal/arch/riscv/src/rv64/asm/trap.S` + `trap.rs` (`vi_kernel_stack_overflow`); same file set as R1.

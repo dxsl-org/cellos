@@ -14,18 +14,26 @@ extern "C" {
     fn __trap_entry();
     fn __trap_entry_hart0();
     fn __trap_entry_hart1();
-    fn __trap_save_end();
     pub fn vi_set_sscratch(kernel_stack_top: usize);
     #[cfg(feature = "test-hooks")]
     fn vi_rv64_kernel_fault_snapshot(satp: usize, stval: usize);
 
 }
 
-/// True when `sepc` lies in the trap entry's frame-save sequence
-/// (`__trap_entry` .. `__trap_save_end`). A fault there means saving the
-/// frame itself faulted: the kernel stack overflowed into its guard page.
-fn fault_in_trap_save(sepc: usize) -> bool {
-    (__trap_entry as *const () as usize..__trap_save_end as *const () as usize).contains(&sepc)
+/// Kernel stack overflow, entered from `trap.S` on this hart's dedicated
+/// overflow stack (16 KiB, `.bss`), with the kernel root installed.
+///
+/// The trap entry calls this instead of saving a frame when a kernel-mode
+/// fault hits its own frame-save sequence: the interrupted kernel stack
+/// already reached its guard page, so another save would only recurse and
+/// eventually overwrite whatever mapped memory lies below. No frame exists;
+/// `sepc` and `stval` are those of the failed save, `sp` the overflowed one.
+#[no_mangle]
+pub extern "C" fn vi_kernel_stack_overflow(sepc: usize, stval: usize, sp: usize, interrupted_satp: usize) -> ! {
+    panic!(
+        "Cellos: kernel stack overflow: trap entry could not save a frame (sp={:#x} guard stval={:#x} sepc={:#x} interrupted_satp={:#x})",
+        sp, stval, sepc, interrupted_satp
+    );
 }
 
 /// Initialize trap handling by setting stvec
@@ -188,18 +196,6 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                             "csrr {satp}, satp",
                             satp = out(reg) live_satp,
                             options(nostack, nomem)
-                        );
-                    }
-                    if !from_user && fault_in_trap_save(frame.sepc) {
-                        // Each nested trap faulted on its first frame store, so
-                        // nothing was written until a frame landed on a mapped
-                        // page; this fault's scause/satp describe that
-                        // recursion, not the code that overflowed.
-                        panic!(
-                            "Cellos: kernel stack overflow: trap entry faulted while saving a frame (guard stval={:#x}, frame={:#x}, interrupted_satp={:#x})",
-                            frame.stval,
-                            frame as *const _ as usize,
-                            frame.satp
                         );
                     }
                     #[cfg(feature = "test-hooks")]

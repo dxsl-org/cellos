@@ -20,8 +20,21 @@
 # Total    = 304 bytes
 
 .equ TRAP_FRAME_SIZE, 304
+.equ OVERFLOW_STACK_SIZE, 16384
 
-.macro HART_TRAP_ENTRY pointer_offset
+# Per-hart S-mode trap scratch and kernel-stack-overflow stacks. Both live in
+# .bss, inside the kernel's writable range that every domain root also maps,
+# so they are reachable whichever root is live when the trap is taken.
+.section .bss
+.align 12
+vi_trap_overflow_stacks:
+    .space OVERFLOW_STACK_SIZE * 2
+.align 3
+vi_trap_scratch:
+    .space 8 * 2
+.section .text
+
+.macro HART_TRAP_ENTRY pointer_offset hart
     # Swap user tp with the kernel stack pointer without clobbering either.
     # From S-mode sscratch is zero, so the second swap restores kernel tp.
     csrrw tp, sscratch, tp
@@ -43,16 +56,72 @@
 
 .Lfrom_supervisor\@:
     csrrw tp, sscratch, tp
+    # Kernel stack overflow check, before anything touches the stack. A fault
+    # whose sepc lies in the frame-save sequence means the previous trap could
+    # not save its frame: sp is in a guard page. Saving another frame below it
+    # would only recurse, so switch to this hart's overflow stack instead.
+    # Interrupts are masked on entry, so the stash is single-owner per hart;
+    # sscratch is zero in S-mode and is zeroed again before continuing.
+    csrw sscratch, t0
+    .option push
+    .option norelax
+    lla t0, vi_trap_scratch
+    sd t1, \hart*8(t0)
+    csrr t1, sepc
+    lla t0, __trap_entry
+    bltu t1, t0, .Lstack_ok\@
+    lla t0, __trap_save_end
+    bgeu t1, t0, .Lstack_ok\@
+    lla t0, vi_trap_overflow_stacks
+    .option pop
+    li t1, (\hart + 1) * OVERFLOW_STACK_SIZE
+    add t1, t0, t1
+    mv a2, sp                   # the overflowed stack pointer, for the report
+    mv sp, t1
+    csrw sscratch, zero
+    j .Lkernel_stack_overflow
+.Lstack_ok\@:
+    .option push
+    .option norelax
+    lla t0, vi_trap_scratch
+    .option pop
+    ld t1, \hart*8(t0)
+    csrr t0, sscratch
+    csrw sscratch, zero
     addi sp, sp, -TRAP_FRAME_SIZE
     j .continue_save
 .endm
 
 __trap_entry:
 __trap_entry_hart0:
-    HART_TRAP_ENTRY 0
+    HART_TRAP_ENTRY 0, 0
 
+# stvec direct mode needs a 4-byte-aligned base; the stub above ends at any
+# 2-byte boundary once compressed instructions are emitted.
+.align 4
 __trap_entry_hart1:
-    HART_TRAP_ENTRY 8
+    HART_TRAP_ENTRY 8, 1
+
+# Reached only from the overflow check above, on this hart's overflow stack,
+# with a2 = the overflowed sp. Install the kernel root as the normal path does
+# and report; vi_kernel_stack_overflow never returns.
+.Lkernel_stack_overflow:
+    .option push
+    .option norelax
+    lla t1, VI_KERNEL_SATP
+    .option pop
+    ld t1, 0(t1)
+    csrr a3, satp
+    beqz t1, .Loverflow_report
+    beq a3, t1, .Loverflow_report
+    fence rw, rw
+    csrw satp, t1
+    sfence.vma zero, zero
+.Loverflow_report:
+    csrr a0, sepc
+    csrr a1, stval
+    call vi_kernel_stack_overflow
+1:  j 1b
 
 .continue_save:
     sd x1,   1*8(sp)    # ra
@@ -139,10 +208,10 @@ __trap_entry_hart1:
     csrw satp, t1
     sfence.vma zero, zero
 .Lroot_settled:
-    # Every instruction from __trap_entry up to here only saves the frame.
-    # A fault whose sepc lies in that range means the save itself faulted:
-    # the kernel stack ran into its guard (see trap.rs, stack overflow).
-    .global __trap_save_end
+    # Every instruction from __trap_entry up to here only saves the frame (or
+    # runs the overflow check). A kernel fault whose sepc lies in that range
+    # means the save itself faulted: the S-mode entry switches to the hart's
+    # overflow stack and calls vi_kernel_stack_overflow.
 __trap_save_end:
 
     mv a0, sp               # a0 = &ViTrapFrame (borrowed, not owned)
