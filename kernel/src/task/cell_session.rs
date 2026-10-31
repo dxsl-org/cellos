@@ -455,7 +455,18 @@ fn issuer(sched: &Scheduler, actor: Principal, service: u16) -> Result<Binding> 
 fn zero(value: u32) -> Result<()> { if value == 0 { Ok(()) } else { Err(Status::Malformed) } }
 fn vi(error: ViError) -> Status { match error { ViError::OutOfMemory => Status::QuotaExceeded,
     ViError::PermissionDenied => Status::Denied, ViError::NotSupported => Status::Unsupported,
+    ViError::NotFound => Status::NotFound,
     ViError::InvalidInput | ViError::InvalidArgument => Status::Malformed, _ => Status::Io } }
+/// The route-specific part of a `PrepareChild` body: nothing for the path
+/// route, `grant_id:u64, elf_len:u64` for the ELF route; any other route is
+/// malformed.
+fn prepare_route(route: u32, r: &mut api::cell_session::Reader<'_>) -> Result<Option<(usize, usize)>> {
+    match route {
+        api::cell_session::PREPARE_ROUTE_PATH => Ok(None),
+        api::cell_session::PREPARE_ROUTE_ELF => Ok(Some((r.u64()? as usize, r.u64()? as usize))),
+        _ => Err(Status::Malformed),
+    }
+}
 
 impl State {
     /// Expiry, owner/issuer death and registry drain, all under the owner lock.
@@ -1708,8 +1719,9 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
     let mut r = Reader::new(body);
     if r.reference()? != operation { return Err(Status::Malformed); }
     let route = r.u32()?; let path_len = r.u32()? as usize; let context_len = r.u32()? as usize; zero(r.u32()?)?;
+    let elf = prepare_route(route, &mut r)?;
     let path = r.take(path_len)?; r.finish()?;
-    if route != 1 || !(1..=4096).contains(&path_len) || path.contains(&0)
+    if !(1..=4096).contains(&path_len) || path.contains(&0)
         || !(48..=child_context::MAX_LEN).contains(&context_len) { return Err(Status::Malformed); }
     let path = core::str::from_utf8(path).map_err(|_| Status::Malformed)?;
     {
@@ -1728,8 +1740,19 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
         context.0.try_reserve_exact(context_len).map_err(|_| Status::QuotaExceeded)?;
         context.0.resize(context_len, 0);
     }
-    let request = super::syscall::session_launch_request(caller, path).map_err(|_| Status::Denied)?;
-    let (prepared, state) = request.prepare_session_path(path).map_err(vi)?;
+    let launch_route = if elf.is_some() {
+        crate::loader::launch_profile::LaunchRoute::Elf
+    } else {
+        crate::loader::launch_profile::LaunchRoute::Path
+    };
+    let request = super::syscall::session_launch_request(caller, path, launch_route).map_err(|_| Status::Denied)?;
+    let (prepared, state) = match elf {
+        None => request.prepare_session_path(path),
+        Some((grant_id, elf_len)) => {
+            let bytes = super::syscall::session_elf_bytes(caller, grant_id, elf_len).map_err(|_| Status::Malformed)?;
+            request.prepare_session_elf(bytes, path)
+        }
+    }.map_err(vi)?;
     if super::system_ticks() as u64 >= deadline { return Err(Status::TimedOut); }
     let _kernel = KernelAllocationContext::enter();
     // ADR-0019 §2.1 live-grant preflight for a domain child, before SCHEDULER
@@ -1746,7 +1769,7 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
         return Err(Status::QuotaExceeded);
     }
     sched.cell_session.prepared.try_reserve(1).map_err(|_| Status::QuotaExceeded)?;
-    let publication = super::launch::SessionPublication::reserve(sched, prepared, state).map_err(vi)?;
+    let publication = super::launch::SessionPublication::reserve(sched, prepared, state, launch_route).map_err(vi)?;
     let child = Child { principal: Principal { cell_id: publication.owner.cell_id, generation: publication.owner.generation },
         root_tid: publication.owner.root_tid, publication_generation: publication.owner.generation };
     let reference = child.prepared_ref();
@@ -2199,5 +2222,32 @@ mod tests {
         assert_eq!(receipt_service(GRANT_KIND_INPUT_FRONTEND), api::syscall::service::INPUT);
         assert_eq!(receipt_service(1), api::syscall::service::INPUT);
         assert_eq!(receipt_service(2), api::syscall::service::VFS);
+    }
+
+    #[test]
+    fn prepare_route_reads_grant_only_for_the_elf_route() {
+        use super::prepare_route;
+        let mut tail = alloc::vec::Vec::new();
+        tail.extend_from_slice(&7u64.to_le_bytes());
+        tail.extend_from_slice(&4096u64.to_le_bytes());
+        tail.extend_from_slice(b"/bin/x");
+
+        let mut r = Reader::new(&tail);
+        assert_eq!(prepare_route(api::cell_session::PREPARE_ROUTE_ELF, &mut r), Ok(Some((7, 4096))));
+        assert_eq!(r.take(6), Ok(&b"/bin/x"[..]), "the path follows the grant fields");
+
+        let mut r = Reader::new(b"/bin/x");
+        assert_eq!(prepare_route(api::cell_session::PREPARE_ROUTE_PATH, &mut r), Ok(None));
+        assert_eq!(r.take(6), Ok(&b"/bin/x"[..]), "the path route consumes nothing");
+    }
+
+    #[test]
+    fn prepare_route_refuses_unknown_and_truncated_bodies() {
+        use super::prepare_route;
+        for route in [0, 3, u32::MAX] {
+            assert_eq!(prepare_route(route, &mut Reader::new(&[0u8; 16])), Err(Status::Malformed));
+        }
+        // An ELF route without both u64 fields cannot be read as a launch.
+        assert!(prepare_route(api::cell_session::PREPARE_ROUTE_ELF, &mut Reader::new(&[0u8; 12])).is_err());
     }
 }

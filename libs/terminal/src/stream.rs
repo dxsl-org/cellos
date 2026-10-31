@@ -28,9 +28,32 @@ impl Operation{
     pub fn cancel(self,reason:u32)->Result<(),Status>{let mut body=[0u8;24];let mut w=Writer::new(&mut body);w.reference(self.reference.0)?;w.u32(reason)?;w.u32(0)?;call(self.reference,KernelOp::CancelOperation,true,&body,&mut[0u8;24]).map(|_|())}
     pub fn close(self)->Result<(),Status>{call(self.reference,KernelOp::CloseOperation,true,&self.reference.0.to_bytes(),&mut[0u8;24]).map(|_|())}
     pub fn query(self)->Result<OperationState,Status>{let mut reply=[0u8;40];let n=call(self.reference,KernelOp::QueryOperation,false,&self.reference.0.to_bytes(),&mut reply)?;let mut r=Reader::new(&reply[24..n]);let state=r.u32()?;let holders=r.u32()?;let children=r.u32()?;if r.u32()?!=0||state>2{return Err(Status::Malformed)}r.finish()?;Ok(OperationState{state,holders,children})}
-    pub fn prepare_child(self,path:&str,context_len:usize)->Result<PreparedChild,Status>{
+    pub fn prepare_child(self,path:&str,context_len:usize)->Result<PreparedChild,Status>{self.prepare(path,context_len,None)}
+    /// Route 2: launch `path` from ELF bytes the caller supplies in a grant it owns
+    /// (`api::cell_session::PREPARE_ROUTE_ELF`). The kernel authorizes the edge as an
+    /// ELF launch, which never carries a capability-bearing ceiling.
+    pub fn prepare_child_elf(self,path:&str,grant_id:usize,elf_len:usize,context_len:usize)->Result<PreparedChild,Status>{self.prepare(path,context_len,Some((grant_id,elf_len)))}
+    /// Path route first; only when the kernel cannot find the artifact (it reads
+    /// VIFS1 and the cell table, which a QEMU kernel cannot reach on disk) read it
+    /// through VFS and retry once with route 2. Every other refusal is final, so the
+    /// ELF route never bypasses a path-route decision.
+    pub fn prepare_child_resolving(self,path:&str,context_len:usize)->Result<PreparedChild,Status>{
+        match self.prepare_child(path,context_len){
+            Err(Status::NotFound)=>{}
+            other=>return other,
+        }
+        let vfs=ostd::syscall::sys_lookup_service(api::syscall::service::VFS).ok_or(Status::NotFound)?;
+        let (grant,len)=ostd::fs::read_full_via_grant(path,vfs).map_err(|_|Status::NotFound)?;
+        let prepared=self.prepare_child_elf(path,grant,len,context_len);
+        ostd::syscall::sys_grant_free(grant);
+        prepared
+    }
+    fn prepare(self,path:&str,context_len:usize,elf:Option<(usize,usize)>)->Result<PreparedChild,Status>{
         if path.is_empty()||path.len()>4096||path.as_bytes().contains(&0)||!(api::cell_session::CONTEXT_HEADER_LEN..=api::cell_session::CONTEXT_MAX).contains(&context_len){return Err(Status::Malformed)}
-        let mut body=[0u8;4128];let mut w=Writer::new(&mut body);w.reference(self.reference.0)?;w.u32(1)?;w.u32(path.len() as u32)?;w.u32(context_len as u32)?;w.u32(0)?;w.bytes(path.as_bytes())?;let n=w.position();let mut reply=[0u8;72];let n=call(self.reference,KernelOp::PrepareChild,true,&body[..n],&mut reply)?;let mut r=Reader::new(&reply[24..n]);let reference=PreparedRef::from_raw(r.reference()?)?;let child=ChildRef(r.child()?);r.finish()?;Ok(PreparedChild{reference,child,operation:self.reference,terminal:false})
+        let route=if elf.is_some(){api::cell_session::PREPARE_ROUTE_ELF}else{api::cell_session::PREPARE_ROUTE_PATH};
+        let mut body=[0u8;4144];let mut w=Writer::new(&mut body);w.reference(self.reference.0)?;w.u32(route)?;w.u32(path.len() as u32)?;w.u32(context_len as u32)?;w.u32(0)?;
+        if let Some((grant_id,elf_len))=elf{w.u64(grant_id as u64)?;w.u64(elf_len as u64)?;}
+        w.bytes(path.as_bytes())?;let n=w.position();let mut reply=[0u8;72];let n=call(self.reference,KernelOp::PrepareChild,true,&body[..n],&mut reply)?;let mut r=Reader::new(&reply[24..n]);let reference=PreparedRef::from_raw(r.reference()?)?;let child=ChildRef(r.child()?);r.finish()?;Ok(PreparedChild{reference,child,operation:self.reference,terminal:false})
     }
 }
 #[derive(Clone,Copy,Debug)]pub struct OperationState{pub state:u32,pub holders:u32,pub children:u32}

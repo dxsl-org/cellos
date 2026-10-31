@@ -300,7 +300,7 @@ impl TerminalSession{
     }
     fn prepare_foreground(&mut self,operation:Operation,path:&str,argv:&[&str],cwd:&[u8],environment:&[(&str,&str)],cwd_source:Option<ObjectRefV1>,completion:Option<(Endpoint,Endpoint)>)->Result<ForegroundChild,Status>{
         let (len,grant_count)=foreground_context_len(argv,cwd,environment,completion.is_some())?;
-        let mut prepared=operation.prepare_child(path,len)?;
+        let mut prepared=operation.prepare_child_resolving(path,len)?;
         let (stdin_source,stdin_writer)=operation.create_stream(4096)?;let (control_source,control_writer)=operation.create_stream(4096)?;
         let stdin=stdin_source.delegate(&prepared,EndpointRights::READ_ONLY)?;let control=control_source.delegate(&prepared,EndpointRights::READ_ONLY)?;
         let stdout=self.stdout.delegate(&prepared,EndpointRights::WRITE_DELEGATE)?;let stderr=self.stderr.delegate(&prepared,EndpointRights::WRITE_DELEGATE)?;

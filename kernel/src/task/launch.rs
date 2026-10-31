@@ -440,12 +440,16 @@ pub(crate) struct SessionPublication {
     /// ADR-0019 lease of a domain child, rechecked in `current()` under the same
     /// SCHEDULER section as `publish`; `None` for an ordinary child.
     domain_lease: Option<DomainLease>,
+    /// The launch edge route this child was admitted under (`Path` for a kernel
+    /// read, `Elf` for caller-supplied bytes); `current()` re-authorizes it.
+    route: crate::loader::launch_profile::LaunchRoute,
 }
 impl SessionPublication {
     /// Every fallible allocation, quota, owner-slot, log and ready-queue claim
     /// happens here; `publish` allocates nothing and cannot fail.
     pub(crate) fn reserve(sched: &mut super::scheduler::Scheduler,
-        prepared: super::PreparedElfTask, state: TaskLaunchState) -> Result<Self, ViError> {
+        prepared: super::PreparedElfTask, state: TaskLaunchState,
+        route: crate::loader::launch_profile::LaunchRoute) -> Result<Self, ViError> {
         let Some(caller) = state.caller.as_ref() else { return Err(ViError::PermissionDenied); };
         if !authority_is_current(sched, caller) {
             return Err(ViError::PermissionDenied);
@@ -499,7 +503,7 @@ impl SessionPublication {
         let ready = super::hart_local::ready::PublicationReservation::reserve(state.priority)?;
         sched.reserve_session_owner(owner)?;
         sched.next_task_id = next;
-        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim, domain_lease })
+        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim, domain_lease, route })
     }
     /// ADR-0019 commit decision for this child, given the live-grant preflight
     /// `dispatch` took before SCHEDULER. Call under SCHEDULER, right before
@@ -516,7 +520,7 @@ impl SessionPublication {
         let Some(measurement) = self.state.measurement.as_ref() else { return false; };
         let state = crate::loader::launch_profile::CallerLaunchState { name: &caller.name,
             has_spawn: caller.spawn_cap.is_some(), has_supervisor: caller.supervisor_cap.is_some() };
-        crate::loader::launch_profile::authorize(state, crate::loader::launch_profile::LaunchRoute::Path,
+        crate::loader::launch_profile::authorize(state, self.route,
             &measurement.path).is_some_and(|profile| self.state.granted.intersect(profile.child_ceiling)
                 == self.state.granted && (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some()))
     }

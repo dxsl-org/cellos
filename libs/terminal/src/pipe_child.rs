@@ -300,7 +300,7 @@ impl Pipeline{
         // stdin stream) outlives the commit; `delegated` is closed only while the
         // child is unpublished.
         let mut empty_reader=Closer::new();let mut delegated=Closer::new();
-        let mut prepared=operation.prepare_child(spec.path,context_len)?;
+        let mut prepared=operation.prepare_child_resolving(spec.path,context_len)?;
         let stdin_source=match stdin{
             Some(e)=>e,
             None=>{

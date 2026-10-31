@@ -90,6 +90,18 @@ wire_enum!(KernelOp {
     // reserved u32 = 0, terminal_sequence:u64.
     QueryChild = 30,
 });
+/// `PrepareChild` routes. Body: `operation:Ref, route:u32, path_len:u32,
+/// context_len:u32, reserved:u32 = 0`, then for [`PREPARE_ROUTE_ELF`] only
+/// `grant_id:u64, elf_len:u64`, then the path bytes.
+///
+/// Path: the kernel reads the artifact itself (VIFS1 / cell table) and the
+/// launch edge is authorized as `LaunchRoute::Path`.
+pub const PREPARE_ROUTE_PATH: u32 = 1;
+/// ELF: the caller supplies the artifact in a grant it owns (typically read
+/// through VFS); the edge is authorized as `LaunchRoute::Elf`, which never
+/// lends a capability-bearing ceiling to caller-owned bytes. Signature,
+/// manifest, measurement and Tier-2 admission are the same as the path route.
+pub const PREPARE_ROUTE_ELF: u32 = 2;
 wire_enum!(InputOp {
     Create = 1, AttachFrontend = 2, PrepareForeground = 3, CommitForeground = 4,
     RestoreForeground = 5, Resize = 6, SetMode = 7, ReleaseMode = 8,

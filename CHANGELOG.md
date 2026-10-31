@@ -262,6 +262,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - a closed consumer stops the producer with kernel reason 3, reported 141.
 
 ### Changed
+- The shell can launch programs that exist only on disk (P2; CP1 `.agents/261030-1945-ginux-lessons-hardening/p2-session-elf-route-cp1.md`, approved by the user 2026-11-01). `PrepareChild` gains route 2 (`api::cell_session::PREPARE_ROUTE_ELF`): after the 16-byte header come `grant_id:u64` and `elf_len:u64`, then the path; the caller supplies the ELF bytes in a grant it owns.
+  - **Kernel.** Route 2 is authorized as `LaunchRoute::Elf`, which refuses capability-bearing ceilings, and needs the caller's `SpawnFromElf` allowlist bit. Signature, manifest, measurement and Tier-2 admission are the same as route 1 (`SpawnRequest::prepare_session_elf`). `SessionPublication` records the route, and `current()` re-authorizes the commit with it. `vi()` maps `NotFound` to `Status::NotFound` instead of `Io`.
+  - **Shell.** `libs/terminal` `Operation::prepare_child_resolving` (used for foreground commands and pipeline stages) falls back to route 2 only when route 1 returns `NotFound`; any other refusal is final.
+  - **Evidence (QEMU RV64):**
+    - `tetris-c` is admitted to the Tier 2 Paged Domain from the shell;
+    - `/bin/ls` and `/bin/echo` run as external programs;
+    - `httpd` (NET_LISTENER) is refused at `route=Elf` with `Denied` and exit 126;
+    - a missing reviewed program (`lua`) reports `NotFound` and exit 127;
+    - kernel host tests 314/314 (2 new route-parse tests); `tier2-fault-isolation` 5/5.
+  - **Deviation from the CP1:** a path with no launch edge, such as `nosuchcmd`, is refused by the edge before any lookup and so exits 126 (`Denied`), not 127.
 - Follow-ups to P1:
   - **Test-hooks builds no longer clobber the default kernel.** `scripts/build-test-hooks-ci.sh` and `build-test-hooks-cells.ps1` built the `test-hooks` kernel (and `service-vfs` with its tiny quota) in the shared target directory. That overwrote `target/riscv64gc-unknown-none-elf/release/cellos-kernel`, so a default-kernel lane run afterwards booted the test-hooks image and never reached the shell. Both scripts now build under `target/test-hooks` (`CELLOS_TEST_HOOKS_TARGET_DIR`) and copy only `cellos-kernel-test-hooks` out. Verified: the default kernel's hash is unchanged across a run, and `tier2-fault-isolation` passes 5/5 right after.
   - **The kernel builds without `native-domains` again.** `SessionOutputPin::reserve` now gates its SAS ownership lease like `preflight_user_output` does, and the allocation-failure size dump gates `MappingEntry`. The 3 build errors from before P1 are gone, and the build is warning-free.
@@ -281,7 +291,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - RV64 `atomic-publication` 1/1 and `authority-provenance` 2/2; kernel host tests 309/309;
     - x86 candidate `ahci-x86` 8/8, `nvme-x86` 4/4, `x86_64-boot` 9/9.
   - **Gap against the CP1 evidence plan:** session publication builds page tables and is not host-reachable, so the drain and live-grant paths have no end-to-end host test; the commit decision itself is host-tested (follow-up entry above).
-  - **Still unlaunchable from the shell:** other disk-only Tier-2 apps such as `tetris-c` and `doom`, which still fail with `Io` because the program is only on disk and the kernel cannot read P2 on QEMU.
+  - **Disk-only programs** such as `tetris-c` became launchable from the shell in P2 (entry above).
 - RV64: the shell can launch external programs again; 11 boot-suite tests now pass (RV64 boot suite 51/65, was 40/65). Fixes, from the RCA below:
   - **`Io`.** The shell's foreground launch (`PrepareChild`, path route) resolves only through the kernel loader (VIFS1 + P2), and on QEMU the kernel cannot read P2. `scripts/gen-disk-ci.sh` and `gen_disk.ps1` now also place `/bin/shutdown`, `/bin/posix-shim-test`, `/bin/nc`, `/bin/curl`, `/bin/wget` and `/bin/mqtt` in VIFS1, the same treatment `hotswap` and `bench` already had.
   - **Unsigned network tools.** Both signing lists named the package `app-net-tools` instead of its binaries, so `curl`, `wget`, `nc`, `mqtt` and `ping` were never signed. They were admitted as Tier-2 domains, which session publication refuses (`Denied`). Each binary is now signed.

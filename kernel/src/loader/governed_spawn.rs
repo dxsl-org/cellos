@@ -248,11 +248,26 @@ impl super::SpawnRequest {
     /// route, measurement, CSpace, or runnable queue entry.
     pub(crate) fn prepare_session_path(self, path: &str)
         -> ViResult<(crate::task::PreparedElfTask, crate::task::TaskLaunchState)> {
-        if path.is_empty() || !path.starts_with('/') || path.len() > 4096
-            || path.as_bytes().contains(&0) { return Err(ViError::InvalidInput); }
+        session_path_valid(path)?;
         let bytes = super::early::EarlyLoader::read_file(path)?;
         prepare_gated(&bytes, path, self)
     }
+
+    /// Route 2: the same admission over caller-supplied bytes (`path` is the
+    /// advisory edge/measurement name). Signature, manifest, measurement and
+    /// domain classification are exactly route 1's; the edge was authorized as
+    /// `LaunchRoute::Elf` by the caller of this function.
+    pub(crate) fn prepare_session_elf(self, elf: &[u8], path: &str)
+        -> ViResult<(crate::task::PreparedElfTask, crate::task::TaskLaunchState)> {
+        session_path_valid(path)?;
+        prepare_gated(elf, path, self)
+    }
+}
+
+fn session_path_valid(path: &str) -> ViResult<()> {
+    if path.is_empty() || !path.starts_with('/') || path.len() > 4096
+        || path.as_bytes().contains(&0) { return Err(ViError::InvalidInput); }
+    Ok(())
 }
 
 pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {

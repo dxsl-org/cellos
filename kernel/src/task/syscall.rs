@@ -1937,22 +1937,54 @@ fn authorize_launch_edge(
     Ok(profile)
 }
 
-pub(super) fn session_launch_request(caller: usize, path: &str)
+pub(super) fn session_launch_request(caller: usize, path: &str,
+    route: crate::loader::launch_profile::LaunchRoute)
     -> Result<crate::loader::SpawnRequest, SyscallError> {
-    let profile = authorize_launch_edge(caller, crate::loader::launch_profile::LaunchRoute::Path, path)?;
+    let profile = authorize_launch_edge(caller, route, path)?;
     let guard = super::SCHEDULER.lock();
     let task = guard.as_ref().and_then(|s| s.tasks.get(&caller)).ok_or(SyscallError::PermissionDenied)?;
     // The CellSessionV1 transport itself carries no allowlist bit, so the
-    // launch it performs must hold the same SpawnFromPath bit as the syscall.
-    if let Some(bit) = ViSyscall::SpawnFromPath.allowlist_bit() {
+    // launch it performs must hold the same bit as the equivalent syscall:
+    // SpawnFromPath for the path route, SpawnFromElf for caller-owned bytes.
+    let syscall = if matches!(route, crate::loader::launch_profile::LaunchRoute::Elf) {
+        ViSyscall::SpawnFromElf
+    } else {
+        ViSyscall::SpawnFromPath
+    };
+    if let Some(bit) = syscall.allowlist_bit() {
         if (task.syscall_allowlist >> bit) & 1 == 0 {
-            log::warn!("[kernel] session launch denied for tid {}: SpawnFromPath bit {} not allowed", caller, bit);
+            log::warn!("[kernel] session launch denied for tid {}: {:?} bit {} not allowed", caller, syscall, bit);
             return Err(SyscallError::PermissionDenied);
         }
     }
     let ceiling = super::cap::CapSet::of_task(task);
     Ok(crate::loader::SpawnRequest::governed_caller(caller, task.cell_generation, ceiling,
         profile.child_ceiling, api::TaskPriority::Normal as u8, None))
+}
+
+/// The ELF bytes of a session route-2 launch: `len` bytes of a grant the caller
+/// owns, validated exactly as `SpawnFromElf` validates them. The slice is read
+/// in place (SAS) while `prepare_gated` copies the image; it is not retained.
+pub(super) fn session_elf_bytes(caller: usize, grant_id: usize, len: usize)
+    -> Result<&'static [u8], SyscallError> {
+    if len == 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    let base = {
+        let guard = grant_table_lock().lock();
+        let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
+        let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
+        if g.owner != caller {
+            return Err(SyscallError::PermissionDenied);
+        }
+        if len > g.size {
+            return Err(SyscallError::InvalidInput);
+        }
+        g.base
+    };
+    // SAFETY: the grant is owned by the caller and at least `len` bytes long;
+    // the same in-place read `SpawnFromElf` performs.
+    Ok(unsafe { core::slice::from_raw_parts(base as *const u8, len) })
 }
 
 fn caller_has_supervisor(caller_id: usize) -> bool {
