@@ -717,16 +717,23 @@ pub fn register_cell_authority(cell_id: CellId, generation: u64, ceiling: CapSet
 }
 
 /// Retire a CellAuthority upon cell termination.
+///
+/// Called from `Scheduler::finish_root_retirement` after the incarnation is
+/// quiescent, so no member can dispatch against it again. Under one hold of
+/// the table its parked files are released and its exact row is removed, so
+/// no observer sees a half-retired row; a later dispatch for this incarnation
+/// finds no row and is `Stale`. Lock order is `CELL_AUTHORITIES` then
+/// `CSPACE_FILES`, as in [`CellAuthority::close_ticket`].
 pub fn retire_cell_authority(cell_id: CellId, generation: u64) {
+    let key = (cell_id.0, generation);
     let mut auths = CELL_AUTHORITIES.lock();
-    if let Some(auth) = auths.get_mut(&(cell_id.0, generation)) {
-        auth.revoking = true;
-        for slot in auth.slots.iter_mut() {
-            if slot.in_use {
-                slot.admission_cut = true;
-            }
-        }
+    let Ok(index) = auths.rows.binary_search_by_key(&key, |r| r.0) else { return };
+    for slot in auths.rows[index].1.slots.iter().filter(|slot| slot.in_use) {
+        crate::cell::cap_registry::remove_ticket_file((key.0, key.1, slot.ticket));
     }
+    let retired = auths.rows.remove(index);
+    drop(auths);
+    drop(retired);
 }
 
 /// Dispatch a 48-byte Handle Control Request.
@@ -1154,6 +1161,47 @@ mod tests {
         req[24..32].copy_from_slice(&a.1.to_le_bytes());
         let r = dispatch_cspace_control(CellId(b.0), b.1, &req);
         assert_eq!(r.status, ControlStatus::Stale);
+    }
+
+    /// Retirement removes the exact incarnation's row and its parked files; a
+    /// successor incarnation's row and same-numbered ticket file survive.
+    #[test]
+    fn retirement_removes_exact_row_and_ticket_files() {
+        use crate::cell::cap_registry::{has_ticket_file, InertFile};
+        let (old, new) = ((47u64, 9u64), (47u64, 10u64));
+        assert!(register_cell_authority(CellId(old.0), old.1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(new.0), new.1, CapSet::EMPTY));
+        let (file, root) = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&old).unwrap();
+            let file = auth.allocate_file_slot(alloc::boxed::Box::new(InertFile), 0x1).unwrap();
+            let root = auth.mint_kernel_root(ResourceKind::CSpaceAuthority, 0x3, true).unwrap();
+            let successor = auths.get_mut(&new).unwrap()
+                .allocate_file_slot(alloc::boxed::Box::new(InertFile), 0x1).unwrap();
+            assert_eq!(successor, file);
+            (file, root)
+        };
+        assert!(has_ticket_file((old.0, old.1, file)));
+
+        retire_cell_authority(CellId(old.0), old.1);
+        assert!(CELL_AUTHORITIES.lock().get_mut(&old).is_none());
+        assert!(!has_ticket_file((old.0, old.1, file)));
+        assert!(CELL_AUTHORITIES.lock().get_mut(&new).is_some());
+        assert!(has_ticket_file((new.0, new.1, file)));
+
+        // A retired incarnation has no row: every action, QueryRevoke included, is Stale.
+        for (action, ticket) in [(0u32, file), (3, root)] {
+            let mut req = [0u8; 48];
+            req[0..4].copy_from_slice(&1u32.to_le_bytes());
+            req[4..8].copy_from_slice(&action.to_le_bytes());
+            req[8..16].copy_from_slice(&ticket.to_le_bytes());
+            let r = dispatch_handle_control(CellId(old.0), old.1, &req);
+            assert_eq!(r.status, ControlStatus::Stale);
+        }
+
+        retire_cell_authority(CellId(new.0), new.1);
+        assert!(CELL_AUTHORITIES.lock().get_mut(&new).is_none());
+        assert!(!has_ticket_file((new.0, new.1, file)));
     }
 
     #[test]

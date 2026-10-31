@@ -68,3 +68,17 @@ SAS review: replaced broad class-based raw-static exemptions with owner/context/
   - `HAS_X86_VIRT`: one global flag although root mode is per-CPU.
   - audit `RING` is never drained.
   - `BUMP`/`FREE`: cell VA slots leak on every publication.
+
+## Debt follow-up (2026-11-01, user request "xử lý 23 khai báo debt")
+
+- A read-only scout re-verified each entry. Five were wrong and are reclassified with evidence:
+  - SCHEDULER and ALLOCATOR: no IF=1 path allocates. The heap is IRQ-masked anyway now, defensively.
+  - `RANGES`: x86 copies the higher half and skips those records.
+  - `BUMP`/`FREE`: `CellSegments::drop` frees the slot.
+  - `IOMMU_CLEANUP_SERIAL`: a latency issue only, with no lock inversion.
+- Internal fixes, no semantic change: #2, #5, #11, #12/#13, #16, #19, #20/#21, and #22 (the audit ring keeps the newest records, per the user's choice). Found during the work and also fixed: the `sys_cap_revoke` CELL_AUTHORITIES→SCHEDULER lock-order inversion.
+- Fail-closed changes, under CP1 `p02-debt-semantic-cp1.md` (approved): #4, #10, #6 (also corrects the GCAP.ND decode), #7, #3 and #1.
+- Still debt: #23 owner admission, blocked by `.agents/260821-1700-tier1-baseline-admission` Phase 03. The user kept it as debt.
+- Not fixed, noted: `resource_registry::release_for` is called with the retiring cell id, but MMIO grants are keyed by task id. This is a possible pre-existing grant leak and needs its own review.
+- Evidence: see the CHANGELOG `### Fixed` entry.
+- Process note: a plain `cargo build -p cellos-kernel` embeds the stale `kernel/src/embedded/init`, so the shell never starts. Rebuild the default RV64 kernel only through `scripts/gen-disk-ci.sh`.

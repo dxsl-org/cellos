@@ -5,7 +5,7 @@
 
 use super::tcb::TaskState;
 use crate::sync::Spinlock;
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
 /// Only the private-root lifecycle helpers below name `Arc`; every other
 /// target/feature combination has nothing to import.
@@ -42,19 +42,16 @@ static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
 static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
-/// Set of physical frames currently issued via `ShmAlloc`.
-/// `ShmMap` accepts only handles that appear here, preventing a malicious
-/// cell from mapping arbitrary kernel/cell-owned frames into its address
-/// space via a forged handle.
+/// Physical frames currently issued via `ShmAlloc`, each bound to the Cell
+/// incarnation that allocated it.
 ///
-/// NOTE: This is still a single global pool — any cell that knows a peer's
-/// outstanding handle can map it. A per-owner ACL is the proper fix; this
-/// table is the minimum bar to stop "ShmMap kernel_text_phys" attacks.
-static SHM_HANDLES: Spinlock<Option<BTreeSet<usize>>> = Spinlock::new(None);
-
-fn shm_handles_lock() -> &'static Spinlock<Option<BTreeSet<usize>>> {
-    &SHM_HANDLES
-}
+/// `ShmMap` accepts only a handle that appears here AND belongs to the
+/// caller's live incarnation, so a cell can neither forge a physical address
+/// ("ShmMap kernel_text_phys") nor map a peer's or a dead predecessor's frame.
+/// Root retirement reclaims the dead incarnation's frames
+/// ([`release_shm_for`]). A leaf lock: never held while taking another.
+static SHM_HANDLES: Spinlock<BTreeMap<usize, crate::cell::state_stash::Incarnation>> =
+    Spinlock::new(BTreeMap::new());
 
 const MAX_IN_FLIGHT_DMA_PUBLICATIONS: usize = 64;
 static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> =
@@ -114,22 +111,72 @@ pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationG
     reserve_dma_publication(tid, quota)
 }
 
-fn shm_register(handle: usize) {
-    let mut guard = shm_handles_lock().lock();
-    if guard.is_none() {
-        *guard = Some(BTreeSet::new());
-    }
-    if let Some(set) = guard.as_mut() {
-        #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::GRANT_SHARED);
-        set.insert(handle);
-    }
+fn shm_register(frame: usize, owner: crate::cell::state_stash::Incarnation) {
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(None,
+        crate::memory::heap::p01_owner::GRANT_SHARED);
+    SHM_HANDLES.lock().insert(frame, owner);
 }
 
-fn shm_is_valid(handle: usize) -> bool {
-    let guard = shm_handles_lock().lock();
-    guard.as_ref().is_some_and(|set| set.contains(&handle))
+/// Whether `handle` is an outstanding `ShmAlloc` frame owned by exactly `owner`
+/// (same Cell and generation).
+fn shm_owned_by(handle: usize, owner: crate::cell::state_stash::Incarnation) -> bool {
+    SHM_HANDLES.lock().get(&handle) == Some(&owner)
+}
+
+/// Remove every `ShmAlloc` record of `owner` and return its frames. Records of
+/// any other Cell or generation are left untouched.
+fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
+    let mut frames = Vec::new();
+    SHM_HANDLES.lock().retain(|&frame, record| {
+        if *record == owner {
+            frames.push(frame);
+            false
+        } else {
+            true
+        }
+    });
+    frames
+}
+
+/// Reclaim the `ShmAlloc` frames of a retired root's incarnation.
+///
+/// Called from the root-retirement funnel after the generation is quiescent.
+/// `ShmMap` re-maps a frame's identity VA as USER. If that VA still maps the
+/// frame, the USER mapping is removed; where the kernel reaches RAM through the
+/// identity VA (`phys_to_virt` is the identity), the boot kernel mapping is
+/// restored as in [`free_grant_pages`], since every Usable frame must stay
+/// identity-mapped there. The page is flushed on every hart before the frame
+/// returns to the allocator.
+/// Lock order: SHM_HANDLES (released) → FRAME_ALLOCATOR → KERNEL_ROOT.
+pub(crate) fn release_shm_for(cell_id: u64, generation: u64) {
+    use crate::memory::frame::FRAME_ALLOCATOR;
+    use crate::memory::paging::Flags;
+    let frames = shm_take_for(crate::cell::state_stash::Incarnation { cell: cell_id, generation });
+    if frames.is_empty() {
+        return;
+    }
+    let kernel_rwx = Flags::from_bits(
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
+    );
+    if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
+        for &frame in &frames {
+            if crate::memory::paging::virt_to_phys(frame) == Some(frame) {
+                let _ = crate::memory::paging::unmap_page(frame);
+                if crate::memory::frame::phys_to_virt(frame) == frame {
+                    let _ = crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx);
+                }
+            }
+        }
+    }
+    for &frame in &frames {
+        crate::memory::tlb_shootdown::flush_page(frame);
+    }
+    if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
+        for &frame in &frames {
+            allocator.deallocate_frame(frame);
+        }
+    }
 }
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
@@ -1659,6 +1706,15 @@ fn caller_has_cap<F: Fn(&crate::task::tcb::Task) -> bool>(caller_id: usize, chec
 
 fn caller_has_block_io(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.block_io_cap.is_some())
+}
+
+/// `WaitIrq` admission for its `mmio_base` argument.
+///
+/// Zero means "no InterruptACK write". A nonzero base is stored and later
+/// dereferenced by the riscv64/aarch64 ISR, so it must be the exact base of an
+/// MMIO window the resource registry granted to the caller.
+fn wait_irq_base_permitted(caller_id: usize, mmio_base: usize) -> bool {
+    mmio_base == 0 || crate::resource_registry::lookup_mmio_owner(mmio_base) == Some(caller_id)
 }
 
 /// Read a task's live Cell identity `(cell_id, generation)`.
@@ -5656,13 +5712,18 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         }
         Syscall::ShmAlloc { size: _ } => {
             // Allocate a single frame from the global allocator and register
-            // it in the SHM handle table so subsequent ShmMap calls can
-            // verify the caller isn't forging an arbitrary physical address.
+            // it in the SHM handle table, bound to the caller's live Cell
+            // incarnation, so subsequent ShmMap calls can verify the caller
+            // owns the frame rather than forging an arbitrary physical address.
+            let Some((cell, generation)) = live_cell_identity(caller_id) else {
+                return Err(SyscallError::PermissionDenied);
+            };
+            let owner = crate::cell::state_stash::Incarnation { cell, generation };
             let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
             if let Some(allocator) = frame_guard.as_mut() {
                 if let Some(frame) = allocator.allocate_frame() {
                     drop(frame_guard);
-                    shm_register(frame);
+                    shm_register(frame, owner);
                     return Ok(frame);
                 }
             }
@@ -5672,10 +5733,15 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             handle,
             target_pid: _,
         } => {
-            // CRITICAL: handle must be a frame previously issued by ShmAlloc.
+            // CRITICAL: handle must be a frame previously issued by ShmAlloc
+            // to the caller's own incarnation (same Cell and generation).
             // Without this check, a cell could pass `handle = kernel_text_phys`
-            // and obtain a user-accessible mapping to kernel code.
-            if !shm_is_valid(handle) {
+            // and obtain a user-accessible mapping to kernel code, or map a
+            // peer's (or a dead predecessor's) frame.
+            let owns = live_cell_identity(caller_id).is_some_and(|(cell, generation)| {
+                shm_owned_by(handle, crate::cell::state_stash::Incarnation { cell, generation })
+            });
+            if !owns {
                 return Err(SyscallError::PermissionDenied);
             }
 
@@ -5971,13 +6037,18 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
             }
 
-            // Synchronize CSpace authority ceiling with the revoked TCB state
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(target_cell.0, target_gen)) {
-                let new_caps = super::SCHEDULER.lock().as_ref()
+            // Synchronize CSpace authority ceiling with the revoked TCB state.
+            // Lock order is SCHEDULER then CELL_AUTHORITIES, as in
+            // `register_cell_authority` and `finish_root_retirement`.
+            {
+                let sched = super::SCHEDULER.lock();
+                let new_caps = sched.as_ref()
                     .and_then(|sched| sched.tasks.get(&target_tid))
                     .map(|t| super::cap::CapSet::from_task(t))
                     .unwrap_or(super::cap::CapSet::EMPTY);
-                auth.ceiling = auth.ceiling.intersect(new_caps);
+                if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(target_cell.0, target_gen)) {
+                    auth.ceiling = auth.ceiling.intersect(new_caps);
+                }
             }
 
             crate::audit::log_event(
@@ -6089,13 +6160,22 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 && tid == 0
                 && service_id == api::syscall::service::GPU_DRIVER
             {
-                crate::task::drivers::driver_cell::register_gpu_driver(caller_id);
                 let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
-                crate::cell::service_registry::register(
-                    service_id,
+                // Role and route publish as one transaction against exact-TID
+                // teardown. This path has always answered 0 once authorized, so
+                // a rejected route only rolls the role back; it adds no refusal.
+                crate::task::drivers::driver_cell::publish_role_or_rollback(
                     caller_id,
-                    cell_id,
-                    generation,
+                    crate::task::drivers::driver_cell::register_gpu_driver,
+                    || {
+                        crate::cell::service_registry::register(
+                            service_id,
+                            caller_id,
+                            cell_id,
+                            generation,
+                        )
+                    },
+                    crate::task::drivers::driver_cell::deregister_gpu_driver,
                 );
                 return Ok(0);
             }
@@ -7998,6 +8078,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if caller_has_usb_driver(caller_id) && irq == hal_soc_bcm27xx::BCM2837.irq.usb as u8 {
                 // One-shot unmask: re-enable USB legacy IRQ 9 after driver has cleared GINTSTS
                 hal::bcm2835_legacy_irq::enable_irq(hal_soc_bcm27xx::BCM2837.irq.usb);
+            }
+            // The ISR dereferences a stored nonzero base (VirtIO InterruptACK),
+            // so only an MMIO window the caller was granted is accepted.
+            if !wait_irq_base_permitted(caller_id, mmio_base) {
+                return Err(SyscallError::PermissionDenied);
             }
             // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
             if crate::task::drivers::irq_wait::take_pending(irq) {
@@ -11023,5 +11108,77 @@ mod tests {
 
         // NotifyOnExit deaths are untouched and never offered by TryRecv.
         assert_eq!(task.pending_deaths, alloc::vec![(900, 5)]);
+    }
+
+    /// CP1 #4: a nonzero `WaitIrq` base is admitted only when it is the exact
+    /// base of an MMIO window the caller was granted; zero stays valid.
+    #[test]
+    fn wait_irq_base_requires_the_callers_exact_granted_window() {
+        use super::wait_irq_base_permitted;
+        const OWNER: usize = 0x7E1A;
+        const BASE: usize = 0x7E1A_0000_0000;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        assert!(crate::resource_registry::request_mmio_unchecked(
+            CellId(OWNER as u64),
+            BASE,
+            0x1000
+        )
+        .is_ok());
+
+        assert!(wait_irq_base_permitted(OWNER, 0));
+        assert!(wait_irq_base_permitted(OWNER, BASE));
+        // Another caller, an interior address and an ungranted base are refused.
+        assert!(!wait_irq_base_permitted(OWNER + 1, BASE));
+        assert!(!wait_irq_base_permitted(OWNER, BASE + 0x200));
+        assert!(!wait_irq_base_permitted(OWNER, BASE + 0x1000));
+
+        crate::resource_registry::release_for(CellId(OWNER as u64));
+        assert!(!wait_irq_base_permitted(OWNER, BASE));
+        assert!(wait_irq_base_permitted(OWNER, 0));
+    }
+
+    /// CP1 #10: an `ShmAlloc` frame maps only for the incarnation that
+    /// allocated it; another Cell or another generation of the same Cell is
+    /// refused, as is a handle that was never issued.
+    #[test]
+    fn shm_frame_is_owned_by_exactly_the_allocating_incarnation() {
+        use super::{shm_owned_by, shm_register, shm_take_for};
+        use crate::cell::state_stash::Incarnation;
+        const FRAME: usize = 0x5A0_0000;
+        let owner = Incarnation { cell: 0x5A1, generation: 3 };
+        shm_register(FRAME, owner);
+
+        assert!(shm_owned_by(FRAME, owner));
+        assert!(!shm_owned_by(FRAME, Incarnation { cell: 0x5A2, generation: 3 }));
+        assert!(!shm_owned_by(FRAME, Incarnation { cell: 0x5A1, generation: 4 }));
+        assert!(!shm_owned_by(FRAME + 0x1000, owner));
+
+        assert_eq!(shm_take_for(owner), alloc::vec![FRAME]);
+        assert!(!shm_owned_by(FRAME, owner));
+    }
+
+    /// CP1 #10: root-retirement reclaim removes the dead incarnation's records
+    /// and nothing else — not its successor generation's, not a peer's.
+    #[test]
+    fn shm_reclaim_takes_only_the_dead_incarnations_records() {
+        use super::{shm_owned_by, shm_register, shm_take_for};
+        use crate::cell::state_stash::Incarnation;
+        let dead = Incarnation { cell: 0x5B1, generation: 2 };
+        let successor = Incarnation { cell: 0x5B1, generation: 3 };
+        let peer = Incarnation { cell: 0x5B2, generation: 2 };
+        shm_register(0x5B0_0000, dead);
+        shm_register(0x5B0_1000, successor);
+        shm_register(0x5B0_2000, dead);
+        shm_register(0x5B0_3000, peer);
+
+        assert_eq!(shm_take_for(dead), alloc::vec![0x5B0_0000, 0x5B0_2000]);
+        assert!(!shm_owned_by(0x5B0_0000, dead));
+        assert!(!shm_owned_by(0x5B0_2000, dead));
+        assert!(shm_owned_by(0x5B0_1000, successor));
+        assert!(shm_owned_by(0x5B0_3000, peer));
+        assert!(shm_take_for(dead).is_empty());
+
+        assert_eq!(shm_take_for(successor), alloc::vec![0x5B0_1000]);
+        assert_eq!(shm_take_for(peer), alloc::vec![0x5B0_3000]);
     }
 }

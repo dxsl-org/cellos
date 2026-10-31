@@ -2,7 +2,8 @@
 //!
 //! CPL0 phase (paging and LAPIC live, before any Ring-3 task):
 //! - TSS IST1-3 and the NMI/#DF/#MC gates point at this CPU's own stacks and
-//!   every guard page is unmapped (a guard read takes a not-present #PF);
+//!   every guard page is unmapped (a guard read takes a not-present #PF),
+//!   including the one below the BSP boot stack;
 //! - `int $2` / `int $18` with a non-canonical RSP are delivered on IST1/IST3
 //!   with the bad RSP saved in the frame (the SYSCALL/SYSRET window hazard);
 //! - `int3` with a non-canonical RSP cannot be delivered, cascades into a real
@@ -218,10 +219,12 @@ pub(super) fn run_cpl0() {
     if ist::guards_installed() != ist::GUARD_PAGES {
         fail();
     }
-    // Every guard is genuinely unmapped in the live root: both ends of NMI.
+    // Every guard is genuinely unmapped in the live root: both ends of NMI and
+    // the top quadword below the BSP boot stack, where an overflow lands first.
     for guard in [
         ist::stack_bottom(cpu, IST_NMI) as u64 - 8,
         ist::stack_top(cpu, IST_NMI) + 8,
+        ist::boot_stack_guard() as u64 + 0x1000 - 8,
     ] {
         if probe_read(guard).is_some() || FAULT_ERROR.load(Ordering::Acquire) & PF_PRESENT != 0 {
             fail();
@@ -251,7 +254,7 @@ pub(super) fn run_cpl0() {
     expect_seen();
 
     super::super::uart_16550::puts(
-        "\nX86-IST: PASS gates=2/8/18->ist1/2/3 tss=own-cpu guards=8 guard-read=pf \
+        "\nX86-IST: PASS gates=2/8/18->ist1/2/3 tss=own-cpu guards=9 guard-read=pf boot-guard-read=pf \
          int2=ist1/bad-rsp int18=ist3/bad-rsp df=ist2/cascade nmi=ist1/lapic\n",
     );
     super::super::uart_16550::puts("X86-IST-HW: nmi=");
@@ -341,15 +344,14 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
 /// and leads it on disable.
 fn set_smap(on: bool) {
     const CR4_SMAP: u64 = 1 << 21;
-    let flag = core::ptr::addr_of_mut!(protect::SMAP_ACTIVE);
     unsafe {
         let cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
         if on {
             core::arch::asm!("mov cr4, {}", in(reg) cr4 | CR4_SMAP, options(nomem, nostack));
-            core::ptr::write_volatile(flag, 1);
+            protect::SMAP_ACTIVE.store(1, Ordering::Release);
         } else {
-            core::ptr::write_volatile(flag, 0);
+            protect::SMAP_ACTIVE.store(0, Ordering::Release);
             core::arch::asm!("mov cr4, {}", in(reg) cr4 & !CR4_SMAP, options(nomem, nostack));
         }
     }

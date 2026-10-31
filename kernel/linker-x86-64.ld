@@ -56,8 +56,14 @@ SECTIONS {
         __bss_end = .;
     }
 
-    /* 64 KiB kernel stack */
+    /* 64 KiB BSP kernel stack, preceded by one guard page. The section's
+     * page alignment keeps the .bss tail out of the guard page;
+     * ist::install_guards unmaps it so an overflow faults instead of
+     * corrupting .bss. */
     .stack : ALIGN(4096) {
+        __boot_stack_guard = .;
+        . = . + 0x1000;
+        __stack_bottom = .;
         . = . + 0x10000;
         __stack_top = .;
         . = ALIGN(4096);

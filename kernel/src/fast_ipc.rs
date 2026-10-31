@@ -17,7 +17,9 @@
 //! ## Safety invariant
 //! The handler pointer is published once at VFS startup (before any client call)
 //! with `Release` ordering, read with `Acquire`, and only ever nulled on VFS
-//! fault. Single-hart QEMU: no concurrent modification.
+//! fault. Every writer of the pointer or its owner takes `VFS_HANDLER_WRITE`,
+//! so an owner-conditional clear on one hart cannot interleave with a
+//! re-registration on another. Readers stay lock-free.
 
 use api::caller_identity::CallerIdentity;
 use api::fast_ipc::{TrustedHandle, VfsCell};
@@ -41,6 +43,10 @@ static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId that registered the handler; 0 = unregistered. Lets the kernel
 /// null the pointer when (and only when) that specific cell faults.
 static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
+/// Serializes every mutation of `VFS_HANDLER_PTR`/`VFS_HANDLER_CELL` so the
+/// owner compare and the paired clear in `clear_vfs_if_cell` are one step.
+/// Never held across a handler call.
+static VFS_HANDLER_WRITE: crate::sync::Spinlock<()> = crate::sync::Spinlock::new(());
 
 /// Register the kernel-side VFS fast-IPC handler for the future Tier-1 bridge.
 /// No Cell import resolves here today.
@@ -48,6 +54,7 @@ static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// The stable symbol name is retained for the reviewed bridge design.
 #[no_mangle]
 pub extern "Rust" fn register_vfs(handler: VfsFastHandler) {
+    let _write = VFS_HANDLER_WRITE.lock();
     // SAFETY: fn-ptr → *mut () for atomic storage; recovered with the same type
     // in `call_vfs`. Published Release so the handler body is visible to Acquire readers.
     VFS_HANDLER_PTR.store(handler as *mut (), Ordering::Release);
@@ -56,20 +63,25 @@ pub extern "Rust" fn register_vfs(handler: VfsFastHandler) {
 /// Record which cell owns the registered handler (kernel-internal; called from
 /// the VFS spawn path so a later fault of that cell can null the pointer).
 pub fn set_vfs_handler_cell(cell_id_raw: usize) {
-    VFS_HANDLER_CELL.store(cell_id_raw, Ordering::Relaxed);
+    let _write = VFS_HANDLER_WRITE.lock();
+    VFS_HANDLER_CELL.store(cell_id_raw, Ordering::Release);
 }
 
 /// Null the handler pointer iff `cell_id_raw` is the registered owner. Called by
 /// the kernel fault path so a future `call_vfs` does not jump into dead VFS code.
 pub fn clear_vfs_if_cell(cell_id_raw: usize) {
-    if VFS_HANDLER_CELL.load(Ordering::Relaxed) == cell_id_raw && cell_id_raw != 0 {
+    if cell_id_raw == 0 {
+        return;
+    }
+    let _write = VFS_HANDLER_WRITE.lock();
+    if VFS_HANDLER_CELL.load(Ordering::Acquire) == cell_id_raw {
         VFS_HANDLER_PTR.store(core::ptr::null_mut(), Ordering::Release);
-        VFS_HANDLER_CELL.store(0, Ordering::Relaxed);
+        VFS_HANDLER_CELL.store(0, Ordering::Release);
     }
 }
 
 pub(crate) fn is_registered_vfs_cell(cell_id_raw: usize) -> bool {
-    cell_id_raw != 0 && VFS_HANDLER_CELL.load(Ordering::Relaxed) == cell_id_raw
+    cell_id_raw != 0 && VFS_HANDLER_CELL.load(Ordering::Acquire) == cell_id_raw
 }
 
 #[cfg(feature = "test-hooks")]
@@ -89,6 +101,7 @@ pub(crate) fn vfs_handler_pointer_snapshot() -> usize {
 /// test-only fixture temporarily registers its own handler.
 #[cfg(feature = "test-hooks")]
 pub(crate) fn restore_vfs_handler_pointer_for_test(handler: usize) {
+    let _write = VFS_HANDLER_WRITE.lock();
     VFS_HANDLER_PTR.store(handler as *mut (), Ordering::Release);
 }
 
@@ -185,4 +198,64 @@ pub unsafe extern "Rust" fn call_vfs(
     let _sie = SieGuard::disable();
 
     handler(caller, req, out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe fn handler_a(
+        _: Option<CallerIdentity>,
+        _: &VfsRequest<'_>,
+        _: &mut [u8; IPC_BUF_SIZE],
+    ) -> usize {
+        1
+    }
+
+    unsafe fn handler_b(
+        _: Option<CallerIdentity>,
+        _: &VfsRequest<'_>,
+        _: &mut [u8; IPC_BUF_SIZE],
+    ) -> usize {
+        2
+    }
+
+    fn owner() -> usize {
+        VFS_HANDLER_CELL.load(Ordering::Acquire)
+    }
+
+    fn pointer() -> *mut () {
+        VFS_HANDLER_PTR.load(Ordering::Acquire)
+    }
+
+    /// A stale owner's clear must not tear down a newer registration; the
+    /// current owner's clear removes pointer and owner together.
+    #[test]
+    fn stale_owner_clear_preserves_newer_registration() {
+        const CELL_A: usize = 0xA11;
+        const CELL_B: usize = 0xB22;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let saved_ptr = pointer();
+        let saved_owner = owner();
+
+        register_vfs(handler_a);
+        set_vfs_handler_cell(CELL_A);
+        register_vfs(handler_b);
+        set_vfs_handler_cell(CELL_B);
+        let b_ptr = (handler_b as VfsFastHandler) as *mut ();
+
+        clear_vfs_if_cell(CELL_A);
+        assert_eq!(owner(), CELL_B);
+        assert_eq!(pointer(), b_ptr);
+        assert!(is_registered_vfs_cell(CELL_B));
+        assert!(!is_registered_vfs_cell(CELL_A));
+
+        clear_vfs_if_cell(CELL_B);
+        assert_eq!(owner(), 0);
+        assert!(pointer().is_null());
+        assert!(!is_registered_vfs_cell(CELL_B));
+
+        VFS_HANDLER_PTR.store(saved_ptr, Ordering::Release);
+        VFS_HANDLER_CELL.store(saved_owner, Ordering::Release);
+    }
 }

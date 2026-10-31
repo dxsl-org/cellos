@@ -8,7 +8,8 @@
 //!
 //! Layout per CPU, all in kernel `.bss` (mapped in every CR3 through the
 //! shared higher half): `[G][NMI][G][#DF][G][#MC][G]`. Every stack has an
-//! unmapped guard page on both ends once [`install_guards`] has run.
+//! unmapped guard page on both ends once [`install_guards`] has run, which
+//! also unmaps the page below the BSP boot stack (`kernel/linker-x86-64.ld`).
 //!
 //! Size: the deepest path is the shared entry (160-byte frame + 16 alignment
 //! + 528-byte FXSAVE area) plus the fatal dispatch and serial writer, about
@@ -25,8 +26,9 @@ pub fn guards_installed() -> usize {
     GUARDS_INSTALLED.load(Ordering::Acquire)
 }
 
-/// Guard pages the layout requires: four per CPU slot.
-pub const GUARD_PAGES: usize = (IST_COUNT + 1) * MAX_CPUS;
+/// Guard pages the layout requires: four per CPU slot plus the BSP boot-stack
+/// guard.
+pub const GUARD_PAGES: usize = (IST_COUNT + 1) * MAX_CPUS + 1;
 
 /// TSS IST slot numbers (1-based, as encoded in the IDT gate).
 pub const IST_NMI: u8 = 1;
@@ -44,6 +46,16 @@ pub const STACK_BYTES: usize = STACK_PAGES * PAGE;
 struct Region([u8; CPU_PAGES * PAGE * MAX_CPUS]);
 
 static mut REGION: Region = Region([0; CPU_PAGES * PAGE * MAX_CPUS]);
+
+unsafe extern "C" {
+    /// Linker symbol: the page directly below the 64 KiB BSP boot stack.
+    static __boot_stack_guard: u8;
+}
+
+/// The guard page directly below the BSP boot stack (`.stack`).
+pub fn boot_stack_guard() -> usize {
+    core::ptr::addr_of!(__boot_stack_guard) as usize
+}
 
 fn cpu_base(cpu: usize) -> usize {
     assert!(cpu < MAX_CPUS);
@@ -63,9 +75,9 @@ pub fn stack_top(cpu: usize, ist: u8) -> u64 {
 }
 
 fn guard_pages() -> impl Iterator<Item = usize> {
-    (0..MAX_CPUS).flat_map(|cpu| {
-        (0..=IST_COUNT).map(move |k| cpu_base(cpu) + k * (STACK_PAGES + 1) * PAGE)
-    })
+    (0..MAX_CPUS)
+        .flat_map(|cpu| (0..=IST_COUNT).map(move |k| cpu_base(cpu) + k * (STACK_PAGES + 1) * PAGE))
+        .chain(core::iter::once(boot_stack_guard()))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -103,10 +115,11 @@ unsafe fn leaf_slot(pml4: *mut u64, va: usize) -> Result<*mut u64, GuardError> {
 
 /// Unmap every guard page in the live root and verify each is gone.
 ///
-/// Call once on the BSP before the TSS/IST gates are loaded. Later roots (the
-/// kernel PML4, AP and domain roots) copy the higher-half PML4 entries and so
-/// share these page tables; only the local TLB needs flushing.
-/// Returns the number of guard pages installed.
+/// Call once on the BSP before the TSS/IST gates are loaded. The BSP is then
+/// running on the boot stack; its guard lies below `__stack_bottom`, outside
+/// the live stack. Later roots (the kernel PML4, AP and domain roots) copy the
+/// higher-half PML4 entries and so share these page tables; only the local TLB
+/// needs flushing. Returns the number of guard pages installed.
 ///
 /// # Safety
 /// Kernel mode, interrupts in any state, HHDM offset set, no other CPU running.

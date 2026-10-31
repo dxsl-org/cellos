@@ -1468,6 +1468,7 @@ pub fn yield_cpu() {
         }
         crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
         crate::resource_registry::release_for(types::CellId(retirement.owner.cell_id));
+        crate::task::syscall::release_shm_for(retirement.owner.cell_id, retirement.owner.generation);
         #[cfg(cellos_p01_trace)]
         if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize) {
             crate::p01_resources::checked(owner, 7);

@@ -165,7 +165,7 @@ fn scheduler_snapshot() -> SchedulerSnapshot {
         harts: crate::task::hart_local::HART_LOCALS
             .iter()
             .map(|hart| HartSchedulerSnapshot {
-                hart_id: hart.hart_id,
+                hart_id: hart.hart_id.load(Ordering::Acquire),
                 current_cell_id: hart.current_cell_id.load(Ordering::Acquire),
                 current_task_id: hart.current_task_id.load(Ordering::Acquire),
                 ready: hart.ready.lock().clone(),

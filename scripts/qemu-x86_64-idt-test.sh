@@ -15,7 +15,7 @@ OUT_DIR="$(dirname "$ISO")"
 RAW_LOG="$OUT_DIR/qemu.raw.log"
 LOG="$OUT_DIR/qemu.log"
 CPL0_MARKER="X86-IDT-SELFTEST: PASS bp=3 gp=13/ec=fffc gprs=15 df=ok align=ok timer=32"
-IST_MARKER="X86-IST: PASS gates=2/8/18->ist1/2/3 tss=own-cpu guards=8 guard-read=pf int2=ist1/bad-rsp int18=ist3/bad-rsp df=ist2/cascade nmi=ist1/lapic"
+IST_MARKER="X86-IST: PASS gates=2/8/18->ist1/2/3 tss=own-cpu guards=9 guard-read=pf boot-guard-read=pf int2=ist1/bad-rsp int18=ist3/bad-rsp df=ist2/cascade nmi=ist1/lapic"
 CPL3_MARKER="X86-IDT-CPL3: PASS fresh=ok int80=ok timer=32 switch=syscall-resume gs=kernel/user pkru=0/55555550/55555544"
 case "$PROTECT" in
     off)

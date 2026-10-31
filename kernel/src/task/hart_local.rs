@@ -106,15 +106,15 @@ fn owned_slot_index() -> usize {
 /// `#[repr(C)]` ensures Rust does not reorder or pad unexpectedly.
 #[repr(C)]
 pub struct ViHartLocal {
-    /// This hart's id (0 = boot hart).
-    pub hart_id: usize, // offset 0
+    /// This hart's id (0 = boot hart).  Written once by `install()`.
+    pub hart_id: AtomicUsize, // offset 0  (AtomicUsize is transparent over usize)
     /// Cell ID currently running on this hart.  0 = kernel (no quota limit).
     pub current_cell_id: AtomicUsize, // offset 8  (AtomicUsize is transparent over usize)
     /// Value of `gp` captured at `install()` time — handed to new cells.
-    pub kernel_gp: usize, // offset 16
+    pub kernel_gp: AtomicUsize, // offset 16
     /// Value of `tp` that cells inherit on context switch.  Currently 0 (cells
     /// have no TLS); Phase 05 may give each cell a private tp.
-    pub kernel_tp_for_cells: usize, // offset 24
+    pub kernel_tp_for_cells: AtomicUsize, // offset 24
     /// Per-hart ready queues keyed by priority (`u8`; higher = higher priority).
     /// Leaf lock: may be locked while holding SCHEDULER, never the reverse.
     pub ready: crate::sync::Spinlock<BTreeMap<u8, VecDeque<usize>>>,
@@ -220,10 +220,24 @@ pub struct ViHartLocal {
     pub current_tls_base: AtomicUsize,
 }
 
+// The leading word-sized fields keep their documented offsets (0/8/16/24 on
+// 64-bit targets): the `usize` → `AtomicUsize` change must not move them.
+const _: () = assert!(core::mem::offset_of!(ViHartLocal, hart_id) == 0);
+const _: () = assert!(
+    core::mem::offset_of!(ViHartLocal, current_cell_id) == core::mem::size_of::<usize>()
+);
+const _: () = assert!(
+    core::mem::offset_of!(ViHartLocal, kernel_gp) == 2 * core::mem::size_of::<usize>()
+);
+const _: () = assert!(
+    core::mem::offset_of!(ViHartLocal, kernel_tp_for_cells) == 3 * core::mem::size_of::<usize>()
+);
+
 /// Static array of per-hart local state, one entry per supported hart.
 /// Accessed without any lock: hart N only writes HART_LOCALS[N] from N.
-/// SAFETY: interior mutability via AtomicUsize; the `usize` fields are only
-/// written during `install()` before the hart handles any interrupt.
+/// SAFETY: interior mutability via atomics; `hart_id`, `kernel_gp` and
+/// `kernel_tp_for_cells` are only written during `install()` before the hart
+/// handles any interrupt.
 pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
     // `ZERO` is consumed exactly once below, by the `[ZERO; MAX_HARTS]` array-repeat
     // expression — rustc evaluates a `const` operand fresh per array slot, so each
@@ -234,10 +248,10 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
     // non-`Copy` element types).
     #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: ViHartLocal = ViHartLocal {
-        hart_id: 0,
+        hart_id: AtomicUsize::new(0),
         current_cell_id: AtomicUsize::new(0),
-        kernel_gp: 0,
-        kernel_tp_for_cells: 0,
+        kernel_gp: AtomicUsize::new(0),
+        kernel_tp_for_cells: AtomicUsize::new(0),
         ready: crate::sync::Spinlock::new(BTreeMap::new()),
         current_task_id: AtomicUsize::new(0),
         executing_task_id: AtomicUsize::new(0),
@@ -333,18 +347,14 @@ pub fn install(hart_id: usize) {
     // Capture the current gp and tp so we can hand them to cells unchanged.
     let (gp, tp) = crate::hal::arch::get_gp_tp();
 
-    // SAFETY: hart_id < MAX_HARTS; we only write HART_LOCALS[hart_id] from
-    // the hart with that id — no concurrent writers for this index.
+    // We only write HART_LOCALS[hart_id] from the hart with that id — no
+    // concurrent writers for this index.
     let hl = &HART_LOCALS[hart_id];
 
-    // Write hart_id once (not atomic — no other hart touches this slot yet).
-    // SAFETY: single writer; written before any reader could observe this hart.
-    unsafe {
-        let ptr = hl as *const ViHartLocal as *mut ViHartLocal;
-        core::ptr::addr_of_mut!((*ptr).hart_id).write(hart_id);
-        core::ptr::addr_of_mut!((*ptr).kernel_gp).write(gp);
-        core::ptr::addr_of_mut!((*ptr).kernel_tp_for_cells).write(tp);
-    }
+    // Written before this hart serves any trap; this hart is the only writer.
+    hl.hart_id.store(hart_id, Ordering::Relaxed);
+    hl.kernel_gp.store(gp, Ordering::Relaxed);
+    hl.kernel_tp_for_cells.store(tp, Ordering::Relaxed);
     hl.current_cell_id.store(0, Ordering::Relaxed);
     hl.current_cell_generation.store(0, Ordering::Relaxed);
     hl.current_domain_id.store(0, Ordering::Relaxed);
@@ -405,7 +415,7 @@ pub fn current_hart_id() -> usize {
         if tp == 0 {
             return 0;
         }
-        unsafe { (*(tp as *const ViHartLocal)).hart_id }
+        unsafe { (*(tp as *const ViHartLocal)).hart_id.load(Ordering::Relaxed) }
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {

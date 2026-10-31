@@ -7,6 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- Phase 02 writable-global debt: 22 of the 23 debt entries in `scripts/mutable-globals.toml` are resolved; #23 (owner admission) stays debt, blocked by tier1-admission Phase 03, as the user chose. Re-verification found 5 entries were wrong (SCHEDULER, `domain_supervisor_registry::RANGES`, `va_alloc` BUMP/FREE, and the IOMMU cleanup lock order); they are reclassified with evidence. The rest are fixed:
+  - **Internal fixes, no behaviour change:**
+    - The x86 SMAP flag is an `AtomicU8`.
+    - GPU self-registration uses the role/service publication transaction.
+    - `HART_LOCALS` boot fields are `AtomicUsize`, so the `*const`→`*mut` write is gone.
+    - A writer lock covers the VFS handler pointer/owner pair, so a retiring VFS can no longer erase a newer registration.
+    - Heap quota refunds go to the charged (cell, generation) through an owner word stored after each block. Every heap block grows by 8 bytes; quota charges are unchanged.
+    - Every heap entry masks local interrupts.
+    - A domain-admission drain bumps `GENERATION`.
+    - Cell retirement removes its CSpace authority row and its parked ticket files.
+    - `sys_cap_revoke` takes `SCHEDULER` before `CELL_AUTHORITIES`; it was the one path that took them in the reverse order.
+    - A full audit ring evicts its oldest whole records instead of dropping new ones.
+  - **Fail-closed changes** (CP1 `.agents/261030-1945-ginux-lessons-hardening/p02-debt-semantic-cp1.md`, approved by the user 2026-11-01):
+    - `WaitIrq` refuses a nonzero `mmio_base` that is not the caller's own claimed MMIO window (`PermissionDenied`). On riscv64/aarch64 the ISR had acked at a caller-chosen kernel address.
+    - `ShmMap` requires the allocating (cell, generation), and SHM frames are reclaimed at owner retirement.
+    - VT-d DIDs are bounded by `GCAP.ND` and reused after teardown; exhaustion makes the DMA map `Rejected`. The ND field is now decoded from bits 2:0 per the VT-d spec; it was bits 22:16.
+    - SVM ASIDs are bounded by CPUID `8000_000A.EBX` and reserved before any frame is allocated.
+    - A guard page sits below the x86 BSP boot stack.
+    - Each x86 AP enters the same SVM/VMX root mode as the BSP before going online; an AP that cannot stays offline.
+  - **Evidence:**
+    - kernel host tests 326/326, including new tests for the DID/ASID allocators, SHM ownership and reclaim, the `WaitIrq` base check, quota generation, the VFS pair, CSpace retirement and audit eviction;
+    - mutable-globals `--check` 0 problems, with 1 debt left;
+    - RV64 `tier2-fault-isolation` 5/5 and boot suite 51/65 (the same 14 known failures); `authority-provenance` 2/2;
+    - `atomic-publication` 9/10, the same as a HEAD test-hooks kernel built with the same embedded image (9/10). The failing run logs `AP-13: SKIP (hart 1 not online)`, a pre-existing boot-timing race;
+    - x86 candidate `x86_64-boot` 9/9, `ahci-x86` 8/8, `nvme-x86` 4/4 and `iommu-dmar-x86` 3/3;
+    - the x86 IDT fixture passes with `guards=9 … boot-guard-read=pf`;
+    - the x86 domain lane passes for 1 CPU, 2 CPUs, and 2 CPUs with `+svm`. The `+svm` run logs `root operation active (SVM)` and `topology online=2 qualified=yes`.
+  - **Not exercised:**
+    - the VMX AP path (TCG has no VMX);
+    - DID/ASID exhaustion on hardware;
+    - the riscv64/aarch64 SHM reclaim mapping steps.
+
+    `X86-VMM-SMOKE: FAIL … Preempted` predates this change; it is in earlier evidence logs.
 - License gate (ADR-0030): the `cargo deny check licenses` step had been failing on the existing `ocel-pdf` (AGPL-3.0-or-later) and `webpki-roots` (CDLA-Permissive-2.0) crates. Both are now admitted as named exceptions, so the check passes again. A new `scripts/check-copyleft-leaves.sh` step in the Security Scan job fails if any crate depends on a copyleft leaf Cell (`doom`, `ocel-pdf`). Copyleft code stays out of `kernel/`, `hal/`, `libs/` and driver Cells. `cargo deny check bans` passes again: the five path dependencies that lacked `version = "0.1.0"` (in `kernel`, `boot-config`, `c2c-render` and `ocel`) were reported as wildcards.
 - `service-net` public-PKI flavor (`qemu-dev-https`) pins are bumped to patched releases: `rustls-webpki` 0.103.7→0.103.16 (RUSTSEC-2026-0049/0098/0099/0104/0382, covering name constraints, CRL matching, a CRL parse panic and distrusted intermediates), `rustls-pki-types` 1.13.0→1.15.1, and `webpki-roots` 1.0.3→1.0.11 (RUSTSEC-2026-0381, distrusted emSign intermediates). Verified: x86 cell build of both TLS flavors, and host tests 76/76 (default) and 84/84 (`qemu-dev-https`).
 - RUSTSEC-2026-0387 (`crypto-bigint` 0.5 is not constant-time). `silo-guest`, which holds the long-term P-256 signing keys, moves to `p256` 0.14 / `crypto-bigint` 0.7. Its API is ported (`from_slice`, `to_sec1_point`, infallible `normalize_s`). A throwaway cross-version check over 50 keys found identical public points and low-s RFC 6979 signatures, with zero and out-of-range scalars still rejected. Its separate workspace gets its own `deny.toml` with no ignores and its own CI advisories step, which fails on the old lockfile. In the main workspace the advisory is ignored with a review date: `p256` there is verify-only (signing only under `cfg(test)`), and the only secret use is ephemeral ECDHE in `embedded-tls` 0.19, which has no 0.14 release.

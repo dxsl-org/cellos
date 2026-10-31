@@ -35,6 +35,17 @@ pub fn supported() -> bool {
     leaf.ecx & (1 << 2) != 0
 }
 
+/// Highest usable guest ASID: `CPUID.8000_000A:EBX` (NASID) minus one, since
+/// ASID 0 belongs to the host. Returns 0 (no guest ASID) when the extended
+/// leaf range does not reach `0x8000_000A`.
+pub fn max_asid() -> u32 {
+    let max_ext = core::arch::x86_64::__cpuid(0x8000_0000).eax;
+    if max_ext < 0x8000_000A {
+        return 0;
+    }
+    core::arch::x86_64::__cpuid(0x8000_000A).ebx.saturating_sub(1)
+}
+
 /// Returns `true` if firmware locked SVM off (`VM_CR.SVMDIS` set).
 ///
 /// Only meaningful when [`supported`] already returned `true` — reading the

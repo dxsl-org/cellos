@@ -233,12 +233,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // taken during gdt/idt init (including the IDT fixture's probes) would
         // #UD in the entry path and triple-fault without CR4.OSFXSR.
         crate::hal::init_sse();
-        // Unmap the guard pages around every NMI/#DF/#MC IST stack before the
-        // TSS and IST gates are loaded. The live root is Limine's; the kernel
-        // PML4, AP roots and domain roots later copy its higher-half entries,
-        // so they share these cleared PTEs.
+        // Unmap the guard pages around every NMI/#DF/#MC IST stack, and the one
+        // below the BSP boot stack, before the TSS and IST gates are loaded.
+        // The live root is Limine's; the kernel PML4, AP roots and domain roots
+        // later copy its higher-half entries, so they share these cleared PTEs.
         if let Err(error) = unsafe { crate::hal::x86_64::ist::install_guards() } {
-            panic!("x86: IST stack guard pages unavailable: {error:?}");
+            panic!("x86: IST/boot-stack guard pages unavailable: {error:?}");
         }
         crate::hal::gdt::init();
         crate::hal::idt::init();
@@ -632,59 +632,30 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         //     the hypervisor bit would close the capability on the only lane
         //     that can exercise it (the x86 hypervisor smoke lane).
         let _under_hypervisor = cpu_features::hypervisor_present();
-        match cpu_features::x86_virt_kind() {
-            Some(cpu_features::X86Virt::Svm) => {
-                let hsave_pa = {
-                    let mut guard = memory::frame::FRAME_ALLOCATOR.lock();
-                    guard
-                        .as_mut()
-                        .expect("Frame allocator not initialized")
-                        .allocate_frame()
-                };
-                match hsave_pa {
-                    // SAFETY: hsave frame is freshly allocated, exclusively
-                    // owned, never freed (root operation lasts until reset),
-                    // and never mapped into any guest NPT (P02 invariant).
-                    Some(pa) => match unsafe { hal::svm::enable(pa as u64) } {
-                        Ok(()) => {
-                            cpu_features::latch_x86_root_active();
-                            log_info("x86 virt: root operation active (SVM)");
-                        }
-                        Err(_) => log_info("x86 virt: SVM present but firmware-locked; cap closed"),
-                    },
-                    None => log_info("x86 virt: OOM allocating HSAVE frame; cap closed"),
-                }
+        // Root operation is per-CPU: the same helper runs on each AP before it
+        // goes online (task::smp::x86_secondary_main).
+        if cpu_features::x86_virt_kind() == Some(cpu_features::X86Virt::Vmx) {
+            crate::early_uart::text("\n[kernel] x86 virt: VMX preconditions CPUID=");
+            crate::early_uart::flag(hal::vmx::supported());
+            crate::early_uart::text(" FEATURE_CONTROL=");
+            crate::early_uart::hex(hal::vmx::feature_control() as usize);
+            crate::early_uart::text(" VMX_BASIC_revid=");
+            crate::early_uart::hex(hal::vmx::vmxon_revision() as usize);
+            crate::early_uart::text("\n");
+        }
+        match cpu_features::enter_x86_root_on_current_cpu() {
+            Ok(kind) => {
+                cpu_features::latch_x86_root_active();
+                log_info(match kind {
+                    cpu_features::X86Virt::Svm => "x86 virt: root operation active (SVM)",
+                    cpu_features::X86Virt::Vmx => "x86 virt: root operation active (VMX)",
+                });
             }
-            Some(cpu_features::X86Virt::Vmx) => {
-                crate::early_uart::text("\n[kernel] x86 virt: VMX preconditions CPUID=");
-                crate::early_uart::flag(hal::vmx::supported());
-                crate::early_uart::text(" FEATURE_CONTROL=");
-                crate::early_uart::hex(hal::vmx::feature_control() as usize);
-                crate::early_uart::text(" VMX_BASIC_revid=");
-                crate::early_uart::hex(hal::vmx::vmxon_revision() as usize);
-                crate::early_uart::text("\n");
-                let vmxon_pa = {
-                    let mut guard = memory::frame::FRAME_ALLOCATOR.lock();
-                    guard
-                        .as_mut()
-                        .expect("Frame allocator not initialized")
-                        .allocate_frame()
-                };
-                match vmxon_pa {
-                    Some(pa) => {
-                        let va = memory::frame::phys_to_virt(pa) as *mut u32;
-                        match unsafe { hal::vmx::enter_root(pa as u64, va) } {
-                            Ok(()) => {
-                                cpu_features::latch_x86_root_active();
-                                log_info("x86 virt: root operation active (VMX)");
-                            }
-                            Err(_) => log_info("x86 virt: VMX present but unavailable; cap closed"),
-                        }
-                    }
-                    None => log_info("x86 virt: OOM allocating VMXON frame; cap closed"),
-                }
+            Err(reason) => {
+                puts("[INFO] x86 virt: ");
+                puts(reason);
+                puts("; cap closed\n");
             }
-            None => log_info("x86 virt: not supported by CPU; cap closed"),
         }
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).

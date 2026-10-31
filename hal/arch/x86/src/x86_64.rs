@@ -129,14 +129,20 @@ fn cpu_feature_policy() -> usize {
 /// image whose kernel never touches U=1 memory outside a `user_access` window.
 #[cfg(target_arch = "x86_64")]
 pub mod protect {
+    use core::sync::atomic::{AtomicU8, Ordering};
+
     const CR4_UMIP: u64 = 1 << 11;
     const CR4_SMEP: u64 = 1 << 20;
     const CR4_SMAP: u64 = 1 << 21;
 
     /// Read by the IDT entry: nonzero means CLAC is valid and required.
+    ///
+    /// Every CPU stores it from `init_cpu` while others read it, so it is
+    /// atomic; the entry asm's `cmpb` byte load relies on the one-byte layout.
     #[used]
     #[export_name = "ViCell_smap_active"]
-    pub static mut SMAP_ACTIVE: u8 = 0;
+    pub static SMAP_ACTIVE: AtomicU8 = AtomicU8::new(0);
+    const _: () = assert!(core::mem::size_of::<AtomicU8>() == 1);
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     pub struct Caps {
@@ -194,7 +200,7 @@ pub mod protect {
                 core::arch::asm!("mov cr4, {}", in(reg) cr4 | bits, options(nomem, nostack));
                 if want.smap {
                     // CR4.SMAP is set; CLAC is now a valid instruction.
-                    core::ptr::write_volatile(core::ptr::addr_of_mut!(SMAP_ACTIVE), 1);
+                    SMAP_ACTIVE.store(1, Ordering::Release);
                 }
             }
         }
@@ -207,7 +213,7 @@ pub mod protect {
     /// runs inside it; AC is cleared before interrupts return. `f` must not
     /// unwind. Without SMAP active this is just `f()`.
     pub fn user_access<R>(f: impl FnOnce() -> R) -> R {
-        if unsafe { core::ptr::read_volatile(core::ptr::addr_of!(SMAP_ACTIVE)) } == 0 {
+        if SMAP_ACTIVE.load(Ordering::Acquire) == 0 {
             return f();
         }
         let flags = super::context::save_and_disable_interrupts();

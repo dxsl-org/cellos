@@ -699,6 +699,10 @@ static X86_READY: AtomicBool = AtomicBool::new(false);
 static X86_QUALIFIED: AtomicBool = AtomicBool::new(false);
 #[cfg(target_arch = "x86_64")]
 static X86_BOOT_COMPLETE: AtomicBool = AtomicBool::new(false);
+/// Set by the AP instead of `X86_READY` when it cannot enter the x86 root
+/// operation the BSP latched; that AP parks and never goes online.
+#[cfg(target_arch = "x86_64")]
+static X86_AP_ROOT_REFUSED: AtomicBool = AtomicBool::new(false);
 #[cfg(target_arch = "x86_64")]
 static X86_PREEMPT: [AtomicBool; MAX_HARTS] = [const { AtomicBool::new(false) }; MAX_HARTS];
 
@@ -852,7 +856,15 @@ pub fn start_secondaries() {
     // routine with interrupts masked. Restore its original state afterwards.
     let flags: usize;
     unsafe { core::arch::asm!("pushfq", "pop {}", "sti", out(reg) flags); }
-    x86_bounded_wait(|| X86_READY.load(Ordering::Acquire));
+    x86_bounded_wait(|| {
+        X86_READY.load(Ordering::Acquire) || X86_AP_ROOT_REFUSED.load(Ordering::Acquire)
+    });
+    if X86_AP_ROOT_REFUSED.load(Ordering::Acquire) {
+        log::warn!("[x86-smp] AP {} refused x86 root operation; it stays offline", ap_id);
+        finish_up();
+        if flags & (1 << 9) == 0 { unsafe { core::arch::asm!("cli", options(nomem, nostack)); } }
+        return;
+    }
     let epoch = request_tlb_flush(1);
     x86_bounded_wait(|| tlb_flush_completed(1, epoch));
     X86_QUALIFIED.store(true, Ordering::Release);
@@ -872,6 +884,16 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
         panic!("[x86-smp] active AP feature/isolation initialization failed");
     }
     crate::task::hart_local::install(logical);
+    // HypervisorCap is system-wide once the BSP latched root operation, so this
+    // CPU must enter the same root operation (own HSAVE/VMXON frame) before it
+    // may go online. A refused AP parks with IF clear and is never published.
+    if crate::cpu_features::has_x86_virt() {
+        if let Err(reason) = crate::cpu_features::enter_x86_root_on_current_cpu() {
+            log::warn!("[x86-smp] AP {} x86 root operation refused: {}", lapic_id, reason);
+            X86_AP_ROOT_REFUSED.store(true, Ordering::Release);
+            loop { unsafe { core::arch::asm!("cli", "hlt", options(nomem, nostack)); } }
+        }
+    }
     // Establish this CPU's own idle activation before enabling delivery.
     unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
     let epoch = request_tlb_flush(0);

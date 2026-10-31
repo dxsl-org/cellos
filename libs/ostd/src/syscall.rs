@@ -2158,8 +2158,10 @@ pub fn sys_request_mmio(base: usize, len: usize) -> usize {
 ///
 /// `mmio_base` is the VirtIO MMIO slot base address; the kernel ISR uses it to
 /// write the InterruptACK register (offset 0x64) before marking the IRQ pending,
-/// preventing interrupt storms on level-triggered VirtIO devices. Pass 0 for
-/// non-VirtIO devices (e.g. PCIe MSI or GPIO).
+/// preventing interrupt storms on level-triggered VirtIO devices. A nonzero base
+/// must be the exact base of a window this caller claimed via `sys_request_mmio`;
+/// any other base is refused with `PermissionDenied`. Pass 0 for non-VirtIO
+/// devices (e.g. PCIe MSI or GPIO).
 ///
 /// Lost-wakeup safe: an IRQ that fired before this call is returned immediately.
 /// Requires PcieDriverCap or PlatformCap (allowlist bit 51).

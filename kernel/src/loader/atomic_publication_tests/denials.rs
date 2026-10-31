@@ -299,7 +299,9 @@ fn task_table_reservation_contract() -> bool {
 
 /// A prepared CSpace authority is addressable only after commit, commits without
 /// growing the table, and an aborted reservation releases its promise.
+/// Retirement removes the exact row and the files parked behind its tickets.
 fn authority_reservation_contract() -> bool {
+    use crate::cell::cap_registry::{has_ticket_file, InertFile};
     use crate::cell::cspace::{retire_cell_authority, AuthorityReservation, CELL_AUTHORITIES};
     let cell = types::CellId(62);
     let generation = 0x5EA1_0001u64;
@@ -319,9 +321,16 @@ fn authority_reservation_contract() -> bool {
     reservation.commit();
     let (rows2, capacity_after, reservations2) = CELL_AUTHORITIES.lock().test_shape();
     let published = CELL_AUTHORITIES.lock().get_mut(&key).is_some();
+    let file = CELL_AUTHORITIES.lock().get_mut(&key)
+        .and_then(|auth| auth.allocate_file_slot(alloc::boxed::Box::new(InertFile), 0x1).ok());
+    let attached = file.is_some_and(|ticket| has_ticket_file((key.0, key.1, ticket)));
     retire_cell_authority(cell, generation);
+    let (rows3, _, reservations3) = CELL_AUTHORITIES.lock().test_shape();
+    let removed = CELL_AUTHORITIES.lock().get_mut(&key).is_none() && rows3 == rows0 && reservations3 == 0;
+    let released = file.is_some_and(|ticket| !has_ticket_file((key.0, key.1, ticket)));
     hidden && rows1 == rows0 && reservations1 == 0
         && rows2 == rows0 + 1 && capacity_after == capacity_before && reservations2 == 0 && published
+        && attached && removed && released
 }
 
 /// The real transport entry rejects a zero correlation ID as a header-only

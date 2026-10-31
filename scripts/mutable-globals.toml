@@ -205,13 +205,12 @@ review = "kernel/src/cpu_features.rs:detect; kernel/src/main.rs:635; kernel/src/
 key = "kernel::cpu_features::HAS_X86_VIRT"
 lifetime = "global"
 mutation = "atomic"
-owner = "kmain x86 virt bring-up: latch_x86_root_active after hal::svm::enable / hal::vmx::enter_root succeed on the BSP; read by task::cap HypervisorCap grant and kmain smoke gates"
+owner = "cpu_features: latch_x86_root_active after enter_x86_root_on_current_cpu succeeds on the BSP; every AP enters the same root mode in x86_secondary_main before it is published online; read by task::cap HypervisorCap grant and kmain smoke gates"
 contexts = ["boot", "normal"]
-seal = "latched at most once in kmain (main.rs:650/678) on the BSP before start_secondaries"
+seal = "latched at most once in kmain on the BSP before start_secondaries"
 retirement = "never: lives for the whole run"
-rationale = "Relaxed single-writer latch set before APs start, so ordering is adequate; but it records a per-CPU state (EFER.SVME / VMXON) as a system-wide capability, see debt."
-review = "kernel/src/cpu_features.rs:latch_x86_root_active; kernel/src/main.rs:619-688; kernel/src/task/cap.rs:396-399; hal/arch/x86/src/x86_64.rs:init_secondary_cpu"
-debt = "Hazard [INFERENCE]: root operation is entered only on the BSP; init_secondary_cpu never enables SVM/VMX and cpu_feature_policy does not compare them, yet this global flag grants HypervisorCap system-wide. No vCPU-to-CPU0 pinning was found in svm_registry, so a vCPU task scheduled on the AP would execute VMRUN/VMLAUNCH outside root operation (#UD/#GP)."
+rationale = "Relaxed single-writer latch set before APs start. The flag stays system-wide because no CPU runs tasks without root operation: an AP that cannot enter it parks with X86_AP_ROOT_REFUSED and never sets HART_ONLINE, so a vCPU can only be scheduled on a CPU in root operation (CP1 p02-debt-semantic #1)."
+review = "kernel/src/cpu_features.rs:enter_x86_root_on_current_cpu; kernel/src/main.rs (BSP root entry); kernel/src/task/smp.rs:x86_secondary_main; kernel/src/task/smp.rs:start_secondaries; kernel/src/task/cap.rs:396-399"
 
 [[global]]
 key = "kernel::system_config::LOGGING_EXPLICIT"
@@ -370,14 +369,13 @@ review = "hal/arch/x86/src/x86_64.rs:publish_boot_cpu_policy; hal/arch/x86/src/x
 [[global]]
 key = "hal-x86::x86_64::protect::SMAP_ACTIVE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
-mutation = "static-mut"
-owner = "hal-x86::x86_64::protect: init_cpu (BSP kmain:250 and each AP) stores 1 under feature x86-smap; read by IDT common entry asm (ViCell_smap_active) and protect::user_access; x86-idt-cpl3-test set_smap toggles it"
+mutation = "atomic"
+owner = "hal-x86::x86_64::protect: init_cpu (BSP kmain and each AP) stores 1 under feature x86-smap; read by IDT common entry asm (ViCell_smap_active byte) and protect::user_access; x86-idt-cpl3-test set_smap toggles it"
 contexts = ["boot", "ap", "normal", "irq", "exception", "nmi"]
 seal = "set by BSP protect::init_cpu in kmain before Ring-3 entry and AP start (x86-smap builds only); each AP re-stores the same 1"
 retirement = "never: lives for the whole run"
-rationale = "The IDT entry runs CLAC iff this byte is nonzero for every vector including NMI/#DF/#MC; CLAC validity follows CPUID (equal on the AP via the policy check), so the AP window between lidt and init_cpu is safe. The AP's write_volatile re-store races non-atomically with BSP readers (see debt)."
+rationale = "AtomicU8 (size asserted 1) exported as ViCell_smap_active so the entry asm byte load is unchanged; Release stores after CR4.SMAP is set (and before it is cleared in set_smap), Acquire loads in user_access, so the AP's same-value store is no longer a Rust data race. The IDT entry runs CLAC iff the byte is nonzero for every vector including NMI/#DF/#MC."
 review = "hal/arch/x86/src/x86_64.rs:protect::init_cpu; hal/arch/x86/src/x86_64.rs:protect::user_access; hal/arch/x86/src/x86_64/idt/entry.rs:x86_64_idt_common; hal/arch/x86/src/x86_64/idt/probe_ist.rs:set_smap"
-debt = "Hazard: init_secondary_cpu -> protect::init_cpu performs a non-atomic write_volatile to this static mut while the BSP may concurrently read it (user_access read_volatile, IDT entry cmpb). Same-value byte store, benign on x86 [INFERENCE], but not data-race-free in Rust's model; an AtomicU8 or a BSP-only store would remove it."
 
 [[global]]
 key = "hal-x86::x86_64::ARCH"
@@ -625,13 +623,12 @@ review = "hal/arch/x86/src/x86_64/domain.rs:init_pcid; hal/arch/x86/src/x86_64/d
 key = "hal-x86::x86_64::boot::__stack_top @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "linker"
-owner = "kernel/linker-x86-64.ld defines it as the top of the 64 KiB .stack; HAL _start loads it into RSP; the region is the BSP's kmain stack for the whole run"
+owner = "kernel/linker-x86-64.ld defines it as the top of the 64 KiB .stack, above __stack_bottom and the 4 KiB __boot_stack_guard page; HAL _start loads it into RSP; the region is the BSP's kmain stack for the whole run"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: the region is the live BSP kmain stack (kmain is `-> !`), written by every activation on it"
 retirement = "never: kmain never returns"
-rationale = "The symbol is a link-time address; the storage behind it is the BSP boot/kmain stack, also used by non-IST interrupts and exceptions taken while kmain runs (NMI/#DF/#MC switch to IST stacks). No guard page separates it from .bss (see debt)."
-review = "kernel/linker-x86-64.ld:59-65; hal/arch/x86/src/x86_64/boot.rs:9-33; hal/arch/x86/src/x86_64/ist.rs:install_guards"
-debt = "Hazard: linker-x86-64.ld places .stack directly after .bss with no unmapped guard page, and install_guards covers only the IST region, so a BSP stack overflow silently corrupts .bss instead of faulting into the #DF IST path; kernel/src/memory/cell_quota.rs:397-402 records this failure mode on another arch."
+rationale = "The symbol is a link-time address; the storage behind it is the BSP boot/kmain stack, also used by non-IST interrupts and exceptions taken while kmain runs (NMI/#DF/#MC switch to IST stacks). ist::install_guards unmaps __boot_stack_guard, so an overflow takes #PF and escalates to #DF on IST2 instead of corrupting .bss (CP1 p02-debt-semantic #3)."
+review = "kernel/linker-x86-64.ld (.stack: __boot_stack_guard, __stack_bottom, __stack_top); hal/arch/x86/src/x86_64/boot.rs; hal/arch/x86/src/x86_64/ist.rs:guard_pages; hal/arch/x86/src/x86_64/idt/probe_ist.rs (boot-guard-read=pf)"
 
 [[global]]
 key = "hal-x86::x86_64::boot::global_asm!#1 @cfg(target_arch = \"x86_64\" & target_os = \"none\")"
@@ -796,9 +793,8 @@ owner = "task::drivers::irq_wait; stored by register_waiter from the WaitIrq sys
 contexts = ["normal", "irq"]
 seal = "none: rewritten on every WaitIrq registration"
 retirement = "release_waiters_for(tid) clears the base before releasing the slot, so the ISR stops acking the dead owner's device"
-rationale = "Release/Acquire stores and loads order the base against the waiter CAS adequately for the ISR reader, and the clear-before-release order in release_waiters_for is correct. On x86_64 the value is stored and cleared (syscall, and the yield_cpu sweep/retirement which can run in the timer ISR) but never dereferenced."
-review = "kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status; kernel/src/task/syscall.rs:9621 (WaitIrq decode); kernel/src/task/syscall.rs:7990"
-debt = "Hazard: mmio_base is the raw a1 argument of the WaitIrq syscall and is never validated against the caller's RequestMmio grants (syscall.rs decode -> register_waiter), contrary to the SAFETY comment in signal_irq; on riscv64/aarch64 the ISR then volatile-reads/writes mmio_base+0x60/+0x64 (arbitrary kernel-address access from a capability-holding cell). Latent on x86_64 because signal_irq and get_mmio_base have no x86 caller."
+rationale = "Release/Acquire stores and loads order the base against the waiter CAS adequately for the ISR reader, and the clear-before-release order in release_waiters_for is correct. A nonzero base is accepted only if it is the exact base of an MMIO window the caller claimed (wait_irq_base_permitted -> resource_registry::lookup_mmio_owner), else WaitIrq returns PermissionDenied (CP1 p02-debt-semantic #4), so the riscv64/aarch64 ISR only touches the caller's own device. On x86_64 the value is stored and cleared but never dereferenced."
+review = "kernel/src/task/syscall.rs:wait_irq_base_permitted; kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::BLOCK_DRIVER_CELL"
@@ -830,9 +826,8 @@ owner = "task::drivers::driver_cell; written by register_gpu_driver from the Reg
 contexts = ["normal", "irq"]
 seal = "none: overwritten by each GPU self-registration"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
-rationale = "Release store / Acquire load / exact-tid CAS are sufficient for a single tid value, and the teardown runs from exit_task (normal or timer/IPI ISR via yield_cpu) with no blocking."
-review = "kernel/src/task/drivers/driver_cell.rs:register_gpu_driver; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall.rs:6092; kernel/src/task/syscall.rs:7393"
-debt = "Hazard: unlike block/NIC/USB-HID, the GPU path (syscall.rs:6092) calls register_gpu_driver and then service_registry::register without ROLE_PUBLICATION, so deregister_all_for can interleave between role and service publication and leave a GPU_DRIVER route naming a dead tid; whether exit_task can run for a tid that is mid-syscall on another hart was not established."
+rationale = "Release store / Acquire load / exact-tid CAS are sufficient for a single tid value. Role and service route publish together through driver_cell::publish_role_or_rollback under ROLE_PUBLICATION, the same transaction as block/NIC, so deregister_all_for cannot interleave and a rejected route rolls the role back."
+review = "kernel/src/task/syscall.rs (GPU self-registration -> publish_role_or_rollback); kernel/src/task/drivers/driver_cell.rs:publish_role_or_rollback; kernel/src/task/drivers/driver_cell.rs:deregister_all_for"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::USB_HID_PRODUCER_CELL"
@@ -1000,16 +995,15 @@ rationale = "IRQ-masking spinlock taken first in the DOMAINS -> CONTEXTS -> INVA
 review = "kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell; kernel/src/task/drivers/iommu_x86.rs:unmap_cell_domain; kernel/src/task/drivers/iommu_x86.rs:unmap_range_for_cell; kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:retry_retired_dma_cleanup"
 
 [[global]]
-key = "kernel::task::drivers::iommu_x86::DID_COUNTER @cfg(target_arch = \"x86_64\")"
+key = "kernel::task::drivers::iommu_x86::VTD_DIDS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
-mutation = "atomic"
-owner = "task::drivers::iommu_x86; DID allocator advanced by map_range_for_cell when it creates a new per-cell VtdDomain (GrantDma syscall)"
-contexts = ["normal"]
-seal = "none: advanced on every new domain for the whole run"
-retirement = "never: DIDs are not recycled when unmap_cell_domain drops a domain"
-rationale = "fetch_add(Relaxed) under VTD_DOMAINS gives unique values without ordering needs, and only the syscall path allocates (no ISR)."
-review = "kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell; kernel/src/task/drivers/iommu_x86.rs:init_hw"
-debt = "Hazard: the counter is never checked against the hardware domain-ID width (init_hw computes max_did from GCAP.ND but does not store or enforce it) and the AtomicU16 wraps, so after enough per-cell domain creations (driver restarts) it issues DIDs above the supported range, DID 0, or a DID still owned by a live domain."
+mutation = "spinlock"
+owner = "task::drivers::iommu_x86; DidAllocator bitmap bounded by GCAP.ND (set in init_hw); allocate in map_range_for_cell when it creates a per-cell VtdDomain, release after unmap_cell_domain's invalidation completes or when a break-before-make fails"
+contexts = ["boot", "normal", "irq"]
+seal = "limit set once in init_hw; bitmap mutated for the whole run"
+retirement = "unmap_cell_domain returns the DID only after context/IOTLB invalidation completed; a failed invalidation keeps it (the domain is reinserted)"
+rationale = "Taken only under VTD_DOMAINS (or alone in init_hw), so allocation and reuse are serialised with domain publication; IRQ-masking Spinlock covers the retirement funnel reached from the timer ISR. DIDs 1..limit only; exhaustion makes the DMA map Rejected instead of issuing a wrapped, zero or colliding DID (CP1 p02-debt-semantic #6). The ND decode now uses GCAP bits 2:0 per the VT-d spec."
+review = "kernel/src/task/drivers/iommu_x86.rs:DidAllocator; kernel/src/task/drivers/iommu_x86.rs:did_limit; kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell; kernel/src/task/drivers/iommu_x86.rs:unmap_cell_domain; tests did_allocator_issues_bounded_unique_ids_and_reuses_released_ones"
 
 [[global]]
 key = "kernel::task::drivers::iommu_x86::VTD_INVALIDATION_LOCK @cfg(target_arch = \"x86_64\")"
@@ -1206,9 +1200,8 @@ owner = "hypervisor::svm_registry; boot-wide SVM ASID allocator advanced by crea
 contexts = ["boot", "normal"]
 seal = "none: advanced on every SVM vCPU creation for the whole run"
 retirement = "never: ASIDs are deliberately not reused after reap_vms_for_task"
-rationale = "fetch_update(Relaxed) yields unique ASIDs and refuses wrap at u32::MAX; allocation runs from the hypervisor CreateVcpu syscall and the test-hooks boot smoke, never an ISR."
-review = "kernel/src/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/vmcb.rs:init"
-debt = "Hazard: the ASID is never bounded by the CPU's supported ASID count (CPUID Fn8000_000A EBX NASID); no NASID check exists in svm_registry or the x86 HAL, so once more vCPUs have been created than NASID-1 the VMCB carries an unsupported ASID and VMRUN is expected to fail [INFERENCE from the AMD SVM spec]."
+rationale = "fetch_update(Relaxed) issues ASIDs only in 1..=max_asid (CPUID 8000_000A.EBX - 1) and never wraps; the ASID is reserved before any VMCB/host/bitmap frame is allocated, so exhaustion refuses create_vcpu without leaking (CP1 p02-debt-semantic #7). Allocation runs from the hypervisor CreateVcpu syscall and the test-hooks boot smoke, never an ISR."
+review = "kernel/src/hypervisor/svm_registry.rs:next_asid; kernel/src/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; test asid_reservation_is_bounded_and_never_wraps"
 
 [[global]]
 key = "kernel::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = \"x86_64\")"
@@ -1241,9 +1234,8 @@ owner = "kernel::task scheduler (Scheduler: task table, zombies, retirement funn
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "Some(Scheduler) installed once in task::init (ptr::write under the guard) before the timer/APs run; contents mutated for the whole run"
 retirement = "never: the Option is never reset to None outside test fixtures; per-task state is retired through take_reapable_zombies/take_quiescent_root_retirements"
-rationale = "crate::sync::Spinlock masks IF for the guard lifetime, so a timer/IPI on the same CPU cannot re-enter it; NMI/#DF/#MC route to fatal::halt and never touch it, and kernel-mode #PF panics before locking. But task.rs:yield_cpu is reached from the x86 timer ISR (hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch Route::Timer -> task.rs:vi_timer_tick), the IPI ISR (task.rs:vi_ipi_service), the user-fault path (vi_terminate_on_user_trap_fault) and the AP idle loop (smp.rs:x86_secondary_main, only after X86_BOOT_COMPLETE), so the ISR does reaping, allocation/free, DMA teardown and logging with IF masked; the global heap (linked_list_allocator LockedHeap) does not mask IF, so this is only deadlock-free while x86 kernel code allocates with IF=0 (SYSCALL FMASK clears IF)."
-review = "kernel/src/sync.rs:Spinlock::lock; kernel/src/task.rs:init; kernel/src/task.rs:yield_cpu; kernel/src/task.rs:vi_timer_tick; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/memory/heap.rs:QuotaAlloc; hal/arch/x86/src/x86_64/syscall.rs:45"
-debt = "Hazard: the timer ISR runs the whole yield_cpu retirement funnel (heap alloc/free via non-IRQ-masking LockedHeap, IOMMU teardown, logging). Any x86 kernel window that allocates with IF=1 (boot path after X86_BOOT_COMPLETE, activations restored by popfq) can deadlock on the heap lock on the same CPU; not proven absent."
+rationale = "crate::sync::Spinlock masks IF for the guard lifetime, so a timer/IPI on the same CPU cannot re-enter it; NMI/#DF/#MC route to fatal::halt and never touch it. yield_cpu (timer ISR, IPI ISR, user-fault path, AP idle loop) executes cli on x86 and saves/clears SIE on riscv64 before any scheduler or retirement work, and the retirement heap allocation it does therefore runs with interrupts masked. Re-verified 2026-11-01: no reachable IF=1/SIE=1 kernel path allocates while holding the heap lock (see the ALLOCATOR entry), so the earlier same-CPU heap deadlock hypothesis does not hold."
+review = "kernel/src/sync.rs:26-55,117-130 (Spinlock IRQ save/restore); kernel/src/task.rs:1314-1336 (yield_cpu cli / SIE save); kernel/src/task.rs:vi_timer_tick; hal/arch/x86/src/x86_64/idt/dispatch.rs:55-69; hal/arch/x86/src/x86_64/syscall.rs:45 (SYSCALL FMASK clears IF)"
 
 [[global]]
 key = "kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (cellos_p01_trace))"
@@ -1264,9 +1256,8 @@ owner = "kernel::task::teardown_dma_authority; serializes PCI quiesce + IOMMU re
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: taken for the whole run"
 retirement = "never: lives for the whole run (guards no data)"
-rationale = "Callers are the CapRevoke(PCIE_DRIVER) syscall and yield_cpu's reap/retry (timer ISR, user-fault path, AP idle loop). The lock masks IF and is held across pcie_ecam::quiesce_function, iommu::revoke_dma_for_cell (invalidation wait), resource_registry/frame release and log::info!/warn!, so the timer ISR can run a long IF-off critical section that nests other subsystem locks."
-review = "kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task/syscall.rs:5909"
-debt = "Hazard: lock is held with IF masked across device quiesce, IOMMU invalidation waits and logging, entered from the timer ISR; nested lock order (resource_registry, FRAME_ALLOCATOR, logger) under it is undocumented and not verified here."
+rationale = "Callers are the CapRevoke(PCIE_DRIVER) syscall and yield_cpu's reap/retry (timer ISR, user-fault path, AP idle loop). The lock masks IF and is held across pcie_ecam::quiesce_function, iommu::revoke_dma_for_cell (bounded invalidation wait), resource_registry/frame release and logging: a long IF-off section (latency, not correctness). Lock order under it, verified 2026-11-01: IOMMU_CLEANUP_SERIAL -> BDF_OWNERS, then x86 VTD_DOMAINS -> VTD_CONTEXTS (riscv64 RISCV_DOMAINS -> CQ_TRANSACTION), then the pin registry and FRAME_ALLOCATOR. It is acquired only in teardown_dma_authority and no path takes any of those locks and then this one, so there is no inversion."
+review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/task/drivers/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall.rs:1531-1540"
 
 [[global]]
 key = "kernel::task::TICKS"
@@ -1394,12 +1385,11 @@ key = "kernel::task::syscall::SHM_HANDLES"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::task::syscall ShmAlloc/ShmMap handle allowlist (shm_register / shm_is_valid)"
-contexts = ["normal"]
-seal = "none: grows for the whole run (lazily Some on first ShmAlloc)"
-retirement = "never: no removal path; handles and their frames are never released, including at cell retirement"
-rationale = "Only the ShmAlloc and ShmMap syscalls touch it, under a Spinlock in syscall context; no timer-IRQ or AP access. The set is a single global pool with no owner ACL and no unregister, so any cell that learns a handle can map that frame for the rest of the run."
-review = "kernel/src/task/syscall.rs:shm_register; kernel/src/task/syscall.rs:shm_is_valid; kernel/src/task/syscall.rs:5657"
-debt = "Hazard: no retirement path — ShmAlloc frames are never freed or removed from the set when the allocating cell dies, and ShmMap is not owner-checked (noted in the declaration comment)."
+contexts = ["normal", "irq", "exception", "ap"]
+seal = "none: records come and go for the whole run"
+retirement = "release_shm_for(cell, generation) in the root-retirement funnel (after resource_registry::release_for): removes the dead incarnation's frames, unmaps each identity VA if it still maps that frame (restoring the kernel RW mapping where RAM is identity-reached), flushes on all harts, then frees the frame"
+rationale = "Spinlock<BTreeMap<frame, Incarnation>>; held alone and released before FRAME_ALLOCATOR/KERNEL_ROOT are taken. ShmAlloc records the caller's live (cell, generation); ShmMap succeeds only for that exact incarnation, else PermissionDenied (CP1 p02-debt-semantic #10). The reclaim runs only at the post-quiescence funnel, so no task of the dead incarnation is mid-syscall."
+review = "kernel/src/task/syscall.rs:shm_owned_by; kernel/src/task/syscall.rs:release_shm_for; kernel/src/task.rs (retirement funnel call); tests shm_frame_is_owned_by_exactly_the_allocating_incarnation, shm_reclaim_takes_only_the_dead_incarnations_records"
 
 [[global]]
 key = "kernel::task::syscall::DMA_PUBLICATIONS"
@@ -1684,9 +1674,8 @@ owner = "kernel::task::hart_local: slot N owned by CPU N (current task/cell/doma
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "hart_id/kernel_gp/kernel_tp_for_cells written once by install() (BSP in task::init, AP in x86_secondary_main); other fields mutated for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "Mostly owner-CPU atomics plus a per-hart ready Spinlock; touched from the timer/IPI ISR (yield_cpu, current_task_id_for), the #PF/user-fault path (user-copy guard, defer_fault), syscalls, and AP bring-up (install). install() writes the non-atomic fields by casting &HART_LOCALS[n] to *mut, and pinned_domain/staged_domain_release are UnsafeCell slots whose Sync impl rests only on a documented single-owner rule."
-review = "kernel/src/task/hart_local.rs:install; kernel/src/task/hart_local.rs:HartOwnedSlot; kernel/src/task/hart_local/ready.rs:remove_from_all; kernel/src/task.rs:terminate_current_cell_on_fault"
-debt = "Hazard: install() mutates hart_id/kernel_gp/kernel_tp_for_cells (not in UnsafeCell) through a shared reference to a non-mut static, which is UB under Rust aliasing rules; HartOwnedSlot soundness is convention-only and not checked here."
+rationale = "Mostly owner-CPU atomics plus a per-hart ready Spinlock; touched from the timer/IPI ISR (yield_cpu, current_task_id_for), the #PF/user-fault path (user-copy guard, defer_fault), syscalls, and AP bring-up (install). hart_id, kernel_gp and kernel_tp_for_cells are AtomicUsize written by install() with Relaxed stores before the hart serves traps (offsets pinned by const asserts), so there is no write through a shared reference. pinned_domain/staged_domain_release remain HartOwnedSlot UnsafeCells whose Sync rests on the documented one-owner-hart rule."
+review = "kernel/src/task/hart_local.rs:ViHartLocal (offset asserts); kernel/src/task/hart_local.rs:install; kernel/src/task/hart_local.rs:HartOwnedSlot; kernel/src/task/hart_local/ready.rs:remove_from_all"
 
 [[global]]
 key = "kernel::task::hart_local::HART_LOCAL_TP_ADDRS"
@@ -1751,9 +1740,8 @@ owner = "kernel::fast_ipc VFS fast-path handler pointer: register_vfs (no produc
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: only test-hooks fixtures and register_vfs (unresolved #[no_mangle]) store it; retirement nulls it"
 retirement = "nulled by clear_vfs_if_cell from yield_cpu's root-retirement funnel when the registered VFS cell retires"
-rationale = "Release store / Acquire load publishes a fn pointer correctly. The clear runs inside yield_cpu (timer ISR, user faults, AP idle loop). But it is cleared only after a Relaxed load of VFS_HANDLER_CELL, so pointer and owner are not published as one unit."
-review = "kernel/src/fast_ipc.rs:register_vfs; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:call_vfs; kernel/src/task.rs:1469"
-debt = "Hazard: clear_vfs_if_cell is a non-atomic check-then-store pair across two atomics; a retirement on one CPU racing set_vfs_handler_cell/register_vfs on another can null a newly registered handler or leave the pointer/owner pair inconsistent."
+rationale = "Release store / Acquire load publishes the fn pointer; call_vfs takes no lock. Every writer (register_vfs, set_vfs_handler_cell, clear_vfs_if_cell, the test-hooks restore) holds VFS_HANDLER_WRITE, and clear_vfs_if_cell compares the owner and clears owner and pointer under it, so a retiring VFS cell cannot null a newer registration."
+review = "kernel/src/fast_ipc.rs:register_vfs; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:call_vfs; test stale_owner_clear_preserves_newer_registration"
 
 [[global]]
 key = "kernel::fast_ipc::VFS_HANDLER_CELL"
@@ -1763,9 +1751,19 @@ owner = "kernel::fast_ipc registered VFS CellId: set by loader::commit_launch_ro
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: set at each block_io launch, cleared at that cell's retirement"
 retirement = "cleared by clear_vfs_if_cell(cell_id) in yield_cpu's root-retirement funnel"
-rationale = "All accesses are Relaxed, yet the value gates authorization (scheduler owner-watch, syscall VFS lease checks, async_ipc). The clear is a load-compare-store, not a CAS, and runs in yield_cpu (timer ISR, user faults, AP idle loop) while the setter runs on the spawn path on another CPU."
-review = "kernel/src/fast_ipc.rs:set_vfs_handler_cell; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:is_registered_vfs_cell; kernel/src/loader.rs:commit_launch_routes"
-debt = "Hazard: clear_vfs_if_cell does Relaxed load == cell then store(0), so a concurrent set_vfs_handler_cell for a new VFS cell between them is erased (TOCTOU), and Relaxed ordering means the authorization gate is not ordered with the generation/registration state it guards."
+rationale = "Owner publication and clear are Release, the authorization read is_registered_vfs_cell is Acquire. set_vfs_handler_cell and clear_vfs_if_cell serialise on VFS_HANDLER_WRITE, so the retirement funnel (which calls the clear after dropping SCHEDULER) can no longer erase an owner set by a concurrent launch on another hart. Readers stay lock-free and may transiently see the old or new owner during a transition, as before."
+review = "kernel/src/fast_ipc.rs:set_vfs_handler_cell; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:is_registered_vfs_cell; kernel/src/loader.rs:commit_launch_routes; test stale_owner_clear_preserves_newer_registration"
+
+[[global]]
+key = "kernel::fast_ipc::VFS_HANDLER_WRITE"
+lifetime = "global"
+mutation = "spinlock"
+owner = "kernel::fast_ipc writer lock for the VFS_HANDLER_PTR / VFS_HANDLER_CELL pair; taken by register_vfs, set_vfs_handler_cell, clear_vfs_if_cell and the test-hooks restore"
+contexts = ["normal", "irq", "exception", "ap"]
+seal = "none: taken for the whole run"
+retirement = "never: lives for the whole run (guards no data)"
+rationale = "IRQ-masking Spinlock held only for a few atomic loads/stores, never across the handler call; the clear runs from the retirement funnel (timer ISR, user faults, AP idle) and the setter from launch publication under SCHEDULER, so it nests inside SCHEDULER and nothing is taken under it."
+review = "kernel/src/fast_ipc.rs:VFS_HANDLER_WRITE; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/loader.rs:commit_launch_routes"
 
 # ---- slice D ----
 [[global]]
@@ -1974,9 +1972,8 @@ owner = "memory::heap: #[global_allocator] QuotaAlloc wrapping linked_list_alloc
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "heap region installed once by init_heap (main.rs:723) at boot; mutated for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "LockedHeap is a spinning_top::Spinlock that does not mask interrupts, yet the timer ISR on hart 0 frees Vecs in deferred_release::reap_deferred_releases and the yield_cpu funnel (timer/IPI ISRs and the #PF funnel) allocates and drops task/retirement containers. Syscall entry clears IF (SYSCALL_FMASK) so syscall-time allocations are safe, but contexts that run with IF=1 (kernel tasks after task_entry_point enables interrupts, the BSP sti window in start_secondaries) are not excluded."
-review = "kernel/src/memory/heap.rs:QuotaAlloc; kernel/src/memory/heap.rs:init_heap; kernel/src/memory/deferred_release.rs:complete; kernel/src/task.rs:yield_cpu; kernel/src/task/scheduler.rs:task_entry_point; hal/arch/x86/src/x86_64/syscall.rs:45"
-debt = "Hazard: the heap lock (spinning_top, no IRQ masking) is taken from timer/IPI ISR and #PF contexts; a same-hart interrupt arriving while an IF=1 kernel context (e.g. a kernel task started via task_entry_point) holds the heap lock would deadlock. Not established that every IF=1 kernel context avoids the heap."
+rationale = "linked_list_allocator's LockedHeap lock does not mask interrupts by itself, and the timer ISR (deferred_release) and the yield_cpu funnel (timer/IPI ISRs, #PF funnel) allocate and free. Every QuotaAlloc entry (alloc, dealloc, the p01 realloc/alloc_zeroed, init_heap, usage, p01 snapshots) first takes HeapIrqMask, the same save/disable/restore as crate::sync::Spinlock, so no IF=1 kernel context (for example a kernel task after task_entry_point enables interrupts) can hold the heap lock while a same-hart interrupt allocates. Cost: heap operations are IRQ-off windows."
+review = "kernel/src/memory/heap.rs:HeapIrqMask; kernel/src/memory/heap.rs:QuotaAlloc (GlobalAlloc impl); kernel/src/memory/deferred_release.rs:complete; kernel/src/task.rs:yield_cpu; kernel/src/task/scheduler.rs:task_entry_point"
 
 [[global]]
 key = "kernel::memory::frame::PHYS_OFFSET"
@@ -2030,9 +2027,8 @@ owner = "memory::domain_supervisor_registry: kmain registers shared kernel range
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "shared ranges registered in kmain after activate (main.rs:1103-1230); test-hooks private-table entries churn for the whole run"
 retirement = "test-hooks entries are unregistered in AddressSpace::drop, which runs when a domain task is dropped in the yield_cpu funnel (task.rs:1397/1459); shared ranges never"
-rationale = "Production readers are spawn-path builds (map_shared_supervisor); the irq/exception touch is the test-hooks unregister from AddressSpace::drop in the funnel. The crate Spinlock masks IRQs, so both are safe."
-review = "kernel/src/memory/domain-supervisor-registry.rs:register; kernel/src/memory/domain-supervisor-registry.rs:shared_snapshot; kernel/src/memory/address_space.rs:map_shared_supervisor; kernel/src/memory/address_space.rs:1236"
-debt = "Unverified: on x86_64 the registered image/heap ranges are higher-half virtual addresses stored in PhysAddr fields, and map_shared_supervisor identity-maps them (address_space.rs:299-303); whether x86_64 private roots actually consume these supervisor mappings was not established."
+rationale = "Production readers are spawn-path builds (map_shared_supervisor); the irq/exception touch is the test-hooks unregister from AddressSpace::drop in the funnel. The crate Spinlock masks IRQs, so both are safe. On x86_64 the stored ranges are higher-half virtual addresses in PhysAddr fields, but the builder copies PML4 entries 256-511 from KERNEL_ROOT and skips every supervisor mapping at or above 0x0000_8000_0000_0000, so these records never produce a mapping there (verified 2026-11-01); on riscv64/aarch64 they are the supervisor mapping mechanism."
+review = "kernel/src/memory/domain-supervisor-registry.rs:register; kernel/src/memory/address_space.rs:379-386 (copy_kernel_higher_half); kernel/src/memory/address_space.rs:404-414 (skip >= 0x8000_0000_0000); hal/arch/x86/src/x86_64/paging.rs:317-319"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_text_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2206,10 +2202,9 @@ mutation = "atomic"
 owner = "memory::cell_quota: charge/refund from QuotaAlloc (and launch/pipe/thread stack charges) per CellId slot; reset by register/deregister"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: counters move for the whole run"
-retirement = "slot zeroed by deregister in the yield_cpu root-retirement funnel (task.rs:1496) and re-zeroed by register when the CellId is reused"
-rationale = "Relaxed fetch_add/fetch_sub/fetch_update are adequate for a per-slot byte counter that guards no other data. The slot is indexed by a reusable CellId without generation, and QuotaAlloc charges/refunds current_cell_id() at alloc and free time rather than the allocating owner."
-review = "kernel/src/memory/cell_quota.rs:charge; kernel/src/memory/cell_quota.rs:refund; kernel/src/memory/heap.rs:alloc_impl; kernel/src/memory/heap.rs:dealloc"
-debt = "Hazard: attribution is by the executing CellId at free time (heap.rs:226), so a free performed while another cell is current (or after the CellId slot is reused by a new generation) decrements the wrong counter (saturating), letting usage drift below the real charge."
+retirement = "deregister zeroes the byte count in the yield_cpu root-retirement funnel; register bumps the row generation, so refunds carrying an older generation are no-ops"
+rationale = "Each word packs a 24-bit row generation and a 40-bit byte count, so a refund checks the generation and subtracts in one atomic step. QuotaAlloc stores the charged owner token (generation + cell) in a word just past each payload and dealloc refunds that owner, not the current cell, so cross-context frees and CellId reuse no longer move the wrong counter. A generation repeats only after 16M re-registrations of one slot."
+review = "kernel/src/memory/cell_quota.rs:charge_owner; kernel/src/memory/cell_quota.rs:refund_owner; kernel/src/memory/cell_quota.rs:register; kernel/src/memory/heap.rs:alloc_impl; kernel/src/memory/heap.rs:dealloc; tests stale_generation_refund_leaves_reregistered_row_untouched, dealloc_refunds_the_charged_owner_incarnation"
 
 [[global]]
 key = "kernel::memory::cell_quota::DMA_IN_USE"
@@ -2284,10 +2279,9 @@ mutation = "atomic"
 owner = "loader::va_alloc: alloc_cell_va bumps it for never-used PIE VA slots; free_cell_va rewinds it for the newest slot"
 contexts = ["boot", "normal"]
 seal = "none: advances for the whole run"
-retirement = "free_cell_va is called only from the PreparationVa rollback (task/elf_prepare.rs:61); a published cell's slot is never returned"
-rationale = "SeqCst fetch_add/fetch_sub plus a CAS rewind are correct for a lock-free bump; spawn paths only, no trap context."
-review = "kernel/src/loader/va_alloc.rs:alloc_cell_va; kernel/src/loader/va_alloc.rs:free_cell_va; kernel/src/task/elf_prepare.rs:98"
-debt = "Hazard: no retirement path returns a published PIE cell's VA slot (free_cell_va has no caller outside PreparationVa rollback and elf_tests), so MAX_SLOTS (512) PIE publications exhaust alloc_cell_va for the rest of the boot."
+retirement = "a published PIE slot moves into CellSegments, whose Drop calls free_cell_va after eager_unmap removes the mappings and frees the frames; PreparationVa rollback frees an unpublished slot"
+rationale = "SeqCst fetch_add/fetch_sub plus a CAS rewind are correct for a lock-free bump; spawn and retirement paths only. Re-verified 2026-11-01: the earlier 'never returned' finding was wrong, normal cell retirement does free the slot through CellSegments::drop."
+review = "kernel/src/loader/va_alloc.rs:alloc_cell_va; kernel/src/loader/va_alloc.rs:free_cell_va; kernel/src/task/elf_prepare.rs:152-181 (slot moved into CellSegments); kernel/src/task/stack.rs:518-578 (CellSegments::drop)"
 
 [[global]]
 key = "kernel::loader::va_alloc::FREE"
@@ -2296,10 +2290,9 @@ mutation = "atomic"
 owner = "loader::va_alloc: free_cell_va sets a bit for a returned slot; alloc_cell_va CAS-clears it"
 contexts = ["boot", "normal"]
 seal = "none: bitmap changes for the whole run"
-retirement = "bits are set only by free_cell_va from the PreparationVa rollback; published cells never set their bit"
-rationale = "AcqRel CAS / Release fetch_or per word give exclusive slot hand-off without a lock; spawn paths only."
-review = "kernel/src/loader/va_alloc.rs:alloc_cell_va; kernel/src/loader/va_alloc.rs:free_cell_va; kernel/src/task/elf_prepare.rs:61"
-debt = "Hazard: the free list is only fed by preparation rollback; retired published cells never return their slot, so reuse never happens for normal cell death (see BUMP)."
+retirement = "bits set by free_cell_va for a non-tail slot, from CellSegments::drop (published cells) or the PreparationVa rollback"
+rationale = "AcqRel CAS / Release fetch_or per word give exclusive slot hand-off without a lock. Re-verified 2026-11-01: retired published cells return their slot through CellSegments::drop after the mappings are removed, so reuse happens on normal cell death."
+review = "kernel/src/loader/va_alloc.rs:alloc_cell_va; kernel/src/loader/va_alloc.rs:free_cell_va; kernel/src/task/stack.rs:518-578 (CellSegments::drop)"
 
 [[global]]
 key = "kernel::loader::early::CELL_TABLE"
@@ -2327,13 +2320,12 @@ review = "kernel/src/loader/domain_admission.rs:enable_for_boot; kernel/src/load
 key = "kernel::loader::domain_admission::GENERATION @cfg(feature = \"native-domains\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "loader::domain_admission: evaluate_domain_admission copies it into DomainAdmissionLease; remains_enabled compares it"
+owner = "loader::domain_admission: begin_domain_drain bumps it after a successful ENABLED->DRAINING transition; evaluate_domain_admission copies it into DomainAdmissionLease; remains_enabled compares it"
 contexts = ["normal"]
-seal = "never written: no store/fetch_add exists, so it stays 1 for the whole run"
+seal = "none: bumped by each successful drain (no production caller of begin_domain_drain yet; the test-hooks selftest drains)"
 retirement = "never: lives for the whole run"
-rationale = "Only Acquire loads exist, so the generation half of the lease check is vacuous and invalidation rests entirely on POLICY leaving ENABLED."
-review = "kernel/src/loader/domain_admission.rs:DomainAdmissionLease::remains_enabled; kernel/src/loader/domain_admission.rs:evaluate_domain_admission; kernel/src/loader/domain_admission.rs:508"
-debt = "Hazard: GENERATION is never bumped on drain, so a lease taken before a drain passes remains_enabled again if POLICY returns to ENABLED (run_selftest does exactly that at domain_admission.rs:508 under test-hooks)."
+rationale = "fetch_add(AcqRel) only on a successful drain CAS, Acquire loads elsewhere: a lease taken before a drain stays invalid even if POLICY later returns to ENABLED, independently of the policy check."
+review = "kernel/src/loader/domain_admission.rs:begin_domain_drain; kernel/src/loader/domain_admission.rs:DomainAdmissionLease::remains_enabled; kernel/src/loader/domain_admission.rs:run_selftest (generation must change across the drain)"
 
 [[global]]
 key = "kernel::fs::VIFS1"
@@ -2408,22 +2400,20 @@ mutation = "spinlock"
 owner = "cell::cspace: one CellAuthority row per (cell_id, generation), reserved/committed at launch, mutated by CSpace/handle-control syscalls, retired by finish_root_retirement"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: rows added per incarnation for the whole run"
-retirement = "retire_cell_authority (from Scheduler::finish_root_retirement in the yield_cpu funnel, scheduler.rs:608) only sets revoking/admission_cut; the row itself is never removed"
-rationale = "Retirement runs inside yield_cpu under SCHEDULER, reachable from timer/IPI ISRs and the #PF funnel; the IRQ-masking Spinlock covers that."
-review = "kernel/src/cell/cspace.rs:AuthorityReservation::commit; kernel/src/cell/cspace.rs:retire_cell_authority; kernel/src/task/scheduler.rs:finish_root_retirement"
-debt = "Hazard: no code removes rows (rows only grow via commit/insert), so every retired (cell, generation) leaves its CellAuthority and slots in the table for the rest of the boot."
+retirement = "retire_cell_authority (from Scheduler::finish_root_retirement, after quiescence) purges the incarnation's ticket files and removes the exact (cell_id, generation) row"
+rationale = "Retirement runs inside yield_cpu under SCHEDULER, reachable from timer/IPI ISRs and the #PF funnel; the IRQ-masking Spinlock covers that. Order SCHEDULER -> CELL_AUTHORITIES -> CSPACE_FILES everywhere, including sys_cap_revoke since 2026-11-01. A lookup of a removed row returns Stale, and no task of the retired incarnation remains to issue one."
+review = "kernel/src/cell/cspace.rs:retire_cell_authority; kernel/src/task/scheduler.rs:finish_root_retirement; kernel/src/task/syscall.rs:sys_cap_revoke; test retirement_removes_exact_row_and_ticket_files"
 
 [[global]]
 key = "kernel::cell::cap_registry::CSPACE_FILES"
 lifetime = "per-cell"
 mutation = "spinlock"
 owner = "cell::cap_registry: parks open BootFS ViFile boxes keyed by (cell_id, generation, ticket) for cell::cspace allocate/park/unpark/close"
-contexts = ["normal"]
+contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: entries come and go for the whole run"
-retirement = "only CellAuthority::close_ticket calls remove_ticket_file; nothing purges a retired incarnation's entries"
-rationale = "Only cspace syscall handlers touch it, never a trap path, so the Spinlock is adequate; the key includes the generation so a successor incarnation cannot reach a predecessor's file."
-review = "kernel/src/cell/cap_registry.rs:attach_file_to_ticket; kernel/src/cell/cap_registry.rs:remove_ticket_file; kernel/src/cell/cspace.rs:close_ticket; kernel/src/cell/cspace.rs:retire_cell_authority"
-debt = "Hazard: retire_cell_authority does not remove CSPACE_FILES entries, so open files parked by a cell that dies without closing its tickets stay allocated for the rest of the boot."
+retirement = "close_ticket removes one entry; retire_cell_authority removes every remaining ticket file of the retiring incarnation"
+rationale = "cspace syscall handlers and the retirement purge (inside the yield_cpu funnel under SCHEDULER and CELL_AUTHORITIES) touch it; the IRQ-masking Spinlock covers the ISR-reached funnel. The key includes the generation, so a successor incarnation cannot reach a predecessor's file."
+review = "kernel/src/cell/cap_registry.rs:attach_file_to_ticket; kernel/src/cell/cap_registry.rs:remove_ticket_file; kernel/src/cell/cspace.rs:retire_cell_authority; test retirement_removes_exact_row_and_ticket_files"
 
 [[global]]
 key = "kernel::audit::WRITE"
@@ -2440,13 +2430,12 @@ review = "kernel/src/audit.rs:log_event; kernel/src/task/scheduler.rs:1307; kern
 key = "kernel::audit::RING"
 lifetime = "global"
 mutation = "unsafe-cell"
-owner = "audit: producers write buf/head under WRITE in log_event; drain() is the consumer (tail)"
+owner = "audit: producers write buf/head (and evict by advancing tail) under WRITE in log_event; drain() is the future consumer"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: written for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "Producer bytes are published by a Release store of head after the buffer writes, and the consumer pairs Acquire/Release on head/tail, which is correct for one producer-at-a-time plus one consumer. drain() has no caller, so tail never advances and the ring stops accepting events after 256 KiB (dropped counts instead); x86_64 records carry a zero timestamp."
-review = "kernel/src/audit.rs:log_event; kernel/src/audit.rs:drain; kernel/src/audit.rs:146"
-debt = "Hazard: no consumer calls audit::drain, so once 256 KiB of events accumulate every later event is dropped; the unsafe impl Sync justification still says single-hart kernel, and drain itself is unserialised, so a second consumer would race on tail."
+rationale = "Every access to buf and every move of tail happens under WRITE with interrupts masked, in log_event and drain alike. A full ring evicts the oldest whole records (counted in dropped), so it always holds the newest 256 KiB of events; drain copies only whole records, so tail stays on a record boundary. No consumer exists yet (a ReadAuditLog ABI was deferred by the user 2026-11-01); x86_64 records carry a zero timestamp."
+review = "kernel/src/audit.rs:log_event; kernel/src/audit.rs:evict_for; kernel/src/audit.rs:copy_whole_records; kernel/src/audit.rs:drain; test full_ring_evicts_oldest_whole_records_and_drains_whole_records"
 
 [[global]]
 key = "kernel::admission::gate::ADMISSION_REGISTRY"
@@ -2458,4 +2447,27 @@ seal = "const-initialised permissive (production_enforced = false); no productio
 retirement = "never: lives for the whole run"
 rationale = "Spawn-path reads only (boot init spawn and spawn syscalls); Spinlock is adequate. Because nothing outside test-hooks calls update/set_production_enforced, check_admission always returns Ok in production."
 review = "kernel/src/admission/gate.rs:evaluate_owner_admission; kernel/src/admission/gate.rs:OwnerAdmissionRegistry::check_admission; kernel/src/admission/slot_selftest.rs:191; kernel/src/loader/governed_spawn.rs:113"
-debt = "Hazard: with no production writer the owner admission gate is permanently permissive (production_enforced false); this is a policy gap rather than a race."
+debt = "Blocked, deliberately deferred: enforcing the owner admission gate needs boot-provisioned owner/publisher anchors and verified A/B slots, from Phase 03 of .agents/260821-1700-tier1-baseline-admission (status blocked). Setting production_enforced without them would refuse every cell. The user kept this as debt on 2026-11-01. Owner: admission::gate / tier1-baseline-admission plan."
+
+# ---- added 2026-11-01 with the debt fixes ----
+[[global]]
+key = "kernel::task::smp::X86_AP_ROOT_REFUSED @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "atomic"
+owner = "task::smp: the AP sets it in x86_secondary_main instead of X86_READY when enter_x86_root_on_current_cpu fails; start_secondaries on the BSP reads it"
+contexts = ["boot", "ap"]
+seal = "written at most once by the AP during start_secondaries, before X86_BOOT_COMPLETE"
+retirement = "never: lives for the whole run; the refusing AP stays parked"
+rationale = "Release store by the AP after it logs and before it parks with interrupts off; Acquire load by the BSP's bounded wait, which then finishes topology with one CPU online instead of panicking. The AP never sets HART_ONLINE, so TLB shootdowns and deferred release never target it (CP1 p02-debt-semantic #1)."
+review = "kernel/src/task/smp.rs:x86_secondary_main; kernel/src/task/smp.rs:start_secondaries (lines 860-893)"
+
+[[global]]
+key = "hal-x86::x86_64::ist::__boot_stack_guard @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "linker"
+owner = "kernel/linker-x86-64.ld: the 4 KiB page immediately below __stack_bottom at the start of .stack; ist::guard_pages adds it to install_guards"
+contexts = ["boot"]
+seal = "unmapped by ist::install_guards in kmain before general kernel activity; never mapped again (later roots copy the higher half and share these tables)"
+retirement = "never: lives for the whole run"
+rationale = "Only its address is taken (addr_of!); the page has no storage use and exists so a BSP stack overflow takes a non-present #PF (escalating to #DF on IST2) instead of corrupting .bss. .stack starts on its own page boundary after .bss, so nothing else shares the page; a huge-leaf mapping makes install_guards fail closed, as for the IST guards."
+review = "kernel/linker-x86-64.ld (.stack); hal/arch/x86/src/x86_64/ist.rs:guard_pages; hal/arch/x86/src/x86_64/ist.rs:install_guards; hal/arch/x86/src/x86_64/idt/probe_ist.rs (boot-guard-read=pf)"

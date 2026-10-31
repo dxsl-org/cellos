@@ -12,7 +12,7 @@ use super::iommu_pt::VtdSlpt;
 use crate::sync::Spinlock;
 use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::collections::{BTreeMap, BTreeSet};
-use core::sync::atomic::{fence, AtomicU16, AtomicUsize, Ordering};
+use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
 // ── VT-d MMIO register offsets (Intel VT-d spec §10.4) ───────────────────────
 
@@ -97,8 +97,68 @@ struct VtdDomain {
 
 static VTD_DOMAINS: Spinlock<BTreeMap<u64, VtdDomain>> = Spinlock::new(BTreeMap::new());
 
-/// Monotonically incrementing DID allocator (1-based; 0 = invalid).
-static DID_COUNTER: AtomicU16 = AtomicU16::new(1);
+/// DID capacity for the widest `GCAP.ND` encoding (16-bit DIDs).
+const DID_WORDS: usize = (1 << 16) / 64;
+
+/// Domain IDs bounded by `GCAP.ND`. DID 0 is never issued. `limit` (exclusive)
+/// stays 0 until `init_hw` reads the capability, so nothing is issued before.
+/// A DID returns to the pool only after its teardown invalidation completed.
+struct DidAllocator {
+    limit: u32,
+    used: [u64; DID_WORDS],
+}
+
+impl DidAllocator {
+    const fn new() -> Self {
+        let mut used = [0; DID_WORDS];
+        used[0] = 1; // DID 0
+        Self { limit: 0, used }
+    }
+
+    fn set_limit(&mut self, limit: u32) {
+        self.limit = limit.min(1 << 16);
+    }
+
+    /// Lowest free DID in `1..limit`, or `None` when exhausted.
+    fn allocate(&mut self) -> Option<u16> {
+        let limit = self.limit as usize;
+        for (index, word) in self.used[..limit.div_ceil(64)].iter_mut().enumerate() {
+            let bit = (!*word).trailing_zeros();
+            if bit == 64 {
+                continue;
+            }
+            let did = index * 64 + bit as usize;
+            if did >= limit {
+                return None;
+            }
+            *word |= 1 << bit;
+            return Some(did as u16);
+        }
+        None
+    }
+
+    fn release(&mut self, did: u16) {
+        let did = did as usize;
+        if did != 0 && did < self.limit as usize {
+            self.used[did / 64] &= !(1 << (did % 64));
+        }
+    }
+}
+
+/// Taken only while holding `VTD_DOMAINS` (or alone in `init_hw`).
+static VTD_DIDS: Spinlock<DidAllocator> = Spinlock::new(DidAllocator::new());
+
+/// Exclusive DID bound encoded by `GCAP.ND` (bits 2:0): `2^(4 + 2*ND)` domain
+/// IDs. ND = 7 is reserved and yields `None`.
+const fn did_limit(gcap: u64) -> Option<u32> {
+    let nd = (gcap & 0x7) as u32;
+    if nd == 7 {
+        None
+    } else {
+        Some(1 << (4 + 2 * nd))
+    }
+}
+
 /// Serializes register-based invalidations. A timed-out command may complete
 /// later, so every successor must observe an idle register before publishing.
 static VTD_INVALIDATION_LOCK: Spinlock<()> = Spinlock::new(());
@@ -464,19 +524,19 @@ pub(super) fn init_hw(dma: super::iommu::DmaIsolationInput) {
         return;
     }
 
-    // GCAP.ND = bits[22:16]: number of supported domain IDs (ND+1 bits → 2^(ND+1) IDs).
-    let nd = ((gcap >> 16) & 0x7F) as u32;
-    let max_did: u32 = 1u32 << (nd + 1);
+    // GCAP.ND = bits[2:0]: 2^(4 + 2*ND) domain IDs; ND = 7 is reserved.
+    let nd = (gcap & 0x7) as u32;
+    let Some(max_did) = did_limit(gcap) else {
+        log::warn!("[vtd] GCAP.ND={} reserved — per-Cell isolation disabled", nd);
+        return;
+    };
     log::info!(
         "[vtd] Intel VT-d found GCAP={:#x} ND={} max_did={}",
         gcap,
         nd,
         max_did
     );
-    if max_did < 2 {
-        log::warn!("[vtd] VT-d supports < 2 domains — per-Cell isolation disabled");
-        return;
-    }
+    VTD_DIDS.lock().set_limit(max_did);
 
     // Compute IOTLB register base from ECAP.IRO (bits[17:8]).
     // IOTLB_BASE = base + IRO * 16 (spec §10.4.8 IOTLB Invalidate Register).
@@ -513,6 +573,17 @@ pub(super) fn map_range_for_cell(
     };
 
     let mut domains = VTD_DOMAINS.lock();
+    // Reserve a bounded DID before any descriptor is touched: exhaustion must
+    // refuse the map instead of issuing a wrapped, zero or colliding DID.
+    let new_did = if domains.contains_key(&tid) {
+        None
+    } else {
+        let Some(did) = VTD_DIDS.lock().allocate() else {
+            log::warn!("[vtd] Cell {} DMA map refused: domain IDs exhausted", tid);
+            return super::iommu::DmaMapResult::Rejected;
+        };
+        Some(did)
+    };
     // Break before make when a requester changes owners. Clearing P alone
     // does not retire cached contexts/translations: drain the old DID globally
     // before changing either descriptor word or software ownership.
@@ -535,6 +606,9 @@ pub(super) fn map_range_for_cell(
         let iotlb_done = iotlb_flush_global();
         if !(context_done && iotlb_done) {
             // No new range was published; preserve the old domain and its pins.
+            if let Some(did) = new_did {
+                VTD_DIDS.lock().release(did);
+            }
             return super::iommu::DmaMapResult::Rejected;
         }
     }
@@ -546,20 +620,22 @@ pub(super) fn map_range_for_cell(
         }
     }
 
-    #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
-    let entry = domains.entry(tid).or_insert_with(|| {
-        let did = DID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    if let Some(did) = new_did {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED);
         log::info!("[vtd] Cell {} allocated DID={}", tid, did);
-        VtdDomain {
+        domains.insert(tid, VtdDomain {
             slpt: VtdSlpt::new(),
             did,
             bdfs: BTreeSet::new(),
-        }
-    });
-    #[cfg(cellos_p01_trace)]
-    drop(_semantic);
+        });
+        #[cfg(cellos_p01_trace)]
+        drop(_semantic);
+    }
+    let Some(entry) = domains.get_mut(&tid) else {
+        return super::iommu::DmaMapResult::Rejected;
+    };
 
     entry.slpt.map_range(phys, size);
     #[cfg(cellos_p01_trace)]
@@ -779,6 +855,7 @@ pub(super) fn unmap_cell_domain(tid: u64) -> bool {
         );
         false
     } else {
+        VTD_DIDS.lock().release(did);
         log::info!(
             "[vtd] Cell {} DID={} contexts cleared + caches drained",
             tid,
@@ -849,6 +926,41 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn did_limit_decodes_gcap_nd_only() {
+        assert_eq!(did_limit(0), Some(16));
+        assert_eq!(did_limit(2), Some(256));
+        assert_eq!(did_limit(6), Some(1 << 16));
+        assert_eq!(did_limit(7), None);
+        // MGAW (bits 21:16) and ZLR (bit 22) must not leak into the bound.
+        assert_eq!(did_limit((0x66 << 16) | 2), Some(256));
+    }
+
+    #[test]
+    fn did_allocator_issues_bounded_unique_ids_and_reuses_released_ones() {
+        let mut dids = DidAllocator::new();
+        assert_eq!(dids.allocate(), None, "no DID before the capacity is known");
+        for limit in [16u32, 130, 1 << 16] {
+            let mut dids = DidAllocator::new();
+            dids.set_limit(limit);
+            for expected in 1..limit {
+                assert_eq!(dids.allocate(), Some(expected as u16));
+            }
+            assert_eq!(dids.allocate(), None, "exhaustion refuses instead of wrapping");
+            dids.release(0);
+            if limit <= u16::MAX as u32 {
+                dids.release(limit as u16);
+            }
+            assert_eq!(dids.allocate(), None, "DID 0 and out-of-range DIDs are never freed");
+            let freed = (limit / 2) as u16;
+            dids.release(freed);
+            assert_eq!(dids.allocate(), Some(freed));
+            assert_eq!(dids.allocate(), None);
+        }
+        dids.set_limit(16);
+        assert_eq!(dids.allocate(), Some(1));
     }
 
     #[test]

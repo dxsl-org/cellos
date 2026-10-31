@@ -113,6 +113,12 @@ const APIC_GPA: u64 = 0xFEE0_0000;
 /// translations would otherwise let a new VM execute a previous VM's GPA map.
 static NEXT_ASID: AtomicU32 = AtomicU32::new(1);
 
+/// `fetch_update` step for [`NEXT_ASID`]: issue `current` only while it lies in
+/// `1..=max_asid`; never wraps, so exhaustion is permanent for the boot.
+fn next_asid(current: u32, max_asid: u32) -> Option<u32> {
+    current.checked_add(1).filter(|_| current != 0 && current <= max_asid)
+}
+
 struct SvmVm {
     npt: NestedPageTable,
     guest_pa: u64,
@@ -281,6 +287,23 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
         return Ok(vcpu_id);
     }
 
+    // Refuse an unknown VM before consuming a non-reusable ASID.
+    VM_REGISTRY
+        .lock()
+        .as_ref()
+        .and_then(|map| map.get(&(owner, vm_id)))
+        .ok_or(ViError::NotFound)?;
+    // Reserve the ASID before any frame: exhaustion refuses without allocating.
+    let max_asid = hal::x86_64::svm::max_asid();
+    let asid = NEXT_ASID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            next_asid(current, max_asid)
+        })
+        .map_err(|_| {
+            log::warn!("[hv-x86] create_vcpu: ASIDs exhausted (max {})", max_asid);
+            ViError::OutOfMemory
+        })?;
+
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM).
     let vmcb = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
     let host = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
@@ -307,11 +330,6 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     let vcpu_id = vm.vcpus.len() + 1;
 
     let ncr3 = vm.npt.ncr3();
-    let asid = NEXT_ASID
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            (current < u32::MAX).then_some(current + 1)
-        })
-        .map_err(|_| ViError::OutOfMemory)?;
     let vmcb_va = phys_to_virt(vmcb) as *mut u8;
     let apic_va = phys_to_virt(vm.apic_frame) as *mut u8;
     // SAFETY: frames freshly allocated + zeroed/filled above; all outlive the
@@ -711,5 +729,30 @@ fn run_mmio_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervi
         unsafe {
             core::arch::asm!("sti", options(nomem, nostack));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn asid_reservation_is_bounded_and_never_wraps() {
+        let max_asid = 4;
+        let next = AtomicU32::new(1);
+        let reserve = || next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            next_asid(current, max_asid)
+        });
+        for expected in 1..=max_asid {
+            assert_eq!(reserve(), Ok(expected));
+        }
+        for _ in 0..3 {
+            assert!(reserve().is_err(), "exhaustion is permanent");
+        }
+        assert_eq!(next.load(Ordering::Relaxed), max_asid + 1);
+
+        assert_eq!(next_asid(1, 0), None, "zero capacity issues nothing");
+        assert_eq!(next_asid(0, 4), None, "ASID 0 belongs to the host");
+        assert_eq!(next_asid(u32::MAX, u32::MAX), None);
     }
 }

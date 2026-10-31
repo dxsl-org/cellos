@@ -3,7 +3,8 @@
 //! Uses a split design to avoid the alloc-inside-alloc deadlock:
 //! - `QUOTA_LIMITS`: `Spinlock<BTreeMap<usize, usize>>` stores the limit per Cell.
 //!   Only locked in `register`/`deregister` — never inside `GlobalAlloc::alloc`.
-//! - `IN_USE`: `[AtomicUsize; MAX_CELLS]` stores the live byte count per Cell.
+//! - `IN_USE`: `[AtomicUsize; MAX_CELLS]` stores the live byte count per Cell,
+//!   packed with the row's registration generation.
 //!   Updated atomically without any lock — safe to call from inside `GlobalAlloc::alloc`.
 
 use crate::sync::Spinlock;
@@ -50,12 +51,31 @@ static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::
 /// Live byte counters — one AtomicUsize per Cell slot, zero-initialized.
 /// Updated lock-free inside `charge`/`refund` to avoid alloc-inside-alloc deadlock.
 ///
+/// Each word packs the row's registration generation (bits `GENERATION_SHIFT..`)
+/// above its live byte count (`BYTES_MASK`). `register` bumps the generation,
+/// and an owner-tagged refund compares it in the same CAS that subtracts, so a
+/// free charged to an earlier incarnation of a reused CellId can never land on
+/// the current incarnation's counter.
+///
 /// Uses an inline `const { }` repeat-array seed (not a named `const`) — each
 /// slot is independently zero-initialized at compile time, so there is no
 /// shared-instance footgun (clippy::declare_interior_mutable_const) to worry
 /// about; a named `static` cannot be used here because `AtomicUsize` is not
 /// `Copy`, which the `[expr; N]` repeat form otherwise requires.
 static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
+
+/// Low bits of an `IN_USE` word: live bytes, at most 1 TiB per Cell.
+const GENERATION_SHIFT: u32 = 40;
+const BYTES_MASK: usize = (1 << GENERATION_SHIFT) - 1;
+const _: () = assert!(usize::BITS == 64, "IN_USE packs generation and bytes into 64 bits");
+
+/// Owner token for allocations that are not charged to any Cell row.
+pub(crate) const UNCHARGED_OWNER: usize = 0;
+
+/// `word` with `size` live bytes removed and its generation kept.
+fn without_bytes(word: usize, size: usize) -> usize {
+    (word & !BYTES_MASK) | (word & BYTES_MASK).saturating_sub(size)
+}
 
 #[cfg(cellos_p01_trace)]
 struct BoundQuota {
@@ -104,7 +124,7 @@ pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
             && !prior.retired.load(Ordering::SeqCst)
             && prior.cell.load(Ordering::SeqCst) == cell
             && prior.generation.load(Ordering::SeqCst) == generation) { continue; }
-        let value = IN_USE[cell as usize].load(Ordering::SeqCst) as u64;
+        let value = (IN_USE[cell as usize].load(Ordering::SeqCst) & BYTES_MASK) as u64;
         match charge.checked_add(value) {
             Some(next) => charge = next,
             None => P01_SOURCE.fault(),
@@ -145,7 +165,10 @@ pub fn register(cell_id: CellId, limit: usize) {
         if P01_SUBJECTS.iter().any(|row| row.ready.load(Ordering::SeqCst)
             && !row.retired.load(Ordering::SeqCst)
             && row.cell.load(Ordering::SeqCst) == cell_id.0) { P01_SOURCE.fault(); }
-        IN_USE[id].store(0, Ordering::Relaxed);
+        // A new incarnation: bump the generation and start from zero bytes.
+        let _ = IN_USE[id].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+            Some((word & !BYTES_MASK).wrapping_add(1 << GENERATION_SHIFT))
+        });
     }
     // Pin to kernel context (0) so the BTreeMap::insert's node allocation does
     // not re-enter `charge` (which locks QUOTA_LIMITS) while we hold that lock.
@@ -174,7 +197,9 @@ pub fn deregister(cell_id: CellId) {
                 row.retired.store(true, Ordering::SeqCst);
             }
         }
-        IN_USE[id].store(0, Ordering::Relaxed);
+        let _ = IN_USE[id].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+            Some(word & !BYTES_MASK)
+        });
         DMA_IN_USE[id].store(0, Ordering::Relaxed);
     }
     QUOTA_LIMITS.lock().remove(&id);
@@ -241,14 +266,25 @@ impl Drop for QuotaReservation {
 
 /// Charge `size` bytes to the Cell.
 ///
-/// Returns `false` if the quota would be exceeded — the caller (`QuotaAlloc::alloc`)
-/// must return `null_mut()` in that case.
+/// Returns `false` if the quota would be exceeded — callers must refuse the
+/// request in that case.
+pub fn charge(cell_id_raw: usize, size: usize) -> bool {
+    charge_owner(cell_id_raw, size).is_some()
+}
+
+/// Charge `size` bytes to the Cell and return the owner token the charge was
+/// recorded against, or `None` if the quota would be exceeded — the caller
+/// (`QuotaAlloc::alloc`) must return `null_mut()` in that case.
+///
+/// The token names the exact row incarnation (CellId + generation) that was
+/// charged; `UNCHARGED_OWNER` when the Cell has no counter row. Pass it to
+/// `refund_owner` so the refund reaches that incarnation and nothing else.
 ///
 /// Lock-ordering: acquires `QUOTA_LIMITS` briefly for a read (no allocation inside),
 /// then updates `IN_USE` atomically without any lock.
-pub fn charge(cell_id_raw: usize, size: usize) -> bool {
+pub(crate) fn charge_owner(cell_id_raw: usize, size: usize) -> Option<usize> {
     if cell_id_raw == 0 {
-        return true; // kernel itself: unlimited
+        return Some(UNCHARGED_OWNER); // kernel itself: unlimited
     }
     // Read the limit — BTreeMap::get does NOT allocate.  Lock released immediately.
     let limit = QUOTA_LIMITS
@@ -257,36 +293,51 @@ pub fn charge(cell_id_raw: usize, size: usize) -> bool {
         .copied()
         .unwrap_or(usize::MAX);
     if cell_id_raw >= MAX_CELLS {
-        return true; // no slot in IN_USE — uncapped
+        return Some(UNCHARGED_OWNER); // no slot in IN_USE — uncapped
     }
-    // Optimistic add; roll back on breach.
-    // Use saturating_add to prevent wrapping past usize::MAX — a hostile layout.size()
-    // near MAX would otherwise make the comparison read false and bypass the limit.
+    // Compare-and-add: checked_add refuses a hostile layout.size() near MAX
+    // instead of wrapping past the limit, and the byte count can never carry
+    // into the generation bits.
     #[cfg(cellos_p01_trace)]
     let _write = P01_SOURCE.write();
-    let prev = IN_USE[cell_id_raw].fetch_add(size, Ordering::Relaxed);
-    if prev.saturating_add(size) > limit {
-        IN_USE[cell_id_raw].fetch_sub(size, Ordering::Relaxed);
-        false
-    } else {
-        true
-    }
+    IN_USE[cell_id_raw]
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+            let bytes = (word & BYTES_MASK)
+                .checked_add(size)
+                .filter(|&bytes| bytes <= limit.min(BYTES_MASK))?;
+            Some((word & !BYTES_MASK) | bytes)
+        })
+        .ok()
+        .map(|word| (word & !BYTES_MASK) | cell_id_raw)
 }
 
-/// Refund `size` bytes when the Cell frees memory.  Lock-free.
+/// Refund `size` bytes to the current incarnation of the Cell.  Lock-free.
 ///
-/// Uses saturating subtraction to prevent underflow if a deallocation is
-/// attributed to a cell that has already been deregistered (e.g., dealloc
-/// of a Box shared with another cell arrives after the originating cell exited).
+/// Uses saturating subtraction to prevent underflow if a refund is attributed
+/// to a cell that has already been deregistered.
 pub fn refund(cell_id_raw: usize, size: usize) {
     if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
         return;
     }
     #[cfg(cellos_p01_trace)]
     let _write = P01_SOURCE.write();
-    // fetch_update with saturating_sub prevents wrapping to usize::MAX on spurious frees.
-    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
-        Some(cur.saturating_sub(size))
+    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+        Some(without_bytes(word, size))
+    });
+}
+
+/// Refund `size` bytes to the row incarnation named by `owner` (from
+/// `charge_owner`).  Lock-free.  A no-op when the row has been re-registered
+/// since the charge: that incarnation's counter was reset and is not ours.
+pub(crate) fn refund_owner(owner: usize, size: usize) {
+    let cell_id_raw = owner & BYTES_MASK;
+    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
+        return;
+    }
+    #[cfg(cellos_p01_trace)]
+    let _write = P01_SOURCE.write();
+    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+        (word & !BYTES_MASK == owner & !BYTES_MASK).then(|| without_bytes(word, size))
     });
 }
 
@@ -304,7 +355,7 @@ pub fn limit(cell_id_raw: usize) -> Option<usize> {
 pub fn in_use(cell_id: CellId) -> usize {
     let id = cell_id.0 as usize;
     if id < MAX_CELLS {
-        IN_USE[id].load(Ordering::Relaxed)
+        IN_USE[id].load(Ordering::Relaxed) & BYTES_MASK
     } else {
         0
     }
@@ -413,7 +464,7 @@ pub(crate) fn snapshot() -> QuotaSnapshot {
     let mut heap = alloc::vec![0; MAX_CELLS];
     let mut dma = alloc::vec![0; MAX_CELLS];
     for cell_id in 0..MAX_CELLS {
-        heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire);
+        heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
         dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire);
     }
     QuotaSnapshot { limits, heap, dma }
@@ -484,6 +535,42 @@ mod tests {
 
         assert_eq!(successes.load(Ordering::Relaxed), 1);
         assert_eq!(DMA_IN_USE[CELL_RAW].load(Ordering::Relaxed), 0);
+        deregister(cell);
+    }
+
+    #[test]
+    fn stale_generation_refund_leaves_reregistered_row_untouched() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const CELL_RAW: usize = MAX_CELLS - 1;
+        let cell = CellId(CELL_RAW as u64);
+        register(cell, 4096);
+        let first = charge_owner(CELL_RAW, 100).expect("gen1 charge fits");
+        assert_eq!(in_use(cell), 100);
+
+        register(cell, 4096);
+        let second = charge_owner(CELL_RAW, 40).expect("gen2 charge fits");
+        assert_ne!(first, second);
+        refund_owner(first, 100);
+        assert_eq!(in_use(cell), 40, "stale gen1 refund must not touch gen2");
+
+        refund_owner(second, 40);
+        assert_eq!(in_use(cell), 0);
+        deregister(cell);
+    }
+
+    #[test]
+    fn charge_limit_boundary_is_unchanged() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const CELL_RAW: usize = MAX_CELLS - 1;
+        let cell = CellId(CELL_RAW as u64);
+        register(cell, 4096);
+        assert!(charge(CELL_RAW, 4096));
+        assert!(!charge(CELL_RAW, 1));
+        assert!(!charge(CELL_RAW, usize::MAX));
+        assert_eq!(in_use(cell), 4096);
+        refund(CELL_RAW, 4096);
+        assert_eq!(in_use(cell), 0);
+        assert_eq!(charge_owner(0, 1), Some(UNCHARGED_OWNER));
         deregister(cell);
     }
 }

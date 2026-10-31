@@ -138,11 +138,13 @@ struct AuditRing {
     buf: UnsafeCell<[u8; BUF_SIZE]>,
     head: AtomicUsize,
     tail: AtomicUsize,
+    /// Whole records evicted to make room for newer ones.
     dropped: AtomicUsize,
 }
 
-// SAFETY: single-hart kernel; interrupt-disable in log_event prevents
-// timer ISR from preempting a partial write.
+// SAFETY: every access to `buf`, and every move of `tail`, happens under
+// `WRITE` with local interrupts masked: producers (any hart, any context) and
+// the consumer in `drain` are serialised, and a same-hart ISR cannot interleave.
 unsafe impl Sync for AuditRing {}
 
 static RING: AuditRing = AuditRing {
@@ -155,8 +157,11 @@ static RING: AuditRing = AuditRing {
 
 /// Write a kernel audit event to the ring.
 ///
-/// Disables S-mode interrupts for the duration of the write so the timer ISR
-/// cannot preempt a partial record.  Drops silently on ring-full.
+/// Disables interrupts for the duration of the write so a same-hart ISR cannot
+/// preempt a partial record. When the ring is full the oldest whole records are
+/// evicted (and counted in [`dropped_count`]), so the ring always holds the most
+/// recent events: without a consumer, drop-on-full would keep only the first
+/// 256 KiB after boot and lose everything since.
 pub fn log_event(event: AuditEvent, payload: &[u8]) {
     let plen = payload.len().min(255) as u8;
     let record_len = 10 + plen as usize;
@@ -168,21 +173,21 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
 
     let _serialised = WRITE.lock();
     let head = RING.head.load(Ordering::Relaxed);
-    let tail = RING.tail.load(Ordering::Acquire);
+    let tail = RING.tail.load(Ordering::Relaxed);
+    // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
+    let buf = unsafe { &mut *RING.buf.get() };
 
-    // Drop-on-full: never overwrite consumer bytes.
-    if head.wrapping_sub(tail) + record_len > BUF_SIZE {
-        RING.dropped.fetch_add(1, Ordering::Relaxed);
-        // SAFETY: `saved_interrupts` was captured on this hart by the call above.
-        unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
-        return;
+    // Evict whole records from the tail until the new one fits.
+    let (tail, evicted) = evict_for(buf, head, tail, record_len);
+    if evicted != 0 {
+        RING.tail.store(tail, Ordering::Release);
+        RING.dropped.fetch_add(evicted, Ordering::Relaxed);
     }
 
     #[cfg(target_arch = "riscv64")]
     let mtime = hal::common::timer::read_mtime().to_le_bytes();
     #[cfg(not(target_arch = "riscv64"))]
     let mtime = 0u64.to_le_bytes();
-    let buf = unsafe { &mut *RING.buf.get() };
     let mut pos = head;
     for &b in mtime
         .iter()
@@ -202,28 +207,66 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
 }
 
-/// Drain up to `out.len()` bytes from the ring.  Returns bytes copied.
-///
-/// Called by the log-flusher Cell (consumer side).
-pub fn drain(out: &mut [u8]) -> usize {
-    let head = RING.head.load(Ordering::Acquire);
-    let tail = RING.tail.load(Ordering::Relaxed);
-    let available = head.wrapping_sub(tail);
-    if available == 0 {
-        return 0;
-    }
-
-    let to_copy = available.min(out.len());
-    let buf = unsafe { &*RING.buf.get() };
-    for (i, byte) in out[..to_copy].iter_mut().enumerate() {
-        *byte = buf[(tail.wrapping_add(i)) & MASK];
-    }
-    RING.tail
-        .store(tail.wrapping_add(to_copy), Ordering::Release);
-    to_copy
+/// Length of the record starting at ring position `at`: the 8-byte timestamp,
+/// the event byte, the length byte at offset 9, then the payload.
+fn record_len_at(buf: &[u8; BUF_SIZE], at: usize) -> usize {
+    10 + buf[at.wrapping_add(9) & MASK] as usize
 }
 
-/// Number of records dropped due to ring-full since boot.
+/// Advance `tail` by whole records until `record_len` more bytes fit; returns
+/// the new tail and how many records were evicted. `tail` is always a record
+/// boundary (only this and `copy_whole_records` move it, by whole records), and
+/// a record (at most 265 bytes) always fits an empty ring.
+fn evict_for(buf: &[u8; BUF_SIZE], head: usize, mut tail: usize, record_len: usize) -> (usize, usize) {
+    let mut evicted = 0;
+    while head.wrapping_sub(tail) + record_len > BUF_SIZE {
+        tail = tail.wrapping_add(record_len_at(buf, tail));
+        evicted += 1;
+    }
+    (tail, evicted)
+}
+
+/// Copy whole records from `tail` towards `head` into `out`; a record that does
+/// not fit in the remaining space stops the copy. Returns bytes copied.
+fn copy_whole_records(buf: &[u8; BUF_SIZE], head: usize, tail: usize, out: &mut [u8]) -> usize {
+    let mut copied = 0;
+    while tail.wrapping_add(copied) != head {
+        let len = record_len_at(buf, tail.wrapping_add(copied));
+        if copied + len > out.len() {
+            break;
+        }
+        for i in 0..len {
+            out[copied + i] = buf[tail.wrapping_add(copied + i) & MASK];
+        }
+        copied += len;
+    }
+    copied
+}
+
+/// Drain whole records, up to `out.len()` bytes, from the ring. Returns bytes
+/// copied; a record that does not fit in the remaining space is left for the
+/// next call.
+///
+/// For the future log-flusher consumer; it has no caller today. Serialised with
+/// producers because they may advance `tail` when they evict.
+pub fn drain(out: &mut [u8]) -> usize {
+    let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
+    let copied = {
+        let _serialised = WRITE.lock();
+        let head = RING.head.load(Ordering::Relaxed);
+        let tail = RING.tail.load(Ordering::Relaxed);
+        // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
+        let buf = unsafe { &*RING.buf.get() };
+        let copied = copy_whole_records(buf, head, tail, out);
+        RING.tail.store(tail.wrapping_add(copied), Ordering::Release);
+        copied
+    };
+    // SAFETY: `saved_interrupts` was captured on this hart by the call above.
+    unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
+    copied
+}
+
+/// Number of records evicted to make room for newer ones since boot.
 pub fn dropped_count() -> usize {
     RING.dropped.load(Ordering::Relaxed)
 }
@@ -245,4 +288,71 @@ pub fn encode_u32x2(a: u32, b: u32) -> [u8; 8] {
     out[..4].copy_from_slice(&a.to_le_bytes());
     out[4..].copy_from_slice(&b.to_le_bytes());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The producer path of `log_event` over a local ring (the real one masks
+    /// interrupts, which a host test cannot do): evict, write, advance head.
+    fn put(buf: &mut [u8; BUF_SIZE], head: &mut usize, tail: &mut usize, event: u8, payload: &[u8]) -> usize {
+        let record_len = 10 + payload.len();
+        let (new_tail, evicted) = evict_for(buf, *head, *tail, record_len);
+        *tail = new_tail;
+        let mut pos = *head;
+        for &b in [0u8; 8].iter().chain(&[event, payload.len() as u8]).chain(payload) {
+            buf[pos & MASK] = b;
+            pos = pos.wrapping_add(1);
+        }
+        *head = pos;
+        evicted
+    }
+
+    /// Overfilling the ring evicts only the oldest whole records: the newest
+    /// survive, every drained byte parses as whole records, and a short read
+    /// stops at a record boundary instead of splitting one.
+    #[test]
+    fn full_ring_evicts_oldest_whole_records_and_drains_whole_records() {
+        let mut buf = alloc::boxed::Box::new([0u8; BUF_SIZE]);
+        // Start near usize::MAX so positions wrap during the test.
+        let (mut head, mut tail) = (usize::MAX - 1000, usize::MAX - 1000);
+        let mut evicted = 0;
+        let mut written = 0u32;
+        // Varying lengths so record boundaries never line up with the ring size.
+        while written < 4000 {
+            let len = 1 + (written as usize * 37) % 200;
+            let mut payload = alloc::vec![0u8; len];
+            payload[..4.min(len)].copy_from_slice(&written.to_le_bytes()[..4.min(len)]);
+            evicted += put(&mut buf, &mut head, &mut tail, 7, &payload);
+            written += 1;
+            assert!(head.wrapping_sub(tail) <= BUF_SIZE);
+        }
+        assert!(evicted > 0, "4000 records of up to 210 bytes overflow 256 KiB");
+
+        let mut out = alloc::vec![0u8; BUF_SIZE];
+        let first_len = record_len_at(&buf, tail);
+        assert_eq!(copy_whole_records(&buf, head, tail, &mut out[..first_len + 3]), first_len, "short read stops at a boundary");
+        assert_eq!(copy_whole_records(&buf, head, tail, &mut out[..first_len - 1]), 0, "a record larger than the space is left");
+
+        let n = copy_whole_records(&buf, head, tail, &mut out);
+        assert_eq!(n, head.wrapping_sub(tail), "an ample buffer drains everything");
+        let mut at = 0;
+        let mut survivors = 0u32;
+        let mut ids = alloc::vec::Vec::new();
+        while at < n {
+            let len = 10 + out[at + 9] as usize;
+            assert!(at + len <= n, "partial record");
+            assert_eq!(out[at + 8], 7);
+            let p = &out[at + 10..at + len];
+            if p.len() >= 4 {
+                ids.push(u32::from_le_bytes(p[..4].try_into().unwrap()));
+            }
+            survivors += 1;
+            at += len;
+        }
+        assert_eq!(ids.last(), Some(&3999), "the newest record survives");
+        assert!(ids.windows(2).all(|w| w[1] > w[0]), "survivors stay in write order");
+        assert_eq!(evicted as u32 + survivors, 4000, "every record is either evicted or still in the ring");
+    }
 }

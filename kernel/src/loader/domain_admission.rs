@@ -379,9 +379,13 @@ pub(crate) fn enable_for_boot() -> bool {
 /// transition from draining to disabled; no caller may re-enable this boot.
 #[allow(dead_code)] // reason: emergency admission rollback; no production caller until an operator channel lands (ADR-0019 §2.1), exercised by the boot selftest today
 pub(crate) fn begin_domain_drain() -> bool {
-    POLICY
+    let drained = POLICY
         .compare_exchange(ENABLED, DRAINING, Ordering::AcqRel, Ordering::Acquire)
-        .is_ok()
+        .is_ok();
+    if drained {
+        GENERATION.fetch_add(1, Ordering::AcqRel);
+    }
+    drained
 }
 
 #[cfg(all(
@@ -465,10 +469,13 @@ pub(crate) fn run_selftest() -> bool {
         log::error!("S22-{}-ADMISSION-DENY: FAIL", ADMISSION_TAG);
     }
 
-    // Enabled admits, and a drain invalidates the lease an admission is holding.
+    // Enabled admits, and a drain invalidates the lease an admission is holding
+    // by advancing the policy generation the lease was taken under.
     POLICY.store(ENABLED, Ordering::Release);
+    let generation_before = GENERATION.load(Ordering::Acquire);
     let lease = evaluate_domain_admission(DomainAdmissionRequest::fixture());
     let drained = begin_domain_drain()
+        && GENERATION.load(Ordering::Acquire) != generation_before
         && lease.is_ok_and(|lease| !lease.remains_enabled())
         && evaluate_domain_admission(DomainAdmissionRequest::fixture())
             == Err(DomainAdmissionDenial::PolicyDraining);

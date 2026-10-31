@@ -100,7 +100,7 @@ pub(super) fn snapshot() -> StateSnapshot {
         .iter()
         .map(|hart| {
             (
-                hart.hart_id,
+                hart.hart_id.load(Ordering::Acquire),
                 hart.current_task_id.load(Ordering::Acquire),
                 hart.current_cell_id.load(Ordering::Acquire),
             )

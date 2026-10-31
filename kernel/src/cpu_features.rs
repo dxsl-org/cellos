@@ -79,10 +79,51 @@ pub(crate) fn x86_virt_kind() -> Option<X86Virt> {
     }
 }
 
-/// Record that this CPU successfully entered x86 root operation.
+/// Enter the CPUID-selected backend's x86 root operation on the CURRENT CPU.
 ///
-/// Called by kmain after `hal::svm::enable()` / `hal::vmx::enter_root()`
-/// returned `Ok` — the HypervisorCap gate reads [`has_x86_virt`].
+/// Root operation is per-CPU state (`EFER.SVME` + `VM_HSAVE_PA`, or
+/// `CR4.VMXE` + `VMXON`), so every CPU gets its own freshly allocated HSAVE /
+/// VMXON frame. The frame is never freed: root operation lasts until reset, and
+/// it is never mapped into any guest NPT (P02 invariant). The BSP calls this
+/// before [`latch_x86_root_active`]; while [`has_x86_virt`] is set, each AP
+/// calls it before going online, and an AP that is refused stays offline.
+///
+/// `Err` names the refusal for the caller's log line.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn enter_x86_root_on_current_cpu() -> Result<X86Virt, &'static str> {
+    let kind = x86_virt_kind().ok_or("not supported by CPU")?;
+    let frame = {
+        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+        guard
+            .as_mut()
+            .expect("Frame allocator not initialized")
+            .allocate_frame()
+    };
+    match kind {
+        X86Virt::Svm => {
+            let pa = frame.ok_or("OOM allocating HSAVE frame")?;
+            // SAFETY: the HSAVE frame is freshly allocated, exclusively owned
+            // by this CPU and never freed (see above).
+            unsafe { hal::svm::enable(pa as u64) }
+                .map_err(|_| "SVM present but firmware-locked")?;
+        }
+        X86Virt::Vmx => {
+            let pa = frame.ok_or("OOM allocating VMXON frame")?;
+            let va = crate::memory::frame::phys_to_virt(pa) as *mut u32;
+            // SAFETY: pa/va name the same freshly allocated, exclusively owned
+            // frame (HHDM mapping), never freed (see above).
+            unsafe { hal::vmx::enter_root(pa as u64, va) }
+                .map_err(|_| "VMX present but unavailable")?;
+        }
+    }
+    Ok(kind)
+}
+
+/// Record that the BSP successfully entered x86 root operation.
+///
+/// Called by kmain after [`enter_x86_root_on_current_cpu`] returned `Ok` —
+/// the HypervisorCap gate reads [`has_x86_virt`]. APs that cannot enter the
+/// same root operation never go online, so the flag holds on every online CPU.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn latch_x86_root_active() {
     HAS_X86_VIRT.store(true, Ordering::Relaxed);
