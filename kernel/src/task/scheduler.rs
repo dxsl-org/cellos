@@ -1700,6 +1700,26 @@ impl Scheduler {
             }
         });
 
+        // A receive masked to exactly this task can never be satisfied once it
+        // is gone. Complete it through the same death lane as a watcher (the
+        // reason lands in the receive buffer), unless a NotifyOnExit delivery
+        // above already woke that receiver. Wildcard receives are untouched.
+        let masked_receivers: Vec<usize> = self
+            .tasks
+            .iter()
+            .filter_map(|(&id, task)| {
+                matches!(task.state, TaskState::Recv { mask, .. } if mask == tid).then_some(id)
+            })
+            .collect();
+        for receiver in masked_receivers {
+            if let Some(task) = self.tasks.get_mut(&receiver) {
+                task.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
+                task.pending_exit_reason = Some(exit_reason);
+                task.state = TaskState::Ready;
+            }
+            self.push_ready(receiver);
+        }
+
         // Owner watches are token-indexed and use a distinct delivery lane.
         // Backend receives are masked to a service TID, so only a wildcard VFS
         // public receive may wake for this event; masked receives leave it queued.

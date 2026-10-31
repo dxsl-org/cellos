@@ -428,18 +428,55 @@ fn block_wait_step(registered: bool, nvme_alive: bool, elapsed_ms: Option<u64>) 
     }
 }
 
-pub(crate) fn start_block_drivers() {
+/// A block Driver Cell that init respawns when it dies with a failure status
+/// (Phase 08C). The kernel only lets the new incarnation claim its PCI function
+/// after retirement quiesced it and revoked its DMA; while that proof is missing
+/// the claim fails, the replacement exits, and the crash budget gives up, so the
+/// device stays quarantined instead of being reused. A clean exit (no device on
+/// this machine) is final.
+fn supervised_block_driver(name: &str, path: &str, tid: usize) -> crate::service_table::Service {
+    use alloc::string::String;
+    use cellos_boot_config::{CellSpec, Registration, RestartPolicy};
+    let mut driver = crate::service_table::Service::new(CellSpec {
+        name: String::from(name),
+        path: String::from(path),
+        args: alloc::vec::Vec::new(),
+        enabled: true,
+        required: false,
+        restart: RestartPolicy::OnFailure,
+        service_id: Some(service::BLOCK_DRIVER),
+        registration: Registration::SelfReady,
+        after: alloc::vec::Vec::new(),
+        // A replacement resets its controller and identifies the disk before it
+        // registers; 10 s covers both on the QEMU models.
+        ready_timeout_ticks: 1000,
+    });
+    if matches!(ostd::syscall::sys_notify_on_exit(tid), SyscallResult::Ok(0)) {
+        driver.tid = Some(tid);
+    }
+    driver
+}
+
+/// Spawn the block Driver Cells and wait for one to register. Returns the
+/// drivers init supervises from here on (NVMe and, on x86, AHCI).
+pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Service> {
+    let mut supervised = alloc::vec::Vec::new();
     #[cfg(not(feature = "board-rpi3"))]
     let _ = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER);
     let nvme = match sys_spawn_from_path("/bin/nvme") {
         SyscallResult::Ok(tid) => Some(tid),
         SyscallResult::Err(_) => None,
     };
+    if let Some(tid) = nvme {
+        supervised.push(supervised_block_driver("nvme", "/bin/nvme", tid));
+    }
     // x86_64 PC lane (phase 02a): the SATA/AHCI cell. Absent from non-x86
-    // images and idles when the machine has no AHCI controller, so this spawn
-    // is inert everywhere else.
+    // images and exits cleanly when the machine has no SATA disk, so this
+    // spawn is inert everywhere else.
     #[cfg(target_arch = "x86_64")]
-    let _ = sys_spawn_from_path("/bin/ahci");
+    if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/ahci") {
+        supervised.push(supervised_block_driver("ahci", "/bin/ahci", tid));
+    }
     let registered = || sys_lookup_service(service::BLOCK_DRIVER).is_some();
     let started = ostd::syscall::sys_get_time_ms();
     loop {
@@ -450,7 +487,7 @@ pub(crate) fn start_block_drivers() {
                 if !registered() {
                     ostd::io::println("Init: no block driver registered within 60 s; starting the VFS without one.");
                 }
-                return;
+                return supervised;
             }
             BlockWait::KeepWaiting => ostd::task::yield_now(),
             BlockWait::Window => break,
@@ -462,6 +499,7 @@ pub(crate) fn start_block_drivers() {
         }
         ostd::task::yield_now();
     }
+    supervised
 }
 
 #[cfg(test)]

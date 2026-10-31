@@ -130,7 +130,40 @@ fn nvme_fat32_mount_x86() {
         );
         return;
     };
+    let disk = make_fat_nvme_disk(python);
 
+    // 3. Boot and assert the mount marker.
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            let _ = std::fs::remove_file(&disk);
+            panic!(
+                "FAT32-on-NVMe mount not seen within {BOOT_TIMEOUT}s: {e}\n\
+                 Chain: nvme Driver Cell registers pre-VFS → VFS blk_router IPC → \
+                 DrvRequest sector reads over NVMe DMA → fatfs BPB accept.\n\
+                 --- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached after NVMe mount: {e}\n{}", qemu.dump()));
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/probe.txt phase05-nvme-ok");
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("NVMe write command did not complete: {e}\n{}", qemu.dump()));
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vcat /mnt/sd/probe.txt");
+    qemu.wait_for_after("phase05-nvme-ok", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("NVMe read-back marker missing: {e}\n{}", qemu.dump()));
+
+    let _ = std::fs::remove_file(&disk);
+}
+
+/// An NVMe disk carrying a FAT32 volume at `PART_FAT32_BASE_LBA`.
+fn make_fat_nvme_disk(python: &str) -> PathBuf {
     // 1. Format a 524,288-sector (256 MiB) FAT32 volume in a temp file.
     const FAT_SECTORS: u64 = 524_288; // == api::disk::PART_FAT32_SECTORS
     const FAT_BASE_OFFSET: u64 = 2_048 * 512; // PART_FAT32_BASE_LBA in bytes
@@ -176,34 +209,74 @@ fn nvme_fat32_mount_x86() {
         d.write_all(&fat_bytes).expect("write FAT32 volume");
     }
     let _ = std::fs::remove_file(&fat_img);
+    disk
+}
 
-    // 3. Boot and assert the mount marker.
-    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
-    qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
-            panic!(
-                "FAT32-on-NVMe mount not seen within {BOOT_TIMEOUT}s: {e}\n\
-                 Chain: nvme Driver Cell registers pre-VFS → VFS blk_router IPC → \
-                 DrvRequest sector reads over NVMe DMA → fatfs BPB accept.\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
+/// Phase 08C: a dead NVMe driver is restarted by init. The replacement claims
+/// the quiesced function again, resets the controller (CC.EN=0 → CSTS.RDY=0),
+/// re-registers, and serves the volume: data committed before the death reads
+/// back and a new write completes. Needs the fault-injection ISO
+/// (`bash scripts/x86/make-ahci-fault-iso.sh`, `VICELL_AHCI_FAULT_ISO`), whose
+/// `/bin/nvme` exits on a write carrying `F08B-DIE`.
+#[test]
+fn nvme_driver_restart_resets_and_serves_again_x86() {
+    let Ok(iso) = std::env::var("VICELL_AHCI_FAULT_ISO") else {
+        eprintln!("SKIP nvme_driver_restart_resets_and_serves_again_x86: VICELL_AHCI_FAULT_ISO unset");
+        return;
+    };
+    let python = python_binary().expect("Python 3 formats the FAT32 fixture");
+    let disk = make_fat_nvme_disk(python);
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso, &disk.to_string_lossy());
+    for marker in ["[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    let run = |qemu: &mut QemuRunner, command: &str, expect: &str| {
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(command);
+        qemu.wait_for_after(expect, checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?}: {e}\n{}", qemu.dump()));
+        qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?} prompt: {e}\n{}", qemu.dump()));
+    };
+    run(&mut qemu, "vwrite /mnt/sd/keep.txt F08C-KEEP", "Cellos >");
 
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached after NVMe mount: {e}\n{}", qemu.dump()));
+    let death = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/die.txt F08B-DIE");
+    for marker in [
+        "[nvme] fault-inject: driver exiting",
+        "[pcie] quiesced",
+        "Init: service restarted.",
+        "[nvme] controller reset complete",
+        "[driver_cell] block driver registered",
+    ] {
+        qemu.wait_for_after(marker, death, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("restart marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    qemu.wait_for_after("Cellos >", death, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell after the driver death: {e}\n{}", qemu.dump()));
 
-    let checkpoint = qemu.output_checkpoint();
-    qemu.send_line("vwrite /mnt/sd/probe.txt phase05-nvme-ok");
-    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("NVMe write command did not complete: {e}\n{}", qemu.dump()));
-
-    let checkpoint = qemu.output_checkpoint();
-    qemu.send_line("vcat /mnt/sd/probe.txt");
-    qemu.wait_for_after("phase05-nvme-ok", checkpoint, CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("NVMe read-back marker missing: {e}\n{}", qemu.dump()));
-
+    run(&mut qemu, "vcat /mnt/sd/keep.txt", "F08C-KEEP");
+    run(&mut qemu, "vwrite /mnt/sd/after.txt F08C-AFTER", "Cellos >");
+    run(&mut qemu, "vcat /mnt/sd/after.txt", "F08C-AFTER");
+    let output = qemu.dump();
+    let after = output.get(death..).unwrap_or_default();
+    assert!(
+        !after.contains("not quiescent") && !after.contains("restart storm"),
+        "the function was retained or init gave up:\n{after}"
+    );
+    let evidence: Vec<&str> = after
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.contains("[pcie] quiesced")
+                || line.contains("Init: service")
+                || line.contains("controller reset")
+                || line.contains("block driver registered")
+        })
+        .collect();
+    println!("08C NVMe witness: {evidence:#?}");
+    drop(qemu);
     let _ = std::fs::remove_file(&disk);
 }
 

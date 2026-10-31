@@ -93,6 +93,16 @@ pub fn handle(
                     SECTOR_SIZE,
                 );
             }
+            // Phase 08C witness only: a payload carrying the marker kills this
+            // cell with its controller still enabled.
+            #[cfg(feature = "fault-inject")]
+            if data[10..10 + SECTOR_SIZE].windows(8).any(|window| window == b"F08B-DIE") {
+                let _ = ostd::io::print_fmt(format_args!(
+                    "[nvme] fault-inject: driver exiting at lba={}\n",
+                    sector
+                ));
+                ostd::syscall::sys_exit(70);
+            }
             match ctrl.write_sector(sector, io_buf.iova()) {
                 Ok(()) => status(out, BlockOutcome::Completed),
                 Err(outcome) => status(out, outcome),

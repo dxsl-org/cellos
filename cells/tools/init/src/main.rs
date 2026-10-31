@@ -78,8 +78,11 @@ fn cell_main() {
 }
 
 fn start_services() {
-    boot::start_block_drivers();
-    let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 1);
+    // Supervised block drivers go after every configured entry: launch and
+    // autoload orders index the table from 1. Each early `supervisor::run`
+    // below appends them first so a driver death is still watched.
+    let mut block_drivers = boot::start_block_drivers();
+    let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 1 + block_drivers.len());
     services.push(service_table::Service::bootstrap_vfs());
     match service_table::spawn(&mut services[0]) {
         Some(_) => {}
@@ -92,6 +95,7 @@ fn start_services() {
         Ok(config) => config,
         Err(error) => {
             println(&alloc::format!("Init: configuration failure — {error}"));
+            services.append(&mut block_drivers);
             supervisor::run(&mut services);
         }
     };
@@ -99,6 +103,7 @@ fn start_services() {
         Ok(order) => order,
         Err(error) => {
             println(&alloc::format!("Init: service ordering failure — {error}"));
+            services.append(&mut block_drivers);
             supervisor::run(&mut services);
         }
     };
@@ -106,12 +111,14 @@ fn start_services() {
         Ok(order) => order,
         Err(error) => {
             println(&alloc::format!("Init: autoload ordering failure — {error}"));
+            services.append(&mut block_drivers);
             supervisor::run(&mut services);
         }
     };
     let autoload_offset = 1 + service_config.cells.len();
     services.extend(service_config.cells.into_iter().map(service_table::Service::new));
     services.extend(autoload_config.cells.into_iter().map(service_table::Service::new));
+    services.append(&mut block_drivers);
     if !launch_order(&mut services, &service_order, 1) {
         println("Init: required service failed — autoload and OS ready blocked.");
         supervisor::run(&mut services);

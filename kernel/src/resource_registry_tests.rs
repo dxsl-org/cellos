@@ -78,3 +78,22 @@ fn bdf_claim_preserves_live_owner_until_reap() {
     assert_eq!(owner_of_bdf(BDF), Some(COMPETING_TID));
     release_bdfs_for(COMPETING_TID);
 }
+
+/// Phase 08C non-reuse: a retirement that cannot prove the function quiescent
+/// (no ECAM window on the host, so `quiesce_function` refuses) keeps the dead
+/// owner's BDF, and a replacement cannot claim it.
+#[test]
+fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
+    const BDF: u32 = 0x00_E1;
+    const DEAD_TID: usize = 0x5_08C1;
+    const REPLACEMENT_TID: usize = 0x5_08C2;
+    release_bdfs_for(DEAD_TID);
+    release_bdfs_for(REPLACEMENT_TID);
+    assert!(claim_bdf_owner(BDF, DEAD_TID));
+
+    assert!(!crate::task::teardown_dma_authority(DEAD_TID), "teardown must report retention");
+    assert_eq!(owner_of_bdf(BDF), Some(DEAD_TID));
+    assert!(!claim_bdf_owner(BDF, REPLACEMENT_TID));
+
+    release_bdfs_for(DEAD_TID);
+}

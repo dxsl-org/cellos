@@ -55,6 +55,24 @@ fn forget_driver(tid: usize) {
     let _ = DRIVER_TID.compare_exchange(tid, NOT_PROBED, Ordering::Relaxed, Ordering::Relaxed);
 }
 
+/// Receive the reply to a request sent to `tid`; `false` when there is none.
+///
+/// A receive masked to the driver completes with `Ok(tid)` both for a reply
+/// and when the driver dies (the kernel then writes the exit reason into the
+/// first 8 bytes; a clean exit, reason 0, would read as `Completed`). Death
+/// clears the driver's service registration before any receiver runs, so a
+/// message counts as a reply only while `tid` is still the registered block
+/// driver. Otherwise the cached tid is dropped so the next request finds the
+/// restarted driver (Phase 08C) instead of sending to the dead one.
+fn receive_reply(tid: usize, reply: &mut [u8]) -> bool {
+    let replied = matches!(sys_recv(tid, reply), SyscallResult::Ok(from) if from == tid)
+        && sys_lookup_service(api::syscall::service::BLOCK_DRIVER) == Some(tid);
+    if !replied {
+        forget_driver(tid);
+    }
+    replied
+}
+
 /// Read one 512-byte sector at absolute LBA `abs_lba`.
 ///
 /// Routes to the block Driver Cell (DrvRequest IPC) when registered, falling
@@ -72,19 +90,12 @@ pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
         // Reply: [status (1B)] [data (512B)] = 513 bytes. mask=tid so a message
         // from another cell (while we are blocked here) is never mistaken for it.
         let mut reply = [0u8; 1 + SECTOR_SIZE];
-        // This recv result used to be dropped, and dropping it is not harmless:
-        // the kernel delivers a driver cell's death as `Ok(dead_tid)` with the
-        // reason written into the first 8 bytes of the buffer, so a cell that
-        // died while this recv was parked left `reply[0] == 0` plus 512 bytes of
-        // zeros - a successful read of data that was never on the device, from
-        // which the filesystem then walked a FAT chain of zeros. Only `Ok(tid)`
-        // is a reply; anything else is a failure the caller's retry re-probes.
-        match sys_recv(tid, &mut reply) {
-            SyscallResult::Ok(from) if from == tid => {}
-            _ => {
-                forget_driver(tid);
-                return false;
-            }
+        // A read must never accept a death notification as data: see
+        // `receive_reply`. Before the recv result was checked at all, a cell
+        // that died here left `reply[0] == 0` plus 512 zero bytes, a successful
+        // read the filesystem then walked as a FAT chain of zeros.
+        if !receive_reply(tid, &mut reply) {
+            return false;
         }
         if !BlockOutcome::from_byte(reply[0]).is_completed() {
             return false;
@@ -147,19 +158,14 @@ fn exchange_status(tid: usize, req: &[u8]) -> BlockOutcome {
         return BlockOutcome::NotIssued;
     }
     let mut reply = [0u8; 1];
-    // Only `Ok(tid)` is a reply: the kernel delivers a driver cell's death as
-    // `Ok(dead_tid)`, and an unanswered write read as success would make the
+    // A missing reply after the send means the driver may have issued the
+    // command before it died; a write read as success would make the
     // write-through page cache believe a sector reached the device.
-    match sys_recv(tid, &mut reply) {
-        SyscallResult::Ok(from) if from == tid => BlockOutcome::from_byte(reply[0]),
-        other => {
-            ostd::io::println(&alloc::format!(
-                "[blk-router] driver reply missing after send: {:?}",
-                other
-            ));
-            forget_driver(tid);
-            BlockOutcome::Indeterminate
-        }
+    if receive_reply(tid, &mut reply) {
+        BlockOutcome::from_byte(reply[0])
+    } else {
+        ostd::io::println("[blk-router] driver died before replying; outcome indeterminate");
+        BlockOutcome::Indeterminate
     }
 }
 

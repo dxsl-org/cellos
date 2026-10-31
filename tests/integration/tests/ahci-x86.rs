@@ -579,3 +579,68 @@ fn ahci_driver_retirement_quiesces_function_x86() {
     );
     println!("08B witness: {line}");
 }
+
+/// Phase 08C: a dead AHCI driver is restarted by init, the replacement claims
+/// the quiesced function again, resets the HBA, re-registers, and serves the
+/// volume: the file committed before the death reads back and a new write
+/// completes through the new incarnation.
+#[test]
+fn ahci_driver_restart_resets_and_serves_again_x86() {
+    let Ok(iso) = std::env::var("VICELL_AHCI_FAULT_ISO") else {
+        eprintln!("SKIP ahci_driver_restart_resets_and_serves_again_x86: VICELL_AHCI_FAULT_ISO unset");
+        return;
+    };
+    let python = python_binary().expect("Python 3 formats the FAT32 fixture");
+    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    for marker in ["[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    let run = |qemu: &mut QemuRunner, command: &str, expect: &str| {
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(command);
+        qemu.wait_for_after(expect, checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?}: {e}\n{}", qemu.dump()));
+        qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("{command:?} prompt: {e}\n{}", qemu.dump()));
+    };
+    run(&mut qemu, "vwrite /mnt/sd/keep.txt F08C-KEEP", "Cellos >");
+
+    let death = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/die.txt F08B-DIE");
+    for marker in [
+        "[ahci] fault-inject: driver exiting",
+        "[pcie] quiesced 00:1f.2",
+        "Init: service restarted.",
+        "[ahci] HBA reset complete",
+        "[driver_cell] ahci storage driver ready",
+    ] {
+        qemu.wait_for_after(marker, death, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("restart marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    qemu.wait_for_after("Cellos >", death, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell after the driver death: {e}\n{}", qemu.dump()));
+
+    run(&mut qemu, "vcat /mnt/sd/keep.txt", "F08C-KEEP");
+    run(&mut qemu, "vwrite /mnt/sd/after.txt F08C-AFTER", "Cellos >");
+    run(&mut qemu, "vcat /mnt/sd/after.txt", "F08C-AFTER");
+    let output = qemu.dump();
+    let after = output.get(death..).unwrap_or_default();
+    assert!(
+        !after.contains("not quiescent") && !after.contains("restart storm"),
+        "the function was retained or init gave up:\n{after}"
+    );
+    let evidence: Vec<&str> = after
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.contains("[pcie] quiesced")
+                || line.contains("Init: service")
+                || line.contains("HBA reset")
+                || line.contains("block driver registered")
+                || line.contains("granted DMA BDF=00:1f.2")
+        })
+        .collect();
+    println!("08C AHCI witness: {evidence:#?}");
+}

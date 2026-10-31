@@ -8,6 +8,11 @@ license.workspace = true
 name = "driver-nvme"
 path = "src/main.rs"
 
+[features]
+# Phase 08C restart witness only (`F08B-DIE` in `src/dispatch.rs`); never
+# enabled by a production image profile.
+fault-inject = []
+
 [dependencies]
 types = { path = "../../../libs/types", version = "0.1.0" }
 api   = { path = "../../../libs/api", version = "0.1.0" }

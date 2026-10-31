@@ -152,6 +152,9 @@ impl NvmeController {
             }
             fence(Ordering::SeqCst);
         }
+        // Reset proof for a replacement incarnation (Phase 08C): the controller
+        // left whatever state its previous owner died in.
+        let _ = print_fmt(format_args!("[nvme] controller reset complete (CC.EN=0, CSTS.RDY=0)\n"));
 
         // 4. Program AQA, ASQ, ACQ.
         let aqa = ((ADMIN_QUEUE_DEPTH as u32 - 1) << 16) | (ADMIN_QUEUE_DEPTH as u32 - 1);

@@ -4667,6 +4667,32 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             ) = match pending_msg_info {
                 Err(()) => return Err(SyscallError::OutOfMemory),
                 Ok(None) => {
+                    // A receive masked to a peer that is already gone, with no
+                    // message of its left to deliver, would park forever: the
+                    // exit-time wake (scheduler `exit_task`) fired before this
+                    // receive existed. Complete it as that death, reason 0 like
+                    // NotifyOnExit's already-dead target.
+                    if mask != 0 {
+                        let peer_gone = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+                            sched.tasks.get(&mask).is_none_or(|peer| {
+                                matches!(
+                                    peer.state,
+                                    super::tcb::TaskState::Retiring
+                                        | super::tcb::TaskState::Terminated
+                                )
+                            })
+                        });
+                        if peer_gone {
+                            if buf_len >= core::mem::size_of::<u64>() {
+                                validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                                let view = caller_copy_view(caller_id)?;
+                                view.write_bytes(buf_ptr, &0u64.to_ne_bytes())
+                                    .map_err(|_| SyscallError::InvalidInput)?;
+                            }
+                            attest(mask);
+                            return Ok(mask);
+                        }
+                    }
                     let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
                     match res {
                         Ok(0) => {
