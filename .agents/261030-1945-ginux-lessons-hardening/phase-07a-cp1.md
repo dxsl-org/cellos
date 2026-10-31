@@ -1,6 +1,6 @@
 # Phase 07A CP1 — CSpace derive: destination admission, delegability, issuer preservation (Law-1 semantic)
 
-Status: **draft, awaiting user approval.** No code for this design is written.
+Status: CP1 and CP2 approved by the user 2026-10-31. Complete.
 
 ## 1. Facts (verified 2026-10-31)
 
@@ -41,3 +41,16 @@ D5. **Issuer preservation.** The child keeps the parent's `issuer`. The delegato
 - Shape of the receive/exercise path (holder-side lookup into the issuer table, or kernel-mediated transfer).
 - Legacy `CAP_TABLE` keyed by `CellId` only (census finding #4).
 - The signed-boot-manifest ADR (Phase 07 step 5).
+
+## 6. Result (2026-10-31)
+
+CP1 approved by the user ("Duyệt CP1"). Implemented in `kernel/src/cell/cspace.rs` and `kernel/src/task/cap_file_selftest.rs`:
+- D2/D3: `AuthorityTable::derive_destination` runs under the already-held `CELL_AUTHORITIES` lock in both dispatchers. A non-live or revoking destination returns `Stale`; any other Cell returns `Denied`; nothing is recorded.
+- D4: `SlotEntry::delegable`. `mint_kernel_root(kind, rights, delegable)`; the BootFS file root (OpenCap) is `false`. A child inherits its parent's flag, and a non-delegable parent returns `Denied`.
+- D5: a derived slot takes the parent's `issuer`. The `issuer` argument applies to roots only.
+- D2 ceiling check: with D3 every admitted destination is the source itself, and the child is already ⊆ the parent. A per-kind destination-ceiling map is therefore not implemented. It belongs to the future receive-path CP1, where a different destination becomes possible.
+- `tests/unit_cspace_smoke.rs` is not referenced by any Cargo target or script (never compiled) and tests only its own copy, so it was left unchanged rather than updated.
+
+Evidence: `cspace` host tests 11/11, including the new `derive_admits_only_live_self_destination_and_preserves_issuer` (cross-Cell `Denied` with no slot, stale or unregistered destination `Stale`, revoking destination `Stale` through the CSpace dispatcher, non-delegable root `Denied`, equal-rights local derive `Success` with issuer `Kernel`) and `child_is_never_more_delegable_than_parent`; x86 and RV64 release builds with `-D warnings`.
+
+CP2 approved by the user 2026-10-31 ("Duyệt CP2 + commit"). RV64 boot: `cap-file self-test PASS` (incl. non-delegable BootFS root), reaches `Cellos >`.

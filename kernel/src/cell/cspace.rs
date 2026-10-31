@@ -341,6 +341,8 @@ pub struct SlotEntry {
     pub depth: usize,
     pub admission_cut: bool,
     pub quiesced: bool,
+    /// May be derived from. A child is never more delegable than its parent.
+    pub delegable: bool,
 }
 
 impl Default for SlotEntry {
@@ -359,6 +361,7 @@ impl Default for SlotEntry {
             depth: 0,
             admission_cut: false,
             quiesced: true,
+            delegable: false,
         }
     }
 }
@@ -434,12 +437,15 @@ impl CellAuthority {
             Some(ticket) => Some(self.live_slot_index(ticket)? as u32),
             None => None,
         };
-        let depth = if let Some(parent_idx) = lineage_parent {
+        // A derived slot keeps the resource's issuer (the delegator is its lineage
+        // parent) and its parent's delegability; `issuer` applies to roots only.
+        let (depth, issuer, delegable) = if let Some(parent_idx) = lineage_parent {
             let p = &self.slots[parent_idx as usize];
             if p.admission_cut {
                 return Err(ControlStatus::AdmissionCut);
             }
-            if rights & !p.rights != 0
+            if !p.delegable
+                || rights & !p.rights != 0
                 || p.expiry.is_some_and(|limit| expiry.is_none_or(|value| value > limit))
             {
                 return Err(ControlStatus::Denied);
@@ -448,9 +454,9 @@ impl CellAuthority {
             if next_depth > MAX_LINEAGE_DEPTH {
                 return Err(ControlStatus::Capacity);
             }
-            next_depth
+            (next_depth, p.issuer, p.delegable)
         } else {
-            0
+            (0, issuer, true)
         };
 
         let idx = self.slots.iter().position(|slot| !slot.in_use)
@@ -476,6 +482,7 @@ impl CellAuthority {
             depth,
             admission_cut: false,
             quiesced: false,
+            delegable,
         };
         if let Some(parent_idx) = lineage_parent {
             self.slots[parent_idx as usize].child_count += 1;
@@ -488,10 +495,19 @@ impl CellAuthority {
     ///
     /// The only root-mint entry outside this module: the issuer is always
     /// `Kernel` and the holder is always the owning incarnation, so a caller
-    /// cannot mint for an arbitrary holder or claim another issuer.
-    pub(crate) fn mint_kernel_root(&mut self, kind: ResourceKind, rights: u32) -> Result<u64, ControlStatus> {
+    /// cannot mint for an arbitrary holder or claim another issuer. The minting
+    /// site decides whether the grant may be derived from.
+    pub(crate) fn mint_kernel_root(
+        &mut self,
+        kind: ResourceKind,
+        rights: u32,
+        delegable: bool,
+    ) -> Result<u64, ControlStatus> {
         let holder = Principal::Cell { id: self.cell_id, generation: self.generation };
-        self.allocate_slot(holder, Principal::Kernel, kind, rights, None, None)
+        let ticket = self.allocate_slot(holder, Principal::Kernel, kind, rights, None, None)?;
+        let idx = self.live_slot_index(ticket)?;
+        self.slots[idx].delegable = delegable;
+        Ok(ticket)
     }
 
     /// Verify a ticket and return reference to the slot if valid.
@@ -590,7 +606,7 @@ impl CellAuthority {
         file_box: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
         rights: u32,
     ) -> Result<u64, ControlStatus> {
-        let ticket = self.mint_kernel_root(ResourceKind::BootFSFile, rights)?;
+        let ticket = self.mint_kernel_root(ResourceKind::BootFSFile, rights, false)?;
         let _ = self.live_slot_index(ticket)?;
         crate::cell::cap_registry::attach_file_to_ticket((self.cell_id.0, self.generation, ticket), file_box);
         Ok(ticket)
@@ -635,6 +651,21 @@ pub struct AuthorityTable {
 impl AuthorityTable {
     pub fn get_mut(&mut self, key: &(u64, u64)) -> Option<&mut CellAuthority> {
         self.rows.binary_search_by_key(key, |r| r.0).ok().map(|i| &mut self.rows[i].1)
+    }
+    /// Spec 25 §3.1 destination admission for a derive (07A D2/D3): the
+    /// destination must be a live, non-revoking incarnation, else `Stale`. No
+    /// cross-Cell receive path is admitted yet, so a destination other than the
+    /// source incarnation itself is `Denied`. Two bounded lookups, no allocation.
+    fn derive_destination(&self, source: (u64, u64), destination: (u64, u64)) -> Result<(), ControlStatus> {
+        let live = self.rows.binary_search_by_key(&destination, |r| r.0)
+            .is_ok_and(|i| !self.rows[i].1.revoking);
+        if !live {
+            return Err(ControlStatus::Stale);
+        }
+        if destination != source {
+            return Err(ControlStatus::Denied);
+        }
+        Ok(())
     }
     /// (rows, capacity, outstanding reservations) for publication regression tests.
     #[cfg(feature = "test-hooks")]
@@ -710,6 +741,10 @@ pub fn dispatch_handle_control(
     };
 
     let mut auths = CELL_AUTHORITIES.lock();
+    let destination = auths.derive_destination(
+        (cell_id.0, generation),
+        (req.destination_cell, req.destination_generation),
+    );
     let Some(auth) = auths.get_mut(&(cell_id.0, generation)) else {
         return ControlResultHeader::new(ControlStatus::Stale, 0, 32, 0);
     };
@@ -728,6 +763,9 @@ pub fn dispatch_handle_control(
         }
         1 => {
             // Derive
+            if let Err(status) = destination {
+                return ControlResultHeader::new(status, req.ticket, 32, 0);
+            }
             let (parent_rights, parent_expiry, kind) = match auth.verify_ticket(req.ticket) {
                 Ok(slot) => (slot.rights, slot.expiry, slot.kind),
                 Err(status) => return ControlResultHeader::new(status, req.ticket, 32, 0),
@@ -797,6 +835,10 @@ pub fn dispatch_cspace_control(
     };
 
     let mut auths = CELL_AUTHORITIES.lock();
+    let destination = auths.derive_destination(
+        (cell_id.0, generation),
+        (req.target_cell, req.target_generation),
+    );
     let Some(auth) = auths.get_mut(&(cell_id.0, generation)) else {
         return ControlResultHeader::new(ControlStatus::Stale, 0, 32, 0);
     };
@@ -815,6 +857,9 @@ pub fn dispatch_cspace_control(
         }
         1 => {
             // Derive
+            if let Err(status) = destination {
+                return ControlResultHeader::new(status, req.parent_ticket, 32, 0);
+            }
             // This internal tranche has no mask-bearing subgrant metadata.
             // Reject unsupported authority rather than silently discard it.
             if req.mmio_mask != 0 || req.block_region_mask != 0 {
@@ -1046,5 +1091,78 @@ mod tests {
         assert_eq!(auth.slots, before);
         assert_eq!(auth.next_ticket_counter, u64::MAX);
         assert_eq!(auth.verify_ticket(parent).unwrap().rights, 3);
+    }
+
+    fn derive_request(ticket: u64, destination: (u64, u64), rights: u32) -> [u8; 48] {
+        let mut buf = [0u8; 48];
+        buf[0..4].copy_from_slice(&1u32.to_le_bytes());
+        buf[4..8].copy_from_slice(&1u32.to_le_bytes());
+        buf[8..16].copy_from_slice(&ticket.to_le_bytes());
+        buf[16..24].copy_from_slice(&destination.0.to_le_bytes());
+        buf[24..32].copy_from_slice(&destination.1.to_le_bytes());
+        buf[32..36].copy_from_slice(&rights.to_le_bytes());
+        buf
+    }
+
+    fn slots_in_use(cell: (u64, u64)) -> usize {
+        CELL_AUTHORITIES.lock().get_mut(&cell).unwrap().slots.iter().filter(|s| s.in_use).count()
+    }
+
+    /// 07A D2/D3/D4/D5 through the real dispatchers and the global table.
+    #[test]
+    fn derive_admits_only_live_self_destination_and_preserves_issuer() {
+        let (a, b) = ((41u64, 3u64), (42u64, 5u64));
+        assert!(register_cell_authority(CellId(a.0), a.1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(b.0), b.1, CapSet::EMPTY));
+        let (root, file) = {
+            let mut auths = CELL_AUTHORITIES.lock();
+            let auth = auths.get_mut(&a).unwrap();
+            let root = auth.mint_kernel_root(ResourceKind::CSpaceAuthority, 0x3, true).unwrap();
+            let file = auth.mint_kernel_root(ResourceKind::BootFSFile, 0x1, false).unwrap();
+            (root, file)
+        };
+        let before = slots_in_use(a);
+
+        // Cross-Cell (live B) refused, nothing recorded.
+        let r = dispatch_handle_control(CellId(a.0), a.1, &derive_request(root, b, 0x1));
+        assert_eq!(r.status, ControlStatus::Denied);
+        // Stale incarnation of B and a never-registered Cell: Stale.
+        let r = dispatch_handle_control(CellId(a.0), a.1, &derive_request(root, (b.0, b.1 + 1), 0x1));
+        assert_eq!(r.status, ControlStatus::Stale);
+        let r = dispatch_handle_control(CellId(a.0), a.1, &derive_request(root, (43, 1), 0x1));
+        assert_eq!(r.status, ControlStatus::Stale);
+        // Non-delegable root refused even toward itself.
+        let r = dispatch_handle_control(CellId(a.0), a.1, &derive_request(file, a, 0x1));
+        assert_eq!(r.status, ControlStatus::Denied);
+        assert_eq!(slots_in_use(a), before);
+
+        // Positive control: equal-rights local attenuation keeps the root issuer.
+        let r = dispatch_handle_control(CellId(a.0), a.1, &derive_request(root, a, 0x3));
+        assert_eq!(r.status, ControlStatus::Success);
+        let mut auths = CELL_AUTHORITIES.lock();
+        let child = auths.get_mut(&a).unwrap().verify_ticket(r.ticket).unwrap().clone();
+        assert_eq!((child.issuer, child.rights, child.depth, child.delegable), (Principal::Kernel, 0x3, 1, true));
+
+        // A revoking destination is no longer live (CSpace dispatcher).
+        auths.get_mut(&a).unwrap().revoking = true;
+        drop(auths);
+        let mut req = [0u8; 64];
+        req[0..4].copy_from_slice(&1u32.to_le_bytes());
+        req[4..8].copy_from_slice(&1u32.to_le_bytes());
+        req[8..16].copy_from_slice(&1u64.to_le_bytes());
+        req[16..24].copy_from_slice(&a.0.to_le_bytes());
+        req[24..32].copy_from_slice(&a.1.to_le_bytes());
+        let r = dispatch_cspace_control(CellId(b.0), b.1, &req);
+        assert_eq!(r.status, ControlStatus::Stale);
+    }
+
+    #[test]
+    fn child_is_never_more_delegable_than_parent() {
+        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let root = auth.mint_kernel_root(ResourceKind::CSpaceAuthority, 0x3, false).unwrap();
+        assert_eq!(
+            auth.allocate_slot(Principal::Kernel, Principal::Kernel, ResourceKind::CSpaceAuthority, 0x1, None, Some(root)),
+            Err(ControlStatus::Denied)
+        );
     }
 }

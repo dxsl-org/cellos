@@ -14,13 +14,15 @@ pub fn run() {
     register_cell_authority(cell, gen, CapSet::EMPTY);
     let mut auths = CELL_AUTHORITIES.lock();
     let auth = auths.get_mut(&(cell.0, gen)).expect("authority registered");
-    let ticket = auth.mint_kernel_root(ResourceKind::BootFSFile, CapPerms::FILE_READ.0)
+    let ticket = auth.mint_kernel_root(ResourceKind::BootFSFile, CapPerms::FILE_READ.0, false)
         .expect("file capability slot allocated");
+    let slot = auth.verify_ticket(ticket).expect("ticket verified");
     assert_eq!(
-        auth.verify_ticket(ticket).map(|slot| slot.holder).ok(),
-        Some(Principal::Cell { id: cell, generation: gen }),
+        slot.holder,
+        Principal::Cell { id: cell, generation: gen },
         "kernel root mint must be held by the owning incarnation"
     );
+    assert!(!slot.delegable, "a BootFS file root must not be delegable");
 
     // Read and Seek should pass permission check
     let slot = auth.verify_ticket(ticket).expect("ticket verified");
