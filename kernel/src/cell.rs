@@ -8,6 +8,8 @@ pub mod hotswap;
 pub mod metadata;
 pub mod registry;
 pub mod service_registry;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod provenance_selftest;
 pub mod state_stash;
 
 // Re-export core types for convenience

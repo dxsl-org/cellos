@@ -45,3 +45,9 @@ File set: `kernel/src/cell/cspace.rs` (`allocate_slot` private; new `pub(crate) 
 User: "xóa tests/unit_cspace_smoke.rs rồi tiếp tục CAP_TABLE". Census #4 re-checked: nothing allocates into the legacy `CAP_TABLE` (no `alloc`/`alloc_with_lease` caller in kernel, libs, cells, tests or tools); its only use is `revoke_all_for` at retirement (`kernel/src/task.rs:1469`), a no-op on an always-empty table. Clean cutover: delete `CapTable`/`CapEntry`/`CapResource`/`CAP_TABLE`, keep the CSpace file-backing helpers. Kernel-internal, no ABI or Law-1 delta.
 
 File set: `tests/unit_cspace_smoke.rs` (deleted, never compiled), `kernel/src/cell/cap_registry.rs`, `kernel/src/task.rs`, `CHANGELOG.md`, this plan directory.
+
+## Slice 07C (2026-10-31)
+
+User: "kiểm tra hoàn thành 3 việc còn lại của phase 07". (a) Private 1/2-hart authority witness (Phase 07 step 3/4, test-hooks only); (b) signed-boot-manifest ADR, status Proposed (step 5); (c) receive-path CP1 draft (design only; Law-1, no code without approval).
+
+File set: new `kernel/src/cell/provenance_selftest.rs` (cfg `test-hooks` + riscv64), `kernel/src/cell/mod.rs` (module line), `kernel/src/main.rs` (primary call after the TLB fixture), `kernel/src/task/smp.rs` (secondary call after the TLB fixture), new `tests/integration/tests/authority-provenance.rs`, `tests/integration/Cargo.toml` if tests need registration, new ADR under `docs/adr/`, new `phase-07c-receive-cp1.md`, `CHANGELOG.md`, this plan directory. Production (non-test-hooks) builds unchanged.

@@ -1081,6 +1081,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    crate::cell::provenance_selftest::run_primary();
     #[cfg(all(
         target_arch = "riscv64",
         feature = "native-domains",

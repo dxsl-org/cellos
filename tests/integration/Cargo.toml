@@ -221,3 +221,7 @@ api = { path = "../../libs/api" }
 
 # Detach from the parent workspace so the riscv64 default target is not inherited.
 [workspace]
+
+[[test]]
+name = "authority-provenance"
+path = "tests/authority-provenance.rs"
