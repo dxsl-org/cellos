@@ -127,7 +127,7 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 
 **CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses the POSIX services shim. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
 
-See `docs/mlibc-build.md` for the full mlibc build guide.
+See `docs/mlibc-build.md` for the full mlibc build guide. See also: [`docs/posix-ledger.md`](../posix-ledger.md) for the per-adapter POSIX export, sysdep and evidence ledger.
 
 **Cách hoạt động:** Rust cell link statically với C library. Các lời gọi POSIX bên trong C code (`malloc`, `open`, `read`...) được resolve sang `Cellos-libc` (Newlib + POSIX shim) tại link time — chạy native trong SAS, 0ms overhead.
 

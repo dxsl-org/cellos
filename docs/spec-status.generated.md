@@ -6,13 +6,15 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 401 |
+| Sections scanned | 431 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 290 |
+| Ratified/Accepted sections | 291 |
 | …of those, anchored | 18 |
 | Anchor violations | 2 |
-| Coverage gaps (ratified, unanchored) | 272 |
-| Status-prose hits | 79 |
+| Coverage gaps (ratified, unanchored) | 273 |
+| Status-prose hits | 80 |
+| Plans linked from status docs | 8 |
+| Structural errors (plan frontmatter, doc links) | 0 |
 
 ## Anchored sections
 
@@ -40,6 +42,21 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | `docs/specs/21-documentation-architecture.md` | 4. Rollout | `design` | OK |
 | `docs/specs/21-documentation-architecture.md` | 5. Rejected alternatives | `design` | OK |
 | `docs/specs/21-documentation-architecture.md` | 6. Cross-references | `design` | OK |
+
+## Plan status claims
+
+Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` with each plan's own frontmatter `status:`. Report-only: the linking prose may describe scheduling, evidence or implementation state, so the checker neither equates these statuses nor rewrites either side.
+
+| Plan | Frontmatter status | Linked from |
+|---|---|---|
+| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:183` |
+| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:416` |
+| `.agents/261011-1200-cell-contract-authority/plan.md` | `complete` | `.agents/plan-portfolio.md:17`, `.agents/plan-portfolio.md:27`, `README.md:76`, `README.md:100`, `docs/README.md:13` |
+| `.agents/261019-1310-unified-desktop/plan.md` | `completed` | `.agents/plan-portfolio.md:96` |
+| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:167` |
+| `.agents/261020-1750-cellbox-cli/plan.md` | `closed-at-stated-ceilings-with-deferred-items` | `.agents/plan-portfolio.md:108`, `.agents/plan-portfolio.md:110`, `.agents/plan-portfolio.md:127`, `docs/README.md:21` |
+| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:156` |
+| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:155` |
 
 ## Open findings
 
@@ -189,30 +206,30 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/14-viui.md:20` — 2. Runtime architecture
 - `docs/specs/14-viui.md:47` — 3. Dual authoring layer
 - `docs/specs/14-viui.md:62` — 4. Shipped component surface
-- `docs/specs/14-viui.md:77` — 5. Rendering and text
-- `docs/specs/14-viui.md:84` — 6. Non-goals
-- `docs/specs/14-viui.md:95` — 7. Verification gates
-- `docs/specs/14-viui.md:105` — See also
-- `docs/specs/15-kernel-boundary.md:10` — 1. Theoretical Basis
-- `docs/specs/15-kernel-boundary.md:12` — 1.1 Liedtke's Minimality Principle (1995)
-- `docs/specs/15-kernel-boundary.md:31` — 1.2 What LBI Can and Cannot Eliminate
-- `docs/specs/15-kernel-boundary.md:58` — 1.3 The Confused Deputy Problem
-- `docs/specs/15-kernel-boundary.md:73` — 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
-- `docs/specs/15-kernel-boundary.md:122` — 2. Kernel Whitelist — What BELONGS in the Kernel
-- `docs/specs/15-kernel-boundary.md:124` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
-- `docs/specs/15-kernel-boundary.md:136` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
-- `docs/specs/15-kernel-boundary.md:148` — Category C: Bootstrap Chicken-and-Egg
-- `docs/specs/15-kernel-boundary.md:172` — Category D: Hardware Exclusivity Arbiter
-- `docs/specs/15-kernel-boundary.md:186` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
-- `docs/specs/15-kernel-boundary.md:191` — 3.1 Device Drivers (all of them)
-- `docs/specs/15-kernel-boundary.md:235` — 3.2 Orchestration Policy
-- `docs/specs/15-kernel-boundary.md:255` — 3.3 Platform Enumeration
-- `docs/specs/15-kernel-boundary.md:263` — 3.4 Scheduling Policy
-- `docs/specs/15-kernel-boundary.md:274` — 3.5 Test/Debug Code
-- `docs/specs/15-kernel-boundary.md:282` — 4. The Boundary Decision Test (quick reference)
-- `docs/specs/15-kernel-boundary.md:306` — 5. Kernel Size Budget
-- `docs/specs/15-kernel-boundary.md:320` — 6. Comparison Table — Where Cellos Fits
-- `docs/specs/15-kernel-boundary.md:339` — 7. References
+- `docs/specs/14-viui.md:79` — 5. Rendering and text
+- `docs/specs/14-viui.md:89` — 6. Non-goals
+- `docs/specs/14-viui.md:100` — 7. Verification gates
+- `docs/specs/14-viui.md:110` — See also
+- `docs/specs/15-kernel-boundary.md:15` — 1. Theoretical Basis
+- `docs/specs/15-kernel-boundary.md:17` — 1.1 Liedtke's Minimality Principle (1995)
+- `docs/specs/15-kernel-boundary.md:36` — 1.2 What LBI Can and Cannot Eliminate
+- `docs/specs/15-kernel-boundary.md:63` — 1.3 The Confused Deputy Problem
+- `docs/specs/15-kernel-boundary.md:78` — 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
+- `docs/specs/15-kernel-boundary.md:127` — 2. Kernel Whitelist — What BELONGS in the Kernel
+- `docs/specs/15-kernel-boundary.md:129` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
+- `docs/specs/15-kernel-boundary.md:141` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
+- `docs/specs/15-kernel-boundary.md:153` — Category C: Bootstrap Chicken-and-Egg
+- `docs/specs/15-kernel-boundary.md:177` — Category D: Hardware Exclusivity Arbiter
+- `docs/specs/15-kernel-boundary.md:191` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
+- `docs/specs/15-kernel-boundary.md:196` — 3.1 Device Drivers (all of them)
+- `docs/specs/15-kernel-boundary.md:240` — 3.2 Orchestration Policy
+- `docs/specs/15-kernel-boundary.md:260` — 3.3 Platform Enumeration
+- `docs/specs/15-kernel-boundary.md:268` — 3.4 Scheduling Policy
+- `docs/specs/15-kernel-boundary.md:279` — 3.5 Test/Debug Code
+- `docs/specs/15-kernel-boundary.md:287` — 4. The Boundary Decision Test (quick reference)
+- `docs/specs/15-kernel-boundary.md:311` — 5. Kernel Size Budget
+- `docs/specs/15-kernel-boundary.md:325` — 6. Comparison Table — Where Cellos Fits
+- `docs/specs/15-kernel-boundary.md:344` — 7. References
 - `docs/specs/16-rustc-tcb.md:12` — 1. What "TCB" Means for Cellos
 - `docs/specs/16-rustc-tcb.md:36` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
 - `docs/specs/16-rustc-tcb.md:38` — 2.1 `#![forbid(unsafe_code)]` enforcement
@@ -236,40 +253,40 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/16-rustc-tcb.md:215` — 6. Policies Derived from This Spec
 - `docs/specs/16-rustc-tcb.md:232` — 7. Comparison with Prior Art
 - `docs/specs/16-rustc-tcb.md:248` — 8. Cross-References
-- `docs/specs/17-ipc-wire-contract.md:16` — 1. Scope & model
-- `docs/specs/17-ipc-wire-contract.md:40` — 2. The recv-mask rule (most important)
-- `docs/specs/17-ipc-wire-contract.md:68` — 3. Byte-0 discriminant registry
-- `docs/specs/17-ipc-wire-contract.md:114` — 4. Framing
-- `docs/specs/17-ipc-wire-contract.md:132` — 5. Buffer sizes
-- `docs/specs/17-ipc-wire-contract.md:152` — 6. Blocking discipline & the input queue
-- `docs/specs/17-ipc-wire-contract.md:179` — 7. Fail loud, never silent
-- `docs/specs/17-ipc-wire-contract.md:198` — 8. Case studies (the evidence this spec is built on)
-- `docs/specs/17-ipc-wire-contract.md:222` — 9. Compliance checklist & amendments
-- `docs/specs/17-ipc-wire-contract.md:279` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
-- `docs/specs/17-ipc-wire-contract.md:288` — 10.1 `NET_READY` frame
-- `docs/specs/17-ipc-wire-contract.md:303` — 10.2 Collision-safety invariants (normative)
-- `docs/specs/17-ipc-wire-contract.md:319` — 10.3 Interest registration
-- `docs/specs/17-ipc-wire-contract.md:333` — 10.4 Edge semantics + delivery
-- `docs/specs/17-ipc-wire-contract.md:345` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
-- `docs/specs/17-ipc-wire-contract.md:364` — 10.6 One recv consumer per tid + demux
-- `docs/specs/17-ipc-wire-contract.md:384` — 10.7 Handle namespace (frozen)
-- `docs/specs/17-ipc-wire-contract.md:394` — 11. Caller attestation — Ratified 2026-07-30
-- `docs/specs/17-ipc-wire-contract.md:399` — 11.1 The problem
-- `docs/specs/17-ipc-wire-contract.md:417` — 11.2 The mechanism
-- `docs/specs/17-ipc-wire-contract.md:434` — 11.3 Normative rules
-- `docs/specs/17-ipc-wire-contract.md:454` — 11.4 Direct (non-`ecall`) service calls
-- `docs/specs/17-ipc-wire-contract.md:481` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
-- `docs/specs/17-ipc-wire-contract.md:485` — 12.1 Copied IPC across Domain Boundaries
-- `docs/specs/17-ipc-wire-contract.md:495` — 12.2 Inter-Domain Zero-Copy Grants
-- `docs/specs/17-ipc-wire-contract.md:502` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+- `docs/specs/17-ipc-wire-contract.md:20` — 1. Scope & model
+- `docs/specs/17-ipc-wire-contract.md:48` — 2. The recv-mask rule (most important)
+- `docs/specs/17-ipc-wire-contract.md:95` — 3. Byte-0 discriminant registry
+- `docs/specs/17-ipc-wire-contract.md:141` — 4. Framing
+- `docs/specs/17-ipc-wire-contract.md:159` — 5. Buffer sizes
+- `docs/specs/17-ipc-wire-contract.md:179` — 6. Blocking discipline & the input queue
+- `docs/specs/17-ipc-wire-contract.md:205` — 7. Fail loud, never silent
+- `docs/specs/17-ipc-wire-contract.md:224` — 8. Case studies (the evidence this spec is built on)
+- `docs/specs/17-ipc-wire-contract.md:248` — 9. Compliance checklist & amendments
+- `docs/specs/17-ipc-wire-contract.md:330` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
+- `docs/specs/17-ipc-wire-contract.md:339` — 10.1 `NET_READY` frame
+- `docs/specs/17-ipc-wire-contract.md:354` — 10.2 Collision-safety invariants (normative)
+- `docs/specs/17-ipc-wire-contract.md:370` — 10.3 Interest registration
+- `docs/specs/17-ipc-wire-contract.md:384` — 10.4 Edge semantics + delivery
+- `docs/specs/17-ipc-wire-contract.md:396` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+- `docs/specs/17-ipc-wire-contract.md:415` — 10.6 One recv consumer per tid + demux
+- `docs/specs/17-ipc-wire-contract.md:435` — 10.7 Handle namespace (frozen)
+- `docs/specs/17-ipc-wire-contract.md:445` — 11. Caller attestation — Ratified 2026-07-30
+- `docs/specs/17-ipc-wire-contract.md:450` — 11.1 The problem
+- `docs/specs/17-ipc-wire-contract.md:468` — 11.2 The mechanism
+- `docs/specs/17-ipc-wire-contract.md:485` — 11.3 Normative rules
+- `docs/specs/17-ipc-wire-contract.md:505` — 11.4 Direct (non-`ecall`) service calls
+- `docs/specs/17-ipc-wire-contract.md:532` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+- `docs/specs/17-ipc-wire-contract.md:536` — 12.1 Copied IPC across Domain Boundaries
+- `docs/specs/17-ipc-wire-contract.md:546` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:553` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:89` — 2.1 Tier 1 admission — `cellos-sign`
-- `docs/specs/18-cell-trust-tiers.md:131` — 2.2 Tier 2 admission — nothing
-- `docs/specs/18-cell-trust-tiers.md:147` — 2.3 Upgrade path (G2+, optional)
-- `docs/specs/18-cell-trust-tiers.md:157` — 3. Rejected alternatives
-- `docs/specs/18-cell-trust-tiers.md:169` — 4. Consequences
-- `docs/specs/18-cell-trust-tiers.md:198` — 5. Cross-references
+- `docs/specs/18-cell-trust-tiers.md:136` — 2.2 Tier 2 admission — nothing
+- `docs/specs/18-cell-trust-tiers.md:152` — 2.3 Upgrade path (G2+, optional)
+- `docs/specs/18-cell-trust-tiers.md:162` — 3. Rejected alternatives
+- `docs/specs/18-cell-trust-tiers.md:174` — 4. Consequences
+- `docs/specs/18-cell-trust-tiers.md:203` — 5. Cross-references
 - `docs/specs/18c-publisher-provenance-envelope.md:5` — Purpose and scope
 - `docs/specs/18c-publisher-provenance-envelope.md:13` — Terms
 - `docs/specs/18c-publisher-provenance-envelope.md:21` — Canonical envelope encoding, version 1
@@ -284,12 +301,13 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/20-unified-ipc-contract.md:37` — 2.2 Principal, ingress and export
 - `docs/specs/20-unified-ipc-contract.md:47` — 2.3 Frames, bounds and capacity
 - `docs/specs/20-unified-ipc-contract.md:59` — 2.4 Submission and outcome matrix
-- `docs/specs/20-unified-ipc-contract.md:77` — 2.5 Liveness and safety boundaries
-- `docs/specs/20-unified-ipc-contract.md:81` — 3. Boundedness and runtime constraints
-- `docs/specs/20-unified-ipc-contract.md:90` — 4. ABI and caller inventory (proposal, no additions)
-- `docs/specs/20-unified-ipc-contract.md:101` — 5. Behavioral proof matrix (required before promotion, not a passing test report)
-- `docs/specs/20-unified-ipc-contract.md:113` — 6. Open gates and ratification checklist
-- `docs/specs/20-unified-ipc-contract.md:128` — 7. Revision record
+- `docs/specs/20-unified-ipc-contract.md:77` — 2.6 Local RPC lifecycle — synchronous and nonblocking callers share one operation
+- `docs/specs/20-unified-ipc-contract.md:175` — 2.5 Liveness and safety boundaries
+- `docs/specs/20-unified-ipc-contract.md:179` — 3. Boundedness and runtime constraints
+- `docs/specs/20-unified-ipc-contract.md:188` — 4. ABI and caller inventory (proposal, no additions)
+- `docs/specs/20-unified-ipc-contract.md:199` — 5. Behavioral proof matrix (required before promotion, not a passing test report)
+- `docs/specs/20-unified-ipc-contract.md:211` — 6. Open gates and ratification checklist
+- `docs/specs/20-unified-ipc-contract.md:226` — 7. Revision record
 - `docs/specs/23-native-sdk-contract.md:14` — 1. Scope and non-claims
 - `docs/specs/23-native-sdk-contract.md:37` — 2. Vocabulary and evidence rule
 - `docs/specs/23-native-sdk-contract.md:39` — 2.1 Stability
@@ -385,4 +403,4 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 - `docs/specs/13-peripherals.md:170` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
 - `docs/specs/13-peripherals.md:171` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
 - `docs/specs/13-peripherals.md:172` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
-- … 19 more
+- … 20 more

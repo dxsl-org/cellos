@@ -180,6 +180,7 @@ data under load, which is strictly worse than a clean refusal.
 | Tier 2 admission control ruling | `docs/decisions/0019-tier2-admission-control-on-path.md` |
 | Application tiers, profiles, SDK modules | `docs/specs/05-application.md`, `docs/decisions/0003-application-tier-taxonomy.md` |
 | FFI/POSIX profile guide | `docs/guides/tier1b-c-zig.md` |
+| POSIX adapter ledger (exports, sysdeps, evidence status) | See also: [`docs/posix-ledger.md`](../posix-ledger.md) |
 | Dual-mode hybrid architecture | `docs/decisions/0015-dual-mode-hybrid-architecture.md` |
 | First Tier 2 application (Ocel) | `docs/decisions/0017-dual-browser-strategy-ocel-and-tier3-chrome.md` |
 | Runtime/language research and verdicts | `docs/research/ecosystem.md` |

@@ -66,11 +66,23 @@ jobs:
       # rollout step 1, warn-only, because specs 00-18 and 20 are not anchored
       # yet (256 ratified sections).
       # What IS enforced today: the generated status file must be current, so a
-      # code rename that breaks an anchor cannot land silently. Turn on full
-      # enforcement with `--strict` once the step-2 backfill reaches zero
-      # coverage gaps.
+      # code rename that breaks an anchor cannot land silently, and plan
+      # frontmatter `status:` plus local links in the portfolio/README status
+      # docs must be structurally valid (ginux-lessons Phase 05; statuses are
+      # reported side by side, never equated). Turn on full anchor enforcement
+      # with `--strict` once the step-2 backfill reaches zero coverage gaps.
       - name: Check spec anchors and generated status
-        run: python3 scripts/check-spec-anchors.py --check
+        run: |
+          python3 -m unittest scripts/test_check_spec_anchors.py
+          python3 scripts/check-spec-anchors.py --check
+
+      # POSIX ledger (ADR-0018, docs/posix-ledger.md): every Tier-A export and
+      # mlibc sysdep is listed exactly once with a closed-vocabulary status, and
+      # a behavioural status needs a behavioural evidence anchor.
+      - name: Check POSIX ledger
+        run: |
+          python3 -m unittest scripts/test_check_posix_ledger.py
+          python3 scripts/check-posix-ledger.py
 
       - name: Validate app-tier acceptance ledger
         run: |

@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Semantic documentation consistency and optional POSIX ledger"
-status: pending
+status: partial (tooling, ledger and CI done; behavioural criterion 3 open: posix-shim-test cannot launch on RV64, see CHANGELOG RCA)
 priority: P2
 dependencies: [1]
 tier: medium

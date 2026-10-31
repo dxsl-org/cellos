@@ -17,11 +17,28 @@ Anchor grammar (Spec 21 §3):
 
 Several anchors may share one line, separated by " · ".
 
+Structural pass (Phase 05, report-only for meaning, fail-only for structure):
+
+    plan status   YAML-frontmatter `status:` of .agents/*/plan.md; an
+                  unterminated frontmatter block or a duplicate, empty or
+                  non-scalar `status:` is a structural error
+    doc links     inline Markdown links in .agents/plan-portfolio.md,
+                  README.md and docs/README.md; a local target that does not
+                  exist is a structural error (external schemes and
+                  anchor-only links are ignored, #fragments stripped)
+    plan claims   every plan those docs link is listed with its frontmatter
+                  status and the linking file:line. Linked prose may describe
+                  scheduling, evidence or implementation state, so statuses
+                  are never compared, equated or rewritten.
+
 Modes:
-  (default)  report findings, rewrite docs/spec-status.generated.md, exit 0
-  --check    do not write; exit 1 when the committed status file is stale
-  --strict   exit 1 on anchor violations and on coverage gaps in
-             Ratified/Accepted/Definitive sections (rollout step 3)
+  (default)          report findings, rewrite docs/spec-status.generated.md,
+                     exit 0
+  --check            do not write; exit 1 when the committed status file is
+                     stale or a structural error exists
+  --check-structure  do not write; exit 1 only on structural errors
+  --strict           exit 1 on anchor violations and on coverage gaps in
+                     Ratified/Accepted/Definitive sections (rollout step 3)
 
 The script needs no toolchain and never compiles the tree, so it runs on every
 push cheaply, alongside scripts/check-cell-va-layout.py.
@@ -34,11 +51,14 @@ import ast
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 SPECS_DIR = ROOT / "docs" / "specs"
 STATUS_FILE = ROOT / "docs" / "spec-status.generated.md"
 ABSENT_ROOTS = ("kernel", "libs", "cells")
+PLAN_GLOB = ".agents/*/plan.md"
+CLAIM_DOCS = (".agents/plan-portfolio.md", "README.md", "docs/README.md")
 
 RATIFIED = ("ratified", "accepted", "definitive")
 STATUS_WORDS = (
@@ -56,6 +76,10 @@ HEADING_RE = re.compile(r"^(#{2,4})\s+(.*?)\s*$")
 ANCHOR_RE = re.compile(r"^\s*>?\s*\**\s*Anchor\**:\s*(.+?)\s*$")
 STATUS_RE = re.compile(r"^\s*>?\s*\**\s*Status\**:\s*(.+?)\s*$")
 KEYWORDS = ("status:", "anchor:")
+FRONTMATTER_STATUS_RE = re.compile(r"^status\s*:(.*)$")
+LINK_RE = re.compile(r"\]\(\s*(<[^>]*>|[^)\s]+)")
+CODE_SPAN_RE = re.compile(r"(`+).*?\1")
+SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
 # Status prose Spec 21 §3 forbids outside fenced blocks.
 PROSE_PATTERNS = (
@@ -85,7 +109,7 @@ SUFFIX_RE = re.compile(r"(?<=\d)(u8|u16|u32|u64|usize|i8|i16|i32|i64|isize)")
 
 class Finding:
     def __init__(self, severity: str, spec: str, line: int, subject: str, detail: str):
-        self.severity = severity  # violation | coverage | prose
+        self.severity = severity  # violation | coverage | prose | structural
         self.spec = spec
         self.line = line
         self.subject = subject
@@ -394,13 +418,155 @@ def collect() -> tuple[list[Section], list[Finding]]:
     return sections, findings
 
 
-def render_status(sections: list[Section], findings: list[Finding]) -> str:
+def frontmatter_scalar(raw: str) -> str | None:
+    """One-line plain or quoted YAML scalar with its comment stripped, else None."""
+    if raw and not raw[0].isspace():
+        return None  # `status:x` is a plain scalar key, not a mapping entry
+    value = raw.strip()
+    if value[:1] in ("'", '"'):
+        close = value.find(value[0], 1)
+        if close < 0 or value[close + 1 :].strip()[:1] not in ("", "#"):
+            return None
+        return value[1:close].strip() or None
+    value = re.split(r"\s#", value, maxsplit=1)[0].strip()
+    if not value or value[0] in "[{|>&*!#%@`":
+        return None
+    return value
+
+
+def plan_status(path: Path, rel: str) -> tuple[str | None, list[Finding]]:
+    """A plan's frontmatter `status:` plus structural findings; None when absent."""
+    lines = read_text(path).splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None, []
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return None, [
+            Finding("structural", rel, 1, "frontmatter", "opening '---' is never closed")
+        ]
+
+    entries: list[tuple[int, str]] = []
+    for index in range(1, end):
+        match = FRONTMATTER_STATUS_RE.match(lines[index])
+        if match:
+            entries.append((index + 1, match.group(1)))
+
+    findings: list[Finding] = []
+    status: str | None = None
+    for position, (line, raw) in enumerate(entries):
+        if position:
+            findings.append(
+                Finding(
+                    "structural",
+                    rel,
+                    line,
+                    "status",
+                    f"duplicate frontmatter status (first at line {entries[0][0]})",
+                )
+            )
+        value = frontmatter_scalar(raw)
+        if value is None:
+            findings.append(
+                Finding(
+                    "structural",
+                    rel,
+                    line,
+                    "status",
+                    f"malformed frontmatter status '{raw.strip()}' (expected a one-line scalar)",
+                )
+            )
+        elif not position:
+            status = value
+    return status, findings
+
+
+def doc_links(path: Path) -> list[tuple[int, str]]:
+    """Inline Markdown link targets outside fenced and inline code, as (line, target)."""
+    links: list[tuple[int, str]] = []
+    in_fence = False
+    for number, line in enumerate(read_text(path).splitlines(), 1):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        for match in LINK_RE.finditer(CODE_SPAN_RE.sub("", line)):
+            links.append((number, match.group(1).strip("<>").strip()))
+    return links
+
+
+def local_target(doc: Path, target: str, root: Path) -> Path | None:
+    """Filesystem path a link names; None for external or anchor-only links."""
+    if target.startswith(("#", "//")) or SCHEME_RE.match(target):
+        return None
+    local = unquote(target.split("#", 1)[0].split("?", 1)[0])
+    if not local:
+        return None
+    if local.startswith("/"):
+        return root / local.lstrip("/")
+    return doc.parent / local
+
+
+def linked_plan(target: Path, root: Path) -> str | None:
+    """Repo-relative plan.md a link names directly or through its plan directory."""
+    plan = (target / "plan.md" if target.is_dir() else target).resolve()
+    agents = (root / ".agents").resolve()
+    if plan.name != "plan.md" or plan.parent.parent != agents or not plan.is_file():
+        return None
+    return plan.relative_to(root.resolve()).as_posix()
+
+
+def collect_structure(
+    root: Path,
+) -> tuple[list[Finding], list[tuple[str, str | None, list[str]]]]:
+    """Structural plan-status/link findings plus (plan, status, linking sites) claims."""
+    findings: list[Finding] = []
+    statuses: dict[str, str | None] = {}
+    for plan in sorted(root.glob(PLAN_GLOB)):
+        rel = plan.relative_to(root).as_posix()
+        statuses[rel], plan_findings = plan_status(plan, rel)
+        findings.extend(plan_findings)
+
+    linked: dict[str, list[str]] = {}
+    for doc_rel in CLAIM_DOCS:
+        doc = root / doc_rel
+        if not doc.is_file():
+            findings.append(Finding("structural", doc_rel, 0, doc_rel, "claim document missing"))
+            continue
+        for number, target in doc_links(doc):
+            path = local_target(doc, target, root)
+            if path is None:
+                continue
+            if not path.exists():
+                findings.append(
+                    Finding("structural", doc_rel, number, target, "link target does not exist")
+                )
+                continue
+            plan = linked_plan(path, root)
+            if plan is None:
+                continue
+            sites = linked.setdefault(plan, [])
+            site = f"{doc_rel}:{number}"
+            if site not in sites:
+                sites.append(site)
+
+    claims = [(plan, statuses.get(plan), sites) for plan, sites in sorted(linked.items())]
+    return findings, claims
+
+
+
+def render_status(
+    sections: list[Section],
+    findings: list[Finding],
+    claims: list[tuple[str, str | None, list[str]]],
+) -> str:
     anchored = [s for s in sections if s.anchor]
     ratified = [s for s in sections if s.ratified]
     ratified_anchored = [s for s in ratified if s.anchor]
     violations = [f for f in findings if f.severity == "violation"]
     coverage = [f for f in findings if f.severity == "coverage"]
     prose = [f for f in findings if f.severity == "prose"]
+    structural = [f for f in findings if f.severity == "structural"]
 
     out: list[str] = []
     out.append("# Generated spec anchor status")
@@ -422,6 +588,8 @@ def render_status(sections: list[Section], findings: list[Finding]) -> str:
     out.append(f"| Anchor violations | {len(violations)} |")
     out.append(f"| Coverage gaps (ratified, unanchored) | {len(coverage)} |")
     out.append(f"| Status-prose hits | {len(prose)} |")
+    out.append(f"| Plans linked from status docs | {len(claims)} |")
+    out.append(f"| Structural errors (plan frontmatter, doc links) | {len(structural)} |")
     out.append("")
     out.append("## Anchored sections")
     out.append("")
@@ -435,8 +603,35 @@ def render_status(sections: list[Section], findings: list[Finding]) -> str:
     if not anchored:
         out.append("| — | — | — | — |")
     out.append("")
+    out.append("## Plan status claims")
+    out.append("")
+    out.append(
+        "Plans linked from "
+        + ", ".join(f"`{doc}`" for doc in CLAIM_DOCS)
+        + " with each plan's own frontmatter `status:`. Report-only: the linking "
+        "prose may describe scheduling, evidence or implementation state, so the "
+        "checker neither equates these statuses nor rewrites either side."
+    )
+    out.append("")
+    out.append("| Plan | Frontmatter status | Linked from |")
+    out.append("|---|---|---|")
+    for plan, status, sites in claims:
+        shown = f"`{status}`".replace("|", "\\|") if status else "—"
+        linked = ", ".join(f"`{site}`" for site in sites)
+        out.append(f"| `{plan}` | {shown} | {linked} |")
+    if not claims:
+        out.append("| — | — | — |")
+    out.append("")
     out.append("## Open findings")
     out.append("")
+    if structural:
+        out.append("### Structural errors (fail `--check`)")
+        out.append("")
+        for finding in structural:
+            out.append(
+                f"- `{finding.spec}:{finding.line}` — {finding.subject}: {finding.detail}"
+            )
+        out.append("")
     if violations:
         out.append("### Anchor violations")
         out.append("")
@@ -461,7 +656,7 @@ def render_status(sections: list[Section], findings: list[Finding]) -> str:
         if len(prose) > 60:
             out.append(f"- … {len(prose) - 60} more")
         out.append("")
-    if not (violations or coverage or prose):
+    if not (violations or coverage or prose or structural):
         out.append("None.")
         out.append("")
     return "\n".join(out)
@@ -472,7 +667,12 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="do not write the status file; fail when it is stale",
+        help="do not write the status file; fail when it is stale or on structural errors",
+    )
+    parser.add_argument(
+        "--check-structure",
+        action="store_true",
+        help="do not write the status file; fail only on structural errors",
     )
     parser.add_argument(
         "--strict",
@@ -482,7 +682,8 @@ def main() -> int:
     args = parser.parse_args()
 
     sections, findings = collect()
-    rendered = render_status(sections, findings)
+    structural, claims = collect_structure(ROOT)
+    rendered = render_status(sections, findings + structural, claims)
 
     violations = [f for f in findings if f.severity == "violation"]
     coverage = [f for f in findings if f.severity == "coverage"]
@@ -496,6 +697,12 @@ def main() -> int:
     )
     for finding in violations:
         print(f"  violation {finding.spec}:{finding.line} — {finding.subject}: {finding.detail}")
+    print(
+        f"plan structure: {len(claims)} linked plan(s), "
+        f"{len(structural)} structural error(s)"
+    )
+    for finding in structural:
+        print(f"  structural {finding.spec}:{finding.line} — {finding.subject}: {finding.detail}")
 
     stale = False
     if STATUS_FILE.is_file():
@@ -503,22 +710,30 @@ def main() -> int:
     else:
         stale = True
 
-    if args.check:
-        if stale:
-            print(
-                f"FAIL: {STATUS_FILE.relative_to(ROOT)} is stale — "
-                "run python3 scripts/check-spec-anchors.py and commit the result"
-            )
-            return 1
-        print(f"OK: {STATUS_FILE.relative_to(ROOT)} is current")
+    failed = False
+    if args.check or args.check_structure:
+        if args.check:
+            if stale:
+                print(
+                    f"FAIL: {STATUS_FILE.relative_to(ROOT)} is stale — "
+                    "run python3 scripts/check-spec-anchors.py and commit the result"
+                )
+                failed = True
+            else:
+                print(f"OK: {STATUS_FILE.relative_to(ROOT)} is current")
+        if structural:
+            print(f"FAIL: {len(structural)} structural error(s) in plan frontmatter or doc links")
+            failed = True
+        else:
+            print("OK: plan frontmatter and status-doc links are structurally valid")
     else:
         STATUS_FILE.write_text(rendered, encoding="utf-8")
         print(f"wrote {STATUS_FILE.relative_to(ROOT)} ({len(rendered.splitlines())} lines)")
 
     if args.strict and (violations or coverage):
         print("FAIL: strict mode (Spec 21 rollout step 3)")
-        return 1
-    return 0
+        failed = True
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
