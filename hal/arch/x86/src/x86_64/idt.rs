@@ -18,6 +18,8 @@ mod probe;
 #[cfg(feature = "x86-idt-cpl3-test")]
 mod probe_entry;
 #[cfg(feature = "x86-idt-cpl3-test")]
+mod probe_ist;
+#[cfg(feature = "x86-idt-cpl3-test")]
 mod probe_timer;
 
 include!(concat!(env!("OUT_DIR"), "/x86_idt_generated.rs"));
@@ -49,12 +51,12 @@ impl IdtEntry {
         reserved: 0,
     };
 
-    fn interrupt_gate(handler: usize, dpl: u8) -> Self {
+    fn interrupt_gate(handler: usize, dpl: u8, ist: u8) -> Self {
         let handler = handler as u64;
         Self {
             off_lo: handler as u16,
             selector: 0x08,
-            ist: 0,
+            ist: ist & 7,
             attributes: 0x8e | ((dpl & 3) << 5),
             off_mid: (handler >> 16) as u16,
             off_hi: (handler >> 32) as u32,
@@ -73,6 +75,21 @@ struct IdtPointer {
 }
 
 static mut IDT: Idt = Idt([IdtEntry::MISSING; X86_IDT_STUB_COUNT]);
+
+/// IST slot for `vector`: NMI, #DF and #MC never run on the interrupted stack.
+pub const fn ist_for_vector(vector: usize) -> u8 {
+    match vector {
+        2 => super::ist::IST_NMI,
+        8 => super::ist::IST_DF,
+        18 => super::ist::IST_MC,
+        _ => 0,
+    }
+}
+
+/// IST slot encoded in the installed gate for `vector` (fixture oracle).
+pub fn gate_ist(vector: usize) -> u8 {
+    unsafe { (*core::ptr::addr_of!(IDT)).0[vector].ist }
+}
 static IDT_READY: AtomicBool = AtomicBool::new(false);
 
 pub fn init() {
@@ -83,7 +100,7 @@ pub fn init() {
             debug_assert!(handler != 0 && (vector == 0 || handler > previous));
             previous = handler;
             let dpl = if vector == 0x80 { 3 } else { 0 };
-            (*idt).0[vector] = IdtEntry::interrupt_gate(handler, dpl);
+            (*idt).0[vector] = IdtEntry::interrupt_gate(handler, dpl, ist_for_vector(vector));
         }
         IDT_READY.store(true, Ordering::Release);
         assert!(load_current_cpu());

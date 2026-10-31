@@ -3,7 +3,8 @@
 //! ## Syscall ABI translation
 //!
 //! x86_64 syscall ABI: RAX=number, args in RDI/RSI/RDX/R10/R8/R9.
-//! Hardware saves: RCX=user RIP, R11=user RFLAGS, then clears IF (via FMASK).
+//! Hardware saves: RCX=user RIP, R11=user RFLAGS, then clears the FMASK bits
+//! (IF, TF, DF, AC, NT, IOPL) so Rust never runs with a caller's DF or AC.
 //!
 //! The kernel dispatcher `ViCell_syscall_dispatch` uses the RISC-V index
 //! convention (regs[17]=number, regs[10]=a0, …).  `syscall_entry` translates:
@@ -38,6 +39,10 @@ const IA32_EFER: u32 = 0xC000_0080;
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
 const IA32_FMASK: u32 = 0xC000_0084;
+/// RFLAGS bits cleared on SYSCALL: TF(8) IF(9) DF(10) IOPL(12-13) NT(14) AC(18).
+/// DF=0 is a Rust ABI requirement; AC=0 keeps a caller from opening an SMAP
+/// window for the kernel. SYSRET restores the caller's flags from R11.
+pub const SYSCALL_FMASK: u64 = (1 << 8) | (1 << 9) | (1 << 10) | (3 << 12) | (1 << 14) | (1 << 18);
 const IA32_GSBASE: u32 = 0xC000_0101;
 const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 
@@ -150,7 +155,7 @@ pub fn init() {
         fn syscall_entry();
     }
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
-    wrmsr(IA32_FMASK, 0x0300); // clear IF + DF on syscall entry
+    wrmsr(IA32_FMASK, SYSCALL_FMASK);
 
 }
 
@@ -176,7 +181,7 @@ pub fn set_task_pku(val: u32) {
 //
 // On SYSCALL entry (hardware invariants):
 //   RCX = user RIP (return address)
-//   R11 = user RFLAGS (saved by CPU; IF cleared via FMASK=0x0300)
+//   R11 = user RFLAGS (saved by CPU; IF/TF/DF/AC/NT/IOPL cleared via FMASK)
 //   RSP = still user RSP
 //   CS  = kernel CS from STAR[47:32]
 //   GS_BASE = user GS (currently 0), KERNEL_GS_BASE = &CPU_LOCAL

@@ -353,40 +353,23 @@ class SignPathStrictnessTests(unittest.TestCase):
 class CellboxContainmentTests(unittest.TestCase):
     """Rejected rollout inputs must leave prior artifacts and outputs intact."""
 
-    def test_entire_signing_batch_is_rejected_without_mutating_earlier_targets(self):
-        for name in ("cellbox", "app-cellbox", "terminal"):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                earlier = write(root, "unrelated.elf", "preserve earlier bytes")
-                blocked = write(root, name, "unqualified candidate")
-                with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                    signing.sign_and_verify(root, [earlier, blocked], "missing-objcopy", None)
-                self.assertEqual(earlier.read_text(), "preserve earlier bytes")
-                self.assertEqual(blocked.read_text(), "unqualified candidate")
-                self.assertFalse(Path(str(earlier) + ".signed").exists())
-                self.assertFalse(Path(str(blocked) + ".signed").exists())
-
-    def test_symlink_alias_cannot_hide_a_blocked_artifact_name(self):
-        with tempfile.TemporaryDirectory() as tmp:
+    def test_quarantined_bytes_reject_the_whole_batch_without_mutation(self):
+        import hashlib
+        digest = hashlib.sha256(b"quarantined bytes").hexdigest()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(signing, "BLOCKED_ARTIFACT_SHA256", frozenset({digest})):
             root = Path(tmp)
-            blocked = write(root, "cellbox", "unqualified candidate")
+            earlier = write(root, "unrelated.elf", "preserve earlier bytes")
+            payload = write(root, "store/payload", "quarantined bytes")
             alias = root / "renamed.elf"
-            alias.symlink_to(blocked)
-            with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                signing.sign_and_verify(root, [alias], "missing-objcopy", None)
-            self.assertEqual(blocked.read_text(), "unqualified candidate")
-
-    def test_blocked_symlink_name_cannot_point_to_an_unblocked_basename(self):
-        for name in ("cellbox", "app-cellbox", "terminal"):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                payload = write(root, "other.elf", "preserve payload bytes")
-                blocked = root / name
-                blocked.symlink_to(payload)
-                with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                    signing.sign_and_verify(root, [blocked], "missing-objcopy", None)
-                self.assertTrue(blocked.is_symlink())
-                self.assertEqual(payload.read_text(), "preserve payload bytes")
+            alias.symlink_to(payload)
+            for blocked in (payload, alias):
+                with self.subTest(blocked=blocked.name):
+                    with self.assertRaisesRegex(signing.SigningRefused, "quarantined"):
+                        signing.sign_and_verify(root, [earlier, blocked], "missing-objcopy", None)
+                    self.assertEqual(earlier.read_text(), "preserve earlier bytes")
+                    self.assertEqual(payload.read_text(), "quarantined bytes")
+                    self.assertFalse(Path(str(earlier) + ".signed").exists())
 
     def test_packager_only_runs_the_assembler_and_keeps_an_existing_image(self):
         """S10-2b: G1 is open, but the packager is only a thin caller of the assembler
@@ -473,20 +456,20 @@ class CellboxContainmentTests(unittest.TestCase):
             self.assertEqual(output.read_text(), "keep existing ISO")
 
 
-class CellboxPrivateFixtureAllowanceTests(unittest.TestCase):
-    """Phase 04 S1/S3-gui: `cellbox`, `app-cellbox` and `terminal` sign only for an
-    explicit private fixture (env var AND an explicit non-dev seed)."""
+class KeySeparationTests(unittest.TestCase):
+    """Test/release separation is by key, not by name (plan 261031-1200): the dev key
+    signs every cell, `cellbox`/`terminal` included; a non-dev key signs only in CI or
+    on an audited KMS signer; quarantined bytes are refused whatever the key."""
 
-    NAMES = ("cellbox", "app-cellbox", "terminal")
-
-    PRIVATE_SEED = "11" * 32
+    NAMES = ("cellbox", "app-cellbox", "terminal", "service-vfs")
+    OTHER_SEED = "11" * 32
 
     class Reached(Exception):
-        """Raised by the patched signer loader: the preflight admitted the batch."""
+        """Raised by the patched signer loader: every refusal was passed."""
 
     def env(self, **extra):
         base = {k: v for k, v in os.environ.items()
-                if k not in {signing.CELLBOX_FIXTURE_ENV, signing.PROD_OVERRIDE_ENV}}
+                if k not in {signing.PROD_OVERRIDE_ENV, *signing.CI_MARKERS}}
         base.update(extra)
         return mock.patch.dict(os.environ, base, clear=True)
 
@@ -503,111 +486,44 @@ class CellboxPrivateFixtureAllowanceTests(unittest.TestCase):
                 return False
         self.fail("sign_and_verify returned without signing or refusing")
 
-    def test_default_still_refuses_fixture_names(self):
-        for name in self.NAMES:
-            with self.subTest(name=name), self.env(), tempfile.TemporaryDirectory() as tmp:
-                target = write(Path(tmp), name, "candidate")
-                for seed in (None, self.PRIVATE_SEED):
-                    with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                        signing.preflight_blocked_artifacts([target], seed)
-                    self.assertFalse(self.reaches_signer(target, seed))
-                self.assertEqual(target.read_text(), "candidate")
-
-    def test_allowance_requires_exactly_the_env_var_and_a_private_seed(self):
-        for name in self.NAMES:
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                target = write(Path(tmp), name, "candidate")
-                with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1", signing.PROD_OVERRIDE_ENV: "1"}):
-                    signing.preflight_blocked_artifacts([target], self.PRIVATE_SEED)
-                    self.assertTrue(self.reaches_signer(target, self.PRIVATE_SEED))
-                for value in ("", "0", "true", "yes", "2"):
-                    with self.env(**{signing.CELLBOX_FIXTURE_ENV: value, signing.PROD_OVERRIDE_ENV: "1"}):
-                        self.assertFalse(self.reaches_signer(target, self.PRIVATE_SEED), value)
-
-    def test_allowance_never_rides_on_the_default_or_dev_key(self):
-        with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), tempfile.TemporaryDirectory() as tmp:
-            for name in self.NAMES:
-                target = write(Path(tmp), name, "candidate")
-                for seed in (None, signing.DEV_SEED_HEX, signing.DEV_SEED_HEX.upper()):
-                    with self.subTest(name=name, seed=seed):
-                        with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                            signing.preflight_blocked_artifacts([target], seed)
-                        self.assertFalse(self.reaches_signer(target, seed))
-
-    def test_post_preflight_defense_refuses_dev_seed_for_every_fixture_name(self):
-        # Even if the preflight regressed to admit the batch, the dev key must not
-        # sign any private fixture name (cellbox, app-cellbox or terminal), directly
-        # or through a symlink whose resolved name is a fixture name.
-        with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), tempfile.TemporaryDirectory() as tmp:
+    def test_dev_key_signs_every_name_and_alias(self):
+        with self.env(), tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for name in self.NAMES:
                 target = write(root, name, "candidate")
                 alias = root / f"{name}-alias"
                 alias.symlink_to(target)
                 for candidate in (target, alias):
-                    with self.subTest(name=name, candidate=candidate.name):
-                        with mock.patch.object(signing, "preflight_blocked_artifacts"):
-                            with self.assertRaisesRegex(
-                                signing.SigningRefused, "never sign with the dev key"
-                            ):
-                                signing.sign_and_verify(REPO_ROOT, [candidate], "missing-objcopy", None)
-                        self.assertEqual(target.read_text(), "candidate")
+                    with self.subTest(candidate=candidate.name):
+                        self.assertTrue(self.reaches_signer(candidate, None))
+
+    def test_non_dev_key_needs_ci_or_the_audited_override(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = write(Path(tmp), "cellbox", "candidate")
+            with self.env():
+                self.assertFalse(self.reaches_signer(target, self.OTHER_SEED))
+            for extra in ({"CELLOS_SIGN_CI": "1"}, {signing.PROD_OVERRIDE_ENV: "1"}):
+                with self.subTest(env=sorted(extra)), self.env(**extra):
+                    self.assertTrue(self.reaches_signer(target, self.OTHER_SEED))
 
     def test_dev_seed_constant_matches_the_signer(self):
         signer = signing.load_signer(REPO_ROOT)
         self.assertEqual(bytes.fromhex(signing.DEV_SEED_HEX), signer.DEV_SEED)
 
-    def test_terminal_aliases_are_admitted_only_under_the_exact_conditions(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            terminal = write(root, "terminal", "candidate")
-            payload = write(root, "other.elf", "candidate")
-            alias = root / "terminal-alias"
-            alias.symlink_to(terminal)
-            hidden_dir = root / "d"
-            hidden_dir.mkdir()
-            hidden = hidden_dir / "terminal"
-            hidden.symlink_to(payload)
-            cellbox = write(root, "x/cellbox", "candidate")
-            targets = ([terminal], [alias], [hidden], [cellbox, terminal])
-
-            # Exact conditions: env == "1" and an explicit non-dev seed.
-            with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1", signing.PROD_OVERRIDE_ENV: "1"}):
-                for batch in targets:
-                    signing.preflight_blocked_artifacts(batch, self.PRIVATE_SEED)
-                    self.assertTrue(self.reaches_signer(batch[0], self.PRIVATE_SEED))
-
-            # Any single missing condition refuses every alias form and mixed batch.
-            refusals = [
-                (self.env(), self.PRIVATE_SEED),
-                (self.env(**{signing.CELLBOX_FIXTURE_ENV: "true"}), self.PRIVATE_SEED),
-                (self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), None),
-                (self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), signing.DEV_SEED_HEX),
-            ]
-            for context, seed in refusals:
-                with context:
-                    for batch in targets:
-                        with self.assertRaisesRegex(signing.SigningRefused, "ROLLOUT BLOCKED"):
-                            signing.preflight_blocked_artifacts(batch, seed)
-                        self.assertFalse(self.reaches_signer(batch[0], seed))
-
-    def test_a_batch_with_an_unblocked_name_is_unaffected_by_the_allowance(self):
-        with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), tempfile.TemporaryDirectory() as tmp:
-            other = write(Path(tmp), "other.elf", "candidate")
-            signing.preflight_blocked_artifacts([other], self.PRIVATE_SEED)
-
-    def test_quarantined_hashes_stay_refused_under_the_allowance(self):
+    def test_quarantined_hashes_are_refused_whatever_the_name_key_or_env(self):
         import hashlib
         self.assertEqual(len(signing.BLOCKED_ARTIFACT_SHA256), 2)
-        with self.env(**{signing.CELLBOX_FIXTURE_ENV: "1"}), tempfile.TemporaryDirectory() as tmp:
+        digest = hashlib.sha256(b"quarantined bytes").hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for name in (*self.NAMES, "innocent.elf"):
                 target = write(root, name, "quarantined bytes")
-                digest = hashlib.sha256(b"quarantined bytes").hexdigest()
-                with mock.patch.object(signing, "BLOCKED_ARTIFACT_SHA256", frozenset({digest})):
-                    with self.assertRaisesRegex(signing.SigningRefused, "quarantined"):
-                        signing.preflight_blocked_artifacts([target], self.PRIVATE_SEED)
-                    self.assertFalse(self.reaches_signer(target, self.PRIVATE_SEED))
+                for env, seed in (({}, None), ({"CELLOS_SIGN_CI": "1"}, self.OTHER_SEED)):
+                    with self.subTest(name=name, seed=bool(seed)), self.env(**env), \
+                            mock.patch.object(signing, "BLOCKED_ARTIFACT_SHA256", frozenset({digest})):
+                        with self.assertRaisesRegex(signing.SigningRefused, "quarantined"):
+                            signing.preflight_blocked_artifacts([target])
+                        self.assertFalse(self.reaches_signer(target, seed))
                 self.assertEqual(target.read_text(), "quarantined bytes")
 
 
@@ -618,8 +534,7 @@ class CandidateRouteTests(unittest.TestCase):
     RECIPE = Path(os.path.realpath(REPO_ROOT / "scripts" / "assemble-x86-image.py"))
     HEADLESS, DESKTOP = "x86-candidate-headless", "x86-candidate-desktop"
     CANON_HEADLESS, CANON_DESKTOP = "x86-canonical-headless", "x86-canonical-desktop"
-    ALL_ENV = {signing.CELLBOX_FIXTURE_ENV: "1", signing.PROD_OVERRIDE_ENV: "1",
-               "GITHUB_ACTIONS": "true", "CELLOS_SIGN_CI": "1"}
+    ALL_ENV = {signing.PROD_OVERRIDE_ENV: "1", "GITHUB_ACTIONS": "true", "CELLOS_SIGN_CI": "1"}
 
     class Reached(Exception):
         """Raised by the patched signer loader: every refusal was passed."""
@@ -635,8 +550,7 @@ class CandidateRouteTests(unittest.TestCase):
 
     def env(self, **values):
         base = {k: v for k, v in os.environ.items()
-                if k not in {signing.CELLBOX_FIXTURE_ENV, signing.PROD_OVERRIDE_ENV,
-                             *signing.CI_MARKERS}}
+                if k not in {signing.PROD_OVERRIDE_ENV, *signing.CI_MARKERS}}
         base.update(values)
         return mock.patch.dict(os.environ, base, clear=True)
 
@@ -685,9 +599,6 @@ class CandidateRouteTests(unittest.TestCase):
         for spec in signing.QUALIFIED_ROUTES.values():
             self.assertEqual(spec.recipe_sha256, digest)
             self.assertNotIn("app-cellbox", spec.binaries)
-        self.assertEqual(signing.QUALIFIED_ROUTES[self.HEADLESS].fixture_names, {"cellbox"})
-        self.assertEqual(signing.QUALIFIED_ROUTES[self.DESKTOP].fixture_names,
-                         {"cellbox", "terminal"})
 
     # ---- positive -----------------------------------------------------------------------
 
@@ -729,9 +640,9 @@ class CandidateRouteTests(unittest.TestCase):
 
     def test_names_outside_the_route(self):
         cases = [
-            (self.HEADLESS, "terminal", "fixture name not on this route"),
-            (self.HEADLESS, "app-cellbox", "fixture name not on this route"),
-            (self.DESKTOP, "app-cellbox", "fixture name not on this route"),
+            (self.HEADLESS, "terminal", "not a binary of this route"),
+            (self.HEADLESS, "app-cellbox", "not a binary of this route"),
+            (self.DESKTOP, "app-cellbox", "not a binary of this route"),
             (self.HEADLESS, "hotswap", "not a binary of this route"),
             (self.DESKTOP, "sshd", "not a binary of this route"),
             (self.HEADLESS, "chrome", "not a binary of this route"),
@@ -752,8 +663,7 @@ class CandidateRouteTests(unittest.TestCase):
                           REPO_ROOT / "scripts" / "package-desktop-x86.py"):
                 with mock.patch.object(signing, "_route_caller", return_value=other):
                     self.assert_refused(targets, self.route(), "running program is not the recipe")
-            stale = {name: signing.QualifiedRoute(spec.recipe, "0" * 64, spec.fixture_names,
-                                                  spec.binaries)
+            stale = {name: signing.QualifiedRoute(spec.recipe, "0" * 64, spec.binaries)
                      for name, spec in signing.QUALIFIED_ROUTES.items()}
             with self.as_recipe(), mock.patch.dict(signing.QUALIFIED_ROUTES, stale):
                 self.assert_refused(targets, self.route(), "differs from its reviewed SHA-256 pin")
@@ -806,11 +716,6 @@ class CandidateRouteTests(unittest.TestCase):
                         mock.patch.object(signing, "BLOCKED_ARTIFACT_SHA256", frozenset({digest})):
                     self.assert_refused(targets, self.route(route, root), "quarantined")
 
-    def test_no_environment_bypass_without_a_route(self):
-        for name in ("cellbox", "app-cellbox", "terminal"):
-            with self.subTest(name=name), self.env(**self.ALL_ENV), self.as_recipe():
-                self.assert_refused(self.batch(name), None)
-
     def test_batch_atomicity_on_a_route(self):
         earlier = self.batch("platform", "cellbox")
         later = write(self.root.parent, "ls", "outside")
@@ -835,20 +740,12 @@ class CandidateRouteTests(unittest.TestCase):
         loaded._priv_from_seed.assert_not_called()
         self.assertEqual(targets[0].read_text(), "candidate cellbox")
 
-    def test_cli_has_no_route_and_still_refuses_dev_cellbox(self):
+    def test_cli_has_no_route_option(self):
         target = self.batch("cellbox")[0]
         with self.assertRaises(SystemExit) as usage, \
                 mock.patch("sys.stderr", new_callable=__import__("io").StringIO):
             cli.main(["--route", self.HEADLESS, "--sign", str(target)])
         self.assertEqual(usage.exception.code, 2)
-        verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
-        for env in ({}, self.ALL_ENV):
-            with self.subTest(env=sorted(env)), self.env(**env), self.as_recipe(), \
-                    mock.patch.object(cli.policy, "check", return_value=policy.Result()), \
-                    mock.patch.object(cli.toolchain, "check", return_value=verified), \
-                    mock.patch("sys.stderr", new_callable=__import__("io").StringIO) as err:
-                self.assertEqual(cli.main(["--sign", str(target)]), cli.EXIT_SIGNING)
-                self.assertIn("ROLLOUT BLOCKED", err.getvalue())
         self.assertEqual(target.read_text(), "candidate cellbox")
 
     def test_sign_route_runs_the_f1_f5_check_first(self):
@@ -939,7 +836,7 @@ class CandidateRouteTests(unittest.TestCase):
                                     "dev key only", seed=seed)
             self.assert_refused(self.batch("terminal", root=canonical),
                                 self.route(self.CANON_HEADLESS, canonical),
-                                "fixture name not on this route")
+                                "not a binary of this route")
             self.assert_refused(self.batch("hotswap", root=canonical),
                                 self.route(self.CANON_DESKTOP, canonical),
                                 "not a binary of this route")

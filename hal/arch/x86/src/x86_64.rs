@@ -22,6 +22,8 @@ pub mod hpet;
 #[cfg(target_arch = "x86_64")]
 pub mod idt;
 #[cfg(target_arch = "x86_64")]
+pub mod ist;
+#[cfg(target_arch = "x86_64")]
 pub mod paging;
 #[cfg(target_arch = "x86_64")]
 pub mod pku;
@@ -108,11 +110,116 @@ fn cpu_feature_policy() -> usize {
     let leaf1 = core::arch::x86_64::__cpuid(1);
     let cet = cet::detect();
     let pku = pku::detect();
+    let protect = protect::detect();
     1 | ((leaf1.edx & ((1 << 24) | (1 << 25) | (1 << 26)) == ((1 << 24) | (1 << 25) | (1 << 26))) as usize) << 1
         | (cet.ibt as usize) << 2 | (cet.shstk as usize) << 3
         | (pku.pku as usize) << 4 | (pku.pks as usize) << 5
         | (domain::pcid_supported() as usize) << 6
         | (domain::invpcid_supported() as usize) << 7
+        | (protect.smep as usize) << 8 | (protect.smap as usize) << 9
+        | (protect.umip as usize) << 10
+}
+
+/// Opt-in supervisor protections, one cargo feature each (`x86-smep`,
+/// `x86-smap`, `x86-umip`); all off by default.
+///
+/// They are defense in depth, not a substitute for LBI or for authority
+/// checks. A requested protection the CPU lacks refuses the CPU (boot or AP
+/// admission) instead of running unprotected. SMAP is only selectable for an
+/// image whose kernel never touches U=1 memory outside a `user_access` window.
+#[cfg(target_arch = "x86_64")]
+pub mod protect {
+    const CR4_UMIP: u64 = 1 << 11;
+    const CR4_SMEP: u64 = 1 << 20;
+    const CR4_SMAP: u64 = 1 << 21;
+
+    /// Read by the IDT entry: nonzero means CLAC is valid and required.
+    #[used]
+    #[export_name = "ViCell_smap_active"]
+    pub static mut SMAP_ACTIVE: u8 = 0;
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    pub struct Caps {
+        pub smep: bool,
+        pub smap: bool,
+        pub umip: bool,
+    }
+
+    pub fn detect() -> Caps {
+        if core::arch::x86_64::__cpuid(0).eax < 7 {
+            return Caps::default();
+        }
+        let leaf7 = core::arch::x86_64::__cpuid_count(7, 0);
+        Caps {
+            smep: leaf7.ebx & (1 << 7) != 0,
+            smap: leaf7.ebx & (1 << 20) != 0,
+            umip: leaf7.ecx & (1 << 2) != 0,
+        }
+    }
+
+    pub const fn requested() -> Caps {
+        Caps {
+            smep: cfg!(feature = "x86-smep"),
+            smap: cfg!(feature = "x86-smap"),
+            umip: cfg!(feature = "x86-umip"),
+        }
+    }
+
+    /// Protections currently set in this CPU's CR4.
+    pub fn active() -> Caps {
+        let cr4: u64;
+        unsafe { core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack)) };
+        Caps {
+            smep: cr4 & CR4_SMEP != 0,
+            smap: cr4 & CR4_SMAP != 0,
+            umip: cr4 & CR4_UMIP != 0,
+        }
+    }
+
+    /// Enable the requested protections on this CPU. Returns false, changing
+    /// nothing, when the CPU lacks one of them.
+    pub fn init_cpu() -> bool {
+        let want = requested();
+        let have = detect();
+        if (want.smep && !have.smep) || (want.smap && !have.smap) || (want.umip && !have.umip) {
+            return false;
+        }
+        let bits = if want.smep { CR4_SMEP } else { 0 }
+            | if want.smap { CR4_SMAP } else { 0 }
+            | if want.umip { CR4_UMIP } else { 0 };
+        if bits != 0 {
+            unsafe {
+                let mut cr4: u64;
+                core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
+                core::arch::asm!("mov cr4, {}", in(reg) cr4 | bits, options(nomem, nostack));
+                if want.smap {
+                    // CR4.SMAP is set; CLAC is now a valid instruction.
+                    core::ptr::write_volatile(core::ptr::addr_of_mut!(SMAP_ACTIVE), 1);
+                }
+            }
+        }
+        active() == want
+    }
+
+    /// Run `f` with supervisor access to U=1 pages allowed (SMAP profile).
+    ///
+    /// Interrupts stay masked for the window, so no handler or context switch
+    /// runs inside it; AC is cleared before interrupts return. `f` must not
+    /// unwind. Without SMAP active this is just `f()`.
+    pub fn user_access<R>(f: impl FnOnce() -> R) -> R {
+        if unsafe { core::ptr::read_volatile(core::ptr::addr_of!(SMAP_ACTIVE)) } == 0 {
+            return f();
+        }
+        let flags = super::context::save_and_disable_interrupts();
+        // No `nomem`: STAC/CLAC must not be reordered with `f`'s user accesses.
+        unsafe { core::arch::asm!("stac", options(nostack)) };
+        let result = f();
+        unsafe {
+            core::arch::asm!("clac", options(nostack));
+            super::context::restore_sstatus(flags);
+        }
+        result
+    }
 }
 
 /// Publish the BSP feature policy after its local initialization completes.
@@ -148,7 +255,9 @@ pub unsafe fn init_secondary_cpu(logical: usize, lapic_id: u32, kernel_cr3: usiz
     gdt::init();
     if !idt::load_current_cpu() { return false; }
     cet::init_kernel_cet();
-    if !pku::init_secondary() || !domain::init_secondary_pcid() { return false; }
+    if !pku::init_secondary() || !domain::init_secondary_pcid() || !protect::init_cpu() {
+        return false;
+    }
     syscall::init();
     apic::register_cpu(logical, lapic_id) && apic::init_secondary(lapic_id)
 }
@@ -309,6 +418,7 @@ impl Arch for X86_64Arch {
         cet::init_kernel_cet(); // LAYER2-CET-INIT — must follow idt (registers #CP vector 21)
         pku::init(); // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
+        assert!(protect::init_cpu(), "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU");
         apic::init_lapic();
         publish_boot_cpu_policy();
     }

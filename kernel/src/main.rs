@@ -229,12 +229,28 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // (LAPIC phys 0xFEE00000 isn't in Limine's HHDM for MMIO regions).
     #[cfg(target_arch = "x86_64")]
     {
+        // SSE/FXSR first: every IDT entry runs FXSAVE/LDMXCSR, so a fault
+        // taken during gdt/idt init (including the IDT fixture's probes) would
+        // #UD in the entry path and triple-fault without CR4.OSFXSR.
+        crate::hal::init_sse();
+        // Unmap the guard pages around every NMI/#DF/#MC IST stack before the
+        // TSS and IST gates are loaded. The live root is Limine's; the kernel
+        // PML4, AP roots and domain roots later copy its higher-half entries,
+        // so they share these cleared PTEs.
+        if let Err(error) = unsafe { crate::hal::x86_64::ist::install_guards() } {
+            panic!("x86: IST stack guard pages unavailable: {error:?}");
+        }
         crate::hal::gdt::init();
         crate::hal::idt::init();
         crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
         crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
-        crate::hal::init_sse();
+        // Opt-in SMEP/SMAP/UMIP profile: a requested protection the CPU
+        // lacks refuses boot rather than running unprotected.
+        assert!(
+            crate::hal::x86_64::protect::init_cpu(),
+            "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU"
+        );
         crate::hal::x86_64::publish_boot_cpu_policy();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
@@ -1377,6 +1393,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("cell signing self-test PASS");
         } else {
             log_info("cell signing self-test FAIL — cell signature gate unsafe");
+        }
+        {
+            let (posture, anchor) = crate::signing::trust_anchor();
+            log::info!(
+                "[signing] cell trust posture={} anchor={:02x?} unsigned={}",
+                posture,
+                anchor,
+                if crate::signing::unsigned_admitted() { "tier2" } else { "denied" }
+            );
         }
         #[cfg(feature = "test-hooks")]
         if crate::admission::self_test() {

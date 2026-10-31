@@ -777,6 +777,16 @@ fn x86_bounded_wait(mut done: impl FnMut() -> bool) {
     panic!("[x86-smp] active AP safety handshake timed out");
 }
 
+/// x86 IDT fixture only: it runs inside `task::init`, before
+/// `start_secondaries`, on the BSP alone and never returns. Publish the same
+/// uniprocessor boot-complete state that `start_secondaries` publishes when no
+/// AP exists, so `yield_cpu` schedules the fixture's Ring-3 tasks.
+#[cfg(all(target_arch = "x86_64", feature = "x86-idt-cpl3-test"))]
+pub(crate) fn x86_idt_fixture_uniprocessor_ready() {
+    HART_ONLINE[0].store(true, Ordering::Release);
+    X86_BOOT_COMPLETE.store(true, Ordering::Release);
+}
+
 #[cfg(target_arch = "x86_64")]
 pub fn start_secondaries() {
     use crate::boot::limine;

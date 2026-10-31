@@ -11,9 +11,7 @@
 #
 # S1 (Phase 04 entry dossier): the serial shell is `cellbox sh` (/bin/cellbox, init
 # service "cellbox" args ["sh"]); the S1 gate checks (cellbox identity, ungranted
-# kill refused with no effect) are the s1-* observations below. Signing a
-# cellbox-named ELF needs CELLBOX_PRIVATE_FIXTURE_SIGNING=1, set only on the signing
-# step of this private fixture.
+# kill refused with no effect) are the s1-* observations below.
 #
 # S2-lite (Phase 04 slice S2, phase-04-s2-authority-proposal.md §2.2): the s2-* checks
 # attempt each ungranted right from the cellbox shell using only EXISTING launch edges
@@ -158,15 +156,12 @@ done
 
 if [[ "$KERNEL_TESTS" == 1 ]]; then
     echo "==> Signing with the development key (kernel regression lane, private cells)"
-    # The dev key may never sign the cellbox name (quarantine): this lane only needs
-    # the other cells; the unsigned cellbox is permitted by the dev-posture kernel.
-    LANE_SIGN=()
-    for b in "${CELL_BINARIES[@]}"; do [[ "$(basename "$b")" == cellbox ]] || LANE_SIGN+=("$b"); done
-    "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" --sign "${LANE_SIGN[@]}" "$REL/app-init"
+    # Test images trust the dev key: it signs every cell, cellbox included.
+    "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" --sign "${CELL_BINARIES[@]}" "$REL/app-init"
 else
     echo "==> Signing with the private key after the F1/F5 policy check"
     SEED_HEX="$(cat "$KEYS/seed.hex")"
-    CELLBOX_PRIVATE_FIXTURE_SIGNING=1 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
+    CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
         --seed-hex "$SEED_HEX" --sign "${CELL_BINARIES[@]}" "$REL/app-init"
     unset SEED_HEX
 fi

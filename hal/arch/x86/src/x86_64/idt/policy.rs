@@ -111,25 +111,22 @@ mod tests {
     }
 
     #[test]
-    fn optional_privilege_stack_is_read_only_for_non_kernel_cs() {
-        let mut words = [0u64; 22];
-        words[18] = 0x08;
-        {
+    fn saved_rsp_and_ss_are_decoded_for_every_origin() {
+        // 64-bit delivery always pushes SS:RSP; a same-CPL or IST entry is no
+        // exception, and the saved RSP may be a bad value from the window.
+        for (cs, rsp, ss) in [
+            (0x08, 0x8000_0000_0000_0000, 0x10),
+            (0x08, 0xffff_ffff_81a0_2ca0, 0),
+            (0x23, 0x1234_5678_9abc_def0, 0x1b),
+        ] {
+            let mut words = [0u64; 22];
+            words[18] = cs;
+            words[20] = rsp;
+            words[21] = ss;
             let frame = unsafe { &*words.as_ptr().cast::<EntryFrame>() };
-            assert_eq!(frame.old_rsp(), None);
-            assert_eq!(frame.old_ss(), None);
-            assert_eq!(
-                frame.interrupted_rsp(),
-                frame as *const EntryFrame as u64 + 160
-            );
+            assert_eq!(frame.old_rsp(), rsp);
+            assert_eq!(frame.old_ss(), ss);
+            assert_eq!(frame.interrupted_rsp(), rsp);
         }
-
-        words[18] = 0x23;
-        words[20] = 0x1234_5678_9abc_def0;
-        words[21] = 0x1b;
-        let frame = unsafe { &*words.as_ptr().cast::<EntryFrame>() };
-        assert_eq!(frame.old_rsp(), Some(words[20]));
-        assert_eq!(frame.old_ss(), Some(words[21]));
-        assert_eq!(frame.interrupted_rsp(), words[20]);
     }
 }

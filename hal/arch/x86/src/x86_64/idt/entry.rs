@@ -24,26 +24,27 @@ pub(super) struct EntryFrame {
     pub rflags: u64,
 }
 
+/// In 64-bit mode the CPU always pushes SS:RSP, with or without a privilege
+/// change or IST switch, so both words follow `rflags` for every vector.
 impl EntryFrame {
-    #[inline]
-    fn has_privilege_stack(&self) -> bool {
-        self.cs & 3 != 0
-    }
-
-    pub(super) fn old_rsp(&self) -> Option<u64> {
-        self.has_privilege_stack()
-            .then(|| unsafe { core::ptr::read((self as *const Self).cast::<u64>().add(20)) })
+    /// RSP at the interrupted instruction (user or kernel, possibly invalid).
+    pub(super) fn old_rsp(&self) -> u64 {
+        unsafe { core::ptr::read((self as *const Self).cast::<u64>().add(20)) }
     }
 
     #[allow(dead_code)]
-    pub(super) fn old_ss(&self) -> Option<u64> {
-        self.has_privilege_stack()
-            .then(|| unsafe { core::ptr::read((self as *const Self).cast::<u64>().add(21)) })
+    pub(super) fn old_ss(&self) -> u64 {
+        unsafe { core::ptr::read((self as *const Self).cast::<u64>().add(21)) }
+    }
+
+    /// Test-only resume: replace the saved RSP that IRETQ will load.
+    #[cfg(feature = "x86-idt-cpl3-test")]
+    pub(super) fn set_old_rsp(&mut self, rsp: u64) {
+        unsafe { core::ptr::write((self as *mut Self).cast::<u64>().add(20), rsp) }
     }
 
     pub(super) fn interrupted_rsp(&self) -> u64 {
         self.old_rsp()
-            .unwrap_or((self as *const Self as usize + core::mem::size_of::<Self>()) as u64)
     }
 }
 
@@ -132,6 +133,13 @@ x86_64_idt_common:
     xorl %edx,%edx
     wrpkru
 .Lidt_kernel_entry:
+    # SMAP profile only: no handler runs inside an interrupted access window
+    # or with a caller's AC. IRETQ restores the saved AC on return. Profiles
+    # without SMAP never execute CLAC (it is #UD on CPUs lacking SMAP).
+    cmpb $0,ViCell_smap_active(%rip)
+    je .Lidt_ac_clear
+    clac
+.Lidt_ac_clear:
     cld
     movq %rsp,%r12
     andq $-16,%rsp

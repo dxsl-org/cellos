@@ -20,19 +20,27 @@ pub const SEL_USER_CODE: u16 = 0x23; // 0x20 | RPL3
 /// TSS selector (loaded via `ltr`).
 pub const SEL_TSS: u16 = 0x28;
 
-/// Minimal TSS storing only the kernel-stack pointer (RSP0).
+/// Architectural 64-bit TSS: RSP0-2, IST1-7 and the I/O-map base.
 #[repr(C, packed)]
 pub struct Tss {
     _r0: u32,
-    pub rsp0: u64,
-    _rest: [u8; 92],
+    pub rsp: [u64; 3],
+    _r1: u64,
+    pub ist: [u64; 7],
+    _r2: u64,
+    _r3: u16,
+    pub iomap_base: u16,
 }
 impl Tss {
     pub const fn new() -> Self {
         Self {
             _r0: 0,
-            rsp0: 0,
-            _rest: [0; 92],
+            rsp: [0; 3],
+            _r1: 0,
+            ist: [0; 7],
+            _r2: 0,
+            _r3: 0,
+            iomap_base: 0,
         }
     }
 }
@@ -86,19 +94,40 @@ static mut TABLES: [CpuTables; super::syscall::MAX_CPUS] = [
     super::syscall::MAX_CPUS
 ];
 const _: () = {
-    assert!(core::mem::size_of::<Tss>() == 104);
-    assert!(core::mem::offset_of!(Tss, rsp0) == 4);
+    use core::mem::{offset_of, size_of};
+    assert!(size_of::<Tss>() == 104);
+    assert!(offset_of!(Tss, rsp) == 4);
+    assert!(offset_of!(Tss, ist) == 36);
+    assert!(offset_of!(Tss, iomap_base) == 102);
 };
 
+/// IST stack top programmed into this CPU's TSS for slot `ist` (test oracle).
+pub fn ist_entry(ist: u8) -> u64 {
+    unsafe {
+        let tables = core::ptr::addr_of!(TABLES).cast::<CpuTables>()
+            .add(super::syscall::current_cpu_id());
+        let slots = core::ptr::read_unaligned(core::ptr::addr_of!((*tables).tss.ist));
+        slots[usize::from(ist) - 1]
+    }
+}
+
 /// Build this CPU's private GDT and TSS after installing kernel GS.
+///
+/// The TSS carries this CPU's own NMI/#DF/#MC IST stacks before `ltr`, so
+/// the shared IDT's IST gates never select another CPU's stack.
 pub fn init() {
     unsafe {
-        let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>()
-            .add(super::syscall::current_cpu_id());
+        let cpu = super::syscall::current_cpu_id();
+        let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>().add(cpu);
         let gdt = core::ptr::addr_of_mut!((*tables).gdt);
         let tss = core::ptr::addr_of_mut!((*tables).tss);
         // I/O bitmap starts beyond the TSS limit, denying Ring-3 port access.
-        core::ptr::write_unaligned(tss.cast::<u8>().add(102).cast::<u16>(), 104);
+        core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tss).iomap_base), 104);
+        let mut ist = [0u64; 7];
+        for slot in [super::ist::IST_NMI, super::ist::IST_DF, super::ist::IST_MC] {
+            ist[usize::from(slot) - 1] = super::ist::stack_top(cpu, slot);
+        }
+        core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tss).ist), ist);
         (*gdt).entries[1] = GdtEntry::code(0);
         (*gdt).entries[2] = GdtEntry::data(0);
         (*gdt).entries[3] = GdtEntry::data(3);
@@ -131,6 +160,6 @@ pub fn set_kernel_stack(sp: u64) {
     unsafe {
         let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>()
             .add(super::syscall::current_cpu_id());
-        core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tables).tss.rsp0), sp);
+        core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tables).tss.rsp).cast::<u64>(), sp);
     }
 }

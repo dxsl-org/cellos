@@ -73,7 +73,8 @@ struct Endpoint { reference: Ref, holder: Principal, operation: Ref, parent: Ref
 /// CommitChild moves the sole writer count to it.
 struct Holder { endpoint: Endpoint, charge: Charge }
 #[derive(Clone, Copy)]
-struct Intent { reference: Ref, issuer: Binding, writers: [Ref; 2] }
+// `#[allow(dead_code)]` fields: written for the retained record, no reader yet.
+struct Intent { #[allow(dead_code)] reference: Ref, issuer: Binding, writers: [Ref; 2] }
 struct Prepared {
     reference: Ref, child: Child, preparer: Principal, operation: Ref,
     deadline: u64, written: usize, context: Vec<u8>, parsed: Option<child_context::Context>,
@@ -83,8 +84,8 @@ struct Prepared {
     intent: Option<Intent>, receipts: [Ref; 3], charge: Charge,
 }
 struct Receipt { reference: Ref, prepared: Ref, child: Child, operation: Ref, issuer: Binding,
-    kind: u16, slot: u16, object: Ref, expected_epoch: u64, next_epoch: u64,
-    digest: [u8; 32], seal: [u8; 256], seal_len: usize, state: u32,
+    kind: u16, slot: u16, object: Ref, #[allow(dead_code)] expected_epoch: u64, next_epoch: u64,
+    digest: [u8; 32], seal: [u8; 256], #[allow(dead_code)] seal_len: usize, state: u32,
     bound: bool, producers: [Ref; 2], restored: bool, materialized: bool, charge: Charge }
 struct Bootstrap { reference: Ref, controller: Principal, operation: Ref, issuer: Binding,
     endpoints: [Ref; 8], session: Ref, state: u32, deadline: u64, charge: Charge }

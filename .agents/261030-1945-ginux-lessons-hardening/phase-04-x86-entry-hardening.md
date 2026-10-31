@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "SAS-compatible x86 entry safety and measured protection options"
-status: pending
+status: completed-at-qemu-tcg-ceiling   # 2026-10-31; SMAP profile, KVM, AP-IST and physical Intel pending
 priority: P1
 dependencies: [1]
 tier: thinking
@@ -60,3 +60,18 @@ A bad entry mapping/GS change is node-fatal; use isolated images and preserve a 
 ## Deviation Log
 
 SAS review: dropped mandatory SMAP/copy migration and unrequested resumable NMI; protection knobs are distinct qualified options. Removed Phase 02/03 tooling/KVM from the security-fix critical path.
+
+Implementation (2026-10-31): see [admission-approval.md](admission-approval.md) deviation log: `paging.rs` helper visibility, `hal/core/Cargo.toml` feature forwarding, two pre-existing fixture breakages fixed (`init_sse` order; CPL3 tasks never scheduled since `775686575`), stac/clac compiler-ordering bug found by the SMAP probe, IST guards moved before gate load after review.
+
+## Evidence (QEMU/TCG, q35, uniprocessor fixture)
+
+| Criterion | Observed | Command |
+|---|---|---|
+| IST under CPL0 bad RSP; guards; real #DF; real NMI | `X86-IST: PASS ... guards=8 guard-read=pf int2=ist1/bad-rsp int18=ist3/bad-rsp df=ist2/cascade nmi=ist1/lapic`; high-water 0x2d8 of 0x2000 per stack | `bash scripts/build-x86_64-idt-test-ci.sh && bash scripts/qemu-x86_64-idt-test.sh` |
+| Negative control | IST gates zeroed: `int $2` with non-canonical RSP → QEMU `Triple fault` | throwaway worktree, not retained |
+| SYSCALL DF/AC | caller flags 0x40602 saved, live 0x46 in Rust; SYSRET hands DF+AC back; old FMASK 0x300 fails the fixture | same as above |
+| SMEP / UMIP profile | `smep=on exec=pf`, `umip=on sgdt=gp`; refused on CPU without them | `bash scripts/x86/qemu-idt-protection-test.sh` |
+| SMAP | mechanism only (`smap=probe read=pf window=ok`). Boot-time SMAP refused by the kernel itself: `Scheduler::spawn_with_stacks_configured` memsets U=1 user stacks (first observed #PF va=0x218a000). **Pending**: migrate kernel U=1 accesses into bounded windows without copies | same |
+| Fatal policy | unchanged (`policy.rs` routes 2/8/18 to halt) | host tests 14/14 |
+
+Not covered: CPL3-origin NMI/#MC (fixture injects at CPL0), AP IST (fixture is uniprocessor; AP path programs its TSS via the same `gdt::init`), real #MC, KVM, physical Intel. Domain and C2C-lifecycle lanes refuse to build at baseline (Cellbox rollout containment), so no domain-CR3 run.

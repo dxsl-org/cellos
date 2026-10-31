@@ -693,6 +693,30 @@ pub fn init_paging() { /* SV39 */ }
 pub fn init_paging() { /* ARMv8 */ }
 ```
 
+### Cell Signing: Test Key vs Release Key
+
+Test and release are separated by **key and kernel posture, never by file name**
+(plan `.agents/261031-1200-test-release-key-separation`, user decision 2026-10-31).
+
+| | Test / alpha images | Release images |
+|---|---|---|
+| Kernel features | default (`dev-signing-key`) | `--no-default-features --features release-posture,…` |
+| Kernel trusts | dev key only (seed `0x43*32`, public) | release key only (`CELLOS_RELEASE_CELL_PUBLIC_KEY`) |
+| Who signs | anyone: `scripts/cellos-sign --sign` / `sign_cells`, every cell incl. `cellbox` | CI only (private key is a CI secret; `guard_prod_key`) |
+| Unsigned cell | Tier 2 | denied |
+| Signed cell | Tier 1, or Tier 2 if the manifest is FFI/UNTRUSTED | same |
+
+Rules:
+- Sign every native cell of a test image with the dev key. Do not skip a cell by name,
+  invent a private seed or an environment bypass to get it signed.
+- Never combine `dev-signing-key` with `release-signing-key` (build.rs refuses), and never
+  ship a kernel built with default features as a release.
+- A dev-signed artifact is safe only because release kernels do not trust the dev key;
+  do not add the dev key to a release kernel "temporarily".
+- The two quarantined hashes in `scripts/cellos_sign/signing.py` stay refused for every key.
+- Check the boot log line `[signing] cell trust posture=… unsigned=…` before trusting any
+  evidence about signing or tiers.
+
 ### Compiler Flags
 
 ```toml

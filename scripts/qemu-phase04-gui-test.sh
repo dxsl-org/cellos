@@ -64,7 +64,7 @@
 # one-character-changed control and a "before" frame control; the UART negative check
 # reuses the S3 method (command payloads must never appear on the physical UART).
 #
-# Signing: cellbox and terminal need CELLBOX_PRIVATE_FIXTURE_SIGNING=1 with the private
+# Signing: cellbox and terminal need with the private
 # seed (scripts/cellos_sign guard); it is set only on that one signing call.
 #
 # S5-3 option C (phase-05-s3c-frontend-annex.md §7, decision A), between S5-2 and Ctrl-C: the
@@ -389,7 +389,7 @@ echo "==> Signing with the private key (policy check inside cellos-sign)"
 SEED_HEX="$(cat "$KEYS/seed.hex")"
 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
     --seed-hex "$SEED_HEX" --sign "${PLAIN_BINARIES[@]}" "$REL/app-init"
-CELLBOX_PRIVATE_FIXTURE_SIGNING=1 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet \
+CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet \
     --objcopy "${OBJCOPY:-objcopy}" --seed-hex "$SEED_HEX" --sign "${GUARDED_BINARIES[@]}"
 unset SEED_HEX
 

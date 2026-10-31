@@ -33,3 +33,12 @@ Until this plan is done, every D03 commit, including SSH first-trust persistence
    - A host power-cut harness cuts at every 512 B write and both flush points, then remounts. Before the reply the destination must be old or new whole; after `CommittedDurable` it must be new.
    - A private QEMU crash lane SIGKILLs during repeated commits with a pinned write-back cache, cold-boots and checks the same properties.
 7. **Migration** of existing volumes, or a format version bump with a refusal of older volumes, and an update of consumers: the editor save in D03 and the SSH trust store in Phase 09 S9-4c.
+
+## External design inputs (2026-10-31, from ginux review; decisions stay with this plan)
+
+Source: `gmkurtzer/ginux` commit `1852455`, `docs/STORAGE.md` and `crates/volume-service/src/lib.rs:168-244` (Apache-2.0; ideas only, no code).
+
+1. Integrity primitive (CRC32C vs SHA-256): an unkeyed checksum detects tears and bit-rot, not deliberate tampering; only a keyed MAC or signature does. Name the failure class claimed.
+2. Accept only the newest **unambiguous** committed generation; equal generations with different content means refuse to mount.
+3. Write order prepare → flush → commit → flush.
+4. Keep "runtime never formats" (`cells/services/vfs/src/manager.rs:68-70`) as a negative test: foreign, corrupt and geometry-mismatched media are refused, not reformatted.

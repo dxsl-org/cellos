@@ -13,7 +13,9 @@ pub(crate) const STDIO_PROJECTION_LEN: usize = 4 * 40;
 pub(crate) struct Grant {
     pub kind: u16,
     pub rights: u16,
+    #[allow(dead_code)] // decoded from the grant wire; no reader yet
     pub slot: u16,
+    #[allow(dead_code)] // decoded from the grant wire; no reader yet
     pub owner_service: u64,
     pub object: ObjectRefV1,
     pub wire: [u8; 40],

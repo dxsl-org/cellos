@@ -128,6 +128,8 @@ The Phase02 annex is now ready to **request** exact approval, digest `73bc7483ae
 
 **Subsequent exact user approval — Phase02:** user selected **“Duyệt CP1 và fixture riêng”** for the digest above. [The authorization record](../261020-1750-cellbox-cli/phase-02-cp1-approval.md) admits only that78-path D01 child-context/D02 stream/session closure, narrow VFS binder and private local execution. This is the single current controlling implementation slice; kernel publication/owner edits have one serialization owner. The prior pending wording is historical; CP2 and canonical rollout remain blocked. No other delta/legacy lock is approved or reopened.
 
+**Adopted slice — Ginux lessons Phase 04 (2026-10-31):** the user admitted [plan 261030-1945](../261030-1945-ginux-lessons-hardening/plan.md) Phases 01 and 04 only ([record](../261030-1945-ginux-lessons-hardening/admission-approval.md)). Adoption row: Phase 04 x86 entry safety; files = HAL x86 entry/GDT/IDT/syscall/IST, x86 early-init order + IST-guard call in `kernel/src/main.rs`, feature-gated `user_copy` SMAP window, IDT scripts; owner = HAL x86 (single integrating session); acceptance = phase-04 success criteria; Law-1 = none; ceiling = x86 q35 QEMU/TCG (KVM when available). Phases 02, 03, 05–09 have no adoption row yet.
+
 ## Verification protocol
 
 Tests establish invariants; a separate actual runtime scenario establishes the changed path. Each phase records source revision, artifact SHA-256, features/configuration, runner command, full serial logs, negative controls, expected versus observed outcome, and ceiling (host / x86 QEMU / exact physical Intel / production). Every persistent result remains pending until observed. A skipped test or absent runner never counts as pass.

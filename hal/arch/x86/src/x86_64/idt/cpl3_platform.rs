@@ -40,8 +40,8 @@ pub(super) fn valid_entry(frame: &EntryFrame, vector: u64, expected_pku: u32) ->
     frame.vector == vector
         && frame.error == 0
         && frame.cs == 0x23
-        && frame.old_ss() == Some(0x1b)
-        && frame.old_rsp() == Some(frame.r14)
+        && frame.old_ss() == 0x1b
+        && frame.old_rsp() == frame.r14
         && valid_kernel_state(expected_pku)
 }
 
@@ -55,6 +55,7 @@ pub(super) fn arm_timer() {
 }
 
 pub(super) fn require_pku() {
+    super::probe_ist::run_cpl0();
     if !super::super::pku::detect().pku || !super::probe::cpl0_complete() {
         super::probe::fail();
     }

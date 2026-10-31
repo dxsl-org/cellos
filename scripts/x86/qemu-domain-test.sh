@@ -110,9 +110,14 @@ QEMU_PID=$!
 exec 9> "$FIFO"
 
 (
+    # Type only after the fault AND a later prompt: the serial session is owned
+    # by the input service and starts after the fault on this image; bytes sent
+    # before the session exists are dropped, not queued.
     typed=0
     for _ in $(seq 1 $((BOOT_WINDOW * 4))); do
-        if grep -qa "deliberately writing to NULL" "$RAW_LOG" 2>/dev/null; then
+        if fault_at=$(grep -nam1 "deliberately writing to NULL" "$RAW_LOG" 2>/dev/null | cut -d: -f1) \
+            && [[ -n "$fault_at" ]] \
+            && tail -n +"$fault_at" "$RAW_LOG" | grep -qa "Cellos > "; then
             printf 'ps\r' >&9
             typed=1
             break

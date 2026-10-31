@@ -134,6 +134,7 @@ cells/apps/vove/
 /.ci-cache/
 /build/x86-virtio-*
 /build/x86-idt-test/
+/build/x86-idt-test-protect/
 /test_ls*
 /run_test.sh
 

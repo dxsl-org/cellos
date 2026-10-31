@@ -94,7 +94,15 @@ fn prepare_gated(
             return Err(ViError::PermissionDenied);
             #[cfg(not(feature = "browser-engine-profile"))]
             {
-                // Unsigned artifacts remain Tier 2 in the ordinary development profile.
+                // Release posture: every cell is signed; the manifest picks the tier.
+                if !crate::signing::unsigned_admitted() {
+                    crate::audit::log_event(
+                        crate::audit::AuditEvent::CellSpawnDenied,
+                        &crate::audit::encode_u32x2(0, 4),
+                    );
+                    return Err(ViError::PermissionDenied);
+                }
+                // Unsigned artifacts remain Tier 2 in the development posture.
                 true
             }
         }

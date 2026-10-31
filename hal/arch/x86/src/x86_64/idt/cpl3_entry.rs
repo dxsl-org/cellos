@@ -8,9 +8,16 @@ global_asm!(
     .global x86_idt_cpl3_user_b
     .global x86_idt_cpl3_user_b_return
     .global x86_idt_cpl3_user_end
+    .global x86_idt_cpl3_user_umip
+    .global x86_idt_cpl3_user_umip_end
     .balign 16
 x86_idt_cpl3_user_start:
 x86_idt_cpl3_user_b:
+    # Enter SYSCALL with DF and AC set: the kernel must run with both clear
+    # and SYSRET must hand both back.
+    pushfq
+    orq $0x40400,(%rsp)
+    popfq
     movq %rsp,%r14
     leaq x86_idt_cpl3_user_b_return(%rip),%r12
     movabsq $0x1122334455667788,%rdx
@@ -28,6 +35,10 @@ x86_idt_cpl3_user_b_return:
 
     .balign 16
 x86_idt_cpl3_user_a:
+    # UMIP profile: #GP(0), resumed after the instruction. Otherwise it runs.
+x86_idt_cpl3_user_umip:
+    sgdt -16(%rsp)
+x86_idt_cpl3_user_umip_end:
     xorl %ecx,%ecx
     rdpkru
     movl %eax,%r15d

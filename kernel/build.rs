@@ -89,6 +89,37 @@ fn main() {
             "private Phase02 key requires phase02-terminal-profile"
         );
     }
+    // Release posture: the cell trust anchor is a provisioned public key file
+    // (the private half is a CI secret). Never together with the dev key.
+    println!("cargo:rerun-if-env-changed=CELLOS_RELEASE_CELL_PUBLIC_KEY");
+    let release_key = std::env::var_os("CARGO_FEATURE_RELEASE_SIGNING_KEY").is_some();
+    if release_key {
+        assert!(
+            std::env::var_os("CARGO_FEATURE_DEV_SIGNING_KEY").is_none(),
+            "release-signing-key cannot be combined with dev-signing-key \
+             (build with --no-default-features --features release-posture)"
+        );
+        assert!(!phase02_profile, "release-signing-key cannot be combined with phase02-terminal-profile");
+        let key_path = std::env::var_os("CELLOS_RELEASE_CELL_PUBLIC_KEY")
+            .map(PathBuf::from)
+            .expect("release-signing-key requires CELLOS_RELEASE_CELL_PUBLIC_KEY (32 raw bytes)");
+        println!("cargo:rerun-if-changed={}", key_path.display());
+        let key = fs::read(&key_path).expect("read release cell public key");
+        assert_eq!(key.len(), 32, "release cell public key must be 32 raw bytes");
+        assert!(key.iter().any(|byte| *byte != 0), "zero release key refused");
+        // Dev key from scripts/sign-cell.py seed 0x43*32 (see kernel/src/signing.rs).
+        const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
+            0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb, 0x0c, 0x0a,
+            0xa1, 0x4e, 0x02, 0x5a, 0x36, 0x5e, 0xc0, 0xe3, 0x42, 0xe8, 0x6e, 0x38, 0x29, 0xcb, 0x74, 0xb6,
+        ];
+        assert_ne!(key, DEV_CELL_SIGNER_PUBKEY, "the dev key cannot be the release key");
+        fs::write(out_dir.join("release-cell-signing.pub"), key).expect("copy release public key");
+    } else {
+        assert!(
+            std::env::var_os("CELLOS_RELEASE_CELL_PUBLIC_KEY").is_none(),
+            "CELLOS_RELEASE_CELL_PUBLIC_KEY requires the release-signing-key feature"
+        );
+    }
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");

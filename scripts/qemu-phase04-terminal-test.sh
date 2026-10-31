@@ -132,9 +132,6 @@
 # fake matcher/fixed responses, and the cellbox syscall ceiling is unchanged
 # (scripts/cellbox-ceiling-diff.py). The Terminal's own ceiling delta is recorded.
 #
-# Signing a cellbox-named ELF needs CELLBOX_PRIVATE_FIXTURE_SIGNING=1, set only on the
-# signing step of this private fixture.
-#
 # Usage: CELLBOX_PHASE04_WORK=/tmp/cellbox-phase04-XXXX bash scripts/qemu-phase04-terminal-test.sh [--candidate <candidate.json>]
 # Optional: PHASE04_ACCEL=tcg|kvm (default tcg), PHASE04_BOOT_WINDOW (seconds, default 2700:
 # the S7-4 7 MiB `rg` read alone takes about nine minutes on TCG).
@@ -493,7 +490,7 @@ done
 
 echo "==> Signing with the private key after the F1/F5 policy check"
 SEED_HEX="$(cat "$KEYS/seed.hex")"
-CELLBOX_PRIVATE_FIXTURE_SIGNING=1 CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
+CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI=1 "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "${OBJCOPY:-objcopy}" \
     --seed-hex "$SEED_HEX" --sign "${CELL_BINARIES[@]}" "$REL/top-load" "$REL/app-init"
 unset SEED_HEX
 

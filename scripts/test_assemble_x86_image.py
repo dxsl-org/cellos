@@ -524,8 +524,6 @@ class EndToEnd(unittest.TestCase):
                     route = signing.QUALIFIED_ROUTES[f"x86-{kind}-" + profile.name]
                     self.assertEqual(route.binaries, {cell.binary for cell in profile.cells
                                                       if cell.signed} | {"app-init"})
-                    self.assertEqual(route.fixture_names,
-                                     route.binaries & signing.PRIVATE_FIXTURE_NAMES)
                     self.assertEqual(route.recipe, "scripts/assemble-x86-image.py")
                     self.assertEqual(route.in_repo_root,
                                      None if kind == "candidate" else signing.X86_CANONICAL_ROOT)

@@ -71,7 +71,7 @@ rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$KERNEL" "$ISO_OUT"
 echo "==> Building base cells (init, shell, vfs, config, platform, drivers, sys tools)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-platform
+    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -82,6 +82,7 @@ CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
+    "$REL/service-input"
     "$REL/platform"
     "$REL/driver-nvme"
     "$REL/driver-e1000"
@@ -94,6 +95,7 @@ CELL_IMAGE_PATHS=(
     /bin/cellbox
     /bin/vfs
     /bin/config
+    /bin/input
     /bin/platform
     /bin/nvme
     /bin/e1000
@@ -127,7 +129,8 @@ fi
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
 
-echo "==> Signing $(( ${#CELL_BINARIES[@]} + 1 )) cells (F1/F5)..."
+echo "==> Signing cells + init (F1/F5) with the dev key..."
+# Test images trust the dev key: it signs every cell, cellbox included.
 sign_cells "${CELL_BINARIES[@]}" "$REL/app-init"
 
 if [[ "$WORKLOAD" == render ]]; then
@@ -137,7 +140,9 @@ if [[ "$WORKLOAD" == render ]]; then
 fi
 
 echo "==> Assembling kernel_fs.img (VIFS1 ramdisk)..."
-"$PYTHON_BIN" tools/mkfat32.py "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
+# `cellbox sh` opens an authenticated serial session owned by the input
+# service; without it the shell exits (NotFound) and no prompt appears.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
 if [[ ! -s "$TH_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
     exit 1

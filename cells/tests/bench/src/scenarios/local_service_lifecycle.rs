@@ -1211,18 +1211,36 @@ fn sdk_leg() {
     }
 
     // The handle resolves, sends, waits for the masked reply and decodes it — all keyed on
-    // the binding it resolved, not on a tid it was handed.
+    // the binding it resolved, not on a tid it was handed. A cell launched with a cwd
+    // grant is path-sealed by VFS (D01), so it asks through that inherited directory
+    // handle (the grant's object id is the VFS handle); an unsealed launch keeps the
+    // path-addressed `Stat("/")`.
     let mut response_buffer = [0u8; IPC_BUF_SIZE];
-    match vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response_buffer) {
-        Ok(VfsResponse::Stat { .. }) => println("[local-lifecycle] SDK-VFS-CALL=OK"),
+    let cwd = ostd::child_context::ChildContext::read_own()
+        .ok()
+        .and_then(|context| context.cwd_grant());
+    let (request, label) = match cwd {
+        Some(grant) => (
+            VfsRequest::ListAtPage { dir: api::dir_handles::ViDirHandle(grant.id), cursor: 0 },
+            "ListAtPage(cwd)",
+        ),
+        None => (VfsRequest::Stat("/"), "Stat(/)"),
+    };
+    match vfs.call::<VfsRequest, VfsResponse>(&request, &mut response_buffer) {
+        Ok(VfsResponse::DirPage { .. }) if cwd.is_some() => {
+            println(&format!("[local-lifecycle] SDK-VFS-CALL=OK {label}"))
+        }
+        Ok(VfsResponse::Stat { .. }) if cwd.is_none() => {
+            println(&format!("[local-lifecycle] SDK-VFS-CALL=OK {label}"))
+        }
         Ok(other) => {
             println(&format!(
-                "[local-lifecycle] SDK-VFS-CALL=UNEXPECTED {other:?}"
+                "[local-lifecycle] SDK-VFS-CALL=UNEXPECTED {label} {other:?}"
             ));
-            fail("sdk-leg: VFS Stat answered with a different response");
+            fail("sdk-leg: VFS answered with a different response");
         }
         Err(error) => {
-            println(&format!("[local-lifecycle] SDK-VFS-CALL=ERR {error:?}"));
+            println(&format!("[local-lifecycle] SDK-VFS-CALL=ERR {label} {error:?}"));
             fail("sdk-leg: ServiceRef call to a live VFS failed");
         }
     }

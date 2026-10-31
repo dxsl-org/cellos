@@ -126,6 +126,29 @@ OpenSBI → Limine → kernel, the kernel is built PIE (`-C relocation-model=pic
 via `kernel/build.rs`), and `limine.conf` sets `KASLR=yes` so consecutive boots load the kernel
 at different physical bases. Verified across the integration test suite.
 
+### x86-64 Privileged Entry — Hardened (2026-10-31)
+**Severity: Resolved for the entry paths listed; SMAP open**
+
+Applies to every tier: LBI does not make hardware exception delivery safe.
+
+- **IST stacks.** NMI, #DF and #MC use per-CPU IST1/IST2/IST3 stacks (`hal/arch/x86/src/x86_64/ist.rs`),
+  8 KiB each, with an unmapped guard page on both ends. An NMI in the SYSCALL window (after `swapgs`,
+  before the kernel stack load) or after SYSRET's user-RSP restore no longer writes through an
+  untrusted RSP, and a stack overflow ends in a diagnosed #DF instead of a triple fault. These vectors
+  stay fatal; their path does not read GS, so it is safe in every `swapgs` window.
+- **SYSCALL flags.** `IA32_FMASK` clears IF, TF, DF, AC, NT and IOPL. Previously it masked only TF/IF,
+  so a caller's DF reached Rust code. SYSRET restores the caller's flags.
+- **Frame decode.** 64-bit delivery always pushes SS:RSP; the saved RSP is now read for kernel-origin
+  entries too.
+- **Opt-in SMEP/UMIP** (`x86-smep`, `x86-umip` features): off by default; a requested protection the
+  CPU lacks refuses boot or AP admission. **SMAP** (`x86-smap`) has the mechanism (CLAC on IDT entry,
+  AC cleared on SYSCALL, `protect::user_access` windows) but no qualifying kernel profile: the SAS
+  kernel writes U=1 pages directly (first site: user-stack zeroing in
+  `Scheduler::spawn_with_stacks_configured`). Enabling it requires migrating those accesses into
+  bounded windows without adding copies.
+- Evidence: `scripts/qemu-x86_64-idt-test.sh` and `scripts/x86/qemu-idt-protection-test.sh`
+  (QEMU/TCG only; no physical Intel or real machine-check evidence).
+
 ### Per-Cell DMA Isolation — Shipped (2026-06-22)
 **Severity: Resolved (residual gap for untrusted FFI/native code — see below)**
 
@@ -219,10 +242,12 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 - **Per-Cell SHA-256 measurement (2026-06-21)** — every ELF is hashed at `spawn_from_path()` and extended
   into an append-only kernel measurement log (Linux IMA model) *before* the Cell is scheduled
   (`kernel/src/sha256.rs`, `kernel/src/measurement_log.rs`; emitted as a `CellMeasure` audit event).
-- **Ed25519 cell-signing verify-at-spawn (2026-06-23)** — the loader extracts the `__ViCell_sig` section and
-  verifies a present signature before spawning. Invalid signatures fail closed; an absent signature fails
-  only under the non-default `signing-required` feature. The default dev seed is public/reproducible, while
-  disabling it selects a `[0u8; 32]` placeholder; no production public-key provisioning path exists yet.
+- **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31)** — the loader extracts the
+  `__ViCell_sig` section and verifies it against the kernel's single trust anchor. Test kernels
+  (`dev-signing-key`) trust only the public dev seed and admit unsigned cells to Tier 2; release kernels
+  (`release-posture` = `release-signing-key` + `signing-required`) trust only the provisioned release key
+  (`CELLOS_RELEASE_CELL_PUBLIC_KEY`, private key a CI secret) and deny unsigned cells. The two features
+  cannot be combined (build error), so a dev-signed artifact is refused by a release kernel.
 - **What the normal signing workflow means (2026-07-30, phase 11)** — `scripts/cellos-sign` checks the
   repository's F1/F5 policy before its normal signing call: it verifies that every Cell crate root carries
   `#![forbid(unsafe_code)]`, that no tracked `.rs` file under `cells/` contains `unsafe` outside

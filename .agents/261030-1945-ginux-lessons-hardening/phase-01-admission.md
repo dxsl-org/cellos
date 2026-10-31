@@ -77,3 +77,5 @@ If admission is refused, the whole plan stays parked. Undo: revert the doc commi
 ## Deviation Log
 
 None.
+
+2026-10-31: completed. User admitted Phase 01 + 04 only ([record](admission-approval.md)). 09A not admitted. Lock register, portfolio and controlling-plan rows added; all 38 relations unchanged; 261025 inputs appended. SMEP/SMAP/UMIP: per-profile opt-in.

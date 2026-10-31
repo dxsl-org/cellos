@@ -35,7 +35,7 @@ pub fn set_hhdm_offset(offset: usize) {
 ///
 /// Precondition: `set_hhdm_offset` has been called with the Limine HHDM base.
 #[inline]
-fn phys_to_virt_ptr(phys: usize) -> usize {
+pub(crate) fn phys_to_virt_ptr(phys: usize) -> usize {
     phys + HHDM_OFFSET.load(Ordering::Relaxed)
 }
 

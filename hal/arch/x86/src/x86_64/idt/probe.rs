@@ -104,9 +104,13 @@ fn live_rflags() -> u64 {
     flags
 }
 
-fn validate_entry(frame: &EntryFrame, vector: u64, error: u64) {
-    let base = frame as *const EntryFrame as u64;
+/// The probe stubs save the caller RSP, push six registers plus 8 bytes of
+/// padding, then pop the padding before trapping: RSP at the trap is C-48.
+const PROBE_RSP_BELOW_CALLER: u64 = 48;
+
+fn validate_entry(frame: &EntryFrame, vector: u64, error: u64, caller_rsp: *const u64) {
     let shim_rsp = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(X86_IDT_SHIM_RSP)) };
+    let trap_rsp = unsafe { core::ptr::read_volatile(caller_rsp) } - PROBE_RSP_BELOW_CALLER;
     if registers(frame) != SENTINELS
         || frame.vector != vector
         || frame.error != error
@@ -114,9 +118,10 @@ fn validate_entry(frame: &EntryFrame, vector: u64, error: u64) {
         || frame.cs != 0x08
         || frame.rflags & DF == 0
         || live_rflags() & DF != 0
-        || frame.old_rsp().is_some()
-        || frame.old_ss().is_some()
-        || frame.interrupted_rsp() != base + 160
+        // 64-bit delivery pushes SS:RSP even without a privilege change.
+        || frame.old_rsp() != trap_rsp
+        || frame.old_ss() != 0x10
+        || frame.interrupted_rsp() != trap_rsp
         || (shim_rsp + 8) & 15 != 0
     {
         fail();
@@ -126,17 +131,17 @@ fn validate_entry(frame: &EntryFrame, vector: u64, error: u64) {
 pub(super) fn handle_entry(frame: &mut EntryFrame) -> bool {
     match STATE.load(Ordering::Acquire) {
         ARMED_BP => {
-            validate_entry(frame, 3, 0);
+            validate_entry(frame, 3, 0, core::ptr::addr_of!(X86_IDT_BP_CALLER_RSP));
             transition(ARMED_BP, SAW_BP);
             true
         }
         ARMED_GP => {
-            validate_entry(frame, 13, 0xfffc);
+            validate_entry(frame, 13, 0xfffc, core::ptr::addr_of!(X86_IDT_GP_CALLER_RSP));
             frame.rip = RECOVERY_RIP.load(Ordering::Acquire);
             transition(ARMED_GP, SAW_GP);
             true
         }
-        _ => super::cpl3_probe::handle_entry(frame),
+        _ => super::probe_ist::handle_entry(frame) || super::cpl3_probe::handle_entry(frame),
     }
 }
 

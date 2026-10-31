@@ -86,9 +86,16 @@ qemu-dev-https = []
 # Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
 # grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
 policy-required = []
-# Fleet-secure posture for cell signing: a cell with NO __ViCell_sig section is
-# denied at spawn (same as a tampered signature). Off in G1 (dev-permissive default).
+# Records the signing posture. Spawn behaviour does not depend on it: in every
+# posture a signature that fails verification is denied, and an UNSIGNED cell is
+# placed in Tier 2 except under `release-signing-key`, which denies it.
 signing-required = []
+# Release cell trust anchor: the 32-byte public key at CELLOS_RELEASE_CELL_PUBLIC_KEY
+# (private key = CI secret). Mutually exclusive with dev-signing-key (build.rs) and
+# denies unsigned cells: every release cell is signed; its manifest class picks the tier.
+release-signing-key = []
+# Named release kernel posture. Build with `--no-default-features --features release-posture`.
+release-posture = ["release-signing-key", "signing-required"]
 # Named fail-closed kernel posture selected by the production relay image owner.
 production-relay-image = ["policy-required", "signing-required"]
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
@@ -146,6 +153,10 @@ snapshot-qualified = []
 test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
 # Terminal x86 per-vector IDT CPL3 oracle; never enable in generic test images.
 x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
+# Opt-in x86 supervisor protections (see hal-x86). Off in every shipped profile.
+x86-smep = ["hal/x86-smep"]
+x86-smap = ["hal/x86-smap"]
+x86-umip = ["hal/x86-umip"]
 # Isolated x86 SVM NPF/MMIO decode fixture; does not enable the global test suite.
 x86-mmio-smoke = []
 # Private Phase02 session fixture routes and caller-selected disposable trust key.

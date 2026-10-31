@@ -26,15 +26,11 @@ CI_MARKERS = ("GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "CELLOS_SI
 # so that it cannot be enabled by accident and shows up in a grep of any script.
 PROD_OVERRIDE_ENV = "CELLOS_SIGN_ALLOW_PROD_KEY_OUTSIDE_CI"
 
-# Phase 04 S1/S3-gui: the serial shell ships as `cellbox sh` and the GUI Terminal
-# hosts it, so a private fixture has to be able to sign ELFs named `cellbox` and
-# `terminal`. The allowance is deliberately narrow: exactly this variable set to
-# "1", only for the names below, and only with an explicit private seed that is NOT
-# the reproducible dev seed the canonical builds sign with. It never admits the
-# quarantined bytes (see BLOCKED_ARTIFACT_SHA256). It is independent of the rollout
-# guards of `package-desktop-x86.py` and `make-iso-ci.sh` (reopened by S10-2b on their own rules).
-CELLBOX_FIXTURE_ENV = "CELLBOX_PRIVATE_FIXTURE_SIGNING"
-PRIVATE_FIXTURE_NAMES = frozenset({"cellbox", "app-cellbox", "terminal"})
+# Test and release are separated by KEY, not by file name (plan
+# .agents/261031-1200-test-release-key-separation): the dev key signs every cell
+# for test images, whose kernels trust only the dev key; release kernels trust only
+# the release key (`release-signing-key`), so a dev-signed artifact cannot run there.
+# The quarantined Cellbox/terminal bytes stay refused whatever the key or route.
 BLOCKED_ARTIFACT_SHA256 = frozenset({
     "64eb28f3be3d08bf2560d6eb0b58bee4a33ff8ea3439bcd5ed6e1ccc42f84a39",
     "636497acc2bdf735471173c5c428e61d16b1d8c870935cfe868e6d0120e52fa2",
@@ -54,16 +50,15 @@ class QualifiedRoute:
 
     recipe: str                     # repository-relative path of the only admitted program
     recipe_sha256: str              # pinned digest of that program; any edit needs a re-review
-    fixture_names: frozenset[str]   # the PRIVATE_FIXTURE_NAMES this route may sign
     binaries: frozenset[str]        # every basename a batch on this route may contain
     in_repo_root: str | None = None  # None: the root must be outside the repository (candidate
                                      # routes); else the root must be exactly this repo-relative path
 
 
-# The x86 routes: the DEV cell key may sign `cellbox`/`terminal` only here, only from the
-# pinned assembler running as the program itself, never the quarantined hashes. Candidate
-# routes sign into a root outside the repository (S10-2a); canonical routes (S10-2b) sign
-# only into exactly `X86_CANONICAL_ROOT`. Adding a route or a name, or editing the
+# The x86 packaging routes: only the pinned assembler running as the program itself
+# may sign these image batches, never the quarantined hashes. Candidate routes sign
+# into a root outside the repository (S10-2a); canonical routes (S10-2b) sign only
+# into exactly `X86_CANONICAL_ROOT`. Adding a route or a binary, or editing the
 # assembler, is a reviewed source change of this table.
 X86_CANONICAL_ROOT = "kernel/src/embedded-x86_64"
 X86_CANDIDATE_RECIPE = "scripts/assemble-x86-image.py"
@@ -78,17 +73,15 @@ _X86_DESKTOP_SIGNED = _X86_HEADLESS_SIGNED | frozenset({
 })
 QUALIFIED_ROUTES = {
     "x86-candidate-headless": QualifiedRoute(
-        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, frozenset({"cellbox"}),
-        _X86_HEADLESS_SIGNED),
+        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, _X86_HEADLESS_SIGNED),
     "x86-candidate-desktop": QualifiedRoute(
-        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, frozenset({"cellbox", "terminal"}),
-        _X86_DESKTOP_SIGNED),
+        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, _X86_DESKTOP_SIGNED),
     "x86-canonical-headless": QualifiedRoute(
-        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, frozenset({"cellbox"}),
-        _X86_HEADLESS_SIGNED, X86_CANONICAL_ROOT),
+        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, _X86_HEADLESS_SIGNED,
+        X86_CANONICAL_ROOT),
     "x86-canonical-desktop": QualifiedRoute(
-        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, frozenset({"cellbox", "terminal"}),
-        _X86_DESKTOP_SIGNED, X86_CANONICAL_ROOT),
+        X86_CANDIDATE_RECIPE, X86_CANDIDATE_RECIPE_SHA256, _X86_DESKTOP_SIGNED,
+        X86_CANONICAL_ROOT),
 }
 
 
@@ -145,17 +138,6 @@ def load_signer(repo: Path) -> ModuleType:
     return module
 
 
-def private_fixture_allowed(seed_hex: str | None) -> bool:
-    """True only for an explicit private-fixture signing request.
-
-    Needs `CELLBOX_PRIVATE_FIXTURE_SIGNING=1` *and* an explicit seed that is not
-    the reproducible dev seed: the default (no `--seed-hex`) is the dev key every
-    canonical build signs with, so a fixture can never ride on it.
-    """
-    if os.environ.get(CELLBOX_FIXTURE_ENV) != "1":
-        return False
-    return seed_hex is not None and seed_hex.strip().lower() != DEV_SEED_HEX
-
 
 def _route_caller() -> Path | None:
     """The real path of the running program (`__main__`), or None (REPL, `-m`, embed)."""
@@ -201,8 +183,6 @@ def route_admits(route: Route, targets: list[Path], seed_hex: str | None) -> Non
     for target in targets:
         real = Path(os.path.realpath(target))
         names = {target.name, real.name}
-        if names & (PRIVATE_FIXTURE_NAMES - spec.fixture_names):
-            refuse(f"fixture name not on this route: {target}")
         if not names <= spec.binaries:
             refuse(f"not a binary of this route: {target}")
         try:
@@ -227,27 +207,14 @@ def _refuse_blocked_hashes(targets: list[Path]) -> None:
                     f"ROLLOUT BLOCKED: quarantined Cellbox/terminal bytes: {target}"
                 )
 
-
-def preflight_blocked_artifacts(targets: list[Path], seed_hex: str | None, *,
-                                route: Route | None = None) -> None:
+def preflight_blocked_artifacts(targets: list[Path]) -> None:
     """Refuse the whole batch before any key is loaded or target is written.
 
-    First, unconditionally, the quarantined byte hashes, whatever the name, env,
-    seed or route. Then the names in `PRIVATE_FIXTURE_NAMES` (`cellbox`,
-    `app-cellbox`, `terminal`) are refused unless [`private_fixture_allowed`] holds
-    or, for a `route` request, [`route_admits`] admits the whole batch.
+    The quarantined byte hashes are refused unconditionally, whatever the name,
+    environment, key or route. Names are not a policy: the key decides which
+    kernels accept a signature.
     """
     _refuse_blocked_hashes(targets)
-    if route is not None:
-        route_admits(route, targets, seed_hex)
-        return
-    allowed = private_fixture_allowed(seed_hex)
-    for target in targets:
-        names = {target.name, target.resolve().name}
-        if names & PRIVATE_FIXTURE_NAMES and not allowed:
-            raise SigningRefused(
-                f"ROLLOUT BLOCKED: unqualified Cellbox/terminal artifact: {target}"
-            )
 
 
 def sign_and_verify(
@@ -261,8 +228,9 @@ def sign_and_verify(
     successful objcopy alone never proves the kernel-compatible result.
     """
     # Preflight the entire batch before loading keys or mutating any target.
-    # Names cover rebuilt candidates; hashes also catch renamed quarantined ELFs.
-    preflight_blocked_artifacts(targets, seed_hex, route=route)
+    preflight_blocked_artifacts(targets)
+    if route is not None:
+        route_admits(route, targets, seed_hex)
     guard_prod_key(seed_hex)
     signer = load_signer(repo)
     # The low-level signer refuses to produce a signature unless this sentinel
@@ -275,10 +243,6 @@ def sign_and_verify(
     _refuse_blocked_hashes(targets)
     if route is not None:
         route_admits(route, targets, seed_hex)
-    elif seed == signer.DEV_SEED and any(
-        {t.name, t.resolve().name} & PRIVATE_FIXTURE_NAMES for t in targets
-    ):
-        raise SigningRefused("ROLLOUT BLOCKED: private fixtures never sign with the dev key")
     if len(seed) != 32:
         raise SigningRefused(f"seed must be 32 bytes (64 hex chars), got {len(seed)}")
     priv = signer._priv_from_seed(seed)

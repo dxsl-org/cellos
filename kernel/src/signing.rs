@@ -29,6 +29,9 @@ static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> = crate::sync::Spinlock::
 
 /// Dev Ed25519 **public** key — derived from the fixed dev seed in
 /// `scripts/sign-cell.py` (seed `[0x43]*32`, reproducible; never shipped in release).
+#[cfg(all(feature = "dev-signing-key", feature = "release-signing-key"))]
+compile_error!("dev-signing-key and release-signing-key are mutually exclusive");
+
 #[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
     0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb, 0x0c, 0x0a,
@@ -36,23 +39,53 @@ const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
 ];
 
 /// Fleet cell-signing trust anchor.
-/// `dev-signing-key` → the reproducible dev key above (matching `scripts/sign-cell.py --seed 0x43*32`).
-/// Otherwise → a zero placeholder that fails every verify (fail-closed until prod key is provisioned).
+/// - `dev-signing-key` → the reproducible dev (test) key above; test images only.
+/// - `release-signing-key` → the provisioned release key (build.rs copies the file named by
+///   `CELLOS_RELEASE_CELL_PUBLIC_KEY`; the private key is a CI secret).
+/// - neither → a zero placeholder that fails every verify (fail closed).
 #[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const CELL_SIGNER_PUBKEY: [u8; 32] = DEV_CELL_SIGNER_PUBKEY;
 
-#[cfg(all(not(feature = "dev-signing-key"), not(feature = "phase02-terminal-profile")))]
-const CELL_SIGNER_PUBKEY: [u8; 32] = [0u8; 32]; // TODO(prod): provisioned fleet key
+#[cfg(all(feature = "release-signing-key", not(feature = "phase02-terminal-profile")))]
+const CELL_SIGNER_PUBKEY: [u8; 32] =
+    *include_bytes!(concat!(env!("OUT_DIR"), "/release-cell-signing.pub"));
+
+#[cfg(all(
+    not(feature = "dev-signing-key"),
+    not(feature = "release-signing-key"),
+    not(feature = "phase02-terminal-profile")
+))]
+const CELL_SIGNER_PUBKEY: [u8; 32] = [0u8; 32];
 
 #[cfg(feature = "phase02-terminal-profile")]
 const CELL_SIGNER_PUBKEY: [u8; 32] =
     *include_bytes!(concat!(env!("OUT_DIR"), "/phase02-cell-signing.pub"));
 
-/// Returns `true` when the `signing-required` build feature is set (CI/prod posture).
-/// In dev mode (default) an absent signature is permitted; with `signing-required`
-/// an unsigned cell is denied the same as a tampered one.
+/// Whether this kernel records the `signing-required` posture (see `kernel/Cargo.toml`).
 pub const fn signing_required() -> bool {
     cfg!(feature = "signing-required")
+}
+
+/// Whether an UNSIGNED cell may be admitted (to Tier 2). False in the release
+/// posture: every release cell is signed and its manifest class picks the tier.
+pub const fn unsigned_admitted() -> bool {
+    !cfg!(feature = "release-signing-key")
+}
+
+/// Posture name and the first 8 bytes of the trust anchor, for the boot log.
+pub fn trust_anchor() -> (&'static str, [u8; 8]) {
+    let posture = if cfg!(feature = "release-signing-key") {
+        "release"
+    } else if cfg!(feature = "phase02-terminal-profile") {
+        "phase02-private"
+    } else if cfg!(feature = "dev-signing-key") {
+        "dev"
+    } else {
+        "none"
+    };
+    let mut prefix = [0u8; 8];
+    prefix.copy_from_slice(&CELL_SIGNER_PUBKEY[..8]);
+    (posture, prefix)
 }
 
 /// Extract the 64-byte Ed25519 signature from the `__ViCell_sig` ELF section.

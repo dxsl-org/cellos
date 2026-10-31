@@ -24,6 +24,7 @@ const COMPLETE: u8 = 8;
 static STATE: AtomicU8 = AtomicU8::new(0);
 static TIMER_COUNT: AtomicU8 = AtomicU8::new(0);
 static B_RETURN_RIP: AtomicU64 = AtomicU64::new(0);
+static CODE_BASE: AtomicU64 = AtomicU64::new(0);
 
 use hal_arch_trait::kernel_abi::{
     vi_x86_idt_cpl3_park_b, vi_x86_idt_cpl3_switch_to_a, vi_x86_idt_cpl3_wake_b,
@@ -40,6 +41,7 @@ fn transition(from: u8, to: u8) {
 
 pub(super) fn arm(code_base: usize, b_return_offset: usize) {
     B_RETURN_RIP.store((code_base + b_return_offset) as u64, Ordering::Release);
+    CODE_BASE.store(code_base as u64, Ordering::Release);
     transition(0, READY);
 }
 
@@ -57,6 +59,7 @@ pub(super) fn handle_syscall(frame: &mut ViTrapFrame) -> bool {
     {
         super::probe::fail();
     }
+    super::probe_ist::run_kernel_protection(CODE_BASE.load(Ordering::Acquire), frame.sstatus as u64);
     transition(READY, B_PARKED);
     vi_x86_idt_cpl3_park_b();
     if STATE.load(Ordering::Acquire) != A_TIMER_ENTERED {
@@ -98,6 +101,7 @@ pub(super) fn handle_entry(frame: &mut EntryFrame) -> bool {
                 && frame.r13 == RDX_TOKEN
                 && frame.r12 == B_RETURN_RIP.load(Ordering::Acquire) =>
         {
+            super::probe_ist::finish_cpl3(frame.rflags);
             transition(A_TIMER_ENTERED, B_SYSCALL_RETURNED);
             vi_x86_idt_cpl3_switch_to_a();
             super::probe::fail()

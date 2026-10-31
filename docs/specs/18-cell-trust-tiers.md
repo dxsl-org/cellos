@@ -120,13 +120,18 @@ artifact provenance are the guarantee. The current `[0x43; 32]` dev seed and
 `--unchecked-dev-signature` route are test fixtures: the kernel cannot distinguish their
 signatures from a checked dev signature, so they establish no adversarial provenance.
 
-Current admission behavior is explicit:
+Current admission behavior is explicit (2026-10-31, plan `261031-1200-test-release-key-separation`):
 
-- signature present but invalid: deny in every build;
-- signature absent + `signing-required`: deny;
-- signature absent + default G1 features: admit to the SAS;
-- disabling `dev-signing-key` selects a `[0u8; 32]` placeholder, not a provisioned fleet
-  key, so it cannot form a usable production profile.
+- signature present but invalid for this kernel's trust anchor: deny in every build;
+- valid signature: Tier 1, or Tier 2 when the manifest declares FFI/UNTRUSTED;
+- signature absent, dev/test posture: admit to Tier 2;
+- signature absent, release posture (`release-signing-key`): deny. Every release cell is
+  signed; its manifest class selects the tier.
+- Trust anchors are exclusive per kernel: `dev-signing-key` (test images) or
+  `release-signing-key` (provisioned public key file; private key is a CI secret). A
+  kernel without either uses a `[0u8; 32]` placeholder that fails every verify. A
+  dev-signed artifact therefore cannot run on a release kernel, and the signer no
+  longer refuses names: test images sign every cell, `cellbox` included.
 
 ### 2.2 Tier 2 admission — nothing
 
