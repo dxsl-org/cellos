@@ -38,9 +38,23 @@ allow = [
   "Zlib",
 ]
 
+# Copyleft policy: docs/decisions/0030-license-model-and-copyleft-boundary.md.
+# A GPL/AGPL/LGPL crate is admitted only by name and only as a leaf application
+# Cell. scripts/check-copyleft-leaves.sh fails if any crate depends on one.
+# Never add a copyleft exception for kernel/, hal/, libs/ or any driver Cell.
 [[licenses.exceptions]]
 allow = ["GPL-2.0-only"]
 name = "doom"
+
+[[licenses.exceptions]]
+# Optional Ocel PDF renderer linking MuPDF (ADR-0017); omitted by CELLOS_NO_OCEL_PDF=1.
+allow = ["AGPL-3.0-or-later"]
+name = "ocel-pdf"
+
+[[licenses.exceptions]]
+# Mozilla CA root list (data, not code), pulled in by service-net TLS.
+allow = ["CDLA-Permissive-2.0"]
+name = "webpki-roots"
 
 [[licenses.exceptions]]
 # redoxfs uses license-file; vendored in third_party/ under MIT

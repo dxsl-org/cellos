@@ -2188,6 +2188,9 @@ jobs:
         with:
           arguments: --all-features
 
+      - name: Copyleft leaf check (ADR-0030)
+        run: scripts/check-copyleft-leaves.sh
+
       - name: cargo-audit
         uses: rustsec/audit-check@v2
         with:
