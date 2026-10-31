@@ -1466,9 +1466,6 @@ pub fn yield_cpu() {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
             sched.release_waiters_after_resource_drop(waiter_wakes);
         }
-        crate::cell::cap_registry::CAP_TABLE
-            .lock()
-            .revoke_all_for(types::CellId(retirement.owner.cell_id));
         crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
         crate::resource_registry::release_for(types::CellId(retirement.owner.cell_id));
         #[cfg(cellos_p01_trace)]

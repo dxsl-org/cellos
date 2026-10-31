@@ -39,3 +39,9 @@ User selected all remaining phases: 09A, 02, 03, 05, 06, 07, 08, 09B, 09C. WIP s
 User chose "07A: #3 + viết CP1 cho #1/#2" after the Phase 07 census (`agent://AuthorityCensus`). No Law-1 delta in code: kernel-internal visibility only.
 
 File set: `kernel/src/cell/cspace.rs` (`allocate_slot` private; new `pub(crate) mint_kernel_root` with issuer Kernel and holder = the authority's own incarnation; `allocate_file_slot` loses its `holder` parameter), `kernel/src/task/syscall.rs` (OpenCap call site), `kernel/src/task/cap_file_selftest.rs`, `CHANGELOG.md`, this plan directory (new `phase-07a-cp1.md` design draft for derive destination admission / delegability / issuer preservation — awaiting approval, no code).
+
+## Slice 07B (2026-10-31)
+
+User: "xóa tests/unit_cspace_smoke.rs rồi tiếp tục CAP_TABLE". Census #4 re-checked: nothing allocates into the legacy `CAP_TABLE` (no `alloc`/`alloc_with_lease` caller in kernel, libs, cells, tests or tools); its only use is `revoke_all_for` at retirement (`kernel/src/task.rs:1469`), a no-op on an always-empty table. Clean cutover: delete `CapTable`/`CapEntry`/`CapResource`/`CAP_TABLE`, keep the CSpace file-backing helpers. Kernel-internal, no ABI or Law-1 delta.
+
+File set: `tests/unit_cspace_smoke.rs` (deleted, never compiled), `kernel/src/cell/cap_registry.rs`, `kernel/src/task.rs`, `CHANGELOG.md`, this plan directory.
