@@ -412,7 +412,10 @@ impl CellAuthority {
     }
 
     /// Allocate a new slot in this Cell's arena.
-    pub fn allocate_slot(
+    ///
+    /// Private: a parentless call is an unchecked root mint. Outside this module
+    /// roots come only from [`Self::mint_kernel_root`]; derivations pass a parent.
+    fn allocate_slot(
         &mut self,
         holder: Principal,
         issuer: Principal,
@@ -479,6 +482,16 @@ impl CellAuthority {
         }
         self.next_ticket_counter = next_ticket;
         Ok(ticket)
+    }
+
+    /// Kernel-issued root grant held by this authority's own Cell incarnation.
+    ///
+    /// The only root-mint entry outside this module: the issuer is always
+    /// `Kernel` and the holder is always the owning incarnation, so a caller
+    /// cannot mint for an arbitrary holder or claim another issuer.
+    pub(crate) fn mint_kernel_root(&mut self, kind: ResourceKind, rights: u32) -> Result<u64, ControlStatus> {
+        let holder = Principal::Cell { id: self.cell_id, generation: self.generation };
+        self.allocate_slot(holder, Principal::Kernel, kind, rights, None, None)
     }
 
     /// Verify a ticket and return reference to the slot if valid.
@@ -571,14 +584,13 @@ impl CellAuthority {
             Ok(ControlStatus::Pending)
         }
     }
-    /// Allocate a CSpace slot for an open BootFS file with given rights.
+    /// Allocate a CSpace slot for an open BootFS file, held by this Cell.
     pub fn allocate_file_slot(
         &mut self,
-        holder: Principal,
         file_box: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
         rights: u32,
     ) -> Result<u64, ControlStatus> {
-        let ticket = self.allocate_slot(holder, Principal::Kernel, ResourceKind::BootFSFile, rights, None, None)?;
+        let ticket = self.mint_kernel_root(ResourceKind::BootFSFile, rights)?;
         let _ = self.live_slot_index(ticket)?;
         crate::cell::cap_registry::attach_file_to_ticket((self.cell_id.0, self.generation, ticket), file_box);
         Ok(ticket)

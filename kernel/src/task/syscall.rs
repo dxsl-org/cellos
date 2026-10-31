@@ -6697,11 +6697,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
             let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
-            let ticket = auth.allocate_file_slot(
-                crate::cell::cspace::Principal::Cell { id: cell_id, generation: cell_gen },
-                file,
-                api::cap::CapPerms::FILE_READ.0,
-            ).map_err(|_| SyscallError::OutOfMemory)?;
+            let ticket = auth.allocate_file_slot(file, api::cap::CapPerms::FILE_READ.0)
+                .map_err(|_| SyscallError::OutOfMemory)?;
             Ok(ticket as usize)
         }
 

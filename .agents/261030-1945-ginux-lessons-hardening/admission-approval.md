@@ -33,3 +33,9 @@ Retained gates: fatal NMI/#DF/#MC policy unchanged; resumable NMI not admitted; 
 ## Admission 2 (2026-10-31)
 
 User selected all remaining phases: 09A, 02, 03, 05, 06, 07, 08, 09B, 09C. WIP stays one implementation slice; order 09A → 07 → 08 → 09B → 09C with 02/03/05/06 between kernel slices. Each slice records its exact file set here before editing. 09A changes stash syscall semantics: it needs a Law-1 CP1 approval of an exact design text before code; selecting the phase is not that approval.
+
+## Slice 07A (2026-10-31)
+
+User chose "07A: #3 + viết CP1 cho #1/#2" after the Phase 07 census (`agent://AuthorityCensus`). No Law-1 delta in code: kernel-internal visibility only.
+
+File set: `kernel/src/cell/cspace.rs` (`allocate_slot` private; new `pub(crate) mint_kernel_root` with issuer Kernel and holder = the authority's own incarnation; `allocate_file_slot` loses its `holder` parameter), `kernel/src/task/syscall.rs` (OpenCap call site), `kernel/src/task/cap_file_selftest.rs`, `CHANGELOG.md`, this plan directory (new `phase-07a-cp1.md` design draft for derive destination admission / delegability / issuer preservation — awaiting approval, no code).
