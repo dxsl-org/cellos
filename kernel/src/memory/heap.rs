@@ -50,7 +50,10 @@ static FAIL_SITE: [AtomicUsize; 8] = [const { AtomicUsize::new(0) }; 8];
 /// Record the live call chain (`.text` words only) when an allocation fails.
 ///
 /// # Safety
-/// Called from `alloc` with a live stack; the scan only reads it.
+/// Called from `alloc` with a live stack; the scan only reads it. The scan
+/// never crosses the page above `sp`: a shallow frame can sit just below a
+/// stack top, and the page past a top is unmapped (often another stack's
+/// guard), so reading it would fault inside the allocator.
 #[cfg(target_arch = "riscv64")]
 unsafe fn capture_fail_site() {
     let sp: usize;
@@ -59,8 +62,10 @@ unsafe fn capture_fail_site() {
     let mut index = 0usize;
     let mut offset = 0usize;
     let mut last = 0usize;
-    while offset < 2048 && index < FAIL_SITE.len() {
-        // SAFETY: the stack is mapped; the scan stays inside the live frames.
+    let page = crate::memory::paging::PAGE_SIZE;
+    let limit = 2048.min(page - (sp & (page - 1)));
+    while offset < limit && index < FAIL_SITE.len() {
+        // SAFETY: `sp`'s own page is mapped and the scan stays inside it.
         let candidate = unsafe { core::ptr::read_volatile((sp + offset) as *const usize) };
         if (0x8020_0000..0x802c_9000).contains(&candidate) && candidate != last {
             FAIL_SITE[index].store(candidate, Ordering::Relaxed);

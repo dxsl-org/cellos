@@ -33,3 +33,7 @@ R5. **ABI.** New syscall (or HandleControl action 4 "Exercise"), plus a launch-p
 ## 4. Evidence plan (C only)
 
 Host tests for opt-in absent/present, ceiling exceeded, stale issuer, stale receiver, close versus revoke, and lineage cut. A QEMU two-hart run of the witness with a receiver on hart 1.
+
+## Decision (2026-10-31)
+
+User chose **A. Defer**: derive stays fail-closed (07A); the receive path is designed when a real consumer appears. Phase 07 closed.

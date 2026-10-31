@@ -33,14 +33,20 @@ fn wait_for(expected: u8) {
     }
 }
 
+/// Kernel stack pages for the fixture tasks. The worker's terminal path
+/// (`exit_task` + `yield_cpu`) runs the scheduler's global sweep, whose
+/// `cell_session` maintenance frame alone is ~3.3 KiB; a single page overflows
+/// into the bottom guard, and the S-mode trap entry then recurses below it.
+const HANDOFF_KERNEL_STACK_PAGES: usize = 8;
+
 /// Keep the post-init cross-hart fixture independent from production stack
-/// sizing; it executes only a bounded kernel handoff path.
+/// sizing; it executes only kernel handoff and scheduler-exit paths.
 fn spawn_handoff_task(
     scheduler: &mut super::scheduler::Scheduler,
     name: &str,
     cell_id: CellId,
 ) -> Result<usize, types::ViError> {
-    let kernel_stack = super::stack::Stack::new_kernel(1)?;
+    let kernel_stack = super::stack::Stack::new_kernel(HANDOFF_KERNEL_STACK_PAGES)?;
     let user_stack = super::stack::Stack::new_user(1)?;
     let tid = scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack);
     if let Some(task) = scheduler.tasks.get(&tid) {
