@@ -1252,17 +1252,19 @@ impl State {
             }) { return Err(Status::InvalidChild); }
         }
         if !self.prepared[pi].publication.as_ref().is_some_and(|p| p.current(sched)) {
-            if self.prepared[pi].publication.as_ref().is_some_and(|p| p.is_domain()) {
-                // A drain or authority change since prepare: audited like a
-                // `publish_prepared` drain refusal, no SAS fallback.
-                super::launch::audit_domain_drain_refusal();
-            }
             return Err(Status::Revoked);
         }
-        if self.commit_domain_grant_live
-            && self.prepared[pi].publication.as_ref().is_some_and(|p| p.is_domain()) {
-            super::launch::audit_domain_live_grant_refusal();
-            return Err(Status::Denied);
+        let grant_live = self.commit_domain_grant_live;
+        match self.prepared[pi].publication.as_ref().map(|p| p.domain_commit(grant_live)) {
+            Some(super::launch::DomainCommit::Drained) => {
+                super::launch::audit_domain_drain_refusal();
+                return Err(Status::Revoked);
+            }
+            Some(super::launch::DomainCommit::LiveGrant) => {
+                super::launch::audit_domain_live_grant_refusal();
+                return Err(Status::Denied);
+            }
+            _ => {}
         }
         let mut receipt_indices: [Option<usize>; 3] = [None; 3];
         for n in 0..3 {

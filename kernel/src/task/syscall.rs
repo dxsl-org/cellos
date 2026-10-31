@@ -2428,17 +2428,34 @@ fn preflight_user_output(caller_id: usize, ptr: usize, len: usize) -> Result<(),
 struct SessionOutputPin { span: Option<(usize, usize, usize)> }
 impl SessionOutputPin {
     fn reserve(caller: usize, ptr: usize, len: usize, view: &TaskCopyView) -> Result<Self, SyscallError> {
-        if !view.is_sas() { return Ok(Self { span: None }); }
-        let page_grants = grant_table_lock().lock();
-        let registered = reg_grant_table_lock().lock();
-        let guard = super::SCHEDULER.lock();
-        let sched = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
-        if !sas_caller_owned_span(sched, page_grants.as_ref(), registered.as_ref(), caller, ptr, len) {
-            return Err(SyscallError::InvalidInput);
+        // Same gate as `preflight_user_output`: the SAS ownership lease exists
+        // only in builds with a domain backend.
+        #[cfg(all(
+            feature = "native-domains",
+            any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+        ))]
+        {
+            if !view.is_sas() { return Ok(Self { span: None }); }
+            let page_grants = grant_table_lock().lock();
+            let registered = reg_grant_table_lock().lock();
+            let guard = super::SCHEDULER.lock();
+            let sched = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
+            if !sas_caller_owned_span(sched, page_grants.as_ref(), registered.as_ref(), caller, ptr, len) {
+                return Err(SyscallError::InvalidInput);
+            }
+            view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+            crate::memory::pin::pin(ptr, len, caller).map_err(|_| SyscallError::OutOfMemory)?;
+            Ok(Self { span: Some((ptr, len, caller)) })
         }
-        view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
-        crate::memory::pin::pin(ptr, len, caller).map_err(|_| SyscallError::OutOfMemory)?;
-        Ok(Self { span: Some((ptr, len, caller)) })
+        #[cfg(not(all(
+            feature = "native-domains",
+            any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+        )))]
+        {
+            let _ = caller;
+            view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+            Ok(Self { span: None })
+        }
     }
 }
 impl Drop for SessionOutputPin {

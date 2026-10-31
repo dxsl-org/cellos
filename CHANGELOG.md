@@ -262,13 +262,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - a closed consumer stops the producer with kernel reason 3, reported 141.
 
 ### Changed
+- Follow-ups to P1:
+  - **Test-hooks builds no longer clobber the default kernel.** `scripts/build-test-hooks-ci.sh` and `build-test-hooks-cells.ps1` built the `test-hooks` kernel (and `service-vfs` with its tiny quota) in the shared target directory. That overwrote `target/riscv64gc-unknown-none-elf/release/cellos-kernel`, so a default-kernel lane run afterwards booted the test-hooks image and never reached the shell. Both scripts now build under `target/test-hooks` (`CELLOS_TEST_HOOKS_TARGET_DIR`) and copy only `cellos-kernel-test-hooks` out. Verified: the default kernel's hash is unchanged across a run, and `tier2-fault-isolation` passes 5/5 right after.
+  - **The kernel builds without `native-domains` again.** `SessionOutputPin::reserve` now gates its SAS ownership lease like `preflight_user_output` does, and the allocation-failure size dump gates `MappingEntry`. The 3 build errors from before P1 are gone, and the build is warning-free.
+  - **The ADR-0019 commit decision is now a pure, host-tested function** (`launch::domain_commit_gate`, 3 tests): an ordinary child is unaffected; a domain child is refused with `Revoked` after a drain and `Denied` while a domain grant is live; a drain takes precedence. The drain audit now fires only for a real drain, not for an unrelated authority change. Kernel host tests 312/312; `tier2-fault-isolation` 5/5 and `posix_shim_*` 3/3 after the change.
 - The shell can launch Tier-2 domain cells (P1; CP1 `.agents/261030-1945-ginux-lessons-hardening/p1-session-domain-admission-cp1.md`, option A approved by the user 2026-10-31; ADR-0019 §2.1 amended).
   - **Problem.** `SessionPublication::reserve` refused every domain child, so no FFI/UNTRUSTED cell could be started from `cellbox`.
   - **Kernel.** Both publication points now call one shared ADR-0019 sequence, `task::launch::admit_and_bind_domain`: lease, private root, lease recheck, bind.
     - `publish_prepared` is unchanged in behaviour.
     - The session path runs the live-grant preflight before SCHEDULER, in `prepare_child`, and runs the sequence in `reserve`.
     - At commit, a second live-grant preflight is queried before SCHEDULER by `dispatch` and applied under it. `current()` rechecks the lease in the same SCHEDULER section as `publish`. A drain or a live domain grant since prepare refuses the commit, audited, with no SAS fallback.
-  - **Builds without `native-domains`** keep refusing with `NotSupported`; that configuration still has its 3 pre-existing build errors and no new ones.
+  - **Builds without `native-domains`** keep refusing with `NotSupported`; that configuration's 3 pre-existing build errors are fixed in the follow-up entry above.
   - **`posix-shim-test`** gets its `PROTECTION_CLASS_FFI` tier back. `tier2-smoke` and `tier2-exploit` join VIFS1 so the shell can launch them.
   - **Evidence:**
     - serial `[domain] admitted cell 'posix-shim-test' to Tier 2 Paged Domain (SATP isolation)` followed by `POSIX-FSTAT: OK` and `POSIX-ENTROPY: OK`;
@@ -276,7 +280,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - `posix_shim_*` 3/3; RV64 boot suite 51/65, the same 14 failures as before;
     - RV64 `atomic-publication` 1/1 and `authority-provenance` 2/2; kernel host tests 309/309;
     - x86 candidate `ahci-x86` 8/8, `nvme-x86` 4/4, `x86_64-boot` 9/9.
-  - **Gap against the CP1 evidence plan:** no new kernel host tests for the session drain and live-grant paths. Session publication builds page tables and is not host-reachable, so these paths are covered only by the runtime lanes above.
+  - **Gap against the CP1 evidence plan:** session publication builds page tables and is not host-reachable, so the drain and live-grant paths have no end-to-end host test; the commit decision itself is host-tested (follow-up entry above).
   - **Still unlaunchable from the shell:** other disk-only Tier-2 apps such as `tetris-c` and `doom`, which still fail with `Io` because the program is only on disk and the kernel cannot read P2 on QEMU.
 - RV64: the shell can launch external programs again; 11 boot-suite tests now pass (RV64 boot suite 51/65, was 40/65). Fixes, from the RCA below:
   - **`Io`.** The shell's foreground launch (`PrepareChild`, path route) resolves only through the kernel loader (VIFS1 + P2), and on QEMU the kernel cannot read P2. `scripts/gen-disk-ci.sh` and `gen_disk.ps1` now also place `/bin/shutdown`, `/bin/posix-shim-test`, `/bin/nc`, `/bin/curl`, `/bin/wget` and `/bin/mqtt` in VIFS1, the same treatment `hotswap` and `bench` already had.

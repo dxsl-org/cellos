@@ -9,7 +9,9 @@
 #   - kernel_fs.img embeds the test-hooks cell binaries + vfs-test
 #   - kernel is built with EMBEDDED_OVERRIDE pointing at the test-hooks image dir
 #
-# The kernel binary is separate from the production binary so it never overwrites it.
+# Everything builds under its own cargo target directory (target\test-hooks):
+# building in the shared one overwrote the default `cellos-kernel` and
+# `service-vfs`. Only the final kernel is copied to the path the tests read.
 # Run prerequisites: xpack riscv GCC + libclang on PATH (same as gen_disk.ps1).
 
 Set-StrictMode -Version Latest
@@ -17,7 +19,10 @@ $ErrorActionPreference = "Stop"
 
 $root    = (Get-Location).Path
 $tools   = "$root\tools"
-$rel     = "$root\target\riscv64gc-unknown-none-elf\release"
+$out_rel = "$root\target\riscv64gc-unknown-none-elf\release"
+if (-not $env:CELLOS_TEST_HOOKS_TARGET_DIR) { $env:CELLOS_TEST_HOOKS_TARGET_DIR = "$root\target\test-hooks" }
+$env:CARGO_TARGET_DIR = $env:CELLOS_TEST_HOOKS_TARGET_DIR
+$rel     = "$env:CARGO_TARGET_DIR\riscv64gc-unknown-none-elf\release"
 $th_dir  = "$root\kernel\src\embedded-test-hooks"
 
 # Toolchain env (mirrors gen_disk.ps1)
@@ -103,8 +108,10 @@ Remove-Item Env:\EMBEDDED_OVERRIDE -ErrorAction SilentlyContinue
 Remove-Item Env:\RUSTFLAGS          -ErrorAction SilentlyContinue
 
 $kernel_src = "$rel\cellos-kernel"
-$kernel_dst = "$rel\cellos-kernel-test-hooks"
+New-Item -ItemType Directory -Force -Path $out_rel | Out-Null
+$kernel_dst = "$out_rel\cellos-kernel-test-hooks"
 Copy-Item $kernel_src $kernel_dst -Force
 Write-Host "==> Test-hooks kernel: $kernel_dst"
+Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 Write-Host "==> Done. Run integration tests with:"
 Write-Host "    cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-pc-windows-msvc vfs_quota"

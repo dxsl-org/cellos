@@ -304,6 +304,28 @@ impl Drop for PublicationClaim {
     }
 }
 
+/// The ADR-0019 decision at a session commit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DomainCommit {
+    /// Not a domain child, or a domain child whose lease and grant state allow it.
+    Admit,
+    /// The admission lease no longer holds (a drain since prepare): `Revoked`.
+    Drained,
+    /// A domain-backed grant record is live: `Denied`.
+    LiveGrant,
+}
+
+/// `lease_enabled` is `None` for an ordinary child. A drain wins over a live
+/// grant: the policy generation the child was admitted under is gone, so the
+/// grant state no longer matters.
+pub(crate) fn domain_commit_gate(lease_enabled: Option<bool>, grant_live: bool) -> DomainCommit {
+    match lease_enabled {
+        None => DomainCommit::Admit,
+        Some(false) => DomainCommit::Drained,
+        Some(true) if grant_live => DomainCommit::LiveGrant,
+        Some(true) => DomainCommit::Admit,
+    }
+}
 #[cfg(feature = "native-domains")]
 type DomainLease = crate::loader::domain_admission::DomainAdmissionLease;
 /// Builds without a domain backend never hold a lease: every domain request is
@@ -479,19 +501,15 @@ impl SessionPublication {
         sched.next_task_id = next;
         Ok(Self { task, owner, state, quota, authority, measurement, ready, claim, domain_lease })
     }
-    /// Whether this child is a Tier-2 domain (its commit needs the live-grant
-    /// preflight, ADR-0019 §2.1).
-    pub(crate) fn is_domain(&self) -> bool {
-        self.domain_lease.is_some()
+    /// ADR-0019 commit decision for this child, given the live-grant preflight
+    /// `dispatch` took before SCHEDULER. Call under SCHEDULER, right before
+    /// `publish`, after `current()`.
+    pub(crate) fn domain_commit(&self, grant_live: bool) -> DomainCommit {
+        domain_commit_gate(self.domain_lease.map(|lease| lease.remains_enabled()), grant_live)
     }
     pub(crate) fn current(&self, sched: &super::scheduler::Scheduler) -> bool {
         if !sched.session_owner_reserved(self.owner)
             || self.state.caller.as_ref().is_none_or(|a| !authority_is_current(sched, a)) {
-            return false;
-        }
-        // A drain since `reserve` invalidates the lease: the child must not
-        // become runnable inside a policy generation that no longer admits it.
-        if self.domain_lease.is_some_and(|lease| !lease.remains_enabled()) {
             return false;
         }
         let Some(caller) = self.state.caller.as_ref().and_then(|a| sched.tasks.get(&a.tid)) else { return false; };
@@ -548,5 +566,28 @@ impl SessionPublication {
         self.ready.commit(tid);
         self.claim.transfer();
         sched.pend_preempt_on_hart(hart, priority);
+    }
+}
+
+#[cfg(test)]
+mod domain_commit_tests {
+    use super::{domain_commit_gate, DomainCommit};
+
+    #[test]
+    fn ordinary_child_ignores_domain_state() {
+        assert_eq!(domain_commit_gate(None, true), DomainCommit::Admit);
+        assert_eq!(domain_commit_gate(None, false), DomainCommit::Admit);
+    }
+
+    #[test]
+    fn domain_child_is_refused_by_drain_or_live_grant() {
+        assert_eq!(domain_commit_gate(Some(true), false), DomainCommit::Admit);
+        assert_eq!(domain_commit_gate(Some(true), true), DomainCommit::LiveGrant);
+        assert_eq!(domain_commit_gate(Some(false), false), DomainCommit::Drained);
+    }
+
+    #[test]
+    fn drain_takes_precedence_over_a_live_grant() {
+        assert_eq!(domain_commit_gate(Some(false), true), DomainCommit::Drained);
     }
 }

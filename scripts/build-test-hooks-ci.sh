@@ -27,7 +27,14 @@ else
     exit 1
 fi
 
-REL="target/riscv64gc-unknown-none-elf/release"
+# Everything here builds under its own cargo target directory. Building in the
+# shared one overwrote the default `cellos-kernel` with this test-hooks kernel
+# (and `service-vfs` with its test-hooks quota build), so a later default-kernel
+# lane booted the wrong image and never reached the shell. Only the final kernel
+# is copied to the path the integration tests read.
+OUT_REL="target/riscv64gc-unknown-none-elf/release"
+export CARGO_TARGET_DIR="${CELLOS_TEST_HOOKS_TARGET_DIR:-target/test-hooks}"
+REL="$CARGO_TARGET_DIR/riscv64gc-unknown-none-elf/release"
 TH_DIR="kernel/src/embedded-test-hooks"
 
 # riscv64 cross-compiler required by littlefs2 C FFI (Ubuntu: gcc-riscv64-unknown-elf).
@@ -134,5 +141,6 @@ cargo build --release \
     --features test-hooks \
     -p cellos-kernel
 
-cp "$REL/cellos-kernel" "$REL/cellos-kernel-test-hooks"
-echo "==> Done: $REL/cellos-kernel-test-hooks"
+mkdir -p "$OUT_REL"
+cp "$REL/cellos-kernel" "$OUT_REL/cellos-kernel-test-hooks"
+echo "==> Done: $OUT_REL/cellos-kernel-test-hooks"

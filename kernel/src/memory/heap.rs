@@ -311,11 +311,21 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     log::error!("allocation error: {:?}", layout);
     // Structure sizes, so the fatal layout above can be matched to what asked for
     // it (the spawn path's per-cell structures are the recurring candidates).
+    #[cfg(all(
+        feature = "native-domains",
+        any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+    ))]
+    let mapping_entry = core::mem::size_of::<crate::memory::address_space::MappingEntry>();
+    #[cfg(not(all(
+        feature = "native-domains",
+        any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+    )))]
+    let mapping_entry = 0;
     log::error!(
         "  sizes: Task={} LoadedPage={} MappingEntry={} Stack={} MeasureEntry={}",
         core::mem::size_of::<crate::task::tcb::Task>(),
         core::mem::size_of::<crate::loader::elf::LoadedPage>(),
-        core::mem::size_of::<crate::memory::address_space::MappingEntry>(),
+        mapping_entry,
         core::mem::size_of::<crate::task::stack::Stack>(),
         core::mem::size_of::<crate::measurement_log::MeasureEntry>(),
     );
