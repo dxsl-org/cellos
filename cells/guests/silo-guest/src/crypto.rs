@@ -43,11 +43,11 @@ impl SiloState {
             seed.fill(0);
             return CryptoResult::Fault(0x02);
         }
-        let parsed = SigningKey::from_bytes(seed.as_slice().into());
+        let parsed = SigningKey::from_slice(seed.as_slice());
         seed.fill(0);
         match parsed {
             Ok(key) => {
-                let point = VerifyingKey::from(&key).to_encoded_point(false);
+                let point = VerifyingKey::from(&key).to_sec1_point(false);
                 let mut public = [0u8; 65];
                 public.copy_from_slice(point.as_bytes());
                 self.key = Some(key);
@@ -98,18 +98,18 @@ impl SiloState {
         let mut seed: [u8; 32] = material.finalize().into();
         nonce.fill(0);
         core::hint::black_box(nonce);
-        let mut parsed = SigningKey::from_bytes((&seed).into());
+        let mut parsed = SigningKey::from_slice(&seed);
         let mut retries = 0;
         while parsed.is_err() && retries < 8 {
             seed = Sha256::digest(seed).into();
-            parsed = SigningKey::from_bytes((&seed).into());
+            parsed = SigningKey::from_slice(&seed);
             retries += 1;
         }
         match parsed {
             Ok(enrollment_key) => {
                 seed.fill(0);
                 core::hint::black_box(&seed);
-                let point = VerifyingKey::from(&enrollment_key).to_encoded_point(false);
+                let point = VerifyingKey::from(&enrollment_key).to_sec1_point(false);
                 let mut public = [0u8; 65];
                 public.copy_from_slice(point.as_bytes());
                 self.enrollment = Some((pending_generation, enrollment_key));
@@ -138,7 +138,7 @@ impl SiloState {
         if *generation != pending_generation || !validate_hostname(hostname) {
             return CryptoResult::Fault(0x23);
         }
-        let point = VerifyingKey::from(enrollment_key).to_encoded_point(false);
+        let point = VerifyingKey::from(enrollment_key).to_sec1_point(false);
         let mut sec1 = [0u8; 65];
         sec1.copy_from_slice(point.as_bytes());
         let Some((cri, cri_len)) = canonical_relay_cri(hostname, &sec1) else {
@@ -179,7 +179,7 @@ fn sign_low_s(key: &SigningKey, digest: &[u8; 32]) -> CryptoResult {
     let Ok(signature): Result<Signature, _> = key.sign_prehash(digest) else {
         return CryptoResult::Fault(0x11);
     };
-    let normalized = signature.normalize_s().unwrap_or(signature);
+    let normalized = signature.normalize_s();
     let mut raw = [0u8; 64];
     raw.copy_from_slice(&normalized.to_bytes());
     CryptoResult::Signature(raw)
@@ -196,7 +196,7 @@ impl SiloState {
             return CryptoResult::Fault(0x29);
         }
         let (_, promoted) = self.enrollment.take().expect("checked");
-        let point = VerifyingKey::from(&promoted).to_encoded_point(false);
+        let point = VerifyingKey::from(&promoted).to_sec1_point(false);
         let mut public = [0u8; 65];
         public.copy_from_slice(point.as_bytes());
         // Zeroize the retired active signer before replacing it.

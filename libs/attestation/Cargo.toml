@@ -16,6 +16,6 @@ license = "MPL-2.0"
 unsafe_code = "forbid"
 
 [dependencies]
-# Version + features MUST match cells/guests/silo-guest/Cargo.toml exactly so
-# Cargo does not pull two copies of p256 into the workspace graph.
+# Same p256 line as service-kms and embedded-tls, so the workspace graph holds a
+# single copy. silo-guest is a separate workspace and may differ (it is on 0.14).
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "ecdh"] }

@@ -2188,6 +2188,14 @@ jobs:
         with:
           arguments: --all-features
 
+      - name: cargo-deny advisories (silo-guest workspace)
+        # Separate workspace holding long-term P-256 signing keys; its own
+        # deny.toml ignores no advisory.
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: cells/guests/silo-guest/Cargo.toml
+          command: check advisories
+
       - name: Copyleft leaf check (ADR-0030)
         run: scripts/check-copyleft-leaves.sh
 

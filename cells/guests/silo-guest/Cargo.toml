@@ -17,7 +17,8 @@ path = "src/main.rs"
 [dependencies]
 types = { path = "../../../libs/types", version = "0.1.0" }
 # P-256 pure-Rust, no_std; the guest exposes only purpose-bound ECDSA.
-p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+# 0.14 pulls crypto-bigint 0.7 (RUSTSEC-2026-0387: 0.5 is not constant-time).
+p256 = { version = "0.14", default-features = false, features = ["ecdsa"] }
 # SHA-2 pure-Rust, no_std.
 sha2 = { version = "0.10", default-features = false }
 

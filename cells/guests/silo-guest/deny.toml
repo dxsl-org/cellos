@@ -1,0 +1,9 @@
+# silo-guest is its own workspace, so the root deny.toml graph never sees it.
+# It holds the long-term P-256 signing keys, so no advisory is ignored here.
+[graph]
+targets = [{ triple = "aarch64-unknown-none-softfloat" }]
+
+[advisories]
+version = 2
+unmaintained = "all"
+ignore = []

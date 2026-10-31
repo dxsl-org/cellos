@@ -21,6 +21,13 @@ ignore = [
   # Cellos never exposes (no RSA private keys, no RSA decryption service).
   # No fixed rsa release exists; revisit when RustCrypto ships one.
   { id = "RUSTSEC-2023-0071", reason = "rsa used only for TLS cert signature verification (public-key op); no private-key decryption oracle exists in Cellos; no fixed release available" },
+  # crypto-bigint 0.5 (via p256/p384 0.13) is not constant-time. In this workspace
+  # p256 is verify-only in service-kms and attestation (signing exists only under
+  # cfg(test)). The one secret use is embedded-tls 0.19 ECDHE, with one ephemeral
+  # key per handshake. The long-term P-256 signer, silo-guest, is its own
+  # workspace on p256 0.14 and is checked by its own CI step. Remove this entry
+  # once embedded-tls moves to p256 0.14. Review by 2027-01-31.
+  { id = "RUSTSEC-2026-0387", reason = "workspace p256 is verify-only plus ephemeral TLS ECDHE in embedded-tls 0.19 (no p256 0.14 release); long-term signer silo-guest is on the patched line" },
 ]
 
 [licenses]
