@@ -79,6 +79,8 @@ CLAUDE.md
 
 # Disk Images
 *.img
+# CellosFS provisioning receipts kept beside staged images (historical records).
+/*.img*.cellosfs-receipts.*/
 /kernel/src/embedded-hv/
 /kernel/src/embedded-shell-test/
 /kernel/src/embedded-srv-test/
