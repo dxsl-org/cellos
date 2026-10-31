@@ -1823,10 +1823,42 @@ pub(crate) fn wake_task(tid: usize, result: usize) {
 /// exactly the hardware state it would reach by dying. Serialized against the
 /// other teardowns: a timed-out invalidation must be retried, not interleaved.
 ///
-/// Returns `false` when hardware did not acknowledge the teardown; the caller
-/// must then keep the authority (and the frames) fail-closed.
+/// Order: quiesce every owned PCI function (no new DMA, no interrupts), then
+/// revoke and fence its IOMMU translations, then release the BDFs and the
+/// acknowledged frames. Quiescing is idempotent, so a retried teardown repeats
+/// it harmlessly.
+///
+/// Returns `false` when hardware did not acknowledge the teardown, including a
+/// function that could not be shown quiescent; the caller must then keep the
+/// authority (and the frames) fail-closed.
 pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
+    for bdf in crate::resource_registry::bdfs_owned_by(tid) {
+        match crate::task::drivers::pcie_ecam::quiesce_function(bdf) {
+            Ok(quiesced) if quiesced.changed => log::info!(
+                "[pcie] quiesced {:02x}:{:02x}.{} for tid {}: cmd=0x{:04x} bme=0 intx_disable=1 msi={} msix={}",
+                (bdf >> 8) & 0xFF,
+                (bdf >> 3) & 0x1F,
+                bdf & 0x7,
+                tid,
+                quiesced.command,
+                if quiesced.msi { "off" } else { "none" },
+                if quiesced.msix { "masked" } else { "none" },
+            ),
+            Ok(_) => {}
+            Err(error) => {
+                log::warn!(
+                    "[pcie] {:02x}:{:02x}.{} of tid {} not quiescent ({:?}); BDF and frames retained",
+                    (bdf >> 8) & 0xFF,
+                    (bdf >> 3) & 0x1F,
+                    bdf & 0x7,
+                    tid,
+                    error
+                );
+                return false;
+            }
+        }
+    }
     if !crate::task::drivers::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }
@@ -1877,6 +1909,7 @@ fn reap_retired_task_resources(tid: usize) {
     if !teardown_dma_authority(tid) {
         queue_retired_dma_cleanup(tid);
     }
+    crate::task::drivers::irq_wait::release_waiters_for(tid);
     crate::task::syscall::reap_grants_for_task(tid);
     crate::hypervisor::registry::reap_vms_for_task(tid);
 }

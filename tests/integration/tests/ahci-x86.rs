@@ -526,3 +526,56 @@ fn ahci_write_outcome_issue_certainty_x86() {
         .collect();
     println!("08A witness evidence: {evidence:#?}");
 }
+
+/// Phase 08B: when the AHCI Driver Cell retires, the kernel quiesces its PCI
+/// function (Bus Master off, INTx disabled) before the BDF is released. The
+/// ICH9 AHCI function on q35 is 00:1f.2.
+///
+/// The suite shell cannot kill a service, so the fault-injection ISO (see
+/// [`ahci_write_outcome_issue_certainty_x86`]) supplies the death: a write
+/// carrying `F08B-DIE` makes `/bin/ahci` exit with its HBA still bus-mastering.
+#[test]
+fn ahci_driver_retirement_quiesces_function_x86() {
+    let Ok(iso) = std::env::var("VICELL_AHCI_FAULT_ISO") else {
+        eprintln!(
+            "SKIP ahci_driver_retirement_quiesces_function_x86: VICELL_AHCI_FAULT_ISO unset \
+             (build: bash scripts/x86/make-ahci-fault-iso.sh)"
+        );
+        return;
+    };
+    let python = python_binary().expect("Python 3 formats the FAT32 fixture");
+    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    let registered = "[driver_cell] block driver registered: tid=";
+    for marker in [registered, "[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    let output = qemu.dump();
+    let tid: usize = output
+        .lines()
+        .find_map(|line| line.split(registered).nth(1))
+        .and_then(|rest| rest.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|digits| digits.parse().ok())
+        .unwrap_or_else(|| panic!("AHCI driver tid not logged\n{output}"));
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/die.txt F08B-DIE");
+    let quiesced = format!("[pcie] quiesced 00:1f.2 for tid {tid}: ");
+    qemu.wait_for_after(&quiesced, checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("AHCI function not quiesced on retirement: {e}\n{}", qemu.dump()));
+    let output = qemu.dump();
+    let line = output
+        .lines()
+        .find(|line| line.contains(&quiesced))
+        .expect("quiesce line present");
+    assert!(
+        line.contains("bme=0 intx_disable=1"),
+        "quiesce did not report Bus Master off and INTx disabled: {line}"
+    );
+    assert!(
+        !output.contains("not quiescent"),
+        "quiescence failed and the BDF was retained:\n{output}"
+    );
+    println!("08B witness: {line}");
+}

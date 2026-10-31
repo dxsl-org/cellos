@@ -11,6 +11,9 @@
 //!   is logged as one.
 //! - `F08A-NI`: refused before `PxCI`, replying `NotIssued`. The next write
 //!   carrying the marker is the caller's retry and is logged when it completes.
+//! - `F08B-DIE`: the driver exits on the spot while the HBA it programmed stays
+//!   bus-mastering, so the kernel's retirement quiescence (Phase 08B) has a
+//!   live function to stop.
 
 use crate::controller::AhciController;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -27,6 +30,7 @@ pub enum Inject {
 
 const INDETERMINATE_MARKER: &[u8] = b"F08A-IND";
 const NOT_ISSUED_MARKER: &[u8] = b"F08A-NI";
+const DIE_MARKER: &[u8] = b"F08B-DIE";
 
 static INDETERMINATE_FIRED: AtomicBool = AtomicBool::new(false);
 static NOT_ISSUED_FIRED: AtomicBool = AtomicBool::new(false);
@@ -37,6 +41,10 @@ fn carries(payload: &[u8], marker: &[u8]) -> bool {
 
 /// Arm the controller for a write of `payload` to `lba`.
 pub fn before_write(ctrl: &mut AhciController, lba: u64, payload: &[u8]) {
+    if carries(payload, DIE_MARKER) {
+        let _ = print_fmt(format_args!("[ahci] fault-inject: driver exiting at lba={}\n", lba));
+        ostd::syscall::sys_exit(70);
+    }
     if carries(payload, INDETERMINATE_MARKER) {
         if INDETERMINATE_FIRED.swap(true, Ordering::Relaxed) {
             let _ = print_fmt(format_args!(

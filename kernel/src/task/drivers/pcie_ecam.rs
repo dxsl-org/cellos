@@ -160,10 +160,20 @@ const CFG_STATUS: usize = 0x06;
 // Command register bits.
 const CMD_MEM_SPACE: u16 = 1 << 1;
 const CMD_BUS_MASTER: u16 = 1 << 2;
+const CMD_INTX_DISABLE: u16 = 1 << 10;
+
+// Status register: capability list present.
+const STATUS_CAP_LIST: u16 = 1 << 4;
 
 // Capability IDs.
 const CAP_ID_PM: u8 = 0x01;
+const CAP_ID_MSI: u8 = 0x05;
 const CAP_ID_MSIX: u8 = 0x11;
+
+// MSI / MSI-X Message Control bits.
+const MSI_ENABLE: u16 = 1 << 0;
+const MSIX_FUNCTION_MASK: u16 = 1 << 14;
+const MSIX_ENABLE: u16 = 1 << 15;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -686,26 +696,21 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
     }
 }
 
-/// Enable MMIO decoding and bus mastering after the caller has established
-/// exclusive BDF ownership and an IOMMU mapping.
-pub fn enable_bus_master(bdf: u32) {
-    let bus = ((bdf >> 8) & 0xFF) as u8;
-    let dev = ((bdf >> 3) & 0x1F) as u8;
-    let fun = (bdf & 0x07) as u8;
-
+/// The admitted ECAM window: `(base, first bus, last bus)`; base 0 = none.
+fn ecam_window() -> (usize, u8, u8) {
     #[cfg(target_arch = "x86_64")]
-    let (ecam_base, bus_start, bus_end) = {
+    let window = {
         let (start, end) = ecam_bus_range_x86();
         (ecam_base_x86(), start, end)
     };
     #[cfg(target_arch = "riscv64")]
-    let (ecam_base, bus_start, bus_end) = (ECAM_BASE_RISCV, 0u8, 0u8);
+    let window = (ECAM_BASE_RISCV, 0u8, 0u8);
     #[cfg(all(
         target_arch = "aarch64",
         not(feature = "board-rpi3"),
         not(feature = "board-rpi4")
     ))]
-    let (ecam_base, bus_start, bus_end) = (ECAM_BASE_AARCH64, 0u8, 0u8);
+    let window = (ECAM_BASE_AARCH64, 0u8, 0u8);
     #[cfg(any(
         all(
             target_arch = "aarch64",
@@ -717,7 +722,21 @@ pub fn enable_bus_master(bdf: u32) {
             target_arch = "aarch64"
         ))
     ))]
-    let (ecam_base, bus_start, bus_end) = (0usize, 0u8, 0u8);
+    let window = (0usize, 0u8, 0u8);
+    window
+}
+
+fn split_bdf(bdf: u32) -> (u8, u8, u8) {
+    (((bdf >> 8) & 0xFF) as u8, ((bdf >> 3) & 0x1F) as u8, (bdf & 0x07) as u8)
+}
+
+/// Enable MMIO decoding and bus mastering after the caller has established
+/// exclusive BDF ownership and an IOMMU mapping. Also clears the INTx Disable
+/// bit that [`quiesce_function`] set when a previous owner retired, so a new
+/// owner receives the function in the state it had before any quiescence.
+pub fn enable_bus_master(bdf: u32) {
+    let (bus, dev, fun) = split_bdf(bdf);
+    let (ecam_base, bus_start, bus_end) = ecam_window();
     if ecam_base == 0 {
         return;
     }
@@ -739,9 +758,144 @@ pub fn enable_bus_master(bdf: u32) {
         let command = core::ptr::read_volatile(command_ptr as *const u16);
         core::ptr::write_volatile(
             command_ptr as *mut u16,
-            command | CMD_MEM_SPACE | CMD_BUS_MASTER,
+            (command | CMD_MEM_SPACE | CMD_BUS_MASTER) & !CMD_INTX_DISABLE,
         );
     }
+}
+
+// ── Retirement quiescence ─────────────────────────────────────────────────────
+
+/// Command register after quiescence: no new DMA, no INTx. Memory decoding is
+/// kept so a later reset (or the next driver) can still reach the BARs.
+const fn quiesced_command(command: u16) -> u16 {
+    (command & !CMD_BUS_MASTER) | CMD_INTX_DISABLE
+}
+
+/// MSI Message Control after quiescence: MSI Enable (bit 0) cleared.
+const fn quiesced_msi_control(control: u16) -> u16 {
+    control & !MSI_ENABLE
+}
+
+/// MSI-X Message Control after quiescence: MSI-X Enable (bit 15) cleared and
+/// Function Mask (bit 14) set, so no vector can fire even if re-enabled.
+const fn quiesced_msix_control(control: u16) -> u16 {
+    (control & !MSIX_ENABLE) | MSIX_FUNCTION_MASK
+}
+
+/// What `quiesce_function` left in config space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Quiesced {
+    /// Command register as read back.
+    pub command: u16,
+    /// The function has an MSI / MSI-X capability (now disabled).
+    pub msi: bool,
+    pub msix: bool,
+    /// Some register held a live value (Bus Master, INTx, MSI or MSI-X enabled)
+    /// before this call; `false` on an idempotent repeat.
+    pub changed: bool,
+}
+
+/// Why a function could not be shown quiescent; its owner must keep it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuiesceError {
+    /// No ECAM window, or the BDF lies outside it.
+    OutOfRange,
+    /// A config write did not read back as written.
+    Readback { offset: u16, wrote: u16, read: u16 },
+}
+
+/// Stop a function a dead driver owned from starting DMA or raising
+/// interrupts: clear Bus Master, set INTx Disable, and turn off MSI and MSI-X
+/// (masking MSI-X), each confirmed by readback.
+///
+/// The capability list is walked here, bounded by the same 64-entry budget as
+/// the scan, through range-checked config addresses; no cached or
+/// driver-supplied offset is used.
+///
+/// Clearing Bus Master stops new requests but does not prove that writes the
+/// device already posted have drained. The caller still needs the IOMMU fence
+/// before it releases any frame.
+pub fn quiesce_function(bdf: u32) -> Result<Quiesced, QuiesceError> {
+    let (ecam_base, bus_start, bus_end) = ecam_window();
+    if ecam_base == 0 {
+        return Err(QuiesceError::OutOfRange);
+    }
+    // SAFETY: the admitted ECAM window is identity-mapped for the kernel's life.
+    unsafe { quiesce_in_window(ecam_base, bus_start, bus_end, bdf) }
+}
+
+/// [`quiesce_function`] against an explicit ECAM window.
+///
+/// # Safety
+/// `ecam_base` must map config space for buses `bus_start..=bus_end`.
+unsafe fn quiesce_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bdf: u32,
+) -> Result<Quiesced, QuiesceError> {
+    // A BDF is 16 bits; anything above would alias another function.
+    if bdf > 0xFFFF {
+        return Err(QuiesceError::OutOfRange);
+    }
+    let (bus, dev, fun) = split_bdf(bdf);
+    let addr = |off: usize| {
+        config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, off)
+            .ok_or(QuiesceError::OutOfRange)
+    };
+    // SAFETY (all accesses below): every pointer comes from
+    // `config_addr_in_range` for the caller's window.
+    let read16 = |off: usize| addr(off).map(|p| unsafe { core::ptr::read_volatile(p as *const u16) });
+    let read8 = |off: usize| addr(off).map(|p| unsafe { core::ptr::read_volatile(p as *const u8) });
+    let changed = core::cell::Cell::new(false);
+    let update = |off: usize, next: fn(u16) -> u16| -> Result<u16, QuiesceError> {
+        let ptr = addr(off)? as *mut u16;
+        let before = unsafe { core::ptr::read_volatile(ptr) };
+        let wrote = next(before);
+        if wrote != before {
+            changed.set(true);
+            unsafe { core::ptr::write_volatile(ptr, wrote) };
+        }
+        let read = unsafe { core::ptr::read_volatile(ptr) };
+        if read != wrote {
+            return Err(QuiesceError::Readback { offset: off as u16, wrote, read });
+        }
+        Ok(read)
+    };
+
+    // No function answers here (all-ones vendor): nothing can master the bus
+    // or interrupt, and config writes would be dropped.
+    if read16(CFG_VENDOR_ID)? == 0xFFFF {
+        return Ok(Quiesced { command: 0xFFFF, msi: false, msix: false, changed: false });
+    }
+
+    // Function first: once Bus Master is off the device cannot start new DMA,
+    // whatever the interrupt capabilities below turn out to hold.
+    let command = update(CFG_COMMAND, quiesced_command)?;
+    let mut quiesced = Quiesced { command, msi: false, msix: false, changed: false };
+
+    if read16(CFG_STATUS)? & STATUS_CAP_LIST != 0 {
+        let mut cap = read8(CFG_CAP_PTR)? & 0xFC;
+        let mut budget = 64u8;
+        while cap != 0 && budget > 0 {
+            budget -= 1;
+            let at = cap as usize;
+            match read8(at)? {
+                CAP_ID_MSI => {
+                    quiesced.msi = true;
+                    update(at + 2, quiesced_msi_control)?;
+                }
+                CAP_ID_MSIX => {
+                    quiesced.msix = true;
+                    update(at + 2, quiesced_msix_control)?;
+                }
+                _ => {}
+            }
+            cap = read8(at + 1)? & 0xFC;
+        }
+    }
+    quiesced.changed = changed.get();
+    Ok(quiesced)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1085,5 +1239,86 @@ mod tests {
         // SAFETY: the test owns a correctly sized, live in-memory ECAM stand-in.
         let identity = unsafe { read_identity_in_range(ecam.as_ptr() as usize, 64, 65, 65, 3, 2) };
         assert_eq!(identity, Some((0x8086, 0x100E)));
+    }
+
+    /// One in-memory function at bus 0, 00:02.0, inside a one-bus window.
+    fn function_config(ecam: &mut [u8], off: usize, value: u16) {
+        let at = (2usize << 15) + off;
+        ecam[at..at + 2].copy_from_slice(&value.to_ne_bytes());
+    }
+
+    fn read_config(ecam: &[u8], off: usize) -> u16 {
+        let at = (2usize << 15) + off;
+        u16::from_ne_bytes([ecam[at], ecam[at + 1]])
+    }
+
+    #[test]
+    fn quiesce_stops_dma_and_every_interrupt_path() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        function_config(&mut ecam, CFG_COMMAND, CMD_MEM_SPACE | CMD_BUS_MASTER);
+        function_config(&mut ecam, CFG_STATUS, STATUS_CAP_LIST);
+        // Capability list: 0x40 MSI (enabled) -> 0x50 PM -> 0x60 MSI-X (enabled).
+        function_config(&mut ecam, CFG_CAP_PTR, 0x40);
+        function_config(&mut ecam, 0x40, u16::from(CAP_ID_MSI) | (0x50 << 8));
+        function_config(&mut ecam, 0x42, MSI_ENABLE | (1 << 7));
+        function_config(&mut ecam, 0x50, u16::from(CAP_ID_PM) | (0x60 << 8));
+        function_config(&mut ecam, 0x60, u16::from(CAP_ID_MSIX));
+        function_config(&mut ecam, 0x62, MSIX_ENABLE | 0x7);
+
+        // SAFETY: the test owns a one-bus in-memory ECAM stand-in.
+        let quiesced = unsafe { quiesce_in_window(ecam.as_mut_ptr() as usize, 0, 0, 2 << 3) };
+        assert_eq!(
+            quiesced,
+            Ok(Quiesced {
+                command: CMD_MEM_SPACE | CMD_INTX_DISABLE,
+                msi: true,
+                msix: true,
+                changed: true,
+            })
+        );
+        assert_eq!(read_config(&ecam, CFG_COMMAND), CMD_MEM_SPACE | CMD_INTX_DISABLE);
+        assert_eq!(read_config(&ecam, 0x42), 1 << 7, "MSI enable cleared, other bits kept");
+        assert_eq!(read_config(&ecam, 0x62), MSIX_FUNCTION_MASK | 0x7, "MSI-X off and masked");
+
+        // A retry after an IOMMU timeout repeats quiescence; it must not report
+        // a second transition.
+        // SAFETY: as above.
+        let repeat = unsafe { quiesce_in_window(ecam.as_mut_ptr() as usize, 0, 0, 2 << 3) };
+        assert_eq!(repeat.map(|q| q.changed), Ok(false));
+    }
+
+    #[test]
+    fn quiesce_refuses_a_function_outside_the_window() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        // SAFETY: as above; bus 1 lies outside the 0..=0 window, so nothing is touched.
+        let result =
+            unsafe { quiesce_in_window(ecam.as_mut_ptr() as usize, 0, 0, (1 << 8) | (2 << 3)) };
+        assert_eq!(result, Err(QuiesceError::OutOfRange));
+    }
+
+    #[test]
+    fn quiesce_survives_a_circular_capability_list() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        function_config(&mut ecam, CFG_COMMAND, CMD_BUS_MASTER);
+        function_config(&mut ecam, CFG_STATUS, STATUS_CAP_LIST);
+        function_config(&mut ecam, CFG_CAP_PTR, 0x40);
+        function_config(&mut ecam, 0x40, u16::from(CAP_ID_PM) | (0x40 << 8));
+        // SAFETY: as above.
+        let quiesced = unsafe { quiesce_in_window(ecam.as_mut_ptr() as usize, 0, 0, 2 << 3) };
+        assert_eq!(quiesced.map(|q| q.command), Ok(CMD_INTX_DISABLE));
+    }
+
+    #[test]
+    fn quiesce_leaves_an_absent_function_and_refuses_an_overflowing_bdf() {
+        let mut ecam = alloc::vec![0xFFu8; ECAM_BYTES_PER_BUS];
+        let base = ecam.as_mut_ptr() as usize;
+        // SAFETY: as above.
+        let absent = unsafe { quiesce_in_window(base, 0, 0, 0x00FF) };
+        assert_eq!(absent.map(|q| q.changed), Ok(false));
+        assert!(ecam.iter().all(|&byte| byte == 0xFF), "nothing written to an absent function");
+        // 0x02_00_00 decodes to 00:00.0 if the high bits are dropped.
+        // SAFETY: as above.
+        let overflow = unsafe { quiesce_in_window(base, 0, 0, 0x02_00_00) };
+        assert_eq!(overflow, Err(QuiesceError::OutOfRange));
     }
 }

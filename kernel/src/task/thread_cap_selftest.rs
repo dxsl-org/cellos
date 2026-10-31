@@ -34,8 +34,11 @@ const DRIVER_TID: usize = 9004;
 /// BAR table keeps exactly what the ECAM scan put in it.
 #[cfg(feature = "test-hooks")]
 const DRIVER_BAR: usize = 0x5100_0000;
-/// A synthetic requester ID; nothing else claims it during the boot window.
-const DRIVER_BDF: u32 = 0x02_00_00;
+/// A synthetic requester ID: 00:1f.7, a well-formed BDF that no supported board
+/// populates, so retirement quiescence finds no function and touches nothing.
+/// (The previous `0x02_00_00` overflowed the 16-bit encoding and aliased the
+/// real host bridge at 00:00.0.)
+const DRIVER_BDF: u32 = 0x00_FF;
 /// Separate cell for the thread-cap section, so its fillers cannot be mistaken
 /// for (or collide with) the identity-inheritance section's parent cell.
 const DOS_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 4) as u64;

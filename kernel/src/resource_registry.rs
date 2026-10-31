@@ -803,6 +803,16 @@ pub fn owner_of_bdf(bdf: u32) -> Option<usize> {
     BDF_OWNERS.lock().get(&bdf).copied()
 }
 
+/// Every BDF that task `tid` currently owns.
+pub fn bdfs_owned_by(tid: usize) -> alloc::vec::Vec<u32> {
+    BDF_OWNERS
+        .lock()
+        .iter()
+        .filter(|(_, &owner)| owner == tid)
+        .map(|(&bdf, _)| bdf)
+        .collect()
+}
+
 /// Release all BDF ownerships held by task `tid` (called on Cell exit).
 pub fn release_bdfs_for(tid: usize) {
     BDF_OWNERS.lock().retain(|_bdf, &mut owner| owner != tid);

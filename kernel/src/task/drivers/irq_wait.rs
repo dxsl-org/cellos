@@ -147,6 +147,39 @@ pub fn clear_waiter(irq: u8) {
     IRQ_MMIO_BASE[idx].store(0, Ordering::Release);
 }
 
+/// Release every IRQ line whose waiter is `tid`; returns how many were released.
+///
+/// Called by the retirement funnel for a task that will never run again. A
+/// waiter is otherwise cleared only when the scheduler wakes it, so a driver
+/// that dies inside `WaitIrq` would keep its line forever and its replacement
+/// would get `TryAgain` on every wait.
+///
+/// The MMIO base is cleared first, so the ISR stops acking the dead owner's
+/// device before the slot can be claimed again. An ISR that loaded the base just
+/// before the clear issues one extra InterruptACK to the same, still-present
+/// virtio device, which is harmless. The pending flag is dropped last: a
+/// replacement must not take the dead owner's interrupt as its first wake.
+pub fn release_waiters_for(tid: usize) -> usize {
+    if tid == NO_WAITER {
+        return 0;
+    }
+    let mut released = 0;
+    for idx in 0..MAX_IRQ {
+        if IRQ_WAITERS[idx].load(Ordering::Acquire) != tid {
+            continue;
+        }
+        IRQ_MMIO_BASE[idx].store(0, Ordering::Release);
+        if IRQ_WAITERS[idx]
+            .compare_exchange(tid, NO_WAITER, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            IRQ_PENDING[idx].store(false, Ordering::Release);
+            released += 1;
+        }
+    }
+    released
+}
+
 /// Return `true` if any Driver Cell is currently registered for `irq`.
 ///
 /// Called from the IRQ dispatcher to decide whether to route to `signal_irq`
@@ -166,4 +199,44 @@ pub fn get_mmio_base(irq: u8) -> usize {
         return 0;
     }
     IRQ_MMIO_BASE[idx].load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The tables are process-global: each test owns distinct IRQ lines.
+
+    #[test]
+    fn release_frees_only_the_dead_owners_lines() {
+        assert!(register_waiter(60, 901, 0x1000));
+        assert!(register_waiter(61, 902, 0x2000));
+        signal_irq_pending_only(60);
+
+        assert_eq!(release_waiters_for(901), 1);
+        assert!(!has_waiter(60));
+        assert_eq!(get_mmio_base(60), 0);
+        assert!(!take_pending(60), "a replacement must not inherit the dead owner's wake");
+        assert!(register_waiter(60, 903, 0x3000), "released line is claimable again");
+
+        assert!(has_waiter(61));
+        assert_eq!(get_mmio_base(61), 0x2000);
+
+        clear_waiter(60);
+        clear_waiter(61);
+    }
+
+    #[test]
+    fn release_of_a_non_waiter_changes_nothing() {
+        assert!(register_waiter(62, 911, 0));
+        assert_eq!(release_waiters_for(912), 0);
+        assert_eq!(release_waiters_for(NO_WAITER), 0);
+        assert!(has_waiter(62));
+        clear_waiter(62);
+    }
+
+    /// `signal_irq` would ack a real MMIO base; tests set the flag directly.
+    fn signal_irq_pending_only(irq: u8) {
+        IRQ_PENDING[irq as usize].store(true, Ordering::Release);
+    }
 }
