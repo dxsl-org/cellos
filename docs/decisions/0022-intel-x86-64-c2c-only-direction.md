@@ -1,7 +1,7 @@
 # ADR-0022: Make Intel x86-64 Cell-to-Cell Anywhere the sole development direction
 
 **Date**: 2026-10-08
-**Status**: Accepted — direction and scheduling; not implementation or hardware qualification
+**Status**: Accepted — direction and scheduling; not implementation or hardware qualification. Amended 2026-10-31 by [ADR-0029](0029-platform-image-families-and-runtime-detection.md) (bounded aarch64 core refactor exception).
 **Decider**: Cellos maintainer, through explicit approval in the planning conversation
 
 ## Context
@@ -167,6 +167,24 @@ old plan trigger or obtaining a board is insufficient.
 - Revisit the direction only through an explicit owner decision based on a
   concrete funded requirement, demonstrated technical blocker or measured result;
   record the changed scope rather than silently reopening old programs.
+
+### Amendment 2026-10-31 — bounded aarch64 core/backend refactor
+
+Owner decision recorded in [ADR-0029](0029-platform-image-families-and-runtime-detection.md).
+The sole development direction is unchanged. One bounded non-Intel slice is
+admitted: moving Raspberry Pi `cfg(feature = "board-rpi*")` code out of the
+shared aarch64 core (`hal/arch/arm`, `kernel/src`) into an embedded backend
+behind interrupt-controller, IOMMU and platform-discovery traits.
+
+- Behaviour-preserving only. Existing RPi3/RPi4 and QEMU `virt` aarch64 builds and
+  regressions must produce the same results before and after.
+- It does not admit new ARM bring-up, SystemReady or Apple Silicon backends, new
+  drivers, RPi peripheral expansion or hardware purchase. Those remain parked.
+- It must not take file ownership from an active Intel C2C slice. If it conflicts,
+  the Intel slice wins and the refactor waits.
+- Separately, ADR-0029's runtime x86-64 board selection is in scope under this
+  ADR as an x86 build/qualification simplification. It selects a profile at boot
+  and does not broaden device support.
 
 ## Related operational tooling decision
 

@@ -128,6 +128,11 @@ For every row: prior status/progress is retained; current scheduling is **BLOCKE
 
 **Bounded adopted slice — Ginux lessons Phase 04, x86 entry safety (2026-10-31):** the accountable owner admitted Phase 01 + 04 only of [plan 261030-1945](261030-1945-ginux-lessons-hardening/plan.md) ([record](261030-1945-ginux-lessons-hardening/admission-approval.md)), after the Cellbox CP1 slice closed. File-bounded exception for the HAL x86 entry/GDT/IDT/syscall/IST files, the x86 early-init order and IST-guard call in `kernel/src/main.rs`, feature-gated SMAP windows in `kernel/src/task/user_copy/**`, the IDT test scripts, and docs/CHANGELOG listed there. No Law-1 delta; fatal NMI/#DF/#MC policy kept; SMEP/SMAP/UMIP are opt-in profiles. All 38 relations keep their whole-plan scope.
 
+**Bounded adopted slice — x86 runtime board selection, phases 01–02 (approved 2026-10-31, dormant until Ginux closes):** the accountable owner approved the [lock handoff](261031-1241-x86-runtime-board-selection/lock-handoff-approval.md) for [plan 261031-1241](261031-1241-x86-runtime-board-selection/plan.md) (ADR-0029; ADR-0022 amendment 2026-10-31). Effective only after the Ginux Phase 01 + 04 slice is recorded closed in the portfolio. Until then no listed file is edited for this plan.
+- File-bounded exception for exactly the paths listed in the record: ACPI/Limine/new SMBIOS parser, `kernel/src/board.rs`, the x86 binding call sites in `kernel/src/main.rs`, the serial lookup in `task/syscall.rs`, the profile re-key in `task/drivers/iommu{,_x86}.rs`, removal of `board-x86-pc`, the boards/hal-soc-x86 catalog, the x86 QEMU scripts/CI lane and the docs.
+- No Law-1 delta. `dma_isolation` semantics unchanged. Phase 03 (fingerprint hand-off) is excluded and needs its own handoff.
+- All 38 relations keep their whole-plan scope.
+
 | Existing plan | Prior status / progress (preserved) | Blocked scope | Replacement area / rebase gate |
 |---|---|---|---|
 | [260528-2016-vicell-full-implementation](260528-2016-vicell-full-implementation/plan.md) | pending | Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices of the legacy umbrella; unrelated historic product scope stays parked. | P01 then P02/P03/P05/P06; explicit per-slice handoff |

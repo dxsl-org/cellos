@@ -143,6 +143,25 @@ A signature proves neither qualification nor permission to deploy. Physical Inte
 
 Scope supports Intel Cellos operations only. No IDE/build environment, general Linux command inventory or independent application ecosystem is selected.
 
+## Registered — platform image families (ADR-0029), not yet admitted
+
+**Recorded 2026-10-31:** the maintainer accepted [ADR-0029](../docs/decisions/0029-platform-image-families-and-runtime-detection.md)
+and the [ADR-0022 amendment](../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) of the same date.
+Two plans are registered. Neither is the current implementation slice, and no
+`CELL-CONTRACT-0024` lock relation is narrowed by this entry.
+
+| Order | Plan | C2C link (ADR-0022) | Acceptance scenario | Evidence ceiling |
+|---|---|---|---|---|
+| 1 | [x86-64 runtime board selection](261031-1241-x86-runtime-board-selection/plan.md) | Necessary prerequisite: one x86 image for QEMU lanes and the HCL qualification machine; profile bound at boot; `board-x86-pc` removed | One ISO: q35 profile by `cellos.profile=` boots; default PC profile refuses DMA without VT-d and boots with `intel-iommu`; fingerprint mismatch enters safe mode until re-confirmed | QEMU/TCG |
+| 2 | [aarch64 core/backend split](261031-1241-aarch64-core-backend-split/plan.md) | ADR-0022 amendment exception (behaviour-preserving refactor, not a C2C deliverable); yields file ownership to any Intel C2C slice | No `board-rpi*` cfg outside `backend/mod.rs`; RPi3/RPi3-bring-up/RPi4/virt builds within ±1% `.text`; virt CI lanes and `raspi3b` boot unchanged | QEMU `virt` + QEMU `raspi3b`; RPi4 compile-only |
+
+Admission blockers, per the promotion rule:
+- File-owner handoff from the Cell contract plan, recorded in the [lock inventory](cell-contract-0024-locks.md).
+  - **x86 phases 01–02: approved 2026-10-31, dormant** ([record](261031-1241-x86-runtime-board-selection/lock-handoff-approval.md)). Becomes effective, and the slice becomes executable, only once the Ginux Phase 01 + 04 slice is recorded closed here, because both edit x86 early init in `kernel/src/main.rs`. x86 phase 03 still needs its own handoff.
+  - aarch64 touches `hal/arch/arm/**` and the aarch64 parts of `kernel/src/**`, including `resource_registry.rs` and `hypervisor/registry.rs`.
+- Single-WIP rule: x86 is admitted first. aarch64 only after x86 closes or with an explicit owner exception.
+- The x86 phase 03 kernel→init fingerprint hand-off needs a Law-1 CP1 if it changes ABI. Otherwise the plan stops at that point.
+
 ## Parked research — VFS, storage and agent search
 
 **Recorded 2026-10-19:** [VFS/storage/search research plan](261019-1534-vfs-storage-search-research/plan.md)
