@@ -1,6 +1,8 @@
 # Phase 09A CP1 — stash ownership and destination-bound handoff (Law-1 semantic change)
 
 Status: CP1 approved by the user 2026-10-31 ("Duyệt CP1"); **CP2 approved by the user 2026-10-31** ("Duyệt CP2 + commit") on the evidence in §7–§8. Complete.
+
+No ABI bytes change: syscall numbers 410/411/412, argument
 registers, allowlist bits 33/34 and the `ostd::hotswap` / `ostd::syscall` signatures stay.
 Return-value **meaning** changes as listed in §3, so this is a Law-1 semantic delta.
 
