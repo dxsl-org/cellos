@@ -30,5 +30,18 @@ fn cell_main() {
     {
         ostd::syscall::sys_exit(1);
     }
+    // `write_all` returns once the bytes are in the session's stdout ring; the
+    // shell relays that ring to the console only when it next runs. Powering off
+    // at once would drop the message, so give the relay a bounded window first.
+    if let Ok(now) = ostd::session::monotonic_ns() {
+        let until = now.saturating_add(RELAY_WINDOW_NS);
+        while ostd::session::monotonic_ns().is_ok_and(|now| now < until) {
+            ostd::task::yield_now();
+        }
+    }
     ostd::syscall::sys_shutdown();
 }
+
+/// How long the shutdown message gets to reach the console before power-off.
+const RELAY_WINDOW_NS: u64 = 300_000_000;
+

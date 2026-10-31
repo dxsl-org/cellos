@@ -80,6 +80,7 @@ fn network_worker_edges_carry_only_their_grant() {
         ("/bin/llm-gateway", client),
         ("/bin/https-demo", client),
         ("/bin/robot-demo", client),
+        ("/bin/posix-shim-test", client),
         ("/bin/nc", (true, true, true, false)),
         ("/bin/net-broker", (true, true, true, false)),
         ("/bin/httpd", (false, false, true, false)),
@@ -782,7 +783,6 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
         "/bin/input-test",
         "/bin/window-policy-probe",
         "/bin/ls",
-        "/bin/posix-shim-test",
         "/bin/ps",
         "/bin/robot-dashboard",
         "/bin/viui-demo",
@@ -819,6 +819,7 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
         "/bin/ocel",
         "/bin/llm-gateway",
         "/bin/https-demo",
+        "/bin/posix-shim-test",
     ] {
         rows.push((path, client));
     }

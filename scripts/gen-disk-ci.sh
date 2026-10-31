@@ -267,7 +267,7 @@ add_signable() { [[ -f $1 ]] && SIGNABLE+=("$1"); return 0; }
 for cell in app-init cellbox platform service-vfs service-config service-net service-kms \
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
-            ai-test service-input bench bench-probe capacity-probe heavy-probe app-net-tools app-sys-tools \
+            ai-test service-input bench bench-probe capacity-probe heavy-probe curl wget nc mqtt ping app-sys-tools \
             robot-demo robot-dashboard fb-console desktop ocel hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
@@ -346,6 +346,18 @@ add_kfs "$REL/bench"                "/bin/bench"
 add_kfs "$REL/bench-probe"          "/bin/bench-probe"
 add_kfs "$REL/hypha-core"           "/bin/hypha"
 add_kfs "$REL/hypha-tool-spawn"     "/bin/tool-spawn"
+# The cellbox foreground launch (`PrepareChild`, path route) resolves only
+# through the kernel loader: VIFS1 and the P2 cell table, which the kernel cannot
+# read on QEMU (no kernel block device). A disk-only program therefore fails with
+# "foreground preparation failed: Io". `shutdown` is the persistence lanes' power
+# step, `posix-shim-test` is the POSIX ledger's behavioural witness, and the
+# network tools are the shell's own network commands.
+add_kfs "$REL/shutdown"             "/bin/shutdown"
+add_kfs "$REL/posix-shim-test"      "/bin/posix-shim-test"
+add_kfs "$REL/nc"                   "/bin/nc"
+add_kfs "$REL/curl"                 "/bin/curl"
+add_kfs "$REL/wget"                 "/bin/wget"
+add_kfs "$REL/mqtt"                 "/bin/mqtt"
 if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_kfs "$REL/capacity-probe"   "/bin/capacity-probe"
     # Heavy cells for the D5 gate's M-resident baselines; same guard as the probe

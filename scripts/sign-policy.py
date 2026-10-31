@@ -189,7 +189,7 @@ DEV_POLICY = [
     ("/bin/wget",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/httpd",       0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_LISTENER),
     ("/bin/mqtt",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
-    ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0),
+    ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),

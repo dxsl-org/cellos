@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Semantic documentation consistency and optional POSIX ledger"
-status: partial (tooling, ledger and CI done; behavioural criterion 3 open: posix-shim-test cannot launch on RV64, see CHANGELOG RCA)
+status: done (a32353422 tooling/ledger/CI; behavioural evidence after the RV64 shell launch fix: posix_shim_fstat/getentropy/net pass, 9 Tier-A rows partial; QEMU/TCG only)
 priority: P2
 dependencies: [1]
 tier: medium

@@ -276,7 +276,9 @@ Add-CellToSign "$rel_dir/service-input"
 Add-RequiredCellToSign "$rel_dir/bench" "app-bench (bench binary)"
 Add-CellToSign "$rel_dir/bench-probe"
 if ($include_capacity_probe) { Add-CellToSign "$rel_dir/capacity-probe" }
-Add-CellToSign "$rel_dir/app-net-tools"
+# app-net-tools is a package, not a binary: sign each tool it builds. An unsigned
+# tool is admitted only as a Tier-2 domain, which the shell cannot launch.
+foreach ($net_tool in @("curl", "wget", "nc", "mqtt", "ping")) { Add-CellToSign "$rel_dir/$net_tool" }
 Add-CellToSign "$rel_dir/app-sys-tools"
 Add-CellToSign "$rel_dir/robot-demo"
 Add-CellToSign "$rel_dir/robot-dashboard"
@@ -565,6 +567,15 @@ if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/b
 # down, on Hypha's own child edge.
 if (Test-Path $hypha_core_bin)        { $kfs_args += @($hypha_core_bin,  "/bin/hypha") }
 if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/bin/tool-spawn") }
+# Shell foreground launches resolve only through the kernel loader (VIFS1/P2),
+# so a disk-only program fails with "foreground preparation failed: Io". Keep in
+# sync with scripts/gen-disk-ci.sh.
+if (Test-Path $shutdown_bin)        { $kfs_args += @($shutdown_bin,        "/bin/shutdown") }
+if (Test-Path $posix_shim_test_bin) { $kfs_args += @($posix_shim_test_bin, "/bin/posix-shim-test") }
+if (Test-Path $nc_bin)              { $kfs_args += @($nc_bin,              "/bin/nc") }
+if (Test-Path $curl_bin)            { $kfs_args += @($curl_bin,            "/bin/curl") }
+if (Test-Path $wget_bin)            { $kfs_args += @($wget_bin,            "/bin/wget") }
+if (Test-Path $mqtt_bin)            { $kfs_args += @($mqtt_bin,            "/bin/mqtt") }
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
     $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
 }

@@ -44,14 +44,37 @@ A behavioural evidence anchor is either `<path>::<fn>`, naming a Rust `#[test]` 
 Python `test*` function, or a `docs/evidence/` artifact `path:line`. A source
 line is never evidence.
 
-**The posix-shim-test runners do not count as current evidence.** Its RV64 runners
-(`tests/integration/tests/boot.rs::posix_shim_fstat`, `::posix_shim_getentropy`,
-`::posix_shim_net`) failed on the RV64 boot suite of 2026-10-31 with
-`shell: foreground preparation failed: Io`, before the Cell started. Rows whose
-only witness is one of those runners are therefore `unverified`. They still cite
-the runner, and the retained 2026-09-03 pass in
-`docs/evidence/posix-fstat-verification.txt:25-34`, so it is clear what has to
-pass again.
+**Current runner evidence: 2026-10-31, RV64.** The three posix-shim-test runners,
+`tests/integration/tests/boot.rs::posix_shim_fstat`, `::posix_shim_getentropy` and
+`::posix_shim_net`, pass on the RV64 boot suite of 2026-10-31. For that run,
+`posix-shim-test` is launched from the shell as a non-domain Cell with
+`NET_CLIENT` rights. Its FFI protection tier is removed for now, because session
+publication refuses domain children
+(`cells/tests/posix-shim-test/src/main.rs:32-35`). The tier comes back once
+session publication admits domains. A row cites a runner only when that runner
+asserts the row's behaviour, and the row is then `partial`, because no runner
+covers a symbol's full subset and refusals:
+
+- **`posix_shim_fstat`** requires `POSIX-FSTAT-OPEN: OK` and `POSIX-FSTAT: OK`
+  exactly once, and no `FAIL`, panic or Cell fault
+  (`cells/tests/posix-shim-test/src/fstat.rs:58-115`). That covers:
+  - `_open` of a read-only regular file.
+  - `_fstat` of that file: `st_mode` regular, `st_size` matching the kernel
+    record, all other bytes zero.
+  - `_fstat` on fd `-1` returns `-1` and leaves the caller buffer unchanged.
+  - `_fstat` with a `NULL` buffer returns `-1`.
+  - `_close` of the kernel fd returns 0.
+- **`posix_shim_getentropy`** requires `POSIX-ENTROPY: OK`: `getentropy` of 16 bytes
+  returns 0 and writes non-zero output. The refusal cases are not asserted.
+- **`posix_shim_net`** requires `POSIX-NET: OK` and `POSIX-DNS: OK`. That is one
+  echo round trip through `socket(AF_INET, SOCK_STREAM)`, `connect`, `send` and
+  `recv` to the literal host address, then `gethostbyname("gateway")`, which must
+  return an `AF_INET` 4-byte address equal to that host and usable for a second
+  round trip. Refusal cases and the socket `_close` result are not asserted.
+
+`posix-shim-test` also prints `POSIX-STAT`, `POSIX-UNLINK`, `POSIX-MKDIR-RMDIR`,
+`POSIX-RENAME` and `PORTING-SMOKE` markers. No runner asserts them, so their rows
+stay `unverified`.
 
 ## Native transport, POSIX adapters, Linux VM
 
@@ -111,7 +134,7 @@ or one `libc-symbol-family` of C99 math functions with identical backing.
 
 | profile | kind | entry_point | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|
-| tier-a | libc-symbol | `getentropy` | `ViSyscall::GetRandom` in chunks of up to 64 bytes | `libs/api/src/services/posix/entropy.rs:18-34` | `buflen` at most 256 | `-1` for `NULL` buffer, `buflen` over 256 or syscall failure; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_getentropy`; `cells/tests/posix-shim-test/src/main.rs::test_getentropy` |
+| tier-a | libc-symbol | `getentropy` | `ViSyscall::GetRandom` in chunks of up to 64 bytes | `libs/api/src/services/posix/entropy.rs:18-34` | `buflen` at most 256 | `-1` for `NULL` buffer, `buflen` over 256 or syscall failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_getentropy`; `cells/tests/posix-shim-test/src/main.rs::test_getentropy` |
 | tier-a | libc-symbol | `arc4random_buf` | `getentropy` | `libs/api/src/services/posix/entropy.rs:42-45` | fills up to 256 bytes | requests over 256 bytes are silently truncated; failure is not reported | unverified | none |
 | tier-a | libc-symbol | `setjmp` | naked assembly per target: RV64, AArch64 hard-float, AArch64 soft-float, x86_64 | `libs/api/src/services/posix/setjmp.rs:38`; `libs/api/src/services/posix/setjmp.rs:121`; `libs/api/src/services/posix/setjmp.rs:180`; `libs/api/src/services/posix/setjmp.rs:236`; `libs/api/src/services/posix/setjmp.rs:288` | saves callee-saved registers; one definition per target | other targets: returns 0 and saves nothing | unverified | none |
 | tier-a | libc-symbol | `longjmp` | naked assembly per target, as `setjmp` | `libs/api/src/services/posix/setjmp.rs:76`; `libs/api/src/services/posix/setjmp.rs:144`; `libs/api/src/services/posix/setjmp.rs:209`; `libs/api/src/services/posix/setjmp.rs:258`; `libs/api/src/services/posix/setjmp.rs:298` | restores the saved context; `val` 0 becomes 1 | other targets: spins forever and never returns | unverified | none |
@@ -184,19 +207,19 @@ and talks to the Net service over typed IPC (`libs/api/src/services/posix/net.rs
 
 | profile | kind | entry_point | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|
-| tier-a | libc-symbol | `socket` | local socket table | `libs/api/src/services/posix/net.rs:100-109` | `AF_INET` with `SOCK_STREAM` only | `-1` for any other domain or type, or when the table is full; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::test_net` |
-| tier-a | libc-symbol | `connect` | Net IPC TCP connect | `libs/api/src/services/posix/net.rs:116-121` | IPv4 `sockaddr_in` | `-1` on a bad fd, bad address or transport error; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `send` | Net IPC `TcpSend` | `libs/api/src/services/posix/net.rs:211-291` | at most 495 bytes per call; waits up to 5 s for the handshake | `-1` on `NULL`, bad fd, refused peer, timeout or transport error; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `recv` | Net IPC receive | `libs/api/src/services/posix/net.rs:297-346` | copies at most `len` bytes | `-1` on `NULL`, bad fd or transport error; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `_close` | socket fds 10-17 use the local table; other fds use `ViSyscall::Close` | `libs/api/src/services/posix/net.rs:355-361` | closes a socket or a kernel fd | `-1` on failure; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `tests/integration/tests/boot.rs::posix_shim_fstat`; `docs/evidence/posix-fstat-verification.txt:25-34` |
+| tier-a | libc-symbol | `socket` | local socket table | `libs/api/src/services/posix/net.rs:100-109` | `AF_INET` with `SOCK_STREAM` only | `-1` for any other domain or type, or when the table is full; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `connect` | Net IPC TCP connect | `libs/api/src/services/posix/net.rs:116-121` | IPv4 `sockaddr_in` | `-1` on a bad fd, bad address or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `send` | Net IPC `TcpSend` | `libs/api/src/services/posix/net.rs:211-291` | at most 495 bytes per call; waits up to 5 s for the handshake | `-1` on `NULL`, bad fd, refused peer, timeout or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `recv` | Net IPC receive | `libs/api/src/services/posix/net.rs:297-346` | copies at most `len` bytes | `-1` on `NULL`, bad fd or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `_close` | socket fds 10-17 use the local table; other fds use `ViSyscall::Close` | `libs/api/src/services/posix/net.rs:355-361` | closes a socket or a kernel fd | `-1` on failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
 | tier-a | libc-symbol | `close` | `_close` | `libs/api/src/services/posix/net.rs:365-368` | as `_close` | as `_close` | unverified | none |
-| tier-a | libc-symbol | `gethostbyname` | Net service resolver over IPC | `libs/api/src/services/posix/net.rs:493-551` | IPv4 only; a single address; static result storage | `NULL` for a `NULL`, empty, over-long or unresolvable name, or an unreachable service; `h_errno` not set | unverified | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::test_net_dns` |
+| tier-a | libc-symbol | `gethostbyname` | Net service resolver over IPC | `libs/api/src/services/posix/net.rs:493-551` | IPv4 only; a single address; static result storage | `NULL` for a `NULL`, empty, over-long or unresolvable name, or an unreachable service; `h_errno` not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::test_net_dns` |
 
 ### File, process and time
 
 | profile | kind | entry_point | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|
-| tier-a | libc-symbol | `_open` | `ViSyscall::Open` | `libs/api/src/services/posix/sysio.rs:140-150` | path, flags and mode passed through to the kernel | `-1` on kernel failure; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_fstat`; `docs/evidence/posix-fstat-verification.txt:25-34` |
+| tier-a | libc-symbol | `_open` | `ViSyscall::Open` | `libs/api/src/services/posix/sysio.rs:140-150` | path, flags and mode passed through to the kernel | `-1` on kernel failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
 | tier-a | libc-symbol | `open` | `_open` | `libs/api/src/services/posix/sysio.rs:154-157` | as `_open` | as `_open` | unverified | none |
 | tier-a | libc-symbol | `_write` | `ViSyscall::Write` | `libs/api/src/services/posix/sysio.rs:502-505` | raw kernel write | kernel error value returned as `-1`; errno not set | unverified | none |
 | tier-a | libc-symbol | `write` | `_write` | `libs/api/src/services/posix/sysio.rs:509-512` | as `_write` | as `_write` | unverified | none |
@@ -204,7 +227,7 @@ and talks to the Net service over typed IPC (`libs/api/src/services/posix/net.rs
 | tier-a | libc-symbol | `read` | `_read` | `libs/api/src/services/posix/sysio.rs:523-526` | as `_read` | as `_read` | unverified | none |
 | tier-a | libc-symbol | `_lseek` | `ViSyscall::Seek` | `libs/api/src/services/posix/sysio.rs:530-540` | signed offset and whence passed through | kernel error value returned; errno not set | unverified | none |
 | tier-a | libc-symbol | `lseek` | `_lseek` | `libs/api/src/services/posix/sysio.rs:544-547` | as `_lseek` | as `_lseek` | unverified | none |
-| tier-a | libc-symbol | `_fstat` | `ViSyscall::Fstat` (ViFstatV1) | `libs/api/src/services/posix/sysio.rs:567-598` | only `st_mode` (character, regular or directory) and `st_size` are set; other fields are zero | `-1` on `NULL`, bad fd or bad wire record; caller buffer left unchanged; errno not set | unverified | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat`; `docs/evidence/posix-fstat-verification.txt:25-34` |
+| tier-a | libc-symbol | `_fstat` | `ViSyscall::Fstat` (ViFstatV1) | `libs/api/src/services/posix/sysio.rs:567-598` | only `st_mode` (character, regular or directory) and `st_size` are set; other fields are zero | `-1` on `NULL`, bad fd or bad wire record; caller buffer left unchanged; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat`; `docs/evidence/posix-fstat-verification.txt:25-34` |
 | tier-a | libc-symbol | `fstat` | `_fstat` | `libs/api/src/services/posix/sysio.rs:604-607` | as `_fstat` | as `_fstat` | unverified | none |
 | tier-a | libc-symbol | `_stat` | typed VFS `Stat` IPC; falls back to `_open` plus `_fstat` | `libs/api/src/services/posix/sysio.rs:613-634` | `st_mode` (regular or directory) and `st_size` | `-1` on `NULL` or a missing path; caller buffer left unchanged; errno not set | unverified | `cells/tests/posix-shim-test/src/fstat.rs::test_stat` |
 | tier-a | libc-symbol | `stat` | `_stat` | `libs/api/src/services/posix/sysio.rs:640-643` | as `_stat` | as `_stat` | unverified | none |

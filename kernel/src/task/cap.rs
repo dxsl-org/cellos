@@ -522,7 +522,8 @@ impl CapSet {
     fn with_path_net_rights(mut self, path: &str) -> CapSet {
         let (resolve, connect, listen, l2) = match path {
             "/bin/curl" | "/bin/wget" | "/bin/mqtt" | "/bin/ocel" | "/bin/llm-gateway"
-            | "/bin/https-demo" | "/bin/robot-demo" | "/bin/cellbox-ssh" => (true, true, false, false),
+            | "/bin/https-demo" | "/bin/robot-demo" | "/bin/cellbox-ssh"
+            | "/bin/posix-shim-test" => (true, true, false, false),
             "/bin/nc" | "/bin/net-broker" => (true, true, true, false),
             "/bin/httpd" | "/bin/sshd" => (false, false, true, false),
             "/bin/hypervisor" => (false, false, false, true),

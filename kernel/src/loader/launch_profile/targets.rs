@@ -53,7 +53,6 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/input-test"
         | "/bin/window-policy-probe"
         | "/bin/ls"
-        | "/bin/posix-shim-test"
         | "/bin/ps"
         | "/bin/robot-dashboard"
         | "/bin/viui-demo"
@@ -76,7 +75,9 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         // means the caller-owned SpawnFromElf route refuses these edges, so a
         // shell cannot relabel arbitrary bytes as a granted worker.
         "/bin/curl" | "/bin/wget" | "/bin/mqtt" | "/bin/ocel" | "/bin/llm-gateway"
-        | "/bin/https-demo" => NET_CLIENT,
+        | "/bin/https-demo"
+        // The POSIX ledger's network witness (`socket`/`connect`/`gethostbyname`).
+        | "/bin/posix-shim-test" => NET_CLIENT,
         "/bin/nc" => NET_PEER,
         "/bin/httpd" => NET_LISTENER,
         "/bin/net-broker" => CapSet {
