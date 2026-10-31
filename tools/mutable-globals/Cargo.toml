@@ -1,0 +1,16 @@
+[package]
+name = "mutable-globals"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Writable-global ownership inventory and drift gate for the kernel and HAL (ginux-lessons Phase 02)"
+publish = false
+
+[workspace]
+
+[dependencies]
+syn = { version = "2", default-features = false, features = ["full", "visit", "parsing", "printing"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"

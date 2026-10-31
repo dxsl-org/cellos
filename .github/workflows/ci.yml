@@ -84,6 +84,17 @@ jobs:
           python3 -m unittest scripts/test_check_posix_ledger.py
           python3 scripts/check-posix-ledger.py
 
+      # Writable-global inventory (ginux-lessons Phase 02): every static,
+      # static mut, extern static, static-emitting macro and global_asm! in the
+      # x86 kernel/HAL image has a reviewed classification or explicit debt in
+      # scripts/mutable-globals.toml; a new unclassified one, a stale entry or a
+      # stale docs/generated/mutable-globals.md fails. A drift gate, not a proof
+      # of synchronization.
+      - name: Check writable-global inventory
+        run: |
+          cargo test --target x86_64-unknown-linux-gnu --manifest-path tools/mutable-globals/Cargo.toml
+          cargo run --release --target x86_64-unknown-linux-gnu --manifest-path tools/mutable-globals/Cargo.toml -- --check
+
       - name: Validate app-tier acceptance ledger
         run: |
           baseline_dir="$RUNNER_TEMP/app-tier-acceptance-baseline"

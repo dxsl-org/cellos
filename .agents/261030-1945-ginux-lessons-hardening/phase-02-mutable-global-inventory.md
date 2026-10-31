@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "SAS-aware writable-global ownership inventory"
-status: pending
+status: done
 priority: P2
 dependencies: [1]
 tier: medium
@@ -36,10 +36,10 @@ Candidate new tool/classification: `scripts/mutable-globals.py`, `scripts/mutabl
 
 ## Success Criteria
 
-- [ ] Every discovered active-x86 declaration is classified or explicit reviewed debt; no silent UNKNOWN-to-PASS conversion.
-- [ ] Add an unclassified declaration in a throwaway fixture: check refuses it. Resolve/remove it: check succeeds.
-- [ ] Macro/cfg/custom-wrapper cases have stated coverage; exclusions cannot be mistaken for full LBI proof.
-- [ ] No production runtime code, synchronization scheme or hot path changed.
+- [x] Every discovered active-x86 declaration is classified or explicit reviewed debt; no silent UNKNOWN-to-PASS conversion. 582 declarations discovered; 208 need review on the x86 profile and all 208 have entries (23 debt). `cfg-unknown` predicates count as active, and an `unknown` dimension without `debt` fails.
+- [x] Throwaway `static PHASE02_FIXTURE: AtomicU32` added to `kernel/src/audit.rs`: `--check` exits 1 (`unclassified static kernel::audit::PHASE02_FIXTURE`). Removed: exits 0. The fixture tests in `tools/mutable-globals/tests/discovery.rs` cover the same cases (7 tests).
+- [x] Macro/cfg/custom-wrapper coverage is stated in the generated report's "Coverage and exclusions" section. Macros are not expanded: static-emitting `macro_rules!`, their invocations, other item macros and `global_asm!` are listed for review instead. Only a closed set of immutable shapes is exempt.
+- [x] No production runtime code, synchronization scheme or hot path changed.
 
 ## Assumptions
 
@@ -52,3 +52,19 @@ This is an audit/drift tool, not an LBI verifier. It does not establish safety o
 ## Deviation Log
 
 SAS review: replaced broad class-based raw-static exemptions with owner/context/lifetime evidence; no automatic Spinlock migration.
+
+## Implementation (2026-11-01)
+
+- Tool: `tools/mutable-globals`, a standalone std crate on `syn` 2 rather than a token scanner. It walks the real module tree (`mod`, `#[path]`, inline modules, file `#![cfg]`) and evaluates cfg against the x86 profile using each crate's resolved feature closure. Keys are `crate::module::[fn()|<impl T>]::ITEM @cfg(chain)`.
+- Classification: `scripts/mutable-globals.toml`. Report: `docs/generated/mutable-globals.md`. CI runs the tool tests and `--check` in the lint job, beside the spec-anchor check.
+- Deviation: the context vocabulary gained `none` (no accessor compiled into the profile; must stand alone), so dead storage is not mislabelled `boot`.
+- `kernel/src/intrinsics.rs` and `kernel/src/prelude.rs` are not in the module tree, so they are not compiled; they are acknowledged in `[[unreached]]`.
+- The 23 debt entries are real hazards or unestablished dimensions found by the review. They are recorded, not fixed (out of scope; no runtime change). The most severe:
+  - `IRQ_MMIO_BASE`: `WaitIrq` stores an unchecked `mmio_base` that the riscv64/aarch64 IRQ path then reads and writes, a kernel write at a caller-chosen address. Not reachable on x86_64.
+  - `SHM_HANDLES`: `ShmMap` has no ownership check, and handles and frames are never reclaimed.
+  - `ALLOCATOR` / `SCHEDULER`: the heap lock does not mask interrupts, yet IRQ paths allocate.
+  - domain_admission `GENERATION` is never written, so the lease generation check is inert.
+  - `HART_LOCALS`: written through a `*const`→`*mut` cast of a non-`mut` static.
+  - `HAS_X86_VIRT`: one global flag although root mode is per-CPU.
+  - audit `RING` is never drained.
+  - `BUMP`/`FREE`: cell VA slots leak on every publication.
