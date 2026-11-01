@@ -55,6 +55,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RV64 `atomic-publication` lane passes again (AP-00…AP-15, `ALL: PASS`); it panicked after AP-13 at baseline. Two causes. (1) The SMP-CONTEXT-HANDOFF fixture gave its tasks a 1-page kernel stack, but the worker's exit path (`exit_task` + `yield_cpu`, with `cell_session` maintenance at ~3.3 KiB) used 6600 B. The stack overflowed into the guard, and each S-mode trap-frame save faulted again 304 B lower (2774 nested frames) until it reached a mapped page, so the panic misleadingly reported an unmapped stack under a domain satp. The fixture now uses 8 pages. (2) Unmasked by (1): the riscv64 allocation-failure diagnostic `capture_fail_site` (`memory/heap.rs`) scanned 2 KiB above `sp` and read past a stack top into an unmapped page; the scan is now clamped to `sp`'s own page.
 - RV64 kernel stack overflow is caught before any frame is written. The S-mode trap entry first checks whether `sepc` lies in its own frame-save sequence (`__trap_entry` … `__trap_save_end`), which means the previous trap could not save its frame because `sp` is in a guard page. In that case it switches to the hart's dedicated 16 KiB overflow stack (`.bss`, inside the writable range every domain root maps), installs the kernel root and calls `vi_kernel_stack_overflow`, which panics with `kernel stack overflow: trap entry could not save a frame (sp, guard stval, sepc, interrupted_satp)`. Previously each nested trap retried 304 B lower until it reached a mapped page, wrote a frame over whatever lay there, and reported a misleading scause/satp. The check runs only on S-mode traps, uses `sscratch` plus a per-hart `.bss` slot to stay register-transparent, and adds no memory access to the U-mode path. `__trap_entry_hart1` is now explicitly 4-byte aligned (the longer stub had left it at a 2-byte boundary, which `stvec` cannot hold). Verified: with the handoff fixture temporarily back at 1 page, the boot panics through the new path with `sp` 928 B below the stack bottom (one save attempt, no recursion); with 8 pages, `atomic-publication` passes 3/3 and `authority-provenance` 2/2, and a production RV64 2-hart boot reaches `Cellos >`.
 ### Added
+- Boundary-specific ABI records and signed CellManifest refusal evidence on x86 (ginux-lessons Phase 06; docs and private tooling only, zero ABI bytes changed).
+  - **Convention**:
+    - New `docs/abi-boundary-records.md`, linked from `docs/code-standards.md` (Law 1, "Boundary-specific ABI records") and Spec 23 §6.
+    - The six-field record: identity, version policy, length, reserved/unknown bits, ownership, validation before effect.
+    - Families are classified by their real update class.
+    - Same-build typed SAS calls stay header-free.
+    - Includes a census of 21 families and 10 known gaps with file:line. Gaps are recorded, not fixed; each fix that changes observable behavior needs its own Law-1 CP1.
+  - **Fixtures** (`scripts/x86/abi_refusal_fixtures.py`, `scripts/x86/make-abi-refusal-iso.sh`):
+    - The manifest-free `echo` cell gets one `__ViCell_manifest` section *before* signing. The normal dev-key route then signs it (`sign_cells`, F1/F5 checked).
+    - Covered records:
+      - v1 and v2 controls;
+      - unknown version;
+      - unknown flag bit;
+      - v1 padding;
+      - v2 `reserved` and `cap_args_off`;
+      - out-of-range class;
+      - a v1 tag on a 16-byte record;
+      - one fixture with a damaged signature (signature evidence only).
+    - The private image uses canonical kernel features and an unchanged kernel and init. Fixtures sit at reviewed launch-edge slots.
+  - **Witness** (`scripts/x86/run-abi-refusal-witness.py`):
+    - Boots q35/TCG and pauses the guest once init reports every fixture.
+    - Reads the kernel audit ring with QMP `memsave`.
+    - Requires each malformed record to be refused before signature, task, measurement or capability work, as `CellSpawnDenied(0, 1)` with no `CellSignatureVerified`.
+    - Requires the bad signature to give `CellSignatureFailed(0, 0)`.
+    - Requires v1, v2 and v2-after-refusals to be published and run, with consecutive TIDs 7/8/9.
+    - Result: `ABI-FX: PASS`, twice. Host tests: `scripts/x86/test_abi_refusal_fixtures.py` (12), `cargo test -p api manifest` (9).
 - x86 performance evidence that separates tiers (ginux-lessons Phase 03; slice 3 under CP1 `.agents/261030-1945-ginux-lessons-hardening/p03-bench-counters-tier2-cp1.md`, approved by the user 2026-11-01).
   - **Collector** (`scripts/bench_results.py`, capture v3):
     - A profile registry: RV64 `rv64-qemu-virt-2h-256m-v2` is unchanged, and x86 adds `x86_64-q35-2c-256m-v1` with an exact q35 command and a required `-accel`.

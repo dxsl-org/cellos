@@ -235,6 +235,12 @@ Phase 02 may change the ledger; it is never a silent exemption.
    MUST NOT silently widen a capability, emulate Tier 2 in SAS, or fall back to
    raw cross-domain pointer transfer.
 
+Per-boundary records (identity, version policy, length, reserved/unknown-bit
+handling, ownership, validation before effect), the Manifest v1/v2 record, and
+its signed refusal evidence on x86 are kept in
+[ABI boundary records](../abi-boundary-records.md). That document describes
+the current contracts; it does not change any of them.
+
 ## 7. Security and tier behavior
 
 Tier 1 is a Trusted SAS Cell. Rust LBI, admission policy, and the manifest

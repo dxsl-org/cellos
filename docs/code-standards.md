@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-09-03
+**Last Updated**: 2026-11-01
 
 ---
 ## Solo-First Development and Independent Promotion
@@ -165,6 +165,28 @@
 - Classify a required product-specific fact as `UNVERIFIED` when exact
   vendor-backed evidence is absent. Absence is never a pass and must not be
   filled by architectural similarity or generic design capability.
+
+#### Boundary-specific ABI records
+
+- A record that crosses a real trust or update boundary needs a written
+  contract. Such boundaries are serialized records, guest/native ABI, persisted
+  metadata, and independently built or updated components. The contract states
+  identity/type, version policy, an exact or explicitly bounded length,
+  reserved/unknown-bit handling, ownership, and validation before any effect.
+  An existing typed envelope or exact-length contract may cover a field. The
+  census and template are in [ABI boundary records](abi-boundary-records.md).
+- Same-build typed Rust calls, including Tier-1 SAS method calls, get no magic,
+  version or size header and no per-call wire decode. They still need their
+  bounded holder/rights/live-lineage checks and a snapshot of shared metadata
+  at admission.
+- New decoders refuse non-zero reserved fields, undefined flag bits, and
+  trailing bytes the record does not explain. They refuse an unknown version
+  but keep accepting every version the policy still supports.
+- Feature bits describe real negotiated behavior, never a test stage or a
+  capability grant.
+- Malformed-record evidence comes from fixtures signed after construction by
+  the normal test-key route. Never patch a record after signing and present the
+  signature failure as parser evidence. Never weaken the signer.
 
 ### Law 2: Owned Buffers for Async (SAS Safety)
 

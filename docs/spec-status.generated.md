@@ -319,10 +319,10 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/23-native-sdk-contract.md:167` — 5. Capability matrix (seed for Phase 02 ledger)
 - `docs/specs/23-native-sdk-contract.md:187` — 5.1 Deterministic Phase 02 handoff
 - `docs/specs/23-native-sdk-contract.md:211` — 6. Compatibility, versions, and errors
-- `docs/specs/23-native-sdk-contract.md:238` — 7. Security and tier behavior
-- `docs/specs/23-native-sdk-contract.md:252` — 8. Conformance and release gates
-- `docs/specs/23-native-sdk-contract.md:273` — 9. Evidence ledger and known gaps
-- `docs/specs/23-native-sdk-contract.md:297` — 10. Cross-references
+- `docs/specs/23-native-sdk-contract.md:244` — 7. Security and tier behavior
+- `docs/specs/23-native-sdk-contract.md:258` — 8. Conformance and release gates
+- `docs/specs/23-native-sdk-contract.md:279` — 9. Evidence ledger and known gaps
+- `docs/specs/23-native-sdk-contract.md:303` — 10. Cross-references
 - `docs/specs/24-ai-inference-architecture.md:23` — 1. Context & Motivation
 - `docs/specs/24-ai-inference-architecture.md:32` — Rejected Alternatives
 - `docs/specs/24-ai-inference-architecture.md:41` — 2. Unified Native AI Architecture (`libs/ai-sdk`)

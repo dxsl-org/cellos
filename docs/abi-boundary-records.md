@@ -1,0 +1,177 @@
+# ABI boundary records
+
+**Status**: convention + census, 2026-11-01 (ginux-lessons Phase 06). Zero ABI
+bytes were changed to write it.
+**Rule source**: [code standards, Law 1](code-standards.md#boundary-specific-abi-records).
+**Related specs**: [Spec 17 IPC wire contract](specs/17-ipc-wire-contract.md)
+(Cell↔Cell framing, §4), [Spec 23 §6](specs/23-native-sdk-contract.md#6-compatibility-versions-and-errors)
+(frozen ABI, Manifest v2), [Spec 22 §2.7](specs/22-native-domain-cell-implementation-gate.md#27-admission-and-manifest-compatibility)
+(no Manifest v3 without its own versioning).
+
+A boundary record is needed where bytes cross a real trust or update boundary:
+a serialized record, a guest or native ABI, persisted metadata, or a component
+that is built or updated independently of its peer. It is not needed for
+same-build typed Rust calls. A Tier-1 SAS method call stays a typed call: do not
+add magic, version or size fields, or decode a wire format on every call.
+Typed calls still need their bounded holder/rights/live-lineage checks and a
+snapshot of mutable shared metadata at admission (Spec 25).
+
+## 1. What a record states
+
+Write these six fields for every boundary record. A field may be satisfied by an
+enclosing typed envelope or an exact-length contract; not every record needs its
+own header.
+
+| Field | Meaning |
+|---|---|
+| Identity / type | Magic, tag, section name, or the typed envelope that fixes it (syscall number + fixed size). |
+| Version policy | The exact accepted set. A version that policy still supports is not refused for being older (CellManifest v1 is accepted). An unknown version is refused, never ignored. |
+| Length | Exact (`!=` refused) or an explicit bound. Trailing bytes are refused unless the record says why they are tolerated. |
+| Reserved / unknown bits | Writers emit zero; decoders refuse non-zero reserved fields and undefined flag bits. Feature bits describe real negotiated behavior, never a test stage or a capability grant. |
+| Ownership | Producer, consumer and update class (§2). |
+| Validation before effect | The full record is decoded and validated before any task, authority, device, resource or persistent state changes. |
+
+Changing a public byte, SDK surface or error meaning still follows Law 1 (CP1
+approval before code). Fixing a gap in §4 is such a change when it alters what
+a caller observes.
+
+## 2. Update classes
+
+| Class | Boundary | Examples |
+|---|---|---|
+| S | Same build: the kernel and bytes it embeds | VIFS1 `kernel_fs.img`, embedded init, `system.toml` |
+| K | Kernel ↔ independently built Cell | syscalls, ELF sections, `cell_session`, child context, telemetry, completion, caller identity |
+| C | Cell ↔ Cell IPC | block wire, KMS frame |
+| O | Operator/fleet signed | `__ViCell_sig`, `/POLICY.BIN` |
+| P | Persisted across builds | CellosFS, P2 cell table, `/mnt/sd/etc/cellos/*.toml`, KMS records |
+| F | Firmware / bootloader | ACPI, Limine responses |
+| G | Guest-delivered values | VM exit fields |
+
+## 3. Census
+
+`file:line` references were read on 2026-11-01.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect |
+|---|---|---|---|---|---|---|
+| Syscall ABI | K | `ViSyscall` numbers (`libs/api/src/abi/syscall.rs`); unknown → `Unknown` | none (no ABI version) | registers; user buffers bounded | unknown number fails closed, handler never runs (`kernel/src/task/syscall.rs:10036-10038`); flags per syscall, e.g. `TelemetrySnapshot` strict (`kernel/src/task/telemetry.rs:200-205`) | per handler |
+| **CellManifest** `__ViCell_manifest` | K, inside signed bytes | magic `0x5649_4345` (`libs/api/src/abi/manifest_flags.rs:8`) | v2 exact; v1 upcast accepted; others refused (`libs/api/src/abi/manifest_parse.rs:31-85`) | exactly 8 (v1) or 16 (v2) (`manifest_parse.rs:24`, `kernel/src/loader/manifest_section.rs:48-52`) | undefined flags, v1 padding, v2 `cap_args_off`/`reserved`, class outside 0..=3 and `0xFF` refused (`manifest_parse.rs:34-75`) | classified before signature, owner admission, caps and task preparation (`kernel/src/loader/governed_spawn.rs:45-56` vs :60, :113, :130, :206) — see §5 |
+| `__ViCell_sig` | O | one `SHT_PROGBITS` section of 64 bytes (`kernel/src/signing.rs:120-140`) | none (raw Ed25519, compile-time anchor) | exact 64 | n/a | covers every ELF byte except itself (`signing.rs:7-12`); verified before admission (`governed_spawn.rs:60-89`) |
+| `__ViCell_syscalls` | K | none (raw u64) | none | ≥ 8 read, trailing ignored | all bits meaningful | **gap 1**: missing/short → `u64::MAX` permit-all (`governed_spawn.rs:14-22`) |
+| `__ViCell_cluster` | K | none | none | ≥ 16, trailing ignored | pad and mode byte unchecked | **gap 2**: short/missing → `(0, 0)` (`governed_spawn.rs:24-34`) |
+| `/POLICY.BIN` | O | magic `"VPOL"` (`kernel/src/policy.rs:33`) | v1..v8 accepted (`policy.rs:75-87`) | header + signature bounded; **no end-of-body check** (`policy.rs:426`) | header flags refused (`policy.rs:272`) | signature verified before parse (`policy.rs:201-204`); invalid → deny-all (`policy.rs:250`) |
+| VIFS1 `kernel_fs.img` | S | FAT image | none | FAT-bounded | n/a | mount failure refuses |
+| P2 cell table | P | magic `0x5649_4F53_5F43_454C` (`kernel/src/loader/disk_layout.rs:44`) | **none** | ≤ 64 entries | `_pad` unchecked (`disk_layout.rs:68`) | magic checked (`kernel/src/loader/early.rs:88`); each ELF later signature-checked |
+| Block wire | C | `op: u16` (`libs/types/src/block_wire.rs`) | none | `<` checks, trailing accepted | unknown op → NotIssued; unknown reply byte → Indeterminate | parsed before device I/O |
+| Completion record | K | magic `"VICQ"` | exact v1 | `< 24` refused, longer accepted (`libs/api/src/abi/completion.rs:97`) | source bits checked | kernel validates the wait mask first |
+| `cell_session` | K | `VERSION = 1` at offset 0 | exact | header 24; total length exact | header reserved and flags refused; unknown selector refused | header decoded first |
+| Child context | K | u32 version 1 (`kernel/src/task/child_context.rs:35`) | exact | 48..=max, declared == actual (`child_context.rs:33-36`) | reserved fields refused | validated before publication |
+| Telemetry snapshot | K | `TELEMETRY_VERSION = 1` | exact | exact | flags/reserved refused | arguments refused before sampling |
+| Caller identity trailer | K | magic `"VICI"` | **none** | last 32 bytes | **gap 5**: bits 8..31 documented must-be-zero (`libs/api/src/abi/caller_identity.rs:62`) but kept (`caller_identity.rs:167`) | written by the kernel after the payload copy |
+| Dir attestation | K | magic `"VIDH"` | exact v1 | `<` refused, trailing accepted (`libs/api/src/abi/dir_attestation.rs:88`) | reserved word never read | — |
+| Service binding | K | none | **none** | `<` refused, trailing accepted (`libs/api/src/abi/service_binding.rs:74`) | all-nonzero liveness | — |
+| KMS frame v1 | C | `abi_version` byte | exact 1 | exact 128 | flags/reserved refused; canonical zero tail | decoded before dispatch; undecodable → no reply |
+| CellosFS superblock / inode | P | magic `b"CELL_OSF"`, CRC32C | `FORMAT_VERSION = 1` exact (`libs/cellos-fs/src/format.rs:15`, :163) | 4096 / 512 | **gap 4**: superblock `flags` (`format.rs:50`) never checked; `reserved` not required zero (`format.rs:134`) | **gap 4**: mount writes at once (`cells/services/vfs/src/backend_cellosfs.rs:33`) |
+| Boot config TOML | S / P | `version` key | exact 1 | ≤ 16 KiB | unknown fields refused (`deny_unknown_fields`) | validated before any configured cell launches |
+| Limine responses | F | base-revision tag | written-back revision not read | null/bounds checked | unknown memmap type → reserved | at boot |
+| ACPI tables | F | signatures, checksums | RSDP revision only; SDT revision unchecked | bounded per table | unknown tables skipped | checksum before use; failure closes hardware gates |
+| `ViVmExit` | K (values G) | `repr(C, u8)` enum | `VERSION = 2` never sent or checked | size pinned 80 | append-only discriminants | guest decode in HAL |
+
+Not serialized boundaries: `fast_ipc` (zero-sized type token) and `vm.rs`
+(`ViVmRuntime`, no users).
+
+## 4. Known gaps
+
+None is fixed in Phase 06. Each fix that changes what a caller, Cell, operator
+or volume observes needs its own Law 1 CP1 before code. Each gap names its
+current behavior.
+
+1. **Syscall allowlist defaults to permit-all.** A missing, short or unparsable `__ViCell_syscalls` gives `u64::MAX` (`kernel/src/loader/governed_spawn.rs:14-22`). These sections are read by `ElfLoader::get_section` through xmas-elf `find_section_by_name`, with no duplicate check (`kernel/src/loader/elf.rs:405-411`). The bounded `ElfSections` parser used for the manifest and signature refuses duplicates.
+2. **The cluster section is lenient.** Its length check is `>= 16`; pad and mode bytes are not range-checked; short or missing becomes isolated (`governed_spawn.rs:24-34`).
+3. **A malformed signature section counts as unsigned.** `extract_sig` returns `None` for a wrong size, duplicate or non-`PROGBITS` section (`kernel/src/signing.rs:94-102`, :133). The dev posture then admits the ELF as Tier 2 (`governed_spawn.rs:90-107`). Release posture refuses it (`signing.rs:71-73`).
+4. **CellosFS ignores unknown superblock flags and mutates on mount.** An older build can open and then write (`clear_staging`) a volume whose `flags` it does not understand (`libs/cellos-fs/src/format.rs:50`, `cells/services/vfs/src/backend_cellosfs.rs:33`).
+5. **Kernel→Cell records accept reserved bits or trailing bytes.** Caller-identity flags 8..31 are documented must-be-zero and kept (`libs/api/src/abi/caller_identity.rs:62`, :167). Completion, dir attestation and service binding check `<`, not `!=` (`completion.rs:97`, `dir_attestation.rs:88`, `service_binding.rs:74`). Do not copy this pattern into new records.
+6. **POLICY.BIN accepts trailing bytes and has no sequence.** It returns after the last entry without an end-of-body check (`kernel/src/policy.rs:426`). An older, validly signed blob is replayable [INFERENCE: the header has no epoch field].
+7. **The P2 cell table has no version** and does not check its padding (`kernel/src/loader/disk_layout.rs:62-69`).
+8. **There is no syscall ABI version.** Unknown numbers fail closed without an audit record (`kernel/src/task/syscall.rs:10036-10038`).
+9. **The audit denial codes collide.** `CellSpawnDenied(0, 1)` means "malformed manifest" in `governed_spawn.rs:49-52` and "domain admission feature disabled" in `kernel/src/loader/domain_admission.rs:49`, :262-265; codes 2 to 4 collide the same way. The ring has no consumer (`kernel/src/audit.rs:250-251`), so this is not a public ABI. The Phase 06 witness separates the two by record sequence (§5).
+10. **The audit docs have drifted.** `AuditEvent::CellSignatureFailed` says "Path is logged separately via `log::warn!`" (`kernel/src/audit.rs:95`), but the signature branch logs nothing (`governed_spawn.rs:72-78`). The module header says new writes are dropped when the ring is full (`audit.rs:16-18`), but the ring evicts the oldest records (`audit.rs:180-185`).
+
+## 5. CellManifest record and refusal evidence
+
+**Record.** 16-byte v2 `{magic u32, version u8 = 2, class u8, flags u16, cap_args_off u32 = 0, reserved u32 = 0}` or 8-byte v1 `{magic, version u8 = 1, flags u8, pad [0; 2]}` (`libs/api/src/abi/manifest.rs:11-34`). One section per ELF; a named `SHT_NOBITS` section or a duplicate is malformed (`kernel/src/loader/manifest_section.rs:37-46`). Producer: `declare_manifest!` or the Zig v1 emitter. Consumer: the kernel loader. The section is inside the signed bytes.
+
+**Order on the real admission path** (`kernel/src/loader/governed_spawn.rs`), reached from `SpawnFromElf` and `SpawnFromPath` (`kernel/src/task/syscall.rs:6753`, :6499) after the launch-edge gate (`syscall.rs:1959-1994`):
+
+1. `manifest_section::classify` (:45). `Malformed` writes `CellSpawnDenied(0, 1)` and returns `PermissionDenied` (:48-55). No signature work happens, and no task, TID, CSpace, measurement, route or capability is created.
+2. Signature (:60-89). A mismatch writes `CellSignatureFailed(0, 0)` and returns `PermissionDenied`.
+3. Owner admission (:113), privilege check (:121), capability derivation (:130), platform reservation (:176-183), task preparation (:206), then publication (:241). A published task writes `CellMeasure(tid, …)` and `CellSpawn(tid, 0)` (`kernel/src/task/launch.rs:262-267`).
+
+Both refusals return `PermissionDenied` to the caller and print nothing. The
+evidence therefore reads the kernel's own audit ring.
+
+**Fixtures** (`scripts/x86/abi_refusal_fixtures.py`). Each fixture is the manifest-free `echo` cell with one `__ViCell_manifest` section added **before** signing. The fixtures are then signed by the normal test-image route: `scripts/lib-sign-cells.sh` `sign_cells` runs `cellos-sign --sign`, which uses the dev key and passes the F1/F5 check. This route is authorized by the test-key rule in [code standards § Cell Signing](code-standards.md#cell-signing-test-key-vs-release-key), and the user admitted Phase 06's private signed refusal fixtures on 2026-11-01. The signer is not modified. Only `abifx-sigbad` is damaged after signing (one signature bit), and it carries a valid record: it is signature evidence only. Every fixture's signature is checked on the host with `scripts/sign-cell.py --verify`.
+
+The launch-edge gate allows init to launch only exact reviewed paths
+(`kernel/src/loader/launch_profile/profiles.rs:55-59`,
+`kernel/src/loader/launch_profile/targets.rs:29-71`). Each fixture is therefore
+installed at a distinct reviewed `LEGACY` slot in a private image. The slot name
+says nothing about the bytes.
+
+| Fixture | Slot | Manifest bytes | Host signature | Expected |
+|---|---|---|---|---|
+| abifx-v2 | /bin/echo | `4543495602ff00000000000000000000` | valid | admitted (current v2) |
+| abifx-badver | /bin/cat | `4543495603ff00000000000000000000` | valid | format refusal (version 3) |
+| abifx-v1 | /bin/ls | `4543495601000000` | valid | admitted (older v1) |
+| abifx-badflag | /bin/ps | `4543495602ff00100000000000000000` | valid | format refusal (flag bit 12) |
+| abifx-v1pad | /bin/free | `4543495601000100` | valid | format refusal (v1 padding) |
+| abifx-badrsv | /bin/wx-test | `4543495602ff00000000000001000000` | valid | format refusal (reserved) |
+| abifx-capargs | /bin/cfi-test | `4543495602ff00000100000000000000` | valid | format refusal (`cap_args_off`) |
+| abifx-badtier | /bin/futex-test | `45434956020400000000000000000000` | valid | format refusal (class 4) |
+| abifx-v1len | /bin/tls-test | `45434956010000000000000000000000` | valid | format refusal (v1 tag, 16 bytes) |
+| abifx-sigbad | /bin/c-pthread | `4543495602ff00000000000000000000` | **invalid** | signature refusal |
+| abifx-v2b | /bin/pipe-peer | `4543495602ff00000000000000000000` | valid | admitted after the refusals |
+
+**Image.** `bash scripts/x86/make-abi-refusal-iso.sh` builds a private image in
+`target/abi-refusal-06` with the canonical kernel features (default posture
+plus `policy-required`). The kernel, init and signer are unchanged. Its
+`autoload.toml` lists only the fixtures, in order.
+
+**Runner.** `python3 scripts/x86/run-abi-refusal-witness.py` boots q35 under
+TCG and waits until init has reported every fixture. It then pauses the guest,
+copies `audit::RING` (address from the kernel symbol table) with QMP `memsave`,
+and matches the trailing admission attempts against the table. A refused
+fixture yields one attempt per init route (ELF, then path). A control must show
+its own `CellExit` record. Host tests:
+`python3 scripts/x86/test_abi_refusal_fixtures.py`.
+
+**Observed** on 2026-11-01. The run was repeated; both runs gave identical
+results.
+
+```text
+[ INFO] [signing] cell trust posture=dev anchor=[22, fc, 29, 77, 92, f0, b6, ff] unsigned=tier2
+ABI-FX: audit ring @0xffffffff8061c3b0 records=77 layout={'buf_offset': 0, 'head': 1386, 'tail': 0, 'dropped': 0}
+ABI-FX abifx-v2 /bin/echo: PASS expect=admit observed=['admit'] attempts=1 records=[CellSignatureVerified(0, 0)+CapNarrowedByPolicy(7, 57344)+CellMeasure(7, 2016906938)+CellSpawn(7, 0)] exit(tid=7)=0
+ABI-FX abifx-badver /bin/cat: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-v1 /bin/ls: PASS expect=admit observed=['admit'] attempts=1 records=[CellSignatureVerified(0, 0)+CapNarrowedByPolicy(8, 57344)+CellMeasure(8, 2209215457)+CellSpawn(8, 0)] exit(tid=8)=0
+ABI-FX abifx-badflag /bin/ps: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-v1pad /bin/free: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-badrsv /bin/wx-test: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-capargs /bin/cfi-test: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-badtier /bin/futex-test: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-v1len /bin/tls-test: PASS expect=format-refused observed=['format-refused'] attempts=2 records=[CellSpawnDenied(0, 1); CellSpawnDenied(0, 1)]
+ABI-FX abifx-sigbad /bin/c-pthread: PASS expect=signature-refused observed=['signature-refused'] attempts=2 records=[CellSignatureFailed(0, 0); CellSignatureFailed(0, 0)]
+ABI-FX abifx-v2b /bin/pipe-peer: PASS expect=admit observed=['admit'] attempts=1 records=[CellSignatureVerified(0, 0)+CapNarrowedByPolicy(9, 57344)+CellMeasure(9, 2016906938)+CellSpawn(9, 0)] exit(tid=9)=0
+ABI-FX: PASS
+```
+
+What this shows:
+
+- **Refused before effect.** None of the 14 format attempts or the 2 signature attempts has a `CellSignatureVerified`, `CellMeasure` or `CellSpawn` record. The controls on either side were published as consecutive TIDs 7, 8 and 9, so the 16 refused attempts allocated no TID. A format refusal stops before the signature check.
+- **Signature-invalid and format-invalid are distinct.** A signature refusal is `CellSignatureFailed(0, 0)`. A format refusal is `CellSpawnDenied(0, 1)` with no preceding `CellSignatureVerified`, even though every format fixture's signature is valid on the host. That sequence excludes the colliding domain-admission code (gap 9), which can only follow a verified signature for a signed ELF.
+- **Compatible records still run.** v1 and current v2 were admitted, published, ran and exited with status 0. In the same boot the image's real cells with built-in v2 manifests were also admitted: platform, ahci, vfs (flags `0x00c1`) and input. `serial` has no manifest section.
+
+Ceiling: x86 q35 QEMU/TCG, one vCPU, private image. It is not KVM evidence or
+physical-Intel evidence. Existing host coverage of the same decoder:
+`libs/api/src/abi/manifest_compat_tests.rs` and `manifest_tests.rs`, plus the
+RV64 test-hooks continuity guard
+`tests/integration/tests/manifest-qemu-continuity.rs`.

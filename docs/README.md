@@ -92,6 +92,7 @@ GUI, browser, AI, robotics, general-purpose OS expansion, and new AMD/ARM/RISC-V
 | [cellbox-cli.md](cellbox-cli.md) | Accepted CLI, pipeline, terminal/TUI, selected-tool and migration design; not a frozen wire ABI |
 | [decisions/0003-application-tier-taxonomy.md](decisions/0003-application-tier-taxonomy.md) | Canonical application tier, runtime profile, and SDK terminology |
 | [code-standards.md](code-standards.md) | The 8 Coding Laws + conventions |
+| [abi-boundary-records.md](abi-boundary-records.md) | Per-boundary ABI records (identity, version, length, reserved bits, ownership, validation before effect), census, known gaps, Manifest refusal evidence |
 | [PATTERNS.md](PATTERNS.md) | Common Rust patterns for Cellos |
 | [security-model.md](security-model.md) | STRIDE analysis, known limitations |
 
