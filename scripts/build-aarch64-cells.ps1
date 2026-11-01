@@ -396,7 +396,8 @@ $imgArgs += @($policyTmp, "/POLICY.BIN")
 
 Write-Host ""
 Write-Host "=== Creating aarch64 kernel_fs.img ==="
-$configFeatures = if ($BoardRpi3) { 'board-rpi3' } else { '' }
+# Cellbox opens its serial session through INPUT, so every image selects it.
+$configFeatures = if ($BoardRpi3) { 'input,board-rpi3' } else { 'input' }
 & $python @pythonArgs (Join-Path 'tools' 'mkfat32.py') "--config-features=$configFeatures" `
     --config-output-dir "$embeddedDir/boot-config" @imgArgs
 if ($LASTEXITCODE -ne 0) {

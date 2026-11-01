@@ -24,15 +24,39 @@ print('BPS=%d SPC=%d RES=%d FAT_CNT=%d ROOT_ENT=%d FAT_SZ=%d' % (bps, spc, res_s
 
 root_off = (res_s + fc * fat_sz) * bps
 data_off = root_off + re * 32
+fat_off = res_s * bps
+cluster_bytes = spc * bps
+fat32 = fat_sz16 == 0
+end_of_chain = 0x0FFFFFF8 if fat32 else 0xFFF8
 print('Root dir at %d, Data area at %d' % (root_off, data_off))
 
 
-def parse_dir(data, offset, label):
+def directory_bytes(clus):
+    """Return a subdirectory's clusters joined in FAT-chain order.
+
+    A directory that exactly fills its clusters has no zero end-marker entry; only the
+    chain says where it ends, and the bytes past its last cluster belong to whatever was
+    allocated next.
+    """
+    out = bytearray()
+    visited = set()
+    while 2 <= clus < end_of_chain and clus not in visited:
+        visited.add(clus)
+        offset = data_off + (clus - 2) * cluster_bytes
+        out += data[offset:offset + cluster_bytes]
+        if fat32:
+            clus = struct.unpack_from('<I', data, fat_off + clus * 4)[0] & 0x0FFFFFFF
+        else:
+            clus = struct.unpack_from('<H', data, fat_off + clus * 2)[0]
+    return bytes(out)
+
+
+def parse_dir(entries, label):
     print('  --- %s ---' % label)
     pending_lfn = []
-    for i in range(512):
-        e = data[offset + i*32: offset + (i+1)*32]
-        if len(e) < 32 or e[0] == 0:
+    for i in range(len(entries) // 32):
+        e = entries[i*32:(i+1)*32]
+        if e[0] == 0:
             break
         if e[0] == 0xE5:
             continue
@@ -63,17 +87,20 @@ def parse_dir(data, offset, label):
             print('    SFN %-20s attr=%02x clus=%d sz=%d' % (full.decode(errors='replace'), attr, clus, size))
 
 
-parse_dir(data, root_off, 'root')
+# FAT16 keeps the root in a fixed region; FAT32 chains it from the BPB root cluster.
+root_entries = (directory_bytes(struct.unpack_from('<I', bs, 44)[0]) if fat32
+                else data[root_off:data_off])
+parse_dir(root_entries, 'root')
 
 # Walk every subdirectory, not just /bin: images are packed from a list that can put entries
 # anywhere (`mkfat32.py <src> /mnt/sd/ai-model.gguf`), and an inspector that silently ignores a
 # directory makes a packed file look absent to every caller that greps this output.
-def subdirectories(data, offset, entries):
+def subdirectories(entries):
     """Return (long name when present, short name, first cluster) for each subdirectory."""
     found = []
     pending = ''
-    for i in range(entries):
-        e = data[offset + i*32: offset + (i+1)*32]
+    for i in range(len(entries) // 32):
+        e = entries[i*32:(i+1)*32]
         if e[0] == 0:
             break
         if e[0] == 0xE5:
@@ -95,19 +122,20 @@ seen = set()
 def label(long_name, short_name):
     return long_name if long_name else short_name.decode(errors='replace')
 
-for long_name, short_name, clus in subdirectories(data, root_off, re):
+for long_name, short_name, clus in subdirectories(root_entries):
     if clus < 2 or clus in seen:
         continue
     seen.add(clus)
-    offset = data_off + (clus - 2) * spc * bps
+    offset = data_off + (clus - 2) * cluster_bytes
     top = label(long_name, short_name)
     print('%s dir (SFN=%r) at cluster %d, offset %d' % (top, short_name.decode(errors='replace'), clus, offset))
-    parse_dir(data, offset, '/' + top)
-    for sub_long, sub_short, sub_clus in subdirectories(data, offset, re):
+    entries = directory_bytes(clus)
+    parse_dir(entries, '/' + top)
+    for sub_long, sub_short, sub_clus in subdirectories(entries):
         if sub_clus < 2 or sub_clus in seen:
             continue
         seen.add(sub_clus)
-        sub_off = data_off + (sub_clus - 2) * spc * bps
+        sub_off = data_off + (sub_clus - 2) * cluster_bytes
         sub = label(sub_long, sub_short)
         print('%s dir (SFN=%r) at cluster %d, offset %d' % (sub, sub_short.decode(errors='replace'), sub_clus, sub_off))
-        parse_dir(data, sub_off, '/' + top + '/' + sub)
+        parse_dir(directory_bytes(sub_clus), '/' + top + '/' + sub)

@@ -19,6 +19,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
+name = "cellos-boards"
+version = "0.2.0"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -243,6 +247,7 @@ name = "vicell-integration-tests"
 version = "0.1.0"
 dependencies = [
  "api",
+ "cellos-boards",
  "tempfile",
 ]
 

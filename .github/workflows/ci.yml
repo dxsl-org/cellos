@@ -645,7 +645,7 @@ jobs:
             "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
             "$REL/service-input" "$REL/input-test" "$REL/periph-demo" \
             "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/kill"
-          python3 tools/mkfat32.py \
+          python3 tools/mkfat32.py --config-features input \
             kernel/src/embedded-aarch64/kernel_fs.img \
             "$REL/cellbox"      /bin/cellbox \
             "$REL/service-vfs"    /bin/vfs \

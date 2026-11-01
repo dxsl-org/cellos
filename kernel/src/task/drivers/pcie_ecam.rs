@@ -6,7 +6,8 @@
 //! ECAM bases per machine:
 //!   x86_64      : runtime ACPI MCFG (no q35 fallback)
 //!   RISC-V virt : 0x3000_0000
-//!   ARM64 virt  : 0x3F00_0000
+//!   AArch64     : none. The kernel discovers no config-space window there
+//!                 (devices are VirtIO MMIO), so it never touches PCI config space.
 //!
 //! The Platform Cell may map and enumerate the complete firmware-admitted bus
 //! range. Kernel fallback enumeration remains bus-0-only on non-x86 targets.
@@ -120,15 +121,6 @@ pub fn ecam_bus_range_x86() -> (u8, u8) {
 /// PCIe ECAM config-space base for RISC-V virt gpex.
 /// Source: QEMU virt machine DTS — `pci@30000000`.
 pub const ECAM_BASE_RISCV: usize = 0x3000_0000;
-
-/// PCIe ECAM config-space base for ARM64 virt gpex.
-/// Source: QEMU virt machine DTS — `pcie@3f000000`.
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-pub const ECAM_BASE_AARCH64: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.pcie_ecam_bus0.base;
 
 /// ECAM bytes per PCI bus (32 devices × 8 functions × 4 KiB).
 pub const ECAM_BYTES_PER_BUS: usize = 0x10_0000;
@@ -697,6 +689,12 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
 }
 
 /// The admitted ECAM window: `(base, first bus, last bus)`; base 0 = none.
+///
+/// Only a window the kernel maps and knows to be backed counts. AArch64 has none:
+/// QEMU `virt` moves ECAM above 4 GiB whenever highmem ECAM is on (the default for
+/// 64-bit CPUs), and the kernel neither reads the DTB `pcie` node nor scans there,
+/// so a config access at the board profile's low-ECAM guess (`0x3F00_0000`) hits
+/// nothing and takes a synchronous external abort.
 fn ecam_window() -> (usize, u8, u8) {
     #[cfg(target_arch = "x86_64")]
     let window = {
@@ -705,25 +703,15 @@ fn ecam_window() -> (usize, u8, u8) {
     };
     #[cfg(target_arch = "riscv64")]
     let window = (ECAM_BASE_RISCV, 0u8, 0u8);
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    let window = (ECAM_BASE_AARCH64, 0u8, 0u8);
-    #[cfg(any(
-        all(
-            target_arch = "aarch64",
-            any(feature = "board-rpi3", feature = "board-rpi4")
-        ),
-        not(any(
-            target_arch = "x86_64",
-            target_arch = "riscv64",
-            target_arch = "aarch64"
-        ))
-    ))]
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64")))]
     let window = (0usize, 0u8, 0u8);
     window
+}
+
+/// Whether the kernel has a config-space window to quiesce or enable functions
+/// through. Without one, [`quiesce_function`] fails closed for every BDF.
+pub fn config_space_admitted() -> bool {
+    ecam_window().0 != 0
 }
 
 fn split_bdf(bdf: u32) -> (u8, u8, u8) {
@@ -912,23 +900,8 @@ pub fn init() {
     let ecam_base = ecam_base_x86();
     #[cfg(target_arch = "riscv64")]
     let ecam_base = ECAM_BASE_RISCV;
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    let ecam_base = ECAM_BASE_AARCH64;
-    #[cfg(all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    ))]
-    let ecam_base = 0usize;
-    #[cfg(not(any(
-        target_arch = "x86_64",
-        target_arch = "riscv64",
-        target_arch = "aarch64"
-    )))]
-    let ecam_base = 0usize; // bare-physical arches: no PCIe
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64")))]
+    let ecam_base = 0usize; // see `ecam_window`: no discovered config space
 
     #[cfg(target_arch = "x86_64")]
     let scan_bus = ecam_bus_range_x86().0;

@@ -305,10 +305,17 @@ kfs_args+=(
     "$KFS_TMP/POLICY.BIN" "/POLICY.BIN"
 )
 
-"$PYTHON_BIN" tools/mkfat32.py \
+# `input` selects /bin/input in services.toml. cellbox's serial session is created
+# through the INPUT service, so an image that never starts it boots to
+# "shell: authenticated serial session failed: NotFound" instead of a prompt.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input \
     --config-output-dir "$EMB/boot-config" "${kfs_args[@]}"
 if [[ ! -s "$KFS" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
+    exit 1
+fi
+if ! grep -Fxq 'path = "/bin/input"' "$EMB/boot-config/services.toml"; then
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
     exit 1
 fi
 

@@ -61,6 +61,11 @@ pub fn read_file_from_vifs1(path: &str) -> ViResult<Box<[u8]>> {
     drop(scratch);
     buf.resize(size, 0);
     let mut read = 0usize;
+    // Bounded reads, not one `read` of the whole file: each `FatFile::read` takes
+    // the filesystem lock once, and lock acquisition is where an x86 CPU in an
+    // IF-masked syscall (spawn) answers a peer's TLB shootdown (`sync.rs`). The
+    // chunk size bounds the copy between two such points; the handle keeps the
+    // file's run map, so chunks cost the same at any offset.
     while read < size {
         let end = read.saturating_add(4096).min(size);
         let want = end - read;

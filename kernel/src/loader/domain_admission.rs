@@ -341,6 +341,27 @@ pub(crate) fn evaluate_domain_admission(
 /// Enter the boot's admission posture. Called once during boot for a profile
 /// that runs domain-class cells; a build that never calls it denies them
 /// (fail-closed), which is the fleet posture.
+///
+/// Compiled only for the profiles that call it: the development profile and
+/// the x86 browser-engine profile. Fleet builds (`policy-required`,
+/// `production-relay-image`) and builds without `native-domains` do not carry
+/// it at all, so the fleet posture cannot be reopened by a stray call.
+#[cfg(any(
+    all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        ),
+        not(any(
+            feature = "policy-required",
+            feature = "production-relay-image",
+            feature = "browser-engine-profile"
+        ))
+    ),
+    all(feature = "browser-engine-profile", target_arch = "x86_64")
+))]
 pub(crate) fn enable_for_boot() -> bool {
     // Phase-01 posture: a build whose raw switch ordering is unqualified stays
     // fail-closed instead of entering the enabled posture, because the admission

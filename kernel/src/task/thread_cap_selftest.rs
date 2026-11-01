@@ -36,6 +36,8 @@ const DRIVER_TID: usize = 9004;
 const DRIVER_BAR: usize = 0x5100_0000;
 /// A synthetic requester ID: 00:1f.7, a well-formed BDF that no supported board
 /// populates, so retirement quiescence finds no function and touches nothing.
+/// Where the kernel has no config-space window (AArch64) the function cannot be
+/// shown quiescent at all, and the revoke must refuse instead.
 /// (The previous `0x02_00_00` overflowed the 16-bit encoding and aliased the
 /// real host bridge at 00:00.0.)
 const DRIVER_BDF: u32 = 0x00_FF;
@@ -369,6 +371,40 @@ pub fn self_test() -> bool {
             0x1000,
             crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
         );
+
+        // Without config space the owned function cannot be shown quiescent, so the
+        // revoke must fail closed: error, BDF still owned, every capability intact.
+        // The claim is then dropped so the rest of the teardown is still proven.
+        if bdf_claimed && !crate::task::drivers::pcie_ecam::config_space_admitted() {
+            let refused = handle_syscall(
+                PARENT_TID,
+                Syscall::CapRevoke {
+                    target_tid: DRIVER_TID,
+                    cap_mask: CM::PCIE_DRIVER | CM::PLATFORM | CM::SUPERVISOR,
+                },
+            );
+            let caps_intact = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+                sched.tasks.get(&DRIVER_TID).is_some_and(|t| {
+                    t.pcie_driver_cap.is_some()
+                        && t.platform_cap.is_some()
+                        && t.supervisor_cap.is_some()
+                })
+            });
+            let bdf_retained =
+                crate::resource_registry::owner_of_bdf(DRIVER_BDF) == Some(DRIVER_TID);
+            let refused_closed = matches!(refused, Err(SyscallError::NotSupported));
+            if !(refused_closed && caps_intact && bdf_retained) {
+                ok = false;
+                log::error!(
+                    "[selftest] REVOKE-PRIVILEGED: no-config-space revoke did not fail closed \
+                     r={:?} caps_intact={} bdf_retained={}",
+                    refused,
+                    caps_intact,
+                    bdf_retained
+                );
+            }
+            crate::resource_registry::release_bdfs_for(DRIVER_TID);
+        }
 
         let r_priv = handle_syscall(
             PARENT_TID,

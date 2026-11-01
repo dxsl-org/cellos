@@ -104,15 +104,29 @@ pub fn service_tlb_flush(hart_id: usize) -> usize {
     let epoch = TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire);
     if TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
         crate::memory::paging::tlb_flush_all();
-        TLB_FLUSH_COMPLETE[hart_id].store(epoch, Ordering::Release);
+        let _advanced = publish_completion(&TLB_FLUSH_COMPLETE[hart_id], epoch);
         #[cfg(all(feature = "test-hooks", not(target_arch = "x86_64")))]
-        log::info!(
-            "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
-            hart_id,
-            epoch
-        );
+        if _advanced {
+            log::info!(
+                "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
+                hart_id,
+                epoch
+            );
+        }
     }
     epoch
+}
+
+/// Publish `epoch` as complete without ever lowering `complete`; returns
+/// whether this call advanced it.
+///
+/// The service path can be re-entered by an IPI between its request snapshot
+/// and this publication (an x86 waiter spins with interrupts enabled), so the
+/// nested call may already have published a newer epoch that a plain store of
+/// the older snapshot would retract. Release orders the local invalidate
+/// before the requester's Acquire observation.
+fn publish_completion(complete: &AtomicUsize, epoch: usize) -> bool {
+    complete.fetch_max(epoch, Ordering::Release) < epoch
 }
 
 
@@ -1242,5 +1256,23 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
             core::arch::asm!("wfi", options(nomem, nostack))
         };
         core::hint::spin_loop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An IPI-nested service publishes a newer epoch before the interrupted
+    /// outer service publishes its older snapshot; completion must not regress.
+    #[test]
+    fn nested_service_completion_is_not_retracted_by_stale_snapshot() {
+        let complete = AtomicUsize::new(4);
+        let outer_snapshot = 5;
+        assert!(publish_completion(&complete, 6));
+        assert!(!publish_completion(&complete, outer_snapshot));
+        assert_eq!(complete.load(Ordering::Acquire), 6);
+        assert!(publish_completion(&complete, 7));
+        assert_eq!(complete.load(Ordering::Acquire), 7);
     }
 }

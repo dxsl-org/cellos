@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **AArch64 image boots to `Cellos >` again.** Two causes:
+  - The kernel claimed a PCIe config-space window it had never found (`0x3F00_0000`). QEMU `virt` puts ECAM at `0x40_1000_0000` and the kernel does not read the DTB. So the Phase 08B quiesce of an owned BDF aborted, which panicked the boot. `pcie_ecam` now reports no window on targets other than x86_64 and riscv64, and `quiesce_function` fails closed there (BDF and capabilities kept). On those targets the thread-cap self-test proves that refusal, then runs the full privileged revoke.
+  - The boot config did not select INPUT, which Cellbox needs for its serial session, so the boot stopped at `shell: authenticated serial session failed: NotFound`. `gen-disk-aarch64-ci.sh`, `build-aarch64-cells.ps1` and the CI aarch64 image step now pass `--config-features input`, and the script checks that INPUT is selected.
+  - Result: `qemu-aarch64-test.sh` PASS. `aarch64-boot` passes 6 and fails 3: periph-demo, uart-input and httpd type `cmd &`, which Cellbox refuses.
+- `tools/inspect_fat.py` follows each directory's FAT chain. Before, a directory that exactly fills its clusters ran into the next one. That made the 15-cell aarch64 `/bin` count as 16 (`gen-disk-aarch64-ci.sh` failed). FAT32 subdirectories are now listed too.
+- **VIFS1 reads are linear instead of quadratic.** `FatFile` maps its cluster chain once and keeps the map; before, every 4 KiB read reopened the file and walked the chain from the start. On an x86 `-smp 2` boot, the `/bin/vfs` spawn step drops from about 125 ms to 17–33 ms. Each chunk still takes the filesystem lock once, so x86 TLB-shootdown service points stay frequent.
+- x86 TLB shootdown completion is published with `fetch_max`. An IPI that landed between reading the request and storing the completion could move the completed epoch back by one.
+- The `policy-required` kernel builds under `-D warnings` again. `domain_admission::enable_for_boot` is now compiled only into the profiles that call it (development and the x86 browser-engine profile).
+- Host tests now pass under static (non-PIE) builds as well as PIE. `snapshot_scratch_frames_never_appear_in_the_inventory` had assumed the scratch buffer lies above its fake RAM window; its layout now covers both ranges.
+- **Integration tests compile again** (`--no-run` for the whole crate):
+  - `base-tray-handoff`: the bare-metal-only `ToString` import moved into `mod runner`.
+  - `iommu-publication`: it uses the real `cellos-boards` crate as a dev-dependency, and its stand-ins match the current `iommu` API.
 - MMIO windows are owned and released by task id. `RequestMmio` recorded the claiming task's tid as the window owner, and every reader compared tids: `lookup_mmio_owner`, `WaitIrq`, block-route ownership and GPIO IRQ routing. But two paths used the CellId:
   - **Root retirement** called `release_for(CellId)`, so a dead driver's window stayed owned. A restarted driver only got it back because `request_mmio` skips dead owners, and the Platform/DWC2 claim paths do not skip them.
   - **`CapRevoke`** called `revoke_mmio_for(target_cell)`. An MMIO, `PCIE_DRIVER` or `PLATFORM` revoke found no window, reported success and left the window owned and user-mapped.

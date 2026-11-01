@@ -5406,10 +5406,12 @@ mod tests {
             end: region.end() + IMAGE_MUTABLE_FRAMES as u64 * FRAME_SIZE as u64,
         };
         // The layout spans the fake RAM window and wherever the host pool
-        // landed, so the planner's own bounds describe both.
+        // landed, so the planner's own bounds describe both. The pool's address
+        // is the host linker's choice: a PIE binary places it above the window,
+        // a static one below it, so neither end may assume an order.
         let layout = RamLayout {
             base: core::cmp::min(BASE, region.base),
-            end: mutable.end,
+            end: core::cmp::max(BASE + FRAMES * FRAME_SIZE as u64, mutable.end),
             image: mutable,
         };
 

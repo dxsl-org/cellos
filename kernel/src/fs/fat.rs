@@ -1,4 +1,6 @@
 //! FAT32 Filesystem Implementation
+mod runs;
+
 use alloc::boxed::Box;
 use alloc::string::String;
 // use alloc::string::{String, ToString};
@@ -7,6 +9,7 @@ use alloc::sync::Arc;
 // use core::cell::RefCell;
 use core::cmp;
 
+use self::runs::RunMap;
 use crate::sync::Spinlock;
 use crate::task::drivers::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use api::block::ViBlockDevice;
@@ -256,14 +259,8 @@ impl ViFileSystem for ViFatFS {
             }
         }
 
-        // If we just created it, open it again?
-        // create_file returns File object, but we dropped it.
-        // Re-open in FatFile is handled lazily in read/write?
-        // No, current `FatFile` re-opens on every read/write call?!
-        // CHECK FatFile implementation:
-        // read() calls `root.open_file(rel_path)`.
-        // This is inefficient (Stateless), but works.
-        // So successful creation here is enough.
+        // A created file is not kept open: every FatFile operation resolves the
+        // path again under the filesystem lock.
 
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation_fallback(
@@ -273,6 +270,7 @@ impl ViFileSystem for ViFatFS {
             pos: 0,
             fs: self.inner.clone(),
             is_dir,
+            runs: None,
         }))
     }
 
@@ -339,12 +337,17 @@ impl ViFileSystem for ViFatFS {
     }
 }
 
-/// Stateless File Handle
+/// File handle: a path and a cursor. Each operation resolves the path again
+/// under the filesystem lock; reads additionally keep the file's run map.
 pub struct FatFile {
     path: String,
     pos: u64,
     fs: Arc<Spinlock<FatFS>>,
     is_dir: bool,
+    /// Built by the first `read` and kept for this handle's lifetime. Valid
+    /// because the volume cannot change: `BlockStream`'s device (`ViRamDisk`)
+    /// refuses every write, so no cluster chain or size moves after mapping.
+    runs: Option<RunMap>,
 }
 
 impl ViFile for FatFile {
@@ -353,29 +356,27 @@ impl ViFile for FatFile {
             return Err(ViError::IsADirectory);
         }
 
-        let n = {
-            let fs_lock = self.fs.lock();
-            let root = fs_lock.root_dir();
-            // Important: Strip leading slash, same as open()
-            let rel_path = self.path.trim_start_matches('/');
-            // Bind via `?` so the open_file() Result temporary is dropped at this
-            // statement — keeping a `match` scrutinee alive would extend the borrow
-            // of `fs_lock` past the end of the block (E0597).
-            let mut file = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
-            file.seek(SeekFrom::Start(self.pos))
-                .map_err(|_| ViError::IO)?;
-            // Loop: fatfs Read::read may return fewer bytes than requested
-            // (e.g. stopping at a cluster boundary).  Fill the buffer fully.
-            let mut total = 0usize;
-            while total < buf.len() {
-                let r = file.read(&mut buf[total..]).map_err(|_| ViError::IO)?;
-                if r == 0 {
-                    break;
-                } // EOF
-                total += r;
+        // One lock acquisition per call, held for at most `buf.len()` bytes plus,
+        // on the first call, one walk of the cluster chain. A caller that reads a
+        // large file in bounded buffers (`read_file_from_vifs1`) therefore re-enters
+        // `Spinlock::lock` at a bounded interval, which is where an x86 CPU running
+        // a syscall with IF masked answers a peer's TLB shootdown (`sync.rs`).
+        let fs_lock = self.fs.lock();
+        let runs: &RunMap = match &self.runs {
+            Some(runs) => runs,
+            None => {
+                let root = fs_lock.root_dir();
+                // Important: Strip leading slash, same as open()
+                let rel_path = self.path.trim_start_matches('/');
+                let mut file = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
+                #[cfg(cellos_p01_trace)]
+                let _semantic = crate::memory::heap::p01_owner::creation_fallback(
+                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
+                self.runs.insert(RunMap::build(&mut file)?)
             }
-            total
         };
+        let n = runs.read_at(&mut BlockStream::new(), self.pos, buf)?;
+        drop(fs_lock);
         self.pos += n as u64;
         Ok(n)
     }

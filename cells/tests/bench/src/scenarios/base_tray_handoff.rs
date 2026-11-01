@@ -3,8 +3,6 @@
 //! This is a model-only contract. It does not command a drive, establish
 //! physical station arrival, or provide a safety mechanism.
 
-use alloc::string::ToString;
-
 use super::lab_transfer_contract::{
     validate_provenance, Admission, AdmissionObservation, Configuration, ContractError, JobState,
     PlacementObservation, Principal, ReconcileDecision, TransferContract, TransferRequest,
@@ -437,6 +435,8 @@ pub use runner::run;
 #[cfg(target_os = "none")]
 mod runner {
     use super::*;
+    use alloc::string::ToString;
+
     const TRACE_LOG_PATH: &str = "/srv/base_tray_trace.log";
 
     const OBSERVER: Principal = Principal {
