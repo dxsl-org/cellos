@@ -17,8 +17,8 @@ use crate::manager::VfsManager;
 const EXTRA_PHASE: u32 = 1 << 31;
 
 /// One entry the mount table contributes to a listing.
-struct Extra {
-    name: &'static str,
+struct Extra<'a> {
+    name: &'a str,
     kind: EntryKind,
     /// The backend lists this name itself; only its kind is overridden.
     in_backend: bool,
@@ -75,7 +75,7 @@ impl VfsManager {
     /// Mount children of `path` (kind `Mount` for a mount point, `Dir` for a
     /// directory that only leads to one), then the configuration names, the
     /// same set `list_dir` adds.
-    fn listing_extras(&self, path: &str, backend: &dyn FsBackend) -> Vec<Extra> {
+    fn listing_extras(&self, path: &str, backend: &dyn FsBackend) -> Vec<Extra<'_>> {
         let mut extras: Vec<Extra> = Vec::new();
         for name in self.mounts.direct_mount_children(path) {
             let child = join_component(path, name);
@@ -105,7 +105,7 @@ impl VfsManager {
 
 /// Report backend entries that are mount points as `Mount`: the backend sees
 /// its own directory there, but every request below it goes to another mount.
-fn mark_mount_kinds(page: &mut [u8], extras: &[Extra]) {
+fn mark_mount_kinds(page: &mut [u8], extras: &[Extra<'_>]) {
     let mut pos = 0;
     while pos + ENTRY_HEADER_LEN <= page.len() {
         let end = pos + ENTRY_HEADER_LEN + usize::from(page[pos + 1]);

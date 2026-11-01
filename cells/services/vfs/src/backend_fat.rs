@@ -9,11 +9,13 @@
 //! fatfs uses interior mutability, so all operations go through `&self`
 //! internally; `&mut self` on the trait is only for RamFS symmetry.
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::backend::{fill_page, FsBackend, ListPage};
 use api::ipc::vfs_dir_page::EntryKind;
+use crate::blk_router::DeviceRef;
 use crate::block_stream::{BlockStream, CachedBlockStream};
 use ostd::io::println;
 
@@ -29,7 +31,9 @@ type DataDir<'a> =
 
 pub struct FatBackend {
     fs: Option<DataFs>,
-    prefix: &'static str,
+    prefix: Box<str>,
+    /// Device the volume lives on; `sync` flushes only this device.
+    dev: DeviceRef,
 }
 
 /// Reads sector 0 of the FAT partition and returns `true` when the volume is
@@ -39,9 +43,9 @@ pub struct FatBackend {
 /// A temporary `BlockStream` is used so the probe does not interfere with the
 /// `CachedBlockStream` fatfs will create afterwards (positions are per-instance;
 /// both start at offset 0).
-fn probe_exfat(base_lba: u64) -> bool {
+fn probe_exfat(dev: DeviceRef, base_lba: u64) -> bool {
     use fatfs::Read;
-    let mut bs = BlockStream::new(base_lba);
+    let mut bs = BlockStream::new(dev, base_lba);
     let mut sec = [0u8; 512];
     // Guard against short reads — need at least 11 bytes for the OEM-Name field.
     match bs.read(&mut sec) {
@@ -51,23 +55,22 @@ fn probe_exfat(base_lba: u64) -> bool {
 }
 
 impl FatBackend {
-    /// Mount the persistent FAT volume on the VirtIO disk. On failure (no disk
-    /// attached, bad BPB, or exFAT) the backend stays in fallback mode — every
-    /// operation fails cleanly while other mounts keep working.
-    /// Mount a FAT volume whose partition begins at absolute `base_lba`. Used
-    /// for both `/mnt/sd` (P1, `PART_FAT32_BASE_LBA`) and the read-only `/bin`
-    /// cell-store (P6, `PART_CELLSTORE_BASE_LBA`). On failure the backend stays
-    /// in fallback mode — every op fails cleanly while other mounts keep working.
-    pub fn mount(prefix: &'static str, base_lba: u64) -> Self {
-        if probe_exfat(base_lba) {
+    /// Mount the FAT volume whose partition begins at absolute `base_lba` on
+    /// `dev`: `/mnt/sd` (P1, `PART_FAT32_BASE_LBA`) and the read-only `/bin`
+    /// cell-store (P6, `PART_CELLSTORE_BASE_LBA`) on the primary disk, and
+    /// `/mnt/disk/<name>` (P1 offset) on a secondary disk. On failure (bad BPB
+    /// or exFAT) the backend stays in fallback mode — every op fails cleanly
+    /// while other mounts keep working; see [`Self::is_mounted`].
+    pub fn mount(prefix: &str, dev: DeviceRef, base_lba: u64) -> Self {
+        if probe_exfat(dev, base_lba) {
             println("[vfs] exFAT volume detected — not supported; reformat to FAT32 or use /data (littlefs)");
-            return Self { fs: None, prefix };
+            return Self { fs: None, prefix: prefix.into(), dev };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
-        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(base_lba), opts) {
+        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(dev, base_lba), opts) {
             Ok(fs) => {
-                // Include the mount prefix so the two FAT volumes (/mnt/sd P1 and
-                // the /bin cell-store P6) are distinguishable in the boot log.
+                // Include the mount prefix so every FAT volume is distinguishable
+                // in the boot log.
                 ostd::io::print("[vfs] FAT32 ");
                 ostd::io::print(prefix);
                 println(" volume mounted");
@@ -80,13 +83,18 @@ impl FatBackend {
                 None
             }
         };
-        Self { fs, prefix }
+        Self { fs, prefix: prefix.into(), dev }
+    }
+
+    /// Whether a FAT32 volume was opened.
+    pub fn is_mounted(&self) -> bool {
+        self.fs.is_some()
     }
 
     /// Strip the mount prefix; reject the mount root itself.
     /// `/data/x` → `x`; `/data` and `/data/` → None.
     fn rel_nonempty<'a>(&self, path: &'a str) -> Option<&'a str> {
-        let r = path.strip_prefix(self.prefix)?.strip_prefix('/')?;
+        let r = path.strip_prefix(&*self.prefix)?.strip_prefix('/')?;
         if r.is_empty() {
             None
         } else {
@@ -96,7 +104,7 @@ impl FatBackend {
 
     /// Strip the mount prefix; the mount root maps to the volume root (`""`).
     fn rel_allow_root<'a>(&self, path: &'a str) -> &'a str {
-        let r = path.strip_prefix(self.prefix).unwrap_or(path);
+        let r = path.strip_prefix(&*self.prefix).unwrap_or(path);
         r.strip_prefix('/').unwrap_or(r)
     }
 
@@ -415,7 +423,7 @@ impl FsBackend for FatBackend {
     }
 
     fn sync(&mut self, _path: &str) -> bool {
-        crate::blk_router::blk_flush().is_completed()
+        crate::blk_router::blk_flush(self.dev).is_completed()
     }
 
     fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {

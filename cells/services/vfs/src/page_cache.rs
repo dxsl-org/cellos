@@ -3,8 +3,15 @@
 //! Lives entirely inside the VFS cell — one owner, no lock contention.
 //! Cache budget is derived from the cell's heap; see `MAX_CACHE_BYTES`.
 
-use crate::block_stream::BlockStream;
 use alloc::collections::{BTreeMap, VecDeque};
+
+/// Raw partition-relative sector I/O beneath the cache.
+pub trait SectorDevice {
+    /// Read `sector`; `false` when the device returned no data.
+    fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool;
+    /// Write `sector`; `true` only when the device reported the write completed.
+    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool;
+}
 
 /// Sector cache budget: a quarter of the cell's heap.
 ///
@@ -53,7 +60,7 @@ impl PageCache {
     }
 
     /// Serve `sector` from cache; fall back to a raw disk read on miss.
-    pub fn read_sector(&mut self, dev: &mut BlockStream, sector: u64, buf: &mut [u8; 512]) -> bool {
+    pub fn read_sector(&mut self, dev: &mut impl SectorDevice, sector: u64, buf: &mut [u8; 512]) -> bool {
         // Copy data out so we don't hold a borrow into self.entries past this point.
         let cached = self.entries.get(&sector).map(|e| e.data);
         if let Some(data) = cached {
@@ -74,12 +81,24 @@ impl PageCache {
     /// FAT32 has no journal, so write-through is the durability model — and the
     /// order matters as much as the policy: writing the device before the cache
     /// keeps every resident entry clean, which is what makes eviction safe.
-    pub fn write_sector(&mut self, dev: &mut BlockStream, sector: u64, data: &[u8; 512]) -> bool {
+    ///
+    /// A write that did not complete drops the resident entry: the medium may
+    /// hold the old, the new or a torn sector, so the next read must come from
+    /// the device rather than from the pre-write image.
+    pub fn write_sector(&mut self, dev: &mut impl SectorDevice, sector: u64, data: &[u8; 512]) -> bool {
         if !dev.write_raw_sector(sector, data) {
+            self.evict(sector);
             return false;
         }
         self.insert(sector, data);
         true
+    }
+
+    fn evict(&mut self, sector: u64) {
+        if self.entries.remove(&sector).is_some() {
+            self.total_bytes -= 512;
+            self.lru_order.retain(|&s| s != sector);
+        }
     }
 
     fn insert(&mut self, sector: u64, data: &[u8; 512]) {
@@ -106,5 +125,70 @@ impl PageCache {
         // O(n) scan — acceptable while the cache holds a few thousand sectors.
         self.lru_order.retain(|&s| s != sector);
         self.lru_order.push_front(sector);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PageCache, SectorDevice};
+    use alloc::collections::BTreeMap;
+
+    /// In-memory medium whose writes can be made to fail.
+    #[derive(Default)]
+    struct Medium {
+        sectors: BTreeMap<u64, [u8; 512]>,
+        fail_writes: bool,
+        reads: usize,
+    }
+
+    impl SectorDevice for Medium {
+        fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
+            self.reads += 1;
+            *buf = self.sectors.get(&sector).copied().unwrap_or([0; 512]);
+            true
+        }
+        fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
+            if self.fail_writes {
+                // The device may have applied the write before failing to report it.
+                self.sectors.insert(sector, [0xEE; 512]);
+                return false;
+            }
+            self.sectors.insert(sector, *data);
+            true
+        }
+    }
+
+    #[test]
+    fn failed_write_evicts_the_resident_sector() {
+        let mut cache = PageCache::new();
+        let mut medium = Medium::default();
+        assert!(cache.write_sector(&mut medium, 7, &[1; 512]));
+        assert!(cache.write_sector(&mut medium, 8, &[2; 512]));
+        assert_eq!(cache.total_bytes, 1024);
+
+        medium.fail_writes = true;
+        assert!(!cache.write_sector(&mut medium, 7, &[3; 512]));
+        assert!(!cache.entries.contains_key(&7));
+        assert!(!cache.lru_order.contains(&7));
+        assert_eq!(cache.total_bytes, 512);
+
+        let mut buf = [0u8; 512];
+        let reads = medium.reads;
+        assert!(cache.read_sector(&mut medium, 7, &mut buf));
+        assert_eq!(buf, [0xEE; 512], "read after a failed write comes from the medium");
+        assert_eq!(medium.reads, reads + 1);
+        assert!(cache.read_sector(&mut medium, 8, &mut buf));
+        assert_eq!(buf, [2; 512], "other sectors stay resident");
+        assert_eq!(medium.reads, reads + 1);
+    }
+
+    #[test]
+    fn failed_write_of_absent_sector_leaves_cache_unchanged() {
+        let mut cache = PageCache::new();
+        let mut medium = Medium { fail_writes: true, ..Medium::default() };
+        assert!(!cache.write_sector(&mut medium, 3, &[9; 512]));
+        assert!(cache.entries.is_empty());
+        assert!(cache.lru_order.is_empty());
+        assert_eq!(cache.total_bytes, 0);
     }
 }

@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- F1/F5 unsafe gate (regression from Phase 09B): `cellos-sign` refused every batch, which blocked the x86 assembler and the fault ISO, because the recovery-demo crate roots lacked `#![forbid(unsafe_code)]` and `worker/fault.rs` (its deliberate fault-inject page fault) had no allowlist entry. The authority and client roots now forbid unsafe; `scripts/unsafe-allowlist.toml` gains a `test-harness` `[[file]]` entry for `worker/fault.rs` and a `[[crate]]` entry for `recovery-demo`, approved by dmin on 2026-11-01.
 - Phase 02 writable-global debt: 22 of the 23 debt entries in `scripts/mutable-globals.toml` are resolved; #23 (owner admission) stays debt, blocked by tier1-admission Phase 03, as the user chose. Re-verification found 5 entries were wrong (SCHEDULER, `domain_supervisor_registry::RANGES`, `va_alloc` BUMP/FREE, and the IOMMU cleanup lock order); they are reclassified with evidence. The rest are fixed:
   - **Internal fixes, no behaviour change:**
     - The x86 SMAP flag is an `AtomicU8`.
@@ -55,6 +56,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RV64 `atomic-publication` lane passes again (AP-00…AP-15, `ALL: PASS`); it panicked after AP-13 at baseline. Two causes. (1) The SMP-CONTEXT-HANDOFF fixture gave its tasks a 1-page kernel stack, but the worker's exit path (`exit_task` + `yield_cpu`, with `cell_session` maintenance at ~3.3 KiB) used 6600 B. The stack overflowed into the guard, and each S-mode trap-frame save faulted again 304 B lower (2774 nested frames) until it reached a mapped page, so the panic misleadingly reported an unmapped stack under a domain satp. The fixture now uses 8 pages. (2) Unmasked by (1): the riscv64 allocation-failure diagnostic `capture_fail_site` (`memory/heap.rs`) scanned 2 KiB above `sp` and read past a stack top into an unmapped page; the scan is now clamped to `sp`'s own page.
 - RV64 kernel stack overflow is caught before any frame is written. The S-mode trap entry first checks whether `sepc` lies in its own frame-save sequence (`__trap_entry` … `__trap_save_end`), which means the previous trap could not save its frame because `sp` is in a guard page. In that case it switches to the hart's dedicated 16 KiB overflow stack (`.bss`, inside the writable range every domain root maps), installs the kernel root and calls `vi_kernel_stack_overflow`, which panics with `kernel stack overflow: trap entry could not save a frame (sp, guard stval, sepc, interrupted_satp)`. Previously each nested trap retried 304 B lower until it reached a mapped page, wrote a frame over whatever lay there, and reported a misleading scause/satp. The check runs only on S-mode traps, uses `sscratch` plus a per-hart `.bss` slot to stay register-transparent, and adds no memory access to the U-mode path. `__trap_entry_hart1` is now explicitly 4-byte aligned (the longer stub had left it at a 2-byte boundary, which `stvec` cannot hold). Verified: with the handoff fixture temporarily back at 1 page, the boot panics through the new path with `sp` 928 B below the stack bottom (one save attempt, no recursion); with 8 pages, `atomic-publication` passes 3/3 and `authority-provenance` 2/2, and a production RV64 2-hart boot reaches `Cellos >`.
 ### Added
+- Phase 09C device-backed replacement (ginux-lessons; Law-1; CP1 `.agents/261030-1945-ginux-lessons-hardening/phase-09c-cp1.md` v3, approved by the user 2026-11-01).
+  - **Verdict-gated restarts.** Init restarts any supervised service only after reading the dead root's `QueryRetirement` verdict (bounded at 200 ticks):
+    - `Contained`, or `Quarantined` for pins/leases only → restart;
+    - deferred DMA teardown → `device unavailable` for the boot;
+    - `Unproven`, no record, or still `Pending` → `node recovery required`, no restart.
+
+    `restart = "never"` services are not queried, and the crash budget is unchanged.
+  - **Per-device block routes (Law-1).**
+    - Syscall 416 `RegisterBlockDriver` now takes `(kind, id)`: a PCI BDF or an MMIO window base. It binds the route of the device the caller owns, for the whole boot, so a restarted driver regains only its own route. Errors: NotOwner `MAX-2`, Malformed `MAX-3`, Denied `MAX`.
+    - New syscall 432 `LookupBlockRoute` returns `api::block_route::ViBlockRouteV1` (40 bytes, v1). Only BlockIoCap or SpawnCap holders may call it.
+    - The `BLOCK_DRIVER` service is retired, and `RegisterService(BLOCK_DRIVER)` is refused.
+    - ostd: `sys_register_block_device` and `sys_lookup_block_route` replace `sys_register_block_driver`.
+  - **VFS.**
+    - Enumerates the routes. The primary disk (the one with a Cellos MBR, else the lowest key) keeps `/mnt/sd`, `/data`, `/srv` and `/bin`; every other FAT32 disk is mounted at `/mnt/disk/pci-BB-DD-F` or `/mnt/disk/mmio-<base>`.
+    - Each device has its own route. A dead driver fails only its own device: new writes are `NotIssued` and nothing is sent; a write in flight is `Indeterminate` and never replayed.
+    - A cached sector whose write did not complete is evicted.
+  - **Block drivers** answer only the registered VFS. Before its first block I/O, the VFS waits until it is registered.
+  - **Evidence (QEMU/TCG):**
+    - x86 `ahci-x86` 14/14 + E4(b) 1/1, `nvme-x86` 11/11 (including VT-d and `-smp 2`), `local-service-lifecycle-x86` 2/2;
+    - RV64 `hotswap-smoke` 13/13, `provider-recovery` 2/2, `init_gives_up_after_a_crash_storm` PASS on the `ai` image; the boot suite is 51/65 with no new failures against HEAD;
+    - kernel host 345, api 169, vfs 125, init 28;
+    - mutable-globals `--check` 0 problems.
+  - **Not claimed:** durability or power cut, physical hardware, KVM, AHCI under VT-d.
+  - **Known, not fixed:** an x86 SMP TLB-shootdown timeout panic when a Cell retires while the other CPU spawns. Init now waits for exited block drivers' verdicts before starting the VFS, which avoids it at boot.
 - Phase 09B software provider crash/restore (ginux-lessons; Law-1 additive; CP1 `.agents/261030-1945-ginux-lessons-hardening/phase-09b-cp1.md`, approved by the user 2026-11-01).
   - **K1.** New syscall 431 `QueryRetirement` with record `api::retirement::ViRetirementV1` (96 bytes, v1; other lengths, versions, reserved bits and states are refused). Once a retired incarnation's CPUs have quiesced, it reports one of:
     - `Contained`;

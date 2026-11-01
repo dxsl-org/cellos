@@ -112,6 +112,8 @@ pub(crate) type CellBlk = VirtIOBlk<CellHal, MmioTransport>;
 /// Runtime state for the active VirtIO block device.
 pub struct BlkDevice {
     blk: CellBlk,
+    /// Base of the MMIO slot this cell claimed; names the device's block route.
+    base: u64,
 }
 
 /// Classify a blocking virtio-drivers request result by issue certainty.
@@ -130,6 +132,11 @@ fn outcome(result: Result<(), VirtioError>) -> Result<(), BlockOutcome> {
 }
 
 impl BlkDevice {
+    /// Base of the claimed MMIO slot.
+    pub fn base(&self) -> u64 {
+        self.base
+    }
+
     /// Read one 512-byte sector.
     pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
         outcome(self.blk.read_blocks(sector as usize, buf))
@@ -232,7 +239,10 @@ pub fn find_and_init_blk() -> Option<BlkDevice> {
             Err(_) => continue,
         };
 
-        return Some(BlkDevice { blk });
+        return Some(BlkDevice {
+            blk,
+            base: base as u64,
+        });
     }
     None
 }

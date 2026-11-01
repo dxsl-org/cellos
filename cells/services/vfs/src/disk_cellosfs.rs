@@ -1,19 +1,22 @@
 //! Block device adapter for CellosFS Native — connects CellosFS to blk_router.
 //!
-//! Maps each 4 KiB CellosFS block to 8 x 512-byte sectors on the assigned MBR partition.
-//! Enforces partition bounds checking to prevent partition bleed.
+//! Maps each 4 KiB CellosFS block to 8 x 512-byte sectors on the assigned MBR
+//! partition of one device. Enforces partition bounds checking to prevent
+//! partition bleed; a flush flushes only that device.
 
-use crate::blk_router::{blk_flush, blk_read_sectors, blk_write_sectors};
+use crate::blk_router::{blk_flush, blk_read_sectors, blk_write_sectors, DeviceRef};
 use cellos_fs::{BlockDevice, FsError, BLOCK_SIZE};
 
 pub struct CellosPartitionDisk {
+    dev: DeviceRef,
     base_lba: u64,
     total_blocks: u64,
 }
 
 impl CellosPartitionDisk {
-    pub fn new(base_lba: u64, total_sectors: u64) -> Self {
+    pub fn new(dev: DeviceRef, base_lba: u64, total_sectors: u64) -> Self {
         Self {
+            dev,
             base_lba,
             total_blocks: total_sectors / 8,
         }
@@ -26,7 +29,7 @@ impl BlockDevice for CellosPartitionDisk {
             return Err(FsError::PartitionOverflow);
         }
         let abs_lba = self.base_lba + block * 8;
-        if blk_read_sectors(abs_lba, 8, buf) {
+        if blk_read_sectors(self.dev, abs_lba, 8, buf) {
             Ok(())
         } else {
             Err(FsError::IoError)
@@ -38,7 +41,7 @@ impl BlockDevice for CellosPartitionDisk {
             return Err(FsError::PartitionOverflow);
         }
         let abs_lba = self.base_lba + block * 8;
-        if blk_write_sectors(abs_lba, 8, buf).is_completed() {
+        if blk_write_sectors(self.dev, abs_lba, 8, buf).is_completed() {
             Ok(())
         } else {
             Err(FsError::IoError)
@@ -46,7 +49,7 @@ impl BlockDevice for CellosPartitionDisk {
     }
 
     fn flush(&mut self) -> Result<(), FsError> {
-        if blk_flush().is_completed() {
+        if blk_flush(self.dev).is_completed() {
             Ok(())
         } else {
             Err(FsError::IoError)

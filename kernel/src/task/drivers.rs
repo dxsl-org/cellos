@@ -63,7 +63,8 @@ pub fn init() {
                             // forever.  We re-enable SIE after all drivers are initialised.
                             // G2 loader redesign (phases 05/06): the kernel drives NO block hardware. The
                             // virtio-blk Driver Cell (/bin/block) owns the VirtIO block device (MMIO + DMA)
-                            // and registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel
+                            // and binds its per-device block route (416); VFS routes that device's sector I/O
+                            // to the route's provider. Kernel
                             // boot-time block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade
                             // gracefully (block::read_sector → Err on the null device). MMC (SDHCI) still
                             // initialises for real boards.

@@ -1701,7 +1701,8 @@ fn has_typed_errors(syscall: &Syscall) -> bool {
     matches!(syscall, Syscall::IpcSubmit { .. } | Syscall::IpcTake { .. }
         | Syscall::IpcWait { .. } | Syscall::IpcCancel { .. }
         | Syscall::IpcCurrent | Syscall::IpcReply { .. }
-        | Syscall::QueryRetirement { .. })
+        | Syscall::QueryRetirement { .. } | Syscall::LookupBlockRoute { .. }
+        | Syscall::RegisterBlockDriver { .. })
 }
 
 /// Encode the additive spawn-OOM result while preserving all other legacy errors.
@@ -2261,6 +2262,66 @@ fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallErro
     } else {
         Err(SyscallError::InvalidInput)
     }
+}
+
+/// 416: bind the route of the block device the caller owns.
+///
+/// Checks in order, each before any effect: decode (`Malformed` →
+/// `InvalidInput`), a live PcieDriverCap/UsbDriverCap caller (`PermissionDenied`),
+/// ownership of the named device (`NotOwner` → `FileNotFound`), then the route
+/// slot under `ROLE_PUBLICATION` (a refusal is `PermissionDenied`).
+///
+/// Ownership is read without SCHEDULER held: `request_mmio` takes the MMIO
+/// registry before SCHEDULER, so the opposite order here could deadlock. Both
+/// owner tables key the claim by the claiming task id (`RequestMmio` records
+/// `CellId(tid)`), and a claim is released only at that task's retirement, so
+/// it still holds when the caller is found live again under SCHEDULER, where
+/// its `(cell, generation)` is read and the slot is published so exit teardown
+/// cannot interleave. No service-registry entry is written.
+fn register_block_device_route(
+    caller_id: usize,
+    kind: usize,
+    id: usize,
+    reserved: (usize, usize),
+) -> Result<usize, SyscallError> {
+    use api::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    let key = u16::try_from(kind)
+        .ok()
+        .filter(|_| reserved == (0, 0))
+        .and_then(|kind| DeviceKey::new(kind, id as u64))
+        .ok_or(SyscallError::InvalidInput)?;
+
+    let live_driver = |scheduler: &Option<super::Scheduler>| {
+        scheduler
+            .as_ref()
+            .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+            .filter(|task| {
+                (task.pcie_driver_cap.is_some() || task.usb_driver_cap.is_some())
+                    && !matches!(&task.state, TaskState::Retiring | TaskState::Terminated)
+            })
+            .map(|task| (task.cell_id.0, task.cell_generation))
+    };
+    if live_driver(&crate::task::SCHEDULER.lock()).is_none() {
+        return Err(SyscallError::PermissionDenied);
+    }
+
+    let owned = match key.kind {
+        BLOCK_DEVICE_PCI => crate::resource_registry::owner_of_bdf(key.id as u32) == Some(caller_id),
+        BLOCK_DEVICE_MMIO => crate::resource_registry::lookup_mmio_owner(key.id as usize) == Some(caller_id),
+        _ => false,
+    };
+    if !owned {
+        return Err(SyscallError::FileNotFound);
+    }
+
+    let scheduler = crate::task::SCHEDULER.lock();
+    let Some((cell_id, generation)) = live_driver(&scheduler) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    let published =
+        crate::task::drivers::driver_cell::publish_block_route(key, (caller_id, cell_id, generation));
+    drop(scheduler);
+    published.map(|_| 0).ok_or(SyscallError::PermissionDenied)
 }
 
 fn caller_has_platform(caller_id: usize) -> bool {
@@ -3914,6 +3975,8 @@ pub enum Syscall {
     TelemetrySnapshot { out_ptr: usize, out_len: usize, flags: usize, reserved: usize },
     /// 431: QueryRetirement (Phase 09B K1)
     QueryRetirement { root_tid: usize, out_ptr: usize, out_len: usize },
+    /// 432: LookupBlockRoute — copy route slot `index` as a `ViBlockRouteV1`.
+    LookupBlockRoute { index: usize, out_ptr: usize, out_len: usize, reserved: usize },
     CellSessionV1 { request_ptr: usize, request_len: usize, result_ptr: usize, result_capacity: usize },
 
     // --- Legacy / Compatibility Layer ---
@@ -4026,8 +4089,9 @@ pub enum Syscall {
     },
     /// 415: KillCell — forcibly terminate a Cell. Requires SupervisorCap.
     KillCell { target_tid: usize, exit_code: u32 },
-    /// 416: RegisterBlockDriver — announce caller as the active block driver.
-    RegisterBlockDriver,
+    /// 416: RegisterBlockDriver — bind the route of the block device the
+    /// caller owns (`kind` 1 = PCI BDF, 2 = MMIO base; `reserved` must be 0).
+    RegisterBlockDriver { kind: usize, id: usize, reserved: (usize, usize) },
     /// 417: RegisterNicDriver — announce caller as the active NIC driver.
     RegisterNicDriver,
     /// 423: RegisterUsbHidProducer — announce caller as the USB HID event producer.
@@ -4345,7 +4409,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
         Syscall::SpawnReplacement { .. } => V::SpawnReplacement,
         Syscall::PauseService { .. } => V::PauseService,
-        Syscall::RegisterBlockDriver => V::RegisterBlockDriver,
+        Syscall::RegisterBlockDriver { .. } => V::RegisterBlockDriver,
         Syscall::RegisterNicDriver => V::RegisterNicDriver,
         Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
@@ -4390,6 +4454,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::ForceExit { .. }
         | Syscall::NotifyOnExit { .. }
         | Syscall::QueryRetirement { .. }
+        | Syscall::LookupBlockRoute { .. }
         | Syscall::RegisterService { .. }
         | Syscall::CapRevoke { .. }
         // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
@@ -6194,7 +6259,28 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(api::retirement::RETIREMENT_RECORD_LEN)
         }
 
+        Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved } => {
+            // Admitted past the allowlist; the VFS (BlockIoCap) and init
+            // (SpawnCap) are the route readers.
+            if !(caller_has_block_io(caller_id) || caller_has_spawn(caller_id)) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            let len = api::block_route::BLOCK_ROUTE_RECORD_LEN;
+            if out_len != len || reserved != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            let record = crate::task::drivers::driver_cell::block_route_record(index)
+                .ok_or(SyscallError::FileNotFound)?;
+            write_user_slice(caller_id, out_ptr, &record.encode(), len)?;
+            Ok(len)
+        }
+
         Syscall::RegisterService { service_id, tid } => {
+            // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
+            // so no caller may publish the singleton service.
+            if service_id == api::syscall::service::BLOCK_DRIVER {
+                return Err(SyscallError::PermissionDenied);
+            }
             // Development Silo readiness is self-published only after artifact,
             // VM, entropy, guest READY, and public-key validation. The dedicated
             // non-delegable cap is minted solely for the governed `/bin/silo`
@@ -8021,15 +8107,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
 
         // ── Driver Cell Registration (P00) ───────────────────────────────────
 
-        // 416: RegisterBlockDriver — announce caller as the active block device driver.
-        // Stores tid in BLOCK_DRIVER_CELL and registers under service::BLOCK_DRIVER
-        // so VFS can resolve it via LookupService.
-        Syscall::RegisterBlockDriver => register_driver_service(
-            caller_id,
-            api::syscall::service::BLOCK_DRIVER,
-            crate::task::drivers::driver_cell::register_block_driver,
-            crate::task::drivers::driver_cell::deregister_block_driver,
-        ),
+        // 416: RegisterBlockDriver — bind the caller's owned block device route.
+        Syscall::RegisterBlockDriver { kind, id, reserved } => {
+            register_block_device_route(caller_id, kind, id, reserved)
+        }
 
         // 417: RegisterNicDriver — announce caller as the active NIC driver.
         Syscall::RegisterNicDriver => register_driver_service(
@@ -9577,6 +9658,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_ptr: a1,
             out_len: a2,
         },
+        ViSyscall::LookupBlockRoute => Syscall::LookupBlockRoute {
+            index: a0,
+            out_ptr: a1,
+            out_len: a2,
+            reserved: a3,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -9670,7 +9757,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             target_tid: a0,
             exit_code: a1 as u32,
         },
-        ViSyscall::RegisterBlockDriver => Syscall::RegisterBlockDriver,
+        ViSyscall::RegisterBlockDriver => Syscall::RegisterBlockDriver {
+            kind: a0,
+            id: a1,
+            reserved: (a2, a3),
+        },
         ViSyscall::RegisterNicDriver => Syscall::RegisterNicDriver,
         ViSyscall::RegisterUsbHidProducer => Syscall::RegisterUsbHidProducer,
         ViSyscall::FindPcieDevice => Syscall::FindPcieDevice {
@@ -10725,6 +10816,222 @@ mod tests {
             assert_eq!(super::encode_ipc_result(denied), usize::MAX);
             assert_eq!(query(tid, 77, 0, len), Err(SyscallError::InvalidInput), "gate passed");
             retirement_verdict::tests::reset();
+        });
+    }
+
+    /// Inserts a live task into the scheduler installed by `with_scheduler_task_caps`.
+    fn insert_block_route_task(tid: usize, cell: u64, generation: u64, caps: CapSet) {
+        let mut task = alloc::boxed::Box::new(Task::new(
+            tid,
+            CellId(cell),
+            "block-route-test",
+            alloc::vec::Vec::new(),
+        ));
+        task.cell_generation = generation;
+        caps.apply_to(&mut task);
+        SCHEDULER.lock().as_mut().expect("scheduler").tasks.insert(tid, task);
+    }
+
+    fn block_routes_snapshot(
+    ) -> [Option<api::block_route::ViBlockRouteV1>; api::block_route::MAX_BLOCK_ROUTES] {
+        core::array::from_fn(crate::task::drivers::driver_cell::block_route_record)
+    }
+
+    /// Phase 09C D4: `RegisterBlockDriver` (416) decodes a0..a3 with typed
+    /// errors, and binds only the route of the device the caller owns.
+    #[test]
+    fn register_block_driver_binds_only_the_callers_owned_device_route() {
+        use crate::resource_registry::{claim_bdf_owner, release_bdfs_for, release_for};
+        use crate::task::drivers::driver_cell::{deregister_all_for, reset_block_routes};
+        use api::block_route::MAX_BLOCK_ROUTES;
+        const BDF: usize = 0x4160;
+        const FOREIGN_BDF: usize = 0x4161;
+        const BASE: usize = 0x4_1600_0000;
+        let syscall = map_syscall(ViSyscall::RegisterBlockDriver as usize, 1, 0xFA, 2, 3)
+            .expect("RegisterBlockDriver must decode");
+        match syscall {
+            Syscall::RegisterBlockDriver { kind, id, reserved } => {
+                assert_eq!((kind, id, reserved), (1, 0xFA, (2, 3)));
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert!(super::has_typed_errors(&syscall));
+
+        let register = |tid, kind, id, reserved| {
+            super::handle_syscall(tid, Syscall::RegisterBlockDriver { kind, id, reserved })
+        };
+        let driver = CapSet { pcie_driver: true, ..CapSet::EMPTY };
+        with_scheduler_task_caps(u64::MAX, driver, |tid| {
+            reset_block_routes();
+            SCHEDULER.lock().as_mut().expect("scheduler").tasks.get_mut(&tid)
+                .expect("caller").cell_generation = 3;
+            insert_block_route_task(2, 8, 5, driver);
+            insert_block_route_task(3, 9, 1, CapSet::EMPTY);
+            insert_block_route_task(4, 10, 1, CapSet { usb_driver: true, ..CapSet::EMPTY });
+            insert_block_route_task(6, 11, 1, driver);
+            SCHEDULER.lock().as_mut().expect("scheduler").tasks.get_mut(&6)
+                .expect("retiring task").state = crate::task::tcb::TaskState::Retiring;
+            insert_block_route_task(5, 10, 1, CapSet { usb_driver: true, ..CapSet::EMPTY });
+            assert!(claim_bdf_owner(BDF as u32, tid));
+            assert!(claim_bdf_owner(FOREIGN_BDF as u32, 2));
+            // `RequestMmio` records the claiming task id as the window owner.
+            assert!(crate::resource_registry::request_mmio_unchecked(CellId(4), BASE, 0x1000)
+                .is_ok());
+            let empty = block_routes_snapshot();
+
+            for (kind, id, reserved) in [
+                (0, BDF, (0, 0)),
+                (3, BDF, (0, 0)),
+                (0x1_0001, BDF, (0, 0)),
+                (1, 0x1_0000, (0, 0)),
+                (2, 0, (0, 0)),
+                (1, BDF, (1, 0)),
+                (1, BDF, (0, 1)),
+            ] {
+                let malformed = register(tid, kind, id, reserved);
+                assert_eq!(malformed, Err(SyscallError::InvalidInput), "{kind} {id:#x}");
+                assert_eq!(super::encode_ipc_result(malformed), usize::MAX - 3);
+            }
+            for (caller, kind, id) in [(tid, 1, FOREIGN_BDF), (tid, 1, 0x4162), (tid, 2, BASE)] {
+                let not_owner = register(caller, kind, id, (0, 0));
+                assert_eq!(not_owner, Err(SyscallError::FileNotFound), "{kind} {id:#x}");
+                assert_eq!(super::encode_ipc_result(not_owner), usize::MAX - 2);
+            }
+            assert!(claim_bdf_owner(0x4163, 3));
+            assert!(claim_bdf_owner(0x4164, 6));
+            for (caller, bdf) in [(3, 0x4163), (6, 0x4164)] {
+                let denied = register(caller, 1, bdf, (0, 0));
+                assert_eq!(denied, Err(SyscallError::PermissionDenied), "no cap / retiring");
+                assert_eq!(super::encode_ipc_result(denied), usize::MAX);
+            }
+            assert_eq!(block_routes_snapshot(), empty, "refusals leave the table untouched");
+
+            assert_eq!(register(tid, 1, BDF, (0, 0)), Ok(0), "first bind appends");
+            assert_eq!(register(tid, 1, BDF, (0, 0)), Ok(0), "repeat is idempotent");
+            assert_eq!(register(4, 2, BASE, (0, 0)), Ok(0), "second device, second slot");
+            let routes = block_routes_snapshot();
+            let first = routes[0].expect("slot 0");
+            assert_eq!((first.kind, first.id, first.provider()), (1, BDF as u64, Some((1, 7, 3))));
+            let second = routes[1].expect("slot 1");
+            assert_eq!((second.kind, second.id, second.provider()), (2, BASE as u64, Some((4, 10, 1))));
+            assert!(routes[2].is_none());
+
+            assert_eq!(register(5, 2, BASE, (0, 0)), Err(SyscallError::FileNotFound),
+                "another task of the same Cell does not own the window task 4 claimed");
+            assert_eq!(block_routes_snapshot(), routes);
+
+            deregister_all_for(tid);
+            let released = block_routes_snapshot()[0].expect("key kept");
+            assert_eq!((released.kind, released.id, released.provider()), (1, BDF as u64, None));
+            release_bdfs_for(tid);
+            assert!(claim_bdf_owner(BDF as u32, 2));
+            assert_eq!(register(2, 1, BDF, (0, 0)), Ok(0), "new owner regains the same slot");
+            assert_eq!(block_routes_snapshot()[0].and_then(|r| r.provider()), Some((2, 8, 5)));
+            assert_eq!(block_routes_snapshot()[1], routes[1], "sibling route untouched");
+
+            for bdf in 0x4170..0x4170 + (MAX_BLOCK_ROUTES - 2) {
+                assert!(claim_bdf_owner(bdf as u32, 2));
+                assert_eq!(register(2, 1, bdf, (0, 0)), Ok(0));
+            }
+            assert!(claim_bdf_owner(0x4180, 2));
+            let full = block_routes_snapshot();
+            let refused = register(2, 1, 0x4180, (0, 0));
+            assert_eq!(refused, Err(SyscallError::PermissionDenied), "table full");
+            assert_eq!(super::encode_ipc_result(refused), usize::MAX);
+            assert_eq!(block_routes_snapshot(), full);
+
+            assert_eq!(crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER), None);
+            assert_eq!(
+                super::handle_syscall(tid, Syscall::LookupService {
+                    service_id: api::syscall::service::BLOCK_DRIVER
+                }),
+                Ok(0)
+            );
+
+            for owner in [1, 2, 3, 4, 5, 6] {
+                release_bdfs_for(owner);
+                deregister_all_for(owner);
+            }
+            release_for(CellId(4));
+            reset_block_routes();
+        });
+    }
+
+    /// Phase 09C D4: `LookupBlockRoute` (432) is admitted past the allowlist,
+    /// gated on BlockIoCap or SpawnCap, and its refusals are typed.
+    #[test]
+    fn lookup_block_route_is_gated_on_block_io_or_spawn_with_typed_errors() {
+        use crate::task::drivers::driver_cell::{
+            block_route_record, deregister_all_for, publish_block_route, reset_block_routes,
+        };
+        use api::block_route::{DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN};
+        let syscall = map_syscall(ViSyscall::LookupBlockRoute as usize, 3, 0x5000, 40, 0)
+            .expect("LookupBlockRoute must decode");
+        match syscall {
+            Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved } => {
+                assert_eq!((index, out_ptr, out_len, reserved), (3, 0x5000, 40, 0));
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), None);
+        assert!(super::has_typed_errors(&syscall));
+        let len = BLOCK_ROUTE_RECORD_LEN;
+        let lookup = |tid, index, out_ptr, out_len, reserved| {
+            super::handle_syscall(tid, Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved })
+        };
+        let key = DeviceKey::new(BLOCK_DEVICE_PCI, 0xFA).expect("valid BDF");
+
+        let block_io = CapSet { block_io: true, ..CapSet::EMPTY };
+        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        for caps in [CapSet::EMPTY, block_io, spawn] {
+            with_scheduler_task_caps(0, caps, |tid| {
+                reset_block_routes();
+                assert_eq!(publish_block_route(key, (9, 90, 2)), Some(0));
+                assert_eq!(check_allowlist(ViSyscall::LookupBlockRoute as usize, tid), Ok(()));
+                if caps == CapSet::EMPTY {
+                    let denied = lookup(tid, 0, 0x5000, len, 0);
+                    assert_eq!(denied, Err(SyscallError::PermissionDenied));
+                    assert_eq!(super::encode_ipc_result(denied), usize::MAX);
+                    reset_block_routes();
+                    return;
+                }
+                for (out_len, reserved) in [(len - 1, 0), (len + 1, 0), (len, 1)] {
+                    let bad = lookup(tid, 0, 0x5000, out_len, reserved);
+                    assert_eq!(bad, Err(SyscallError::InvalidInput));
+                    assert_eq!(super::encode_ipc_result(bad), usize::MAX - 3);
+                }
+                for index in [1, 8, usize::MAX] {
+                    let missing = lookup(tid, index, 0x5000, len, 0);
+                    assert_eq!(missing, Err(SyscallError::FileNotFound), "index {index}");
+                    assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
+                }
+                assert_eq!(lookup(tid, 0, 0, len, 0), Err(SyscallError::InvalidInput), "gate passed");
+
+                let record = block_route_record(0).expect("bound slot");
+                let decoded = ViBlockRouteV1::decode(&record.encode()).expect("valid record bytes");
+                assert_eq!(decoded.device(), key);
+                assert_eq!(decoded.provider(), Some((9, 90, 2)));
+                deregister_all_for(9);
+                let released = block_route_record(0).expect("key kept");
+                let decoded = ViBlockRouteV1::decode(&released.encode()).expect("valid record bytes");
+                assert_eq!((decoded.device(), decoded.provider(), decoded.flags), (key, None, 0));
+                reset_block_routes();
+            });
+        }
+    }
+
+    /// Phase 09C R3: `BLOCK_DRIVER` is retired; not even a SpawnCap holder may
+    /// register it.
+    #[test]
+    fn register_service_refuses_the_retired_block_driver_id() {
+        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        with_scheduler_task_caps(0, spawn, |tid| {
+            let refused = super::handle_syscall(tid, Syscall::RegisterService {
+                service_id: api::syscall::service::BLOCK_DRIVER,
+                tid,
+            });
+            assert_eq!(refused, Err(SyscallError::PermissionDenied));
+            assert_eq!(crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER), None);
         });
     }
 

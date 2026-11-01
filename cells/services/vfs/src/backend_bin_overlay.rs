@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use crate::backend::{FsBackend, ListPage};
 use crate::backend_bootfs::BootFsProxy;
 use crate::backend_fat::FatBackend;
+use crate::blk_router::DeviceRef;
 
 /// Cursor bit marking a position in the cell-store half of a `/bin` listing.
 const STORE_PHASE: u32 = 1 << 30;
@@ -22,13 +23,14 @@ pub struct BinOverlay {
 }
 
 impl BinOverlay {
-    /// `store_base_lba` = `api::disk::PART_CELLSTORE_BASE_LBA`. The cell-store FAT
-    /// is mounted with prefix `/bin` so `/bin/<cell>` strips to `<cell>` at the FAT
-    /// root — matching the layout gen_disk writes into the cell-store.
-    pub fn new(store_base_lba: u64) -> Self {
+    /// `store_base_lba` = `api::disk::PART_CELLSTORE_BASE_LBA` on the primary disk
+    /// `dev`. The cell-store FAT is mounted with prefix `/bin` so `/bin/<cell>`
+    /// strips to `<cell>` at the FAT root — matching the layout gen_disk writes
+    /// into the cell-store.
+    pub fn new(dev: DeviceRef, store_base_lba: u64) -> Self {
         Self {
             boot: BootFsProxy::new(),
-            store: FatBackend::mount("/bin", store_base_lba),
+            store: FatBackend::mount("/bin", dev, store_base_lba),
         }
     }
 }

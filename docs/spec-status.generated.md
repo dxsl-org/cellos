@@ -219,17 +219,17 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/15-kernel-boundary.md:129` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
 - `docs/specs/15-kernel-boundary.md:141` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
 - `docs/specs/15-kernel-boundary.md:153` — Category C: Bootstrap Chicken-and-Egg
-- `docs/specs/15-kernel-boundary.md:177` — Category D: Hardware Exclusivity Arbiter
-- `docs/specs/15-kernel-boundary.md:191` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
-- `docs/specs/15-kernel-boundary.md:196` — 3.1 Device Drivers (all of them)
-- `docs/specs/15-kernel-boundary.md:240` — 3.2 Orchestration Policy
-- `docs/specs/15-kernel-boundary.md:260` — 3.3 Platform Enumeration
-- `docs/specs/15-kernel-boundary.md:268` — 3.4 Scheduling Policy
-- `docs/specs/15-kernel-boundary.md:279` — 3.5 Test/Debug Code
-- `docs/specs/15-kernel-boundary.md:287` — 4. The Boundary Decision Test (quick reference)
-- `docs/specs/15-kernel-boundary.md:311` — 5. Kernel Size Budget
-- `docs/specs/15-kernel-boundary.md:325` — 6. Comparison Table — Where Cellos Fits
-- `docs/specs/15-kernel-boundary.md:344` — 7. References
+- `docs/specs/15-kernel-boundary.md:178` — Category D: Hardware Exclusivity Arbiter
+- `docs/specs/15-kernel-boundary.md:192` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
+- `docs/specs/15-kernel-boundary.md:197` — 3.1 Device Drivers (all of them)
+- `docs/specs/15-kernel-boundary.md:241` — 3.2 Orchestration Policy
+- `docs/specs/15-kernel-boundary.md:261` — 3.3 Platform Enumeration
+- `docs/specs/15-kernel-boundary.md:269` — 3.4 Scheduling Policy
+- `docs/specs/15-kernel-boundary.md:280` — 3.5 Test/Debug Code
+- `docs/specs/15-kernel-boundary.md:288` — 4. The Boundary Decision Test (quick reference)
+- `docs/specs/15-kernel-boundary.md:312` — 5. Kernel Size Budget
+- `docs/specs/15-kernel-boundary.md:326` — 6. Comparison Table — Where Cellos Fits
+- `docs/specs/15-kernel-boundary.md:345` — 7. References
 - `docs/specs/16-rustc-tcb.md:12` — 1. What "TCB" Means for Cellos
 - `docs/specs/16-rustc-tcb.md:36` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
 - `docs/specs/16-rustc-tcb.md:38` — 2.1 `#![forbid(unsafe_code)]` enforcement

@@ -2,10 +2,12 @@
 //!
 //! Probes VirtIO MMIO slots for a Block device (type 2), claims exclusive MMIO
 //! via `sys_request_mmio`, initialises the virtqueue via `virtio-drivers`,
-//! registers as the system block driver via `sys_register_block_driver`, then
-//! serves the `DrvRequest` sector-I/O protocol (identical wire format to the
-//! NVMe Driver Cell — VFS speaks ONE block protocol). Replaces the kernel's
-//! `virtio_blk.rs` driver per the Kernel Boundary Law (G2 loader redesign).
+//! publishes the block route of the claimed slot via
+//! `sys_register_block_device(BlockDevice::Mmio { base })`, then serves the
+//! `DrvRequest` sector-I/O protocol (identical wire format to the NVMe Driver
+//! Cell — VFS speaks ONE block protocol) to the registered VFS only. Replaces
+//! the kernel's `virtio_blk.rs` driver per the Kernel Boundary Law (G2 loader
+//! redesign).
 //!
 //! # Coexistence during migration (phase 02)
 //! The single QEMU virtio-blk device is still owned by the kernel (boot + VFS)
@@ -26,12 +28,30 @@ extern crate alloc;
 mod device;
 mod dispatch;
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use device::BlkDevice;
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_register_block_driver, sys_send};
+use ostd::syscall::{sys_lookup_service, sys_register_block_device, sys_send, BlockDevice};
 
 static STATE: Mutex<Option<BlkDevice>> = Mutex::new(None);
+
+/// Tid of the registered VFS once a request from it was accepted. Tids are never
+/// reissued, so a cached match stays valid for the life of that VFS.
+static VFS_TID: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether `sender_tid` is the registered VFS, the only accepted block client.
+fn sender_is_vfs(sender_tid: usize) -> bool {
+    let cached = VFS_TID.load(Ordering::Relaxed);
+    if cached != 0 && cached == sender_tid {
+        return true;
+    }
+    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+        VFS_TID.store(sender_tid, Ordering::Relaxed);
+        return true;
+    }
+    false
+}
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
@@ -47,10 +67,13 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
             // Publish state before registration because VFS may route a request
             // immediately after successful publication.
+            let base = dev.base();
             *STATE.lock() = Some(dev);
-            if sys_register_block_driver().is_err() {
+            if let Err(error) = sys_register_block_device(BlockDevice::Mmio { base }) {
                 *STATE.lock() = None;
-                ostd::io::println("[virtio-blk] block driver registration failed");
+                ostd::io::println(&alloc::format!(
+                    "[virtio-blk] block driver registration failed: {error:?} (base={base:#x})"
+                ));
                 ostd::syscall::sys_exit(1);
             }
             ostd::io::println("[virtio-blk] ready");
@@ -58,9 +81,18 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
         // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so
         // requests may arrive as RawMessage; accept Message too — layout is identical.
+        // Only the registered VFS may issue block requests; any other sender gets
+        // `NotIssued` without touching the device.
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
-            let len = if let Some(dev) = STATE.lock().as_mut() {
+            let len = if !sender_is_vfs(sender_tid) {
+                let _ = ostd::io::print_fmt(format_args!(
+                    "[virtio-blk] refused block request from tid={}: sender is not the registered VFS\n",
+                    sender_tid
+                ));
+                reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
+                1
+            } else if let Some(dev) = STATE.lock().as_mut() {
                 dispatch::handle(dev, data.as_ref(), &mut reply)
             } else {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte(); // not initialised

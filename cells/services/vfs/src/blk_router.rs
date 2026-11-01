@@ -1,203 +1,191 @@
-//! Shared absolute-LBA block router for all disk-backed VFS backends.
+//! Absolute-LBA block router for all disk-backed VFS backends, per device.
 //!
-//! Since the G2 loader redesign the kernel drives no block hardware on QEMU:
-//! `sys_blk_read`/`sys_blk_write` reach only the kernel's null device. Sector
-//! I/O must go to the registered block Driver Cell (`service::BLOCK_DRIVER`,
-//! the virtio-blk / NVMe cell) via the DrvRequest IPC protocol. This module is
-//! the single place that speaks that protocol so every backend (FAT via
-//! `block_stream`, littlefs via `lfs_disk`) routes identically — before this was
-//! extracted, littlefs still called the raw syscalls and silently hit the dead
-//! null device, so every `/data` write failed.
+//! Every storage device a block Driver Cell registered (syscall 416) has a
+//! kernel route slot; the VFS reads the slots once at start (syscall 432) into
+//! its device table, and each backend addresses its device by [`DeviceRef`].
+//! Requests go to the device's provider over the DrvRequest IPC wire. This is
+//! the single place that speaks that wire, so FAT (`block_stream`) and CellosFS
+//! (`disk_cellosfs`) route identically.
 //!
-//! The kernel path remains the fallback for real boards where an MMC/SDHCI
-//! block device is kernel-resident and no Driver Cell registers.
+//! The kernel block path (`sys_blk_*`) serves only [`DeviceRef::Kernel`], the
+//! disk of boards where no Driver Cell registers a route (kernel-resident MMC).
 
-use core::sync::atomic::{AtomicUsize, Ordering};
-use ostd::syscall::{
-    sys_blk_read, sys_blk_write, sys_lookup_service, sys_recv, sys_send, SyscallResult,
-};
-use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
+mod discovery;
+mod requests;
+mod router;
+#[cfg(test)]
+mod tests;
 
-/// Sentinel: block Driver Cell not yet probed.
-const NOT_PROBED: usize = 0;
-/// Sentinel: probed and absent (no Driver Cell registered — use the kernel path).
-const ABSENT: usize = usize::MAX;
+pub use self::discovery::Discovery;
 
-/// Cached block Driver Cell TID. `NOT_PROBED` (0) until the first lookup.
-static DRIVER_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
+use self::router::Router;
+use api::block_route::ViBlockRouteV1;
+use ostd::prelude::Mutex;
+#[cfg(target_os = "none")]
+use ostd::syscall::{self as sys, SyscallResult};
+use types::block_wire::{BlockOutcome, SECTOR_SIZE};
 
-/// Returns the block Driver Cell TID if one has registered, else `None`.
-/// Caches a live driver TID across requests, re-checking service discovery
-/// when no driver was registered previously.
-fn driver_tid() -> Option<usize> {
-    let cached = DRIVER_TID.load(Ordering::Relaxed);
-    if cached != NOT_PROBED && cached != ABSENT {
-        return Some(cached);
-    }
+/// Which block path a request takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceRef {
+    /// Entry `n` of the device table built at discovery.
+    Device(u8),
+    /// The kernel block path; used only when discovery found no routes.
+    Kernel,
+}
 
-    match sys_lookup_service(api::syscall::service::BLOCK_DRIVER) {
-        Some(tid) if tid != 0 => {
-            DRIVER_TID.store(tid, Ordering::Relaxed);
-            Some(tid)
+/// Kernel and IPC operations the router needs.
+pub trait BlockSys {
+    /// Route slot `index` (syscall 432); `None` when there is no route there.
+    fn lookup_route(&mut self, index: u32) -> Option<ViBlockRouteV1>;
+    /// `true` when the kernel accepted the message for `tid`.
+    fn send(&mut self, tid: usize, msg: &[u8]) -> bool;
+    /// `true` when a message from `tid` arrived in `buf`.
+    fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool;
+    fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool;
+    fn kernel_write(&mut self, lba: u64, data: &[u8; SECTOR_SIZE]) -> bool;
+    fn kernel_flush(&mut self) -> bool;
+    fn log(&mut self, line: &str);
+}
+
+/// The VFS block-device table; every block request is serialized through it.
+static ROUTER: Mutex<Router> = Mutex::new(Router::new());
+
+/// Scheduler ticks the VFS waits for its own `service::VFS` registration, which
+/// the drivers require of every block request sender.
+#[cfg(target_os = "none")]
+const VFS_REGISTRATION_WAIT_TICKS: u64 = 500;
+
+/// The live kernel behind [`BlockSys`].
+struct Syscalls;
+
+#[cfg(target_os = "none")]
+impl BlockSys for Syscalls {
+    fn lookup_route(&mut self, index: u32) -> Option<ViBlockRouteV1> {
+        match sys::sys_lookup_block_route(index) {
+            Ok(record) => record,
+            Err(error) => {
+                self.log(&alloc::format!("[vfs] block route {index} lookup refused: {error:?}"));
+                None
+            }
         }
-        _ => None,
+    }
+    fn send(&mut self, tid: usize, msg: &[u8]) -> bool {
+        !matches!(sys::sys_send(tid, msg), SyscallResult::Err(_))
+    }
+    fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool {
+        // Masked to `tid`, so no other cell's message is taken for the reply.
+        matches!(sys::sys_recv(tid, buf), SyscallResult::Ok(from) if from == tid)
+    }
+    fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
+        sys::sys_blk_read(lba, buf)
+    }
+    fn kernel_write(&mut self, lba: u64, data: &[u8; SECTOR_SIZE]) -> bool {
+        sys::sys_blk_write(lba, data)
+    }
+    fn kernel_flush(&mut self) -> bool {
+        sys::sys_blk_flush()
+    }
+    fn log(&mut self, line: &str) {
+        ostd::io::println(line);
     }
 }
 
-/// Drop the cached driver TID after a failed exchange so the next request
-/// re-probes service discovery.
-///
-/// A block driver cell that dies and is restarted registers under a new tid;
-/// keeping the old one cached means every later request in that boot is sent to
-/// a cell that no longer answers. `compare_exchange` leaves a tid cached by
-/// another caller alone.
-fn forget_driver(tid: usize) {
-    let _ = DRIVER_TID.compare_exchange(tid, NOT_PROBED, Ordering::Relaxed, Ordering::Relaxed);
-}
-
-/// Receive the reply to a request sent to `tid`; `false` when there is none.
-///
-/// A receive masked to the driver completes with `Ok(tid)` both for a reply
-/// and when the driver dies (the kernel then writes the exit reason into the
-/// first 8 bytes; a clean exit, reason 0, would read as `Completed`). Death
-/// clears the driver's service registration before any receiver runs, so a
-/// message counts as a reply only while `tid` is still the registered block
-/// driver. Otherwise the cached tid is dropped so the next request finds the
-/// restarted driver (Phase 08C) instead of sending to the dead one.
-fn receive_reply(tid: usize, reply: &mut [u8]) -> bool {
-    let replied = matches!(sys_recv(tid, reply), SyscallResult::Ok(from) if from == tid)
-        && sys_lookup_service(api::syscall::service::BLOCK_DRIVER) == Some(tid);
-    if !replied {
-        forget_driver(tid);
+/// Hosted (test) builds have no kernel: no routes, and the kernel disk is absent.
+#[cfg(not(target_os = "none"))]
+impl BlockSys for Syscalls {
+    fn lookup_route(&mut self, _index: u32) -> Option<ViBlockRouteV1> {
+        None
     }
-    replied
+    fn send(&mut self, _tid: usize, _msg: &[u8]) -> bool {
+        false
+    }
+    fn recv(&mut self, _tid: usize, _buf: &mut [u8]) -> bool {
+        false
+    }
+    fn kernel_read(&mut self, _lba: u64, _buf: &mut [u8; SECTOR_SIZE]) -> bool {
+        false
+    }
+    fn kernel_write(&mut self, _lba: u64, _data: &[u8; SECTOR_SIZE]) -> bool {
+        false
+    }
+    fn kernel_flush(&mut self) -> bool {
+        false
+    }
+    fn log(&mut self, _line: &str) {}
 }
 
-/// Read one 512-byte sector at absolute LBA `abs_lba`.
-///
-/// Routes to the block Driver Cell (DrvRequest IPC) when registered, falling
-/// back to the kernel block path (`sys_blk_read`) for MMC-backed real boards.
-pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
-    if let Some(tid) = driver_tid() {
-        // Read request: [op (2B)] [sector (8B)] — 10 bytes.
-        let mut req = [0u8; 10];
-        req[0..2].copy_from_slice(&block_wire::OP_READ.to_le_bytes());
-        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
-        if let SyscallResult::Err(_) = sys_send(tid, &req) {
-            forget_driver(tid);
-            return false;
+/// Wait (bounded) until this VFS is the registered `service::VFS`, then build
+/// the device table from the kernel route slots and choose the primary disk.
+pub fn discover() -> Discovery {
+    wait_for_vfs_registration();
+    discovery::discover(&mut ROUTER.lock(), &mut Syscalls)
+}
+
+/// Drivers refuse block requests from anyone but the registered VFS, and init
+/// registers a freshly spawned VFS only after the spawn returns.
+#[cfg(target_os = "none")]
+fn wait_for_vfs_registration() {
+    let start = sys::sys_get_scheduler_ticks();
+    while sys::sys_lookup_service(api::syscall::service::VFS).is_none() {
+        let waited = match (start, sys::sys_get_scheduler_ticks()) {
+            (Some(start), Some(now)) => now.saturating_sub(start),
+            _ => u64::MAX,
+        };
+        if waited >= VFS_REGISTRATION_WAIT_TICKS {
+            ostd::io::println("[vfs] not registered as VFS after 500 ticks; block devices will refuse requests");
+            return;
         }
-        // Reply: [status (1B)] [data (512B)] = 513 bytes. mask=tid so a message
-        // from another cell (while we are blocked here) is never mistaken for it.
-        let mut reply = [0u8; 1 + SECTOR_SIZE];
-        // A read must never accept a death notification as data: see
-        // `receive_reply`. Before the recv result was checked at all, a cell
-        // that died here left `reply[0] == 0` plus 512 zero bytes, a successful
-        // read the filesystem then walked as a FAT chain of zeros.
-        if !receive_reply(tid, &mut reply) {
-            return false;
-        }
-        if !BlockOutcome::from_byte(reply[0]).is_completed() {
-            return false;
-        }
-        buf.copy_from_slice(&reply[1..1 + SECTOR_SIZE]);
-        true
-    } else {
-        sys_blk_read(abs_lba, buf)
+        ostd::task::yield_now();
     }
 }
 
-/// Write one 512-byte sector at absolute LBA `abs_lba`.
+#[cfg(not(target_os = "none"))]
+fn wait_for_vfs_registration() {}
+
+/// Read one 512-byte sector at absolute LBA `abs_lba` of `dev`.
+pub fn blk_read(dev: DeviceRef, abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
+    ROUTER.lock().read(&mut Syscalls, dev, abs_lba, buf)
+}
+
+/// Write one 512-byte sector at absolute LBA `abs_lba` of `dev`.
 ///
-/// `Indeterminate` means the driver may have issued the write: the caller must
-/// not replay it. A send the kernel refused never reached the driver
-/// (`NotIssued`); a send followed by a missing reply (driver died while the
-/// request was parked) may have been issued. The kernel fallback path reports
-/// only success or failure, so its failure is `Indeterminate`.
-pub fn blk_write(abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> BlockOutcome {
-    let outcome = if let Some(tid) = driver_tid() {
-        // Write request: [op (2B)] [sector (8B)] [data (512B)] = 522 bytes.
-        let mut req = [0u8; 10 + SECTOR_SIZE];
-        req[0..2].copy_from_slice(&block_wire::OP_WRITE.to_le_bytes());
-        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
-        req[10..10 + SECTOR_SIZE].copy_from_slice(data);
-        exchange_status(tid, &req)
-    } else if sys_blk_write(abs_lba, data) {
-        BlockOutcome::Completed
-    } else {
-        BlockOutcome::Indeterminate
-    };
-    if outcome == BlockOutcome::Indeterminate {
-        ostd::io::println(&alloc::format!(
-            "[blk-router] write lba={} indeterminate; not replayed",
-            abs_lba
-        ));
-    }
-    outcome
+/// `NotIssued`: nothing reached a device (send refused, or no live provider).
+/// `Indeterminate`: the write may have been issued; the caller must not replay it.
+pub fn blk_write(dev: DeviceRef, abs_lba: u64, data: &[u8; SECTOR_SIZE]) -> BlockOutcome {
+    ROUTER.lock().write(&mut Syscalls, dev, abs_lba, data)
 }
 
-/// Flush all dirty data for the block device. Outcome rules as [`blk_write`].
-pub fn blk_flush() -> BlockOutcome {
-    let outcome = if let Some(tid) = driver_tid() {
-        exchange_status(tid, &block_wire::OP_FLUSH.to_le_bytes())
-    } else if ostd::syscall::sys_blk_flush() {
-        BlockOutcome::Completed
-    } else {
-        BlockOutcome::Indeterminate
-    };
-    if !outcome.is_completed() {
-        ostd::io::println(&alloc::format!("[blk-router] flush {:?}", outcome));
-    }
-    outcome
+/// Flush `dev` only. Outcome rules as [`blk_write`].
+pub fn blk_flush(dev: DeviceRef) -> BlockOutcome {
+    ROUTER.lock().flush(&mut Syscalls, dev)
 }
 
-/// Send a write/flush request and decode its one-byte status reply.
-fn exchange_status(tid: usize, req: &[u8]) -> BlockOutcome {
-    if let SyscallResult::Err(_) = sys_send(tid, req) {
-        forget_driver(tid);
-        return BlockOutcome::NotIssued;
-    }
-    let mut reply = [0u8; 1];
-    // A missing reply after the send means the driver may have issued the
-    // command before it died; a write read as success would make the
-    // write-through page cache believe a sector reached the device.
-    if receive_reply(tid, &mut reply) {
-        BlockOutcome::from_byte(reply[0])
-    } else {
-        ostd::io::println("[blk-router] driver died before replying; outcome indeterminate");
-        BlockOutcome::Indeterminate
-    }
-}
-
-/// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` into `buf`.
-pub fn blk_read_sectors(abs_lba: u64, count: u32, buf: &mut [u8]) -> bool {
+/// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` into `buf`.
+pub fn blk_read_sectors(dev: DeviceRef, abs_lba: u64, count: u32, buf: &mut [u8]) -> bool {
     if buf.len() < (count as usize) * SECTOR_SIZE {
         return false;
     }
-    for i in 0..count {
-        let mut tmp = [0u8; SECTOR_SIZE];
-        if !blk_read(abs_lba + i as u64, &mut tmp) {
+    for (i, chunk) in buf.chunks_exact_mut(SECTOR_SIZE).take(count as usize).enumerate() {
+        let sector: &mut [u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
+        if !blk_read(dev, abs_lba + i as u64, sector) {
             return false;
         }
-        let off = (i as usize) * SECTOR_SIZE;
-        buf[off..off + SECTOR_SIZE].copy_from_slice(&tmp);
     }
     true
 }
 
-/// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` from `data`.
+/// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` from `data`.
 ///
 /// Stops at the first sector that does not complete and returns its outcome;
 /// earlier sectors stay written.
-pub fn blk_write_sectors(abs_lba: u64, count: u32, data: &[u8]) -> BlockOutcome {
+pub fn blk_write_sectors(dev: DeviceRef, abs_lba: u64, count: u32, data: &[u8]) -> BlockOutcome {
     if data.len() < (count as usize) * SECTOR_SIZE {
         return BlockOutcome::NotIssued;
     }
-    for i in 0..count {
-        let off = (i as usize) * SECTOR_SIZE;
-        let mut tmp = [0u8; SECTOR_SIZE];
-        tmp.copy_from_slice(&data[off..off + SECTOR_SIZE]);
-        let outcome = blk_write(abs_lba + i as u64, &tmp);
+    for (i, chunk) in data.chunks_exact(SECTOR_SIZE).take(count as usize).enumerate() {
+        let sector: &[u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
+        let outcome = blk_write(dev, abs_lba + i as u64, sector);
         if !outcome.is_completed() {
             return outcome;
         }

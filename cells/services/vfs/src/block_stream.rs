@@ -1,19 +1,15 @@
-//! fatfs block stream backed by the kernel block-I/O syscalls (ids 500/501).
+//! fatfs block streams over one block device of the VFS device table.
 //!
 //! Two types are exported:
 //!  - `BlockStream`: raw sector I/O, no caching. Used internally by `PageCache`.
 //!  - `CachedBlockStream`: wraps `BlockStream + PageCache`; implement all fatfs
 //!    traits. VFS mounts FAT32 through this type.
 //!
-//! Data-plane routing: on first access, the stream probes the service registry for
-//! a registered NVMe Driver Cell (`service::BLOCK_DRIVER`). If one is present,
-//! sector I/O goes through IPC (DrvRequest protocol). Otherwise the kernel VirtIO
-//! path (`sys_blk_read`/`sys_blk_write`) is used as the fallback.  On QEMU/VirtIO
-//! builds the NVMe Driver Cell exits early (no PCIe NVMe device), so `nvme_tid()`
-//! always returns `None` there and the VirtIO path is unchanged.
+//! Every sector goes through `blk_router` to the stream's own [`DeviceRef`];
+//! a flush flushes only that device.
 
-use crate::blk_router::{blk_flush, blk_read, blk_write};
-use crate::page_cache::PageCache;
+use crate::blk_router::{blk_flush, blk_read, blk_write, DeviceRef};
+use crate::page_cache::{PageCache, SectorDevice};
 use types::block_wire::BlockOutcome;
 
 const SECTOR_SIZE: u64 = 512;
@@ -22,6 +18,8 @@ const SECTOR_SIZE: u64 = 512;
 const RAW_IO_ATTEMPTS: usize = 3;
 
 pub struct BlockStream {
+    /// Device the volume lives on.
+    dev: DeviceRef,
     /// Byte position within the volume (partition-relative; LBA 0 = byte 0).
     pos: u64,
     /// Absolute base LBA of this volume's partition, added to the relative
@@ -32,8 +30,8 @@ pub struct BlockStream {
 }
 
 impl BlockStream {
-    pub fn new(base_lba: u64) -> Self {
-        Self { pos: 0, base_lba }
+    pub fn new(dev: DeviceRef, base_lba: u64) -> Self {
+        Self { dev, pos: 0, base_lba }
     }
 }
 
@@ -49,7 +47,7 @@ impl fatfs::Read for BlockStream {
         let sector = self.pos / SECTOR_SIZE;
         let off = (self.pos % SECTOR_SIZE) as usize;
         let mut sec = [0u8; 512];
-        if !blk_read(self.base_lba + sector, &mut sec) {
+        if !blk_read(self.dev, self.base_lba + sector, &mut sec) {
             return Err(());
         }
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
@@ -71,17 +69,17 @@ impl fatfs::Write for BlockStream {
                 // Full-sector write — no need to read first.
                 let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !blk_write(self.base_lba + sector, &full).is_completed() {
+                if !blk_write(self.dev, self.base_lba + sector, &full).is_completed() {
                     return Err(());
                 }
             } else {
                 // Partial sector — read-modify-write.
                 let mut sec = [0u8; 512];
-                if !blk_read(self.base_lba + sector, &mut sec) {
+                if !blk_read(self.dev, self.base_lba + sector, &mut sec) {
                     return Err(());
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !blk_write(self.base_lba + sector, &sec).is_completed() {
+                if !blk_write(self.dev, self.base_lba + sector, &sec).is_completed() {
                     return Err(());
                 }
             }
@@ -94,7 +92,7 @@ impl fatfs::Write for BlockStream {
 
     /// Issue a flush command so prior writes reach the backing disk image.
     fn flush(&mut self) -> Result<(), ()> {
-        if blk_flush().is_completed() {
+        if blk_flush(self.dev).is_completed() {
             Ok(())
         } else {
             Err(())
@@ -119,7 +117,7 @@ impl fatfs::Seek for BlockStream {
     }
 }
 
-impl BlockStream {
+impl SectorDevice for BlockStream {
     /// Read one 512-byte sector directly from disk, bypassing the page cache.
     /// Called by `PageCache` on a cache miss. `sector` is partition-relative.
     ///
@@ -128,9 +126,9 @@ impl BlockStream {
     /// which the requesting device model then had to fail — a guest I/O error
     /// out of nowhere. Sector reads are idempotent, so absorbing the blip here
     /// is both safe and the narrowest place to do it.
-    pub fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
+    fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
         for _ in 0..RAW_IO_ATTEMPTS {
-            if blk_read(self.base_lba + sector, buf) {
+            if blk_read(self.dev, self.base_lba + sector, buf) {
                 return true;
             }
         }
@@ -144,9 +142,9 @@ impl BlockStream {
     /// Retried only while the driver proves the write was never issued. An
     /// `Indeterminate` write is not replayed: the device may already hold it
     /// (or part of it), and a replay is a second, unrequested medium write.
-    pub fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
+    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
         for _ in 0..RAW_IO_ATTEMPTS {
-            match blk_write(self.base_lba + sector, data) {
+            match blk_write(self.dev, self.base_lba + sector, data) {
                 BlockOutcome::Completed => return true,
                 BlockOutcome::NotIssued => continue,
                 BlockOutcome::Indeterminate => return false,
@@ -169,9 +167,9 @@ pub struct CachedBlockStream {
 }
 
 impl CachedBlockStream {
-    pub fn new(base_lba: u64) -> Self {
+    pub fn new(dev: DeviceRef, base_lba: u64) -> Self {
         Self {
-            inner: BlockStream::new(base_lba),
+            inner: BlockStream::new(dev, base_lba),
             cache: PageCache::new(),
         }
     }
@@ -233,7 +231,7 @@ impl fatfs::Write for CachedBlockStream {
     }
 
     fn flush(&mut self) -> Result<(), ()> {
-        if blk_flush().is_completed() {
+        if blk_flush(self.inner.dev).is_completed() {
             Ok(())
         } else {
             Err(())

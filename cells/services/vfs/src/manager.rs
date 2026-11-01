@@ -6,6 +6,7 @@
 
 mod change_marks;
 mod conditional_save;
+mod disks;
 mod listing;
 mod owned_state;
 mod state_transfer;
@@ -21,11 +22,8 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::access::AccessTable;
-use crate::backend_bin_overlay::BinOverlay;
 use crate::backend::FsBackend;
 use crate::backend_bootfs::BootFsProxy;
-use crate::backend_cellosfs::CellosFsBackend;
-use crate::backend_fat::FatBackend;
 use crate::backend_ramfs::RamFsBackend;
 use crate::caller::Caller;
 use crate::dirs::DirTable;
@@ -64,40 +62,15 @@ pub struct VfsManager {
 }
 
 impl VfsManager {
+    /// Discover the block devices, then mount RamFS at `/` and `/tmp`, the
+    /// primary disk's partitions and each secondary disk (`manager::disks`).
     pub fn new() -> Self {
         let mut mounts = MountTable::new();
         let ram = mounts.add_backend(Box::new(RamFsBackend::new()));
-        // FAT32 P1 remains the interoperability/config override volume.
-        // Native P4/P5 require explicit offline provisioning; runtime never formats.
-        let fat = mounts.add_backend(Box::new(FatBackend::mount(
-            "/mnt/sd",
-            api::disk::PART_FAT32_BASE_LBA,
-        )));
-        // /data (P4): CellosFS Native (pure-Rust, power-loss resilient).
-        // Available on all architectures with zero external C toolchain dependencies.
-        let data_fs = mounts.add_backend(Box::new(CellosFsBackend::mount(
-            "/data",
-            api::disk::PART_LFS_BASE_LBA,
-            api::disk::PART_LFS_SECTORS,
-        )));
-        // /bin overlay: VIFS1 ramdisk (bootstrap cells) unioned with the on-disk
-        // FAT cell-store (non-bootstrap cells migrated off the raw P2 table).
-        let binov = mounts.add_backend(Box::new(BinOverlay::new(
-            api::disk::PART_CELLSTORE_BASE_LBA,
-        )));
-        // Longest prefix wins: the specific mounts shadow the read-only root.
+        // Longest prefix wins: the disk mounts shadow the read-only root.
         mounts.mount("/", ram);
         mounts.mount("/tmp", ram);
-        mounts.mount("/data", data_fs);
-        mounts.mount("/mnt/sd", fat);
-        mounts.mount("/bin", binov);
-        // /srv P5: existing native V1 volume, not an admitted durable journal.
-        let srv_fs = mounts.add_backend(Box::new(CellosFsBackend::mount(
-            "/srv",
-            api::disk::PART_SRV_BASE_LBA,
-            api::disk::PART_SRV_SECTORS,
-        )));
-        mounts.mount("/srv", srv_fs);
+        disks::mount_disks(&mut mounts, disks::disk_mounts(&crate::blk_router::discover()));
 
         Self {
             mounts,

@@ -37,7 +37,7 @@ impl ViBlockDevice for NullBlock {
 ///
 /// MMC (SDHCI) on real boards; otherwise a null device — on QEMU the virtio-blk
 /// Driver Cell owns the disk, not the kernel (G2 loader redesign). VFS reaches the
-/// block driver via `sys_lookup_service(service::BLOCK_DRIVER)`, not this path.
+/// block driver through its per-device route (`sys_lookup_block_route`), not this path.
 pub fn block_device() -> &'static dyn ViBlockDevice {
     if super::mmc::is_present() {
         &MMC_ZST

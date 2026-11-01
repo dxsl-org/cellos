@@ -2510,18 +2510,74 @@ pub fn sys_kill_cell(target_tid: usize, exit_code: u32) -> Result<(), SyscallErr
 
 // ── Driver Cell Registration (P00) ───────────────────────────────────────────
 
-/// Register the calling cell as the active block device driver.
+/// A storage device named in a block-route registration (syscall 416).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockDevice {
+    /// A PCI function; the kernel BDF encoding from `PcieDeviceInfo::bdf`.
+    Pci { bdf: u16 },
+    /// A platform MMIO window; the exact base the caller's Cell owns.
+    Mmio { base: u64 },
+}
+
+/// Why the kernel refused a block-route registration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockRegisterError {
+    /// The caller does not own the named device.
+    NotOwner,
+    /// Unknown kind or out-of-range id.
+    Malformed,
+    /// No driver capability, caller retiring, or no free route slot.
+    Denied,
+}
+
+/// Publish the calling cell as the block driver of `device`, which it must own.
 ///
-/// After this call, `sys_lookup_service(service::BLOCK_DRIVER)` returns this
-/// cell's TID. VFS cells send block-I/O IPC here instead of using the kernel
-/// NVMe driver.  Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
-pub fn sys_register_block_driver() -> Result<(), SyscallError> {
-    // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
-    let ret = unsafe { syscall(ViSyscall::RegisterBlockDriver, 0, 0, 0, 0) };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(SyscallError::PermissionDenied)
+/// The kernel keys the route by the device for the whole boot: registering the
+/// same device again (a restarted driver) takes its route back, and no caller can
+/// publish another device's route. VFS finds routes with [`sys_lookup_block_route`].
+pub fn sys_register_block_device(device: BlockDevice) -> Result<(), BlockRegisterError> {
+    use api::block_route::{BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    let (kind, id) = match device {
+        BlockDevice::Pci { bdf } => (BLOCK_DEVICE_PCI, bdf as usize),
+        BlockDevice::Mmio { base } => (BLOCK_DEVICE_MMIO, base as usize),
+    };
+    // SAFETY: register-only syscall; no memory is passed.
+    let ret = unsafe { syscall(ViSyscall::RegisterBlockDriver, kind as usize, id, 0, 0) };
+    match ret {
+        0 => Ok(()),
+        // Typed sentinels: `usize::MAX - 2` not the owner, `usize::MAX - 3` malformed.
+        -3 => Err(BlockRegisterError::NotOwner),
+        -4 => Err(BlockRegisterError::Malformed),
+        _ => Err(BlockRegisterError::Denied),
+    }
+}
+
+/// Read block route slot `index` (syscall 432). Requires BlockIoCap or SpawnCap.
+///
+/// `Ok(None)` means no route at `index`: slots fill in bind order and are never
+/// removed within a boot, so enumeration ends there.
+///
+/// # Errors
+/// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a valid
+///   V1 record.
+/// - `PermissionDenied`: the caller holds neither capability.
+pub fn sys_lookup_block_route(
+    index: u32,
+) -> Result<Option<api::block_route::ViBlockRouteV1>, SyscallError> {
+    use api::block_route::{ViBlockRouteV1, BLOCK_ROUTE_RECORD_LEN};
+    let mut out = [0u8; BLOCK_ROUTE_RECORD_LEN];
+    // SAFETY: `out` is a live, writable buffer of exactly `BLOCK_ROUTE_RECORD_LEN`
+    // bytes and the kernel writes at most that many.
+    let ret = unsafe {
+        syscall(ViSyscall::LookupBlockRoute, index as usize, out.as_mut_ptr() as usize, out.len(), 0)
+    };
+    match ret {
+        n if n >= 0 && n as usize == BLOCK_ROUTE_RECORD_LEN => {
+            ViBlockRouteV1::decode(&out).map(Some).map_err(|_| SyscallError::Unknown)
+        }
+        -3 => Ok(None),
+        -4 => Err(SyscallError::Unknown),
+        _ => Err(SyscallError::PermissionDenied),
     }
 }
 

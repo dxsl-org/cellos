@@ -11,10 +11,11 @@
 //!   3. Resets the HBA, starts the first port carrying an ATA disk, and completes
 //!      one polled IDENTIFY DEVICE. All DMA structures go through `DmaBuf` +
 //!      `authorize` so the phase-05 IOMMU path applies without rework.
-//!   4. Registers as the system block driver via `sys_register_block_driver` and
-//!      serves the DrvRequest IPC (512-byte sector read/write/flush) — the same
-//!      registration surface NVMe and virtio-blk use, so VFS and littlefs `/data`
-//!      need no device-specific path.
+//!   4. Publishes the block route of its controller's BDF via
+//!      `sys_register_block_device(BlockDevice::Pci { .. })` and serves the
+//!      DrvRequest IPC (512-byte sector read/write/flush) — the same wire NVMe
+//!      and virtio-blk use, so VFS and littlefs `/data` need no device-specific
+//!      path. Only the registered VFS may send block requests.
 //!
 //! Law 4 exception: this cell uses `unsafe` for DMA memory access; MMIO goes
 //! through the bounds-checked `ostd::mmio::MmioRegion`.
@@ -34,13 +35,15 @@ mod fault_inject;
 
 use crate::dma::AuthorizedDma;
 use controller::AhciController;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::app::{AppContext, AppEvent};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{
-    sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo,
+    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, sys_send, BlockDevice,
+    PcieDeviceInfo,
 };
 use types::ViError;
 
@@ -69,6 +72,23 @@ struct AhciState {
 
 static STATE: Mutex<Option<AhciState>> = Mutex::new(None);
 
+/// Tid of the registered VFS once a request from it was accepted. Tids are never
+/// reissued, so a cached match stays valid for the life of that VFS.
+static VFS_TID: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether `sender_tid` is the registered VFS, the only accepted block client.
+fn sender_is_vfs(sender_tid: usize) -> bool {
+    let cached = VFS_TID.load(Ordering::Relaxed);
+    if cached != 0 && cached == sender_tid {
+        return true;
+    }
+    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+        VFS_TID.store(sender_tid, Ordering::Relaxed);
+        return true;
+    }
+    false
+}
+
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
@@ -93,6 +113,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     ));
                     ostd::syscall::sys_exit(1);
                 }
+                // Exit 0: nothing to claim (no AHCI controller on this machine).
                 let _ = print_fmt(format_args!(
                     "[ahci] no AHCI controller present; driver cell idle\n"
                 ));
@@ -154,7 +175,9 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     // Publish state before registration: VFS may route requests
                     // as soon as the syscall succeeds.
                     *STATE.lock() = Some(AhciState { ctrl, io_buf });
-                    if let Err(error) = sys_register_block_driver() {
+                    if let Err(error) =
+                        sys_register_block_device(BlockDevice::Pci { bdf: info.bdf as u16 })
+                    {
                         *STATE.lock() = None;
                         let _ = print_fmt(format_args!(
                             "[ahci] block driver registration failed: {:?}\n",
@@ -169,8 +192,8 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 }
                 // A controller with no ATA disk attached (q35 always exposes
                 // ICH9 AHCI, even with no `-device ide-hd`) is an idle machine,
-                // not a driver failure: log and exit cleanly so every diskless
-                // x86 boot stays clean.
+                // not a driver failure. Exit 0: nothing to claim, so every
+                // diskless x86 boot stays clean.
                 Err(ViError::NotFound) => {
                     let _ = print_fmt(format_args!(
                         "[ahci] no SATA disk attached; driver cell idle\n"
@@ -191,9 +214,18 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // requests arrive as RawMessage; accept Message too — layout is identical.
         // Without the RawMessage arm the request falls into `_ => {}` and VFS
         // blocks forever in its reply recv (the x86 FAT-on-NVMe boot hang).
+        // Only the registered VFS may issue block requests; any other sender gets
+        // `NotIssued` without touching the device.
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
-            let len = if let Some(state) = STATE.lock().as_mut() {
+            let len = if !sender_is_vfs(sender_tid) {
+                let _ = print_fmt(format_args!(
+                    "[ahci] refused block request from tid={}: sender is not the registered VFS\n",
+                    sender_tid
+                ));
+                reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
+                1
+            } else if let Some(state) = STATE.lock().as_mut() {
                 dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
             } else {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
@@ -242,30 +274,41 @@ api::declare_manifest!(
 // `run_app!` emits a manifest but NOT a `VICELL_SYSCALLS` section (see
 // libs/ostd/src/lib.rs), so without this the kernel leaves the cell at its TCB's
 // `u64::MAX` allowlist (kernel/src/task/syscall.rs). List exactly what the cell
-// calls: the AppContext base set (its `run()` loop uses Recv), the PCIe device
-// path, block-driver registration, request replies, the timeout polling in
-// controller.rs (`GetTime`), the exit path, and the DMA calls behind
-// `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and are
-// always permitted; naming them documents the intent (the macro skips them).
-api::declare_syscalls![
-    // AppContext event-loop base set.
-    Send,
-    Recv,
-    TryRecv,
-    Reply,
-    Log,
-    Heartbeat,
-    LookupService,
-    GetTime,
-    RecvTimeout,
-    // PCIe device path.
-    FindPcieDevice,
-    RequestMmio,
-    // System block-driver role.
-    RegisterBlockDriver,
-    // Clean shutdown returns through the exit path.
-    Exit,
-    // DMA: `DmaBuf::alloc` -> GrantAlloc, `DmaBuf::authorize` -> GrantDma.
-    GrantAlloc,
-    GrantDma
-];
+// calls: the AppContext base set (its `run()` loop uses Recv; `LookupService`
+// also resolves the VFS sender), the PCIe device path, block-route
+// registration, request replies, the timeout polling in controller.rs
+// (`GetTime`), the exit path, and the DMA calls behind `DmaBuf::alloc`/
+// `authorize`. `Exit`/`Yield` carry no allowlist bit and are always permitted;
+// naming them documents the intent (the macro skips them). Fault-injection
+// builds add `ShmAlloc`/`ShmMap` for the `F09C-DIE-SHM` seam only.
+macro_rules! ahci_syscalls {
+    ($($extra:ident),*) => {
+        api::declare_syscalls![
+            // AppContext event-loop base set.
+            Send,
+            Recv,
+            TryRecv,
+            Reply,
+            Log,
+            Heartbeat,
+            LookupService,
+            GetTime,
+            RecvTimeout,
+            // PCIe device path.
+            FindPcieDevice,
+            RequestMmio,
+            // Block-route registration (syscall 416).
+            RegisterBlockDriver,
+            // Clean shutdown returns through the exit path.
+            Exit,
+            // DMA: `DmaBuf::alloc` -> GrantAlloc, `DmaBuf::authorize` -> GrantDma.
+            GrantAlloc,
+            GrantDma
+            $(, $extra)*
+        ];
+    };
+}
+#[cfg(not(feature = "fault-inject"))]
+ahci_syscalls!();
+#[cfg(feature = "fault-inject")]
+ahci_syscalls!(ShmAlloc, ShmMap);

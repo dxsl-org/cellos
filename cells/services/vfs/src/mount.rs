@@ -11,7 +11,8 @@ use alloc::vec::Vec;
 use crate::backend::FsBackend;
 
 struct MountEntry {
-    prefix: &'static str,
+    /// Owned: secondary-disk mount points (`/mnt/disk/<name>`) are named at runtime.
+    prefix: Box<str>,
     backend: usize,
 }
 
@@ -41,8 +42,8 @@ impl MountTable {
     /// Policy ("may this cell write this path") is `AccessTable`, consulted in
     /// `dispatch`; structure ("is this backend writable at all") is the backend
     /// itself — e.g. `BinOverlay` returns `false` from every mutating method.
-    pub fn mount(&mut self, prefix: &'static str, backend: usize) {
-        self.entries.push(MountEntry { prefix, backend });
+    pub fn mount(&mut self, prefix: &str, backend: usize) {
+        self.entries.push(MountEntry { prefix: prefix.into(), backend });
     }
 
     /// Boundary-aware prefix match: the next char after the prefix must be `/`
@@ -62,7 +63,7 @@ impl MountTable {
         self.entries
             .iter()
             .enumerate()
-            .filter(|(_, e)| Self::prefix_matches(e.prefix, path))
+            .filter(|(_, e)| Self::prefix_matches(&e.prefix, path))
             .max_by_key(|(_, e)| e.prefix.len())
             .map(|(i, _)| self.entries[i].backend)
     }
@@ -92,12 +93,12 @@ impl MountTable {
         } else {
             path.trim_end_matches('/')
         };
-        self.entries.iter().any(|entry| entry.prefix == trimmed)
+        self.entries.iter().any(|entry| &*entry.prefix == trimmed)
     }
 
     /// Enumerate direct child directory names under `path` that are mount points
     /// or directory ancestors of registered mounts.
-    pub fn direct_mount_children(&self, path: &str) -> Vec<&'static str> {
+    pub fn direct_mount_children(&self, path: &str) -> Vec<&str> {
         let parent = if path == "/" {
             ""
         } else {
@@ -105,7 +106,7 @@ impl MountTable {
         };
         let mut children = Vec::new();
         for entry in &self.entries {
-            if entry.prefix == "/" {
+            if &*entry.prefix == "/" {
                 continue;
             }
             if let Some(rest) = entry.prefix.strip_prefix(parent) {
@@ -127,5 +128,26 @@ impl MountTable {
     pub fn backend_mut(&mut self, path: &str) -> Option<&mut (dyn FsBackend + 'static)> {
         let i = self.resolve_idx(path)?;
         Some(self.backends[i].as_mut())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MountTable;
+
+    #[test]
+    fn runtime_named_secondary_mounts_resolve_and_list_under_mnt() {
+        let mut table = MountTable::new();
+        for (index, prefix) in ["/", "/mnt/sd", "/mnt/disk/pci-00-1f-2"].into_iter().enumerate() {
+            table.mount(&alloc::format!("{prefix}"), index);
+        }
+        assert_eq!(table.resolve_idx("/mnt/disk/pci-00-1f-2/f"), Some(2));
+        assert_eq!(table.resolve_idx("/mnt/disk/pci-00-1f-20"), Some(0));
+        assert_eq!(table.resolve_idx("/mnt/sd/f"), Some(1));
+        assert!(table.is_mount_ancestor("/mnt"));
+        assert!(table.is_mount_ancestor("/mnt/disk"));
+        assert!(table.is_mount_point("/mnt/disk/pci-00-1f-2/"));
+        assert_eq!(table.direct_mount_children("/mnt"), ["sd", "disk"]);
+        assert_eq!(table.direct_mount_children("/mnt/disk"), ["pci-00-1f-2"]);
     }
 }

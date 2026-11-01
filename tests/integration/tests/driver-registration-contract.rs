@@ -50,7 +50,7 @@ fn native_pcie_drivers_publish_ready_state_and_fail_closed() {
     assert_registration_contract(
         "nvme",
         include_str!("../../../cells/drivers/nvme/src/main.rs"),
-        "if let Err(error) = sys_register_block_driver()",
+        "if let Err(error) = sys_register_block_device(BlockDevice::Pci { bdf: bdf as u16 })",
         "block driver registration failed",
     );
 }
@@ -66,42 +66,32 @@ fn virtio_drivers_publish_ready_state_and_fail_closed() {
     assert_registration_contract(
         "virtio-blk",
         include_str!("../../../cells/drivers/virtio-blk/src/main.rs"),
-        "if sys_register_block_driver().is_err()",
+        "if let Err(error) = sys_register_block_device(BlockDevice::Mmio { base })",
         "block driver registration failed",
     );
 }
 
-#[test]
-fn kernel_rolls_back_driver_role_when_service_registry_rejects() {
-    for (role, start_marker, end_marker, register, deregister) in [
-        (
-            "block",
-            "        // 416: RegisterBlockDriver",
-            "        // 417: RegisterNicDriver",
-            "register_block_driver",
-            "deregister_block_driver",
-        ),
-        (
-            "NIC",
-            "        // 417: RegisterNicDriver",
-            "        // 418: FindPcieDevice",
-            "register_nic_driver",
-            "deregister_nic_driver",
-        ),
-    ] {
-        let start = SYSCALL_SOURCE
-            .find(start_marker)
-            .unwrap_or_else(|| panic!("missing {role} registration handler"));
-        let end = SYSCALL_SOURCE[start..]
-            .find(end_marker)
-            .map(|offset| start + offset)
-            .unwrap_or_else(|| panic!("missing end of {role} registration handler"));
-        let handler = &SYSCALL_SOURCE[start..end];
+/// The source text from `start` up to (not including) the next `end` after it.
+fn source_between<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+    let from = source.find(start).unwrap_or_else(|| panic!("missing `{start}`"));
+    let to = source[from..]
+        .find(end)
+        .map(|offset| from + offset)
+        .unwrap_or_else(|| panic!("missing `{end}` after `{start}`"));
+    &source[from..to]
+}
 
-        assert!(handler.contains("register_driver_service("));
-        assert!(handler.contains(register));
-        assert!(handler.contains(deregister));
-    }
+#[test]
+fn kernel_rolls_back_nic_role_when_service_registry_rejects() {
+    let handler = source_between(
+        SYSCALL_SOURCE,
+        "        // 417: RegisterNicDriver",
+        "        // 418: FindPcieDevice",
+    );
+    assert!(handler.contains("register_driver_service("));
+    assert!(handler.contains("register_nic_driver"));
+    assert!(handler.contains("deregister_nic_driver"));
+
     assert!(DRIVER_CELL_SOURCE.contains("static ROLE_PUBLICATION: Spinlock<()>"));
     assert!(
         DRIVER_CELL_SOURCE
@@ -111,14 +101,11 @@ fn kernel_rolls_back_driver_role_when_service_registry_rejects() {
         "registration and teardown must share the publication transaction"
     );
     assert!(DRIVER_CELL_SOURCE.contains("service_registry::clear_tid(tid);"));
-    let helper_start = SYSCALL_SOURCE
-        .find("fn register_driver_service")
-        .expect("missing atomic driver registration helper");
-    let helper_end = SYSCALL_SOURCE[helper_start..]
-        .find("fn caller_has_mmio_device")
-        .map(|offset| helper_start + offset)
-        .expect("missing end of driver registration helper");
-    let helper = &SYSCALL_SOURCE[helper_start..helper_end];
+    let helper = source_between(
+        SYSCALL_SOURCE,
+        "fn register_driver_service",
+        "fn caller_has_mmio_device",
+    );
     assert!(helper.contains("let scheduler = crate::task::SCHEDULER.lock();"));
     assert!(helper.contains("task.pcie_driver_cap.is_some()"));
     assert!(helper.contains("crate::task::tcb::TaskState::Retiring"));
@@ -133,4 +120,62 @@ fn kernel_rolls_back_driver_role_when_service_registry_rejects() {
     assert!(
         DRIVER_CELL_SOURCE.contains("rejected_service_publication_rolls_back_only_the_exact_owner")
     );
+}
+
+#[test]
+fn kernel_binds_block_route_only_for_the_owned_device() {
+    let handler = source_between(
+        SYSCALL_SOURCE,
+        "        // 416: RegisterBlockDriver",
+        "        // 417: RegisterNicDriver",
+    );
+    assert!(handler.contains("register_block_device_route("));
+    assert!(
+        !handler.contains("register_driver_service("),
+        "416 must not publish a singleton service"
+    );
+
+    let helper = source_between(
+        SYSCALL_SOURCE,
+        "fn register_block_device_route",
+        "fn caller_has_platform",
+    );
+    let position = |needle: &str| {
+        helper
+            .find(needle)
+            .unwrap_or_else(|| panic!("416 helper must contain `{needle}`"))
+    };
+    // Ownership is read outside SCHEDULER (the MMIO registry is taken before
+    // SCHEDULER elsewhere), then the caller is re-checked live under SCHEDULER and
+    // the route is published before that lock is dropped.
+    position("task.pcie_driver_cap.is_some()");
+    position("TaskState::Retiring");
+    let pci_owner = position("owner_of_bdf(");
+    let mmio_owner = position("lookup_mmio_owner(key.id as usize) == Some(caller_id)");
+    let not_owner = position("Err(SyscallError::FileNotFound)");
+    let locked = position("let scheduler = crate::task::SCHEDULER.lock();");
+    let publish = position("publish_block_route(");
+    let unlocked = position("drop(scheduler);");
+    assert!(
+        pci_owner < not_owner && mmio_owner < not_owner && not_owner < locked,
+        "416 must prove device ownership before taking the scheduler lock for publication"
+    );
+    assert!(
+        locked < publish && publish < unlocked,
+        "416 must publish only an owned device's route, before dropping the scheduler lock"
+    );
+
+    let publication = source_between(
+        DRIVER_CELL_SOURCE,
+        "pub(crate) fn publish_block_route",
+        "pub(crate) fn block_route_record",
+    );
+    assert!(
+        publication.contains("let _publication = ROLE_PUBLICATION.lock();"),
+        "route publication and exit teardown must share the publication transaction"
+    );
+    assert!(publication.contains("\"[driver_cell] block driver registered: tid={} device={} route={}\""));
+    let teardown = source_between(DRIVER_CELL_SOURCE, "pub fn deregister_all_for", "\n}\n");
+    assert!(teardown.contains("let _publication = ROLE_PUBLICATION.lock();"));
+    assert!(teardown.contains("clear_block_route_provider(tid);"));
 }

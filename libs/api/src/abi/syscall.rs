@@ -454,8 +454,19 @@ pub enum ViSyscall {
     KillCell = 415,
 
     // === Driver Cell Registration (P00) — DriverRegistration-gated (bit 50) ===
-    /// 416: Register caller as the active block device driver.
-    /// ABI: (no args) → 0 on success. Requires PcieDriverCap.
+    /// 416: Publish the caller as the block driver of one device it owns
+    /// ([`crate::block_route`]).
+    ///
+    /// ABI: a0 = kind ([`crate::block_route::BLOCK_DEVICE_PCI`] or
+    /// [`crate::block_route::BLOCK_DEVICE_MMIO`]), a1 = id (BDF `bus<<8|dev<<3|fn`
+    /// ≤ 0xFFFF, or the exact non-zero MMIO window base), a2 = a3 = 0 → 0 on
+    /// success. The caller must hold PcieDriverCap or UsbDriverCap and own the
+    /// device (its BDF lease, or the MMIO window owned by its Cell). The route slot
+    /// is keyed by the device and bound to it for the boot: a re-registration of the
+    /// same device takes the slot back, no caller can publish another device's slot.
+    /// Errors: `usize::MAX - 2` the caller does not own the device;
+    /// `usize::MAX - 3` unknown kind, id out of range or non-zero a2/a3;
+    /// `usize::MAX` no driver capability, caller retiring, or no free slot.
     RegisterBlockDriver = 416,
     /// 417: Register caller as the active NIC driver.
     /// ABI: (no args) → 0 on success. Requires PcieDriverCap.
@@ -628,6 +639,21 @@ pub enum ViSyscall {
     /// Allowlist: none (the `u64` allowlist is full); always permitted past the
     /// allowlist like [`Self::NotifyOnExit`], gated at dispatch.
     QueryRetirement = 431,
+    /// 432: Read one block route slot ([`crate::block_route`]).
+    ///
+    /// ABI: a0 = index (`0..MAX_BLOCK_ROUTES`), a1 = out_ptr, a2 = out_len (must
+    /// equal [`crate::block_route::BLOCK_ROUTE_RECORD_LEN`]), a3 = 0 →
+    /// `BLOCK_ROUTE_RECORD_LEN` on success, the slot's
+    /// [`crate::block_route::ViBlockRouteV1`] written to `out_ptr`. Slots fill in
+    /// bind order and are never removed within a boot, so an enumeration stops at
+    /// the first empty index. Errors: `usize::MAX - 2` (`FileNotFound`) no route at
+    /// that index; `usize::MAX - 3` (`InvalidInput`) wrong `out_len`, non-zero a3 or
+    /// an unwritable `out_ptr`; `usize::MAX` the caller holds neither BlockIoCap nor
+    /// SpawnCap.
+    ///
+    /// Allowlist: none (the `u64` allowlist is full); always permitted past the
+    /// allowlist like [`Self::QueryRetirement`], gated at dispatch.
+    LookupBlockRoute = 432,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1191,6 +1217,8 @@ impl ViSyscall {
             // QueryRetirement: dispatch admits only a death subscriber of that
             // root or a SupervisorCap holder; the allowlist has no free bit.
             | Self::QueryRetirement
+            // LookupBlockRoute: dispatch admits only BlockIoCap or SpawnCap holders.
+            | Self::LookupBlockRoute
             | Self::RegisterService
             | Self::CapRevoke
             | Self::SpawnSetDirs
@@ -1362,6 +1390,7 @@ impl From<usize> for ViSyscall {
             429 => ViSyscall::LookupServiceBound,
             430 => ViSyscall::TelemetrySnapshot,
             431 => ViSyscall::QueryRetirement,
+            432 => ViSyscall::LookupBlockRoute,
             _ => ViSyscall::Unknown,
         }
     }

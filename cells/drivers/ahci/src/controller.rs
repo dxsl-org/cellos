@@ -509,6 +509,14 @@ impl AhciController {
         // `MmioRegion` refuses an out-of-bounds offset before touching the
         // device, so an error here means nothing was issued.
         wr(&self.mmio, p + PX_CI, bit).map_err(not_issued)?;
+        #[cfg(feature = "fault-inject")]
+        if let crate::fault_inject::Inject::ExitAfterIssue { lba } = inject {
+            let _ = print_fmt(format_args!(
+                "[ahci] fault-inject: driver exiting after PxCI at lba={}\n",
+                lba
+            ));
+            ostd::syscall::sys_exit(70);
+        }
 
         let indeterminate = |_| BlockOutcome::Indeterminate;
         let mut spins = 0u64;

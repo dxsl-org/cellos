@@ -79,7 +79,4 @@ impl DmaBuf {
     }
 }
 
-pub use crate::syscall::{
-    sys_register_block_driver as register_block_driver,
-    sys_register_nic_driver as register_nic_driver,
-};
+pub use crate::syscall::sys_register_nic_driver as register_nic_driver;

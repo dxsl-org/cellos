@@ -11,7 +11,7 @@ const CELL: Caller = Caller {
 #[test]
 fn reads_are_allowed_across_the_shipped_prefixes() {
     let table = AccessTable::new();
-    for path in ["/bin/shell", "/data/x", "/tmp/x", "/mnt/sd/x", "/srv/x"] {
+    for path in ["/bin/shell", "/data/x", "/tmp/x", "/mnt/sd/x", "/mnt/disk/pci-00-1f-2/x", "/srv/x"] {
         assert!(table.can_read(CELL, path), "{path} should be readable");
     }
 }
@@ -37,6 +37,15 @@ fn root_is_read_only() {
     let table = AccessTable::new();
     assert!(table.can_read(CELL, "/motd"));
     assert!(!table.can_write(CELL, "/motd"));
+}
+
+#[test]
+fn secondary_disks_follow_the_mnt_sd_policy() {
+    let table = AccessTable::new();
+    for path in ["/mnt/sd/f", "/mnt/disk/pci-00-1f-2/f", "/mnt/disk/mmio-10001000/d/f"] {
+        assert!(table.can_read(CELL, path), "{path} should be readable");
+        assert!(table.can_write(CELL, path), "{path} should be writable");
+    }
 }
 
 #[test]

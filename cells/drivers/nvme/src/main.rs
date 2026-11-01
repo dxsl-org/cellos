@@ -4,8 +4,9 @@
 //!   1. Calls `sys_find_pcie_device(NVMe class/sub/progif)` to locate BAR0.
 //!   2. Claims exclusive MMIO via `sys_request_mmio`.
 //!   3. Initialises the NVMe controller (init sequence identical to blk_nvme.rs).
-//!   4. Calls `sys_register_block_driver()` to announce itself to the kernel.
-//!   5. Serves `DrvRequest` IPC from VFS (sector read/write).
+//!   4. Publishes the block route of its BDF via
+//!      `sys_register_block_device(BlockDevice::Pci { .. })`.
+//!   5. Serves `DrvRequest` IPC (sector read/write) from the registered VFS only.
 //!
 //! Law 4 exception: this cell uses `unsafe` for MMIO register access.  Every
 //! `unsafe` block carries a `// SAFETY:` comment.
@@ -27,13 +28,17 @@ mod dma;
 mod queue;
 
 use controller::NvmeController;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use dma::AuthorizedDma;
 use ostd::app::{AppContext, AppEvent};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo};
+use ostd::syscall::{
+    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, sys_send, BlockDevice,
+    PcieDeviceInfo,
+};
 
 /// NVMe PCIe class triple.
 const NVME_CLASS: u8 = 0x01;
@@ -49,6 +54,23 @@ struct NvmeState {
 }
 
 static STATE: Mutex<Option<NvmeState>> = Mutex::new(None);
+
+/// Tid of the registered VFS once a request from it was accepted. Tids are never
+/// reissued, so a cached match stays valid for the life of that VFS.
+static VFS_TID: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether `sender_tid` is the registered VFS, the only accepted block client.
+fn sender_is_vfs(sender_tid: usize) -> bool {
+    let cached = VFS_TID.load(Ordering::Relaxed);
+    if cached != 0 && cached == sender_tid {
+        return true;
+    }
+    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+        VFS_TID.store(sender_tid, Ordering::Relaxed);
+        return true;
+    }
+    false
+}
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
@@ -69,7 +91,8 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 ostd::task::yield_now();
             }
             if !found {
-                // No NVMe on this machine (or no PcieDriverCap) — exit cleanly.
+                // Exit 0: nothing to claim (no NVMe controller visible to this
+                // cell, e.g. none on this machine or no PcieDriverCap).
                 ostd::syscall::sys_exit(0);
             }
 
@@ -124,7 +147,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             // Publish state before registration: VFS may route requests as soon
             // as the syscall succeeds.
             *STATE.lock() = Some(NvmeState { ctrl, io_buf });
-            if let Err(error) = sys_register_block_driver() {
+            if let Err(error) = sys_register_block_device(BlockDevice::Pci { bdf: bdf as u16 }) {
                 *STATE.lock() = None;
                 let _ = print_fmt(format_args!(
                     "[nvme] block driver registration failed: {:?}\n",
@@ -138,9 +161,18 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // requests arrive as RawMessage; accept Message too — layout is identical.
         // Without the RawMessage arm the request falls into `_ => {}` and VFS
         // blocks forever in its reply recv (x86 FAT-on-NVMe boot hang).
+        // Only the registered VFS may issue block requests; any other sender gets
+        // `NotIssued` without touching the device.
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
-            let len = if let Some(state) = STATE.lock().as_mut() {
+            let len = if !sender_is_vfs(sender_tid) {
+                let _ = print_fmt(format_args!(
+                    "[nvme] refused block request from tid={}: sender is not the registered VFS\n",
+                    sender_tid
+                ));
+                reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
+                1
+            } else if let Some(state) = STATE.lock().as_mut() {
                 dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
             } else {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();

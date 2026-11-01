@@ -5,6 +5,7 @@ use cellos_fs::{CellosFs, Expect, disk::FsError};
 use ostd::prelude::Mutex;
 use crate::backend::{fill_page, BackendHealth, FsBackend, ListPage};
 use api::ipc::vfs_dir_page::EntryKind;
+use crate::blk_router::DeviceRef;
 use crate::disk_cellosfs::CellosPartitionDisk;
 
 #[derive(Clone, Copy)]
@@ -25,8 +26,8 @@ pub struct CellosFsBackend<D: cellos_fs::disk::BlockDevice = CellosPartitionDisk
     fs: Mutex<NativeState<D>>,
 }
 impl CellosFsBackend {
-    pub fn mount(prefix: &'static str, base_lba: u64, total_sectors: u64) -> Self {
-        let disk = CellosPartitionDisk::new(base_lba, total_sectors);
+    pub fn mount(prefix: &'static str, dev: DeviceRef, base_lba: u64, total_sectors: u64) -> Self {
+        let disk = CellosPartitionDisk::new(dev, base_lba, total_sectors);
         let opened = if total_sectors % 8 != 0 || base_lba.checked_add(total_sectors).is_none() {
             Err(FsError::PartitionOverflow)
         } else { CellosFs::open(disk) };

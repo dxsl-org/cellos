@@ -104,6 +104,9 @@ pub struct NvmeController {
     // start allocating DmaBufs directly on the controller instead of via Queue.
     #[allow(dead_code)]
     bdf: u32,
+    /// Fault-injection builds only: exit (70) right after the next I/O doorbell.
+    #[cfg(feature = "fault-inject")]
+    exit_after_doorbell: bool,
 }
 
 impl NvmeController {
@@ -210,6 +213,8 @@ impl NvmeController {
             lba_bytes: 512,
             vwc: false,
             bdf,
+            #[cfg(feature = "fault-inject")]
+            exit_after_doorbell: false,
         };
 
         // The device-visible addresses this instance programmed, next to the
@@ -452,6 +457,14 @@ impl NvmeController {
         self.io.sq_tail = ((tail + 1) % depth) as u16;
         fence(Ordering::Release);
         self.ring_sq_tail(1, self.io.sq_tail);
+        #[cfg(feature = "fault-inject")]
+        if core::mem::take(&mut self.exit_after_doorbell) {
+            let _ = print_fmt(format_args!(
+                "[nvme] fault-inject: driver exiting after doorbell at lba={}\n",
+                lba
+            ));
+            ostd::syscall::sys_exit(70);
+        }
 
         let mut wait = Deadline::start(deadline::IO_BUDGET_MS, now_ms());
         let status = match self.wait_command(1, cid, &mut wait) {
@@ -489,6 +502,13 @@ impl NvmeController {
     /// Write one 512-byte sector from `buf` (must be DMA-capable).
     pub fn write_sector(&mut self, sector: u64, buf_phys: u64) -> Result<(), BlockOutcome> {
         self.submit_io(NVM_OPC_WRITE, 1, sector, 0, buf_phys)
+    }
+
+    /// Fault-injection builds only: exit (70) right after ringing the SQ tail
+    /// doorbell of the next I/O command, before polling its completion.
+    #[cfg(feature = "fault-inject")]
+    pub fn exit_after_next_doorbell(&mut self) {
+        self.exit_after_doorbell = true;
     }
 
     /// Send an NVMe flush command for the namespace.

@@ -8,30 +8,32 @@
 //! polled IDENTIFY DEVICE over DMA.
 //!
 //! Part B adds the data path and block registration: after IDENTIFY the cell
-//! calls `sys_register_block_driver` (the same surface NVMe/virtio-blk use) and
-//! serves the DrvRequest IPC with READ/WRITE DMA EXT and FLUSH CACHE EXT. The
-//! oracles are:
+//! binds the block route of its PCI function (`sys_register_block_device`, the
+//! same surface NVMe/virtio-blk use) and serves the DrvRequest IPC with
+//! READ/WRITE DMA EXT and FLUSH CACHE EXT. The oracles are:
 //!   `[ahci] controller bound`
 //!   `[ahci] IDENTIFY DEVICE ok`
 //!   `[driver_cell] ahci storage driver ready`
-//!   `[driver_cell] block driver registered`
+//!   `[driver_cell] block driver registered: tid=T device=pci-00-1f-2 route=R`
 //!   `[vfs] FAT32 /mnt/sd volume mounted`
 //! and the two-boot persistence test: a marker written through the shell in the
 //! first boot must be readable in a second boot on the same image.
+//!
+//! The 08A–08C and 09C witnesses need the fault-injection ISO
+//! (`bash scripts/x86/make-ahci-fault-iso.sh`, `VICELL_AHCI_FAULT_ISO`) and
+//! skip without it.
 //!
 //! Tests skip gracefully when the ISO or `qemu-system-x86_64` is absent.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
+use vicell_integration_tests::block_09c::fault_iso;
+use vicell_integration_tests::block_09c_lanes::{fresh_lease_and_cold_readback, Lane};
+use vicell_integration_tests::fat_disk::{python_binary, FatDisk};
+use vicell_integration_tests::{block_09c_cycles, block_09c_two_disks, qemu_x86_binary, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
 const CMD_TIMEOUT: u64 = 15;
-
-/// `api::disk::PART_FAT32_BASE_LBA` — byte offset 1 MiB.
-const FAT_BASE_OFFSET: u64 = 2_048 * 512;
-/// `api::disk::PART_FAT32_SECTORS`.
-const FAT_SECTORS: u64 = 524_288;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -95,15 +97,6 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(iso_ok && qemu_ok && cell_ok)
 }
 
-fn python_binary() -> Option<&'static str> {
-    ["python", "python3"].into_iter().find(|binary| {
-        std::process::Command::new(binary)
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success())
-    })
-}
-
 /// Removes the temp SATA image on every exit path, including a panic inside the
 /// runner constructor (which would otherwise leak a 64 MiB file per attempt).
 struct TempImage(PathBuf);
@@ -133,81 +126,6 @@ impl TempImage {
 }
 
 impl Drop for TempImage {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
-
-/// A raw SATA image carrying a FAT32 volume at `PART_FAT32_BASE_LBA`, sized so
-/// the volume's sector range fits (the `/bin` cell-store and `/data` littlefs
-/// partitions live past the end and are simply absent on this lane).
-struct FatSataImage(PathBuf);
-
-impl FatSataImage {
-    /// Format a FAT32 volume with `tools/mkfat32_inplace.py` and splice it into
-    /// an otherwise-empty raw disk. Returns `None` (caller skips) when the
-    /// formatter is missing or fails.
-    fn new(python: &str) -> Option<Self> {
-        let volume = std::env::temp_dir().join(format!(
-            "vicell_sata_fat32_{}_{}.img",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .subsec_nanos()
-        ));
-        {
-            let f = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(&volume)
-                .expect("create FAT32 scratch image");
-            f.set_len(FAT_SECTORS * 512).expect("size FAT32 scratch image");
-        }
-        let status = std::process::Command::new(python)
-            .arg(repo_root().join("tools/mkfat32_inplace.py"))
-            .arg(&volume)
-            .arg(FAT_SECTORS.to_string())
-            .status()
-            .expect("run mkfat32_inplace.py");
-        if !status.success() {
-            let _ = std::fs::remove_file(&volume);
-            return None;
-        }
-
-        let disk = std::env::temp_dir().join(format!(
-            "vicell_sata_x86_fat_{}_{}.img",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .subsec_nanos()
-                + 1
-        ));
-        {
-            use std::io::{Seek, SeekFrom, Write};
-            let fat_bytes = std::fs::read(&volume).expect("read FAT32 volume");
-            let mut d = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .open(&disk)
-                .expect("create SATA disk image");
-            d.set_len(FAT_BASE_OFFSET + FAT_SECTORS * 512 + 1024 * 1024)
-                .expect("size SATA disk image");
-            d.seek(SeekFrom::Start(FAT_BASE_OFFSET))
-                .expect("seek to partition base");
-            d.write_all(&fat_bytes).expect("write FAT32 volume");
-        }
-        let _ = std::fs::remove_file(&volume);
-        Some(Self(disk))
-    }
-
-    fn path(&self) -> &std::path::Path {
-        &self.0
-    }
-}
-
-impl Drop for FatSataImage {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
     }
@@ -248,8 +166,8 @@ fn ahci_driver_cell_identifies_sata_x86() {
     });
 }
 
-/// The AHCI Driver Cell must register as the system block driver through the
-/// same surface NVMe uses: `[driver_cell] block driver registered`.
+/// The AHCI Driver Cell must bind the block route of its PCI function through
+/// the same surface NVMe uses: `[driver_cell] block driver registered`.
 #[test]
 fn ahci_driver_cell_registers_block_driver_x86() {
     if !prerequisites_ok() {
@@ -259,12 +177,12 @@ fn ahci_driver_cell_registers_block_driver_x86() {
     let disk = TempImage::new();
     let qemu = QemuRunner::boot_x86_bios_with_sata(&iso_path(), &disk.path().to_string_lossy());
 
-    qemu.wait_for("[driver_cell] block driver registered", BOOT_TIMEOUT)
+    qemu.wait_for("[driver_cell] block driver registered: tid=", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "AHCI Driver Cell did not register as block driver within {BOOT_TIMEOUT}s: {e}\n\
                  Chain: IDENTIFY ok → DmaBuf::authorize(sector buffer) → \
-                 sys_register_block_driver → kernel role + service::BLOCK_DRIVER.\n\
+                 sys_register_block_device(Pci 00:1f.2) → kernel block route.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
@@ -313,13 +231,13 @@ fn ahci_fat32_persistence_reboot_x86() {
         eprintln!("SKIP ahci_fat32_persistence_reboot_x86: Python 3 not on PATH");
         return;
     };
-    let image = FatSataImage::new(python).unwrap_or_else(|| {
+    let image = FatDisk::new(python).unwrap_or_else(|| {
         panic!(
             "mkfat32_inplace.py failed: the persistence oracle cannot run, which is a test \
              failure (the in-tree formatter is the test's own fixture), not an environment skip"
         )
     });
-    let disk_path = image.path().to_string_lossy().into_owned();
+    let disk_path = image.arg();
 
     // ── First boot: mount, write, and read the marker back ───────────────────
     let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso_path(), &disk_path);
@@ -390,56 +308,37 @@ fn ahci_fat32_persistence_reboot_x86() {
 }
 
 /// With both an NVMe controller and a SATA disk present, init spawns `/bin/nvme`
-/// and `/bin/ahci`, so two cells call `sys_register_block_driver` in one boot.
-///
-/// Asserts the observed **registration** contract: neither call is refused, and
-/// the later TID replaces the earlier one in the kernel role slot and the
-/// service registry (`driver_cell.rs:84-91`, registry `insert`) — printed in
-/// order so a spawn race is visible.
-///
-/// Does **not** assert which cell serves filesystem I/O: `service-vfs` resolves
-/// the provider through a cached TID, so if VFS looks it up before the second
-/// cell registers, the replacement does not redirect traffic. Which cell wins on
-/// a two-storage-device machine is therefore scheduling-dependent — recorded as
-/// a plan risk, and every other lane attaches exactly one storage device.
+/// and `/bin/ahci`; each binds the route of the PCI function it owns, so the two
+/// registrations name distinct devices and route indices. VFS mounts the
+/// primary (the lowest device key: these fixtures carry no Cellos MBR) at
+/// `/mnt/sd` and the other disk at `/mnt/disk/<name>`. Both are usable: one
+/// file is written and read back on each mount.
 #[test]
-fn ahci_and_nvme_both_register_x86() {
+fn ahci_and_nvme_both_mounted_x86() {
     if !prerequisites_ok() {
         return;
     }
-    let sata = TempImage::new();
-    let nvme = TempImage::new();
-    let qemu = QemuRunner::boot_x86_bios_with_sata_and_nvme(
-        &iso_path(),
-        &sata.path().to_string_lossy(),
-        &nvme.path().to_string_lossy(),
-    );
+    let Some(python) = python_binary() else {
+        let _ = vicell_integration_tests::ci_guard(false);
+        eprintln!("SKIP ahci_and_nvme_both_mounted_x86: Python 3 not on PATH");
+        return;
+    };
+    let sata = FatDisk::new(python).expect("mkfat32_inplace.py formats the SATA fixture");
+    let nvme = FatDisk::new(python).expect("mkfat32_inplace.py formats the NVMe fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata_and_nvme(&iso_path(), &sata.arg(), &nvme.arg());
+    let disks = block_09c_two_disks::discover(&qemu);
+    block_09c_two_disks::print_discovery("combined lane", &qemu);
 
-    qemu.wait_for("[driver_cell] ahci storage driver ready", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "AHCI cell not ready on the combined lane: {e}\n{}",
-                qemu.dump()
-            )
-        });
-    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("shell not reached on the combined lane: {e}\n{}", qemu.dump()));
-
-    let output = qemu.dump();
-    let registrations: Vec<&str> = output
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.contains("[driver_cell] block driver registered"))
-        .collect();
-    println!(
-        "observed block-driver registrations on the NVMe+SATA lane (in order): {registrations:?}"
-    );
-    assert!(
-        registrations.len() >= 2,
-        "expected both NVMe and AHCI to register (last-wins), observed {}: {registrations:?}\n{}",
-        registrations.len(),
-        output
-    );
+    for path in ["/mnt/sd/both.txt".to_string(), format!("{}/both.txt", disks.secondary_mount())] {
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(&format!("vwrite {path} both-mounted-ok"));
+        qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("vwrite {path}: {e}\n{}", qemu.dump()));
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(&format!("vcat {path}"));
+        qemu.wait_for_after("both-mounted-ok", checkpoint, CMD_TIMEOUT)
+            .unwrap_or_else(|e| panic!("vcat {path}: {e}\n{}", qemu.dump()));
+    }
 }
 
 /// Phase 08A witness: the block outcome carries issue certainty from the AHCI
@@ -467,8 +366,8 @@ fn ahci_write_outcome_issue_certainty_x86() {
     };
     assert!(PathBuf::from(&iso).exists(), "VICELL_AHCI_FAULT_ISO={iso} does not exist");
     let python = python_binary().expect("Python 3 formats the FAT32 fixture");
-    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
-    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    let image = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.arg());
     for marker in [
         "[driver_cell] block driver registered",
         "[vfs] FAT32 /mnt/sd volume mounted",
@@ -544,8 +443,8 @@ fn ahci_driver_retirement_quiesces_function_x86() {
         return;
     };
     let python = python_binary().expect("Python 3 formats the FAT32 fixture");
-    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
-    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    let image = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.arg());
     let registered = "[driver_cell] block driver registered: tid=";
     for marker in [registered, "[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
         qemu.wait_for(marker, BOOT_TIMEOUT)
@@ -591,8 +490,8 @@ fn ahci_driver_restart_resets_and_serves_again_x86() {
         return;
     };
     let python = python_binary().expect("Python 3 formats the FAT32 fixture");
-    let image = FatSataImage::new(python).expect("mkfat32_inplace.py formats the fixture");
-    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.path().to_string_lossy());
+    let image = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_sata(&iso, &image.arg());
     for marker in ["[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
         qemu.wait_for(marker, BOOT_TIMEOUT)
             .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
@@ -645,5 +544,73 @@ fn ahci_driver_restart_resets_and_serves_again_x86() {
     println!("08C AHCI witness: {evidence:#?}");
     if let Some(report) = vicell_integration_tests::bench_milestones::retire_report("ahci", "tcg", after) {
         println!("P08-RETIRE-LATENCY {report}");
+    }
+}
+
+/// Phase 09C E1+E2+E3 on AHCI, 1 vCPU. E1: an `F08B-DIE` death is quiesced,
+/// init logs `Init: ahci retirement Contained (…)` before the replacement's
+/// DMA grant, and the replacement resets the HBA and rebinds the same route
+/// under a new tid. E2: a record committed in boot 1 and never read in boot 2
+/// is read cache-cold through the new lease, and boot 3 reads both records from
+/// the medium. E3: `F09C-DIE-ISSUED` dies after `PxCI`; VFS reports the write
+/// indeterminate and never replays it; the post-restart `vcat` equals boot 3's.
+#[test]
+fn ahci_09c_fresh_lease_cold_readback_uncertain_write_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::Ahci, &iso, 1, true);
+    }
+}
+
+/// Phase 09C E5: the AHCI E1–E3 lane on 2 vCPUs (`[x86-smp] topology online=2`).
+#[test]
+fn ahci_09c_fresh_lease_cold_readback_uncertain_write_smp2_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::Ahci, &iso, 2, true);
+    }
+}
+
+/// Phase 09C E4(d): rapid AHCI deaths exhaust init's crash budget; after
+/// `restart storm` the device's I/O fails with nothing sent.
+#[test]
+fn ahci_09c_crash_budget_gives_up_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::crash_budget(Lane::Ahci, &iso);
+    }
+}
+
+/// Phase 09C E4(b): an AHCI death holding an untracked SHM export retires
+/// `Unproven`; init logs `node recovery required` and does not restart it.
+#[test]
+fn ahci_09c_untracked_export_blocks_restart_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::untracked_export_blocks_restart(&iso);
+    }
+}
+
+/// Phase 09C E8: ten AHCI replacements spaced past init's 1000-tick window,
+/// each verdict `Contained … dma=0 qpages=0 leaked=0`, each read served.
+#[test]
+fn ahci_09c_ten_replacement_cycles_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::repeated_cycles(Lane::Ahci, &iso);
+    }
+}
+
+/// Phase 09C E9 on SATA+NVMe, 1 vCPU: both disks mounted on their own routes;
+/// killing either driver leaves the other disk serving, refuses the dead
+/// disk's I/O unsent, and the replacement rebinds the same route; a final boot
+/// and the raw media show each disk holds only its own files.
+#[test]
+fn two_disks_09c_independent_failure_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_two_disks::two_disks_independent(&iso, 1);
+    }
+}
+
+/// Phase 09C E9 on 2 vCPUs.
+#[test]
+fn two_disks_09c_independent_failure_smp2_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_two_disks::two_disks_independent(&iso, 2);
     }
 }

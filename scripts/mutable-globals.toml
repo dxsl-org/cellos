@@ -797,15 +797,15 @@ rationale = "Release/Acquire stores and loads order the base against the waiter 
 review = "kernel/src/task/syscall.rs:wait_irq_base_permitted; kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::BLOCK_DRIVER_CELL"
+key = "kernel::task::drivers::driver_cell::BLOCK_ROUTES"
 lifetime = "per-cell"
-mutation = "atomic"
-owner = "task::drivers::driver_cell; written by the RegisterBlockDriver syscall (register_driver_service -> publish_role_or_rollback), cleared by deregister_all_for; no non-test reader (VFS resolves service::BLOCK_DRIVER through the service registry)"
+mutation = "spinlock"
+owner = "task::drivers::driver_cell; per-device block route slots (key + provider tid/cell/generation) written by the RegisterBlockDriver syscall (register_block_device_route -> publish_block_route) after the caller's device ownership is proven, provider cleared by deregister_all_for, read by LookupBlockRoute (block_route_record) for the VFS and init"
 contexts = ["normal", "irq"]
-seal = "none: overwritten by each RegisterBlockDriver"
-retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
-rationale = "Release store and exact-tid AcqRel CAS, both under ROLE_PUBLICATION (order SCHEDULER -> ROLE_PUBLICATION), so registration and teardown cannot interleave between role and service publication; exit_task may run inside the timer/IPI ISR via yield_cpu but only touches the atomic and an IRQ-masking spinlock."
-review = "kernel/src/task/drivers/driver_cell.rs:register_block_driver; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall.rs:register_driver_service; kernel/src/task/scheduler.rs:exit_task"
+seal = "none: append-only for the boot; a slot's key is fixed at its first bind and only its provider is rebound by the device's owner"
+retirement = "Scheduler::exit_task -> deregister_all_for(tid) clears the provider of every slot naming exactly the dead tid and keeps the key"
+rationale = "Fixed array of MAX_BLOCK_ROUTES slots under one IRQ-masking spinlock, no allocation; lock order SCHEDULER -> ROLE_PUBLICATION -> BLOCK_ROUTES (leaf), shared by publication and teardown, so a provider is never published for a task already torn down. exit_task may run inside the timer/IPI ISR via yield_cpu and only touches this spinlock."
+review = "kernel/src/task/drivers/driver_cell.rs:publish_block_route; kernel/src/task/drivers/driver_cell.rs:block_route_record; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall.rs:register_block_device_route; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::NIC_DRIVER_STATE"
@@ -1401,6 +1401,17 @@ seal = "none: mutated for the whole run"
 retirement = "slot cleared by DmaPublicationGuard::drop; retirement waits while dma_publication_in_flight(tid)"
 rationale = "Fixed array under a Spinlock, so no allocation. Written only on the GrantDma syscall path; read by dma_publication_in_flight from Scheduler::take_quiescent_root_retirements under SCHEDULER (order SCHEDULER -> DMA_PUBLICATIONS), which yield_cpu reaches from the timer ISR, user faults and the AP idle loop."
 review = "kernel/src/task/syscall.rs:reserve_dma_publication; kernel/src/task/syscall.rs:DmaPublicationGuard; kernel/src/task/scheduler.rs:1910"
+
+[[global]]
+key = "kernel::task::syscall::LEAKED_PAGES"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::task::syscall; incremented by withhold_or_free when the grant quarantine is full and a live pin forces a leak; read by leaked_pages() for the retirement tally (task.rs yield_cpu retirement funnel)"
+contexts = ["normal", "irq", "exception", "ap"]
+seal = "none: monotonic count for the whole run"
+retirement = "never: a boot-wide counter; retirement reads a delta across its own reclaim window"
+rationale = "A single Relaxed fetch_add/load counter with no ordering obligation: the tally takes a before/after delta that may over-report concurrent leaks and never under-reports. Lock-free, so the grant reap paths reached from yield_cpu (timer ISR, user faults, AP idle loop) cannot deadlock on it."
+review = "kernel/src/task/syscall.rs:withhold_or_free; kernel/src/task/syscall.rs:leaked_pages; kernel/src/task.rs:yield_cpu"
 
 [[global]]
 key = "kernel::task::syscall::PAGE_GRANT_TABLE"
@@ -2348,6 +2359,17 @@ seal = "none: entries come and go for the whole run"
 retirement = "no hook on cell retirement: Open entries of dead owners and Sealed entries of dead destinations are dropped lazily by reclaim_dead_owners when the table is full; otherwise the destination's clear() consumes them"
 rationale = "Syscall paths plus the boot self_test (main.rs:932) only; the Spinlock is never held across the liveness callback, and restore copies into a kernel buffer."
 review = "kernel/src/cell/state_stash.rs:stash; kernel/src/cell/state_stash.rs:reclaim_dead_owners; kernel/src/cell/state_stash.rs:clear; kernel/src/task/syscall.rs:7622"
+
+[[global]]
+key = "kernel::cell::retirement_verdict::TABLE"
+lifetime = "per-cell"
+mutation = "spinlock"
+owner = "cell::retirement_verdict: open from Scheduler::retire_cell_incarnation_participants, close from the yield_cpu retirement funnel, query from the QueryRetirement (431) syscall"
+contexts = ["normal", "irq", "exception", "ap"]
+seal = "none: records come and go for the whole run"
+retirement = "bounded: a full table evicts the oldest final record, never a Pending one; with every slot Pending a new retirement is not recorded"
+rationale = "Fixed array of MAX_RECORDS slots under one leaf Spinlock, no allocation and no nested lock; open runs under SCHEDULER and the death-subscriber lock, close in the retirement funnel that yield_cpu reaches from the timer ISR, user faults and the AP idle loop."
+review = "kernel/src/cell/retirement_verdict.rs:open; kernel/src/cell/retirement_verdict.rs:close; kernel/src/cell/retirement_verdict.rs:query; kernel/src/task/scheduler.rs:retire_cell_incarnation_participants; kernel/src/task.rs:yield_cpu"
 
 [[global]]
 key = "kernel::cell::service_registry::REGISTRY"

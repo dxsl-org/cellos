@@ -59,6 +59,13 @@ approver = "dmin"
 date = "2026-10-09"
 
 [[file]]
+path = "cells/demos/recovery-demo/src/bin/worker/fault.rs"
+class = "test-harness"
+reason = "Phase 09B fault-inject witness (feature fault-inject only): a deliberate load from an unmapped user address makes the kernel retire the whole worker incarnation exactly as for a real crash."
+approver = "dmin"
+date = "2026-11-01"
+
+[[file]]
 path = "cells/demos/doom/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -500,6 +507,13 @@ date = "2026-09-25"
 # file cannot carry #![forbid(unsafe_code)] on its root. Removing the last
 # [[file]] entry for a crate means this entry must go too — `--check`
 # reports it as unused.
+
+[[crate]]
+name = "recovery-demo"
+class = "test-harness"
+reason = "The recovery-worker root cannot carry #![forbid(unsafe_code)] because its fault-inject module allows the allowlisted deliberate fault — see the [[file]] entry for cells/demos/recovery-demo/src/bin/worker/fault.rs. The authority and client roots forbid unsafe."
+approver = "dmin"
+date = "2026-11-01"
 
 [[crate]]
 name = "app-tls-test"

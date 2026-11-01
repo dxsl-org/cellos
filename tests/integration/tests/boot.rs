@@ -2422,6 +2422,11 @@ fn posix_shim_net() {
 /// architected counter, 10 MHz `mtime` on RV64 — made it ~0.1 ms wide, so the budget rolled
 /// on every exit and a crash-looping service was restarted forever. `bench init-giveup`
 /// delivers six abnormal exits to `/bin/config` and requires that `init` leaves it down.
+///
+/// Phase 09C E10: every restart is gated on the retirement verdict, so each
+/// `Init: service died` (the restart line) is preceded, since the previous one,
+/// by `Init: config retirement Contained (` — the service's `name` in
+/// `config/services.toml`.
 #[test]
 fn init_gives_up_after_a_crash_storm() {
     if !prerequisites_ok() {
@@ -2454,9 +2459,25 @@ fn init_gives_up_after_a_crash_storm() {
             qemu.dump()
         ),
     }
+    let output = qemu.dump();
     assert!(
-        !qemu.output_contains("[init-giveup] FAIL"),
-        "the crash-storm scenario reported a failure\n--- output ---\n{}",
-        qemu.dump()
+        !output.contains("[init-giveup] FAIL"),
+        "the crash-storm scenario reported a failure\n--- output ---\n{output}"
     );
+
+    let restarts: Vec<usize> = output.match_indices("Init: service died").map(|(at, _)| at).collect();
+    assert!(!restarts.is_empty(), "init restarted nothing during the storm\n--- output ---\n{output}");
+    let mut since = 0;
+    for &at in &restarts {
+        let window = &output[since..at];
+        let Some(verdict) = window.rfind("Init: config retirement Contained (") else {
+            panic!("a restart was not preceded by its verdict line:\n{window}");
+        };
+        println!(
+            "09C E10 {}",
+            window[verdict..].lines().next().unwrap_or_default().trim()
+        );
+        since = at + "Init: service died".len();
+    }
+    println!("09C E10 {} config restarts, each gated on `retirement Contained`", restarts.len());
 }

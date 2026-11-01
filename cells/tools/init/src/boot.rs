@@ -1,5 +1,4 @@
-use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_spawn_from_path, SyscallResult};
+use ostd::syscall::{sys_spawn_from_path, SyscallResult};
 
 // ── Phase-03 step-5 Tier-2 grant pair (opt-in `tier2-grant-pair`) ───────────
 //
@@ -395,45 +394,55 @@ mod platform_wait_tests {
 #[cfg(not(feature = "board-rpi3"))]
 const VIRTIO_BLOCK_DRIVER: &str = "/bin/block";
 
-/// How long init waits for a block driver to register (Phase 10 S10-3c, D3c-2 B): one NVMe
-/// admin budget. Before, the wait was 400 yields, after which the VFS mounted without a disk
-/// even while the NVMe Cell was still identifying its controller.
+/// How long init waits for the block Driver Cells to settle (Phase 10 S10-3c, D3c-2 B):
+/// one NVMe admin budget. The VFS enumerates block routes once, when it starts, so every
+/// device must have its route bound by then.
 const BLOCK_DRIVER_WAIT_MS: u64 = 60_000;
-/// The former window: used for the other drivers once the NVMe Cell is gone (no controller,
-/// or not in the image), and as the whole bound without a monotonic clock.
+/// The bound when there is no monotonic clock.
 const BLOCK_DRIVER_WAIT_YIELDS: usize = 400;
+
+/// Where one spawned block Driver Cell stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DriverProgress {
+    /// A block route names it as the live provider.
+    Routed,
+    /// It exited (no device on this machine, or a failure).
+    Terminated,
+    /// Neither yet.
+    Starting,
+}
 
 /// What the block-driver wait does next.
 #[derive(Debug, PartialEq, Eq)]
 enum BlockWait {
-    Done,
-    /// The NVMe Cell is still initialising: wait on.
+    /// Every driver is routed or terminated.
+    Settled,
+    /// The bound ran out with a driver still starting.
+    TimedOut,
     KeepWaiting,
-    /// Finish with the former 400-yield window.
-    Window,
 }
 
-/// One step of the block-driver wait: done once a driver registered or the time budget is
-/// spent; wait on while the NVMe Cell lives; otherwise (it exited, it was never started, or
-/// there is no clock) the former window. The AHCI Cell idles without exiting on a machine
-/// without a controller, so only the NVMe Cell's life extends the wait.
-fn block_wait_step(registered: bool, nvme_alive: bool, elapsed_ms: Option<u64>) -> BlockWait {
-    if registered {
-        return BlockWait::Done;
+/// One step of the block-driver wait: settled once no driver is still starting;
+/// otherwise wait on until `BLOCK_DRIVER_WAIT_MS` (or, without a clock,
+/// `BLOCK_DRIVER_WAIT_YIELDS` yields) is spent.
+fn block_wait_step(drivers: &[DriverProgress], elapsed_ms: Option<u64>, yields: usize) -> BlockWait {
+    if !drivers.contains(&DriverProgress::Starting) {
+        return BlockWait::Settled;
     }
-    match elapsed_ms {
-        Some(ms) if ms >= BLOCK_DRIVER_WAIT_MS => BlockWait::Done,
-        Some(_) if nvme_alive => BlockWait::KeepWaiting,
-        _ => BlockWait::Window,
-    }
+    let spent = match elapsed_ms {
+        Some(ms) => ms >= BLOCK_DRIVER_WAIT_MS,
+        None => yields >= BLOCK_DRIVER_WAIT_YIELDS,
+    };
+    if spent { BlockWait::TimedOut } else { BlockWait::KeepWaiting }
 }
 
-/// A block Driver Cell that init respawns when it dies with a failure status
-/// (Phase 08C). The kernel only lets the new incarnation claim its PCI function
-/// after retirement quiesced it and revoked its DMA; while that proof is missing
-/// the claim fails, the replacement exits, and the crash budget gives up, so the
-/// device stays quarantined instead of being reused. A clean exit (no device on
-/// this machine) is final.
+/// A block Driver Cell that init respawns when it dies with a failure status.
+/// Like every supervised service, a replacement starts only after the dead
+/// incarnation's retirement verdict allows it (`Contained`, or `Quarantined`
+/// without `DMA_DEFERRED`). A verdict with `DMA_DEFERRED` means the kernel
+/// retains the PCI function: the driver is never restarted this boot and the
+/// device stays unavailable. A clean exit (nothing to claim) is final. An
+/// incarnation is ready once a block route names it as the live provider.
 fn supervised_block_driver(name: &str, path: &str, tid: usize) -> crate::service_table::Service {
     use alloc::string::String;
     use cellos_boot_config::{CellSpec, Registration, RestartPolicy};
@@ -444,30 +453,32 @@ fn supervised_block_driver(name: &str, path: &str, tid: usize) -> crate::service
         enabled: true,
         required: false,
         restart: RestartPolicy::OnFailure,
-        service_id: Some(service::BLOCK_DRIVER),
+        service_id: None,
         registration: Registration::SelfReady,
         after: alloc::vec::Vec::new(),
         // A replacement resets its controller and identifies the disk before it
-        // registers; 10 s covers both on the QEMU models.
+        // binds its route; 10 s covers both on the QEMU models.
         ready_timeout_ticks: 1000,
     });
+    driver.readiness = crate::service_table::Readiness::BlockRoute;
     if matches!(ostd::syscall::sys_notify_on_exit(tid), SyscallResult::Ok(0)) {
         driver.tid = Some(tid);
     }
     driver
 }
 
-/// Spawn the block Driver Cells and wait for one to register. Returns the
-/// drivers init supervises from here on (NVMe and, on x86, AHCI).
+/// Spawn the block Driver Cells and wait until each has bound its route or
+/// exited. Returns the drivers init supervises from here on (NVMe and, on x86,
+/// AHCI); the VirtIO block driver is waited for but not supervised.
 pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Service> {
     let mut supervised = alloc::vec::Vec::new();
+    let mut spawned = alloc::vec::Vec::new();
     #[cfg(not(feature = "board-rpi3"))]
-    let _ = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER);
-    let nvme = match sys_spawn_from_path("/bin/nvme") {
-        SyscallResult::Ok(tid) => Some(tid),
-        SyscallResult::Err(_) => None,
-    };
-    if let Some(tid) = nvme {
+    if let SyscallResult::Ok(tid) = sys_spawn_from_path(VIRTIO_BLOCK_DRIVER) {
+        spawned.push(tid);
+    }
+    if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/nvme") {
+        spawned.push(tid);
         supervised.push(supervised_block_driver("nvme", "/bin/nvme", tid));
     }
     // x86_64 PC lane (phase 02a): the SATA/AHCI cell. Absent from non-x86
@@ -475,56 +486,78 @@ pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Ser
     // spawn is inert everywhere else.
     #[cfg(target_arch = "x86_64")]
     if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/ahci") {
+        spawned.push(tid);
         supervised.push(supervised_block_driver("ahci", "/bin/ahci", tid));
     }
-    let registered = || sys_lookup_service(service::BLOCK_DRIVER).is_some();
     let started = ostd::syscall::sys_get_time_ms();
+    let mut yields = 0;
     loop {
-        let elapsed = started.and_then(|start| ostd::syscall::sys_get_time_ms().map(|now| now.saturating_sub(start)));
-        let nvme_alive = nvme.is_some_and(|tid| !task_terminated(tid));
-        match block_wait_step(registered(), nvme_alive, elapsed) {
-            BlockWait::Done => {
-                if !registered() {
-                    ostd::io::println("Init: no block driver registered within 60 s; starting the VFS without one.");
+        let routes = crate::service_table::block_routes();
+        let progress: alloc::vec::Vec<DriverProgress> = spawned
+            .iter()
+            .map(|&tid| {
+                if crate::service_table::routes_name(&routes, tid) {
+                    DriverProgress::Routed
+                } else if task_terminated(tid) {
+                    DriverProgress::Terminated
+                } else {
+                    DriverProgress::Starting
                 }
-                return supervised;
+            })
+            .collect();
+        let elapsed = started.and_then(|start| ostd::syscall::sys_get_time_ms().map(|now| now.saturating_sub(start)));
+        match block_wait_step(&progress, elapsed, yields) {
+            BlockWait::Settled => break,
+            BlockWait::TimedOut => {
+                ostd::io::println("Init: a block driver bound no route within the wait; starting the VFS with the routes bound so far.");
+                break;
             }
-            BlockWait::KeepWaiting => ostd::task::yield_now(),
-            BlockWait::Window => break,
+            BlockWait::KeepWaiting => {
+                yields += 1;
+                ostd::task::yield_now();
+            }
         }
     }
-    for _ in 0..BLOCK_DRIVER_WAIT_YIELDS {
-        if registered() {
-            break;
+    // A driver that exited (no device) is still retiring: its quiescence fences
+    // every CPU. The VFS starts only after those retirements are final, so it
+    // discovers a settled route set and its spawn does not overlap them.
+    for &tid in &spawned {
+        if task_terminated(tid) {
+            let _ = crate::supervisor::await_verdict(tid);
         }
-        ostd::task::yield_now();
     }
     supervised
 }
 
 #[cfg(test)]
 mod block_wait_tests {
-    use super::{block_wait_step, BlockWait, BLOCK_DRIVER_WAIT_MS};
+    use super::{block_wait_step, BlockWait, DriverProgress, BLOCK_DRIVER_WAIT_MS, BLOCK_DRIVER_WAIT_YIELDS};
+    use DriverProgress::{Routed, Starting, Terminated};
 
     #[test]
-    fn a_registered_driver_ends_the_wait_at_once() {
-        for (alive, elapsed) in [(true, Some(0)), (false, None), (true, Some(BLOCK_DRIVER_WAIT_MS + 1))] {
-            assert_eq!(block_wait_step(true, alive, elapsed), BlockWait::Done);
+    fn every_driver_routed_or_terminated_ends_the_wait_at_once() {
+        for drivers in [&[][..], &[Routed], &[Terminated], &[Routed, Terminated, Routed], &[Terminated, Terminated]] {
+            for elapsed in [Some(0), None, Some(BLOCK_DRIVER_WAIT_MS + 1)] {
+                assert_eq!(block_wait_step(drivers, elapsed, 0), BlockWait::Settled);
+            }
         }
     }
 
     #[test]
-    fn a_live_nvme_cell_is_waited_for_up_to_the_budget() {
-        assert_eq!(block_wait_step(false, true, Some(0)), BlockWait::KeepWaiting);
-        assert_eq!(block_wait_step(false, true, Some(BLOCK_DRIVER_WAIT_MS - 1)), BlockWait::KeepWaiting);
-        assert_eq!(block_wait_step(false, true, Some(BLOCK_DRIVER_WAIT_MS)), BlockWait::Done);
+    fn one_starting_driver_among_several_is_waited_for_up_to_the_budget() {
+        for drivers in [&[Routed, Starting][..], &[Starting, Terminated, Routed], &[Starting, Starting]] {
+            assert_eq!(block_wait_step(drivers, Some(0), 0), BlockWait::KeepWaiting);
+            assert_eq!(block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS - 1), 1_000_000), BlockWait::KeepWaiting);
+            assert_eq!(block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS), 0), BlockWait::TimedOut);
+        }
     }
 
     #[test]
-    fn without_an_nvme_cell_or_a_clock_the_former_window_applies() {
-        assert_eq!(block_wait_step(false, false, Some(5)), BlockWait::Window);
-        assert_eq!(block_wait_step(false, true, None), BlockWait::Window);
-        assert_eq!(block_wait_step(false, false, None), BlockWait::Window);
+    fn without_a_clock_the_yield_bound_applies() {
+        let drivers = [Routed, Starting];
+        assert_eq!(block_wait_step(&drivers, None, 0), BlockWait::KeepWaiting);
+        assert_eq!(block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS - 1), BlockWait::KeepWaiting);
+        assert_eq!(block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS), BlockWait::TimedOut);
     }
 }
 

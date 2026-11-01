@@ -9,8 +9,8 @@ name = "driver-nvme"
 path = "src/main.rs"
 
 [features]
-# Phase 08C restart witness only (`F08B-DIE` in `src/dispatch.rs`); never
-# enabled by a production image profile.
+# Restart witnesses only (`F08B-DIE` and `F09C-DIE-ISSUED` in `src/dispatch.rs`);
+# never enabled by a production image profile.
 fault-inject = []
 
 [dependencies]

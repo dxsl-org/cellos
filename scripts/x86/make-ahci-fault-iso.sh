@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Build the private x86_64 ISO for the Phase 08 block witnesses
+# Build the private x86_64 ISO for the Phase 08/09C block witnesses
 # (tests/integration/tests/{ahci,nvme}-x86.rs, `VICELL_AHCI_FAULT_ISO`).
 #
 # The image differs from the canonical headless image in one way that matters:
 # /bin/ahci and /bin/nvme are built with `--features fault-inject`
-# (cells/drivers/ahci/src/fault_inject.rs, the `F08B-DIE` hook in
-# cells/drivers/nvme/src/dispatch.rs). It carries only the cells the witnesses
-# need (init with the canonical `input` feature, vfs, input, cellbox, platform,
-# the serial terminal, ahci and nvme), dev-key signed like every other lane,
-# plus the signed operator policy the `policy-required` kernel insists on.
+# (cells/drivers/ahci/src/fault_inject.rs, the `F08B-DIE`/`F09C-DIE-ISSUED`
+# hooks in cells/drivers/nvme/src/dispatch.rs). It carries only the cells the
+# witnesses need (init with the canonical `input` feature, vfs, input, cellbox,
+# platform, the serial terminal, ahci, nvme, and e1000 as an independent PCI
+# device owner beside the replaced storage driver), dev-key signed like every
+# other lane, plus the signed operator policy the `policy-required` kernel
+# insists on.
 #
 # Everything is built under its own cargo target directory so a fault-injecting
 # driver never lands in target/x86_64-unknown-none/release, which the canonical
@@ -51,13 +53,13 @@ echo "[ahci-fault] building cells into $BIN_DIR"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release --locked \
     --target "$TARGET" -Z build-std=core,alloc \
     -p app-init -p service-vfs -p service-input -p app-cellbox -p service-platform \
-    -p driver-serial-x86 -p driver-ahci -p driver-nvme \
+    -p driver-serial-x86 -p driver-ahci -p driver-nvme -p driver-e1000 \
     --features app-init/input,driver-ahci/fault-inject,driver-nvme/fault-inject
 
 # shellcheck source=scripts/lib-sign-cells.sh
 source "$REPO_ROOT/scripts/lib-sign-cells.sh"
 SIGN_TARGETS=()
-for binary in app-init service-vfs service-input cellbox platform driver-serial-x86 driver-ahci driver-nvme; do
+for binary in app-init service-vfs service-input cellbox platform driver-serial-x86 driver-ahci driver-nvme driver-e1000; do
     SIGN_TARGETS+=("$BIN_DIR/$binary")
 done
 sign_cells "${SIGN_TARGETS[@]}"
@@ -82,10 +84,11 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$BIN_DIR/driver-serial-x86" /bin/serial \
     "$BIN_DIR/driver-ahci" /bin/ahci \
     "$BIN_DIR/driver-nvme" /bin/nvme \
+    "$BIN_DIR/driver-e1000" /bin/e1000 \
     "$WORK/POLICY.BIN" /POLICY.BIN
 
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
-for required in init vfs input cellbox platform serial ahci nvme; do
+for required in init vfs input cellbox platform serial ahci nvme e1000; do
     if ! grep -Fq -- "LFN '$required'" "$WORK/fat-layout.txt"; then
         echo "FAIL: kernel_fs.img does not contain /bin/$required" >&2
         exit 1

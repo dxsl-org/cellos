@@ -175,11 +175,25 @@ Seek to end of file and append data. Semantically equivalent to OP_WRITE but ens
 
 ## Mount Points
 
-| Mount point | Backing  | Writable | Notes                                  |
-|-------------|----------|----------|----------------------------------------|
-| `/bin`      | RamFS    | No       | Embedded binaries (shell, lua, cat, etc.) |
-| `/tmp`      | RamFS    | Yes      | Volatile scratch; cleared on reboot    |
-| `/data`     | FAT16    | Yes      | Persistent storage on VirtIO disk (LBA 0–81919) |
+| Mount point | Backing | Writable | Notes |
+|-------------|---------|----------|-------|
+| `/` , `/tmp` | RamFS | `/tmp` yes | Volatile; cleared on reboot |
+| `/bin` | VIFS1 ramdisk ∪ FAT cell store (P6 of the primary disk) | No | Bootstrap cells plus disk cells |
+| `/mnt/sd` | FAT32 (P1 of the primary disk) | Yes | Interoperability/config volume |
+| `/data` | CellosFS Native (P4 of the primary disk) | Yes | Offline-provisioned; runtime never formats |
+| `/srv` | CellosFS Native (P5 of the primary disk) | Per access rules | Service volume |
+| `/mnt/disk/<name>` | FAT32 (P1 of each other disk) | Yes | One per additional storage device (Phase 09C) |
+
+Block devices (Phase 09C). Each block Driver Cell publishes a route for the one device
+it owns (syscall 416); VFS enumerates the routes once at start (syscall 432,
+`api::block_route::ViBlockRouteV1`). The **primary** disk is the only device whose MBR
+carries the Cellos P2 entry (type `0x7F`); otherwise the lowest device key. Every other
+disk with a FAT32 volume at LBA 2048 is mounted at `/mnt/disk/<name>`, where `<name>` is
+`pci-BB-DD-F` (PCI location) or `mmio-<base>` (platform window). Each device has its own
+route: a dead driver fails only that device's requests (writes `NotIssued` until the
+route has a live provider again; a write in flight at the death is `Indeterminate` and
+never replayed), and a restarted driver regains only its own device's route. A device
+registered after VFS start is mounted at the next boot.
 
 ---
 

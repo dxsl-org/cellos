@@ -78,6 +78,7 @@ mod tests {
         (429, ViSyscall::LookupServiceBound),
         (430, ViSyscall::TelemetrySnapshot),
         (431, ViSyscall::QueryRetirement),
+        (432, ViSyscall::LookupBlockRoute),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -314,14 +315,23 @@ mod tests {
     }
 
     /// 09B K1: `QueryRetirement` is 431, has no allowlist bit (the `u64` is
-    /// full) and is gated at dispatch like `NotifyOnExit`; 432 stays unmapped.
+    /// full) and is gated at dispatch like `NotifyOnExit`.
     #[test]
     fn query_retirement_is_dispatch_gated_without_allowlist_bit() {
         assert_eq!(ViSyscall::QueryRetirement as usize, 431);
         assert_eq!(ViSyscall::from(431), ViSyscall::QueryRetirement);
         assert_eq!(ViSyscall::QueryRetirement.allowlist_bit(), None);
         assert!(SyscallSet::EMPTY.permits(ViSyscall::QueryRetirement));
-        assert_eq!(ViSyscall::from(432), ViSyscall::Unknown);
+    }
+
+    /// 09C: `LookupBlockRoute` is 432, dispatch-gated like 431; 433 stays unmapped.
+    #[test]
+    fn lookup_block_route_is_dispatch_gated_without_allowlist_bit() {
+        assert_eq!(ViSyscall::LookupBlockRoute as usize, 432);
+        assert_eq!(ViSyscall::from(432), ViSyscall::LookupBlockRoute);
+        assert_eq!(ViSyscall::LookupBlockRoute.allowlist_bit(), None);
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::LookupBlockRoute));
+        assert_eq!(ViSyscall::from(433), ViSyscall::Unknown);
     }
 
     #[test]

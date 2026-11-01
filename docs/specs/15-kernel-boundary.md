@@ -171,8 +171,9 @@ Boot Cell itself.
 > ramdisk** (VIFS1, kernel-embedded), so no block device is read before the first Cell;
 > non-bootstrap cell ELFs live in a disk **FAT cell-store** served by VFS under `/bin`, and
 > post-boot spawns read the ELF via VFS + the new `sys_spawn_from_elf` syscall. The kernel
-> now drives **no** block hardware — `cells/drivers/virtio-blk/` owns the device and serves
-> `service::BLOCK_DRIVER`. See `.agents/260707-1726-g2-loader-redesign/`.
+> now drives **no** block hardware — `cells/drivers/virtio-blk/` owns the device and
+> publishes its per-device block route (syscall 416, Phase 09C; VFS reads routes with
+> syscall 432). See `.agents/260707-1726-g2-loader-redesign/`.
 
 ### Category D: Hardware Exclusivity Arbiter
 

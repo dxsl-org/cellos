@@ -4,19 +4,27 @@
 //! the Platform Cell (`/bin/platform`, spawned by the kernel) scans ECAM and
 //! registers devices/BARs; init spawns the NVMe Driver Cell (`/bin/nvme`),
 //! which locates the controller via `sys_find_pcie_device`, claims BAR0 MMIO,
-//! initialises the controller (admin + IO queues over DMA), and announces
-//! itself via `sys_register_block_driver`.
+//! initialises the controller (admin + IO queues over DMA), and binds the block
+//! route of its PCI function via `sys_register_block_device`.
 //!
 //! The oracle is the kernel's registration marker:
-//!   `[driver_cell] block driver registered`
+//!   `[driver_cell] block driver registered: tid=T device=pci-BB-DD-F route=R`
 //! which is only reachable after the FULL chain (ECAM scan → BAR registration
 //! → find → MMIO claim → controller RDY → Identify DMA round-trip → IO queue
 //! creation) has succeeded.
+//!
+//! The 08C and 09C witnesses need the fault-injection ISO
+//! (`bash scripts/x86/make-ahci-fault-iso.sh`, `VICELL_AHCI_FAULT_ISO`) and
+//! skip without it.
 //!
 //! Tests skip gracefully when the ISO or `qemu-system-x86_64` is absent.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use vicell_integration_tests::block_09c::fault_iso;
+use vicell_integration_tests::block_09c_cycles;
+use vicell_integration_tests::block_09c_lanes::{fresh_lease_and_cold_readback, Lane};
+use vicell_integration_tests::fat_disk::{python_binary, FatDisk};
 use vicell_integration_tests::{qemu_x86_binary, x86_iso_path, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
@@ -52,15 +60,6 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
 }
 
-fn python_binary() -> Option<&'static str> {
-    ["python", "python3"].into_iter().find(|binary| {
-        std::process::Command::new(binary)
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success())
-    })
-}
-
 fn make_nvme_disk() -> PathBuf {
     static CTR: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
@@ -78,7 +77,7 @@ fn make_nvme_disk() -> PathBuf {
 }
 
 /// The NVMe Driver Cell must bind the QEMU `-device nvme` controller and
-/// register as the system block driver.
+/// register its block route.
 ///
 /// Proves the whole PCIe storage chain under ring-3: Platform Cell ECAM scan,
 /// BAR registration, `sys_find_pcie_device`, user-mapped BAR0 MMIO, controller
@@ -93,13 +92,13 @@ fn nvme_driver_cell_registers_x86() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("[driver_cell] block driver registered", BOOT_TIMEOUT)
+    qemu.wait_for("[driver_cell] block driver registered: tid=", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
             panic!(
                 "NVMe Driver Cell did not register within {BOOT_TIMEOUT}s: {e}\n\
                  Chain: platform ECAM scan → find_pcie_device(01:08:02) → BAR0 MMIO \
-                 claim → controller init → sys_register_block_driver.\n\
+                 claim → controller init → sys_register_block_device.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
@@ -130,16 +129,15 @@ fn nvme_fat32_mount_x86() {
         );
         return;
     };
-    let disk = make_fat_nvme_disk(python);
+    let disk = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
 
     // 3. Boot and assert the mount marker.
-    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.arg());
     qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&disk);
             panic!(
                 "FAT32-on-NVMe mount not seen within {BOOT_TIMEOUT}s: {e}\n\
-                 Chain: nvme Driver Cell registers pre-VFS → VFS blk_router IPC → \
+                 Chain: nvme Driver Cell binds its route pre-VFS → VFS blk_router IPC → \
                  DrvRequest sector reads over NVMe DMA → fatfs BPB accept.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
@@ -158,58 +156,6 @@ fn nvme_fat32_mount_x86() {
     qemu.send_line("vcat /mnt/sd/probe.txt");
     qemu.wait_for_after("phase05-nvme-ok", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("NVMe read-back marker missing: {e}\n{}", qemu.dump()));
-
-    let _ = std::fs::remove_file(&disk);
-}
-
-/// An NVMe disk carrying a FAT32 volume at `PART_FAT32_BASE_LBA`.
-fn make_fat_nvme_disk(python: &str) -> PathBuf {
-    // 1. Format a 524,288-sector (256 MiB) FAT32 volume in a temp file.
-    const FAT_SECTORS: u64 = 524_288; // == api::disk::PART_FAT32_SECTORS
-    const FAT_BASE_OFFSET: u64 = 2_048 * 512; // PART_FAT32_BASE_LBA in bytes
-    let fat_img = std::env::temp_dir().join(format!(
-        "vicell_fat32_{}_{}.img",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos()
-    ));
-    {
-        let f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&fat_img)
-            .expect("create FAT32 scratch image");
-        f.set_len(FAT_SECTORS * 512)
-            .expect("size FAT32 scratch image");
-    }
-    let mkfat = repo_root().join("tools/mkfat32_inplace.py");
-    let status = std::process::Command::new(python)
-        .arg(&mkfat)
-        .arg(&fat_img)
-        .arg(FAT_SECTORS.to_string())
-        .status()
-        .expect("run mkfat32_inplace.py");
-    assert!(status.success(), "mkfat32_inplace.py failed");
-
-    // 2. Splice the volume into an NVMe disk at the partition offset.
-    let disk = make_nvme_disk();
-    {
-        use std::io::{Seek, SeekFrom, Write};
-        let fat_bytes = std::fs::read(&fat_img).expect("read FAT32 image");
-        let mut d = std::fs::OpenOptions::new()
-            .write(true)
-            .open(&disk)
-            .expect("open NVMe disk for splice");
-        d.set_len(FAT_BASE_OFFSET + FAT_SECTORS * 512 + 1024 * 1024)
-            .expect("grow NVMe disk");
-        d.seek(SeekFrom::Start(FAT_BASE_OFFSET))
-            .expect("seek to partition base");
-        d.write_all(&fat_bytes).expect("write FAT32 volume");
-    }
-    let _ = std::fs::remove_file(&fat_img);
-    disk
 }
 
 /// Phase 08C: a dead NVMe driver is restarted by init. The replacement claims
@@ -225,8 +171,8 @@ fn nvme_driver_restart_resets_and_serves_again_x86() {
         return;
     };
     let python = python_binary().expect("Python 3 formats the FAT32 fixture");
-    let disk = make_fat_nvme_disk(python);
-    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso, &disk.to_string_lossy());
+    let disk = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso, &disk.arg());
     for marker in ["[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
         qemu.wait_for(marker, BOOT_TIMEOUT)
             .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
@@ -248,7 +194,7 @@ fn nvme_driver_restart_resets_and_serves_again_x86() {
         "[pcie] quiesced",
         "Init: service restarted.",
         "[nvme] controller reset complete",
-        "[driver_cell] block driver registered",
+        "[driver_cell] block driver registered: tid=",
     ] {
         qemu.wait_for_after(marker, death, BOOT_TIMEOUT)
             .unwrap_or_else(|e| panic!("restart marker {marker:?}: {e}\n{}", qemu.dump()));
@@ -279,8 +225,6 @@ fn nvme_driver_restart_resets_and_serves_again_x86() {
     if let Some(report) = vicell_integration_tests::bench_milestones::retire_report("nvme", "tcg", after) {
         println!("P08-RETIRE-LATENCY {report}");
     }
-    drop(qemu);
-    let _ = std::fs::remove_file(&disk);
 }
 
 /// Boot with an NVMe controller attached must still reach the interactive
@@ -303,4 +247,67 @@ fn nvme_boot_reaches_shell_x86() {
     });
 
     let _ = std::fs::remove_file(&disk);
+}
+
+/// Phase 09C E1+E2+E3 on NVMe (+e1000), 1 vCPU: the verdict-gated
+/// replacement rebinds the same route under a new tid after
+/// `Init: nvme retirement Contained (…)`, reads boot 1's record cache-cold,
+/// and a write that died after the SQ doorbell (`F09C-DIE-ISSUED`) is reported
+/// indeterminate and never replayed.
+#[test]
+fn nvme_09c_fresh_lease_cold_readback_uncertain_write_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::Nvme, &iso, 1, true);
+    }
+}
+
+/// Phase 09C E5: the NVMe E1–E3 lane on 2 vCPUs.
+#[test]
+fn nvme_09c_fresh_lease_cold_readback_uncertain_write_smp2_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::Nvme, &iso, 2, true);
+    }
+}
+
+/// Phase 09C E4(d): rapid NVMe deaths exhaust init's crash budget; after
+/// `restart storm` the device's I/O fails with nothing sent.
+#[test]
+fn nvme_09c_crash_budget_gives_up_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::crash_budget(Lane::Nvme, &iso);
+    }
+}
+
+/// Phase 09C E6: the e1000 owner (`/bin/e1000` on the fault ISO) keeps its tid
+/// and BDF grant across an NVMe replacement; its function is never quiesced.
+#[test]
+fn nvme_09c_nic_owner_survives_replacement_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::nic_survives_nvme_replacement(&iso);
+    }
+}
+
+/// Phase 09C E7: E1+E2 for NVMe behind Intel VT-d (real IOTLB invalidation).
+#[test]
+fn nvme_09c_vtd_fresh_lease_cold_readback_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::NvmeVtd, &iso, 1, false);
+    }
+}
+
+/// Phase 09C E7 on 2 vCPUs.
+#[test]
+fn nvme_09c_vtd_fresh_lease_cold_readback_smp2_x86() {
+    if let Some(iso) = fault_iso() {
+        fresh_lease_and_cold_readback(Lane::NvmeVtd, &iso, 2, false);
+    }
+}
+
+/// Phase 09C E8: ten NVMe replacements spaced past init's 1000-tick window,
+/// each verdict `Contained … dma=0 qpages=0 leaked=0`, each read served.
+#[test]
+fn nvme_09c_ten_replacement_cycles_x86() {
+    if let Some(iso) = fault_iso() {
+        block_09c_cycles::repeated_cycles(Lane::Nvme, &iso);
+    }
 }

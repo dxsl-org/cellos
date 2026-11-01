@@ -19,6 +19,12 @@ use std::time::{Duration, Instant};
 
 pub mod ppm;
 pub mod bench_milestones;
+pub mod fat_disk;
+pub mod block_09c;
+pub mod block_09c_replace;
+pub mod block_09c_lanes;
+pub mod block_09c_cycles;
+pub mod block_09c_two_disks;
 pub use ppm::{pixel_region, read_ppm_frame};
 
 /// Announce a skip on the real stderr, bypassing libtest's output capture.
@@ -1025,8 +1031,32 @@ impl QemuRunner {
     /// enumerates as `8086:2922` class `01:06:01`. This is the lane for the AHCI
     /// storage Driver Cell (phase 02a).
     pub fn boot_x86_bios_with_sata(iso: &str, sata_disk: &str) -> Self {
+        Self::boot_x86_bios_with_sata_smp(iso, sata_disk, 1)
+    }
+
+    /// [`Self::boot_x86_bios_with_sata`] with `cpus` vCPUs (`-smp`).
+    pub fn boot_x86_bios_with_sata_smp(iso: &str, sata_disk: &str, cpus: usize) -> Self {
+        Self::boot_x86_q35(
+            iso,
+            cpus,
+            &[
+                "-drive".into(),
+                format!("file={sata_disk},format=raw,if=none,id=sata0"),
+                "-device".into(),
+                "ide-hd,drive=sata0".into(),
+            ],
+        )
+    }
+
+    /// Shared body of the q35 storage lanes: Limine ISO on the CD-ROM, 256 MiB,
+    /// `cpus` vCPUs, COM1 bridged to the serial socket, and `devices` appended in
+    /// order (QEMU wires devices in command-line order, which the VT-d lane
+    /// relies on).
+    fn boot_x86_q35(iso: &str, cpus: usize, devices: &[String]) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
+        let cpus = cpus.to_string();
+        let serial = format!("tcp:127.0.0.1:{port}");
 
         let mut child = Command::new(qemu_binary_x86())
             .args([
@@ -1036,6 +1066,8 @@ impl QemuRunner {
                 "qemu64,+pdpe1gb",
                 "-m",
                 "256M",
+                "-smp",
+                &cpus,
                 "-nographic",
                 "-cdrom",
                 iso,
@@ -1044,13 +1076,9 @@ impl QemuRunner {
                 "-no-reboot",
                 "-monitor",
                 "none",
-                "-drive",
-                &format!("file={sata_disk},format=raw,if=none,id=sata0"),
-                "-device",
-                "ide-hd,drive=sata0",
-                "-serial",
-                &format!("tcp:127.0.0.1:{port}"),
             ])
+            .args(devices)
+            .args(["-serial", &serial])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -1193,74 +1221,40 @@ impl QemuRunner {
     /// built-in ICH9 AHCI controller carrying a raw SATA image.
     ///
     /// The two block Driver Cells (`/bin/nvme`, `/bin/ahci`) are spawned
-    /// together by init, so this lane witnesses what the kernel does when two
-    /// drivers call `sys_register_block_driver` in one boot. Registration is
-    /// last-wins at both the role (`driver_cell::register_block_driver`) and the
-    /// service-registry layer, so both calls succeed and the later TID becomes
-    /// the route VFS resolves (no LIST, no refusal).
+    /// together by init and each binds the block route of the PCI function it
+    /// owns, so every disk has its own route (`[driver_cell] block driver
+    /// registered: … route=R`). VFS mounts the primary disk (the unique Cellos
+    /// MBR, else the lowest device key) at `/mnt/sd` and the other at
+    /// `/mnt/disk/pci-BB-DD-F`.
     pub fn boot_x86_bios_with_sata_and_nvme(
         iso: &str,
         sata_disk: &str,
         nvme_disk: &str,
     ) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
-        let port = listener.local_addr().unwrap().port();
+        Self::boot_x86_bios_with_sata_and_nvme_smp(iso, sata_disk, nvme_disk, 1)
+    }
 
-        let mut child = Command::new(qemu_binary_x86())
-            .args([
-                "-machine",
-                "q35",
-                "-cpu",
-                "qemu64,+pdpe1gb",
-                "-m",
-                "256M",
-                "-nographic",
-                "-cdrom",
-                iso,
-                "-boot",
-                "d",
-                "-no-reboot",
-                "-monitor",
-                "none",
-                "-drive",
-                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",
-                "nvme,drive=nvme0,serial=deadbeef01",
-                "-drive",
-                &format!("file={sata_disk},format=raw,if=none,id=sata0"),
-                "-device",
-                "ide-hd,drive=sata0",
-                "-serial",
-                &format!("tcp:127.0.0.1:{port}"),
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("qemu-system-x86_64 must be on PATH");
-
-        let stream = accept_qemu_serial(&listener, &mut child);
-        let writer = stream.try_clone().expect("clone serial stream");
-
-        let output = Arc::new(Mutex::new(String::new()));
-        let buf = Arc::clone(&output);
-        thread::spawn(move || {
-            let mut reader = BufReader::new(stream);
-            let mut byte = [0u8; 1];
-            loop {
-                match reader.read(&mut byte) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
-                }
-            }
-        });
-        Self {
-            child,
-            writer: Some(writer),
-            output,
-            temp_disk: None,
-            monitor: None,
-        }
+    /// [`Self::boot_x86_bios_with_sata_and_nvme`] with `cpus` vCPUs (`-smp`).
+    pub fn boot_x86_bios_with_sata_and_nvme_smp(
+        iso: &str,
+        sata_disk: &str,
+        nvme_disk: &str,
+        cpus: usize,
+    ) -> Self {
+        Self::boot_x86_q35(
+            iso,
+            cpus,
+            &[
+                "-drive".into(),
+                format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device".into(),
+                "nvme,drive=nvme0,serial=deadbeef01".into(),
+                "-drive".into(),
+                format!("file={sata_disk},format=raw,if=none,id=sata0"),
+                "-device".into(),
+                "ide-hd,drive=sata0".into(),
+            ],
+        )
     }
 
     /// Boot x86_64 q35 from a Limine ISO with NVMe + e1000 NIC.
@@ -1268,64 +1262,25 @@ impl QemuRunner {
     /// Same as `boot_x86_bios_with_nvme` plus `-device e1000,netdev=net0`.
     /// `restrict=on` prevents outbound traffic in CI.
     pub fn boot_x86_bios_with_nic(iso: &str, nvme_disk: &str) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
-        let port = listener.local_addr().unwrap().port();
+        Self::boot_x86_bios_with_nic_smp(iso, nvme_disk, 1)
+    }
 
-        let mut child = Command::new(qemu_binary_x86())
-            .args([
-                "-machine",
-                "q35",
-                "-cpu",
-                "qemu64,+pdpe1gb",
-                "-m",
-                "256M",
-                "-nographic",
-                "-cdrom",
-                iso,
-                "-boot",
-                "d",
-                "-no-reboot",
-                "-monitor",
-                "none",
-                "-drive",
-                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",
-                "nvme,drive=nvme0,serial=deadbeef01",
-                "-netdev",
-                "user,id=net0,restrict=on",
-                "-device",
-                "e1000,netdev=net0",
-                "-serial",
-                &format!("tcp:127.0.0.1:{port}"),
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("qemu-system-x86_64 must be on PATH");
-
-        let stream = accept_qemu_serial(&listener, &mut child);
-        let writer = stream.try_clone().expect("clone serial stream");
-
-        let output = Arc::new(Mutex::new(String::new()));
-        let buf = Arc::clone(&output);
-        thread::spawn(move || {
-            let mut reader = BufReader::new(stream);
-            let mut byte = [0u8; 1];
-            loop {
-                match reader.read(&mut byte) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
-                }
-            }
-        });
-        Self {
-            child,
-            writer: Some(writer),
-            output,
-            temp_disk: None,
-            monitor: None,
-        }
+    /// [`Self::boot_x86_bios_with_nic`] with `cpus` vCPUs (`-smp`).
+    pub fn boot_x86_bios_with_nic_smp(iso: &str, nvme_disk: &str, cpus: usize) -> Self {
+        Self::boot_x86_q35(
+            iso,
+            cpus,
+            &[
+                "-drive".into(),
+                format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device".into(),
+                "nvme,drive=nvme0,serial=deadbeef01".into(),
+                "-netdev".into(),
+                "user,id=net0,restrict=on".into(),
+                "-device".into(),
+                "e1000,netdev=net0".into(),
+            ],
+        )
     }
 
     /// Boot x86_64 q35 from a Limine ISO with NVMe + QEMU's `igb` NIC.
@@ -1480,7 +1435,12 @@ impl QemuRunner {
     /// Same as `boot_x86_bios_with_nic` but adds `-device intel-iommu` before
     /// the NIC so QEMU wires it up first.
     pub fn boot_x86_bios_with_vtd(iso: &str, nvme_disk: &str) -> Self {
-        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "e1000")
+        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "e1000", 1)
+    }
+
+    /// [`Self::boot_x86_bios_with_vtd`] with `cpus` vCPUs (`-smp`).
+    pub fn boot_x86_bios_with_vtd_smp(iso: &str, nvme_disk: &str, cpus: usize) -> Self {
+        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "e1000", cpus)
     }
 
     /// Boot x86_64 q35 from a Limine ISO with NVMe + Intel VT-d + QEMU's `igb`.
@@ -1490,73 +1450,29 @@ impl QemuRunner {
     /// precedes every endpoint device, so the igb controller's descriptor and
     /// buffer DMA must translate before a frame can move in either direction.
     pub fn boot_x86_bios_with_vtd_igb_nic(iso: &str, nvme_disk: &str) -> Self {
-        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "igb")
+        Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, "igb", 1)
     }
 
     /// Shared body of the VT-d lanes; `nic` is the QEMU NIC model, always placed
     /// **after** `intel-iommu` so QEMU wires the IOMMU up first.
-    fn boot_x86_bios_with_vtd_nic(iso: &str, nvme_disk: &str, nic: &str) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
-        let port = listener.local_addr().unwrap().port();
-
-        let mut child = Command::new(qemu_binary_x86())
-            .args([
-                "-machine",
-                "q35",
-                "-cpu",
-                "qemu64,+pdpe1gb",
-                "-m",
-                "256M",
-                "-nographic",
-                "-cdrom",
-                iso,
-                "-boot",
-                "d",
-                "-no-reboot",
-                "-monitor",
-                "none",
-                "-drive",
-                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",
-                "nvme,drive=nvme0,serial=deadbeef01",
+    fn boot_x86_bios_with_vtd_nic(iso: &str, nvme_disk: &str, nic: &str, cpus: usize) -> Self {
+        Self::boot_x86_q35(
+            iso,
+            cpus,
+            &[
+                "-drive".into(),
+                format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device".into(),
+                "nvme,drive=nvme0,serial=deadbeef01".into(),
                 // intel-iommu must precede endpoint devices.
-                "-device",
-                "intel-iommu",
-                "-netdev",
-                "user,id=net0,restrict=on",
-                "-device",
-                &format!("{nic},netdev=net0"),
-                "-serial",
-                &format!("tcp:127.0.0.1:{port}"),
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("qemu-system-x86_64 must be on PATH");
-
-        let stream = accept_qemu_serial(&listener, &mut child);
-        let writer = stream.try_clone().expect("clone serial stream");
-
-        let output = Arc::new(Mutex::new(String::new()));
-        let buf = Arc::clone(&output);
-        thread::spawn(move || {
-            let mut reader = BufReader::new(stream);
-            let mut byte = [0u8; 1];
-            loop {
-                match reader.read(&mut byte) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
-                }
-            }
-        });
-        Self {
-            child,
-            writer: Some(writer),
-            output,
-            temp_disk: None,
-            monitor: None,
-        }
+                "-device".into(),
+                "intel-iommu".into(),
+                "-netdev".into(),
+                "user,id=net0,restrict=on".into(),
+                "-device".into(),
+                format!("{nic},netdev=net0"),
+            ],
+        )
     }
 
     /// Boot q35 with an NVMe endpoint behind a PCIe root port on bus 1.

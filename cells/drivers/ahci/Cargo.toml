@@ -9,8 +9,8 @@ name = "driver-ahci"
 path = "src/main.rs"
 
 [features]
-# Phase 08A block-outcome witness only (`src/fault_inject.rs`); never enabled
-# by a production image profile.
+# Block-outcome and restart witnesses only (`src/fault_inject.rs`); never
+# enabled by a production image profile.
 fault-inject = []
 
 [dependencies]

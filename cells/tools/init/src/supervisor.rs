@@ -1,12 +1,96 @@
+use alloc::string::String;
+use api::retirement::{reason, RetirementState, ViRetirementV1};
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_send};
+use ostd::syscall::{sys_lookup_service, sys_query_retirement, sys_send, SyscallError};
 use cellos_boot_config::RestartPolicy;
 
 use crate::service_table::{self, now_ticks, Service};
 
 const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
+/// Scheduler ticks init waits for a dead incarnation's retirement verdict to
+/// leave `Pending` before it decides; a verdict still pending then is unproven.
+const VERDICT_WAIT_TICKS: u64 = 200;
+/// Poll backstop for a scheduler-tick clock that never advances.
+const VERDICT_POLL_LIMIT: usize = 5_000_000;
+
+/// What init does with a service whose death passed the policy and the budget.
+#[derive(Debug, PartialEq, Eq)]
+enum Decision {
+    /// The verdict is `Contained`, or `Quarantined` without `DMA_DEFERRED`.
+    Restart(ViRetirementV1),
+    /// `Quarantined` with `DMA_DEFERRED`: the kernel retains the PCI function and
+    /// the record will not change this boot, so no replacement can claim it.
+    DeviceUnavailable,
+    /// `Unproven`, no record, refused, or still `Pending` after the bound.
+    NodeRecoveryRequired,
+}
+
+/// The restart policy table, identical for every supervised service.
+/// `WRITABLE_BORROW` is reported in the line but never changes the decision.
+fn restart_decision(verdict: Result<ViRetirementV1, SyscallError>) -> Decision {
+    let Ok(record) = verdict else {
+        return Decision::NodeRecoveryRequired;
+    };
+    match record.retirement_state() {
+        Some(RetirementState::Contained) => Decision::Restart(record),
+        Some(RetirementState::Quarantined) if record.reasons & reason::DMA_DEFERRED != 0 => {
+            Decision::DeviceUnavailable
+        }
+        Some(RetirementState::Quarantined) => Decision::Restart(record),
+        Some(RetirementState::Pending | RetirementState::Unproven) | None => {
+            Decision::NodeRecoveryRequired
+        }
+    }
+}
+
+/// The one consumer-visible line for a decision.
+fn decision_line(name: &str, decision: &Decision) -> String {
+    match decision {
+        Decision::Restart(record) => alloc::format!(
+            "Init: {name} retirement {} (reasons=0x{:x} dma={} qpages={} leaked={}) — restarting",
+            if record.retirement_state() == Some(RetirementState::Contained) {
+                "Contained"
+            } else {
+                "Quarantined"
+            },
+            record.reasons,
+            record.dma_deferred,
+            record.quarantined_pages,
+            record.leaked_pages,
+        ),
+        Decision::DeviceUnavailable => {
+            alloc::format!("Init: {name} device unavailable: DMA teardown unacknowledged (BDF retained)")
+        }
+        Decision::NodeRecoveryRequired => {
+            alloc::format!("Init: {name} node recovery required: containment unproven, no restart")
+        }
+    }
+}
+
+/// Bounded verdict wait: poll while `Pending`, yielding between polls, until
+/// `VERDICT_WAIT_TICKS` have passed. Returns the last answer, which is still a
+/// `Pending` record when the bound ran out.
+pub(crate) fn await_verdict(dead: usize) -> Result<ViRetirementV1, SyscallError> {
+    let started = now_ticks();
+    let mut polls = 0usize;
+    loop {
+        let verdict = sys_query_retirement(dead);
+        let pending = matches!(
+            verdict,
+            Ok(record) if record.retirement_state() == Some(RetirementState::Pending)
+        );
+        if !pending
+            || now_ticks().wrapping_sub(started) >= VERDICT_WAIT_TICKS
+            || polls >= VERDICT_POLL_LIMIT
+        {
+            return verdict;
+        }
+        polls += 1;
+        ostd::task::yield_now();
+    }
+}
 
 pub(crate) fn run(services: &mut [Service]) -> ! {
     let mut activator = crate::activation::Activator::new();
@@ -79,6 +163,18 @@ pub(crate) fn run(services: &mut [Service]) -> ! {
             continue;
         }
         service.restart_count += 1;
+        // The verdict gate: a replacement starts only after the dead
+        // incarnation's retirement verdict allows it. A refusal keeps the
+        // budget already charged and leaves `restart_pending` unarmed; only a
+        // new watched death can arm it again.
+        let decision = restart_decision(await_verdict(dead));
+        println(&decision_line(&service.spec.name, &decision));
+        if !matches!(decision, Decision::Restart(_)) {
+            if service.spec.required {
+                println("Init: required service unavailable — recovery failed.");
+            }
+            continue;
+        }
         // Reserve the existing crash budget once for this observed death.
         // Dependency recovery must neither discard this restart nor give a
         // crash-storm victim a new budget merely because time has passed.
@@ -129,4 +225,90 @@ fn relay_hypervisor_exit(dead: usize) {
         let _ = sys_send(supervisor, &message);
     }
     println("Init: hypervisor exited — scanout cleanup relayed.");
+}
+
+#[cfg(test)]
+mod restart_decision_tests {
+    use super::{decision_line, restart_decision, Decision};
+    use api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_VERSION};
+    use ostd::syscall::SyscallError;
+
+    fn record(state: RetirementState, reasons: u32) -> ViRetirementV1 {
+        ViRetirementV1 {
+            version: RETIREMENT_RECORD_VERSION,
+            state: state as u16,
+            reasons,
+            root_tid: 42,
+            dma_deferred: u32::from(reasons & reason::DMA_DEFERRED != 0),
+            quarantined_pages: 3,
+            leaked_pages: 0,
+            ..ViRetirementV1::default()
+        }
+    }
+
+    #[test]
+    fn contained_restarts() {
+        let contained = record(RetirementState::Contained, 0);
+        assert_eq!(restart_decision(Ok(contained)), Decision::Restart(contained));
+        let borrowed = record(RetirementState::Contained, reason::WRITABLE_BORROW);
+        assert_eq!(restart_decision(Ok(borrowed)), Decision::Restart(borrowed));
+    }
+
+    #[test]
+    fn quarantined_without_deferred_dma_restarts() {
+        for reasons in [
+            reason::TRACKED_QUARANTINE,
+            reason::TRACKED_QUARANTINE | reason::WRITABLE_BORROW,
+        ] {
+            let quarantined = record(RetirementState::Quarantined, reasons);
+            assert_eq!(restart_decision(Ok(quarantined)), Decision::Restart(quarantined));
+        }
+    }
+
+    #[test]
+    fn quarantined_with_deferred_dma_leaves_the_device_unavailable() {
+        for reasons in [reason::DMA_DEFERRED, reason::DMA_DEFERRED | reason::TRACKED_QUARANTINE] {
+            let retained = record(RetirementState::Quarantined, reasons);
+            assert_eq!(restart_decision(Ok(retained)), Decision::DeviceUnavailable);
+        }
+    }
+
+    #[test]
+    fn unproven_pending_and_every_error_require_node_recovery() {
+        let unproven = record(RetirementState::Unproven, reason::SHM_UNTRACKED);
+        assert_eq!(restart_decision(Ok(unproven)), Decision::NodeRecoveryRequired);
+        // A record still pending once the wait bound ran out.
+        let pending = record(RetirementState::Pending, 0);
+        assert_eq!(restart_decision(Ok(pending)), Decision::NodeRecoveryRequired);
+        for error in [
+            SyscallError::FileNotFound,
+            SyscallError::PermissionDenied,
+            SyscallError::Unknown,
+            SyscallError::InvalidCommand,
+        ] {
+            assert_eq!(restart_decision(Err(error)), Decision::NodeRecoveryRequired);
+        }
+    }
+
+    #[test]
+    fn decision_lines_are_exact() {
+        let contained = record(RetirementState::Contained, reason::WRITABLE_BORROW);
+        assert_eq!(
+            decision_line("ahci", &Decision::Restart(contained)),
+            "Init: ahci retirement Contained (reasons=0x4 dma=0 qpages=3 leaked=0) — restarting"
+        );
+        let quarantined = record(RetirementState::Quarantined, reason::TRACKED_QUARANTINE);
+        assert_eq!(
+            decision_line("vfs", &Decision::Restart(quarantined)),
+            "Init: vfs retirement Quarantined (reasons=0x10 dma=0 qpages=3 leaked=0) — restarting"
+        );
+        assert_eq!(
+            decision_line("nvme", &Decision::DeviceUnavailable),
+            "Init: nvme device unavailable: DMA teardown unacknowledged (BDF retained)"
+        );
+        assert_eq!(
+            decision_line("config", &Decision::NodeRecoveryRequired),
+            "Init: config node recovery required: containment unproven, no restart"
+        );
+    }
 }

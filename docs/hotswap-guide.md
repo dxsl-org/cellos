@@ -59,6 +59,23 @@ separate state-authority Cell (pattern: `cells/demos/recovery-demo`):
 That state is RAM-only: it survives a worker crash, not an authority crash,
 reboot or power loss. Durable retention requires the CellosFS state owner.
 
+### Init restarts only after a retirement verdict (Phase 09C)
+
+Every service init restarts (policy `always` or `on-failure`) is restarted only
+after init has read the dead root's `QueryRetirement` verdict (bounded wait,
+200 scheduler ticks):
+
+- `Contained`, or `Quarantined` for counted pins/VFS leases only → restart;
+- `Quarantined` with deferred DMA teardown → no restart for the rest of the boot
+  (the device's PCI function stays retained; the device is unavailable);
+- `Unproven`, no record, a refusal or still `Pending` at the bound → no restart,
+  `node recovery required`.
+
+`restart = "never"` services are not queried. The crash budget (5 restarts per
+1000 ticks) is charged before the verdict; a refused restart keeps that charge.
+A restarted block driver regains only the route of the device it owns
+(`docs/vfs-api.md`, Mount Points).
+
 ---
 
 ## Implementing `ViStateTransfer`

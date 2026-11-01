@@ -86,6 +86,12 @@ pub static PREFIX_RULES: &[PathRule] = &[
         allow_read_all: true,
         allow_write_all: true,
     },
+    // Secondary disks' FAT32 volumes (`/mnt/disk/<name>`): the /mnt/sd policy.
+    PathRule {
+        prefix: "/mnt/disk/",
+        allow_read_all: true,
+        allow_write_all: true,
+    },
     // /srv service volume (CellosFS Native on P5). Writable like /data: without
     // this rule every /srv write fell through to the read-only "/" rule and
     // failed before reaching the backend.
