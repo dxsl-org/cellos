@@ -234,7 +234,7 @@ pub fn self_test() -> bool {
             .first()
             .copied()
             .and_then(|(base, len, class)| {
-                crate::resource_registry::request_mmio(CellId(0x1111), base, len, class)
+                crate::resource_registry::request_mmio(TARGET_TID, base, len, class)
                     .is_ok()
                     .then_some((base, len))
             });
@@ -364,7 +364,7 @@ pub fn self_test() -> bool {
         // synthetic window is registered only where the test hook exists.
         #[cfg(feature = "test-hooks")]
         let bar_claimed = crate::resource_registry::test_register_region(
-            CellId(0x3333),
+            DRIVER_TID,
             DRIVER_BAR,
             0x1000,
             crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,

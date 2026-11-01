@@ -4529,16 +4529,16 @@ fn cap_revoke_gate(
     Ok(())
 }
 
-/// Release `cell`'s MMIO windows of `classes` and take their user accessibility
-/// away.
+/// Release task `tid`'s MMIO windows of `classes` and take their user
+/// accessibility away.
 ///
-/// Fail-closed: an error means a window the Cell can still reach, so the caller
+/// Fail-closed: an error means a window the task can still reach, so the caller
 /// returns without clearing the capability.
 fn revoke_mmio_classes(
-    cell: CellId,
+    tid: usize,
     classes: crate::resource_registry::MmioClass,
 ) -> Result<(), SyscallError> {
-    for (base, len) in crate::resource_registry::revoke_mmio_for(cell, classes) {
+    for (base, len) in crate::resource_registry::revoke_mmio_for(tid, classes) {
         if let Err(e) = crate::memory::paging::revoke_mmio_user(base, len) {
             log::error!(
                 "[kernel] CapRevoke: MMIO window {base:#x}+{len:#x} is still user-reachable \
@@ -6091,7 +6091,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
             if mmio_revoke != 0 {
                 revoke_mmio_classes(
-                    target_cell,
+                    target_tid,
                     mmio_revoke as crate::resource_registry::MmioClass,
                 )?;
                 // A revoked device class can be the authority behind a grant the
@@ -6113,7 +6113,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     return Err(SyscallError::NotSupported);
                 }
                 revoke_mmio_classes(
-                    target_cell,
+                    target_tid,
                     crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
                 )?;
                 reclaim_owned_grants(target_tid);
@@ -6121,7 +6121,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
 
             if cap_mask & CM::PLATFORM != 0 {
                 // The Platform Cell's ECAM config-space window.
-                revoke_mmio_classes(target_cell, crate::resource_registry::CLASS_ECAM)?;
+                revoke_mmio_classes(target_tid, crate::resource_registry::CLASS_ECAM)?;
             }
 
             let mut target_present = true;
@@ -8842,7 +8842,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 {
                     let mmio = hal_soc_bcm27xx::BCM2837.mmio;
                     if !crate::resource_registry::owns_exact_mmio(
-                        types::CellId(caller_id as u64),
+                        caller_id,
                         mmio.mailbox_base,
                         mmio.mailbox_grant_size,
                     ) {
@@ -9114,7 +9114,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
 
             if caller_has_platform(caller_id) {
                 return match crate::resource_registry::request_mmio_unchecked(
-                    types::CellId(caller_id as u64),
+                    caller_id,
                     base,
                     len,
                 ) {
@@ -9131,7 +9131,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if caller_has_pcie_driver(caller_id) && crate::resource_registry::is_pcie_bar(base, len)
             {
                 return match crate::resource_registry::request_mmio(
-                    types::CellId(caller_id as u64),
+                    caller_id,
                     base,
                     len,
                     crate::resource_registry::DEV_PCIE,
@@ -9149,7 +9149,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if caller_has_usb_driver(caller_id) && crate::resource_registry::is_dwc2_mmio(base, len)
             {
                 return match crate::resource_registry::request_dwc2_mmio(
-                    types::CellId(caller_id as u64),
+                    caller_id,
                     base,
                     len,
                 ) {
@@ -9175,7 +9175,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 return Err(SyscallError::PermissionDenied);
             }
             match crate::resource_registry::request_mmio(
-                types::CellId(caller_id as u64),
+                    caller_id,
                 base,
                 len,
                 allowed_devices,
@@ -10841,7 +10841,7 @@ mod tests {
     /// errors, and binds only the route of the device the caller owns.
     #[test]
     fn register_block_driver_binds_only_the_callers_owned_device_route() {
-        use crate::resource_registry::{claim_bdf_owner, release_bdfs_for, release_for};
+        use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
         use crate::task::drivers::driver_cell::{deregister_all_for, reset_block_routes};
         use api::block_route::MAX_BLOCK_ROUTES;
         const BDF: usize = 0x4160;
@@ -10875,7 +10875,7 @@ mod tests {
             assert!(claim_bdf_owner(BDF as u32, tid));
             assert!(claim_bdf_owner(FOREIGN_BDF as u32, 2));
             // `RequestMmio` records the claiming task id as the window owner.
-            assert!(crate::resource_registry::request_mmio_unchecked(CellId(4), BASE, 0x1000)
+            assert!(crate::resource_registry::request_mmio_unchecked(4, BASE, 0x1000)
                 .is_ok());
             let empty = block_routes_snapshot();
 
@@ -10952,7 +10952,7 @@ mod tests {
                 release_bdfs_for(owner);
                 deregister_all_for(owner);
             }
-            release_for(CellId(4));
+            crate::resource_registry::release_mmio_for(4);
             reset_block_routes();
         });
     }
@@ -11673,7 +11673,7 @@ mod tests {
         const BASE: usize = 0x7E1A_0000_0000;
         let _guard = crate::TEST_STATE_LOCK.lock();
         assert!(crate::resource_registry::request_mmio_unchecked(
-            CellId(OWNER as u64),
+            OWNER,
             BASE,
             0x1000
         )
@@ -11686,7 +11686,7 @@ mod tests {
         assert!(!wait_irq_base_permitted(OWNER, BASE + 0x200));
         assert!(!wait_irq_base_permitted(OWNER, BASE + 0x1000));
 
-        crate::resource_registry::release_for(CellId(OWNER as u64));
+        crate::resource_registry::release_mmio_for(OWNER);
         assert!(!wait_irq_base_permitted(OWNER, BASE));
         assert!(wait_irq_base_permitted(OWNER, 0));
     }

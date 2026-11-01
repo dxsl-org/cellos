@@ -20,14 +20,14 @@ use super::syscall::{handle_syscall, Syscall};
 use super::thread_cap_selftest::{insert, mk_task, remove};
 use crate::memory::paging;
 use crate::resource_registry as registry;
-use types::CellId;
 
-// Synthetic tid/cell above the boot-assigned range; removed before return.
+// Synthetic tids/cell above the boot-assigned range; removed before return.
+// MMIO windows are owned by task id, so the probes claim under tids.
 const TARGET_TID: usize = 9301;
 const TARGET_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 12) as u64;
-/// A second cell for the allowlist path, so a stale region owned by the first
+/// A second owner for the allowlist path, so a stale region owned by the first
 /// cannot make the revoke look selective.
-const ALLOW_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 13) as u64;
+const ALLOW_TID: usize = 9302;
 
 const PAGE: usize = 4096;
 /// Two windows owned under classes no `DEV_*` bit names — the class the platform
@@ -41,18 +41,18 @@ const WINDOW_B: usize = 0x5001_0000;
 /// carries at most one window per board, so a second class has to come from the
 /// test hook to make selectivity observable.
 fn probe_classes() -> bool {
-    let cell = CellId(TARGET_CELL);
-    if !registry::test_register_region(cell, WINDOW_A, PAGE, registry::CLASS_ECAM)
-        || !registry::test_register_region(cell, WINDOW_B, PAGE, registry::CLASS_DWC2)
+    let owner = TARGET_TID;
+    if !registry::test_register_region(owner, WINDOW_A, PAGE, registry::CLASS_ECAM)
+        || !registry::test_register_region(owner, WINDOW_B, PAGE, registry::CLASS_DWC2)
     {
         return false;
     }
 
-    let revoked = registry::revoke_mmio_for(cell, registry::CLASS_ECAM);
+    let revoked = registry::revoke_mmio_for(owner, registry::CLASS_ECAM);
     let selective = revoked == alloc::vec![(WINDOW_A, PAGE)]
         && registry::lookup_mmio_owner(WINDOW_A).is_none()
-        && registry::owns_exact_mmio(cell, WINDOW_B, PAGE);
-    let rest = registry::revoke_mmio_for(cell, registry::CLASS_DWC2);
+        && registry::owns_exact_mmio(owner, WINDOW_B, PAGE);
+    let rest = registry::revoke_mmio_for(owner, registry::CLASS_DWC2);
     selective && rest == alloc::vec![(WINDOW_B, PAGE)]
 }
 
@@ -62,11 +62,10 @@ fn probe_classes() -> bool {
 /// `None` when this board has no allowlisted window to claim.
 fn probe_allowlist() -> Option<bool> {
     let &(base, len, class) = registry::allowed_windows().first()?;
-    let cell = CellId(ALLOW_CELL);
-    if registry::request_mmio(cell, base, len, class).is_err() {
+    if registry::request_mmio(ALLOW_TID, base, len, class).is_err() {
         return Some(false);
     }
-    let revoked = registry::revoke_mmio_for(cell, class as registry::MmioClass);
+    let revoked = registry::revoke_mmio_for(ALLOW_TID, class as registry::MmioClass);
     Some(revoked == alloc::vec![(base, len)] && registry::lookup_mmio_owner(base).is_none())
 }
 
@@ -99,8 +98,8 @@ pub(crate) fn self_test() -> bool {
     let allowlist = probe_allowlist();
 
     // Teardown: release anything a probe left owned, then drop the task.
-    let _ = registry::revoke_mmio_for(CellId(TARGET_CELL), u16::MAX);
-    let _ = registry::revoke_mmio_for(CellId(ALLOW_CELL), u16::MAX);
+    let _ = registry::revoke_mmio_for(TARGET_TID, u16::MAX);
+    let _ = registry::revoke_mmio_for(ALLOW_TID, u16::MAX);
     remove(TARGET_TID);
 
     report("MMIO-REVOKE-CLASS", classes);

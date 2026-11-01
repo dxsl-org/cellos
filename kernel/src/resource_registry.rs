@@ -7,12 +7,12 @@
 //!    device window for the active target. Unknown ranges are rejected
 //!    so a misbehaving Cell cannot map arbitrary kernel memory as MMIO.
 //!
-//! 2. **Exclusive ownership**: at most one Cell may hold a given MMIO range.
+//! 2. **Exclusive ownership**: at most one task may hold a given MMIO range.
 //!    A second `request_mmio` for an overlapping range returns `AlreadyExists`.
 //!
-//! 3. **Release-on-exit**: `release_for(cell_id)` frees all ranges owned by
-//!    a Cell.  Call this from every Cell-exit path alongside
-//!    `cell_quota::deregister`.
+//! 3. **Release-on-exit**: `release_mmio_for(tid)` frees all ranges owned by
+//!    a task. Owners are task ids, the same key as `BDF_OWNERS`: the claiming
+//!    task holds the window, so retirement releases it per member task.
 //!
 //! # Current scope
 //! Allowlist is hardcoded per target (DTB discovery remains deferred).
@@ -163,11 +163,12 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 /// Maps MMIO base address → the window's ownership record.
 static REGISTRY: Spinlock<BTreeMap<usize, MmioRegion>> = Spinlock::new(BTreeMap::new());
 
-/// One owned MMIO window.
+/// One owned MMIO window. `owner_tid` is the claiming task: every query
+/// (`lookup_mmio_owner`, WaitIrq, block-route ownership) compares task ids.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct MmioRegion {
     len: usize,
-    owner: CellId,
+    owner_tid: usize,
     class: MmioClass,
 }
 
@@ -205,7 +206,7 @@ static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new
 /// has no window of the class it needs.
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_register_region(
-    cell_id: CellId,
+    tid: usize,
     base: usize,
     len: usize,
     class: MmioClass,
@@ -221,7 +222,7 @@ pub(crate) fn test_register_region(
         base,
         MmioRegion {
             len,
-            owner: cell_id,
+            owner_tid: tid,
             class,
         },
     ).is_none()
@@ -336,7 +337,7 @@ fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
 /// still runs — two cells cannot share a byte. Used by the PlatformCap bypass path
 /// in `sys_request_mmio` so the Platform Cell can claim the ECAM config-space window
 /// (which is not a device BAR and therefore not in either allowlist).
-pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
+pub fn request_mmio_unchecked(tid: usize, base: usize, len: usize) -> ViResult<()> {
     let end = checked_mmio_end(base, len)?;
     let mut reg = REGISTRY.lock();
     for (&eb, region) in reg.iter() {
@@ -349,7 +350,7 @@ pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViRes
         base,
         MmioRegion {
             len,
-            owner: cell_id,
+            owner_tid: tid,
             class: CLASS_ECAM,
         },
     );
@@ -376,7 +377,7 @@ pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
 }
 
 /// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding `UsbDriverCap`.
-pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
+pub fn request_dwc2_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
     if !is_dwc2_mmio(base, len) {
         return Err(ViError::PermissionDenied);
     }
@@ -395,14 +396,14 @@ pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<(
         base,
         MmioRegion {
             len,
-            owner: cell_id,
+            owner_tid: tid,
             class: CLASS_DWC2,
         },
     );
     Ok(())
 }
 
-/// Request exclusive ownership of `[base, base+len)` for `cell_id`.
+/// Request exclusive ownership of `[base, base+len)` for task `tid`.
 ///
 /// Returns:
 /// - `Ok(())` — range is now owned by the caller; construct `MmioRegion` and
@@ -411,7 +412,7 @@ pub fn request_dwc2_mmio(cell_id: CellId, base: usize, len: usize) -> ViResult<(
 ///   not among `allowed_devices` (the cell's declared `mmio_devices`).
 /// - `Err(AlreadyExists)` — range overlaps an already-granted region.
 /// - `Err(InvalidInput)` — zero length or arithmetic overflow in `base + len`.
-pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u8) -> ViResult<()> {
+pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) -> ViResult<()> {
     // 1. Allowlist check — the range must fall inside a known device window
     //    AND that window's device class must be one the cell declared.
     let end = checked_mmio_end(base, len)?;
@@ -435,7 +436,7 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
     let mut reg = REGISTRY.lock();
     reg.retain(|&eb, region| {
         let ee = eb + region.len;
-        if !(end <= eb || base >= ee) && region.owner == cell_id {
+        if !(end <= eb || base >= ee) && region.owner_tid == tid {
             return false;
         }
         true
@@ -444,7 +445,7 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
         let ee = eb + region.len;
         if !(end <= eb || base >= ee) {
             if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
-                if let Some(task) = sched.tasks.get(&(region.owner.0 as usize)) {
+                if let Some(task) = sched.tasks.get(&region.owner_tid) {
                     if matches!(task.state, crate::task::tcb::TaskState::Terminated) {
                         continue;
                     }
@@ -462,7 +463,7 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
         base,
         MmioRegion {
             len,
-            owner: cell_id,
+            owner_tid: tid,
             class,
         },
     );
@@ -543,32 +544,32 @@ pub fn self_test() -> bool {
     true
 }
 
-/// Release all MMIO regions owned by `cell_id`.
+/// Release all MMIO regions owned by task `tid`.
 ///
-/// Call this from every Cell-exit path (Exit syscall, ForceExit, fault, watchdog).
-pub fn release_for(cell_id: CellId) {
+/// Retirement calls this for every member task of the retiring incarnation.
+pub fn release_mmio_for(tid: usize) {
     REGISTRY
         .lock()
-        .retain(|_base, region| region.owner != cell_id);
+        .retain(|_base, region| region.owner_tid != tid);
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
 }
 
-/// Release the regions owned by `cell_id` whose class is in `device_mask`, and
+/// Release the regions owned by task `tid` whose class is in `device_mask`, and
 /// return their `(base, len)` so the caller can remove user accessibility.
 ///
 /// Selective by construction: a class the caller did not name stays owned and
 /// mapped, so revoking one device class never disarms another. Used by runtime
-/// revocation (`sys_cap_revoke`); Cell death uses [`release_for`], which drops
-/// every region regardless of class.
-pub fn revoke_mmio_for(cell_id: CellId, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
+/// revocation (`sys_cap_revoke`); task retirement uses [`release_mmio_for`],
+/// which drops every region regardless of class.
+pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
     let mut revoked = alloc::vec::Vec::new();
     if device_mask == 0 {
         return revoked;
     }
     REGISTRY.lock().retain(|&base, region| {
-        let hit = region.owner == cell_id && region.class & device_mask != 0;
+        let hit = region.owner_tid == tid && region.class & device_mask != 0;
         if hit {
             #[cfg(cellos_p01_trace)]
             let _semantic = crate::memory::heap::p01_owner::creation(None,
@@ -589,19 +590,19 @@ pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
     REGISTRY
         .lock()
         .get(&base)
-        .map(|region| region.owner.0 as usize)
+        .map(|region| region.owner_tid)
 }
 
-/// Return whether `cell_id` owns exactly `[base, base + len)`.
+/// Return whether task `tid` owns exactly `[base, base + len)`.
 ///
 /// Display registration uses this rather than an overlap query: the VideoCore
 /// mailbox authority is one fixed capability, so a subrange cannot be confused
 /// with an independently granted peripheral window.
-pub fn owns_exact_mmio(cell_id: CellId, base: usize, len: usize) -> bool {
+pub fn owns_exact_mmio(tid: usize, base: usize, len: usize) -> bool {
     REGISTRY
         .lock()
         .get(&base)
-        .is_some_and(|region| region.len == len && region.owner == cell_id)
+        .is_some_and(|region| region.len == len && region.owner_tid == tid)
 }
 
 /// Outcome of atomically reserving one framebuffer mapping transaction.
@@ -762,7 +763,7 @@ mod display_tests {
                 .is_err()
         );
         assert_eq!(display_framebuffer_resolution(), Some((800, 480)));
-        release_for(owner);
+        release_mmio_for(owner.0 as usize);
         assert_eq!(display_framebuffer_resolution(), Some((800, 480)));
     }
 }

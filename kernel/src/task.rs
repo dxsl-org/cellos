@@ -1490,7 +1490,6 @@ pub fn yield_cpu() {
             sched.release_waiters_after_resource_drop(waiter_wakes);
         }
         crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
-        crate::resource_registry::release_for(types::CellId(retirement.owner.cell_id));
         tally.shm_frames_released = crate::task::syscall::release_shm_for(
             retirement.owner.cell_id,
             retirement.owner.generation,
@@ -1929,6 +1928,8 @@ fn retry_retired_dma_cleanup() {
     if let Some(tid) = retry {
         if !teardown_dma_authority(tid) {
             queue_retired_dma_cleanup(tid);
+        } else {
+            crate::resource_registry::release_mmio_for(tid);
         }
     }
     #[cfg(cellos_p01_trace)]
@@ -1938,6 +1939,7 @@ fn retry_retired_dma_cleanup() {
             // Preserve the immutable incarnation and token through every retry.
             IOMMU_CLEANUP_RETRIES.lock().push_back(cleanup);
         } else {
+            crate::resource_registry::release_mmio_for(cleanup.tid);
             crate::p01_resources::finish(cleanup.obligation, 1);
             if let Some(owner) = cleanup.owner { crate::p01_resources::checked(owner, 5); }
         }
@@ -1959,6 +1961,10 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
     let dma_deferred = !teardown_dma_authority(tid);
     if dma_deferred {
         queue_retired_dma_cleanup(tid);
+    } else {
+        // A window stays owned, like its BDF, until the device's DMA teardown
+        // is acknowledged; the deferred retry releases it on success.
+        crate::resource_registry::release_mmio_for(tid);
     }
     crate::task::drivers::irq_wait::release_waiters_for(tid);
     let grants = crate::task::syscall::reap_grants_for_task(tid);
