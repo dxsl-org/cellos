@@ -32,16 +32,26 @@ impl<T> Spinlock<T> {
         #[cfg(not(all(test, not(target_os = "none"))))]
         crate::hal::ARCH.disable_interrupts();
 
-        while self
-            .lock
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
-        {
-            // A peer may hold this lock while awaiting our invalidation. IF is
-            // masked, so service only the lock-free local mailbox here: never
-            // schedule, allocate, or log from this ownership window.
+        loop {
+            // Every acquisition, not only a contended one, answers an
+            // invalidation a peer asked of this CPU. x86 syscalls run with IF
+            // masked (SYSCALL FMASK), so the IPI cannot land until the syscall
+            // returns: a long one that takes locks but never waits on them
+            // (spawn reading a 627 KiB image out of VIFS1) starved the peer's
+            // shootdown past its probe budget. A peer may also hold this very
+            // lock while it waits. IF is masked here, so service only the
+            // lock-free local mailbox: never schedule, allocate, or log from
+            // this ownership window. With nothing owed it is a GS read and two
+            // loads.
             #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
             crate::task::smp::service_tlb_flush(crate::task::hart_local::current_hart_id());
+            if self
+                .lock
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
+                break;
+            }
             core::hint::spin_loop();
         }
         SpinlockGuard {

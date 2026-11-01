@@ -277,6 +277,7 @@ if [[ "$X86_CPUS" == "2" ]]; then
         "qualified two-CPU topology:::[x86-smp] topology online=2 processor_ids="
         "raw-context ownership and retirement:::S22-X86-CONTEXT-HANDOFF: PASS"
         "actual remote translation invalidation:::S22-X86-REMOTE-SHOOTDOWN: PASS"
+        "invalidation answered under a masked uncontended lock:::S22-X86-MASKED-SHOOTDOWN: PASS"
     )
 fi
 

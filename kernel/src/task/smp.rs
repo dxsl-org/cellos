@@ -915,7 +915,11 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
 // This behavioral fixture caches a genuinely GLOBAL shared translation on the
 // AP, changes its binding on the BSP, then forces the AP to contend on the same
 // page-table lock with IF clear. Success requires lock-spin local invalidation;
-// an ISR-only acknowledgement deadlocks or retains the old binding.
+// an ISR-only acknowledgement deadlocks or retains the old binding. A second
+// round rebinds the page while the AP, IF still clear, only takes that lock
+// *uncontended* — a long masked kernel stretch such as a spawn reading its
+// image. The BSP's shootdown must still be acknowledged before its probe
+// expires: every acquisition, not only a contended one, is a service point.
 #[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
 const X86_PROBE_VA: usize = 0x0600_0000;
 #[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
@@ -941,6 +945,21 @@ fn x86_shootdown_fixture_secondary() {
     );
     drop(root);
     X86_PROBE_STAGE.store(5, Ordering::Release);
+    unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+    // Round two: VA -> new is cached here. With IF clear again, take the lock
+    // only uncontended until the BSP's shootdown of the rebinding returns.
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 6);
+    unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+    X86_PROBE_STAGE.store(7, Ordering::Release);
+    x86_bounded_wait(|| {
+        drop(crate::memory::paging::KERNEL_ROOT.lock());
+        X86_PROBE_STAGE.load(Ordering::Acquire) == 8
+    });
+    // Round one's BEFORE value is already checked; reuse the slot.
+    X86_PROBE_BEFORE.store(
+        unsafe { core::ptr::read_volatile(X86_PROBE_VA as *const usize) }, Ordering::Release,
+    );
+    X86_PROBE_STAGE.store(9, Ordering::Release);
     unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
 }
 
@@ -982,12 +1001,28 @@ fn x86_shootdown_fixture_primary() {
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 5);
     assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
     assert_eq!(X86_PROBE_AFTER.load(Ordering::Acquire), 0x2468);
+    // Round two: rebind to `old` and shoot it down while the AP holds IF clear
+    // and never contends. `flush_range` panics if the AP stays silent.
+    {
+        let root = KERNEL_ROOT.lock();
+        let root_pointer = phys_to_virt(root.expect("fixture root")) as *mut u64;
+        let mut no_allocate = || None;
+        let leaf = unsafe { walk_create(root_pointer, X86_PROBE_VA, &mut no_allocate) }.expect("fixture leaf");
+        unsafe { core::ptr::write_volatile(leaf, old as u64 | flags); }
+    }
+    X86_PROBE_STAGE.store(6, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 7);
+    crate::memory::tlb_shootdown::flush_range(X86_PROBE_VA, PAGE_SIZE);
+    X86_PROBE_STAGE.store(8, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 9);
+    assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
     crate::memory::paging::unmap_page_x86(X86_PROBE_VA).expect("fixture unmap");
     let mut allocator = FRAME_ALLOCATOR.lock();
     let allocator = allocator.as_mut().expect("fixture frame allocator");
     allocator.deallocate_frame(old);
     allocator.deallocate_frame(new);
     log::info!("S22-X86-REMOTE-SHOOTDOWN: PASS harts=2 global=true irq_masked_lock=true before=4951 after=9320");
+    log::info!("S22-X86-MASKED-SHOOTDOWN: PASS harts=2 irq_masked_uncontended_lock=true after=4951");
 }
 
 #[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
