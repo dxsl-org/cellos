@@ -62,7 +62,7 @@ class QualifiedRoute:
 # assembler, is a reviewed source change of this table.
 X86_CANONICAL_ROOT = "kernel/src/embedded-x86_64"
 X86_CANDIDATE_RECIPE = "scripts/assemble-x86-image.py"
-X86_CANDIDATE_RECIPE_SHA256 = "b74cc99787ab69dde04dac5c517acb6f771016043c23841bc7b40ab0b3bec7ed"
+X86_CANDIDATE_RECIPE_SHA256 = "e793a0e4bf12fbb3fdeda23a2ccb7348f9f7c52b520eea74ebba58f31d19d600"
 _X86_HEADLESS_SIGNED = frozenset({
     "cellbox", "service-vfs", "service-config", "service-input", "service-net", "platform",
     "driver-nvme", "driver-e1000", "driver-igb", "driver-ahci", "driver-xhci",

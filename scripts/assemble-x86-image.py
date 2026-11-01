@@ -308,8 +308,10 @@ class Assembler:
 
     def sign(self, targets: list[Path], candidate_root: Path) -> None:
         """Sign the input copies in place. A private seed takes the `cellos-sign` CLI
-        (private-fixture path); the dev key takes the named candidate route, which
-        only this program, at its pinned digest, can pass."""
+        (private-fixture path); the dev key takes the named route, which only this
+        program, at its pinned digest, can pass. A candidate route is rooted at the
+        private work directory; a canonical route only admits exactly the canonical
+        directory as its root, so the work directory below it holds the targets."""
         if self.seed_hex is not None:
             command = [sys.executable, str(self.repo / "scripts" / "cellos-sign"), "--quiet",
                        "--objcopy", self.objcopy, "--seed-hex", self.seed_hex,
@@ -320,7 +322,8 @@ class Assembler:
         else:
             print(f"+ cellos-sign route {self.route_name()} (dev key) "
                   f"--sign {len(targets)} cell(s)", flush=True)
-            code = signing_cli.sign_route(self.repo, self.route_name(), candidate_root,
+            root = self.out_dir if self.is_canonical_out_dir() else candidate_root
+            code = signing_cli.sign_route(self.repo, self.route_name(), root,
                                           targets, self.objcopy)
         if code != 0:
             raise AssemblyError("cellos-sign refused or failed; nothing was packaged")

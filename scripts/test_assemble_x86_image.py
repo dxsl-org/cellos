@@ -516,6 +516,11 @@ class EndToEnd(unittest.TestCase):
         with mock.patch.object(asm.signing_cli, "sign_route", return_value=3):
             with self.assertRaisesRegex(asm.AssemblyError, "refused"):
                 asm.Assembler(HEADLESS, self.out).sign(targets, work)
+        canonical = REPO / "kernel" / "src" / "embedded-x86_64"
+        with mock.patch.object(asm.signing_cli, "sign_route", return_value=0) as route:
+            asm.Assembler(HEADLESS, canonical, objcopy="objcopy").sign(targets, work)
+            route.assert_called_once_with(REPO, "x86-canonical-headless", canonical,
+                                          targets, "objcopy")
 
     def test_route_table_matches_the_profiles(self):
         for kind in ("candidate", "canonical"):

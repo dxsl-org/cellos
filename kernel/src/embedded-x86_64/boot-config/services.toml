@@ -38,9 +38,4 @@ path = "/bin/net"
 service_id = 2
 required = true
 restart = "always"
-
-[[cells]]
-name = "compositor"
-path = "/bin/compositor"
-service_id = 5
-restart = "always"
+# cellos-generated sha256=484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855
