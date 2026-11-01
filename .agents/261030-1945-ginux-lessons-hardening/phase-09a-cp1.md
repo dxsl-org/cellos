@@ -76,3 +76,12 @@ User decision: long-running providers are services, not shell background jobs; s
 Command: `CELLOS_INIT_FEATURES=input,hotswap-demo bash scripts/gen-disk-ci.sh && cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test hotswap-smoke` → **13/13 pass**: CLI swap preserves counter 5 (v2 restored from the destination-sealed stash, supervisor status probe only), supervisor swap with cached-sender drains to 6, unauthorized sender denied, peer-death guard.
 
 Found, not fixed here: `app_entry!` services arm a 500-tick (~5 s) heartbeat but idle in `sys_recv` without timeout, so an idle service is killed as "hung" (observed on demo-v1 after a failed CLI launch). The swap runs inside that window.
+
+## 9. Drift fixed in 09B (2026-11-01)
+
+The §2 row "Owner retired with `Open` entries → kernel retirement path removes them"
+was implemented in 09A only as a lazy reclaim when the table was full
+(`reclaim_dead_owners`). Phase 09B (user-approved CP1, `phase-09b-cp1.md`) moved it
+into the root retirement funnel: `state_stash::release_retired` removes the retired
+incarnation's `Open` entries and the `Sealed` entries addressed to it, and the lazy
+path and `stash`'s liveness callback were deleted. Semantics otherwise unchanged.

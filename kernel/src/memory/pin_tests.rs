@@ -308,3 +308,32 @@ fn vfs_owner_query_filters_by_overlapping_owner() {
     assert!(release_vfs_lease(304, 916, 1).is_empty());
     assert!(release_vfs_lease(305, 917, 2).is_empty());
 }
+
+#[test]
+fn retirement_attribution_counts_only_named_tasks() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let (pinned, leased, foreign) = (arena(30), arena(31), arena(32));
+    // A member's DMA pin, a lease a member granted to a live holder, and an
+    // unrelated owner's pin.
+    assert_eq!(pin(pinned, PAGE_SIZE, 930), Ok(()));
+    assert_eq!(pin_vfs_lease(leased, PAGE_SIZE, 931, 330, 14, 4), Ok(()));
+    assert_eq!(pin(foreign, PAGE_SIZE, 939), Ok(()));
+    assert_eq!(vfs_leases_pending_for_owner(931), 0, "not revoked yet");
+    assert!(mark_vfs_lease_pending_revoke(330, 931, 4));
+    assert_eq!(vfs_leases_pending_for_owner(931), 1);
+    assert_eq!(vfs_leases_pending_for_owner(930), 0);
+
+    for base in [pinned, leased, foreign] {
+        assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    }
+    assert_eq!(quarantined_pages_attributed(&[930, 931]), 2);
+    assert_eq!(quarantined_pages_attributed(&[330]), 1, "the lease holder is named too");
+    assert_eq!(quarantined_pages_attributed(&[939]), 1);
+    assert_eq!(quarantined_pages_attributed(&[]), 0);
+
+    assert_eq!(acknowledge(930), alloc::vec![(pinned, 1)]);
+    assert_eq!(release_vfs_lease(330, 931, 4), alloc::vec![(leased, 1)]);
+    assert_eq!(acknowledge(939), alloc::vec![(foreign, 1)]);
+    assert_eq!(quarantined_pages_attributed(&[930, 931, 939]), 0);
+    assert_eq!(vfs_leases_pending_for_owner(931), 0);
+}

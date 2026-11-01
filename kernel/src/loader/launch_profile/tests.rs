@@ -586,6 +586,60 @@ fn backend_supervisor_edge_is_exact_and_lifecycle_gated() {
 }
 
 #[test]
+fn recovery_authority_edge_is_exact_and_lifecycle_gated() {
+    use super::targets::reviewed_user_target_ceiling;
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let profile = authorize(
+            caller("recovery-authority", true, false),
+            route,
+            "/bin/recovery-worker",
+        )
+        .expect("the state authority must be able to launch its worker");
+        assert_eq!(
+            profile.child_ceiling,
+            LEGACY,
+            "the worker is capability-free on {route:?}"
+        );
+        assert!(
+            profile.requires_lifecycle_authority,
+            "the edge exists so a SpawnCap holder can watch and restart the child"
+        );
+    }
+
+    assert!(
+        authorize(
+            caller("recovery-authority", false, false),
+            LaunchRoute::Path,
+            "/bin/recovery-worker"
+        )
+        .is_none(),
+        "a task named recovery-authority without SpawnCap must not borrow the edge"
+    );
+    for target in ["/bin/recovery-client", "/bin/recovery-authority", "/bin/backend-worker", "/bin/vfs"] {
+        assert!(
+            authorize(caller("recovery-authority", true, false), LaunchRoute::Path, target).is_none(),
+            "the edge is exact: the worker path only, not {target}"
+        );
+    }
+    assert!(
+        authorize(
+            caller("recovery-authority", true, false),
+            LaunchRoute::Mem,
+            "/bin/recovery-worker"
+        )
+        .is_none(),
+        "no memory launch edge"
+    );
+    assert!(
+        reviewed_user_target_ceiling("/bin/recovery-authority").is_some_and(|caps| caps.spawn),
+        "init must reach the authority with its SpawnCap intact"
+    );
+    for leaf in ["/bin/recovery-worker", "/bin/recovery-client"] {
+        assert_eq!(reviewed_user_target_ceiling(leaf), Some(LEGACY), "{leaf}");
+    }
+}
+
+#[test]
 fn shell_reaches_the_backend_cells_with_the_intended_ceilings() {
     assert!(
         shell_edge(LaunchRoute::Path, "/bin/backend-supervisor")
@@ -802,6 +856,8 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
         "/bin/pipe-peer",
         "/bin/c-spawn",
         "/bin/backend-worker",
+        "/bin/recovery-worker",
+        "/bin/recovery-client",
         "/bin/doom",
         "/bin/echo",
         "/bin/free",
@@ -859,6 +915,7 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
         "/bin/backend-supervisor",
         "/bin/hotswap-demo-v1",
         "/bin/hotswap-demo-v2",
+        "/bin/recovery-authority",
     ] {
         rows.push((path, spawn));
     }
@@ -1339,6 +1396,7 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         "tool-spawn",
         "dwc2-usb",
         "backend-supervisor",
+        "recovery-authority",
         "c2c-render",
         "supervisor",
         "bench",

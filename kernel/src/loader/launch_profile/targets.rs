@@ -45,6 +45,10 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/pipe-peer"
         | "/bin/c-spawn"
         | "/bin/backend-worker"
+        // Phase 09B: the recovery worker (a capability-free child of its state
+        // authority) and the client driving it.
+        | "/bin/recovery-worker"
+        | "/bin/recovery-client"
         | "/bin/doom"
         | "/bin/echo"
         | "/bin/free"
@@ -112,7 +116,10 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         // children at all (ADR-0021 §2.4).
         | "/bin/backend-supervisor"
         | "/bin/hotswap-demo-v1"
-        | "/bin/hotswap-demo-v2" => CapSet {
+        | "/bin/hotswap-demo-v2"
+        // Phase 09B state authority: lifecycle parent of its worker; it must
+        // spawn, watch and force-exit it, and read its retirement verdict.
+        | "/bin/recovery-authority" => CapSet {
             spawn: true,
             ..LEGACY
         },

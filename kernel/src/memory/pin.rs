@@ -950,6 +950,37 @@ pub fn quarantined_pages() -> usize {
     reg.quarantine.iter().map(|q| q.pages).sum()
 }
 
+/// VFS leases on grants owned by `grant_owner` that its death pending-revoked
+/// and whose holder has not released yet.
+pub fn vfs_leases_pending_for_owner(grant_owner: usize) -> usize {
+    let reg = REGISTRY.lock();
+    reg.vfs_leases
+        .iter()
+        .filter(|e| e.pages != 0 && e.grant_owner == grant_owner && e.pending_revoke)
+        .count()
+}
+
+/// Quarantined pages whose release key names one of `tids`: an owner-wide
+/// acknowledgement by a member, or a VFS lease a member granted or held.
+/// Boot-lifetime cache-sync holds carry no task and are never attributed.
+pub fn quarantined_pages_attributed(tids: &[usize]) -> usize {
+    let reg = REGISTRY.lock();
+    reg.quarantine
+        .iter()
+        .filter(|q| {
+            q.pages != 0
+                && match q.release {
+                    ReleaseKey::Owner(owner) => tids.contains(&owner),
+                    ReleaseKey::VfsLease { holder_tid, grant_owner, .. } => {
+                        tids.contains(&holder_tid) || tids.contains(&grant_owner)
+                    }
+                    ReleaseKey::None | ReleaseKey::CacheSyncBootLifetime => false,
+                }
+        })
+        .map(|q| q.pages)
+        .sum()
+}
+
 /// Release the registry lock unconditionally during fault teardown.
 ///
 /// # Safety

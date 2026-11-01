@@ -160,6 +160,10 @@ Build-Cargo -What "tier2 test cells" -Packages @('tier2-smoke', 'tier2-exploit')
 # the kfs_args note below), so leaving it out of this build step would make the
 # VIFS1 row silently absent and the QEMU witness fail as "command not found".
 Build-Cargo -What "backend supervisor witness" -Packages @('app-backend')
+# Phase 09B recovery witness: built only by scripts/gen-disk-ci.sh for the
+# `recovery-demo` packaging feature (fault-inject cells + recovery-fixture VFS).
+# This script never ships it, so drop any artifact a Linux lane left behind.
+Remove-Item "$rel_dir/recovery-authority", "$rel_dir/recovery-worker", "$rel_dir/recovery-client" -Force -ErrorAction SilentlyContinue
 
 # DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
 # it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).

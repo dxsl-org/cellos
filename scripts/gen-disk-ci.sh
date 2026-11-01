@@ -182,6 +182,14 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "posix-shim-test" -p app-posix-shim-test
     build_cells "tier2 test cells" -p tier2-smoke -p tier2-exploit
     build_cells "backend supervisor witness" -p app-backend
+    # Phase 09B witness (packaging feature `recovery-demo` only): fault-inject
+    # cells plus the `recovery-fixture` VFS. Any other image ships neither, and the
+    # previous run's artifacts are dropped so presence guards cannot ship them.
+    rm -f "$REL/recovery-authority" "$REL/recovery-worker" "$REL/recovery-client"
+    if [[ ",${CELLOS_INIT_FEATURES:-input}," == *",recovery-demo,"* ]]; then
+        build_cells "recovery demo (fault-inject)" -p recovery-demo --features fault-inject
+        build_cells "service-vfs (recovery-fixture)" -p service-vfs --features recovery-fixture
+    fi
 
     # Optional demo cells. Drop the previous artifact first: a failed build must
     # omit the cell rather than let the presence-guarded image steps below ship the
@@ -228,6 +236,12 @@ assert_absent_marker "$REL/service-vfs" "access/selftest.rs" \
     "service-vfs must be built WITHOUT --features test-hooks for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)."
 assert_absent_marker "$REL/vfs-test" "rdir-quota" \
     "app-vfs-test must be built WITHOUT --features test-hooks for a production disk (scripts/build-test-hooks-ci.sh owns that flavour)."
+# The recovery-fixture VFS withholds a grant lease on purpose; only the
+# recovery-demo evidence image may carry it.
+if [[ ",${CELLOS_INIT_FEATURES:-input}," != *",recovery-demo,"* ]]; then
+    assert_absent_marker "$REL/service-vfs" "recovery-fixture: holding grant lease" \
+        "service-vfs must be built WITHOUT --features recovery-fixture unless CELLOS_INIT_FEATURES contains recovery-demo."
+fi
 
 # cellbox's `shell_test` flavour replaces the REPL with a deterministic scenario
 # harness. scripts/build-shell-test-ci.sh builds it at $REL/cellbox and copies
@@ -271,7 +285,8 @@ for cell in app-init cellbox platform service-vfs service-config service-net ser
             robot-demo robot-dashboard fb-console desktop ocel hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
-            vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 ls cat \
+            vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 \
+            recovery-authority recovery-worker recovery-client ls cat \
             echo ps kill shutdown free hotswap posix-shim-test tier2-smoke tier2-exploit tetris \
             tetris-c tetris-lua doom lua micropython; do
     add_signable "$REL/$cell"
@@ -340,6 +355,11 @@ add_kfs "$REL/hotswap-demo-v2"      "/bin/hotswap-demo-v2"
 # The cellbox foreground launch reads the boot ramdisk; the hotswap CLI must be
 # there, next to the demos it drives (a cell-table-only copy fails with Io).
 add_kfs "$REL/hotswap"              "/bin/hotswap"
+# Phase 09B witness: the authority (SpawnCap, init autoload), the worker it
+# launches through the kernel path route, and the shell-launched client.
+add_kfs "$REL/recovery-authority"   "/bin/recovery-authority"
+add_kfs "$REL/recovery-worker"      "/bin/recovery-worker"
+add_kfs "$REL/recovery-client"      "/bin/recovery-client"
 add_kfs "$REL/backend-supervisor"   "/bin/backend-supervisor"
 add_kfs "$REL/free"                 "/bin/free"
 add_kfs "$REL/bench"                "/bin/bench"
@@ -441,6 +461,9 @@ add_row "$REL/wx-test"                "/bin/wx-test"
 add_row "$REL/vfs-test"               "/bin/vfs-test"
 add_row "$REL/hotswap-demo-v1"        "/bin/hotswap-demo-v1"
 add_row "$REL/hotswap-demo-v2"        "/bin/hotswap-demo-v2"
+# The recovery witness cells are VIFS1-only: the P2 table is capped at 64 rows and
+# every path that launches them (init autoload, the authority's path route, the
+# shell's foreground launch) resolves VIFS1.
 add_row "$REL/tier2-smoke"            "/bin/tier2-smoke"
 add_row "$REL/tier2-exploit"          "/bin/tier2-exploit"
 add_row "$REL/backend-supervisor"     "/bin/backend-supervisor"

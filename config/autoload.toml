@@ -27,6 +27,17 @@ name = "hotswap-demo"
 path = "/bin/hotswap-demo-v1"
 restart = "never"
 
+# Phase 09B evidence image only (packaging feature `recovery-demo`): the provider-owned
+# state authority, which spawns, fences and restarts its own worker. Not restarted:
+# its RAM state is the committed state, so losing it is RecoveryFailed, never a cold
+# start. service_id 31242 (0x7A0A) is the cell-private fixture id the worker and the
+# evidence client resolve; init registers it.
+[[cells]]
+name = "recovery-authority"
+path = "/bin/recovery-authority"
+restart = "never"
+service_id = 31242
+
 [[cells]]
 name = "cellbox"
 path = "/bin/cellbox"

@@ -612,6 +612,22 @@ pub enum ViSyscall {
     /// authority, and the `u64` allowlist is full (bits 0–62 syscalls, 63 the
     /// VFS-mutate declaration). `GetProcs2`, `GetProcs` and `MemInfo` are unchanged.
     TelemetrySnapshot = 430,
+    /// 431: Read the retirement verdict of a retired Cell incarnation root
+    /// (Phase 09B K1, [`crate::retirement`]).
+    ///
+    /// ABI: a0 = root_tid, a1 = out_ptr, a2 = out_len (must equal
+    /// [`crate::retirement::RETIREMENT_RECORD_LEN`]) →
+    /// `RETIREMENT_RECORD_LEN` on success, the most recent
+    /// [`crate::retirement::ViRetirementV1`] for that root written to `out_ptr`.
+    /// Errors: `usize::MAX - 2` (`FileNotFound`) no record — unknown or evicted,
+    /// which the caller must treat as `Unproven`; `usize::MAX - 3`
+    /// (`InvalidInput`) `out_len` is not the exact record length, or `out_ptr`
+    /// is not a writable caller buffer; `usize::MAX` the caller was not a death
+    /// subscriber of that root when it retired and holds no `SupervisorCap`.
+    ///
+    /// Allowlist: none (the `u64` allowlist is full); always permitted past the
+    /// allowlist like [`Self::NotifyOnExit`], gated at dispatch.
+    QueryRetirement = 431,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1172,6 +1188,9 @@ impl ViSyscall {
             | Self::Exit
             | Self::ForceExit
             | Self::NotifyOnExit
+            // QueryRetirement: dispatch admits only a death subscriber of that
+            // root or a SupervisorCap holder; the allowlist has no free bit.
+            | Self::QueryRetirement
             | Self::RegisterService
             | Self::CapRevoke
             | Self::SpawnSetDirs
@@ -1342,6 +1361,7 @@ impl From<usize> for ViSyscall {
             428 => ViSyscall::SerialConfigure,
             429 => ViSyscall::LookupServiceBound,
             430 => ViSyscall::TelemetrySnapshot,
+            431 => ViSyscall::QueryRetirement,
             _ => ViSyscall::Unknown,
         }
     }

@@ -1442,8 +1442,21 @@ pub fn yield_cpu() {
         }
     };
     for mut retirement in root_retirements {
+        // Leaks counted anywhere in this window are charged to this verdict:
+        // a concurrent leak elsewhere can only over-report, which fails closed.
+        let leaked_before = crate::task::syscall::leaked_pages();
+        let mut tally = crate::cell::retirement_verdict::RetirementTally {
+            member_threads: retirement.member_tids.len(),
+            remote_hart_mask: retirement.remote_hart_mask,
+            ..Default::default()
+        };
         for tid in retirement.member_tids.iter().copied() {
-            reap_retired_task_resources(tid);
+            let reap = reap_retired_task_resources(tid);
+            tally.dma_deferred += usize::from(reap.dma_deferred);
+            tally.pins_quarantined += reap.grants.pins_quarantined;
+            tally.grantee_refs_cleared += reap.grants.grantee_refs_cleared;
+            tally.writable_borrows += reap.grants.writable_borrows;
+            tally.grants_reclaimed += reap.grants.grants_reclaimed;
             crate::task::syscall::release_vfs_holder_leases(tid);
             #[cfg(cellos_p01_trace)]
             if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
@@ -1451,6 +1464,16 @@ pub fn yield_cpu() {
                 crate::memory::pin::p01_retirement_check(owner);
             }
         }
+        tally.leaked_pages = crate::task::syscall::leaked_pages().wrapping_sub(leaked_before);
+        // Counted after every member released its own holder leases, so only
+        // obligations owed to live holders outside the incarnation remain.
+        tally.vfs_leases_pending = retirement
+            .member_tids
+            .iter()
+            .map(|&tid| crate::memory::pin::vfs_leases_pending_for_owner(tid))
+            .sum();
+        tally.quarantined_pages =
+            crate::memory::pin::quarantined_pages_attributed(&retirement.member_tids);
         // `take_quiescent_root_retirements` removed these exact zombies while
         // holding SCHEDULER after all remote switch proofs completed. Drop their
         // stacks before exposing the CellId or quota to a new generation.
@@ -1468,7 +1491,15 @@ pub fn yield_cpu() {
         }
         crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
         crate::resource_registry::release_for(types::CellId(retirement.owner.cell_id));
-        crate::task::syscall::release_shm_for(retirement.owner.cell_id, retirement.owner.generation);
+        tally.shm_frames_released = crate::task::syscall::release_shm_for(
+            retirement.owner.cell_id,
+            retirement.owner.generation,
+        );
+        crate::cell::state_stash::release_retired(crate::cell::state_stash::Incarnation {
+            cell: retirement.owner.cell_id,
+            generation: retirement.owner.generation,
+        });
+        crate::cell::retirement_verdict::close(retirement.owner, tally);
         #[cfg(cellos_p01_trace)]
         if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize) {
             crate::p01_resources::checked(owner, 7);
@@ -1913,17 +1944,26 @@ fn retry_retired_dma_cleanup() {
     }
 }
 
-fn reap_retired_task_resources(tid: usize) {
+/// What reaping one retired task observed, for the retirement verdict.
+struct MemberReap {
+    /// DMA teardown was not acknowledged; it is queued for retry.
+    dma_deferred: bool,
+    grants: crate::task::syscall::GrantReap,
+}
+
+fn reap_retired_task_resources(tid: usize) -> MemberReap {
     // IOFENCE/IOTLB completion is the acknowledgement required before another
     // Driver Cell may claim the BDF or pinned frames may leave quarantine.
     // On timeout both ownership and still-pinned frames remain fail-closed and
     // one deferred teardown is retried on each scheduler pass.
-    if !teardown_dma_authority(tid) {
+    let dma_deferred = !teardown_dma_authority(tid);
+    if dma_deferred {
         queue_retired_dma_cleanup(tid);
     }
     crate::task::drivers::irq_wait::release_waiters_for(tid);
-    crate::task::syscall::reap_grants_for_task(tid);
+    let grants = crate::task::syscall::reap_grants_for_task(tid);
     crate::hypervisor::registry::reap_vms_for_task(tid);
+    MemberReap { dma_deferred, grants }
 }
 
 /// Allocate a stack pair and register a task. `Err` on OOM — never a panic: this

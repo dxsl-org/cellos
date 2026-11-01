@@ -67,7 +67,7 @@ File set:
 
 No kernel, HAL, `libs/api`, `libs/types`, cell, signer or `Cargo.lock` change.
 
-- **Classification**: `docs/abi-boundary-records.md` has the six-field record template and the update classes S/K/C/O/P/F/G. The census covers 21 families and lists 10 gaps with file:line. Census input came from a read-only scout pass; the cited refs were spot-checked again.
+- **Classification**: `docs/abi-boundary-records.md` has the six-field record template and the update classes S/K/C/O/P/F/G. The census covers 22 families, including the Phase 09B `ViRetirementV1` row added at P09bCp1's request, and lists 10 gaps with file:line. Census input came from a read-only scout pass; the cited refs were spot-checked again.
 - **Spec links**:
   - Spec 17 (`docs/specs/17-ipc-wire-contract.md`) is the IPC wire contract. It is linked from the record, not edited, because its §9 amendment rule applies to rule text.
   - Spec 23 §6 links the record.

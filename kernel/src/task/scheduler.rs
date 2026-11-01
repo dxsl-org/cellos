@@ -226,6 +226,8 @@ pub(crate) struct RootRetirement {
     /// Waiters are retained locally until this generation's tasks have dropped.
     pub waiter_wakes: Vec<(usize, usize)>,
     requested_switch_completion: [usize; super::smp::MAX_HARTS],
+    /// Bit `h`: retirement requested a remote switch completion on hart `h`.
+    pub remote_hart_mask: u64,
 }
 
 /// A task removed from the scheduler with its waiters held until teardown.
@@ -334,6 +336,13 @@ fn drain_death_subscribers(watched_tid: usize, mut deliver: impl FnMut(usize)) {
     for watcher in watchers {
         deliver(watcher);
     }
+}
+
+/// Run `f` over the current death subscribers of `watched`, without draining
+/// them. Lock order: called with SCHEDULER held; `f` must take only leaf locks.
+fn with_death_subscribers_of<R>(watched: usize, f: impl FnOnce(&[usize]) -> R) -> R {
+    let subscribers = DEATH_SUBSCRIBERS.lock();
+    f(subscribers.get(&watched).map_or(&[], Vec::as_slice))
 }
 
 #[cfg(feature = "test-hooks")]
@@ -1386,6 +1395,19 @@ impl Scheduler {
         // before selecting members so neither thread creation nor owner
         // attestation can race the teardown.
         self.begin_root_retirement(owner);
+        // The verdict's readers are the root's subscribers now, before any
+        // member or the root itself drains them in `exit_task`.
+        let recorded = with_death_subscribers_of(owner.root_tid as usize, |watchers| {
+            crate::cell::retirement_verdict::open(owner, watchers)
+        });
+        if !recorded {
+            log::warn!(
+                "[task] retirement verdict table full of pending records: cell={} generation={} root={} unrecorded",
+                owner.cell_id,
+                owner.generation,
+                owner.root_tid,
+            );
+        }
         super::cell_session::retiring(self, owner, exit_reason);
         let live_members: Vec<usize> = self
             .tasks
@@ -1424,6 +1446,7 @@ impl Scheduler {
                 zombies: Vec::new(),
                 waiter_wakes: Vec::new(),
                 requested_switch_completion: [0; super::smp::MAX_HARTS],
+                remote_hart_mask: 0,
             });
         }
     }
@@ -1896,6 +1919,7 @@ impl Scheduler {
                         // fresh epoch so release waits for its eventual switch-away.
                         retirement.requested_switch_completion[hart] =
                             super::smp::request_retirement_switch(hart);
+                        retirement.remote_hart_mask |= 1u64.checked_shl(hart as u32).unwrap_or(0);
                     }
                 }
             }
@@ -2830,6 +2854,7 @@ mod retirement_tests {
             zombies: Vec::new(),
             waiter_wakes: Vec::new(),
             requested_switch_completion: [0; super::super::smp::MAX_HARTS],
+            remote_hart_mask: 0,
         });
 
         let old_current = super::super::hart_local::ready::current_task_id_for(remote_hart);
@@ -2875,6 +2900,7 @@ mod retirement_tests {
         assert_eq!(ready.len(), 1);
         let retirement = ready.pop().expect("one quiescent retirement");
         assert!(retirement.member_tids.contains(&WORKER_TID));
+        assert_eq!(retirement.remote_hart_mask, 1u64 << remote_hart, "awaited remote hart recorded");
         assert_eq!(retirement.zombies.len(), 2);
         assert!(retirement.zombies.iter().any(|task| task.id == ROOT_TID));
         assert!(retirement.zombies.iter().any(|task| task.id == WORKER_TID));

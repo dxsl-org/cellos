@@ -60,6 +60,8 @@ def selected(path, features):
         return bool(features & {"supervisor", "hostile-backend-recovery", "hotswap-demo"})
     if path == "/bin/hotswap-demo-v1":
         return "hotswap-demo" in features
+    if path == "/bin/recovery-authority":
+        return "recovery-demo" in features
     if path == "/bin/net-broker":
         return "c2c-broker" in features
     if path == "/bin/silo":

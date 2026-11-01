@@ -60,6 +60,10 @@ pub(crate) fn read_file_grant<'a>(
     grant: usize,
     max: usize,
 ) -> VfsResponse<'a> {
+    #[cfg(feature = "recovery-fixture")]
+    if path == HOLD_LEASE_PATH {
+        return hold_lease(grant);
+    }
     if !vfs.access.can_read(caller, path) {
         return VfsResponse::Err(ERR_DENIED);
     }
@@ -76,4 +80,28 @@ pub(crate) fn read_file_grant<'a>(
             VfsResponse::GrantDone { bytes: n }
         }
     }
+}
+
+/// `recovery-fixture` (Phase 09B evidence images only): the borrower that does
+/// not acknowledge. Resolving the grant publishes this request's lease; the
+/// reply that releases it is withheld for `HOLD_LEASE_MS`, so a grant owner
+/// that dies meanwhile must leave its pages quarantined, not freed.
+#[cfg(feature = "recovery-fixture")]
+const HOLD_LEASE_PATH: &str = "/tmp/recovery-hold-lease";
+#[cfg(feature = "recovery-fixture")]
+const HOLD_LEASE_MS: u64 = 4_000;
+
+#[cfg(feature = "recovery-fixture")]
+fn hold_lease<'a>(grant: usize) -> VfsResponse<'a> {
+    use ostd::syscall::{sys_get_time_ms, sys_grant_slice_with_len, sys_yield};
+    if sys_grant_slice_with_len(grant).is_none() {
+        return VfsResponse::Err(ERR_IO);
+    }
+    ostd::io::println("[vfs] recovery-fixture: holding grant lease without acknowledgement");
+    let start = sys_get_time_ms().unwrap_or(0);
+    while sys_get_time_ms().is_some_and(|now| now.saturating_sub(start) < HOLD_LEASE_MS) {
+        sys_yield();
+    }
+    ostd::io::println("[vfs] recovery-fixture: lease released");
+    VfsResponse::Err(ERR_IO)
 }

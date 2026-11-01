@@ -1637,6 +1637,39 @@ pub fn telemetry_bytes(out: &[u64], written: usize) -> &[u8] {
     unsafe { core::slice::from_raw_parts(out.as_ptr().cast::<u8>(), len) }
 }
 
+/// Read the retirement verdict of a retired Cell incarnation root (Phase 09B K1).
+///
+/// The caller must have been a death subscriber (`NotifyOnExit`) of `root_tid`
+/// when it retired, or hold `SupervisorCap`.
+///
+/// # Errors
+/// - `FileNotFound`: no record (unknown or evicted root); treat as
+///   [`api::retirement::RetirementState::Unproven`].
+/// - `Unknown`: the kernel refused the length or the buffer (`InvalidInput`), or
+///   wrote bytes that are not a valid V1 record.
+/// - `PermissionDenied`: every other refusal: not a watcher of that root and no
+///   `SupervisorCap`.
+pub fn sys_query_retirement(
+    root_tid: usize,
+) -> Result<api::retirement::ViRetirementV1, SyscallError> {
+    use api::retirement::{ViRetirementV1, RETIREMENT_RECORD_LEN};
+    let mut out = [0u8; RETIREMENT_RECORD_LEN];
+    // SAFETY: `out` is a live, writable buffer of exactly `RETIREMENT_RECORD_LEN`
+    // bytes and the kernel writes at most that many.
+    let ret = unsafe {
+        syscall(ViSyscall::QueryRetirement, root_tid, out.as_mut_ptr() as usize, out.len(), 0)
+    };
+    match ret {
+        n if n >= 0 && n as usize == RETIREMENT_RECORD_LEN => {
+            ViRetirementV1::decode(&out).map_err(|_| SyscallError::Unknown)
+        }
+        // Typed sentinels: `usize::MAX - 2` no record, `usize::MAX - 3` bad length.
+        -3 => Err(SyscallError::FileNotFound),
+        -4 => Err(SyscallError::Unknown),
+        _ => Err(SyscallError::PermissionDenied),
+    }
+}
+
 /// Signal to the kernel that this cell has finished deserializing hot-swap state
 /// and is ready to receive IPC from the service registry.
 ///

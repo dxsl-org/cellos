@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Authorized state handoff and SAS post-fault replacement"
-status: in-progress   # 09A done (d10af4a6f); 09B, 09C not admitted
+status: in-progress   # 09A done (d10af4a6f); 09B implemented 2026-11-01, CP2 evidence awaiting user approval (phase-09b-cp1.md §11); 09C admitted, needs its own CP1
 priority: P1
 dependencies: [1] # 09A only; 09B requires 09A; 09C requires 09B and 08
 tier: thinking
@@ -73,3 +73,5 @@ Names and LBI do not authorize state transfer. A bad ownership retrofit can bloc
 ## Deviation Log
 
 SAS review: explicit destination-bound transfer replaces CellId-equality/generation-order rules; split early authority fix, software recovery and device extension; removed fresh-address assertions and volatile dedup shortcut.
+
+2026-11-01 (09B): implemented per the approved CP1 (`phase-09b-cp1.md`): provider-owned RAM state authority (`cells/demos/recovery-demo`), kernel retirement verdict K1 (syscall 431 `QueryRetirement`, `ViRetirementV1`), demo restore failure = RecoveryFailed, 09A stash-retirement drift fixed. Evidence §11 there: provider-recovery 2/2 (2-hart and 1-hart), hotswap-smoke 13/13. Not qualified: durable/reboot retention, Tier-2/Domain worker variant, x86 runtime lane.

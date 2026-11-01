@@ -28,6 +28,11 @@ test-hooks = []
 # Injects a run-scoped benchmark-oracle K1 into RamFS. The build script requires
 # CELLOS_C2C_ORACLE_K1_FILE to name exactly 32 bytes whenever this is enabled.
 c2c-oracle-k1-fixture = []
+# Phase 09B evidence only (`CELLOS_INIT_FEATURES` contains `recovery-demo`):
+# a ReadFileGrant of `/tmp/recovery-hold-lease` holds the caller's grant lease
+# for 4 s before replying, injecting a missing borrower acknowledgement. Never in
+# a production image (gen-disk-ci.sh asserts its marker is absent there).
+recovery-fixture = []
 
 [[bin]]
 name = "service-vfs"

@@ -176,6 +176,7 @@ members = [
     "cells/demos/audio-demo",
     "cells/demos/hotswap-demo-v1",
     "cells/demos/hotswap-demo-v2",
+    "cells/demos/recovery-demo",
     "cells/demos/async-echo",
     "cells/demos/tokio-smoke",
 

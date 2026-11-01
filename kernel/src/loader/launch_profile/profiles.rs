@@ -307,6 +307,25 @@ pub(super) fn backend_supervisor_profile(
     ))
 }
 
+/// The Phase 09B state authority needs exactly one exact child edge: its
+/// worker. Lifecycle authority is required because the authority is the
+/// worker's lifecycle parent (`NotifyOnExit`/`ForceExit` are `SpawnCap` gated,
+/// and the retirement verdict is readable only by a death subscriber). The
+/// child is capability-free, so a compromised worker cannot escalate through it.
+pub(super) fn recovery_authority_profile(
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/recovery-worker" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        LEGACY,
+        "recovery-authority-worker-edge",
+        true,
+    ))
+}
+
 /// The renderer may launch only its capability-free trusted or domain worker.
 /// Lifecycle authority permits synchronous teardown of either worker class.
 pub(super) fn render_worker_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {

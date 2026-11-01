@@ -7,6 +7,7 @@ pub mod cspace;
 pub mod hotswap;
 pub mod metadata;
 pub mod registry;
+pub mod retirement_verdict;
 pub mod service_registry;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod provenance_selftest;

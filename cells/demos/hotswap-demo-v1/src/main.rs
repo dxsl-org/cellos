@@ -96,10 +96,10 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     println("[hotswap-demo-v1] state stashed");
                 }
                 Err(e) => {
-                    // Log and continue — kernel will proceed with an empty stash
-                    // (v2 starts cold) rather than aborting the swap.
+                    // The replacement then finds no state and fails its restore
+                    // (RecoveryFailed); the supervisor rolls back to this cell.
                     let _ = e;
-                    println("[hotswap-demo-v1] WARN: stash failed — v2 starts cold");
+                    println("[hotswap-demo-v1] WARN: stash failed — replacement will refuse Ready");
                 }
             }
         }
@@ -115,13 +115,10 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     state.counter = restored.counter;
                     println("[hotswap-demo-v1] state restored");
                 }
-                Err(_) => {
-                    // Cold start (no prior stash) — counter stays at 0.
-                    println("[hotswap-demo-v1] WARN: no stash found — starting cold");
-                }
+                Err(_) => recovery_failed("[hotswap-demo-v1] RecoveryFailed: no valid stashed state — no Ready"),
             }
-            // MUST be the last call in the Restore handler.
-            // Unblocks the hotswap orchestrator's Step 4 wait.
+            // MUST be the last call in the Restore handler: Ready only after a
+            // complete restore. Unblocks the hotswap orchestrator's Step 4 wait.
             sys_hotswap_ready();
         }
 
@@ -158,6 +155,16 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
 fn message_eq(received: &[u8], expected: &[u8]) -> bool {
     received.get(..expected.len()) == Some(expected)
         && received[expected.len()..].iter().all(|byte| *byte == 0)
+}
+
+/// Exit code of a replacement whose restore failed (matches recovery-demo).
+const RECOVERY_FAILED_EXIT: usize = 0x9B;
+
+/// Spec 25 §6: a replacement that cannot restore committed state exits as
+/// RecoveryFailed without signalling Ready; this demo has no cold-start opt-in.
+fn recovery_failed(line: &str) -> ! {
+    println(line);
+    ostd::syscall::sys_exit(RECOVERY_FAILED_EXIT)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

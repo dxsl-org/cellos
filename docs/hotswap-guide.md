@@ -26,7 +26,38 @@ then on only the replacement reads them, and clearing them consumes them. The
 old instance can no longer write (fenced). The supervisor sees only whether state
 exists (`sys_state_restore(key, &mut [])` returns the length) and may abort with
 clear; it never receives the bytes. A Cell restarted any other way does not
-inherit its predecessor's stash.
+inherit its predecessor's stash. When an incarnation retires, the kernel removes
+the open entries it owns and the sealed entries addressed to it, in the same
+retirement funnel that releases its other resources.
+
+### Restore failure is RecoveryFailed (2026-11-01, Phase 09B)
+
+A replacement that finds no valid state (missing, malformed or wrong schema)
+exits as RecoveryFailed and never calls `sys_hotswap_ready()`; there is no
+cold-start opt-in in the demos. The supervisor's ready wait then fails and it
+rolls back to the old Cell. The stash is byte transport only: it does not carry
+business commits, writer epochs or request deduplication.
+
+### Crash recovery needs a state authority (Phase 09B)
+
+The stash cannot survive a crash: sealing needs a live, frozen source. A
+provider that must keep committed state across a worker crash keeps it in a
+separate state-authority Cell (pattern: `cells/demos/recovery-demo`):
+
+- the worker commits `(caller, method, request id, payload, result, revision)`
+  at the authority before replying, under a writer epoch the authority issued;
+- on worker death the authority fences that epoch, captures the committed
+  watermark, and reads the kernel retirement verdict (`QueryRetirement`, 431,
+  record `ViRetirementV1`): `Unproven` (untracked SHM export or quarantine
+  overflow) means node recovery, no restart; `Contained` or `Quarantined`
+  (counted, bounded) allows a replacement;
+- the replacement attaches with a one-shot nonce staged in its argv, restores,
+  validates schema and revision, and only then is published (Ready);
+- a retried request with the same binding returns the recorded result; the same
+  id with a different payload or method is refused (Conflict).
+
+That state is RAM-only: it survives a worker crash, not an authority crash,
+reboot or power loss. Durable retention requires the CellosFS state owner.
 
 ---
 

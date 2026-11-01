@@ -1,0 +1,41 @@
+[package]
+name = "recovery-demo"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+autobins = false
+description = "Phase 09B witness: provider-owned RAM state authority with crash/restore of its worker"
+
+[lib]
+name = "recovery_demo"
+path = "src/lib.rs"
+
+[[bin]]
+name = "recovery-authority"
+path = "src/bin/authority/main.rs"
+# no_std Cells: only the library's protocol and ledger tests run on the host.
+test = false
+
+[[bin]]
+name = "recovery-worker"
+path = "src/bin/worker/main.rs"
+test = false
+
+[[bin]]
+name = "recovery-client"
+path = "src/bin/client/main.rs"
+test = false
+
+[features]
+default = []
+# Test images only: worker crash points and authority state corruption that the
+# evidence client drives. gen-disk-ci.sh enables it only for the recovery-demo
+# packaging feature; no production image carries these paths.
+fault-inject = []
+
+[dependencies]
+api  = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

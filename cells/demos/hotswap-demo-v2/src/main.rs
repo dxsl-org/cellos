@@ -75,7 +75,7 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
             let state = STATE.lock();
             match stash_transfer(key, &*state) {
                 Ok(()) => println("[hotswap-demo-v2] state stashed"),
-                Err(_) => println("[hotswap-demo-v2] WARN: stash failed — next v starts cold"),
+                Err(_) => println("[hotswap-demo-v2] WARN: stash failed — replacement will refuse Ready"),
             }
         }
 
@@ -88,9 +88,7 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     state.counter = restored.counter;
                     println("[hotswap-demo-v2] state restored from v1");
                 }
-                Err(_) => {
-                    println("[hotswap-demo-v2] WARN: no stash found — starting cold");
-                }
+                Err(_) => recovery_failed("[hotswap-demo-v2] RecoveryFailed: no valid stashed state — no Ready"),
             }
             // A missing target makes ForceExit side-effect free while still
             // exercising the SpawnCap gate inherited through SpawnReplacement.
@@ -132,6 +130,16 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
 fn message_eq(received: &[u8], expected: &[u8]) -> bool {
     received.get(..expected.len()) == Some(expected)
         && received[expected.len()..].iter().all(|byte| *byte == 0)
+}
+
+/// Exit code of a replacement whose restore failed (matches recovery-demo).
+const RECOVERY_FAILED_EXIT: usize = 0x9B;
+
+/// Spec 25 §6: a replacement that cannot restore committed state exits as
+/// RecoveryFailed without signalling Ready; this demo has no cold-start opt-in.
+fn recovery_failed(line: &str) -> ! {
+    println(line);
+    ostd::syscall::sys_exit(RECOVERY_FAILED_EXIT)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

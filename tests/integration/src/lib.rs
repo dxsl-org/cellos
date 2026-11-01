@@ -398,6 +398,26 @@ impl QemuRunner {
         runner
     }
 
+    /// [`Self::boot_with_fresh_disk`] on `harts` RV64 harts: a workload whose
+    /// retirement must be observed across CPUs cannot use the 1-hart default.
+    pub fn boot_with_fresh_disk_smp(kernel: &str, disk: &str, harts: usize) -> Self {
+        let tmp = std::env::temp_dir().join(format!(
+            "ViCell_disk_smp_{}_{}.img",
+            std::process::id(),
+            {
+                use std::sync::atomic::{AtomicU64, Ordering};
+                static CTR: AtomicU64 = AtomicU64::new(0);
+                CTR.fetch_add(1, Ordering::Relaxed)
+            }
+        ));
+        std::fs::copy(disk, &tmp)
+            .unwrap_or_else(|e| panic!("failed to copy disk image for test isolation: {e}"));
+        let mut runner =
+            Self::boot_with_netdev_harts(kernel, &tmp.to_string_lossy(), "user,id=net0", harts);
+        runner.temp_disk = Some(tmp);
+        runner
+    }
+
     /// Take the temp disk path out of this runner so Drop does NOT delete it.
     ///
     /// Used by persistence tests: the caller is responsible for cleaning up.
@@ -1861,6 +1881,12 @@ impl QemuRunner {
     /// inject keystrokes via `send_qemu_key` (e.g. for the keyboard E2E test).
     /// QEMU connects to both as a client on start (server=off / no `server` flag).
     fn boot_with_netdev(kernel: &str, disk: &str, netdev: &str) -> Self {
+        Self::boot_with_netdev_harts(kernel, disk, netdev, 1)
+    }
+
+    /// [`Self::boot_with_netdev`] with an explicit hart count (`-smp`).
+    fn boot_with_netdev_harts(kernel: &str, disk: &str, netdev: &str, harts: usize) -> Self {
+        let harts = harts.to_string();
         // Bind an ephemeral port on the host; QEMU connects to it as a serial
         // backend (server=off,nowait → QEMU is the client and connects on start).
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
@@ -1877,6 +1903,8 @@ impl QemuRunner {
                 "virt",
                 "-m",
                 "256M",
+                "-smp",
+                &harts,
                 // Use `-display none` instead of `-nographic` so that QEMU
                 // creates a proper graphical console for virtio-gpu + virtio-keyboard,
                 // enabling input-send-event to route keyboard events to the guest.

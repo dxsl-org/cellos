@@ -77,6 +77,7 @@ mod tests {
         (424, ViSyscall::FindPcieDeviceByVendor),
         (429, ViSyscall::LookupServiceBound),
         (430, ViSyscall::TelemetrySnapshot),
+        (431, ViSyscall::QueryRetirement),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -302,7 +303,7 @@ mod tests {
     /// S6-1: `TelemetrySnapshot` is the same task-observation authority as
     /// `GetProcs2` (bit 55, no fresh bit), so an existing `GetProcs2` declaration
     /// admits it at the allowlist and the X right decides at dispatch. 430 is the
-    /// next opcode after 429 and 431 stays unmapped.
+    /// next opcode after 429.
     #[test]
     fn telemetry_snapshot_shares_the_get_procs2_authority() {
         assert_eq!(ViSyscall::TelemetrySnapshot.allowlist_bit(), Some(55));
@@ -310,7 +311,17 @@ mod tests {
         assert!(declared.permits(ViSyscall::TelemetrySnapshot));
         assert!(!SyscallSet::EMPTY.with(ViSyscall::MemInfo).permits(ViSyscall::TelemetrySnapshot));
         assert_eq!(ViSyscall::from(430), ViSyscall::TelemetrySnapshot);
-        assert_eq!(ViSyscall::from(431), ViSyscall::Unknown);
+    }
+
+    /// 09B K1: `QueryRetirement` is 431, has no allowlist bit (the `u64` is
+    /// full) and is gated at dispatch like `NotifyOnExit`; 432 stays unmapped.
+    #[test]
+    fn query_retirement_is_dispatch_gated_without_allowlist_bit() {
+        assert_eq!(ViSyscall::QueryRetirement as usize, 431);
+        assert_eq!(ViSyscall::from(431), ViSyscall::QueryRetirement);
+        assert_eq!(ViSyscall::QueryRetirement.allowlist_bit(), None);
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::QueryRetirement));
+        assert_eq!(ViSyscall::from(432), ViSyscall::Unknown);
     }
 
     #[test]

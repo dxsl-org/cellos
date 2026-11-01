@@ -148,13 +148,15 @@ fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
 /// restored as in [`free_grant_pages`], since every Usable frame must stay
 /// identity-mapped there. The page is flushed on every hart before the frame
 /// returns to the allocator.
+/// Returns the number of frames released: each was mapped USER in the shared
+/// root with no borrower record, which the retirement verdict reports.
 /// Lock order: SHM_HANDLES (released) → FRAME_ALLOCATOR → KERNEL_ROOT.
-pub(crate) fn release_shm_for(cell_id: u64, generation: u64) {
+pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
     let frames = shm_take_for(crate::cell::state_stash::Incarnation { cell: cell_id, generation });
     if frames.is_empty() {
-        return;
+        return 0;
     }
     let kernel_rwx = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
@@ -177,6 +179,7 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) {
             allocator.deallocate_frame(frame);
         }
     }
+    frames.len()
 }
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
@@ -1189,7 +1192,7 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
 /// Lock order: PIN_TABLE (leaf) → PAGE_GRANT_TABLE collect → FRAME_ALLOCATOR →
 /// KERNEL_ROOT (inside `unmap_page`/`map_page`). Never holds FRAME_ALLOCATOR
 /// when calling free_grant_pages, and never holds PIN_TABLE across either.
-pub(crate) fn reap_grants_for_task(dead_tid: usize) {
+pub(crate) fn reap_grants_for_task(dead_tid: usize) -> GrantReap {
     // Pins outlive their owner: a device authorised through the IOMMU keeps its
     // mapping after the cell is gone. Mark them before sweeping the tables so
     // the frames below are withheld rather than recycled.
@@ -1202,14 +1205,30 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
         );
     }
 
-    clear_grantee_refs(dead_tid);
-    reclaim_owned_grants(dead_tid);
+    let (grantee_refs_cleared, writable_borrows) = clear_grantee_refs(dead_tid);
+    let grants_reclaimed = reclaim_owned_grants(dead_tid);
     sweep_deferred_domain_grants();
     sweep_orphan_reg_grants();
+    GrantReap { pins_quarantined: pinned, grantee_refs_cleared, writable_borrows, grants_reclaimed }
+}
+
+/// What [`reap_grants_for_task`] did for one dead task (retirement verdict input).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GrantReap {
+    /// Pin and cache-sync regions moved to quarantine.
+    pub pins_quarantined: usize,
+    /// Grants this task received that became unshared.
+    pub grantee_refs_cleared: usize,
+    /// Of those, grants it could write (`WriteOnly` or `ReadWrite`).
+    pub writable_borrows: usize,
+    /// Grants this task owned that were removed from either table.
+    pub grants_reclaimed: usize,
 }
 
 /// Drop `tid`'s grantee-side references in both tables: a grant it *received*
 /// becomes unshared again and its owner keeps both the entry and the frames.
+/// Returns `(cleared, writable)`: references cleared and, of those, the ones
+/// with write permission.
 ///
 /// Death only. A runtime revoke must not touch the target's received grants —
 /// those are governed by the granter's authority, not by the target's.
@@ -1218,13 +1237,22 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
 /// retains that root, so the receiver half is drained here (PTE removal plus
 /// acknowledgement) before the record is left unshared. The drain runs outside
 /// every table lock: it awaits an invalidation the table lock must not hold.
-fn clear_grantee_refs(tid: usize) {
+fn clear_grantee_refs(tid: usize) -> (usize, usize) {
+    let mut cleared = 0usize;
+    let mut writable = 0usize;
+    let mut count = |perm: GrantPerm| {
+        cleared += 1;
+        if matches!(perm, GrantPerm::WriteOnly | GrantPerm::ReadWrite) {
+            writable += 1;
+        }
+    };
     let mut drained: Vec<DomainRecord> = Vec::new();
     {
         let mut tbl = grant_table_lock().lock();
         if let Some(map) = tbl.as_mut() {
             for grant in map.values_mut() {
-                if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
+                if let Some((_, perm)) = grant.shared_to.filter(|(grantee, _)| *grantee == tid) {
+                    count(perm);
                     grant.shared_to = None;
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         drained.push(record);
@@ -1238,7 +1266,8 @@ fn clear_grantee_refs(tid: usize) {
         let mut tbl = reg_grant_table_lock().lock();
         if let Some(map) = tbl.as_mut() {
             for grant in map.values_mut() {
-                if grant.shared_to.is_some_and(|(grantee, _)| grantee == tid) {
+                if let Some((_, perm)) = grant.shared_to.filter(|(grantee, _)| *grantee == tid) {
+                    count(perm);
                     grant.shared_to = None;
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         drained.push(record);
@@ -1251,6 +1280,7 @@ fn clear_grantee_refs(tid: usize) {
     for record in drained {
         drain_domain_receiver(&record);
     }
+    (cleared, writable)
 }
 
 /// Remove and release every grant `tid` **owns**, in both tables.
@@ -1265,10 +1295,14 @@ fn clear_grantee_refs(tid: usize) {
 /// still be programmed against them, and [`release_acked_frames`] returns them
 /// once the driver acknowledges the teardown.
 ///
+/// Returns the number of owned grants taken from `tid`: rows removed from
+/// either table plus domain rows handed to deferred revocation. A grant whose
+/// ownership passed to a live grantee is not counted.
+///
 /// Lock order (identical to the reaper's): PIN_TABLE (leaf) → grant table
 /// collect → FRAME_ALLOCATOR → KERNEL_ROOT inside `free_grant_pages`. Never
 /// holds FRAME_ALLOCATOR while calling `free_grant_pages`.
-pub(crate) fn reclaim_owned_grants(tid: usize) {
+pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
     // ── PAGE_GRANT_TABLE pass ─────────────────────────────────────────────────
     // A domain row's record is cloned out and revoked after the table lock is
     // released: revocation awaits the receiver root's tag invalidation, which
@@ -1312,6 +1346,7 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
         free_grant_pages(grant.base, grant_pages_for_size(grant.size));
     }
 
+    let mut reclaimed = owned.len() + page_deferred.len();
     for (key, record, base, size) in page_deferred {
         release_deferred_domain_row(key, record, base, size, false);
     }
@@ -1377,10 +1412,11 @@ pub(crate) fn reclaim_owned_grants(tid: usize) {
         }
         free_grant_pages(reg.base, grant_pages_for_size(reg.size));
     }
-
+    reclaimed += reg_owned.len() + reg_deferred.len();
     for (key, record, base, size) in reg_deferred {
         release_deferred_domain_row(key, record, base, size, true);
     }
+    reclaimed
 }
 
 /// Complete one owner-reclaimed domain row: revoke, then either release the
@@ -1549,18 +1585,30 @@ fn sweep_orphan_reg_grants() {
 /// orphaned release key; if the transfer wins, that exact release owns it.
 ///
 /// Returns `true` when the frames must not be freed. A full quarantine also
-/// returns `true`: leaking the frames is the only safe answer left.
+/// returns `true`: leaking the frames is the only safe answer left, and the
+/// leak is counted in [`leaked_pages`].
 fn withhold_or_free(base: usize, pages: usize) -> bool {
     match crate::memory::pin::withhold_pinned_frames(base, pages) {
         crate::memory::pin::FrameTransfer::Free => false,
         crate::memory::pin::FrameTransfer::Withheld => true,
         crate::memory::pin::FrameTransfer::Full => {
+            LEAKED_PAGES.fetch_add(pages, core::sync::atomic::Ordering::Relaxed);
             log::error!(
                 "[grant] quarantine full: leaking {pages} page(s) at {base:#x} protected by a live pin"
             );
             true
         }
     }
+}
+
+/// Pages leaked for the life of the boot because the quarantine was full.
+static LEAKED_PAGES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Monotonic boot-wide count of pages leaked by [`withhold_or_free`]. A delta
+/// across a window counts every leak in that window, including concurrent
+/// leaks attributed to other tasks: it can over-report, never under-report.
+pub(crate) fn leaked_pages() -> usize {
+    LEAKED_PAGES.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// Return quarantined frames owned by `tid` to the allocator once the driver has
@@ -1647,10 +1695,13 @@ fn encode_ipc_result(result: SyscallResult) -> usize {
     }
 }
 
-fn is_ipc_operation(syscall: &Syscall) -> bool {
+/// Syscalls whose errors use the typed sentinels of [`encode_ipc_result`]
+/// (`usize::MAX - 1..=4`) instead of the single generic error.
+fn has_typed_errors(syscall: &Syscall) -> bool {
     matches!(syscall, Syscall::IpcSubmit { .. } | Syscall::IpcTake { .. }
         | Syscall::IpcWait { .. } | Syscall::IpcCancel { .. }
-        | Syscall::IpcCurrent | Syscall::IpcReply { .. })
+        | Syscall::IpcCurrent | Syscall::IpcReply { .. }
+        | Syscall::QueryRetirement { .. })
 }
 
 /// Encode the additive spawn-OOM result while preserving all other legacy errors.
@@ -1737,13 +1788,6 @@ fn stash_incarnation(tid: usize) -> Result<crate::cell::state_stash::Incarnation
     live_cell_identity(tid)
         .map(|(cell, generation)| crate::cell::state_stash::Incarnation { cell, generation })
         .ok_or(SyscallError::PermissionDenied)
-}
-
-/// Whether any live task still belongs to `inc` (stash reclamation).
-fn incarnation_is_live(inc: crate::cell::state_stash::Incarnation) -> bool {
-    super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
-        sched.tasks.values().any(|t| t.cell_id.0 == inc.cell && t.cell_generation == inc.generation)
-    })
 }
 
 /// Per-cell block-I/O range gate (Milestone 2.5 P03).
@@ -3868,6 +3912,8 @@ pub enum Syscall {
     MemInfo { out_ptr: usize, out_len: usize },
     /// 430: TelemetrySnapshot (Phase 06 S6-1)
     TelemetrySnapshot { out_ptr: usize, out_len: usize, flags: usize, reserved: usize },
+    /// 431: QueryRetirement (Phase 09B K1)
+    QueryRetirement { root_tid: usize, out_ptr: usize, out_len: usize },
     CellSessionV1 { request_ptr: usize, request_len: usize, result_ptr: usize, result_capacity: usize },
 
     // --- Legacy / Compatibility Layer ---
@@ -4343,6 +4389,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::Exit { .. }
         | Syscall::ForceExit { .. }
         | Syscall::NotifyOnExit { .. }
+        | Syscall::QueryRetirement { .. }
         | Syscall::RegisterService { .. }
         | Syscall::CapRevoke { .. }
         // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
@@ -6131,6 +6178,22 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(0)
         }
 
+        Syscall::QueryRetirement { root_tid, out_ptr, out_len } => {
+            // Admitted past the allowlist; the verdict table is the gate: a
+            // death subscriber of that root at its retirement, or a supervisor.
+            if out_len != api::retirement::RETIREMENT_RECORD_LEN {
+                return Err(SyscallError::InvalidInput);
+            }
+            let supervisor = caller_has_supervisor(caller_id);
+            let record = crate::cell::retirement_verdict::query(caller_id, supervisor, root_tid)
+                .map_err(|error| match error {
+                    crate::cell::retirement_verdict::QueryError::NotFound => SyscallError::FileNotFound,
+                    crate::cell::retirement_verdict::QueryError::Denied => SyscallError::PermissionDenied,
+                })?;
+            write_user_slice(caller_id, out_ptr, &record.encode(), api::retirement::RETIREMENT_RECORD_LEN)?;
+            Ok(api::retirement::RETIREMENT_RECORD_LEN)
+        }
+
         Syscall::RegisterService { service_id, tid } => {
             // Development Silo readiness is self-published only after artifact,
             // VM, entropy, guest READY, and public-key validation. The dedicated
@@ -7695,7 +7758,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 buf_len,
                 crate::cell::state_stash::MAX_STASH_LEN,
             )?;
-            let stored = crate::cell::state_stash::stash(owner, raw_key, &bytes, incarnation_is_live);
+            let stored = crate::cell::state_stash::stash(owner, raw_key, &bytes);
             #[cfg(feature = "bench-counters")]
             if stored > 0 {
                 crate::bench_counters::milestone("state-stashed", caller_id);
@@ -9509,6 +9572,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             flags: a2,
             reserved: a3,
         },
+        ViSyscall::QueryRetirement => Syscall::QueryRetirement {
+            root_tid: a0,
+            out_ptr: a1,
+            out_len: a2,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -10054,7 +10122,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     }
 
     let supports_typed_oom = supports_typed_oom(&syscall);
-    let typed_ipc = is_ipc_operation(&syscall);
+    let typed_errors = has_typed_errors(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -10062,7 +10130,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = if typed_ipc { encode_ipc_result(result) }
+    frame.regs[10] = if typed_errors { encode_ipc_result(result) }
         else { encode_syscall_result(result, usize::MAX, supports_typed_oom) };
 }
 
@@ -10116,14 +10184,14 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
     }
 
     let supports_typed_oom = supports_typed_oom(&syscall);
-    let typed_ipc = is_ipc_operation(&syscall);
+    let typed_errors = has_typed_errors(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     unsafe {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = if typed_ipc { encode_ipc_result(result) as u32 }
+    frame.regs[10] = if typed_errors { encode_ipc_result(result) as u32 }
         else { encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32 };
 }
 
@@ -10616,6 +10684,48 @@ mod tests {
             out_ptr: 0,
             out_len: 0,
         }));
+    }
+
+    /// Phase 09B K1: `QueryRetirement` (431) decodes a0..a2, is admitted past
+    /// an empty allowlist, and its refusals are typed: bad length, no record,
+    /// not a watcher. A watcher passes the gate and reaches the user copy.
+    #[test]
+    fn query_retirement_is_gated_by_the_verdict_with_typed_errors() {
+        use crate::cell::retirement_verdict;
+        let syscall = map_syscall(ViSyscall::QueryRetirement as usize, 77, 0x5000, 96, 0)
+            .expect("QueryRetirement must decode");
+        match syscall {
+            Syscall::QueryRetirement { root_tid, out_ptr, out_len } => {
+                assert_eq!((root_tid, out_ptr, out_len), (77, 0x5000, 96));
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), None);
+        assert!(super::has_typed_errors(&syscall));
+        let len = api::retirement::RETIREMENT_RECORD_LEN;
+        let query = |tid, root_tid, out_ptr, out_len| {
+            super::handle_syscall(tid, Syscall::QueryRetirement { root_tid, out_ptr, out_len })
+        };
+        with_scheduler_task_caps(0, CapSet::EMPTY, |tid| {
+            retirement_verdict::tests::reset();
+            assert_eq!(check_allowlist(ViSyscall::QueryRetirement as usize, tid), Ok(()));
+            let watched = api::cell_owner::CellOwner::new(0x431, 3, 77);
+            let foreign = api::cell_owner::CellOwner::new(0x432, 3, 78);
+            assert!(retirement_verdict::open(watched, &[tid]));
+            assert!(retirement_verdict::open(foreign, &[tid + 1]));
+
+            let bad_len = query(tid, 77, 0x5000, len - 1);
+            assert_eq!(bad_len, Err(SyscallError::InvalidInput));
+            assert_eq!(super::encode_ipc_result(bad_len), usize::MAX - 3);
+            let missing = query(tid, 79, 0x5000, len);
+            assert_eq!(missing, Err(SyscallError::FileNotFound));
+            assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
+            let denied = query(tid, 78, 0x5000, len);
+            assert_eq!(denied, Err(SyscallError::PermissionDenied));
+            assert_eq!(super::encode_ipc_result(denied), usize::MAX);
+            assert_eq!(query(tid, 77, 0, len), Err(SyscallError::InvalidInput), "gate passed");
+            retirement_verdict::tests::reset();
+        });
     }
 
     #[test]

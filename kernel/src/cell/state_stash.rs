@@ -137,14 +137,9 @@ pub(crate) fn discard_spawn_argv(task_id: usize) {
 /// Store `bytes` under `key` for `caller`. Returns the bytes stored (clamped to
 /// [`MAX_STASH_LEN`]) or 0 when refused: the key belongs to another incarnation
 /// or is sealed, the caller already owns [`MAX_ENTRIES_PER_OWNER`] slots, the
-/// table is full even after dropping open slots of dead owners, or no heap.
-///
-/// `is_live` answers whether an incarnation still exists. It is called with the
-/// stash lock released, so it may take the scheduler lock.
-pub fn stash(caller: Incarnation, key: u64, bytes: &[u8], is_live: impl Fn(Incarnation) -> bool) -> usize {
-    if STASH.lock().len() >= MAX_ENTRIES {
-        reclaim_dead_owners(is_live);
-    }
+/// table is full, or no heap. Entries of retired incarnations are already gone:
+/// the retirement funnel calls [`release_retired`].
+pub fn stash(caller: Incarnation, key: u64, bytes: &[u8]) -> usize {
     let n = bytes.len().min(MAX_STASH_LEN);
     // Fallible copy: an entry can be up to MAX_STASH_LEN, and `to_vec` allocates
     // infallibly — a full heap would halt the kernel instead of refusing the stash.
@@ -173,29 +168,18 @@ pub fn stash(caller: Incarnation, key: u64, bytes: &[u8], is_live: impl Fn(Incar
     }
 }
 
-/// Drop `Open` entries whose owner no longer exists, and sealed entries whose
-/// destination no longer exists. Liveness is checked without the stash lock.
-fn reclaim_dead_owners(is_live: impl Fn(Incarnation) -> bool) {
-    let holders: Vec<(u64, Incarnation)> = STASH
-        .lock()
-        .iter()
-        .map(|(key, e)| (*key, match e.phase {
-            Phase::Open => e.owner,
-            Phase::Sealed { destination } => destination,
-        }))
-        .collect();
-    let dead: Vec<(u64, Incarnation)> = holders.into_iter().filter(|(_, h)| !is_live(*h)).collect();
+/// Drop every `Open` entry owned by `retired` and every sealed entry whose
+/// destination is `retired`, at that incarnation's retirement. Entries `retired`
+/// sealed to a successor survive: they belong to the destination. Returns the
+/// count removed.
+pub fn release_retired(retired: Incarnation) -> usize {
     let mut map = STASH.lock();
-    for (key, holder) in dead {
-        // Re-check under the lock: the slot may have changed hands meanwhile.
-        let still = map.get(&key).is_some_and(|e| match e.phase {
-            Phase::Open => e.owner == holder,
-            Phase::Sealed { destination } => destination == holder,
-        });
-        if still {
-            map.remove(&key);
-        }
-    }
+    let before = map.len();
+    map.retain(|_, e| match e.phase {
+        Phase::Open => e.owner != retired,
+        Phase::Sealed { destination } => destination != retired,
+    });
+    before - map.len()
 }
 
 /// Copy the bytes for `key` into `buf` when `caller` may read them (owner while
@@ -266,7 +250,7 @@ pub fn self_test() {
     let kernel = Incarnation { cell: u64::MAX, generation: u64::MAX };
     let stranger = Incarnation { cell: u64::MAX - 1, generation: 1 };
     let sentinel: [u8; 8] = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0x12, 0x34];
-    stash(kernel, SCRATCH_KEY, &sentinel, |_| true);
+    stash(kernel, SCRATCH_KEY, &sentinel);
     let mut buf = [0u8; 8];
     let n = restore(kernel, SCRATCH_KEY, &mut buf);
     let foreign = restore(stranger, SCRATCH_KEY, &mut [0u8; 8]);
@@ -296,8 +280,8 @@ mod tests {
     #[test]
     fn owner_round_trip_and_overwrite() {
         let _g = guard();
-        assert_eq!(stash(A, 42, &[1, 2, 3, 4, 5], |_| true), 5);
-        assert_eq!(stash(A, 42, &[9, 8], |_| true), 2);
+        assert_eq!(stash(A, 42, &[1, 2, 3, 4, 5]), 5);
+        assert_eq!(stash(A, 42, &[9, 8]), 2);
         let mut out = [0u8; 5];
         assert_eq!(restore(A, 42, &mut out), 2);
         assert_eq!(&out[..2], &[9, 8]);
@@ -306,11 +290,11 @@ mod tests {
     #[test]
     fn guessed_key_grants_nothing() {
         let _g = guard();
-        stash(A, 0x00A3_0000_0000_0001, b"secret", |_| true);
+        stash(A, 0x00A3_0000_0000_0001, b"secret");
         let mut out = [0u8; 6];
         assert_eq!(restore(MALLORY, 0x00A3_0000_0000_0001, &mut out), 0);
         assert_eq!(status(MALLORY, false, 0x00A3_0000_0000_0001), 0);
-        assert_eq!(stash(MALLORY, 0x00A3_0000_0000_0001, b"forged", |_| true), 0);
+        assert_eq!(stash(MALLORY, 0x00A3_0000_0000_0001, b"forged"), 0);
         assert_eq!(clear(MALLORY, false, 0x00A3_0000_0000_0001), Err(()));
         assert_eq!(restore(A, 0x00A3_0000_0000_0001, &mut out), 6);
         assert_eq!(&out, b"secret");
@@ -319,7 +303,7 @@ mod tests {
     #[test]
     fn a_later_incarnation_is_not_the_owner() {
         let _g = guard();
-        stash(A, 7, b"old", |_| true);
+        stash(A, 7, b"old");
         assert_eq!(restore(A_NEXT, 7, &mut [0u8; 3]), 0);
         assert_eq!(clear(A_NEXT, false, 7), Err(()));
     }
@@ -327,12 +311,12 @@ mod tests {
     #[test]
     fn sealing_hands_the_entry_to_the_destination_only() {
         let _g = guard();
-        stash(A, 7, b"state", |_| true);
-        stash(B, 8, b"other", |_| true);
+        stash(A, 7, b"state");
+        stash(B, 8, b"other");
         assert_eq!(seal_for_replacement(A, A_NEXT), 1);
         let mut out = [0u8; 5];
         assert_eq!(restore(A, 7, &mut out), 0, "old incarnation lost access");
-        assert_eq!(stash(A, 7, b"late!", |_| true), 0, "old writer fenced");
+        assert_eq!(stash(A, 7, b"late!"), 0, "old writer fenced");
         assert_eq!(restore(MALLORY, 7, &mut out), 0);
         assert_eq!(restore(A_NEXT, 7, &mut out), 5);
         assert_eq!(&out, b"state");
@@ -345,7 +329,7 @@ mod tests {
     #[test]
     fn supervisor_sees_length_and_may_abort_but_never_reads() {
         let _g = guard();
-        stash(A, 9, b"payload", |_| true);
+        stash(A, 9, b"payload");
         assert_eq!(status(MALLORY, true, 9), 7);
         assert_eq!(status(MALLORY, false, 9), 0);
         assert_eq!(restore(MALLORY, 9, &mut [0u8; 7]), 0);
@@ -354,19 +338,43 @@ mod tests {
     }
 
     #[test]
-    fn one_owner_cannot_fill_the_table_and_dead_owners_are_reclaimed() {
+    fn one_owner_cannot_fill_the_table_and_retirement_frees_its_slots() {
         let _g = guard();
         for key in 0..MAX_ENTRIES_PER_OWNER as u64 {
-            assert_eq!(stash(A, 100 + key, b"x", |_| true), 1);
+            assert_eq!(stash(A, 100 + key, b"x"), 1);
         }
-        assert_eq!(stash(A, 999, b"x", |_| true), 0);
+        assert_eq!(stash(A, 999, b"x"), 0);
         for i in 0..(MAX_ENTRIES - MAX_ENTRIES_PER_OWNER) as u64 {
             let owner = Incarnation { cell: 0x9000 + i, generation: 1 };
-            assert_eq!(stash(owner, 1000 + i, b"x", |_| true), 1);
+            assert_eq!(stash(owner, 1000 + i, b"x"), 1);
         }
-        assert_eq!(stash(B, 5000, b"x", |_| true), 0, "table full of live owners");
-        assert_eq!(stash(B, 5000, b"x", |i| i != A), 1, "A's dead slots reclaimed");
+        assert_eq!(stash(B, 5000, b"x"), 0, "table full");
+        assert_eq!(release_retired(A), MAX_ENTRIES_PER_OWNER);
+        assert_eq!(stash(B, 5000, b"x"), 1, "A's retired slots are free");
         assert_eq!(restore(A, 100, &mut [0u8; 1]), 0);
+    }
+
+    #[test]
+    fn release_retired_keeps_entries_sealed_to_a_successor() {
+        let _g = guard();
+        stash(A, 7, b"state");
+        stash(B, 8, b"other");
+        assert_eq!(seal_for_replacement(A, A_NEXT), 1);
+        assert_eq!(release_retired(A), 0, "sealed entry belongs to the destination");
+        assert_eq!(restore(A_NEXT, 7, &mut [0u8; 5]), 5);
+        assert_eq!(restore(B, 8, &mut [0u8; 5]), 5, "other owners unaffected");
+    }
+
+    #[test]
+    fn release_retired_drops_entries_sealed_to_a_dead_destination() {
+        let _g = guard();
+        stash(A, 7, b"state");
+        stash(A_NEXT, 9, b"own");
+        assert_eq!(seal_for_replacement(A, A_NEXT), 1);
+        assert_eq!(release_retired(A_NEXT), 2, "sealed inbound and own open entry");
+        assert_eq!(status(MALLORY, true, 7), 0);
+        assert_eq!(status(MALLORY, true, 9), 0);
+        assert_eq!(release_retired(A_NEXT), 0, "idempotent");
     }
 
     #[test]

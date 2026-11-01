@@ -1,6 +1,6 @@
 # Phase 09B CP1 — software provider crash/restore at a provider-owned state authority (Law-1 additive)
 
-Status: **CP1 APPROVED by the user 2026-11-01.** Option B ("Duyệt B"); K1 syscall 431 `QueryRetirement` / `ViRetirementV1` ("Duyệt K1"); hotswap-demo restore failure becomes RecoveryFailed, no cold-start opt-in ("Đổi thành RecoveryFailed"); VFS test-hooks-only missing-ack knob ("Duyệt"); 09A drift fixed in code: retirement removes the dead owner's Open stash entries ("Sửa code"). CP2 (evidence) still required.
+Status: **CP1 APPROVED by the user 2026-11-01.** Option B ("Duyệt B"); K1 syscall 431 `QueryRetirement` / `ViRetirementV1` ("Duyệt K1"); hotswap-demo restore failure becomes RecoveryFailed, no cold-start opt-in ("Đổi thành RecoveryFailed"); VFS test-hooks-only missing-ack knob ("Duyệt"); 09A drift fixed in code: retirement removes the dead owner's Open stash entries ("Sửa code"). **CP2 APPROVED by the user 2026-11-01 ("Duyệt CP2 + commit") on the §11 evidence; independently re-run: kernel host 340/340, provider-recovery 2/2.**
 Admission: 09B admitted 2026-11-01 (`admission-approval.md:82`); this CP1 is the separate
 design approval that line requires. Depends on 09A (complete, `phase-09a-cp1.md:3`).
 
@@ -402,3 +402,86 @@ classification.
    text changes). The alternative is to make its restore failure RecoveryFailed now;
    that changes supervisor semantics and needs its own note.
 4. Approve the VFS test-hooks knob for the E8 missing-ack injection.
+
+## 11. CP2 — implementation and evidence (2026-11-01)
+
+### 11.1 Exact public delta (as implemented)
+- `ViSyscall::QueryRetirement = 431` (`libs/api/src/abi/syscall.rs`), no allowlist
+  bit (dispatch-gated group next to `NotifyOnExit`). `a0 = root_tid, a1 = out_ptr,
+  a2 = out_len` → 96 on success. Typed errors via the IPC sentinel encoder
+  (`has_typed_errors`): `usize::MAX-2` no record, `usize::MAX-3` length ≠ 96 or bad
+  out pointer, `usize::MAX` not a recorded watcher of that root and no SupervisorCap.
+- `api::retirement::ViRetirementV1` (`libs/api/src/abi/retirement.rs`): `repr(C)`, exactly
+  96 bytes, version set {1}; decode refuses length ≠ 96, other versions, non-zero
+  `reserved0/1`, states outside 1..=4 and unknown reason bits (rules of
+  `docs/abi-boundary-records.md`). Producer: kernel; consumer: independently built Cells.
+- `ostd::syscall::sys_query_retirement(root_tid) -> Result<ViRetirementV1, SyscallError>`.
+- Watchers: up to 8 death subscribers of the root at retirement start (later ones get
+  `PermissionDenied`). Table: 64 records, a `Pending` record is never evicted.
+- Leaked-page counting: `withhold_or_free`'s `Full` branch now counts pages; a
+  concurrent leak elsewhere can only over-report (fails closed).
+- Unchanged: 401/410/411/412/421 numbers and arguments, exit reasons, `NotifyOnExit`.
+  09A drift: `state_stash::release_retired` in the funnel; the lazy reclaim path and
+  `stash`'s liveness argument are deleted.
+- Demo semantics: `hotswap-demo-v1/v2` restore failure prints
+  `RecoveryFailed: no valid stashed state — no Ready` and exits `0x9B` without
+  `sys_hotswap_ready()`; the supervisor's ready wait fails and rolls back.
+
+### 11.2 Deviations from §4–§7 (none changes the approved public delta)
+1. VFS knob is the cargo feature `recovery-fixture`, not `test-hooks`: the test-hooks VFS
+   flavour is refused on the gen-disk-ci image (flavour assertion, 1.1 KiB quota) and the
+   test-hooks image has no shell/autoload for the cells. Same property: test-only,
+   built only when `CELLOS_INIT_FEATURES` contains `recovery-demo`; the default image
+   asserts its marker absent.
+2. Recovery cells are VIFS1-only (the P2 cell table is capped at 64 rows; 66 failed).
+3. Service ids are cell-private fixture ids 0x7A0A (authority, registered by init from
+   `config/autoload.toml`) and 0x7A0B (published worker), same pattern as init's 0x7A01.
+4. E10 has no futex waiter: the authority reads the lock word left in the discarded
+   page (1) and frees the page without unlocking or reusing it; the "never force
+   unlocked" half rests on the source fact (`kernel/src/task/futex.rs:28-30`).
+5. E12's vector is free frames (`MemInfo`), verdict counts, quarantined and leaked pages
+   and the authority ledger size; the stash entry count is not part of it (the demo does
+   not use the stash). Kernel heap stays outside the no-leak claim (P01 class 8).
+6. A fenced live writer is ended by its own `StaleEpoch` exit (`0x9C`), not by a timer at
+   the authority (the authority loop has no attested timed receive).
+
+### 11.3 Commands and results
+| # | Command | Result |
+|---|---|---|
+| 1 | `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu --target-dir target/p09b-host` | 340 passed, 0 failed |
+| 2 | `cargo test -p api -p recovery-demo --target x86_64-unknown-linux-gnu --target-dir target/p09b-host` | api 162 + 2 passed; recovery-demo 8 passed |
+| 3 | `RUSTFLAGS="-D warnings -C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static" cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc --target-dir target/k1-x86` | Finished, no warnings |
+| 4 | `CELLOS_INIT_FEATURES=input,recovery-demo bash scripts/gen-disk-ci.sh` then `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test provider-recovery -- --test-threads=1` | **2/2 pass** (`provider_recovery_two_harts`, `provider_recovery_one_hart`) |
+| 5 | `CELLOS_INIT_FEATURES=input,hotswap-demo bash scripts/gen-disk-ci.sh` then `cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu --test hotswap-smoke -- --test-threads=1` | **13/13 pass** |
+| 6 | `bash scripts/gen-disk-ci.sh` (default image restored on the production path) | exit 0; `disk_v3.img` sha256 `27350b70822b0889…`, kernel `3f775518eb7b914d…`, VIFS1 `3ffe0a55832c728b…`; no `recovery-*` artifact shipped; `service-vfs` carries 0 `recovery-fixture` strings |
+
+Kernel host tests added: verdict classification matrix, watcher/supervisor gate,
+8-watcher cap, Pending never evicted, oldest final evicted, unknown close no-op,
+`release_retired` (open, sealed-to-dead-destination, others kept), syscall 431 decode,
+no allowlist bit and typed errors, `vfs_leases_pending_for_owner`,
+`quarantined_pages_attributed`, the `recovery-authority` launch edge, and the remote-hart
+mask in the existing remote-retirement test. Host: ledger and frame codec (8 tests).
+
+### 11.4 Evidence map (RV64 QEMU, `-smp 2` unless noted; serial lines quoted)
+| # | Criterion | Observed |
+|---|---|---|
+| E1 | fault before commit | `E1 PASS fault-before-commit: old revision kept, resubmit applied once (counter 1)` |
+| E2 | fault after commit, before reply | `E2 PASS fault-after-commit: recorded outcome returned, not reapplied (counter 2)` |
+| E3 | same id, different payload | `E3 PASS same request id with a different payload refused (Conflict), state unchanged` |
+| E4 | same id, different authority | `E4 PASS same request id with a different method/authority refused (Conflict)…`; second principal: `E4 PASS foreign principal reusing request id 1002: independent binding, applied once (counter 3)` |
+| E5 | old writer cannot commit | `E5 PASS old writer refused StaleEpoch after fence; revision 2 kept; epoch 3 -> 4` |
+| E6 | RecoveryFailed, no Ready | four kinds: `E6 PASS corrupt|missing|wrong-schema|wrong-revision: RecoveryFailed, no Ready (worker service unpublished)`; worker side `[recovery-worker] RecoveryFailed: attach refused RecoveryFailed` / `schema 2 is not 1`; authority `RecoveryFailed: … no Ready publication` |
+| E7 | whole-Cell retirement on 2 CPUs | `E7 PASS whole-Cell retirement: threads=2 remote_harts=0x2 state=Contained`; 3 of 11 spin crashes waited for a remote hart (2-hart run), 0 of 11 on 1 hart |
+| E8 | missing ack quarantines | `[vfs] recovery-fixture: holding grant lease without acknowledgement`; `verdict … state=Quarantined reasons=0x10 threads=2 remote_harts=0x1 grants=1 … vfs=1 … qpages=1 leaked=0`; `E8 PASS missing borrower ack quarantined 1 page(s); released after VFS completed (free 30556 -> 30557)` |
+| E9 | untracked export → no restart | `verdict … state=Unproven reasons=0x1 … shm=1 … (untracked SHM export)`; `node recovery required: containment unproven, no restart`; `E9 PASS … no restart, no Ready, heal refused` |
+| E10 | abandoned lock, no forced unlock | `verdict … reasons=0x4 … borrows=1 writable=1`; `lent page discarded with lock word=1 (freed=true): never unlocked or reused`; `E10 PASS …` |
+| E11 | identity, not address | `E11 PASS 20 published worker incarnations, all distinct (cell, generation); stale epochs refused (E5)`; Tier-2/Domain worker variant **not run: unqualified** |
+| E12 | 10 cycles reconcile | cycles 1–10 `free_before=30557 free_after=30557 state=Contained threads=2 … qpages=0 leaked=0 shm=0 ledger=2`; `E12 PASS 10 cycles: all Contained, 0 quarantined, 0 leaked, settled free frames 30557 constant` |
+| R | regressions | hotswap-smoke 13/13; boot self-test `state-stash: round-trip OK, foreign read refused` |
+
+### 11.5 Remaining / not claimed
+- RAM-only: no durable, reboot or power-loss claim (needs the CellosFS state owner).
+- E11 Domain/private-root worker variant not run; x86 runtime lane not run (RV64 only).
+- Remote-hart waits are observed (3/11 on 2 harts), not forced: the witness does not pin
+  threads to harts.
+- `CHANGELOG.md` entry is with Main (file owned by Phase06Abi).
