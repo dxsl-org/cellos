@@ -149,3 +149,59 @@ fn validation_rejects_malformed_serial_declarations() {
     }];
     assert_eq!(test_profile(&CONSOLE_FIRST, &RS485_OK).validate(), Ok(()));
 }
+
+#[test]
+fn every_catalog_profile_shares_the_early_facts() {
+    assert_eq!(X86_EARLY_FACTS.serial_ports[0], X86_EARLY_FACTS.com1);
+    let mut slugs = [""; X86_PROFILES.len()];
+    for (index, profile) in X86_PROFILES.iter().enumerate() {
+        assert_eq!(profile.validate(), Ok(()), "{}", profile.slug);
+        assert!(
+            profile.has_early_facts(&X86_EARLY_FACTS),
+            "{}",
+            profile.slug
+        );
+        assert_eq!(profile.com1, X86_EARLY_FACTS.com1);
+        assert_eq!(profile.serial_ports, X86_EARLY_FACTS.serial_ports);
+        assert_eq!(
+            profile.legacy_bios_window,
+            X86_EARLY_FACTS.legacy_bios_window
+        );
+        assert_eq!(
+            profile.legacy_rsdp_window,
+            X86_EARLY_FACTS.legacy_rsdp_window
+        );
+        assert!(!slugs.contains(&profile.slug), "duplicate {}", profile.slug);
+        slugs[index] = profile.slug;
+    }
+    assert!(slugs.contains(&QEMU_Q35.slug));
+    assert!(slugs.contains(&GENERIC_X86_PC.slug));
+}
+
+#[test]
+fn early_facts_comparison_names_each_divergence() {
+    static STANDARD: [PortIoDevice; 4] = STANDARD_COM_PORTS;
+    assert!(test_profile(&STANDARD, &[]).has_early_facts(&X86_EARLY_FACTS));
+
+    // Fewer ports, a moved port, a moved console and a moved window each diverge.
+    assert!(!test_profile(&STANDARD[..3], &[]).has_early_facts(&X86_EARLY_FACTS));
+    static MOVED_PORT: [PortIoDevice; 4] = [
+        STANDARD_COM_PORTS[0],
+        STANDARD_COM_PORTS[1],
+        STANDARD_COM_PORTS[2],
+        PortIoDevice {
+            base: 0x02E0,
+            irq: 3,
+        },
+    ];
+    assert!(!test_profile(&MOVED_PORT, &[]).has_early_facts(&X86_EARLY_FACTS));
+    let mut console = test_profile(&STANDARD, &[]);
+    console.com1.irq = 3;
+    assert!(!console.has_early_facts(&X86_EARLY_FACTS));
+    let mut bios = test_profile(&STANDARD, &[]);
+    bios.legacy_bios_window.size = 0x0004_0000;
+    assert!(!bios.has_early_facts(&X86_EARLY_FACTS));
+    let mut rsdp = test_profile(&STANDARD, &[]);
+    rsdp.legacy_rsdp_window.base = 0x0000_1000;
+    assert!(!rsdp.has_early_facts(&X86_EARLY_FACTS));
+}

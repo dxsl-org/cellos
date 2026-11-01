@@ -18,7 +18,7 @@ One `x86_64` kernel image. Profile is chosen at boot from a compiled catalog:
 
 | # | Phase | Status | Depends | Checkpoint |
 |---|---|---|---|---|
-| 01 | [Identity facts and catalog API](phase-01-identity-facts-and-catalog.md) | pending | — | no |
+| 01 | [Identity facts and catalog API](phase-01-identity-facts-and-catalog.md) | done 2026-11-01 (uncommitted) | — | no |
 | 02 | [Runtime profile selection, feature removal](phase-02-runtime-profile-selection.md) | pending | 01 | **yes** |
 | 03 | [Fingerprint pinning and re-confirmation](phase-03-fingerprint-pinning.md) | pending | 02 | **yes** |
 
@@ -30,7 +30,7 @@ One `x86_64` kernel image. Profile is chosen at boot from a compiled catalog:
 
 ## Assumptions (unverified)
 
-- A1: Limine in the pinned version supports the executable command-line request and the SMBIOS request.
+- A1 (**verified 2026-11-01**, phase 01): the vendored Limine 8.7.0 used for the ISO supports the executable-file request, whose `cmdline` field carries the command line, and the SMBIOS request (physical entry points under base revision 3). See [phase 01](phase-01-identity-facts-and-catalog.md#implementation).
 - A2: QEMU q35 sets the CPUID hypervisor bit under both TCG and KVM.
 - A3: A writable cellosfs path exists on the x86 boot disk images used by CI. If not, phase 03 adds a small config partition to `scripts/gen-disk*`.
 

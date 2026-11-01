@@ -6,7 +6,7 @@ use crate::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
 use crate::raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B;
 use crate::raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B;
 use crate::starfive_visionfive_2::STARFIVE_VISIONFIVE_2;
-use crate::{Architecture, DriverId, FirmwareInterface, SocId};
+use crate::{Architecture, DmaIsolation, DriverId, FirmwareInterface, SocId};
 
 #[test]
 fn qemu_descriptor_matches_current_kernel_constants() {
@@ -112,4 +112,58 @@ fn soc_and_driver_selection_is_typed() {
     assert!(QEMU_Q35_X86_64.has_driver(DriverId::PcieEcam));
     assert!(QEMU_Q35_X86_64.fallback_memory.is_empty());
     assert_eq!(QEMU_Q35_X86_64.validate_for(Architecture::X86_64), Ok(()));
+}
+
+#[test]
+fn x86_catalog_holds_exactly_the_bindable_x86_profiles() {
+    let catalog = crate::x86_catalog();
+    let slugs: [&str; 2] = [catalog[0].slug, catalog[1].slug];
+    assert_eq!(slugs, ["x86_64-pc", "qemu-q35-x86_64"]);
+    for (index, board) in catalog.iter().enumerate() {
+        assert_eq!(
+            board.validate_for(Architecture::X86_64),
+            Ok(()),
+            "{}",
+            board.slug
+        );
+        assert!(
+            !catalog[..index]
+                .iter()
+                .any(|other| other.slug == board.slug),
+            "duplicate {}",
+            board.slug
+        );
+    }
+    // The first entry is the strict profile; the weaker one is only reachable
+    // by naming it.
+    assert_eq!(catalog[0].dma_isolation, DmaIsolation::Required);
+    assert_eq!(catalog[1].dma_isolation, DmaIsolation::Optional);
+}
+
+#[test]
+fn find_by_slug_is_exact_and_confined_to_the_named_catalog() {
+    let catalog = crate::x86_catalog();
+    assert_eq!(
+        crate::find_by_slug(catalog, "x86_64-pc").map(|board| board.soc),
+        Some(SocId::GenericX86Pc)
+    );
+    assert_eq!(
+        crate::find_by_slug(catalog, "qemu-q35-x86_64").map(|board| board.soc),
+        Some(SocId::QemuX86Q35)
+    );
+    for rejected in [
+        "",
+        "X86_64-PC",
+        "x86_64-pc ",
+        "x86_64",
+        "qemu-q35-x86_64\0",
+        QEMU_VIRT_RISCV64.slug,
+        RASPBERRY_PI_4_MODEL_B.slug,
+    ] {
+        assert!(
+            crate::find_by_slug(catalog, rejected).is_none(),
+            "{rejected:?}"
+        );
+    }
+    assert!(crate::find_by_slug(&[], "x86_64-pc").is_none());
 }

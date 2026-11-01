@@ -236,5 +236,79 @@ pub const GENERIC_X86_PC: X86PlatformProfile = X86PlatformProfile {
     },
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// The machine facts boot consumes before ACPI discovery has bound a profile:
+/// the console, the declared COM ports, and the firmware windows the RSDP
+/// search and ACPI table admission rely on.
+///
+/// Every entry of [`X86_PROFILES`] must carry exactly these facts (checked at
+/// compile time), so code that runs before the profile is known reads them from
+/// [`X86_EARLY_FACTS`] and cannot observe which profile is later bound. A
+/// machine whose pre-ACPI wiring differs is not expressible as a profile of this
+/// image; it needs a different early-boot contract, not a new catalog entry.
+pub struct X86EarlyFacts {
+    pub com1: PortIoDevice,
+    pub serial_ports: &'static [PortIoDevice],
+    pub legacy_bios_window: AddressRange,
+    pub legacy_rsdp_window: AddressRange,
+}
+
+/// The pre-ACPI facts shared by every profile in [`X86_PROFILES`].
+pub const X86_EARLY_FACTS: X86EarlyFacts = X86EarlyFacts {
+    com1: STANDARD_COM_PORTS[0],
+    serial_ports: &STANDARD_COM_PORTS,
+    legacy_bios_window: AddressRange {
+        base: 0x0008_0000,
+        size: 0x0008_0000,
+    },
+    legacy_rsdp_window: AddressRange {
+        base: 0,
+        size: 0x0010_0000,
+    },
+};
+
+/// Every x86 platform profile this image can bind at boot.
+pub const X86_PROFILES: [&X86PlatformProfile; 2] = [&QEMU_Q35, &GENERIC_X86_PC];
+
+impl X86PlatformProfile {
+    /// Reports whether this profile's pre-ACPI facts equal `facts` exactly.
+    pub const fn has_early_facts(&self, facts: &X86EarlyFacts) -> bool {
+        if !port_eq(self.com1, facts.com1)
+            || !range_eq(self.legacy_bios_window, facts.legacy_bios_window)
+            || !range_eq(self.legacy_rsdp_window, facts.legacy_rsdp_window)
+            || self.serial_ports.len() != facts.serial_ports.len()
+        {
+            return false;
+        }
+        let mut index = 0;
+        while index < self.serial_ports.len() {
+            if !port_eq(self.serial_ports[index], facts.serial_ports[index]) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+}
+
+const fn port_eq(left: PortIoDevice, right: PortIoDevice) -> bool {
+    left.base == right.base && left.irq == right.irq
+}
+
+const fn range_eq(left: AddressRange, right: AddressRange) -> bool {
+    left.base == right.base && left.size == right.size
+}
+
+const _: () = {
+    let mut index = 0;
+    while index < X86_PROFILES.len() {
+        assert!(
+            X86_PROFILES[index].has_early_facts(&X86_EARLY_FACTS),
+            "an x86 profile diverges from X86_EARLY_FACTS"
+        );
+        index += 1;
+    }
+};
+
 #[cfg(test)]
 mod tests;

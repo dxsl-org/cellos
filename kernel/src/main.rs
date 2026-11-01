@@ -77,6 +77,7 @@ pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS m
 pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
+pub mod smbios; // Bounded SMBIOS type 1 reader (x86 boot identity)
 pub mod snapshot;
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
@@ -381,14 +382,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Frame allocator initialized");
 
     // Limine does not guarantee HHDM mappings for firmware-owned memory. The
-    // parser requests a mapping for each RSDP/SDT range before dereferencing it.
-    // Child tables must stay inside ACPI reclaimable/NVS or firmware-reserved
-    // memory-map entries. Legacy BIOS ACPI records may live in the bounded
-    // windows supplied by the selected x86 platform profile. Some BIOSes,
-    // including q35, report other SDTs as Reserved, so table checksums remain
-    // the final trust gate.
+    // ACPI and SMBIOS parsers request a mapping for each RSDP/SDT/SMBIOS range
+    // before dereferencing it. Those ranges must stay inside ACPI
+    // reclaimable/NVS or firmware-reserved memory-map entries. Legacy BIOS
+    // records may live in the bounded windows supplied by the selected x86
+    // platform profile. Some BIOSes, including q35, report other SDTs as
+    // Reserved, so checksums remain the final trust gate.
     #[cfg(target_arch = "x86_64")]
-    let acpi_info = {
+    let (acpi_info, smbios_system) = {
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
         let soc = crate::board::selected_x86_64_soc();
         let mut map_physical = |physical: usize, length: usize| {
@@ -412,7 +413,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             });
             if !legacy_firmware && !legacy_rsdp && !firmware_owned {
                 log::warn!(
-                    "[acpi] rejected non-firmware range {:#x}..{:#x}",
+                    "[firmware] rejected non-firmware range {:#x}..{:#x}",
                     physical,
                     end
                 );
@@ -444,8 +445,20 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             info.ecam_base != 0,
             info.dmar_base != 0
         );
-        info
+        // SMBIOS entry points and tables get the same firmware-range admission
+        // as ACPI tables: the legacy BIOS window or firmware-owned memory.
+        let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();
+        let smbios = crate::smbios::discover(smbios_32, smbios_64, &mut map_physical);
+        (info, smbios)
     };
+    #[cfg(target_arch = "x86_64")]
+    let platform_identity = crate::board::PlatformIdentity {
+        acpi_oem: acpi_info.root_oem,
+        smbios: smbios_system,
+        hypervisor: cpu_features::hypervisor_present(),
+    };
+    #[cfg(target_arch = "x86_64")]
+    crate::board::report_identity(&platform_identity);
 
     #[cfg(target_arch = "x86_64")]
     let x86_ioapic_base = if crate::board::selected().has_driver(cellos_boards::DriverId::IoApic) {

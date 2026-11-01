@@ -40,6 +40,26 @@ pub struct AcpiInfo {
     /// The selected DRHD carries INCLUDE_PCI_ALL, so it covers PCI devices that
     /// declare no device scope of their own.
     pub dmar_include_pci_all: bool,
+    /// A DMAR table passed its SDT checksum, whether or not it declared a usable
+    /// unit. Absence never implies anything about DMA policy.
+    pub dmar_present: bool,
+    /// OEM identity from the validated XSDT (ACPI 2.0+) or RSDT header; `None`
+    /// when no root table validated.
+    pub root_oem: Option<AcpiOem>,
+}
+
+/// The OEM fields of an ACPI system description table header.
+///
+/// These name the firmware vendor and build, not the machine: identical
+/// firmware on different machines reports identical values. The bytes are
+/// firmware-controlled and carry no authority; they are kept verbatim
+/// (space-padded ASCII by specification, but not checked) for identity
+/// comparison and escaped logging.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AcpiOem {
+    pub oem_id: [u8; 6],
+    pub oem_table_id: [u8; 8],
+    pub oem_revision: u32,
 }
 
 impl Default for AcpiInfo {
@@ -60,6 +80,8 @@ impl Default for AcpiInfo {
             dmar_base: 0,
             dmar_units: 0,
             dmar_include_pci_all: false,
+            dmar_present: false,
+            root_oem: None,
         }
     }
 }
@@ -285,6 +307,21 @@ unsafe fn read_sig(virt: usize) -> [u8; 4] {
     unsafe { core::ptr::read_unaligned(virt as *const [u8; 4]) }
 }
 
+/// Read the OEM fields of the SDT header at `virt`.
+///
+/// # Safety
+/// `[virt, virt + 36)` must be a readable, validated SDT header.
+unsafe fn read_sdt_oem(virt: usize) -> AcpiOem {
+    // SAFETY: offsets 10..28 lie inside the caller's 36-byte header.
+    unsafe {
+        AcpiOem {
+            oem_id: core::ptr::read_unaligned((virt + 10) as *const [u8; 6]),
+            oem_table_id: core::ptr::read_unaligned((virt + 16) as *const [u8; 8]),
+            oem_revision: core::ptr::read_unaligned((virt + 24) as *const u32),
+        }
+    }
+}
+
 /// Iterate XSDT (64-bit pointer array) and dispatch each child SDT.
 unsafe fn parse_xsdt(
     phys: usize,
@@ -295,6 +332,8 @@ unsafe fn parse_xsdt(
         log::warn!("[acpi] XSDT validation failed — hardware gates closed");
         return;
     };
+    // SAFETY: validate_sdt returned a checksummed table of at least 36 bytes.
+    info.root_oem = Some(unsafe { read_sdt_oem(virt) });
 
     // Entries start at byte 36 (after the 36-byte common header).
     // Each entry is an 8-byte physical pointer.
@@ -322,6 +361,8 @@ unsafe fn parse_rsdt(
         log::warn!("[acpi] RSDT validation failed — hardware gates closed");
         return;
     };
+    // SAFETY: validate_sdt returned a checksummed table of at least 36 bytes.
+    info.root_oem = Some(unsafe { read_sdt_oem(virt) });
 
     // Entries start at byte 36; each entry is a 4-byte physical pointer.
     let entries_start = virt + 36;
@@ -354,7 +395,10 @@ fn dispatch_sdt(
         b"APIC" => parse_madt(virt, length, info),
         b"MCFG" => parse_mcfg(virt, length, info),
         b"HPET" => parse_hpet(virt, length, info),
-        b"DMAR" => parse_dmar(virt, length, info),
+        b"DMAR" => {
+            info.dmar_present = true;
+            parse_dmar(virt, length, info)
+        }
         _ => {
             // Skip unknown/unneeded tables silently.
         }
@@ -780,5 +824,124 @@ mod tests {
         let mut info = AcpiInfo::default();
         parse_dmar(undersized.as_ptr() as usize, undersized.len(), &mut info);
         assert_eq!(info.dmar_base, 0);
+    }
+
+    /// Stamp a common SDT header over `table[0..36]` and fix its checksum.
+    fn seal_sdt(mut table: Vec<u8>, signature: &[u8; 4], oem_id: &[u8; 6]) -> Vec<u8> {
+        let length = table.len() as u32;
+        table[0..4].copy_from_slice(signature);
+        table[4..8].copy_from_slice(&length.to_le_bytes());
+        table[8] = 1;
+        table[9] = 0;
+        table[10..16].copy_from_slice(oem_id);
+        table[16..24].copy_from_slice(b"BXPC    ");
+        table[24..28].copy_from_slice(&1u32.to_le_bytes());
+        let sum = table.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+        table[9] = 0u8.wrapping_sub(sum);
+        table
+    }
+
+    /// Physical memory image: RSDP at 0x10, root table at 0x100, children from
+    /// 0x400. `revision >= 2` builds RSDP v2 + XSDT, otherwise RSDP v1 + RSDT.
+    fn firmware_image(revision: u8, root_oem: &[u8; 6], children: &[Vec<u8>]) -> Vec<u8> {
+        const RSDP: usize = 0x10;
+        const ROOT: usize = 0x100;
+        let mut memory = vec![0u8; 0x2000];
+        let mut child_phys = Vec::new();
+        let mut cursor = 0x400;
+        for child in children {
+            memory[cursor..cursor + child.len()].copy_from_slice(child);
+            child_phys.push(cursor as u64);
+            cursor += child.len().next_multiple_of(16);
+        }
+
+        let entry_size = if revision >= 2 { 8 } else { 4 };
+        let mut root = vec![0u8; 36];
+        for phys in &child_phys {
+            root.extend_from_slice(&phys.to_le_bytes()[..entry_size]);
+        }
+        let signature = if revision >= 2 { b"XSDT" } else { b"RSDT" };
+        let root = seal_sdt(root, signature, root_oem);
+        memory[ROOT..ROOT + root.len()].copy_from_slice(&root);
+
+        let rsdp = &mut memory[RSDP..RSDP + 36];
+        rsdp[0..8].copy_from_slice(b"RSD PTR ");
+        rsdp[9..15].copy_from_slice(b"RSDPOE");
+        rsdp[15] = revision;
+        if revision >= 2 {
+            rsdp[20..24].copy_from_slice(&36u32.to_le_bytes());
+            rsdp[24..32].copy_from_slice(&(ROOT as u64).to_le_bytes());
+        } else {
+            rsdp[16..20].copy_from_slice(&(ROOT as u32).to_le_bytes());
+        }
+        let v1 = rsdp[..20]
+            .iter()
+            .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+        rsdp[8] = 0u8.wrapping_sub(v1);
+        if revision >= 2 {
+            let all = rsdp.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+            rsdp[32] = 0u8.wrapping_sub(all);
+        }
+        memory
+    }
+
+    fn parse_image(memory: &[u8]) -> AcpiInfo {
+        let base = memory.as_ptr() as usize;
+        parse(0x10, |phys: usize, len: usize| {
+            (phys.checked_add(len)? <= memory.len()).then_some(base + phys)
+        })
+    }
+
+    #[test]
+    fn parse_retains_the_xsdt_oem_and_reports_a_validated_dmar() {
+        let dmar = seal_sdt(dmar_table(&[drhd(1, 0, 0xFED9_0000)]), b"DMAR", b"BOCHS ");
+        let info = parse_image(&firmware_image(2, b"BOCHS ", &[dmar]));
+        assert_eq!(
+            info.root_oem,
+            Some(AcpiOem {
+                oem_id: *b"BOCHS ",
+                oem_table_id: *b"BXPC    ",
+                oem_revision: 1,
+            })
+        );
+        assert!(info.dmar_present);
+        assert_eq!(info.dmar_base, 0xFED9_0000);
+    }
+
+    #[test]
+    fn parse_retains_the_rsdt_oem_and_keeps_dmar_absent_without_a_table() {
+        let info = parse_image(&firmware_image(0, b"OEMRSD", &[]));
+        assert_eq!(info.root_oem.map(|oem| oem.oem_id), Some(*b"OEMRSD"));
+        assert!(!info.dmar_present);
+        assert_eq!(info.dmar_units, 0);
+    }
+
+    #[test]
+    fn dmar_presence_is_independent_of_a_usable_unit() {
+        let dmar = seal_sdt(dmar_table(&[drhd(1, 2, 0xFED9_0000)]), b"DMAR", b"BOCHS ");
+        let info = parse_image(&firmware_image(2, b"BOCHS ", &[dmar]));
+        assert!(info.dmar_present);
+        assert_eq!(info.dmar_base, 0);
+        assert_eq!(info.dmar_units, 1);
+
+        // A DMAR that fails its checksum is not present.
+        let mut corrupt = seal_sdt(dmar_table(&[drhd(1, 0, 0xFED9_0000)]), b"DMAR", b"BOCHS ");
+        corrupt[40] ^= 0xFF;
+        let info = parse_image(&firmware_image(2, b"BOCHS ", &[corrupt]));
+        assert!(!info.dmar_present);
+        assert_eq!(info.dmar_base, 0);
+    }
+
+    #[test]
+    fn a_root_table_failing_its_checksum_yields_no_oem() {
+        let mut memory = firmware_image(2, b"BOCHS ", &[]);
+        memory[0x100 + 10] ^= 0x20;
+        let info = parse_image(&memory);
+        assert_eq!(info.root_oem, None);
+        assert!(!info.dmar_present);
+
+        let mut memory = firmware_image(0, b"BOCHS ", &[]);
+        memory[0x100 + 16] ^= 0x20;
+        assert_eq!(parse_image(&memory).root_oem, None);
     }
 }

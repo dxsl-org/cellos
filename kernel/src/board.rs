@@ -105,6 +105,98 @@ fn validated_x86_profile(
     }
 }
 
+/// Machine identity facts detected at boot on x86_64.
+///
+/// Plain data: it selects nothing and grants nothing. Profile binding may use
+/// it only to validate or reject a profile the operator named (ADR-0029 §2).
+/// Every byte string in it is firmware-controlled.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PlatformIdentity {
+    /// OEM fields of the validated ACPI root table; `None` without one.
+    pub(crate) acpi_oem: Option<crate::acpi::AcpiOem>,
+    /// SMBIOS type 1; `None` when firmware publishes none or it is malformed.
+    pub(crate) smbios: Option<crate::smbios::SmbiosSystem>,
+    /// `CPUID.1:ECX[31]`: a hypervisor reports itself.
+    pub(crate) hypervisor: bool,
+}
+
+/// One log line: `acpi_oem=… smbios=… hv=0|1`. Firmware strings are printed
+/// quoted, with bytes outside printable ASCII, `"` and `\` escaped, so they
+/// cannot break the line or forge another record.
+#[cfg(target_arch = "x86_64")]
+impl core::fmt::Display for PlatformIdentity {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match &self.acpi_oem {
+            Some(oem) => write!(
+                f,
+                "acpi_oem={} acpi_table={} acpi_rev={:#x}",
+                Quoted(&oem.oem_id),
+                Quoted(&oem.oem_table_id),
+                oem.oem_revision
+            )?,
+            None => f.write_str("acpi_oem=none")?,
+        }
+        match &self.smbios {
+            Some(system) => {
+                write!(
+                    f,
+                    " smbios=manufacturer={} product={} uuid=",
+                    Quoted(system.manufacturer.as_bytes()),
+                    Quoted(system.product.as_bytes())
+                )?;
+                match system.uuid {
+                    Some(uuid) => {
+                        for (index, byte) in uuid.iter().enumerate() {
+                            if matches!(index, 4 | 6 | 8 | 10) {
+                                f.write_str("-")?;
+                            }
+                            write!(f, "{:02x}", byte)?;
+                        }
+                    }
+                    None => f.write_str("none")?,
+                }
+            }
+            None => f.write_str(" smbios=none")?,
+        }
+        write!(f, " hv={}", u8::from(self.hypervisor))
+    }
+}
+
+/// Writes `[identity] <facts>` to the early console. Detection runs before the
+/// logger is installed, and `log` output is dropped until then.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn report_identity(identity: &PlatformIdentity) {
+    struct EarlyConsole;
+    impl core::fmt::Write for EarlyConsole {
+        fn write_str(&mut self, text: &str) -> core::fmt::Result {
+            crate::early_uart::text(text);
+            Ok(())
+        }
+    }
+    // EarlyConsole never reports an error, so the result carries nothing.
+    let _ = core::fmt::Write::write_fmt(&mut EarlyConsole, format_args!("[identity] {identity}\n"));
+}
+
+/// Firmware bytes rendered as a quoted, escaped ASCII string.
+#[cfg(target_arch = "x86_64")]
+struct Quoted<'a>(&'a [u8]);
+
+#[cfg(target_arch = "x86_64")]
+impl core::fmt::Display for Quoted<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("\"")?;
+        for &byte in self.0 {
+            match byte {
+                b'"' | b'\\' => write!(f, "\\{}", byte as char)?,
+                0x20..=0x7E => write!(f, "{}", byte as char)?,
+                _ => write!(f, "\\x{:02x}", byte)?,
+            }
+        }
+        f.write_str("\"")
+    }
+}
+
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 const DEFAULT_RPI3_BOARD: &BoardDescriptor =
     &cellos_boards::raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B;
@@ -201,4 +293,62 @@ pub(crate) fn selected_rpi4() -> &'static BoardDescriptor {
 ))]
 pub(crate) fn active() -> &'static BoardDescriptor {
     selected_rpi4()
+}
+
+#[cfg(all(test, target_arch = "x86_64"))]
+mod tests {
+    use super::PlatformIdentity;
+    use crate::acpi::AcpiOem;
+    use crate::smbios::{SmbiosString, SmbiosSystem};
+    use alloc::format;
+
+    #[test]
+    fn identity_line_names_every_fact() {
+        let identity = PlatformIdentity {
+            acpi_oem: Some(AcpiOem {
+                oem_id: *b"BOCHS ",
+                oem_table_id: *b"BXPC    ",
+                oem_revision: 1,
+            }),
+            smbios: Some(SmbiosSystem {
+                manufacturer: SmbiosString::new(b"QEMU"),
+                product: SmbiosString::new(b"Standard PC (Q35 + ICH9, 2009)"),
+                uuid: Some([
+                    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+                    0xDD, 0xEE, 0xFF,
+                ]),
+            }),
+            hypervisor: true,
+        };
+        assert_eq!(
+            format!("{identity}"),
+            "acpi_oem=\"BOCHS \" acpi_table=\"BXPC    \" acpi_rev=0x1 \
+             smbios=manufacturer=\"QEMU\" product=\"Standard PC (Q35 + ICH9, 2009)\" \
+             uuid=00112233-4455-6677-8899-aabbccddeeff hv=1"
+        );
+    }
+
+    #[test]
+    fn identity_line_escapes_firmware_bytes_and_names_absence() {
+        let identity = PlatformIdentity {
+            acpi_oem: None,
+            smbios: Some(SmbiosSystem {
+                manufacturer: SmbiosString::new(b"a\"b\\c\n[x] {}%s\xff"),
+                product: SmbiosString::EMPTY,
+                uuid: None,
+            }),
+            hypervisor: false,
+        };
+        assert_eq!(
+            format!("{identity}"),
+            "acpi_oem=none smbios=manufacturer=\"a\\\"b\\\\c\\x0a[x] {}%s\\xff\" product=\"\" \
+             uuid=none hv=0"
+        );
+        let none = PlatformIdentity {
+            acpi_oem: None,
+            smbios: None,
+            hypervisor: false,
+        };
+        assert_eq!(format!("{none}"), "acpi_oem=none smbios=none hv=0");
+    }
 }

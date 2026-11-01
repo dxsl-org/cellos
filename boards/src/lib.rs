@@ -66,3 +66,27 @@ pub fn qemu_q35_x86_64() -> &'static BoardDescriptor {
 pub fn pc_x86_64() -> &'static BoardDescriptor {
     &pc_x86_64::X86_64_PC
 }
+
+/// Every x86_64 descriptor one x86_64 image may bind at boot, strictest first.
+///
+/// Membership is the whole approval: a slug absent here cannot be bound, and
+/// nothing detected at boot adds an entry. The order carries no selection
+/// meaning beyond documentation; which entry applies is decided by the caller.
+static X86_CATALOG: [&BoardDescriptor; 2] =
+    [&pc_x86_64::X86_64_PC, &qemu_q35_x86_64::QEMU_Q35_X86_64];
+
+/// Returns the compiled x86_64 catalog.
+pub fn x86_catalog() -> &'static [&'static BoardDescriptor] {
+    &X86_CATALOG
+}
+
+/// Returns the descriptor in `catalog` whose slug equals `slug` byte for byte.
+///
+/// The search is confined to the catalog the caller names, so a slug from
+/// another architecture's board list can never be found through it.
+pub fn find_by_slug(
+    catalog: &[&'static BoardDescriptor],
+    slug: &str,
+) -> Option<&'static BoardDescriptor> {
+    catalog.iter().copied().find(|board| board.slug == slug)
+}

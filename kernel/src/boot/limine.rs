@@ -449,6 +449,64 @@ pub fn get_rsdp_ptr() -> Option<usize> {
     }
 }
 
+/// SMBIOS request — x86_64 only.
+///
+/// Under base revision 3 Limine reports both entry points as physical
+/// addresses; zero means that entry point is absent, and no response means
+/// firmware published neither. Layout and GUID match the vendored Limine 8.7.0
+/// `limine.h` (`LIMINE_SMBIOS_REQUEST`, `struct limine_smbios_response`).
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineSmbiosRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *const LimineSmbiosResponse,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineSmbiosResponse {
+    revision: u64,
+    entry_32: u64,
+    entry_64: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[used]
+#[link_section = ".requests"]
+static mut SMBIOS_REQUEST: LimineSmbiosRequest = LimineSmbiosRequest {
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x9e9046f11e095391,
+        0xaa4a520fefbde5ee,
+    ],
+    revision: 0,
+    response: core::ptr::null(),
+};
+
+/// Physical addresses of the 32-bit and 64-bit SMBIOS entry points, in that
+/// order; each is `None` when Limine reported it absent.
+#[cfg(target_arch = "x86_64")]
+pub fn get_smbios_entry_points() -> (Option<usize>, Option<usize>) {
+    // SAFETY: Limine writes the response pointer before kernel entry and
+    // nothing writes it afterwards.
+    let response = unsafe { core::ptr::read_volatile(&raw const SMBIOS_REQUEST.response) };
+    if !mp_record_valid(response, 1) {
+        return (None, None);
+    }
+    // SAFETY: `mp_record_valid` checked alignment and that the whole response
+    // lies in bootloader-reclaimable memory, which is never handed to the
+    // frame allocator.
+    let response = unsafe { &*response };
+    let present = |address: u64| {
+        usize::try_from(address)
+            .ok()
+            .filter(|address| *address != 0)
+    };
+    (present(response.entry_32), present(response.entry_64))
+}
+
 /// Limine memory map entry types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]
