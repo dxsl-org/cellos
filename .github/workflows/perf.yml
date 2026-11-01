@@ -46,9 +46,12 @@ jobs:
         with:
           path: perf-results/
           # Attempts are immutable captures; restore-keys selects prior history.
-          key: perf-results-${{ github.run_id }}-${{ github.run_attempt }}
+          # The rv64-v3 prefix starts the capture/v3 history (fingerprinted,
+          # tier/path-labelled contract with ipc_fastpath); v2 captures are not
+          # comparable and are deliberately not restored.
+          key: perf-results-rv64-v3-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            perf-results-
+            perf-results-rv64-v3-
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -176,5 +179,86 @@ jobs:
         if: always()
         with:
           path: perf-results/
-          key: perf-results-${{ github.run_id }}-${{ github.run_attempt }}
+          key: perf-results-rv64-v3-${{ github.run_id }}-${{ github.run_attempt }}
+
+  bench-x86-tcg:
+    # Functional/report-only: TCG timings never PASS or FAIL a budget, so this
+    # job cannot gate. Budgets need a matched KVM baseline on a named machine
+    # (scripts/x86/run-bench-x86.sh kvm on a KVM-capable runner).
+    name: Run benchmarks (x86_64 TCG, report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: x86_64-unknown-none
+
+      - name: Install QEMU and xorriso
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+
+      # scripts/lib-sign-cells.sh signs every cell with the dev key through
+      # `cryptography`'s Ed25519.
+      - name: Install Python cryptography (cell signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
+      - name: Restore perf history
+        uses: actions/cache/restore@v4
+        with:
+          path: perf-results-x86/
+          key: perf-results-x86-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            perf-results-x86-v1-
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build x86 lifecycle image
+        run: C2C_WORKLOAD=lifecycle bash scripts/build-x86_64-c2c-lifecycle-ci.sh
+
+      - name: Boot QEMU (TCG) and collect immutable benchmark capture
+        id: bench_run
+        timeout-minutes: 20
+        env:
+          CAPTURE_ID: ${{ github.run_id }}-${{ github.run_attempt }}-x86_64-q35-2c-256m-v1-tcg-1
+        run: |
+          set -euo pipefail
+          echo "capture_id=$CAPTURE_ID" >> "$GITHUB_OUTPUT"
+          echo "current_capture=perf-results-x86/perf-${CAPTURE_ID}.json" >> "$GITHUB_OUTPUT"
+          X86_BENCH_SKIP_BUILD=1 X86_BENCH_RESULTS_DIR=perf-results-x86 \
+            bash scripts/x86/run-bench-x86.sh tcg "$CAPTURE_ID"
+
+      - name: Validate current capture and report history (report-only)
+        if: always()
+        run: |
+          bash scripts/compare-bench-results.sh perf-results-x86/ \
+            --current "${{ steps.bench_run.outputs.current_capture }}" \
+            --current-id "${{ steps.bench_run.outputs.capture_id }}"
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-x86-${{ github.run_id }}-${{ github.run_attempt }}
+          path: perf-results-x86/
+          retention-days: 90
+
+      - name: Save perf history
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: perf-results-x86/
+          key: perf-results-x86-v1-${{ github.run_id }}-${{ github.run_attempt }}
 

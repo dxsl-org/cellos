@@ -177,6 +177,11 @@ phase04-driver-profile = []
 # service idling in a completion wait from one wedged behind a masked receive.
 # Rate-limited; never a shipped image.
 ipc-trace = []
+# Benchmark counters (syscalls, CR3 writes on the domain syscall path, root
+# programmings, context switches, IPC bytes copied, heap allocations), read by
+# the `bench` cell through raw opcode 504. Off by default; measurement only.
+# The relaxed atomics cost time, so captures with it are a separate group.
+bench-counters = []
 # Isolated RV64 boot path for the GetRandom SAS ownership fixture. Test-only;
 # exits QEMU before unrelated boot suites execute.
 getrandom-sas-test = ["native-domains", "test-hooks"]

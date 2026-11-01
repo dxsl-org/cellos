@@ -17,6 +17,8 @@
 #   * it is a **production-feature** kernel (no `test-hooks`). Consumer spawn
 #     authority is restricted by exact launch edges. The render workload also
 #     bakes the signed operator policy; the default lifecycle image is unchanged.
+#   * X86_KERNEL_FEATURES (default empty) adds measurement-only kernel features,
+#     e.g. `bench-counters`; the test-hooks refusal below still applies.
 #
 # WHAT IT DOES NOT CHANGE
 #   No public ABI, no syscall, no kernel source, no cell source. It only adds
@@ -36,7 +38,9 @@ WORKLOAD="${C2C_WORKLOAD:-lifecycle}"
 case "$WORKLOAD" in
     lifecycle)
         WORKLOAD_PACKAGE="app-bench"
-        WORKLOAD_CELLS=(bench bench-probe)
+        # bench-peer-t2 is the Tier-2 (private-root domain) echo peer of
+        # `bench`'s ipc_send_recv_domain scenario.
+        WORKLOAD_CELLS=(bench bench-probe bench-peer-t2)
         ;;
     render)
         WORKLOAD_PACKAGE="app-c2c-render"
@@ -53,6 +57,11 @@ TH_DIR="target/x86-c2c-$WORKLOAD-embedded"
 ISO_OUT="build/vicell-x86-c2c-$WORKLOAD.iso"
 ISO_ROOT="build/x86-c2c-$WORKLOAD-iso-root"
 KERNEL="$REL/cellos-kernel"
+X86_KERNEL_FEATURES="${X86_KERNEL_FEATURES:-}"
+KERNEL_FEATURE_ARGS=()
+if [[ -n "$X86_KERNEL_FEATURES" ]]; then
+    KERNEL_FEATURE_ARGS=(--features "$X86_KERNEL_FEATURES")
+fi
 
 export CARGO_TARGET_DIR="$TARGET_DIR"
 # x86_64 CELLS build with relocation-model=pic (the kernel profile in
@@ -119,11 +128,16 @@ for index in "${!CELL_BINARIES[@]}"; do
     FAT_CELL_ARGS+=("${CELL_BINARIES[$index]}" "${CELL_IMAGE_PATHS[$index]}")
 done
 
-# The witness spawns `/bin/bench-probe` from `/bin/bench`, so the probe path is
-# load-bearing: assert it is the string the scenario actually uses.
-if [[ "$WORKLOAD" == lifecycle ]] && ! grep -qa -- "/bin/bench-probe" "$REL/bench"; then
-    echo "FAIL: $REL/bench does not carry the /bin/bench-probe spawn path" >&2
-    exit 1
+# The witness spawns `/bin/bench-probe` (and the Tier-2 `/bin/bench-peer-t2`)
+# from `/bin/bench`, so the peer paths are load-bearing: assert they are the
+# strings the scenarios actually use.
+if [[ "$WORKLOAD" == lifecycle ]]; then
+    for peer in /bin/bench-probe /bin/bench-peer-t2; do
+        if ! grep -qa -- "$peer" "$REL/bench"; then
+            echo "FAIL: $REL/bench does not carry the $peer spawn path" >&2
+            exit 1
+        fi
+    done
 fi
 
 # shellcheck source=scripts/lib-sign-cells.sh
@@ -167,7 +181,7 @@ echo "    kernel_fs.img: $(du -sh "$TH_DIR/kernel_fs.img" | cut -f1)"
 # INIT_ELF is embedded separately from kernel_fs.img.
 cp "$REL/app-init" "$TH_DIR/init"
 
-echo "==> Building the production-feature kernel (no test-hooks)..."
+echo "==> Building the production-feature kernel (no test-hooks; extra features: ${X86_KERNEL_FEATURES:-none})..."
 # RUSTFLAGS carries the kernel profile: the target-config default is not applied
 # to this package when RUSTFLAGS is set, so the two must agree.
 EMBEDDED_OVERRIDE="$TH_DIR" \
@@ -175,7 +189,8 @@ RUSTFLAGS="-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C reloc
 cargo build --release \
     -p cellos-kernel \
     --target "$TARGET" \
-    -Z build-std=core,alloc
+    -Z build-std=core,alloc \
+    "${KERNEL_FEATURE_ARGS[@]}"
 
 if [[ ! -s "$KERNEL" ]]; then
     echo "FAIL: kernel not produced at $KERNEL" >&2
@@ -199,6 +214,7 @@ if [[ ! -s "$ISO_OUT" ]]; then
 fi
 
 echo "X86_C2C_WORKLOAD=$WORKLOAD"
+echo "X86_C2C_KERNEL_FEATURES=$X86_KERNEL_FEATURES"
 echo "X86_C2C_LIFECYCLE_KERNEL=$KERNEL"
 echo "X86_C2C_LIFECYCLE_EMBEDDED=$TH_DIR"
 echo "X86_C2C_LIFECYCLE_ISO=$ISO_OUT"

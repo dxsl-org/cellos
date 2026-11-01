@@ -1663,6 +1663,8 @@ pub fn yield_cpu() {
                 plan.incoming
             };
             if !plan.incoming.is_null() {
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::context_switch();
                 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
                 note_task_dispatch(hart_id);
                 #[cfg(target_arch = "riscv64")]
@@ -1742,6 +1744,8 @@ pub fn yield_cpu() {
                 next
             };
             if !next.is_null() {
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::context_switch();
                 // Set TSS.rsp0 and CPU_LOCAL.kernel_rsp for the incoming task.
                 // The physical GS_BASE/KERNEL_GS_BASE pair is kernel context
                 // state and must remain untouched across this raw switch.
@@ -2377,6 +2381,8 @@ pub fn ipc_send(
     let msg_bytes = caller_view
         .read_bytes(msg_ptr, msg_len)
         .map_err(|_| IpcSendError::Backpressure)?;
+    #[cfg(feature = "bench-counters")]
+    crate::bench_counters::ipc_bytes(msg_bytes.len());
     ipc_send_kernel(caller_id, target_id, &msg_bytes)
 }
 
@@ -2602,6 +2608,8 @@ pub fn ipc_recv(
     let copy_len = core::cmp::min(snapshot.len(), buf_len);
     if copy_len > 0 {
         receiver_view.write_bytes(buf_ptr, &snapshot.as_slice()[..copy_len])?;
+        #[cfg(feature = "bench-counters")]
+        crate::bench_counters::ipc_bytes(copy_len);
     }
 
     // Commit: remove by delivery token, wake sender, assign caller context.
@@ -2728,6 +2736,8 @@ pub fn ipc_try_recv(
     let copy_len = core::cmp::min(snapshot.len(), buf_len);
     if copy_len > 0 {
         receiver_view.write_bytes(buf_ptr, &snapshot.as_slice()[..copy_len])?;
+        #[cfg(feature = "bench-counters")]
+        crate::bench_counters::ipc_bytes(copy_len);
     }
 
     let mut guard = SCHEDULER.lock();
@@ -2920,6 +2930,8 @@ pub fn ipc_try_send(
         }
     };
     let msg_bytes = caller_view.read_bytes(msg_ptr, msg_len).map_err(|_| ())?;
+    #[cfg(feature = "bench-counters")]
+    crate::bench_counters::ipc_bytes(msg_bytes.len());
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(())?;
     // Revalidate under the second lock: phase-1 target state is stale once

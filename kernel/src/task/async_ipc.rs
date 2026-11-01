@@ -156,6 +156,8 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     let wire = ipc_wire::IpcWireMessage::try_from_user(header, &view, ptr, len,
         #[cfg(cellos_p01_trace)] heap_owner)
         .map_err(|_| Failure::Invalid)?;
+    #[cfg(feature = "bench-counters")]
+    crate::bench_counters::ipc_bytes(len);
     let reply_header = ipc_wire::IpcWireHeader {
         sender_tid: peer, sender_cell_id: peer_binding.0,
         sender_generation: peer_binding.1, delivery_id: 0, async_op: token,
@@ -249,6 +251,10 @@ fn terminal(sched: &mut Scheduler, owner_tid: usize, token: usize, provider: usi
         return Err(Failure::Invalid);
     }
     let copied = view.read_into(ptr, &mut op.reply.as_mut_slice()[..len]);
+    #[cfg(feature = "bench-counters")]
+    if copied.is_ok() {
+        crate::bench_counters::ipc_bytes(len);
+    }
     op.phase = Phase::Terminal {
         kind: if copied.is_ok() { api::syscall::ipc_status::REPLY }
             else { api::syscall::ipc_status::INDETERMINATE },
@@ -375,6 +381,8 @@ pub fn take(consumer: usize, token: usize, reply_ptr: usize, reply_len: usize,
     if !data.is_empty() {
         view.validate_writable(reply_ptr, data.len()).map_err(|_| Failure::Invalid)?;
         view.write_bytes(reply_ptr, data).map_err(|_| Failure::Invalid)?;
+        #[cfg(feature = "bench-counters")]
+        crate::bench_counters::ipc_bytes(data.len());
     }
     let mut status = [0u8; api::syscall::IPC_STATUS_LEN];
     status[..4].copy_from_slice(&api::syscall::IPC_STATUS_VERSION.to_le_bytes());

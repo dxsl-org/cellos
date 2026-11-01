@@ -313,6 +313,33 @@ fn capacity_probe_path_grants_only_spawn_and_elf_is_denied() {
 }
 
 #[test]
+fn bench_alone_may_pin_the_tier2_echo_peer() {
+    let edge = authorize(caller("bench", true, false), LaunchRoute::Pinned, "/bin/bench-peer-t2")
+        .expect("bench may pin its Tier-2 echo peer");
+    assert_eq!(edge.child_ceiling, LEGACY);
+    assert!(!edge.requires_lifecycle_authority);
+    // Only the pinned route, and only with bench's declared spawn authority.
+    for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem] {
+        assert!(
+            authorize(caller("bench", true, false), route, "/bin/bench-peer-t2").is_none(),
+            "{route:?}"
+        );
+    }
+    assert!(authorize(caller("bench", false, false), LaunchRoute::Pinned, "/bin/bench-peer-t2").is_none());
+    // No other caller reaches it on any route.
+    for name in ["capacity-probe", "periph-demo", "cellbox", "init", "bench-probe", "bench-peer-t2"] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+            for (spawn, supervisor) in [(false, false), (true, false), (true, true)] {
+                assert!(
+                    authorize(caller(name, spawn, supervisor), route, "/bin/bench-peer-t2").is_none(),
+                    "{name} {route:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn c_pthread_witness_has_no_process_lifecycle_authority() {
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         assert_eq!(

@@ -344,6 +344,9 @@ pub(super) fn pinned_profile(
     }
     let ceiling = match (caller_name, target) {
         ("bench", "/bin/bench-probe") | ("capacity-probe", "/bin/bench-probe") => LEGACY,
+        // Tier-2 echo peer for `ipc_send_recv_domain`; domain admission accepts
+        // LEGACY (observe/mutate are not domain-unenforceable).
+        ("bench", "/bin/bench-peer-t2") => LEGACY,
         ("capacity-probe", "/bin/heavy-probe") => LEGACY,
         ("periph-demo", "/bin/periph-demo") => CapSet {
             mmio_devices: CONSOLE_MMIO,

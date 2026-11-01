@@ -63,6 +63,21 @@ The attached disk remains provenance/environment input. Benchmark launch uses th
 cell through the normal shell because the early kernel loader no longer owns the userspace block
 Driver Cell.
 
+### x86_64 profile (`x86_64-q35-2c-256m-v1`, ginux-lessons Phase 03)
+
+- **Runner.** `scripts/x86/run-bench-x86.sh tcg|kvm [capture-id]` builds the x86 lifecycle image (`scripts/build-x86_64-c2c-lifecycle-ci.sh`), boots `qemu-system-x86_64 -machine q35 -accel {tcg|kvm} -cpu {qemu64,+pdpe1gb|host} -smp 2 -m 256M`, and sends `bench` at `Cellos >`. `X86_KERNEL_FEATURES=bench-counters` builds the measurement kernel.
+- **Capture format.** Format v3 records a machine fingerprint: host CPU, host kernel, CPU governor, QEMU version, accelerator, vCPUs, RAM and guest clocksource. It also records the kernel feature list.
+- **Grouping.** Captures are compared only within the same profile, accelerator, fingerprint and feature set. Other groups are `EXCLUDED`, never merged.
+- **KVM honesty.** KVM must be confirmed from QEMU's open `kvm-vm` handle. A requested KVM that fails or is absent gives an invalid `kvm_unavailable` capture; there is no TCG fallback.
+- **Verdicts.**
+  - TCG is `REPORT_ONLY`.
+  - KVM is `NO_BASELINE` without a matched baseline, and `UNQUALIFIED` when any fingerprint field is unknown (for example the governor under WSL2).
+  - Otherwise KVM uses the median/3-run policy above.
+- **Labels.** Every metric carries `tier` (`sas`/`domain`) and `path` (`copy`/`ring`/`syscall`/`sched`/…).
+  - `ipc_send_recv_domain` uses the Tier-2 echo peer `bench-peer-t2` (UNTRUSTED, private CR3) and is never merged with the SAS `ipc_send_recv`.
+  - `<scenario>.counters` records are informational: system-wide deltas of syscalls, domain-syscall CR3 round trips, root programmings, context switches, IPC bytes copied, heap allocations and heap bytes. They come from kernel opcode 504 and need the off-by-default `bench-counters` feature; without it every value is `"unknown"`.
+- **CI.** `perf.yml` job `bench-x86-tcg` is report-only.
+
 ---
 
 ## Baseline Measurements

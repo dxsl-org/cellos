@@ -692,6 +692,29 @@ pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
     }
 }
 
+/// Read the kernel's benchmark counter record into `buf`:
+/// `[version, syscalls, domain_syscall_cr3, root_programmings,
+/// context_switches, ipc_bytes_copied, heap_allocs, heap_alloc_bytes]`.
+///
+/// Raw syscall 504, outside `ViSyscall` like 500–503. Only a kernel built with
+/// `bench-counters` knows it, and it is gated like `MemInfo` (declared bit 56
+/// plus the `observe_memory` right). Any other kernel, or a caller without that
+/// authority, refuses it and this returns `Err`; `buf` is then unspecified.
+pub fn sys_bench_counters(buf: &mut [u64; 8]) -> Result<(), SyscallError> {
+    let len = core::mem::size_of::<[u64; 8]>();
+    // SAFETY: `buf` is a live, aligned, exclusively borrowed 64-byte array and
+    // the kernel validates the pointer before writing at most `len` bytes.
+    let ret = unsafe { syscall_raw(504, buf.as_mut_ptr() as usize, len, 0, 0) };
+    if ret != len as isize {
+        return Err(SyscallError::Unknown);
+    }
+    // The kernel writes little-endian words.
+    for word in buf.iter_mut() {
+        *word = u64::from_le(*word);
+    }
+    Ok(())
+}
+
 /// Open a file by path and return a capability ID.
 ///
 /// Returns `Ok(cap_id)` where `cap_id > 0`, or `Err` if the path is not found.

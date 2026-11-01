@@ -6,6 +6,7 @@
 
 extern crate alloc;
 
+mod echo;
 mod framework;
 mod scenarios;
 
@@ -41,7 +42,7 @@ api::declare_syscalls![Spawn, Wait, Send, Recv, RecvTimeout, Log, GetTime, State
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 use api::benchmark::{BenchReport, ViBenchmark};
-use framework::{report, runner};
+use framework::{counters, report, runner};
 use ostd::io::println;
 use scenarios::{
     context_switch::ContextSwitchBench, ipc_fastpath::IpcFastpathBench,
@@ -49,7 +50,13 @@ use scenarios::{
     syscall_yield::SyscallYieldBench,
 };
 
+/// Collector profile identity: the workload/QEMU machine contract this build
+/// emits under. The accelerator is deliberately not part of it; the collector
+/// records the requested accelerator and host fingerprint separately.
+#[cfg(target_arch = "riscv64")]
 const PROFILE: &str = "rv64-qemu-virt-2h-256m-v2";
+#[cfg(target_arch = "x86_64")]
+const PROFILE: &str = "x86_64-q35-2c-256m-v1";
 
 /// PDR performance targets (nanoseconds). All checked against p99.
 const TARGET_CTX_SWITCH_NS: u64 = 100_000;
@@ -88,6 +95,7 @@ fn emit_run_failure(invalid: &mut u32, scenario: &str, failure: runner::RunFailu
     }
 }
 
+/// Run one metric scenario and print its kernel counter delta around it.
 fn run_metric<B: ViBenchmark>(
     scenario: &'static str,
     bench: &mut B,
@@ -95,7 +103,10 @@ fn run_metric<B: ViBenchmark>(
     iters: u32,
     invalid: &mut u32,
 ) -> Option<BenchReport> {
-    match runner::run(bench, warmup, iters) {
+    let before = counters::read();
+    let outcome = runner::run(bench, warmup, iters);
+    counters::emit(scenario, before);
+    match outcome {
         Ok(mut result) => {
             result.name = scenario;
             Some(result)
@@ -436,19 +447,7 @@ fn cell_main() {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
-        "ipc-echo" => {
-            let mut buf = [0xa5u8; 64];
-            loop {
-                buf.fill(0xa5);
-                let sender = match ostd::syscall::sys_recv(0, &mut buf) {
-                    ostd::syscall::SyscallResult::Ok(sid) if sid != 0 => sid,
-                    _ => continue,
-                };
-                let valid_request = buf[0] == 0x42 && buf[1..].iter().all(|&byte| byte == 0);
-                let reply = if valid_request { 0 } else { 1 };
-                let _ = ostd::syscall::sys_send(sender, &[reply]);
-            }
-        }
+        "ipc-echo" => echo::run(),
         "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         "peer-death-guard" => scenarios::smp::run_peer_death_guard(),
@@ -516,6 +515,25 @@ fn cell_main() {
         }
     }
 
+    // Tier-2 copied IPC: the same round trip with a private-root domain peer.
+    // Spawn/admission failure is an invalid experiment, never a SAS fallback.
+    #[cfg(target_arch = "x86_64")]
+    if let Some(result) = run_metric(
+        "ipc_send_recv_domain",
+        &mut IpcSendRecvBench::domain(),
+        runner::DEFAULT_WARMUP,
+        runner::DEFAULT_ITERS,
+        &mut invalid,
+    ) {
+        print_latency(&result);
+        informational = informational.saturating_add(1);
+        if result.meets_target(HARDWARE_TARGET_IPC_NS) {
+            println("[bench] ipc_send_recv_domain HW-TARGET-MET (QEMU evidence only)");
+        } else {
+            println("[bench] ipc_send_recv_domain HW-TARGET-MISS (QEMU evidence only)");
+        }
+    }
+
     if let Some(result) = run_metric(
         "ipc_fastpath",
         &mut IpcFastpathBench::new(),
@@ -552,8 +570,11 @@ fn cell_main() {
     }
 
     {
+        let before = counters::read();
         let mut memory = MemoryFootprintBench::new();
-        match runner::run(&mut memory, 0, 1) {
+        let outcome = runner::run(&mut memory, 0, 1);
+        counters::emit("memory_footprint", before);
+        match outcome {
             Err(failure) => emit_run_failure(&mut invalid, "memory_footprint", failure),
             Ok(_) => {
                 let bytes = memory.bytes();
@@ -575,8 +596,12 @@ fn cell_main() {
 
     println("");
     println("[rt] Real-time latency suite (under load):");
+    let before = counters::read();
     run_rt_preempt(&mut invalid, &mut passed, &mut failed);
+    counters::emit("preempt_latency", before);
+    let before = counters::read();
     run_rt_control_loop(&mut invalid, &mut passed, &mut failed);
+    counters::emit("control_loop", before);
     run_rt_under_load(&mut invalid);
 
     println("");

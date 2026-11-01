@@ -24,6 +24,10 @@ name = "bench-probe"
 path = "src/bench-probe.rs"
 
 [[bin]]
+name = "bench-peer-t2"
+path = "src/bench-peer-t2.rs"
+
+[[bin]]
 name = "capacity-probe"
 path = "src/capacity-probe.rs"
 

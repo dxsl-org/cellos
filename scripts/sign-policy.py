@@ -179,6 +179,7 @@ DEV_POLICY = [
     ("/bin/c2c-render",  0, 0, 1, 0, 0, 0,     0, 0, 0),
     ("/bin/c2c-render-worker", 0, 0, 0, 0, 0, 0, 0, 0, 0),
     ("/bin/c2c-render-domain-worker", 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    ("/bin/bench-peer-t2", 0, 0, 0, 0, 0, 0, 0, 0, 0),
     ("/bin/hotswap-demo-v1", 0, 0, 1, 0, 0, 0, 0, 0, 0),
     ("/bin/hotswap-demo-v2", 0, 0, 1, 0, 0, 0, 0, 0, 0),
     ("/bin/hypha",       0, 0, 1, 0, 0, 0,     0, 0, 0),

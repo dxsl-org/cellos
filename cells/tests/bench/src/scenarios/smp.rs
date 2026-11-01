@@ -3,7 +3,7 @@
 //! All spawn/notify/force_exit helpers run only in the orchestrator context
 //! (which has SpawnCap).  Only `run_worker` is called from bench-probe.
 
-use crate::framework::timer::NS_PER_TICK;
+use crate::framework::{counters, timer::ticks_to_ns};
 use alloc::format;
 use api::task::TaskPriority;
 use core::hint::black_box;
@@ -183,9 +183,7 @@ fn measure_spawn_rate() -> SmpOutcome {
             return invalid(NAME, "measure", !force_exit(tid));
         }
     }
-    let dt_ns = sys_get_time()
-        .saturating_sub(t0)
-        .saturating_mul(NS_PER_TICK);
+    let dt_ns = ticks_to_ns(sys_get_time().saturating_sub(t0));
     if dt_ns == 0 {
         return invalid(NAME, "measure", false);
     }
@@ -247,9 +245,7 @@ fn measure_ipc_throughput() -> SmpOutcome {
             break;
         }
     }
-    let dt_ns = sys_get_time()
-        .saturating_sub(t0)
-        .saturating_mul(NS_PER_TICK);
+    let dt_ns = ticks_to_ns(sys_get_time().saturating_sub(t0));
     let teardown_failed = !force_exit(echo_tid);
     if operation_failed || dt_ns == 0 {
         return invalid(NAME, "measure", teardown_failed);
@@ -330,8 +326,15 @@ fn measure_work_distribution() -> SmpOutcome {
 
 pub fn run_smp_suite() -> [SmpOutcome; 3] {
     [
-        measure_spawn_rate(),
-        measure_ipc_throughput(),
-        measure_work_distribution(),
+        with_counters("smp_spawn_rate", measure_spawn_rate),
+        with_counters("smp_ipc_throughput", measure_ipc_throughput),
+        with_counters("smp_work_distribution", measure_work_distribution),
     ]
+}
+
+fn with_counters(name: &str, measure: fn() -> SmpOutcome) -> SmpOutcome {
+    let before = counters::read();
+    let outcome = measure();
+    counters::emit(name, before);
+    outcome
 }

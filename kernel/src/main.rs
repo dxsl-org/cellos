@@ -43,6 +43,8 @@ static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::Ato
 pub mod acpi;
 pub mod admission;
 pub mod audit;
+#[cfg(feature = "bench-counters")]
+pub(crate) mod bench_counters; // Measurement-only counters, raw opcode 504
 mod board;
 pub mod boot;
 pub mod cell;

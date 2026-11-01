@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+mod echo;
 mod framework;
 mod scenarios;
 
@@ -84,19 +85,7 @@ fn cell_main() {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
-        "ipc-echo" => {
-            let mut buf = [0xa5u8; 64];
-            loop {
-                buf.fill(0xa5);
-                let sender = match ostd::syscall::sys_recv(0, &mut buf) {
-                    ostd::syscall::SyscallResult::Ok(sid) if sid != 0 => sid,
-                    _ => continue,
-                };
-                let valid_request = buf[0] == 0x42 && buf[1..].iter().all(|&byte| byte == 0);
-                let reply = if valid_request { 0 } else { 1 };
-                let _ = ostd::syscall::sys_send(sender, &[reply]);
-            }
-        }
+        "ipc-echo" => echo::run(),
         "fastpath-echo" => {
             let mut addr_buf = [0u8; 8];
             let sender = match ostd::syscall::sys_recv(0, &mut addr_buf) {

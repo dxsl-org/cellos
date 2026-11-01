@@ -4039,6 +4039,10 @@ pub enum Syscall {
     Shutdown,
     /// 503: BlkFlush — flush the VirtIO block device write cache to the backing image.
     BlkFlush,
+    /// 504: BenchCounters — copy the `bench-counters` record to the caller.
+    /// Raw opcode, compiled only with that feature (measurement builds).
+    #[cfg(feature = "bench-counters")]
+    BenchCounters { out_ptr: usize, out_len: usize },
     /// 208: GrantAlloc — allocate n pages as a zero-copy Grant region.
     GrantAlloc { size: usize },
     /// 209: GrantShare — share a Grant region with `target_cell` under `perm`.
@@ -4844,6 +4848,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                                         let view = caller_copy_view(caller_id)?;
                                         view.write_bytes(buf_ptr, &payload[..copy_len])
                                             .map_err(|_| SyscallError::InvalidInput)?;
+                                        #[cfg(feature = "bench-counters")]
+                                        crate::bench_counters::ipc_bytes(copy_len);
                                     }
                                     *sender_tid
                                 }
@@ -4896,6 +4902,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 caller_view
                     .write_bytes(buf_ptr, &data[..copy_len])
                     .map_err(|_| SyscallError::InvalidInput)?;
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::ipc_bytes(copy_len);
             }
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
@@ -4966,6 +4974,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     pos += len;
                 }
             }
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::ipc_bytes(total);
             super::ipc_post_nonblock(caller_id, target, &gathered)
                 .map_err(|_| SyscallError::TryAgain)?;
             Ok(0)
@@ -5047,6 +5057,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             caller_view
                 .write_scatter(&iovec_entries, &tmp[..copy_total])
                 .map_err(|_| SyscallError::InvalidInput)?;
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::ipc_bytes(copy_total);
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
                     if pos < t.pending_msgs.len()
@@ -5195,6 +5207,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                                         let view = caller_copy_view(caller_id)?;
                                         view.write_bytes(buf_ptr, &payload[..copy_len])
                                             .map_err(|_| SyscallError::InvalidInput)?;
+                                        #[cfg(feature = "bench-counters")]
+                                        crate::bench_counters::ipc_bytes(copy_len);
                                     }
                                     *sender_tid
                                 }
@@ -5242,6 +5256,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 caller_view
                     .write_bytes(buf_ptr, &data[..copy_len])
                     .map_err(|_| SyscallError::InvalidInput)?;
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::ipc_bytes(copy_len);
             }
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
@@ -5362,6 +5378,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     caller_view
                         .write_bytes(buf_ptr, &data[..copy_len])
                         .map_err(|_| SyscallError::InvalidInput)?;
+                    #[cfg(feature = "bench-counters")]
+                    crate::bench_counters::ipc_bytes(copy_len);
                 }
                 if attest_caller {
                     write_caller_identity(caller_id, buf_ptr, buf_len, sender_tid);
@@ -7290,6 +7308,19 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 )
             };
             write_user_slice(caller_id, out_ptr, raw_bytes, MAX_USER_BUF)?;
+            Ok(len)
+        }
+
+        #[cfg(feature = "bench-counters")]
+        Syscall::BenchCounters { out_ptr, out_len } => {
+            // Gated like MemInfo at dispatch (bit 56 + observe_memory).
+            let len = crate::bench_counters::RECORD_BYTES;
+            if out_len < len {
+                return Err(SyscallError::InvalidInput);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let record = crate::bench_counters::snapshot_bytes();
+            write_user_slice(caller_id, out_ptr, &record, MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -9761,6 +9792,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             },
             502 => Syscall::Shutdown,
             503 => Syscall::BlkFlush,
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::OPCODE => Syscall::BenchCounters {
+                out_ptr: a0,
+                out_len: a1,
+            },
             _ => return None,
         },
     };
@@ -9821,7 +9857,17 @@ pub(crate) fn dispatch_raw_for_test(
 /// The SCHEDULER lock is acquired and released here — callers must NOT hold it.
 fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallError> {
     let sc = ViSyscall::from(syscall_id);
-    let bit = sc.allowlist_bit();
+    // `bench-counters` raw 504 borrows MemInfo's gate exactly: allowlist bit 56
+    // and the `observe_memory` right. Without the feature 504 stays unknown.
+    #[cfg(feature = "bench-counters")]
+    let gate_sc = if syscall_id == crate::bench_counters::OPCODE {
+        ViSyscall::MemInfo
+    } else {
+        sc
+    };
+    #[cfg(not(feature = "bench-counters"))]
+    let gate_sc = sc;
+    let bit = gate_sc.allowlist_bit();
     // Bit 36 gates raw block-I/O opcodes (500/501/503) and BlkReadAsync (212).
     let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) {
         Some(36)
@@ -9836,7 +9882,8 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     // 500/501/503 are gated by bit 36 below + the ZST BlockIoCap at the handler;
     // 502 and the legacy raw ops (3/100/110/111) predate the bitmap and stay
     // always-permitted, matching their pre-Phase-31b behavior.
-    let known_raw = matches!(syscall_id, 3 | 100 | 110 | 111 | 500 | 501 | 502 | 503);
+    let known_raw = matches!(syscall_id, 3 | 100 | 110 | 111 | 500 | 501 | 502 | 503)
+        || (cfg!(feature = "bench-counters") && syscall_id == 504);
 
     let Some(allowlist) = syscall_allowlist_for(caller_id) else {
         log::warn!(
@@ -9890,7 +9937,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             return Err(SyscallError::PermissionDenied);
         }
     }
-    if !observe_right_held(sc, caller_id) {
+    if !observe_right_held(gate_sc, caller_id) {
         log::warn!(
             "[kernel] syscall {:?} denied for tid {}: edge withholds the S2-T observation right",
             sc,
@@ -9931,6 +9978,22 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
     if crate::hal::idt::handle_cpl3_probe_syscall(frame) {
         return;
+    }
+
+    #[cfg(feature = "bench-counters")]
+    {
+        crate::bench_counters::syscall();
+        // The SYSCALL stub parks the interrupted CR3 in `scause` and, exactly
+        // when it differs from a recorded kernel CR3, writes CR3 on entry and
+        // again on exit. Mirror that test here (synthetic in-kernel frames
+        // carry 0 and are not counted).
+        #[cfg(target_arch = "x86_64")]
+        {
+            let kernel_cr3 = crate::hal::domain::kernel_cr3();
+            if frame.scause != 0 && kernel_cr3 != 0 && frame.scause != kernel_cr3 {
+                crate::bench_counters::domain_syscall_cr3();
+            }
+        }
     }
 
     let syscall_id = frame.regs[17];
@@ -9996,6 +10059,8 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTrapFrame) {
+    #[cfg(feature = "bench-counters")]
+    crate::bench_counters::syscall();
     // Promote u32 register slots to usize (= u32 on rv32) for arch-agnostic helpers.
     let syscall_id = frame.regs[17] as usize;
 
@@ -10560,6 +10625,64 @@ mod tests {
         with_scheduler_task(1u64 << 56, |tid| {
             assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
         });
+    }
+
+    /// Without `bench-counters`, raw 504 is exactly as unknown as before: no
+    /// decode, and the allowlist gate denies it even with MemInfo's bit.
+    #[cfg(not(feature = "bench-counters"))]
+    #[test]
+    fn bench_counters_opcode_is_unknown_without_the_feature() {
+        assert!(map_syscall(504, 0x2000, 64, 0, 0).is_none());
+        with_scheduler_task(1u64 << 56, |tid| {
+            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+        });
+    }
+
+    /// With `bench-counters`, raw 504 decodes outside `ViSyscall` and is gated
+    /// exactly like MemInfo: allowlist bit 56 plus the `observe_memory` right.
+    #[cfg(feature = "bench-counters")]
+    #[test]
+    fn bench_counters_opcode_maps_and_is_gated_like_mem_info() {
+        let syscall = map_syscall(504, 0x2000, 64, 0, 0).expect("504 must decode");
+        match syscall {
+            Syscall::BenchCounters { out_ptr, out_len } => {
+                assert_eq!(out_ptr, 0x2000);
+                assert_eq!(out_len, 64);
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), None);
+        assert_eq!(ViSyscall::from(504), ViSyscall::Unknown);
+        with_scheduler_task(0, |tid| {
+            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+        });
+        with_scheduler_task(1u64 << 55, |tid| {
+            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+        });
+        with_scheduler_task(1u64 << 56, |tid| {
+            assert_eq!(check_allowlist(504, tid), Ok(()));
+            // A short buffer is refused before any user access.
+            assert_eq!(
+                super::handle_syscall(tid, Syscall::BenchCounters { out_ptr: 0x2000, out_len: 63 }),
+                Err(SyscallError::InvalidInput)
+            );
+        });
+        // The bit alone is not enough: the edge must grant observe_memory.
+        for allowlist in [1u64 << 56, u64::MAX] {
+            with_scheduler_task_caps(allowlist, CapSet::EMPTY, |tid| {
+                assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+            });
+        }
+        let m_only = CapSet {
+            observe_memory: true,
+            ..CapSet::EMPTY
+        };
+        with_scheduler_task_caps(1u64 << 56, m_only, |tid| {
+            assert_eq!(check_allowlist(504, tid), Ok(()));
+        });
+        // Kernel context (tid 0) is not gated, as for MemInfo.
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        assert_eq!(check_allowlist(504, 0), Ok(()));
     }
 
     #[test]

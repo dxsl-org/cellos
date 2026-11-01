@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 437 | 172 | 171 | 1 | 7 | 260 |
+| kernel | yes | 444 | 172 | 171 | 1 | 7 | 267 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 89 | 39 | 39 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 6 | 0 | 0 | 0 | 0 | 6 |
@@ -254,7 +254,7 @@ Source files outside the module tree:
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (374)
+## Other declarations (381)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -370,6 +370,13 @@ Source files outside the module tree:
 | `kernel::INIT_ELF @cfg(any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64"))` | `kernel/src/main.rs` | static | `&[u8]` | syntactically immutable |
 | `kernel::TEST_SAFE_ROOT @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/main.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::TEST_STATE_LOCK @cfg(test)` | `kernel/src/main.rs` | static | `sync::Spinlock<()>` | cfg inactive in this profile |
+| `kernel::bench_counters::CONTEXT_SWITCHES @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::DOMAIN_SYSCALL_CR3 @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::HEAP_ALLOCS @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::HEAP_ALLOC_BYTES @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::IPC_BYTES_COPIED @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::ROOT_PROGRAMMINGS @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::bench_counters::SYSCALLS @cfg(feature = "bench-counters")` | `kernel/src/bench_counters.rs` | static | `AtomicU64` | cfg inactive in this profile |
 | `kernel::boot::DTB_BOOT_INFO @cfg(any (target_arch = "riscv64" , all (target_arch = "aarch64" , feature = "board-rpi3")))` | `kernel/src/boot.rs` | static mut | `SimpleBootInfo` | cfg inactive in this profile |
 | `kernel::boot::DTB_MEMORY_MAP @cfg(any (target_arch = "riscv64" , all (target_arch = "aarch64" , feature = "board-rpi3")))` | `kernel/src/boot.rs` | static mut | `[MemoryMapEntry;MAX_MEMORY_MAP_ENTRIES]` | cfg inactive in this profile |
 | `kernel::boot::FALLBACK_BOOT_INFO @cfg(all (target_arch = "aarch64" , feature = "board-rpi3"))` | `kernel/src/boot.rs` | static | `SimpleBootInfo` | cfg inactive in this profile |

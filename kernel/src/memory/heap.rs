@@ -208,6 +208,8 @@ impl QuotaAlloc {
             ptr.add(layout.size()).cast::<usize>().write_unaligned(owner);
             #[cfg(feature = "cell-scale-experiment")]
             size_hist::record_alloc(layout.size());
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::heap_alloc(layout.size());
         }
         ptr
     }

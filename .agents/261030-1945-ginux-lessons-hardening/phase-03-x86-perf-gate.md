@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Tier-aware x86 performance evidence"
-status: pending
+status: in-progress
 priority: P2
 dependencies: [1]
 tier: medium
@@ -52,3 +52,25 @@ Instrumentation stays optional, bounded and absent from normal hot paths when di
 ## Deviation Log
 
 SAS review: removed perf/KVM as a prerequisite for entry hardening; added tier-separated cost accounting and preserved existing authorized local transports.
+
+## Implementation (2026-11-01)
+
+User choices: kernel counters behind a feature and printed to serial; a Tier-2 echo peer; an x86 TCG job in `perf.yml` with KVM run locally. Slice 3 is under CP1 `p03-bench-counters-tier2-cp1.md`, approved.
+
+- **Collector.**
+  - `scripts/bench_results.py` capture v3 has a profile registry: RV64 is unchanged, and x86 adds `x86_64-q35-2c-256m-v1`.
+  - It records a machine fingerprint and the kernel features, and labels every metric with tier/path.
+  - KVM is confirmed through QEMU's `kvm-vm` fd; otherwise the capture is `kvm_unavailable`.
+  - x86 verdicts are TCG `REPORT_ONLY`, KVM `NO_BASELINE`/`UNQUALIFIED`/median-3. RV64 still gates on TCG, as before.
+- **Workloads.**
+  - Runner `scripts/x86/run-bench-x86.sh`; CI job `bench-x86-tcg`, report-only.
+  - `bench-peer-t2` plus `ipc_send_recv_domain` (tier `domain`).
+  - `bench-counters` kernel feature and raw opcode 504, emitted as per-scenario `.counters` records.
+- **Success criteria:**
+  - [x] A real x86 scenario produces labelled captures: on this host, 3 KVM and 1 TCG valid captures, with and without counters.
+  - [x] Mixed profile/accelerator/fingerprint/feature comparisons are excluded. An unmatched KVM is `NO_BASELINE`. A matched deliberate regression fails (collector unit tests; no qualified real KVM machine yet).
+  - [x] TCG cannot pass a KVM budget, and a forced KVM failure (`/dev/null` over `/dev/kvm`) is invalid with no fallback, shown for real.
+  - [x] SAS metrics expose copy, allocation and CR3 overhead separately from Tier 2: `domain_syscall_cr3` is about 2200 for the domain scenario and 0 for every SAS scenario; heap bytes are about 2.6× for domain.
+- **Remaining before `done`:**
+  - P04 entry-safety, P08 retirement-latency and P09 restore/Ready-latency measurements are not instrumented yet (requirement line 24).
+  - A KVM baseline on a machine with known governor/timer metadata. This WSL2 host reports the governor as unknown, so its KVM captures are `UNQUALIFIED`. The user plans to buy an x86 machine.

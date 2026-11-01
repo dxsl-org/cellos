@@ -1,5 +1,6 @@
 //! Benchmarking framework — timer, stats, and runner.
 
+pub mod counters;
 pub mod report;
 pub mod rt_report;
 pub mod runner;

@@ -133,6 +133,8 @@ impl SwitchPlan {
                 // is exactly what begin_execution's recheck prevents.
                 hart_local::set_current_domain(id, generation);
                 crate::hal::domain::observe_switch_activation();
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::root_programming();
                 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
                 log::info!(
                     "S22-RV64-SWITCH: PASS harts={}",
@@ -147,11 +149,15 @@ impl SwitchPlan {
                 // Cell under the kernel root with the kernel's mappings visible
                 // to its S-mode code — a silent isolation failure.
                 crate::hal::domain::observe_switch_activation();
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::root_programming();
                 root_tuple(&domain.0)
             }
             DomainTransition::ToSafeRoot => {
                 hart_local::mark_safe_root_pending();
                 crate::hal::domain::observe_switch_activation();
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::root_programming();
                 kernel_root_tuple()
             }
             DomainTransition::SasToSas => (0, 0),

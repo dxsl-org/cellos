@@ -18,16 +18,45 @@ from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
-SCHEMA = "cellos.benchmark.capture/v2"
-STATE_SCHEMA = "cellos.benchmark.regression-state/v2"
-PROFILE = "rv64-qemu-virt-2h-256m-v2"
+SCHEMA = "cellos.benchmark.capture/v3"
+STATE_SCHEMA = "cellos.benchmark.regression-state/v3"
 THRESHOLD_PERCENT = 10.0
 CONSECUTIVE_REQUIRED = 3
 HISTORY_WINDOW = 20
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")
+UNKNOWN = "unknown"
+RV64_PROFILE = "rv64-qemu-virt-2h-256m-v2"
+X86_PROFILE = "x86_64-q35-2c-256m-v1"
+# Machine fingerprint recorded with every capture. It is part of the
+# compatibility key; artifact digests and source commits are deliberately not,
+# so before/after code changes on one machine remain comparable.
+FINGERPRINT_FIELDS = (
+    "host_cpu_model",
+    "host_kernel_release",
+    "cpu_governor",
+    "qemu_version",
+    "accelerator",
+    "vcpus",
+    "ram_mib",
+    "guest_clocksource",
+)
+# Producer outcomes that never ran a guest workload, so they cannot have carried
+# baseline data and do not count as lost history.
+NO_DATA_STATUSES = frozenset({"launch_failed", "kvm_unavailable"})
+PRODUCER_STATUSES = frozenset(
+    {
+        "completed",
+        "intentional_termination_after_complete",
+        "timeout_before_completion",
+        "unexpected_exit",
+        "launch_failed",
+        "kvm_unavailable",
+        "accelerator_mismatch",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -37,39 +66,210 @@ class MetricSpec:
     unit: str
     kind: str
     direction: str
+    # Cost-accounting labels: SAS (Tier 1) and private-domain (Tier 2) results
+    # and copy/ring/syscall paths must never share a statistic.
+    tier: str
+    path: str
 
 
-METRICS = (
-    MetricSpec("context_switch", 1000, "ns", "latency", "lower"),
-    MetricSpec("ipc_send_recv", 1000, "ns", "latency", "lower"),
-    MetricSpec("syscall_yield", 1000, "ns", "latency", "lower"),
-    MetricSpec("memory_footprint", 1, "bytes", "footprint", "lower"),
-    MetricSpec("preempt_latency", 500, "ns", "rt", "lower"),
-    MetricSpec("control_loop", 200, "ns", "rt", "lower"),
-    MetricSpec("ipc_send_recv_idle", 1000, "ns", "latency", "lower"),
-    MetricSpec("syscall_yield_idle", 1000, "ns", "latency", "lower"),
-    MetricSpec("ipc_send_recv_load", 1000, "ns", "latency", "lower"),
-    MetricSpec("syscall_yield_load", 1000, "ns", "latency", "lower"),
-    MetricSpec("smp_spawn_rate", 8, "operations/sec", "value", "higher"),
-    MetricSpec("smp_ipc_throughput", 1000, "operations/sec", "value", "higher"),
-    MetricSpec("smp_work_distribution", 2, "scale_x100", "value", "higher"),
-    MetricSpec("stage_encode_request_x1000", 10, "ns per 1000 operations", "latency", "lower"),
-    MetricSpec("stage_decode_reply_x1000", 10, "ns per 1000 operations", "latency", "lower"),
-    MetricSpec("stage_ecall_roundtrip_x1000", 10, "ns per 1000 operations", "latency", "lower"),
-    MetricSpec("total_typed_roundtrip_x1000", 10, "ns per 1000 operations", "latency", "lower"),
+# The Tier-1 SAS suite `bench` emits with no arguments
+# (cells/tests/bench/src/main.rs), in emission order. Both profiles were
+# verified to emit exactly this set.
+SAS_SUITE = (
+    MetricSpec("context_switch", 1000, "ns", "latency", "lower", "sas", "sched"),
+    MetricSpec("ipc_send_recv", 1000, "ns", "latency", "lower", "sas", "copy"),
+    MetricSpec("ipc_fastpath", 1000, "ns", "latency", "lower", "sas", "ring"),
+    MetricSpec("syscall_yield", 1000, "ns", "latency", "lower", "sas", "syscall"),
+    MetricSpec("memory_footprint", 1, "bytes", "footprint", "lower", "sas", "footprint"),
+    MetricSpec("preempt_latency", 500, "ns", "rt", "lower", "sas", "sched"),
+    MetricSpec("control_loop", 200, "ns", "rt", "lower", "sas", "sched"),
+    MetricSpec("ipc_send_recv_idle", 1000, "ns", "latency", "lower", "sas", "copy"),
+    MetricSpec("syscall_yield_idle", 1000, "ns", "latency", "lower", "sas", "syscall"),
+    MetricSpec("ipc_send_recv_load", 1000, "ns", "latency", "lower", "sas", "copy"),
+    MetricSpec("syscall_yield_load", 1000, "ns", "latency", "lower", "sas", "syscall"),
+    MetricSpec("smp_spawn_rate", 8, "operations/sec", "value", "higher", "sas", "spawn"),
+    MetricSpec("smp_ipc_throughput", 1000, "operations/sec", "value", "higher", "sas", "copy"),
+    MetricSpec("smp_work_distribution", 2, "scale_x100", "value", "higher", "sas", "sched"),
+    MetricSpec("stage_encode_request_x1000", 10, "ns per 1000 operations", "latency", "lower", "sas", "codec"),
+    MetricSpec("stage_decode_reply_x1000", 10, "ns per 1000 operations", "latency", "lower", "sas", "codec"),
+    MetricSpec("stage_ecall_roundtrip_x1000", 10, "ns per 1000 operations", "latency", "lower", "sas", "syscall"),
+    MetricSpec("total_typed_roundtrip_x1000", 10, "ns per 1000 operations", "latency", "lower", "sas", "copy"),
 )
-SPECS = {spec.name: spec for spec in METRICS}
-PROFILE_CONTRACT = [
-    {
-        "name": spec.name,
-        "n": spec.n,
-        "unit": spec.unit,
-        "kind": spec.kind,
-        "direction": spec.direction,
+# x86 adds the Tier-2 copied-IPC round trip (private-root domain peer
+# `bench-peer-t2`), labelled separately so SAS and domain never share a statistic.
+X86_SUITE = (
+    *SAS_SUITE[:2],
+    MetricSpec("ipc_send_recv_domain", 1000, "ns", "latency", "lower", "domain", "copy"),
+    *SAS_SUITE[2:],
+)
+# Informational `<metric>.counters` records: kernel counter deltas around one
+# scenario (raw opcode 504, kernel feature `bench-counters`). Never gated.
+COUNTERS_SUFFIX = ".counters"
+COUNTER_FIELDS = (
+    "syscalls",
+    "domain_syscall_cr3",
+    "root_programmings",
+    "context_switches",
+    "ipc_bytes_copied",
+    "heap_allocs",
+    "heap_alloc_bytes",
+)
+COUNTERS_FEATURE = "bench-counters"
+
+
+def _normalize_rv64(command: list[str]) -> tuple[list[str], str] | None:
+    """Return the frozen RV64 command with revision-specific paths normalized."""
+    if len(command) != 18 or Path(command[0]).name != "qemu-system-riscv64":
+        return None
+    expected = {
+        1: "-machine",
+        2: "virt",
+        3: "-accel",
+        4: "tcg",
+        5: "-smp",
+        6: "2",
+        7: "-nographic",
+        8: "-bios",
+        9: "default",
+        10: "-kernel",
+        12: "-m",
+        13: "256M",
+        14: "-drive",
+        16: "-device",
+        17: "virtio-blk-device,drive=hd0",
     }
-    for spec in METRICS
-]
-REQUIRED_ARTIFACTS = {"kernel", "bench", "probe", "disk", "ramdisk"}
+    if any(command[index] != value for index, value in expected.items()):
+        return None
+    drive_parts = command[15].split(",")
+    if (
+        not command[11]
+        or len(drive_parts) != 4
+        or not drive_parts[0].startswith("file=")
+        or not drive_parts[0][5:]
+        or drive_parts[1:] != ["format=raw", "id=hd0", "if=none"]
+    ):
+        return None
+    normalized = list(command)
+    normalized[0] = "qemu-system-riscv64"
+    normalized[11] = "<kernel>"
+    normalized[15] = "file=<disk>,format=raw,id=hd0,if=none"
+    return normalized, "tcg"
+
+
+# Each accelerator pins its CPU model: TCG needs PDPE1GB for Limine's 1 GiB
+# HHDM pages; KVM exposes the host CPU. Exactly one explicit `-accel` is
+# required, so QEMU has no fallback accelerator list to silently degrade to.
+X86_CPU_MODELS = {"tcg": "qemu64,+pdpe1gb", "kvm": "host"}
+
+
+def _normalize_x86(command: list[str]) -> tuple[list[str], str] | None:
+    """Return the frozen x86 q35 ISO command (ISO path normalized) and accelerator."""
+    if len(command) != 17 or Path(command[0]).name != "qemu-system-x86_64":
+        return None
+    accelerator = command[4]
+    if accelerator not in X86_CPU_MODELS:
+        return None
+    expected = {
+        1: "-machine",
+        2: "q35",
+        3: "-accel",
+        5: "-cpu",
+        6: X86_CPU_MODELS[accelerator],
+        7: "-smp",
+        8: "2",
+        9: "-m",
+        10: "256M",
+        11: "-nographic",
+        12: "-no-reboot",
+        13: "-boot",
+        14: "d",
+        15: "-cdrom",
+    }
+    if any(command[index] != value for index, value in expected.items()) or not command[16]:
+        return None
+    normalized = list(command)
+    normalized[0] = "qemu-system-x86_64"
+    normalized[16] = "<iso>"
+    return normalized, accelerator
+
+
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    metrics: tuple[MetricSpec, ...]
+    normalize: Callable[[list[str]], tuple[list[str], str] | None]
+    machine: str
+    harts: int
+    ram_mib: int
+    accelerators: frozenset[str]
+    # Accelerators whose captures may produce a budget PASS/FAIL. Everything
+    # else is report-only: history is replayed for information, never gated.
+    gating_accelerators: frozenset[str]
+    # Fingerprint fields that must be known (not "unknown") before a matched
+    # capture may gate; unknown machine/timer metadata disables qualification.
+    qualification_fields: tuple[str, ...]
+    required_artifacts: frozenset[str]
+    # (serial substring, label) pairs identifying the guest clocksource.
+    clocksource_markers: tuple[tuple[str, str], ...]
+    absolute_targets: bool
+
+    @property
+    def specs(self) -> dict[str, MetricSpec]:
+        return {spec.name: spec for spec in self.metrics}
+
+    @property
+    def contract(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": spec.name,
+                "n": spec.n,
+                "unit": spec.unit,
+                "kind": spec.kind,
+                "direction": spec.direction,
+                "tier": spec.tier,
+                "path": spec.path,
+            }
+            for spec in self.metrics
+        ]
+
+
+PROFILES = {
+    profile.name: profile
+    for profile in (
+        # Legacy CI gate: RV64 has only TCG, and its existing absolute targets
+        # and history policy remain gating with no added qualification fields.
+        Profile(
+            name=RV64_PROFILE,
+            metrics=SAS_SUITE,
+            normalize=_normalize_rv64,
+            machine="virt",
+            harts=2,
+            ram_mib=256,
+            accelerators=frozenset({"tcg"}),
+            gating_accelerators=frozenset({"tcg"}),
+            qualification_fields=(),
+            required_artifacts=frozenset({"kernel", "bench", "probe", "disk", "ramdisk"}),
+            clocksource_markers=(),
+            absolute_targets=True,
+        ),
+        # x86 q35: TCG is functional/report-only; only a matched, qualified KVM
+        # history may gate. No absolute targets: budgets are per-machine history.
+        Profile(
+            name=X86_PROFILE,
+            metrics=X86_SUITE,
+            normalize=_normalize_x86,
+            machine="q35",
+            harts=2,
+            ram_mib=256,
+            accelerators=frozenset({"tcg", "kvm"}),
+            gating_accelerators=frozenset({"kvm"}),
+            qualification_fields=("host_cpu_model", "host_kernel_release", "cpu_governor", "qemu_version", "guest_clocksource"),
+            required_artifacts=frozenset({"kernel", "bench", "probe", "peer", "ramdisk", "iso"}),
+            clocksource_markers=(("x86_64 timers initialized from ACPI (HPET + LAPIC)", "acpi-hpet+lapic"),),
+            absolute_targets=False,
+        ),
+    )
+}
 
 
 class BenchError(ValueError):
@@ -207,11 +407,15 @@ def validate_records(records: Any, profile: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(records, list):
         return ["records must be an array"]
+    if profile not in PROFILES:
+        return [f"unknown benchmark profile {profile!r}"]
+    specs = PROFILES[profile].specs
 
     starts: list[tuple[int, dict[str, Any]]] = []
     completes: list[tuple[int, dict[str, Any]]] = []
     invalids: list[tuple[int, dict[str, Any]]] = []
     results: dict[str, dict[str, Any]] = {}
+    counters: dict[str, dict[str, Any]] = {}
 
     for index, record in enumerate(records):
         label = f"record {index}"
@@ -245,7 +449,17 @@ def validate_records(records: Any, profile: str) -> list[str]:
             continue
 
         name = record.get("name")
-        if not isinstance(name, str) or name not in SPECS:
+        if isinstance(name, str) and name.endswith(COUNTERS_SUFFIX):
+            base = name[: -len(COUNTERS_SUFFIX)]
+            if base not in specs:
+                errors.append(f"{label} counters for unknown metric {base!r}")
+            elif name in counters:
+                errors.append(f"duplicate counters record {name}")
+            else:
+                counters[name] = record
+                errors.extend(_counter_record_errors(record, specs[base]))
+            continue
+        if not isinstance(name, str) or name not in specs:
             errors.append(f"{label} has unknown metric name {name!r}")
             continue
         if name in results:
@@ -275,12 +489,12 @@ def validate_records(records: Any, profile: str) -> list[str]:
         if invalid_count != 0:
             errors.append(f"producer reported {invalid_count!r} invalid scenario(s)")
 
-    missing = sorted(set(SPECS) - set(results))
+    missing = sorted(set(specs) - set(results))
     if missing:
         errors.append(f"missing required metric records: {', '.join(missing)}")
 
     for name, record in results.items():
-        spec = SPECS[name]
+        spec = specs[name]
         if spec.kind == "latency":
             required = {"name", "n", "min", "p50", "p99", "max"}
             ordered = ("min", "p50", "p99", "max")
@@ -321,15 +535,58 @@ def validate_records(records: Any, profile: str) -> list[str]:
     return errors
 
 
-def _partition_records(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _counter_record_errors(record: dict[str, Any], spec: MetricSpec) -> list[str]:
+    errors: list[str] = []
+    name = record["name"]
+    _exact_keys(record, {"name", "tier", "path", *COUNTER_FIELDS}, f"counters {name}", errors)
+    if (record.get("tier"), record.get("path")) != (spec.tier, spec.path):
+        errors.append(f"counters {name} must be labelled tier={spec.tier} path={spec.path}")
+    for field in COUNTER_FIELDS:
+        value = record.get(field)
+        if value != UNKNOWN and not _plain_int(value):
+            errors.append(f"counters {name} {field} must be a non-negative integer or {UNKNOWN!r}")
+    return errors
+
+
+def counter_feature_errors(records: list[Any], features: Any) -> list[str]:
+    """Counter values must agree with the declared kernel features.
+
+    With ``bench-counters`` every metric carries a fully known counters record;
+    without it the kernel refuses the opcode, so any record is all ``unknown``.
+    """
+    counters = [record for record in records if isinstance(record, dict) and str(record.get("name", "")).endswith(COUNTERS_SUFFIX)]
+    metrics = {record.get("name") for record in records if isinstance(record, dict) and "name" in record and record not in counters}
+    enabled = isinstance(features, list) and COUNTERS_FEATURE in features
+    errors: list[str] = []
+    if enabled:
+        missing = sorted(name for name in metrics if f"{name}{COUNTERS_SUFFIX}" not in {record.get("name") for record in counters})
+        if missing:
+            errors.append(f"{COUNTERS_FEATURE} capture lacks counters records for: {', '.join(missing)}")
+    for record in counters:
+        values = [record.get(field) for field in COUNTER_FIELDS]
+        if enabled and UNKNOWN in values:
+            errors.append(f"{COUNTERS_FEATURE} capture has unknown counters in {record.get('name')}")
+        if not enabled and any(value != UNKNOWN for value in values):
+            errors.append(f"counters {record.get('name')} report values without the {COUNTERS_FEATURE} kernel feature")
+    return errors
+
+
+def _partition_records(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split ordered records into events, metric results and counters records."""
+    counters = [record for record in records if str(record.get("name", "")).endswith(COUNTERS_SUFFIX)]
     return (
         [record for record in records if "bench_event" in record],
-        [record for record in records if "name" in record],
+        [record for record in records if "name" in record and record not in counters],
+        counters,
     )
 
 
-def target_verdict(records: list[dict[str, Any]]) -> dict[str, Any]:
-    by_name = {record["name"]: record for record in records if isinstance(record, dict) and record.get("name") in SPECS}
+def target_verdict(profile: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Absolute target verdict; profiles without calibrated targets report none."""
+    if not PROFILES[profile].absolute_targets:
+        return {"verdict": "NOT_CONFIGURED", "rows": []}
+    specs = PROFILES[profile].specs
+    by_name = {record["name"]: record for record in records if isinstance(record, dict) and record.get("name") in specs}
     rows: list[dict[str, Any]] = []
 
     def ceiling(name: str, field: str, limit: int, informational: bool = False) -> None:
@@ -355,44 +612,66 @@ def target_verdict(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {"verdict": "FAIL" if any(row["status"] == "FAIL" for row in rows) else "PASS", "rows": rows}
 
 
+def _requested_accelerator(profile: Profile, command: list[str]) -> str:
+    """Accelerator the command explicitly requests; ``unknown`` if not exactly one."""
+    shaped = profile.normalize(command)
+    if shaped is not None:
+        return shaped[1]
+    values = [command[index + 1] for index, value in enumerate(command[:-1]) if value == "-accel"]
+    return values[0] if len(values) == 1 and values[0] in profile.accelerators else UNKNOWN
 
-def _normalized_qemu_command(command: list[str]) -> list[str] | None:
-    """Return the frozen profile command with revision-specific paths normalized."""
-    if len(command) != 18 or Path(command[0]).name != "qemu-system-riscv64":
-        return None
-    expected = {
-        1: "-machine",
-        2: "virt",
-        3: "-accel",
-        4: "tcg",
-        5: "-smp",
-        6: "2",
-        7: "-nographic",
-        8: "-bios",
-        9: "default",
-        10: "-kernel",
-        12: "-m",
-        13: "256M",
-        14: "-drive",
-        16: "-device",
-        17: "virtio-blk-device,drive=hd0",
-    }
-    if any(command[index] != value for index, value in expected.items()):
-        return None
-    drive_parts = command[15].split(",")
-    if (
-        not command[11]
-        or len(drive_parts) != 4
-        or not drive_parts[0].startswith("file=")
-        or not drive_parts[0][5:]
-        or drive_parts[1:] != ["format=raw", "id=hd0", "if=none"]
-    ):
-        return None
-    normalized = list(command)
-    normalized[0] = "qemu-system-riscv64"
-    normalized[11] = "<kernel>"
-    normalized[15] = "file=<disk>,format=raw,id=hd0,if=none"
-    return normalized
+
+def _guest_clocksource(profile: Profile, raw_text: str) -> str:
+    for marker, label in profile.clocksource_markers:
+        if marker in raw_text:
+            return label
+    return UNKNOWN
+
+
+def _host_cpu_model() -> str:
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return UNKNOWN
+    for line in text.splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip() in {"model name", "Model", "uarch"} and value.strip():
+            return value.strip()
+    return UNKNOWN
+
+
+def _cpu_governor() -> str:
+    try:
+        value = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").read_text(encoding="utf-8").strip()
+    except OSError:
+        return UNKNOWN
+    return value or UNKNOWN
+
+
+def _host_kernel_release() -> str:
+    try:
+        return os.uname().release or UNKNOWN
+    except AttributeError:
+        return UNKNOWN
+
+
+def _observe_accelerator(pid: int) -> str:
+    """Accelerator a live QEMU process actually uses, from its open descriptors.
+
+    A KVM guest holds an ``anon_inode:kvm-vm`` descriptor; TCG never does. The
+    requested accelerator is never trusted on its own.
+    """
+    try:
+        entries = list(Path(f"/proc/{pid}/fd").iterdir())
+    except OSError:
+        return UNKNOWN
+    for entry in entries:
+        try:
+            if os.readlink(entry) == "anon_inode:kvm-vm":
+                return "kvm"
+        except OSError:
+            continue
+    return "tcg"
 
 
 def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) -> list[str]:
@@ -401,7 +680,7 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
         return ["capture document must be an object"]
     _exact_keys(
         document,
-        {"schema", "capture", "producer", "records", "events", "results", "validity", "target"},
+        {"schema", "capture", "producer", "records", "events", "results", "counters", "validity", "target"},
         "capture document",
         errors,
     )
@@ -412,21 +691,22 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
         return errors + ["capture metadata must be an object"]
     _exact_keys(
         capture,
-        {"id", "captured_at", "profile", "repetition", "profile_contract", "source", "build", "qemu", "artifacts"},
+        {"id", "captured_at", "profile", "repetition", "profile_contract", "source", "build", "qemu", "fingerprint", "artifacts"},
         "capture metadata",
         errors,
     )
+    profile = PROFILES.get(capture.get("profile")) if isinstance(capture.get("profile"), str) else None
+    if profile is None:
+        return errors + [f"profile must be one of {sorted(PROFILES)}"]
     capture_id = capture.get("id")
     if not isinstance(capture_id, str) or not ID_RE.fullmatch(capture_id):
         errors.append("capture id is missing or unsafe")
     if not _parse_utc(capture.get("captured_at")):
         errors.append("captured_at must be an ISO-8601 UTC timestamp ending in Z")
-    if capture.get("profile") != PROFILE:
-        errors.append(f"profile must be {PROFILE}")
     if not _plain_int(capture.get("repetition")) or capture.get("repetition", 0) < 1:
         errors.append("repetition must be a positive integer")
-    if capture.get("profile_contract") != PROFILE_CONTRACT:
-        errors.append("profile contract has wrong units, counts, kinds, directions, or required metrics")
+    if capture.get("profile_contract") != profile.contract:
+        errors.append("profile contract has wrong units, counts, kinds, directions, tiers, paths, or required metrics")
 
     source = capture.get("source")
     if not isinstance(source, dict):
@@ -456,23 +736,58 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
     qemu = capture.get("qemu")
     if not isinstance(qemu, dict):
         errors.append("QEMU metadata must be an object")
+        qemu = {}
     else:
-        _exact_keys(qemu, {"version", "command", "machine", "accelerator", "harts", "ram_mib"}, "QEMU metadata", errors)
+        _exact_keys(
+            qemu,
+            {"version", "command", "machine", "accelerator", "accelerator_observed", "harts", "ram_mib"},
+            "QEMU metadata",
+            errors,
+        )
         if not isinstance(qemu.get("version"), str) or not qemu["version"] or qemu["version"] == "unavailable":
             errors.append("actual QEMU version is required")
         command = qemu.get("command")
         if not isinstance(command, list) or not command or any(not isinstance(value, str) or not value for value in command):
             errors.append("actual QEMU command must be a non-empty string array")
-        if qemu.get("machine") != "virt" or qemu.get("accelerator") != "tcg" or qemu.get("harts") != 2 or qemu.get("ram_mib") != 256:
+        if (
+            qemu.get("machine") != profile.machine
+            or qemu.get("accelerator") not in profile.accelerators
+            or qemu.get("harts") != profile.harts
+            or qemu.get("ram_mib") != profile.ram_mib
+        ):
             errors.append("QEMU environment does not match the frozen profile")
-        if isinstance(command, list) and command:
-            normalized_command = _normalized_qemu_command(command)
-            if normalized_command is None:
+        if isinstance(command, list) and command and all(isinstance(value, str) for value in command):
+            shaped = profile.normalize(command)
+            if shaped is None:
                 errors.append("recorded QEMU command does not match the frozen profile command")
+            elif shaped[1] != qemu.get("accelerator"):
+                errors.append("recorded accelerator does not match the QEMU command")
+        if qemu.get("accelerator_observed") != qemu.get("accelerator"):
+            errors.append(
+                f"requested accelerator {qemu.get('accelerator')!r} was not observed in the QEMU process "
+                f"(observed {qemu.get('accelerator_observed')!r})"
+            )
+
+    fingerprint = capture.get("fingerprint")
+    if not isinstance(fingerprint, dict):
+        errors.append("machine fingerprint must be an object")
+        fingerprint = {}
+    else:
+        _exact_keys(fingerprint, set(FINGERPRINT_FIELDS), "machine fingerprint", errors)
+        for field in ("host_cpu_model", "host_kernel_release", "cpu_governor", "guest_clocksource"):
+            if not isinstance(fingerprint.get(field), str) or not fingerprint[field]:
+                errors.append(f"fingerprint {field} must be a non-empty string (or {UNKNOWN!r})")
+        if (
+            fingerprint.get("qemu_version") != qemu.get("version")
+            or fingerprint.get("accelerator") != qemu.get("accelerator")
+            or fingerprint.get("vcpus") != profile.harts
+            or fingerprint.get("ram_mib") != profile.ram_mib
+        ):
+            errors.append("fingerprint QEMU version/accelerator/vCPU/RAM does not match the capture")
 
     artifacts = capture.get("artifacts")
-    if not isinstance(artifacts, dict) or set(artifacts) != REQUIRED_ARTIFACTS:
-        errors.append(f"artifact metadata must contain exactly {sorted(REQUIRED_ARTIFACTS)}")
+    if not isinstance(artifacts, dict) or set(artifacts) != profile.required_artifacts:
+        errors.append(f"artifact metadata must contain exactly {sorted(profile.required_artifacts)}")
     else:
         for name, artifact in artifacts.items():
             if isinstance(artifact, dict):
@@ -484,11 +799,14 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
     record_errors = validate_records(records, capture.get("profile"))
     errors.extend(record_errors)
     if isinstance(records, list):
-        events, results = _partition_records([record for record in records if isinstance(record, dict)])
+        events, results, counters = _partition_records([record for record in records if isinstance(record, dict)])
         if document.get("events") != events:
             errors.append("events do not match ordered raw records")
         if document.get("results") != results:
             errors.append("results do not match ordered raw records")
+        if document.get("counters") != counters:
+            errors.append("counters do not match ordered raw records")
+        errors.extend(counter_feature_errors(records, build.get("features") if isinstance(build, dict) else None))
 
     producer = document.get("producer")
     if not isinstance(producer, dict):
@@ -501,7 +819,7 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
             errors,
         )
         status = producer.get("status")
-        if status not in {"completed", "intentional_termination_after_complete", "timeout_before_completion", "unexpected_exit", "launch_failed"}:
+        if status not in PRODUCER_STATUSES:
             errors.append("producer status is invalid")
         if status not in {"completed", "intentional_termination_after_complete"}:
             errors.append(f"producer output is incomplete: {status}")
@@ -522,6 +840,10 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
             errors.append("unexpected-exit status conflicts with exit/timeout metadata")
         elif status == "launch_failed" and (timed_out or exit_code is not None or not isinstance(launch_error, str) or not launch_error):
             errors.append("launch-failed status conflicts with exit/timeout metadata")
+        elif status in {"kvm_unavailable", "accelerator_mismatch"} and (not isinstance(launch_error, str) or not launch_error):
+            errors.append(f"{status} status requires the recorded accelerator failure")
+        if status == "kvm_unavailable" and qemu.get("accelerator") != "kvm":
+            errors.append("kvm_unavailable status requires a requested kvm accelerator")
         stdin_line = producer.get("stdin_line")
         if stdin_line is not None and (
             not isinstance(stdin_line, str)
@@ -567,9 +889,11 @@ def validate_capture(document: Any, results_dir: Path, verify_raw: bool = True) 
                     lowered = raw_text.lower()
                     if "panicked at" in lowered or "kernel panic" in lowered or "[panic]" in lowered or "panic:" in lowered:
                         errors.append("raw producer output contains a panic")
+                    if fingerprint.get("guest_clocksource") != _guest_clocksource(profile, raw_text):
+                        errors.append("fingerprint guest_clocksource does not match the retained raw log")
 
     if not record_errors and isinstance(records, list):
-        expected_target = target_verdict(records)
+        expected_target = target_verdict(profile.name, records)
         if document.get("target") != expected_target:
             errors.append("stored target verdict does not match validated records")
 
@@ -633,8 +957,9 @@ def _exclusive_bytes(path: Path, data: bytes) -> None:
 def collect(args: argparse.Namespace) -> int:
     if not ID_RE.fullmatch(args.capture_id):
         raise BenchError("capture id contains unsafe characters")
-    if args.profile != PROFILE:
-        raise BenchError(f"collector only supports frozen profile {PROFILE}")
+    profile = PROFILES.get(args.profile)
+    if profile is None:
+        raise BenchError(f"unknown profile {args.profile!r}; supported: {', '.join(sorted(PROFILES))}")
     if not args.command:
         raise BenchError("QEMU command is required after --")
     command = args.command[1:] if args.command[0] == "--" else args.command
@@ -662,8 +987,8 @@ def collect(args: argparse.Namespace) -> int:
         raise BenchError("stdin-line and stdin-after must be supplied together")
 
     artifacts = _parse_mapping(args.artifact, "artifact")
-    if set(artifacts) != REQUIRED_ARTIFACTS:
-        raise BenchError(f"artifacts must contain exactly {sorted(REQUIRED_ARTIFACTS)}")
+    if set(artifacts) != profile.required_artifacts:
+        raise BenchError(f"artifacts must contain exactly {sorted(profile.required_artifacts)}")
     source_inputs = _parse_mapping(args.source_input, "source input")
     if not source_inputs:
         raise BenchError("at least one source input hash is required")
@@ -686,10 +1011,15 @@ def collect(args: argparse.Namespace) -> int:
     raw_path.parent.mkdir(parents=True, exist_ok=True)
 
     qemu_version = _qemu_version(command[0])
+    requested_accelerator = _requested_accelerator(profile, command)
     timed_out = False
     completion_observed = False
     return_code: int | None = None
     launch_error: str | None = None
+    # What the live QEMU process actually runs on, sampled once the guest is up
+    # (stdin trigger or start event). A failed or non-KVM launch is never
+    # retried or relabelled: it becomes an invalid capture.
+    observed_accelerator = UNKNOWN
     with raw_path.open("xb") as raw_stream:
         try:
             process = subprocess.Popen(
@@ -725,6 +1055,9 @@ def collect(args: argparse.Namespace) -> int:
                         recent.extend(chunk)
                         if len(recent) > 4096:
                             del recent[:-4096]
+                        guest_up = (trigger is not None and trigger in recent) or b'{"bench_event":"start"' in recent
+                        if observed_accelerator == UNKNOWN and guest_up and process.poll() is None:
+                            observed_accelerator = _observe_accelerator(process.pid)
                         if not sent and trigger in recent:
                             process.stdin.write(command_line)
                             process.stdin.flush()
@@ -733,6 +1066,8 @@ def collect(args: argparse.Namespace) -> int:
                         if complete_index >= 0 and b"\n" in recent[complete_index:]:
                             completion_observed = True
                             break
+                if timed_out and observed_accelerator == UNKNOWN and process.poll() is None:
+                    observed_accelerator = _observe_accelerator(process.pid)
                 if timed_out or completion_observed:
                     process.terminate()
                     try:
@@ -759,6 +1094,16 @@ def collect(args: argparse.Namespace) -> int:
     guest_complete = not guest_errors and not panic
     if launch_error is not None:
         producer_status = "launch_failed"
+    elif requested_accelerator == "kvm" and observed_accelerator != "kvm":
+        # Never fall back and never relabel: the requested KVM gate is unavailable.
+        producer_status = "kvm_unavailable"
+        launch_error = (
+            f"requested accelerator kvm was not observed in the QEMU process "
+            f"(observed={observed_accelerator}, exit={return_code}); no fallback attempted"
+        )
+    elif observed_accelerator not in {UNKNOWN, requested_accelerator}:
+        producer_status = "accelerator_mismatch"
+        launch_error = f"requested accelerator {requested_accelerator} but QEMU ran {observed_accelerator}"
     elif completion_observed:
         producer_status = (
             "intentional_termination_after_complete" if guest_complete else "unexpected_exit"
@@ -771,7 +1116,7 @@ def collect(args: argparse.Namespace) -> int:
         producer_status = "unexpected_exit"
 
 
-    events, results = _partition_records(records)
+    events, results, counters = _partition_records(records)
     document: dict[str, Any] = {
         "schema": SCHEMA,
         "capture": {
@@ -779,7 +1124,7 @@ def collect(args: argparse.Namespace) -> int:
             "captured_at": captured_at,
             "profile": args.profile,
             "repetition": args.repetition,
-            "profile_contract": PROFILE_CONTRACT,
+            "profile_contract": profile.contract,
             "source": {
                 "repository": args.repository,
                 "ref": args.source_ref,
@@ -790,10 +1135,21 @@ def collect(args: argparse.Namespace) -> int:
             "qemu": {
                 "version": qemu_version,
                 "command": command,
-                "machine": "virt",
-                "accelerator": "tcg",
-                "harts": 2,
-                "ram_mib": 256,
+                "machine": profile.machine,
+                "accelerator": requested_accelerator,
+                "accelerator_observed": observed_accelerator,
+                "harts": profile.harts,
+                "ram_mib": profile.ram_mib,
+            },
+            "fingerprint": {
+                "host_cpu_model": _host_cpu_model(),
+                "host_kernel_release": _host_kernel_release(),
+                "cpu_governor": _cpu_governor(),
+                "qemu_version": qemu_version,
+                "accelerator": requested_accelerator,
+                "vcpus": profile.harts,
+                "ram_mib": profile.ram_mib,
+                "guest_clocksource": _guest_clocksource(profile, raw_text),
             },
             "artifacts": artifact_metadata,
         },
@@ -810,8 +1166,9 @@ def collect(args: argparse.Namespace) -> int:
         "records": records,
         "events": events,
         "results": results,
+        "counters": counters,
         "validity": {"verdict": "INVALID", "errors": []},
-        "target": target_verdict(records) if not guest_errors else {"verdict": "NOT_EVALUATED", "rows": []},
+        "target": target_verdict(profile.name, records) if not guest_errors else {"verdict": "NOT_EVALUATED", "rows": []},
     }
     errors = _core_validate_capture(document, results_dir)
     document["validity"] = {"verdict": "VALID" if not errors else "INVALID", "errors": errors}
@@ -820,8 +1177,14 @@ def collect(args: argparse.Namespace) -> int:
     print(f"[collect] raw log: {raw_path}")
     print(f"[collect] capture: {result_path}")
     print(f"[collect] producer: {producer_status} (exit={return_code}, timeout={timed_out})")
+    print(f"[collect] accelerator: requested={requested_accelerator} observed={observed_accelerator}")
+    if launch_error is not None:
+        print(f"[collect] producer error: {launch_error}")
     print(f"[collect] validity: {document['validity']['verdict']}")
+    for error in errors:
+        print(f"[collect]   {error}")
     for line in raw_text.splitlines():
+        line = line.removeprefix("USER: ")
         if line.startswith(("[bench]", "[rt]", "[smp]", "[breakdown]")) or line.lstrip().startswith("{"):
             print(line)
     return 0
@@ -832,7 +1195,13 @@ def _capture_digest(document: dict[str, Any]) -> str:
 
 
 def _compatibility_key(document: dict[str, Any]) -> str:
+    """Exact comparability: profile contract, build, QEMU shape and machine fingerprint.
+
+    Artifact digests and source identity are excluded so before/after code on
+    one machine stays comparable; anything else that differs is a separate group.
+    """
     capture = document["capture"]
+    shaped = PROFILES[capture["profile"]].normalize(capture["qemu"]["command"])
     value = {
         "profile": capture["profile"],
         "profile_contract": capture["profile_contract"],
@@ -841,25 +1210,58 @@ def _compatibility_key(document: dict[str, Any]) -> str:
             key: capture["qemu"][key]
             for key in ("version", "machine", "accelerator", "harts", "ram_mib")
         },
-        "qemu_command": _normalized_qemu_command(capture["qemu"]["command"]),
+        "qemu_command": shaped[0] if shaped is not None else None,
+        "fingerprint": capture["fingerprint"],
     }
     return sha256_bytes(canonical_bytes(value))
 
 
+def _lineage(document: Any) -> str | None:
+    """Measurement series (profile, accelerator, host CPU, counters on/off) of any capture.
+
+    History in the same lineage but a different compatibility group is
+    configuration drift on one machine class and fails closed; a different
+    lineage is another machine, or a deliberately separate instrumented series
+    (kernel ``bench-counters``), and never supplies a baseline.
+    """
+    try:
+        capture = document["capture"]
+        value = {
+            "profile": capture["profile"],
+            "accelerator": capture["qemu"]["accelerator"],
+            "host_cpu_model": capture["fingerprint"]["host_cpu_model"],
+            "bench_counters": COUNTERS_FEATURE in capture["build"]["features"],
+        }
+    except (KeyError, TypeError):
+        return None
+    if not all(isinstance(value[key], str) for key in ("profile", "accelerator", "host_cpu_model")):
+        return None
+    return sha256_bytes(canonical_bytes(value))
+
+
+def _unqualified_fields(document: dict[str, Any]) -> list[str]:
+    capture = document["capture"]
+    fingerprint = capture["fingerprint"]
+    return [field for field in PROFILES[capture["profile"]].qualification_fields if fingerprint[field] == UNKNOWN]
+
+
 def _observations(document: dict[str, Any]) -> dict[str, tuple[float, str]]:
+    """Comparable values keyed ``tier/path/metric/statistic``; labels never merge."""
+    specs = PROFILES[document["capture"]["profile"]].specs
     observations: dict[str, tuple[float, str]] = {}
     for record in document["results"]:
-        spec = SPECS[record["name"]]
+        spec = specs[record["name"]]
+        key = f"{spec.tier}/{spec.path}/{spec.name}"
         if spec.kind in {"latency", "rt"}:
-            observations[f"{spec.name}/p99"] = (float(record["p99"]), "lower")
+            observations[f"{key}/p99"] = (float(record["p99"]), "lower")
             if spec.kind == "rt":
-                observations[f"{spec.name}/p999"] = (float(record["p999"]), "lower")
-                observations[f"{spec.name}/jitter"] = (float(record["jitter"]), "lower")
-                observations[f"{spec.name}/miss"] = (float(record["miss"]), "lower")
+                observations[f"{key}/p999"] = (float(record["p999"]), "lower")
+                observations[f"{key}/jitter"] = (float(record["jitter"]), "lower")
+                observations[f"{key}/miss"] = (float(record["miss"]), "lower")
         elif spec.kind == "footprint":
-            observations[f"{spec.name}/bytes"] = (float(record["bytes"]), "lower")
+            observations[f"{key}/bytes"] = (float(record["bytes"]), "lower")
         else:
-            observations[f"{spec.name}/value"] = (float(record["value"]), "higher")
+            observations[f"{key}/value"] = (float(record["value"]), "higher")
     return observations
 
 
@@ -952,6 +1354,8 @@ def _read_state(path: Path) -> tuple[str, dict[str, Any] | None]:
             not HASH_RE.fullmatch(key)
             or not isinstance(group, dict)
             or not isinstance(group.get("profile"), str)
+            or not isinstance(group.get("lineage"), str)
+            or not HASH_RE.fullmatch(group["lineage"])
             or not isinstance(group.get("processed_run_ids"), list)
             or any(not isinstance(run_id, str) for run_id in group.get("processed_run_ids", []))
             or not isinstance(group.get("metrics"), dict)
@@ -1049,19 +1453,31 @@ def compare(args: argparse.Namespace) -> int:
         return 1
     print(f"[compare] CURRENT: {actual_id}")
     print("[compare] VALIDITY: VALID")
-    target = target_verdict(current["records"])
-    print(f"[compare] TARGET: {target['verdict']}")
+    profile = PROFILES[current["capture"]["profile"]]
+    accelerator = current["capture"]["qemu"]["accelerator"]
+    gating = accelerator in profile.gating_accelerators
+    print(f"[compare] PROFILE: {profile.name} accelerator={accelerator} ({'gating' if gating else 'report-only'})")
+    target = target_verdict(profile.name, current["records"])
+    print(f"[compare] TARGET: {target['verdict']}{'' if gating else ' (report-only)'}")
     for row in target["rows"]:
         print(f"[compare]   {row['name']}: {row['status']} ({row['value']} {row['operator']} {row['target']})")
 
+    current_lineage = _lineage(current)
     valid_documents: list[dict[str, Any]] = []
-    invalid_same_profile = False
+    invalid_same_lineage = False
     for _, document in loaded:
-        capture = document.get("capture")
-        same_profile = isinstance(capture, dict) and capture.get("profile") == PROFILE
         if validate_capture(document, results_dir):
-            if same_profile and document is not current:
-                invalid_same_profile = True
+            if document is current:
+                continue
+            capture = document.get("capture")
+            producer = document.get("producer")
+            if not isinstance(capture, dict) or capture.get("profile") != profile.name:
+                continue
+            if isinstance(producer, dict) and producer.get("status") in NO_DATA_STATUSES:
+                continue
+            lineage = _lineage(document)
+            if lineage is None or lineage == current_lineage:
+                invalid_same_lineage = True
             continue
         if all(document["capture"]["id"] != seen["capture"]["id"] for seen in valid_documents):
             valid_documents.append(document)
@@ -1072,34 +1488,45 @@ def compare(args: argparse.Namespace) -> int:
         groups.setdefault(_compatibility_key(document), []).append(document)
     current_group = groups[current_key]
     prior_compatible = [document for document in current_group if document["capture"]["id"] != actual_id and (document["capture"]["captured_at"], document["capture"]["id"]) < (current["capture"]["captured_at"], actual_id)]
+    excluded = len(valid_documents) - len(current_group)
+    if excluded:
+        print(f"[compare] EXCLUDED: {excluded} valid capture(s) with a different profile/accelerator/fingerprint/configuration (never merged)")
 
+    # Drift = same machine-class lineage recorded under a *different*
+    # compatibility group; later captures of the current group are not drift.
     known_current = False
-    known_profile = False
+    known_lineage = False
     if state_status == "valid" and old_state is not None:
-        for group in old_state["groups"].values():
-            if isinstance(group, dict) and group.get("profile") == PROFILE:
-                known_profile = True
+        for key, group in old_state["groups"].items():
+            if isinstance(group, dict) and group.get("profile") == profile.name and group.get("lineage") == current_lineage:
+                if key != current_key:
+                    known_lineage = True
                 if actual_id in group.get("processed_run_ids", []):
                     known_current = True
-    same_profile_other = any(
-        document["capture"].get("profile") == PROFILE and document["capture"]["id"] != actual_id
+    same_lineage_other = any(
+        _lineage(document) == current_lineage and _compatibility_key(document) != current_key
         for document in valid_documents
-    ) or invalid_same_profile
+    ) or invalid_same_lineage
 
-    if not prior_compatible and not known_current and (same_profile_other or known_profile or state_status == "corrupt" or malformed_history):
+    if not prior_compatible and not known_current and (same_lineage_other or known_lineage or state_status == "corrupt" or malformed_history):
         print("[compare] HISTORY: INVALID/BLOCKED — existing profile has no reconstructable compatible prior-run state")
         if malformed_history:
             print(f"[compare]   non-comparable malformed history: {', '.join(malformed_history)}")
-        return 1
+        print(f"[compare] BUDGET: {'BLOCKED' if gating else 'REPORT_ONLY'}")
+        return 1 if gating else 0
 
     state_groups: dict[str, Any] = {}
     outcomes_by_group: dict[str, dict[str, dict[str, Any]]] = {}
     for key, documents in sorted(groups.items()):
         group_state, outcomes = replay_group(documents)
+        group_state["lineage"] = _lineage(documents[0])
         state_groups[key] = group_state
         outcomes_by_group[key] = outcomes
     outcome = outcomes_by_group[current_key][actual_id]
-    print(f"[compare] HISTORY: {outcome['verdict']}")
+    if gating:
+        print(f"[compare] HISTORY: {outcome['verdict']}")
+    else:
+        print(f"[compare] HISTORY (informational): {outcome['verdict']}")
     for row in outcome["rows"]:
         if row["status"] != "PASS":
             print(f"[compare]   {row['metric']}: {row['status']} current={row['current']:.0f} median={row['median']} streak={row['streak']}")
@@ -1107,6 +1534,24 @@ def compare(args: argparse.Namespace) -> int:
         print(f"[compare] STATE: reconstructed from immutable captures ({state_status})")
     if malformed_history:
         print(f"[compare] HISTORY NOTE: ignored non-comparable malformed files: {', '.join(malformed_history)}")
+
+    # Budget: TCG-style report-only accelerators never PASS/FAIL; a gating
+    # capture needs a matched prior baseline and fully known machine metadata.
+    unqualified = _unqualified_fields(current)
+    if not gating:
+        budget = "REPORT_ONLY"
+    elif not prior_compatible:
+        budget = "NO_BASELINE"
+    elif unqualified:
+        budget = "UNQUALIFIED"
+    else:
+        budget = outcome["verdict"]
+    detail = f" (unknown: {', '.join(unqualified)})" if budget == "UNQUALIFIED" else ""
+    print(f"[compare] BUDGET: {budget}{detail}")
+    # Counter deltas are cost accounting, never a budget input.
+    for record in current["counters"]:
+        values = " ".join(f"{field}={record[field]}" for field in COUNTER_FIELDS)
+        print(f"[compare] COUNTERS (informational) {record['tier']}/{record['path']}/{record['name']}: {values}")
 
     new_state = {
         "schema": STATE_SCHEMA,
@@ -1120,7 +1565,7 @@ def compare(args: argparse.Namespace) -> int:
         "groups": state_groups,
     }
     _atomic_write(state_path, canonical_bytes(new_state))
-    return 1 if target["verdict"] == "FAIL" or outcome["verdict"] == "FAIL" else 0
+    return 1 if (gating and target["verdict"] == "FAIL") or budget == "FAIL" else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
