@@ -649,10 +649,12 @@ pub fn reserve_contiguous_run(allocator: &mut FrameAllocator, frames: usize) -> 
 
 /// Largest number of disjoint usable ranges the allocator tracks.
 ///
-/// Firmware maps in the supported targets describe at most a handful (QEMU virt
-/// and the supported boards report one; a Limine map with a reserved hole reports
-/// two). More than this halts rather than silently dropping memory.
-pub const MAX_MANAGED_RANGES: usize = 8;
+/// Every boot path hands the allocator a converted map of at most
+/// [`crate::boot::MAX_MEMORY_MAP_ENTRIES`] entries, so this covers any map the
+/// kernel accepts. Firmware maps are not small: under OVMF, Limine reports more
+/// than eight disjoint usable ranges, and real UEFI machines often report twenty
+/// or more. More than this halts rather than silently dropping memory.
+pub const MAX_MANAGED_RANGES: usize = crate::boot::MAX_MEMORY_MAP_ENTRIES;
 
 /// One contiguous, page-aligned run of usable physical memory.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -899,19 +901,28 @@ mod tests {
         let _ = plan_managed_ranges(&entries);
     }
 
+    /// A map of `ranges` disjoint usable one-page ranges, each followed by a
+    /// one-page hole, so adjacency merging cannot reduce the count.
+    fn disjoint_usable_map(ranges: usize) -> alloc::vec::Vec<MemoryMapEntry> {
+        (0..ranges)
+            .map(|i| map_entry(0x10_0000 + i * 2 * PAGE_SIZE, PAGE_SIZE, MemoryType::Usable))
+            .collect()
+    }
+
+    /// Firmware maps carry many disjoint usable ranges (OVMF: more than eight);
+    /// every range a converted boot map can hold must be managed.
     #[test]
-    #[should_panic(expected = "more usable ranges than")]
+    fn a_full_memory_map_of_disjoint_ranges_is_managed() {
+        let full = crate::boot::MAX_MEMORY_MAP_ENTRIES;
+        let plan = plan_managed_ranges(&disjoint_usable_map(full));
+        assert_eq!(plan.range_count(), full, "every disjoint range is its own range");
+        assert_eq!(plan.total_frames(), full);
+    }
+
+    #[test]
+    #[should_panic(expected = "more usable ranges than the allocator tracks (65 > 64)")]
     fn too_many_ranges_halt() {
-        let entries: alloc::vec::Vec<_> = (0..9)
-            .map(|i| {
-                map_entry(
-                    0x8000_0000 + i * 0x0200_0000,
-                    0x0100_0000,
-                    MemoryType::Usable,
-                )
-            })
-            .collect();
-        let _ = plan_managed_ranges(&entries);
+        let _ = plan_managed_ranges(&disjoint_usable_map(super::MAX_MANAGED_RANGES + 1));
     }
 
     fn multi_range_allocator(ranges: &[(usize, usize)]) -> FrameAllocator {
