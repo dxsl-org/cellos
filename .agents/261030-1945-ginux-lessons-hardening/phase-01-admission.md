@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Admission, ownership and CellosFS inputs"
-status: pending
+status: done   # 2026-10-31 admission record admission-approval.md; plan.md already listed it done
 priority: P1
 effort: "0.5d"
 dependencies: []

@@ -206,3 +206,6 @@ cells/apps/vove/
 /.agents/261020-1750-cellbox-cli/reports/**/mapping-*.json
 /.agents/261020-1750-cellbox-cli/reports/**/serial-receipts.json
 /.agents/261020-1750-cellbox-cli/reports/s10-4-evidence/logs-lock/metadata.json
+
+# Local benchmark captures (numbers are recorded in docs/CHANGELOG)
+perf-results-*/
