@@ -34,3 +34,9 @@ Phase 03 is **not** handed off here. The kernel→init fingerprint hand-off, the
 - No `libs/api`/`libs/types` edit. No new syscall.
 - All 38 `CELL-CONTRACT-0024` relations keep their whole-plan scope.
 - Evidence ceiling: QEMU/TCG.
+
+## File-set exceptions approved by the user during Phase 02 (2026-11-01)
+1. `scripts/mutable-globals.toml` + regenerated `docs/generated/mutable-globals.md` (SMBIOS_REQUEST, EXECUTABLE_FILE_REQUEST, BOUND_X86_PROFILE; feature list).
+2. `scripts/x86/make-iso-ci.sh` (`X86_LIMINE_CONF` override, default unchanged) + new `scripts/x86/limine-pc.conf`.
+3. `tests/integration/tests/{ahci,xhci}-x86.rs` SKIP-message text only.
+`docs/project-roadmap.md:286` left as historical prose.

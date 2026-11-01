@@ -64,45 +64,253 @@ fn invalid_descriptor(error: ValidationError) -> ! {
     panic!("[board] invalid descriptor: {:?}", error)
 }
 
-#[cfg(all(target_arch = "x86_64", not(feature = "board-x86-pc")))]
-const SELECTED_X86_64_BOARD: &BoardDescriptor = &cellos_boards::qemu_q35_x86_64::QEMU_Q35_X86_64;
+/// Slug bound when the command line names no profile. It must be the strict
+/// (`DmaIsolation::Required`) catalog entry; a host test pins that.
+#[cfg(target_arch = "x86_64")]
+pub(crate) const DEFAULT_X86_PROFILE: &str = "x86_64-pc";
 
-/// Generic PC descriptor (phase 01 of the x86 PC lane). Selected by
-/// `board-x86-pc`; the machine-level qualification list lives in
-/// `docs/hardware-compatibility-list.md`.
-#[cfg(all(target_arch = "x86_64", feature = "board-x86-pc"))]
-const SELECTED_X86_64_BOARD: &BoardDescriptor = &cellos_boards::pc_x86_64::X86_64_PC;
+/// Longest kernel command line accepted from Limine, in bytes.
+#[cfg(target_arch = "x86_64")]
+pub(crate) const CMDLINE_MAX: usize = 1024;
 
 #[cfg(target_arch = "x86_64")]
-/// Validates the board contract before early boot consumes platform facts.
-pub(crate) fn selected() -> &'static BoardDescriptor {
-    match SELECTED_X86_64_BOARD.validate_for(Architecture::X86_64) {
-        Ok(()) => SELECTED_X86_64_BOARD,
-        Err(error) => invalid_descriptor(error),
+const PROFILE_KEY: &str = "cellos.profile";
+
+#[cfg(target_arch = "x86_64")]
+const PROFILE_SLUG_MAX: usize = 64;
+
+/// Write-once holder of the profile bound at boot.
+#[cfg(target_arch = "x86_64")]
+struct ProfileCell(core::sync::atomic::AtomicPtr<BoardDescriptor>);
+
+#[cfg(target_arch = "x86_64")]
+impl ProfileCell {
+    const fn new() -> Self {
+        Self(core::sync::atomic::AtomicPtr::new(core::ptr::null_mut()))
+    }
+
+    /// Stores `board` if nothing is bound yet; `false` if a profile already is.
+    fn bind(&self, board: &'static BoardDescriptor) -> bool {
+        use core::sync::atomic::Ordering;
+        self.0
+            .compare_exchange(
+                core::ptr::null_mut(),
+                (board as *const BoardDescriptor).cast_mut(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+    }
+
+    fn get(&self) -> Option<&'static BoardDescriptor> {
+        let board = self.0.load(core::sync::atomic::Ordering::Acquire);
+        // SAFETY: `bind` is the only store, and it stores only pointers taken
+        // from `&'static BoardDescriptor`; the pointee is never written.
+        unsafe { board.as_ref() }
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-/// Returns the validated x86 platform profile paired with the selected board.
+static BOUND_X86_PROFILE: ProfileCell = ProfileCell::new();
+
+/// The x86 profile bound at boot by [`bind_x86_profile`].
+///
+/// # Panics
+/// Before binding. Code that runs before ACPI discovery reads
+/// `hal_soc_x86::X86_EARLY_FACTS` instead.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn selected() -> &'static BoardDescriptor {
+    match BOUND_X86_PROFILE.get() {
+        Some(board) => board,
+        None => panic!("[board] x86 profile read before boot bound one"),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Returns the validated x86 platform profile paired with the bound board.
 pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PlatformProfile {
+    x86_soc_profile(selected())
+}
+
+/// The platform profile an x86 catalog descriptor pairs with.
+#[cfg(target_arch = "x86_64")]
+fn x86_soc_profile(board: &BoardDescriptor) -> &'static hal_soc_x86::X86PlatformProfile {
     use cellos_boards::SocId;
 
-    match selected().soc {
-        SocId::QemuX86Q35 => validated_x86_profile(&hal_soc_x86::QEMU_Q35),
-        SocId::GenericX86Pc => validated_x86_profile(&hal_soc_x86::GENERIC_X86_PC),
+    let profile = match board.soc {
+        SocId::QemuX86Q35 => &hal_soc_x86::QEMU_Q35,
+        SocId::GenericX86Pc => &hal_soc_x86::GENERIC_X86_PC,
         _ => panic!("[board] x86 descriptor has incompatible SoC identity"),
-    }
-}
-
-/// Validates an x86 platform profile before early boot consumes its facts.
-#[cfg(target_arch = "x86_64")]
-fn validated_x86_profile(
-    profile: &'static hal_soc_x86::X86PlatformProfile,
-) -> &'static hal_soc_x86::X86PlatformProfile {
+    };
     match profile.validate() {
         Ok(()) => profile,
         Err(error) => panic!("[board] invalid x86 SoC profile: {:?}", error),
     }
+}
+
+/// Why the boot command line was refused.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CmdlineError {
+    /// Longer than [`CMDLINE_MAX`].
+    TooLong,
+    /// A byte outside printable ASCII and tab.
+    NotPrintableAscii,
+    /// `cellos.profile` with an empty value, or a value that is not a slug
+    /// (`[a-z0-9_-]`, at most 64 bytes).
+    InvalidProfile,
+    /// `cellos.profile` given more than once.
+    DuplicateProfile,
+}
+
+/// The `cellos.profile=` value on `cmdline`, or `None` when it is absent.
+///
+/// Tokens are separated by spaces or tabs. Every other token is ignored, but
+/// the whole line must be printable ASCII and at most [`CMDLINE_MAX`] bytes.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn profile_option(cmdline: &[u8]) -> Result<Option<&str>, CmdlineError> {
+    if cmdline.len() > CMDLINE_MAX {
+        return Err(CmdlineError::TooLong);
+    }
+    if !cmdline
+        .iter()
+        .all(|byte| matches!(byte, b'\t' | 0x20..=0x7E))
+    {
+        return Err(CmdlineError::NotPrintableAscii);
+    }
+    let text = core::str::from_utf8(cmdline).map_err(|_| CmdlineError::NotPrintableAscii)?;
+    let mut found = None;
+    for token in text.split([' ', '\t']).filter(|token| !token.is_empty()) {
+        let value = match token.split_once('=') {
+            Some((PROFILE_KEY, value)) => value,
+            None if token == PROFILE_KEY => "",
+            _ => continue,
+        };
+        let is_slug = !value.is_empty()
+            && value.len() <= PROFILE_SLUG_MAX
+            && value
+                .bytes()
+                .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_'));
+        if !is_slug {
+            return Err(CmdlineError::InvalidProfile);
+        }
+        if found.replace(value).is_some() {
+            return Err(CmdlineError::DuplicateProfile);
+        }
+    }
+    Ok(found)
+}
+
+/// Where the bound profile came from.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProfileSource {
+    CommandLine,
+    Default,
+}
+
+/// Why no x86 profile could be bound. Every variant stops boot.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum BindError<'a> {
+    Cmdline(CmdlineError),
+    /// The named slug is not in `cellos_boards::x86_catalog()`.
+    UnknownProfile(&'a str),
+    /// The named profile weakens DMA isolation, and CPUID reports no
+    /// hypervisor to make that consistent with the machine.
+    NeedsHypervisor(&'static str),
+}
+
+#[cfg(target_arch = "x86_64")]
+impl core::fmt::Display for BindError<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Cmdline(error) => write!(f, "boot command line refused: {:?}", error),
+            Self::UnknownProfile(slug) => {
+                write!(f, "unknown cellos.profile={slug}; this image binds only:")?;
+                for board in cellos_boards::x86_catalog() {
+                    write!(f, " {}", board.slug)?;
+                }
+                Ok(())
+            }
+            Self::NeedsHypervisor(slug) => write!(
+                f,
+                "cellos.profile={slug} does not require DMA isolation and is admitted only \
+                 under a hypervisor, but CPUID reports none"
+            ),
+        }
+    }
+}
+
+/// Applies the x86 binding rules (ADR-0029 §2) to the boot command line and
+/// the detected identity.
+///
+/// 1. A `cellos.profile=` slug selects that catalog entry; an unknown slug is
+///    an error.
+/// 2. Without one, [`DEFAULT_X86_PROFILE`] applies.
+/// 3. A profile that does not require DMA isolation is refused unless CPUID
+///    reports a hypervisor. Detected facts only reject; they never choose.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn choose_x86_profile<'a>(
+    cmdline: &'a [u8],
+    identity: &PlatformIdentity,
+) -> Result<(&'static BoardDescriptor, ProfileSource), BindError<'a>> {
+    let (slug, source) = match profile_option(cmdline).map_err(BindError::Cmdline)? {
+        Some(slug) => (slug, ProfileSource::CommandLine),
+        None => (DEFAULT_X86_PROFILE, ProfileSource::Default),
+    };
+    let board = cellos_boards::find_by_slug(cellos_boards::x86_catalog(), slug)
+        .ok_or(BindError::UnknownProfile(slug))?;
+    if board.dma_isolation != cellos_boards::DmaIsolation::Required && !identity.hypervisor {
+        return Err(BindError::NeedsHypervisor(board.slug));
+    }
+    Ok((board, source))
+}
+
+/// Binds `board` as the x86 profile for the rest of the boot and names it on
+/// the early console.
+///
+/// # Panics
+/// If `board` fails validation or a profile is already bound.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, source: ProfileSource) {
+    if let Err(error) = board.validate_for(Architecture::X86_64) {
+        invalid_descriptor(error);
+    }
+    let soc = x86_soc_profile(board);
+    if !board.has_driver(cellos_boards::DriverId::Uart16550PortIo) {
+        panic!(
+            "[board] x86 profile {} does not enable the early UART",
+            board.slug
+        );
+    }
+    if !BOUND_X86_PROFILE.bind(board) {
+        panic!("[board] x86 profile bound twice");
+    }
+    early_console(format_args!(
+        "[x86-gate] board={} soc-profile={} source={} dma_isolation={:?}\n",
+        board.slug,
+        soc.slug,
+        match source {
+            ProfileSource::CommandLine => "cmdline",
+            ProfileSource::Default => "default",
+        },
+        board.dma_isolation
+    ));
+}
+
+/// Writes to the early console; the logger is not installed during binding.
+#[cfg(target_arch = "x86_64")]
+fn early_console(arguments: core::fmt::Arguments<'_>) {
+    struct EarlyConsole;
+    impl core::fmt::Write for EarlyConsole {
+        fn write_str(&mut self, text: &str) -> core::fmt::Result {
+            crate::early_uart::text(text);
+            Ok(())
+        }
+    }
+    // EarlyConsole never reports an error, so the result carries nothing.
+    let _ = core::fmt::Write::write_fmt(&mut EarlyConsole, arguments);
 }
 
 /// Machine identity facts detected at boot on x86_64.
@@ -167,15 +375,7 @@ impl core::fmt::Display for PlatformIdentity {
 /// logger is installed, and `log` output is dropped until then.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn report_identity(identity: &PlatformIdentity) {
-    struct EarlyConsole;
-    impl core::fmt::Write for EarlyConsole {
-        fn write_str(&mut self, text: &str) -> core::fmt::Result {
-            crate::early_uart::text(text);
-            Ok(())
-        }
-    }
-    // EarlyConsole never reports an error, so the result carries nothing.
-    let _ = core::fmt::Write::write_fmt(&mut EarlyConsole, format_args!("[identity] {identity}\n"));
+    early_console(format_args!("[identity] {identity}\n"));
 }
 
 /// Firmware bytes rendered as a quoted, escaped ASCII string.
@@ -297,10 +497,14 @@ pub(crate) fn active() -> &'static BoardDescriptor {
 
 #[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
-    use super::PlatformIdentity;
+    use super::{
+        choose_x86_profile, profile_option, x86_soc_profile, BindError, CmdlineError,
+        PlatformIdentity, ProfileCell, ProfileSource, CMDLINE_MAX, DEFAULT_X86_PROFILE,
+    };
     use crate::acpi::AcpiOem;
     use crate::smbios::{SmbiosString, SmbiosSystem};
     use alloc::format;
+    use cellos_boards::{DmaIsolation, DriverId};
 
     #[test]
     fn identity_line_names_every_fact() {
@@ -350,5 +554,132 @@ mod tests {
             hypervisor: false,
         };
         assert_eq!(format!("{none}"), "acpi_oem=none smbios=none hv=0");
+    }
+
+    fn facts(hypervisor: bool) -> PlatformIdentity {
+        PlatformIdentity {
+            acpi_oem: None,
+            smbios: None,
+            hypervisor,
+        }
+    }
+
+    #[test]
+    fn profile_option_reads_one_bounded_slug_and_ignores_other_keys() {
+        assert_eq!(profile_option(b""), Ok(None));
+        assert_eq!(profile_option(b"  quiet\tconsole=ttyS0 "), Ok(None));
+        assert_eq!(
+            profile_option(b"quiet cellos.profile=qemu-q35-x86_64\tdebug"),
+            Ok(Some("qemu-q35-x86_64"))
+        );
+        // Keys are exact and case-sensitive; look-alikes are other keys.
+        assert_eq!(
+            profile_option(b"CELLOS.PROFILE=x cellos.profiles=y"),
+            Ok(None)
+        );
+        for (cmdline, error) in [
+            (&b"cellos.profile="[..], CmdlineError::InvalidProfile),
+            (b"cellos.profile", CmdlineError::InvalidProfile),
+            (b"cellos.profile=Q35", CmdlineError::InvalidProfile),
+            (b"cellos.profile=a=b", CmdlineError::InvalidProfile),
+            (
+                b"cellos.profile=x86_64-pc,q35",
+                CmdlineError::InvalidProfile,
+            ),
+            (
+                b"cellos.profile=x86_64-pc cellos.profile=x86_64-pc",
+                CmdlineError::DuplicateProfile,
+            ),
+            (
+                b"cellos.profile=x86_64-pc\n",
+                CmdlineError::NotPrintableAscii,
+            ),
+            (b"quiet \xff", CmdlineError::NotPrintableAscii),
+        ] {
+            assert_eq!(profile_option(cmdline), Err(error), "{cmdline:?}");
+        }
+        let slug = alloc::format!("cellos.profile={}", "a".repeat(65));
+        assert_eq!(
+            profile_option(slug.as_bytes()),
+            Err(CmdlineError::InvalidProfile)
+        );
+        let mut long = alloc::vec![b' '; CMDLINE_MAX];
+        assert_eq!(profile_option(&long), Ok(None));
+        long.push(b' ');
+        assert_eq!(profile_option(&long), Err(CmdlineError::TooLong));
+    }
+
+    #[test]
+    fn binding_rules_default_strict_and_never_let_facts_choose() {
+        // No option: the strict profile, whatever was detected.
+        for hypervisor in [false, true] {
+            let (board, source) = choose_x86_profile(b"quiet", &facts(hypervisor)).unwrap();
+            assert_eq!(board.slug, DEFAULT_X86_PROFILE);
+            assert_eq!(board.dma_isolation, DmaIsolation::Required);
+            assert_eq!(source, ProfileSource::Default);
+        }
+        // The weak profile needs both the operator's choice and a hypervisor.
+        let (board, source) =
+            choose_x86_profile(b"cellos.profile=qemu-q35-x86_64", &facts(true)).unwrap();
+        assert_eq!(board.slug, "qemu-q35-x86_64");
+        assert_eq!(source, ProfileSource::CommandLine);
+        assert_eq!(
+            choose_x86_profile(b"cellos.profile=qemu-q35-x86_64", &facts(false)),
+            Err(BindError::NeedsHypervisor("qemu-q35-x86_64"))
+        );
+        // Naming the strict profile needs no detected fact.
+        let (board, source) =
+            choose_x86_profile(b"cellos.profile=x86_64-pc", &facts(false)).unwrap();
+        assert_eq!(board.slug, "x86_64-pc");
+        assert_eq!(source, ProfileSource::CommandLine);
+        // Unknown and malformed selections fail; they never fall back.
+        assert_eq!(
+            choose_x86_profile(b"cellos.profile=qemu-virt-riscv64", &facts(true)),
+            Err(BindError::UnknownProfile("qemu-virt-riscv64"))
+        );
+        assert_eq!(
+            choose_x86_profile(b"cellos.profile=", &facts(true)),
+            Err(BindError::Cmdline(CmdlineError::InvalidProfile))
+        );
+    }
+
+    #[test]
+    fn bind_errors_name_the_refusal() {
+        assert_eq!(
+            format!("{}", BindError::UnknownProfile("pc")),
+            "unknown cellos.profile=pc; this image binds only: x86_64-pc qemu-q35-x86_64"
+        );
+        assert!(format!("{}", BindError::NeedsHypervisor("qemu-q35-x86_64"))
+            .contains("admitted only under a hypervisor"));
+        assert_eq!(
+            format!("{}", BindError::Cmdline(CmdlineError::TooLong)),
+            "boot command line refused: TooLong"
+        );
+    }
+
+    #[test]
+    fn every_catalog_profile_pairs_with_an_early_facts_soc_profile() {
+        for board in cellos_boards::x86_catalog() {
+            let soc = x86_soc_profile(board);
+            assert_eq!(soc.slug, board.slug);
+            assert!(hal_soc_x86::X86_PROFILES
+                .iter()
+                .any(|profile| **profile == *soc));
+            assert!(soc.has_early_facts(&hal_soc_x86::X86_EARLY_FACTS));
+            assert!(
+                board.has_driver(DriverId::Uart16550PortIo),
+                "{}",
+                board.slug
+            );
+        }
+    }
+
+    #[test]
+    fn the_profile_cell_binds_once() {
+        let cell = ProfileCell::new();
+        assert!(cell.get().is_none());
+        assert!(cell.bind(cellos_boards::pc_x86_64()));
+        assert!(!cell.bind(cellos_boards::qemu_q35_x86_64()));
+        assert_eq!(cell.get().map(|board| board.slug), Some("x86_64-pc"));
     }
 }

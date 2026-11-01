@@ -5,7 +5,9 @@
 #   iso-out defaults to build/vicell-x86.iso for integration-test compatibility.
 #   Relative output paths are resolved from the repository root.
 # Optional X86_KERNEL and X86_ISO_ROOT select isolated inputs/work directories;
-# their defaults preserve production runner semantics.
+# their defaults preserve production runner semantics. Optional X86_LIMINE_CONF
+# selects the Limine config; the default names the q35 profile on the kernel
+# command line, and scripts/x86/limine-pc.conf leaves the strict PC default.
 #
 # XORRISO may name an alternate xorriso-compatible executable. This script only
 # creates an ISO; it never writes a disk or removable device.
@@ -20,7 +22,7 @@ ISO_OUT="${1:-build/vicell-x86.iso}"
 ISO_ROOT="${X86_ISO_ROOT:-build/x86-iso-root}"
 LIMINE="limine/limine-8.7.0/bin"
 KERNEL="${X86_KERNEL:-target/x86_64-unknown-none/release/cellos-kernel}"
-LIMINE_CONF="scripts/x86/limine.conf"
+LIMINE_CONF="${X86_LIMINE_CONF:-scripts/x86/limine.conf}"
 
 # The default kernel path is the rollout route (S10-2b). It is admitted only when that
 # kernel really embeds the clean canonical ramdisk and `init` of kernel/src/embedded-x86_64

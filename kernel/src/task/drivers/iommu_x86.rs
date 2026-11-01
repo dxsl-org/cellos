@@ -491,10 +491,11 @@ unsafe fn clear_ctx_slot(slot: usize) {
 /// Context tables are allocated per bus on demand. Translation stays disabled.
 ///
 /// The register base comes from firmware: a DRHD unit the boot path parsed out of
-/// the ACPI DMAR table. Only the board-declared q35 model may fall back to the
-/// compiled-in address, and the chosen path is logged either way, so a machine
-/// that reaches this driver without firmware data says so instead of silently
-/// touching an address that belongs to another machine.
+/// the ACPI DMAR table. Only a boot whose bound profile is q35 (operator-named
+/// and hypervisor-checked, see `board::choose_x86_profile`) may fall back to
+/// the compiled-in address, and the chosen path is logged either way, so a
+/// machine that reaches this driver without firmware data says so instead of
+/// silently touching an address that belongs to another machine.
 pub(super) fn init_hw(dma: super::iommu::DmaIsolationInput) {
     let base = if dma.vtd_base != 0 {
         log::info!(

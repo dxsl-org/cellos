@@ -130,7 +130,7 @@ check_readme_command \
     'cargo build -p cellos-kernel --release --target x86_64-unknown-none'
 check_readme_command \
     "boards/pc/x86_64-pc/README.md" \
-    'cargo build -p cellos-kernel --release --target x86_64-unknown-none --features board-x86-pc'
+    'cargo build -p cellos-kernel --release --target x86_64-unknown-none'
 
 run bash scripts/check-hal-boundaries.sh
 
@@ -148,10 +148,10 @@ record_run rpi3 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3
 record_run rpi4 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4
-record_run qemu-q35-x86-64 \
+# One x86_64 image covers every x86 catalog profile; the profile is bound at
+# boot from the Limine command line, so there is no per-board feature to check.
+record_run x86-64 \
     run cargo check -p cellos-kernel --target x86_64-unknown-none
-record_run x86-pc \
-    run cargo check -p cellos-kernel --target x86_64-unknown-none --features board-x86-pc
 
 expect_compile_error \
     riscv-conflict \

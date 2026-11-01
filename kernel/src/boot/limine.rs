@@ -507,6 +507,104 @@ pub fn get_smbios_entry_points() -> (Option<usize>, Option<usize>) {
     (present(response.entry_32), present(response.entry_64))
 }
 
+/// Executable-file request — x86_64 only; used for the kernel command line.
+/// GUID and layout match the vendored Limine 8.7.0 `limine.h`
+/// (`LIMINE_EXECUTABLE_FILE_REQUEST`, `struct limine_executable_file_response`).
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineExecutableFileRequest {
+    id: [u64; 4],
+    revision: u64,
+    response: *const LimineExecutableFileResponse,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineExecutableFileResponse {
+    revision: u64,
+    executable_file: *const LimineFilePrefix,
+}
+
+/// The leading fields of `struct limine_file` up to `cmdline`; the kernel
+/// reads nothing after them.
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct LimineFilePrefix {
+    revision: u64,
+    address: *const u8,
+    size: u64,
+    path: *const u8,
+    cmdline: *const u8,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[used]
+#[link_section = ".requests"]
+static mut EXECUTABLE_FILE_REQUEST: LimineExecutableFileRequest = LimineExecutableFileRequest {
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0xad97e90e83f1ed67,
+        0x31eb5d1c5ff23b69,
+    ],
+    revision: 0,
+    response: core::ptr::null(),
+};
+
+/// The kernel command line from `limine.conf` (`cmdline:`), without its NUL.
+///
+/// At most `limit` bytes are returned: a line that has no NUL within `limit`
+/// bytes comes back exactly `limit` bytes long, so a caller passing one more
+/// than its own maximum can tell "too long" from "fits". `None` means Limine
+/// gave no executable-file response, or the string does not lie inside
+/// bootloader-reclaimable memory.
+#[cfg(target_arch = "x86_64")]
+pub fn get_executable_cmdline(limit: usize) -> Option<&'static [u8]> {
+    // SAFETY: Limine writes the response pointer before kernel entry and
+    // nothing writes it afterwards.
+    let response = unsafe { core::ptr::read_volatile(&raw const EXECUTABLE_FILE_REQUEST.response) };
+    if !mp_record_valid(response, 1) {
+        return None;
+    }
+    // SAFETY: validated as a complete bootloader-reclaimable object above.
+    let file = unsafe { (*response).executable_file };
+    if !mp_record_valid(file, 1) {
+        return None;
+    }
+    // SAFETY: as above, for the file record.
+    let cmdline = unsafe { (*file).cmdline };
+    bootloader_bytes(cmdline, limit)
+}
+
+/// The NUL-terminated string at `pointer`, capped at `limit` bytes, provided
+/// every byte read lies in one bootloader-reclaimable memory-map entry.
+#[cfg(target_arch = "x86_64")]
+fn bootloader_bytes(pointer: *const u8, limit: usize) -> Option<&'static [u8]> {
+    let start = pointer as usize;
+    let physical = (start as u64).checked_sub(get_hhdm_offset()?)?;
+    let map = get_memory_map()?;
+    // SAFETY: Limine's memory-map response is a mandatory trusted boot input.
+    let readable = unsafe {
+        (0..map.entry_count as usize).find_map(|index| {
+            let entry = &**map.entries.add(index);
+            let end = entry.base.checked_add(entry.length)?;
+            (entry.entry_type == 5 && physical >= entry.base && physical < end)
+                .then(|| end - physical)
+        })
+    }?;
+    let window = usize::try_from(readable).ok()?.min(limit);
+    // SAFETY: `[start, start + window)` lies inside one bootloader-reclaimable
+    // entry, which the HHDM maps and the frame allocator never receives.
+    let bytes = unsafe { core::slice::from_raw_parts(pointer, window) };
+    match bytes.iter().position(|byte| *byte == 0) {
+        Some(len) => Some(&bytes[..len]),
+        // The string runs to the cap: report the capped prefix (too long).
+        None if window == limit => Some(bytes),
+        // The string runs off its memory-map entry: not a valid string.
+        None => None,
+    }
+}
+
 /// Limine memory map entry types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]

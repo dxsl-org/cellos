@@ -23,7 +23,8 @@ never qualify a machine; only a capture bound to one exact machine can create a
 row.
 
 The contract a machine is qualified against is the **generic**
-`boards/pc/x86_64-pc` descriptor (build with `--features board-x86-pc`). It
+`boards/pc/x86_64-pc` descriptor, which the single x86_64 image binds at boot
+when the Limine command line names no `cellos.profile=` (ADR-0029). It
 declares a compatibility contract, not facts guaranteed for every PC. It now
 lists COM1/16550, IOAPIC, HPET, PCIe ECAM, NVMe, AHCI, xHCI, e1000 and `igb`;
 the driver phases and DMAR/multi-port serial have completed at QEMU only.

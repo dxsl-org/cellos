@@ -81,13 +81,13 @@ fn prerequisites_ok() -> bool {
     let cell_ok = iso_ok && iso_carries_ahci_cell();
     if iso_ok && !cell_ok {
         eprintln!(
-            "SKIP ahci-x86: ISO does not carry /bin/ahci ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the board-x86-pc kernel + ISO",
+            "SKIP ahci-x86: ISO does not carry /bin/ahci ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the x86_64 kernel + ISO",
             iso_path()
         );
     }
     if !iso_ok {
         eprintln!(
-            "SKIP ahci-x86: x86_64 ISO not built ({})\n  Run: pwsh scripts/build-x86_64-cells.ps1, then build the board-x86-pc kernel + ISO",
+            "SKIP ahci-x86: x86_64 ISO not built ({})\n  Run: pwsh scripts/build-x86_64-cells.ps1, then build the x86_64 kernel + ISO",
             iso_path()
         );
     }

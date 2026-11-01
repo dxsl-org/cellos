@@ -171,22 +171,21 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "x86_64")]
     {
-        let board = crate::board::selected();
-        if !board.has_driver(cellos_boards::DriverId::Uart16550PortIo) {
-            panic!("[board] selected x86 board does not enable the early UART");
-        }
-        let soc = crate::board::selected_x86_64_soc();
-        crate::hal::uart_16550::configure(soc.com1.base, soc.com1.irq);
+        // No profile is bound before ACPI discovery; every catalog profile
+        // shares these facts (const-asserted in hal_soc_x86), so the console
+        // and COM wiring cannot depend on which profile is bound later.
+        let early = &hal_soc_x86::X86_EARLY_FACTS;
+        crate::hal::uart_16550::configure(early.com1.base, early.com1.irq);
         crate::hal::uart_16550::init();
-        // Register every port the profile declares: the console takes slot 0 and
-        // each extra port must answer a 16550 probe before it is offered, so a
-        // descriptor that names a port this machine does not have produces a
-        // refusal rather than a cell writing into empty port space.
+        // Register every declared port: the console takes slot 0 and each extra
+        // port must answer a 16550 probe before it is offered, so a declared
+        // port this machine does not have produces a refusal rather than a
+        // cell writing into empty port space.
         {
             use crate::hal::uart_16550::{SerialPortSpec, MAX_PORTS};
             let mut specs = [SerialPortSpec { base: 0, irq: 0 }; MAX_PORTS];
-            let declared = soc.serial_ports.len().min(MAX_PORTS);
-            for (slot, port) in soc.serial_ports.iter().take(declared).enumerate() {
+            let declared = early.serial_ports.len().min(MAX_PORTS);
+            for (slot, port) in early.serial_ports.iter().take(declared).enumerate() {
                 specs[slot] = SerialPortSpec {
                     base: port.base,
                     irq: port.irq,
@@ -194,14 +193,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
             crate::hal::uart_16550::configure_all(&specs[..declared]);
         }
-        // Name the selected contract once: a captured log must prove which board
-        // descriptor the image was built with (q35 vs the generic PC lane).
-        // Emitted only after `init()`: `putchar` asserts a configured port.
-        crate::hal::uart_16550::puts("[x86-gate] board=");
-        crate::hal::uart_16550::puts(board.slug);
-        crate::hal::uart_16550::puts(" soc-profile=");
-        crate::hal::uart_16550::puts(soc.slug);
-        crate::hal::uart_16550::puts("\n");
+        // Emitted only after `init()`: `putchar` asserts a configured port. The
+        // bound profile is named by `board::bind_x86_profile` after ACPI.
         crate::hal::uart_16550::puts(
             "[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT\n",
         );
@@ -385,20 +378,21 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // ACPI and SMBIOS parsers request a mapping for each RSDP/SDT/SMBIOS range
     // before dereferencing it. Those ranges must stay inside ACPI
     // reclaimable/NVS or firmware-reserved memory-map entries. Legacy BIOS
-    // records may live in the bounded windows supplied by the selected x86
-    // platform profile. Some BIOSes, including q35, report other SDTs as
+    // records may live in the bounded windows of `X86_EARLY_FACTS`, which every
+    // catalog profile shares. Some BIOSes, including q35, report other SDTs as
     // Reserved, so checksums remain the final trust gate.
     #[cfg(target_arch = "x86_64")]
     let (acpi_info, smbios_system) = {
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
-        let soc = crate::board::selected_x86_64_soc();
+        let early = &hal_soc_x86::X86_EARLY_FACTS;
         let mut map_physical = |physical: usize, length: usize| {
             let end = physical.checked_add(length)?;
             if length == 0 {
                 return None;
             }
-            let legacy_firmware = soc.legacy_bios_window.contains(physical, length);
-            let legacy_rsdp = physical == rsdp && soc.legacy_rsdp_window.contains(physical, length);
+            let legacy_firmware = early.legacy_bios_window.contains(physical, length);
+            let legacy_rsdp =
+                physical == rsdp && early.legacy_rsdp_window.contains(physical, length);
             let firmware_owned = mmap_entries.iter().any(|entry| {
                 let Some(entry_end) = entry.base.checked_add(entry.length) else {
                     return false;
@@ -459,6 +453,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     };
     #[cfg(target_arch = "x86_64")]
     crate::board::report_identity(&platform_identity);
+    // Bind the profile once, before the first `has_driver` gate. The operator
+    // names it on the Limine command line; detected facts may only reject it.
+    #[cfg(target_arch = "x86_64")]
+    {
+        let cmdline = crate::boot::limine::get_executable_cmdline(crate::board::CMDLINE_MAX + 1)
+            .unwrap_or(&[]);
+        match crate::board::choose_x86_profile(cmdline, &platform_identity) {
+            Ok((board, source)) => crate::board::bind_x86_profile(board, source),
+            Err(error) => panic!("[board] {}", error),
+        }
+    }
 
     #[cfg(target_arch = "x86_64")]
     let x86_ioapic_base = if crate::board::selected().has_driver(cellos_boards::DriverId::IoApic) {

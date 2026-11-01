@@ -12,11 +12,19 @@ which NIC family it carries is recorded per machine in
 a machine that fails a mandatory requirement there is rejected, not covered by
 this descriptor.
 
-Selected at build time:
+Selected at boot. There is one x86_64 kernel image; it binds this profile when
+the Limine command line carries no `cellos.profile=` option (ADR-0029). This is
+the strict default: DMA-capable drivers run only behind a discovered VT-d
+remapper.
 
 ```bash
-cargo build -p cellos-kernel --release --target x86_64-unknown-none --features board-x86-pc
+cargo build -p cellos-kernel --release --target x86_64-unknown-none
+X86_LIMINE_CONF=scripts/x86/limine-pc.conf bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-pc.iso
 ```
+
+The default `scripts/x86/limine.conf` names `cellos.profile=qemu-q35-x86_64`
+instead. The kernel accepts that weaker profile only when CPUID reports a
+hypervisor.
 
 Driver families are added to `enabled_drivers` by the phase that ships them
 (`.agents/261004-1957-x86-pc-lane/`): AHCI storage (02a/02b), xHCI USB (03),

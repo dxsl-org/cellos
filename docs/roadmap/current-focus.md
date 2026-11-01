@@ -637,8 +637,9 @@ This remains `qemu`-ceiling work.
   approval, admission, or production status changes.
 
 - x86 PC/server enablement has its contract but no qualified machine. A generic
-  `pc/x86_64-pc` descriptor and the HCL model landed in phase 01 (2026-10-04,
-  `--features board-x86-pc`); there is still no machine-specific descriptor and
+  `pc/x86_64-pc` descriptor and the HCL model landed in phase 01 (2026-10-04;
+  since 2026-11-01 bound at boot from the Limine command line, ADR-0029, instead
+  of a cargo feature); there is still no machine-specific descriptor and
   no HCL row, the AHCI/SATA storage family shipped in phases 02a/02b (`ahci-x86`
   5/5 with a two-boot persistence oracle), xHCI is being reopened for this lane
   by the owner's 2026-10-05 decision, the e1000 cell fail-closing every Ethernet binding

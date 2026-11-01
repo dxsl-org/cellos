@@ -22,7 +22,7 @@
 # nested interrupts can still alias per-CPU state.
 
 [profile]
-name = "x86_64 QEMU (kernel default + policy-required + board-x86-pc)"
+name = "x86_64 QEMU (kernel default + policy-required)"
 target_arch = "x86_64"
 target_os = "none"
 target_pointer_width = "64"
@@ -34,7 +34,7 @@ name = "kernel"
 root = "kernel/src/main.rs"
 manifest = "kernel/Cargo.toml"
 active = true
-features = ["default", "policy-required", "board-x86-pc"]
+features = ["default", "policy-required"]
 
 [[crate]]
 name = "hal-core"
@@ -332,6 +332,39 @@ seal = "`response` written by Limine before _start; no kernel store exists"
 retirement = "never: .requests is RW for the whole run; response memory is bootloader-reclaimable and never admitted to the frame allocator"
 rationale = "Bootloader-written before entry and read once by the BSP during ACPI discovery, so no race. Reads are plain loads of a `static mut` that no Rust code stores to; they rely on #[used] keeping LLVM from folding the null initializer [INFERENCE], whereas get_mp_response uses read_volatile for the same pattern."
 review = "kernel/src/boot/limine.rs:get_rsdp_ptr; kernel/src/main.rs:390"
+
+[[global]]
+key = "kernel::boot::limine::SMBIOS_REQUEST @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "static-mut"
+owner = "Limine bootloader writes `response`; kernel::boot::limine::get_smbios_entry_points reads it for the boot identity after ACPI parsing in kmain"
+contexts = ["boot"]
+seal = "`response` written by Limine before _start; no kernel store exists"
+retirement = "never: .requests is RW for the whole run; response memory is bootloader-reclaimable and never admitted to the frame allocator"
+rationale = "Bootloader-written before entry and read once by the BSP with read_volatile; mp_record_valid confirms the response lies in bootloader-reclaimable memory before it is dereferenced."
+review = "kernel/src/boot/limine.rs:get_smbios_entry_points; kernel/src/main.rs:kmain"
+
+[[global]]
+key = "kernel::boot::limine::EXECUTABLE_FILE_REQUEST @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "static-mut"
+owner = "Limine bootloader writes `response`; kernel::boot::limine::get_executable_cmdline reads it once to bind the x86 profile in kmain"
+contexts = ["boot"]
+seal = "`response` written by Limine before _start; no kernel store exists"
+retirement = "never: .requests is RW for the whole run; response, file record and command line are bootloader-reclaimable and never admitted to the frame allocator"
+rationale = "Bootloader-written before entry and read once by the BSP with read_volatile; the response and file record pass mp_record_valid and the command line is bounded to one bootloader-reclaimable memory-map entry before any byte is read."
+review = "kernel/src/boot/limine.rs:get_executable_cmdline; kernel/src/boot/limine.rs:bootloader_bytes; kernel/src/main.rs:kmain"
+
+[[global]]
+key = "kernel::board::BOUND_X86_PROFILE @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "once"
+owner = "board::bind_x86_profile stores the bound catalog descriptor once after ACPI discovery; board::selected / selected_x86_64_soc read it for every later has_driver, IOMMU and serial decision"
+contexts = ["boot", "normal", "irq"]
+seal = "compare_exchange from null in bind_x86_profile, called once from kmain on the BSP before start_secondaries; a second bind panics"
+retirement = "never: lives for the whole run"
+rationale = "Write-once AtomicPtr holding only &'static catalog descriptors (AcqRel store, Acquire loads), published before APs and cells start; a read before binding panics instead of guessing a profile."
+review = "kernel/src/board.rs:ProfileCell; kernel/src/board.rs:bind_x86_profile; kernel/src/board.rs:selected; kernel/src/main.rs:kmain"
 
 [[global]]
 key = "hal-x86::critical_section::x86_64_impl::set_impl!#1 @cfg(feature = \"critical-section-impl\" & target_arch = \"x86_64\")"

@@ -82,7 +82,7 @@ fn prerequisites_ok() -> bool {
     let cell_ok = iso_ok && iso_carries_xhci_lane();
     if iso_ok && !cell_ok {
         eprintln!(
-            "SKIP xhci-x86: ISO is missing {} ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the board-x86-pc kernel + ISO",
+            "SKIP xhci-x86: ISO is missing {} ({})\n  Rebuild: pwsh scripts/build-x86_64-cells.ps1, then the x86_64 kernel + ISO",
             if iso_contains(b"/bin/xhci") {
                 "/bin/input (input service not packaged)"
             } else {
@@ -93,7 +93,7 @@ fn prerequisites_ok() -> bool {
     }
     if !iso_ok {
         eprintln!(
-            "SKIP xhci-x86: x86_64 ISO not built ({})\n  Run: pwsh scripts/build-x86_64-cells.ps1, then build the board-x86-pc kernel + ISO",
+            "SKIP xhci-x86: x86_64 ISO not built ({})\n  Run: pwsh scripts/build-x86_64-cells.ps1, then build the x86_64 kernel + ISO",
             iso_path()
         );
     }

@@ -1018,16 +1018,13 @@ jobs:
           -- --nocapture
 
       # Phase 05: the VT-d register base must come from ACPI DMAR, and a profile
-      # that requires isolation must refuse untranslated DMA. The `x86_64-pc`
-      # descriptor is a separate kernel build, so it gets its own image; the
-      # kernel is copied out first so the q35 binary the steps above used is not
-      # silently replaced by the PC one.
+      # that requires isolation must refuse untranslated DMA. The kernel is the
+      # one the steps above booted (one x86_64 image, profile bound at boot,
+      # ADR-0029); only the Limine config differs: limine-pc.conf carries no
+      # `cellos.profile=`, so the kernel binds the strict x86_64-pc default.
       - name: Build the x86_64-pc profile image (phase 05 lanes)
         run: |
-          KERNEL_FEATURES="$(python3 -c 'import json; print(",".join(json.load(open("kernel/src/embedded-x86_64/manifest.json"))["kernel_features"]))')"
-          cargo build --release -p cellos-kernel --target x86_64-unknown-none --features "board-x86-pc,$KERNEL_FEATURES"
-          cp target/x86_64-unknown-none/release/cellos-kernel "$RUNNER_TEMP/cellos-kernel-pc"
-          X86_KERNEL="$RUNNER_TEMP/cellos-kernel-pc" \
+          X86_LIMINE_CONF=scripts/x86/limine-pc.conf \
             X86_ISO_ROOT="$RUNNER_TEMP/x86-pc-iso-root" \
             bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-pc.iso
 

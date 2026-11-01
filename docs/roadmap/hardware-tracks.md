@@ -45,7 +45,8 @@ There is no supported physical x86 target today: no machine is qualified and no
 machine-specific descriptor exists. `boards/` carries `qemu/q35-x86_64`, the
 placeholder entries (`q35-x86_32` is README-only), and — since phase 01 of
 `.agents/261004-1957-x86-pc-lane/` — a **generic** `pc/x86_64-pc` descriptor
-(selected by `--features board-x86-pc`) that declares the PC-class compatibility
+(bound at boot by the single x86_64 image when the Limine command line names no
+`cellos.profile=`, ADR-0029) that declares the PC-class compatibility
 baseline and only drivers whose cells exist — not a claim that every PC exposes
 that wiring. Every x86 Capability Lane row still carries a
 `qemu` ceiling, and QEMU/compile results never qualify a board. The table below

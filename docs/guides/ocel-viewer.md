@@ -86,12 +86,13 @@ After preparing the embedded filesystem with signed QuickJS and init artifacts,
 profile. Without `--javascript`, that builder retains its closed fleet posture.
 The kernel feature is `browser-engine-profile`; it implies
 `native-domains,policy-required,signing-required` and is not a default feature.
-For a direct PC kernel build, use `--target x86_64-unknown-none
---features board-x86-pc,browser-engine-profile`.
+For a direct kernel build, use `--target x86_64-unknown-none
+--features browser-engine-profile`; the PC profile is bound at boot when the
+Limine command line has no `cellos.profile=` (`scripts/x86/limine-pc.conf`).
 
 The existing development signing and policy keys remain development-only.
 A provisioned fleet build must instead use `--no-default-features
---features board-x86-pc,browser-engine-profile` and real kernel trust anchors;
+--features browser-engine-profile` and real kernel trust anchors;
 the in-tree production key placeholders cannot verify an image and this profile
 does not bypass that provisioning requirement.
 
