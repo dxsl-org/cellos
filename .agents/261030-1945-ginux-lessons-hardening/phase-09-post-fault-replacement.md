@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Authorized state handoff and SAS post-fault replacement"
-status: pending
+status: in-progress   # 09A done (d10af4a6f); 09B, 09C not admitted
 priority: P1
 dependencies: [1] # 09A only; 09B requires 09A; 09C requires 09B and 08
 tier: thinking

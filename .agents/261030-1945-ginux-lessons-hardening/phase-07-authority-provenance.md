@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Issuer-derived authority provenance and isolated SMP witness"
-status: pending
+status: done   # 07A 26b16f256/da28557c9; 07B 3ea8a1da2; 07C witness 4bd73e61a; post-start receipt deferred (07C CP1 decision A)
 priority: P1
 dependencies: [1]
 tier: thinking

@@ -1,6 +1,6 @@
 # Phase 07C CP1 — post-start capability receipt (Law-1 semantic + new ABI)
 
-Status: **draft, awaiting user approval.** No code. Selecting it is not approval.
+Status: **decided 2026-10-31: A. Defer** (see Decision below). No code.
 
 ## 1. Facts (verified 2026-10-31)
 
