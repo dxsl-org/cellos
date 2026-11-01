@@ -1,7 +1,7 @@
 ---
 title: "Ginux lessons: x86 entry, device quiescence, recovery, authority and discipline hardening"
 description: "Adopt nine reviewed ginux ideas as bounded Intel C2C slices under CELL-CONTRACT-0024, compatible with Tier-1 SAS/LBI."
-status: in-progress   # 2026-10-31: Phase 01 done, Phase 04 done at QEMU/TCG ceiling; other phases proposed (not admitted)
+status: closed   # 2026-11-01 by the user; all admitted phases done at QEMU/TCG ceilings; deferred: Phase 03 KVM baseline (physical machine), Phase 02 debt #23 (tier1-admission)
 priority: P1
 effort: "~5-7 weeks serialized (WIP = one slice); 09A can run first"
 tier: thinking

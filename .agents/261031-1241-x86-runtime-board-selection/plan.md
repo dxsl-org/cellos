@@ -1,6 +1,6 @@
 # Plan — x86-64 runtime board selection (ADR-0029)
 
-**Status:** registered in `.agents/plan-portfolio.md` (order 1). Lock handoff for phases 01–02 approved but **dormant until the Ginux slice closes** ([record](lock-handoff-approval.md)). Phase 03 needs its own handoff.
+**Status:** registered in `.agents/plan-portfolio.md` (order 1). Lock handoff for phases 01–02 approved and **effective 2026-11-01** (Ginux closed; [record](lock-handoff-approval.md)). Phase 03 needs its own handoff.
 **Authority:** [ADR-0029](../../docs/decisions/0029-platform-image-families-and-runtime-detection.md) §1–3, 5; [ADR-0022](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md) amendment 2026-10-31
 **C2C link (ADR-0022 admission):** necessary prerequisite / build simplification. The Intel qualification machine and QEMU lanes boot one x86 image, and the HCL profile is selected and pinned at boot instead of by a cargo feature.
 **Evidence ceiling:** QEMU (q35 with and without `intel-iommu`). Physical evidence comes from the HCL machine's qualification, not from this plan.
