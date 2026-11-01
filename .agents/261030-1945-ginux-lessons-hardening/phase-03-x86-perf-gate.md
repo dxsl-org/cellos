@@ -71,6 +71,15 @@ User choices: kernel counters behind a feature and printed to serial; a Tier-2 e
   - [x] Mixed profile/accelerator/fingerprint/feature comparisons are excluded. An unmatched KVM is `NO_BASELINE`. A matched deliberate regression fails (collector unit tests; no qualified real KVM machine yet).
   - [x] TCG cannot pass a KVM budget, and a forced KVM failure (`/dev/null` over `/dev/kvm`) is invalid with no fallback, shown for real.
   - [x] SAS metrics expose copy, allocation and CR3 overhead separately from Tier 2: `domain_syscall_cr3` is about 2200 for the domain scenario and 0 for every SAS scenario; heap bytes are about 2.6× for domain.
+- **P04/P08/P09 measurements (2026-11-01).** The user chose: P04 as an A/B between commits, P08 from timestamps under `bench-counters`, P09 from the planned RV64 hotswap. Details are in `docs/performance-report.md`, under "Hardening-cost measurements".
+  - **P04.** `scripts/x86/run-bench-p04-ab.sh kvm 3`, with 3 baseline and 3 candidate captures alternated. The baseline is HEAD with the IDT `smap_active` test and the FMASK widening reverted. Result: no signal above noise. Latency and throughput medians move both ways, from −11% to +11%: `syscall_yield` p99 +1.6%, `stage_ecall_roundtrip` +2.8%, `ipc_send_recv` −7.5%. The RT tails (`control_loop` p999/jitter −90%, `preempt_latency` −20%) favour the *hardened* build, which is Hyper-V noise. `UNQUALIFIED` (WSL2 governor unknown).
+  - **P08**, x86 TCG fault ISO with `bench-counters`, 3 runs, median:
+    - AHCI: Exit to DMA retired 1.12 ms; Exit to new driver registered 24.9 ms.
+    - NVMe: Exit to DMA retired 1.88 ms; Exit to new driver registered 30.9 ms.
+  - **P09**, RV64 TCG `hotswap-smoke` with `bench-counters`, 3 runs, median:
+    - CLI: sealed to restored 2.46 ms; sealed to Ready 3.51 ms; snapshot to Ready 16.9 ms.
+    - Supervisor with cached sender: sealed to restored 1.75 ms; sealed to Ready 2.69 ms; snapshot to Ready 13.7 ms.
+  - The milestones need no authority scan or signature check on IPC. Without the feature they compile out. The `Exit` path stores atomics only.
 - **Remaining before `done`:**
-  - P04 entry-safety, P08 retirement-latency and P09 restore/Ready-latency measurements are not instrumented yet (requirement line 24).
   - A KVM baseline on a machine with known governor/timer metadata. This WSL2 host reports the governor as unknown, so its KVM captures are `UNQUALIFIED`. The user plans to buy an x86 machine.
+  - P08 on KVM: the SATA/NVMe runner is TCG only. P09 restore after a crash needs Phase 09B.

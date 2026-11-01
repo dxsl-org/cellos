@@ -19,6 +19,9 @@
 # Usage: bash scripts/x86/make-ahci-fault-iso.sh [iso-out]
 #   iso-out defaults to $CARGO_TARGET_DIR/vicell-x86-ahci-fault.iso.
 #   CARGO_TARGET_DIR defaults to target/ahci-fault-08a.
+#   X86_KERNEL_FEATURES (default empty) appends measurement-only kernel
+#   features, e.g. `bench-counters` for the Phase 03 retirement-latency
+#   milestones; use a separate CARGO_TARGET_DIR for such an image.
 
 set -euo pipefail
 
@@ -98,6 +101,9 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 print(",".join(module.CANONICAL_KERNEL_FEATURES))')"
+if [[ -n "${X86_KERNEL_FEATURES:-}" ]]; then
+    KERNEL_FEATURES="$KERNEL_FEATURES,${X86_KERNEL_FEATURES// /,}"
+fi
 echo "[ahci-fault] kernel features: $KERNEL_FEATURES"
 EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --release --locked \
     -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc \

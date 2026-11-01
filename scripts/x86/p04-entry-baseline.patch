@@ -1,0 +1,29 @@
+diff --git a/hal/arch/x86/src/x86_64/idt/entry.rs b/hal/arch/x86/src/x86_64/idt/entry.rs
+--- a/hal/arch/x86/src/x86_64/idt/entry.rs
++++ b/hal/arch/x86/src/x86_64/idt/entry.rs
+@@ -133,13 +133,6 @@
+     xorl %edx,%edx
+     wrpkru
+ .Lidt_kernel_entry:
+-    # SMAP profile only: no handler runs inside an interrupted access window
+-    # or with a caller's AC. IRETQ restores the saved AC on return. Profiles
+-    # without SMAP never execute CLAC (it is #UD on CPUs lacking SMAP).
+-    cmpb $0,ViCell_smap_active(%rip)
+-    je .Lidt_ac_clear
+-    clac
+-.Lidt_ac_clear:
+     cld
+     movq %rsp,%r12
+     andq $-16,%rsp
+diff --git a/hal/arch/x86/src/x86_64/syscall.rs b/hal/arch/x86/src/x86_64/syscall.rs
+--- a/hal/arch/x86/src/x86_64/syscall.rs
++++ b/hal/arch/x86/src/x86_64/syscall.rs
+@@ -155,7 +155,7 @@
+         fn syscall_entry();
+     }
+     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
+-    wrmsr(IA32_FMASK, SYSCALL_FMASK);
++    wrmsr(IA32_FMASK, 0x0300);
+ 
+ }
+ 

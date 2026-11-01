@@ -88,6 +88,45 @@ pub(crate) fn snapshot() -> [u64; SLOTS] {
     ]
 }
 
+// Retirement timing (Phase 03 P08). The Exit syscall may not log or lock while
+// the exiting Cell is still charged, so it only stores its tid and time here;
+// the later DMA teardown, which may log, pairs them. One slot: a concurrent
+// exit overwrites it and the pair then reports the exit time as unknown.
+const NO_TID: u64 = u64::MAX;
+static LAST_EXIT_TID: AtomicU64 = AtomicU64::new(NO_TID);
+static LAST_EXIT_NS: AtomicU64 = AtomicU64::new(0);
+
+/// The calling task entered the Exit syscall. Atomics only: no log, lock or
+/// allocation on the victim-attributed path.
+pub(crate) fn note_exit(tid: usize) {
+    let Some(ns) = crate::task::telemetry::monotonic_ns() else { return };
+    LAST_EXIT_TID.store(NO_TID, Ordering::Release);
+    LAST_EXIT_NS.store(ns, Ordering::Release);
+    LAST_EXIT_TID.store(tid as u64, Ordering::Release);
+}
+
+/// Exit time of `tid` if the slot still holds its unbroken record.
+fn exit_ns(tid: usize) -> Option<u64> {
+    let before = LAST_EXIT_TID.load(Ordering::Acquire);
+    let ns = LAST_EXIT_NS.load(Ordering::Acquire);
+    let after = LAST_EXIT_TID.load(Ordering::Acquire);
+    (before == tid as u64 && after == before).then_some(ns)
+}
+
+/// Serial milestone `[bench-ts] <event> tid=<tid> ns=<now> exit_ns=<ns|unknown>`
+/// on the `GetTime(0)` clock. Phase 03 events: `dma-retired`, `block-ready`
+/// (P08 driver retirement and restart) and `state-stashed`,
+/// `replacement-sealed`, `state-restored`, `hotswap-ready` (P09 replacement).
+/// `exit_ns` is the tid's own Exit-syscall time when still recorded, so a
+/// retirement span is computed from one guest clock; live tasks print unknown.
+pub(crate) fn milestone(event: &str, tid: usize) {
+    let Some(now) = crate::task::telemetry::monotonic_ns() else { return };
+    match exit_ns(tid) {
+        Some(exit) => log::warn!("[bench-ts] {} tid={} ns={} exit_ns={}", event, tid, now, exit),
+        None => log::warn!("[bench-ts] {} tid={} ns={} exit_ns=unknown", event, tid, now),
+    }
+}
+
 /// [`snapshot`] encoded as the little-endian bytes the caller receives.
 pub(crate) fn snapshot_bytes() -> [u8; RECORD_BYTES] {
     let mut out = [0u8; RECORD_BYTES];

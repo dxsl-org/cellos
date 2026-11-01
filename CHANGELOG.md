@@ -77,7 +77,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **Limits:**
     - WSL2 exposes no cpufreq governor, so no KVM capture here can gate budgets (`UNQUALIFIED`).
     - KVM under Hyper-V is noisy (p99 varies up to about 10× between runs).
-    - P04 entry, P08 retirement and P09 restore latencies are not instrumented yet.
+    - P04 entry, P08 retirement and P09 restore latencies are measured: see the next entry.
+- Phase 03 hardening-cost measurements (ginux-lessons; user choices 2026-11-01). All are report-only and `bench-counters`-only.
+  - **P04 A/B.** New `scripts/x86/run-bench-p04-ab.sh` and `scripts/x86/p04-entry-baseline.patch` compare HEAD with HEAD minus the per-entry Phase 04 deltas (IDT `smap_active` test, wider FMASK). New `scripts/bench_ab.py` prints per-set medians and refuses invalid or cross-group captures. KVM on WSL2 (UNQUALIFIED): no signal above noise. Latency and throughput medians move both ways within ±11%; `syscall_yield` p99 is +1.6%.
+  - **Kernel milestones.** `[bench-ts] <event> tid ns exit_ns` events are `dma-retired`, `block-ready`, `state-stashed`, `replacement-sealed`, `state-restored` and `hotswap-ready`. The Exit syscall stores its tid and time in atomics only. Without the feature nothing is compiled.
+  - **Image knobs:** `make-ahci-fault-iso.sh` gains `X86_KERNEL_FEATURES` and `gen-disk-ci.sh` gains `CELLOS_KERNEL_FEATURES`. Both default to empty.
+  - **Reports.** New `tests/integration/src/bench_milestones.rs`. The AHCI/NVMe restart witnesses print `P08-RETIRE-LATENCY` and `hotswap-smoke` prints `P09-HOTSWAP-LATENCY`; a missing endpoint is `"unknown"`, never 0.
+  - **Evidence (TCG, median of 3):**
+    - AHCI: Exit to DMA retired 1.12 ms, to new driver registered 24.9 ms.
+    - NVMe: 1.88 ms and 30.9 ms.
+    - RV64 hotswap CLI: seal to restore 2.46 ms, seal to Ready 3.51 ms.
+    - Supervisor cached: 1.75 ms and 2.69 ms.
 - Writable-global ownership inventory for the x86 kernel/HAL image (ginux-lessons Phase 02; tooling and docs only, no runtime change).
   - **Tool.** `tools/mutable-globals` (standalone std crate, `syn` 2) walks each crate's real module tree and evaluates `#[cfg]` against the x86 profile and resolved features. It lists every `static`, `static mut`, extern static, static-emitting `macro_rules!` and its invocations, other item macros and `global_asm!`. Only a closed set of syntactically immutable shapes is exempt.
   - **Classification.** In `scripts/mutable-globals.toml`, each entry records lifetime, mutation, owner, execution contexts (including `nmi`/`ap`/`irq`), seal, retirement, rationale and a code reference. Report: `docs/generated/mutable-globals.md`.

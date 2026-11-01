@@ -643,4 +643,7 @@ fn ahci_driver_restart_resets_and_serves_again_x86() {
         })
         .collect();
     println!("08C AHCI witness: {evidence:#?}");
+    if let Some(report) = vicell_integration_tests::bench_milestones::retire_report("ahci", "tcg", after) {
+        println!("P08-RETIRE-LATENCY {report}");
+    }
 }

@@ -5846,6 +5846,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 return Ok(0);
             }
 
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::note_exit(caller_id);
+
             // Do not inspect the task table, log, audit, or call
             // `Scheduler::exit_task` while the exiting Cell is still charged.
             // A root exit can retire every member and grow scheduler vectors;
@@ -7692,7 +7695,12 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 buf_len,
                 crate::cell::state_stash::MAX_STASH_LEN,
             )?;
-            Ok(crate::cell::state_stash::stash(owner, raw_key, &bytes, incarnation_is_live))
+            let stored = crate::cell::state_stash::stash(owner, raw_key, &bytes, incarnation_is_live);
+            #[cfg(feature = "bench-counters")]
+            if stored > 0 {
+                crate::bench_counters::milestone("state-stashed", caller_id);
+            }
+            Ok(stored)
         }
         Syscall::StateRestore {
             key,
@@ -7738,6 +7746,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     &kbuf[..n],
                     crate::cell::state_stash::MAX_STASH_LEN,
                 )?;
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::milestone("state-restored", caller_id);
             }
             Ok(n)
         }
@@ -7940,6 +7950,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // replacement: the old writer is fenced, only the new one may read.
             if let Ok(new_incarnation) = stash_incarnation(task_id) {
                 crate::cell::state_stash::seal_for_replacement(old_incarnation, new_incarnation);
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::milestone("replacement-sealed", task_id);
             }
             Ok(task_id)
         }
@@ -8307,6 +8319,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // No SpawnCap required — only the new cell itself calls this
             // after its restore flow finishes.
             crate::cell::hotswap::set_task_hotswap_ready(caller_id);
+            #[cfg(feature = "bench-counters")]
+            crate::bench_counters::milestone("hotswap-ready", caller_id);
             Ok(0)
         }
 

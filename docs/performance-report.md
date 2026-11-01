@@ -78,6 +78,15 @@ Driver Cell.
   - `<scenario>.counters` records are informational: system-wide deltas of syscalls, domain-syscall CR3 round trips, root programmings, context switches, IPC bytes copied, heap allocations and heap bytes. They come from kernel opcode 504 and need the off-by-default `bench-counters` feature; without it every value is `"unknown"`.
 - **CI.** `perf.yml` job `bench-x86-tcg` is report-only.
 
+### Hardening-cost measurements (ginux-lessons Phase 03, P04/P08/P09)
+
+All three are report-only. None gates a budget.
+
+- **P04 entry-safety A/B.** `scripts/x86/run-bench-p04-ab.sh [kvm|tcg] [N]` builds this commit twice. The baseline is a detached worktree with `scripts/x86/p04-entry-baseline.patch` applied, which reverts the two Phase 04 changes that run on every entry of a default kernel: the IDT-entry `ViCell_smap_active` test and the wider SYSCALL FMASK. Baseline and candidate captures alternate, so slow host drift hits both. `scripts/bench_ab.py` then prints the median per `tier/path/metric/statistic` for each set. It refuses captures that are invalid or from different groups, and labels an unknown governor or timer `UNQUALIFIED`. The guarded IST stacks are not reverted, because only NMI, #DF and #MC use them.
+- **Serial milestones.** With `bench-counters`, the kernel prints `[bench-ts] <event> tid=T ns=N exit_ns=E|unknown` on the `GetTime(0)` clock. `exit_ns` is the time of the task's own Exit syscall. The Exit path only stores atomics; the line is printed later, at DMA teardown. `tests/integration/src/bench_milestones.rs` turns these lines into JSON. A span with a missing endpoint is reported as `"unknown"`, never zero.
+- **P08 driver retirement.** The milestones are `dma-retired` (functions quiesced, translations revoked, BDFs released) and then `block-ready` (the restarted driver registers after its controller reset). The source image is `CARGO_TARGET_DIR=target/ahci-fault-bench X86_KERNEL_FEATURES=bench-counters bash scripts/x86/make-ahci-fault-iso.sh`. The AHCI and NVMe `*_driver_restart_resets_and_serves_again_x86` witnesses print `P08-RETIRE-LATENCY {…}`. These runs are TCG only, because the SATA runner has no accelerator option.
+- **P09 planned replacement.** The milestones are `state-stashed` (old provider), `replacement-sealed` (`SpawnReplacement`), and `state-restored` and `hotswap-ready` (replacement). The source image is `CELLOS_INIT_FEATURES=input,hotswap-demo CELLOS_KERNEL_FEATURES=bench-counters bash scripts/gen-disk-ci.sh`. That kernel lands on the production path, so rebuild without the feature afterwards. `hotswap-smoke` prints `P09-HOTSWAP-LATENCY {…}`. These runs are RV64 TCG only. Restore after a crash waits for Phase 09B.
+
 ---
 
 ## Baseline Measurements

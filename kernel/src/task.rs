@@ -1838,7 +1838,10 @@ pub(crate) fn wake_task(tid: usize, result: usize) {
 /// authority (and the frames) fail-closed.
 pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
-    for bdf in crate::resource_registry::bdfs_owned_by(tid) {
+    let owned = crate::resource_registry::bdfs_owned_by(tid);
+    #[cfg(feature = "bench-counters")]
+    let owned_any = !owned.is_empty();
+    for bdf in owned {
         match crate::task::drivers::pcie_ecam::quiesce_function(bdf) {
             Ok(quiesced) if quiesced.changed => log::info!(
                 "[pcie] quiesced {:02x}:{:02x}.{} for tid {}: cmd=0x{:04x} bme=0 intx_disable=1 msi={} msix={}",
@@ -1869,6 +1872,10 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     }
     crate::resource_registry::release_bdfs_for(tid);
     crate::task::syscall::release_acked_frames(tid);
+    #[cfg(feature = "bench-counters")]
+    if owned_any {
+        crate::bench_counters::milestone("dma-retired", tid);
+    }
     true
 }
 

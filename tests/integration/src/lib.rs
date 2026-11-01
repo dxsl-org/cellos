@@ -18,6 +18,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub mod ppm;
+pub mod bench_milestones;
 pub use ppm::{pixel_region, read_ppm_frame};
 
 /// Announce a skip on the real stderr, bypassing libtest's output capture.

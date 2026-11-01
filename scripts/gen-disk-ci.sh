@@ -484,10 +484,18 @@ assert_policy_in_image "$KFS_TMP/fat-layout.txt"
 # kernel/src/embedded/init is never rewritten (gen_disk.ps1 copies app-init over
 # it; the embedded bytes are identical either way). The image copy below keeps
 # kernel/src/embedded/kernel_fs.img current for the lanes that read it directly.
-echo "==> building kernel (PIC, VIFS1 embedded)"
+echo "==> building kernel (PIC, VIFS1 embedded; extra features: ${CELLOS_KERNEL_FEATURES:-none})"
 cp "$REL/app-init" "$EMBED_DIR/init"
+# CELLOS_KERNEL_FEATURES (default empty) adds measurement-only kernel features,
+# e.g. `bench-counters` for the Phase 03 hotswap latency milestones. Such a
+# kernel lands on the production path: rebuild without it afterwards.
+KERNEL_FEATURE_ARGS=()
+if [[ -n "${CELLOS_KERNEL_FEATURES:-}" ]]; then
+    KERNEL_FEATURE_ARGS=(--features "$CELLOS_KERNEL_FEATURES")
+fi
 RUSTFLAGS="-C relocation-model=pic" EMBEDDED_OVERRIDE="$EMBED_DIR" \
-    cargo build --release -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc
+    cargo build --release -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc \
+    "${KERNEL_FEATURE_ARGS[@]}"
 
 # A concurrent test-hooks build clobbers the production kernel path. Both
 # build-test-hooks-ci.sh and build-aarch64-test-hooks-ci.sh build the test-hooks

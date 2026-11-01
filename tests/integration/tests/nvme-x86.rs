@@ -276,6 +276,9 @@ fn nvme_driver_restart_resets_and_serves_again_x86() {
         })
         .collect();
     println!("08C NVMe witness: {evidence:#?}");
+    if let Some(report) = vicell_integration_tests::bench_milestones::retire_report("nvme", "tcg", after) {
+        println!("P08-RETIRE-LATENCY {report}");
+    }
     drop(qemu);
     let _ = std::fs::remove_file(&disk);
 }

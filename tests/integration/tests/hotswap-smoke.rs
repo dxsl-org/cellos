@@ -73,6 +73,14 @@ fn expect(qemu: &mut QemuRunner, marker: &str, what: &str) {
         .unwrap_or_else(|e| panic!("{what}: {e}\n{}", qemu.dump()));
 }
 
+/// Phase 03 P09: on a `bench-counters` kernel, report the replacement's
+/// restore/Ready latency from its serial milestones (RV64 QEMU is TCG only).
+fn print_hotswap_latency(qemu: &QemuRunner, scenario: &str) {
+    if let Some(report) = vicell_integration_tests::bench_milestones::hotswap_report(scenario, "tcg", &qemu.dump()) {
+        println!("P09-HOTSWAP-LATENCY {report}");
+    }
+}
+
 /// The shell-level `hotswap` CLI drives the Supervisor through a full demo
 /// replacement while preserving the demo counter; each step is foreground.
 #[test]
@@ -102,6 +110,7 @@ fn hotswap_cli_preserves_demo_state() {
 
     qemu.send_line("bench hotswap-verify 5");
     expect(&mut qemu, "[hotswap-verify] PASS (v2 counter=5)", "state not preserved");
+    print_hotswap_latency(&qemu, "cli");
 }
 
 /// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
@@ -136,6 +145,7 @@ fn supervisor_hotswap_preserves_demo_state() {
 
     qemu.send_line("bench hotswap-verify 6");
     expect(&mut qemu, "[hotswap-verify] PASS (v2 counter=6)", "drained increment not applied");
+    print_hotswap_latency(&qemu, "supervisor_cached");
 }
 
 /// A non-CLI sender cannot coerce the supervisor into swapping a service.

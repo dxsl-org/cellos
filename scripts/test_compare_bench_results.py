@@ -783,5 +783,46 @@ class CountersAndDomainTests(unittest.TestCase):
             self.assertIn("BUDGET: FAIL", completed.stdout)
 
 
+class AbSummaryTests(unittest.TestCase):
+    AB = SCRIPTS / "bench_ab.py"
+
+    def ab(self, root: Path, baseline: list[str], candidate: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(self.AB), str(root), "--baseline", *baseline, "--candidate", *candidate],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False,
+        )
+
+    def test_matched_sets_report_median_change_per_observation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for order, (name, p99) in enumerate([("a1", 100), ("a2", 300), ("a3", 200), ("b1", 250), ("b2", 250)], 1):
+                write_capture(root, name, order, profile=X86, accelerator="kvm", stage_p99=p99)
+            completed = self.ab(root, ["a1", "a2", "a3"], ["b1", "b2"])
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            self.assertIn("sas/codec/stage_encode_request_x1000/p99: baseline=200.0 candidate=250.0 change=+25.0%", completed.stdout)
+            self.assertIn("QUALIFICATION: qualified machine", completed.stdout)
+
+    def test_mixed_groups_and_invalid_captures_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_capture(root, "kvm", 1, profile=X86, accelerator="kvm")
+            write_capture(root, "tcg", 2, profile=X86, accelerator="tcg")
+            write_capture(root, "other-cpu", 3, profile=X86, accelerator="kvm", cpu="Test CPU B")
+            for candidate in ("tcg", "other-cpu", "missing"):
+                completed = self.ab(root, ["kvm"], [candidate])
+                self.assertEqual(completed.returncode, 1, completed.stdout)
+                self.assertNotIn("change=", completed.stdout)
+
+    def test_unknown_governor_is_reported_unqualified(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_capture(root, "a", 1, profile=X86, accelerator="kvm", governor="unknown")
+            write_capture(root, "b", 2, profile=X86, accelerator="kvm", governor="unknown")
+            completed = self.ab(root, ["a"], ["b"])
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            self.assertIn("UNQUALIFIED (unknown: cpu_governor)", completed.stdout)
+
+
+
 if __name__ == "__main__":
     unittest.main()

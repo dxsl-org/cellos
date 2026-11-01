@@ -103,6 +103,8 @@ pub(crate) fn publish_role_or_rollback(
 pub fn register_block_driver(tid: usize) {
     BLOCK_DRIVER_CELL.store(tid, Ordering::Release);
     log::warn!("[driver_cell] block driver registered: tid={}", tid);
+    #[cfg(feature = "bench-counters")]
+    crate::bench_counters::milestone("block-ready", tid);
 }
 
 /// Record `tid` as the active NIC driver.  Overwrites any previous registration.
