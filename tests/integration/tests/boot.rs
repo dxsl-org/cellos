@@ -549,19 +549,26 @@ fn vfs_fat16_unlink() {
         qemu.dump()
     );
     std::thread::sleep(std::time::Duration::from_millis(500));
+    // Every wait is bounded to output after its own command: the boot log
+    // already holds unrelated "not found" text, and the shell echo of the
+    // typed `echo` line carries the file content marker.
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo PHASE_F_DEL > /data/del.txt");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("vcat /data/del.txt");
-    qemu.wait_for("PHASE_F_DEL", CMD_TIMEOUT)
+    qemu.wait_for_after("PHASE_F_DEL", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("file exists: {e}\n{}", qemu.dump()));
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("post-vcat prompt: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("rm /data/del.txt");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("rm: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("vcat /data/del.txt");
-    qemu.wait_for("not found", CMD_TIMEOUT)
+    qemu.wait_for_after("vcat: cannot read: /data/del.txt", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("file still exists after rm: {e}\n{}", qemu.dump()));
 }
 
@@ -715,17 +722,29 @@ fn vfs_fat16_recursive_rmdir() {
     );
     std::thread::sleep(std::time::Duration::from_millis(500));
 
+    // Every wait is bounded to output after its own command: the boot log
+    // already holds unrelated "not found" text and earlier prompts.
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("mkdir /data/rr");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("mkdir: {e}\n{}", qemu.dump()));
-    qemu.send_line("echo X > /data/rr/f.txt");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("echo RR_PRESENT > /data/rr/f.txt");
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
-    qemu.send_line("rm -r /data/rr");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("rm -r: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("vcat /data/rr/f.txt");
-    qemu.wait_for("not found", CMD_TIMEOUT)
+    qemu.wait_for_after("RR_PRESENT", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("file created before rm -r: {e}\n{}", qemu.dump()));
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("post-vcat prompt: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("rm -r /data/rr");
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("rm -r: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vcat /data/rr/f.txt");
+    qemu.wait_for_after("vcat: cannot read: /data/rr/f.txt", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("tree not deleted: {e}\n{}", qemu.dump()));
 }
 
@@ -1950,10 +1969,10 @@ fn shell_ready_hypha_burst_is_lossless() {
         .unwrap_or_else(|e| panic!("shell readiness banner: {e}\n{}", qemu.dump()));
 
     qemu.send_bytes(b"hypha\n");
-    // The launch-edge policy intentionally denies shell -> /bin/hypha. The
-    // complete command in this diagnostic proves every byte reached the parser;
-    // a truncated burst produces a different command name or stalls.
-    qemu.wait_for("shell: command not found: hypha", CMD_TIMEOUT)
+    // `/bin/hypha` is a reviewed shell launch edge, so Cellbox starts it and
+    // the agent prints its banner. Only the exact command name reaches that
+    // binary; a truncated burst resolves a different path or stalls.
+    qemu.wait_for("Cellos AI agent", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "first shell burst was dropped or stalled: {e}\n--- output ---\n{}",

@@ -223,21 +223,23 @@ fn handoff_rv64_uses_dtb_memory_size() {
         return;
     }
     let qemu = QemuRunner::boot_rv64_with_memory(&rv64_kernel_path(), "2G");
-    qemu.wait_for("[boot] allocator range", HANDOFF_TIMEOUT)
+    qemu.wait_for("[boot] allocator: ", HANDOFF_TIMEOUT)
         .unwrap_or_else(|e| panic!("{e}\n--- output ---\n{}", qemu.dump()));
     qemu.wait_for("Heap initialized", HANDOFF_TIMEOUT)
         .unwrap_or_else(|e| panic!("{e}\n--- output ---\n{}", qemu.dump()));
 
+    // `[boot] allocator: <n> usable range(s), <frames> frames (<MiB> MiB)`
     let output = qemu.dump();
     let marker = output
         .lines()
-        .find(|line| line.contains("[boot] allocator range"))
+        .find(|line| line.contains("[boot] allocator: "))
         .expect("allocator marker present");
-    let managed_bytes = marker
-        .split_once('(')
-        .and_then(|(_, suffix)| suffix.split_once(" bytes)"))
-        .and_then(|(bytes, _)| bytes.parse::<usize>().ok())
+    let managed_frames = marker
+        .split_once("usable range(s), ")
+        .and_then(|(_, suffix)| suffix.split_once(" frames ("))
+        .and_then(|(frames, _)| frames.parse::<usize>().ok())
         .unwrap_or_else(|| panic!("invalid allocator marker: {marker}"));
+    let managed_bytes = managed_frames * 4096;
     eprintln!("{marker}");
     assert!(
         managed_bytes > 1024 * 1024 * 1024,

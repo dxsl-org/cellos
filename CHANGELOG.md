@@ -7,6 +7,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **`rm -r /data/...` works again.** Phase 09C moved `/data` to CellosFS, whose `rmdir_recursive` was a stub returning `false`. It is now a bounded walk (32 levels, 4096 entries) that collects the tree first, then deletes child-first, syncing after each entry. `RmdirRecursive` under `/srv` is refused, because a subtree has no namespace reservation.
+- **Refused session launches are logged.** When the loader refuses a `PrepareChild` launch (Cellbox's foreground route), the kernel logs `[loader] PrepareChild refused: caller=… path=… error=…`. Before, only the shell's mapped status was visible.
+- **AArch64 boot suite passes 11/11.**
+  - `periph-demo`, `httpd` and `tier2-smoke` run in the foreground, since Cellbox refuses `cmd &` on a session shell.
+  - `input-test` reads its own terminal session when it has one.
+  - `gen-disk-aarch64-ci.sh` refreshes `kernel/src/embedded-aarch64/{init,kernel_fs.img}`, as CI does.
+  - The prod-refusal image starts `/bin/input`.
+- **x86 early decisions are visible.** `[acpi] gates: …` and `[x86-gate] timer CLOSED …` are written through the early UART. Before, they went through `log::` before the x86 logger existed and were dropped. The HCL R1/R2 rows now name symbols instead of stale line numbers. R1 no longer claims that polled RX works at runtime with the IRQ closed.
+- **`check-board-configs.sh` passes.** x86 IDT dispatch takes `vi_ipi_service` from `hal_arch_trait::kernel_abi` (now declared for x86_64 too) instead of a local `extern "Rust"` block. `pi_monitor_mmu_init` is now compiled for `board-rpi4`, matching the Pi EL2 monitor gate.
+- **Tests that could not fail now check something.**
+  - `vfs_fat16_unlink` and `vfs_fat16_recursive_rmdir` wait for the exact `vcat: cannot read: <path>` after a fresh checkpoint. They had matched "not found" anywhere in the boot log, which hid the `rm -r` regression.
+  - The vfs-smp source-text tests are removed; the QEMU SMP markers cover that behaviour.
+  - `shell_ready_hypha_burst_is_lossless` waits for the hypha banner, since `/bin/hypha` is an allowed launch.
+  - `handoff_rv64_uses_dtb_memory_size` parses the current `[boot] allocator: … frames` line.
 - **USB keyboards reach the shell again.** The xHCI and DWC2 HID cells registered with the input service via `TrySend`. Since the input service polls instead of blocking in `Recv`, every registration was refused, so decoded keys were never forwarded. Registration now uses a queued `sys_send`, like key frames already do. The `xhci-x86` key test now checks the exact command line (`qq`) and Cellbox's launch-edge denial, not the old shell's `command not found` wording.
 - **x86 UEFI (OVMF) boots to `Cellos >` again.** The frame allocator tracked at most 8 disjoint usable ranges, and the Limine map under OVMF has more, so boot panicked at `memory/frame.rs` ("memory map has more usable ranges than the allocator tracks (9 > 8)"). `MAX_MANAGED_RANGES` now equals `boot::MAX_MEMORY_MAP_ENTRIES` (64), the size of every converted boot map, so any map the kernel accepts is managed; a larger input still halts. OVMF q35 at 256M and 1G and SeaBIOS q35 reach `Cellos >`. Host tests cover a full 64-range map and the 65-range halt.
 - **AArch64 image boots to `Cellos >` again.** Two causes:
