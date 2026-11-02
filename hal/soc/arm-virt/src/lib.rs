@@ -79,6 +79,10 @@ pub struct ArmVirtProfile {
     pub slug: &'static str,
     pub gic_distributor: MmioRange,
     pub gic_cpu: MmioRange,
+    /// GICv2 virtual interface control (GICH), present with `virtualization=on`.
+    pub gic_hyp: MmioRange,
+    /// GICv2 virtual CPU interface (GICV) a guest's GICC is mapped onto.
+    pub gic_vcpu: MmioRange,
     pub gic_map: MmioRange,
     pub uart: IrqMmio,
     pub rtc: MmioRange,
@@ -100,6 +104,8 @@ impl ArmVirtProfile {
         let ranges = [
             self.gic_distributor,
             self.gic_cpu,
+            self.gic_hyp,
+            self.gic_vcpu,
             self.gic_map,
             self.uart.mmio,
             self.rtc,
@@ -126,10 +132,16 @@ impl ArmVirtProfile {
         if virtio_region.size == 0 {
             return Err(ValidationError::InvalidVirtioLayout);
         }
-        if self.gic_distributor.base < self.gic_map.base
-            || self.gic_distributor.end() > self.gic_map.end()
-            || self.gic_cpu.base < self.gic_map.base
-            || self.gic_cpu.end() > self.gic_map.end()
+        let outside_gic_map =
+            |range: MmioRange| range.base < self.gic_map.base || range.end() > self.gic_map.end();
+        if [
+            self.gic_distributor,
+            self.gic_cpu,
+            self.gic_hyp,
+            self.gic_vcpu,
+        ]
+        .into_iter()
+        .any(outside_gic_map)
         {
             return Err(ValidationError::GicOutsideMappedRange);
         }
@@ -153,6 +165,14 @@ pub const QEMU_ARM_VIRT: ArmVirtProfile = ArmVirtProfile {
     },
     gic_cpu: MmioRange {
         base: 0x0801_0000,
+        size: 0x0001_0000,
+    },
+    gic_hyp: MmioRange {
+        base: 0x0803_0000,
+        size: 0x0001_0000,
+    },
+    gic_vcpu: MmioRange {
+        base: 0x0804_0000,
         size: 0x0001_0000,
     },
     gic_map: MmioRange {

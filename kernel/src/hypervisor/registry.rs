@@ -27,7 +27,7 @@ use crate::memory::stage2::Stage2Table;
 #[cfg(target_arch = "aarch64")]
 use api::hypervisor::ViVmExit as ApiVmExit;
 #[cfg(target_arch = "aarch64")]
-use hal::aarch64::backend::{ArmEl2Monitor, El2Monitor};
+use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, VgicWindows};
 #[cfg(target_arch = "aarch64")]
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
@@ -45,6 +45,28 @@ use hal::ViVmExit as HalVmExit;
 #[cfg(target_arch = "aarch64")]
 const PI_MONITOR: bool = El2Monitor::PRESENT;
 
+/// The board's GICv2 virtualization windows; `None` leaves guests without GICH
+/// list-register injection or GICV passthrough (the Pi 3 monitor uses
+/// `HCR_EL2.VI` instead).
+#[cfg(target_arch = "aarch64")]
+const VGIC: Option<VgicWindows> = <Board as ArmResources>::VGIC;
+
+/// Guest IPA of the guest's GICC, as the hypervisor cell's DTB declares it.
+#[cfg(target_arch = "aarch64")]
+const GUEST_GICC_IPA: u64 = 0x0801_0000;
+
+/// Guest virtual-timer PPI (the guest DTB's `arm,armv8-timer` virtual entry).
+/// Level-sensitive: it is sampled before every entry, never queued.
+#[cfg(target_arch = "aarch64")]
+const GUEST_VTIMER_PPI: u32 = 27;
+
+/// The guest's virtual timer line, against the virtual count with the current
+/// `CNTVOFF_EL2` applied (see [`vgic::vtimer_line_asserted`]).
+#[cfg(target_arch = "aarch64")]
+fn guest_vtimer_asserted(ctl: u64, cval: u64) -> bool {
+    vgic::vtimer_line_asserted(ctl, cval, hal::aarch64::timer::virtual_count_now())
+}
+
 // ── VM entry ──────────────────────────────────────────────────────────────────
 
 #[cfg(target_arch = "aarch64")]
@@ -58,6 +80,9 @@ struct Vm {
     /// coalescing bitset — see `pending_irqs::PendingIrqs` for why this isn't
     /// a queue.
     vcpu_irqs: Vec<PendingIrqs>,
+    /// Per-vCPU GICv2 virtual CPU interface state (VMCR, APR, Active LRs),
+    /// installed in GICH around each guest run on hosts without the Pi monitor.
+    vcpu_vgic: Vec<vgic::CpuIfState>,
     // reason: the Pi monitor's guest entry passes this to `monitor::run`; on the
     // other AArch64 hosts the local `vmid` still carries the Stage-2 activation,
     // so the field stays reserved for VM introspection until they read it too.
@@ -152,11 +177,20 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
                 log::error!("[hv] create_vm: guest RAM stage-2 map failed: {:?}", error);
                 ViError::OutOfMemory
             })?;
-        // Only QEMU virt supplies GICV/GICH. Pi GICC/GICD are software-MMIO
-        // devices and must remain unmapped Stage-2 holes.
-        if !PI_MONITOR {
+        // GICV is passed through only on boards that declare it (QEMU virt).
+        // Pi GICC/GICD are software-MMIO devices and must remain unmapped
+        // Stage-2 holes. GICV is writable: the guest enables its interface
+        // (GICC_CTLR, GICC_PMR) and completes every interrupt (GICC_EOIR)
+        // through it, and those writes reach only the running vCPU's GICH
+        // state, which `vgic::CpuIfState` switches per vCPU.
+        if let Some(windows) = VGIC {
             table
-                .map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
+                .map_mmio_passthrough(
+                    GUEST_GICC_IPA,
+                    windows.gicv.base as u64,
+                    windows.gicv.size / PAGE_SIZE,
+                    true,
+                )
                 .map_err(|error| {
                     log::error!("[hv] create_vm: GICV stage-2 map failed: {:?}", error);
                     ViError::OutOfMemory
@@ -168,9 +202,10 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         unsafe {
             enable_stage2(vmid, table.root_pa());
         }
-        if !PI_MONITOR {
+        if let Some(windows) = VGIC {
+            // SAFETY: EL2 host; the board's GICH window is kernel-mapped.
             unsafe {
-                vgic::enable();
+                vgic::enable(windows.gich_base);
             }
         }
 
@@ -189,11 +224,11 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
                     guest_pages,
                     vcpus: Vec::new(),
                     vcpu_irqs: Vec::new(),
+                    vcpu_vgic: Vec::new(),
                     vmid,
                     entry_flushed: false,
                 },
             );
-            let _ = PAGE_SIZE; // suppress unused warning
             id
         };
         Ok(vm_id)
@@ -242,6 +277,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
 
         vm.vcpus.push(AArch64Vcpu::new(entry_pc));
         vm.vcpu_irqs.push(PendingIrqs::new());
+        vm.vcpu_vgic.push(vgic::CpuIfState::new());
         Ok(vcpu_id)
     }
     #[cfg(target_arch = "x86_64")]
@@ -317,18 +353,22 @@ pub unsafe fn run_vcpu(
                     .and_then(PendingIrqs::take_lowest)
                     .is_some();
             let mut num_loaded = 0usize;
-            if !PI_MONITOR {
-                if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                    while num_loaded < vgic::MAX_LRS {
-                        let Some(intid) = q.take_lowest() else {
-                            break;
-                        };
-                        // SAFETY: EL2; GICH MMIO at 0x0803_0000; num_loaded < MAX_LRS.
-                        unsafe {
-                            vgic::load_lr(num_loaded, intid);
-                        }
-                        num_loaded += 1;
+            if let Some(windows) = VGIC {
+                if let (Some(q), Some(cpu_if), Some(vcpu)) = (
+                    vm.vcpu_irqs.get_mut(vcpu_idx),
+                    vm.vcpu_vgic.get_mut(vcpu_idx),
+                    vm.vcpus.get(vcpu_idx),
+                ) {
+                    // The guest's timer is level-triggered and only its saved
+                    // CNTV state says whether the line is up, so sample it at
+                    // every entry. Injecting it only on WFI starved a CPU-bound
+                    // guest of ticks: it never waited, so it never got one.
+                    if guest_vtimer_asserted(vcpu.g_cntv_ctl, vcpu.g_cntv_cval) {
+                        q.set(GUEST_VTIMER_PPI);
                     }
+                    // SAFETY: EL2; the board's GICH window is kernel-mapped; no
+                    // vCPU running.
+                    num_loaded = unsafe { cpu_if.load(windows.gich_base, || q.take_lowest()) };
                 }
             }
 
@@ -422,24 +462,24 @@ pub unsafe fn run_vcpu(
                 // vcpu borrow ends here (NLL + nested block)
             };
 
-            // ── Phase 09: drain GICH LRs after exit ─────────────────────────────
-            // Re-mark pending any LRs still in Active state (guest was preempted
-            // mid-handling). SAFETY: no vCPU running; EL2; GICH MMIO accessible.
-            if !PI_MONITOR && num_loaded > 0 {
-                let elrsr = unsafe { vgic::read_elrsr() };
-                for n in 0..num_loaded {
-                    if (elrsr >> n) & 1 == 0 {
-                        // LR occupied — re-mark pending if Active or Pending+Active.
-                        let lr_val = unsafe { vgic::read_lr(n) };
-                        if (lr_val >> 28) & 3 != 0 {
-                            if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                                q.set(lr_val & 0x3FF);
-                            }
-                        }
-                    }
+            // ── Phase 09: take the vCPU's GICH state back after exit ────────────
+            // Unacknowledged edge interrupts return to the pending set; the timer
+            // line is re-sampled at the next entry instead. Active ones (guest
+            // preempted mid-handler) stay with the vCPU's interface state.
+            // SAFETY: no vCPU running; EL2; the board's GICH window is mapped.
+            if let Some(windows) = VGIC {
+                if let (Some(q), Some(cpu_if)) = (
+                    vm.vcpu_irqs.get_mut(vcpu_idx),
+                    vm.vcpu_vgic.get_mut(vcpu_idx),
+                ) {
                     unsafe {
-                        vgic::clear_lr(n);
-                    }
+                        cpu_if.save(
+                            windows.gich_base,
+                            num_loaded,
+                            |intid| intid == GUEST_VTIMER_PPI,
+                            |intid| q.set(intid),
+                        )
+                    };
                 }
             }
 

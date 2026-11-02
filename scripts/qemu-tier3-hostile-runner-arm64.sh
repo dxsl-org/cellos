@@ -50,7 +50,10 @@ if [ ! -f "$KERNEL" ] || [ "${BUILD_HOSTILE_IMAGE:-0}" == "1" ]; then
     bash scripts/prepare-tier3-hostile-initramfs-arm64.sh
     INITRD_OVERRIDE="build/tier3-hostile-initramfs-arm64.cpio.gz" bash scripts/make-hypervisor-fs.sh --skip-fetch
     RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg" EMBEDDED_OVERRIDE="kernel/src/embedded-hv" cargo build --release -p cellos-kernel --features qemu-virt-1g --target aarch64-unknown-none-softfloat
-    bash scripts/format-disk-arm.sh "$DISK"
+    # The hypervisor disk, as in the CI machinery lane: its P1 carries the
+    # guest_disk.img the hypervisor cell serves as the guest's /dev/vda. On the
+    # plain format-disk-arm.sh layout this kernel never reached the hypervisor.
+    bash scripts/format-disk-hv-arm.sh "$DISK"
 fi
 
 if [[ ! -f "$KERNEL" ]] || [[ ! -f "$DISK" ]]; then

@@ -6,7 +6,7 @@ use hal_soc_bcm27xx::BCM2711;
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
     MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
-    SecondaryStart,
+    SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
@@ -173,6 +173,7 @@ impl ArmResources for Bcm2711 {
     ];
 
     const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = None;
+    const VGIC: Option<VgicWindows> = None;
     const GPIO_MMIO_BASE: usize = BCM2711.mmio.gpio_base;
     const DWC2_WINDOW: Option<MmioWindow> = None;
     const DISPLAY: Option<DisplayFirmware> = None;

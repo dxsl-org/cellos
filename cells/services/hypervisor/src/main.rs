@@ -104,7 +104,8 @@ mod pl011;
 mod psci;
 #[cfg(target_arch = "aarch64")]
 mod run_loop;
-#[cfg(target_arch = "aarch64")]
+// QEMU virt: the kernel raises the guest timer line from the saved CNTV state.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 mod timer;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod virtio_blk;

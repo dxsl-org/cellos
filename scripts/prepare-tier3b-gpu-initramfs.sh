@@ -13,8 +13,10 @@ done
 
 cargo build --manifest-path "$MANIFEST" --target "$TARGET" --release
 PYTHON_BIN="${PYTHON_BIN:-python}"
+# The aarch64 guest profile boots `rdinit=/bin/pi-guest-init`
+# (boot_arm_profile.rs RDINIT); /bin/sh stays the stock busybox link.
 "$PYTHON_BIN" tools/repack-initramfs.py "$CACHE_DIR/initramfs-virt" "$OUTPUT" \
-    --add bin/sh tests/guests/tier3b-gpu-probe/guest-init.sh 100755 \
+    --add bin/pi-guest-init tests/guests/tier3b-gpu-probe/guest-init.sh 100755 \
     --add tier3b-gpu-probe "$PROBE" 100755 \
     --add modloop.squashfs "$CACHE_DIR/modloop-virt" 100644
 echo "[tier3b-initramfs] created $OUTPUT"

@@ -16,7 +16,7 @@ use hal_soc_bcm27xx::BCM2837;
 use super::{
     ArmEl2Monitor, ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware,
     DtbPolicy, GuestRunProbe, MmioMap, MmioSpan, MmioWindow, NoIommu, PlatformAnnounce,
-    PlatformFacts, SdhciFacts, SecondaryStart,
+    PlatformFacts, SdhciFacts, SecondaryStart, VgicWindows,
 };
 use crate::aarch64::trap::TrapFrame;
 use crate::aarch64::vcpu::AArch64Vcpu;
@@ -220,6 +220,7 @@ impl ArmResources for Bcm2837 {
     ];
 
     const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = None;
+    const VGIC: Option<VgicWindows> = None;
     const GPIO_MMIO_BASE: usize = BCM2837.mmio.gpio_base;
     const DWC2_WINDOW: Option<MmioWindow> = Some(MmioWindow {
         base: BCM2837.mmio.dwc2_base,

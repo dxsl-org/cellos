@@ -7,7 +7,7 @@ use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
     MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
-    SecondaryStart,
+    SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
@@ -185,6 +185,13 @@ impl ArmResources for QemuVirt {
     ];
 
     const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = Some(QEMU_ARM_VIRT.virtio);
+    const VGIC: Option<VgicWindows> = Some(VgicWindows {
+        gich_base: QEMU_ARM_VIRT.gic_hyp.base,
+        gicv: MmioWindow {
+            base: QEMU_ARM_VIRT.gic_vcpu.base,
+            size: QEMU_ARM_VIRT.gic_vcpu.size,
+        },
+    });
     const GPIO_MMIO_BASE: usize = QEMU_ARM_VIRT.gpio.mmio.base;
     const DWC2_WINDOW: Option<MmioWindow> = None;
     const DISPLAY: Option<DisplayFirmware> = None;

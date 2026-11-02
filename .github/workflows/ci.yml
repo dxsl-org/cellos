@@ -1715,6 +1715,11 @@ jobs:
           # tests had drifted from the session — they predate the stat that
           # reserves the buffer — and nothing noticed while they were unreachable.
           cargo test -p ostd --target x86_64-unknown-linux-gnu
+          # The aarch64 vGIC's list-register planning and guest timer line are
+          # pure functions in `hal-arm` (`aarch64/vgic.rs`), and the QEMU virt
+          # layout (GICH/GICV windows included) is validated in
+          # `hal-soc-arm-virt`; both crates compile for the host.
+          cargo test -p hal-arm -p hal-soc-arm-virt --target x86_64-unknown-linux-gnu
           # Suites that already passed but that no job ran: pure-logic crates
           # whose tests need neither the host environment (no temp files, clocks,
           # sockets or RNG — checked) nor a bare-metal target. They were one

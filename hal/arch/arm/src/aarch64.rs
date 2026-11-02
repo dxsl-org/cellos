@@ -43,7 +43,8 @@ pub mod trap_el2;
 pub mod uart_pl011;
 #[cfg(target_arch = "aarch64")]
 pub mod vcpu;
-#[cfg(target_arch = "aarch64")]
+// Its list-register planning is pure and host-tested; the GICH accessors are
+// plain volatile MMIO, so the module compiles for every target.
 pub mod vgic;
 
 #[cfg(target_arch = "aarch64")]

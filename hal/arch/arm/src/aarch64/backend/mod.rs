@@ -170,6 +170,12 @@ pub trait ArmResources {
     /// VirtIO MMIO transport window, when the board has one.
     const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout>;
 
+    /// GICv2 virtualization windows the EL2 host's vGIC drives, when the board
+    /// has them and its host stays at EL2. `None`: no GICH list-register
+    /// injection and no GICV passthrough (the Pi 3 monitor injects through
+    /// `HCR_EL2.VI`; the Pi 4 has no guest vGIC yet).
+    const VGIC: Option<VgicWindows>;
+
     /// GPIO controller window whose owner receives GPIO IRQ notifications.
     const GPIO_MMIO_BASE: usize;
 
@@ -235,6 +241,14 @@ pub struct MmioMap {
 pub struct MmioWindow {
     pub base: usize,
     pub size: usize,
+}
+
+/// GICv2 virtualization extension windows (GIC-400 GICH and GICV).
+pub struct VgicWindows {
+    /// Virtual interface control: list registers, VMCR, APR.
+    pub gich_base: usize,
+    /// Virtual CPU interface, passed through to the guest's GICC.
+    pub gicv: MmioWindow,
 }
 
 /// Firmware framebuffer path.

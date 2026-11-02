@@ -18,3 +18,18 @@ fn qemu_layout_preserves_existing_public_windows() {
     assert_eq!(QEMU_ARM_VIRT.gpio.mmio.base, 0x0903_0000);
     assert_eq!(QEMU_ARM_VIRT.pcie_ecam_bus0.base, 0x3F00_0000);
 }
+
+#[test]
+fn qemu_layout_has_gicv2_virtualization_windows() {
+    // QEMU `virt` VIRT_GIC_HYP / VIRT_GIC_VCPU (`virtualization=on`).
+    assert_eq!(QEMU_ARM_VIRT.gic_hyp.base, 0x0803_0000);
+    assert_eq!(QEMU_ARM_VIRT.gic_vcpu.base, 0x0804_0000);
+    assert_eq!(QEMU_ARM_VIRT.gic_vcpu.size, 0x0001_0000);
+
+    let mut outside = QEMU_ARM_VIRT;
+    outside.gic_vcpu.base = QEMU_ARM_VIRT.gic_map.end();
+    assert_eq!(
+        outside.validate(),
+        Err(crate::ValidationError::GicOutsideMappedRange)
+    );
+}

@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **AArch64 QEMU virt guests receive interrupts, and the hypervisor-machinery lane reaches the guest shell.**
+  - **Cause:** GICV was mapped read-only in stage 2, so the guest's `GICC_CTLR`/`PMR`/`EOIR` writes were dropped. List registers were also loaded as Group 1, which Linux never enables. No device completion was delivered, and the guest hung at its first disk read.
+  - **GIC fix:** GICV is now writable. Interrupts are loaded as Group 0. `GICH_VMCR`, `GICH_APR` and active list registers are saved and restored per vCPU (`vgic::CpuIfState`).
+  - **Guest timer:** it is level-sensitive. Before every entry it is sampled from the guest's timer state (`CNTVCT`) and never queued. Before, it was injected only on WFI, which starved CPU-bound guests of ticks.
+  - **Board scope:** the windows come from `ArmResources::VGIC`, which only QEMU virt sets, so the Pi boards map nothing.
+  - **Tests:** the list-register planning and the timer check are pure functions, host-tested in CI.
+  - **Test images:** the GPU and hostile initramfs builders install their init at `/bin/pi-guest-init`. The ARM64 hostile runner builds the hypervisor disk and now runs every probe stimulus.
 - **The aarch64 hypervisor-machinery lane passes again.** Since `7e4491296` the virt guest boots `rdinit=/bin/pi-guest-init`, but `make-hypervisor-fs.sh` still packed the stock Alpine `initramfs-virt`, which lacks it. The guest therefore panicked with `VFS: Unable to mount root fs`, in CI as well as locally. The script now packs the init and its ext4 modules with `tools/prepare-rpi3-guest-initramfs.py` (deterministic cpio newc), and stops with an error if `modloop-virt` or `unsquashfs` is missing. Both hypervisor CI jobs install `squashfs-tools`.
 - **`rm -r /data/...` works again.** Phase 09C moved `/data` to CellosFS, whose `rmdir_recursive` was a stub returning `false`. It is now a bounded walk (32 levels, 4096 entries) that collects the tree first, then deletes child-first, syncing after each entry. `RmdirRecursive` under `/srv` is refused, because a subtree has no namespace reservation.
 - **Refused session launches are logged.** When the loader refuses a `PrepareChild` launch (Cellbox's foreground route), the kernel logs `[loader] PrepareChild refused: caller=… path=… error=…`. Before, only the shell's mapped status was visible.

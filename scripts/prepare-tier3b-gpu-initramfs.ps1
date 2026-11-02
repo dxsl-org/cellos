@@ -21,8 +21,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "Tier3b guest probe build failed."
 }
 
+# The aarch64 guest profile boots `rdinit=/bin/pi-guest-init`
+# (boot_arm_profile.rs RDINIT); /bin/sh stays the stock busybox link.
 python tools/repack-initramfs.py $baseInitramfs $Output `
-    --add bin/sh tests/guests/tier3b-gpu-probe/guest-init.sh 100755 `
+    --add bin/pi-guest-init tests/guests/tier3b-gpu-probe/guest-init.sh 100755 `
     --add tier3b-gpu-probe $probe 100755 `
     --add modloop.squashfs $modloop 100644
 if ($LASTEXITCODE -ne 0) {

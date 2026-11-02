@@ -33,6 +33,18 @@ pub fn counter_now() -> u64 {
     value
 }
 
+/// The virtual counter (`CNTVCT_EL0` = `CNTPCT_EL0` − `CNTVOFF_EL2`): the count
+/// a guest's virtual timer compares `CNTV_CVAL` against, read with the
+/// current virtual offset.
+pub fn virtual_count_now() -> u64 {
+    let value: u64;
+    // SAFETY: CNTVCT_EL0 is readable from EL1/EL2 and modifies nothing.
+    unsafe {
+        core::arch::asm!("mrs {}, cntvct_el0", out(reg) value, options(nomem, nostack));
+    }
+    value
+}
+
 /// The system counter's frequency in Hz (`CNTFRQ_EL0`).
 ///
 /// Absent firmware that reports a frequency (0) falls back to QEMU virt's

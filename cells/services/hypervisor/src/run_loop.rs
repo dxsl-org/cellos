@@ -7,11 +7,13 @@ extern crate alloc;
 
 #[cfg(feature = "board-rpi3")]
 use crate::gicc::Gicc;
+#[cfg(feature = "board-rpi3")]
+use crate::timer;
 use crate::{
     gicd::Gicd,
     net_backend,
     pl011::Pl011,
-    psci, timer,
+    psci,
     virtio_blk::BlkDisk,
     virtio_console::Console,
     virtio_gpu::GpuDev,
@@ -189,8 +191,6 @@ pub fn run(
 
             // ── WFI — poll guest RX; Pi timer IRQ follows its deadline ───────
             ViVmExit::Wfi => {
-                #[cfg(not(feature = "board-rpi3"))]
-                timer::inject_timer_irq(vm_id, vcpu_id);
                 gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 // Input first: it is the interactive path, and the RX poll below
                 // is an IPC round trip the guest's echo should not wait behind.
