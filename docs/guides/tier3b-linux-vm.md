@@ -25,7 +25,7 @@ Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightwe
 
 | Platform | Status | Hypervisor | Notes |
 |----------|--------|-----------|-------|
-| **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console. Under QEMU-TCG only the machinery half is asserted (`[hv] vCPU ready`); the strict `/ #` boot needs KVM/real hardware |
+| **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console. The QEMU-TCG machinery lane asserts the guest's `~ #` shell prompt |
 | **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the primary application gate `scripts/qemu-x86-python-gate.sh` installs CPython in a 256 MiB Alpine guest and processes JSON into CSV in separate Linux processes. Nginx remains a secondary regression in the same CI job. Intel VT-x guest execution is not implemented |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
@@ -252,9 +252,11 @@ RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg" \
   cargo build --release -p cellos-kernel --features qemu-virt-1g \
   --target aarch64-unknown-none-softfloat -Z build-std=core,alloc
 
-# Boot it. The guest is already wired to the console, so Alpine's own shell is
-# what you type into (Windows: .\run-hypervisor-arm.ps1):
-HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh   # needs KVM/real ARM64
+# Boot it. The guest is wired to the console, so interactively
+# (Windows: .\run-hypervisor-arm.ps1) Alpine's own shell is what you type into.
+# The smoke script checks the same boot and stops QEMU at the guest's "~ #":
+HV_SMOKE_MODE=machinery bash scripts/qemu-hypervisor-smoke.sh   # QEMU-TCG
+HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh        # KVM on real ARM64
 ```
 
 The x86 walkthrough is the same shape with `scripts/make-hypervisor-fs-x86.sh` /
@@ -343,8 +345,8 @@ hypervisor cell. Passing is emulator evidence — it does not qualify physical h
 
 | Lane | Command | Asserts | CI job |
 |------|---------|---------|--------|
-| ARM64 machinery | `HV_SMOKE_MODE=machinery bash scripts/qemu-hypervisor-smoke.sh` | `[hv] vCPU ready`; tolerates only the documented TCG address-size fault | `qemu-hypervisor-machinery` |
-| ARM64 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh` | Alpine `/ #` prompt (switches to KVM — needs real hardware) | `qemu-hypervisor-boot-kvm` (gated on a self-hosted runner) |
+| ARM64 machinery | `HV_SMOKE_MODE=machinery bash scripts/qemu-hypervisor-smoke.sh` | Alpine guest `~ #` prompt under QEMU-TCG (no panic, cell fault or `[hv]` error) | `qemu-hypervisor-machinery` |
+| ARM64 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke.sh` | Same `~ #` gate with `-enable-kvm -cpu host` (needs real hardware) | `qemu-hypervisor-boot-kvm` (gated on a self-hosted runner) |
 | x86 boot-to-shell | `HV_SMOKE_MODE=boot bash scripts/qemu-hypervisor-smoke-x86.sh` | Alpine `/ #` prompt | `qemu-x86-hypervisor-boot` |
 | x86 in-guest CPython (primary application) | `bash scripts/qemu-x86-python-gate.sh` | 256 MiB Alpine profile, `apk add python3` via HTTPS from Alpine v3.21, exact JSON→CSV aggregation and a separate Python consumer process | `qemu-x86-tier3-python` |
 | x86 in-guest nginx (secondary regression) | `bash scripts/qemu-x86-nginx-gate.sh` | `apk add nginx`, forked master + worker and in-guest HTTP fetch | `qemu-x86-tier3-python` (second step) |

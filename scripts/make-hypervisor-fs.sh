@@ -157,7 +157,7 @@ elif [[ -n "${INITRD_OVERRIDE:-}" ]]; then
 else
     # The guest profile (boot_arm_profile.rs RDINIT) boots `rdinit=/bin/pi-guest-init`,
     # which the stock initramfs-virt lacks: the guest would panic with "Unable to
-    # mount root fs". Pack the same init and ext4 modules the RPi3 persistent
+    # mount root fs". Pack the same init and ext4 modules the Pi persistent
     # profile uses; the repack is deterministic (fixed inode order, gzip mtime 0).
     [[ -s "$ALPINE_CACHE/modloop-virt" ]] || {
         echo "ERROR: guest init needs Alpine modloop-virt for ext4: $ALPINE_CACHE/modloop-virt" >&2
@@ -169,9 +169,9 @@ else
         exit 1
     }
     INITRD="$STAGING/initrd-hv-guest.gz"
-    "$PYTHON_BIN" tools/prepare-rpi3-guest-initramfs.py \
+    "$PYTHON_BIN" tools/prepare-guest-initramfs.py \
         "$ALPINE_CACHE/initramfs-virt" "$ALPINE_CACHE/modloop-virt" \
-        scripts/rpi3-guest-init "$INITRD"
+        scripts/pi-guest-init "$INITRD"
 fi
 
 # Alpine ≥3.20 ships vmlinuz-virt as an EFI zboot wrapper ("MZ" + "zimg" +

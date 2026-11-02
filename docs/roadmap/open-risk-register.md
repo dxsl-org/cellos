@@ -226,9 +226,9 @@ those remain fail-closed production gates.
   compatibility remain future capabilities; Tier 1 must not be described as
   POSIX-complete.
 - The historical ARM64 hypervisor machinery intermittency was fixed at the
-  EL2 IRQ/preemption boundary. Hosted run `33486590595:1` passes the retained
-  TCG machinery oracle; full logs remain diagnostic evidence for distinguishing
-  the narrowly tolerated nested-walk signature from functional failures.
+  EL2 IRQ/preemption boundary. Since virtual interrupt delivery was fixed
+  (`287377e5d`) the TCG machinery lane requires the Alpine guest's `~ #` shell
+  prompt; it no longer tolerates a nested-walk fault signature.
   Hosted-runner mirror failures remain infrastructure blockers, not runtime
   passes or functional failures.
 - Several additional physical hardware lanes remain external-gated. Compile/

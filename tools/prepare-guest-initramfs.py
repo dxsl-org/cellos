@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add the pinned Alpine modloop's ext4 drivers and Pi guest init to initramfs."""
+"""Add the pinned Alpine modloop's ext4 drivers and the guest init to initramfs."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ MODULES = (
 
 def main() -> None:
     if len(sys.argv) != 5:
-        sys.exit("usage: prepare-rpi3-guest-initramfs.py INITRAMFS MODLOOP INIT OUTPUT")
+        sys.exit("usage: prepare-guest-initramfs.py INITRAMFS MODLOOP INIT OUTPUT")
     source, modloop, init_script, output = map(Path, sys.argv[1:])
     entries = repack.read_archive(source)
     by_name = {entry.name: entry for entry in entries}

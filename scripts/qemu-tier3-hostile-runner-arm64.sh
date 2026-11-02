@@ -137,8 +137,9 @@ if grep -qi "\[hv\] .*fail\|\[hv\] .*error" qemu-hv-hostile-arm64.log; then
     exit 1
 fi
 
-# ARM64 under TCG hits a known spurious address-size fault during early boot.
-# The guest OS never reaches userspace, so no hostile axis can execute.
+# Older builds stopped in early boot under TCG with this address-size fault,
+# before userspace; the guest now reaches its shell. If the signature recurs,
+# no hostile axis could execute, so classify the run as blocked.
 LIVENESS_MARKER='[hv] vCPU ready'
 if ! grep -qF "$LIVENESS_MARKER" qemu-hv-hostile-arm64.log; then
     echo "FAIL: liveness marker '$LIVENESS_MARKER' not seen — VMM never brought the guest up"

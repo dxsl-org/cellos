@@ -196,7 +196,7 @@ What that means for images and commands:
   reaches the hypervisor cell (staged spawn argv), the cell puts it in the guest
   command line, and the guest's init execs it. The guest-side half needs an
   initramfs whose init reads that name and exits with the app — the SD profile
-  already ships a custom initramfs (`tools/prepare-rpi3-guest-initramfs.py`),
+  already ships a custom initramfs (`tools/prepare-guest-initramfs.py`),
   the volatile profile still boots the stock Alpine initramfs to `~ #`. Until
   that lands, `hv` boots the guest's own shell and the app launch is not
   claimed.

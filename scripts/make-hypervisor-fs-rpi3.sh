@@ -283,9 +283,9 @@ elif (( VOLATILE )); then
     "$PYTHON_BIN" tools/prepare-rpi3-shell-initramfs.py "$CACHE/initramfs-virt" "$INITRD"
 else
     INITRD="$POLICY_TMP/initrd-pi.gz"
-    "$PYTHON_BIN" tools/prepare-rpi3-guest-initramfs.py \
+    "$PYTHON_BIN" tools/prepare-guest-initramfs.py \
         "$CACHE/initramfs-virt" "$CACHE/modloop-virt" \
-        scripts/rpi3-guest-init "$INITRD"
+        scripts/pi-guest-init "$INITRD"
 fi
 FAT_ARGS=("$BIN_DIR/app-init" bin/init \
     "$BIN_DIR/cellbox" bin/cellbox \
