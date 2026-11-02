@@ -2468,6 +2468,7 @@ dependencies = [
  "api",
  "cell-build",
  "ostd",
+ "terminal-sdk",
  "types",
 ]
 

@@ -283,7 +283,10 @@ fn aarch64_periph_demo_gpio() {
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
-    qemu.send_line("periph-demo &");
+    // Foreground launch: Cellbox's serial session refuses `cmd &` ("SDK background
+    // launch requires explicit nonterminal streams"), and the demo's markers are
+    // all this row reads, so the shell waiting on it costs nothing.
+    qemu.send_line("periph-demo");
     qemu.wait_for("[periph-demo] GPIO PL061 opened", 30)
         .unwrap_or_else(|e| {
             panic!(
@@ -320,21 +323,6 @@ fn aarch64_periph_demo_gpio() {
     });
 }
 
-/// UART → input-service → app delivery on AArch64.
-///
-/// ARM64 QEMU virt has no virtio-keyboard-device — the only keyboard path is
-/// the PL011 serial line.  This test exercises the full chain:
-///
-///   TCP socket → QEMU PL011 RX → viConsole::poll() →
-///   relay_ascii_to_input() → input service (EV_ASCII) → dispatcher →
-///   input-test AppContext
-///
-/// The input service deliberately does not log per-event (it would bury the
-/// shell prompt), so the only observable marker is the app-side delivery
-/// (`[input-test] input ok`).
-///
-/// Prerequisites: `/bin/input` + `/bin/input-test` in the aarch64 embedded
-/// ramdisk (scripts/build-aarch64-cells.ps1).
 /// The kernel must start its second core through firmware, and survive it.
 ///
 /// A single-CPU boot cannot witness this: the kernel starts a secondary only
@@ -385,6 +373,28 @@ fn aarch64_smp_second_hart_online() {
     });
 }
 
+/// UART → input-service → app delivery on AArch64.
+///
+/// ARM64 QEMU virt has no virtio-keyboard-device — the only keyboard path is
+/// the PL011 serial line.  This test exercises the full chain:
+///
+///   TCP socket → QEMU PL011 RX → viConsole::poll() →
+///   relay_ascii_to_input() → input service (EV_ASCII) → serial session →
+///   input-test, the session's foreground reader
+///
+/// Cellbox's serial shell holds an attached terminal session, and while it does
+/// (no compositor on this image) the input service gives physical keys to that
+/// session's foreground reader only, never to legacy keyboard focus. So the app
+/// is launched in the foreground — `input-test &` is refused by Cellbox ("SDK
+/// background launch requires explicit nonterminal streams") — and reads the
+/// byte as a session event.
+///
+/// The input service deliberately does not log per-event (it would bury the
+/// shell prompt), so the only observable marker is the app-side delivery
+/// (`[input-test] input ok`).
+///
+/// Prerequisites: `/bin/input` + `/bin/input-test` in the aarch64 embedded
+/// ramdisk (scripts/gen-disk-aarch64-ci.sh, scripts/build-aarch64-cells.ps1).
 #[test]
 fn aarch64_uart_input_delivery() {
     if !prerequisites_ok() {
@@ -394,22 +404,21 @@ fn aarch64_uart_input_delivery() {
     qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
-    // Demos are on-demand: spawn input-test from the shell (mirrors the riscv
-    // `input_bare_cell` test).
-    qemu.send_line("input-test &");
+    // Demos are on-demand: spawn input-test from the shell, in the foreground so
+    // it becomes the serial session's input reader.
+    qemu.send_line("input-test");
 
-    // Wait for input-test to acquire focus (retries in a yield loop until the
-    // input service is registered and grants focus).
-    qemu.wait_for("[input-test] focus granted", 30)
+    // Wait until input-test reads the session it was launched with: from then
+    // on a typed byte is queued for it, not for the shell's line editor.
+    qemu.wait_for("[input-test] session reader ready", 30)
         .unwrap_or_else(|e| {
             panic!(
-                "input-test did not claim focus: {e}\n--- output ---\n{}",
+                "input-test did not attach to the serial session: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });
 
-    // Settle: let input-test's AppContext event loop park in sys_recv before
-    // we inject.  Mirrors the 300ms pause used in `input_bare_cell`.
+    // Settle: let input-test park in its first session wait before we inject.
     std::thread::sleep(std::time::Duration::from_millis(300));
 
     // Inject a single printable byte — no trailing newline to avoid a
@@ -417,7 +426,7 @@ fn aarch64_uart_input_delivery() {
     qemu.send_bytes(b"a");
 
     // Assert the app received the event (UART relay → input service →
-    // dispatcher → input-test).
+    // serial session → input-test).
     qemu.wait_for("[input-test] input ok", 15)
         .unwrap_or_else(|e| {
             panic!(
@@ -453,8 +462,11 @@ fn aarch64_httpd_web_server_serves_requests() {
 
     std::thread::sleep(Duration::from_millis(500));
 
-    // Spawn httpd in the background
-    qemu.send_line("httpd &");
+    // Foreground launch: Cellbox's serial session refuses `cmd &` ("SDK background
+    // launch requires explicit nonterminal streams"). The shell then waits on the
+    // server, which is fine: every later step talks to httpd over hostfwd, never
+    // to the shell.
+    qemu.send_line("httpd");
     qemu.wait_for("httpd: listening on :8080", 15)
         .unwrap_or_else(|e| panic!("httpd did not listen: {e}\n--- output ---\n{}", qemu.dump()));
 
@@ -555,13 +567,16 @@ fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     let checkpoint = qemu.output_checkpoint();
-    qemu.send_line("tier2-smoke &");
+    // Foreground, as in the fault-isolation row below: Cellbox refuses `cmd &`
+    // before the loader is ever asked, which would hide the refusal under test.
+    qemu.send_line("tier2-smoke");
 
     let timeout = 30;
     // 1. The *loader* saw the artifact and refused the launch. This is the
     //    assertion that cannot be satisfied by an image which merely lacks the
-    //    cell: an absent file takes the same shell route and reports
-    //    `error=NotFound` (`shell: command not found`), never `NotSupported`.
+    //    cell: an absent file takes the same Cellbox foreground route (the
+    //    kernel's `PrepareChild`) and reports `error=NotFound`, never
+    //    `NotSupported`.
     qemu.wait_for_after(
         "path=/bin/tier2-smoke error=NotSupported",
         checkpoint,
@@ -588,7 +603,7 @@ fn aarch64_tier2_admission_is_refused_until_switch_is_qualified() {
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
     assert!(
-        after.contains("[loader] SpawnFromPath refused: caller="),
+        after.contains("[loader] PrepareChild refused: caller="),
         "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
     );
     assert!(
@@ -671,7 +686,7 @@ fn aarch64_tier2_fault_isolation_fixture_is_refused() {
     let output = qemu.dump();
     let after = output.get(checkpoint..).unwrap_or("");
     assert!(
-        after.contains("[loader] SpawnFromPath refused: caller="),
+        after.contains("[loader] PrepareChild refused: caller="),
         "the refusal must be the loader's, not the shell's file lookup\n--- output ---\n{after}"
     );
     assert!(

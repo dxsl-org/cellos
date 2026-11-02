@@ -3,7 +3,7 @@
 # Linux, the way `scripts/gen-disk-ci.sh` does for RV64 and
 # `scripts/build-aarch64-cells.ps1` does on a Windows dev box.
 #
-# Produces (all gitignored build artifacts, nothing in the shipping tree):
+# Produces (gitignored build artifacts):
 #   target/aarch64-prod-ci-embedded/kernel_fs.img  VIFS1 — the bootstrap ramdisk
 #                                                  embedded in the kernel via
 #                                                  include_bytes! (FAT)
@@ -12,6 +12,13 @@
 #                                                  production-feature kernel
 #   target/aarch64-prod-ci/disk_arm_virt.img       MBR disk: P1 FAT32, P2 cell
 #                                                  table, P6 FAT cell-store
+#
+# and, once all of those are verified, refreshes the in-tree embedded pair the way
+# `.github/workflows/ci.yml` (`qemu-aarch64-boot`) and `build-aarch64-cells.ps1` do:
+#   kernel/src/embedded-aarch64/kernel_fs.img      (gitignored)
+#   kernel/src/embedded-aarch64/init               (tracked: a change shows in git)
+# so a plain `cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat`
+# (what `scripts/qemu-aarch64-test.sh` boots) embeds the same cells as this image.
 #
 # Boot the integration suite against it with:
 #   CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu cargo test \
@@ -37,9 +44,11 @@
 #     written by BOTH the production lane and `build-aarch64-test-hooks-ci.sh`
 #     (which builds the test-hooks kernel there and only THEN copies it aside).
 #     A test-hooks kernel sitting on that path enables Tier-2 admission, so the
-#     boot suite cannot use it as its production witness. Everything here lands
-#     under `target/aarch64-prod-ci*`, which no other lane touches — the same
-#     convention `scripts/build-aarch64-prod-refusal-ci.sh` uses.
+#     boot suite cannot use it as its production witness. Every build artifact
+#     here lands under `target/aarch64-prod-ci*`, which no other lane touches —
+#     the same convention `scripts/build-aarch64-prod-refusal-ci.sh` uses. The
+#     only write outside it is step 8's refresh of the production in-tree
+#     embedded pair, which CI's production boot job writes too.
 #   * Features. No `--features test-hooks` on any cell or on the kernel, so the
 #     image is the production posture (the `switch_ordering_qualified()` branch is
 #     `aarch64 && test-hooks` is const-asserted false for this build).
@@ -82,7 +91,8 @@ usage() {
     cat <<'EOF'
 Assemble the production-feature AArch64 QEMU images on Linux: VIFS1 (kernel_fs.img)
 plus the embedded init, the production kernel and an MBR disk image, all under
-target/aarch64-prod-ci*.
+target/aarch64-prod-ci*; then refresh kernel/src/embedded-aarch64/{init,kernel_fs.img}
+from them, as CI and build-aarch64-cells.ps1 do.
 
 Usage: bash scripts/gen-disk-aarch64-ci.sh [--no-cells] [--disk <path>] [--help]
 
@@ -348,8 +358,9 @@ cp "$REL/app-init" "$EMB/init"
 echo "    init: $(du -sh "$EMB/init" | cut -f1)"
 
 # ── 5. Kernel (embeds VIFS1 via include_bytes!) ───────────────────────────────
-# EMBEDDED_OVERRIDE points the build script at our staging dir, so the in-tree
-# `kernel/src/embedded-aarch64/**` is never rewritten. RUSTFLAGS is deliberately
+# EMBEDDED_OVERRIDE points the build script at our staging dir, so this kernel
+# never embeds a half-assembled in-tree pair (step 8 refreshes that pair only after
+# everything here is verified). RUSTFLAGS is deliberately
 # NOT set: .cargo/config.toml already carries `-C relocation-model=pic` and the
 # +bti,+paca,+pacg target features, and setting the env var would REPLACE them.
 echo "==> building the production-feature kernel (no test-hooks)"
@@ -495,12 +506,28 @@ fi
 rm -rf "$KFS_TMP"
 mv -f "$NEW_DISK" "$DISK"
 
+# ── 8. Refresh the in-tree embedded pair ──────────────────────────────────────
+# `qemu-aarch64-boot` in .github/workflows/ci.yml and build-aarch64-cells.ps1 write
+# kernel_fs.img and init straight into kernel/src/embedded-aarch64/, which is what a
+# plain `cargo build -p cellos-kernel` (no EMBEDDED_OVERRIDE) embeds and what
+# scripts/qemu-aarch64-test.sh boots. Without this step that kernel kept whatever
+# init and cells were last copied there by hand, so a cell fix rebuilt here never
+# reached it. Done last, so a failed run never leaves a half-refreshed pair.
+IN_TREE="kernel/src/embedded-aarch64"
+INIT_STATE="unchanged"
+if ! cmp -s "$EMB/init" "$IN_TREE/init"; then
+    INIT_STATE="UPDATED (tracked file: review and commit it)"
+fi
+cp -f "$EMB/kernel_fs.img" "$IN_TREE/kernel_fs.img"
+cp -f "$EMB/init" "$IN_TREE/init"
+
 cat <<EOF
 
 ==> done
     kernel: $KERNEL
     VIFS1:  $KFS
     init:   $EMB/init
+    in-tree: $IN_TREE/{kernel_fs.img,init} refreshed (init $INIT_STATE)
     disk:   $DISK  ($(stat -c%s "$DISK") bytes, sha256 $(sha256sum "$DISK" | cut -c1-16))
     kernel sha256 $(sha256sum "$KERNEL" | cut -c1-16) — production features, no test-hooks
 

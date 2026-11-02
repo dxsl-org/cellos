@@ -184,9 +184,18 @@ fi
 echo "    tier2-smoke: signed + untrusted   tier2-exploit: unsigned + untrusted   cellbox: signed + legacy"
 
 echo "==> Assembling kernel_fs.img (VIFS1 ramdisk)..."
-"$PYTHON_BIN" tools/mkfat32.py "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
+# `input` selects /bin/input in services.toml. cellbox's serial session is created
+# through the INPUT service, so an image that never starts it boots to
+# "shell: authenticated serial session failed: NotFound" instead of a prompt.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input \
+    --config-output-dir "$TH_DIR/boot-config" \
+    "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
 if [[ ! -s "$TH_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
+    exit 1
+fi
+if ! grep -Fxq 'path = "/bin/input"' "$TH_DIR/boot-config/services.toml"; then
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
     exit 1
 fi
 

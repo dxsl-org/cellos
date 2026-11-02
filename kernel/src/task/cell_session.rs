@@ -457,6 +457,13 @@ fn vi(error: ViError) -> Status { match error { ViError::OutOfMemory => Status::
     ViError::PermissionDenied => Status::Denied, ViError::NotSupported => Status::Unsupported,
     ViError::NotFound => Status::NotFound,
     ViError::InvalidInput | ViError::InvalidArgument => Status::Malformed, _ => Status::Io } }
+/// A loader refusal of a session launch (artifact read, admission, domain
+/// policy): logged in the shape of `SpawnFromPath refused` so the operator sees
+/// the loader's error, which the caller only receives as a mapped [`Status`].
+fn refused(caller: usize, path: &str, error: ViError) -> Status {
+    log::warn!("[loader] PrepareChild refused: caller={} path={} error={:?}", caller, path, error);
+    vi(error)
+}
 /// The route-specific part of a `PrepareChild` body: nothing for the path
 /// route, `grant_id:u64, elf_len:u64` for the ELF route; any other route is
 /// malformed.
@@ -1752,13 +1759,13 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
             let bytes = super::syscall::session_elf_bytes(caller, grant_id, elf_len).map_err(|_| Status::Malformed)?;
             request.prepare_session_elf(bytes, path)
         }
-    }.map_err(vi)?;
+    }.map_err(|error| refused(caller, path, error))?;
     if super::system_ticks() as u64 >= deadline { return Err(Status::TimedOut); }
     let _kernel = KernelAllocationContext::enter();
     // ADR-0019 §2.1 live-grant preflight for a domain child, before SCHEDULER
     // (grant-table → SCHEDULER lock order), exactly as `publish_prepared` does.
     if state.is_domain {
-        super::launch::refuse_while_domain_grant_live().map_err(vi)?;
+        super::launch::refuse_while_domain_grant_live().map_err(|error| refused(caller, path, error))?;
     }
     let mut guard = super::SCHEDULER.lock(); let sched = guard.as_mut().ok_or(Status::Revoked)?;
     if resolve_actor(sched, caller)? != principal { return Err(Status::Revoked); }
@@ -1769,7 +1776,14 @@ fn prepare_child(caller: usize, principal: Principal, operation: Ref, body: &[u8
         return Err(Status::QuotaExceeded);
     }
     sched.cell_session.prepared.try_reserve(1).map_err(|_| Status::QuotaExceeded)?;
-    let publication = super::launch::SessionPublication::reserve(sched, prepared, state, launch_route).map_err(vi)?;
+    let publication = match super::launch::SessionPublication::reserve(sched, prepared, state, launch_route) {
+        Ok(publication) => publication,
+        Err(error) => {
+            // Release SCHEDULER before logging the refusal.
+            drop(guard);
+            return Err(refused(caller, path, error));
+        }
+    };
     let child = Child { principal: Principal { cell_id: publication.owner.cell_id, generation: publication.owner.generation },
         root_tid: publication.owner.root_tid, publication_generation: publication.owner.generation };
     let reference = child.prepared_ref();
