@@ -84,6 +84,8 @@ pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
 use boot::BootInfo;
+#[cfg(target_arch = "aarch64")]
+use hal::backend::ArmPlatform as _;
 use hal::Arch;
 
 // Internal utilities
@@ -164,10 +166,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0. Initialize UART immediately for early logging
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     task::drivers::uart::init();
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    crate::hal::uart_bcm_mini::init();
-    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-    crate::hal::uart_pl011::init();
+    #[cfg(target_arch = "aarch64")]
+    crate::hal::backend::Board::console_init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "x86_64")]
@@ -260,13 +260,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             {
                 let _ = crate::hal::sbi::console_putchar(c);
             }
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            #[cfg(target_arch = "aarch64")]
             {
-                crate::hal::uart_bcm_mini::putchar(c);
-            }
-            #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-            {
-                crate::hal::uart_pl011::putchar(c);
+                crate::hal::backend::Board::early_putc(c);
             }
             #[cfg(target_arch = "arm")]
             {
@@ -1569,14 +1565,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     "Successfully spawned init with complete root authority (tid={})",
                     tid
                 );
-                #[cfg(feature = "board-rpi3")]
-                crate::hal::uart_bcm_mini::probe_put(b'V');
+                #[cfg(target_arch = "aarch64")]
+                crate::hal::backend::Board::diag_probe(b'V');
             }
             Err(_e) => {
                 log_info("Failed to spawn init");
                 // Failure occurs before init reaches any ready queue.
-                #[cfg(feature = "board-rpi3")]
-                crate::hal::uart_bcm_mini::probe_put(b'F');
+                #[cfg(target_arch = "aarch64")]
+                crate::hal::backend::Board::diag_probe(b'F');
                 #[cfg(feature = "test-hooks")]
                 panic!("atomic-publication trusted-init success contract did not publish init");
             }
@@ -1833,13 +1829,9 @@ fn panic(info: &PanicInfo) -> ! {
         {
             let _ = crate::hal::sbi::console_putchar(c);
         }
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        #[cfg(target_arch = "aarch64")]
         {
-            crate::hal::uart_bcm_mini::putchar(c);
-        }
-        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-        {
-            crate::hal::uart_pl011::putchar(c);
+            crate::hal::backend::Board::early_putc(c);
         }
         #[cfg(target_arch = "arm")]
         {

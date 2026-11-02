@@ -7,6 +7,9 @@ use crate::sync::Spinlock;
 use core::fmt;
 use core::fmt::Write as _;
 
+#[cfg(target_arch = "aarch64")]
+use crate::hal::backend::ArmPlatform as _;
+
 /// UART Registers (offset from base)
 const _RHR: usize = 0; // Receive Holding Register (read)
 const _THR: usize = 0; // Transmit Holding Register (write)
@@ -88,13 +91,9 @@ impl fmt::Write for DirectWriter {
             {
                 let _ = crate::hal::sbi::console_putchar(c);
             }
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            #[cfg(target_arch = "aarch64")]
             {
-                write_rpi3_console_byte(c);
-            }
-            #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-            {
-                crate::hal::uart_pl011::putchar(c);
+                crate::hal::backend::Board::console_write_byte(c, vi_handle_uart_irq);
             }
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
             {
@@ -102,23 +101,6 @@ impl fmt::Write for DirectWriter {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-fn write_rpi3_console_byte(byte: u8) {
-    if byte == b'\n' {
-        write_rpi3_console_byte(b'\r');
-    }
-    loop {
-        // Synchronous exceptions mask IRQs while `sys_log` prints. Keep draining
-        // the eight-symbol RX FIFO into the 4096-byte kernel ring so full-duplex
-        // terminal traffic cannot overrun while TX waits for space.
-        vi_handle_uart_irq();
-        if crate::hal::uart_bcm_mini::try_putchar(byte) {
-            break;
-        }
-        core::hint::spin_loop();
     }
 }
 
@@ -380,7 +362,8 @@ pub fn poll_rhr() -> Option<u8> {
 
 /// Called from the UART RX IRQ handler.
 ///
-/// On RISC-V / AArch64: reads from the MMIO base stored in SERIAL.
+/// On RISC-V / AArch64: reads from the MMIO base stored in SERIAL, except that
+/// AArch64 boards with interrupt-driven console RX read their console UART.
 /// On x86_64: delegates to the configured HAL port-I/O UART mechanism.
 /// Pushes received bytes, unchanged, into RX_BUFFER. CR is not rewritten: the only
 /// reader (`console_drv`) relays raw bytes to the input service and converts CR→LF
@@ -425,32 +408,28 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                     };
                     (lsr, byte)
                 }
-                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+                #[cfg(target_arch = "aarch64")]
                 {
-                    let byte = crate::hal::uart_bcm_mini::poll_rx();
-                    (byte.map_or(0, |_| _LSR_RX_READY), byte)
+                    if crate::hal::backend::Board::CONSOLE_RX_IRQ {
+                        let byte = crate::hal::backend::Board::console_poll_rx();
+                        (byte.map_or(0, |_| _LSR_RX_READY), byte)
+                    } else {
+                        let Some(rx) = poll_serial_mmio() else {
+                            break;
+                        };
+                        rx
+                    }
                 }
                 #[cfg(not(any(
                     target_arch = "x86_64",
                     target_arch = "x86",
-                    all(target_arch = "aarch64", feature = "board-rpi3")
+                    target_arch = "aarch64"
                 )))]
                 {
-                    // MMIO path for RISC-V / AArch64.
-                    let serial = SERIAL.lock();
-                    let ptr = serial.base_addr as *mut u8;
-                    // No MMIO UART on this board (e.g. Pioneer SG2042): bail out.
-                    if ptr.is_null() {
+                    let Some(rx) = poll_serial_mmio() else {
                         break;
-                    }
-                    // SAFETY: MMIO region is identity-mapped and valid.
-                    let lsr_val = unsafe { ptr.add(LSR).read_volatile() };
-                    let byte = if lsr_val & _LSR_RX_READY != 0 {
-                        Some(unsafe { ptr.add(_RHR).read_volatile() })
-                    } else {
-                        None
                     };
-                    (lsr_val, byte)
+                    rx
                 }
             };
             let _ = lsr;
@@ -464,6 +443,27 @@ pub extern "Rust" fn vi_handle_uart_irq() {
             }
         }
     }
+}
+
+/// Read LSR and, when Data Ready, RHR from the MMIO base stored in SERIAL.
+///
+/// Returns `None` when this board has no MMIO UART (e.g. Pioneer SG2042).
+#[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+#[inline(always)]
+fn poll_serial_mmio() -> Option<(u8, Option<u8>)> {
+    let serial = SERIAL.lock();
+    let ptr = serial.base_addr as *mut u8;
+    if ptr.is_null() {
+        return None;
+    }
+    // SAFETY: MMIO region is identity-mapped and valid.
+    let lsr_val = unsafe { ptr.add(LSR).read_volatile() };
+    let byte = if lsr_val & _LSR_RX_READY != 0 {
+        Some(unsafe { ptr.add(_RHR).read_volatile() })
+    } else {
+        None
+    };
+    Some((lsr_val, byte))
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]

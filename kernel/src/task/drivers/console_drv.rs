@@ -2,6 +2,9 @@ use crate::sync::Spinlock;
 use alloc::collections::VecDeque;
 use core::sync::atomic::Ordering;
 
+#[cfg(target_arch = "aarch64")]
+use crate::hal::backend::ArmPlatform as _;
+
 #[allow(non_camel_case_types)]
 pub struct viConsole {
     pub buffer: VecDeque<u8>,
@@ -111,29 +114,25 @@ impl viConsole {
             route_byte!(c, true);
         }
 
-        // 1c. Poll the board-selected AArch64 UART RX backend.
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::getchar() else {
-                break;
-            };
-            route_byte!(c, true);
+        // 1c. Board-selected AArch64 console RX. Interrupt-driven boards first
+        // drain the ring the UART IRQ handler filled.
+        #[cfg(target_arch = "aarch64")]
+        if crate::hal::backend::Board::CONSOLE_RX_IRQ {
+            while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
+                let Some(c) = crate::task::drivers::uart::getchar() else {
+                    break;
+                };
+                route_byte!(c, true);
+            }
         }
 
-        // Keep direct polling as a fallback for early boot and lost IRQ routing.
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        // Then poll the console UART directly. On interrupt-driven boards this is
+        // the fallback for early boot and lost IRQ routing. On QEMU virt the PL011
+        // at 0x0900_0000 is the only path; `-serial tcp:...` connects its TX/RX to
+        // the TCP socket used by the integration-test harness.
+        #[cfg(target_arch = "aarch64")]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::hal::uart_bcm_mini::poll_rx() else {
-                break;
-            };
-            route_byte!(c, false);
-        }
-
-        // QEMU virt maps PL011 at 0x0900_0000; `-serial tcp:...` connects its
-        // TX/RX to the TCP socket used by the integration-test harness.
-        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::hal::uart_pl011::poll_rx() else {
+            let Some(c) = crate::hal::backend::Board::console_poll_rx() else {
                 break;
             };
             route_byte!(c, false);

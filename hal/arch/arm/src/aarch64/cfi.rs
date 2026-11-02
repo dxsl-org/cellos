@@ -22,6 +22,8 @@
 //! - `SCTLR_EL1[35]` — BT0: BTI enforcement at EL0
 //! - `SCTLR_EL1[36]` — BT1: BTI enforcement at EL1
 
+use super::backend::{ArmPlatform, Board};
+
 /// Hardware CFI capability flags discovered at boot.
 #[derive(Copy, Clone, Debug)]
 pub struct CfiCaps {
@@ -76,12 +78,6 @@ pub fn detect() -> CfiCaps {
 /// for dev/QEMU. Production boards must derive a per-device key via Silo
 /// before the kernel is finalised; replace this call at that stage.
 pub fn init() {
-    // Board-aware early UART output (MMU is still off; routes to the active console).
-    #[cfg(feature = "board-rpi3")]
-    let cfi_puts = |s: &str| super::uart_bcm_mini::puts(s);
-    #[cfg(not(feature = "board-rpi3"))]
-    let cfi_puts = |s: &str| super::uart_pl011::puts(s);
-
     let caps = detect();
 
     if caps.bti {
@@ -105,9 +101,9 @@ pub fn init() {
             );
             core::arch::asm!("isb", options(nomem, nostack));
         }
-        cfi_puts("[INFO] CFI: BTI enabled\n");
+        Board::early_puts("[INFO] CFI: BTI enabled\n");
     } else {
-        cfi_puts("[INFO] CFI: BTI unavailable\n");
+        Board::early_puts("[INFO] CFI: BTI unavailable\n");
     }
 
     if caps.pac {
@@ -138,8 +134,8 @@ pub fn init() {
             );
             core::arch::asm!("isb", options(nomem, nostack));
         }
-        cfi_puts("[INFO] CFI: PAC-RET enabled (dev key)\n");
+        Board::early_puts("[INFO] CFI: PAC-RET enabled (dev key)\n");
     } else {
-        cfi_puts("[INFO] CFI: PAC-RET unavailable\n");
+        Board::early_puts("[INFO] CFI: PAC-RET unavailable\n");
     }
 }

@@ -21,10 +21,7 @@
 
 use hal_mte::ViMte;
 
-#[cfg(feature = "board-rpi3")]
-use super::uart_bcm_mini as early_uart;
-#[cfg(not(feature = "board-rpi3"))]
-use super::uart_pl011 as early_uart;
+use super::backend::{ArmPlatform, Board};
 
 /// AArch64 MTE2 implementation of `ViMte`.
 pub struct AArch64Mte;
@@ -133,7 +130,7 @@ impl ViMte for AArch64Mte {
 /// Logs the outcome via the active board's early UART.
 pub fn init() {
     if !AArch64Mte::is_available() {
-        early_uart::puts("[INFO] MTE: unavailable\n");
+        Board::early_puts("[INFO] MTE: unavailable\n");
         return;
     }
 
@@ -165,5 +162,5 @@ pub fn init() {
         core::arch::asm!("isb", options(nomem, nostack));
     }
 
-    early_uart::puts("[INFO] MTE: enabled (sync fault)\n");
+    Board::early_puts("[INFO] MTE: enabled (sync fault)\n");
 }

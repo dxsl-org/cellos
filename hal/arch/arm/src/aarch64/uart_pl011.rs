@@ -4,11 +4,8 @@
 //! Used for early boot output before the kernel logging system is ready.
 //! All register access goes through volatile MMIO writes.
 
-/// PL011 base address on QEMU virt.
-#[cfg(feature = "board-rpi4")]
-pub const PL011_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.uart_base;
-#[cfg(not(feature = "board-rpi4"))]
-pub const PL011_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base;
+/// PL011 base address of the selected board backend.
+pub const PL011_BASE: usize = <super::backend::Board as super::backend::ArmPlatform>::PL011_BASE;
 
 // PL011 register offsets (byte offsets from base).
 const UARTDR: usize = 0x000; // Data Register

@@ -6,6 +6,8 @@
 use hal_arch_trait::Arch;
 
 // Sub-modules only compile when targeting AArch64.
+#[cfg(target_arch = "aarch64")]
+pub mod backend;
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub mod bcm2835_legacy_irq;
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
