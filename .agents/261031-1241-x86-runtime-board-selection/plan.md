@@ -20,7 +20,7 @@ One `x86_64` kernel image. Profile is chosen at boot from a compiled catalog:
 |---|---|---|---|---|
 | 01 | [Identity facts and catalog API](phase-01-identity-facts-and-catalog.md) | done 2026-11-01 (`6eaf663a2`) | — | no |
 | 02 | [Runtime profile selection, feature removal](phase-02-runtime-profile-selection.md) | done 2026-11-01 (uncommitted) | 01 | **yes** |
-| 03 | [Fingerprint pinning and re-confirmation](phase-03-fingerprint-pinning.md) | 🔨 implemented 2026-11-02, uncommitted; awaiting CP2 ([dossier](reports/phase-03-cp2-dossier.md)) | 02 | **yes** |
+| 03 | [Fingerprint pinning and re-confirmation](phase-03-fingerprint-pinning.md) | ✅ done 2026-11-02 (CP2 approved, 26d9250ab) ([dossier](reports/phase-03-cp2-dossier.md)) | 02 | **yes** |
 
 ## Key design decisions
 
