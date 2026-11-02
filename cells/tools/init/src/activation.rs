@@ -10,7 +10,7 @@ use ostd::syscall::{self, SyscallResult};
 use crate::activation_state::{Effects, Owner, Phase, Principal, Provider, State};
 use crate::service_table::now_ticks;
 
-const PAYLOAD_BYTES: usize = 64;
+pub(crate) const PAYLOAD_BYTES: usize = 64;
 const MESSAGE_BYTES: usize = PAYLOAD_BYTES + CALLER_IDENTITY_LEN;
 const DEFERRED_MESSAGES: usize = 32;
 const READY_TICKS: u64 = 300;
@@ -313,11 +313,16 @@ pub(crate) fn service_id(engine: Engine) -> u16 {
 }
 
 fn deliver(message: &Message, response: Response) -> bool {
-    let frame = response.encode();
-    if let Some(operation) = message.operation { return ipc::reply(operation, &frame).is_ok(); }
+    deliver_frame(message, &response.encode())
+}
+
+/// Reply to `message`: through its IPC operation when it came as one, else a
+/// bounded one-way send to the sender.
+pub(crate) fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
+    if let Some(operation) = message.operation { return ipc::reply(operation, frame).is_ok(); }
     let started = now_ticks();
     for _ in 0..POLL_LIMIT {
-        if matches!(syscall::sys_try_send(message.sender, &frame), SyscallResult::Ok(0)) { return true; }
+        if matches!(syscall::sys_try_send(message.sender, frame), SyscallResult::Ok(0)) { return true; }
         if now_ticks().wrapping_sub(started) >= LEGACY_TICKS { break; }
         ostd::task::yield_now();
     }

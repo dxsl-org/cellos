@@ -1475,6 +1475,35 @@ impl QemuRunner {
         )
     }
 
+    /// Boot q35 with an NVMe disk, optionally `-device intel-iommu` and
+    /// optionally one NIC model on a restricted user netdev: the machine pin
+    /// lane (ADR-0029 §3) changes exactly these devices between boots of one
+    /// disk. Without `nic`, `-nic none` drops QEMU's default q35 NIC (e1000e),
+    /// so the PCI set holds only what the lane names. `intel-iommu` precedes
+    /// the NIC so QEMU wires it up first.
+    pub fn boot_x86_bios_for_machine_pin(iso: &str, nvme_disk: &str, vtd: bool, nic: Option<&str>) -> Self {
+        let mut devices = vec![
+            "-drive".into(),
+            format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+            "-device".into(),
+            "nvme,drive=nvme0,serial=deadbeef01".into(),
+        ];
+        if vtd {
+            devices.extend(["-device".into(), "intel-iommu".into()]);
+        }
+        if let Some(nic) = nic {
+            devices.extend([
+                "-netdev".into(),
+                "user,id=net0,restrict=on".into(),
+                "-device".into(),
+                format!("{nic},netdev=net0"),
+            ]);
+        } else {
+            devices.extend(["-nic".into(), "none".into()]);
+        }
+        Self::boot_x86_q35(iso, 1, &devices)
+    }
+
     /// Boot q35 with an NVMe endpoint behind a PCIe root port on bus 1.
     ///
     /// When `with_vtd` is true, Intel VT-d is installed before the root port so

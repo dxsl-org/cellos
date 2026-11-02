@@ -1,5 +1,7 @@
 # Phase 03 — Fingerprint pinning and re-confirmation  (checkpoint)
 
+**Status:** implemented 2026-11-02 (uncommitted), awaiting CP2. Design: [CP1](phase-03-cp1.md), approved with all defaults ([record](phase-03-cp1-approval.md)). Evidence and deviations: [CP2 dossier](reports/phase-03-cp2-dossier.md). Superseded requirement details: the record lives at `/srv/.cellos-machine/pin`, not `/etc/cellos/machine-pin`; an unknown version or unreadable record is safe mode, not "no record"; without a store, the PC profile enters safe mode and q35 warns (criterion 5 reads "DMA refusal + store unavailable → safe mode").
+
 ## Context Links
 [plan](plan.md) · [phase 02](phase-02-runtime-profile-selection.md) · ADR-0029 §3
 
@@ -34,10 +36,10 @@ Kernel computes the fingerprint. Init compares it and gates. The `cellbox` comma
 4. The `cellbox machine pin --confirm` command.
 
 ## Todo List
-- [ ] fingerprint encode + tests
-- [ ] kernel→init hand-off (ABI gate)
-- [ ] init gate + safe mode
-- [ ] cellbox confirm command
+- [x] fingerprint encode + tests
+- [x] kernel→init hand-off (ABI gate: syscall 433, CP1)
+- [x] init gate + safe mode
+- [x] cellbox confirm command
 
 ## Success Criteria (checkpoint)
 - Host tests pass.

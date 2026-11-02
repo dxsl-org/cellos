@@ -311,5 +311,8 @@ fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViRe
     );
     #[cfg(cellos_p01_trace)]
     let state = { let mut state = state; state.bootstrap_init = bootstrap_init; state };
-    crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)
+    let tid = crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)?;
+    // Init's tid keys the `MACHINE_PIN` registration restriction (ADR-0029 §3).
+    crate::task::syscall::publish_trusted_init(tid);
+    Ok(tid)
 }

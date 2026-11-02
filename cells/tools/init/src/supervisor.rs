@@ -92,7 +92,9 @@ pub(crate) fn await_verdict(dead: usize) -> Result<ViRetirementV1, SyscallError>
     }
 }
 
-pub(crate) fn run(services: &mut [Service]) -> ! {
+/// Supervise `services` forever. `pin` is the machine pin endpoint once the
+/// gate has run; its frames are answered before any other handler sees them.
+pub(crate) fn run(services: &mut [Service], mut pin: Option<&mut crate::machine_pin::Endpoint>) -> ! {
     let mut activator = crate::activation::Activator::new();
     loop {
         restart_pending(services);
@@ -100,6 +102,11 @@ pub(crate) fn run(services: &mut [Service]) -> ! {
             ostd::task::yield_now();
             continue;
         };
+        if let Some(pin) = pin.as_deref_mut() {
+            if pin.handle(&message, services) {
+                continue;
+            }
+        }
         if activator.handle(message) {
             continue;
         }

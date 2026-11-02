@@ -2581,6 +2581,35 @@ pub fn sys_lookup_block_route(
     }
 }
 
+/// Read the machine facts record (syscall 433). Requires SpawnCap.
+///
+/// The record is decoded and fully validated before it is returned; the
+/// returned value keeps the exact bytes the kernel wrote.
+///
+/// # Errors
+/// - `FileNotFound`: the kernel has no facts (not x86, no profile bound, or
+///   more than `MACHINE_FACTS_PCI_MAX` PCI functions).
+/// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a
+///   valid V1 record.
+/// - `PermissionDenied`: the caller holds no SpawnCap.
+pub fn sys_query_machine_facts() -> Result<api::machine_facts::MachineFactsRecord, SyscallError> {
+    use api::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
+    let mut out = alloc::vec![0u8; MACHINE_FACTS_CAPACITY];
+    // SAFETY: `out` is a live, writable heap buffer of exactly
+    // `MACHINE_FACTS_CAPACITY` bytes and the kernel writes at most that many.
+    let ret = unsafe {
+        syscall(ViSyscall::QueryMachineFacts, out.as_mut_ptr() as usize, out.len(), 0, 0)
+    };
+    match ret {
+        n if n > 0 && n as usize <= MACHINE_FACTS_CAPACITY => {
+            MachineFactsRecord::decode(&out[..n as usize]).map_err(|_| SyscallError::Unknown)
+        }
+        -3 => Err(SyscallError::FileNotFound),
+        -1 => Err(SyscallError::PermissionDenied),
+        _ => Err(SyscallError::Unknown),
+    }
+}
+
 /// Register the calling cell as the active NIC driver.
 ///
 /// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).

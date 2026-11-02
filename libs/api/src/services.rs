@@ -21,6 +21,7 @@ pub mod hostile_backend_recovery;
 pub mod hotswap;
 pub mod input;
 pub mod ipc;
+pub mod machine_pin;
 pub mod net;
 pub mod posix;
 pub mod ring_channel;

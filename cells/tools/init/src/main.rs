@@ -61,6 +61,7 @@ mod boot;
 mod activation;
 mod activation_state;
 mod configuration;
+mod machine_pin;
 mod service_table;
 mod supervisor;
 
@@ -96,7 +97,7 @@ fn start_services() {
         Err(error) => {
             println(&alloc::format!("Init: configuration failure — {error}"));
             services.append(&mut block_drivers);
-            supervisor::run(&mut services);
+            supervisor::run(&mut services, None);
         }
     };
     let service_order = match ordered_indices(&service_config, &CellConfig::default()) {
@@ -104,7 +105,7 @@ fn start_services() {
         Err(error) => {
             println(&alloc::format!("Init: service ordering failure — {error}"));
             services.append(&mut block_drivers);
-            supervisor::run(&mut services);
+            supervisor::run(&mut services, None);
         }
     };
     let autoload_order = match ordered_indices(&autoload_config, &service_config) {
@@ -112,37 +113,34 @@ fn start_services() {
         Err(error) => {
             println(&alloc::format!("Init: autoload ordering failure — {error}"));
             services.append(&mut block_drivers);
-            supervisor::run(&mut services);
+            supervisor::run(&mut services, None);
         }
     };
     let autoload_offset = 1 + service_config.cells.len();
     services.extend(service_config.cells.into_iter().map(service_table::Service::new));
     services.extend(autoload_config.cells.into_iter().map(service_table::Service::new));
     services.append(&mut block_drivers);
-    if !launch_order(&mut services, &service_order, 1) {
-        println("Init: required service failed — autoload and OS ready blocked.");
-        supervisor::run(&mut services);
+
+    // ADR-0029 §3: the machine pin gates every configured service. The VFS and
+    // the boot-critical block drivers above are already running and stay so.
+    let init_tid = own_tid();
+    let mut pin = machine_pin::gate(init_tid);
+    if pin.safe_mode() {
+        pin.enter_safe_mode(&mut services, autoload_offset);
+        supervisor::run(&mut services, Some(&mut pin));
     }
 
-    let init_tid = {
-        let mut procs = [api::syscall::ProcessInfo::default(); 16];
-        let mut tid = 2;
-        if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
-            for proc in procs.iter().take(count) {
-                if &proc.name[..4] == b"init" && (proc.name[4] == 0 || proc.name[4] == b' ') {
-                    tid = proc.id;
-                    break;
-                }
-            }
-        }
-        tid
-    };
+    if !launch_order(&mut services, &service_order, 1) {
+        println("Init: required service failed — autoload and OS ready blocked.");
+        supervisor::run(&mut services, Some(&mut pin));
+    }
+
     if !matches!(
         ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid),
         ostd::syscall::SyscallResult::Ok(0)
     ) {
         println("Init: Ocel activator registration failed — autoload blocked.");
-        supervisor::run(&mut services);
+        supervisor::run(&mut services, Some(&mut pin));
     }
 
     // Test fixtures retain their reviewed boot lanes. Production optional cells,
@@ -150,7 +148,7 @@ fn start_services() {
     boot::spawn_test_fixtures();
     if !required_services_available(&services[..autoload_offset]) {
         println("Init: required service lost before autoload — OS ready blocked.");
-        supervisor::run(&mut services);
+        supervisor::run(&mut services, Some(&mut pin));
     }
     println("Init: services spawned.");
     println("Init: service registry verified (init registration is publication, not application readiness).");
@@ -159,10 +157,24 @@ fn start_services() {
         || !required_services_available(&services)
     {
         println("Init: required cell unavailable — remaining autoload blocked.");
-        supervisor::run(&mut services);
+        supervisor::run(&mut services, Some(&mut pin));
     }
     println("Init: supervising services (auto-restart on crash)...");
-    supervisor::run(&mut services)
+    supervisor::run(&mut services, Some(&mut pin))
+}
+
+/// Init's own tid, found by name in the process table; 2 when the table
+/// cannot be read (the fallback init has always used here).
+fn own_tid() -> usize {
+    let mut procs = [api::syscall::ProcessInfo::default(); 16];
+    if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
+        for proc in procs.iter().take(count) {
+            if &proc.name[..4] == b"init" && (proc.name[4] == 0 || proc.name[4] == b' ') {
+                return proc.id;
+            }
+        }
+    }
+    2
 }
 
 fn required_services_available(services: &[service_table::Service]) -> bool {

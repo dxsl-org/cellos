@@ -79,6 +79,7 @@ mod tests {
         (430, ViSyscall::TelemetrySnapshot),
         (431, ViSyscall::QueryRetirement),
         (432, ViSyscall::LookupBlockRoute),
+        (433, ViSyscall::QueryMachineFacts),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -324,14 +325,25 @@ mod tests {
         assert!(SyscallSet::EMPTY.permits(ViSyscall::QueryRetirement));
     }
 
-    /// 09C: `LookupBlockRoute` is 432, dispatch-gated like 431; 433 stays unmapped.
+    /// 09C: `LookupBlockRoute` is 432, dispatch-gated like 431.
     #[test]
     fn lookup_block_route_is_dispatch_gated_without_allowlist_bit() {
         assert_eq!(ViSyscall::LookupBlockRoute as usize, 432);
         assert_eq!(ViSyscall::from(432), ViSyscall::LookupBlockRoute);
         assert_eq!(ViSyscall::LookupBlockRoute.allowlist_bit(), None);
         assert!(SyscallSet::EMPTY.permits(ViSyscall::LookupBlockRoute));
-        assert_eq!(ViSyscall::from(433), ViSyscall::Unknown);
+    }
+
+    /// ADR-0029 §3: `QueryMachineFacts` is 433, dispatch-gated (SpawnCap) like
+    /// 432; 434 stays unmapped, and `MACHINE_PIN` takes service id 20.
+    #[test]
+    fn query_machine_facts_is_dispatch_gated_without_allowlist_bit() {
+        assert_eq!(ViSyscall::QueryMachineFacts as usize, 433);
+        assert_eq!(ViSyscall::from(433), ViSyscall::QueryMachineFacts);
+        assert_eq!(ViSyscall::QueryMachineFacts.allowlist_bit(), None);
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::QueryMachineFacts));
+        assert_eq!(ViSyscall::from(434), ViSyscall::Unknown);
+        assert_eq!(crate::syscall::service::MACHINE_PIN, 20);
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod guest_disk;
 #[cfg(test)]
 mod guest_disk_tests;
 mod kms;
+mod machine_pin;
 mod rules;
 #[cfg(feature = "test-hooks")]
 pub(crate) mod selftest;
@@ -31,6 +32,10 @@ pub(crate) use guest_disk::{contains_guest_disk, is_guest_disk_path, GUEST_DISK_
 use kms::{
     contains_kms_namespace, is_canonical_policy_path, is_kms_namespace_path, is_kms_store_rule,
     live_kms_matches,
+};
+use machine_pin::{
+    contains_machine_pin_namespace, is_machine_pin_namespace_path, is_machine_pin_store_rule,
+    live_machine_pin_matches,
 };
 pub use rules::PathRule;
 
@@ -64,10 +69,24 @@ impl AccessTable {
 
     /// Whether `caller` may write to `path`.
     ///
-    /// `/srv/cellos/kms` is narrower than the broad `/srv/` prefix: only the
-    /// live KMS service instance may touch it.
+    /// `/srv/cellos/kms` and `/srv/.cellos-machine` are narrower than the broad
+    /// `/srv/` prefix: only the live KMS, respectively `MACHINE_PIN`, service
+    /// instance may touch them. The mutate flag is required everywhere except
+    /// for [`Self::is_machine_pin_writer`].
     pub fn can_write(&self, caller: Caller, path: &str) -> bool {
-        caller.may_mutate() && self.decide(caller, path, AccessKind::Write)
+        (caller.may_mutate() || self.is_machine_pin_writer(caller, path))
+            && self.decide(caller, path, AccessKind::Write)
+    }
+
+    /// The one write admitted without `CALLER_FLAG_VFS_MUTATE`: a canonical
+    /// path inside `/srv/.cellos-machine` from the live `MACHINE_PIN`
+    /// provider. The kernel accepts that registration only from trusted init
+    /// naming itself, and init runs with a permit-all allowlist, which never
+    /// attests the mutate flag. Every other caller and path is unchanged.
+    pub(crate) fn is_machine_pin_writer(&self, caller: Caller, path: &str) -> bool {
+        is_canonical_policy_path(path)
+            && is_machine_pin_namespace_path(path)
+            && live_machine_pin_matches(caller, self.service_lookup)
     }
 
     /// Whether `caller` may write to the guest system disk image.
@@ -85,10 +104,11 @@ impl AccessTable {
 
     /// Interrupt-disabled fast path: never performs service lookup.
     ///
-    /// The protected KMS prefix is denied here so the ecall path remains the
-    /// only place that can prove "live service::KMS" with a normal lookup.
+    /// The provider-held namespaces are denied here so the ecall path remains
+    /// the only place that can prove "live service::KMS" or "live
+    /// service::MACHINE_PIN" with a normal lookup.
     pub fn can_read_fast(&self, caller: Caller, path: &str) -> bool {
-        if !is_canonical_policy_path(path) || is_kms_namespace_path(path) {
+        if !is_canonical_policy_path(path) || is_provider_namespace_path(path) {
             return false;
         }
         self.decide(caller, path, AccessKind::Read)
@@ -99,7 +119,7 @@ impl AccessTable {
         caller.may_mutate()
             && is_canonical_policy_path(path)
             && self.can_write(caller, path)
-            && !contains_kms_namespace(path)
+            && !contains_provider_namespace(path)
             && !contains_guest_disk(path)
     }
 
@@ -108,7 +128,7 @@ impl AccessTable {
         caller.may_mutate()
             && is_canonical_policy_path(path)
             && self.can_write(caller, path)
-            && !contains_kms_namespace(path)
+            && !contains_provider_namespace(path)
             && !contains_guest_disk(path)
     }
 
@@ -131,6 +151,9 @@ impl AccessTable {
         match self.rule_for(path) {
             Some(rule) if is_kms_store_rule(rule.prefix) => {
                 live_kms_matches(caller, self.service_lookup)
+            }
+            Some(rule) if is_machine_pin_store_rule(rule.prefix) => {
+                live_machine_pin_matches(caller, self.service_lookup)
             }
             Some(rule) => match kind {
                 AccessKind::Read => rule.allow_read_all,
@@ -156,6 +179,18 @@ impl Default for AccessTable {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Namespaces admitted only to one live service provider, which the fast path
+/// cannot prove and so must refuse outright.
+fn is_provider_namespace_path(path: &str) -> bool {
+    is_kms_namespace_path(path) || is_machine_pin_namespace_path(path)
+}
+
+/// Whether removing `path` would remove a provider-held namespace: `path` is
+/// inside one or is an ancestor of one. No caller, the provider included, may.
+fn contains_provider_namespace(path: &str) -> bool {
+    contains_kms_namespace(path) || contains_machine_pin_namespace(path)
 }
 
 fn touches_boot_configuration(path: &str) -> bool {

@@ -1702,7 +1702,7 @@ fn has_typed_errors(syscall: &Syscall) -> bool {
         | Syscall::IpcWait { .. } | Syscall::IpcCancel { .. }
         | Syscall::IpcCurrent | Syscall::IpcReply { .. }
         | Syscall::QueryRetirement { .. } | Syscall::LookupBlockRoute { .. }
-        | Syscall::RegisterBlockDriver { .. })
+        | Syscall::QueryMachineFacts { .. } | Syscall::RegisterBlockDriver { .. })
 }
 
 /// Encode the additive spawn-OOM result while preserving all other legacy errors.
@@ -1852,6 +1852,24 @@ fn caller_has_development_silo_registration(caller_id: usize) -> bool {
 
 fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
+}
+
+/// Tid of trusted init, published once by `loader::governed_spawn::spawn_init`
+/// right after init's task is committed; zero before. It keys the
+/// `MACHINE_PIN` registration restriction, so that restriction never trusts a
+/// spawner-chosen task name. Tids are never reused, so a dead init's tid
+/// cannot be taken over.
+static TRUSTED_INIT_TID: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Record `tid` as trusted init. Only the first publication counts.
+pub(crate) fn publish_trusted_init(tid: usize) {
+    use core::sync::atomic::Ordering;
+    let _first_wins =
+        TRUSTED_INIT_TID.compare_exchange(0, tid, Ordering::AcqRel, Ordering::Acquire);
+}
+
+fn caller_is_trusted_init(caller_id: usize) -> bool {
+    caller_id != 0 && TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire) == caller_id
 }
 
 const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
@@ -3977,6 +3995,8 @@ pub enum Syscall {
     QueryRetirement { root_tid: usize, out_ptr: usize, out_len: usize },
     /// 432: LookupBlockRoute — copy route slot `index` as a `ViBlockRouteV1`.
     LookupBlockRoute { index: usize, out_ptr: usize, out_len: usize, reserved: usize },
+    /// 433: QueryMachineFacts — copy the current `ViMachineFactsV1`.
+    QueryMachineFacts { out_ptr: usize, out_len: usize, a2: usize, a3: usize },
     CellSessionV1 { request_ptr: usize, request_len: usize, result_ptr: usize, result_capacity: usize },
 
     // --- Legacy / Compatibility Layer ---
@@ -4455,6 +4475,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::NotifyOnExit { .. }
         | Syscall::QueryRetirement { .. }
         | Syscall::LookupBlockRoute { .. }
+        | Syscall::QueryMachineFacts { .. }
         | Syscall::RegisterService { .. }
         | Syscall::CapRevoke { .. }
         // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
@@ -6275,10 +6296,32 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(len)
         }
 
+        Syscall::QueryMachineFacts { out_ptr, out_len, a2, a3 } => {
+            // Admitted past the allowlist; init (SpawnCap) is the reader.
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if out_len != api::machine_facts::MACHINE_FACTS_CAPACITY || a2 != 0 || a3 != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            let record = crate::machine_facts::query().ok_or(SyscallError::FileNotFound)?;
+            write_user_slice(caller_id, out_ptr, &record, record.len())?;
+            Ok(record.len())
+        }
+
         Syscall::RegisterService { service_id, tid } => {
             // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
             // so no caller may publish the singleton service.
             if service_id == api::syscall::service::BLOCK_DRIVER {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // The machine pin endpoint is init's own: only trusted init may
+            // register it, and only naming itself (ADR-0029 §3). The VFS admits
+            // the live provider to the pin store, so a hijacked registration
+            // would hand over pin write access.
+            if service_id == api::syscall::service::MACHINE_PIN
+                && !(tid == caller_id && caller_is_trusted_init(caller_id))
+            {
                 return Err(SyscallError::PermissionDenied);
             }
             // Development Silo readiness is self-published only after artifact,
@@ -9664,6 +9707,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_len: a2,
             reserved: a3,
         },
+        ViSyscall::QueryMachineFacts => Syscall::QueryMachineFacts {
+            out_ptr: a0,
+            out_len: a1,
+            a2,
+            a3,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -11032,6 +11081,72 @@ mod tests {
             });
             assert_eq!(refused, Err(SyscallError::PermissionDenied));
             assert_eq!(crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER), None);
+        });
+    }
+
+    /// ADR-0029 §3: `QueryMachineFacts` (433) is admitted past the allowlist,
+    /// gated on SpawnCap, validates its arguments before computing anything,
+    /// and reports "no facts" while no x86 profile is bound.
+    #[test]
+    fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
+        use api::machine_facts::MACHINE_FACTS_CAPACITY as CAP;
+        let syscall = map_syscall(ViSyscall::QueryMachineFacts as usize, 0x5000, CAP, 0, 0)
+            .expect("QueryMachineFacts must decode");
+        match syscall {
+            Syscall::QueryMachineFacts { out_ptr, out_len, a2, a3 } => {
+                assert_eq!((out_ptr, out_len, a2, a3), (0x5000, CAP, 0, 0));
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), None);
+        assert!(super::has_typed_errors(&syscall));
+        let query = |tid, out_len, a2, a3| {
+            super::handle_syscall(tid, Syscall::QueryMachineFacts { out_ptr: 0x5000, out_len, a2, a3 })
+        };
+        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        for caps in [CapSet::EMPTY, spawn] {
+            with_scheduler_task_caps(0, caps, |tid| {
+                assert_eq!(check_allowlist(ViSyscall::QueryMachineFacts as usize, tid), Ok(()));
+                if caps == CapSet::EMPTY {
+                    let denied = query(tid, CAP, 0, 0);
+                    assert_eq!(denied, Err(SyscallError::PermissionDenied));
+                    assert_eq!(super::encode_ipc_result(denied), usize::MAX);
+                    return;
+                }
+                for (out_len, a2, a3) in [(CAP - 1, 0, 0), (CAP + 1, 0, 0), (0, 0, 0), (CAP, 1, 0), (CAP, 0, 1)] {
+                    let bad = query(tid, out_len, a2, a3);
+                    assert_eq!(bad, Err(SyscallError::InvalidInput), "{out_len} {a2} {a3}");
+                    assert_eq!(super::encode_ipc_result(bad), usize::MAX - 3);
+                }
+                assert!(crate::board::x86_machine_inputs().is_none(), "host tests bind no profile");
+                let missing = query(tid, CAP, 0, 0);
+                assert_eq!(missing, Err(SyscallError::FileNotFound));
+                assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
+            });
+        }
+    }
+
+    /// ADR-0029 §3 (CP1 Q9): only trusted init, naming itself, may register
+    /// `MACHINE_PIN`; a SpawnCap holder that is not init is refused.
+    #[test]
+    fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
+        use api::syscall::service::MACHINE_PIN;
+        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        with_scheduler_task_caps(0, spawn, |tid| {
+            let register = |tid, target| {
+                super::handle_syscall(tid, Syscall::RegisterService { service_id: MACHINE_PIN, tid: target })
+            };
+            if super::TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire) != tid {
+                assert_eq!(register(tid, tid), Err(SyscallError::PermissionDenied), "not init");
+                assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), None);
+            }
+            super::publish_trusted_init(tid);
+            assert!(super::caller_is_trusted_init(tid));
+            assert_eq!(register(tid, tid + 1), Err(SyscallError::PermissionDenied), "not itself");
+            assert_eq!(register(tid, 0), Err(SyscallError::PermissionDenied), "not itself");
+            assert_eq!(register(tid, tid), Ok(0));
+            assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), Some(tid));
+            crate::cell::service_registry::clear_tid(tid);
         });
     }
 

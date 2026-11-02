@@ -195,6 +195,20 @@ route has a live provider again; a write in flight at the death is `Indeterminat
 never replayed), and a restarted driver regains only its own device's route. A device
 registered after VFS start is mounted at the next boot.
 
+### Protected `/srv/.cellos-machine` namespace (machine pin)
+
+`/srv/.cellos-machine/**` holds the machine fingerprint pin (`/srv/.cellos-machine/pin`,
+ADR-0029 §3): a class P record that trusted init compares on every boot. Only the live
+`service::MACHINE_PIN` provider (trusted init) may read, stat, list, open handles in,
+create or write anything in it: the caller's attested identity must be non-zero and its
+sending thread must be the tid currently registered under `MACHINE_PIN`. Every other
+Cell, including shells and SSH sessions, is refused on every path and handle operation,
+grant, rename and save. The interrupt-disabled fast path never serves it, non-canonical
+spellings are refused, and no caller may remove the namespace or an ancestor of it
+(`access/machine_pin.rs`). The pin carries no authority: it only lets init withhold
+services. The rule stops in-system Cells only; a raw-disk or offline attacker can delete
+or replace the record and is out of scope.
+
 ---
 
 ## Quota Model

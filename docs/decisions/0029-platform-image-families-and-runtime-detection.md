@@ -66,6 +66,14 @@ Drivers:
 - aarch64 groups 2 and 3 have no code, tests or HCL entries until scheduled. Any work on them must first amend ADR-0022's scope.
 - Apple Silicon support, if ever scheduled, would follow Asahi's hardware coverage (realistically M1/M2) and requires a documented clean-room process.
 
+### Amendment 2026-11-02 — fingerprint store, safe mode and trust (plan 261031-1241 phase 03)
+
+- **Hand-off.** No boot-time record could carry the PCI set, which is complete only after the Platform Cell runs. The kernel answers a SpawnCap-gated syscall 433 `QueryMachineFacts` with one `ViMachineFactsV1` (profile slug and source, ACPI root OEM, SMBIOS type 1, DMAR/VT-d/hypervisor flags, sorted PCI multiset, SHA-256). Approved as Law-1 (CP1 2026-11-02).
+- **Store.** `/srv/.cellos-machine/pin` on CellosFS P5, not `/etc/cellos` (synthetic and read-only). The VFS admits only the live `MACHINE_PIN` provider (service id 20), which the kernel accepts only from trusted init naming itself. No durability is claimed.
+- **Safe mode.** Init gates every configured service. A mismatch, an unreadable or unknown-version record, or missing facts withhold everything except `input` and the `cellbox` shell; boot-critical storage keeps running under catalog policy. A record is never re-pinned automatically: only definitive absence on a healthy store is a first boot. No store is safe mode under `Required` profiles and a warning under the `Optional` q35 profile.
+- **Re-confirmation.** `machine pin --confirm` from the console shell init started, in safe mode, for the digest init reports; it takes effect at the next boot.
+- **Trust.** The pin carries no authority and changes no profile or DMA decision. It is change detection, not a boot-integrity control: `limine.conf` (which selects the profile) and the kernel are unmeasured today, and an offline writer can delete the pin. Phase 02's note that firmware "cannot inject the command line" holds only on a measured or Secure Boot setup that does not exist yet (HCL R3).
+
 ## Related
 
 - [ADR-0022](0022-intel-x86-64-c2c-only-direction.md): sole x86-64 direction and scheduling.

@@ -654,6 +654,22 @@ pub enum ViSyscall {
     /// Allowlist: none (the `u64` allowlist is full); always permitted past the
     /// allowlist like [`Self::QueryRetirement`], gated at dispatch.
     LookupBlockRoute = 432,
+    /// 433: Read the machine facts record ([`crate::machine_facts`], ADR-0029 §3).
+    ///
+    /// ABI: a0 = out_ptr, a1 = out_len (must equal
+    /// [`crate::machine_facts::MACHINE_FACTS_CAPACITY`]), a2 = 0, a3 = 0 → the
+    /// record's `total_len`, with one [`crate::machine_facts::ViMachineFactsV1`]
+    /// written to the start of `out_ptr`. The record is computed at call time
+    /// from the bound x86 profile, the boot identity facts, the VT-d state and
+    /// the registered PCI functions; the call has no other effect. Errors:
+    /// `usize::MAX - 2` (`FileNotFound`) no facts — not x86, no profile bound
+    /// yet, or more than `MACHINE_FACTS_PCI_MAX` PCI functions; `usize::MAX - 3`
+    /// (`InvalidInput`) wrong `out_len`, non-zero a2/a3 or an unwritable
+    /// `out_ptr`; `usize::MAX` the caller holds no SpawnCap.
+    ///
+    /// Allowlist: none (the `u64` allowlist is full); always permitted past the
+    /// allowlist like [`Self::LookupBlockRoute`], gated at dispatch.
+    QueryMachineFacts = 433,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1219,6 +1235,8 @@ impl ViSyscall {
             | Self::QueryRetirement
             // LookupBlockRoute: dispatch admits only BlockIoCap or SpawnCap holders.
             | Self::LookupBlockRoute
+            // QueryMachineFacts: dispatch admits only SpawnCap holders.
+            | Self::QueryMachineFacts
             | Self::RegisterService
             | Self::CapRevoke
             | Self::SpawnSetDirs
@@ -1391,6 +1409,7 @@ impl From<usize> for ViSyscall {
             430 => ViSyscall::TelemetrySnapshot,
             431 => ViSyscall::QueryRetirement,
             432 => ViSyscall::LookupBlockRoute,
+            433 => ViSyscall::QueryMachineFacts,
             _ => ViSyscall::Unknown,
         }
     }
@@ -1473,12 +1492,17 @@ pub mod service {
     ///
     /// Ids 1–13 are the services above, 14 is
     /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI`, 16 `OCEL_JS`,
-    /// 17 this producer role, 18 `OCEL_PDF`, and 19 `OCEL_ACTIVATOR`; next free: 20.
+    /// 17 this producer role, 18 `OCEL_PDF`, 19 `OCEL_ACTIVATOR` and 20
+    /// `MACHINE_PIN`; next free: 21.
     pub const USB_HID_PRODUCER: u16 = 17;
     /// Ocel's isolated native PDF rasterizer (`/bin/ocel-pdf`).
     pub const OCEL_PDF: u16 = 18;
     /// Init's allowlisted, demand-only Ocel engine activation endpoint.
     pub const OCEL_ACTIVATOR: u16 = 19;
+    /// Init's machine pin endpoint ([`crate::services::machine_pin`]). The
+    /// kernel accepts this registration only from trusted init naming itself;
+    /// the VFS admits the live provider alone to `/srv/.cellos-machine/`.
+    pub const MACHINE_PIN: u16 = 20;
 }
 
 /// Arguments for `SpawnFromMem`.

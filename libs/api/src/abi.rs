@@ -23,6 +23,7 @@ pub mod dir_handles_tests;
 pub mod disk;
 pub mod fast_ipc;
 pub mod hypervisor;
+pub mod machine_facts;
 pub mod manifest;
 #[cfg(test)]
 mod manifest_compat_tests;

@@ -190,6 +190,7 @@ Source of truth: `cells/tools/cellbox/src/ledger.rs` (compiled in the production
 | builtin | `jobs` | InSuite |
 | builtin | `kill` | InSuiteRefused |
 | builtin | `ls` | InSuite |
+| builtin | `machine` | InSuite |
 | builtin | `mkdir` | InSuite |
 | builtin | `mv` | InSuite |
 | builtin | `ps` | InSuite |
@@ -278,6 +279,7 @@ Source of truth: `cells/tools/cellbox/src/oneshot.rs` `TABLE` (host-tested: ever
 | `ip` | Run |
 | `kill` | Run |
 | `ls` | Run |
+| `machine` | Run |
 | `mkdir` | Run |
 | `mv` | Run |
 | `ps` | Run |

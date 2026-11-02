@@ -109,7 +109,7 @@ const BUILTINS: &[&str] = &[
     "ls", "cat", "wc", "head", "tail", "find", "uniq", "sort", "tee", "mkdir", "rmdir", "rm",
     "touch", "mv", "cp", "vcat", "vwrite", "vappend", "kill", "ps", "pwd", "uname", "free", "env",
     "uptime", "sleep", "blktest", "echo", "history", "ifconfig", "ip", "date", "top", "grep",
-    "sed", "awk", "snapshot", "hv", "shutdown", "clear", "help", "jobs", "test", "[",
+    "sed", "awk", "snapshot", "hv", "shutdown", "clear", "help", "jobs", "test", "[", "machine",
 ];
 
 fn is_assignment(argv: &[String]) -> bool {

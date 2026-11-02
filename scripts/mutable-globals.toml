@@ -367,6 +367,28 @@ rationale = "Write-once AtomicPtr holding only &'static catalog descriptors (Acq
 review = "kernel/src/board.rs:ProfileCell; kernel/src/board.rs:bind_x86_profile; kernel/src/board.rs:selected; kernel/src/main.rs:kmain"
 
 [[global]]
+key = "kernel::board::X86_MACHINE_FACTS @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "once"
+owner = "board::bind_x86_profile stores the boot identity, profile source and DMAR presence once, together with BOUND_X86_PROFILE; board::x86_machine_inputs reads a copy for machine_facts::query (syscall 433)"
+contexts = ["boot", "normal"]
+seal = "set from None under the Spinlock in bind_x86_profile, called once from kmain on the BSP before start_secondaries; a second bind panics before overwriting"
+retirement = "never: lives for the whole run"
+rationale = "Spinlock<Option<Copy data>>: one store at binding, then copy-out reads from syscall context; no allocation (the heap is not up at binding) and no reference escapes the lock."
+review = "kernel/src/board.rs:bind_x86_profile; kernel/src/board.rs:x86_machine_inputs; kernel/src/machine_facts.rs:query; kernel/src/main.rs:kmain"
+
+[[global]]
+key = "kernel::task::syscall::TRUSTED_INIT_TID"
+lifetime = "boot"
+mutation = "once"
+owner = "task::syscall::publish_trusted_init, called by loader::governed_spawn::spawn_init after init's task is committed; read by the RegisterService(MACHINE_PIN) restriction"
+contexts = ["boot", "normal"]
+seal = "compare_exchange from 0 (AcqRel); only the first publication counts, later ones are ignored"
+retirement = "never: lives for the whole run; tids are never reused, so a dead init's tid cannot be taken over"
+rationale = "Write-once AtomicUsize keyed by tid rather than a spawner-chosen task name; Acquire loads in caller_is_trusted_init."
+review = "kernel/src/task/syscall.rs:publish_trusted_init; kernel/src/task/syscall.rs:caller_is_trusted_init; kernel/src/loader/governed_spawn.rs:spawn_init"
+
+[[global]]
 key = "hal-x86::critical_section::x86_64_impl::set_impl!#1 @cfg(feature = \"critical-section-impl\" & target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "none"

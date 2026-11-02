@@ -113,6 +113,21 @@ impl ProfileCell {
 #[cfg(target_arch = "x86_64")]
 static BOUND_X86_PROFILE: ProfileCell = ProfileCell::new();
 
+/// Boot facts kept after binding for the machine fingerprint (syscall 433).
+/// Written once by [`bind_x86_profile`] together with the profile; read by
+/// [`x86_machine_inputs`].
+#[cfg(target_arch = "x86_64")]
+static X86_MACHINE_FACTS: crate::sync::Spinlock<Option<X86BootFacts>> =
+    crate::sync::Spinlock::new(None);
+
+/// The bound profile and the boot facts recorded with it, or `None` before
+/// binding. Never panics: syscall 433 may be asked before or without a profile.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn x86_machine_inputs() -> Option<(&'static BoardDescriptor, X86BootFacts)> {
+    let facts = (*X86_MACHINE_FACTS.lock())?;
+    Some((BOUND_X86_PROFILE.get()?, facts))
+}
+
 /// The x86 profile bound at boot by [`bind_x86_profile`].
 ///
 /// # Panics
@@ -267,13 +282,13 @@ pub(crate) fn choose_x86_profile<'a>(
     Ok((board, source))
 }
 
-/// Binds `board` as the x86 profile for the rest of the boot and names it on
-/// the early console.
+/// Binds `board` as the x86 profile for the rest of the boot, keeps `facts`
+/// for the machine fingerprint, and names the profile on the early console.
 ///
 /// # Panics
 /// If `board` fails validation or a profile is already bound.
 #[cfg(target_arch = "x86_64")]
-pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, source: ProfileSource) {
+pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, facts: X86BootFacts) {
     if let Err(error) = board.validate_for(Architecture::X86_64) {
         invalid_descriptor(error);
     }
@@ -284,9 +299,14 @@ pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, source: ProfileS
             board.slug
         );
     }
-    if !BOUND_X86_PROFILE.bind(board) {
-        panic!("[board] x86 profile bound twice");
+    {
+        let mut kept = X86_MACHINE_FACTS.lock();
+        if kept.is_some() || !BOUND_X86_PROFILE.bind(board) {
+            panic!("[board] x86 profile bound twice");
+        }
+        *kept = Some(facts);
     }
+    let source = facts.source;
     early_console(format_args!(
         "[x86-gate] board={} soc-profile={} source={} dma_isolation={:?}\n",
         board.slug,
@@ -327,6 +347,17 @@ pub(crate) struct PlatformIdentity {
     pub(crate) smbios: Option<crate::smbios::SmbiosSystem>,
     /// `CPUID.1:ECX[31]`: a hypervisor reports itself.
     pub(crate) hypervisor: bool,
+}
+
+/// What binding keeps for the machine fingerprint. Plain data: it selects
+/// nothing and grants nothing.
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct X86BootFacts {
+    pub(crate) identity: PlatformIdentity,
+    pub(crate) source: ProfileSource,
+    /// Firmware published a DMAR table (`AcpiInfo::dmar_present`).
+    pub(crate) dmar_present: bool,
 }
 
 /// One log line: `acpi_oem=… smbios=… hv=0|1`. Firmware strings are printed

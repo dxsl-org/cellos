@@ -56,6 +56,7 @@ pub mod fs; // Filesystem
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod loader;
+pub(crate) mod machine_facts; // Machine facts record for syscall 433 (ADR-0029 §3)
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 #[cfg(cellos_p01_trace)]
 pub(crate) mod p01_measurement;
@@ -455,12 +456,20 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::board::report_identity(&platform_identity);
     // Bind the profile once, before the first `has_driver` gate. The operator
     // names it on the Limine command line; detected facts may only reject it.
+    // The facts are kept with the profile for the machine fingerprint (433).
     #[cfg(target_arch = "x86_64")]
     {
         let cmdline = crate::boot::limine::get_executable_cmdline(crate::board::CMDLINE_MAX + 1)
             .unwrap_or(&[]);
         match crate::board::choose_x86_profile(cmdline, &platform_identity) {
-            Ok((board, source)) => crate::board::bind_x86_profile(board, source),
+            Ok((board, source)) => crate::board::bind_x86_profile(
+                board,
+                crate::board::X86BootFacts {
+                    identity: platform_identity,
+                    source,
+                    dmar_present: acpi_info.dmar_present,
+                },
+            ),
             Err(error) => panic!("[board] {}", error),
         }
     }

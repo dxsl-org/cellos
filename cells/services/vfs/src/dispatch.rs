@@ -51,8 +51,10 @@ pub fn handle_request<'a>(
     }
 
     // Centrally deny any mutating request from a caller lacking VfsMutate authority
-    // BEFORE path sealing, handle resolution, or backend work.
-    if req.requires_mutation_authority() && !caller.may_mutate() {
+    // BEFORE path sealing, handle resolution, or backend work. The only exception
+    // is init's machine pin store: `Write`/`Mkdir` inside `/srv/.cellos-machine`
+    // from the live `MACHINE_PIN` provider (see `AccessTable::is_machine_pin_writer`).
+    if req.requires_mutation_authority() && !caller.may_mutate() && !machine_pin_write(vfs, caller, &req) {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
     // A cell that has given up path strings is refused here, before the request
@@ -215,5 +217,17 @@ pub fn handle_request<'a>(
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
         _ => api::ipc::VfsResponse::Err(0xFF),
+    }
+}
+
+/// Whether `req` is the narrow machine pin exception to the central mutate
+/// gate: a path `Write` or `Mkdir` that `AccessTable::is_machine_pin_writer`
+/// admits. Any other request kind, path or caller still needs the mutate flag.
+fn machine_pin_write(vfs: &VfsManager, caller: Caller, req: &api::ipc::VfsRequest<'_>) -> bool {
+    match *req {
+        api::ipc::VfsRequest::Write { path, .. } | api::ipc::VfsRequest::Mkdir(path) => {
+            vfs.access.is_machine_pin_writer(caller, path)
+        }
+        _ => false,
     }
 }

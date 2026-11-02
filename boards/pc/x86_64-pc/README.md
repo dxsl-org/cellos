@@ -30,3 +30,29 @@ Driver families are added to `enabled_drivers` by the phase that ships them
 (`.agents/261004-1957-x86-pc-lane/`): AHCI storage (02a/02b), xHCI USB (03),
 Intel `igb` NIC (04a/04b), extra 16550 ports (06). A descriptor never lists a
 driver whose cell does not exist — `has_driver` gates real kernel init.
+
+## Machine pin and re-confirmation (ADR-0029 §3)
+
+Before any configured service starts, init compares the kernel's machine facts
+(profile and its source, ACPI root OEM, SMBIOS type 1, DMAR/VT-d, hypervisor
+bit, PCI function set) with `/srv/.cellos-machine/pin` on the provisioned
+CellosFS `/srv` (P5). The first boot records the pin. A later difference prints
+one `Init: machine pin: changed …` or `pci +/-…` line per change and enters
+**safe mode**: only `input` and the `cellbox` console shell start; `net` and
+every other configured service are withheld. Under this profile a missing or
+unreadable store (no `/srv`, or no VT-d so storage DMA is refused) is safe mode
+too.
+
+To accept the change, read the diff, then at the console:
+
+```text
+Cellos > machine pin --confirm
+machine pin: current=<64 hex>
+machine pin: recorded <64 hex>; reboot to start services
+```
+
+and reboot. Init accepts the confirm only in safe mode, only from the shell it
+started, and only for the digest it currently reports. `machine pin` alone
+prints the state and both digests. The pin grants nothing and changes no
+profile or DMA decision; it is change detection, not a boot-integrity control
+(see HCL R3).

@@ -76,6 +76,7 @@ ostd::declare_custom_heap!(HEAP_ARENA_BYTES);
 
 mod cmd_cwd;
 mod cmd_fs;
+mod cmd_machine;
 mod cmd_sys;
 mod commands;
 mod context_session;

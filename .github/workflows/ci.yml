@@ -1039,6 +1039,23 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+      # Plan 261031-1241 phase 03 (ADR-0029 §3): machine fingerprint pinning.
+      # One P5-provisioned disk (scripts/x86/machine_pin_disk.py) across PC
+      # boots: first boot pins, an unchanged reboot matches, an added e1000 is a
+      # PCI diff and safe mode until `machine pin --confirm`, then a match; a
+      # corrupt record and a PC boot without an IOMMU are safe mode; q35 without
+      # a store warns and continues; removing VT-d on q35 names dmar/vtd.
+      - name: Machine pin lanes (x86_64-pc + q35)
+        env:
+          VICELL_PC_ISO: ${{ github.workspace }}/build/x86-pc-lane/vicell-x86-pc.iso
+          VICELL_X86_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test machine-pin-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture --test-threads=1
+
       # Phase 06: N declared 16550 ports, driven from a cell. The lane attaches
       # three extra `isa-serial` devices behind its own chardev sockets (the test
       # creates them), so it proves both directions per port and that COM1 is

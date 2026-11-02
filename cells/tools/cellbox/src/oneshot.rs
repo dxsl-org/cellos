@@ -51,7 +51,7 @@ pub enum Class {
 }
 
 /// The closed one-shot table: every `BUILTINS` name, `[`, `.` and the six stage words,
-/// each exactly once (62 + 6).
+/// each exactly once (63 + 6).
 pub const TABLE: &[(&str, Class)] = &[
     ("awk", Class::Run),
     ("blktest", Class::Run),
@@ -70,6 +70,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("ip", Class::Run),
     ("kill", Class::Run),
     ("ls", Class::Run),
+    ("machine", Class::Run),
     ("mkdir", Class::Run),
     ("mv", Class::Run),
     ("ps", Class::Run),
@@ -450,11 +451,11 @@ mod tests {
         expected.extend(["[", "."]);
         expected.extend(STAGES);
         assert_eq!(set, expected);
-        assert_eq!(TABLE.len(), 68);
+        assert_eq!(TABLE.len(), 69);
         let count = |class: Class| TABLE.iter().filter(|(_, c)| *c == class).count();
         assert_eq!(
             [count(Class::Run), count(Class::State), count(Class::Terminal), count(Class::Launch), count(Class::Reserved), count(Class::Stage)],
-            [42, 16, 1, 2, 1, 6]
+            [43, 16, 1, 2, 1, 6]
         );
         for stage in STAGES {
             assert_eq!(class_of(stage), Some(Class::Stage));

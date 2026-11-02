@@ -94,6 +94,7 @@ pub const LEDGER: &[Entry] = &[
     e(Builtin, "jobs", InSuite),
     e(Builtin, "kill", InSuiteRefused),
     e(Builtin, "ls", InSuite),
+    e(Builtin, "machine", InSuite),
     e(Builtin, "mkdir", InSuite),
     e(Builtin, "mv", InSuite),
     e(Builtin, "ps", InSuite),
@@ -218,9 +219,10 @@ mod tests {
 
     #[test]
     fn counts_match_the_s2_gate() {
-        // 57 at the S2 gate, plus `edit` (Phase 08 S8-4), `ssh` (Phase 09 S9-2) and
-        // `completion` (Phase 09 S9-6, the `cellbox.ssh.completion` record).
-        assert_eq!(names_of(Builtin).len(), 60);
+        // 57 at the S2 gate, plus `edit` (Phase 08 S8-4), `ssh` (Phase 09 S9-2),
+        // `completion` (Phase 09 S9-6, the `cellbox.ssh.completion` record) and `machine`
+        // (ADR-0029 §3, the init machine-pin client).
+        assert_eq!(names_of(Builtin).len(), 61);
         assert_eq!(names_of(SysTool).len(), 11);
         assert_eq!(names_of(NetTool).len(), 6);
     }

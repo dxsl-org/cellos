@@ -968,7 +968,7 @@ pub const BUILTINS: &[&str] = &[
     "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "date", "echo", "edit",
     "ssh", "completion",
     "env", "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "hv",
-    "ifconfig", "ip", "jobs", "kill", "ls", "mkdir", "mv", "ps", "pwd", "read", "rg", "rm", "rmdir",
+    "ifconfig", "ip", "jobs", "kill", "ls", "machine", "mkdir", "mv", "ps", "pwd", "read", "rg", "rm", "rmdir",
     "sed", "shutdown", "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top",
     "touch", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
     "cp",
@@ -2267,6 +2267,7 @@ fn catalog_handler(prog: &str) -> Option<Catalog> {
         "kill" => Status(|_| crate::commands::cmd_kill()),
         "snapshot" => Status(|_| crate::commands::cmd_snapshot()),
         "shutdown" => Status(|_| crate::cmd_sys::cmd_shutdown()),
+        "machine" => Status(crate::cmd_machine::cmd_machine),
         "help" => Status(|_| crate::commands::cmd_help().map(|_| 0).unwrap_or(1)),
         "test" => Status(|args| {
             let refs: Vec<&str> = args.iter().map(String::as_str).collect();

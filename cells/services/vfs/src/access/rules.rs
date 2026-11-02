@@ -48,6 +48,13 @@ pub static EXACT_RULES: &[PathRule] = &[
         allow_read_all: false,
         allow_write_all: false,
     },
+    // ADR-0029 §3: the machine fingerprint pin. Only the live `MACHINE_PIN`
+    // provider (trusted init) is admitted (`access::machine_pin`).
+    PathRule {
+        prefix: "/srv/.cellos-machine",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
     PathRule {
         prefix: crate::access::GUEST_DISK_PATH,
         allow_read_all: true,
@@ -102,6 +109,11 @@ pub static PREFIX_RULES: &[PathRule] = &[
     },
     PathRule {
         prefix: "/srv/.cellos-trust/",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: "/srv/.cellos-machine/",
         allow_read_all: false,
         allow_write_all: false,
     },

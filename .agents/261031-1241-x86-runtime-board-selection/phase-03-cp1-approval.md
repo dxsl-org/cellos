@@ -17,3 +17,6 @@ Approved as recommended:
 
 The lock handoff in [phase-03-lock-handoff-draft.md](phase-03-lock-handoff-draft.md) is effective with these answers.
 CP2 (the evidence) still needs approval before commit.
+
+## CP2
+2026-11-02: the user replied "Duyệt CP2 + commit". The dossier at reports/phase-03-cp2-dossier.md is approved, including deviations 1–7 (VFS pin exception, cellbox registry, iommu-dmar-x86 lane, TRUSTED_INIT_TID placement, fixed magic/version frame, definitive-absence re-pin rule, refreshed aarch64 init).

@@ -117,6 +117,21 @@ fn make_nvme_disk() -> PathBuf {
     path
 }
 
+/// A disk with a provisioned blank `/srv` (`scripts/x86/machine_pin_disk.py`):
+/// the strict PC profile withholds services when it has no machine pin store
+/// (ADR-0029 §3), so the lane that expects the network needs one.
+fn make_pin_store_disk() -> PathBuf {
+    let disk = make_nvme_disk();
+    let status = std::process::Command::new("python3")
+        .arg(repo_root().join("scripts/x86/machine_pin_disk.py"))
+        .arg(&disk)
+        .status()
+        .expect("run machine_pin_disk.py");
+    assert!(status.success(), "machine_pin_disk.py failed: {status}");
+    let _ = std::fs::remove_file(format!("{}.srv-receipt.json", disk.display()));
+    disk
+}
+
 /// The `0x…` value that follows `key` on the first line containing `marker`.
 fn value_after(serial: &str, marker: &str, key: &str) -> Option<String> {
     let line = serial.lines().find(|line| line.contains(marker))?;
@@ -137,8 +152,14 @@ fn x86_pc_discovers_the_vtd_base_from_acpi_dmar() {
         return;
     }
 
-    let disk = make_nvme_disk();
+    let disk = make_pin_store_disk();
     let qemu = QemuRunner::boot_x86_bios_with_vtd_igb_nic(&iso, &disk.to_string_lossy());
+    require_marker(
+        &qemu,
+        &disk,
+        "Init: machine pin: first boot",
+        "the strict profile did not pin its first boot",
+    );
 
     require_marker(
         &qemu,
@@ -214,6 +235,13 @@ fn x86_pc_without_a_remapper_refuses_untranslated_dma() {
         &disk,
         "Cellos >",
         "the machine did not stay alive after refusing DMA",
+    );
+    // No DMA means no pin store: the strict profile withholds services.
+    require_marker(
+        &qemu,
+        &disk,
+        "Init: SAFE MODE",
+        "the strict profile without a pin store did not enter safe mode",
     );
 
     std::thread::sleep(std::time::Duration::from_millis(500));

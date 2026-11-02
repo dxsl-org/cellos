@@ -1078,6 +1078,57 @@ pub fn devices() -> Vec<PciDevice> {
     devices.clone()
 }
 
+/// `(vendor, device, class, subclass, prog_if)` of every registered function,
+/// for the machine fingerprint (syscall 433). Every field is re-read from
+/// config space by BDF, so none comes from a Platform Cell `cls` argument.
+/// `None` without an admitted ECAM window. Read-only: `PCI_DEVICES`,
+/// registration and `PLATFORM_REGISTERED` are untouched.
+#[cfg(target_arch = "x86_64")]
+pub fn fingerprint_functions() -> Option<Vec<api::machine_facts::PciFunctionId>> {
+    let (ecam_base, bus_start, bus_end) = ecam_window();
+    if ecam_base == 0 {
+        return None;
+    }
+    let bdfs: Vec<(u8, u8, u8)> = PCI_DEVICES.lock().iter().map(|device| device.bdf).collect();
+    // SAFETY: x86 paging maps the validated MCFG allocation before any Cell
+    // runs, and it stays mapped for the whole boot.
+    Some(unsafe { fingerprint_in_window(ecam_base, bus_start, bus_end, &bdfs) })
+}
+
+/// Config-space identity and class code of each `bdfs` entry inside the
+/// window. An entry outside the admitted bus range cannot have been
+/// registered (registration reads it through the same window) and is skipped.
+///
+/// # Safety
+/// The admitted ECAM window must be identity-mapped and remain live.
+#[cfg(target_arch = "x86_64")]
+unsafe fn fingerprint_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bdfs: &[(u8, u8, u8)],
+) -> Vec<api::machine_facts::PciFunctionId> {
+    bdfs.iter()
+        .filter_map(|&(bus, dev, fun)| {
+            // SAFETY: the caller guarantees the window is live and mapped.
+            let (vendor, device) =
+                unsafe { read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)? };
+            // Dword at 0x08: revision ID, prog IF, subclass, class code.
+            let class_reg = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, 0x08)?;
+            // SAFETY: the checked, 4-byte-aligned class register lies in the
+            // same live function header.
+            let class_code = unsafe { core::ptr::read_volatile(class_reg.cast::<u32>()) };
+            Some(api::machine_facts::PciFunctionId {
+                vendor,
+                device,
+                class: (class_code >> 24) as u8,
+                subclass: (class_code >> 16) as u8,
+                prog_if: (class_code >> 8) as u8,
+            })
+        })
+        .collect()
+}
+
 /// Find the first supported device matching (class, subclass, prog_if).
 ///
 /// Example: NVMe = `find_class(0x01, 0x08, 0x02)`.
@@ -1293,5 +1344,30 @@ mod tests {
         // SAFETY: as above.
         let overflow = unsafe { quiesce_in_window(base, 0, 0, 0x02_00_00) };
         assert_eq!(overflow, Err(QuiesceError::OutOfRange));
+    }
+
+    /// The fingerprint takes identity and class code from config space by BDF,
+    /// never from a registration's `cls` argument, and skips BDFs outside the
+    /// admitted window.
+    #[test]
+    fn fingerprint_reads_identity_and_class_from_config_space() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        let at = (3usize << 15) | (1 << 12);
+        ecam[at..at + 4].copy_from_slice(&[0x86, 0x80, 0x0e, 0x10]);
+        ecam[at + 8..at + 12].copy_from_slice(&[0x03, 0x00, 0x00, 0x02]);
+        // SAFETY: the window is the live 1 MiB buffer above; bus 1 is outside it.
+        let ids = unsafe {
+            fingerprint_in_window(ecam.as_mut_ptr() as usize, 0, 0, &[(0, 3, 1), (1, 0, 0)])
+        };
+        assert_eq!(
+            ids,
+            [api::machine_facts::PciFunctionId {
+                vendor: 0x8086,
+                device: 0x100e,
+                class: 0x02,
+                subclass: 0x00,
+                prog_if: 0x00,
+            }]
+        );
     }
 }
