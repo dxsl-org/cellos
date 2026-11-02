@@ -79,7 +79,7 @@ fn shell_launch_profile_allows_vfs_test_and_routes_snapshot_via_supervisor() {
     let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
     qemu.wait_for("[selftest] boot-ceiling: PASS", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("boot selftest not observed: {e}\n{}", qemu.dump()));
-    qemu.wait_for("Init: service registry verified.", BOOT_TIMEOUT)
+    qemu.wait_for("Init: service registry verified (", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("init verification missing: {e}\n{}", qemu.dump()));
     qemu.wait_for(PROMPT, BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt not reached: {e}\n{}", qemu.dump()));

@@ -471,7 +471,7 @@ fn riscv64_vfs_smp_all_pass() {
     // Init must survive enough two-hart scheduling pressure to finish its
     // VFS/config launch sequence before the VFS client exercises the service.
     wait_for_or_dump(&runner, "Init: services spawned.");
-    wait_for_or_dump(&runner, "Init: service registry verified.");
+    wait_for_or_dump(&runner, "Init: service registry verified (");
 
     for marker in [
         "ATOMIC_PUBLICATION_AP-00: PASS",
