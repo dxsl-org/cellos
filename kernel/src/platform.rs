@@ -154,77 +154,40 @@ pub fn init(sbi_dtb: usize) {
     unsafe { publish_boot(info) };
 }
 
-// ── Raspberry Pi 3 defaults (BCM2837, aarch64, board-rpi3) ───────────────────
-// BCM2837: peripherals at 0x3F000000, no GIC, no VirtIO, no Goldfish RTC.
-// Mini UART IO register at 0x3F215040 (AUX_MU_IO).
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+// ── AArch64: board facts from the backend ────────────────────────────────────
+// QEMU ARM virt publishes PL011, PL031 and four VirtIO MMIO slots; the BCM
+// boards publish their console UART only (no VirtIO MMIO, no RTC).
+#[cfg(target_arch = "aarch64")]
 pub fn init(_dtb_ptr: usize) {
-    let board = crate::board::selected_rpi3();
-    let soc = hal_soc_bcm27xx::BCM2837;
-    // RPi 3 has no Goldfish/PL031 RTC — uptime only via ARM counter, epoch=0.
+    use hal::aarch64::backend::{ArmResources, Board};
+    let board = crate::board::active();
+    let facts = <Board as ArmResources>::PLATFORM;
+    if let Some(rtc_base) = facts.rtc_base {
+        hal::rtc::init(rtc_base);
+    }
     let info = PlatformInfo {
-        uart_base: soc.mmio.mini_uart_io,
-        uart_irq: 0,
+        uart_base: facts.uart_base,
+        uart_irq: facts.uart_irq,
         plic_base: 0,
         plic_size: 0,
         clint_base: 0,
-        virtio_mmio: [None; 8],
-        rtc_base: 0,
+        virtio_mmio: match <Board as ArmResources>::VIRTIO_MMIO {
+            Some(layout) => arm_virtio_slots(layout, facts.published_virtio_slots),
+            None => [None; 8],
+        },
+        rtc_base: facts.rtc_base.unwrap_or(0),
     };
     // SAFETY: `kmain` invokes this once during single-core boot.
     unsafe { publish_boot(info) };
-    log::info!(
-        "[platform] RPi 3 BCM2837: UART={:#x} periph={:#x} fallback-end={:#x}",
-        soc.mmio.mini_uart_io,
-        soc.mmio.peripheral_base,
-        board.fallback_memory[1].base + board.fallback_memory[1].size
-    );
-}
-
-// ── QEMU ARM virt defaults (aarch64) ─────────────────────────────────────────
-// QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
-// PL031 RTC at 0x0901_0000 on ARM virt; UART (PL011) at 0x0900_0000.
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-pub fn init(_dtb_ptr: usize) {
-    let _board = crate::board::selected_qemu_arm_virt();
-    let soc = hal_soc_arm_virt::QEMU_ARM_VIRT;
-    hal::rtc::init(soc.rtc.base);
-    let info = PlatformInfo {
-        uart_base: soc.uart.mmio.base,
-        uart_irq: soc.uart.spi,
-        plic_base: 0,
-        plic_size: 0,
-        clint_base: 0,
-        virtio_mmio: arm_virtio_slots(soc.virtio, 4),
-        rtc_base: soc.rtc.base,
-    };
-    // SAFETY: `kmain` invokes this once during single-core boot.
-    unsafe { publish_boot(info) };
-}
-
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-pub fn init(_dtb_ptr: usize) {
-    let _board = crate::board::selected_rpi4();
-    let soc = hal_soc_bcm27xx::BCM2711;
-    let info = PlatformInfo {
-        uart_base: soc.mmio.uart_base,
-        uart_irq: 0,
-        plic_base: 0,
-        plic_size: 0,
-        clint_base: 0,
-        virtio_mmio: [None; 8],
-        rtc_base: 0,
-    };
-    // SAFETY: `kmain` invokes this once during single-core boot.
-    unsafe { publish_boot(info) };
+    if let Some(announce) = facts.announce {
+        log::info!(
+            "[platform] {}: UART={:#x} periph={:#x} fallback-end={:#x}",
+            announce.label,
+            facts.uart_base,
+            announce.peripheral_base,
+            board.fallback_memory[1].base + board.fallback_memory[1].size
+        );
+    }
 }
 
 #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
@@ -472,11 +435,7 @@ fn required_riscv_mmio(
     region.unwrap_or_else(|| panic!("[board] RISC-V fallback is missing {}", name))
 }
 
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 fn arm_virtio_slots(
     layout: hal_soc_arm_virt::VirtioMmioLayout,
     limit: usize,

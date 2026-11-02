@@ -14,24 +14,12 @@
 //! entry when the cell exits.  A new cell that re-opens GPIO after a restart
 //! becomes the new owner transparently.
 
-/// GPIO MMIO base — PL061 on QEMU ARM virt, BCM2837 on Raspberry Pi 3.
-/// Must match the allowlist entry in resource_registry.rs for the current target.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-const GPIO_MMIO_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.gpio_base;
-
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-const GPIO_MMIO_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.gpio_base;
-
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-const GPIO_MMIO_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.gpio.mmio.base;
+/// GPIO MMIO base — the board backend's GPIO controller (PL061 on QEMU ARM
+/// virt, the BCM GPIO block on Raspberry Pi). Must match the allowlist entry in
+/// resource_registry.rs for the current target.
+#[cfg(target_arch = "aarch64")]
+const GPIO_MMIO_BASE: usize =
+    <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::GPIO_MMIO_BASE;
 
 #[cfg(not(target_arch = "aarch64"))]
 const GPIO_MMIO_BASE: usize = 0;
@@ -67,9 +55,11 @@ const _: crate::hal::GpioNotifyIrq = vi_gpio_notify_irq;
 /// Signal USB DWC2 hardware interrupt to the driver cell waiting on USB_IRQ.
 #[no_mangle]
 pub extern "Rust" fn vi_signal_usb_irq() {
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
+    if let Some(usb_irq) =
+        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::USB_ONE_SHOT_IRQ
     {
-        crate::task::drivers::irq_wait::signal_irq(hal_soc_bcm27xx::BCM2837.irq.usb as u8);
+        crate::task::drivers::irq_wait::signal_irq(usb_irq as u8);
     }
 }
 

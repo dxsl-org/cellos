@@ -10,7 +10,12 @@ pub mod timer;
 mod trap;
 pub mod uart_bcm_mini;
 
-use super::{ArmIrqController, ArmPlatform, ArmTimer, NoIommu, SecondaryStart};
+use hal_soc_bcm27xx::BCM2837;
+
+use super::{
+    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
+    MmioWindow, NoIommu, PlatformAnnounce, PlatformFacts, SdhciFacts, SecondaryStart,
+};
 use crate::aarch64::trap::TrapFrame;
 
 /// Raspberry Pi 3 (BCM2837).
@@ -125,4 +130,67 @@ impl ArmTimer for Bcm2837 {
     fn reset() {
         timer::reset();
     }
+}
+
+impl ArmResources for Bcm2837 {
+    const SOC: ArmSoc = ArmSoc::Bcm2837;
+
+    /// Peripherals at 0x3F000000, no GIC, no VirtIO, no Goldfish/PL031 RTC
+    /// (uptime only via the ARM counter, epoch = 0). The console register is
+    /// the mini UART IO register at 0x3F215040 (AUX_MU_IO).
+    const PLATFORM: PlatformFacts = PlatformFacts {
+        uart_base: BCM2837.mmio.mini_uart_io,
+        uart_irq: 0,
+        rtc_base: None,
+        published_virtio_slots: 0,
+        announce: Some(PlatformAnnounce {
+            label: "RPi 3 BCM2837",
+            peripheral_base: BCM2837.mmio.peripheral_base,
+        }),
+    };
+
+    const KERNEL_MMIO_MAPS: &'static [MmioMap] = &[
+        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): cell MMIO.
+        // Covers mini UART, GPIO, I2C, SPI, EMMC — kernel maps them all; individual
+        // cells receive sub-regions via sys_request_mmio / resource_registry.
+        MmioMap {
+            base: BCM2837.mmio.peripheral_base,
+            end: match BCM2837.mmio.peripheral_end() {
+                Some(end) => end,
+                None => panic!("BCM2837 peripheral span must not overflow"),
+            },
+            cell_access: true,
+        },
+        // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
+        MmioMap {
+            base: BCM2837.mmio.local_controller_base,
+            end: match BCM2837.mmio.local_controller_end() {
+                Some(end) => end,
+                None => panic!("BCM2837 local-controller span must not overflow"),
+            },
+            cell_access: false,
+        },
+    ];
+
+    const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = None;
+    const GPIO_MMIO_BASE: usize = BCM2837.mmio.gpio_base;
+    const DWC2_WINDOW: Option<MmioWindow> = Some(MmioWindow {
+        base: BCM2837.mmio.dwc2_base,
+        size: BCM2837.mmio.dwc2_grant_size,
+    });
+    /// VideoCore mailbox; framebuffers live below the peripheral aperture.
+    const DISPLAY: Option<DisplayFirmware> = Some(DisplayFirmware {
+        mailbox: MmioWindow {
+            base: BCM2837.mmio.mailbox_base,
+            size: BCM2837.mmio.mailbox_grant_size,
+        },
+        framebuffer_limit: BCM2837.mmio.peripheral_base,
+    });
+    const SDHCI: Option<SdhciFacts> = Some(SdhciFacts {
+        base: BCM2837.mmio.sdhci_base,
+        word_access_only: BCM2837.sdhci.word_access_only,
+        minimum_write_spacing_us: BCM2837.sdhci.minimum_write_spacing_us,
+        pinmux_gpio_base: Some(BCM2837.mmio.gpio_base),
+    });
+    const BOARD_PINMUX_GPIO_BASE: Option<usize> = Some(BCM2837.mmio.gpio_base);
 }

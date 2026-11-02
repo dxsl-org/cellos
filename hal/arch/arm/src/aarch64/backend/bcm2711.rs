@@ -3,7 +3,10 @@
 
 use hal_soc_bcm27xx::BCM2711;
 
-use super::{ArmIrqController, ArmPlatform, ArmTimer, NoIommu, SecondaryStart};
+use super::{
+    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
+    MmioWindow, NoIommu, PlatformFacts, SdhciFacts, SecondaryStart,
+};
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
 use crate::aarch64::{timer, uart_pl011};
@@ -104,4 +107,69 @@ impl ArmTimer for Bcm2711 {
     fn reset() {
         timer::reset_generic();
     }
+}
+
+/// `base + size`, or a compile-time error when a profile window overflows.
+const fn window_end(base: usize, size: usize) -> usize {
+    match base.checked_add(size) {
+        Some(end) => end,
+        None => panic!("BCM2711 MMIO window overflows the address space"),
+    }
+}
+
+impl ArmResources for Bcm2711 {
+    const SOC: ArmSoc = ArmSoc::Bcm2711;
+
+    const PLATFORM: PlatformFacts = PlatformFacts {
+        uart_base: BCM2711.mmio.uart_base,
+        uart_irq: 0,
+        rtc_base: None,
+        published_virtio_slots: 0,
+        announce: None,
+    };
+
+    const KERNEL_MMIO_MAPS: &'static [MmioMap] = &[
+        // Cell-accessible device windows: GPIO, PL011 UART, SDHCI.
+        MmioMap {
+            base: BCM2711.mmio.gpio_base,
+            end: window_end(BCM2711.mmio.gpio_base, BCM2711.mmio.gpio_grant_size),
+            cell_access: true,
+        },
+        MmioMap {
+            base: BCM2711.mmio.uart_base,
+            end: window_end(BCM2711.mmio.uart_base, BCM2711.mmio.uart_grant_size),
+            cell_access: true,
+        },
+        MmioMap {
+            base: BCM2711.mmio.sdhci_base,
+            end: window_end(BCM2711.mmio.sdhci_base, BCM2711.mmio.sdhci_grant_size),
+            cell_access: true,
+        },
+        // GIC-400 distributor and CPU interface (kernel-only).
+        MmioMap {
+            base: BCM2711.mmio.gic_distributor_base,
+            end: window_end(
+                BCM2711.mmio.gic_distributor_base,
+                BCM2711.mmio.gic_distributor_size,
+            ),
+            cell_access: false,
+        },
+        MmioMap {
+            base: BCM2711.mmio.gic_cpu_base,
+            end: window_end(BCM2711.mmio.gic_cpu_base, BCM2711.mmio.gic_cpu_size),
+            cell_access: false,
+        },
+    ];
+
+    const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = None;
+    const GPIO_MMIO_BASE: usize = BCM2711.mmio.gpio_base;
+    const DWC2_WINDOW: Option<MmioWindow> = None;
+    const DISPLAY: Option<DisplayFirmware> = None;
+    const SDHCI: Option<SdhciFacts> = Some(SdhciFacts {
+        base: BCM2711.mmio.sdhci_base,
+        word_access_only: BCM2711.sdhci.word_access_only,
+        minimum_write_spacing_us: BCM2711.sdhci.minimum_write_spacing_us,
+        pinmux_gpio_base: Some(BCM2711.mmio.gpio_base),
+    });
+    const BOARD_PINMUX_GPIO_BASE: Option<usize> = None;
 }

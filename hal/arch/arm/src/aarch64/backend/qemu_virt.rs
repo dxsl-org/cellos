@@ -4,7 +4,10 @@
 use hal_arch_trait::vi_handle_virtio_irq;
 use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
 
-use super::{ArmIrqController, ArmPlatform, ArmTimer, NoIommu, SecondaryStart};
+use super::{
+    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
+    MmioWindow, NoIommu, PlatformFacts, SdhciFacts, SecondaryStart,
+};
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
 use crate::aarch64::{timer, uart_pl011};
@@ -122,4 +125,59 @@ impl ArmTimer for QemuVirt {
     fn reset() {
         timer::reset_generic();
     }
+}
+
+impl ArmResources for QemuVirt {
+    const SOC: ArmSoc = ArmSoc::QemuArmVirt;
+
+    /// PL011 UART at 0x0900_0000; PL031 RTC at 0x0901_0000; the first four of
+    /// the 32 VirtIO MMIO slots at 0x0a000000 (512 bytes each, SPI 16+i).
+    const PLATFORM: PlatformFacts = PlatformFacts {
+        uart_base: QEMU_ARM_VIRT.uart.mmio.base,
+        uart_irq: QEMU_ARM_VIRT.uart.spi,
+        rtc_base: Some(QEMU_ARM_VIRT.rtc.base),
+        published_virtio_slots: 4,
+        announce: None,
+    };
+
+    const KERNEL_MMIO_MAPS: &'static [MmioMap] = &[
+        // GIC (EL1-only): cells must not modify interrupt routing.
+        MmioMap {
+            base: QEMU_ARM_VIRT.gic_map.base,
+            end: QEMU_ARM_VIRT.gic_map.end(),
+            cell_access: false,
+        },
+        // Peripheral MMIO (GPIO PL061, UART PL011, RTC): cells access directly via
+        // driver rlibs (bit-bang GPIO/I2C/SPI/PWM). LBI guarantees only cells with
+        // the GPIO capability can construct driver objects, so USER access is safe.
+        MmioMap {
+            base: QEMU_ARM_VIRT.peripheral_map.base,
+            end: QEMU_ARM_VIRT.peripheral_map.end(),
+            cell_access: true,
+        },
+        MmioMap {
+            base: QEMU_ARM_VIRT.virtio.region().base,
+            end: QEMU_ARM_VIRT.virtio.region().end(),
+            cell_access: true,
+        },
+        MmioMap {
+            base: QEMU_ARM_VIRT.platform_bus_map.base,
+            end: QEMU_ARM_VIRT.platform_bus_map.end(),
+            cell_access: false,
+        },
+        // PCIe ECAM bus-0 window (1 MiB at 0x3F00_0000) for ARM64 virt gpex.
+        // Required before pcie_ecam::init() accesses config space.
+        MmioMap {
+            base: QEMU_ARM_VIRT.pcie_ecam_bus0.base,
+            end: QEMU_ARM_VIRT.pcie_ecam_bus0.end(),
+            cell_access: false,
+        },
+    ];
+
+    const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout> = Some(QEMU_ARM_VIRT.virtio);
+    const GPIO_MMIO_BASE: usize = QEMU_ARM_VIRT.gpio.mmio.base;
+    const DWC2_WINDOW: Option<MmioWindow> = None;
+    const DISPLAY: Option<DisplayFirmware> = None;
+    const SDHCI: Option<SdhciFacts> = None;
+    const BOARD_PINMUX_GPIO_BASE: Option<usize> = None;
 }

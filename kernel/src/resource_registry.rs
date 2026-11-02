@@ -74,8 +74,19 @@ pub const CLASS_DWC2: MmioClass = 1 << 9;
 /// class scopes the capability: a cell may claim a range only if it declared
 /// the matching device class, so one peripheral class cannot claim another
 /// class's controller window.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-const ALLOWED: &[(usize, usize, u8)] = &[
+///
+/// AArch64: one table per SoC, kept here so the `DEV_*` bits stay kernel-local;
+/// the board backend's [`ArmSoc`](hal::aarch64::backend::ArmSoc) selects it.
+#[cfg(target_arch = "aarch64")]
+const ALLOWED: &[(usize, usize, u8)] =
+    match <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SOC {
+        hal::aarch64::backend::ArmSoc::QemuArmVirt => QEMU_ARM_VIRT_ALLOWED,
+        hal::aarch64::backend::ArmSoc::Bcm2837 => BCM2837_ALLOWED,
+        hal::aarch64::backend::ArmSoc::Bcm2711 => BCM2711_ALLOWED,
+    };
+
+#[cfg(target_arch = "aarch64")]
+const BCM2837_ALLOWED: &[(usize, usize, u8)] = &[
     (
         hal_soc_bcm27xx::BCM2837.mmio.gpio_base,
         hal_soc_bcm27xx::BCM2837.mmio.gpio_grant_size,
@@ -103,12 +114,8 @@ const ALLOWED: &[(usize, usize, u8)] = &[
     ),
 ];
 
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-const ALLOWED: &[(usize, usize, u8)] = &[
+#[cfg(target_arch = "aarch64")]
+const QEMU_ARM_VIRT_ALLOWED: &[(usize, usize, u8)] = &[
     (
         hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base,
         hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.size,
@@ -121,12 +128,8 @@ const ALLOWED: &[(usize, usize, u8)] = &[
     ),
 ];
 
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-const ALLOWED: &[(usize, usize, u8)] = &[
+#[cfg(target_arch = "aarch64")]
+const BCM2711_ALLOWED: &[(usize, usize, u8)] = &[
     (
         hal_soc_bcm27xx::BCM2711.mmio.uart_base,
         hal_soc_bcm27xx::BCM2711.mmio.uart_grant_size,
@@ -138,6 +141,55 @@ const ALLOWED: &[(usize, usize, u8)] = &[
         DEV_GPIO,
     ),
 ];
+
+// Authority-table equality (Q5): every AArch64 build checks all three tables at
+// compile time against the pre-plan snapshot (baseline `6d5cdeb0c`, values
+// copied once from the SoC profiles). A drifted profile or a mis-moved entry
+// fails the build instead of widening a Cell's MMIO reach.
+#[cfg(target_arch = "aarch64")]
+const BCM2837_ALLOWED_SNAPSHOT: &[(usize, usize, u8)] = &[
+    (0x3F20_0000, 0x1000, DEV_GPIO),
+    (0x3F21_5000, 0x1000, DEV_UART),
+    (0x3F80_4000, 0x1000, DEV_I2C),
+    (0x3F20_4000, 0x1000, DEV_SPI),
+    (0x3F00_B880, 0x1000, DEV_DISPLAY),
+];
+#[cfg(target_arch = "aarch64")]
+const QEMU_ARM_VIRT_ALLOWED_SNAPSHOT: &[(usize, usize, u8)] = &[
+    (0x0900_0000, 0x1000, DEV_UART),
+    (0x0903_0000, 0x1000, DEV_GPIO),
+];
+#[cfg(target_arch = "aarch64")]
+const BCM2711_ALLOWED_SNAPSHOT: &[(usize, usize, u8)] = &[
+    (0xFE20_1000, 0x1000, DEV_UART),
+    (0xFE20_0000, 0x1000, DEV_GPIO),
+];
+
+#[cfg(target_arch = "aarch64")]
+const _: () = assert!(allowlists_equal(BCM2837_ALLOWED, BCM2837_ALLOWED_SNAPSHOT));
+#[cfg(target_arch = "aarch64")]
+const _: () = assert!(allowlists_equal(
+    QEMU_ARM_VIRT_ALLOWED,
+    QEMU_ARM_VIRT_ALLOWED_SNAPSHOT
+));
+#[cfg(target_arch = "aarch64")]
+const _: () = assert!(allowlists_equal(BCM2711_ALLOWED, BCM2711_ALLOWED_SNAPSHOT));
+
+/// Entry-by-entry, order-sensitive equality of two allowlists.
+#[cfg(target_arch = "aarch64")]
+const fn allowlists_equal(a: &[(usize, usize, u8)], b: &[(usize, usize, u8)]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i].0 != b[i].0 || a[i].1 != b[i].1 || a[i].2 != b[i].2 {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
 
 /// SiFive GPIO0 for QEMU `sifive_u` machine (FU540/FU740).
 /// The kernel serial driver owns NS16550 at 0x1000_0000 — excluded from allowlist.
@@ -359,21 +411,18 @@ pub fn request_mmio_unchecked(tid: usize, base: usize, len: usize) -> ViResult<(
 
 /// Check if `[base, base + len)` falls inside the platform's DWC2 host controller MMIO window.
 pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
+    if let Some(dwc2) =
+        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::DWC2_WINDOW
     {
-        let dwc2_base = hal_soc_bcm27xx::BCM2837.mmio.dwc2_base;
-        let dwc2_len = hal_soc_bcm27xx::BCM2837.mmio.dwc2_grant_size;
-        len > 0
-            && base >= dwc2_base
+        return len > 0
+            && base >= dwc2.base
             && base
                 .checked_add(len)
-                .is_some_and(|end| end <= dwc2_base + dwc2_len)
+                .is_some_and(|end| end <= dwc2.base + dwc2.size);
     }
-    #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
-    {
-        let _ = (base, len);
-        false
-    }
+    let _ = (base, len);
+    false
 }
 
 /// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding `UsbDriverCap`.
@@ -474,10 +523,46 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
 // Boot-time allowlist self-test (runs on every boot, QEMU-visible)
 // ---------------------------------------------------------------------------
 
-/// Power-on self-test of the MMIO allowlist. Non-RPi3 targets have nothing
-/// pinned yet; the test exists so the boot chain can call it unconditionally.
-#[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+/// Power-on self-test of the MMIO allowlist. The boot chain calls it on every
+/// target; tables with nothing pinned pass trivially.
 pub fn self_test() -> bool {
+    #[cfg(target_arch = "aarch64")]
+    match <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SOC {
+        hal::aarch64::backend::ArmSoc::Bcm2837 => return bcm2837_self_test(),
+        hal::aarch64::backend::ArmSoc::QemuArmVirt => return qemu_arm_virt_self_test(),
+        hal::aarch64::backend::ArmSoc::Bcm2711 => {}
+    }
+    true
+}
+
+/// Power-on self-test of the QEMU ARM virt production MMIO allowlist (Q5).
+///
+/// Pins, on the REAL table (`ALLOWED`): it is the virt table, entry for entry;
+/// every window authorizes its own device class; and no window authorizes any
+/// other class, so one peripheral class cannot claim another's controller.
+#[cfg(target_arch = "aarch64")]
+fn qemu_arm_virt_self_test() -> bool {
+    if !allowlists_equal(ALLOWED, QEMU_ARM_VIRT_ALLOWED_SNAPSHOT) {
+        log::error!("[selftest] mmio-allowlist: FAIL — selected table is not the QEMU virt table");
+        return false;
+    }
+    for &(base, len, class) in ALLOWED {
+        let end = base + len;
+        if static_range_class(ALLOWED, base, end, class) != Some(class) {
+            log::error!(
+                "[selftest] mmio-allowlist: FAIL — window {base:#x} no longer authorizes \
+                 class {class:#04x}"
+            );
+            return false;
+        }
+        if static_range_class(ALLOWED, base, end, !class).is_some() {
+            log::error!(
+                "[selftest] mmio-allowlist: FAIL — window {base:#x} authorized for a class \
+                 other than {class:#04x}"
+            );
+            return false;
+        }
+    }
     true
 }
 
@@ -492,8 +577,8 @@ pub fn self_test() -> bool {
 ///    class, full masks included, over the whole aperture AND at its edges.
 ///    The entry was previously present mis-tagged `DEV_PCIE`; it may return
 ///    only via policy v3 with a signed USB-host authority byte.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub fn self_test() -> bool {
+#[cfg(target_arch = "aarch64")]
+fn bcm2837_self_test() -> bool {
     let mmio = hal_soc_bcm27xx::BCM2837.mmio;
 
     // 1. Positive control: the table is live.

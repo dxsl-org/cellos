@@ -32,7 +32,7 @@ pub type Board = qemu_virt::QemuVirt;
 /// Console and diagnostic methods run on the boot path or in the console fast
 /// path, so implementations stay allocation-free and forward straight to the
 /// board's UART driver.
-pub trait ArmPlatform: ArmIrqController + ArmTimer {
+pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
     /// DMA remapping unit in front of the board's bus masters.
     type Iommu: ArmIommu;
 
@@ -123,6 +123,102 @@ pub trait ArmTimer {
 
     /// Re-arm the tick for the next quantum. Called from the IRQ path.
     fn reset();
+}
+
+/// The board's platform map: the facts and windows the kernel publishes,
+/// identity-maps and grants. All values come from the `hal/soc` profiles.
+pub trait ArmResources {
+    /// SoC identity. The kernel selects its MMIO authority table by it; the
+    /// tables and their device-class bits stay kernel-side.
+    const SOC: ArmSoc;
+
+    /// Facts `platform::init` publishes.
+    const PLATFORM: PlatformFacts;
+
+    /// Kernel identity mappings of device MMIO, in mapping order.
+    const KERNEL_MMIO_MAPS: &'static [MmioMap];
+
+    /// VirtIO MMIO transport window, when the board has one.
+    const VIRTIO_MMIO: Option<hal_soc_arm_virt::VirtioMmioLayout>;
+
+    /// GPIO controller window whose owner receives GPIO IRQ notifications.
+    const GPIO_MMIO_BASE: usize;
+
+    /// DWC2 USB host aperture, when the board has one.
+    const DWC2_WINDOW: Option<MmioWindow>;
+
+    /// Firmware framebuffer path, when the board has one.
+    const DISPLAY: Option<DisplayFirmware>;
+
+    /// SDHCI controller the kernel probes, when the board has one.
+    const SDHCI: Option<SdhciFacts>;
+
+    /// BCM GPIO block whose pins the kernel routes from the board wiring at
+    /// driver init, when the board needs it.
+    const BOARD_PINMUX_GPIO_BASE: Option<usize>;
+}
+
+/// SoC identity of a board backend.
+pub enum ArmSoc {
+    /// QEMU `virt` machine.
+    QemuArmVirt,
+    /// BCM2837 (Raspberry Pi 3).
+    Bcm2837,
+    /// BCM2711 (Raspberry Pi 4).
+    Bcm2711,
+}
+
+/// Platform facts published at boot.
+pub struct PlatformFacts {
+    /// Console UART register base.
+    pub uart_base: usize,
+    /// Console UART interrupt (0 when none is wired).
+    pub uart_irq: u32,
+    /// PL031 RTC base, when the board has one.
+    pub rtc_base: Option<usize>,
+    /// How many leading [`ArmResources::VIRTIO_MMIO`] slots are published.
+    pub published_virtio_slots: usize,
+    /// Boot log line naming the board, when it has one.
+    pub announce: Option<PlatformAnnounce>,
+}
+
+/// The `[platform]` boot log line of a board.
+pub struct PlatformAnnounce {
+    /// Board label.
+    pub label: &'static str,
+    /// Peripheral aperture base.
+    pub peripheral_base: usize,
+}
+
+/// One kernel identity mapping of device MMIO, `[base, end)`.
+pub struct MmioMap {
+    pub base: usize,
+    pub end: usize,
+    /// `true`: Cells may access the window (USER); `false`: kernel-only.
+    pub cell_access: bool,
+}
+
+/// An MMIO window, `[base, base + size)`.
+pub struct MmioWindow {
+    pub base: usize,
+    pub size: usize,
+}
+
+/// Firmware framebuffer path.
+pub struct DisplayFirmware {
+    /// Mailbox window the registering Cell must own exactly.
+    pub mailbox: MmioWindow,
+    /// A framebuffer must end at or below this address.
+    pub framebuffer_limit: usize,
+}
+
+/// SDHCI controller facts.
+pub struct SdhciFacts {
+    pub base: usize,
+    pub word_access_only: bool,
+    pub minimum_write_spacing_us: u32,
+    /// BCM GPIO block whose SD pins `mmc` routes before probing, when needed.
+    pub pinmux_gpio_base: Option<usize>,
 }
 
 /// Design hook for group 2/3 boards: a DMA remapping unit (SMMU) the kernel

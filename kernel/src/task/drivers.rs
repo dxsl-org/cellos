@@ -14,7 +14,7 @@ pub mod virtio_hal;
 pub mod uart;
 
 // Drivers
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+#[cfg(target_arch = "aarch64")]
 mod bcm_pinmux;
 pub mod block;
 pub mod console_drv;
@@ -71,8 +71,12 @@ pub fn init() {
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     {
         let board = crate::board::active();
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        bcm_pinmux::apply(hal_soc_bcm27xx::BCM2837.mmio.gpio_base, board.wiring);
+        #[cfg(target_arch = "aarch64")]
+        if let Some(gpio_base) =
+            <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::BOARD_PINMUX_GPIO_BASE
+        {
+            bcm_pinmux::apply(gpio_base, board.wiring);
+        }
         if board.has_driver(cellos_boards::DriverId::SdhciArasan)
             || board.has_driver(cellos_boards::DriverId::SdhciDwCqe)
         {

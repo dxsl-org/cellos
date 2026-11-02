@@ -264,18 +264,12 @@ pub fn init_kernel_paging(
             )
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
     {
-        let mmio = hal_soc_bcm27xx::BCM2837.mmio;
-        let peripheral_end = mmio
-            .peripheral_end()
-            .expect("BCM2837 peripheral span must not overflow");
-        let local_controller_end = mmio
-            .local_controller_end()
-            .expect("BCM2837 local-controller span must not overflow");
-        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): cell MMIO.
-        // Covers mini UART, GPIO, I2C, SPI, EMMC — kernel maps them all; individual
-        // cells receive sub-regions via sys_request_mmio / resource_registry.
+        use hal::aarch64::backend::{ArmResources, Board};
+        // Cell-accessible windows: individual cells receive sub-regions via
+        // sys_request_mmio / resource_registry; kernel-only windows (interrupt
+        // controllers, platform bus, ECAM) keep mmio_flags.
         let cell_mmio_flags = PageFlags::from_bits(
             PageFlags::VALID
                 | PageFlags::READ
@@ -285,122 +279,14 @@ pub fn init_kernel_paging(
                 | PageFlags::ACCESSED
                 | PageFlags::DIRTY,
         );
-        root_table
-            .identity_map(
-                mmio.peripheral_base,
-                peripheral_end,
-                cell_mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-        // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
-        root_table
-            .identity_map(
-                mmio.local_controller_base,
-                local_controller_end,
-                mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-    }
-
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    {
-        let arm_virt = hal_soc_arm_virt::QEMU_ARM_VIRT;
-        // GIC (EL1-only): cells must not modify interrupt routing — keep mmio_flags.
-        root_table
-            .identity_map(
-                arm_virt.gic_map.base,
-                arm_virt.gic_map.end(),
-                mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-        // Peripheral MMIO (GPIO PL061, UART PL011, RTC): cells access directly via
-        // driver rlibs (bit-bang GPIO/I2C/SPI/PWM). LBI guarantees only cells with
-        // the GPIO capability can construct driver objects, so USER access is safe.
-        let cell_mmio_flags = PageFlags::from_bits(
-            PageFlags::VALID
-                | PageFlags::READ
-                | PageFlags::WRITE
-                | PageFlags::USER
-                | PageFlags::DEVICE
-                | PageFlags::ACCESSED
-                | PageFlags::DIRTY,
-        );
-        root_table
-            .identity_map(
-                arm_virt.peripheral_map.base,
-                arm_virt.peripheral_map.end(),
-                cell_mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table
-            .identity_map(
-                arm_virt.virtio.region().base,
-                arm_virt.virtio.region().end(),
-                cell_mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table
-            .identity_map(
-                arm_virt.platform_bus_map.base,
-                arm_virt.platform_bus_map.end(),
-                mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-        // PCIe ECAM bus-0 window (1 MiB at 0x3F00_0000) for ARM64 virt gpex.
-        // Required before pcie_ecam::init() accesses config space.
-        root_table
-            .identity_map(
-                arm_virt.pcie_ecam_bus0.base,
-                arm_virt.pcie_ecam_bus0.end(),
-                mmio_flags,
-                &mut alloc_fn,
-            )
-            .map_err(|_| PageTableError::OutOfMemory)?;
-    }
-
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
-    {
-        let mmio = hal_soc_bcm27xx::BCM2711.mmio;
-        let cell_mmio_flags = PageFlags::from_bits(
-            PageFlags::VALID
-                | PageFlags::READ
-                | PageFlags::WRITE
-                | PageFlags::USER
-                | PageFlags::DEVICE
-                | PageFlags::ACCESSED
-                | PageFlags::DIRTY,
-        );
-        for (base, size) in [
-            (mmio.gpio_base, mmio.gpio_grant_size),
-            (mmio.uart_base, mmio.uart_grant_size),
-            (mmio.sdhci_base, mmio.sdhci_grant_size),
-        ] {
-            let end = base
-                .checked_add(size)
-                .ok_or(PageTableError::InvalidAddress)?;
+        for map in <Board as ArmResources>::KERNEL_MMIO_MAPS {
+            let flags = if map.cell_access {
+                cell_mmio_flags
+            } else {
+                mmio_flags
+            };
             root_table
-                .identity_map(base, end, cell_mmio_flags, &mut alloc_fn)
-                .map_err(|_| PageTableError::OutOfMemory)?;
-        }
-        for (base, size) in [
-            (mmio.gic_distributor_base, mmio.gic_distributor_size),
-            (mmio.gic_cpu_base, mmio.gic_cpu_size),
-        ] {
-            let end = base
-                .checked_add(size)
-                .ok_or(PageTableError::InvalidAddress)?;
-            root_table
-                .identity_map(base, end, mmio_flags, &mut alloc_fn)
+                .identity_map(map.base, map.end, flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
         }
     }

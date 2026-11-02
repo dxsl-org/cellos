@@ -3,11 +3,11 @@
 //! `virtio_blk`, `input_irq_ack`, and Driver Cells use `virtio_slots()` to
 //! iterate all VirtIO MMIO slots for the current platform.
 //!
-//! AArch64 QEMU virt: scans all 32 slots at 0x0a000000, stride 0x200.
-//! Raspberry Pi 3 exposes no VirtIO MMIO window, so board-rpi3 yields no slots.
-//! QEMU assigns devices to slots in an implementation-defined order so we must
-//! probe all 32 there.  The identity map in paging.rs covers the full
-//! 0x0a004000 range only on non-RPi3 AArch64 builds.
+//! AArch64: the board backend's VirtIO MMIO window, if any. QEMU virt scans all
+//! 32 slots at 0x0a000000, stride 0x200; the Raspberry Pi boards expose no
+//! VirtIO MMIO window and yield no slots. QEMU assigns devices to slots in an
+//! implementation-defined order so we must probe all 32 there.  The identity
+//! map in paging.rs covers the window wherever the backend declares one.
 //!
 //! RISC-V: reads DTB-confirmed slots from `platform::PLATFORM`.
 //! PCIe-only arches expose no VirtIO-MMIO slots.
@@ -23,26 +23,18 @@ pub struct VirtioSlot {
 
 /// Iterator over all VirtIO MMIO slots for the current platform.
 pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
-    #[cfg(all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    ))]
+    #[cfg(target_arch = "aarch64")]
     {
-        Vec::new().into_iter()
-    }
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    {
-        let layout = hal_soc_arm_virt::QEMU_ARM_VIRT.virtio;
-        let slots: Vec<VirtioSlot> = (0..layout.count)
-            .map(|i| VirtioSlot {
-                base: layout.slot_base(i).expect("bounded VirtIO slot"),
-                irq: layout.spi(i).expect("bounded VirtIO IRQ"),
-            })
-            .collect();
+        use hal::aarch64::backend::{ArmResources, Board};
+        let slots: Vec<VirtioSlot> = match <Board as ArmResources>::VIRTIO_MMIO {
+            Some(layout) => (0..layout.count)
+                .map(|i| VirtioSlot {
+                    base: layout.slot_base(i).expect("bounded VirtIO slot"),
+                    irq: layout.spi(i).expect("bounded VirtIO IRQ"),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
         slots.into_iter()
     }
     #[cfg(target_arch = "riscv64")]
@@ -128,24 +120,12 @@ pub(crate) fn ack_virtio_interrupt_status(mmio_base: usize) -> u32 {
 /// before they can enter `sys_wait_irq`. Leaving those level-triggered
 /// interrupts asserted starves the Cell before registration completes.
 fn ack_unclaimed(irq: u32) -> bool {
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    let base = {
-        let layout = hal_soc_arm_virt::QEMU_ARM_VIRT.virtio;
-        irq.checked_sub(layout.first_spi)
-            .and_then(|index| layout.slot_base(index as usize))
-    };
-    #[cfg(all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    ))]
-    let base: Option<usize> = {
-        let _ = irq;
-        None
-    };
+    #[cfg(target_arch = "aarch64")]
+    let base = <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::VIRTIO_MMIO
+        .and_then(|layout| {
+            irq.checked_sub(layout.first_spi)
+                .and_then(|index| layout.slot_base(index as usize))
+        });
     #[cfg(target_arch = "riscv64")]
     let base = crate::platform::virtio_mmio_base_for_irq(irq);
     // x86_64 routes VirtIO through PCI MSI-X, not a fixed MMIO IRQ window, so

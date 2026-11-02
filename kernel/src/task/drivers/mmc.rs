@@ -1,9 +1,6 @@
 pub mod core;
 pub mod emmc;
-#[cfg(all(
-    target_arch = "aarch64",
-    any(feature = "board-rpi3", feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 mod pinmux_bcm;
 pub mod regs;
 pub mod sd;
@@ -23,29 +20,15 @@ struct SdhciConfig {
 }
 
 fn selected_sdhci_config() -> Option<SdhciConfig> {
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
+    if let Some(sdhci) =
+        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SDHCI
     {
-        let soc = hal_soc_bcm27xx::BCM2837;
         return Some(SdhciConfig {
-            base: soc.mmio.sdhci_base,
+            base: sdhci.base,
             policy: SdhciAccessPolicy {
-                word_access_only: soc.sdhci.word_access_only,
-                minimum_write_spacing_us: soc.sdhci.minimum_write_spacing_us,
-            },
-        });
-    }
-    #[cfg(all(
-        target_arch = "aarch64",
-        feature = "board-rpi4",
-        not(feature = "board-rpi3")
-    ))]
-    {
-        let soc = hal_soc_bcm27xx::BCM2711;
-        return Some(SdhciConfig {
-            base: soc.mmio.sdhci_base,
-            policy: SdhciAccessPolicy {
-                word_access_only: soc.sdhci.word_access_only,
-                minimum_write_spacing_us: soc.sdhci.minimum_write_spacing_us,
+                word_access_only: sdhci.word_access_only,
+                minimum_write_spacing_us: sdhci.minimum_write_spacing_us,
             },
         });
     }
@@ -152,20 +135,13 @@ pub fn init_driver() {
         return;
     };
 
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    pinmux_bcm::apply(
-        hal_soc_bcm27xx::BCM2837.mmio.gpio_base,
-        crate::board::selected_rpi3().wiring,
-    );
-    #[cfg(all(
-        target_arch = "aarch64",
-        feature = "board-rpi4",
-        not(feature = "board-rpi3")
-    ))]
-    pinmux_bcm::apply(
-        hal_soc_bcm27xx::BCM2711.mmio.gpio_base,
-        crate::board::selected_rpi4().wiring,
-    );
+    #[cfg(target_arch = "aarch64")]
+    if let Some(gpio_base) =
+        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SDHCI
+            .and_then(|sdhci| sdhci.pinmux_gpio_base)
+    {
+        pinmux_bcm::apply(gpio_base, crate::board::active().wiring);
+    }
 
     // Try eMMC first, then SD card.
     // SAFETY: config.base is the SoC-profile MMIO address for the selected board.

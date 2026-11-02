@@ -8880,23 +8880,29 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             packed_dimensions,
             pitch,
         } => {
-            #[cfg(any(all(target_arch = "aarch64", feature = "board-rpi3"), target_arch = "x86_64"))]
+            #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
             {
                 const MAX_DIMENSION: usize = 8192;
                 const PAGE_SIZE: usize = 4096;
+                // AArch64: only a board with a firmware display path registers a
+                // framebuffer; any other board refuses before every other check.
+                #[cfg(target_arch = "aarch64")]
+                let Some(display) =
+                    <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::DISPLAY
+                else {
+                    let _ = (base, size, packed_dimensions, pitch);
+                    return Err(SyscallError::Unknown);
+                };
                 if !caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY) {
                     return Err(SyscallError::PermissionDenied);
                 }
-                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-                {
-                    let mmio = hal_soc_bcm27xx::BCM2837.mmio;
-                    if !crate::resource_registry::owns_exact_mmio(
-                        caller_id,
-                        mmio.mailbox_base,
-                        mmio.mailbox_grant_size,
-                    ) {
-                        return Err(SyscallError::PermissionDenied);
-                    }
+                #[cfg(target_arch = "aarch64")]
+                if !crate::resource_registry::owns_exact_mmio(
+                    caller_id,
+                    display.mailbox.base,
+                    display.mailbox.size,
+                ) {
+                    return Err(SyscallError::PermissionDenied);
                 }
                 if base == 0
                     || size == 0
@@ -8918,14 +8924,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     .checked_mul(height)
                     .ok_or(SyscallError::InvalidInput)?;
                 let end = base.checked_add(size).ok_or(SyscallError::InvalidInput)?;
-                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-                {
-                    let mmio = hal_soc_bcm27xx::BCM2837.mmio;
-                    if covered > size || end > mmio.peripheral_base {
-                        return Err(SyscallError::InvalidInput);
-                    }
+                #[cfg(target_arch = "aarch64")]
+                if covered > size || end > display.framebuffer_limit {
+                    return Err(SyscallError::InvalidInput);
                 }
-                #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+                #[cfg(not(target_arch = "aarch64"))]
                 {
                     if covered > size {
                         return Err(SyscallError::InvalidInput);
@@ -8998,7 +9001,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     Err(SyscallError::Unknown)
                 }
             }
-            #[cfg(not(any(all(target_arch = "aarch64", feature = "board-rpi3"), target_arch = "x86_64")))]
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
             {
                 let _ = (base, size, packed_dimensions, pitch);
                 Err(SyscallError::Unknown)

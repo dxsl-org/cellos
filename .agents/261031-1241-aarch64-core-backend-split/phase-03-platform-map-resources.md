@@ -1,5 +1,7 @@
 # Phase 03 — Platform map, resources, driver selectors
 
+**Status:** implemented 2026-11-02, uncommitted; gate PASS ([reports/phase-03-gate.md](reports/phase-03-gate.md)). Phase 04 not started.
+
 ## Context Links
 [plan](plan.md) · [scout](scout-report.md) · ADR-0029 §6
 
@@ -29,11 +31,16 @@ Static dispatch through `Board` (see the plan's key design decisions). Only `bac
 5. Run preservation gate
 
 ## Todo List
-- [ ] Add data accessors to the trait
-- [ ] Move platform_info and kernel MMIO maps
-- [ ] Move resource authority tables with equality test
-- [ ] Move driver selectors and syscall branches
-- [ ] Run preservation gate
+- [x] Add data accessors to the trait (`ArmResources`)
+- [x] Move platform_info and kernel MMIO maps
+- [x] Move resource authority tables with equality test (Q5: kernel-side tables selected by `SOC`, compile-time equality assertions for all three boards, virt boot self-test)
+- [x] Move driver selectors and syscall branches (`pcie_ecam.rs` dropped, Q6)
+- [x] Run preservation gate
+
+Deviations are in the gate report §6. Summary:
+- The accessors are `const` data; `mmio_authority()` is replaced by `SOC` and the kernel-side tables; there is no `has_ecam`.
+- The equality test is a compile-time assertion rather than a host unit test.
+- The virt self-test runs on every boot inside the existing `mmio-allowlist` self-test.
 
 ## Success Criteria
 Gate passes. The authority-table equality tests pass for all three backends. The listed files are free of `board-rpi*`.
