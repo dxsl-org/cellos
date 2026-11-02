@@ -315,7 +315,14 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
 
 /// Read-only diagnostic path inspection under KERNEL_ROOT. Stop at blocks/huge
 /// leaves; never interpret leaf physical memory as another table.
-#[cfg(all(cellos_p01_trace, any(target_arch = "x86_64", target_arch = "riscv64", target_arch = "aarch64")))]
+#[cfg(all(
+    cellos_p01_trace,
+    any(
+        target_arch = "x86_64",
+        target_arch = "riscv64",
+        target_arch = "aarch64"
+    )
+))]
 fn p01_observe_table_path(root: usize, va: usize, failed: bool, allocator: &FrameAllocator) {
     #[cfg(target_arch = "x86_64")]
     const LEVELS: &[usize] = &[39, 30, 21];
@@ -328,14 +335,23 @@ fn p01_observe_table_path(root: usize, va: usize, failed: bool, allocator: &Fram
         // positively a table, with the same geometry as the architecture HAL.
         let word = unsafe { core::ptr::read_volatile(alias.add((va >> shift) & 511)) };
         #[cfg(target_arch = "x86_64")]
-        let next = if word & 1 == 0 || word & (1 << 7) != 0 { return; }
-            else { (word & 0x000f_ffff_ffff_f000) as usize };
+        let next = if word & 1 == 0 || word & (1 << 7) != 0 {
+            return;
+        } else {
+            (word & 0x000f_ffff_ffff_f000) as usize
+        };
         #[cfg(target_arch = "riscv64")]
-        let next = if word & 1 == 0 || word & 14 != 0 { return; }
-            else { (((word >> 10) & 0x003f_ffff_ffff_ffff) << 12) as usize };
+        let next = if word & 1 == 0 || word & 14 != 0 {
+            return;
+        } else {
+            (((word >> 10) & 0x003f_ffff_ffff_ffff) << 12) as usize
+        };
         #[cfg(target_arch = "aarch64")]
-        let next = if word & 3 != 3 { return; }
-            else { (word & !0xfff) as usize };
+        let next = if word & 3 != 3 {
+            return;
+        } else {
+            (word & !0xfff) as usize
+        };
         // Inherited firmware tables may be outside managed bitmap memory; they
         // are not used_frames and must not acquire a fabricated allocator origin.
         if allocator.manages(next) {
@@ -574,36 +590,31 @@ pub unsafe fn activate_paging(root_phys: PhysAddr) {
     unsafe {
         hal::paging::write_cr3(root_phys as u64);
     }
-    // Report the decision here, on the raw UART, and not through the logger: the
-    // logger is not live yet, and later boot stages (Tier-3 VMM bring-up) can
-    // hang on a given accelerator, which would hide a witness for a decision that
-    // was already made. The 'Q' probe just above proves this path writes.
+    // Report the decision here, as soon as it is made: later boot stages
+    // (Tier-3 VMM bring-up) can hang on a given accelerator, which would hide a
+    // witness for a decision that was already made.
     emit_pcid_decision();
     log::info!("[kernel] paging activated");
 }
 
-/// Emit the PCID decision as one line on the early UART, without allocating —
-/// the heap may not exist yet. Also prints the live CR3 so the tag bits that the
-/// policy produced are visible, not inferred.
+/// Log the PCID decision as one line, with the live CR3 so the tag bits that
+/// the policy produced are visible, not inferred.
 #[cfg(target_arch = "x86_64")]
 fn emit_pcid_decision() {
-    use crate::early_uart::{flag, hex, put, text};
-
     let usable = hal::domain::pcid_usable();
-    text("\n[kernel] x86_64 paging: PCID ");
-    text(if usable { "enabled" } else { "disabled" });
-    text(" (CPUID pcid=");
-    flag(hal::domain::pcid_supported());
-    text(" invpcid=");
-    flag(hal::domain::invpcid_supported());
-    text(", CR4.PCIDE=");
-    put(if hal::domain::pcide_set() { b'1' } else { b'0' });
-    text(", CR3=");
-    hex(hal::domain::read_cr3());
-    if !usable {
-        text(" — domain roots use tag 0 with a full CR3 flush");
-    }
-    text(")\n");
+    log::info!(
+        "[kernel] x86_64 paging: PCID {} (CPUID pcid={} invpcid={}, CR4.PCIDE={}, CR3={:#x}{})",
+        if usable { "enabled" } else { "disabled" },
+        hal::domain::pcid_supported(),
+        hal::domain::invpcid_supported(),
+        u8::from(hal::domain::pcide_set()),
+        hal::domain::read_cr3(),
+        if usable {
+            ""
+        } else {
+            " — domain roots use tag 0 with a full CR3 flush"
+        },
+    );
 }
 
 /// Map a 4KB page (x86_64).
@@ -757,20 +768,19 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
 // the frame identity-mapped for the kernel — SAS requires it, and the kernel
 // keeps using MMIO windows after a Cell loses them.
 
-/// Remove *user* accessibility from `[base, base+len)` (x86_64).
+/// Remove *user* accessibility from `[base, base+len)`.
 ///
-/// x86 maps a claimed window on demand (`map_mmio_user_x86`), so revoking it
-/// clears the user leaf PTE; the boot identity map still serves the kernel.
-/// Pages that were never user-mapped are skipped — `unmap_page_x86` is
-
-/// Remove *user* accessibility from `[base, base+len)` (riscv64 / aarch64).
-///
-/// These arches boot-map MMIO USER for every Cell in the single SAS page table,
-/// so the frame cannot be unmapped — the kernel still uses the window. The
-/// page's permissions are lowered instead, and the Cell's next access faults.
+/// The frame cannot be unmapped — the kernel still uses the window. On
+/// riscv64/aarch64 the single SAS page table boot-maps MMIO USER for every
+/// Cell; on x86_64 a claimed window is user-mapped on demand. Either way the
+/// page's permissions are lowered, and the Cell's next access faults.
 /// Pages that are not mapped are skipped; a mapped page that cannot be
 /// re-protected is an error, because that page would stay user-reachable.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     let Some(end) = checked_page_end(base, len) else {
         return Ok(0);
@@ -843,7 +853,11 @@ fn mmio_user_flags() -> Flags {
 
 /// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
 /// Cell's access to the window is revoked.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 fn mmio_kernel_flags() -> Flags {
     #[cfg(target_arch = "riscv64")]
     let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
@@ -928,7 +942,11 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
 /// mapping of the frame is unchanged. `Err` means at least one mapped page is
 /// still user-reachable and the caller must not report the revoke as complete.
 pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     {
         clear_mmio_user(base, len)
     }
@@ -1291,7 +1309,11 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     Ok(())
 }
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingResult<()> {
     Err(PageTableError::NotSupported)
 }

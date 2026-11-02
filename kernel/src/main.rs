@@ -48,8 +48,6 @@ pub(crate) mod bench_counters; // Measurement-only counters, raw opcode 504
 mod board;
 pub mod boot;
 pub mod cell;
-#[cfg(target_arch = "x86_64")]
-pub mod early_uart; // Allocation-free boot console (logger not live yet)
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
@@ -58,8 +56,13 @@ pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks onl
 pub mod loader;
 pub(crate) mod machine_facts; // Machine facts record for syscall 433 (ADR-0029 §3)
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
+pub mod memory;
 #[cfg(cellos_p01_trace)]
 pub(crate) mod p01_measurement;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_noncpu;
+#[cfg(cellos_p01_trace)]
+pub(crate) mod p01_noncpu_topology;
 #[cfg(cellos_p01_trace)]
 pub(crate) mod p01_resources;
 #[cfg(cellos_p01_trace)]
@@ -67,19 +70,14 @@ pub(crate) mod p01_retained;
 #[cfg(cellos_p01_trace)]
 pub(crate) mod p01_topology;
 #[cfg(cellos_p01_trace)]
-pub(crate) mod p01_noncpu;
-#[cfg(cellos_p01_trace)]
-pub(crate) mod p01_noncpu_topology;
-#[cfg(cellos_p01_trace)]
 pub(crate) mod p01_vtd_topology;
-pub mod memory;
 pub mod policy; // Signed operator policy (P5b) — headless consent
-pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod smbios; // Bounded SMBIOS type 1 reader (x86 boot identity)
 pub mod snapshot;
+pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
@@ -202,6 +200,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         if crate::hal::uart_16550::poll_input().is_some() {
             crate::hal::uart_16550::puts("[x86-gate] COM1 polled RX observed\n");
         }
+        // Register the log backend now, as RV64 does above: the console is
+        // configured and the boot stub installed GS (Spinlock needs it), and
+        // neither the logger nor its console lock allocates. Registering it at
+        // step 6 dropped every `log` record of the boot path before the heap
+        // (allocator ranges, firmware-range rejections, ACPI table findings).
+        task::drivers::uart::init();
     }
     #[cfg(target_arch = "x86")]
     crate::hal::uart_16550::init();
@@ -429,16 +433,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         };
 
         let info = crate::acpi::parse(rsdp, &mut map_physical);
-        // The logger is installed after the heap, so `log` would drop this.
-        crate::early_uart::text("[acpi] gates: madt=");
-        crate::early_uart::flag(info.lapic_base != 0 && info.ioapic_base != 0);
-        crate::early_uart::text(" hpet=");
-        crate::early_uart::flag(info.hpet_base != 0);
-        crate::early_uart::text(" mcfg=");
-        crate::early_uart::flag(info.ecam_base != 0);
-        crate::early_uart::text(" dmar=");
-        crate::early_uart::flag(info.dmar_base != 0);
-        crate::early_uart::text("\n");
+        log::info!(
+            "[acpi] gates: madt={} hpet={} mcfg={} dmar={}",
+            info.lapic_base != 0 && info.ioapic_base != 0,
+            info.hpet_base != 0,
+            info.ecam_base != 0,
+            info.dmar_base != 0
+        );
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
         let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();
@@ -605,28 +606,37 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             #[cfg(cellos_g1_cpu)]
             {
                 let vendor = core::arch::x86_64::__cpuid(0);
-                assert!(vendor.ebx == u32::from_le_bytes(*b"Genu")
-                    && vendor.edx == u32::from_le_bytes(*b"ineI")
-                    && vendor.ecx == u32::from_le_bytes(*b"ntel"),
-                    "G1 private lane requires GenuineIntel CPUID");
+                assert!(
+                    vendor.ebx == u32::from_le_bytes(*b"Genu")
+                        && vendor.edx == u32::from_le_bytes(*b"ineI")
+                        && vendor.ecx == u32::from_le_bytes(*b"ntel"),
+                    "G1 private lane requires GenuineIntel CPUID"
+                );
                 let calibration = crate::hal::init_timers_observed()
                     .expect("G1 requires actual HPET/LAPIC timer initialization");
                 let clock = crate::hal::hpet::checked_sample()
                     .expect("G1 requires a checked shared 64-bit HPET");
-                let initial = calibration.ticks_per_ms.checked_mul(10)
+                let initial = calibration
+                    .ticks_per_ms
+                    .checked_mul(10)
                     .and_then(|count| u32::try_from(count).ok())
                     .expect("G1 rejects overflowed LAPIC calibration");
-                assert!(calibration.hpet_used && initial >= 10_000
-                    && initial == calibration.initial_count
-                    && calibration.lvt & (1 << 16) == 0
-                    && (calibration.lvt >> 17) & 3 == 1,
-                    "G1 rejects LAPIC fallback, stopped or masked timer");
-                // Logger registration follows heap setup; emit this boot receipt
-                // without allocation instead of dropping it through log::info.
+                assert!(
+                    calibration.hpet_used
+                        && initial >= 10_000
+                        && initial == calibration.initial_count
+                        && calibration.lvt & (1 << 16) == 0
+                        && (calibration.lvt >> 17) & 3 == 1,
+                    "G1 rejects LAPIC fallback, stopped or masked timer"
+                );
+                // The G1 lane's boot receipt: emitted raw and allocation-free,
+                // starting its own line, without a log-level tag.
                 struct G1BootWriter;
                 impl core::fmt::Write for G1BootWriter {
                     fn write_str(&mut self, text: &str) -> core::fmt::Result {
-                        for byte in text.bytes() { crate::hal::uart_16550::putchar(byte); }
+                        for byte in text.bytes() {
+                            crate::hal::uart_16550::putchar(byte);
+                        }
                         Ok(())
                     }
                 }
@@ -639,8 +649,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
             log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
         } else {
-            // Fail-closed decision; `log` is not live yet and would drop it.
-            crate::early_uart::text("[x86-gate] timer CLOSED: validated MADT + HPET required\n");
+            // Fail-closed decision: it must reach the console.
+            log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
             #[cfg(cellos_g1_cpu)]
             panic!("G1 private measurement requires validated MADT and HPET");
         }
@@ -664,13 +674,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Root operation is per-CPU: the same helper runs on each AP before it
         // goes online (task::smp::x86_secondary_main).
         if cpu_features::x86_virt_kind() == Some(cpu_features::X86Virt::Vmx) {
-            crate::early_uart::text("\n[kernel] x86 virt: VMX preconditions CPUID=");
-            crate::early_uart::flag(hal::vmx::supported());
-            crate::early_uart::text(" FEATURE_CONTROL=");
-            crate::early_uart::hex(hal::vmx::feature_control() as usize);
-            crate::early_uart::text(" VMX_BASIC_revid=");
-            crate::early_uart::hex(hal::vmx::vmxon_revision() as usize);
-            crate::early_uart::text("\n");
+            // VMXON faults (#GP) rather than reporting failure when a
+            // precondition is unmet; logged first, a fault stays attributable.
+            log::info!(
+                "[kernel] x86 virt: VMX preconditions CPUID={} FEATURE_CONTROL={:#x} VMX_BASIC_revid={:#x}",
+                hal::vmx::supported(),
+                hal::vmx::feature_control(),
+                hal::vmx::vmxon_revision()
+            );
         }
         match cpu_features::enter_x86_root_on_current_cpu() {
             Ok(kind) => {
@@ -742,7 +753,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("HAL initialized (PLIC enabled)");
 
     // 6. Logger & Drivers & FS
-    task::drivers::uart::init(); // registers log backend on all arches
+    // Registers the log backend on AArch64/ARM; RV64 and x86_64 registered it
+    // at entry, so the call is a no-op there.
+    task::drivers::uart::init();
     #[cfg(target_arch = "aarch64")]
     {
         use hal::backend::{ArmEl2Monitor, El2Monitor};
@@ -1072,7 +1085,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Bring actual secondaries online only after task::init. x86 uses the
     // Limine MP callback and qualifies bidirectional invalidation before tasks.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     task::smp::start_secondaries();
     // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
     // SGI delivery path is exercised here: a hart that is online but deaf to the
@@ -1206,7 +1223,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             target_arch = "aarch64",
             target_arch = "x86_64"
         ),
-        not(any(feature = "policy-required", feature = "production-relay-image", feature = "browser-engine-profile"))
+        not(any(
+            feature = "policy-required",
+            feature = "production-relay-image",
+            feature = "browser-engine-profile"
+        ))
     ))]
     {
         if crate::loader::domain_admission::enable_for_boot() {
@@ -1367,7 +1388,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 "[signing] cell trust posture={} anchor={:02x?} unsigned={}",
                 posture,
                 anchor,
-                if crate::signing::unsigned_admitted() { "tier2" } else { "denied" }
+                if crate::signing::unsigned_admitted() {
+                    "tier2"
+                } else {
+                    "denied"
+                }
             );
         }
         #[cfg(feature = "test-hooks")]
@@ -1444,7 +1469,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             let height = fb.height as u16;
             let pitch = fb.pitch as usize;
             let size = pitch.wrapping_mul(height as usize);
-            let pages = (size + 4095) / 4096;
+            let pages = size.div_ceil(4096);
             let owner = types::CellId(0);
             match crate::memory::paging::map_display_framebuffer_user(phys_addr, pages) {
                 Ok(_) => {
@@ -1661,11 +1686,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // `IDLE_PROBES` iterations only (RPi3: 4) to avoid flood.
     // If 'L' never appears after 'K', the code never reaches the idle loop.
     #[cfg(target_arch = "aarch64")]
-    if <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES > 0 {
+    if <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES != 0 {
         static IDLE_COUNT: core::sync::atomic::AtomicUsize =
             core::sync::atomic::AtomicUsize::new(0);
         loop {
             let n = IDLE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            // reason: `IDLE_PROBES` is a per-board const; on boards with no idle
+            // probe it is 0, and this whole block is then dead.
+            #[allow(clippy::absurd_extreme_comparisons)]
             if n < <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES {
                 crate::hal::backend::Board::diag_probe(b'L');
             }

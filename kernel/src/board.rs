@@ -283,7 +283,7 @@ pub(crate) fn choose_x86_profile<'a>(
 }
 
 /// Binds `board` as the x86 profile for the rest of the boot, keeps `facts`
-/// for the machine fingerprint, and names the profile on the early console.
+/// for the machine fingerprint, and names the profile on the console.
 ///
 /// # Panics
 /// If `board` fails validation or a profile is already bound.
@@ -307,8 +307,8 @@ pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, facts: X86BootFa
         *kept = Some(facts);
     }
     let source = facts.source;
-    early_console(format_args!(
-        "[x86-gate] board={} soc-profile={} source={} dma_isolation={:?}\n",
+    log::info!(
+        "[x86-gate] board={} soc-profile={} source={} dma_isolation={:?}",
         board.slug,
         soc.slug,
         match source {
@@ -316,21 +316,7 @@ pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, facts: X86BootFa
             ProfileSource::Default => "default",
         },
         board.dma_isolation
-    ));
-}
-
-/// Writes to the early console; the logger is not installed during binding.
-#[cfg(target_arch = "x86_64")]
-fn early_console(arguments: core::fmt::Arguments<'_>) {
-    struct EarlyConsole;
-    impl core::fmt::Write for EarlyConsole {
-        fn write_str(&mut self, text: &str) -> core::fmt::Result {
-            crate::early_uart::text(text);
-            Ok(())
-        }
-    }
-    // EarlyConsole never reports an error, so the result carries nothing.
-    let _ = core::fmt::Write::write_fmt(&mut EarlyConsole, arguments);
+    );
 }
 
 /// Machine identity facts detected at boot on x86_64.
@@ -402,11 +388,10 @@ impl core::fmt::Display for PlatformIdentity {
     }
 }
 
-/// Writes `[identity] <facts>` to the early console. Detection runs before the
-/// logger is installed, and `log` output is dropped until then.
+/// Logs `[identity] <facts>`.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn report_identity(identity: &PlatformIdentity) {
-    early_console(format_args!("[identity] {identity}\n"));
+    log::info!("[identity] {identity}");
 }
 
 /// Firmware bytes rendered as a quoted, escaped ASCII string.
