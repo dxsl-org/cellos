@@ -1,6 +1,6 @@
 # Plan — aarch64 core/backend split (ADR-0029 §6)
 
-**Status:** registered in `.agents/plan-portfolio.md` (order 2), not admitted. Needs a lock-inventory file-owner handoff, and x86 closed first.
+**Status:** admitted 2026-11-02 ([handoff](lock-handoff-approval.md)); phases 01–04 in progress.
 **Authority:** [ADR-0022 amendment 2026-10-31](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md); [ADR-0029](../../docs/decisions/0029-platform-image-families-and-runtime-detection.md) §5–6
 **Scope rule:** behaviour-preserving only. No new backend, driver, peripheral or bring-up. It yields file ownership to any active Intel C2C slice.
 **Evidence ceiling:** QEMU `virt` (CI) + QEMU `raspi3b` (manual `run-rpi3.ps1`) + RPi4 compile-only. No physical evidence is claimed.

@@ -169,7 +169,7 @@ Two plans are registered. Neither is the current implementation slice, and no
 | Order | Plan | C2C link (ADR-0022) | Acceptance scenario | Evidence ceiling |
 |---|---|---|---|---|
 | 1 (done 2026-11-02) | [x86-64 runtime board selection](261031-1241-x86-runtime-board-selection/plan.md) | Necessary prerequisite: one x86 image for QEMU lanes and the HCL qualification machine; profile bound at boot; `board-x86-pc` removed | One ISO: q35 profile by `cellos.profile=` boots; default PC profile refuses DMA without VT-d and boots with `intel-iommu`; fingerprint mismatch enters safe mode until re-confirmed | QEMU/TCG |
-| 2 | [aarch64 core/backend split](261031-1241-aarch64-core-backend-split/plan.md) | ADR-0022 amendment exception (behaviour-preserving refactor, not a C2C deliverable); yields file ownership to any Intel C2C slice | No `board-rpi*` cfg outside `backend/mod.rs`; RPi3/RPi3-bring-up/RPi4/virt builds within ±1% `.text`; virt CI lanes and `raspi3b` boot unchanged | QEMU `virt` + QEMU `raspi3b`; RPi4 compile-only |
+| 2 (admitted 2026-11-02) | [aarch64 core/backend split](261031-1241-aarch64-core-backend-split/plan.md) | ADR-0022 amendment exception (behaviour-preserving refactor, not a C2C deliverable); yields file ownership to any Intel C2C slice | No `board-rpi*` cfg outside `backend/mod.rs`; RPi3/RPi3-bring-up/RPi4/virt builds within ±1% `.text`; virt CI lanes and `raspi3b` boot unchanged | QEMU `virt` + QEMU `raspi3b`; RPi4 compile-only |
 
 Admission blockers, per the promotion rule:
 - File-owner handoff from the Cell contract plan, recorded in the [lock inventory](cell-contract-0024-locks.md).
