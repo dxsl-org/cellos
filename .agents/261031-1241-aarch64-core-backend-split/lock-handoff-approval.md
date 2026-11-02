@@ -142,7 +142,10 @@ Trip-wires. If any of these holds, stop and open a CP1 before continuing:
 ## Cross-phase couplings found while deriving the file set
 
 - **C1, Phase 02 vs 03 not disjoint.** Phase 02 moves `bcm2835_legacy_irq` into `backend/bcm2837`, but `kernel/src/task/syscall.rs:8310` (Phase 03) calls `hal::bcm2835_legacy_irq::enable_irq`. Either Phase 02 also owns `syscall.rs:8307-8311`, or Phase 02 keeps the old module path until Phase 03. The second option is a temporary re-export, which the clean-cutover rule discourages.
-- **C2, `uart_bcm_mini` callers span phases.** The callers are in `main.rs` (01 and 04), `console_drv.rs` (01), `uart.rs` (unlisted) and `hypervisor/registry.rs` (04). If Phase 01 moves the module, every caller path changes in Phase 01.
+- **C2, BCM HAL module callers span phases (corrected 2026-11-02, Phase 02).**
+  - `uart_bcm_mini` callers: `main.rs` (01: console sites; 04: `:792` RX-IRQ enable and the `:1688-1733` Q/K/L probes), `console_drv.rs` (01), `uart.rs` (01, Q1), `aarch64/trap.rs` (02). `hypervisor/registry.rs` has no `uart_bcm_mini` caller; the earlier text was wrong.
+  - `bcm2835_systimer` and the RPi3 timer helpers are called from `hypervisor/registry.rs:832,1009,1032` (04, `pi_monitor_smoke`).
+  - Resolution: Phase 01 routed its sites through `Board` and kept the module in place. Phase 02 moved the BCM HAL files under `backend/bcm2837/`, with approved path-only amendments at `main.rs:792,1688-1733` and `registry.rs:832,1009,1032` (no cfg or logic change). See [reports/phase-02-gate.md](reports/phase-02-gate.md).
 - **C3, unlisted sites.** `task/drivers/uart.rs` (5 sites) and `syscall.rs:9397-9400` (`VcpuRegs`) are in no phase, but the Phase 04 end state needs them clean.
 - **C4, authority-table test placement.** `resource_registry_tests.rs` is `#[cfg(test)]`, which means host tests. Host builds compile none of the aarch64 `ALLOWED` tables. A host unit test cannot check the bcm2837/bcm2711 backends.
 
@@ -210,3 +213,6 @@ Trip-wires. If any of these holds, stop and open a CP1 before continuing:
 - Q12 admit plan order 2
 
 The handoff is effective for phases 01–04. The Phase 02 and Phase 04 checkpoints still apply.
+
+## Phase 02 checkpoint
+2026-11-02: the user replied "duyệt CP2 + commit". Deviations 1–4 are approved, as are the path-only amendments (main.rs:792,1688-1733; hypervisor/registry.rs:832,1009,1032).

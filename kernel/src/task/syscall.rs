@@ -8304,10 +8304,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             {
                 return Err(SyscallError::PermissionDenied);
             }
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            if caller_has_usb_driver(caller_id) && irq == hal_soc_bcm27xx::BCM2837.irq.usb as u8 {
-                // One-shot unmask: re-enable USB legacy IRQ 9 after driver has cleared GINTSTS
-                hal::bcm2835_legacy_irq::enable_irq(hal_soc_bcm27xx::BCM2837.irq.usb);
+            #[cfg(target_arch = "aarch64")]
+            {
+                use hal::aarch64::backend::{ArmIrqController, Board};
+                if let Some(usb_irq) = <Board as ArmIrqController>::USB_ONE_SHOT_IRQ {
+                    if caller_has_usb_driver(caller_id) && irq == usb_irq as u8 {
+                        // One-shot unmask: re-enable the USB legacy IRQ after the
+                        // driver has cleared GINTSTS.
+                        <Board as ArmIrqController>::unmask_usb_irq();
+                    }
+                }
             }
             // The ISR dereferences a stored nonzero base (VirtIO InterruptACK),
             // so only an MMIO window the caller was granted is accepted.

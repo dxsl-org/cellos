@@ -42,11 +42,13 @@ static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), Atom
 /// mechanism has one definition per architecture.
 #[inline]
 fn send_ipi(hart_id: usize) {
-    #[cfg(any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", not(feature = "board-rpi3"))
-    ))]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     {
+        // Boards with no software-interrupt transport retain the request epoch.
+        #[cfg(target_arch = "aarch64")]
+        if !<hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::HAS_IPI {
+            return;
+        }
         if hart_id >= MAX_HARTS || hart_id == crate::task::hart_local::current_hart_id() {
             return;
         }
@@ -54,12 +56,12 @@ fn send_ipi(hart_id: usize) {
         if let Some((mask, base)) = logical_sbi_target(hart_id) {
             let _ = hal::common::sbi::sbi_send_ipi(mask, base);
         }
-        // AArch64: the BCM2836 (RPi3) local controller has no software-interrupt
-        // path in this kernel, and that board starts no secondary, so the GIC SGI
-        // is the only delivery mechanism that exists.
-        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+        // AArch64: the board's interrupt controller raises the IPI (a GIC SGI).
+        #[cfg(target_arch = "aarch64")]
         if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
-            hal::aarch64::gic::send_sgi(cpu as u32, hal::aarch64::gic::SGI_IPI);
+            <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::send_ipi(
+                cpu as u32,
+            );
         }
     }
     #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
@@ -71,8 +73,8 @@ fn send_ipi(hart_id: usize) {
     // Boards with no software-interrupt transport retain the request epoch.
     #[cfg(not(any(
         target_arch = "riscv64",
-        all(target_arch = "x86_64", not(all(test, not(target_os = "none")))),
-        all(target_arch = "aarch64", not(feature = "board-rpi3"))
+        target_arch = "aarch64",
+        all(target_arch = "x86_64", not(all(test, not(target_os = "none"))))
     )))]
     let _ = hart_id;
 }
@@ -452,7 +454,7 @@ pub fn start_secondaries() {
 /// the write is followed by a clean to the point of coherency. `static mut`
 /// with a single writer and no reader until the core is started is the whole
 /// synchronisation argument.
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[cfg(target_arch = "aarch64")]
 static mut SECONDARY_CONTEXT: [hal::aarch64::boot::SecondaryContext; MAX_HARTS] =
     [hal::aarch64::boot::SecondaryContext {
         hart_id: 0,
@@ -465,6 +467,18 @@ static mut SECONDARY_CONTEXT: [hal::aarch64::boot::SecondaryContext; MAX_HARTS] 
 
 /// Called by hart 0 **after** `task::init()` to bring secondary cores online.
 ///
+/// How a core comes online is the board backend's choice
+/// ([`SecondaryStart`](hal::aarch64::backend::SecondaryStart)): through PSCI,
+/// or not at all, in which case the board stays single-hart and says why.
+#[cfg(target_arch = "aarch64")]
+pub fn start_secondaries() {
+    use hal::aarch64::backend::{ArmPlatform, Board, SecondaryStart};
+    match <Board as ArmPlatform>::SECONDARY_START {
+        SecondaryStart::Psci => start_psci_secondaries(),
+        SecondaryStart::None(reason) => log::info!("[smp] {}", reason),
+    }
+}
+
 /// AArch64 starts a core through firmware (`PSCI_CPU_ON` over the conduit the
 /// device tree declares). Everything the new core needs — its stack, the boot
 /// core's live translation regime, the hardening bits in `SCTLR_EL1` — travels
@@ -473,8 +487,8 @@ static mut SECONDARY_CONTEXT: [hal::aarch64::boot::SecondaryContext; MAX_HARTS] 
 ///
 /// Bounded wait, graceful degradation, never a panic: a core that does not come
 /// online within the deadline leaves the system single-hart with a warning.
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-pub fn start_secondaries() {
+#[cfg(target_arch = "aarch64")]
+fn start_psci_secondaries() {
     use crate::boot::firmware_smp;
     use crate::task::stack::Stack;
     use crate::task::STACK_PAGES;
@@ -694,13 +708,6 @@ pub fn run_ipi_selftest() {
             epoch
         );
     }
-}
-
-/// RPi3: the BCM2836 local controller has no software-interrupt path here, and
-/// the board's secondaries are parked by firmware, so it stays single-hart.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub fn start_secondaries() {
-    log::info!("[smp] BCM2836 has no SGI path in this kernel — keeping Cellos single-hart");
 }
 
 /// No-op on targets with one CPU.
@@ -1120,7 +1127,7 @@ fn x86_handoff_fixture() {
 /// installed, this hart's stack in place, interrupts masked, and `hart_id` in
 /// x0. Returns only by never returning: the hart parks and lives out its life
 /// in the timer/IPI trap path, which is where its scheduler round runs.
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[cfg(target_arch = "aarch64")]
 #[no_mangle]
 pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
     crate::task::hart_local::install(hart_id);

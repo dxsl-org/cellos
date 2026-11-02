@@ -829,7 +829,7 @@ pub fn pi_monitor_smoke() {
     // for a bounded 100 ms guest smoke window. Otherwise their pre-boot
     // pending IRQs can turn a conditional WFI into a NOP. Production vCPU
     // runs retain the regular 10 ms host-tick preemption.
-    let prepare = hal::aarch64::timer::prepare_monitor_smoke_window;
+    let prepare = hal::aarch64::backend::bcm2837::timer::prepare_monitor_smoke_window;
     // A physical tick can still race guest entry. Retry only genuine
     // preemptions, bounded: a permanently asserted unrelated IRQ fails closed.
     let run_step = |cpu: &mut AArch64Vcpu, vi: bool| {
@@ -1006,7 +1006,7 @@ pub fn pi_monitor_smoke() {
                     // host tick; otherwise a runaway guest owns the CPU.
                     let mut spin_cpu = AArch64Vcpu::new(IPA);
                     spin_cpu.g_elr_el2 = IPA + 0x300;
-                    hal::aarch64::timer::arm_monitor_smoke_preemption();
+                    hal::aarch64::backend::bcm2837::timer::arm_monitor_smoke_preemption();
                     unsafe {
                         monitor::run(&mut spin_cpu, VMID, table.root_pa(), false);
                     }
@@ -1029,7 +1029,7 @@ pub fn pi_monitor_smoke() {
         disable_stage2();
     }
     // Restore the ordinary host tick cadence before Cells can run.
-    hal::aarch64::bcm2835_systimer::init();
+    hal::aarch64::backend::bcm2837::bcm2835_systimer::init();
     hal::aarch64::timer::reset();
     if passed {
         monitor::mark_verified();

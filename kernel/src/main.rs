@@ -789,7 +789,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         // IRQ delivery must start only after the heap-backed queue exists.
         task::drivers::uart::init_input();
-        crate::hal::uart_bcm_mini::enable_rx_interrupt();
+        crate::hal::backend::Board::console_enable_rx_irq();
     }
     // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).
     // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
@@ -1685,7 +1685,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).
     // Q absent → IRQ fired immediately after daifclr (expected); check if H/G appear.
     #[cfg(feature = "board-rpi3")]
-    crate::hal::uart_bcm_mini::probe_put(b'Q');
+    crate::hal::backend::Board::diag_probe(b'Q');
 
     // board-rpi3: Print IRQ state snapshot immediately after enabling IRQs.
     // Format: "K<src_bit8><pend_bit1><src_nibble>" where src = CORE0_IRQ_SOURCE,
@@ -1707,18 +1707,18 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 b'a' + n as u8 - 10
             }
         };
-        crate::hal::uart_bcm_mini::probe_put(b'K');
-        crate::hal::uart_bcm_mini::probe_put(if src_raw & soc.irq.local_gpu_mask != 0 {
+        crate::hal::backend::Board::diag_probe(b'K');
+        crate::hal::backend::Board::diag_probe(if src_raw & soc.irq.local_gpu_mask != 0 {
             b'1'
         } else {
             b'0'
         });
-        crate::hal::uart_bcm_mini::probe_put(if pend & (1 << soc.irq.system_timer_c1) != 0 {
+        crate::hal::backend::Board::diag_probe(if pend & (1 << soc.irq.system_timer_c1) != 0 {
             b'1'
         } else {
             b'0'
         });
-        crate::hal::uart_bcm_mini::probe_put(hex(src_raw & 0xF));
+        crate::hal::backend::Board::diag_probe(hex(src_raw & 0xF));
     }
 
     // Probe 'L': fires once per idle loop iteration (only first 3 on board-rpi3 to avoid flood).
@@ -1730,7 +1730,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         loop {
             let n = IDLE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             if n < 4 {
-                crate::hal::uart_bcm_mini::probe_put(b'L');
+                crate::hal::backend::Board::diag_probe(b'L');
             }
             crate::task::yield_cpu();
             crate::hal::ARCH.wait_for_interrupt();

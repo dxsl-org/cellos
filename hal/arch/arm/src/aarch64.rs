@@ -8,12 +8,6 @@ use hal_arch_trait::Arch;
 // Sub-modules only compile when targeting AArch64.
 #[cfg(target_arch = "aarch64")]
 pub mod backend;
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub mod bcm2835_legacy_irq;
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub mod bcm2835_systimer;
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub mod bcm2836_irq;
 #[cfg(target_arch = "aarch64")]
 pub mod boot;
 #[cfg(target_arch = "aarch64")]
@@ -50,8 +44,6 @@ pub mod timer;
 pub mod trap;
 #[cfg(target_arch = "aarch64")]
 pub mod trap_el2;
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub mod uart_bcm_mini;
 #[cfg(target_arch = "aarch64")]
 pub mod uart_pl011;
 #[cfg(target_arch = "aarch64")]
@@ -102,15 +94,10 @@ impl Arch for AArch64Arch {
         cfi::init(); // LAYER2-CFI-INIT
         mte::init(); // LAYER2-MTE-INIT
 
-        // IRQ controller: BCM2836 local on RPi 3, GIC-400 on QEMU virt.
+        // IRQ controller: the board backend's (GIC-400 on QEMU virt and RPi 4,
+        // BCM2836 local + BCM2835 legacy on RPi 3).
         // The IRQ controller MUST precede timer::init() which enables a timer PPI.
-        #[cfg(feature = "board-rpi3")]
-        {
-            bcm2836_irq::init();
-            bcm2835_legacy_irq::init();
-        }
-        #[cfg(not(feature = "board-rpi3"))]
-        gic::init();
+        <backend::Board as backend::ArmIrqController>::init();
 
         timer::init();
         trap::init();
@@ -167,14 +154,7 @@ impl Arch for AArch64Arch {
 /// reports itself unavailable on QEMU virt).
 #[cfg(target_arch = "aarch64")]
 pub fn init_secondary_hart() {
-    #[cfg(feature = "board-rpi3")]
-    {
-        // BCM2836 local controller + BCM2835 legacy bank: the RPi3 has no GIC.
-        bcm2836_irq::init();
-        bcm2835_legacy_irq::init();
-    }
-    #[cfg(not(feature = "board-rpi3"))]
-    gic::init_cpu();
+    <backend::Board as backend::ArmIrqController>::init_cpu();
 
     timer::init();
     trap::init();

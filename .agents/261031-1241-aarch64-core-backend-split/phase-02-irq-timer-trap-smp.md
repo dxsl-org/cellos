@@ -1,5 +1,7 @@
 # Phase 02 — IRQ, timer, trap, SMP  (checkpoint)
 
+**Status:** implemented 2026-11-02, uncommitted; gate PASS ([reports/phase-02-gate.md](reports/phase-02-gate.md)). Waiting for checkpoint approval; Phase 03 not started.
+
 ## Context Links
 [plan](plan.md) · [scout](scout-report.md) · ADR-0029 §6
 
@@ -31,11 +33,17 @@ Static dispatch through `Board` (see the plan's key design decisions). Only `bac
 5. Run preservation gate with SMP=2
 
 ## Todo List
-- [ ] Define IRQ and timer traits
-- [ ] Parameterise GIC by profile
-- [ ] Move BCM IRQ and systimer into bcm2837 backend
-- [ ] Move trap dispatch and SMP start
-- [ ] Run preservation gate with SMP=2
+- [x] Define IRQ and timer traits (`ArmIrqController`, `ArmTimer`, `SecondaryStart`)
+- [x] Parameterise GIC by profile (`GicV2Layout`)
+- [x] Move BCM IRQ and systimer into bcm2837 backend (with `uart_bcm_mini`, Q3)
+- [x] Move trap dispatch and SMP start (plus `syscall.rs` `WaitIrq` USB unmask, Q2)
+- [x] Run preservation gate with SMP=2
+
+Deviations and file-set amendments are in the gate report §1 and §6. Summary:
+- `aarch64.rs` keeps the `monitor` module gate; it moves with `monitor.rs` in Phase 04.
+- Path-only edits were made at `main.rs:792,1688-1733` and `hypervisor/registry.rs:832,1009,1032`.
+- `docs/generated/mutable-globals.md` was regenerated (Q7).
+- The RPi3 tick criterion is restated by Q10(a); the tick proxies are recorded in the gate report.
 
 ## Success Criteria
 Checkpoint:

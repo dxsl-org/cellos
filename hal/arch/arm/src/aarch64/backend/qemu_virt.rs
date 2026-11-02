@@ -1,7 +1,13 @@
-//! QEMU `virt` backend: PL011 console at the `ArmVirtProfile` UART.
+//! QEMU `virt` backend: PL011 console at the `ArmVirtProfile` UART, GICv2,
+//! generic-timer tick, PSCI secondaries, and VirtIO MMIO/PL061 device IRQs.
 
-use super::{ArmPlatform, NoIommu};
-use crate::aarch64::uart_pl011;
+use hal_arch_trait::vi_handle_virtio_irq;
+use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
+
+use super::{ArmIrqController, ArmPlatform, ArmTimer, NoIommu, SecondaryStart};
+use crate::aarch64::gic::{self, GicV2Layout};
+use crate::aarch64::trap::{self, TrapFrame};
+use crate::aarch64::{timer, uart_pl011};
 
 /// QEMU `virt` machine.
 pub struct QemuVirt;
@@ -9,7 +15,8 @@ pub struct QemuVirt;
 impl ArmPlatform for QemuVirt {
     type Iommu = NoIommu;
 
-    const PL011_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base;
+    const PL011_BASE: usize = QEMU_ARM_VIRT.uart.mmio.base;
+    const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;
 
     #[inline(always)]
@@ -38,5 +45,81 @@ impl ArmPlatform for QemuVirt {
     }
 
     #[inline(always)]
+    fn console_enable_rx_irq() {}
+
+    #[inline(always)]
     fn diag_probe(_byte: u8) {}
+
+    #[inline(always)]
+    fn probe_uncategorized_trap(_frame: &TrapFrame, _vector_kind: u8) {}
+}
+
+impl GicV2Layout for QemuVirt {
+    const DISTRIBUTOR_BASE: usize = QEMU_ARM_VIRT.gic_distributor.base;
+    const CPU_INTERFACE_BASE: usize = QEMU_ARM_VIRT.gic_cpu.base;
+    /// PL061 GPIO controller (SPI 7 = GIC ID 39).
+    const GPIO_GIC_ID: u32 = ArmVirtProfile::gic_id_for_spi(QEMU_ARM_VIRT.gpio.spi);
+
+    #[inline(always)]
+    fn enable_board_irqs() {
+        // Enable VirtIO MMIO IRQs: QEMU virt assigns SPI 16..47 (GIC IDs 48..79)
+        // to the 32 VirtIO MMIO slots.  Without this, GICD_ISENABLER bit is 0 and
+        // the GIC never delivers VirtIO interrupts even after claim/complete.
+        // NIC is at slot 30 (SPI 46, GIC ID 78); Block at slot 31 (SPI 47, GIC ID 79).
+        let virtio = QEMU_ARM_VIRT.virtio;
+        let first = ArmVirtProfile::gic_id_for_spi(virtio.first_spi);
+        for i in first..first + virtio.count as u32 {
+            gic::enable_irq::<Self>(i);
+        }
+        gic::enable_irq::<Self>(ArmVirtProfile::gic_id_for_spi(QEMU_ARM_VIRT.gpio.spi));
+    }
+
+    #[inline(always)]
+    fn dispatch_spi(irq: u32) {
+        // VirtIO MMIO: convert GIC ID → SPI number.
+        // SAFETY: vi_handle_virtio_irq is #[no_mangle] in kernel/src/task/drivers.
+        unsafe {
+            vi_handle_virtio_irq(irq - ArmVirtProfile::GIC_SPI_OFFSET);
+        }
+    }
+}
+
+impl ArmIrqController for QemuVirt {
+    const HAS_IPI: bool = true;
+    const USB_ONE_SHOT_IRQ: Option<u32> = None;
+
+    #[inline(always)]
+    fn init() {
+        gic::init::<Self>();
+    }
+
+    #[inline(always)]
+    fn init_cpu() {
+        gic::init_cpu::<Self>();
+    }
+
+    #[inline(always)]
+    fn send_ipi(target_cpu: u32) {
+        gic::send_sgi::<Self>(target_cpu, gic::SGI_IPI);
+    }
+
+    #[inline(always)]
+    fn unmask_usb_irq() {}
+
+    #[inline(always)]
+    fn handle_irq() {
+        trap::handle_gic_irq::<Self>();
+    }
+}
+
+impl ArmTimer for QemuVirt {
+    #[inline(always)]
+    fn init() {
+        timer::init_gic::<Self>();
+    }
+
+    #[inline(always)]
+    fn reset() {
+        timer::reset_generic();
+    }
 }

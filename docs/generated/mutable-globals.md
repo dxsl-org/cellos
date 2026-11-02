@@ -626,7 +626,7 @@ Source files outside the module tree:
 | `kernel::task::retirement_selftest::ROOT_EXIT_QUOTA_SATURATED @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/task/retirement_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::task::smp::BOOT_PHYSICAL_HART @cfg(target_arch = "riscv64")` | `kernel/src/task/smp.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::task::smp::PREEMPT_PENDS @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/task/smp.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
-| `kernel::task::smp::SECONDARY_CONTEXT @cfg(all (target_arch = "aarch64" , not (feature = "board-rpi3")))` | `kernel/src/task/smp.rs` | static mut | `[hal::aarch64::boot::SecondaryContext;MAX_HARTS]` | cfg inactive in this profile |
+| `kernel::task::smp::SECONDARY_CONTEXT @cfg(target_arch = "aarch64")` | `kernel/src/task/smp.rs` | static mut | `[hal::aarch64::boot::SecondaryContext;MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::task::smp::X86_HANDOFF_CONTEXTS @cfg(all (target_arch = "x86_64" , feature = "test-hooks"))` | `kernel/src/task/smp.rs` | static mut | `[core::mem::MaybeUninit<hal::arch::Context>;2]` | cfg inactive in this profile |
 | `kernel::task::smp::X86_HANDOFF_FIRST_EPOCH @cfg(all (target_arch = "x86_64" , feature = "test-hooks"))` | `kernel/src/task/smp.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::task::smp::X86_HANDOFF_LATE_EPOCH @cfg(all (target_arch = "x86_64" , feature = "test-hooks"))` | `kernel/src/task/smp.rs` | static | `AtomicUsize` | cfg inactive in this profile |
