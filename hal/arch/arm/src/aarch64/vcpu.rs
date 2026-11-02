@@ -317,13 +317,20 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             in(reg) vcpu.g_tpidr_el0, in(reg) vcpu.g_tpidr_el1,
             options(nomem, nostack),
         );
+        // ESR_EL1/FAR_EL1 are part of the guest bank too. A host IRQ can exit
+        // the guest between taking an exception and reading its syndrome; on
+        // the Pi the EL1 host's own Cell SVCs and aborts then overwrite both,
+        // and the resumed guest decodes the host's syndrome (observed on QEMU
+        // raspi3b: a guest EL0 data abort resumed with a host Cell's SVC ESR).
         core::arch::asm!(
             "msr cntv_ctl_el0,  {0}",  "msr cntv_cval_el0, {1}",
             "msr spsr_el1,      {2}",  "msr elr_el1,       {3}",
             "msr sp_el1,        {4}",
+            "msr esr_el1,       {5}",  "msr far_el1,       {6}",
             in(reg) vcpu.g_cntv_ctl,  in(reg) vcpu.g_cntv_cval,
             in(reg) vcpu.g_spsr_el1,  in(reg) vcpu.g_elr_el1,
             in(reg) vcpu.g_sp_el1,
+            in(reg) vcpu.g_esr_el1,   in(reg) vcpu.g_far_el1,
             options(nomem, nostack),
         );
         // Program ELR_EL2 (guest PC) + SPSR_EL2 for `eret` in vcpu_enter_guest.
@@ -356,8 +363,9 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // reset the guest's SCTLR/TTBR/VBAR to reset values, and Linux then ran on
     // with its MMU off and VBAR_EL1=0 until it took an exception and fetched a
     // vector from IPA 0x200 (observed as ec=0x20 iss=0x6 pc=0x200). ESR/FAR
-    // are saved too: after a guest-internal exception they carry the original
-    // syndrome, which the vector-fetch S2 abort at EL2 does not.
+    // are saved and restored like the rest: after a guest-internal exception
+    // they carry the original syndrome, which the vector-fetch S2 abort at
+    // EL2 does not, and a guest preempted before reading them needs them back.
     // SAFETY: reading EL1 sysregs from EL2 is always permitted; the guest is
     // stopped (TPIDR_EL2 cleared by vt_vcpu_trap).
     unsafe {
