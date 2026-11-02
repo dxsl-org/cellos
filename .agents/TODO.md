@@ -20,10 +20,12 @@ Vừa đóng (không mở lại; chi tiết ở portfolio/CHANGELOG): Ginux less
 ([plan](261030-1945-ginux-lessons-hardening/plan.md)); x86 runtime board selection và aarch64
 core/backend split xong 2026-11-02 ([x86](261031-1241-x86-runtime-board-selection/plan.md),
 [aarch64](261031-1241-aarch64-core-backend-split/plan.md)); hv vGIC fix `287377e5d` (guest
-AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell).
+AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell); **C2C Phase 03 done
+2026-11-02** ở trần x86 QEMU/TCG (slice e CP2,
+[record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md)).
 
 **Ứng viên kế tiếp** (chưa admit; chọn trong portfolio theo promotion rule):
-- [ ] **C2C Phase 03 slice tiếp theo** — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
+- [ ] **C2C slice tiếp theo** (Phase 03 đã done) — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
   bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice
   ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).
 - [ ] **VFS/storage/search research** — parked; chỉ tiếp tục khi owner yêu cầu
@@ -36,13 +38,6 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
 
 **C2C program (mở, có gate):**
-- [ ] **Phase 03 remaining proof obligations:** huỷ operation đã dispatch, retained-reply lifetime,
-  sustained admission competition / full-peer-queue fairness (unbounded monopolization). Two-hart
-  wake race đã xong:
-  `async_ipc::tests::deterministic_two_hart_publication_and_wake_races` pass (2026-11-02).
-  Witness đã có và phạm vi của chúng:
-  [phase-03](260927-1100-c2c-anywhere-tier-aware/phase-03-async-ipc.md);
-  contract [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md).
 - [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical
   bring-up và acquisition gated riêng. Bắt buộc kiểm thử đạt trên cả 3 môi trường (QEMU TCG, QEMU/KVM,
   VMware) trước khi nạp lên board thật. Kèm: Ginux Phase 03 KVM baseline cần máy vật lý có

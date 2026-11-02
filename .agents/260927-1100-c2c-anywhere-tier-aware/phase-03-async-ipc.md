@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Reliable nonblocking request and completion lifecycle"
-status: pending
+status: done
 priority: P1
 effort: "ABI review + implementation gate"
 dependencies: [1, 2]
@@ -36,10 +36,12 @@ Provide a *real* nonblocking caller API for several outstanding local/broker req
 
 ## Success criteria
 
-- [ ] `submit` returns without parking when target is busy, or returns immediate `Busy` with no request delivered; later the exact accepted request produces one correlated completion.
-- [ ] Full queue, duplicate/late replies, caller/target death, cancellation and deadline produce a terminal outcome with zero silent loss or double execution in the proven window.
-- [ ] IPC-masked recv, VFS grant lifetime and TIMER/NET_RX completion behavior remain valid in QEMU; deterministic two-hart wake race test passes.
-- [ ] New ABI is absent unless both Law-1 confirmations are recorded; no Cap'n Proto pipelining or wire swap is asserted by this phase.
+- [x] `submit` returns without parking when target is busy, or returns immediate `Busy` with no request delivered; later the exact accepted request produces one correlated completion.
+- [x] Full queue, duplicate/late replies, caller/target death, cancellation and deadline produce a terminal outcome with zero silent loss or double execution in the proven window.
+- [x] IPC-masked recv, VFS grant lifetime and TIMER/NET_RX completion behavior remain valid in QEMU; deterministic two-hart wake race test passes.
+- [x] New ABI is absent unless both Law-1 confirmations are recorded; no Cap'n Proto pipelining or wire swap is asserted by this phase.
+
+**DONE 2026-11-02 at the x86 QEMU/TCG ceiling** (owner CP2 approval of slice e, [record](phase-03e-closure-cp2-approval.md)). Evidence map: [slice e CP1 §10](phase-03e-closure-cp1.md) and the [CP2 package](reports/phase-03e-cp2-package.md). Excluded, not claimed: registry restart + re-lookup (C2C Phase 02 step 3), the broker `NetworkPoller` cutover (slice d D-5), an x86 NET_RX producer, physical Intel qualification. The receive-commit fix and the admission bounds are host-proven; the two-CPU lanes are unforced.
 
 ## Assumptions
 
@@ -374,3 +376,13 @@ At the end of P2, the userspace multi-source wait, an SMP lane witness, the SDK 
 **Closed 2026-11-02.** The owner answered YES to Law-1 confirmation 2 and ratified closure amendments A1–A5 ([CP2 approval](phase-03d-multi-source-wait-cp2-approval.md)); deviations D9–D17 are recorded in the CP2 package. The surface is FROZEN and pinned by `scripts/check-multi-source-wait-law1-digests.sh`. Spec 17 §9 (2026-11-02 entry), Spec 20 v3.4 and Spec 03b are amended. `CHANGELOG.md` is not edited in this slice (owner instruction).
 
 Still open in Phase 03, outside slice d: cancelling a dispatched operation, retained-reply lifetime, sustained full-peer-queue fairness, the broker `NetworkPoller` cutover (separate optional slice, D-5), a hardware NET_RX producer on x86, and physical Intel qualification.
+
+## Slice e — closure of lifetime, cancellation and fairness (adopted 2026-11-02; DONE 2026-11-02, CP2 approved)
+
+The owner answered YES to E-1..E-8 of the [CP1](phase-03e-closure-cp1.md) ([approval](phase-03e-closure-cp1-approval.md)). No Law-1 delta. The [CP2 package](reports/phase-03e-cp2-package.md) records the baseline, reproductions, deviations and post-edit digests.
+
+- **Reproduced first.** A masked `Recv`/`RecvScatter`/`RecvTimeout` committed removal by queue position; a cancel ahead of the delivered record between the two scheduler holds made it remove the sender's next request and deliver the first twice (host test failed: removed op 12, delivered op 11). A dropped untaken `PendingCall` kept its slot; the x86 lane stayed `Busy` after 64 drops.
+- **Fixes.** `PendingMailbox::remove_delivered` commits wires by delivery id in the four syscall receive arms (`syscall.rs`, the granted lines only; the `ipc_recv` paths and blocking-resume commit already did; inline records keep a sender/position rule), with a debug assertion against an arm that drops the id. `PendingCall` drops cancel and take an unsettled operation (the handle is now `Drop` and `!Sync`). Operation submits keep 8 of 64 receiver-queue slots for Cell incarnations holding no queued wire there (`async_ipc::PEER_QUEUE_HEADROOM`), checked once before the reply-buffer allocation and again at the push; the bound is Cell-wide and holds only while no raw records are queued. Dispatched cancellation stays `Indeterminate` (no cancel-ack).
+- **Host tests (kernel 392 → 400, ostd 86 → 87):** receive-commit and inline rule plus the debug guard, cancel/expire/owner-exit/peer-death/cutover matrix around the dispatch boundary, hot-swap cutover with replacement refusal, retained-terminal quota through take and owner exit with reply storage freed on reap, the exact B2 limit (refusal only behind 9 holders), and the randomized model (B3 as receives to dispatch ≤ 64; crowd of 40 Cells: 12 refusals, none behind fewer than 28; depth-only rule: 350 refusals behind 1 holder).
+- **Lanes:** lifecycle 3/3 and independent `-smp 1`/`-smp 2` sessions (local and async), 0 `denied for tid`: `CANCEL-RACE` 256 with no delivered request reported `Cancelled` (definiteness only; the receive-commit fix is host-proven), `SYNC-TIMEOUT-LATE`, `SYNC-EXPIRY` (unbounded, real 3000 ticks), `DROP-RECLAIM` 192 dropped and 64 re-admitted, `PEER-PRESSURE` rewritten (A fills 56, B admitted first try, B 64 calls with 0 refusals while A was refused ~10,000 times). `igb-x86` 2/2 on a private rebuilt image (round 1). Evidence: [c2c-phase03-closure-x86](../../docs/evidence/c2c-phase03-closure-x86.txt).
+- **Success criteria map:** CP1 §10. **Closed 2026-11-02:** the owner approved CP2 ([record](phase-03e-closure-cp2-approval.md)) and this phase is done at the x86 QEMU/TCG ceiling; registry restart + re-lookup (Phase 02 step 3), the broker `NetworkPoller` cutover, an x86 NET_RX producer and physical Intel stay excluded. The slice-e file-bounded exception ends with that record.

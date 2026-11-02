@@ -96,8 +96,8 @@ Reply | PeerGone | PreDispatchTimeout | Indeterminate | Cancelled }`.
 | Submission | `submit` copies the request into kernel-owned storage and reserves the reply slot under one scheduler lock hold; the caller may drop its stack buffer immediately | No pinned caller buffer, no bare stack pointer |
 | Identity | The token binds owner tid, peer tid, peer cell **and** peer generation; the receiver reads it from the delivered message (`IpcCurrent`) | A completion cannot cross incarnations, and a stale generation cannot settle someone else's operation |
 | Terminal kinds | `Reply`, `PeerGone`, `PreDispatchTimeout`, `Indeterminate`, `Cancelled` | Peer death terminates waiting, but does not prove no prior side effect or no delegated sibling work; never blind-retry accepted work |
-| Reply retention | The kernel owns the reply until `take`; an undersized `take` buffer does **not** consume the result; taking a terminal releases the slot | No silent truncation, no double execution through re-taking |
-| Capacity | Bounded operations per owner and a bounded receiver queue; a full owner set or queue returns `Busy` with nothing delivered | Congestion is a refusal, never a silent drop |
+| Reply retention | The kernel owns the reply until `take`; an undersized `take` buffer does **not** consume the result; taking a terminal releases the slot. Storage is fixed at acceptance (one `IPC_BUF_SIZE` reply buffer per operation, at most 64 per task); no terminal transition allocates. Dropping an unsettled SDK `PendingCall` cancels and takes it (C2C Phase 03 slice e) | No silent truncation, no double execution through re-taking; abandoned interest cannot leak the quota |
+| Capacity | Bounded operations per owner and a bounded receiver queue (64); a full owner set or queue returns `Busy` with nothing delivered. The last 8 queue slots admit an operation only from a Cell incarnation holding no queued operation wire at that receiver. The holder is the whole Cell incarnation: a synchronous thread whose sibling thread already has a request queued there is not "fresh". With no raw messages or kernel-inserted records queued at that receiver, one Cell queues at most 56, and a Cell holding none is refused for capacity only when at least 9 other Cells each hold one. Raw `Send`/`Post` admission is unchanged and raw records are not counted, so raw traffic can occupy the reserved slots | Congestion is a refusal, never a silent drop; one Cell cannot monopolize a provider's operation queue; an unbounded synchronous call that meets `Busy` returns it rather than retrying |
 | Waiting | `WaitCompletion` with `IPC` (optionally plus `TIMER` and `NET_RX`) parks until one owned operation reaches its terminal or another named source fires; each terminal is reported once, by token, and taken with `IpcTake`. The SDK uses it when the Cell's compiled allowlist holds bit 42 and `IpcWait` otherwise (Spec 17 §9, 2026-11-02) | One wait covers NET_RX, IPC replies and a deadline; a retained result never re-wakes the caller on the completion path |
 
 **Reply identity is per-operation, not per-sender.** SDK `service_call` and its
@@ -118,6 +118,18 @@ apply an end-to-end scheduler-tick budget, retry `Busy` only before acceptance,
 and never resend accepted work. Pre-dispatch caller expiry is `PreDispatchTimeout`;
 post-dispatch cancellation is `Indeterminate`. Every SDK error cancels/drains its
 reservation, including a reply too large for the caller's buffer.
+
+The four syscall receive arms (`Recv`, `RecvScatter`, `RecvTimeout`,
+`TryRecv`) commit removal of the exact wire their snapshot delivered, by
+delivery id; the `ipc_recv` paths and the blocking-resume commit already did.
+Inline (non-wire) records keep a sender/position rule: the arms use the snapshot
+position, the blocking-resume commit the first record from that sender. A
+cancellation, expiry or owner death that removes a record ahead of a delivered
+wire between snapshot and commit therefore cannot make the receive remove a
+different record and deliver the snapshotted request twice. `Cancelled` and
+`PreDispatchTimeout` are produced only for a request no receive ever
+snapshotted, in the same scheduler hold that removes its wire; dispatched
+cancellation stays `Indeterminate`, with no provider acknowledgement.
 
 `Completion::is_definite` covers Reply/pre-dispatch timeout/cancellation;
 `is_uncertain` covers PeerGone/Indeterminate. Neither helper authorizes automatic
@@ -168,10 +180,24 @@ with exact sender and sequence, and the mailbox is empty at exit. This proves
 bounded progress and refusal backpressure in a finite workload, not
 starvation freedom under unbounded competing monopolization.
 
-**Separate proof obligations:** the full fairness/restart matrix remains open. Multi-source completion
+Slice e (C2C Phase 03 closure, 2026-11-02; evidence
+`docs/evidence/c2c-phase03-closure-x86.{txt,log}`) adds: the receive-commit
+fix above, proven by a failing-before host test only (no lane can place a
+cancellation between a receive's two scheduler holds); a 256-iteration cancel
+race against a masked provider in which no delivered request is reported
+`Cancelled`; the bounded and unbounded synchronous expiry with refused late
+replies; reclaim of 192 dropped handles; and the admission headroom: under a
+Cell held at its 56-wire share for thousands of submissions, an independent
+synchronous Cell completed 64 calls with zero refusals. Host tests pin the
+limit (a fresh Cell is refused only behind exactly 9 other holders), bound one
+Cell at 56 and a wire's wait at 64 receives in a randomized model, and show the
+previous depth-only rule letting one Cell take all 64 slots. Ceilings: more than
+8 saturating Cells, sibling threads sharing a Cell's share, raw-message traffic
+and provider masked-receive policy are not bounded; the two-CPU lanes are
+unforced. Multi-source completion
 waiting landed in C2C Phase 03 slice d (Spec 17 §9, 2026-11-02; evidence
 `docs/evidence/c2c-multi-source-wait-x86.{txt,log}`), including the deterministic two-hart host model
-for the IPC source; the x86 two-CPU lane is unforced. Neither claims remote RPC readiness.
+for the IPC source. Neither claims remote RPC readiness.
 
 ### 2.5 Liveness and safety boundaries
 
@@ -226,6 +252,12 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 
 ## 7. Revision record
 
+- **v3.5 (2026-11-02, local implementation amendment; remote draft unchanged):**
+  §2.6 records C2C Phase 03 slice e with no Law-1 delta: receive commits by delivery
+  id, dispatched cancellation stays `Indeterminate`, dropping an unsettled
+  `PendingCall` releases its slot, and operation submits keep 8 of 64 receiver-queue
+  slots for Cells holding no queued wire there. No syscall, flag, record or wire
+  layout changed.
 - **v3.4 (2026-11-02, local implementation amendment; remote draft unchanged):**
   §2.4, §2.6 (Waiting row, proof obligations), §3, §4 and §5 record C2C Phase 03 slice d,
   Law-1 2× confirmed: `WaitCompletion = 242` accepts a non-empty `NET_RX | TIMER | IPC` mask, and

@@ -1,0 +1,80 @@
+C2C Phase 03 slice e: retained-reply lifetime, dispatched cancellation and admission fairness (2026-11-02)
+
+Scope: CP1 .agents/260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp1.md (owner YES on E-1..E-8,
+approval record phase-03e-closure-cp1-approval.md). No Law-1 delta: no syscall, flag, allowlist bit,
+completion source, record or libs/api byte changed. Source HEAD 5638153118921e53c510571ba5dc50c26d73b0a7
+plus the uncommitted slice delta, including the independent-review round 2 fixes.
+
+Reproduced before fixing:
+- (b) masked-receive double delivery, host test
+  task::async_ipc::tests::masked_receive_commit_removes_the_delivered_record_after_a_concurrent_cancel
+  against the receive arms' position rule (extracted verbatim into PendingMailbox::remove_delivered):
+    assertion `left == right` failed: the commit removed a record it never delivered
+      left: Some(12)   right: Some(11)
+  Mailbox [foreign op 21, op 11, op 12]; masked Recv snapshots and dispatches op 11; the foreign caller
+  cancels op 21 between the holds; the position commit removed op 12, leaving op 11 to be delivered again.
+  This defect is proven by host tests only: no lane can place a cancellation between a receive's two
+  scheduler holds, so CANCEL-RACE below witnesses cancellation definiteness (A2), not this fix (A1).
+- (a) dropped PendingCall slot leak, x86 lane with the HEAD SDK (ISO 7f64f2d2f930464f):
+    [async-lifecycle] FAIL - admission stayed Busy: a released slot was never returned
+  (DROP-RECLAIM: 64 dropped unsettled handles, then the next submit stayed Busy for 4000 yields.)
+
+After the fix: both host tests PASS; DROP-RECLAIM dropped=192 fresh_accepted=64 late_accepted=0 on -smp 1
+and -smp 2.
+
+Observed markers (independent serial sessions, final ISO; -smp 1 / -smp 2):
+  [local-lifecycle] SYNC-EXPIRY=OK unbounded=Indeterminate elapsed_ticks>=3000 late_reply=refused fresh=Reply   (both)
+  [local-lifecycle] PRESSURE-FILL a_fill=56 a_headroom_busy=true b_first_admitted=true                          (both)
+  [local-lifecycle] PRESSURE-CALLER b_completed=64 b_fresh_refused=0 b_max_call_ticks=1                         (both)
+  [local-lifecycle] PRESSURE-PROVIDER=OK b=64 duplicate=0 extra_delivery=0 a=3772 / 1366 max_a_between_b=111 / 153
+  [local-lifecycle] PEER-PRESSURE=OK a_fill=56 a_headroom_busy=true b_first_admitted=true b_fresh_refused=0 b_done=64
+                    duplicate=0 wrong_correlation=0 a_submitted=3772 / 1366 a_busy=10036 / 9893
+  [async-lifecycle] CANCEL-RACE total=256 cancelled=64 indeterminate=192 other=0 cancelled_but_received=0
+                    received_but_definite=0 delivered_twice=0 unterminal=0                                     (both)
+  [async-lifecycle] SYNC-TIMEOUT-LATE queued=Some(PreDispatchTimeout) queued_delivered=false first=Some(Indeterminate)
+                    late_explicit_refused=true late_send_raw_absent=true next_reply=true                       (both)
+  [async-lifecycle] DROP-RECLAIM dropped=192 fresh_accepted=64 held_by_provider=128 late_accepted=0            (both)
+  "denied for tid": 0 in both sessions. "[x86-smp] topology online=1" / "=2" as labelled.
+
+Fairness bound, measured:
+- Host boundary test: one Cell fills exactly 56 slots; 8 distinct fresh Cells take the headroom (each then
+  refused a second wire); a fresh Cell is refused only then, behind exactly 9 other holders; one receive
+  admits it again; another incarnation of the flooding Cell counts as a different holder.
+- Host model (randomized, one flooding Cell plus synchronous Cells, D = 64, H = 8; B3 measured as provider
+  receives from admission to dispatch, read from the dequeued record):
+  2 / 9 / 10 Cells: max_held 56 / 55 / 54, max_receives_to_dispatch 57 / 59 / 59, fresh_refused 0;
+  crowd of 40 Cells (400,000 steps): max_held 48, max_receives_to_dispatch 64, fresh_refused 12,
+  fewest other holders at a refusal 28, B2 violations 0.
+  Depth-only rule (headroom 0, the pre-03e behaviour), 2 Cells: max_held=64, 350 fresh refusals behind 1
+  other holder.
+- Lane: A held its 56-wire share for 3772 / 1366 submissions with 10036 / 9893 Busy refusals; B was refused
+  0 times in 64 calls and each B call took at most 1 tick from submit to taken reply. max_a_between_b counts
+  A receives between consecutive B receives, including A wires admitted during B's own reply turnaround;
+  it is reported, not bounded.
+- Qualifications: the holder is the whole Cell incarnation (a sibling thread's queued request makes the
+  Cell a holder), and B2 holds only while no raw or kernel-inserted records are queued at the receiver.
+
+Verification:
+- cargo test --target x86_64-unknown-linux-gnu (RUSTFLAGS, CARGO_TARGET_DIR unset):
+  -p api 184 + 2 (4 doc-tests ignored); -p ostd 87 + 7 + 19 (2 ignored); -p cellos-kernel 400.
+- bash scripts/build-x86_64-c2c-lifecycle-ci.sh: PASS (F1/F5 signing), ISO sha256
+  395b1b1f426f552691ac62a8a8299a251e06e6fec17486f06df55a3a7a78b060, kernel.elf
+  e97e543c1b441e1e1e560bd22e3067ba2a44df99371b9e61998b562ae1d7121d.
+- cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-unknown-linux-gnu
+  --test local-service-lifecycle-x86: 3 passed (local -smp 1, async -smp 1, async -smp 2).
+- igb-x86 on a private headless image rebuilt from the round-1 tree (assemble-x86-image.py, out-dir and
+  target under /tmp, manifest kernel_features; ISO 92ff130fab481b60...): 2 passed. Not re-run after the
+  round-2 changes (early admission check, debug guard, tests and wording only).
+- cargo fmt --all --check clean; clippy -D warnings: see the CP2 package.
+- scripts/check-multi-source-wait-law1-digests.sh PASS; scripts/check-lookupservicebound-law1-digests.sh PASS.
+
+Independent serial runtime: QEMU q35, cpu qemu64,+pdpe1gb, 256 MiB, nographic, CD-ROM boot d, no reboot,
+monitor none, localhost TCP serial; 0.5 s settle before each command. local lifecycle PASS 33.78 s
+(-smp 1) / 34.02 s (-smp 2); async lifecycle PASS 32.18 s / 32.27 s.
+Raw serial log: docs/evidence/c2c-phase03-closure-x86.log (80518 bytes, git-ignored).
+
+Evidence ceiling: x86 QEMU/TCG only. The receive-commit race and the admission bounds are proven by
+deterministic host tests; the two-CPU lanes do not force interleavings. More than 8 saturating Cells,
+sibling threads sharing a Cell's share, raw-message traffic and provider masked-receive policy are not
+bounded. Registry restart + re-lookup is C2C Phase 02 step 3. No physical Intel, remote RPC or production
+claim.

@@ -1,0 +1,1343 @@
+### Phase 03e independent serial session (review round 2): -smp 1, bench local-service-lifecycle + bench async-lifecycle
+c[?7l[2J[0mSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:02.0 CA00 PCI2.10 PnP PMM+0EFCACF0+0EF0ACF0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:02.0)...                                                                               
+
+
+Booting from DVD/CD...
+c[?7l[2Jc[?7l[2Jvbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe83d000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  9
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+acpi: Found SMBIOS 64-bit entry point at 0xf52e0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe21fa
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e83d000
+[ INFO] [boot] allocator: 3 usable range(s), 59280 frames (231 MiB)
+[ INFO] [boot]   range 0x59000..0x9f000 (0 MiB)
+[ INFO] [boot]   range 0x100000..0xe836000 (231 MiB)
+[ INFO] [boot]   range 0xfe56000..0xfe6a000 (0 MiB)
+[INFO] Frame allocator initialized
+[ INFO] [acpi] HPET: event timer block = 0xfed00000
+[ INFO] [acpi] MCFG: segment 0 bus 0-255 ECAM window base = 0xb0000000
+[ INFO] [acpi] gates: madt=true hpet=true mcfg=true dmar=false
+[ INFO] [identity] acpi_oem="BOCHS " acpi_table="BXPC    " acpi_rev=0x1 smbios=manufacturer="QEMU" product="Standard PC (Q35 + ICH9, 2009)" uuid=none hv=1
+[ INFO] [x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64 source=cmdline dma_isolation=Optional
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[ INFO] [kernel] x86_64 paging: kernel PML4 built
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+[ INFO] [kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x59000 — domain roots use tag 0 with a full CR3 flush)
+[ INFO] [kernel] paging activated
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[ INFO] [rt-heap] TLSF pool ready — 256 KiB, O(1) alloc/dealloc
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 8192 KB (16384 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfeb80000
+[ WARN] [e1000] unsupported Ethernet 8086:10d3; driver gate closed
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 96
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215a000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2143000-0x2155000, UStackTop 0x2169000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 656 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [x86-smp] topology online=1 processor_ids=0 qualified=yes
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [signing] cell trust posture=dev anchor=[22, fc, 29, 77, 92, f0, b6, ff] unsigned=tier2
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38552 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100003829 flags=R-X
+[ INFO] ELF LOAD: 0x100003830-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x102000000-0x10204C35A flags=R-X
+[ INFO] ELF LOAD: 0x10204C360-0x102059BF8 flags=R--
+[ INFO] ELF LOAD: 0x10205A000-0x10205BB40 flags=RW-
+[ INFO] ELF LOAD: 0x10205C000-0x10215C031 flags=RW-
+[ INFO] ELF LOAD: 0x10215C038-0x10215D03C flags=R--
+[ INFO] [wx] 'init': 91/350 cell pages lowered to read-only/execute-only
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+USER: [platform] ECAM scan complete
+[ INFO] Syscall::Exit: task 1 exited with code 0
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ INFO] ELF LOAD: 0x100000000-0x100004B49 flags=R-X
+[ INFO] ELF LOAD: 0x100004B50-0x100005BD0 flags=R--
+[ INFO] ELF LOAD: 0x100006000-0x1000063C0 flags=RW-
+[ INFO] ELF LOAD: 0x100007000-0x100107041 flags=RW-
+[ INFO] ELF LOAD: 0x100108000-0x10010803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+[ INFO] Syscall::Exit: task 3 exited with code 0
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (632192 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x10007B83A flags=R-X
+[ INFO] ELF LOAD: 0x10007B840-0x100080770 flags=R--
+[ INFO] ELF LOAD: 0x100081000-0x100082CD0 flags=RW-
+[ INFO] ELF LOAD: 0x100083000-0x101183040 flags=RW-
+[ INFO] ELF LOAD: 0x101183040-0x10118403C flags=R--
+[ INFO] [wx] 'vfs': 130/4485 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4 (cell 1 gen 111)
+USER: [vfs] primary disk kernel (no block routes)
+USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+[ INFO] [service-registry] 20 -> tid 2 (cell 2 gen 109)
+USER: Init: machine pin: store unavailable (/srv not mounted)
+USER: Init: machine pin disabled — no store; continuing under qemu-q35-x86_64.
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29752 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x104002449 flags=R-X
+[ INFO] ELF LOAD: 0x104002450-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: e1000 launched.
+[ INFO] [loader] SpawnFromElf: /bin/input (167296 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x10601C6AA flags=R-X
+[ INFO] ELF LOAD: 0x10601C6B0-0x10601FD98 flags=R--
+[ INFO] ELF LOAD: 0x106020000-0x106021348 flags=RW-
+[ INFO] ELF LOAD: 0x106022000-0x106122031 flags=RW-
+[ INFO] ELF LOAD: 0x106122038-0x10612303C flags=R--
+[ INFO] [wx] 'input': 33/292 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6 (cell 4 gen 113)
+USER: Init: input launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 109)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3144888 bytes from grant)
+[ INFO] ELF LOAD: 0x108000000-0x1081FD547 flags=R-X
+[ INFO] ELF LOAD: 0x1081FD548-0x10828A9D0 flags=R--
+[ INFO] ELF LOAD: 0x10828B000-0x1082B28B8 flags=RW-
+[ INFO] ELF LOAD: 0x1082B3000-0x1089B3148 flags=RW-
+[ INFO] ELF LOAD: 0x1089B3148-0x1089B403C flags=R--
+[ INFO] [wx] 'cellbox': 652/2485 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: Init: service exited cleanly — policy says no restart.
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+[ INFO] Syscall::Exit: task 5 exited with code 0
+USER: Init: service exited cleanly — policy says no restart.
+USER: bench local-service-lifecycle
+[ INFO] ELF LOAD: 0x104000000-0x10403295A flags=R-X
+[ INFO] ELF LOAD: 0x104032960-0x10403A9B8 flags=R--
+[ INFO] ELF LOAD: 0x10403B000-0x10403BCF0 flags=RW-
+[ INFO] ELF LOAD: 0x10403C000-0x10413C031 flags=RW-
+[ INFO] ELF LOAD: 0x10413C038-0x10413D03C flags=R--
+[ INFO] [wx] 'bench': 60/318 cell pages lowered to read-only/execute-only
+USER: [local-lifecycle] START
+USER: [local-lifecycle] VFS-BINDING tid=4 cell=1 gen=111 matches_lookup=true
+USER: [local-lifecycle] ABSENT-BINDING lookup=None bound_is_none=true
+USER: [local-lifecycle] SDK-BINDING matches_raw=true tid=Some(4)
+USER: [local-lifecycle] SDK-VFS-CALL=OK ListAtPage(cwd)
+USER: [local-lifecycle] SDK-BINDING-LIVE resolved=true unresolved=false
+USER: [local-lifecycle] SDK-ABSENT-BINDING=REFUSED
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3704 KiB free=29063 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3740 KiB free=29027 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-caller:9'
+USER: [local-lifecycle] sync-caller-start provider=9
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 9 exited with code 0
+USER: [local-lifecycle] SYNC-RESULT=RETURNED error=PeerGone
+[ INFO] Syscall::Exit: task 10 exited with code 0
+USER: [local-lifecycle] SYNC-LEG=complete
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3704 KiB free=29063 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-nested-reply'
+USER: [local-lifecycle] NESTED-PROVIDER=REPLIED
+[ INFO] Syscall::Exit: task 11 exited with code 0
+USER: [local-lifecycle] NESTED-REPLY=OK retained=true duplicate_quarantined=true
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3704 KiB free=29063 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-reply-loop'
+[ INFO] Syscall::Exit: task 12 exited with code 0
+USER: [local-lifecycle] SDK-SLOT-CLEANUP=OK errors=70 reply_len=2
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3741 KiB free=29026 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-cancel-reply'
+[ INFO] Syscall::Exit: task 13 exited with code 0
+USER: [local-lifecycle] CANCEL-LATE-REPLY=OK outcome=Indeterminate next_seq=2
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3741 KiB free=29026 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 14 exited with code 0
+USER: [local-lifecycle] ASYNC-TERMINAL=PEER-GONE
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3741 KiB free=29026 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-saturation'
+USER: [local-lifecycle] SATURATION-PROVIDER=OK received=65 busy_delivered=0
+[ INFO] Syscall::Exit: task 15 exited with code 0
+USER: [local-lifecycle] SATURATION=OK accepted=64 busy_delivered=0 terminal_charged=64 drained=64 reuse=Reply
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3750 KiB free=29017 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-deadline'
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3751 KiB free=29016 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-expiry-holder'
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3787 KiB free=28980 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-expiry-caller:17'
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: [local-lifecycle] SYNC-EXPIRY=OK unbounded=Indeterminate elapsed_ticks>=3000 late_reply=refused fresh=Reply
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: [local-lifecycle] DEADLINE-PROVIDER=OK queued_delivered=0 late_reply=refused
+[ INFO] Syscall::Exit: task 16 exited with code 0
+USER: [local-lifecycle] DEADLINE=OK queued=PreDispatchTimeout dispatched=Indeterminate elapsed_ticks>=3000 queued_delivered=0 reuse=Reply
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3752 KiB free=29015 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-caller-death'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3751 KiB free=29016 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-doomed-caller:19'
+USER: [local-lifecycle] CALLER-DEATH-CHILD=EXITING queued=4
+[ INFO] Syscall::Exit: task 20 exited with code 0
+USER: [local-lifecycle] CALLER-DEATH-PROVIDER=OK dead_delivered=0 fresh=Reply
+[ INFO] Syscall::Exit: task 19 exited with code 0
+USER: [local-lifecycle] CALLER-DEATH=OK queued=4 exit_observed=true dead_delivered=0 fresh=Reply
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-restart-old'
+[ INFO] Syscall::Exit: task 21 exited with code 0
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-restart-new'
+[ INFO] Syscall::Exit: task 22 exited with code 0
+USER: [local-lifecycle] RESTART=OK old=PeerGone replacement=Reply old_token=refused dead_submit=PeerGone
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3711 KiB free=29056 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-event-provider'
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3755 KiB free=29012 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-raw-event'
+[ INFO] Syscall::Exit: task 24 exited with code 0
+[ INFO] Syscall::Exit: task 23 exited with code 0
+USER: [local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3752 KiB free=29015 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-input-provider'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3783 KiB free=28984 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-input-source'
+[ INFO] Syscall::Exit: task 26 exited with code 0
+[ INFO] Syscall::Exit: task 25 exited with code 0
+USER: [local-lifecycle] CONCURRENT-INPUT=OK rpc_calls=8 input_events=32 rpc_settled=false rpc_drained=8 input_drained=32 misplaced=0
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-multi-provider'
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3751 KiB free=29016 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-full-caller:27'
+[ INFO] Syscall::Exit: task 28 exited with code 0
+[ INFO] Syscall::Exit: task 27 exited with code 0
+USER: [local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3752 KiB free=29015 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-pressure-provider'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3983 KiB free=28784 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-pressure-caller:29'
+USER: [local-lifecycle] PRESSURE-FILL a_fill=56 a_headroom_busy=true b_first_admitted=true
+USER: [local-lifecycle] PRESSURE-CALLER b_completed=64 b_fresh_refused=0 b_max_call_ticks=1
+[ INFO] Syscall::Exit: task 30 exited with code 0
+USER: [local-lifecycle] PRESSURE-PROVIDER=OK b=64 duplicate=0 extra_delivery=0 a=3772 max_a_between_b=111
+[ INFO] Syscall::Exit: task 29 exited with code 0
+USER: [local-lifecycle] PRESSURE-CALLER a_submitted=3772 a_busy=10036
+USER: [local-lifecycle] PEER-PRESSURE=OK a_fill=56 a_headroom_busy=true b_first_admitted=true b_fresh_refused=0 b_done=64 duplicate=0 wrong_correlation=0 a_submitted=3772 a_busy=10036
+USER: [local-lifecycle] PASS
+[ INFO] Syscall::Exit: task 8 exited with code 0
+USER: Cellos > bench async-lifecycle
+[ INFO] ELF LOAD: 0x104000000-0x10403295A flags=R-X
+[ INFO] ELF LOAD: 0x104032960-0x10403A9B8 flags=R--
+[ INFO] ELF LOAD: 0x10403B000-0x10403BCF0 flags=RW-
+[ INFO] ELF LOAD: 0x10403C000-0x10413C031 flags=RW-
+[ INFO] ELF LOAD: 0x10413C038-0x10413D03C flags=R--
+[ INFO] [wx] 'bench': 60/318 cell pages lowered to read-only/execute-only
+USER: [async-lifecycle] START
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3705 KiB free=29062 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-echo-reverse:8'
+USER: [async-lifecycle] echo-provider-ready count=8
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=603760 p99_ticks=617270 freq_hz=1000000000 wait_rounds=1
+USER: [async-lifecycle] BOUNDED-RELEASED ok=true
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3746 KiB free=29021 KiB after SpawnPinned path=/bin/bench-probe
+USER: [async-lifecycle] echo-provider-done
+[ INFO] Syscall::Exit: task 32 exited with code 0
+USER: [bench-probe] Started with role: 'c2c-slow-parked'
+USER: [async-lifecycle] slow-provider-ready
+USER: [async-lifecycle] slow-provider-busy
+USER: [async-lifecycle] slow-provider-second queued=false
+USER: [async-lifecycle] slow-provider-done
+[ INFO] Syscall::Exit: task 33 exited with code 0
+USER: [async-lifecycle] TRY-SEND parked_refused=false busy_refused=true parked_ret=0 busy_ret=18446744073709551615
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3709 KiB free=29058 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 34 exited with code 0
+USER: [async-lifecycle] DEATH outstanding=4 submit_refused=0 terminal=4 peer_gone=4 unterminal=0 lost=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3746 KiB free=29021 KiB after SpawnPinned path=/bin/bench-probe
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3745 KiB free=29022 KiB after SpawnPinned path=/bin/bench-probe
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3781 KiB free=28986 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-slow'
+USER: [bench-probe] Started with role: 'c2c-msw-hold'
+[ INFO] ELF LOAD: 0x110000000-0x110012D8A flags=R-X
+[ INFO] ELF LOAD: 0x110012D90-0x110015E90 flags=R--
+[ INFO] ELF LOAD: 0x110016000-0x110016310 flags=RW-
+[ INFO] ELF LOAD: 0x110017000-0x110117031 flags=RW-
+[ INFO] ELF LOAD: 0x110117038-0x11011803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3817 KiB free=28950 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-echo'
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+[ INFO] ELF LOAD: 0x112000000-0x112012D8A flags=R-X
+[ INFO] ELF LOAD: 0x112012D90-0x112015E90 flags=R--
+[ INFO] ELF LOAD: 0x112016000-0x112016310 flags=RW-
+[ INFO] ELF LOAD: 0x112017000-0x112117031 flags=RW-
+[ INFO] ELF LOAD: 0x112117038-0x11211803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3855 KiB free=28912 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-echo-reverse:8'
+USER: [async-lifecycle] echo-provider-ready count=8
+[ INFO] ELF LOAD: 0x114000000-0x114012D8A flags=R-X
+[ INFO] ELF LOAD: 0x114012D90-0x114015E90 flags=R--
+[ INFO] ELF LOAD: 0x114016000-0x114016310 flags=RW-
+[ INFO] ELF LOAD: 0x114017000-0x114117031 flags=RW-
+[ INFO] ELF LOAD: 0x114117038-0x11411803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3887 KiB free=28880 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-raw'
+[ INFO] ELF LOAD: 0x116000000-0x116012D8A flags=R-X
+[ INFO] ELF LOAD: 0x116012D90-0x116015E90 flags=R--
+[ INFO] ELF LOAD: 0x116016000-0x116016310 flags=RW-
+[ INFO] ELF LOAD: 0x116017000-0x116117031 flags=RW-
+[ INFO] ELF LOAD: 0x116117038-0x11611803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3928 KiB free=28839 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-caller'
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] MSW-REPLY records=8 dup=0 foreign=0 timer_returns=0 rereport=0 wrong_seq=0
+USER: [async-lifecycle] echo-provider-done
+[ INFO] Syscall::Exit: task 39 exited with code 0
+USER: [async-lifecycle] MSW-M5 rounds=200 wc_p50=33780 wc_p99=502870 ipcwait_p50=34710 ipcwait_p99=290580 tick=10000000 pass=true
+USER: [async-lifecycle] MSW-MIXED timer=true interrupted_by_raw=true ipc_after_raw=true raw_ignored_without_netrx=true ipc_second=true netrx_records=0 netrx_producer=absent-x86
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 38 exited with code 0
+USER: [async-lifecycle] MSW-DEATH outstanding=4 records=4 peer_gone=4 dup=0 unterminal=0
+USER: [async-lifecycle] MSW-STARVATION a_done=4858 b_done=8 b_during_flood=8 records=4866 max_b_overtakes=0 bound=63 lost=0 dup=0 foreign=0
+USER: [async-lifecycle] MSW-DEADLINE timer=true timer_ticks=20 op_expiry=true op_expiry_ticks=3000 terminal=Indeterminate
+USER: [async-lifecycle] MSW-STALE late_reply_refused=true fresh_reply=true stale_records=0 other_records=0 quiet_after=true
+[ INFO] Syscall::Exit: task 41 exited with code 0
+[ INFO] Syscall::Exit: task 35 exited with code 0
+[ INFO] Syscall::Exit: task 36 exited with code 0
+[ INFO] Syscall::Exit: task 40 exited with code 0
+[ INFO] Syscall::Exit: task 37 exited with code 0
+USER: [async-lifecycle] MSW PASS
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3748 KiB free=29019 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-race-provider'
+[ INFO] Syscall::Exit: task 42 exited with code 0
+USER: [async-lifecycle] CANCEL-RACE total=256 cancelled=64 indeterminate=192 other=0 cancelled_but_received=0 received_but_definite=0 delivered_twice=0 unterminal=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3748 KiB free=29019 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-hold'
+USER: [async-lifecycle] SYNC-TIMEOUT-LATE queued=Some(PreDispatchTimeout) queued_delivered=false first=Some(Indeterminate) late_explicit_refused=true late_send_raw_absent=true next_reply=true
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3744 KiB free=29023 KiB after SpawnPinned path=/bin/bench-probe
+[ INFO] Syscall::Exit: task 43 exited with code 0
+USER: [bench-probe] Started with role: 'c2c-drop-provider'
+[ INFO] Syscall::Exit: task 44 exited with code 0
+USER: [async-lifecycle] DROP-RECLAIM dropped=192 fresh_accepted=64 held_by_provider=128 late_accepted=0
+USER: [async-lifecycle] PASS
+[ INFO] Syscall::Exit: task 31 exited with code 0
+USER: Cellos > 
+### Phase 03e independent serial session (review round 2): -smp 2, bench local-service-lifecycle + bench async-lifecycle
+c[?7l[2J[0mSeaBIOS (version 1.16.3-debian-1.16.3-2)
+
+
+iPXE (https://ipxe.org) 00:02.0 CA00 PCI2.10 PnP PMM+0EFCACF0+0EF0ACF0 CA00
+Press Ctrl-B to configure iPXE (PCI 00:02.0)...                                                                               
+
+
+Booting from DVD/CD...
+c[?7l[2Jc[?7l[2Jvbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+limine: Loading executable `boot():/boot/kernel.elf`...
+limine: Physical base:   0xe83d000
+limine: Virtual base:    0xffffffff80000000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80000000
+limine: Base revision:   3
+limine: Requests count:  9
+limine: Top of HHDM:     0x40000000
+acpi: Found RSDP at 0xf52c0
+acpi: Found SMBIOS 64-bit entry point at 0xf52e0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are supported!
+acpi: Found RSDP at 0xf52c0
+acpi: Found "APIC" at 0xffe224d
+smp: [xAPIC] Found candidate AP for bring-up. LAPIC ID: 1
+smp: Successfully brought up AP
+[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT
+[INFO] CET-IBT: unavailable
+[INFO] PKU: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[boot] kernel_phys_base=0x000000000e83d000
+[ INFO] [boot] allocator: 3 usable range(s), 59261 frames (231 MiB)
+[ INFO] [boot]   range 0x5a000..0x9f000 (0 MiB)
+[ INFO] [boot]   range 0x100000..0xe836000 (231 MiB)
+[ INFO] [boot]   range 0xfe56000..0xfe58000 (0 MiB)
+[INFO] Frame allocator initialized
+[ INFO] [acpi] HPET: event timer block = 0xfed00000
+[ INFO] [acpi] MCFG: segment 0 bus 0-255 ECAM window base = 0xb0000000
+[ INFO] [acpi] gates: madt=true hpet=true mcfg=true dmar=false
+[ INFO] [identity] acpi_oem="BOCHS " acpi_table="BXPC    " acpi_rev=0x1 smbios=manufacturer="QEMU" product="Standard PC (Q35 + ICH9, 2009)" uuid=none hv=1
+[ INFO] [x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64 source=cmdline dma_isolation=Optional
+[INFO] Initializing x86_64 paging (kernel PML4)...
+[ INFO] [kernel] x86_64 paging: kernel PML4 built
+[INFO] x86_64 paging initialized
+[INFO] Activating x86_64 paging (mov cr3)...
+[ INFO] [kernel] x86_64 paging: PCID disabled (CPUID pcid=false invpcid=false, CR4.PCIDE=0, CR3=0x5a000 — domain roots use tag 0 with a full CR3 flush)
+[ INFO] [kernel] paging activated
+QAHC1oKnx~~[INFO] x86_64 timers initialized from ACPI (HPET + LAPIC)
+[INFO] x86 virt: root operation active (SVM)
+[INFO] Heap initialized
+[ INFO] [rt-heap] TLSF pool ready — 256 KiB, O(1) alloc/dealloc
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] RAM Disk: read-only, 8192 KB (16384 sectors)
+[ INFO] VMware/QEMU absolute pointer enabled (EV_ABS guest pixels)
+[ INFO] UART Input Buffer Initialized
+[ INFO] [x86-gate] serial port 0 base=0x3f8 irq=4 usable
+[ WARN] [x86-gate] serial port 1 base=0x2f8 irq=3 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 2 base=0x3e8 irq=4 absent (16550 probe failed)
+[ WARN] [x86-gate] serial port 3 base=0x2e8 irq=3 absent (16550 probe failed)
+[INFO] x86_64: ramdisk + UART RX IRQ initialised
+[ INFO] [pcie] ECAM fallback scan bus 0 @ 0xb0000000 (1 MiB window)
+[ INFO] [pcie] 00:00.0 vendor=8086 device=29c0 class=06:00:00 bar0=0x0
+[ INFO] [pcie] 00:01.0 vendor=1234 device=1111 class=03:00:00 bar0=0xfd000000
+[ INFO] [pcie] 00:02.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfeb80000
+[ WARN] [e1000] unsupported Ethernet 8086:10d3; driver gate closed
+[ INFO] [pcie] 00:1f.0 vendor=8086 device=2918 class=06:01:00 bar0=0x0
+[ INFO] [pcie] 00:1f.2 vendor=8086 device=2922 class=01:06:01 bar0=0x0
+[ INFO] [pcie] 00:1f.3 vendor=8086 device=2930 class=0c:05:00 bar0=0x0
+[ INFO] [pcie] ECAM scan complete: 6 device(s) found
+[ WARN] [vtd] no ACPI DMAR unit; using the board-declared q35 register base 0xfed90000 (fallback)
+[ INFO] [vtd] Intel VT-d not present (GCAP=0x0)
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 96
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] no /POLICY.BIN in VIFS1 — absent
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] Thread 'thread' (ID 1): KStack 0x2144000-0x2156000, UStackTop 0x216A000, Entry 0x1000, Arg 0x0
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x215b000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] Thread 'thread' (ID 1): KStack 0x2144000-0x2156000, UStackTop 0x216A000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (147456 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 656 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[INFO] CET-IBT: unavailable
+[ INFO] [x86-smp] transport IPI-invalidate bidirectional=pass
+[ INFO] [x86-smp] topology online=2 processor_ids=0;1 qualified=yes
+[INFO] Tier 2 admission: ENABLED (development profile)
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [signing] cell trust posture=dev anchor=[22, fc, 29, 77, 92, f0, b6, ff] unsigned=tier2
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[INFO] [boot] x86_64 Limine linear framebuffer mapped and registered
+[ INFO] [early] VIFS1-first /bin/platform <- ramdisk (38552 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x100003829 flags=R-X
+[ INFO] ELF LOAD: 0x100003830-0x100004658 flags=R--
+[ INFO] ELF LOAD: 0x100005000-0x100005250 flags=RW-
+[ INFO] ELF LOAD: 0x100006000-0x100106031 flags=RW-
+[ INFO] ELF LOAD: 0x100106038-0x10010703C flags=R--
+[ INFO] [wx] 'platform': 6/264 cell pages lowered to read-only/execute-only
+[INFO] Platform Cell spawned (x86 PCIe ECAM scanner)
+[INFO] Publishing trusted init
+[ INFO] [sched] hart 1 dispatched a task
+[ INFO] ELF LOAD: 0x102000000-0x10204C35A flags=R-X
+[ INFO] ELF LOAD: 0x10204C360-0x102059BF8 flags=R--
+[ INFO] ELF LOAD: 0x10205A000-0x10205BB40 flags=RW-
+[ INFO] ELF LOAD: 0x10205C000-0x10215C031 flags=RW-
+[ INFO] ELF LOAD: 0x10215C038-0x10215D03C flags=R--
+[ INFO] [wx] 'init': 91/350 cell pages lowered to read-only/execute-only
+USER: [platform] ECAM scan buses 0-255 starting
+USER: [platform] registered bus 0 device 0 function 0 class 6:0:0
+USER: [platform] registered bus 0 device 1 function 0 class 3:0:0
+USER: [platform] unsupported Ethernet identity — registration skipped
+USER: [platform] registered bus 0 device 31 function 0 class 6:1:0
+USER: [platform] registered bus 0 device 31 function 2 class 1:6:1
+USER: [platform] registered bus 0 device 31 function 3 class 12:5:0
+[ INFO] Successfully spawned init with complete root authority (tid=2)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [sched] hart 0 dispatched a task
+USER: Init: Starting Cellos Orchestrator...
+USER: [platform] ECAM scan complete
+USER: 
+USER: 
+[ INFO] Syscall::Exit: task 1 exited with code 0
+[ WARN] [early] VIFS1-first "/bin/block" missing — falling back to block table
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/block error=NotFound
+[ INFO] ELF LOAD: 0x104000000-0x104004B49 flags=R-X
+[ INFO] ELF LOAD: 0x104004B50-0x104005BD0 flags=R--
+[ INFO] ELF LOAD: 0x104006000-0x1040063C0 flags=RW-
+[ INFO] ELF LOAD: 0x104007000-0x104107041 flags=RW-
+[ INFO] ELF LOAD: 0x104108000-0x10410803C flags=R--
+[ INFO] [wx] 'nvme': 7/265 cell pages lowered to read-only/execute-only
+[ INFO] Syscall::Exit: task 3 exited with code 0
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ahci error=NotFound
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (632192 bytes)
+[ INFO] ELF LOAD: 0x100000000-0x10007B83A flags=R-X
+[ INFO] ELF LOAD: 0x10007B840-0x100080770 flags=R--
+[ INFO] ELF LOAD: 0x100081000-0x100082CD0 flags=RW-
+[ INFO] ELF LOAD: 0x100083000-0x101183040 flags=RW-
+[ INFO] ELF LOAD: 0x101183040-0x10118403C flags=R--
+[ INFO] [wx] 'vfs': 130/4485 cell pages lowered to read-only/execute-only
+USER: VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)
+[ INFO] [service-registry] 1 -> tid 4 (cell 1 gen 111)
+USER: [vfs] primary disk kernel (no block routes)
+USER: [vfs] WARNING: FAT32 /mnt/sd mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+USER: [vfs] WARNING: FAT32 /bin mount failed
+USER: [vfs] WARNING: CellosFS open failed — volume unavailable
+[ INFO] [service-registry] 20 -> tid 2 (cell 2 gen 109)
+USER: Init: machine pin: store unavailable (/srv not mounted)
+USER: Init: machine pin disabled — no store; continuing under qemu-q35-x86_64.
+[ INFO] [loader] SpawnFromElf: /bin/e1000 (29752 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x104002449 flags=R-X
+[ INFO] ELF LOAD: 0x104002450-0x104003508 flags=R--
+[ INFO] ELF LOAD: 0x104004000-0x104004280 flags=RW-
+[ INFO] ELF LOAD: 0x104005000-0x1041053A1 flags=RW-
+[ INFO] ELF LOAD: 0x104106000-0x10410603C flags=R--
+[ INFO] [wx] 'e1000': 5/263 cell pages lowered to read-only/execute-only
+USER: Init: e1000 launched.
+[ INFO] Syscall::Exit: task 5 exited with code 0
+[ INFO] [loader] SpawnFromElf: /bin/input (167296 bytes from grant)
+[ INFO] ELF LOAD: 0x104000000-0x10401C6AA flags=R-X
+[ INFO] ELF LOAD: 0x10401C6B0-0x10401FD98 flags=R--
+[ INFO] ELF LOAD: 0x104020000-0x104021348 flags=RW-
+[ INFO] ELF LOAD: 0x104022000-0x104122031 flags=RW-
+[ INFO] ELF LOAD: 0x104122038-0x10412303C flags=R--
+[ INFO] [wx] 'input': 33/292 cell pages lowered to read-only/execute-only
+[ WARN] [input] registered input service TID 6
+USER: [input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing
+USER: [input] No VirtIO input device; relying on kernel push
+[ INFO] [service-registry] 3 -> tid 6 (cell 3 gen 113)
+USER: Init: input launched.
+[ INFO] [service-registry] 19 -> tid 2 (cell 2 gen 109)
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/silo-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/ai-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/vfs-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/srv-test error=NotFound
+[ WARN] [loader] SpawnFromPath refused: caller=2 path=/bin/std-smoke error=NotFound
+USER: Init: services spawned.
+USER: Init: service registry verified (init registration is publication, not application readiness).
+USER: Init: OS ready.
+[ INFO] [loader] SpawnFromElf: /bin/cellbox (3144888 bytes from grant)
+[ INFO] ELF LOAD: 0x106000000-0x1061FD547 flags=R-X
+[ INFO] ELF LOAD: 0x1061FD548-0x10628A9D0 flags=R--
+[ INFO] ELF LOAD: 0x10628B000-0x1062B28B8 flags=RW-
+[ INFO] ELF LOAD: 0x1062B3000-0x1069B3148 flags=RW-
+[ INFO] ELF LOAD: 0x1069B3148-0x1069B403C flags=R--
+[ INFO] [wx] 'cellbox': 652/2485 cell pages lowered to read-only/execute-only
+USER: shell: starting
+USER: 
+USER: === Cellos shell ready — type 'help' for commands ===
+USER: Cellos > 
+USER: Init: cellbox launched.
+USER: Init: supervising services (auto-restart on crash)...
+USER: Init: service exited cleanly — policy says no restart.
+USER: Init: service exited cleanly — policy says no restart.
+USER: bench local-service-lifecycle
+[ INFO] ELF LOAD: 0x108000000-0x10803295A flags=R-X
+[ INFO] ELF LOAD: 0x108032960-0x10803A9B8 flags=R--
+[ INFO] ELF LOAD: 0x10803B000-0x10803BCF0 flags=RW-
+[ INFO] ELF LOAD: 0x10803C000-0x10813C031 flags=RW-
+[ INFO] ELF LOAD: 0x10813C038-0x10813D03C flags=R--
+[ INFO] [wx] 'bench': 60/318 cell pages lowered to read-only/execute-only
+USER: [local-lifecycle] START
+USER: [local-lifecycle] VFS-BINDING tid=4 cell=1 gen=111 matches_lookup=true
+USER: [local-lifecycle] ABSENT-BINDING lookup=None bound_is_none=true
+USER: [local-lifecycle] SDK-BINDING matches_raw=true tid=Some(4)
+USER: [local-lifecycle] SDK-VFS-CALL=OK ListAtPage(cwd)
+USER: [local-lifecycle] SDK-BINDING-LIVE resolved=true unresolved=false
+USER: [local-lifecycle] SDK-ABSENT-BINDING=REFUSED
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3704 KiB free=29063 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3740 KiB free=29027 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-caller:9'
+USER: [local-lifecycle] sync-caller-start provider=9
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 9 exited with code 0
+USER: [local-lifecycle] SYNC-LEG=complete
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+USER: [local-lifecycle] SYNC-RESULT=RETURNED error=PeerGone
+[ INFO] Syscall::Exit: task 10 exited with code 0
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3742 KiB free=29025 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-nested-reply'
+USER: [local-lifecycle] NESTED-PROVIDER=REPLIED
+[ INFO] Syscall::Exit: task 11 exited with code 0
+USER: [local-lifecycle] NESTED-REPLY=OK retained=true duplicate_quarantined=true
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3704 KiB free=29063 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-reply-loop'
+[ INFO] Syscall::Exit: task 12 exited with code 0
+USER: [local-lifecycle] SDK-SLOT-CLEANUP=OK errors=70 reply_len=2
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3741 KiB free=29026 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-cancel-reply'
+[ INFO] Syscall::Exit: task 13 exited with code 0
+USER: [local-lifecycle] CANCEL-LATE-REPLY=OK outcome=Indeterminate next_seq=2
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3701 KiB free=29066 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 14 exited with code 0
+USER: [local-lifecycle] ASYNC-TERMINAL=PEER-GONE
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3705 KiB free=29062 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-saturation'
+USER: [local-lifecycle] SATURATION-PROVIDER=OK received=65 busy_delivered=0
+[ INFO] Syscall::Exit: task 15 exited with code 0
+USER: [local-lifecycle] SATURATION=OK accepted=64 busy_delivered=0 terminal_charged=64 drained=64 reuse=Reply
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3751 KiB free=29016 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-deadline'
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3747 KiB free=29020 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-expiry-holder'
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3787 KiB free=28980 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-expiry-caller:17'
+[ INFO] Syscall::Exit: task 18 exited with code 0
+USER: [local-lifecycle] SYNC-EXPIRY=OK unbounded=Indeterminate elapsed_ticks>=3000 late_reply=refused fresh=Reply
+[ INFO] Syscall::Exit: task 17 exited with code 0
+USER: [local-lifecycle] DEADLINE-PROVIDER=OK queued_delivered=0 late_reply=refused
+[ INFO] Syscall::Exit: task 16 exited with code 0
+USER: [local-lifecycle] DEADLINE=OK queued=PreDispatchTimeout dispatched=Indeterminate elapsed_ticks>=3000 queued_delivered=0 reuse=Reply
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-caller-death'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3751 KiB free=29016 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-doomed-caller:19'
+USER: [local-lifecycle] CALLER-DEATH-CHILD=EXITING queued=4
+[ INFO] Syscall::Exit: task 20 exited with code 0
+USER: [local-lifecycle] CALLER-DEATH-PROVIDER=OK dead_delivered=0 fresh=Reply
+[ INFO] Syscall::Exit: task 19 exited with code 0
+USER: [local-lifecycle] CALLER-DEATH=OK queued=4 exit_observed=true dead_delivered=0 fresh=Reply
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-restart-old'
+[ INFO] Syscall::Exit: task 21 exited with code 0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3719 KiB free=29048 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-restart-new'
+[ INFO] Syscall::Exit: task 22 exited with code 0
+USER: [local-lifecycle] RESTART=OK old=PeerGone replacement=Reply old_token=refused dead_submit=PeerGone
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3752 KiB free=29015 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-event-provider'
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3752 KiB free=29015 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-raw-event'
+[ INFO] Syscall::Exit: task 24 exited with code 0
+[ INFO] Syscall::Exit: task 23 exited with code 0
+USER: [local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-input-provider'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3784 KiB free=28983 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-input-source'
+[ INFO] Syscall::Exit: task 26 exited with code 0
+[ INFO] Syscall::Exit: task 25 exited with code 0
+USER: [local-lifecycle] CONCURRENT-INPUT=OK rpc_calls=8 input_events=32 rpc_settled=false rpc_drained=8 input_drained=32 misplaced=0
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-multi-provider'
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3748 KiB free=29019 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-full-caller:27'
+[ INFO] Syscall::Exit: task 28 exited with code 0
+[ INFO] Syscall::Exit: task 27 exited with code 0
+USER: [local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3715 KiB free=29052 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-pressure-provider'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3984 KiB free=28783 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-pressure-caller:29'
+USER: [local-lifecycle] PRESSURE-FILL a_fill=56 a_headroom_busy=true b_first_admitted=true
+USER: [local-lifecycle] PRESSURE-CALLER b_completed=64 b_fresh_refused=0 b_max_call_ticks=1
+[ INFO] Syscall::Exit: task 30 exited with code 0
+USER: [local-lifecycle] PRESSURE-PROVIDER=OK b=64 duplicate=0 extra_delivery=0 a=1366 max_a_between_b=153
+[ INFO] Syscall::Exit: task 29 exited with code 0
+USER: [local-lifecycle] PRESSURE-CALLER a_submitted=1366 a_busy=9893
+USER: [local-lifecycle] PEER-PRESSURE=OK a_fill=56 a_headroom_busy=true b_first_admitted=true b_fresh_refused=0 b_done=64 duplicate=0 wrong_correlation=0 a_submitted=1366 a_busy=9893
+USER: [local-lifecycle] PASS
+[ INFO] Syscall::Exit: task 8 exited with code 0
+USER: Cellos > bench async-lifecycle
+[ INFO] ELF LOAD: 0x108000000-0x10803295A flags=R-X
+[ INFO] ELF LOAD: 0x108032960-0x10803A9B8 flags=R--
+[ INFO] ELF LOAD: 0x10803B000-0x10803BCF0 flags=RW-
+[ INFO] ELF LOAD: 0x10803C000-0x10813C031 flags=RW-
+[ INFO] ELF LOAD: 0x10813C038-0x10813D03C flags=R--
+[ INFO] [wx] 'bench': 60/318 cell pages lowered to read-only/execute-only
+USER: [async-lifecycle] START
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3705 KiB free=29062 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-echo-reverse:8'
+USER: [async-lifecycle] echo-provider-ready count=8
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=719340 p99_ticks=736110 freq_hz=1000000000 wait_rounds=1
+USER: [async-lifecycle] BOUNDED-RELEASED ok=true
+USER: [async-lifecycle] echo-provider-done
+[ INFO] Syscall::Exit: task 32 exited with code 0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3747 KiB free=29020 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-slow-parked'
+USER: [async-lifecycle] slow-provider-ready
+USER: [async-lifecycle] slow-provider-busy
+USER: [async-lifecycle] slow-provider-second queued=false
+USER: [async-lifecycle] slow-provider-done
+[ INFO] Syscall::Exit: task 33 exited with code 0
+USER: [async-lifecycle] TRY-SEND parked_refused=false busy_refused=true parked_ret=0 busy_ret=18446744073709551615
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3709 KiB free=29058 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 34 exited with code 0
+USER: [async-lifecycle] DEATH outstanding=4 submit_refused=0 terminal=4 peer_gone=4 unterminal=0 lost=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3746 KiB free=29021 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-echo'
+[ INFO] ELF LOAD: 0x10E000000-0x10E012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10E012D90-0x10E015E90 flags=R--
+[ INFO] ELF LOAD: 0x10E016000-0x10E016310 flags=RW-
+[ INFO] ELF LOAD: 0x10E017000-0x10E117031 flags=RW-
+[ INFO] ELF LOAD: 0x10E117038-0x10E11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3745 KiB free=29022 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-slow'
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3781 KiB free=28986 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-hold'
+[ INFO] ELF LOAD: 0x110000000-0x110012D8A flags=R-X
+[ INFO] ELF LOAD: 0x110012D90-0x110015E90 flags=R--
+[ INFO] ELF LOAD: 0x110016000-0x110016310 flags=RW-
+[ INFO] ELF LOAD: 0x110017000-0x110117031 flags=RW-
+[ INFO] ELF LOAD: 0x110117038-0x11011803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3813 KiB free=28954 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-provider'
+USER: [local-lifecycle] provider-ready
+[ INFO] ELF LOAD: 0x112000000-0x112012D8A flags=R-X
+[ INFO] ELF LOAD: 0x112012D90-0x112015E90 flags=R--
+[ INFO] ELF LOAD: 0x112016000-0x112016310 flags=RW-
+[ INFO] ELF LOAD: 0x112017000-0x112117031 flags=RW-
+[ INFO] ELF LOAD: 0x112117038-0x11211803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3855 KiB free=28912 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-echo-reverse:8'
+USER: [async-lifecycle] echo-provider-ready count=8
+[ INFO] ELF LOAD: 0x114000000-0x114012D8A flags=R-X
+[ INFO] ELF LOAD: 0x114012D90-0x114015E90 flags=R--
+[ INFO] ELF LOAD: 0x114016000-0x114016310 flags=RW-
+[ INFO] ELF LOAD: 0x114017000-0x114117031 flags=RW-
+[ INFO] ELF LOAD: 0x114117038-0x11411803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3892 KiB free=28875 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-raw'
+[ INFO] ELF LOAD: 0x116000000-0x116012D8A flags=R-X
+[ INFO] ELF LOAD: 0x116012D90-0x116015E90 flags=R--
+[ INFO] ELF LOAD: 0x116016000-0x116016310 flags=RW-
+[ INFO] ELF LOAD: 0x116017000-0x116117031 flags=RW-
+[ INFO] ELF LOAD: 0x116117038-0x11611803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3928 KiB free=28839 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-msw-caller'
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] MSW-REPLY records=8 dup=0 foreign=0 timer_returns=0 rereport=0 wrong_seq=0
+USER: [async-lifecycle] echo-provider-done
+[ INFO] Syscall::Exit: task 39 exited with code 0
+USER: [async-lifecycle] MSW-M5 rounds=200 wc_p50=26780 wc_p99=579500 ipcwait_p50=27190 ipcwait_p99=549820 tick=10000000 pass=true
+USER: [async-lifecycle] MSW-MIXED timer=true interrupted_by_raw=true ipc_after_raw=true raw_ignored_without_netrx=true ipc_second=true netrx_records=0 netrx_producer=absent-x86
+USER: [local-lifecycle] provider-exiting-without-reply
+[ INFO] Syscall::Exit: task 38 exited with code 0
+USER: [async-lifecycle] MSW-DEATH outstanding=4 records=4 peer_gone=4 dup=0 unterminal=0
+USER: [async-lifecycle] MSW-STARVATION a_done=600 b_done=8 b_during_flood=8 records=608 max_b_overtakes=9 bound=63 lost=0 dup=0 foreign=0
+USER: [async-lifecycle] MSW-DEADLINE timer=true timer_ticks=20 op_expiry=true op_expiry_ticks=3000 terminal=Indeterminate
+USER: [async-lifecycle] MSW-STALE late_reply_refused=true fresh_reply=true stale_records=0 other_records=0 quiet_after=true
+[ INFO] Syscall::Exit: task 41 exited with code 0
+[ INFO] Syscall::Exit: task 37 exited with code 0
+[ INFO] Syscall::Exit: task 40 exited with code 0
+USER: [async-lifecycle] MSW PASS
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] Syscall::Exit: task 35 exited with code 0
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3788 KiB free=28979 KiB after SpawnPinned path=/bin/bench-probe
+[ INFO] Syscall::Exit: task 36 exited with code 0
+USER: [bench-probe] Started with role: 'c2c-race-provider'
+[ INFO] Syscall::Exit: task 42 exited with code 0
+USER: [async-lifecycle] CANCEL-RACE total=256 cancelled=64 indeterminate=192 other=0 cancelled_but_received=0 received_but_definite=0 delivered_twice=0 unterminal=0
+[ INFO] ELF LOAD: 0x10C000000-0x10C012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10C012D90-0x10C015E90 flags=R--
+[ INFO] ELF LOAD: 0x10C016000-0x10C016310 flags=RW-
+[ INFO] ELF LOAD: 0x10C017000-0x10C117031 flags=RW-
+[ INFO] ELF LOAD: 0x10C117038-0x10C11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3749 KiB free=29018 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-sync-hold'
+USER: [async-lifecycle] SYNC-TIMEOUT-LATE queued=Some(PreDispatchTimeout) queued_delivered=false first=Some(Indeterminate) late_explicit_refused=true late_send_raw_absent=true next_reply=true
+[ INFO] Syscall::Exit: task 43 exited with code 0
+[ INFO] ELF LOAD: 0x10A000000-0x10A012D8A flags=R-X
+[ INFO] ELF LOAD: 0x10A012D90-0x10A015E90 flags=R--
+[ INFO] ELF LOAD: 0x10A016000-0x10A016310 flags=RW-
+[ INFO] ELF LOAD: 0x10A017000-0x10A117031 flags=RW-
+[ INFO] ELF LOAD: 0x10A117038-0x10A11803C flags=R--
+[ INFO] [wx] 'bench-probe': 23/281 cell pages lowered to read-only/execute-only
+[ INFO] [heap] used=3712 KiB free=29055 KiB after SpawnPinned path=/bin/bench-probe
+USER: [bench-probe] Started with role: 'c2c-drop-provider'
+[ INFO] Syscall::Exit: task 44 exited with code 0
+USER: [async-lifecycle] DROP-RECLAIM dropped=192 fresh_accepted=64 held_by_provider=128 late_accepted=0
+USER: [async-lifecycle] PASS
+[ INFO] Syscall::Exit: task 31 exited with code 0
+USER: Cellos > 
+### Reproduction before the SDK fix (DROP-RECLAIM, -smp 1, integration lane output, ISO 7f64f2d2f930464f)
+async lifecycle scenario did not complete (-smp 1): timeout: pattern "[async-lifecycle] PASS" not seen in 210s
+USER: [async-lifecycle] START
+USER: [async-lifecycle] echo-provider-ready count=8
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] BOUNDED completed=8 lost=0 wrong_seq=0 p50_ticks=948130 p99_ticks=965910 freq_hz=1000000000 wait_rounds=1
+USER: [async-lifecycle] BOUNDED-RELEASED ok=true
+USER: [async-lifecycle] echo-provider-done
+USER: [async-lifecycle] slow-provider-ready
+USER: [async-lifecycle] slow-provider-busy
+USER: [async-lifecycle] slow-provider-second queued=false
+USER: [async-lifecycle] slow-provider-done
+USER: [async-lifecycle] TRY-SEND parked_refused=false busy_refused=true parked_ret=0 busy_ret=18446744073709551615
+USER: [async-lifecycle] DEATH outstanding=4 submit_refused=0 terminal=4 peer_gone=4 unterminal=0 lost=0
+USER: [async-lifecycle] echo-provider-ready count=8
+USER: [async-lifecycle] echo-provider-replied count=8 reversed
+USER: [async-lifecycle] MSW-REPLY records=8 dup=0 foreign=0 timer_returns=0 rereport=0 wrong_seq=0
+USER: [async-lifecycle] echo-provider-done
+USER: [async-lifecycle] MSW-M5 rounds=200 wc_p50=28100 wc_p99=95770 ipcwait_p50=28850 ipcwait_p99=349510 tick=10000000 pass=true
+USER: [async-lifecycle] MSW-MIXED timer=true interrupted_by_raw=true ipc_after_raw=true raw_ignored_without_netrx=true ipc_second=true netrx_records=0 netrx_producer=absent-x86
+USER: [async-lifecycle] MSW-DEATH outstanding=4 records=4 peer_gone=4 dup=0 unterminal=0
+USER: [async-lifecycle] MSW-STARVATION a_done=4834 b_done=8 b_during_flood=8 records=4842 max_b_overtakes=0 bound=63 lost=0 dup=0 foreign=0
+USER: [async-lifecycle] MSW-DEADLINE timer=true timer_ticks=20 op_expiry=true op_expiry_ticks=3000 terminal=Indeterminate
+USER: [async-lifecycle] MSW-STALE late_reply_refused=true fresh_reply=true stale_records=0 other_records=0 quiet_after=true
+USER: [async-lifecycle] MSW PASS
+USER: [async-lifecycle] CANCEL-RACE total=256 cancelled=64 indeterminate=192 other=0 cancelled_but_received=0 received_but_definite=0 delivered_twice=0 unterminal=0
+USER: [async-lifecycle] SYNC-TIMEOUT-LATE queued=Some(PreDispatchTimeout) queued_delivered=false first=Some(Indeterminate) late_explicit_refused=true late_send_raw_absent=true next_reply=true
+USER: [async-lifecycle] FAIL â admission stayed Busy: a released slot was never returned

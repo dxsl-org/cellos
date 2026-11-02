@@ -23,6 +23,10 @@ lockScope: "All unfinished local, async, fastpath, LAN, relay and tier-adapter e
 >
 > The broker cutover remains a separate optional slice. No other Phase 03 scope, and nothing in Phases 04-10, is unlocked.
 
+> **Phase 03 slice e, closure — DONE 2026-11-02 (no Law-1 delta). Phase 03 is DONE at the x86 QEMU/TCG ceiling.**
+>
+> The user answered YES to E-1..E-8 of the [CP1](phase-03e-closure-cp1.md) and its [lock handoff](phase-03e-closure-cp1-approval.md), then approved CP2 ([record](phase-03e-closure-cp2-approval.md); [package](reports/phase-03e-cp2-package.md)): receive commits by delivery identity, `PendingCall` drop releases its slot, operation-submit admission headroom, and the remaining lifetime/cancellation lane legs. The only kernel-repair lines touched are the four `kernel/src/task/syscall.rs` receive-commit hunks, as granted. Excluded, not claimed: registry restart + re-lookup (Phase 02 step 3), the broker `NetworkPoller` cutover, an x86 NET_RX producer, physical Intel. Nothing in Phases 04-10 is unlocked.
+
 ## Decision and scope
 
 **Strategic decision (2026-10-08):**
@@ -74,7 +78,7 @@ Native Cell-to-Cell Anywhere means local Tier-1/Tier-2 cells and authenticated p
 |---|---|---|---|
 | 01 | [Ratify tier-aware contract](phase-01-contract.md) | none | contract; Law-1 approval before ABI edits |
 | 02 | [Correct local Tier-1/Tier-2 routing](phase-02-local-boundary.md) | 01 | host + single-guest QEMU; copied default |
-| 03 | [Reliable nonblocking call lifecycle](phase-03-async-ipc.md) | 01, 02 | host + QEMU; public ABI only after 2 confirmations |
+| 03 | [Reliable nonblocking call lifecycle](phase-03-async-ipc.md) — **done 2026-11-02** (x86 QEMU/TCG ceiling) | 01, 02 | host + QEMU; public ABI only after 2 confirmations |
 | 04 | [Protected relay entry and handoff](phase-04-protected-relay.md) | 01, external ADR-0008 owner | contract/host while blocked; no route enable until AC-012 |
 | 05 | [Authenticated broker-to-broker RPC](phase-05-remote-rpc.md) | 01, 02, 04 | host; bounded synchronous call may precede 03; remote off until 06 |
 | 06 | [Isolated relay-only two-node oracle](phase-06-relay-oracle.md) | 05 | two-node QEMU/software; guarded remote opt-in only |

@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **A masked receive can no longer deliver one RPC request twice** (C2C Phase 03 slice e).
+  - **Cause:** `Recv`, `RecvScatter` and `RecvTimeout` remove the delivered message by queue position in a second scheduler hold after the copy-out. If another caller's queued request ahead of it was cancelled, expired or dropped by owner death in between, the position named the delivered sender's *next* message. That message was removed instead, and the delivered request stayed queued to be delivered again.
+  - **Fix:** the four syscall receive arms (`Recv`, `RecvScatter`, `RecvTimeout`, `TryRecv`) commit through `PendingMailbox::remove_delivered`, which finds a wire by its delivery id; the `ipc_recv` paths and the blocking-resume commit already did. Inline (non-wire) records keep a sender/position rule. A failing-before host test reproduces the case; a debug assertion catches an arm that commits a wire without its delivery id.
+- **Dropping an untaken `ostd::ipc::PendingCall` releases its operation slot.** The handle used to keep its kernel slot until the thread exited, so 64 abandoned calls left the thread permanently `Busy`. `Drop` now cancels and takes an unsettled operation: a queued request is never delivered, and a dispatched one ends `Indeterminate`.
+  - **SDK change for out-of-tree users:** `PendingCall` now implements `Drop` and is no longer `Sync`. A handle used as a temporary, for example `PendingCall::submit(..)?.operation()`, is cancelled at the end of that statement. To keep the slot for a later `ipc::take` by id, `core::mem::forget` the handle.
 - **RPi3 Tier-3 guests no longer randomly SIGSEGV** (`Attempted to kill init! exitcode=0x0000000b`, ~1 in 3 runs).
   - **Cause:** the world switch saved the guest's `ESR_EL1`/`FAR_EL1` but never restored them. When a host tick exited the guest between taking an exception and reading its syndrome, the Pi host (running at EL1) overwrote both. The guest then decoded the host's syndrome, for example a page fault arrived as an SVC.
   - **Fix:** `run_vcpu_impl` now restores both registers on entry.
@@ -462,6 +467,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - a closed consumer stops the producer with kernel reason 3, reported 141.
 
 ### Changed
+- **One Cell can no longer monopolize a provider's operation queue.** An operation submit keeps the last 8 of the receiver's 64 queue slots for Cell incarnations that hold no queued operation wire there; the check is Cell-wide, so a sibling thread's queued request makes the whole Cell a holder. With no raw messages queued at that receiver, one Cell queues at most 56, and a Cell holding none is refused for capacity only when at least 9 other Cells each hold a queued request. Raw `Send`/`Post` admission is unchanged and raw records are not counted, so raw traffic can occupy the reserved slots. An unbounded synchronous `service_call` that meets `Busy` still returns it without retrying. No syscall or wire layout changed. Lane: under sustained pressure an independent synchronous Cell completed 64 calls with zero refusals (`docs/evidence/c2c-phase03-closure-x86.txt`).
 - **The hv/aarch64 machinery lane now requires the guest shell.** `qemu-hypervisor-smoke.sh` passes only when the guest prints `~ #`, under both TCG and KVM, and stops QEMU as soon as the prompt appears. The tolerated address-size fault signature and the memory-init fallback are gone.
 - **Guest initramfs names are board-neutral:** `scripts/pi-guest-init` and `tools/prepare-guest-initramfs.py`. The in-guest path `/bin/pi-guest-init` is unchanged.
 - **Lint debt cleared.**

@@ -178,6 +178,15 @@ Admission blockers, per the promotion rule:
 - Single-WIP rule: x86 is admitted first. aarch64 only after x86 closes or with an explicit owner exception.
 - The x86 phase 03 kernel→init fingerprint hand-off needs a Law-1 CP1 if it changes ABI. Otherwise the plan stops at that point.
 
+## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
+
+The user answered YES to E-1..E-8 of the [CP1](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp1.md) and its [lock handoff](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp1-approval.md), then approved CP2 ([record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md); [package](260927-1100-c2c-anywhere-tier-aware/reports/phase-03e-cp2-package.md)). Controlling P04 (P03 for the receive-commit rows). The slice no longer holds the WIP lane. **C2C Phase 03 is done at the x86 QEMU/TCG ceiling.**
+
+- **Delivered:** receive commits by delivery identity (masked-receive double delivery fixed), `PendingCall` drop releases its slot, operation-submit headroom of 8 of 64 peer-mailbox slots, and the sync-timeout, sync-expiry, cancel-race and drop-reclaim lane legs. No Law-1 delta.
+- **Kernel-repair overlap:** only the four `kernel/src/task/syscall.rs` receive-commit hunks (E-3).
+- **Evidence ceiling:** host tests plus x86 QEMU/TCG; the receive-commit race and the admission bounds are host-proven, the two-CPU lanes unforced.
+- **Not admitted / excluded:** cancel-ack, raw-mailbox fairness, registry restart + re-lookup (C2C Phase 02 step 3), the broker cutover, an x86 NET_RX producer, remote/relay, physical Intel. All 38 lock relations stay.
+
 ## Done — C2C Phase 03 slice d, multi-source `WaitCompletion` (admitted and closed 2026-11-02)
 
 The user approved the [CP1 and lock handoff](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md) ([text](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1.md)), then Law-1 confirmation 2 and closure amendments A1–A5 ([CP2 approval](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md); [CP2 package](260927-1100-c2c-anywhere-tier-aware/reports/phase-03d-cp2-package.md)). Controlling P04, with P03 for the two-hart rows. The slice no longer holds the WIP lane.
