@@ -16,7 +16,11 @@ use crate::driver::{fail, free_frames, state_name, Client};
 pub fn foreign(client: &mut Client, request_id: u64) {
     let (counter, _, _) = client.get();
     match client.mutate(request_id, METHOD_INC, 1, Fault::None) {
-        Some(Msg::Done { replayed: false, result, .. }) if result == counter + 1 => {}
+        Some(Msg::Done {
+            replayed: false,
+            result,
+            ..
+        }) if result == counter + 1 => {}
         other => fail(&format!("E4 foreign principal: {other:?}")),
     }
     println(&format!("[recovery-client] E4 PASS foreign principal reusing request id {request_id}: independent binding, applied once (counter {})", counter + 1));
@@ -27,7 +31,12 @@ pub fn foreign(client: &mut Client, request_id: u64) {
 pub fn missing_ack(client: &mut Client) {
     let v = client.crash(crash::HOLD_LEASE, 0);
     if state_name(&v) != "Quarantined" || (v.vfs_leases_pending == 0 && v.quarantined_pages == 0) {
-        fail(&format!("E8: retirement {} vfs={} qpages={}", state_name(&v), v.vfs_leases_pending, v.quarantined_pages));
+        fail(&format!(
+            "E8: retirement {} vfs={} qpages={}",
+            state_name(&v),
+            v.vfs_leases_pending,
+            v.quarantined_pages
+        ));
     }
     let held = free_frames();
     println(&format!("[recovery-client] E8 quarantined: state=Quarantined vfs_leases={} qpages={} reasons={:#x} free_while_held={held}",
@@ -47,13 +56,28 @@ pub fn missing_ack(client: &mut Client) {
 /// E9: an untracked SHM export makes containment unproven: no restart, no
 /// Ready, and healing is refused (node recovery required).
 pub fn untracked_export(client: &mut Client) {
-    if client.worker_call(Msg::Crash { mode: crash::SHM_EXPORT, arg: 0 }) != Some(Msg::Ack) {
+    if client.worker_call(Msg::Crash {
+        mode: crash::SHM_EXPORT,
+        arg: 0,
+    }) != Some(Msg::Ack)
+    {
         fail("E9: crash not acknowledged");
     }
-    let status = client.wait_status("node recovery required", |s| s.state == state::NODE_RECOVERY_REQUIRED && s.worker == 0);
-    let Some(v) = status.verdict else { fail("E9: no verdict") };
-    if state_name(&v) != "Unproven" || v.reasons & api::retirement::reason::SHM_UNTRACKED == 0 || v.shm_frames_released == 0 {
-        fail(&format!("E9: retirement {} reasons={:#x}", state_name(&v), v.reasons));
+    let status = client.wait_status("node recovery required", |s| {
+        s.state == state::NODE_RECOVERY_REQUIRED && s.worker == 0
+    });
+    let Some(v) = status.verdict else {
+        fail("E9: no verdict")
+    };
+    if state_name(&v) != "Unproven"
+        || v.reasons & api::retirement::reason::SHM_UNTRACKED == 0
+        || v.shm_frames_released == 0
+    {
+        fail(&format!(
+            "E9: retirement {} reasons={:#x}",
+            state_name(&v),
+            v.reasons
+        ));
     }
     common::sleep(100);
     if common::lookup(WORKER_SERVICE).is_some() {

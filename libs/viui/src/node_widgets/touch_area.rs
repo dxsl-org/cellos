@@ -56,8 +56,12 @@ impl TouchArea {
 }
 
 impl ViNode for TouchArea {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    self.child.layout(constraints, font)
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        self.child.layout(constraints, font)
     }
 
     fn bounds(&self) -> Rect {

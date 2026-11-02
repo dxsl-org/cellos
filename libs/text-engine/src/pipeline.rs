@@ -96,7 +96,11 @@ impl Value {
         match self {
             Self::Null => 0,
             Self::Bool(_) => 1,
-            Self::Int(_) | Self::UInt(_) | Self::Float(_) | Self::Timestamp(_) | Self::Duration(_) => 8,
+            Self::Int(_)
+            | Self::UInt(_)
+            | Self::Float(_)
+            | Self::Timestamp(_)
+            | Self::Duration(_) => 8,
             Self::String(s) => s.len(),
             Self::Bytes(b) | Self::Path(b) => b.len(),
             Self::List(l) => l.iter().map(|v| v.payload_bytes()).sum(),
@@ -115,10 +119,8 @@ impl Value {
         }
 
         match self {
-            Self::Float(f) => {
-                if !f.is_finite() {
-                    return Err(PipelineError::NonFiniteFloat);
-                }
+            Self::Float(f) if !f.is_finite() => {
+                return Err(PipelineError::NonFiniteFloat);
             }
             Self::List(list) => {
                 for item in list {
@@ -286,8 +288,7 @@ pub fn filter_record(
     }
 
     let ord = compare_values(field_val, literal)?;
-    if matches!(field_val, Value::Bool(_))
-        && !matches!(op, CompareOp::Equal | CompareOp::NotEqual)
+    if matches!(field_val, Value::Bool(_)) && !matches!(op, CompareOp::Equal | CompareOp::NotEqual)
     {
         return Err(PipelineError::UnsupportedType(
             "bool supports only == and !=".to_string(),
@@ -495,7 +496,11 @@ fn serialize_untyped_node<W: JsonOut>(val: &Value, out: &mut W) -> Result<(), Pi
 fn serialize_typed_node<W: JsonOut>(val: &Value, out: &mut W) -> Result<(), PipelineError> {
     match val {
         Value::Null => out.put("[\"null\",null]"),
-        Value::Bool(b) => out.put(if *b { "[\"bool\",true]" } else { "[\"bool\",false]" }),
+        Value::Bool(b) => out.put(if *b {
+            "[\"bool\",true]"
+        } else {
+            "[\"bool\",false]"
+        }),
         Value::Int(n) => out.put_fmt(format_args!("[\"int\",\"{}\"]", n)),
         Value::UInt(n) => out.put_fmt(format_args!("[\"uint\",\"{}\"]", n)),
         Value::Float(f) => {
@@ -582,7 +587,9 @@ pub fn value_to_text(val: &Value, field: Option<&str>) -> Result<String, Pipelin
         Value::String(s) => Ok(s.clone()),
         Value::Bytes(b) => match core::str::from_utf8(b) {
             Ok(s) => Ok(s.to_string()),
-            Err(_) => Err(PipelineError::UnsupportedType("non-UTF-8 bytes".to_string())),
+            Err(_) => Err(PipelineError::UnsupportedType(
+                "non-UTF-8 bytes".to_string(),
+            )),
         },
         Value::Path(p) => match core::str::from_utf8(p) {
             Ok(s) => Ok(s.to_string()),
@@ -654,11 +661,22 @@ impl Format {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stage {
     Select(Vec<String>),
-    Where { field: String, op: CompareOp, literal: Value },
+    Where {
+        field: String,
+        op: CompareOp,
+        literal: Value,
+    },
     /// `sort-by [--reverse] [--frame] FIELD`: `frame` sorts each frame of a Frames stream.
-    SortBy { field: String, reverse: bool, frame: bool },
+    SortBy {
+        field: String,
+        reverse: bool,
+        frame: bool,
+    },
     /// `take [--frame] N`: N rows, or N whole frames with `frame`.
-    Take { n: usize, frame: bool },
+    Take {
+        n: usize,
+        frame: bool,
+    },
     /// Consumes rows, produces bytes.
     To(Format),
     /// Consumes bytes (`Json`/`Jsonl`, plain or typed), produces rows.
@@ -700,7 +718,10 @@ fn check_field_name(name: &str) -> Result<(), PipelineError> {
                 || matches!(c, '.' | '[' | ']' | '*' | '$' | '/' | '"' | '\'' | '\\')
         });
     if bad {
-        return usage(format!("invalid field name '{}': fields are simple top-level names", name));
+        return usage(format!(
+            "invalid field name '{}': fields are simple top-level names",
+            name
+        ));
     }
     Ok(())
 }
@@ -732,9 +753,10 @@ fn parse_where_literal(s: &str) -> Result<Value, PipelineError> {
         ))
     })?;
     match v {
-        Value::List(_) | Value::Record(_) => {
-            usage(format!("literal '{}' must be a scalar, not a list or record", s))
-        }
+        Value::List(_) | Value::Record(_) => usage(format!(
+            "literal '{}' must be a scalar, not a list or record",
+            s
+        )),
         scalar => Ok(scalar),
     }
 }
@@ -773,7 +795,11 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
                 ))
             })?;
             let literal = parse_where_literal(&args[2])?;
-            Ok(Stage::Where { field: args[0].clone(), op, literal })
+            Ok(Stage::Where {
+                field: args[0].clone(),
+                op,
+                literal,
+            })
         }
         "sort-by" => {
             let mut reverse = false;
@@ -793,7 +819,9 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
                         }
                         frame = true;
                     }
-                    s if s.starts_with("--") => return usage(format!("sort-by: unknown option '{}'", s)),
+                    s if s.starts_with("--") => {
+                        return usage(format!("sort-by: unknown option '{}'", s))
+                    }
                     _ => {
                         if field.is_some() {
                             return usage("sort-by: expected exactly one FIELD".to_string());
@@ -804,7 +832,11 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
                 }
             }
             match field {
-                Some(f) => Ok(Stage::SortBy { field: f.clone(), reverse, frame }),
+                Some(f) => Ok(Stage::SortBy {
+                    field: f.clone(),
+                    reverse,
+                    frame,
+                }),
                 None => usage("sort-by: expected [--reverse] [--frame] FIELD".to_string()),
             }
         }
@@ -819,7 +851,10 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
             };
             match parse_exact_int::<usize>(count, false) {
                 Some(n) => Ok(Stage::Take { n, frame }),
-                None => usage(format!("take: '{}' is not a nonnegative decimal count", count)),
+                None => usage(format!(
+                    "take: '{}' is not a nonnegative decimal count",
+                    count
+                )),
             }
         }
         "to" => {
@@ -835,8 +870,16 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
                 }
             };
             match fmt_name.as_str() {
-                "json" => Ok(Stage::To(if typed(rest)? { Format::JsonTyped } else { Format::Json })),
-                "jsonl" => Ok(Stage::To(if typed(rest)? { Format::JsonlTyped } else { Format::Jsonl })),
+                "json" => Ok(Stage::To(if typed(rest)? {
+                    Format::JsonTyped
+                } else {
+                    Format::Json
+                })),
+                "jsonl" => Ok(Stage::To(if typed(rest)? {
+                    Format::JsonlTyped
+                } else {
+                    Format::Jsonl
+                })),
                 "text" => match rest {
                     [] => Ok(Stage::To(Format::Text)),
                     [flag, field] if flag == "--field" => {
@@ -845,7 +888,10 @@ pub fn parse_stage(argv: &[String]) -> Result<Stage, PipelineError> {
                     }
                     _ => usage("to text: only [--field FIELD] is accepted".to_string()),
                 },
-                other => usage(format!("to: unknown format '{}' (json, jsonl, text)", other)),
+                other => usage(format!(
+                    "to: unknown format '{}' (json, jsonl, text)",
+                    other
+                )),
             }
         }
         "from" => {
@@ -907,11 +953,15 @@ pub fn validate_stage_sequence(input: Input, stages: &[Stage]) -> Result<SinkKin
             Stage::To(format) => {
                 match kind {
                     SinkKind::Bytes => {
-                        return sequence("`to` needs rows; convert bytes with `from json|jsonl` first".to_string())
+                        return sequence(
+                            "`to` needs rows; convert bytes with `from json|jsonl` first"
+                                .to_string(),
+                        )
                     }
                     SinkKind::Frames if !matches!(format, Format::Jsonl | Format::JsonlTyped) => {
                         return sequence(
-                            "input is a frame stream; only `to jsonl [--typed]` can encode frames".to_string(),
+                            "input is a frame stream; only `to jsonl [--typed]` can encode frames"
+                                .to_string(),
                         )
                     }
                     SinkKind::Rows | SinkKind::Frames => {}
@@ -925,7 +975,10 @@ pub fn validate_stage_sequence(input: Input, stages: &[Stage]) -> Result<SinkKin
             }
             Stage::Select(_) | Stage::Where { .. } | Stage::SortBy { .. } | Stage::Take { .. } => {
                 if kind == SinkKind::Bytes {
-                    return sequence("bytes cannot feed a row stage without explicit `from json|jsonl`".to_string());
+                    return sequence(
+                        "bytes cannot feed a row stage without explicit `from json|jsonl`"
+                            .to_string(),
+                    );
                 }
                 let (name, frame) = match stage {
                     Stage::SortBy { frame, .. } => ("sort-by", *frame),
@@ -934,10 +987,14 @@ pub fn validate_stage_sequence(input: Input, stages: &[Stage]) -> Result<SinkKin
                 };
                 match (kind, frame) {
                     (SinkKind::Frames, false) => {
-                        return sequence(format!("{name}: input is a frame stream; use `{name} --frame`"))
+                        return sequence(format!(
+                            "{name}: input is a frame stream; use `{name} --frame`"
+                        ))
                     }
                     (SinkKind::Rows, true) => {
-                        return sequence(format!("{name} --frame: input is rows, not a frame stream"))
+                        return sequence(format!(
+                            "{name} --frame: input is rows, not a frame stream"
+                        ))
                     }
                     _ => {}
                 }
@@ -957,11 +1014,18 @@ struct JsonParser<'a> {
 
 impl<'a> JsonParser<'a> {
     fn new(b: &'a [u8], max_depth: usize) -> Self {
-        Self { b, pos: 0, max_depth }
+        Self {
+            b,
+            pos: 0,
+            max_depth,
+        }
     }
 
     fn fail<T>(&self, msg: &str) -> Result<T, PipelineError> {
-        Err(PipelineError::ParseError(format!("{} at byte {}", msg, self.pos)))
+        Err(PipelineError::ParseError(format!(
+            "{} at byte {}",
+            msg, self.pos
+        )))
     }
 
     fn peek(&self) -> Option<u8> {
@@ -1230,7 +1294,9 @@ fn parse_document(bytes: &[u8], max_depth: usize) -> Result<Value, PipelineError
 /// Strict ordinary-JSON decoder for `from json`: exactly one value plus trailing whitespace.
 pub fn decode_json(bytes: &[u8]) -> Result<Value, PipelineError> {
     if bytes.len() > MAX_JSON_DOCUMENT_BYTES {
-        return Err(PipelineError::ParseError("document exceeds 4 MiB".to_string()));
+        return Err(PipelineError::ParseError(
+            "document exceeds 4 MiB".to_string(),
+        ));
     }
     parse_document(bytes, MAX_DEPTH)
 }
@@ -1238,7 +1304,9 @@ pub fn decode_json(bytes: &[u8]) -> Result<Value, PipelineError> {
 /// Strict typed-envelope decoder for `from json --typed`.
 pub fn decode_json_typed(bytes: &[u8]) -> Result<Value, PipelineError> {
     if bytes.len() > MAX_JSON_DOCUMENT_BYTES {
-        return Err(PipelineError::ParseError("document exceeds 4 MiB".to_string()));
+        return Err(PipelineError::ParseError(
+            "document exceeds 4 MiB".to_string(),
+        ));
     }
     typed_envelope(parse_document(bytes, MAX_TYPED_RAW_DEPTH)?)
 }
@@ -1272,7 +1340,10 @@ fn decode_jsonl_impl(bytes: &[u8], typed: bool) -> Result<Vec<Value>, PipelineEr
         match decoded {
             Ok(v) => rows.push(v),
             Err(PipelineError::ParseError(m)) => {
-                return Err(PipelineError::ParseError(format!("line {}: {}", line_no, m)))
+                return Err(PipelineError::ParseError(format!(
+                    "line {}: {}",
+                    line_no, m
+                )))
             }
             Err(e) => return Err(e),
         }
@@ -1296,7 +1367,11 @@ pub fn decode_jsonl_typed(bytes: &[u8]) -> Result<Vec<Value>, PipelineError> {
 pub fn decode_rows(format: &Format, bytes: &[u8]) -> Result<Vec<Value>, PipelineError> {
     match format {
         Format::Json | Format::JsonTyped => {
-            let v = if format.is_typed() { decode_json_typed(bytes)? } else { decode_json(bytes)? };
+            let v = if format.is_typed() {
+                decode_json_typed(bytes)?
+            } else {
+                decode_json(bytes)?
+            };
             Ok(match v {
                 Value::List(items) => items,
                 other => alloc::vec![other],
@@ -1304,14 +1379,15 @@ pub fn decode_rows(format: &Format, bytes: &[u8]) -> Result<Vec<Value>, Pipeline
         }
         Format::Jsonl => decode_jsonl(bytes),
         Format::JsonlTyped => decode_jsonl_typed(bytes),
-        Format::Text | Format::TextField(_) => {
-            usage("from accepts only json or jsonl".to_string())
-        }
+        Format::Text | Format::TextField(_) => usage("from accepts only json or jsonl".to_string()),
     }
 }
 
 fn typed_bad<T>(msg: &str) -> Result<T, PipelineError> {
-    Err(PipelineError::ParseError(format!("typed envelope: {}", msg)))
+    Err(PipelineError::ParseError(format!(
+        "typed envelope: {}",
+        msg
+    )))
 }
 
 fn typed_envelope(doc: Value) -> Result<Value, PipelineError> {
@@ -1460,7 +1536,11 @@ fn typed_node(node: Value) -> Result<Value, PipelineError> {
 
 const TYPED_ARRAY_OPEN: &[u8] = b"{\"cellbox\":1,\"value\":[\"list\",[";
 
-fn write_text_value(v: &Value, field: Option<&str>, out: &mut Vec<u8>) -> Result<(), PipelineError> {
+fn write_text_value(
+    v: &Value,
+    field: Option<&str>,
+    out: &mut Vec<u8>,
+) -> Result<(), PipelineError> {
     match v {
         Value::String(s) => out.extend_from_slice(s.as_bytes()),
         Value::Bytes(b) | Value::Path(b) => out.extend_from_slice(b),
@@ -1577,7 +1657,12 @@ fn frame_envelope(item: Item) -> Value {
             envelope_field("complete", Value::Bool(end.complete)),
             envelope_field(
                 "unavailable_fields",
-                Value::List(end.unavailable_fields.into_iter().map(Value::String).collect()),
+                Value::List(
+                    end.unavailable_fields
+                        .into_iter()
+                        .map(Value::String)
+                        .collect()
+                ),
             ),
             envelope_field("dropped", Value::UInt(end.dropped)),
         ],
@@ -1601,11 +1686,14 @@ pub fn encode_item(
 ) -> Result<(), PipelineError> {
     match (category, item) {
         (Category::Rows, Item::Row(row)) => encode_row(format, &row, first, out),
-        (Category::Rows, _) => Err(PipelineError::Sequence("frame marker in a rows stream".to_string())),
+        (Category::Rows, _) => Err(PipelineError::Sequence(
+            "frame marker in a rows stream".to_string(),
+        )),
         (Category::Frames, item) => {
             if !matches!(format, Format::Jsonl | Format::JsonlTyped) {
                 return Err(PipelineError::Sequence(
-                    "input is a frame stream; only `to jsonl [--typed]` can encode frames".to_string(),
+                    "input is a frame stream; only `to jsonl [--typed]` can encode frames"
+                        .to_string(),
                 ));
             }
             encode_row(format, &frame_envelope(item), first, out)
@@ -1669,11 +1757,15 @@ pub struct VecSource {
 
 impl VecSource {
     pub fn new(rows: Vec<Value>) -> Self {
-        Self { items: rows.into_iter().map(Item::Row).collect() }
+        Self {
+            items: rows.into_iter().map(Item::Row).collect(),
+        }
     }
 
     pub fn from_items(items: Vec<Item>) -> Self {
-        Self { items: VecDeque::from(items) }
+        Self {
+            items: VecDeque::from(items),
+        }
     }
 }
 
@@ -1705,7 +1797,11 @@ pub struct InterruptLatch {
 impl InterruptLatch {
     /// A latch whose real poll is `poll` (`true` = interrupt observed).
     pub fn new(poll: Box<dyn FnMut() -> bool>) -> Rc<Self> {
-        Rc::new(Self { set: Cell::new(false), checks: Cell::new(0), poll: RefCell::new(poll) })
+        Rc::new(Self {
+            set: Cell::new(false),
+            checks: Cell::new(0),
+            poll: RefCell::new(poll),
+        })
     }
 
     /// A latch that never polls (no session); it is set only by [`set`](Self::set).
@@ -1755,7 +1851,10 @@ struct Upstream {
 
 impl Upstream {
     fn new(src: Box<dyn RowSource>) -> Self {
-        Self { src: Some(src), completion: None }
+        Self {
+            src: Some(src),
+            completion: None,
+        }
     }
 
     fn pull(&mut self) -> Result<Option<Item>, PipelineError> {
@@ -1865,7 +1964,12 @@ impl RowSource for OrderGuard {
 /// Rows stream; a Row outside a frame, a nested Begin or an End without a Begin; a stream
 /// that ends inside a frame; a `sample_id` that does not strictly increase.
 pub fn check_items(source: Box<dyn RowSource>, category: Category) -> Box<dyn RowSource> {
-    Box::new(OrderGuard { up: Upstream::new(source), category, in_frame: false, last_sample: None })
+    Box::new(OrderGuard {
+        up: Upstream::new(source),
+        category,
+        in_frame: false,
+        last_sample: None,
+    })
 }
 
 /// `select`: projects rows; frame markers pass through unchanged.
@@ -2062,7 +2166,9 @@ struct SortFrameSource {
 
 impl SortFrameSource {
     fn sort_frame(&mut self, first: Value) -> Result<(), PipelineError> {
-        let (mut rows, end) = buffer_rows(&mut self.up, Some(first), |item| matches!(item, Item::End(_)))?;
+        let (mut rows, end) = buffer_rows(&mut self.up, Some(first), |item| {
+            matches!(item, Item::End(_))
+        })?;
         let end = end.ok_or_else(|| sequence_error("frame stream ended inside a frame"))?;
         sort_records_by(&mut rows, &self.field, self.reverse)?;
         self.ready.extend(rows.into_iter().map(Item::Row));
@@ -2110,20 +2216,31 @@ pub fn apply_row_stage(
 ) -> Result<Box<dyn RowSource>, PipelineError> {
     let mut up = Upstream::new(input);
     match stage {
-        Stage::Select(fields) => Ok(Box::new(SelectSource { up, fields: fields.clone() })),
+        Stage::Select(fields) => Ok(Box::new(SelectSource {
+            up,
+            fields: fields.clone(),
+        })),
         Stage::Where { field, op, literal } => Ok(Box::new(WhereSource {
             up,
             field: field.clone(),
             op: *op,
             literal: literal.clone(),
         })),
-        Stage::SortBy { field, reverse, frame: false } => Ok(Box::new(SortSource {
+        Stage::SortBy {
+            field,
+            reverse,
+            frame: false,
+        } => Ok(Box::new(SortSource {
             up,
             field: field.clone(),
             reverse: *reverse,
             sorted: None,
         })),
-        Stage::SortBy { field, reverse, frame: true } => Ok(Box::new(SortFrameSource {
+        Stage::SortBy {
+            field,
+            reverse,
+            frame: true,
+        } => Ok(Box::new(SortFrameSource {
             up,
             field: field.clone(),
             reverse: *reverse,
@@ -2133,7 +2250,11 @@ pub fn apply_row_stage(
             if *n == 0 {
                 up.close();
             }
-            Ok(Box::new(TakeSource { up, remaining: *n, frame: *frame }))
+            Ok(Box::new(TakeSource {
+                up,
+                remaining: *n,
+                frame: *frame,
+            }))
         }
         Stage::To(_) | Stage::From(_) => {
             up.close();
@@ -2239,8 +2360,20 @@ mod tests {
         ];
 
         // Filter: score >= 90
-        assert!(filter_record(&records[0], "score", CompareOp::GreaterOrEqual, &Value::Int(90)).unwrap());
-        assert!(!filter_record(&records[2], "score", CompareOp::GreaterOrEqual, &Value::Int(90)).unwrap());
+        assert!(filter_record(
+            &records[0],
+            "score",
+            CompareOp::GreaterOrEqual,
+            &Value::Int(90)
+        )
+        .unwrap());
+        assert!(!filter_record(
+            &records[2],
+            "score",
+            CompareOp::GreaterOrEqual,
+            &Value::Int(90)
+        )
+        .unwrap());
 
         // Sort by id ascending
         sort_records_by(&mut records, "id", false).unwrap();
@@ -2259,7 +2392,10 @@ mod tests {
     fn test_typed_json_serialization() {
         let val = Value::Record(alloc::vec![
             ("tag".into(), Value::String("test".into())),
-            ("raw".into(), Value::Bytes(alloc::vec![0xde, 0xad, 0xbe, 0xef])),
+            (
+                "raw".into(),
+                Value::Bytes(alloc::vec![0xde, 0xad, 0xbe, 0xef])
+            ),
             ("big".into(), Value::UInt(18446744073709551615)),
         ]);
 
@@ -2282,7 +2418,12 @@ mod stage_tests {
     use core::cell::Cell;
 
     fn rec(fields: &[(&str, Value)]) -> Value {
-        Value::Record(fields.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
+        Value::Record(
+            fields
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+        )
     }
 
     fn argv(words: &[&str]) -> Vec<String> {
@@ -2325,7 +2466,12 @@ mod stage_tests {
             let pulled = Rc::new(Cell::new(0));
             let closed = Rc::new(Cell::new(0));
             (
-                Self { next: 0, limit, pulled: pulled.clone(), closed: closed.clone() },
+                Self {
+                    next: 0,
+                    limit,
+                    pulled: pulled.clone(),
+                    closed: closed.clone(),
+                },
                 pulled,
                 closed,
             )
@@ -2378,8 +2524,13 @@ mod stage_tests {
         let r = rec(&[("x", Value::UInt(u64::MAX))]);
         assert!(filter_record(&r, "x", CompareOp::GreaterThan, &Value::Int(i64::MAX)).unwrap());
         assert_eq!(
-            filter_record(&rec(&[("s", Value::String("1".into()))]), "s", CompareOp::Equal, &Value::Int(1))
-                .unwrap_err(),
+            filter_record(
+                &rec(&[("s", Value::String("1".into()))]),
+                "s",
+                CompareOp::Equal,
+                &Value::Int(1)
+            )
+            .unwrap_err(),
             PipelineError::TypeMismatch
         );
     }
@@ -2391,17 +2542,33 @@ mod stage_tests {
         assert!(!filter_record(&r, "x", CompareOp::NotEqual, &Value::Null).unwrap());
         assert!(!filter_record(&r, "x", CompareOp::Equal, &Value::Int(0)).unwrap());
         assert!(filter_record(&r, "x", CompareOp::NotEqual, &Value::Int(0)).unwrap());
-        for op in [CompareOp::LessThan, CompareOp::LessOrEqual, CompareOp::GreaterThan, CompareOp::GreaterOrEqual] {
+        for op in [
+            CompareOp::LessThan,
+            CompareOp::LessOrEqual,
+            CompareOp::GreaterThan,
+            CompareOp::GreaterOrEqual,
+        ] {
             assert!(!filter_record(&r, "x", op, &Value::Int(0)).unwrap());
             assert!(!filter_record(&r, "x", op, &Value::Null).unwrap());
             let z = rec(&[("x", Value::Int(0))]);
             assert!(!filter_record(&z, "x", op, &Value::Null).unwrap());
         }
         assert!(matches!(
-            filter_record(&rec(&[("b", Value::Bool(true))]), "b", CompareOp::LessThan, &Value::Bool(false)),
+            filter_record(
+                &rec(&[("b", Value::Bool(true))]),
+                "b",
+                CompareOp::LessThan,
+                &Value::Bool(false)
+            ),
             Err(PipelineError::UnsupportedType(_))
         ));
-        assert!(filter_record(&rec(&[("b", Value::Bool(true))]), "b", CompareOp::Equal, &Value::Bool(true)).unwrap());
+        assert!(filter_record(
+            &rec(&[("b", Value::Bool(true))]),
+            "b",
+            CompareOp::Equal,
+            &Value::Bool(true)
+        )
+        .unwrap());
     }
 
     #[test]
@@ -2420,25 +2587,67 @@ mod stage_tests {
         );
         assert_eq!(
             parse_stage(&argv(&["where", "cpu_tenths", ">", "uint:0"])).unwrap(),
-            Stage::Where { field: "cpu_tenths".into(), op: CompareOp::GreaterThan, literal: Value::UInt(0) }
+            Stage::Where {
+                field: "cpu_tenths".into(),
+                op: CompareOp::GreaterThan,
+                literal: Value::UInt(0)
+            }
         );
         assert_eq!(
             parse_stage(&argv(&["sort-by", "--reverse", "pid"])).unwrap(),
-            Stage::SortBy { field: "pid".into(), reverse: true, frame: false }
+            Stage::SortBy {
+                field: "pid".into(),
+                reverse: true,
+                frame: false
+            }
         );
-        assert_eq!(parse_stage(&argv(&["sort-by", "pid"])).unwrap(), Stage::SortBy { field: "pid".into(), reverse: false, frame: false });
-        assert_eq!(parse_stage(&argv(&["take", "0"])).unwrap(), Stage::Take { n: 0, frame: false });
-        assert_eq!(parse_stage(&argv(&["take", "12"])).unwrap(), Stage::Take { n: 12, frame: false });
-        assert_eq!(parse_stage(&argv(&["to", "json"])).unwrap(), Stage::To(Format::Json));
-        assert_eq!(parse_stage(&argv(&["to", "jsonl", "--typed"])).unwrap(), Stage::To(Format::JsonlTyped));
-        assert_eq!(parse_stage(&argv(&["to", "json", "--typed"])).unwrap(), Stage::To(Format::JsonTyped));
-        assert_eq!(parse_stage(&argv(&["to", "text"])).unwrap(), Stage::To(Format::Text));
+        assert_eq!(
+            parse_stage(&argv(&["sort-by", "pid"])).unwrap(),
+            Stage::SortBy {
+                field: "pid".into(),
+                reverse: false,
+                frame: false
+            }
+        );
+        assert_eq!(
+            parse_stage(&argv(&["take", "0"])).unwrap(),
+            Stage::Take { n: 0, frame: false }
+        );
+        assert_eq!(
+            parse_stage(&argv(&["take", "12"])).unwrap(),
+            Stage::Take {
+                n: 12,
+                frame: false
+            }
+        );
+        assert_eq!(
+            parse_stage(&argv(&["to", "json"])).unwrap(),
+            Stage::To(Format::Json)
+        );
+        assert_eq!(
+            parse_stage(&argv(&["to", "jsonl", "--typed"])).unwrap(),
+            Stage::To(Format::JsonlTyped)
+        );
+        assert_eq!(
+            parse_stage(&argv(&["to", "json", "--typed"])).unwrap(),
+            Stage::To(Format::JsonTyped)
+        );
+        assert_eq!(
+            parse_stage(&argv(&["to", "text"])).unwrap(),
+            Stage::To(Format::Text)
+        );
         assert_eq!(
             parse_stage(&argv(&["to", "text", "--field", "name"])).unwrap(),
             Stage::To(Format::TextField("name".into()))
         );
-        assert_eq!(parse_stage(&argv(&["from", "json"])).unwrap(), Stage::From(Format::Json));
-        assert_eq!(parse_stage(&argv(&["from", "jsonl", "--typed"])).unwrap(), Stage::From(Format::JsonlTyped));
+        assert_eq!(
+            parse_stage(&argv(&["from", "json"])).unwrap(),
+            Stage::From(Format::Json)
+        );
+        assert_eq!(
+            parse_stage(&argv(&["from", "jsonl", "--typed"])).unwrap(),
+            Stage::From(Format::JsonlTyped)
+        );
     }
 
     #[test]
@@ -2483,7 +2692,11 @@ mod stage_tests {
             &["frob"],
         ];
         for case in bad {
-            assert!(parse_stage(&argv(case)).is_err(), "should reject {:?}", case);
+            assert!(
+                parse_stage(&argv(case)).is_err(),
+                "should reject {:?}",
+                case
+            );
         }
     }
 
@@ -2521,7 +2734,10 @@ mod stage_tests {
         assert_ne!(v.get_field("e"), v.get_field("f"));
         assert!(!filter_record(&v, "e", CompareOp::Equal, &Value::Int(0)).unwrap());
         assert!(filter_record(&v, "e", CompareOp::NotEqual, &Value::Int(0)).unwrap());
-        assert_eq!(decode_json(b"  \n[1, 2 ]\t\r\n").unwrap(), Value::List(vec![Value::Int(1), Value::Int(2)]));
+        assert_eq!(
+            decode_json(b"  \n[1, 2 ]\t\r\n").unwrap(),
+            Value::List(vec![Value::Int(1), Value::Int(2)])
+        );
         assert_eq!(
             decode_json(br#""\u00e9\ud83d\ude00\n""#).unwrap(),
             Value::String("\u{e9}\u{1f600}\n".into())
@@ -2540,7 +2756,10 @@ mod stage_tests {
         }
         assert!(decode_json(deep_ok.as_bytes()).is_ok());
         let too_deep = alloc::format!("[{}]", deep_ok);
-        assert_eq!(decode_json(too_deep.as_bytes()).unwrap_err(), PipelineError::MaxDepthExceeded);
+        assert_eq!(
+            decode_json(too_deep.as_bytes()).unwrap_err(),
+            PipelineError::MaxDepthExceeded
+        );
 
         let mut wide = String::from("{");
         for i in 0..129 {
@@ -2550,17 +2769,32 @@ mod stage_tests {
             wide.push_str(&alloc::format!("\"k{}\":0", i));
         }
         wide.push('}');
-        assert_eq!(decode_json(wide.as_bytes()).unwrap_err(), PipelineError::TooManyFields);
+        assert_eq!(
+            decode_json(wide.as_bytes()).unwrap_err(),
+            PipelineError::TooManyFields
+        );
         let long_name = alloc::format!("{{\"{}\":1}}", "k".repeat(129));
-        assert_eq!(decode_json(long_name.as_bytes()).unwrap_err(), PipelineError::FieldNameTooLong);
+        assert_eq!(
+            decode_json(long_name.as_bytes()).unwrap_err(),
+            PipelineError::FieldNameTooLong
+        );
 
         assert_eq!(
             decode_json(br#"{"a":1,"a":2}"#).unwrap_err(),
             PipelineError::DuplicateField("a".into())
         );
-        assert!(matches!(decode_json(b"18446744073709551616"), Err(PipelineError::PrecisionLoss(_))));
-        assert!(matches!(decode_json(b"-9223372036854775809"), Err(PipelineError::PrecisionLoss(_))));
-        assert_eq!(decode_json(b"1e999").unwrap_err(), PipelineError::NonFiniteFloat);
+        assert!(matches!(
+            decode_json(b"18446744073709551616"),
+            Err(PipelineError::PrecisionLoss(_))
+        ));
+        assert!(matches!(
+            decode_json(b"-9223372036854775809"),
+            Err(PipelineError::PrecisionLoss(_))
+        ));
+        assert_eq!(
+            decode_json(b"1e999").unwrap_err(),
+            PipelineError::NonFiniteFloat
+        );
         let bad: &[&[u8]] = &[
             b"",
             b"   ",
@@ -2593,7 +2827,11 @@ mod stage_tests {
             b"[1] // c",
         ];
         for case in bad {
-            assert!(decode_json(case).is_err(), "should reject {:?}", String::from_utf8_lossy(case));
+            assert!(
+                decode_json(case).is_err(),
+                "should reject {:?}",
+                String::from_utf8_lossy(case)
+            );
         }
         let huge = vec![b' '; MAX_JSON_DOCUMENT_BYTES + 1];
         assert!(decode_json(&huge).is_err());
@@ -2622,7 +2860,10 @@ mod stage_tests {
         long.extend(core::iter::repeat(b'a').take(MAX_RECORD_LINE_BYTES));
         long.push(b'"');
         long.push(b'\n');
-        assert_eq!(decode_jsonl(&long).unwrap_err(), PipelineError::RecordTooLarge);
+        assert_eq!(
+            decode_jsonl(&long).unwrap_err(),
+            PipelineError::RecordTooLarge
+        );
         let mut ok = Vec::from(&b"\""[..]);
         ok.extend(core::iter::repeat(b'a').take(MAX_RECORD_LINE_BYTES - 2));
         ok.push(b'"');
@@ -2642,7 +2883,10 @@ mod stage_tests {
             ("path", Value::Path(vec![b'/', 0xff, 0xfe, b'x'])),
             ("ts", Value::Timestamp(-5)),
             ("dur", Value::Duration(i64::MAX)),
-            ("list", Value::List(vec![Value::UInt(1), Value::Null, Value::List(vec![])])),
+            (
+                "list",
+                Value::List(vec![Value::UInt(1), Value::Null, Value::List(vec![])]),
+            ),
             ("nested", rec(&[("a", Value::Float(-0.5))])),
         ])
     }
@@ -2661,7 +2905,10 @@ mod stage_tests {
         encode_row(&Format::JsonTyped, &row, true, &mut arr).unwrap();
         encode_row(&Format::JsonTyped, &row, false, &mut arr).unwrap();
         finish_encoding(&Format::JsonTyped, true, &mut arr);
-        assert_eq!(decode_rows(&Format::JsonTyped, &arr).unwrap(), vec![row.clone(), row.clone()]);
+        assert_eq!(
+            decode_rows(&Format::JsonTyped, &arr).unwrap(),
+            vec![row.clone(), row.clone()]
+        );
 
         let mut empty = Vec::new();
         finish_encoding(&Format::JsonTyped, false, &mut empty);
@@ -2710,13 +2957,23 @@ mod stage_tests {
             br#"{"cellbox":1,"value":["null",null]} x"#,
         ];
         for case in bad {
-            assert!(decode_json_typed(case).is_err(), "should reject {:?}", String::from_utf8_lossy(case));
+            assert!(
+                decode_json_typed(case).is_err(),
+                "should reject {:?}",
+                String::from_utf8_lossy(case)
+            );
         }
         // ordinary decoding never interprets an envelope
         let plain = decode_json(br#"{"cellbox":1,"value":["uint","5"]}"#).unwrap();
         assert!(matches!(plain, Value::Record(_)));
-        assert_eq!(decode_json_typed(br#"{"value":["uint","5"],"cellbox":1}"#).unwrap(), Value::UInt(5));
-        assert_eq!(decode_json_typed(br#"{"cellbox":1,"value":["float",2]}"#).unwrap(), Value::Float(2.0));
+        assert_eq!(
+            decode_json_typed(br#"{"value":["uint","5"],"cellbox":1}"#).unwrap(),
+            Value::UInt(5)
+        );
+        assert_eq!(
+            decode_json_typed(br#"{"cellbox":1,"value":["float",2]}"#).unwrap(),
+            Value::Float(2.0)
+        );
     }
 
     #[test]
@@ -2728,20 +2985,33 @@ mod stage_tests {
         ));
         let mut out = Vec::new();
         encode_row(&Format::JsonlTyped, &big, true, &mut out).unwrap();
-        assert!(String::from_utf8(out).unwrap().contains("[\"uint\",\"18446744073709551615\"]"));
+        assert!(String::from_utf8(out)
+            .unwrap()
+            .contains("[\"uint\",\"18446744073709551615\"]"));
         let mut keep = Vec::new();
         let p = rec(&[("p", Value::Path(vec![1]))]);
         assert!(encode_row(&Format::Json, &p, true, &mut keep).is_err());
         assert!(keep.is_empty(), "failed encode leaves out unchanged");
 
         let mut out = Vec::new();
-        let row = rec(&[("f", Value::Float(1.0)), ("i", Value::Int(1)), ("s", Value::Float(1e300)), ("t", Value::Float(-0.0))]);
+        let row = rec(&[
+            ("f", Value::Float(1.0)),
+            ("i", Value::Int(1)),
+            ("s", Value::Float(1e300)),
+            ("t", Value::Float(-0.0)),
+        ]);
         encode_row(&Format::Jsonl, &row, true, &mut out).unwrap();
         assert_eq!(decode_jsonl(&out).unwrap(), vec![row]);
 
         let mut arr = Vec::new();
         encode_row(&Format::Json, &rec(&[("a", Value::Int(1))]), true, &mut arr).unwrap();
-        encode_row(&Format::Json, &rec(&[("a", Value::Int(2))]), false, &mut arr).unwrap();
+        encode_row(
+            &Format::Json,
+            &rec(&[("a", Value::Int(2))]),
+            false,
+            &mut arr,
+        )
+        .unwrap();
         finish_encoding(&Format::Json, true, &mut arr);
         assert_eq!(arr, b"[{\"a\":1},{\"a\":2}]\n");
         assert_eq!(decode_rows(&Format::Json, &arr).unwrap().len(), 2);
@@ -2750,11 +3020,20 @@ mod stage_tests {
     #[test]
     fn text_encoding_is_exact_and_refuses_tables() {
         let mut out = Vec::new();
-        encode_row(&Format::Text, &Value::Bytes(vec![0xff, 0x00]), true, &mut out).unwrap();
+        encode_row(
+            &Format::Text,
+            &Value::Bytes(vec![0xff, 0x00]),
+            true,
+            &mut out,
+        )
+        .unwrap();
         encode_row(&Format::Text, &Value::String("a b".into()), false, &mut out).unwrap();
         encode_row(&Format::Text, &Value::UInt(7), false, &mut out).unwrap();
         assert_eq!(out, b"\xff\x00\na b\n7\n");
-        let r = rec(&[("name", Value::String("init".into())), ("pid", Value::UInt(1))]);
+        let r = rec(&[
+            ("name", Value::String("init".into())),
+            ("pid", Value::UInt(1)),
+        ]);
         let mut out = Vec::new();
         assert!(encode_row(&Format::Text, &r, true, &mut out).is_err());
         encode_row(&Format::TextField("pid".into()), &r, true, &mut out).unwrap();
@@ -2772,7 +3051,11 @@ mod stage_tests {
         assert!(t.next_row().unwrap().is_some());
         assert_eq!(closed.get(), 0);
         assert!(t.next_row().unwrap().is_some());
-        assert_eq!(closed.get(), 1, "closed as soon as the nth row is delivered");
+        assert_eq!(
+            closed.get(),
+            1,
+            "closed as soon as the nth row is delivered"
+        );
         assert!(t.next_row().unwrap().is_none());
         assert!(t.next_row().unwrap().is_none());
         t.close();
@@ -2793,7 +3076,11 @@ mod stage_tests {
     fn consumer_close_propagates_through_chain() {
         let (src, pulled, closed) = Counting::new(None);
         let mut s: Box<dyn RowSource> = Box::new(src);
-        s = apply_row_stage(s, &parse_stage(&argv(&["where", "n", ">=", "uint:1"])).unwrap()).unwrap();
+        s = apply_row_stage(
+            s,
+            &parse_stage(&argv(&["where", "n", ">=", "uint:1"])).unwrap(),
+        )
+        .unwrap();
         s = apply_row_stage(s, &parse_stage(&argv(&["select", "n"])).unwrap()).unwrap();
         assert!(s.next_row().unwrap().is_some());
         assert_eq!(pulled.get(), 2);
@@ -2806,10 +3093,17 @@ mod stage_tests {
         // where stopped by an outer take: producer is not pulled again after the last row
         let (src, pulled, closed) = Counting::new(None);
         let mut s: Box<dyn RowSource> = Box::new(src);
-        s = apply_row_stage(s, &parse_stage(&argv(&["where", "n", "!=", "uint:1"])).unwrap()).unwrap();
+        s = apply_row_stage(
+            s,
+            &parse_stage(&argv(&["where", "n", "!=", "uint:1"])).unwrap(),
+        )
+        .unwrap();
         s = apply_row_stage(s, &Stage::Take { n: 2, frame: false }).unwrap();
         let rows = drain(s).unwrap();
-        assert_eq!(rows, vec![rec(&[("n", Value::UInt(0))]), rec(&[("n", Value::UInt(2))])]);
+        assert_eq!(
+            rows,
+            vec![rec(&[("n", Value::UInt(0))]), rec(&[("n", Value::UInt(2))])]
+        );
         assert_eq!(pulled.get(), 3);
         assert_eq!(closed.get(), 1);
     }
@@ -2817,10 +3111,22 @@ mod stage_tests {
     #[test]
     fn select_projects_in_argument_order_and_errors_close_upstream() {
         let rows = vec![
-            rec(&[("a", Value::Int(1)), ("b", Value::Null), ("c", Value::Int(3))]),
-            rec(&[("a", Value::Int(4)), ("b", Value::Null), ("c", Value::Int(6))]),
+            rec(&[
+                ("a", Value::Int(1)),
+                ("b", Value::Null),
+                ("c", Value::Int(3)),
+            ]),
+            rec(&[
+                ("a", Value::Int(4)),
+                ("b", Value::Null),
+                ("c", Value::Int(6)),
+            ]),
         ];
-        let s = apply_row_stage(Box::new(VecSource::new(rows)), &Stage::Select(argv(&["c", "b"]))).unwrap();
+        let s = apply_row_stage(
+            Box::new(VecSource::new(rows)),
+            &Stage::Select(argv(&["c", "b"])),
+        )
+        .unwrap();
         assert_eq!(
             drain(s).unwrap(),
             vec![
@@ -2831,12 +3137,19 @@ mod stage_tests {
 
         let (src, pulled, closed) = Counting::new(None);
         let mut s = apply_row_stage(Box::new(src), &Stage::Select(argv(&["missing"]))).unwrap();
-        assert_eq!(s.next_row().unwrap_err(), PipelineError::FieldNotFound("missing".into()));
+        assert_eq!(
+            s.next_row().unwrap_err(),
+            PipelineError::FieldNotFound("missing".into())
+        );
         assert_eq!(closed.get(), 1);
         assert!(s.next_row().unwrap().is_none());
         assert_eq!(pulled.get(), 1);
 
-        let mut s = apply_row_stage(Box::new(VecSource::new(vec![Value::Int(1)])), &Stage::Select(argv(&["a"]))).unwrap();
+        let mut s = apply_row_stage(
+            Box::new(VecSource::new(vec![Value::Int(1)])),
+            &Stage::Select(argv(&["a"])),
+        )
+        .unwrap();
         assert_eq!(s.next_row().unwrap_err(), PipelineError::TypeMismatch);
     }
 
@@ -2895,21 +3208,48 @@ mod stage_tests {
             rec(&[("k", Value::Int(1))]),
             rec(&[("k", Value::String("a".into()))]),
         ];
-        let mut s = apply_row_stage(Box::new(VecSource::new(mixed)), &Stage::SortBy { field: "k".into(), reverse: false, frame: false }).unwrap();
+        let mut s = apply_row_stage(
+            Box::new(VecSource::new(mixed)),
+            &Stage::SortBy {
+                field: "k".into(),
+                reverse: false,
+                frame: false,
+            },
+        )
+        .unwrap();
         assert_eq!(s.next_row().unwrap_err(), PipelineError::TypeMismatch);
         assert!(s.next_row().unwrap().is_none());
         let missing = vec![rec(&[("k", Value::Int(1))]), rec(&[("z", Value::Int(1))])];
-        let mut s = apply_row_stage(Box::new(VecSource::new(missing)), &Stage::SortBy { field: "k".into(), reverse: false, frame: false }).unwrap();
-        assert_eq!(s.next_row().unwrap_err(), PipelineError::FieldNotFound("k".into()));
+        let mut s = apply_row_stage(
+            Box::new(VecSource::new(missing)),
+            &Stage::SortBy {
+                field: "k".into(),
+                reverse: false,
+                frame: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            s.next_row().unwrap_err(),
+            PipelineError::FieldNotFound("k".into())
+        );
     }
 
     #[test]
     fn sort_caps_row_count_and_payload_and_never_waits_on_endless_input() {
-        let stage = Stage::SortBy { field: "n".into(), reverse: true, frame: false };
+        let stage = Stage::SortBy {
+            field: "n".into(),
+            reverse: true,
+            frame: false,
+        };
         let (src, pulled, closed) = Counting::new(None);
         let mut s = apply_row_stage(Box::new(src), &stage).unwrap();
         assert_eq!(s.next_row().unwrap_err(), PipelineError::SortLimitExceeded);
-        assert_eq!(pulled.get(), MAX_SORT_RECORDS as u64 + 1, "stops pulling right after the cap");
+        assert_eq!(
+            pulled.get(),
+            MAX_SORT_RECORDS as u64 + 1,
+            "stops pulling right after the cap"
+        );
         assert_eq!(closed.get(), 1);
         assert!(s.next_row().unwrap().is_none());
 
@@ -2917,7 +3257,10 @@ mod stage_tests {
         let (src, _p, _c) = Counting::new(Some(MAX_SORT_RECORDS as u64));
         let rows = drain(apply_row_stage(Box::new(src), &stage).unwrap()).unwrap();
         assert_eq!(rows.len(), MAX_SORT_RECORDS);
-        assert_eq!(rows[0].get_field("n"), Some(&Value::UInt(MAX_SORT_RECORDS as u64 - 1)));
+        assert_eq!(
+            rows[0].get_field("n"),
+            Some(&Value::UInt(MAX_SORT_RECORDS as u64 - 1))
+        );
         let (src, _p, closed) = Counting::new(Some(MAX_SORT_RECORDS as u64 + 1));
         assert_eq!(
             drain(apply_row_stage(Box::new(src), &stage).unwrap()).unwrap_err(),
@@ -2927,7 +3270,12 @@ mod stage_tests {
 
         // payload cap
         let big: Vec<Value> = (0..5)
-            .map(|i| rec(&[("n", Value::UInt(i)), ("pad", Value::String("x".repeat(1024 * 1024)))]))
+            .map(|i| {
+                rec(&[
+                    ("n", Value::UInt(i)),
+                    ("pad", Value::String("x".repeat(1024 * 1024))),
+                ])
+            })
             .collect();
         assert_eq!(
             drain(apply_row_stage(Box::new(VecSource::new(big)), &stage).unwrap()).unwrap_err(),
@@ -2947,12 +3295,35 @@ mod stage_tests {
         let sel = Stage::Select(argv(&["a"]));
         let to = Stage::To(Format::JsonlTyped);
         let from = Stage::From(Format::Jsonl);
-        assert_eq!(validate_stage_sequence(Input::Rows, &[]).unwrap(), SinkKind::Rows);
-        assert_eq!(validate_stage_sequence(Input::Bytes, &[]).unwrap(), SinkKind::Bytes);
-        assert_eq!(validate_stage_sequence(Input::Rows, &[sel.clone(), Stage::Take { n: 1, frame: false }]).unwrap(), SinkKind::Rows);
-        assert_eq!(validate_stage_sequence(Input::Rows, &[sel.clone(), to.clone()]).unwrap(), SinkKind::Bytes);
-        assert_eq!(validate_stage_sequence(Input::Bytes, &[from.clone(), sel.clone(), to.clone()]).unwrap(), SinkKind::Bytes);
-        assert_eq!(validate_stage_sequence(Input::Bytes, &[from.clone()]).unwrap(), SinkKind::Rows);
+        assert_eq!(
+            validate_stage_sequence(Input::Rows, &[]).unwrap(),
+            SinkKind::Rows
+        );
+        assert_eq!(
+            validate_stage_sequence(Input::Bytes, &[]).unwrap(),
+            SinkKind::Bytes
+        );
+        assert_eq!(
+            validate_stage_sequence(
+                Input::Rows,
+                &[sel.clone(), Stage::Take { n: 1, frame: false }]
+            )
+            .unwrap(),
+            SinkKind::Rows
+        );
+        assert_eq!(
+            validate_stage_sequence(Input::Rows, &[sel.clone(), to.clone()]).unwrap(),
+            SinkKind::Bytes
+        );
+        assert_eq!(
+            validate_stage_sequence(Input::Bytes, &[from.clone(), sel.clone(), to.clone()])
+                .unwrap(),
+            SinkKind::Bytes
+        );
+        assert_eq!(
+            validate_stage_sequence(Input::Bytes, &[from.clone()]).unwrap(),
+            SinkKind::Rows
+        );
         // bytes into a row stage without from
         assert!(validate_stage_sequence(Input::Bytes, &[sel.clone()]).is_err());
         // from not first, not after bytes, or after rows
@@ -2979,7 +3350,12 @@ mod frame_tests {
     use core::cell::Cell;
 
     fn rec(fields: &[(&str, Value)]) -> Value {
-        Value::Record(fields.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
+        Value::Record(
+            fields
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+        )
     }
 
     fn argv(words: &[&str]) -> Vec<String> {
@@ -2991,11 +3367,19 @@ mod frame_tests {
     }
 
     fn begin(sample_id: u64) -> Item {
-        Item::Begin(FrameBegin { sample_id, monotonic_ns: sample_id * 10, meta: None })
+        Item::Begin(FrameBegin {
+            sample_id,
+            monotonic_ns: sample_id * 10,
+            meta: None,
+        })
     }
 
     fn end(complete: bool, dropped: u64) -> Item {
-        Item::End(FrameEnd { complete, unavailable_fields: Vec::new(), dropped })
+        Item::End(FrameEnd {
+            complete,
+            unavailable_fields: Vec::new(),
+            dropped,
+        })
     }
 
     fn row(n: u64) -> Item {
@@ -3023,7 +3407,13 @@ mod frame_tests {
     fn frames(rows: u64) -> (Box<dyn RowSource>, Rc<Cell<u64>>, Rc<Cell<u32>>) {
         let pulled = Rc::new(Cell::new(0));
         let closed = Rc::new(Cell::new(0));
-        let src = Frames { rows, sample: 0, pos: 0, pulled: pulled.clone(), closed: closed.clone() };
+        let src = Frames {
+            rows,
+            sample: 0,
+            pos: 0,
+            pulled: pulled.clone(),
+            closed: closed.clone(),
+        };
         (Box::new(src), pulled, closed)
     }
 
@@ -3052,15 +3442,26 @@ mod frame_tests {
 
     #[test]
     fn parse_accepts_frame_flags_and_refuses_duplicates() {
-        assert_eq!(stage(&["take", "--frame", "3"]), Stage::Take { n: 3, frame: true });
+        assert_eq!(
+            stage(&["take", "--frame", "3"]),
+            Stage::Take { n: 3, frame: true }
+        );
         assert_eq!(stage(&["take", "3"]), Stage::Take { n: 3, frame: false });
         assert_eq!(
             stage(&["sort-by", "--frame", "--reverse", "cpu"]),
-            Stage::SortBy { field: "cpu".into(), reverse: true, frame: true }
+            Stage::SortBy {
+                field: "cpu".into(),
+                reverse: true,
+                frame: true
+            }
         );
         assert_eq!(
             stage(&["sort-by", "cpu", "--frame"]),
-            Stage::SortBy { field: "cpu".into(), reverse: false, frame: true }
+            Stage::SortBy {
+                field: "cpu".into(),
+                reverse: false,
+                frame: true
+            }
         );
         for bad in [
             &["take", "--frame", "--frame", "1"][..],
@@ -3069,7 +3470,11 @@ mod frame_tests {
             &["sort-by", "--frame", "--frame", "a"],
             &["sort-by", "--frame"],
         ] {
-            assert!(matches!(parse_stage(&argv(bad)), Err(PipelineError::Usage(_))), "{:?}", bad);
+            assert!(
+                matches!(parse_stage(&argv(bad)), Err(PipelineError::Usage(_))),
+                "{:?}",
+                bad
+            );
         }
     }
 
@@ -3090,11 +3495,23 @@ mod frame_tests {
         };
         // Frames pass through select/where/--frame stages and leave Frames (or bytes after jsonl).
         assert_eq!(ok(Input::Frames, &[]), SinkKind::Frames);
-        assert_eq!(ok(Input::Frames, &[sel.clone(), wh.clone(), sort_f.clone(), take_f.clone()]), SinkKind::Frames);
-        assert_eq!(ok(Input::Frames, &[take_f.clone(), jsonl.clone()]), SinkKind::Bytes);
+        assert_eq!(
+            ok(
+                Input::Frames,
+                &[sel.clone(), wh.clone(), sort_f.clone(), take_f.clone()]
+            ),
+            SinkKind::Frames
+        );
+        assert_eq!(
+            ok(Input::Frames, &[take_f.clone(), jsonl.clone()]),
+            SinkKind::Bytes
+        );
         assert_eq!(ok(Input::Frames, &[jsonl_t.clone()]), SinkKind::Bytes);
         // Rows keep the Phase 03 rules.
-        assert_eq!(ok(Input::Rows, &[sel.clone(), take.clone(), sort.clone()]), SinkKind::Rows);
+        assert_eq!(
+            ok(Input::Rows, &[sel.clone(), take.clone(), sort.clone()]),
+            SinkKind::Rows
+        );
         // Rows-only stages on Frames name the --frame form.
         assert!(refused(Input::Frames, &[take.clone()]).contains("take --frame"));
         assert!(refused(Input::Frames, &[sel.clone(), sort.clone()]).contains("sort-by --frame"));
@@ -3102,13 +3519,24 @@ mod frame_tests {
         refused(Input::Rows, &[take_f.clone()]);
         refused(Input::Rows, &[sort_f.clone()]);
         // Only jsonl encodes Frames, even when bounded by take --frame.
-        for format in [Format::Json, Format::JsonTyped, Format::Text, Format::TextField("n".into())] {
+        for format in [
+            Format::Json,
+            Format::JsonTyped,
+            Format::Text,
+            Format::TextField("n".into()),
+        ] {
             refused(Input::Frames, &[Stage::To(format.clone())]);
             refused(Input::Frames, &[take_f.clone(), Stage::To(format)]);
         }
         // from never yields Frames and needs a byte head.
         refused(Input::Frames, &[Stage::From(Format::Jsonl)]);
-        assert_eq!(ok(Input::Bytes, &[Stage::From(Format::JsonlTyped), sel.clone()]), SinkKind::Rows);
+        assert_eq!(
+            ok(
+                Input::Bytes,
+                &[Stage::From(Format::JsonlTyped), sel.clone()]
+            ),
+            SinkKind::Rows
+        );
         refused(Input::Bytes, &[Stage::From(Format::Jsonl), take_f]);
     }
 
@@ -3117,7 +3545,19 @@ mod frame_tests {
         let (src, pulled, closed) = frames(2);
         let mut t = apply_row_stage(src, &stage(&["take", "--frame", "2"])).unwrap();
         let got = items(&mut *t).unwrap();
-        assert_eq!(got, vec![begin(1), row(1), row(0), end(true, 0), begin(2), row(1), row(0), end(true, 0)]);
+        assert_eq!(
+            got,
+            vec![
+                begin(1),
+                row(1),
+                row(0),
+                end(true, 0),
+                begin(2),
+                row(1),
+                row(0),
+                end(true, 0)
+            ]
+        );
         assert_eq!(pulled.get(), 8, "nothing pulled after the 2nd End");
         assert_eq!(closed.get(), 1, "closed right after the 2nd End");
 
@@ -3138,7 +3578,11 @@ mod frame_tests {
         assert_eq!(s.next_item().unwrap(), Some(row(1)));
         assert_eq!(s.next_item().unwrap(), Some(row(2)));
         assert_eq!(s.next_item().unwrap(), Some(end(true, 0)));
-        assert_eq!(pulled.get(), 5, "nothing pulled past End before the frame is emitted");
+        assert_eq!(
+            pulled.get(),
+            5,
+            "nothing pulled past End before the frame is emitted"
+        );
         assert_eq!(s.next_item().unwrap(), Some(begin(2)));
         assert_eq!(s.next_item().unwrap(), Some(row(0)));
 
@@ -3171,9 +3615,18 @@ mod frame_tests {
 
         let pad = "x".repeat(1024 * 1024);
         let mut big = vec![begin(1)];
-        big.extend((0..5).map(|i| Item::Row(rec(&[("n", Value::UInt(i)), ("pad", Value::String(pad.clone()))]))));
+        big.extend((0..5).map(|i| {
+            Item::Row(rec(&[
+                ("n", Value::UInt(i)),
+                ("pad", Value::String(pad.clone())),
+            ]))
+        }));
         big.push(end(true, 0));
-        let mut s = apply_row_stage(Box::new(VecSource::from_items(big)), &stage(&["sort-by", "--frame", "n"])).unwrap();
+        let mut s = apply_row_stage(
+            Box::new(VecSource::from_items(big)),
+            &stage(&["sort-by", "--frame", "n"]),
+        )
+        .unwrap();
         assert_eq!(s.next_item().unwrap(), Some(begin(1)));
         assert_eq!(s.next_item().unwrap_err(), PipelineError::SortLimitExceeded);
     }
@@ -3181,8 +3634,16 @@ mod frame_tests {
     #[test]
     fn where_and_select_pass_markers_unchanged() {
         let meta = rec(&[("schema", Value::String("t.v1".into()))]);
-        let b = Item::Begin(FrameBegin { sample_id: 7, monotonic_ns: 9, meta: Some(meta) });
-        let e = Item::End(FrameEnd { complete: false, unavailable_fields: vec!["cpu".into()], dropped: 4 });
+        let b = Item::Begin(FrameBegin {
+            sample_id: 7,
+            monotonic_ns: 9,
+            meta: Some(meta),
+        });
+        let e = Item::End(FrameEnd {
+            complete: false,
+            unavailable_fields: vec!["cpu".into()],
+            dropped: 4,
+        });
         let src = VecSource::from_items(vec![
             b.clone(),
             Item::Row(rec(&[("n", Value::UInt(0)), ("m", Value::UInt(5))])),
@@ -3191,7 +3652,10 @@ mod frame_tests {
         ]);
         let mut s = apply_row_stage(Box::new(src), &stage(&["where", "n", ">", "uint:0"])).unwrap();
         s = apply_row_stage(s, &stage(&["select", "m"])).unwrap();
-        assert_eq!(items(&mut *s).unwrap(), vec![b, Item::Row(rec(&[("m", Value::UInt(6))])), e]);
+        assert_eq!(
+            items(&mut *s).unwrap(),
+            vec![b, Item::Row(rec(&[("m", Value::UInt(6))])), e]
+        );
     }
 
     fn encode(format: &Format, item: Item) -> Result<String, PipelineError> {
@@ -3203,14 +3667,28 @@ mod frame_tests {
     #[test]
     fn frame_envelopes_encode_exactly_and_round_trip_typed() {
         let meta = rec(&[("schema", Value::String("top.cell.v1".into()))]);
-        let b = Item::Begin(FrameBegin { sample_id: 3, monotonic_ns: 42, meta: Some(meta.clone()) });
+        let b = Item::Begin(FrameBegin {
+            sample_id: 3,
+            monotonic_ns: 42,
+            meta: Some(meta.clone()),
+        });
         assert_eq!(
             encode(&Format::Jsonl, b.clone()).unwrap(),
             "{\"frame\":\"begin\",\"sample_id\":3,\"monotonic_ns\":42,\"meta\":{\"schema\":\"top.cell.v1\"}}\n"
         );
-        assert_eq!(encode(&Format::Jsonl, begin(1)).unwrap(), "{\"frame\":\"begin\",\"sample_id\":1,\"monotonic_ns\":10}\n");
-        assert_eq!(encode(&Format::Jsonl, row(5)).unwrap(), "{\"frame\":\"row\",\"value\":{\"n\":5}}\n");
-        let e = Item::End(FrameEnd { complete: false, unavailable_fields: vec!["cpu_tenths".into()], dropped: 2 });
+        assert_eq!(
+            encode(&Format::Jsonl, begin(1)).unwrap(),
+            "{\"frame\":\"begin\",\"sample_id\":1,\"monotonic_ns\":10}\n"
+        );
+        assert_eq!(
+            encode(&Format::Jsonl, row(5)).unwrap(),
+            "{\"frame\":\"row\",\"value\":{\"n\":5}}\n"
+        );
+        let e = Item::End(FrameEnd {
+            complete: false,
+            unavailable_fields: vec!["cpu_tenths".into()],
+            dropped: 2,
+        });
         assert_eq!(
             encode(&Format::Jsonl, e.clone()).unwrap(),
             "{\"frame\":\"end\",\"complete\":false,\"unavailable_fields\":[\"cpu_tenths\"],\"dropped\":2}\n"
@@ -3229,11 +3707,21 @@ mod frame_tests {
             ])]
         );
         let typed = encode(&Format::JsonlTyped, e).unwrap();
-        assert_eq!(decode_jsonl_typed(typed.as_bytes()).unwrap()[0].get_field("dropped"), Some(&Value::UInt(2)));
+        assert_eq!(
+            decode_jsonl_typed(typed.as_bytes()).unwrap()[0].get_field("dropped"),
+            Some(&Value::UInt(2))
+        );
 
         // Untyped JSON refuses inexact counters; typed keeps them.
-        let huge = Item::Begin(FrameBegin { sample_id: 1, monotonic_ns: u64::MAX, meta: None });
-        assert!(matches!(encode(&Format::Jsonl, huge.clone()), Err(PipelineError::PrecisionLoss(_))));
+        let huge = Item::Begin(FrameBegin {
+            sample_id: 1,
+            monotonic_ns: u64::MAX,
+            meta: None,
+        });
+        assert!(matches!(
+            encode(&Format::Jsonl, huge.clone()),
+            Err(PipelineError::PrecisionLoss(_))
+        ));
         assert!(encode(&Format::JsonlTyped, huge).is_ok());
 
         // Frames never encode as json/text, and a marker is not a row.
@@ -3254,14 +3742,20 @@ mod frame_tests {
         }
         // The bare value is at the bound; wrapped in a row envelope it is one level deeper.
         assert!(deep.validate().is_ok());
-        assert_eq!(encode(&Format::Jsonl, Item::Row(deep)).unwrap_err(), PipelineError::MaxDepthExceeded);
+        assert_eq!(
+            encode(&Format::Jsonl, Item::Row(deep)).unwrap_err(),
+            PipelineError::MaxDepthExceeded
+        );
     }
 
     fn guarded(category: Category, list: Vec<Item>) -> Result<Vec<Item>, PipelineError> {
         let mut g = check_items(Box::new(VecSource::from_items(list)), category);
         let result = items(&mut *g);
         if result.is_err() {
-            assert!(g.next_item().unwrap().is_none(), "a failed guard stays at end");
+            assert!(
+                g.next_item().unwrap().is_none(),
+                "a failed guard stays at end"
+            );
         }
         result
     }
@@ -3270,7 +3764,10 @@ mod frame_tests {
     fn order_guard_accepts_valid_streams_and_refuses_every_violation() {
         let ok = vec![begin(1), row(1), end(true, 0), begin(4), end(true, 0)];
         assert_eq!(guarded(Category::Frames, ok.clone()).unwrap(), ok);
-        assert_eq!(guarded(Category::Rows, vec![row(1), row(2)]).unwrap().len(), 2);
+        assert_eq!(
+            guarded(Category::Rows, vec![row(1), row(2)]).unwrap().len(),
+            2
+        );
         let bad: [(Category, Vec<Item>); 7] = [
             (Category::Rows, vec![row(1), begin(1)]),
             (Category::Rows, vec![end(true, 0)]),
@@ -3278,11 +3775,17 @@ mod frame_tests {
             (Category::Frames, vec![begin(1), begin(2)]),
             (Category::Frames, vec![end(true, 0)]),
             (Category::Frames, vec![begin(1), row(1)]),
-            (Category::Frames, vec![begin(2), end(true, 0), begin(2), end(true, 0)]),
+            (
+                Category::Frames,
+                vec![begin(2), end(true, 0), begin(2), end(true, 0)],
+            ),
         ];
         for (category, list) in bad {
             assert!(
-                matches!(guarded(category, list.clone()), Err(PipelineError::Sequence(_))),
+                matches!(
+                    guarded(category, list.clone()),
+                    Err(PipelineError::Sequence(_))
+                ),
                 "{:?} {:?}",
                 category,
                 list
@@ -3304,7 +3807,12 @@ mod frame_tests {
             }
         }
         let closed = Rc::new(Cell::new(0));
-        let mut g = check_items(Box::new(Bad { closed: closed.clone() }), Category::Frames);
+        let mut g = check_items(
+            Box::new(Bad {
+                closed: closed.clone(),
+            }),
+            Category::Frames,
+        );
         assert!(g.next_item().is_err());
         assert_eq!(closed.get(), 1);
     }
@@ -3453,16 +3961,29 @@ mod hook_tests {
     }
 
     fn begin(sample_id: u64) -> Item {
-        Item::Begin(FrameBegin { sample_id, monotonic_ns: sample_id, meta: None })
+        Item::Begin(FrameBegin {
+            sample_id,
+            monotonic_ns: sample_id,
+            meta: None,
+        })
     }
 
     fn end() -> Item {
-        Item::End(FrameEnd { complete: true, unavailable_fields: Vec::new(), dropped: 0 })
+        Item::End(FrameEnd {
+            complete: true,
+            unavailable_fields: Vec::new(),
+            dropped: 0,
+        })
     }
 
     /// Build `stage(check_items(fake))`, end it per `ending`, and assert the chain reports the
     /// producer's completion, read after the producer's close and before its drop.
-    fn assert_forwards(stage: Option<&Stage>, category: Category, items: Vec<Item>, ending: Ending) {
+    fn assert_forwards(
+        stage: Option<&Stage>,
+        category: Category,
+        items: Vec<Item>,
+        ending: Ending,
+    ) {
         let log = Rc::new(RefCell::new(Vec::new()));
         let fake = Fake {
             items: VecDeque::from(items),
@@ -3494,7 +4015,13 @@ mod hook_tests {
             }
         }
         assert_eq!(chain.completion(), Some(CODE), "{:?} {:?}", stage, ending);
-        assert_eq!(*log.borrow(), ["close", "completion", "drop"], "{:?} {:?}", stage, ending);
+        assert_eq!(
+            *log.borrow(),
+            ["close", "completion", "drop"],
+            "{:?} {:?}",
+            stage,
+            ending
+        );
     }
 
     #[test]
@@ -3509,10 +4036,19 @@ mod hook_tests {
                 literal: Value::UInt(0),
             }),
             Some(Stage::Take { n: 5, frame: false }),
-            Some(Stage::SortBy { field: "n".to_string(), reverse: false, frame: false }),
+            Some(Stage::SortBy {
+                field: "n".to_string(),
+                reverse: false,
+                frame: false,
+            }),
         ];
         for stage in &stages {
-            for ending in [Ending::Eof, Ending::Error, Ending::CloseNow, Ending::CloseAfterOne] {
+            for ending in [
+                Ending::Eof,
+                Ending::Error,
+                Ending::CloseNow,
+                Ending::CloseAfterOne,
+            ] {
                 assert_forwards(stage.as_ref(), Category::Rows, rows(), ending);
             }
         }
@@ -3524,7 +4060,12 @@ mod hook_tests {
         for n in [2, 0] {
             let stage = Stage::Take { n, frame: false };
             for ending in [Ending::Eof, Ending::CloseNow] {
-                assert_forwards(Some(&stage), Category::Rows, vec![row(1), row(2), row(3)], ending);
+                assert_forwards(
+                    Some(&stage),
+                    Category::Rows,
+                    vec![row(1), row(2), row(3)],
+                    ending,
+                );
             }
         }
     }
@@ -3532,8 +4073,17 @@ mod hook_tests {
     #[test]
     fn frame_sort_forwards_the_producer_completion() {
         let frames = || vec![begin(1), row(2), row(1), end(), begin(2), row(5), end()];
-        let stage = Stage::SortBy { field: "n".to_string(), reverse: true, frame: true };
-        for ending in [Ending::Eof, Ending::Error, Ending::CloseNow, Ending::CloseAfterOne] {
+        let stage = Stage::SortBy {
+            field: "n".to_string(),
+            reverse: true,
+            frame: true,
+        };
+        for ending in [
+            Ending::Eof,
+            Ending::Error,
+            Ending::CloseNow,
+            Ending::CloseAfterOne,
+        ] {
             assert_forwards(Some(&stage), Category::Frames, frames(), ending);
         }
     }
@@ -3571,8 +4121,11 @@ mod hook_tests {
         let chain = apply_row_stage(check_items(Box::new(Live), Category::Rows), &select).unwrap();
         assert_eq!(chain.completion(), Some(7));
 
-        let mut chain =
-            apply_row_stage(check_items(Box::new(VecSource::new(vec![])), Category::Rows), &select).unwrap();
+        let mut chain = apply_row_stage(
+            check_items(Box::new(VecSource::new(vec![])), Category::Rows),
+            &select,
+        )
+        .unwrap();
         assert!(chain.next_item().unwrap().is_none());
         assert_eq!(chain.completion(), None);
     }
@@ -3615,7 +4168,10 @@ mod hook_tests {
         }
         let record = Value::Record(vec![
             (escapes.to_string(), Value::List(scalars.clone())),
-            ("nested".to_string(), Value::List(vec![Value::List(vec![]), Value::Record(vec![])])),
+            (
+                "nested".to_string(),
+                Value::List(vec![Value::List(vec![]), Value::Record(vec![])]),
+            ),
             ("null".to_string(), Value::Null),
         ]);
         assert_len_matches(&record);
@@ -3625,7 +4181,12 @@ mod hook_tests {
     #[test]
     fn typed_json_len_reports_the_same_errors() {
         let empty = typed_json_len(&Value::String(String::new())).unwrap();
-        assert_eq!(empty, value_to_json(&Value::String(String::new()), true).unwrap().len());
+        assert_eq!(
+            empty,
+            value_to_json(&Value::String(String::new()), true)
+                .unwrap()
+                .len()
+        );
         // Exactly at the line bound, and one byte over it.
         let at = Value::String("a".repeat(MAX_RECORD_LINE_BYTES - empty));
         assert_eq!(typed_json_len(&at), Ok(MAX_RECORD_LINE_BYTES));
@@ -3635,14 +4196,20 @@ mod hook_tests {
         assert_len_matches(&over);
         // Escapes count at their encoded width: 6 bytes per control char.
         let controls = Value::String("\u{1}".repeat((MAX_RECORD_LINE_BYTES - empty) / 6 + 1));
-        assert_eq!(typed_json_len(&controls), Err(PipelineError::RecordTooLarge));
+        assert_eq!(
+            typed_json_len(&controls),
+            Err(PipelineError::RecordTooLarge)
+        );
         assert_len_matches(&controls);
         let bytes = Value::Bytes(vec![0xab; MAX_RECORD_LINE_BYTES / 2]);
         assert_eq!(typed_json_len(&bytes), Err(PipelineError::RecordTooLarge));
         assert_len_matches(&bytes);
         // Non-finite floats fail, also after an oversized prefix (the same first error).
         for f in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert_eq!(typed_json_len(&Value::Float(f)), Err(PipelineError::NonFiniteFloat));
+            assert_eq!(
+                typed_json_len(&Value::Float(f)),
+                Err(PipelineError::NonFiniteFloat)
+            );
             assert_len_matches(&Value::Float(f));
             let late = Value::List(vec![over.clone(), Value::Float(f)]);
             assert_eq!(typed_json_len(&late), Err(PipelineError::NonFiniteFloat));

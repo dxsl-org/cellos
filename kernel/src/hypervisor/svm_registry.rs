@@ -67,8 +67,11 @@ impl X86Vcpu {
         match self {
             Self::Svm(v) => v.inject_ext_irq_gated(vector),
             Self::Vmx(_) => unsafe {
-                let rflags = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
-                let intr_info = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_INTERRUPTIBILITY_INFO).unwrap_or(0);
+                let rflags =
+                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
+                let intr_info =
+                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_INTERRUPTIBILITY_INFO)
+                        .unwrap_or(0);
                 if (rflags & (1 << 9) != 0) && (intr_info & 0x3 == 0) {
                     let _ = hal::x86_64::vmcs::vmwrite(
                         hal::x86_64::vmcs::VM_ENTRY_INTR_INFO_FIELD,
@@ -87,7 +90,8 @@ impl X86Vcpu {
             Self::Svm(v) => v.shutdown_diagnostics(),
             Self::Vmx(_) => unsafe {
                 let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
-                let rflags = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
+                let rflags =
+                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
                 let cr0 = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_CR0).unwrap_or(0);
                 (rip, rflags, cr0)
             },
@@ -98,9 +102,11 @@ impl X86Vcpu {
         match self {
             Self::Svm(v) => v.npf_diagnostics(),
             Self::Vmx(_) => unsafe {
-                let gpa = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_PHYSICAL_ADDRESS).unwrap_or(0);
+                let gpa = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_PHYSICAL_ADDRESS)
+                    .unwrap_or(0);
                 let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
-                let qual = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::EXIT_QUALIFICATION).unwrap_or(0);
+                let qual =
+                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::EXIT_QUALIFICATION).unwrap_or(0);
                 (qual, gpa, rip)
             },
         }
@@ -116,7 +122,9 @@ static NEXT_ASID: AtomicU32 = AtomicU32::new(1);
 /// `fetch_update` step for [`NEXT_ASID`]: issue `current` only while it lies in
 /// `1..=max_asid`; never wraps, so exhaustion is permanent for the boot.
 fn next_asid(current: u32, max_asid: u32) -> Option<u32> {
-    current.checked_add(1).filter(|_| current != 0 && current <= max_asid)
+    current
+        .checked_add(1)
+        .filter(|_| current != 0 && current <= max_asid)
 }
 
 struct SvmVm {
@@ -138,7 +146,12 @@ impl Drop for SvmVm {
         if let Some(a) = g.as_mut() {
             for f in &self.vcpu_frames {
                 match f {
-                    VcpuFrames::Svm { vmcb, host, msrpm, iopm } => {
+                    VcpuFrames::Svm {
+                        vmcb,
+                        host,
+                        msrpm,
+                        iopm,
+                    } => {
                         a.deallocate_frame(*vmcb);
                         a.deallocate_frame(*host);
                         a.deallocate_frame(*msrpm);
@@ -240,7 +253,9 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     let id = map.keys().filter(|(o, _)| *o == owner).count() + 1;
     #[cfg(cellos_p01_trace)]
     let _semantic = crate::memory::heap::p01_owner::creation(
-        None, crate::memory::heap::p01_owner::SERVICE_SHARED);
+        None,
+        crate::memory::heap::p01_owner::SERVICE_SHARED,
+    );
     map.insert(
         (owner, id),
         SvmVm {
@@ -602,7 +617,9 @@ pub fn x86_smoke() {
             let _ = super::registry::run_vcpu(OWNER, vm_id, 1, 0, &mut e as *mut ApiVmExit);
         }
         match e {
-            ApiVmExit::PortOut { port: 0x3F8, val, .. } if val == 0x4B => {
+            ApiVmExit::PortOut {
+                port: 0x3F8, val, ..
+            } if val == 0x4B => {
                 got_port = true;
             }
             ApiVmExit::Hlt => {
@@ -619,7 +636,12 @@ pub fn x86_smoke() {
     if got_port && got_hlt {
         log::info!("X86-VMM-SMOKE: PASS (api-path PortOut+Hlt)");
     } else {
-        log::error!("X86-VMM-SMOKE: FAIL got_port={} got_hlt={} last_exit={:?}", got_port, got_hlt, e);
+        log::error!(
+            "X86-VMM-SMOKE: FAIL got_port={} got_hlt={} last_exit={:?}",
+            got_port,
+            got_hlt,
+            e
+        );
     }
     reap_vms_for_task(OWNER);
 }
@@ -740,9 +762,11 @@ mod tests {
     fn asid_reservation_is_bounded_and_never_wraps() {
         let max_asid = 4;
         let next = AtomicU32::new(1);
-        let reserve = || next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            next_asid(current, max_asid)
-        });
+        let reserve = || {
+            next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                next_asid(current, max_asid)
+            })
+        };
         for expected in 1..=max_asid {
             assert_eq!(reserve(), Ok(expected));
         }

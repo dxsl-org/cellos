@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::child_context::{ChildContext, GrantSlot};
 use crate::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
 use crate::*;
 use alloc::string::String;
+use api::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
 use api::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
 use api::ipc::IPC_BUF_SIZE;
 use api::syscall::service;
-use api::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
-use crate::child_context::{ChildContext, GrantSlot};
 
 // ─── embedded-io glue ────────────────────────────────────────────────────────
 
@@ -141,7 +141,10 @@ pub struct OutputStream {
 
 enum OutputTarget {
     Legacy,
-    Context { operation: ObjectRefV1, endpoint: ObjectRefV1 },
+    Context {
+        operation: ObjectRefV1,
+        endpoint: ObjectRefV1,
+    },
 }
 
 impl ProcessOutput {
@@ -153,10 +156,16 @@ impl ProcessOutput {
     fn from_context_result(context: Result<ChildContext, Status>) -> Result<Self, Status> {
         let context = match context {
             Ok(context) => context,
-            Err(Status::Denied) => return Ok(Self {
-                stdout: OutputStream { target: OutputTarget::Legacy },
-                stderr: OutputStream { target: OutputTarget::Legacy },
-            }),
+            Err(Status::Denied) => {
+                return Ok(Self {
+                    stdout: OutputStream {
+                        target: OutputTarget::Legacy,
+                    },
+                    stderr: OutputStream {
+                        target: OutputTarget::Legacy,
+                    },
+                })
+            }
             Err(error) => return Err(error),
         };
         let mut stdout = None;
@@ -168,17 +177,23 @@ impl ProcessOutput {
             match grant.slot {
                 GrantSlot::Stdout => stdout = Some(grant.object),
                 GrantSlot::Stderr => stderr = Some(grant.object),
-                _ => {},
+                _ => {}
             }
         }
         let operation = context.operation();
         Ok(Self {
-            stdout: OutputStream { target: OutputTarget::Context {
-                operation, endpoint: stdout.ok_or(Status::Denied)?,
-            } },
-            stderr: OutputStream { target: OutputTarget::Context {
-                operation, endpoint: stderr.ok_or(Status::Denied)?,
-            } },
+            stdout: OutputStream {
+                target: OutputTarget::Context {
+                    operation,
+                    endpoint: stdout.ok_or(Status::Denied)?,
+                },
+            },
+            stderr: OutputStream {
+                target: OutputTarget::Context {
+                    operation,
+                    endpoint: stderr.ok_or(Status::Denied)?,
+                },
+            },
         })
     }
 
@@ -209,12 +224,13 @@ impl OutputStream {
                 let text = core::str::from_utf8(bytes).map_err(|_| Status::UnsupportedInput)?;
                 let _ = syscall::sys_log(text);
                 Ok(())
-            },
-            OutputTarget::Context { operation, endpoint } => {
-                write_all_chunks(bytes, deadline_ns, |chunk, deadline| {
-                    crate::session::write_stream(*operation, *endpoint, chunk, deadline)
-                })
-            },
+            }
+            OutputTarget::Context {
+                operation,
+                endpoint,
+            } => write_all_chunks(bytes, deadline_ns, |chunk, deadline| {
+                crate::session::write_stream(*operation, *endpoint, chunk, deadline)
+            }),
         }
     }
 }
@@ -404,9 +420,18 @@ mod output_tests {
     use super::*;
     use crate::child_context::Grant;
 
-    const OPERATION: ObjectRefV1 = ObjectRefV1 { id: 1, generation: 7 };
-    const STDOUT: ObjectRefV1 = ObjectRefV1 { id: 2, generation: 8 };
-    const STDERR: ObjectRefV1 = ObjectRefV1 { id: 3, generation: 9 };
+    const OPERATION: ObjectRefV1 = ObjectRefV1 {
+        id: 1,
+        generation: 7,
+    };
+    const STDOUT: ObjectRefV1 = ObjectRefV1 {
+        id: 2,
+        generation: 8,
+    };
+    const STDERR: ObjectRefV1 = ObjectRefV1 {
+        id: 3,
+        generation: 9,
+    };
 
     fn context(stdout: bool, stderr: bool) -> ChildContext {
         let mut grants = alloc::vec::Vec::new();
@@ -424,10 +449,19 @@ mod output_tests {
         let output = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
         assert!(matches!(&output.stdout().target, OutputTarget::Legacy));
         assert!(matches!(&output.stderr().target, OutputTarget::Legacy));
-        for error in [Status::Malformed, Status::TimedOut, Status::Cancelled,
-            Status::Revoked, Status::Stale, Status::Io, Status::Indeterminate]
-        {
-            assert_eq!(ProcessOutput::from_context_result(Err(error)).err(), Some(error));
+        for error in [
+            Status::Malformed,
+            Status::TimedOut,
+            Status::Cancelled,
+            Status::Revoked,
+            Status::Stale,
+            Status::Io,
+            Status::Indeterminate,
+        ] {
+            assert_eq!(
+                ProcessOutput::from_context_result(Err(error)).err(),
+                Some(error)
+            );
         }
     }
 
@@ -442,10 +476,13 @@ mod output_tests {
         let output = ProcessOutput::from_context_result(Ok(context(true, true))).unwrap();
         for (stream, expected) in [(output.stdout(), STDOUT), (output.stderr(), STDERR)] {
             match &stream.target {
-                OutputTarget::Context { operation, endpoint } => {
+                OutputTarget::Context {
+                    operation,
+                    endpoint,
+                } => {
                     assert_eq!(*operation, OPERATION);
                     assert_eq!(*endpoint, expected);
-                },
+                }
                 OutputTarget::Legacy => panic!("committed context selected logger"),
             }
         }
@@ -455,11 +492,19 @@ mod output_tests {
     fn empty_output_never_calls_owner_and_deadlines_are_bounded() {
         let output = ProcessOutput::from_context_result(Ok(context(true, true))).unwrap();
         let legacy = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
-        for stream in [output.stdout(), output.stderr(), legacy.stdout(), legacy.stderr()] {
+        for stream in [
+            output.stdout(),
+            output.stderr(),
+            legacy.stdout(),
+            legacy.stderr(),
+        ] {
             assert_eq!(stream.write_all(b"", 1), Ok(()));
             for deadline in [0, u64::MAX] {
                 assert_eq!(stream.write_all(b"", deadline), Err(Status::Malformed));
-                assert_eq!(stream.write_all(b"not published", deadline), Err(Status::Malformed));
+                assert_eq!(
+                    stream.write_all(b"not published", deadline),
+                    Err(Status::Malformed)
+                );
             }
         }
     }
@@ -467,8 +512,14 @@ mod output_tests {
     #[test]
     fn legacy_rejects_binary_output_without_logging() {
         let output = ProcessOutput::from_context_result(Err(Status::Denied)).unwrap();
-        assert_eq!(output.stdout().write_all(b"prefix\xffsuffix", 1), Err(Status::UnsupportedInput));
-        assert_eq!(output.stderr().write_all(b"\xc3", 1), Err(Status::UnsupportedInput));
+        assert_eq!(
+            output.stdout().write_all(b"prefix\xffsuffix", 1),
+            Err(Status::UnsupportedInput)
+        );
+        assert_eq!(
+            output.stderr().write_all(b"\xc3", 1),
+            Err(Status::UnsupportedInput)
+        );
     }
 
     #[test]
@@ -476,14 +527,17 @@ mod output_tests {
         let bytes: alloc::vec::Vec<u8> = (0..1300).map(|i| (i % 256) as u8).collect();
         let mut received = alloc::vec::Vec::new();
         let mut calls = 0;
-        assert_eq!(write_all_chunks(&bytes, 12345, |chunk, deadline| {
-            calls += 1;
-            assert_eq!(deadline, 12345);
-            assert!(!chunk.is_empty() && chunk.len() <= TRANSFER_MAX);
-            let actual = chunk.len().min(73);
-            received.extend_from_slice(&chunk[..actual]);
-            Ok(actual)
-        }), Ok(()));
+        assert_eq!(
+            write_all_chunks(&bytes, 12345, |chunk, deadline| {
+                calls += 1;
+                assert_eq!(deadline, 12345);
+                assert!(!chunk.is_empty() && chunk.len() <= TRANSFER_MAX);
+                let actual = chunk.len().min(73);
+                received.extend_from_slice(&chunk[..actual]);
+                Ok(actual)
+            }),
+            Ok(())
+        );
         assert!(calls > 3);
         assert_eq!(received, bytes);
     }
@@ -492,31 +546,44 @@ mod output_tests {
     fn invalid_progress_stops_without_replaying() {
         for actual in [0, 4] {
             let mut calls = 0;
-            assert_eq!(write_all_chunks(b"abc", 1, |_, _| {
-                calls += 1;
-                Ok(actual)
-            }), Err(Status::Malformed));
+            assert_eq!(
+                write_all_chunks(b"abc", 1, |_, _| {
+                    calls += 1;
+                    Ok(actual)
+                }),
+                Err(Status::Malformed)
+            );
             assert_eq!(calls, 1);
         }
     }
 
     #[test]
     fn errors_after_committed_prefix_are_not_retried() {
-        for error in [Status::WouldBlock, Status::TimedOut, Status::Cancelled,
-            Status::Revoked, Status::BrokenPipe, Status::WrongOwner,
-            Status::WrongDirection, Status::Stale, Status::Indeterminate]
-        {
+        for error in [
+            Status::WouldBlock,
+            Status::TimedOut,
+            Status::Cancelled,
+            Status::Revoked,
+            Status::BrokenPipe,
+            Status::WrongOwner,
+            Status::WrongDirection,
+            Status::Stale,
+            Status::Indeterminate,
+        ] {
             let mut calls = 0;
-            assert_eq!(write_all_chunks(b"abcdef", 1, |chunk, _| {
-                calls += 1;
-                if calls == 1 {
-                    assert_eq!(chunk, b"abcdef");
-                    Ok(2)
-                } else {
-                    assert_eq!(chunk, b"cdef");
-                    Err(error)
-                }
-            }), Err(error));
+            assert_eq!(
+                write_all_chunks(b"abcdef", 1, |chunk, _| {
+                    calls += 1;
+                    if calls == 1 {
+                        assert_eq!(chunk, b"abcdef");
+                        Ok(2)
+                    } else {
+                        assert_eq!(chunk, b"cdef");
+                        Err(error)
+                    }
+                }),
+                Err(error)
+            );
             assert_eq!(calls, 2);
         }
     }

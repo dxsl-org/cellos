@@ -35,7 +35,11 @@ fn rg_run_ms(a: &mut Term, cmd: &str, var: &str, ms: u64) -> RgRun {
         },
         Err(why) => Err(why),
     };
-    RgRun { out, stderr, status }
+    RgRun {
+        out,
+        stderr,
+        status,
+    }
 }
 
 impl RgRun {
@@ -44,7 +48,10 @@ impl RgRun {
     }
 
     fn summary(&self) -> String {
-        format!("out={:?} stderr={} st={:?}", self.out, self.stderr, self.status)
+        format!(
+            "out={:?} stderr={} st={:?}",
+            self.out, self.stderr, self.status
+        )
     }
 }
 
@@ -63,7 +70,9 @@ fn setup(a: &mut Term, cmds: &[&str]) -> Vec<String> {
 
 /// The LINE field of `PATH:LINE:TEXT` rows (escaped paths carry no raw `:`).
 fn line_numbers(rows: &[String]) -> Option<Vec<u64>> {
-    rows.iter().map(|row| row.split(':').nth(1).and_then(|n| n.parse().ok())).collect()
+    rows.iter()
+        .map(|row| row.split(':').nth(1).and_then(|n| n.parse().ok()))
+        .collect()
 }
 
 pub(crate) fn rg_checks(a: &mut Term) {
@@ -86,13 +95,21 @@ fn rg_help(a: &mut Term) {
 /// a diagnostic, no row.
 fn rg_unsupported(a: &mut Term) {
     let mut bad = Vec::new();
-    for (cmd, var) in [("rg -P x /tmp", "strgp"), ("rg -iw x", "strgiw"), ("rg -q -C1 x", "strgqc")] {
+    for (cmd, var) in [
+        ("rg -P x /tmp", "strgp"),
+        ("rg -iw x", "strgiw"),
+        ("rg -q -C1 x", "strgqc"),
+    ] {
         let run = rg_run(a, cmd, var);
         if !(run.rows_are(&[]) && run.stderr && run.status == Ok(2)) {
             bad.push(format!("{cmd}: {}", run.summary()));
         }
     }
-    check("rg-unsupported-before-reads", bad.is_empty(), &format!("{bad:?}"));
+    check(
+        "rg-unsupported-before-reads",
+        bad.is_empty(),
+        &format!("{bad:?}"),
+    );
 }
 
 /// Standard input needs `-a`; with it, a match is `<stdin>:LINE:TEXT` (status 0), none is 1.
@@ -107,7 +124,10 @@ fn rg_stdin(a: &mut Term) {
     let miss = rg_run(a, "echo 'a:b' | rg -a zz -", "strgamiss");
     check(
         "rg-stdin-match",
-        hit.rows_are(&["<stdin>:1:a:b"]) && hit.status == Ok(0) && miss.rows_are(&[]) && miss.status == Ok(1),
+        hit.rows_are(&["<stdin>:1:a:b"])
+            && hit.status == Ok(0)
+            && miss.rows_are(&[])
+            && miss.status == Ok(1),
         &format!("hit {} miss {}", hit.summary(), miss.summary()),
     );
 }
@@ -142,7 +162,11 @@ fn rg_tmp_tree(a: &mut Term) -> Vec<String> {
                 "/tmp/rgt/sub/b.txt:1:foo",
             ])
             && all.status == Ok(0),
-        &format!("setup={failed:?} plain {} all {}", plain.summary(), all.summary()),
+        &format!(
+            "setup={failed:?} plain {} all {}",
+            plain.summary(),
+            all.summary()
+        ),
     );
     plain.out.unwrap_or_default()
 }
@@ -156,12 +180,18 @@ fn rg_typed_roundtrip(a: &mut Term, text_rows: Vec<String>) {
         let records: Vec<&String> = lines.iter().filter(|l| !l.is_empty()).collect();
         records.len() == text_rows.len() && records.iter().all(|l| l.starts_with("{\"cellbox\":1,"))
     });
-    let back = rg_run(a, "from jsonl --typed < /tmp/r.jsonl | select line_number", "strgback");
+    let back = rg_run(
+        a,
+        "from jsonl --typed < /tmp/r.jsonl | select line_number",
+        "strgback",
+    );
     let expected = line_numbers(&text_rows);
     // The terminal table: one header line, then one line per row with the bare number.
-    let numbers: Option<Vec<u64>> = back.out.as_ref().ok().map(|lines| {
-        lines.iter().filter_map(|l| l.trim().parse().ok()).collect()
-    });
+    let numbers: Option<Vec<u64>> = back
+        .out
+        .as_ref()
+        .ok()
+        .map(|lines| lines.iter().filter_map(|l| l.trim().parse().ok()).collect());
     check(
         "rg-typed-roundtrip",
         written.rows_are(&[])
@@ -170,7 +200,11 @@ fn rg_typed_roundtrip(a: &mut Term, text_rows: Vec<String>) {
             && expected.as_ref().is_some_and(|n| !n.is_empty())
             && numbers == expected
             && back.status == Ok(0),
-        &format!("written {} file={file:?} back {} want={expected:?}", written.summary(), back.summary()),
+        &format!(
+            "written {} file={file:?} back {} want={expected:?}",
+            written.summary(),
+            back.summary()
+        ),
     );
 }
 
@@ -187,10 +221,15 @@ fn rg_escape(a: &mut Term) {
         ],
     );
     let out = a.run("rg p0 /tmp/rge", RG_MS);
-    let raw = [&b"\x1b[?1049h"[..], b"\x1b[?25l", b"\x1b[?2004h", b"p04cr\r"]
-        .iter()
-        .filter(|seq| occurrences(&a.out, seq) + occurrences(&a.err, seq) > 0)
-        .count();
+    let raw = [
+        &b"\x1b[?1049h"[..],
+        b"\x1b[?25l",
+        b"\x1b[?2004h",
+        b"p04cr\r",
+    ]
+    .iter()
+    .filter(|seq| occurrences(&a.out, seq) + occurrences(&a.err, seq) > 0)
+    .count();
     let st = a.run("echo strgesc=$?", 30_000);
     let rows = [
         "/tmp/rge/e.txt:1:\\x1B[?1049h\\x1B[?25l\\x1B[?2004hp03-tui-abandon",
@@ -225,11 +264,16 @@ const BIG_MS: u64 = 900_000;
 
 /// The bare numbers of a one-column `select` table (the header is not a number).
 fn column_numbers(run: &RgRun) -> Option<Vec<u64>> {
-    run.out.as_ref().ok().map(|lines| lines.iter().filter_map(|l| l.trim().parse().ok()).collect())
+    run.out
+        .as_ref()
+        .ok()
+        .map(|lines| lines.iter().filter_map(|l| l.trim().parse().ok()).collect())
 }
 
 fn wide_rows() -> Vec<String> {
-    (0..WIDE_FILES).map(|i| format!("{FX}/wide/wide{i:03}{}.txt:1:wide-hit", "x".repeat(32))).collect()
+    (0..WIDE_FILES)
+        .map(|i| format!("{FX}/wide/wide{i:03}{}.txt:1:wide-hit", "x".repeat(32)))
+        .collect()
 }
 
 fn rows_equal(run: &RgRun, rows: &[String]) -> bool {
@@ -253,11 +297,27 @@ pub(crate) fn rg_fixture_checks(a: &mut Term) {
 /// offsets of the three matches, through the typed JSONL record.
 fn rg_fx_big(a: &mut Term) {
     let start = now_ms();
-    let written = rg_run_ms(a, &format!("rg NEEDLE {FX}/big.log > /tmp/big.jsonl"), "strgbig", BIG_MS);
+    let written = rg_run_ms(
+        a,
+        &format!("rg NEEDLE {FX}/big.log > /tmp/big.jsonl"),
+        "strgbig",
+        BIG_MS,
+    );
     let elapsed = now_ms().saturating_sub(start);
-    println(&format!("P04 INFO rg-fx-big elapsed_ms={elapsed} bytes={}", BIG_NEEDLES[2] * BIG_LINE));
-    let lines = rg_run(a, "from jsonl --typed < /tmp/big.jsonl | select line_number", "strgbigl");
-    let offsets = rg_run(a, "from jsonl --typed < /tmp/big.jsonl | select absolute_offset", "strgbigo");
+    println(&format!(
+        "P04 INFO rg-fx-big elapsed_ms={elapsed} bytes={}",
+        BIG_NEEDLES[2] * BIG_LINE
+    ));
+    let lines = rg_run(
+        a,
+        "from jsonl --typed < /tmp/big.jsonl | select line_number",
+        "strgbigl",
+    );
+    let offsets = rg_run(
+        a,
+        "from jsonl --typed < /tmp/big.jsonl | select absolute_offset",
+        "strgbigo",
+    );
     let want_offsets: Vec<u64> = BIG_NEEDLES.iter().map(|n| (n - 1) * BIG_LINE).collect();
     check(
         "rg-fx-big-exact",
@@ -267,7 +327,12 @@ fn rg_fx_big(a: &mut Term) {
             && column_numbers(&offsets) == Some(want_offsets)
             && lines.status == Ok(0)
             && offsets.status == Ok(0),
-        &format!("written {} lines {} offsets {}", written.summary(), lines.summary(), offsets.summary()),
+        &format!(
+            "written {} lines {} offsets {}",
+            written.summary(),
+            lines.summary(),
+            offsets.summary()
+        ),
     );
 }
 
@@ -278,8 +343,16 @@ fn rg_fx_wide(a: &mut Term) {
     let all = rg_run_ms(a, &format!("rg wide-hit {FX}/wide"), "strgwall", WIDE_MS);
     check(
         "rg-fx-wide",
-        quiet.rows_are(&[]) && quiet.status == Ok(0) && rows_equal(&all, &wide_rows()) && all.status == Ok(0),
-        &format!("quiet {} all st={:?} rows={:?}", quiet.summary(), all.status, all.out.as_ref().map(Vec::len)),
+        quiet.rows_are(&[])
+            && quiet.status == Ok(0)
+            && rows_equal(&all, &wide_rows())
+            && all.status == Ok(0),
+        &format!(
+            "quiet {} all st={:?} rows={:?}",
+            quiet.summary(),
+            all.status,
+            all.out.as_ref().map(Vec::len)
+        ),
     );
 }
 
@@ -288,7 +361,10 @@ fn rg_fx_wide(a: &mut Term) {
 fn rg_fx_ignore(a: &mut Term) {
     let plain = rg_run(a, &format!("rg IGNTOK {FX}/ign"), "strgign");
     let all = rg_run(a, &format!("rg --no-ignore IGNTOK {FX}/ign"), "strgignall");
-    let want_plain = [format!("{FX}/ign/keep.txt:1:IGNTOK keep"), format!("{FX}/ign/sub/back.txt:1:IGNTOK back")];
+    let want_plain = [
+        format!("{FX}/ign/keep.txt:1:IGNTOK keep"),
+        format!("{FX}/ign/sub/back.txt:1:IGNTOK back"),
+    ];
     let want_all = [
         format!("{FX}/ign/drop.txt:1:IGNTOK drop"),
         format!("{FX}/ign/keep.txt:1:IGNTOK keep"),
@@ -296,7 +372,10 @@ fn rg_fx_ignore(a: &mut Term) {
     ];
     check(
         "rg-fx-ignore",
-        rows_equal(&plain, &want_plain) && plain.status == Ok(0) && rows_equal(&all, &want_all) && all.status == Ok(0),
+        rows_equal(&plain, &want_plain)
+            && plain.status == Ok(0)
+            && rows_equal(&all, &want_all)
+            && all.status == Ok(0),
         &format!("plain {} all {}", plain.summary(), all.summary()),
     );
 }
@@ -344,23 +423,46 @@ fn rg_fx_enc(a: &mut Term) {
         format!("{FX}/enc/crlf.txt:1:ENCTOK crlf\\r"),
         format!("{FX}/enc/nolf.txt:2:ENCTOK nolf"),
     ];
-    let written = rg_run(a, &format!("rg ENCTOK {FX}/enc/bom.txt > /tmp/bom.jsonl"), "strgbomw");
-    let offset = rg_run(a, "from jsonl --typed < /tmp/bom.jsonl | select absolute_offset", "strgbomo");
+    let written = rg_run(
+        a,
+        &format!("rg ENCTOK {FX}/enc/bom.txt > /tmp/bom.jsonl"),
+        "strgbomw",
+    );
+    let offset = rg_run(
+        a,
+        "from jsonl --typed < /tmp/bom.jsonl | select absolute_offset",
+        "strgbomo",
+    );
     check(
         "rg-fx-enc",
         rows_equal(&rows, &want)
             && rows.status == Ok(0)
             && written.status == Ok(0)
             && column_numbers(&offset).as_deref() == Some(&[9][..]),
-        &format!("rows {} written {} offset {}", rows.summary(), written.summary(), offset.summary()),
+        &format!(
+            "rows {} written {} offset {}",
+            rows.summary(),
+            written.summary(),
+            offset.summary()
+        ),
     );
 }
 
 /// A denied root is one diagnostic; the walk continues into the next root (all 120 rows)
 /// and the status is 2, also with `-q`.
 fn rg_fx_denied_root(a: &mut Term) {
-    let walk = rg_run_ms(a, &format!("rg wide-hit /srv/cellos {FX}/wide"), "strgden", WIDE_MS);
-    let quiet = rg_run_ms(a, &format!("rg -q wide-hit /srv/cellos {FX}/wide"), "strgdenq", WIDE_MS);
+    let walk = rg_run_ms(
+        a,
+        &format!("rg wide-hit /srv/cellos {FX}/wide"),
+        "strgden",
+        WIDE_MS,
+    );
+    let quiet = rg_run_ms(
+        a,
+        &format!("rg -q wide-hit /srv/cellos {FX}/wide"),
+        "strgdenq",
+        WIDE_MS,
+    );
     check(
         "rg-fx-denied-root",
         rows_equal(&walk, &wide_rows())
@@ -385,7 +487,10 @@ fn rg_fx_denied_root(a: &mut Term) {
 fn rg_fx_denied_child(a: &mut Term) {
     let walk = rg_run(a, "rg SRVTOK /srv", "strgsrv");
     let quiet = rg_run(a, "rg -q SRVTOK /srv", "strgsrvq");
-    let want = [String::from("/srv/pub/a.txt:1:SRVTOK a"), String::from("/srv/zz.txt:1:SRVTOK z")];
+    let want = [
+        String::from("/srv/pub/a.txt:1:SRVTOK a"),
+        String::from("/srv/zz.txt:1:SRVTOK z"),
+    ];
     check(
         "rg-fx-denied-child",
         rows_equal(&walk, &want)
@@ -402,10 +507,11 @@ fn rg_fx_denied_child(a: &mut Term) {
 /// the 32-handle VFS caps before the last run (D77-4).
 fn rg_fx_take_no_leak(a: &mut Term) {
     let first = wide_rows().swap_remove(0);
+    let expected = core::slice::from_ref(&first);
     let mut bad = Vec::new();
     for i in 0..40 {
         let run = rg_run(a, &format!("rg wide-hit {FX}/wide | take 1"), "strgtake");
-        if !(rows_equal(&run, &[first.clone()]) && !run.stderr && run.status == Ok(0)) {
+        if !(rows_equal(&run, expected) && !run.stderr && run.status == Ok(0)) {
             bad.push(format!("run {i}: {}", run.summary()));
             break;
         }

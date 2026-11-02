@@ -102,7 +102,10 @@ pub struct FactString {
 
 impl FactString {
     /// The empty string.
-    pub const EMPTY: Self = Self { len: 0, bytes: [0; MACHINE_FACTS_STRING_MAX] };
+    pub const EMPTY: Self = Self {
+        len: 0,
+        bytes: [0; MACHINE_FACTS_STRING_MAX],
+    };
 
     /// `value` if it fits; `None` past 64 bytes.
     pub fn new(value: &[u8]) -> Option<Self> {
@@ -111,7 +114,10 @@ impl FactString {
         }
         let mut bytes = [0; MACHINE_FACTS_STRING_MAX];
         bytes[..value.len()].copy_from_slice(value);
-        Some(Self { len: value.len() as u8, bytes })
+        Some(Self {
+            len: value.len() as u8,
+            bytes,
+        })
     }
 
     /// The value bytes.
@@ -157,7 +163,10 @@ pub struct ViMachineFactsV1 {
 }
 
 fn le(bytes: &[u8], at: usize, n: usize) -> u64 {
-    bytes[at..at + n].iter().rev().fold(0u64, |acc, b| acc << 8 | u64::from(*b))
+    bytes[at..at + n]
+        .iter()
+        .rev()
+        .fold(0u64, |acc, b| acc << 8 | u64::from(*b))
 }
 
 fn all_zero(bytes: &[u8]) -> bool {
@@ -166,7 +175,9 @@ fn all_zero(bytes: &[u8]) -> bool {
 
 fn slug_valid(slug: &[u8]) -> bool {
     !slug.is_empty()
-        && slug.iter().all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_'))
+        && slug
+            .iter()
+            .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_'))
 }
 
 impl ViMachineFactsV1 {
@@ -183,7 +194,10 @@ impl ViMachineFactsV1 {
         if self.flags & !FLAGS_KNOWN != 0 {
             return Err(MachineFactsError::UnknownFlag);
         }
-        if !matches!(self.profile_source, PROFILE_SOURCE_CMDLINE | PROFILE_SOURCE_DEFAULT) {
+        if !matches!(
+            self.profile_source,
+            PROFILE_SOURCE_CMDLINE | PROFILE_SOURCE_DEFAULT
+        ) {
             return Err(MachineFactsError::ProfileSource);
         }
         if !slug_valid(self.slug.as_bytes()) {
@@ -222,7 +236,10 @@ impl ViMachineFactsV1 {
     ///
     /// # Errors
     /// Any rule of the layout the value breaks; nothing is written then.
-    pub fn encode(&self, digest: impl FnOnce(&[u8]) -> [u8; 32]) -> Result<Vec<u8>, MachineFactsError> {
+    pub fn encode(
+        &self,
+        digest: impl FnOnce(&[u8]) -> [u8; 32],
+    ) -> Result<Vec<u8>, MachineFactsError> {
         self.validate()?;
         let total = self.record_len();
         let mut out = alloc::vec![0u8; total];
@@ -278,7 +295,9 @@ impl ViMachineFactsV1 {
         {
             return Err(MachineFactsError::Length);
         }
-        if !all_zero(&bytes[14..16]) || !all_zero(&bytes[20..24]) || !all_zero(&bytes[38..40])
+        if !all_zero(&bytes[14..16])
+            || !all_zero(&bytes[20..24])
+            || !all_zero(&bytes[38..40])
             || !all_zero(&bytes[248..256])
         {
             return Err(MachineFactsError::Reserved);
@@ -294,7 +313,9 @@ impl ViMachineFactsV1 {
             }
             let mut field = FactString::EMPTY;
             field.len = len as u8;
-            field.bytes.copy_from_slice(&bytes[at..at + MACHINE_FACTS_STRING_MAX]);
+            field
+                .bytes
+                .copy_from_slice(&bytes[at..at + MACHINE_FACTS_STRING_MAX]);
             Ok(field)
         };
         let mut pci = Vec::with_capacity(pci_count);
@@ -316,9 +337,15 @@ impl ViMachineFactsV1 {
             profile_source: bytes[8],
             slug: text(9, 56, MachineFactsError::Slug)?,
             acpi_oem_revision: le(bytes, 16, 4) as u32,
-            acpi_oem_table_id: bytes[24..32].try_into().map_err(|_| MachineFactsError::Length)?,
-            acpi_oem_id: bytes[32..38].try_into().map_err(|_| MachineFactsError::Length)?,
-            smbios_uuid: bytes[40..56].try_into().map_err(|_| MachineFactsError::Length)?,
+            acpi_oem_table_id: bytes[24..32]
+                .try_into()
+                .map_err(|_| MachineFactsError::Length)?,
+            acpi_oem_id: bytes[32..38]
+                .try_into()
+                .map_err(|_| MachineFactsError::Length)?,
+            smbios_uuid: bytes[40..56]
+                .try_into()
+                .map_err(|_| MachineFactsError::Length)?,
             smbios_manufacturer: text(10, 120, MachineFactsError::Smbios)?,
             smbios_product: text(11, 184, MachineFactsError::Smbios)?,
             pci,
@@ -346,7 +373,11 @@ impl MachineFactsRecord {
     /// As [`ViMachineFactsV1::decode`].
     pub fn decode(bytes: &[u8]) -> Result<Self, MachineFactsError> {
         let (facts, digest) = ViMachineFactsV1::decode(bytes)?;
-        Ok(Self { bytes: bytes.to_vec(), facts, digest })
+        Ok(Self {
+            bytes: bytes.to_vec(),
+            facts,
+            digest,
+        })
     }
 
     /// The exact record bytes.

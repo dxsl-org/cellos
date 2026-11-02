@@ -13,12 +13,14 @@ impl EnforcementFence {
         self.current
     }
 
-    /// Advance the enforcement fence monotonically; rejects regressions.
-    pub fn advance(&mut self, next: u64) -> Result<(), ()> {
+    /// Advance the enforcement fence monotonically; returns `false` (and leaves the fence
+    /// unchanged) on regression.
+    #[must_use]
+    pub fn advance(&mut self, next: u64) -> bool {
         if next <= self.current {
-            return Err(());
+            return false;
         }
         self.current = next;
-        Ok(())
+        true
     }
 }

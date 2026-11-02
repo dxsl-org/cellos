@@ -15,7 +15,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use api::services::ssh_completion as sc;
-use ostd::clients::kms::{KmsClient, KmsClientError, KmsErrorCode, KmsSshKeyCustody, SshSignResponsePayload};
+use ostd::clients::kms::{
+    KmsClient, KmsClientError, KmsErrorCode, KmsSshKeyCustody, SshSignResponsePayload,
+};
 use vissh::args::{self, Host};
 use vissh::session::{Credential, Dispatch, Ending, Outcome, Phase, SignRequest, Signed};
 
@@ -59,7 +61,11 @@ pub fn commit_trust(code: u8) -> vissh::session::Trust {
 /// Shell builtin: refuse bad argv before any launch, then run the client Cell in the
 /// foreground of this session. Every invocation leaves a completion record.
 pub fn cmd_ssh(argv: &[String]) -> i32 {
-    let mode = if argv.iter().any(|a| a == "--command") { sc::Mode::Exec } else { sc::Mode::Pty };
+    let mode = if argv.iter().any(|a| a == "--command") {
+        sc::Mode::Exec
+    } else {
+        sc::Mode::Pty
+    };
     let refuse = |status: i32, code: &str| {
         crate::executor::set_ssh_completion(admission(mode, code));
         status
@@ -84,9 +90,15 @@ pub fn cmd_ssh(argv: &[String]) -> i32 {
 /// A record for a session that never left admission (refused argv, no terminal, no launch).
 pub fn admission(mode: sc::Mode, code: &str) -> sc::CompletionV1 {
     sc::CompletionV1 {
-        mode, phase: sc::Phase::Admission, dispatch: sc::Dispatch::NotSent, outcome: sc::Outcome::LocalError,
-        remote_status: None, remote_signal: None, error_code: sc::Text::new(code),
-        stdout_complete: false, stderr_complete: false,
+        mode,
+        phase: sc::Phase::Admission,
+        dispatch: sc::Dispatch::NotSent,
+        outcome: sc::Outcome::LocalError,
+        remote_status: None,
+        remote_signal: None,
+        error_code: sc::Text::new(code),
+        stdout_complete: false,
+        stderr_complete: false,
     }
 }
 
@@ -96,10 +108,19 @@ pub fn admission(mode: sc::Mode, code: &str) -> sc::CompletionV1 {
 pub fn settle(record: Option<sc::CompletionV1>, status: i32, mode: sc::Mode) -> sc::CompletionV1 {
     match record {
         Some(r) if status == CANCELLED => sc::CompletionV1 {
-            outcome: sc::Outcome::Cancelled, error_code: sc::Text::new("cancelled"), ..r
+            outcome: sc::Outcome::Cancelled,
+            error_code: sc::Text::new("cancelled"),
+            ..r
         },
         Some(r) => r,
-        None => admission(mode, if status == CANCELLED { "cancelled" } else { "no_record" }),
+        None => admission(
+            mode,
+            if status == CANCELLED {
+                "cancelled"
+            } else {
+                "no_record"
+            },
+        ),
     }
 }
 
@@ -125,13 +146,25 @@ fn record_dispatch(dispatch: Dispatch) -> sc::Dispatch {
 /// (`unknown`, which is also what a session interrupted right here ends with).
 pub fn progress_record(mode: sc::Mode, phase: sc::Phase, dispatch: Dispatch) -> sc::CompletionV1 {
     sc::CompletionV1 {
-        mode, phase, dispatch: record_dispatch(dispatch), outcome: sc::Outcome::Unknown,
-        remote_status: None, remote_signal: None, error_code: None, stdout_complete: false, stderr_complete: false,
+        mode,
+        phase,
+        dispatch: record_dispatch(dispatch),
+        outcome: sc::Outcome::Unknown,
+        remote_status: None,
+        remote_signal: None,
+        error_code: None,
+        stdout_complete: false,
+        stderr_complete: false,
     }
 }
 
 /// The final record of a session (§4.3) that last reported `phase`.
-pub fn completion(outcome: &Outcome, mode: sc::Mode, phase: sc::Phase, session_lost: bool) -> sc::CompletionV1 {
+pub fn completion(
+    outcome: &Outcome,
+    mode: sc::Mode,
+    phase: sc::Phase,
+    session_lost: bool,
+) -> sc::CompletionV1 {
     use sc::Outcome as O;
     use vissh::session::Trust;
     let sent = outcome.dispatch != Dispatch::NotSent;
@@ -144,26 +177,42 @@ pub fn completion(outcome: &Outcome, mode: sc::Mode, phase: sc::Phase, session_l
         Ending::TransportLost => (uncertain, "transport_lost", phase),
         Ending::Unknown => (O::Unknown, "no_exit_status", phase),
         // A publickey refusal is local: nothing was signed for the server.
-        Ending::Credential(credential) => (O::LocalError, credential_code(*credential), sc::Phase::Auth),
-        Ending::HostKey(trust, _) => (O::LocalError, match trust {
-            Trust::Mismatch => "host_key_mismatch",
-            Trust::Unknown | Trust::Refused => "host_key_refused",
-            Trust::Expired => "host_key_confirmation_expired",
-            Trust::NoConfirmation => "host_key_no_frontend",
-            Trust::Denied => "trust_denied",
-            Trust::KnownExact | Trust::Unavailable => "trust_unavailable",
-        }, sc::Phase::Trust),
+        Ending::Credential(credential) => {
+            (O::LocalError, credential_code(*credential), sc::Phase::Auth)
+        }
+        Ending::HostKey(trust, _) => (
+            O::LocalError,
+            match trust {
+                Trust::Mismatch => "host_key_mismatch",
+                Trust::Unknown | Trust::Refused => "host_key_refused",
+                Trust::Expired => "host_key_confirmation_expired",
+                Trust::NoConfirmation => "host_key_no_frontend",
+                Trust::Denied => "trust_denied",
+                Trust::KnownExact | Trust::Unavailable => "trust_unavailable",
+            },
+            sc::Phase::Trust,
+        ),
         Ending::Auth => (O::LocalError, "auth_failed", sc::Phase::Auth),
         Ending::RequestRefused => (O::LocalError, "request_refused", phase),
         Ending::Disconnected => (uncertain, "disconnected", phase),
         Ending::Error(_) => (uncertain, "protocol", phase),
     };
     sc::CompletionV1 {
-        mode, phase, dispatch: record_dispatch(outcome.dispatch), outcome: result,
-        remote_status: match outcome.ending { Ending::RemoteExit(n) => Some(n), _ => None },
-        remote_signal: match &outcome.ending { Ending::RemoteSignal(s) => sc::Text::new(s), _ => None },
+        mode,
+        phase,
+        dispatch: record_dispatch(outcome.dispatch),
+        outcome: result,
+        remote_status: match outcome.ending {
+            Ending::RemoteExit(n) => Some(n),
+            _ => None,
+        },
+        remote_signal: match &outcome.ending {
+            Ending::RemoteSignal(s) => sc::Text::new(s),
+            _ => None,
+        },
         error_code: sc::Text::new(code),
-        stdout_complete: outcome.stdout_complete, stderr_complete: outcome.stderr_complete,
+        stdout_complete: outcome.stdout_complete,
+        stderr_complete: outcome.stderr_complete,
     }
 }
 
@@ -180,7 +229,10 @@ pub struct Escape {
 
 impl Default for Escape {
     fn default() -> Self {
-        Escape { line_start: true, tilde: false }
+        Escape {
+            line_start: true,
+            tilde: false,
+        }
     }
 }
 
@@ -235,7 +287,9 @@ pub fn report(outcome: &Outcome, host: &Host, port: u16) -> (i32, Option<String>
             key.algorithm,
             key.fingerprint()
         ),
-        Ending::HostKey(Trust::Expired, _) => format!("host key confirmation for {host}:{port} timed out; not trusted"),
+        Ending::HostKey(Trust::Expired, _) => {
+            format!("host key confirmation for {host}:{port} timed out; not trusted")
+        }
         Ending::HostKey(Trust::NoConfirmation, _) => String::from(NO_FRONTEND),
         Ending::HostKey(Trust::Denied, _) => String::from("host trust lookup denied"),
         Ending::HostKey(_, _) => String::from("host trust store unavailable"),
@@ -243,9 +297,13 @@ pub fn report(outcome: &Outcome, host: &Host, port: u16) -> (i32, Option<String>
         Ending::Auth => String::from("authentication failed"),
         Ending::RequestRefused => String::from("server refused the session request"),
         Ending::Disconnected => String::from("disconnected"),
-        Ending::Unknown => String::from("connection ended without a remote exit status; the command may have run"),
+        Ending::Unknown => {
+            String::from("connection ended without a remote exit status; the command may have run")
+        }
         Ending::TimedOut => return (TIMED_OUT, Some(String::from("timed out"))),
-        Ending::TransportLost if outcome.dispatch == Dispatch::NotSent => String::from("connection lost before the command was sent"),
+        Ending::TransportLost if outcome.dispatch == Dispatch::NotSent => {
+            String::from("connection lost before the command was sent")
+        }
         Ending::TransportLost => String::from("connection lost; the command may have run"),
         Ending::Error(e) => e.clone(),
     };
@@ -291,7 +349,9 @@ pub fn credential_message(credential: Credential, key_id: Option<&str>) -> Strin
             None => String::from("no such identity"),
         },
         Credential::UnlockCancelled => String::from("unlock cancelled"),
-        Credential::UnlockNeedsTerminal => String::from("encrypted key needs an interactive terminal"),
+        Credential::UnlockNeedsTerminal => {
+            String::from("encrypted key needs an interactive terminal")
+        }
         Credential::UnlockFailed => String::from("unlock failed"),
         Credential::UnlockLocked => String::from("too many failed unlocks; key locked"),
         Credential::Timeout => String::from("key service did not answer"),
@@ -305,10 +365,11 @@ pub fn credential_message(credential: Credential, key_id: Option<&str>) -> Strin
 /// and a key mismatch are one code (`SshUnlockFailed`): there is no oracle to tell apart.
 pub fn credential_of(error: &KmsClientError) -> Credential {
     match error {
-        KmsClientError::ServiceNotFound | KmsClientError::Service(KmsErrorCode::SshKeyUnavailable) => {
-            Credential::Unavailable
-        }
-        KmsClientError::Service(KmsErrorCode::CallerUnattested | KmsErrorCode::PermissionDenied) => Credential::Denied,
+        KmsClientError::ServiceNotFound
+        | KmsClientError::Service(KmsErrorCode::SshKeyUnavailable) => Credential::Unavailable,
+        KmsClientError::Service(
+            KmsErrorCode::CallerUnattested | KmsErrorCode::PermissionDenied,
+        ) => Credential::Denied,
         KmsClientError::Service(KmsErrorCode::SshKeyNotFound) => Credential::UnknownIdentity,
         KmsClientError::Service(KmsErrorCode::SshUnlockFailed) => Credential::UnlockFailed,
         KmsClientError::Service(KmsErrorCode::SshUnlockLocked) => Credential::UnlockLocked,
@@ -326,14 +387,24 @@ pub trait KeyService {
     /// Stage the passphrase for the next signature (Begin and the ordered chunks).
     fn stage_secret(&self, public_key: &[u8; 32], secret: &[u8]) -> Result<(), KmsClientError>;
     /// Sign the userauth challenge.
-    fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError>;
+    fn sign(
+        &self,
+        public_key: &[u8; 32],
+        session_id: &[u8; 32],
+        username: &str,
+    ) -> Result<SshSignResponsePayload, KmsClientError>;
 }
 
 impl KeyService for KmsClient {
     fn stage_secret(&self, public_key: &[u8; 32], secret: &[u8]) -> Result<(), KmsClientError> {
         self.ssh_stage_secret(public_key, secret)
     }
-    fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError> {
+    fn sign(
+        &self,
+        public_key: &[u8; 32],
+        session_id: &[u8; 32],
+        username: &str,
+    ) -> Result<SshSignResponsePayload, KmsClientError> {
         self.ssh_sign_userauth(public_key, session_id, username.as_bytes())
     }
 }
@@ -355,7 +426,8 @@ pub fn kms_sign<K: KeyService>(
         let staged = if secret.is_empty() {
             Err(Credential::UnlockFailed)
         } else {
-            kms.stage_secret(public_key, secret.as_bytes()).map_err(|error| credential_of(&error))
+            kms.stage_secret(public_key, secret.as_bytes())
+                .map_err(|error| credential_of(&error))
         };
         ostd::session::zeroize_string(&mut secret);
         staged?;
@@ -363,14 +435,19 @@ pub fn kms_sign<K: KeyService>(
     let signed = kms
         .sign(public_key, &request.session_id, request.username)
         .map_err(|error| credential_of(&error))?;
-    Ok(Signed { signature: signed.signature, message_sha256: signed.message_sha256 })
+    Ok(Signed {
+        signature: signed.signature,
+        message_sha256: signed.message_sha256,
+    })
 }
 
 /// The argv of an ssh pipeline stage launched from [`SSH_PATH`]: the child's entry keys on
 /// `ssh` as argv[0] ([`SSH_ENTRY`]) and parses what follows, so the stage gets the whole
 /// command with its program name first.
 pub fn stage_argv(words: &[String]) -> Vec<&str> {
-    core::iter::once(SSH_ENTRY).chain(words.iter().skip(1).map(String::as_str)).collect()
+    core::iter::once(SSH_ENTRY)
+        .chain(words.iter().skip(1).map(String::as_str))
+        .collect()
 }
 
 /// Lane-only key-service fault seam (`kssh-faults`; module text for the prefix rules). The
@@ -387,6 +464,7 @@ mod child {
     use super::*;
     use core::cell::Cell;
     use ostd::child_context::{ChildContext, GrantSlot};
+    use ostd::clients::kms::{validate_ssh_key_name, validate_ssh_username};
     use ostd::clients::net::{NetClient, SocketId};
     use ostd::clients::vfs::VfsClient;
     use ostd::ViError;
@@ -395,10 +473,9 @@ mod child {
     use terminal_sdk::session::TerminalSession;
     use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};
     use vissh::client::{HostKey, Transport, TransportError};
-    use ostd::clients::kms::{validate_ssh_key_name, validate_ssh_username};
-    use vissh::session::{self, AuthKind, Dispatch, Input, Local, Mode, Phase, RekeyPolicy, Trust};
     #[cfg(feature = "p09-faults")]
     use vissh::session::Point;
+    use vissh::session::{self, AuthKind, Dispatch, Input, Local, Mode, Phase, RekeyPolicy, Trust};
     use zeroize::Zeroize;
 
     const FOREVER: u64 = u64::MAX;
@@ -416,7 +493,10 @@ mod child {
     fn granted(context: &ChildContext, slot: GrantSlot) -> Option<Endpoint> {
         let operation = OperationRef::from_raw(context.operation()).ok()?;
         let grant = context.grants().find(|g| g.slot == slot && g.kind == 1)?;
-        Some(Endpoint::new(EndpointRef::from_raw(grant.object).ok()?, operation))
+        Some(Endpoint::new(
+            EndpointRef::from_raw(grant.object).ok()?,
+            operation,
+        ))
     }
 
     fn write_all(out: Option<Endpoint>, mut data: &[u8]) {
@@ -431,7 +511,8 @@ mod child {
 
     /// Kernel entropy only: every 64-byte chunk must be filled completely.
     fn kernel_entropy(buf: &mut [u8]) -> bool {
-        buf.chunks_mut(64).all(|c| ostd::syscall::sys_get_random(c) == c.len())
+        buf.chunks_mut(64)
+            .all(|c| ostd::syscall::sys_get_random(c) == c.len())
     }
 
     fn now_ms() -> u64 {
@@ -482,7 +563,9 @@ mod child {
     impl Transport for NetTransport<'_> {
         fn send(&mut self, data: &[u8]) -> Result<usize, TransportError> {
             let chunk = &data[..data.len().min(api::ipc::NET_TCP_INLINE_DATA_MAX)];
-            self.net.tcp_send_some(self.socket, chunk).map_err(|_| TransportError::Io)
+            self.net
+                .tcp_send_some(self.socket, chunk)
+                .map_err(|_| TransportError::Io)
         }
 
         fn recv(&mut self, buf: &mut [u8]) -> Result<usize, TransportError> {
@@ -549,7 +632,9 @@ mod child {
             let kms = &super::faults::Faulted::new(&self.client, self.fault);
             #[cfg(not(feature = "kssh-faults"))]
             let kms = &self.client;
-            kms_sign(kms, &self.public_key, self.custody, request, || passphrase(&self.key_id))
+            kms_sign(kms, &self.public_key, self.custody, request, || {
+                passphrase(&self.key_id)
+            })
         }
     }
 
@@ -561,7 +646,9 @@ mod child {
             return Err(Credential::UnknownIdentity);
         }
         let client = KmsClient::connect().map_err(|error| credential_of(&error))?;
-        let status = client.ssh_key_status(key_id.as_bytes()).map_err(|error| credential_of(&error))?;
+        let status = client
+            .ssh_key_status(key_id.as_bytes())
+            .map_err(|error| credential_of(&error))?;
         if staged && status.custody == KmsSshKeyCustody::PassphraseWrapped {
             return Err(Credential::UnlockNeedsTerminal);
         }
@@ -589,7 +676,14 @@ mod child {
     /// Phase budgets (§4.2): trust runs on the connect deadline, then auth, request (channel
     /// open to the server's reply) and running (none but `--timeout`); every change is
     /// recorded write-ahead on the shell's completion stream.
-    fn advance(deadline: &Deadline, completion: Option<Endpoint>, mode: sc::Mode, current: &mut sc::Phase, phase: Phase, dispatch: Dispatch) {
+    fn advance(
+        deadline: &Deadline,
+        completion: Option<Endpoint>,
+        mode: sc::Mode,
+        current: &mut sc::Phase,
+        phase: Phase,
+        dispatch: Dispatch,
+    ) {
         let next = record_phase(phase);
         if next != *current {
             let budget = match phase {
@@ -603,7 +697,10 @@ mod child {
             }
             *current = next;
         }
-        write_all(completion, &progress_record(mode, *current, dispatch).encode());
+        write_all(
+            completion,
+            &progress_record(mode, *current, dispatch).encode(),
+        );
     }
 
     /// Blocking write of all of `data`; false when the stream failed or closed.
@@ -656,7 +753,10 @@ mod child {
         /// foreground in it) is gone for good, not a transient condition.
         fn note(&mut self, status: api::cell_session::Status) {
             use api::cell_session::Status as S;
-            if matches!(status, S::Stale | S::Revoked | S::BrokenPipe | S::WrongSession | S::WrongEpoch) {
+            if matches!(
+                status,
+                S::Stale | S::Revoked | S::BrokenPipe | S::WrongSession | S::WrongEpoch
+            ) {
                 self.session_lost = true;
             }
         }
@@ -694,7 +794,10 @@ mod child {
         /// The passphrase of the wrapped identity `key_id`, asked once (no re-prompt).
         fn passphrase(&mut self, key_id: &str) -> Result<String, Credential> {
             let mut secret = String::new();
-            match self.ask_secret(&format!("Enter passphrase for key '{key_id}': "), &mut secret) {
+            match self.ask_secret(
+                &format!("Enter passphrase for key '{key_id}': "),
+                &mut secret,
+            ) {
                 Secret::Given => Ok(secret),
                 Secret::Cancelled | Secret::TimedOut => Err(Credential::UnlockCancelled),
             }
@@ -702,7 +805,11 @@ mod child {
 
         fn write(&mut self, stderr: bool, mut data: &[u8]) {
             while !data.is_empty() {
-                let r = if stderr { self.session().write_stderr(data, FOREVER) } else { self.session().write_stdout(data, FOREVER) };
+                let r = if stderr {
+                    self.session().write_stderr(data, FOREVER)
+                } else {
+                    self.session().write_stdout(data, FOREVER)
+                };
                 match r {
                     Ok(n) if n > 0 && n <= data.len() => data = &data[n..],
                     Err(status) => return self.note(status),
@@ -748,7 +855,11 @@ mod child {
         fn pty_input(&mut self, buf: &mut [u8]) -> Input {
             self.enter_raw();
             if self.raw.is_none() {
-                return if self.stdin_ended { Input::Eof } else { Input::Idle };
+                return if self.stdin_ended {
+                    Input::Eof
+                } else {
+                    Input::Idle
+                };
             }
             self.poll_resize();
             if self.stdin_ended {
@@ -806,12 +917,21 @@ mod child {
                         buf[..text.len()].copy_from_slice(text.as_bytes());
                         Input::Data(text.len())
                     }
-                    EventKind::Key { code: ENTER, modifiers: 0, pressed: 1 | 2 } if !buf.is_empty() => {
+                    EventKind::Key {
+                        code: ENTER,
+                        modifiers: 0,
+                        pressed: 1 | 2,
+                    } if !buf.is_empty() => {
                         buf[0] = b'\n';
                         Input::Data(1)
                     }
                     // Ctrl-D arrives as a key, not as end of input: it ends the stdin.
-                    EventKind::Key { code: 0x64 | 0x44, modifiers: CTRL, pressed: 1 | 2 } | EventKind::Eof => {
+                    EventKind::Key {
+                        code: 0x64 | 0x44,
+                        modifiers: CTRL,
+                        pressed: 1 | 2,
+                    }
+                    | EventKind::Eof => {
                         self.stdin_ended = true;
                         Input::Eof
                     }
@@ -830,13 +950,24 @@ mod child {
         fn confirm(&mut self, key: &HostKey) -> (Trust, bool) {
             let (session, epoch) = (self.session.reference().raw(), self.session.epoch());
             let mut vfs = VfsClient::new();
-            let challenge = match vfs.trust_challenge(&self.host, self.port, key.algorithm, &key.blob(), session, epoch) {
-                Ok(Ok((confirmation, challenge))) => match self.session.begin_trust_confirmation(confirmation) {
-                    Ok(()) => challenge,
-                    // A Serial or headless terminal has no trusted way to answer.
-                    Err(api::cell_session::Status::Unsupported) => return (Trust::NoConfirmation, false),
-                    Err(_) => return (Trust::Unavailable, false),
-                },
+            let challenge = match vfs.trust_challenge(
+                &self.host,
+                self.port,
+                key.algorithm,
+                &key.blob(),
+                session,
+                epoch,
+            ) {
+                Ok(Ok((confirmation, challenge))) => {
+                    match self.session.begin_trust_confirmation(confirmation) {
+                        Ok(()) => challenge,
+                        // A Serial or headless terminal has no trusted way to answer.
+                        Err(api::cell_session::Status::Unsupported) => {
+                            return (Trust::NoConfirmation, false)
+                        }
+                        Err(_) => return (Trust::Unavailable, false),
+                    }
+                }
                 // Stored meanwhile by another client (or changed): no prompt.
                 Ok(Err(code)) => return (commit_trust(code), false),
                 Err(_) => return (Trust::Unavailable, false),
@@ -847,7 +978,9 @@ mod child {
                     Ok(api::ipc::ssh_trust::PENDING) if now_ms() < give_up => {
                         let _ = ostd::syscall::sys_set_timer(CONFIRM_POLL_TICKS);
                     }
-                    Ok(code) => return (commit_trust(code), code == api::ipc::ssh_trust::KNOWN_EXACT),
+                    Ok(code) => {
+                        return (commit_trust(code), code == api::ipc::ssh_trust::KNOWN_EXACT)
+                    }
                     Err(_) => return (Trust::Unavailable, false),
                 }
             }
@@ -867,7 +1000,9 @@ mod child {
             let (trust, stored) = self.confirm(key);
             // The connect phase excludes the human decision; `--timeout` keeps running.
             let decided = now_ms().saturating_sub(started);
-            self.deadline.phase.set(self.deadline.phase.get().saturating_add(decided));
+            self.deadline
+                .phase
+                .set(self.deadline.phase.get().saturating_add(decided));
             if trust == Trust::KnownExact && stored {
                 let added = trust_added(&self.host, self.port);
                 self.write(true, format!("{added}\n").as_bytes());
@@ -881,7 +1016,10 @@ mod child {
         }
 
         fn identity(&mut self) -> Result<[u8; 32], Credential> {
-            self.identity.as_ref().map(|identity| identity.public_key).ok_or(Credential::Unavailable)
+            self.identity
+                .as_ref()
+                .map(|identity| identity.public_key)
+                .ok_or(Credential::Unavailable)
         }
 
         fn sign(&mut self, request: &SignRequest<'_>) -> Result<Signed, Credential> {
@@ -896,7 +1034,11 @@ mod child {
             if buf.is_empty() {
                 return Input::Idle;
             }
-            if self.pty { self.pty_input(buf) } else { self.exec_input(buf) }
+            if self.pty {
+                self.pty_input(buf)
+            } else {
+                self.exec_input(buf)
+            }
         }
 
         #[cfg(not(feature = "p09-faults"))]
@@ -919,7 +1061,14 @@ mod child {
         /// Phase budgets (§4.2): trust runs on the connect deadline, then auth, request
         /// (channel open to the server's reply) and running (none but `--timeout`).
         fn progress(&mut self, phase: Phase, dispatch: Dispatch) {
-            advance(self.deadline, self.completion, self.mode, &mut self.phase, phase, dispatch);
+            advance(
+                self.deadline,
+                self.completion,
+                self.mode,
+                &mut self.phase,
+                phase,
+                dispatch,
+            );
         }
 
         fn stderr(&mut self, data: &[u8]) {
@@ -970,7 +1119,10 @@ mod child {
         }
 
         fn identity(&mut self) -> Result<[u8; 32], Credential> {
-            self.identity.as_ref().map(|identity| identity.public_key).ok_or(Credential::Unavailable)
+            self.identity
+                .as_ref()
+                .map(|identity| identity.public_key)
+                .ok_or(Credential::Unavailable)
         }
 
         fn sign(&mut self, request: &SignRequest<'_>) -> Result<Signed, Credential> {
@@ -995,7 +1147,10 @@ mod child {
             }
             match stdin.read(buf, 0) {
                 Ok(n) if n > 0 && n <= buf.len() => Input::Data(n),
-                Ok(_) | Err(api::cell_session::Status::WouldBlock | api::cell_session::Status::TimedOut) => Input::Idle,
+                Ok(_)
+                | Err(
+                    api::cell_session::Status::WouldBlock | api::cell_session::Status::TimedOut,
+                ) => Input::Idle,
                 Err(api::cell_session::Status::Eof) => {
                     self.stdin_ended = true;
                     Input::Eof
@@ -1023,14 +1178,25 @@ mod child {
         }
 
         fn progress(&mut self, phase: Phase, dispatch: Dispatch) {
-            advance(self.deadline, self.completion, self.mode, &mut self.phase, phase, dispatch);
+            advance(
+                self.deadline,
+                self.completion,
+                self.mode,
+                &mut self.phase,
+                phase,
+                dispatch,
+            );
         }
     }
 
     /// One line under the echo-off lease: text, Backspace, Enter; Escape cancels. Pasted
     /// text is refused (§4.1: no newline/NUL, typed only). The wait is bounded by the
     /// remaining phase budget and `--timeout` (K6 O-K6-6), also for the password.
-    fn read_secret(session: &mut TerminalSession, secret: &mut String, deadline: &Deadline) -> Secret {
+    fn read_secret(
+        session: &mut TerminalSession,
+        secret: &mut String,
+        deadline: &Deadline,
+    ) -> Secret {
         let mut paste = false;
         loop {
             let remaining_ms = deadline.at().saturating_sub(now_ms());
@@ -1038,11 +1204,14 @@ mod child {
                 return Secret::TimedOut;
             }
             // The monotonic clock bounds each wait; without it the wait is a poll.
-            let until = ostd::session::monotonic_ns()
-                .map_or(0, |now| now.saturating_add(remaining_ms.min(PROMPT_SLICE_MS).saturating_mul(1_000_000)));
+            let until = ostd::session::monotonic_ns().map_or(0, |now| {
+                now.saturating_add(remaining_ms.min(PROMPT_SLICE_MS).saturating_mul(1_000_000))
+            });
             let mut event = match session.next_event(until) {
                 Ok(event) => event,
-                Err(api::cell_session::Status::TimedOut | api::cell_session::Status::WouldBlock) => {
+                Err(
+                    api::cell_session::Status::TimedOut | api::cell_session::Status::WouldBlock,
+                ) => {
                     if until == 0 {
                         let _ = ostd::syscall::sys_set_timer(1);
                     }
@@ -1067,7 +1236,11 @@ mod child {
                         Some(Secret::Cancelled)
                     }
                 }
-                EventKind::Key { code, modifiers, pressed: 1 | 2 } if !paste => match *code {
+                EventKind::Key {
+                    code,
+                    modifiers,
+                    pressed: 1 | 2,
+                } if !paste => match *code {
                     _ if crate::executor::submits_line(*code, *modifiers) => Some(Secret::Given),
                     ESCAPE if *modifiers == 0 => Some(Secret::Cancelled),
                     BACKSPACE if *modifiers == 0 => {
@@ -1091,20 +1264,37 @@ mod child {
     pub fn run(context: &ChildContext) -> i32 {
         let stderr = granted(context, GrantSlot::Stderr);
         let completion = terminal_sdk::completion_writer(context);
-        let rmode = if context.argv().any(|a| a == "--command") { sc::Mode::Exec } else { sc::Mode::Pty };
-        // A final record and the local message for an ending outside the SSH session.
-        let end = |status: i32, phase: sc::Phase, outcome: sc::Outcome, code: &str, message: &str| {
-            let record = sc::CompletionV1 {
-                mode: rmode, phase, dispatch: sc::Dispatch::NotSent, outcome,
-                remote_status: None, remote_signal: None, error_code: sc::Text::new(code),
-                stdout_complete: false, stderr_complete: false,
-            };
-            write_all(completion, &record.encode());
-            write_all(stderr, format!("ssh: {message}\n").as_bytes());
-            status
+        let rmode = if context.argv().any(|a| a == "--command") {
+            sc::Mode::Exec
+        } else {
+            sc::Mode::Pty
         };
+        // A final record and the local message for an ending outside the SSH session.
+        let end =
+            |status: i32, phase: sc::Phase, outcome: sc::Outcome, code: &str, message: &str| {
+                let record = sc::CompletionV1 {
+                    mode: rmode,
+                    phase,
+                    dispatch: sc::Dispatch::NotSent,
+                    outcome,
+                    remote_status: None,
+                    remote_signal: None,
+                    error_code: sc::Text::new(code),
+                    stdout_complete: false,
+                    stderr_complete: false,
+                };
+                write_all(completion, &record.encode());
+                write_all(stderr, format!("ssh: {message}\n").as_bytes());
+                status
+            };
         let refuse = |status: i32, code: &str, message: &str| {
-            end(status, sc::Phase::Admission, sc::Outcome::LocalError, code, message)
+            end(
+                status,
+                sc::Phase::Admission,
+                sc::Outcome::LocalError,
+                code,
+                message,
+            )
         };
         let parsed = match args::parse(context.argv().skip(1)) {
             Ok(parsed) => parsed,
@@ -1118,14 +1308,24 @@ mod child {
         // publickey exec may run as a stage: password and PTY sessions need the terminal.
         let staged = !context.grants().any(|g| g.slot == GrantSlot::Control);
         if staged && !(key_id.is_some() && parsed.command.is_some()) {
-            return refuse(REMOTE_FAILURE, "no_terminal", "an interactive terminal session is required");
+            return refuse(
+                REMOTE_FAILURE,
+                "no_terminal",
+                "an interactive terminal session is required",
+            );
         }
         let mut session = if staged {
             None
         } else {
             match TerminalSession::from_own_context(context) {
                 Ok(session) => Some(session),
-                Err(_) => return refuse(REMOTE_FAILURE, "no_terminal", "an interactive terminal session is required"),
+                Err(_) => {
+                    return refuse(
+                        REMOTE_FAILURE,
+                        "no_terminal",
+                        "an interactive terminal session is required",
+                    )
+                }
             }
         };
         // Publickey: the key service is asked about the identity before any network traffic,
@@ -1142,7 +1342,11 @@ mod child {
                 match preflight(key_id, staged) {
                     Ok(identity) => Some(identity),
                     Err(credential) => {
-                        return refuse(REMOTE_FAILURE, credential_code(credential), &credential_message(credential, Some(key_id)));
+                        return refuse(
+                            REMOTE_FAILURE,
+                            credential_code(credential),
+                            &credential_message(credential, Some(key_id)),
+                        );
                     }
                 }
             }
@@ -1151,32 +1355,72 @@ mod child {
         // Lane-only (`kssh-faults`): the `: kssh-fault MODE;` command prefix selects the one
         // mutation of this invocation's sign call.
         #[cfg(feature = "kssh-faults")]
-        let identity =
-            identity.map(|identity| Identity { fault: super::faults::Mode::of_command(parsed.command.as_deref()), ..identity });
-        let auth = if key_id.is_some() { AuthKind::PublicKey } else { AuthKind::Password };
+        let identity = identity.map(|identity| Identity {
+            fault: super::faults::Mode::of_command(parsed.command.as_deref()),
+            ..identity
+        });
+        let auth = if key_id.is_some() {
+            AuthKind::PublicKey
+        } else {
+            AuthKind::Password
+        };
         if !vissh::install_entropy(kernel_entropy) {
-            return refuse(REMOTE_FAILURE, "entropy", "entropy source already installed");
+            return refuse(
+                REMOTE_FAILURE,
+                "entropy",
+                "entropy source already installed",
+            );
         }
         let start = now_ms();
         let deadline = Deadline {
             phase: Cell::new(start + u64::from(parsed.connect_timeout) * 1000),
-            overall: parsed.timeout.map_or(u64::MAX, |t| start + u64::from(t) * 1000),
+            overall: parsed
+                .timeout
+                .map_or(u64::MAX, |t| start + u64::from(t) * 1000),
         };
-        write_all(completion, &progress_record(rmode, sc::Phase::Connect, Dispatch::NotSent).encode());
+        write_all(
+            completion,
+            &progress_record(rmode, sc::Phase::Connect, Dispatch::NotSent).encode(),
+        );
         let policy = rekey_policy();
         #[cfg(feature = "kssh-faults")]
         let _ = ostd::syscall::sys_log(super::faults::ANNOUNCE);
-        let connect = |code: &str, message: &str| end(REMOTE_FAILURE, sc::Phase::Connect, sc::Outcome::LocalError, code, message);
-        let timed_out = || end(TIMED_OUT, sc::Phase::Connect, sc::Outcome::Timeout, "timeout", "timed out");
+        let connect = |code: &str, message: &str| {
+            end(
+                REMOTE_FAILURE,
+                sc::Phase::Connect,
+                sc::Outcome::LocalError,
+                code,
+                message,
+            )
+        };
+        let timed_out = || {
+            end(
+                TIMED_OUT,
+                sc::Phase::Connect,
+                sc::Outcome::Timeout,
+                "timeout",
+                "timed out",
+            )
+        };
         let mut net = NetClient::new();
         let addr = match &parsed.host {
             Host::V4(a) => a.octets(),
-            Host::V6(_) => return connect("ipv6_unsupported", "IPv6 is not supported by the network service"),
+            Host::V6(_) => {
+                return connect(
+                    "ipv6_unsupported",
+                    "IPv6 is not supported by the network service",
+                )
+            }
             Host::Name(name) => match net.dns_lookup(name) {
                 Ok(a) => a,
-                Err(ViError::PermissionDenied) => return connect("resolve_denied", "name resolution denied"),
+                Err(ViError::PermissionDenied) => {
+                    return connect("resolve_denied", "name resolution denied")
+                }
                 Err(_) if deadline.passed() => return timed_out(),
-                Err(e) => return connect("resolve_failed", &format!("cannot resolve {name}: {e:?}")),
+                Err(e) => {
+                    return connect("resolve_failed", &format!("cannot resolve {name}: {e:?}"))
+                }
             },
         };
         if deadline.passed() {
@@ -1184,7 +1428,9 @@ mod child {
         }
         let socket = match net.tcp_connect(addr, parsed.port) {
             Ok(s) => s,
-            Err(ViError::PermissionDenied) => return connect("connect_denied", "network connection denied"),
+            Err(ViError::PermissionDenied) => {
+                return connect("connect_denied", "network connection denied")
+            }
             Err(_) if deadline.passed() => return timed_out(),
             Err(e) => return connect("connect_failed", &format!("connect failed: {e:?}")),
         };
@@ -1192,13 +1438,26 @@ mod child {
             let _ = net.tcp_close_graceful(socket);
             return timed_out();
         }
-        let mut transport = NetTransport { net, socket, deadline: &deadline };
+        let mut transport = NetTransport {
+            net,
+            socket,
+            deadline: &deadline,
+        };
         let (mut outcome, phase, lost, prompt_timeout) = match session.as_mut() {
             Some(session) => {
-                let size = session.capabilities().map(|c| (c.rows, c.cols)).ok().filter(|&(r, c)| r > 0 && c > 0).unwrap_or((24, 80));
+                let size = session
+                    .capabilities()
+                    .map(|c| (c.rows, c.cols))
+                    .ok()
+                    .filter(|&(r, c)| r > 0 && c > 0)
+                    .unwrap_or((24, 80));
                 let mode = match &parsed.command {
                     Some(cmd) => Mode::Exec(cmd.clone()),
-                    None => Mode::Pty { term: "cellos-vt1", rows: size.0, cols: size.1 },
+                    None => Mode::Pty {
+                        term: "cellos-vt1",
+                        rows: size.0,
+                        cols: size.1,
+                    },
                 };
                 let mut term = Term {
                     session,
@@ -1221,7 +1480,14 @@ mod child {
                     #[cfg(feature = "p09-faults")]
                     faults: faults::Faults::new(parsed.command.as_deref()),
                 };
-                let outcome = session::run(&mut transport, &mut term, &parsed.user, auth, &mode, &policy);
+                let outcome = session::run(
+                    &mut transport,
+                    &mut term,
+                    &parsed.user,
+                    auth,
+                    &mode,
+                    &policy,
+                );
                 // Leave raw mode before any local message.
                 if let Some(mut raw) = term.raw.take() {
                     let _ = raw.leave(term.session);
@@ -1246,7 +1512,14 @@ mod child {
                     stdin_ended: false,
                     broken: false,
                 };
-                let outcome = session::run(&mut transport, &mut term, &parsed.user, auth, &mode, &policy);
+                let outcome = session::run(
+                    &mut transport,
+                    &mut term,
+                    &parsed.user,
+                    auth,
+                    &mode,
+                    &policy,
+                );
                 (outcome, term.phase, false, false)
             }
         };
@@ -1258,7 +1531,10 @@ mod child {
         // FIN, not a silent discard: the server must see the connection end (a peer left
         // half-open waits out its login grace time and penalises this source).
         let _ = transport.net.tcp_close_graceful(socket);
-        write_all(completion, &super::completion(&outcome, rmode, phase, lost).encode());
+        write_all(
+            completion,
+            &super::completion(&outcome, rmode, phase, lost).encode(),
+        );
         let (status, message) = if lost {
             (SESSION_LOST, Some(String::from("terminal session lost")))
         } else {
@@ -1287,7 +1563,10 @@ mod child {
         /// Lowered rekey triggers so one lane run crosses them (production: 1 h, 1 GiB).
         pub const LANE_REKEY: RekeyPolicy = RekeyPolicy {
             max_age_ms: 20_000,
-            limits: vissh::sunset::RekeyLimits { bytes: 2 << 20, packets: 4096 },
+            limits: vissh::sunset::RekeyLimits {
+                bytes: 2 << 20,
+                packets: 4096,
+            },
             kex_ms: 30_000,
         };
         const HOLD_MS: u64 = 5_000;
@@ -1315,9 +1594,14 @@ mod child {
                     let (spec, _) = rest.split_once(';')?;
                     let mut words = spec.split_whitespace();
                     let (point, action) = (words.next()?, words.next()?);
-                    words.next().is_none().then(|| (String::from(point), String::from(action)))
+                    words
+                        .next()
+                        .is_none()
+                        .then(|| (String::from(point), String::from(action)))
                 });
-                let sink = command.starts_with(": p09-sink;").then(|| (0, Sha256::new(), 0));
+                let sink = command
+                    .starts_with(": p09-sink;")
+                    .then(|| (0, Sha256::new(), 0));
                 Faults { hook, sink }
             }
 
@@ -1325,7 +1609,9 @@ mod child {
             /// half a second later) lands before the session moves past it.
             pub fn checkpoint(&self, point: Point) -> u64 {
                 let name = point_name(point);
-                let Some((hooked, action)) = &self.hook else { return 0 };
+                let Some((hooked, action)) = &self.hook else {
+                    return 0;
+                };
                 if hooked != name {
                     return 0;
                 }
@@ -1335,7 +1621,9 @@ mod child {
 
             /// Consume stdout into the digest; false when no sink is configured.
             pub fn sink(&mut self, data: &[u8]) -> bool {
-                let Some((count, hash, since)) = &mut self.sink else { return false };
+                let Some((count, hash, since)) = &mut self.sink else {
+                    return false;
+                };
                 *count += data.len() as u64;
                 hash.update(data);
                 *since += data.len();
@@ -1348,7 +1636,8 @@ mod child {
             }
 
             pub fn finish(&mut self, outcome: &Outcome) {
-                let _ = ostd::syscall::sys_log(&format!("P04 INFO ssh-rekeys {}\n", outcome.rekeys));
+                let _ =
+                    ostd::syscall::sys_log(&format!("P04 INFO ssh-rekeys {}\n", outcome.rekeys));
                 if let Some((count, hash, _)) = self.sink.take() {
                     let digest = hash.finalize();
                     let mut hex = String::with_capacity(64);

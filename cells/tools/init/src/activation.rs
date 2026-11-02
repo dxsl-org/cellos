@@ -32,14 +32,21 @@ pub(crate) struct Message {
 impl Message {
     pub fn receive(mask: usize, blocking: bool) -> Option<Self> {
         let mut bytes = [0u8; MESSAGE_BYTES];
-        let result = if blocking { syscall::sys_recv_attested(mask, &mut bytes) }
-            else { syscall::sys_try_recv_attested(mask, &mut bytes) };
+        let result = if blocking {
+            syscall::sys_recv_attested(mask, &mut bytes)
+        } else {
+            syscall::sys_try_recv_attested(mask, &mut bytes)
+        };
         // Capture before another receive can replace the kernel's request context.
         let operation = ipc::current();
         match result {
             SyscallResult::Ok(sender) if sender != 0 && sender != usize::MAX => Some(Self {
-                sender, operation, identity: CallerIdentity::from_recv_buf(&bytes), bytes,
-                watched: None, watch_prepared: false,
+                sender,
+                operation,
+                identity: CallerIdentity::from_recv_buf(&bytes),
+                bytes,
+                watched: None,
+                watch_prepared: false,
             }),
             _ => None,
         }
@@ -47,11 +54,18 @@ impl Message {
 
     fn principal(&self) -> Option<Principal> {
         let identity = self.identity?;
-        (identity.sender_tid == self.sender as u64 && identity.cell_id != 0 && identity.generation != 0)
-            .then_some(Principal { cell_id: identity.cell_id, generation: identity.generation })
+        (identity.sender_tid == self.sender as u64
+            && identity.cell_id != 0
+            && identity.generation != 0)
+            .then_some(Principal {
+                cell_id: identity.cell_id,
+                generation: identity.generation,
+            })
     }
 
-    pub fn reason(&self) -> u64 { u64::from_le_bytes(self.bytes[..8].try_into().unwrap()) }
+    pub fn reason(&self) -> u64 {
+        u64::from_le_bytes(self.bytes[..8].try_into().unwrap())
+    }
 }
 
 pub(crate) struct Activator {
@@ -65,11 +79,18 @@ pub(crate) struct Activator {
 
 impl Activator {
     pub const fn new() -> Self {
-        Self { state: State::new(), deferred: [None; DEFERRED_MESSAGES], deferred_len: 0, poisoned_vfs: None }
+        Self {
+            state: State::new(),
+            deferred: [None; DEFERRED_MESSAGES],
+            deferred_len: 0,
+            poisoned_vfs: None,
+        }
     }
 
     pub fn next_message(&mut self) -> Option<Message> {
-        if self.deferred_len == 0 { return Message::receive(0, true); }
+        if self.deferred_len == 0 {
+            return Message::receive(0, true);
+        }
         let message = self.deferred[0].take();
         self.deferred.copy_within(1..self.deferred_len, 0);
         self.deferred_len -= 1;
@@ -78,15 +99,28 @@ impl Activator {
     }
 
     fn watch(&self, principal: Principal, sender: usize) -> Option<Owner> {
-        if sender == 0 || task_alive(sender) != Some(true) { return None; }
-        if !matches!(syscall::sys_notify_on_exit(sender), SyscallResult::Ok(0)) { return None; }
-        Some(Owner { principal, root_tid: sender, watch: sender as u64 })
+        if sender == 0 || task_alive(sender) != Some(true) {
+            return None;
+        }
+        if !matches!(syscall::sys_notify_on_exit(sender), SyscallResult::Ok(0)) {
+            return None;
+        }
+        Some(Owner {
+            principal,
+            root_tid: sender,
+            watch: sender as u64,
+        })
     }
 
     fn defer(&mut self, mut message: Message) {
-        if matches!(Request::decode(&message.bytes[..FRAME_BYTES]), Some(Request::Acquire { .. })) {
+        if matches!(
+            Request::decode(&message.bytes[..FRAME_BYTES]),
+            Some(Request::Acquire { .. })
+        ) {
             message.watch_prepared = true;
-            message.watched = message.principal().and_then(|principal| self.watch(principal, message.sender));
+            message.watched = message
+                .principal()
+                .and_then(|principal| self.watch(principal, message.sender));
         }
         // The exchange checks capacity BEFORE receiving, so no message is lost.
         self.deferred[self.deferred_len] = Some(message);
@@ -101,24 +135,38 @@ impl Activator {
             let engine = request.engine();
             let Some(principal) = message.principal() else {
                 self.cancel_provisional(&message);
-                deliver(&message, Response::Error { engine, failure: Failure::Denied });
+                deliver(
+                    &message,
+                    Response::Error {
+                        engine,
+                        failure: Failure::Denied,
+                    },
+                );
                 return true;
             };
             let result = match request {
                 Request::Acquire { .. } => self.acquire(&mut message, principal, engine),
                 Request::Release { lease, .. } => {
                     match self.state.release(principal, engine, lease) {
-                        Ok(effects) => { self.apply(effects); Ok(Response::Released { engine }) }
+                        Ok(effects) => {
+                            self.apply(effects);
+                            Ok(Response::Released { engine })
+                        }
                         Err(failure) => Err(failure),
                     }
                 }
             };
-            if let Err(failure) = result { deliver(&message, Response::Error { engine, failure }); }
-            else if let Ok(response @ Response::Released { .. }) = result { deliver(&message, response); }
+            if let Err(failure) = result {
+                deliver(&message, Response::Error { engine, failure });
+            } else if let Ok(response @ Response::Released { .. }) = result {
+                deliver(&message, response);
+            }
             return true;
         }
         self.cancel_provisional(&message);
-        if message.identity.is_some() || task_alive(message.sender) != Some(false) { return false; }
+        if message.identity.is_some() || task_alive(message.sender) != Some(false) {
+            return false;
+        }
         if let Some(effects) = self.state.engine_dead(message.sender) {
             self.apply(effects);
             if self.state.watches_root(message.sender) {
@@ -137,13 +185,22 @@ impl Activator {
 
     fn cancel_provisional(&self, _message: &Message) {}
 
-    fn acquire(&mut self, message: &mut Message, principal: Principal, engine: Engine) -> Result<Response, Failure> {
+    fn acquire(
+        &mut self,
+        message: &mut Message,
+        principal: Principal,
+        engine: Engine,
+    ) -> Result<Response, Failure> {
         // Revocation happens before preflight, including an independently
         // replaced service registry row. Never return an old provider's lease.
         if let Some(provider) = self.state.provider(engine) {
             if task_alive(provider.tid) == Some(false) {
-                if let Some(effects) = self.state.engine_dead(provider.tid) { self.apply(effects); }
-            } else if provider.phase == Phase::Ready && syscall::sys_lookup_service(service_id(engine)) != Some(provider.tid) {
+                if let Some(effects) = self.state.engine_dead(provider.tid) {
+                    self.apply(effects);
+                }
+            } else if provider.phase == Phase::Ready
+                && syscall::sys_lookup_service(service_id(engine)) != Some(provider.tid)
+            {
                 let effects = self.state.retire(engine);
                 self.apply(effects);
             }
@@ -159,23 +216,41 @@ impl Activator {
                 owner
             }
             None => {
-                let watched = if message.watch_prepared { message.watched } else { self.watch(principal, message.sender) };
-                let Some(owner) = watched else { return Err(Failure::Denied); };
+                let watched = if message.watch_prepared {
+                    message.watched
+                } else {
+                    self.watch(principal, message.sender)
+                };
+                let Some(owner) = watched else {
+                    return Err(Failure::Denied);
+                };
                 message.watched = Some(owner);
                 owner
             }
         };
         let result = self.acquire_watched(message, owner, engine);
         // Failed first demand never retains an otherwise-unused owner watch.
-        if result.is_err() { self.cancel_provisional(message); }
+        if result.is_err() {
+            self.cancel_provisional(message);
+        }
         result
     }
 
-    fn acquire_watched(&mut self, message: &Message, owner: Owner, engine: Engine) -> Result<Response, Failure> {
-        if task_alive(owner.root_tid) != Some(true) { return Err(Failure::Denied); }
-        if self.state.provider(engine).is_none() { self.start_engine(engine)?; }
+    fn acquire_watched(
+        &mut self,
+        message: &Message,
+        owner: Owner,
+        engine: Engine,
+    ) -> Result<Response, Failure> {
+        if task_alive(owner.root_tid) != Some(true) {
+            return Err(Failure::Denied);
+        }
+        if self.state.provider(engine).is_none() {
+            self.start_engine(engine)?;
+        }
         let provider = self.state.provider(engine).ok_or(Failure::Failed)?;
-        if provider.phase != Phase::Ready || task_alive(provider.tid) != Some(true)
+        if provider.phase != Phase::Ready
+            || task_alive(provider.tid) != Some(true)
             || syscall::sys_lookup_service(service_id(engine)) != Some(provider.tid)
         {
             let effects = self.state.retire(engine);
@@ -186,8 +261,11 @@ impl Activator {
         if root_alive != Some(true) {
             // A dead root revokes its demand; an uncertain liveness query must
             // not revoke existing demand. Either case retires an unused start.
-            let effects = if root_alive == Some(false) { self.state.owner_dead(owner.root_tid) }
-                else { self.state.unused() };
+            let effects = if root_alive == Some(false) {
+                self.state.owner_dead(owner.root_tid)
+            } else {
+                self.state.unused()
+            };
             self.apply(effects);
             return Err(Failure::Denied);
         }
@@ -199,10 +277,16 @@ impl Activator {
                 return Err(failure);
             }
         };
-        let response = Response::Ready { engine, lease: lease.token, tid: provider.tid as u64 };
+        let response = Response::Ready {
+            engine,
+            lease: lease.token,
+            tid: provider.tid as u64,
+        };
         if !deliver(message, response) {
             if newly_allocated {
-                if let Ok(effects) = self.state.release(owner.principal, engine, lease.token) { self.apply(effects); }
+                if let Ok(effects) = self.state.release(owner.principal, engine, lease.token) {
+                    self.apply(effects);
+                }
             }
             // Reply cancellation is not a reason to revoke previously delivered
             // demand or another owner's share of this engine.
@@ -218,12 +302,18 @@ impl Activator {
         };
         let provider = match self.state.start(engine, tid) {
             Ok(provider) => provider,
-            Err(failure) => { let _ = syscall::sys_force_exit(tid); return Err(failure); }
+            Err(failure) => {
+                let _ = syscall::sys_force_exit(tid);
+                return Err(failure);
+            }
         };
         let ready = matches!(syscall::sys_notify_on_exit(tid), SyscallResult::Ok(0))
             && readiness(provider)
             && task_alive(tid) == Some(true)
-            && matches!(syscall::sys_register_service(service_id(engine), tid), SyscallResult::Ok(0))
+            && matches!(
+                syscall::sys_register_service(service_id(engine), tid),
+                SyscallResult::Ok(0)
+            )
             && syscall::sys_lookup_service(service_id(engine)) == Some(tid)
             && task_alive(tid) == Some(true);
         if !ready || !self.state.ready(provider) {
@@ -255,10 +345,15 @@ impl Activator {
     /// ostd::sys_spawn_from_path, with bounded waits and retained init messages.
     fn spawn_via_vfs(&mut self, engine: Engine) -> Result<usize, Failure> {
         let vfs = syscall::sys_lookup_service(service::VFS).ok_or(Failure::Unavailable)?;
-        if self.poisoned_vfs == Some(vfs) { return Err(Failure::Unavailable); }
+        if self.poisoned_vfs == Some(vfs) {
+            return Err(Failure::Unavailable);
+        }
         let stat = self.vfs_exchange(vfs, &VfsRequest::Stat(engine.path()))?;
         let size = match api::ipc::decode::<VfsResponse<'_>>(&stat[..PAYLOAD_BYTES]) {
-            Ok(VfsResponse::Stat { size, is_dir: false }) if size > 0 => usize::try_from(size).map_err(|_| Failure::Failed)?,
+            Ok(VfsResponse::Stat {
+                size,
+                is_dir: false,
+            }) if size > 0 => usize::try_from(size).map_err(|_| Failure::Failed)?,
             _ => return Err(Failure::Unavailable),
         };
         let grant = syscall::sys_grant_alloc(size).ok_or(Failure::Busy)?;
@@ -266,7 +361,14 @@ impl Activator {
             syscall::sys_grant_free(grant);
             return Err(Failure::Denied);
         }
-        let read = self.vfs_exchange(vfs, &VfsRequest::ReadFileGrant { path: engine.path(), grant, max: size });
+        let read = self.vfs_exchange(
+            vfs,
+            &VfsRequest::ReadFileGrant {
+                path: engine.path(),
+                grant,
+                max: size,
+            },
+        );
         let attempt = match read {
             Ok(bytes) => match api::ipc::decode::<VfsResponse<'_>>(&bytes[..PAYLOAD_BYTES]) {
                 Ok(VfsResponse::GrantDone { bytes }) if bytes > 0 && bytes <= size => {
@@ -283,33 +385,48 @@ impl Activator {
         attempt
     }
 
-    fn vfs_exchange(&mut self, peer: usize, request: &VfsRequest<'_>) -> Result<[u8; MESSAGE_BYTES], Failure> {
+    fn vfs_exchange(
+        &mut self,
+        peer: usize,
+        request: &VfsRequest<'_>,
+    ) -> Result<[u8; MESSAGE_BYTES], Failure> {
         let mut send = [0u8; 512];
         let bytes = api::ipc::encode(request, &mut send).map_err(|_| Failure::Failed)?;
         let started = now_ticks();
         let mut admitted = false;
         for _ in 0..POLL_LIMIT {
-            if now_ticks().wrapping_sub(started) >= LEGACY_TICKS { break; }
+            if now_ticks().wrapping_sub(started) >= LEGACY_TICKS {
+                break;
+            }
             if !admitted {
                 admitted = matches!(syscall::sys_try_send(peer, bytes), SyscallResult::Ok(0));
             } else {
                 // A masked receive can still yield ANY pending death record.
                 // If full, leave the next message in the kernel and fail safely.
-                if self.deferred_len == DEFERRED_MESSAGES { break; }
+                if self.deferred_len == DEFERRED_MESSAGES {
+                    break;
+                }
                 if let Some(message) = Message::receive(peer, false) {
-                    if message.sender == peer && message.principal().is_some() { return Ok(message.bytes); }
+                    if message.sender == peer && message.principal().is_some() {
+                        return Ok(message.bytes);
+                    }
                     self.defer(message);
                 }
             }
             ostd::task::yield_now();
         }
-        if admitted { self.poisoned_vfs = Some(peer); }
+        if admitted {
+            self.poisoned_vfs = Some(peer);
+        }
         Err(Failure::Unavailable)
     }
 }
 
 pub(crate) fn service_id(engine: Engine) -> u16 {
-    match engine { Engine::JavaScript => service::OCEL_JS, Engine::Pdf => service::OCEL_PDF }
+    match engine {
+        Engine::JavaScript => service::OCEL_JS,
+        Engine::Pdf => service::OCEL_PDF,
+    }
 }
 
 fn deliver(message: &Message, response: Response) -> bool {
@@ -319,11 +436,20 @@ fn deliver(message: &Message, response: Response) -> bool {
 /// Reply to `message`: through its IPC operation when it came as one, else a
 /// bounded one-way send to the sender.
 pub(crate) fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
-    if let Some(operation) = message.operation { return ipc::reply(operation, frame).is_ok(); }
+    if let Some(operation) = message.operation {
+        return ipc::reply(operation, frame).is_ok();
+    }
     let started = now_ticks();
     for _ in 0..POLL_LIMIT {
-        if matches!(syscall::sys_try_send(message.sender, frame), SyscallResult::Ok(0)) { return true; }
-        if now_ticks().wrapping_sub(started) >= LEGACY_TICKS { break; }
+        if matches!(
+            syscall::sys_try_send(message.sender, frame),
+            SyscallResult::Ok(0)
+        ) {
+            return true;
+        }
+        if now_ticks().wrapping_sub(started) >= LEGACY_TICKS {
+            break;
+        }
         ostd::task::yield_now();
     }
     false
@@ -335,20 +461,35 @@ fn readiness(provider: Provider) -> bool {
         Engine::JavaScript => api::ipc::encode(&dom_arena::OcelJsRequest::Ping, &mut send),
         Engine::Pdf => api::ipc::encode(&ocel_pdf_proto::Request::Ping, &mut send),
     };
-    let Ok(encoded) = encoded else { return false; };
-    let Ok(operation) = ipc::submit(provider.tid, encoded) else { return false; };
+    let Ok(encoded) = encoded else {
+        return false;
+    };
+    let Ok(operation) = ipc::submit(provider.tid, encoded) else {
+        return false;
+    };
     let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
     let started = now_ticks();
     for _ in 0..POLL_LIMIT {
         match ipc::take(operation, &mut reply) {
-            Ok(IpcTakeResult::Terminal { status: IpcTerminal::Reply, len }) => {
+            Ok(IpcTakeResult::Terminal {
+                status: IpcTerminal::Reply,
+                len,
+            }) => {
                 return match provider.engine {
-                    Engine::JavaScript => matches!(api::ipc::decode::<dom_arena::OcelJsReply>(&reply[..len]), Ok(dom_arena::OcelJsReply::Ready)),
-                    Engine::Pdf => matches!(api::ipc::decode::<ocel_pdf_proto::Response>(&reply[..len]), Ok(ocel_pdf_proto::Response::Ready)),
+                    Engine::JavaScript => matches!(
+                        api::ipc::decode::<dom_arena::OcelJsReply>(&reply[..len]),
+                        Ok(dom_arena::OcelJsReply::Ready)
+                    ),
+                    Engine::Pdf => matches!(
+                        api::ipc::decode::<ocel_pdf_proto::Response>(&reply[..len]),
+                        Ok(ocel_pdf_proto::Response::Ready)
+                    ),
                 };
             }
             Ok(IpcTakeResult::Pending) => {
-                if now_ticks().wrapping_sub(started) >= READY_TICKS { break; }
+                if now_ticks().wrapping_sub(started) >= READY_TICKS {
+                    break;
+                }
                 // A finite one-tick park never touches legacy receive messages.
                 ipc::wait(1);
             }
@@ -367,14 +508,24 @@ fn readiness(provider: Provider) -> bool {
 pub(crate) fn task_alive(tid: usize) -> Option<bool> {
     let mut stack = [ProcessInfo::default(); 64];
     let count = syscall::sys_get_procs(&mut stack).ok()?;
-    if let Some(row) = stack.iter().take(count).find(|row| row.id == tid) { return Some(row.state != 3); }
-    if count < stack.len() { return Some(false); }
+    if let Some(row) = stack.iter().take(count).find(|row| row.id == tid) {
+        return Some(row.state != 3);
+    }
+    if count < stack.len() {
+        return Some(false);
+    }
     let mut rows = alloc::vec![ProcessInfo::default(); 128];
     loop {
         let count = syscall::sys_get_procs(&mut rows).ok()?;
-        if let Some(row) = rows.iter().take(count).find(|row| row.id == tid) { return Some(row.state != 3); }
-        if count < rows.len() { return Some(false); }
-        if rows.len() >= 8192 { return None; }
+        if let Some(row) = rows.iter().take(count).find(|row| row.id == tid) {
+            return Some(row.state != 3);
+        }
+        if count < rows.len() {
+            return Some(false);
+        }
+        if rows.len() >= 8192 {
+            return None;
+        }
         rows.resize(rows.len() * 2, ProcessInfo::default());
     }
 }

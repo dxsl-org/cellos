@@ -2,9 +2,9 @@
 
 extern crate alloc;
 
+use agent_proto::{AgentToolRequest, AgentToolResponse};
 use alloc::format;
 use alloc::string::String;
-use agent_proto::{AgentToolRequest, AgentToolResponse};
 use ostd::syscall::{sys_recv, sys_send, SyscallResult};
 
 /// Registry of tool cell TIDs.
@@ -38,10 +38,7 @@ impl ToolRouter {
             return Err(format!("tool '{}' unavailable (cell not bound)", name));
         }
 
-        let req = AgentToolRequest::Invoke {
-            name,
-            args_json,
-        };
+        let req = AgentToolRequest::Invoke { name, args_json };
         let mut out = [0u8; 4096];
         let encoded = postcard::to_slice(&req, &mut out)
             .map_err(|_| String::from("tool request payload exceeded IPC buffer"))?;

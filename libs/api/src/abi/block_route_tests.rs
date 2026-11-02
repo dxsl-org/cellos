@@ -53,13 +53,22 @@ fn round_trip_live_and_idle() {
     }
     assert_eq!(live().provider(), Some((42, 0x1122_3344_5566_7788, 9)));
     assert_eq!(idle().provider(), None);
-    assert_eq!(idle().device(), DeviceKey { kind: BLOCK_DEVICE_MMIO, id: 0x1000_1000 });
+    assert_eq!(
+        idle().device(),
+        DeviceKey {
+            kind: BLOCK_DEVICE_MMIO,
+            id: 0x1000_1000
+        }
+    );
 }
 
 #[test]
 fn length_other_than_exact_is_refused() {
     let bytes = live().encode();
-    assert_eq!(ViBlockRouteV1::decode(&bytes[..39]), Err(RouteRecordError::Length));
+    assert_eq!(
+        ViBlockRouteV1::decode(&bytes[..39]),
+        Err(RouteRecordError::Length)
+    );
     let mut long = [0u8; 41];
     long[..40].copy_from_slice(&bytes);
     assert_eq!(ViBlockRouteV1::decode(&long), Err(RouteRecordError::Length));
@@ -69,39 +78,87 @@ fn length_other_than_exact_is_refused() {
 fn unknown_version_kind_and_flags_are_refused() {
     for version in [0u16, 2, u16::MAX] {
         let r = ViBlockRouteV1 { version, ..live() };
-        assert_eq!(ViBlockRouteV1::decode(&r.encode()), Err(RouteRecordError::UnsupportedVersion));
+        assert_eq!(
+            ViBlockRouteV1::decode(&r.encode()),
+            Err(RouteRecordError::UnsupportedVersion)
+        );
     }
     for kind in [0u16, 3, u16::MAX] {
         let r = ViBlockRouteV1 { kind, ..live() };
-        assert_eq!(ViBlockRouteV1::decode(&r.encode()), Err(RouteRecordError::Device));
+        assert_eq!(
+            ViBlockRouteV1::decode(&r.encode()),
+            Err(RouteRecordError::Device)
+        );
     }
     for bit in 1..32 {
-        let r = ViBlockRouteV1 { flags: FLAG_PROVIDER_LIVE | 1 << bit, ..live() };
-        assert_eq!(ViBlockRouteV1::decode(&r.encode()), Err(RouteRecordError::UnknownFlag));
+        let r = ViBlockRouteV1 {
+            flags: FLAG_PROVIDER_LIVE | 1 << bit,
+            ..live()
+        };
+        assert_eq!(
+            ViBlockRouteV1::decode(&r.encode()),
+            Err(RouteRecordError::UnknownFlag)
+        );
     }
 }
 
 #[test]
 fn device_ids_out_of_range_are_refused() {
-    let pci = ViBlockRouteV1 { id: 0x1_0000, ..live() };
-    assert_eq!(ViBlockRouteV1::decode(&pci.encode()), Err(RouteRecordError::Device));
+    let pci = ViBlockRouteV1 {
+        id: 0x1_0000,
+        ..live()
+    };
+    assert_eq!(
+        ViBlockRouteV1::decode(&pci.encode()),
+        Err(RouteRecordError::Device)
+    );
     let mmio = ViBlockRouteV1 { id: 0, ..idle() };
-    assert_eq!(ViBlockRouteV1::decode(&mmio.encode()), Err(RouteRecordError::Device));
-    assert_eq!(DeviceKey::new(BLOCK_DEVICE_PCI, 0xFFFF), Some(DeviceKey { kind: 1, id: 0xFFFF }));
-    assert_eq!(DeviceKey::new(BLOCK_DEVICE_PCI, 0), Some(DeviceKey { kind: 1, id: 0 }));
+    assert_eq!(
+        ViBlockRouteV1::decode(&mmio.encode()),
+        Err(RouteRecordError::Device)
+    );
+    assert_eq!(
+        DeviceKey::new(BLOCK_DEVICE_PCI, 0xFFFF),
+        Some(DeviceKey {
+            kind: 1,
+            id: 0xFFFF
+        })
+    );
+    assert_eq!(
+        DeviceKey::new(BLOCK_DEVICE_PCI, 0),
+        Some(DeviceKey { kind: 1, id: 0 })
+    );
     assert_eq!(DeviceKey::new(BLOCK_DEVICE_MMIO, 0), None);
     assert_eq!(DeviceKey::new(0, 1), None);
 }
 
 #[test]
 fn provider_fields_must_match_liveness() {
-    let dead_tid = ViBlockRouteV1 { provider_tid: 0, ..live() };
-    assert_eq!(ViBlockRouteV1::decode(&dead_tid.encode()), Err(RouteRecordError::Liveness));
+    let dead_tid = ViBlockRouteV1 {
+        provider_tid: 0,
+        ..live()
+    };
+    assert_eq!(
+        ViBlockRouteV1::decode(&dead_tid.encode()),
+        Err(RouteRecordError::Liveness)
+    );
     for stale in [
-        ViBlockRouteV1 { provider_tid: 5, ..idle() },
-        ViBlockRouteV1 { cell_id: 5, ..idle() },
-        ViBlockRouteV1 { generation: 5, ..idle() },
+        ViBlockRouteV1 {
+            provider_tid: 5,
+            ..idle()
+        },
+        ViBlockRouteV1 {
+            cell_id: 5,
+            ..idle()
+        },
+        ViBlockRouteV1 {
+            generation: 5,
+            ..idle()
+        },
     ] {
-        assert_eq!(ViBlockRouteV1::decode(&stale.encode()), Err(RouteRecordError::Liveness));
+        assert_eq!(
+            ViBlockRouteV1::decode(&stale.encode()),
+            Err(RouteRecordError::Liveness)
+        );
     }
 }

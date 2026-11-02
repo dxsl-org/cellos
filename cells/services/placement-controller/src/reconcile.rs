@@ -20,6 +20,12 @@ pub struct ReconciliationTracker {
     targets: Vec<ReconcileTarget>,
 }
 
+impl Default for ReconciliationTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReconciliationTracker {
     pub fn new() -> Self {
         Self {
@@ -37,22 +43,30 @@ impl ReconciliationTracker {
     }
 
     /// Acknowledge that the draining target has quiesced all in-flight requests.
-    pub fn observe_quiescence(&mut self, key: &[u8; 16]) -> Result<(), ()> {
-        let target = self.targets.iter_mut().find(|t| &t.key == key).ok_or(())?;
+    /// Returns `false` if the target is unknown or not Draining.
+    #[must_use]
+    pub fn observe_quiescence(&mut self, key: &[u8; 16]) -> bool {
+        let Some(target) = self.targets.iter_mut().find(|t| &t.key == key) else {
+            return false;
+        };
         if target.state != MemberLifecycleState::Draining {
-            return Err(());
+            return false;
         }
         target.state = MemberLifecycleState::Quiesced;
-        Ok(())
+        true
     }
 
     /// Complete closure once the destination confirms absence/Gone.
-    pub fn observe_gone(&mut self, key: &[u8; 16]) -> Result<(), ()> {
-        let target = self.targets.iter_mut().find(|t| &t.key == key).ok_or(())?;
+    /// Returns `false` if the target is unknown or not Quiesced.
+    #[must_use]
+    pub fn observe_gone(&mut self, key: &[u8; 16]) -> bool {
+        let Some(target) = self.targets.iter_mut().find(|t| &t.key == key) else {
+            return false;
+        };
         if target.state != MemberLifecycleState::Quiesced {
-            return Err(());
+            return false;
         }
         target.state = MemberLifecycleState::Gone;
-        Ok(())
+        true
     }
 }

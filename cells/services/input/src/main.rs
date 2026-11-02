@@ -31,11 +31,11 @@
 extern crate alloc;
 
 mod dispatcher;
-mod session;
 mod key_repeat;
 mod layout_us_qwerty;
 mod modifier_state;
 mod mouse_state;
+mod session;
 mod virtio_device;
 
 use alloc::vec::Vec;
@@ -48,8 +48,8 @@ use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_get_time_ms, sys_heartbeat, sys_lookup_service, sys_set_timer,
-    sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
+    sys_get_resolution, sys_get_time, sys_get_time_ms, sys_heartbeat, sys_lookup_service,
+    sys_set_timer, sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
 };
 use virtio_device::{find_and_init_inputs, InputDevice};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
@@ -167,7 +167,9 @@ pub fn main() {
                     &mut hid_devices,
                 );
                 // The buffer carried a relayed keystroke (possibly a typed secret): wipe it before reuse.
-                ostd::session::zeroize(&mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]);
+                ostd::session::zeroize(
+                    &mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN],
+                );
             }
             SyscallResult::Ok(sender) => {
                 busy = true;
@@ -181,7 +183,9 @@ pub fn main() {
                     &mut hid_devices,
                 );
                 // SessionV1 records (typed text, raw bytes, paste chunks) must not linger in the receive buffer.
-                ostd::session::zeroize(&mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]);
+                ostd::session::zeroize(
+                    &mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN],
+                );
             }
             _ => {}
         }
@@ -201,7 +205,9 @@ pub fn main() {
             }
         }
         // Polled device events are staged in the head of the same buffer.
-        if !devices.is_empty() { ostd::session::zeroize(&mut buf[..16]); }
+        if !devices.is_empty() {
+            ostd::session::zeroize(&mut buf[..16]);
+        }
         if dispatcher.has_pending_mouse() {
             continue;
         }

@@ -50,15 +50,20 @@ pub fn decode_request(frame: &[u8]) -> Option<(usize, Option<usize>, &[u8])> {
     }
     let tid = u64::from_le_bytes(frame[1..1 + TID_BYTES].try_into().ok()?) as usize;
     let operation = u64::from_le_bytes(
-        frame[1 + TID_BYTES..1 + TID_BYTES + OP_BYTES].try_into().ok()?,
+        frame[1 + TID_BYTES..1 + TID_BYTES + OP_BYTES]
+            .try_into()
+            .ok()?,
     ) as usize;
     let len = u16::from_le_bytes(frame[start - LEN_BYTES..start].try_into().ok()?) as usize;
     if frame.len() < start + len {
         return None;
     }
-    Some((tid, (operation != 0).then_some(operation), &frame[start..start + len]))
+    Some((
+        tid,
+        (operation != 0).then_some(operation),
+        &frame[start..start + len],
+    ))
 }
-
 
 #[cfg(test)]
 mod padded_tests {

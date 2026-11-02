@@ -669,9 +669,7 @@ impl AhciController {
                     }
                 }
             }
-            if ssts & SSTS_DET_MASK != SSTS_DET_PRESENT
-                || ssts & SSTS_IPM_MASK != SSTS_IPM_ACTIVE
-            {
+            if ssts & SSTS_DET_MASK != SSTS_DET_PRESENT || ssts & SSTS_IPM_MASK != SSTS_IPM_ACTIVE {
                 continue;
             }
 
@@ -844,7 +842,7 @@ fn wr(mmio: &MmioRegion, off: usize, val: u32) -> ViResult<()> {
 #[inline]
 fn poll_tick(mut spins: u64, limit: u64, what: &str) -> ViResult<u64> {
     spins += 1;
-    if spins % POLL_YIELD_EVERY == 0 {
+    if spins.is_multiple_of(POLL_YIELD_EVERY) {
         ostd::task::yield_now();
     }
     if spins >= limit {

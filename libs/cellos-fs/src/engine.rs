@@ -9,17 +9,17 @@ use crate::format::{
     INODES_PER_BLOCK, INODE_FLAG_INLINE, INODE_MODE_DIR, INODE_MODE_FILE, INODE_PAYLOAD_SIZE,
     INODE_SIZE, SUPERBLOCK_A_BLOCK, SUPERBLOCK_B_BLOCK,
 };
+#[cfg(all(feature = "g2-cow-experiment", not(target_os = "none")))]
+use crate::format::{InodeRecord, Superblock, BLOCK_SIZE, INODE_MODE_DIR, INODE_MODE_FILE};
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 use crate::inode::{read_inode, write_inode, DirPayload};
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 use alloc::collections::BTreeMap;
+#[cfg(all(feature = "g2-cow-experiment", not(target_os = "none")))]
+use alloc::string::String;
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-#[cfg(all(feature = "g2-cow-experiment", not(target_os = "none")))]
-use crate::format::{InodeRecord, Superblock, BLOCK_SIZE, INODE_MODE_DIR, INODE_MODE_FILE};
-#[cfg(all(feature = "g2-cow-experiment", not(target_os = "none")))]
-use alloc::string::String;
 
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 pub struct CellosFs<D: BlockDevice> {
@@ -41,8 +41,8 @@ impl<D: BlockDevice> CellosFs<D> {
         }
 
         // Calculate bitmap blocks: 1 block covers 32,768 blocks (128 MiB)
-        let bitmap_blocks = u32::try_from(total_blocks.div_ceil(32_768))
-            .map_err(|_| FsError::NoSpace)?;
+        let bitmap_blocks =
+            u32::try_from(total_blocks.div_ceil(32_768)).map_err(|_| FsError::NoSpace)?;
         let mut allocator = BitmapAllocator::new(FIRST_USABLE_BLOCK, bitmap_blocks, total_blocks)?;
 
         // Allocate root inode block (FIRST_USABLE_BLOCK + bitmap_blocks)
@@ -154,7 +154,11 @@ impl<D: BlockDevice> CellosFs<D> {
             *record
         } else {
             let slot = ((inode_num - 1) / INODES_PER_BLOCK as u64) as usize;
-            let block = *self.active_sb.inode_blocks.get(slot).ok_or(FsError::Corrupted)?;
+            let block = *self
+                .active_sb
+                .inode_blocks
+                .get(slot)
+                .ok_or(FsError::Corrupted)?;
             if block == 0 {
                 return Err(FsError::Corrupted);
             }
@@ -169,21 +173,28 @@ impl<D: BlockDevice> CellosFs<D> {
     }
 
     fn ensure_mutable(&self) -> Result<(), FsError> {
-        self.active_sb.sequence.checked_add(1).ok_or(FsError::NoSpace)?;
+        self.active_sb
+            .sequence
+            .checked_add(1)
+            .ok_or(FsError::NoSpace)?;
         Ok(())
     }
 
     fn validate_inode(&self, inode: &InodeRecord) -> Result<(), FsError> {
         if inode.is_dir() {
-            if !inode.is_inline() || inode.extent_count as usize > INODE_PAYLOAD_SIZE / DirEntryRecord::SIZE {
+            if !inode.is_inline()
+                || inode.extent_count as usize > INODE_PAYLOAD_SIZE / DirEntryRecord::SIZE
+            {
                 return Err(FsError::Corrupted);
             }
             for i in 0..inode.extent_count as usize {
                 let off = i * DirEntryRecord::SIZE;
-                let bytes = inode.payload[off..off + DirEntryRecord::SIZE].try_into()
+                let bytes = inode.payload[off..off + DirEntryRecord::SIZE]
+                    .try_into()
                     .map_err(|_| FsError::Corrupted)?;
                 let entry = DirEntryRecord::from_bytes(bytes).ok_or(FsError::Corrupted)?;
-                if entry.inode_num == 0 || entry.inode_num >= self.active_sb.next_inode_num
+                if entry.inode_num == 0
+                    || entry.inode_num >= self.active_sb.next_inode_num
                     || !matches!(entry.file_type, 1 | 2)
                     || entry.name_len == 0
                     || core::str::from_utf8(&entry.name[..entry.name_len as usize]).is_err()
@@ -193,7 +204,8 @@ impl<D: BlockDevice> CellosFs<D> {
                 }
                 for previous in 0..i {
                     let off = previous * DirEntryRecord::SIZE;
-                    let bytes = inode.payload[off..off + DirEntryRecord::SIZE].try_into()
+                    let bytes = inode.payload[off..off + DirEntryRecord::SIZE]
+                        .try_into()
                         .map_err(|_| FsError::Corrupted)?;
                     let other = DirEntryRecord::from_bytes(bytes).ok_or(FsError::Corrupted)?;
                     if other.name_as_str() == entry.name_as_str() {
@@ -203,7 +215,8 @@ impl<D: BlockDevice> CellosFs<D> {
             }
         } else if inode.is_file() {
             if inode.is_inline() {
-                if inode.size > INODE_PAYLOAD_SIZE as u64 || inode.inline_size as u64 != inode.size
+                if inode.size > INODE_PAYLOAD_SIZE as u64
+                    || inode.inline_size as u64 != inode.size
                     || inode.extent_count != 0
                 {
                     return Err(FsError::Corrupted);
@@ -329,7 +342,9 @@ impl<D: BlockDevice> CellosFs<D> {
         if offset >= inode.size {
             return Ok(0);
         }
-        let to_read = buf.len().min(usize::try_from(inode.size - offset).unwrap_or(usize::MAX));
+        let to_read = buf
+            .len()
+            .min(usize::try_from(inode.size - offset).unwrap_or(usize::MAX));
         if inode.is_inline() {
             let start = offset as usize;
             buf[..to_read].copy_from_slice(&inode.payload[start..start + to_read]);
@@ -344,7 +359,8 @@ impl<D: BlockDevice> CellosFs<D> {
             let mut block = [0u8; BLOCK_SIZE];
             self.disk.read_block(physical, &mut block)?;
             let count = (BLOCK_SIZE - block_offset).min(to_read - bytes_read);
-            buf[bytes_read..bytes_read + count].copy_from_slice(&block[block_offset..block_offset + count]);
+            buf[bytes_read..bytes_read + count]
+                .copy_from_slice(&block[block_offset..block_offset + count]);
             bytes_read += count;
         }
         Ok(bytes_read)
@@ -352,7 +368,8 @@ impl<D: BlockDevice> CellosFs<D> {
 
     /// Check the V1 logical mapping representation without disk I/O or mutation.
     pub fn validate_write_range(offset: u64, length: usize) -> Result<u64, FsError> {
-        let end = offset.checked_add(u64::try_from(length).map_err(|_| FsError::InvalidOffset)?)
+        let end = offset
+            .checked_add(u64::try_from(length).map_err(|_| FsError::InvalidOffset)?)
             .ok_or(FsError::InvalidOffset)?;
         if end > u32::MAX as u64 * BLOCK_SIZE as u64 {
             return Err(FsError::InvalidOffset);
@@ -378,9 +395,14 @@ impl<D: BlockDevice> CellosFs<D> {
         self.write_content(inode, 0, end, data, true)
     }
 
-    fn write_content(&mut self, mut inode: InodeRecord, offset: u64, end: u64,
-        data: &[u8], replace: bool) -> Result<usize, FsError>
-    {
+    fn write_content(
+        &mut self,
+        mut inode: InodeRecord,
+        offset: u64,
+        end: u64,
+        data: &[u8],
+        replace: bool,
+    ) -> Result<usize, FsError> {
         if !inode.is_file() {
             return Err(FsError::IsADirectory);
         }
@@ -388,14 +410,18 @@ impl<D: BlockDevice> CellosFs<D> {
             return Ok(0);
         }
         let size = if replace { end } else { inode.size.max(end) };
-        let needed = u32::try_from(size.div_ceil(BLOCK_SIZE as u64))
-            .map_err(|_| FsError::InvalidOffset)?;
+        let needed =
+            u32::try_from(size.div_ceil(BLOCK_SIZE as u64)).map_err(|_| FsError::InvalidOffset)?;
         if needed as u64 > self.active_sb.total_blocks {
             return Err(FsError::NoSpace);
         }
         let was_inline = inode.is_inline();
         let old_size = if replace { 0 } else { inode.size };
-        let mut extents = if was_inline { Vec::new() } else { self.read_extents(&inode)? };
+        let mut extents = if was_inline {
+            Vec::new()
+        } else {
+            self.read_extents(&inode)?
+        };
         if size <= INODE_PAYLOAD_SIZE as u64 && (replace || was_inline) {
             for ext in &extents {
                 for b in 0..ext.block_count {
@@ -416,7 +442,9 @@ impl<D: BlockDevice> CellosFs<D> {
             self.put_inode(inode);
             return Ok(data.len());
         }
-        let current = extents.last().map_or(0, |e| e.logical_block + e.block_count);
+        let current = extents
+            .last()
+            .map_or(0, |e| e.logical_block + e.block_count);
         if needed > current && (needed - current) as u64 > self.allocator.free_block_count() {
             return Err(FsError::NoSpace);
         }
@@ -424,17 +452,28 @@ impl<D: BlockDevice> CellosFs<D> {
             let physical = self.allocator.allocate_block()?;
             if let Some(last) = extents.last_mut() {
                 if last.physical_block + last.block_count as u64 == physical {
-                    last.block_count = last.block_count.checked_add(1).ok_or(FsError::InvalidOffset)?;
+                    last.block_count = last
+                        .block_count
+                        .checked_add(1)
+                        .ok_or(FsError::InvalidOffset)?;
                     continue;
                 }
             }
             if extents.len() == INODE_PAYLOAD_SIZE / Extent::SIZE {
                 return Err(FsError::NoSpace);
             }
-            extents.push(Extent { logical_block: logical, block_count: 1, physical_block: physical });
+            extents.push(Extent {
+                logical_block: logical,
+                block_count: 1,
+                physical_block: physical,
+            });
         }
         // Include gap blocks and block zero during inline-to-extent conversion.
-        let first = if was_inline { 0 } else { offset.min(old_size) / BLOCK_SIZE as u64 };
+        let first = if was_inline {
+            0
+        } else {
+            offset.min(old_size) / BLOCK_SIZE as u64
+        };
         for logical in first..end.div_ceil(BLOCK_SIZE as u64) {
             let start = logical * BLOCK_SIZE as u64;
             let stop = start + BLOCK_SIZE as u64;
@@ -443,9 +482,7 @@ impl<D: BlockDevice> CellosFs<D> {
             let preserved_end = old_size.min(stop);
             if was_inline && logical == 0 && old_size != 0 {
                 block[..old_size as usize].copy_from_slice(&inode.payload[..old_size as usize]);
-            } else if !was_inline && start < old_size
-                && (offset > start || end < preserved_end)
-            {
+            } else if !was_inline && start < old_size && (offset > start || end < preserved_end) {
                 self.disk.read_block(physical, &mut block)?;
             }
             if end > old_size {
@@ -468,7 +505,9 @@ impl<D: BlockDevice> CellosFs<D> {
         // Tail retirement is immediate; crash-preserving retirement is out of scope.
         if replace {
             for ext in &mut extents {
-                let keep = needed.saturating_sub(ext.logical_block).min(ext.block_count);
+                let keep = needed
+                    .saturating_sub(ext.logical_block)
+                    .min(ext.block_count);
                 for b in keep..ext.block_count {
                     self.allocator.free_block(ext.physical_block + b as u64)?;
                 }
@@ -503,11 +542,20 @@ impl<D: BlockDevice> CellosFs<D> {
         let mut logical_end = 0u32;
         for i in 0..inode.extent_count as usize {
             let ext = Self::extent_at(inode, i);
-            let end = ext.physical_block.checked_add(ext.block_count as u64).ok_or(FsError::Corrupted)?;
-            if ext.block_count == 0 || ext.logical_block != logical_end
-                || ext.physical_block < self.active_sb.free_bitmap_block + self.active_sb.free_bitmap_blocks as u64
+            let end = ext
+                .physical_block
+                .checked_add(ext.block_count as u64)
+                .ok_or(FsError::Corrupted)?;
+            if ext.block_count == 0
+                || ext.logical_block != logical_end
+                || ext.physical_block
+                    < self.active_sb.free_bitmap_block + self.active_sb.free_bitmap_blocks as u64
                 || end > self.active_sb.total_blocks
-                || self.active_sb.inode_blocks.iter().any(|&b| b != 0 && b >= ext.physical_block && b < end)
+                || self
+                    .active_sb
+                    .inode_blocks
+                    .iter()
+                    .any(|&b| b != 0 && b >= ext.physical_block && b < end)
             {
                 return Err(FsError::Corrupted);
             }
@@ -519,7 +567,9 @@ impl<D: BlockDevice> CellosFs<D> {
                     return Err(FsError::Corrupted);
                 }
             }
-            logical_end = logical_end.checked_add(ext.block_count).ok_or(FsError::Corrupted)?;
+            logical_end = logical_end
+                .checked_add(ext.block_count)
+                .ok_or(FsError::Corrupted)?;
         }
         if inode.size.div_ceil(BLOCK_SIZE as u64) != logical_end as u64 {
             return Err(FsError::Corrupted);
@@ -529,7 +579,9 @@ impl<D: BlockDevice> CellosFs<D> {
 
     fn read_extents(&self, inode: &InodeRecord) -> Result<Vec<Extent>, FsError> {
         self.validate_extents(inode)?;
-        Ok((0..inode.extent_count as usize).map(|i| Self::extent_at(inode, i)).collect())
+        Ok((0..inode.extent_count as usize)
+            .map(|i| Self::extent_at(inode, i))
+            .collect())
     }
 
     fn mapped_block(&self, inode: &InodeRecord, logical: u32) -> Result<u64, FsError> {
@@ -543,7 +595,9 @@ impl<D: BlockDevice> CellosFs<D> {
     }
 
     fn extent_block(extents: &[Extent], logical: u32) -> Result<u64, FsError> {
-        extents.iter().find(|e| logical >= e.logical_block && logical - e.logical_block < e.block_count)
+        extents
+            .iter()
+            .find(|e| logical >= e.logical_block && logical - e.logical_block < e.block_count)
             .map(|e| e.physical_block + (logical - e.logical_block) as u64)
             .ok_or(FsError::Corrupted)
     }
@@ -681,11 +735,17 @@ impl<D: BlockDevice> CellosFs<D> {
             return Err(FsError::NotADirectory);
         }
         // Insertion independently refuses duplicates, including equivalent path spellings.
-        if DirPayload::find(&new_parent.payload, new_parent.extent_count as usize, new_leaf).is_some() {
+        if DirPayload::find(
+            &new_parent.payload,
+            new_parent.extent_count as usize,
+            new_leaf,
+        )
+        .is_some()
+        {
             return Err(FsError::AlreadyExists);
         }
-        let new_entry = DirEntryRecord::new(old_inode.inode_num, 1, new_leaf)
-            .ok_or(FsError::InvalidName)?;
+        let new_entry =
+            DirEntryRecord::new(old_inode.inode_num, 1, new_leaf).ok_or(FsError::InvalidName)?;
         let mut old_count = old_parent.extent_count as usize;
         DirPayload::remove(&mut old_parent.payload, &mut old_count, old_leaf)?;
         old_parent.extent_count = old_count as u32;
@@ -710,7 +770,12 @@ impl<D: BlockDevice> CellosFs<D> {
     /// Checked and applied in memory as one step; the caller's next `sync` publishes
     /// it in one superblock flip. On `Conflict` nothing is staged. A replaced
     /// destination's inode is retired and its blocks freed. Not crash-preservation proof.
-    pub fn rename_replace_if(&mut self, src: &str, dst: &str, expect: Expect) -> Result<(), FsError> {
+    pub fn rename_replace_if(
+        &mut self,
+        src: &str,
+        dst: &str,
+        expect: Expect,
+    ) -> Result<(), FsError> {
         self.ensure_mutable()?;
         let src = src.trim_matches('/');
         let dst = dst.trim_matches('/');
@@ -728,8 +793,13 @@ impl<D: BlockDevice> CellosFs<D> {
         };
         let matches = match (expect, &current) {
             (Expect::Absent, None) => true,
-            (Expect::Present { inode_num, generation }, Some(found)) =>
-                found.is_file() && found.inode_num == inode_num && found.generation == generation,
+            (
+                Expect::Present {
+                    inode_num,
+                    generation,
+                },
+                Some(found),
+            ) => found.is_file() && found.inode_num == inode_num && found.generation == generation,
             _ => false,
         };
         if !matches {
@@ -743,9 +813,13 @@ impl<D: BlockDevice> CellosFs<D> {
         };
         let (src_parent_path, src_leaf) = split_parent(src);
         let (dst_parent_path, dst_leaf) = split_parent(dst);
-        let new_entry = DirEntryRecord::new(src_inode.inode_num, 1, dst_leaf)
-            .ok_or(FsError::InvalidName)?;
-        let old_extents = if old.is_inline() { Vec::new() } else { self.read_extents(&old)? };
+        let new_entry =
+            DirEntryRecord::new(src_inode.inode_num, 1, dst_leaf).ok_or(FsError::InvalidName)?;
+        let old_extents = if old.is_inline() {
+            Vec::new()
+        } else {
+            self.read_extents(&old)?
+        };
         let mut src_parent = self.lookup(src_parent_path)?;
         let mut dst_parent = self.lookup(dst_parent_path)?;
         let same = src_parent.inode_num == dst_parent.inode_num;
@@ -753,7 +827,11 @@ impl<D: BlockDevice> CellosFs<D> {
         let mut count = src_parent.extent_count as usize;
         DirPayload::remove(&mut src_parent.payload, &mut count, src_leaf)?;
         src_parent.extent_count = count as u32;
-        let target = if same { &mut src_parent } else { &mut dst_parent };
+        let target = if same {
+            &mut src_parent
+        } else {
+            &mut dst_parent
+        };
         let mut count = target.extent_count as usize;
         DirPayload::remove(&mut target.payload, &mut count, dst_leaf)?;
         DirPayload::insert(&mut target.payload, &mut count, &new_entry)?;
@@ -886,9 +964,15 @@ impl<D: BlockDevice> CellosFs<D> {
     pub fn open(disk: D) -> Result<Self, FsError> {
         crate::cow_experiment::Cow::open(disk).map(|inner| Self { inner })
     }
-    pub fn superblock(&self) -> &Superblock { self.inner.superblock() }
-    pub fn free_blocks(&self) -> u64 { self.inner.free_blocks() }
-    pub fn into_disk(self) -> D { self.inner.into_disk() }
+    pub fn superblock(&self) -> &Superblock {
+        self.inner.superblock()
+    }
+    pub fn free_blocks(&self) -> u64 {
+        self.inner.free_blocks()
+    }
+    pub fn into_disk(self) -> D {
+        self.inner.into_disk()
+    }
     pub fn lookup(&mut self, path: &str) -> Result<InodeRecord, FsError> {
         self.inner.lookup(path)
     }
@@ -902,9 +986,12 @@ impl<D: BlockDevice> CellosFs<D> {
         self.inner.read_file(path, offset, buf)
     }
     pub fn validate_write_range(offset: u64, length: usize) -> Result<u64, FsError> {
-        let end = offset.checked_add(u64::try_from(length).map_err(|_| FsError::InvalidOffset)?)
+        let end = offset
+            .checked_add(u64::try_from(length).map_err(|_| FsError::InvalidOffset)?)
             .ok_or(FsError::InvalidOffset)?;
-        if end > u32::MAX as u64 * BLOCK_SIZE as u64 { return Err(FsError::InvalidOffset); }
+        if end > u32::MAX as u64 * BLOCK_SIZE as u64 {
+            return Err(FsError::InvalidOffset);
+        }
         Ok(end)
     }
     pub fn write_file(&mut self, path: &str, offset: u64, data: &[u8]) -> Result<usize, FsError> {
@@ -916,12 +1003,20 @@ impl<D: BlockDevice> CellosFs<D> {
     pub fn list_dir(&mut self, path: &str) -> Result<Vec<(String, bool, u64)>, FsError> {
         self.inner.list_dir(path)
     }
-    pub fn unlink(&mut self, path: &str) -> Result<(), FsError> { self.inner.remove(path, false) }
-    pub fn rmdir(&mut self, path: &str) -> Result<(), FsError> { self.inner.remove(path, true) }
+    pub fn unlink(&mut self, path: &str) -> Result<(), FsError> {
+        self.inner.remove(path, false)
+    }
+    pub fn rmdir(&mut self, path: &str) -> Result<(), FsError> {
+        self.inner.remove(path, true)
+    }
     pub fn rename(&mut self, old: &str, new: &str) -> Result<(), FsError> {
         self.inner.rename(old, new)
     }
-    pub fn sync(&mut self) -> Result<(), FsError> { self.inner.sync() }
+    pub fn sync(&mut self) -> Result<(), FsError> {
+        self.inner.sync()
+    }
     /// See the default engine: the experiment is not a production durability proof.
-    pub fn sync_durable(&mut self) -> Result<(), DurabilityUnavailable> { Err(DurabilityUnavailable) }
+    pub fn sync_durable(&mut self) -> Result<(), DurabilityUnavailable> {
+        Err(DurabilityUnavailable)
+    }
 }

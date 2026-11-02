@@ -37,11 +37,15 @@ extern crate ostd;
 mod command;
 
 use api::cell_session::Status;
-use command::{parse, parse_workers, per_call_ns, Command, InputLine, OutputLine, Tids, MAX_WORKERS};
+use command::{
+    parse, parse_workers, per_call_ns, Command, InputLine, OutputLine, Tids, MAX_WORKERS,
+};
 use core::fmt::Write;
 use core::sync::atomic::{AtomicU8, Ordering};
 use ostd::child_context::ChildContext;
-use ostd::syscall::{sys_exit, sys_get_time, sys_get_timer_freq, sys_set_timer, sys_wait, sys_yield, SyscallResult};
+use ostd::syscall::{
+    sys_exit, sys_get_time, sys_get_timer_freq, sys_set_timer, sys_wait, sys_yield, SyscallResult,
+};
 use terminal_sdk::input::EventKind;
 use terminal_sdk::session::TerminalSession;
 
@@ -111,7 +115,9 @@ fn worker(index: usize) {
                 SEEN[index].store(SPIN, Ordering::Release);
                 while COMMAND[index].load(Ordering::Acquire) == SPIN {
                     for _ in 0..SPIN_CHUNK {
-                        value = value.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                        value = value
+                            .wrapping_mul(6_364_136_223_846_793_005)
+                            .wrapping_add(1_442_695_040_888_963_407);
                     }
                     value = core::hint::black_box(value);
                 }
@@ -141,7 +147,11 @@ struct Workers {
 
 impl Workers {
     fn spawn(count: usize) -> Result<Workers, ()> {
-        let mut workers = Workers { tids: [0; MAX_WORKERS], live: [false; MAX_WORKERS], count };
+        let mut workers = Workers {
+            tids: [0; MAX_WORKERS],
+            live: [false; MAX_WORKERS],
+            count,
+        };
         for index in 0..count {
             match ostd::task::spawn(move || worker(index)) {
                 SyscallResult::Ok(tid) => {
@@ -166,7 +176,10 @@ impl Workers {
     fn settled(&self) -> bool {
         let end = now_ns().saturating_add(SETTLE_NS);
         loop {
-            if self.live().all(|i| SEEN[i].load(Ordering::Acquire) == COMMAND[i].load(Ordering::Acquire)) {
+            if self
+                .live()
+                .all(|i| SEEN[i].load(Ordering::Acquire) == COMMAND[i].load(Ordering::Acquire))
+            {
                 return true;
             }
             if now_ns() >= end {
@@ -254,17 +267,27 @@ fn bench(calls: u64) -> (Option<u64>, Option<u64>) {
         sys_yield();
     }
     let yields = sys_get_time().saturating_sub(start);
-    (per_call_ns(clock, frequency, calls), per_call_ns(yields, frequency, calls))
+    (
+        per_call_ns(clock, frequency, calls),
+        per_call_ns(yields, frequency, calls),
+    )
 }
 
 /// Run one command; `Ok(true)` ends the fixture.
-fn execute(session: &mut TerminalSession, workers: &mut Workers, command: Command) -> Result<bool, i32> {
+fn execute(
+    session: &mut TerminalSession,
+    workers: &mut Workers,
+    command: Command,
+) -> Result<bool, i32> {
     let mut tids = [0usize; MAX_WORKERS];
     match command {
         Command::Busy(spinners) => {
             let chosen = workers.set_busy(spinners, &mut tids);
             if workers.settled() {
-                say(session, format_args!("TOPLOAD busy tids={}", Tids(&tids[..chosen])))?;
+                say(
+                    session,
+                    format_args!("TOPLOAD busy tids={}", Tids(&tids[..chosen])),
+                )?;
             } else {
                 say(session, format_args!("TOPLOAD error timeout"))?;
             }
@@ -279,15 +302,22 @@ fn execute(session: &mut TerminalSession, workers: &mut Workers, command: Comman
         }
         Command::Exit(count) => {
             let chosen = workers.exit(count, &mut tids);
-            say(session, format_args!("TOPLOAD exited tids={}", Tids(&tids[..chosen])))?;
+            say(
+                session,
+                format_args!("TOPLOAD exited tids={}", Tids(&tids[..chosen])),
+            )?;
         }
-        Command::Ping => say(session, format_args!("TOPLOAD pong live={}", workers.live_count()))?,
+        Command::Ping => say(
+            session,
+            format_args!("TOPLOAD pong live={}", workers.live_count()),
+        )?,
         Command::Bench(calls) => {
             let (clock, yields) = bench(calls);
             match (clock, yields) {
-                (Some(clock), Some(yields)) => {
-                    say(session, format_args!("TOPLOAD bench clock_ns={clock} yield_ns={yields}"))?
-                }
+                (Some(clock), Some(yields)) => say(
+                    session,
+                    format_args!("TOPLOAD bench clock_ns={clock} yield_ns={yields}"),
+                )?,
                 _ => say(session, format_args!("TOPLOAD error clock"))?,
             }
         }
@@ -318,7 +348,13 @@ fn run() -> i32 {
         let _ = say(&mut session, format_args!("TOPLOAD error timeout"));
         return FAILURE;
     }
-    if let Err(code) = say(&mut session, format_args!("TOPLOAD ready workers={count} tids={}", Tids(&workers.tids[..count]))) {
+    if let Err(code) = say(
+        &mut session,
+        format_args!(
+            "TOPLOAD ready workers={count} tids={}",
+            Tids(&workers.tids[..count])
+        ),
+    ) {
         return code;
     }
     let mut line = InputLine::new();
@@ -332,7 +368,11 @@ fn run() -> i32 {
                 line.push(text);
                 continue;
             }
-            EventKind::Key { code: ENTER, modifiers: 0, pressed: 1 | 2 } => line.take().and_then(|l| parse(l, workers.live_count())),
+            EventKind::Key {
+                code: ENTER,
+                modifiers: 0,
+                pressed: 1 | 2,
+            } => line.take().and_then(|l| parse(l, workers.live_count())),
             EventKind::Eof => Some(Command::Quit),
             EventKind::Interrupt => return CANCELLED,
             _ => continue,

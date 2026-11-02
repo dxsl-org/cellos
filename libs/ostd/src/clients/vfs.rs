@@ -12,7 +12,9 @@ use crate::{ViError, ViResult};
 use alloc::vec::Vec;
 use api::cell_session::ObjectRefV1;
 use api::dir_handles::ViDirHandle;
-use api::ipc::{Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE, VFS_SAVE_CHUNK};
+use api::ipc::{
+    Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE, VFS_SAVE_CHUNK,
+};
 use api::vfs_file_handles::ViVfsFileHandle;
 use read_file::wire::vfs_err_from_code;
 pub use stream::{VfsDirPage, VfsFileState, VFS_DIR_PAGE_MAX, VFS_READ_CHUNK_MAX};
@@ -82,7 +84,12 @@ impl VfsClient {
 
     /// Read at most `min(buf.len(), VFS_READ_CHUNK_MAX)` bytes at `offset`
     /// into `buf`; returns the count, 0 at end of file.
-    pub fn read_chunk(&mut self, file: ViVfsFileHandle, offset: u64, buf: &mut [u8]) -> ViResult<usize> {
+    pub fn read_chunk(
+        &mut self,
+        file: ViVfsFileHandle,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> ViResult<usize> {
         stream::read_chunk(&mut self.svc, file, offset, buf)
     }
 
@@ -211,7 +218,10 @@ impl VfsClient {
     /// Exact identity of `path` for a later conditional save.
     pub fn observe(&mut self, path: &str) -> ViResult<Observation> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&VfsRequest::Observe { path }, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::Observe { path }, &mut resp_buf)?
+        {
             VfsResponse::Observed(observation) => Ok(observation),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
@@ -222,15 +232,32 @@ impl VfsClient {
     /// failure the transaction is aborted and nothing at `dst` changed.
     pub fn save_stage(&mut self, dst: &str, bytes: &[u8], sha256: [u8; 32]) -> ViResult<u32> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let id = match self.svc.call::<VfsRequest, VfsResponse>(&VfsRequest::SaveBegin { dst }, &mut resp_buf)? {
+        let id = match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::SaveBegin { dst }, &mut resp_buf)?
+        {
             VfsResponse::SaveId(id) => id,
             VfsResponse::Err(code) => return Err(vfs_err_from_code(code)),
             _ => return Err(ViError::IO),
         };
-        let staged = bytes.chunks(VFS_SAVE_CHUNK).enumerate().try_for_each(|(index, piece)| {
-            let offset = (index * VFS_SAVE_CHUNK) as u64;
-            self.call_ok(&VfsRequest::SaveChunk { id, offset, bytes: piece })
-        }).and_then(|()| self.call_ok(&VfsRequest::SaveSeal { id, len: bytes.len() as u64, sha256 }));
+        let staged = bytes
+            .chunks(VFS_SAVE_CHUNK)
+            .enumerate()
+            .try_for_each(|(index, piece)| {
+                let offset = (index * VFS_SAVE_CHUNK) as u64;
+                self.call_ok(&VfsRequest::SaveChunk {
+                    id,
+                    offset,
+                    bytes: piece,
+                })
+            })
+            .and_then(|()| {
+                self.call_ok(&VfsRequest::SaveSeal {
+                    id,
+                    len: bytes.len() as u64,
+                    sha256,
+                })
+            });
         match staged {
             Ok(()) => Ok(id),
             Err(error) => {
@@ -258,10 +285,24 @@ impl VfsClient {
 
     /// Phase 09 host-trust lookup: one of `api::ipc::ssh_trust` for the configured
     /// `host`/`port` and the complete SSH key blob `key`.
-    pub fn trust_lookup(&mut self, host: &str, port: u16, algorithm: &str, key: &[u8]) -> ViResult<u8> {
+    pub fn trust_lookup(
+        &mut self,
+        host: &str,
+        port: u16,
+        algorithm: &str,
+        key: &[u8],
+    ) -> ViResult<u8> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let req = VfsRequest::TrustLookup { host, port, algorithm, key };
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        let req = VfsRequest::TrustLookup {
+            host,
+            port,
+            algorithm,
+            key,
+        };
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Trust(code) => Ok(code),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
@@ -272,12 +313,32 @@ impl VfsClient {
     /// not hold. `Ok(Ok((confirmation, challenge)))` to begin and commit; `Ok(Err(code))`
     /// with an `api::ipc::ssh_trust` refusal (`KNOWN_EXACT`/`MISMATCH` need no prompt).
     /// `session`/`epoch` are the caller's own terminal session the confirmation runs on.
-    pub fn trust_challenge(&mut self, host: &str, port: u16, algorithm: &str, key: &[u8], session: ObjectRefV1, epoch: u64)
-        -> ViResult<Result<(ObjectRefV1, ObjectRefV1), u8>> {
+    pub fn trust_challenge(
+        &mut self,
+        host: &str,
+        port: u16,
+        algorithm: &str,
+        key: &[u8],
+        session: ObjectRefV1,
+        epoch: u64,
+    ) -> ViResult<Result<(ObjectRefV1, ObjectRefV1), u8>> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let req = VfsRequest::TrustChallenge { host, port, algorithm, key, session, epoch };
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
-            VfsResponse::TrustChallenged { confirmation, challenge } => Ok(Ok((confirmation, challenge))),
+        let req = VfsRequest::TrustChallenge {
+            host,
+            port,
+            algorithm,
+            key,
+            session,
+            epoch,
+        };
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
+            VfsResponse::TrustChallenged {
+                confirmation,
+                challenge,
+            } => Ok(Ok((confirmation, challenge))),
             VfsResponse::Trust(code) => Ok(Err(code)),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
@@ -288,7 +349,10 @@ impl VfsClient {
     /// (`PENDING` until the confirmation is decided).
     pub fn trust_commit(&mut self, challenge: ObjectRefV1) -> ViResult<u8> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&VfsRequest::TrustCommit { challenge }, &mut resp_buf)? {
+        match self.svc.call::<VfsRequest, VfsResponse>(
+            &VfsRequest::TrustCommit { challenge },
+            &mut resp_buf,
+        )? {
             VfsResponse::Trust(code) => Ok(code),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
@@ -297,7 +361,10 @@ impl VfsClient {
 
     fn save_outcome(&mut self, req: &VfsRequest<'_>) -> ViResult<SaveOutcome> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(req, &mut resp_buf)?
+        {
             VfsResponse::SaveOutcome(outcome) => Ok(outcome),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),

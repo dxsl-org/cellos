@@ -7,10 +7,7 @@ use ostd::syscall::sys_wait_completion;
 use ostd::syscall::{sys_try_recv_attested, sys_yield};
 #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
 use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
-use ostd::{
-    io::println,
-    syscall::SyscallResult,
-};
+use ostd::{io::println, syscall::SyscallResult};
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
     time::Instant,
@@ -53,6 +50,7 @@ const ABORT_REAP_PER_TURN: usize = 32;
 /// per-arch, and `MTIME_TICKS_PER_MS` is only a 10 MHz assumption, so this is a
 /// nominal 2 s: measured on QEMU raspi3b it lands at about one line per four
 /// turns (8962 → 2245 lines over the same 900 s window, same ~8960 turns).
+#[cfg(feature = "loop-trace")]
 const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
 // A 10-tick deadline can fire just after 9 complete tick periods when the
 // submission lands immediately before a scheduler tick. The exclusive ceiling
@@ -104,7 +102,9 @@ pub(crate) fn next_ephemeral_port() -> u16 {
 }
 /// Normalize architecture-specific raw clocks to the NET 10 MHz timebase.
 pub(crate) fn sys_get_time() -> u64 {
-    ostd::syscall::sys_get_time_ms().unwrap_or(u64::MAX / 10_000).saturating_mul(10_000)
+    ostd::syscall::sys_get_time_ms()
+        .unwrap_or(u64::MAX / 10_000)
+        .saturating_mul(10_000)
 }
 
 pub(crate) fn now_instant() -> Instant {
@@ -182,8 +182,12 @@ fn handle_resolve(
     };
     // Legacy callers wait at Recv; async callers use an exact reply token.
     let _ = pending.push(PendingDns {
-        owner, sender, op_id: ostd::ipc::current(), query: Some(query),
-        answer: None, deadline: sys_get_time().saturating_add(DNS_QUERY_DEADLINE_TICKS),
+        owner,
+        sender,
+        op_id: ostd::ipc::current(),
+        query: Some(query),
+        answer: None,
+        deadline: sys_get_time().saturating_add(DNS_QUERY_DEADLINE_TICKS),
     });
     true
 }
@@ -223,7 +227,10 @@ fn poll_resolves(
                 let _ = ostd::ipc::reply(op_id, bytes);
                 true // A cancelled op cannot be delivered to another caller.
             }
-            None => matches!(ostd::syscall::sys_try_send(state.sender, bytes), SyscallResult::Ok(0)),
+            None => matches!(
+                ostd::syscall::sys_try_send(state.sender, bytes),
+                SyscallResult::Ok(0)
+            ),
         });
         if sent || now >= state.deadline.saturating_add(10_000_000) {
             pending.swap_remove(index);
@@ -238,7 +245,7 @@ const WAITSET_DEADLINE_TICKS: u64 = 50_000_000;
 
 struct PendingReady {
     op_id: usize,
-    interests: heapless::Vec<u8, {MAX_INTERESTS * ipc::NET_READY_RECORD_BYTES}>,
+    interests: heapless::Vec<u8, { MAX_INTERESTS * ipc::NET_READY_RECORD_BYTES }>,
     cursor: u16,
     deadline: u64,
 }
@@ -260,8 +267,11 @@ fn handle_ready_wait(
     table: &SocketTable,
     pending: &mut BTreeMap<SocketOwner, PendingReady>,
 ) -> bool {
-    let Ok(NetRequest::TcpReady { interests, cursor, wait: true }) =
-        ipc::decode::<NetRequest<'_>>(buffer)
+    let Ok(NetRequest::TcpReady {
+        interests,
+        cursor,
+        wait: true,
+    }) = ipc::decode::<NetRequest<'_>>(buffer)
     else {
         return false;
     };
@@ -270,9 +280,13 @@ fn handle_ready_wait(
         Err(()) => send_ready(sender, NetResponse::Err(0xFF)),
         Ok((events, next_cursor)) if !events.is_empty() => {
             let mut packed = [0u8; handlers::tcp::READY_PAGE * ipc::NET_READY_RECORD_BYTES];
-            send_ready(sender, NetResponse::TcpReady {
-                events: handlers::tcp::pack_events(&events, &mut packed), next_cursor,
-            });
+            send_ready(
+                sender,
+                NetResponse::TcpReady {
+                    events: handlers::tcp::pack_events(&events, &mut packed),
+                    next_cursor,
+                },
+            );
         }
         Ok(_) => {
             let Some(op_id) = ostd::ipc::current() else {
@@ -296,12 +310,15 @@ fn handle_ready_wait(
                     return true;
                 }
             }
-            pending.insert(owner, PendingReady {
-                op_id,
-                interests: owned,
-                cursor,
-                deadline: sys_get_time().saturating_add(WAITSET_DEADLINE_TICKS),
-            });
+            pending.insert(
+                owner,
+                PendingReady {
+                    op_id,
+                    interests: owned,
+                    cursor,
+                    deadline: sys_get_time().saturating_add(WAITSET_DEADLINE_TICKS),
+                },
+            );
         }
     }
     true
@@ -322,10 +339,10 @@ fn graceful_end(state: smoltcp::socket::tcp::State, rst_owed: bool, expired: boo
     use smoltcp::socket::tcp::State;
     match state {
         State::Closed if rst_owed => GracefulEnd::Abort, // smoltcp already aborted it and still owes the RST
-        State::Closed => GracefulEnd::Free,              // peer FIN/ACK done, peer RST, or never connected
+        State::Closed => GracefulEnd::Free, // peer FIN/ACK done, peer RST, or never connected
         State::TimeWait if expired => GracefulEnd::Free, // both FINs exchanged and acked: a clean end
         State::TimeWait => GracefulEnd::Keep,            // smoltcp's own 10 s timer finishes it
-        _ if expired => GracefulEnd::Abort,              // FinWait1/FinWait2/Closing/LastAck (and any state not expected after close())
+        _ if expired => GracefulEnd::Abort, // FinWait1/FinWait2/Closing/LastAck (and any state not expected after close())
         _ => GracefulEnd::Keep,
     }
 }
@@ -345,7 +362,11 @@ fn reap_graceful_closes(table: &mut SocketTable, sockets: &mut SocketSet<'_>, no
                 None => GracefulEnd::Free,
                 Some(handle) => {
                     let socket = sockets.get::<smoltcp::socket::tcp::Socket>(handle);
-                    graceful_end(socket.state(), socket.remote_endpoint().is_some(), now >= deadline)
+                    graceful_end(
+                        socket.state(),
+                        socket.remote_endpoint().is_some(),
+                        now >= deadline,
+                    )
                 }
             };
             (end != GracefulEnd::Keep).then_some((cap, end))
@@ -382,7 +403,10 @@ fn reap_aborted(table: &mut SocketTable, sockets: &mut SocketSet<'_>, now: u64) 
     for _ in 0..ABORT_REAP_PER_TURN {
         let next = table.aborting().find_map(|(cap, deadline)| {
             let sent = table.get_unchecked(cap).is_none_or(|h| {
-                sockets.get::<smoltcp::socket::tcp::Socket>(h).remote_endpoint().is_none()
+                sockets
+                    .get::<smoltcp::socket::tcp::Socket>(h)
+                    .remote_endpoint()
+                    .is_none()
             });
             (sent || now >= deadline).then_some(cap)
         });
@@ -409,7 +433,8 @@ fn drain_ready_waits(
                 let mut packed = [0u8; handlers::tcp::READY_PAGE * ipc::NET_READY_RECORD_BYTES];
                 let mut out = [0u8; IPC_BUF_SIZE];
                 let response = NetResponse::TcpReady {
-                    events: handlers::tcp::pack_events(&events, &mut packed), next_cursor,
+                    events: handlers::tcp::pack_events(&events, &mut packed),
+                    next_cursor,
                 };
                 if let Ok(bytes) = ipc::encode(&response, &mut out) {
                     let _ = ostd::ipc::reply(wait.op_id, bytes);
@@ -473,8 +498,17 @@ fn dispatch_admitted(
         && !handle_resolve(buffer, sender, owner, iface, sockets, resolver, pending_dns)
     {
         handlers::handle_request(
-            buffer, sender, owner, iface, device, sockets, table, tls_table, tls_pending,
-            resolver, local_ip,
+            buffer,
+            sender,
+            owner,
+            iface,
+            device,
+            sockets,
+            table,
+            tls_table,
+            tls_pending,
+            resolver,
+            local_ip,
         );
     }
 }
@@ -543,11 +577,17 @@ fn owner_death_line(owner: SocketOwner, aborted: usize, released: usize) -> Opti
     (aborted + released > 0).then(|| {
         alloc::format!(
             "[net] owner death: cell {} gen {}: aborted {} TCP, released {} other",
-            owner.cell_id, owner.generation, aborted, released
+            owner.cell_id,
+            owner.generation,
+            aborted,
+            released
         )
     })
 }
 
+// reason: forwards the same disjoint per-owner state borrows of the service loop
+// as `reclaim_owner_state`; a bundle struct would only re-borrow loop locals.
+#[allow(clippy::too_many_arguments)]
 fn release_owner(
     owner: SocketOwner,
     sockets: &mut SocketSet<'_>,
@@ -560,7 +600,14 @@ fn release_owner(
     watched: &mut BTreeMap<SocketOwner, (usize, u64)>,
 ) {
     let (aborted, released) = reclaim_owner_state(
-        owner, sockets, table, tls_table, tls_pending, pending_ready, pending_dns, resolver,
+        owner,
+        sockets,
+        table,
+        tls_table,
+        tls_pending,
+        pending_ready,
+        pending_dns,
+        resolver,
         sys_get_time().saturating_add(ABORT_DRAIN_TICKS),
     );
     // The kernel dropped the watch with the death; cancelling is then a no-op.
@@ -571,7 +618,6 @@ fn release_owner(
         println(&line);
     }
 }
-
 
 #[cfg(target_os = "none")]
 pub(crate) fn run() {
@@ -710,7 +756,13 @@ pub(crate) fn run() {
         }
         #[cfg(feature = "qemu-dev-https")]
         dev_clock.poll(&mut iface, &mut sockets, local_ip != [0; 4]);
-        tls_pending.poll(&mut iface, &mut device, &mut sockets, &mut table, &mut tls_table);
+        tls_pending.poll(
+            &mut iface,
+            &mut device,
+            &mut sockets,
+            &mut table,
+            &mut tls_table,
+        );
         poll_resolves(&resolver, &mut pending_dns, &mut sockets);
         let graceful_aborted = reap_graceful_closes(&mut table, &mut sockets, sys_get_time());
         if let Some(line) = graceful_deadline_line(graceful_aborted) {
@@ -730,9 +782,17 @@ pub(crate) fn run() {
                 let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buffer)
                 else {
                     if let Some(owner) = owner_for_root(&watched, sender) {
-                        release_owner(owner, &mut sockets, &mut table, &mut tls_table,
-                            &mut tls_pending, &mut pending_ready, &mut pending_dns, &resolver,
-                            &mut watched);
+                        release_owner(
+                            owner,
+                            &mut sockets,
+                            &mut table,
+                            &mut tls_table,
+                            &mut tls_pending,
+                            &mut pending_ready,
+                            &mut pending_dns,
+                            &resolver,
+                            &mut watched,
+                        );
                     }
                     #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
                     idle_ipc_wake_oracle.record_ipc_miss();
@@ -762,12 +822,21 @@ pub(crate) fn run() {
                 // client's sockets are only reclaimed when the net cell
                 // restarts, so a refusal must never deny live traffic.
                 if !watched.contains_key(&owner) {
-                    let watch = ostd::syscall::sys_watch_cell_owner(owner.cell_id, owner.generation);
+                    let watch =
+                        ostd::syscall::sys_watch_cell_owner(owner.cell_id, owner.generation);
                     if let Some((principal, token)) = watch {
                         while let Some(stale) = stale_generation_of(&watched, owner) {
-                            release_owner(stale, &mut sockets, &mut table, &mut tls_table,
-                                &mut tls_pending, &mut pending_ready, &mut pending_dns, &resolver,
-                                &mut watched);
+                            release_owner(
+                                stale,
+                                &mut sockets,
+                                &mut table,
+                                &mut tls_table,
+                                &mut tls_pending,
+                                &mut pending_ready,
+                                &mut pending_dns,
+                                &resolver,
+                                &mut watched,
+                            );
                         }
                         watched.insert(owner, (principal.root_tid as usize, token));
                     } else if !WATCH_REFUSED.swap(true, core::sync::atomic::Ordering::Relaxed) {
@@ -777,9 +846,19 @@ pub(crate) fn run() {
                 #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
                 idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
                 dispatch_admitted(
-                    &buffer, sender, owner, &mut iface, &mut device, &mut sockets, &mut table,
-                    &mut tls_table, &mut tls_pending, &mut pending_ready, &mut pending_dns,
-                    &resolver, &local_ip,
+                    &buffer,
+                    sender,
+                    owner,
+                    &mut iface,
+                    &mut device,
+                    &mut sockets,
+                    &mut table,
+                    &mut tls_table,
+                    &mut tls_pending,
+                    &mut pending_ready,
+                    &mut pending_dns,
+                    &resolver,
+                    &local_ip,
                 );
                 drain_ready_waits(&mut pending_ready, &mut sockets, &table);
                 #[cfg(not(feature = "hypervisor-bridge"))]

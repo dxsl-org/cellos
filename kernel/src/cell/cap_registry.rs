@@ -7,19 +7,17 @@
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 
-static CSPACE_FILES: Spinlock<BTreeMap<(u64, u64, u64), Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>>>> =
+/// A parked BootFS file behind its CSpace ticket.
+type TicketFile = alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>;
+
+static CSPACE_FILES: Spinlock<BTreeMap<(u64, u64, u64), Option<TicketFile>>> =
     Spinlock::new(BTreeMap::new());
 
-pub fn attach_file_to_ticket(
-    key: (u64, u64, u64),
-    file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
-) {
+pub fn attach_file_to_ticket(key: (u64, u64, u64), file: TicketFile) {
     CSPACE_FILES.lock().insert(key, Some(file));
 }
 
-pub fn park_ticket_file(
-    key: (u64, u64, u64),
-) -> Option<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>> {
+pub fn park_ticket_file(key: (u64, u64, u64)) -> Option<TicketFile> {
     CSPACE_FILES.lock().get_mut(&key).and_then(|opt| opt.take())
 }
 

@@ -38,7 +38,18 @@ api::declare_syscalls![
     VfsMutate
 ];
 #[cfg(feature = "g1-cpu-workload")]
-api::declare_syscalls![Spawn, Wait, Send, Recv, RecvTimeout, Log, GetTime, StateRestore, Exit, Yield];
+api::declare_syscalls![
+    Spawn,
+    Wait,
+    Send,
+    Recv,
+    RecvTimeout,
+    Log,
+    GetTime,
+    StateRestore,
+    Exit,
+    Yield
+];
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 use api::benchmark::{BenchReport, ViBenchmark};
@@ -451,7 +462,9 @@ fn cell_main() {
         "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         "peer-death-guard" => scenarios::smp::run_peer_death_guard(),
-        "hotswap-prime" => scenarios::hotswap_cli_probe::prime(argv.get(1).map(|a| a.as_str()) == Some("cached")),
+        "hotswap-prime" => {
+            scenarios::hotswap_cli_probe::prime(argv.get(1).map(|a| a.as_str()) == Some("cached"))
+        }
         "hotswap-verify" => match argv.get(1).and_then(|a| a.parse::<u32>().ok()) {
             Some(expected) => scenarios::hotswap_cli_probe::verify(expected),
             None => {

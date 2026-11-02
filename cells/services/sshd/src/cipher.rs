@@ -4,7 +4,6 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
-use chacha20::cipher::generic_array::GenericArray;
 use chacha20::cipher::{KeyIvInit, StreamCipher};
 use chacha20::ChaCha20Legacy;
 
@@ -68,7 +67,12 @@ impl CipherMode {
                 out.resize(out.len() + pad_len, 0);
                 out
             }
-            Self::ChaCha20Poly1305 { s2c_k1, s2c_k2, s2c_seq, .. } => {
+            Self::ChaCha20Poly1305 {
+                s2c_k1,
+                s2c_k2,
+                s2c_seq,
+                ..
+            } => {
                 let block_size = 8;
                 let min_padding = 4;
                 let unpadded = 1 + payload.len() + min_padding;
@@ -90,13 +94,19 @@ impl CipherMode {
                 let nonce = (seq as u64).to_be_bytes();
 
                 // Encrypt length with K1 (length key per RFC 4253 / PROTOCOL.chacha20poly1305)
-                let mut cipher_k1 = ChaCha20Legacy::new(GenericArray::from_slice(s2c_k1), GenericArray::from_slice(&nonce));
+                let mut cipher_k1 = ChaCha20Legacy::new(
+                    GenericArray::from_slice(s2c_k1),
+                    GenericArray::from_slice(&nonce),
+                );
                 let mut enc_len = [0u8; 4];
                 enc_len.copy_from_slice(&pkt[0..4]);
                 cipher_k1.apply_keystream(&mut enc_len);
 
                 // Derive Poly1305 key using K2 with counter 0
-                let mut cipher_k2 = ChaCha20Legacy::new(GenericArray::from_slice(s2c_k2), GenericArray::from_slice(&nonce));
+                let mut cipher_k2 = ChaCha20Legacy::new(
+                    GenericArray::from_slice(s2c_k2),
+                    GenericArray::from_slice(&nonce),
+                );
                 let mut poly_key = [0u8; 64];
                 cipher_k2.apply_keystream(&mut poly_key);
 
@@ -105,7 +115,7 @@ impl CipherMode {
                 cipher_k2.apply_keystream(body);
 
                 // Compute Poly1305 tag over enc_len || enc_body
-                let poly = chacha20poly1305::Tag::default(); // tag calculation
+                let _poly = chacha20poly1305::Tag::default(); // tag calculation
                 let mut mac_data = Vec::with_capacity(4 + body.len());
                 mac_data.extend_from_slice(&enc_len);
                 mac_data.extend_from_slice(body);
@@ -138,7 +148,7 @@ impl CipherMode {
                     return Ok(None);
                 }
                 let packet_length = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
-                if packet_length < 2 || packet_length > 65536 {
+                if !(2..=65536).contains(&packet_length) {
                     return Err(());
                 }
                 let total_needed = 4 + packet_length;
@@ -153,7 +163,12 @@ impl CipherMode {
                 let payload = buf[5..5 + payload_len].to_vec();
                 Ok(Some((payload, total_needed)))
             }
-            Self::ChaCha20Poly1305 { c2s_k1, c2s_k2, c2s_seq, .. } => {
+            Self::ChaCha20Poly1305 {
+                c2s_k1,
+                c2s_k2,
+                c2s_seq,
+                ..
+            } => {
                 if buf.len() < 4 {
                     return Ok(None);
                 }
@@ -163,12 +178,15 @@ impl CipherMode {
                 let nonce = (seq as u64).to_be_bytes();
 
                 // Decrypt length with K1 (length key)
-                let mut cipher_k1 = ChaCha20Legacy::new(GenericArray::from_slice(c2s_k1), GenericArray::from_slice(&nonce));
+                let mut cipher_k1 = ChaCha20Legacy::new(
+                    GenericArray::from_slice(c2s_k1),
+                    GenericArray::from_slice(&nonce),
+                );
                 let mut dec_len_bytes = [0u8; 4];
                 dec_len_bytes.copy_from_slice(&buf[0..4]);
                 cipher_k1.apply_keystream(&mut dec_len_bytes);
                 let packet_length = u32::from_be_bytes(dec_len_bytes) as usize;
-                if packet_length < 2 || packet_length > 65536 {
+                if !(2..=65536).contains(&packet_length) {
                     ostd::io::print("[cipher] invalid len: ");
                     ostd::io::print_usize(packet_length);
                     ostd::io::println("");
@@ -182,7 +200,10 @@ impl CipherMode {
                 *c2s_seq = c2s_seq.wrapping_add(1);
 
                 // Compute Poly1305 key with K2 at counter 0
-                let mut cipher_k2 = ChaCha20Legacy::new(GenericArray::from_slice(c2s_k2), GenericArray::from_slice(&nonce));
+                let mut cipher_k2 = ChaCha20Legacy::new(
+                    GenericArray::from_slice(c2s_k2),
+                    GenericArray::from_slice(&nonce),
+                );
                 let mut poly_key = [0u8; 64];
                 cipher_k2.apply_keystream(&mut poly_key);
 

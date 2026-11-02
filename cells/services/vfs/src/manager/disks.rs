@@ -20,8 +20,18 @@ pub(crate) const SECONDARY_ROOT: &str = "/mnt/disk";
 pub(crate) enum DiskMount {
     /// FAT volume at `base_lba`; only secondary-disk prefixes are built at
     /// runtime. A `secondary` volume that does not open is not mounted.
-    Fat { prefix: Cow<'static, str>, dev: DeviceRef, base_lba: u64, secondary: bool },
-    CellosFs { prefix: &'static str, dev: DeviceRef, base_lba: u64, sectors: u64 },
+    Fat {
+        prefix: Cow<'static, str>,
+        dev: DeviceRef,
+        base_lba: u64,
+        secondary: bool,
+    },
+    CellosFs {
+        prefix: &'static str,
+        dev: DeviceRef,
+        base_lba: u64,
+        sectors: u64,
+    },
     /// `/bin`: VIFS1 unioned with the FAT cell-store at `base_lba`.
     BinOverlay { dev: DeviceRef, base_lba: u64 },
 }
@@ -34,19 +44,42 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
     let dev = discovery.primary;
     let mut plan = alloc::vec![
         // FAT32 P1 remains the interoperability/config override volume.
-        DiskMount::Fat { prefix: Cow::Borrowed("/mnt/sd"), dev, base_lba: PART_FAT32_BASE_LBA, secondary: false },
+        DiskMount::Fat {
+            prefix: Cow::Borrowed("/mnt/sd"),
+            dev,
+            base_lba: PART_FAT32_BASE_LBA,
+            secondary: false
+        },
         // Native P4/P5 require explicit offline provisioning; runtime never formats.
-        DiskMount::CellosFs { prefix: "/data", dev, base_lba: PART_LFS_BASE_LBA, sectors: PART_LFS_SECTORS },
-        DiskMount::BinOverlay { dev, base_lba: PART_CELLSTORE_BASE_LBA },
+        DiskMount::CellosFs {
+            prefix: "/data",
+            dev,
+            base_lba: PART_LFS_BASE_LBA,
+            sectors: PART_LFS_SECTORS
+        },
+        DiskMount::BinOverlay {
+            dev,
+            base_lba: PART_CELLSTORE_BASE_LBA
+        },
         // /srv P5: existing native V1 volume, not an admitted durable journal.
-        DiskMount::CellosFs { prefix: "/srv", dev, base_lba: PART_SRV_BASE_LBA, sectors: PART_SRV_SECTORS },
+        DiskMount::CellosFs {
+            prefix: "/srv",
+            dev,
+            base_lba: PART_SRV_BASE_LBA,
+            sectors: PART_SRV_SECTORS
+        },
     ];
-    plan.extend(discovery.secondaries.iter().map(|(dev, name)| DiskMount::Fat {
-        prefix: Cow::Owned(format!("{SECONDARY_ROOT}/{name}")),
-        dev: *dev,
-        base_lba: PART_FAT32_BASE_LBA,
-        secondary: true,
-    }));
+    plan.extend(
+        discovery
+            .secondaries
+            .iter()
+            .map(|(dev, name)| DiskMount::Fat {
+                prefix: Cow::Owned(format!("{SECONDARY_ROOT}/{name}")),
+                dev: *dev,
+                base_lba: PART_FAT32_BASE_LBA,
+                secondary: true,
+            }),
+    );
     plan
 }
 
@@ -54,7 +87,12 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
 pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
     for mount in plan {
         match mount {
-            DiskMount::Fat { prefix, dev, base_lba, secondary } => {
+            DiskMount::Fat {
+                prefix,
+                dev,
+                base_lba,
+                secondary,
+            } => {
                 let fat = FatBackend::mount(&prefix, dev, base_lba);
                 if secondary && !fat.is_mounted() {
                     ostd::io::println(&format!("[vfs] {prefix}: no FAT32 volume"));
@@ -63,8 +101,15 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
                 let index = mounts.add_backend(Box::new(fat));
                 mounts.mount(&prefix, index);
             }
-            DiskMount::CellosFs { prefix, dev, base_lba, sectors } => {
-                let index = mounts.add_backend(Box::new(CellosFsBackend::mount(prefix, dev, base_lba, sectors)));
+            DiskMount::CellosFs {
+                prefix,
+                dev,
+                base_lba,
+                sectors,
+            } => {
+                let index = mounts.add_backend(Box::new(CellosFsBackend::mount(
+                    prefix, dev, base_lba, sectors,
+                )));
                 mounts.mount(prefix, index);
             }
             DiskMount::BinOverlay { dev, base_lba } => {
@@ -98,20 +143,58 @@ mod tests {
     #[test]
     fn primary_mounts_exactly_the_fixed_set_on_its_device() {
         let primary = DeviceRef::Device(1);
-        let plan = disk_mounts(&Discovery { primary, secondaries: Vec::new() });
+        let plan = disk_mounts(&Discovery {
+            primary,
+            secondaries: Vec::new(),
+        });
         assert_eq!(prefixes(&plan), ["/mnt/sd", "/data", "/bin", "/srv"]);
-        assert_eq!(plan[0], DiskMount::Fat { prefix: "/mnt/sd".into(), dev: primary, base_lba: PART_FAT32_BASE_LBA, secondary: false });
-        assert_eq!(plan[1], DiskMount::CellosFs { prefix: "/data", dev: primary, base_lba: PART_LFS_BASE_LBA, sectors: PART_LFS_SECTORS });
-        assert_eq!(plan[2], DiskMount::BinOverlay { dev: primary, base_lba: PART_CELLSTORE_BASE_LBA });
-        assert_eq!(plan[3], DiskMount::CellosFs { prefix: "/srv", dev: primary, base_lba: PART_SRV_BASE_LBA, sectors: PART_SRV_SECTORS });
+        assert_eq!(
+            plan[0],
+            DiskMount::Fat {
+                prefix: "/mnt/sd".into(),
+                dev: primary,
+                base_lba: PART_FAT32_BASE_LBA,
+                secondary: false
+            }
+        );
+        assert_eq!(
+            plan[1],
+            DiskMount::CellosFs {
+                prefix: "/data",
+                dev: primary,
+                base_lba: PART_LFS_BASE_LBA,
+                sectors: PART_LFS_SECTORS
+            }
+        );
+        assert_eq!(
+            plan[2],
+            DiskMount::BinOverlay {
+                dev: primary,
+                base_lba: PART_CELLSTORE_BASE_LBA
+            }
+        );
+        assert_eq!(
+            plan[3],
+            DiskMount::CellosFs {
+                prefix: "/srv",
+                dev: primary,
+                base_lba: PART_SRV_BASE_LBA,
+                sectors: PART_SRV_SECTORS
+            }
+        );
     }
 
     #[test]
     fn kernel_primary_keeps_the_fixed_set_and_no_secondaries() {
-        let plan = disk_mounts(&Discovery { primary: DeviceRef::Kernel, secondaries: Vec::new() });
+        let plan = disk_mounts(&Discovery {
+            primary: DeviceRef::Kernel,
+            secondaries: Vec::new(),
+        });
         assert_eq!(prefixes(&plan), ["/mnt/sd", "/data", "/bin", "/srv"]);
         assert!(plan.iter().all(|m| match m {
-            DiskMount::Fat { dev, .. } | DiskMount::CellosFs { dev, .. } | DiskMount::BinOverlay { dev, .. } => *dev == DeviceRef::Kernel,
+            DiskMount::Fat { dev, .. }
+            | DiskMount::CellosFs { dev, .. }
+            | DiskMount::BinOverlay { dev, .. } => *dev == DeviceRef::Kernel,
         }));
     }
 
@@ -121,13 +204,31 @@ mod tests {
             (DeviceRef::Device(0), String::from("pci-00-1f-2")),
             (DeviceRef::Device(2), String::from("mmio-10001000")),
         ];
-        let plan = disk_mounts(&Discovery { primary: DeviceRef::Device(1), secondaries });
-        assert_eq!(&plan[4..], [
-            DiskMount::Fat { prefix: "/mnt/disk/pci-00-1f-2".into(), dev: DeviceRef::Device(0), base_lba: PART_FAT32_BASE_LBA, secondary: true },
-            DiskMount::Fat { prefix: "/mnt/disk/mmio-10001000".into(), dev: DeviceRef::Device(2), base_lba: PART_FAT32_BASE_LBA, secondary: true },
-        ]);
+        let plan = disk_mounts(&Discovery {
+            primary: DeviceRef::Device(1),
+            secondaries,
+        });
+        assert_eq!(
+            &plan[4..],
+            [
+                DiskMount::Fat {
+                    prefix: "/mnt/disk/pci-00-1f-2".into(),
+                    dev: DeviceRef::Device(0),
+                    base_lba: PART_FAT32_BASE_LBA,
+                    secondary: true
+                },
+                DiskMount::Fat {
+                    prefix: "/mnt/disk/mmio-10001000".into(),
+                    dev: DeviceRef::Device(2),
+                    base_lba: PART_FAT32_BASE_LBA,
+                    secondary: true
+                },
+            ]
+        );
         assert!(plan[..4].iter().all(|m| match m {
-            DiskMount::Fat { dev, .. } | DiskMount::CellosFs { dev, .. } | DiskMount::BinOverlay { dev, .. } => *dev == DeviceRef::Device(1),
+            DiskMount::Fat { dev, .. }
+            | DiskMount::CellosFs { dev, .. }
+            | DiskMount::BinOverlay { dev, .. } => *dev == DeviceRef::Device(1),
         }));
     }
 }

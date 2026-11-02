@@ -108,7 +108,10 @@ pub fn parse_list(bytes: &[u8]) -> ViResult<Vec<DirEntry>> {
             } else {
                 (false, line.strip_prefix("f:")?)
             };
-            (!name.is_empty()).then(|| DirEntry { name: String::from(name), is_dir })
+            (!name.is_empty()).then(|| DirEntry {
+                name: String::from(name),
+                is_dir,
+            })
         })
         .collect())
 }
@@ -205,7 +208,8 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
 
 fn inside(path: &str, ancestor: &str) -> bool {
     path == ancestor
-        || (path.starts_with(ancestor) && path.as_bytes().get(ancestor.trim_end_matches('/').len()) == Some(&b'/'))
+        || (path.starts_with(ancestor)
+            && path.as_bytes().get(ancestor.trim_end_matches('/').len()) == Some(&b'/'))
 }
 
 /// Read a whole regular file within `max` bytes: `Stat` decides kind and size, then one
@@ -322,7 +326,11 @@ pub(crate) mod fake {
         pub fn new() -> Self {
             let mut nodes = BTreeMap::new();
             nodes.insert(String::from("/"), None);
-            Self { nodes, denied: Vec::new(), read_only: Vec::new() }
+            Self {
+                nodes,
+                denied: Vec::new(),
+                read_only: Vec::new(),
+            }
         }
         pub fn dir(mut self, path: &str) -> Self {
             self.nodes.insert(String::from(path), None);
@@ -349,7 +357,11 @@ pub(crate) mod fake {
             matches!(self.nodes.get(parent(path)), Some(None))
         }
         fn children(&self, path: &str) -> Vec<String> {
-            self.nodes.keys().filter(|k| k.as_str() != path && parent(k) == path).cloned().collect()
+            self.nodes
+                .keys()
+                .filter(|k| k.as_str() != path && parent(k) == path)
+                .cloned()
+                .collect()
         }
     }
 
@@ -361,7 +373,11 @@ pub(crate) mod fake {
             }
             let mut wire = Vec::new();
             for child in self.children(path) {
-                wire.extend_from_slice(if self.nodes[&child].is_none() { b"d:" } else { b"f:" });
+                wire.extend_from_slice(if self.nodes[&child].is_none() {
+                    b"d:"
+                } else {
+                    b"f:"
+                });
                 wire.extend_from_slice(child.rsplit('/').next().unwrap_or("").as_bytes());
                 wire.push(b'\n');
             }
@@ -396,7 +412,8 @@ pub(crate) mod fake {
             if matches!(self.nodes.get(path), Some(None)) || !self.parent_is_dir(path) {
                 return Err(ViError::IO);
             }
-            self.nodes.insert(String::from(path), Some(content.to_vec()));
+            self.nodes
+                .insert(String::from(path), Some(content.to_vec()));
             Ok(())
         }
         fn append(&mut self, path: &str, content: &[u8]) -> ViResult<()> {
@@ -464,8 +481,14 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                DirEntry { name: String::from("docs"), is_dir: true },
-                DirEntry { name: String::from("a.txt"), is_dir: false },
+                DirEntry {
+                    name: String::from("docs"),
+                    is_dir: true
+                },
+                DirEntry {
+                    name: String::from("a.txt"),
+                    is_dir: false
+                },
             ]
         );
         assert_eq!(parse_list(&[0xff, 0xfe]), Err(ViError::IO));
@@ -490,13 +513,20 @@ mod tests {
 
     #[test]
     fn copy_round_trips_multi_chunk_content_and_respects_the_cp_bound() {
-        let big: Vec<u8> = (0..(WRITE_CHUNK * 2 + 17)).map(|i| (i % 251) as u8).collect();
+        let big: Vec<u8> = (0..(WRITE_CHUNK * 2 + 17))
+            .map(|i| (i % 251) as u8)
+            .collect();
         let mut fs = FakeFs::new().dir("/tmp").file("/tmp/big.bin", &big);
         copy_file(&mut fs, "/tmp/big.bin", "/tmp/copy.bin").unwrap();
         assert_eq!(fs.nodes["/tmp/copy.bin"].as_deref(), Some(&big[..]));
 
-        let mut fs = FakeFs::new().dir("/tmp").file("/tmp/huge", &vec![0u8; COPY_READ_MAX + 1]);
-        assert_eq!(copy_file(&mut fs, "/tmp/huge", "/tmp/out"), Err(FsError::TooLarge));
+        let mut fs = FakeFs::new()
+            .dir("/tmp")
+            .file("/tmp/huge", &vec![0u8; COPY_READ_MAX + 1]);
+        assert_eq!(
+            copy_file(&mut fs, "/tmp/huge", "/tmp/out"),
+            Err(FsError::TooLarge)
+        );
         assert!(!fs.nodes.contains_key("/tmp/out"));
     }
 
@@ -511,7 +541,10 @@ mod tests {
         copy_tree(&mut fs, "/tmp/src", "/tmp/dst").unwrap();
         assert_eq!(fs.nodes["/tmp/dst/sub/x"].as_deref(), Some(&b"x1"[..]));
         assert_eq!(fs.nodes["/tmp/dst/y"].as_deref(), Some(&b""[..]));
-        assert_eq!(copy_tree(&mut fs, "/tmp/src", "/tmp/src/sub/inner"), Err(FsError::IntoItself));
+        assert_eq!(
+            copy_tree(&mut fs, "/tmp/src", "/tmp/src/sub/inner"),
+            Err(FsError::IntoItself)
+        );
         assert!(!fs.nodes.contains_key("/tmp/src/sub/inner"));
     }
 
@@ -525,7 +558,10 @@ mod tests {
             .dir("/data/tree")
             .file("/data/tree/f", b"1");
         // Outside /data a folder is removed only when empty, exactly like `rmdir`.
-        assert_eq!(remove_entry(&mut fs, "/tmp/full", true), Err(FsError::Vfs(ViError::IO)));
+        assert_eq!(
+            remove_entry(&mut fs, "/tmp/full", true),
+            Err(FsError::Vfs(ViError::IO))
+        );
         assert!(fs.nodes.contains_key("/tmp/full/f"));
         remove_entry(&mut fs, "/data/tree", true).unwrap();
         assert!(!fs.nodes.keys().any(|k| k.starts_with("/data/tree")));
@@ -549,7 +585,11 @@ mod tests {
 
     #[test]
     fn refusals_surface_unchanged() {
-        let mut fs = FakeFs::new().dir("/srv").dir("/srv/cellos").dir("/bin").file("/tmp", b"");
+        let mut fs = FakeFs::new()
+            .dir("/srv")
+            .dir("/srv/cellos")
+            .dir("/bin")
+            .file("/tmp", b"");
         fs.denied.push("/srv/cellos");
         fs.read_only.push("/bin");
         assert_eq!(fs.list_dir("/srv/cellos"), Err(ViError::PermissionDenied));
@@ -558,6 +598,9 @@ mod tests {
             Err("permission denied (VFS ERR_DENIED)")
         );
         assert!(!fs.nodes.contains_key("/bin/new"));
-        assert_eq!(create_file(&mut fs, "/tmp"), Err(FsError::Vfs(ViError::AlreadyExists)));
+        assert_eq!(
+            create_file(&mut fs, "/tmp"),
+            Err(FsError::Vfs(ViError::AlreadyExists))
+        );
     }
 }

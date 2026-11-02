@@ -46,7 +46,10 @@ const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
 #[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const CELL_SIGNER_PUBKEY: [u8; 32] = DEV_CELL_SIGNER_PUBKEY;
 
-#[cfg(all(feature = "release-signing-key", not(feature = "phase02-terminal-profile")))]
+#[cfg(all(
+    feature = "release-signing-key",
+    not(feature = "phase02-terminal-profile")
+))]
 const CELL_SIGNER_PUBKEY: [u8; 32] =
     *include_bytes!(concat!(env!("OUT_DIR"), "/release-cell-signing.pub"));
 
@@ -166,8 +169,10 @@ fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> 
     // Retained verification workspace is shared signing state, not an
     // exclusive object of the unpublished task being verified.
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::SIGNING_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::SIGNING_SHARED,
+    );
     let payload = &mut *scratch;
     payload.clear();
     payload

@@ -128,7 +128,11 @@ pub enum Rows {
 /// System memory in bytes (frames × page size).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SysMem {
-    Present { total_bytes: u64, used_bytes: u64, free_bytes: u64 },
+    Present {
+        total_bytes: u64,
+        used_bytes: u64,
+        free_bytes: u64,
+    },
     /// Requested without the `observe_memory` right.
     Denied,
     /// Not requested, or a byte count overflowed `u64`.
@@ -174,7 +178,8 @@ impl Frame {
         match &mut self.rows {
             Rows::Cells(rows) => rows.retain(|row| show_all || row.state != CellState::Retiring),
             Rows::Tasks(rows) => rows.retain(|row| {
-                (show_all || row.state != TaskState::Retiring) && in_view(view, row.cell_id, row.generation)
+                (show_all || row.state != TaskState::Retiring)
+                    && in_view(view, row.cell_id, row.generation)
             }),
         }
     }
@@ -187,7 +192,8 @@ impl Frame {
                     .then((a.cell_id, a.generation).cmp(&(b.cell_id, b.generation)))
             }),
             Rows::Tasks(rows) => rows.sort_by(|a, b| {
-                compare(a.key(spec.field), b.key(spec.field), spec.descending).then(a.tid.cmp(&b.tid))
+                compare(a.key(spec.field), b.key(spec.field), spec.descending)
+                    .then(a.tid.cmp(&b.tid))
             }),
         }
     }
@@ -217,7 +223,10 @@ impl Frame {
             RowKind::Tasks => self.meta.total_tasks,
         } as u64;
         let total = total.max(self.dropped);
-        Err(TopError::Incomplete { emitted: total - self.dropped, total })
+        Err(TopError::Incomplete {
+            emitted: total - self.dropped,
+            total,
+        })
     }
 }
 
@@ -253,7 +262,9 @@ impl CellSample {
             Field::CpuQuality => Key::Num(quality_rank(self.cpu.quality)),
             Field::QuotaBytes => opt(self.quota_bytes),
             Field::LimitBytes => opt(self.limit_bytes),
-            Field::Tid | Field::StackBytes | Field::SegmentBytes | Field::StackInQuota => return None,
+            Field::Tid | Field::StackBytes | Field::SegmentBytes | Field::StackInQuota => {
+                return None
+            }
         })
     }
 }
@@ -291,9 +302,10 @@ fn compare(a: Option<Key<'_>>, b: Option<Key<'_>>, descending: bool) -> Ordering
 
 fn in_view(view: View, cell_id: Option<u64>, generation: Option<u64>) -> bool {
     match view {
-        View::Cell { cell_id: want_cell, generation: want_generation } => {
-            cell_id == Some(want_cell) && generation == Some(want_generation)
-        }
+        View::Cell {
+            cell_id: want_cell,
+            generation: want_generation,
+        } => cell_id == Some(want_cell) && generation == Some(want_generation),
         View::Cells | View::Tasks => true,
     }
 }
@@ -316,7 +328,11 @@ struct Join<'a> {
 
 impl<'a> Join<'a> {
     fn new(marks: &'a [Mark]) -> Self {
-        Self { marks, at: 0, matched: 0 }
+        Self {
+            marks,
+            at: 0,
+            matched: 0,
+        }
     }
 
     /// The baseline mark of `(generation, id)`, if any.
@@ -384,22 +400,44 @@ struct Clock {
 impl Clock {
     fn cpu(&self, row_cpu: bool, ns: u64, base: Option<Mark>) -> Cpu {
         if !(self.header_cpu && row_cpu) {
-            return Cpu { ns: None, tenths: None, quality: Quality::Unavailable };
+            return Cpu {
+                ns: None,
+                tenths: None,
+                quality: Quality::Unavailable,
+            };
         }
         let ns_now = Some(ns);
         let Some(previous) = base.and_then(|mark| mark.cpu_ns) else {
-            return Cpu { ns: ns_now, tenths: None, quality: Quality::New };
+            return Cpu {
+                ns: ns_now,
+                tenths: None,
+                quality: Quality::New,
+            };
         };
         if ns < previous {
-            return Cpu { ns: ns_now, tenths: None, quality: Quality::Reset };
+            return Cpu {
+                ns: ns_now,
+                tenths: None,
+                quality: Quality::Reset,
+            };
         }
         let tenths = self
             .interval_ns
             .filter(|&interval| interval > 0)
-            .and_then(|interval| u32::try_from(u128::from(ns - previous) * 1000 / u128::from(interval)).ok());
+            .and_then(|interval| {
+                u32::try_from(u128::from(ns - previous) * 1000 / u128::from(interval)).ok()
+            });
         match tenths {
-            Some(tenths) => Cpu { ns: ns_now, tenths: Some(tenths), quality: Quality::Ok },
-            None => Cpu { ns: ns_now, tenths: None, quality: Quality::Unavailable },
+            Some(tenths) => Cpu {
+                ns: ns_now,
+                tenths: Some(tenths),
+                quality: Quality::Ok,
+            },
+            None => Cpu {
+                ns: ns_now,
+                tenths: None,
+                quality: Quality::Unavailable,
+            },
         }
     }
 
@@ -429,7 +467,10 @@ impl Sampler {
             (true, true, Some(start)) => header.capture_start_ns.checked_sub(start),
             _ => None,
         };
-        let clock = Clock { header_cpu, interval_ns };
+        let clock = Clock {
+            header_cpu,
+            interval_ns,
+        };
         let empty: &[Mark] = &[];
         let mut unavailable = FieldSet::default();
         if !header_cpu {
@@ -471,7 +512,11 @@ impl Sampler {
         }
 
         let tasks_seen = kind == RowKind::Tasks;
-        let task_base = if same_epoch && base.tasks_seen { &base.tasks[..] } else { empty };
+        let task_base = if same_epoch && base.tasks_seen {
+            &base.tasks[..]
+        } else {
+            empty
+        };
         let mut task_join = Join::new(task_base);
         self.next_tasks.clear();
         let mut tasks = Vec::new();
@@ -507,8 +552,14 @@ impl Sampler {
             (true, true, false) => None,
         };
         let (rows, provider_dropped) = match kind {
-            RowKind::Cells => (Rows::Cells(cells), header.total_cells - header.emitted_cells),
-            RowKind::Tasks => (Rows::Tasks(tasks), header.total_tasks - header.emitted_tasks),
+            RowKind::Cells => (
+                Rows::Cells(cells),
+                header.total_cells - header.emitted_cells,
+            ),
+            RowKind::Tasks => (
+                Rows::Tasks(tasks),
+                header.total_tasks - header.emitted_tasks,
+            ),
         };
         let meta = FrameMeta {
             sample_id: header.sample_id,
@@ -524,8 +575,12 @@ impl Sampler {
             mem: system_memory(&header),
             memory_interval: header.has(header_flags::MEMORY_INTERVAL),
         };
-        let unavailable_fields =
-            kind.fields().iter().filter(|&&field| unavailable.contains(field)).map(|field| field.name().into()).collect();
+        let unavailable_fields = kind
+            .fields()
+            .iter()
+            .filter(|&&field| unavailable.contains(field))
+            .map(|field| field.name().into())
+            .collect();
 
         core::mem::swap(&mut self.base.cells, &mut self.next_cells);
         core::mem::swap(&mut self.base.tasks, &mut self.next_tasks);
@@ -564,11 +619,19 @@ fn cell_sample(row: &TelemetryCellV1, cpu: Cpu) -> CellSample {
         root_tid: row.root_tid,
         name: row_name(&row.name),
         name_truncated: row.has(cell_flags::NAME_TRUNCATED),
-        state: if row.state == cell_state::RETIRING { CellState::Retiring } else { CellState::Live },
+        state: if row.state == cell_state::RETIRING {
+            CellState::Retiring
+        } else {
+            CellState::Live
+        },
         tasks: row.task_count,
         cpu,
-        quota_bytes: row.has(cell_flags::QUOTA_AVAILABLE).then_some(row.quota_charged_bytes),
-        limit_bytes: row.has(cell_flags::LIMIT_AVAILABLE).then_some(row.quota_limit_bytes),
+        quota_bytes: row
+            .has(cell_flags::QUOTA_AVAILABLE)
+            .then_some(row.quota_charged_bytes),
+        limit_bytes: row
+            .has(cell_flags::LIMIT_AVAILABLE)
+            .then_some(row.quota_limit_bytes),
     }
 }
 
@@ -601,10 +664,16 @@ fn system_memory(header: &api::telemetry::TelemetryHeaderV1) -> SysMem {
         return SysMem::Absent;
     }
     let bytes = |frames: u64| frames.checked_mul(header.mem_page_size);
-    match (bytes(header.mem_total_frames), bytes(header.mem_used_frames), bytes(header.mem_free_frames)) {
-        (Some(total_bytes), Some(used_bytes), Some(free_bytes)) => {
-            SysMem::Present { total_bytes, used_bytes, free_bytes }
-        }
+    match (
+        bytes(header.mem_total_frames),
+        bytes(header.mem_used_frames),
+        bytes(header.mem_free_frames),
+    ) {
+        (Some(total_bytes), Some(used_bytes), Some(free_bytes)) => SysMem::Present {
+            total_bytes,
+            used_bytes,
+            free_bytes,
+        },
         _ => SysMem::Absent,
     }
 }

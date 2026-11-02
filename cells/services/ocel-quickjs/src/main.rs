@@ -111,15 +111,25 @@ fn cell_main() {
                 let response = match postcard::from_bytes::<OcelJsRequest>(&recv_buf) {
                     Ok(request) => {
                         context = match &request {
-                            OcelJsRequest::OpenContext { context } | OcelJsRequest::CloseContext { context }
-                            | OcelJsRequest::Begin { context, .. } | OcelJsRequest::Chunk { context, .. }
-                            | OcelJsRequest::Commit { context } | OcelJsRequest::ReadResponse { context, .. }
-                            | OcelJsRequest::ReadLayoutQuery { context, .. } | OcelJsRequest::LayoutResumeBegin { context, .. }
-                            | OcelJsRequest::LayoutResumeChunk { context, .. } | OcelJsRequest::LayoutResumeCommit { context, .. } => Some(*context),
+                            OcelJsRequest::OpenContext { context }
+                            | OcelJsRequest::CloseContext { context }
+                            | OcelJsRequest::Begin { context, .. }
+                            | OcelJsRequest::Chunk { context, .. }
+                            | OcelJsRequest::Commit { context }
+                            | OcelJsRequest::ReadResponse { context, .. }
+                            | OcelJsRequest::ReadLayoutQuery { context, .. }
+                            | OcelJsRequest::LayoutResumeBegin { context, .. }
+                            | OcelJsRequest::LayoutResumeChunk { context, .. }
+                            | OcelJsRequest::LayoutResumeCommit { context, .. } => Some(*context),
                             OcelJsRequest::Ping => None,
                         };
                         ctx.begin_native_call(caller_tid, context.unwrap_or(0), operation);
-                        session.handle_at(caller_tid, request, &mut ctx, ostd::syscall::sys_get_scheduler_ticks())
+                        session.handle_at(
+                            caller_tid,
+                            request,
+                            &mut ctx,
+                            ostd::syscall::sys_get_scheduler_ticks(),
+                        )
                     }
                     Err(_) => JsServiceSession::error("Malformed OcelJsRequest IPC payload"),
                 };
@@ -127,7 +137,9 @@ fn cell_main() {
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {
                     if let Some(operation) = native_layout::reply_operation() {
                         if ostd::ipc::reply(operation, encoded).is_err() {
-                            if let Some(context) = context { session.abandon(caller_tid, context, &mut ctx); }
+                            if let Some(context) = context {
+                                session.abandon(caller_tid, context, &mut ctx);
+                            }
                         }
                     } else if operation.is_none() {
                         let _ = sys_send(caller_tid, encoded);

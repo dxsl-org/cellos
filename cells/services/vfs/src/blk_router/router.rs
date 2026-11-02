@@ -24,7 +24,11 @@ impl Provider {
     /// The live provider of `record`, if the record still carries `key`.
     fn of(record: &ViBlockRouteV1, key: DeviceKey) -> Option<Self> {
         let (tid, cell, generation) = record.provider().filter(|_| record.device() == key)?;
-        Some(Self { tid: tid as usize, cell, generation })
+        Some(Self {
+            tid: tid as usize,
+            cell,
+            generation,
+        })
     }
 }
 
@@ -47,7 +51,8 @@ impl Device {
 
     /// The provider a fresh 432 names for this device's slot.
     fn lookup(&self, sys: &mut impl BlockSys) -> Option<Provider> {
-        sys.lookup_route(self.route).and_then(|r| Provider::of(&r, self.key))
+        sys.lookup_route(self.route)
+            .and_then(|r| Provider::of(&r, self.key))
     }
 }
 
@@ -72,7 +77,9 @@ pub struct Router {
 
 impl Router {
     pub const fn new() -> Self {
-        Self { devices: Vec::new() }
+        Self {
+            devices: Vec::new(),
+        }
     }
 
     pub fn devices(&self) -> &[Device] {
@@ -83,29 +90,45 @@ impl Router {
     pub fn add(&mut self, route: u32, record: &ViBlockRouteV1) -> DeviceRef {
         let key = record.device();
         let provider = Provider::of(record, key);
-        self.devices.push(Device { route, key, name: device_name(key), cached: provider, announced: provider });
+        self.devices.push(Device {
+            route,
+            key,
+            name: device_name(key),
+            cached: provider,
+            announced: provider,
+        });
         DeviceRef::Device((self.devices.len() - 1) as u8)
     }
 
     pub fn name(&self, dev: DeviceRef) -> &str {
         match dev {
             DeviceRef::Kernel => "kernel",
-            DeviceRef::Device(i) => self.devices.get(usize::from(i)).map_or("unknown", |d| d.name.as_str()),
+            DeviceRef::Device(i) => self
+                .devices
+                .get(usize::from(i))
+                .map_or("unknown", |d| d.name.as_str()),
         }
     }
 
     pub(super) fn target(&mut self, sys: &mut impl BlockSys, dev: DeviceRef) -> Target {
-        let DeviceRef::Device(i) = dev else { return Target::Kernel };
+        let DeviceRef::Device(i) = dev else {
+            return Target::Kernel;
+        };
         let i = usize::from(i);
         let Some(device) = self.devices.get_mut(i) else {
-            sys.log(&format!("[blk-router] device {i}: not in the device table; not issued"));
+            sys.log(&format!(
+                "[blk-router] device {i}: not in the device table; not issued"
+            ));
             return Target::Refused;
         };
         if let Some(provider) = device.cached {
             return Target::Provider(i, provider.tid);
         }
         let Some(provider) = device.lookup(sys) else {
-            sys.log(&format!("[blk-router] {}: no live provider; not issued", device.name));
+            sys.log(&format!(
+                "[blk-router] {}: no live provider; not issued",
+                device.name
+            ));
             return Target::Refused;
         };
         device.cached = Some(provider);
@@ -132,12 +155,20 @@ impl Router {
     /// provider's death (the kernel then writes the exit reason into the buffer).
     /// Death clears the route's provider before any receiver runs, so a message
     /// counts as a reply only if a fresh 432 still names `tid`.
-    pub(super) fn exchange(&mut self, sys: &mut impl BlockSys, i: usize, tid: usize, req: &[u8], reply: &mut [u8]) -> Exchange {
+    pub(super) fn exchange(
+        &mut self,
+        sys: &mut impl BlockSys,
+        i: usize,
+        tid: usize,
+        req: &[u8],
+        reply: &mut [u8],
+    ) -> Exchange {
         if !sys.send(tid, req) {
             self.forget(i, tid);
             return Exchange::Refused;
         }
-        let replied = sys.recv(tid, reply) && self.devices[i].lookup(sys).is_some_and(|p| p.tid == tid);
+        let replied =
+            sys.recv(tid, reply) && self.devices[i].lookup(sys).is_some_and(|p| p.tid == tid);
         if !replied {
             self.forget(i, tid);
             return Exchange::Missing;

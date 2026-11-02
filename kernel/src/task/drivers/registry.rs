@@ -30,8 +30,10 @@ impl DriverRegistry {
 
         let id = self.next_id;
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         self.name_to_id.insert(name, id);
         self.next_id += 1;
         id
@@ -51,8 +53,10 @@ pub fn init() {
     // Manually register Console as ID 1 for now, to keep compatibility
     if let Some(r) = reg.as_mut() {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         r.name_to_id.insert("console", 1);
     }
 }

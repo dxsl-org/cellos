@@ -83,16 +83,22 @@ impl DropDown {
 }
 
 impl ViNode for DropDown {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    let w = constraints.max.w.min(200.0);
-    let h = 36.0f32.max(font.line_height() + 16.0).min(constraints.max.h);
-    self.bounds.set(Rect {
-        x: constraints.origin.x,
-        y: constraints.origin.y,
-        w,
-        h,
-    });
-    Size::new(w, h)
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        let w = constraints.max.w.min(200.0);
+        let h = 36.0f32
+            .max(font.line_height() + 16.0)
+            .min(constraints.max.h);
+        self.bounds.set(Rect {
+            x: constraints.origin.x,
+            y: constraints.origin.y,
+            w,
+            h,
+        });
+        Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {
@@ -188,20 +194,24 @@ impl DropDownPopup {
 }
 
 impl ViNode for DropDownPopup {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    self.item_height = Self::ITEM_H.max(font.line_height() + 16.0);
-    let item_h = self.item_height;
-    let w = self.anchor.w;
-    let h = (self.items.len() as f32 * item_h).min(Self::MAX_H);
-    let x = self.anchor.x;
-    // Prefer below; fall back to above when not enough room.
-    let y = if self.anchor.y + self.anchor.h + h <= constraints.max.h {
-        self.anchor.y + self.anchor.h
-    } else {
-        (self.anchor.y - h).max(0.0)
-    };
-    self.bounds.set(Rect { x, y, w, h });
-    Size::new(w, h)
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        self.item_height = Self::ITEM_H.max(font.line_height() + 16.0);
+        let item_h = self.item_height;
+        let w = self.anchor.w;
+        let h = (self.items.len() as f32 * item_h).min(Self::MAX_H);
+        let x = self.anchor.x;
+        // Prefer below; fall back to above when not enough room.
+        let y = if self.anchor.y + self.anchor.h + h <= constraints.max.h {
+            self.anchor.y + self.anchor.h
+        } else {
+            (self.anchor.y - h).max(0.0)
+        };
+        self.bounds.set(Rect { x, y, w, h });
+        Size::new(w, h)
     }
 
     fn bounds(&self) -> Rect {

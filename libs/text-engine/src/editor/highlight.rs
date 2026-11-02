@@ -55,8 +55,8 @@ pub enum Carry {
 }
 
 const RUST_KEYWORDS: [&str; 19] = [
-    "fn", "let", "mut", "pub", "use", "mod", "struct", "enum", "impl", "trait",
-    "if", "else", "match", "for", "while", "loop", "return", "const", "static",
+    "fn", "let", "mut", "pub", "use", "mod", "struct", "enum", "impl", "trait", "if", "else",
+    "match", "for", "while", "loop", "return", "const", "static",
 ];
 
 fn is_ident(b: u8) -> bool {
@@ -92,7 +92,11 @@ fn number_end(bytes: &[u8], mut i: usize) -> usize {
 }
 
 fn find(bytes: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
-    bytes.get(from..)?.windows(needle.len()).position(|w| w == needle).map(|p| from + p)
+    bytes
+        .get(from..)?
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| from + p)
 }
 
 /// `'x'` or a short escape like `'\n'` starting at `i`; `None` for a lifetime.
@@ -117,39 +121,95 @@ pub fn highlight(lang: Lang, carry: Carry, text: &str, out: &mut Vec<Span>) -> C
     match carry {
         Carry::None => {}
         Carry::RustBlockComment => match find(bytes, 0, b"*/") {
-            Some(end) => { push(0, end + 2, Kind::Comment); i = end + 2; }
-            None => { push(0, bytes.len(), Kind::Comment); return carry; }
+            Some(end) => {
+                push(0, end + 2, Kind::Comment);
+                i = end + 2;
+            }
+            None => {
+                push(0, bytes.len(), Kind::Comment);
+                return carry;
+            }
         },
         Carry::TomlTriple(q) => match find(bytes, 0, &[q; 3]) {
-            Some(end) => { push(0, end + 3, Kind::String); i = end + 3; }
-            None => { push(0, bytes.len(), Kind::String); return carry; }
+            Some(end) => {
+                push(0, end + 3, Kind::String);
+                i = end + 3;
+            }
+            None => {
+                push(0, bytes.len(), Kind::String);
+                return carry;
+            }
         },
     }
     while i < bytes.len() {
         let b = bytes[i];
         let word_start = i == 0 || !is_ident(bytes[i - 1]);
-        let comment_hash = b == b'#' && (lang == Lang::Toml || i == 0 || bytes[i - 1].is_ascii_whitespace());
+        let comment_hash =
+            b == b'#' && (lang == Lang::Toml || i == 0 || bytes[i - 1].is_ascii_whitespace());
         match (lang, b) {
-            (Lang::Rust, b'/') if bytes.get(i + 1) == Some(&b'/') => { push(i, bytes.len(), Kind::Comment); break; }
-            (Lang::Rust, b'/') if bytes.get(i + 1) == Some(&b'*') => match find(bytes, i + 2, b"*/") {
-                Some(end) => { push(i, end + 2, Kind::Comment); i = end + 2; }
-                None => { push(i, bytes.len(), Kind::Comment); return Carry::RustBlockComment; }
-            },
-            (Lang::Rust, b'"') => { let end = string_end(bytes, i, true); push(i, end, Kind::String); i = end; }
+            (Lang::Rust, b'/') if bytes.get(i + 1) == Some(&b'/') => {
+                push(i, bytes.len(), Kind::Comment);
+                break;
+            }
+            (Lang::Rust, b'/') if bytes.get(i + 1) == Some(&b'*') => {
+                match find(bytes, i + 2, b"*/") {
+                    Some(end) => {
+                        push(i, end + 2, Kind::Comment);
+                        i = end + 2;
+                    }
+                    None => {
+                        push(i, bytes.len(), Kind::Comment);
+                        return Carry::RustBlockComment;
+                    }
+                }
+            }
+            (Lang::Rust, b'"') => {
+                let end = string_end(bytes, i, true);
+                push(i, end, Kind::String);
+                i = end;
+            }
             (Lang::Rust, b'\'') => match char_literal_end(text, i) {
-                Some(end) => { push(i, end + 1, Kind::String); i = end + 1; }
+                Some(end) => {
+                    push(i, end + 1, Kind::String);
+                    i = end + 1;
+                }
                 None => i += 1,
             },
-            (Lang::Toml | Lang::Shell, b'#') if comment_hash => { push(i, bytes.len(), Kind::Comment); break; }
-            (Lang::Toml, b'"' | b'\'') if bytes.get(i..i + 3) == Some(&[b; 3][..]) => match find(bytes, i + 3, &[b; 3]) {
-                Some(end) => { push(i, end + 3, Kind::String); i = end + 3; }
-                None => { push(i, bytes.len(), Kind::String); return Carry::TomlTriple(b); }
-            },
-            (Lang::Toml | Lang::Shell, b'"') => { let end = string_end(bytes, i, true); push(i, end, Kind::String); i = end; }
-            (Lang::Toml | Lang::Shell, b'\'') => { let end = string_end(bytes, i, false); push(i, end, Kind::String); i = end; }
-            (Lang::Toml | Lang::Rust, b'0'..=b'9') if word_start => { let end = number_end(bytes, i); push(i, end, Kind::Number); i = end; }
+            (Lang::Toml | Lang::Shell, b'#') if comment_hash => {
+                push(i, bytes.len(), Kind::Comment);
+                break;
+            }
+            (Lang::Toml, b'"' | b'\'') if bytes.get(i..i + 3) == Some(&[b; 3][..]) => {
+                match find(bytes, i + 3, &[b; 3]) {
+                    Some(end) => {
+                        push(i, end + 3, Kind::String);
+                        i = end + 3;
+                    }
+                    None => {
+                        push(i, bytes.len(), Kind::String);
+                        return Carry::TomlTriple(b);
+                    }
+                }
+            }
+            (Lang::Toml | Lang::Shell, b'"') => {
+                let end = string_end(bytes, i, true);
+                push(i, end, Kind::String);
+                i = end;
+            }
+            (Lang::Toml | Lang::Shell, b'\'') => {
+                let end = string_end(bytes, i, false);
+                push(i, end, Kind::String);
+                i = end;
+            }
+            (Lang::Toml | Lang::Rust, b'0'..=b'9') if word_start => {
+                let end = number_end(bytes, i);
+                push(i, end, Kind::Number);
+                i = end;
+            }
             (Lang::Rust, _) if word_start && is_ident(b) => {
-                let end = (i..bytes.len()).find(|&j| !is_ident(bytes[j])).unwrap_or(bytes.len());
+                let end = (i..bytes.len())
+                    .find(|&j| !is_ident(bytes[j]))
+                    .unwrap_or(bytes.len());
                 if RUST_KEYWORDS.contains(&&text[i..end]) {
                     push(i, end, Kind::Keyword);
                 }

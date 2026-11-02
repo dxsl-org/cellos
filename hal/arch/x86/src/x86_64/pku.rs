@@ -46,7 +46,10 @@ pub struct PkuCaps {
 /// Detect PKU/PKS capabilities via CPUID leaf 7, subleaf 0.
 pub fn detect() -> PkuCaps {
     if core::arch::x86_64::__cpuid(0).eax < 7 {
-        return PkuCaps { pku: false, pks: false };
+        return PkuCaps {
+            pku: false,
+            pks: false,
+        };
     }
     let ecx = core::arch::x86_64::__cpuid_count(7, 0).ecx;
     PkuCaps {
@@ -149,11 +152,17 @@ pub fn init() {
 pub fn init_secondary() -> bool {
     let active = unsafe { PKU_ACTIVE != 0 };
     let caps = detect();
-    if active && (!caps.pku || !super::cet::detect().ibt) { return false; }
+    if active && (!caps.pku || !super::cet::detect().ibt) {
+        return false;
+    }
     unsafe {
         let mut cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
-        if active { cr4 |= 1 << 22; } else { cr4 &= !(1 << 22); }
+        if active {
+            cr4 |= 1 << 22;
+        } else {
+            cr4 &= !(1 << 22);
+        }
         core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
         if active {
             core::arch::asm!(
@@ -161,7 +170,9 @@ pub fn init_secondary() -> bool {
                 options(nostack),
             );
             #[cfg(feature = "pks")]
-            if caps.pks { init_pks(); }
+            if caps.pks {
+                init_pks();
+            }
         }
     }
     true

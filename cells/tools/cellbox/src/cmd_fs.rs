@@ -431,11 +431,15 @@ pub fn cmd_rm(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                 // Ctrl-C cancels the whole command); legacy fd 0 is never read.
                 match crate::executor::terminal_prompt_line() {
                     Ok(crate::executor::PromptLine::Line(line)) => line,
-                    Ok(crate::executor::PromptLine::Cancelled | crate::executor::PromptLine::Eof) => {
+                    Ok(
+                        crate::executor::PromptLine::Cancelled | crate::executor::PromptLine::Eof,
+                    ) => {
                         return Err(ViError::IO);
                     }
                     Err(_) => {
-                        crate::executor::shell_stderrln("\nrm: input lost; remaining files not removed");
+                        crate::executor::shell_stderrln(
+                            "\nrm: input lost; remaining files not removed",
+                        );
                         return Err(ViError::IO);
                     }
                 }
@@ -692,7 +696,11 @@ pub fn cmd_cp(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
             }
         }
     }
-    if failed { Err(ViError::IO) } else { Ok(()) }
+    if failed {
+        Err(ViError::IO)
+    } else {
+        Ok(())
+    }
 }
 
 /// Recursively delete a `/data/` directory tree via VFS IPC.

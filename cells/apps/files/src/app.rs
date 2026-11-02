@@ -104,7 +104,11 @@ impl<F: FileSystem> FilesApp<F> {
     }
 
     fn summary(&self) -> String {
-        let count = self.items.iter().filter(|item| item.name != PARENT_ENTRY).count();
+        let count = self
+            .items
+            .iter()
+            .filter(|item| item.name != PARENT_ENTRY)
+            .count();
         format!("{}: {} item(s)", self.current_path, count)
     }
 
@@ -183,7 +187,12 @@ impl<F: FileSystem> FilesApp<F> {
             return;
         };
         self.status_message = format!("{} {}", if cut { "Cut" } else { "Copied" }, item.name);
-        self.clipboard = Some(Clip { path: item.path, name: item.name, is_dir: item.is_dir, cut });
+        self.clipboard = Some(Clip {
+            path: item.path,
+            name: item.name,
+            is_dir: item.is_dir,
+            cut,
+        });
     }
 
     /// Copy (or move, after Cut) the clipboard entry into the current folder under a free name.
@@ -227,8 +236,13 @@ impl<F: FileSystem> FilesApp<F> {
             return;
         };
         match fs::remove_entry(&mut self.fs, &item.path, item.is_dir) {
-            Ok(()) => self.refresh(None, format!("Permanently deleted {} (irreversible)", item.name)),
-            Err(e) => self.status_message = format!("Cannot delete {}: {}", item.name, e.describe()),
+            Ok(()) => self.refresh(
+                None,
+                format!("Permanently deleted {} (irreversible)", item.name),
+            ),
+            Err(e) => {
+                self.status_message = format!("Cannot delete {}: {}", item.name, e.describe())
+            }
         }
     }
 
@@ -244,7 +258,10 @@ impl<F: FileSystem> FilesApp<F> {
     }
 
     pub fn begin_prompt(&mut self, kind: PromptKind) {
-        self.prompt = Some(Prompt { kind, text: String::new() });
+        self.prompt = Some(Prompt {
+            kind,
+            text: String::new(),
+        });
         self.show_prompt();
     }
 
@@ -279,7 +296,11 @@ impl<F: FileSystem> FilesApp<F> {
             self.load_directory(&target);
             return;
         }
-        let what = if kind == PromptKind::NewFolder { "folder" } else { "file" };
+        let what = if kind == PromptKind::NewFolder {
+            "folder"
+        } else {
+            "file"
+        };
         if let Err(why) = fs::validate_name(&text) {
             self.status_message = format!("Cannot create {}: {}", what, why);
             return;
@@ -292,7 +313,9 @@ impl<F: FileSystem> FilesApp<F> {
         };
         match result {
             Ok(()) => self.refresh(Some(&text), format!("Created {} {}", what, text)),
-            Err(e) => self.status_message = format!("Cannot create {} {}: {}", what, text, e.describe()),
+            Err(e) => {
+                self.status_message = format!("Cannot create {} {}: {}", what, text, e.describe())
+            }
         }
     }
 }
@@ -319,7 +342,10 @@ mod tests {
     }
 
     fn c5_tree() -> FakeFs {
-        FakeFs::new().dir("/tmp").dir("/tmp/c5dir").file("/tmp/c5dir/a.txt", b"c5\n")
+        FakeFs::new()
+            .dir("/tmp")
+            .dir("/tmp/c5dir")
+            .file("/tmp/c5dir/a.txt", b"c5\n")
     }
 
     #[test]
@@ -335,18 +361,27 @@ mod tests {
 
     #[test]
     fn refused_listing_keeps_the_view_and_shows_the_denial() {
-        let mut fs = c5_tree().dir("/srv").dir("/srv/cellos").file("/srv/cellos/key", b"k");
+        let mut fs = c5_tree()
+            .dir("/srv")
+            .dir("/srv/cellos")
+            .file("/srv/cellos/key", b"k");
         fs.denied.push("/srv/cellos");
         let mut app = app_at(fs, "/tmp/c5dir");
         type_prompt(&mut app, PromptKind::GoTo, "/srv/cellos");
-        assert_eq!(app.status_message, "Cannot open /srv/cellos: permission denied (VFS ERR_DENIED)");
+        assert_eq!(
+            app.status_message,
+            "Cannot open /srv/cellos: permission denied (VFS ERR_DENIED)"
+        );
         assert_eq!(app.current_path, "/tmp/c5dir");
         assert_eq!(names(&app), ["..", "a.txt"]);
 
         // A missing initial folder is an error with nothing listed, not a sample listing.
         let app = app_at(FakeFs::new(), "/data");
         assert!(app.items.is_empty());
-        assert_eq!(app.status_message, "Cannot open /data: I/O error (VFS ERR_IO)");
+        assert_eq!(
+            app.status_message,
+            "Cannot open /data: I/O error (VFS ERR_IO)"
+        );
     }
 
     #[test]
@@ -375,10 +410,16 @@ mod tests {
         assert_eq!(app.status_message, "Pasted a.txt -> a.txt");
         assert_eq!(names(&app), ["..", "a.txt"]);
         assert_eq!(app.selected_index, 1);
-        assert_eq!(app.fs.nodes["/tmp/c5dir/c5new/a.txt"].as_deref(), Some(&b"c5\n"[..]));
+        assert_eq!(
+            app.fs.nodes["/tmp/c5dir/c5new/a.txt"].as_deref(),
+            Some(&b"c5\n"[..])
+        );
 
         app.delete_selected();
-        assert_eq!(app.status_message, "Permanently deleted a.txt (irreversible)");
+        assert_eq!(
+            app.status_message,
+            "Permanently deleted a.txt (irreversible)"
+        );
         assert_eq!(names(&app), [".."]);
         assert!(!app.fs.nodes.contains_key("/tmp/c5dir/c5new/a.txt"));
         app.navigate_up();
@@ -395,7 +436,10 @@ mod tests {
         app.copy_selected(false);
         app.paste_into_current();
         assert_eq!(app.status_message, "Pasted a.txt -> a (1).txt");
-        assert_eq!(app.fs.nodes["/tmp/c5dir/a (1).txt"].as_deref(), Some(&b"c5\n"[..]));
+        assert_eq!(
+            app.fs.nodes["/tmp/c5dir/a (1).txt"].as_deref(),
+            Some(&b"c5\n"[..])
+        );
         assert!(app.clipboard.is_some());
 
         app.selected_index = app.items.iter().position(|i| i.name == "a.txt").unwrap();
@@ -405,7 +449,10 @@ mod tests {
         assert_eq!(app.status_message, "Moved a.txt -> a.txt");
         assert!(app.clipboard.is_none());
         assert!(!app.fs.nodes.contains_key("/tmp/c5dir/a.txt"));
-        assert_eq!(app.fs.nodes["/tmp/other/a.txt"].as_deref(), Some(&b"c5\n"[..]));
+        assert_eq!(
+            app.fs.nodes["/tmp/other/a.txt"].as_deref(),
+            Some(&b"c5\n"[..])
+        );
     }
 
     #[test]
@@ -414,19 +461,31 @@ mod tests {
         fs.read_only.push("/bin");
         let mut app = app_at(fs, "/bin");
         type_prompt(&mut app, PromptKind::NewFolder, "x");
-        assert_eq!(app.status_message, "Cannot create folder x: permission denied (VFS ERR_DENIED)");
+        assert_eq!(
+            app.status_message,
+            "Cannot create folder x: permission denied (VFS ERR_DENIED)"
+        );
         type_prompt(&mut app, PromptKind::NewFile, "y");
-        assert_eq!(app.status_message, "Cannot create file y: permission denied (VFS ERR_DENIED)");
+        assert_eq!(
+            app.status_message,
+            "Cannot create file y: permission denied (VFS ERR_DENIED)"
+        );
         app.selected_index = 1;
         app.delete_selected();
-        assert_eq!(app.status_message, "Cannot delete tool: permission denied (VFS ERR_DENIED)");
+        assert_eq!(
+            app.status_message,
+            "Cannot delete tool: permission denied (VFS ERR_DENIED)"
+        );
         assert!(app.fs.nodes.contains_key("/bin/tool"));
 
         app.copy_selected(true);
         type_prompt(&mut app, PromptKind::GoTo, "/tmp");
         app.paste_into_current();
         // The copy landed, the source could not be removed: both are visible and reported.
-        assert_eq!(app.status_message, "Paste of tool failed: permission denied (VFS ERR_DENIED)");
+        assert_eq!(
+            app.status_message,
+            "Paste of tool failed: permission denied (VFS ERR_DENIED)"
+        );
         assert!(app.fs.nodes.contains_key("/bin/tool"));
         assert_eq!(names(&app), ["..", "c5dir", "tool"]);
         assert!(app.clipboard.as_ref().is_some_and(|clip| clip.cut));
@@ -435,7 +494,10 @@ mod tests {
         type_prompt(&mut app, PromptKind::GoTo, "/tmp");
         app.selected_index = 1;
         app.delete_selected();
-        assert_eq!(app.status_message, "Cannot delete c5dir: I/O error (VFS ERR_IO)");
+        assert_eq!(
+            app.status_message,
+            "Cannot delete c5dir: I/O error (VFS ERR_IO)"
+        );
         assert!(app.fs.nodes.contains_key("/tmp/c5dir/a.txt"));
     }
 
@@ -443,9 +505,15 @@ mod tests {
     fn prompt_validates_names_and_bounds_input() {
         let mut app = app_at(c5_tree(), "/tmp/c5dir");
         type_prompt(&mut app, PromptKind::NewFolder, "a/b");
-        assert_eq!(app.status_message, "Cannot create folder: a name cannot contain '/'");
+        assert_eq!(
+            app.status_message,
+            "Cannot create folder: a name cannot contain '/'"
+        );
         type_prompt(&mut app, PromptKind::NewFile, "a.txt");
-        assert_eq!(app.status_message, "Cannot create file a.txt: already exists");
+        assert_eq!(
+            app.status_message,
+            "Cannot create file a.txt: already exists"
+        );
         type_prompt(&mut app, PromptKind::NewFile, "b.txt");
         assert_eq!(app.status_message, "Created file b.txt");
         assert_eq!(app.fs.nodes["/tmp/c5dir/b.txt"].as_deref(), Some(&b""[..]));
@@ -456,7 +524,10 @@ mod tests {
         }
         assert_eq!(app.prompt.as_ref().unwrap().text.len(), MAX_INPUT_LEN);
         app.prompt_backspace();
-        assert_eq!(app.status_message.len(), "New folder name: ".len() + MAX_INPUT_LEN - 1 + 1);
+        assert_eq!(
+            app.status_message.len(),
+            "New folder name: ".len() + MAX_INPUT_LEN - 1 + 1
+        );
         app.prompt_cancel();
         assert!(app.prompt.is_none());
         assert_eq!(app.status_message, "/tmp/c5dir: 2 item(s)");

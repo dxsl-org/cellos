@@ -88,17 +88,27 @@ fn cr2() -> u64 {
 }
 
 fn on_ist(frame: &EntryFrame, slot: u8) -> bool {
-    ist::contains(super::super::syscall::current_cpu_id(), slot, frame as *const _ as u64)
+    ist::contains(
+        super::super::syscall::current_cpu_id(),
+        slot,
+        frame as *const _ as u64,
+    )
 }
 
 fn arm(state: u8) {
-    if STATE.compare_exchange(IDLE, state, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if STATE
+        .compare_exchange(IDLE, state, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         fail();
     }
 }
 
 fn expect_seen() {
-    if STATE.compare_exchange(SAW, IDLE, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if STATE
+        .compare_exchange(SAW, IDLE, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         fail();
     }
 }
@@ -191,7 +201,11 @@ fn hex(value: u64) {
     let digits = (64 - value.leading_zeros()).div_ceil(4).max(1);
     for shift in (0..digits).rev() {
         let nibble = ((value >> (shift * 4)) & 0xf) as u8;
-        super::super::uart_16550::putchar(if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 });
+        super::super::uart_16550::putchar(if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'a' + nibble - 10
+        });
     }
 }
 
@@ -285,7 +299,9 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
     if active != protect::requested() {
         fail();
     }
-    let expected = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(x86_idt_cpl3_user_start).cast::<u64>()) };
+    let expected = unsafe {
+        core::ptr::read_volatile(core::ptr::addr_of!(x86_idt_cpl3_user_start).cast::<u64>())
+    };
 
     // No SAS kernel profile qualifies for boot-time SMAP yet (task spawn
     // writes U=1 stack pages directly). When the CPU has SMAP, exercise the
@@ -296,14 +312,17 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
         set_smap(true);
     }
     let plain = probe_read(user_page);
-    let windowed = protect::user_access(|| unsafe { core::ptr::read_volatile(user_page as *const u64) });
+    let windowed =
+        protect::user_access(|| unsafe { core::ptr::read_volatile(user_page as *const u64) });
     let windowed_ac = live_rflags() & AC;
     if smap_probe {
         set_smap(false);
     }
     unsafe { super::super::context::restore_sstatus(flags) };
     if active.smap || smap_probe {
-        if plain.is_some() || FAULT_ERROR.load(Ordering::Acquire) & (PF_PRESENT | PF_FETCH) != PF_PRESENT {
+        if plain.is_some()
+            || FAULT_ERROR.load(Ordering::Acquire) & (PF_PRESENT | PF_FETCH) != PF_PRESENT
+        {
             fail();
         }
     } else if plain != Some(expected) {
@@ -318,15 +337,22 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
         unsafe { x86_ist_probe_call(user_page) };
         expect_seen();
         if FAULT_ADDR.load(Ordering::Acquire) != user_page
-            || FAULT_ERROR.load(Ordering::Acquire) & (PF_PRESENT | PF_FETCH) != PF_PRESENT | PF_FETCH
+            || FAULT_ERROR.load(Ordering::Acquire) & (PF_PRESENT | PF_FETCH)
+                != PF_PRESENT | PF_FETCH
         {
             fail();
         }
     }
 
     let start = addr(unsafe { &x86_idt_cpl3_user_start });
-    UMIP_RIP.store(user_page + addr(unsafe { &x86_idt_cpl3_user_umip }) - start, Ordering::Release);
-    UMIP_NEXT.store(user_page + addr(unsafe { &x86_idt_cpl3_user_umip_end }) - start, Ordering::Release);
+    UMIP_RIP.store(
+        user_page + addr(unsafe { &x86_idt_cpl3_user_umip }) - start,
+        Ordering::Release,
+    );
+    UMIP_NEXT.store(
+        user_page + addr(unsafe { &x86_idt_cpl3_user_umip_end }) - start,
+        Ordering::Release,
+    );
 
     super::super::uart_16550::puts(if active.smap {
         "\nX86-PROTECT: smap=on read=pf window=ok"
@@ -335,7 +361,11 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
     } else {
         "\nX86-PROTECT: smap=off read=ok window=ok"
     });
-    super::super::uart_16550::puts(if active.smep { " smep=on exec=pf" } else { " smep=off" });
+    super::super::uart_16550::puts(if active.smep {
+        " smep=on exec=pf"
+    } else {
+        " smep=off"
+    });
     super::super::uart_16550::puts(" syscall-flags=df+ac-cleared\n");
 }
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! First-class ViSurface painting helpers and reusable UI primitives for ViUI.
 
-use ostd::display::ViSurface;
-use ostd::typography::{FontFace, TextFonts};
 use crate::canvas::Color;
 use crate::theme::ViTheme;
+use ostd::display::ViSurface;
+use ostd::typography::{FontFace, TextFonts};
 pub mod components;
 pub use components::*;
 
@@ -69,6 +69,8 @@ pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: 
 }
 
 /// Draw a text label on a ViSurface with clipping and FontFace (left-aligned by default).
+// reason: public drawing primitive used across app crates; its parameter list is its API.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_label(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -85,6 +87,8 @@ pub fn draw_label(
 }
 
 /// Draw raw text at `(x, y)` with clipping.
+// reason: public drawing primitive used across app crates; its parameter list is its API.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_text(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -114,6 +118,8 @@ pub fn draw_text(
     );
 }
 /// Draw a text label on a ViSurface with optional horizontal centering.
+// reason: public drawing primitive used across app crates; its parameter list is its API.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_label_aligned(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -156,6 +162,8 @@ pub fn draw_label_aligned(
 }
 
 /// Draw standard toolkit button with background, border, and centered label.
+// reason: public drawing primitive used across app crates; its parameter list is its API.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_button(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -170,10 +178,24 @@ pub fn draw_button(
 ) {
     fill_rect(surf, x, y, w, h, bg);
     stroke_rect(surf, x, y, w, h, border);
-    draw_label_aligned(surf, fonts, x, y, w, h, text, FontFace::UiSemibold, 13.0, fg, true);
+    draw_label_aligned(
+        surf,
+        fonts,
+        x,
+        y,
+        w,
+        h,
+        text,
+        FontFace::UiSemibold,
+        13.0,
+        fg,
+        true,
+    );
 }
 
 /// Draw badge / chip (e.g. `[HTTPS]`, format badge `[PDF]`, or count tag).
+// reason: public drawing primitive of the viui API, kept consistent with draw_button.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_badge(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -186,7 +208,19 @@ pub fn draw_badge(
     fg: Color,
 ) {
     fill_rect(surf, x, y, w, h, bg);
-    draw_label_aligned(surf, fonts, x, y, w, h, text, FontFace::UiSemibold, 11.0, fg, true);
+    draw_label_aligned(
+        surf,
+        fonts,
+        x,
+        y,
+        w,
+        h,
+        text,
+        FontFace::UiSemibold,
+        11.0,
+        fg,
+        true,
+    );
 }
 
 // ─── Theme-aware High-Level Surface Helpers ─────────────────────────────────
@@ -205,6 +239,8 @@ pub fn draw_themed_panel(
 }
 
 /// Draw a themed button using theme tokens (Normal / Hovered / Primary).
+// reason: public drawing primitive of the viui API, kept consistent with draw_button.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_themed_button(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,

@@ -27,7 +27,10 @@ fn cell_main() {
     let tid: usize = match tid_str.parse() {
         Ok(n) => n,
         Err(_) => {
-            emit(output.stderr(), &[b"kill: invalid tid: ", tid_str.as_bytes(), b"\n"]);
+            emit(
+                output.stderr(),
+                &[b"kill: invalid tid: ", tid_str.as_bytes(), b"\n"],
+            );
             syscall::sys_exit(1);
         }
     };
@@ -44,7 +47,10 @@ fn cell_main() {
         Some(2) => {
             // Task is blocked in a recv call — send cooperative shutdown sentinel.
             let _ = syscall::sys_send(tid, &[0xFF_u8]);
-            emit(output.stdout(), &[b"kill: sent shutdown signal to ", tid_bytes, b"\n"]);
+            emit(
+                output.stdout(),
+                &[b"kill: sent shutdown signal to ", tid_bytes, b"\n"],
+            );
         }
         Some(0) | Some(1) => {
             // Task is Ready or Running — force terminate.
@@ -52,10 +58,16 @@ fn cell_main() {
             emit(output.stdout(), &[b"kill: force-exited ", tid_bytes, b"\n"]);
         }
         Some(3) => {
-            emit(output.stdout(), &[b"kill: task ", tid_bytes, b" is already terminated\n"]);
+            emit(
+                output.stdout(),
+                &[b"kill: task ", tid_bytes, b" is already terminated\n"],
+            );
         }
         _ => {
-            emit(output.stderr(), &[b"kill: task not found: ", tid_bytes, b"\n"]);
+            emit(
+                output.stderr(),
+                &[b"kill: task not found: ", tid_bytes, b"\n"],
+            );
             syscall::sys_exit(1);
         }
     }

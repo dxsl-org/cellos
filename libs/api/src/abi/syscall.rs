@@ -679,7 +679,6 @@ pub enum ViSyscall {
     /// `serial_port` capability check at dispatch is the authority gate, and it
     /// is narrower than any allowlist bit (it reaches only ports the kernel
     /// itself probed).
-
     // === Unknown ===
     Unknown = 9999,
 

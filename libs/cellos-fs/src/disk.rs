@@ -34,9 +34,15 @@ pub trait BlockDevice {
     /// Vectorized read: read `count` contiguous 4 KiB blocks into `buf`.
     /// Default implementation delegates to sequential `read_block`.
     fn read_blocks(&mut self, start_block: u64, count: u32, buf: &mut [u8]) -> Result<(), FsError> {
-        let bytes = usize::try_from(count).ok().and_then(|n| n.checked_mul(BLOCK_SIZE))
+        let bytes = usize::try_from(count)
+            .ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE))
             .ok_or(FsError::PartitionOverflow)?;
-        if start_block.checked_add(count as u64).filter(|&end| end <= self.total_blocks()).is_none() {
+        if start_block
+            .checked_add(count as u64)
+            .filter(|&end| end <= self.total_blocks())
+            .is_none()
+        {
             return Err(FsError::PartitionOverflow);
         }
         if buf.len() < bytes {
@@ -54,9 +60,15 @@ pub trait BlockDevice {
     /// Vectorized write: write `count` contiguous 4 KiB blocks from `buf`.
     /// Default implementation delegates to sequential `write_block`.
     fn write_blocks(&mut self, start_block: u64, count: u32, buf: &[u8]) -> Result<(), FsError> {
-        let bytes = usize::try_from(count).ok().and_then(|n| n.checked_mul(BLOCK_SIZE))
+        let bytes = usize::try_from(count)
+            .ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE))
             .ok_or(FsError::PartitionOverflow)?;
-        if start_block.checked_add(count as u64).filter(|&end| end <= self.total_blocks()).is_none() {
+        if start_block
+            .checked_add(count as u64)
+            .filter(|&end| end <= self.total_blocks())
+            .is_none()
+        {
             return Err(FsError::PartitionOverflow);
         }
         if buf.len() < bytes {
@@ -93,12 +105,17 @@ impl<D: BlockDevice> BoundedDisk<D> {
 
     fn absolute_block(&self, block: u64) -> Result<u64, FsError> {
         if block >= self.block_count
-            || self.start_block.checked_add(self.block_count)
-                .filter(|&end| end <= self.inner.total_blocks()).is_none()
+            || self
+                .start_block
+                .checked_add(self.block_count)
+                .filter(|&end| end <= self.inner.total_blocks())
+                .is_none()
         {
             return Err(FsError::PartitionOverflow);
         }
-        self.start_block.checked_add(block).ok_or(FsError::PartitionOverflow)
+        self.start_block
+            .checked_add(block)
+            .ok_or(FsError::PartitionOverflow)
     }
 
     pub fn into_inner(self) -> D {

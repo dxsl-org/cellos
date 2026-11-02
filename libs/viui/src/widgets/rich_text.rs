@@ -198,12 +198,7 @@ impl RichTextView {
                         cur_row_h = line_h;
                     }
 
-                    let word_rect = Rect::new(
-                        origin.x + cur_x,
-                        origin.y + cur_y,
-                        word_w,
-                        line_h,
-                    );
+                    let word_rect = Rect::new(origin.x + cur_x, origin.y + cur_y, word_w, line_h);
 
                     out_words.push(LaidOutWord {
                         rect: word_rect,
@@ -237,7 +232,11 @@ impl RichTextView {
 }
 
 impl ViWidget for RichTextView {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
         let mut words = self.layout_cache.borrow_mut();
         let fallback_color = self.default_color.unwrap_or(Color::WHITE);
         let desired = Self::layout_spans_into(

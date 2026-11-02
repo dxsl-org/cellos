@@ -37,14 +37,18 @@ impl Button {
 }
 
 impl ViNode for Button {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    let desired = Size {
-        w: font.measure(&self.label) + PAD * 2.0,
-        h: font.line_height() + PAD * 2.0,
-    };
-    let size = constraints.constrain(desired);
-    self.bounds = Rect::from_origin_size(constraints.origin, size);
-    size
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        let desired = Size {
+            w: font.measure(&self.label) + PAD * 2.0,
+            h: font.line_height() + PAD * 2.0,
+        };
+        let size = constraints.constrain(desired);
+        self.bounds = Rect::from_origin_size(constraints.origin, size);
+        size
     }
 
     fn bounds(&self) -> Rect {
@@ -151,7 +155,10 @@ mod tests {
         let mut button = Button::new("Apply", move || {
             callback_calls.set(callback_calls.get() + 1);
         });
-        button.layout(Constraints::root(Size::new(100.0, 40.0)), &mut crate::font_context::FontContext::default());
+        button.layout(
+            Constraints::root(Size::new(100.0, 40.0)),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         assert!(button.event(&Event::MousePress {
             pos: Point::new(1.0, 1.0),

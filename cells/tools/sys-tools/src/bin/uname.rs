@@ -7,8 +7,7 @@ ostd::cell_main!(cell_main);
 
 /// uname [-a] — print system identification.
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let deadline = match ostd::session::monotonic_ns()
         .ok()
         .and_then(|now| now.checked_add(30_000_000_000))

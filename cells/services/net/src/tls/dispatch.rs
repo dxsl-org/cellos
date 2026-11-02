@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+use crate::service_runtime::sys_get_time;
 use crate::{
     interface::VirtioNetDevice,
     socket_state::SocketState,
@@ -20,16 +21,29 @@ use core::ops::Bound::{Excluded, Unbounded};
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
 use ostd::syscall::{sys_try_send, SyscallResult};
-use crate::service_runtime::sys_get_time;
-use smoltcp::{iface::{Interface, SocketHandle, SocketSet}, socket::tcp};
+use smoltcp::{
+    iface::{Interface, SocketHandle, SocketSet},
+    socket::tcp,
+};
 
 const TCP_TIMEOUT: u64 = 150_000_000; // 15 seconds (sys_get_time: 10 MHz)
 const TLS_TIMEOUT: u64 = 300_000_000; // 30 seconds for one TLS operation
 const REPLY_TIMEOUT: u64 = 300_000_000; // legacy receiver may not yet be scheduled
 
 type Handshake = Pin<Box<dyn Future<Output = Result<TlsSocketEntry, embedded_tls::TlsError>>>>;
-type Sending = Pin<Box<dyn Future<Output = (TlsSocketEntry, Result<usize, embedded_tls::TlsError>)>>>;
-type Receiving = Pin<Box<dyn Future<Output = (TlsSocketEntry, Vec<u8>, Result<usize, embedded_tls::TlsError>)>>>;
+type Sending =
+    Pin<Box<dyn Future<Output = (TlsSocketEntry, Result<usize, embedded_tls::TlsError>)>>>;
+type Receiving = Pin<
+    Box<
+        dyn Future<
+            Output = (
+                TlsSocketEntry,
+                Vec<u8>,
+                Result<usize, embedded_tls::TlsError>,
+            ),
+        >,
+    >,
+>;
 
 enum State {
     /// Hostname plus the authenticated-time ticket demanded when the connect was
@@ -97,26 +111,41 @@ fn failed(request: &Request) -> &'static [u8] {
 }
 
 impl TlsPending {
-    pub fn is_empty(&self) -> bool {
-        self.operations.is_empty() && self.replies.is_empty()
-    }
-
     pub fn contains_cap(&self, cap: u64) -> bool {
-        self.operations.contains_key(&cap) || self.replies.iter().any(|reply| reply.cap == Some(cap))
+        self.operations.contains_key(&cap)
+            || self.replies.iter().any(|reply| reply.cap == Some(cap))
     }
 
-    pub fn connect(&mut self, cap: u64, handle: SocketHandle, owner: SocketOwner,
-        reply: ReplyTo, hostname: String) {
-        self.operations.insert(cap, Pending {
-            owner, reply, handle,
-            deadline: sys_get_time().saturating_add(TCP_TIMEOUT),
-            state: State::Connecting(hostname, crate::tls::qemu_time::demand()), queue: VecDeque::new(),
-        });
+    pub fn connect(
+        &mut self,
+        cap: u64,
+        handle: SocketHandle,
+        owner: SocketOwner,
+        reply: ReplyTo,
+        hostname: String,
+    ) {
+        self.operations.insert(
+            cap,
+            Pending {
+                owner,
+                reply,
+                handle,
+                deadline: sys_get_time().saturating_add(TCP_TIMEOUT),
+                state: State::Connecting(hostname, crate::tls::qemu_time::demand()),
+                queue: VecDeque::new(),
+            },
+        );
     }
 
-    pub fn enqueue(&mut self, cap: u64, owner: SocketOwner, reply: ReplyTo,
-        request: Request, tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
-        table: &SocketTable) {
+    pub fn enqueue(
+        &mut self,
+        cap: u64,
+        owner: SocketOwner,
+        reply: ReplyTo,
+        request: Request,
+        tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+        table: &SocketTable,
+    ) {
         if let Some(op) = self.operations.get_mut(&cap) {
             if op.owner == owner {
                 op.queue.push_back(Queued { reply, request });
@@ -126,11 +155,17 @@ impl TlsPending {
         } else if let Some(handle) = table.get(cap, owner) {
             if let Some(entry) = tls_table.remove(&cap) {
                 let state = start(entry, request);
-                self.operations.insert(cap, Pending {
-                    owner, reply, handle,
-                    deadline: sys_get_time().saturating_add(TLS_TIMEOUT),
-                    state, queue: VecDeque::new(),
-                });
+                self.operations.insert(
+                    cap,
+                    Pending {
+                        owner,
+                        reply,
+                        handle,
+                        deadline: sys_get_time().saturating_add(TLS_TIMEOUT),
+                        state,
+                        queue: VecDeque::new(),
+                    },
+                );
             } else {
                 self.answer(reply, owner, None, failed(&request));
             }
@@ -142,12 +177,21 @@ impl TlsPending {
     /// Async callers have kernel operation tokens. Legacy callers use their
     /// original sender TID; a nonblocking send is retried until their masked
     /// receive is ready, never holding the net dispatcher hostage.
-    fn answer(&mut self, reply: ReplyTo, owner: SocketOwner, cap: Option<u64>, bytes: &[u8]) -> bool {
+    fn answer(
+        &mut self,
+        reply: ReplyTo,
+        owner: SocketOwner,
+        cap: Option<u64>,
+        bytes: &[u8],
+    ) -> bool {
         match reply {
             ReplyTo::Async(token) => ostd::ipc::reply(token, bytes).is_ok(),
             ReplyTo::Legacy(sender) => {
                 self.replies.push_back(LegacyReply {
-                    sender, owner, cap, bytes: bytes.to_vec(),
+                    sender,
+                    owner,
+                    cap,
+                    bytes: bytes.to_vec(),
                     deadline: sys_get_time().saturating_add(REPLY_TIMEOUT),
                 });
                 true
@@ -155,12 +199,21 @@ impl TlsPending {
         }
     }
 
-    fn flush_replies(&mut self, sockets: &mut SocketSet<'_>, table: &mut SocketTable,
-        tls_table: &mut BTreeMap<u64, TlsSocketEntry>) {
+    fn flush_replies(
+        &mut self,
+        sockets: &mut SocketSet<'_>,
+        table: &mut SocketTable,
+        tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    ) {
         let count = self.replies.len();
         for _ in 0..count {
-            let Some(reply) = self.replies.pop_front() else { break; };
-            if matches!(sys_try_send(reply.sender, &reply.bytes), SyscallResult::Ok(0)) {
+            let Some(reply) = self.replies.pop_front() else {
+                break;
+            };
+            if matches!(
+                sys_try_send(reply.sender, &reply.bytes),
+                SyscallResult::Ok(0)
+            ) {
                 continue;
             }
             if sys_get_time() < reply.deadline {
@@ -179,12 +232,20 @@ impl TlsPending {
 
     /// Cancel the pending future (which owns keys) BEFORE removing its TCP socket.
     /// Call before SocketTable::remove_owner and the TLS table's owner cleanup.
-    pub fn cancel_owner(&mut self, owner: SocketOwner, sockets: &mut SocketSet<'_>,
-        table: &mut SocketTable) {
+    pub fn cancel_owner(
+        &mut self,
+        owner: SocketOwner,
+        sockets: &mut SocketSet<'_>,
+        table: &mut SocketTable,
+    ) {
         let mut cursor = None;
         while let Some(cap) = self.next_key(cursor) {
             cursor = Some(cap);
-            if self.operations.get(&cap).is_some_and(|op| op.owner == owner) {
+            if self
+                .operations
+                .get(&cap)
+                .is_some_and(|op| op.owner == owner)
+            {
                 let op = self.operations.remove(&cap).unwrap();
                 drop(op);
                 if let Some(handle) = table.remove_internal(cap) {
@@ -200,7 +261,13 @@ impl TlsPending {
     pub fn cancel_cap(&mut self, cap: u64) {
         self.replies.retain(|reply| reply.cap != Some(cap));
         if let Some(op) = self.operations.remove(&cap) {
-            let Pending { reply, owner, state, queue, .. } = op;
+            let Pending {
+                reply,
+                owner,
+                state,
+                queue,
+                ..
+            } = op;
             let response: &[u8] = match &state {
                 State::Connecting(..) | State::Handshake(_) => &[0; 8],
                 State::Send(_) => &[0xff; 4],
@@ -218,49 +285,74 @@ impl TlsPending {
     fn next_key(&self, after: Option<u64>) -> Option<u64> {
         match after {
             None => self.operations.first_key_value().map(|(&cap, _)| cap),
-            Some(cap) => self.operations.range((Excluded(cap), Unbounded)).next().map(|(&cap, _)| cap),
+            Some(cap) => self
+                .operations
+                .range((Excluded(cap), Unbounded))
+                .next()
+                .map(|(&cap, _)| cap),
         }
     }
 
     /// Poll every pending operation once. The caller must continue regular NIC
     /// pumping and smoltcp polling even when no request arrives.
-    pub fn poll(&mut self, iface: &mut Interface, device: &mut VirtioNetDevice,
-        sockets: &mut SocketSet<'_>, table: &mut SocketTable,
-        tls_table: &mut BTreeMap<u64, TlsSocketEntry>) {
+    pub fn poll(
+        &mut self,
+        iface: &mut Interface,
+        device: &mut VirtioNetDevice,
+        sockets: &mut SocketSet<'_>,
+        table: &mut SocketTable,
+        tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    ) {
         let mut cursor = None;
         while let Some(cap) = self.next_key(cursor) {
             cursor = Some(cap);
             let mut op = self.operations.remove(&cap).unwrap();
             if table.get(cap, op.owner) != Some(op.handle) || sys_get_time() >= op.deadline {
-                ostd::io::println(&alloc::format!("[net/tls] Operation TIMEOUT or handle lost for cap={}", cap));
+                ostd::io::println(&alloc::format!(
+                    "[net/tls] Operation TIMEOUT or handle lost for cap={}",
+                    cap
+                ));
                 self.fail(cap, op, sockets, table);
                 continue;
             }
             let result = match &mut op.state {
-                State::Connecting(h, _) => match sockets.get_mut::<tcp::Socket>(op.handle).state() {
-                    tcp::State::Established => {
-                        ostd::io::println(&alloc::format!("[net/tls] TCP Established for {}, starting TLS handshake", h));
-                        Step::TcpConnected
-                    }
-                    tcp::State::Closed | tcp::State::CloseWait => {
-                        ostd::io::println(&alloc::format!("[net/tls] TCP Closed/CloseWait for {}", h));
-                        Step::Failed
-                    }
-                    _ => Step::Waiting,
-                },
-                State::Handshake(future) => {
-                    match poll_future(future, iface, device, sockets) {
-                        Poll::Ready(Ok(entry)) => {
-                            ostd::io::println(&alloc::format!("[net/tls] Handshake SUCCESS for cap={}", cap));
-                            Step::Connected(entry)
+                State::Connecting(h, _) => {
+                    match sockets.get_mut::<tcp::Socket>(op.handle).state() {
+                        tcp::State::Established => {
+                            ostd::io::println(&alloc::format!(
+                                "[net/tls] TCP Established for {}, starting TLS handshake",
+                                h
+                            ));
+                            Step::TcpConnected
                         }
-                        Poll::Ready(Err(e)) => {
-                            ostd::io::println(&alloc::format!("[net/tls] Handshake FAILED for cap={}: {:?}", cap, e));
+                        tcp::State::Closed | tcp::State::CloseWait => {
+                            ostd::io::println(&alloc::format!(
+                                "[net/tls] TCP Closed/CloseWait for {}",
+                                h
+                            ));
                             Step::Failed
                         }
-                        Poll::Pending => Step::Waiting,
+                        _ => Step::Waiting,
                     }
                 }
+                State::Handshake(future) => match poll_future(future, iface, device, sockets) {
+                    Poll::Ready(Ok(entry)) => {
+                        ostd::io::println(&alloc::format!(
+                            "[net/tls] Handshake SUCCESS for cap={}",
+                            cap
+                        ));
+                        Step::Connected(entry)
+                    }
+                    Poll::Ready(Err(e)) => {
+                        ostd::io::println(&alloc::format!(
+                            "[net/tls] Handshake FAILED for cap={}: {:?}",
+                            cap,
+                            e
+                        ));
+                        Step::Failed
+                    }
+                    Poll::Pending => Step::Waiting,
+                },
                 State::Send(future) => match poll_future(future, iface, device, sockets) {
                     Poll::Ready((entry, result)) => Step::Sent(entry, result),
                     Poll::Pending => Step::Waiting,
@@ -272,13 +364,19 @@ impl TlsPending {
                 State::Vacant => unreachable!(),
             };
             match result {
-                Step::Waiting => { self.operations.insert(cap, op); }
+                Step::Waiting => {
+                    self.operations.insert(cap, op);
+                }
                 Step::TcpConnected => {
                     table.set_state(cap, SocketState::Connected);
-                    let State::Connecting(hostname, ticket) = core::mem::replace(&mut op.state, State::Vacant) else {
+                    let State::Connecting(hostname, ticket) =
+                        core::mem::replace(&mut op.state, State::Vacant)
+                    else {
                         unreachable!();
                     };
-                    op.state = State::Handshake(Box::pin(TlsSocketEntry::handshake(op.handle, hostname, ticket)));
+                    op.state = State::Handshake(Box::pin(TlsSocketEntry::handshake(
+                        op.handle, hostname, ticket,
+                    )));
                     op.deadline = sys_get_time().saturating_add(TLS_TIMEOUT);
                     self.operations.insert(cap, op);
                 }
@@ -295,7 +393,9 @@ impl TlsPending {
                         for queued in op.queue {
                             self.answer(queued.reply, op.owner, None, failed(&queued.request));
                         }
-                        if let Some(handle) = table.remove_internal(cap) { sockets.remove(handle); }
+                        if let Some(handle) = table.remove_internal(cap) {
+                            sockets.remove(handle);
+                        }
                     }
                 }
                 Step::Sent(entry, result) => {
@@ -306,8 +406,12 @@ impl TlsPending {
                         self.start_queued(cap, op, tls_table);
                     } else {
                         drop(entry);
-                        for queued in op.queue { self.answer(queued.reply, op.owner, None, failed(&queued.request)); }
-                        if let Some(handle) = table.remove_internal(cap) { sockets.remove(handle); }
+                        for queued in op.queue {
+                            self.answer(queued.reply, op.owner, None, failed(&queued.request));
+                        }
+                        if let Some(handle) = table.remove_internal(cap) {
+                            sockets.remove(handle);
+                        }
                     }
                 }
                 Step::Received(entry, data, result) => {
@@ -321,8 +425,12 @@ impl TlsPending {
                         self.start_queued(cap, op, tls_table);
                     } else {
                         drop(entry);
-                        for queued in op.queue { self.answer(queued.reply, op.owner, None, failed(&queued.request)); }
-                        if let Some(handle) = table.remove_internal(cap) { sockets.remove(handle); }
+                        for queued in op.queue {
+                            self.answer(queued.reply, op.owner, None, failed(&queued.request));
+                        }
+                        if let Some(handle) = table.remove_internal(cap) {
+                            sockets.remove(handle);
+                        }
                     }
                 }
             }
@@ -330,8 +438,12 @@ impl TlsPending {
         self.flush_replies(sockets, table, tls_table);
     }
 
-    fn start_queued(&mut self, cap: u64, mut op: Pending,
-        tls_table: &mut BTreeMap<u64, TlsSocketEntry>) {
+    fn start_queued(
+        &mut self,
+        cap: u64,
+        mut op: Pending,
+        tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
+    ) {
         if let Some(next) = op.queue.pop_front() {
             let entry = tls_table.remove(&cap).expect("completed TLS entry");
             op.reply = next.reply;
@@ -341,8 +453,20 @@ impl TlsPending {
         }
     }
 
-    fn fail(&mut self, cap: u64, op: Pending, sockets: &mut SocketSet<'_>, table: &mut SocketTable) {
-        let Pending { reply, owner, state, queue, .. } = op;
+    fn fail(
+        &mut self,
+        cap: u64,
+        op: Pending,
+        sockets: &mut SocketSet<'_>,
+        table: &mut SocketTable,
+    ) {
+        let Pending {
+            reply,
+            owner,
+            state,
+            queue,
+            ..
+        } = op;
         let response: &[u8] = match &state {
             State::Connecting(..) | State::Handshake(_) => &[0; 8],
             State::Send(_) => &[0xff; 4],
@@ -353,8 +477,12 @@ impl TlsPending {
         // before the smoltcp socket can be removed.
         drop(state);
         self.answer(reply, owner, None, response);
-        for queued in queue { self.answer(queued.reply, owner, None, failed(&queued.request)); }
-        if let Some(handle) = table.remove_internal(cap) { sockets.remove(handle); }
+        for queued in queue {
+            self.answer(queued.reply, owner, None, failed(&queued.request));
+        }
+        if let Some(handle) = table.remove_internal(cap) {
+            sockets.remove(handle);
+        }
     }
 }
 
@@ -364,7 +492,11 @@ enum Step {
     Failed,
     Connected(TlsSocketEntry),
     Sent(TlsSocketEntry, Result<usize, embedded_tls::TlsError>),
-    Received(TlsSocketEntry, Vec<u8>, Result<usize, embedded_tls::TlsError>),
+    Received(
+        TlsSocketEntry,
+        Vec<u8>,
+        Result<usize, embedded_tls::TlsError>,
+    ),
 }
 
 fn start(mut entry: TlsSocketEntry, request: Request) -> State {
@@ -381,8 +513,12 @@ fn start(mut entry: TlsSocketEntry, request: Request) -> State {
     }
 }
 
-fn poll_future<T>(future: &mut Pin<Box<dyn Future<Output = T>>>, iface: &mut Interface,
-    device: &mut VirtioNetDevice, sockets: &mut SocketSet<'_>) -> Poll<T> {
+fn poll_future<T>(
+    future: &mut Pin<Box<dyn Future<Output = T>>>,
+    iface: &mut Interface,
+    device: &mut VirtioNetDevice,
+    sockets: &mut SocketSet<'_>,
+) -> Poll<T> {
     // The transport leaves Pending on absent data/space; the outer service
     // dispatcher, not a self-waking busy loop, is responsible for the next poll.
     let mut context = Context::from_waker(Waker::noop());
@@ -391,4 +527,3 @@ fn poll_future<T>(future: &mut Pin<Box<dyn Future<Output = T>>>, iface: &mut Int
     clear_tls_context();
     result
 }
-

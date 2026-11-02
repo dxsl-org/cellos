@@ -212,9 +212,13 @@ impl ViFatFS {
             Ok(fs) => {
                 // The Arc header and mounted FAT state are retained together.
                 #[cfg(cellos_p01_trace)]
-                let _semantic = crate::memory::heap::p01_owner::creation(None,
-                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
-                Ok(Self { inner: Arc::new(Spinlock::new(fs)) })
+                let _semantic = crate::memory::heap::p01_owner::creation(
+                    None,
+                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
+                );
+                Ok(Self {
+                    inner: Arc::new(Spinlock::new(fs)),
+                })
             }
             Err(e) => {
                 log::error!("ViFatFS: Mount failed: {:?}", e);
@@ -264,7 +268,8 @@ impl ViFileSystem for ViFatFS {
 
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation_fallback(
-            crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
+            crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
+        );
         Ok(Box::new(FatFile {
             path: String::from(path),
             pos: 0,
@@ -371,7 +376,8 @@ impl ViFile for FatFile {
                 let mut file = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
                 #[cfg(cellos_p01_trace)]
                 let _semantic = crate::memory::heap::p01_owner::creation_fallback(
-                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED);
+                    crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
+                );
                 self.runs.insert(RunMap::build(&mut file)?)
             }
         };

@@ -1291,21 +1291,46 @@ pub fn sys_write(fd: usize, buffer: &[u8]) -> Result<usize, SyscallError> {
 /// additive IPC error mapping documented on `ViSyscall::IpcSubmit`.
 pub fn sys_ipc_submit(target: usize, bytes: &[u8]) -> isize {
     // SAFETY: the kernel snapshots the input before returning.
-    unsafe { syscall(ViSyscall::IpcSubmit, target, bytes.as_ptr() as usize, bytes.len(), 0) }
+    unsafe {
+        syscall(
+            ViSyscall::IpcSubmit,
+            target,
+            bytes.as_ptr() as usize,
+            bytes.len(),
+            0,
+        )
+    }
 }
 
 /// Poll and atomically retrieve a retained terminal IPC result.
-pub fn sys_ipc_take(token: usize, reply: &mut [u8],
-                    status: &mut [u8; api::syscall::IPC_STATUS_LEN]) -> isize {
+pub fn sys_ipc_take(
+    token: usize,
+    reply: &mut [u8],
+    status: &mut [u8; api::syscall::IPC_STATUS_LEN],
+) -> isize {
     // SAFETY: both output buffers remain exclusively borrowed for this syscall.
-    unsafe { syscall(ViSyscall::IpcTake, token, reply.as_mut_ptr() as usize,
-        reply.len(), status.as_mut_ptr() as usize) }
+    unsafe {
+        syscall(
+            ViSyscall::IpcTake,
+            token,
+            reply.as_mut_ptr() as usize,
+            reply.len(),
+            status.as_mut_ptr() as usize,
+        )
+    }
 }
 
 pub fn sys_ipc_wait(timeout_ticks: u64) -> isize {
     // SAFETY: register-only wait, no user pointer retained.
-    unsafe { syscall(ViSyscall::IpcWait, timeout_ticks as usize,
-        (timeout_ticks >> 32) as usize, 0, 0) }
+    unsafe {
+        syscall(
+            ViSyscall::IpcWait,
+            timeout_ticks as usize,
+            (timeout_ticks >> 32) as usize,
+            0,
+            0,
+        )
+    }
 }
 
 pub fn sys_ipc_cancel(token: usize) -> isize {
@@ -1320,7 +1345,15 @@ pub fn sys_ipc_current() -> isize {
 
 pub fn sys_ipc_reply(token: usize, bytes: &[u8]) -> isize {
     // SAFETY: kernel copies reply into previously reserved owned storage.
-    unsafe { syscall(ViSyscall::IpcReply, token, bytes.as_ptr() as usize, bytes.len(), 0) }
+    unsafe {
+        syscall(
+            ViSyscall::IpcReply,
+            token,
+            bytes.as_ptr() as usize,
+            bytes.len(),
+            0,
+        )
+    }
 }
 
 // IPC Wrappers
@@ -1617,7 +1650,13 @@ pub fn sys_telemetry_snapshot(out: &mut [u64], flags: usize) -> Result<usize, Sy
     // SAFETY: `out` is a live, aligned, writable slice of `len` bytes and the
     // kernel writes at most `len` bytes into it.
     let ret = unsafe {
-        syscall(ViSyscall::TelemetrySnapshot, out.as_mut_ptr() as usize, len, flags, 0)
+        syscall(
+            ViSyscall::TelemetrySnapshot,
+            out.as_mut_ptr() as usize,
+            len,
+            flags,
+            0,
+        )
     };
     match ret {
         written if written >= 0 && written as usize <= len => Ok(written as usize),
@@ -1657,7 +1696,13 @@ pub fn sys_query_retirement(
     // SAFETY: `out` is a live, writable buffer of exactly `RETIREMENT_RECORD_LEN`
     // bytes and the kernel writes at most that many.
     let ret = unsafe {
-        syscall(ViSyscall::QueryRetirement, root_tid, out.as_mut_ptr() as usize, out.len(), 0)
+        syscall(
+            ViSyscall::QueryRetirement,
+            root_tid,
+            out.as_mut_ptr() as usize,
+            out.len(),
+            0,
+        )
     };
     match ret {
         n if n >= 0 && n as usize == RETIREMENT_RECORD_LEN => {
@@ -2569,12 +2614,18 @@ pub fn sys_lookup_block_route(
     // SAFETY: `out` is a live, writable buffer of exactly `BLOCK_ROUTE_RECORD_LEN`
     // bytes and the kernel writes at most that many.
     let ret = unsafe {
-        syscall(ViSyscall::LookupBlockRoute, index as usize, out.as_mut_ptr() as usize, out.len(), 0)
+        syscall(
+            ViSyscall::LookupBlockRoute,
+            index as usize,
+            out.as_mut_ptr() as usize,
+            out.len(),
+            0,
+        )
     };
     match ret {
-        n if n >= 0 && n as usize == BLOCK_ROUTE_RECORD_LEN => {
-            ViBlockRouteV1::decode(&out).map(Some).map_err(|_| SyscallError::Unknown)
-        }
+        n if n >= 0 && n as usize == BLOCK_ROUTE_RECORD_LEN => ViBlockRouteV1::decode(&out)
+            .map(Some)
+            .map_err(|_| SyscallError::Unknown),
         -3 => Ok(None),
         -4 => Err(SyscallError::Unknown),
         _ => Err(SyscallError::PermissionDenied),
@@ -2598,7 +2649,13 @@ pub fn sys_query_machine_facts() -> Result<api::machine_facts::MachineFactsRecor
     // SAFETY: `out` is a live, writable heap buffer of exactly
     // `MACHINE_FACTS_CAPACITY` bytes and the kernel writes at most that many.
     let ret = unsafe {
-        syscall(ViSyscall::QueryMachineFacts, out.as_mut_ptr() as usize, out.len(), 0, 0)
+        syscall(
+            ViSyscall::QueryMachineFacts,
+            out.as_mut_ptr() as usize,
+            out.len(),
+            0,
+            0,
+        )
     };
     match ret {
         n if n > 0 && n as usize <= MACHINE_FACTS_CAPACITY => {
@@ -2759,10 +2816,7 @@ impl SerialPortInfo {
 /// the index is out of range or the machine did not answer the 16550 probe —
 /// in both cases `info` carries what the profile declared, so a cell can log the
 /// port it could not open. Requires the `serial_port` capability.
-pub fn sys_serial_port_info(
-    index: u32,
-    info: &mut SerialPortInfo,
-) -> Result<bool, SyscallError> {
+pub fn sys_serial_port_info(index: u32, info: &mut SerialPortInfo) -> Result<bool, SyscallError> {
     // SAFETY: `info` is a valid mutable reference; the kernel writes exactly 4 bytes.
     // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
     let ret = unsafe {
@@ -2828,7 +2882,15 @@ pub fn sys_serial_read(index: u32, buf: &mut [u8]) -> Result<usize, SyscallError
 /// Requires the `serial_port` capability. An unsupported rate is refused rather
 /// than rounded to a rate the caller did not ask for.
 pub fn sys_serial_configure(index: u32, baud: u32) -> Result<(), SyscallError> {
-    let ret = unsafe { syscall(ViSyscall::SerialConfigure, index as usize, baud as usize, 0, 0) };
+    let ret = unsafe {
+        syscall(
+            ViSyscall::SerialConfigure,
+            index as usize,
+            baud as usize,
+            0,
+            0,
+        )
+    };
     match ret {
         0 => Ok(()),
         // Unusable index or unsupported rate: the call did not apply.

@@ -51,11 +51,19 @@ fn bit(facts: &ViMachineFactsV1, bit: u16) -> String {
 }
 
 fn source(facts: &ViMachineFactsV1) -> String {
-    String::from(if facts.profile_source == PROFILE_SOURCE_CMDLINE { "cmdline" } else { "default" })
+    String::from(if facts.profile_source == PROFILE_SOURCE_CMDLINE {
+        "cmdline"
+    } else {
+        "default"
+    })
 }
 
 fn when(present: bool, value: impl FnOnce() -> String) -> String {
-    if present { value() } else { String::from("none") }
+    if present {
+        value()
+    } else {
+        String::from("none")
+    }
 }
 
 fn uuid(bytes: &[u8; 16]) -> String {
@@ -82,12 +90,28 @@ pub(crate) fn lines(old: &ViMachineFactsV1, new: &ViMachineFactsV1) -> Vec<Strin
     let fields: [(&str, Render); 12] = [
         ("profile.slug", |f| quoted(f.slug.as_bytes())),
         ("profile.source", source),
-        ("acpi.oem_id", |f| when(flag(f, FLAG_ACPI_OEM), || quoted(&f.acpi_oem_id))),
-        ("acpi.oem_table_id", |f| when(flag(f, FLAG_ACPI_OEM), || quoted(&f.acpi_oem_table_id))),
-        ("acpi.oem_revision", |f| when(flag(f, FLAG_ACPI_OEM), || format!("{:#x}", f.acpi_oem_revision))),
-        ("smbios.manufacturer", |f| when(flag(f, FLAG_SMBIOS), || quoted(f.smbios_manufacturer.as_bytes()))),
-        ("smbios.product", |f| when(flag(f, FLAG_SMBIOS), || quoted(f.smbios_product.as_bytes()))),
-        ("smbios.uuid", |f| when(flag(f, FLAG_SMBIOS_UUID), || uuid(&f.smbios_uuid))),
+        ("acpi.oem_id", |f| {
+            when(flag(f, FLAG_ACPI_OEM), || quoted(&f.acpi_oem_id))
+        }),
+        ("acpi.oem_table_id", |f| {
+            when(flag(f, FLAG_ACPI_OEM), || quoted(&f.acpi_oem_table_id))
+        }),
+        ("acpi.oem_revision", |f| {
+            when(flag(f, FLAG_ACPI_OEM), || {
+                format!("{:#x}", f.acpi_oem_revision)
+            })
+        }),
+        ("smbios.manufacturer", |f| {
+            when(flag(f, FLAG_SMBIOS), || {
+                quoted(f.smbios_manufacturer.as_bytes())
+            })
+        }),
+        ("smbios.product", |f| {
+            when(flag(f, FLAG_SMBIOS), || quoted(f.smbios_product.as_bytes()))
+        }),
+        ("smbios.uuid", |f| {
+            when(flag(f, FLAG_SMBIOS_UUID), || uuid(&f.smbios_uuid))
+        }),
         ("dmar.present", |f| bit(f, FLAG_DMAR_PRESENT)),
         ("vtd.active", |f| bit(f, FLAG_VTD_ACTIVE)),
         ("cpu.hypervisor", |f| bit(f, FLAG_HYPERVISOR)),
@@ -102,7 +126,11 @@ pub(crate) fn lines(old: &ViMachineFactsV1, new: &ViMachineFactsV1) -> Vec<Strin
     }
     let changes = pci_changes(&old.pci, &new.pci);
     let shown = changes.len().min(PCI_LINES_MAX);
-    out.extend(changes[..shown].iter().map(|(sign, entry)| pci_line(*sign, entry)));
+    out.extend(
+        changes[..shown]
+            .iter()
+            .map(|(sign, entry)| pci_line(*sign, entry)),
+    );
     if changes.len() > shown {
         out.push(format!("pci …and {} more", changes.len() - shown));
     }
@@ -115,10 +143,22 @@ fn pci_changes(old: &[PciFunctionId], new: &[PciFunctionId]) -> Vec<(char, PciFu
     let (mut i, mut j, mut out) = (0, 0, Vec::new());
     while i < old.len() || j < new.len() {
         match (old.get(i), new.get(j)) {
-            (Some(a), Some(b)) if a == b => { i += 1; j += 1; }
-            (Some(a), Some(b)) if a < b => { out.push(('-', *a)); i += 1; }
-            (Some(a), None) => { out.push(('-', *a)); i += 1; }
-            (_, Some(b)) => { out.push(('+', *b)); j += 1; }
+            (Some(a), Some(b)) if a == b => {
+                i += 1;
+                j += 1;
+            }
+            (Some(a), Some(b)) if a < b => {
+                out.push(('-', *a));
+                i += 1;
+            }
+            (Some(a), None) => {
+                out.push(('-', *a));
+                i += 1;
+            }
+            (_, Some(b)) => {
+                out.push(('+', *b));
+                j += 1;
+            }
             (None, None) => break,
         }
     }

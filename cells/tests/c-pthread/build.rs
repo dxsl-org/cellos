@@ -23,7 +23,9 @@ fn main() {
     let mut build = cc::Build::new();
 
     let env_key = target.replace('-', "_");
-    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v == "1" || v == "true").unwrap_or(false);
+    let use_zig = std::env::var("CELLOS_USE_ZIG")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
     let custom_cc = std::env::var(format!("CC_{env_key}"))
         .or_else(|_| std::env::var("CC"))
         .ok();

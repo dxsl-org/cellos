@@ -257,27 +257,26 @@ static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new
 /// self-test can prove class-selective revocation on boards whose allowlist
 /// has no window of the class it needs.
 #[cfg(feature = "test-hooks")]
-pub(crate) fn test_register_region(
-    tid: usize,
-    base: usize,
-    len: usize,
-    class: MmioClass,
-) -> bool {
+pub(crate) fn test_register_region(tid: usize, base: usize, len: usize, class: MmioClass) -> bool {
     if checked_mmio_end(base, len).is_err() {
         return false;
     }
     let mut registry = REGISTRY.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
-    registry.insert(
-        base,
-        MmioRegion {
-            len,
-            owner_tid: tid,
-            class,
-        },
-    ).is_none()
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
+    registry
+        .insert(
+            base,
+            MmioRegion {
+                len,
+                owner_tid: tid,
+                class,
+            },
+        )
+        .is_none()
 }
 
 /// The per-arch static allowlist, for callers that must reason about which
@@ -345,8 +344,10 @@ pub fn register_pcie_bar(base: usize, len: usize) {
     }
     let mut bars = PCIE_BARS.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     bars.insert(base, len);
 }
 
@@ -439,8 +440,10 @@ pub fn request_dwc2_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
         }
     }
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     reg.insert(
         base,
         MmioRegion {
@@ -506,8 +509,10 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
         }
     }
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     reg.insert(
         base,
         MmioRegion {
@@ -657,8 +662,10 @@ pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(u
         let hit = region.owner_tid == tid && region.class & device_mask != 0;
         if hit {
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::DRIVER_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED,
+            );
             revoked.push((base, region.len));
         }
         !hit
@@ -672,10 +679,7 @@ pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(u
 /// Returns `None` if no cell has requested that exact base address.
 /// Used by the GPIO IRQ handler to route interrupts to the current MMIO owner.
 pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
-    REGISTRY
-        .lock()
-        .get(&base)
-        .map(|region| region.owner_tid)
+    REGISTRY.lock().get(&base).map(|region| region.owner_tid)
 }
 
 /// Return whether task `tid` owns exactly `[base, base + len)`.
@@ -876,8 +880,10 @@ pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
         Some(owner) => owner == tid,
         None => {
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::DRIVER_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED,
+            );
             owners.insert(bdf, tid);
             true
         }

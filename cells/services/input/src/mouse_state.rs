@@ -117,12 +117,27 @@ mod tests {
     #[test]
     fn relative_edges_do_not_accumulate_offscreen_debt() {
         let mut mouse = MouseState::new(1920, 1080);
-        assert_eq!(position(mouse.apply_rel(REL_X, (-1200i32) as u32)), (0, 0, 0, 0));
+        assert_eq!(
+            position(mouse.apply_rel(REL_X, (-1200i32) as u32)),
+            (0, 0, 0, 0)
+        );
         assert_eq!(position(mouse.apply_rel(REL_X, 10)), (10, 0, 10, 0));
-        assert_eq!(position(mouse.apply_rel(REL_X, i32::MAX as u32)), (1919, 0, 1909, 0));
-        assert_eq!(position(mouse.apply_rel(REL_X, (-1i32) as u32)), (1918, 0, -1, 0));
-        assert_eq!(position(mouse.apply_rel(REL_Y, 2000)), (1918, 1079, 0, 1079));
-        assert_eq!(position(mouse.apply_rel(REL_Y, (-1i32) as u32)), (1918, 1078, 0, -1));
+        assert_eq!(
+            position(mouse.apply_rel(REL_X, i32::MAX as u32)),
+            (1919, 0, 1909, 0)
+        );
+        assert_eq!(
+            position(mouse.apply_rel(REL_X, (-1i32) as u32)),
+            (1918, 0, -1, 0)
+        );
+        assert_eq!(
+            position(mouse.apply_rel(REL_Y, 2000)),
+            (1918, 1079, 0, 1079)
+        );
+        assert_eq!(
+            position(mouse.apply_rel(REL_Y, (-1i32) as u32)),
+            (1918, 1078, 0, -1)
+        );
     }
 
     #[test]
@@ -132,7 +147,10 @@ mod tests {
         assert_eq!(position(mouse.apply_abs(ABS_Y, 119)), (295, 119, 0, 119));
         assert_eq!(position(mouse.apply_abs(ABS_X, 1279)), (1279, 119, 984, 0));
         assert_eq!(position(mouse.apply_abs(ABS_Y, 799)), (1279, 799, 0, 680));
-        assert_eq!(position(mouse.apply_abs(ABS_X, u32::MAX)), (1279, 799, 0, 0));
+        assert_eq!(
+            position(mouse.apply_abs(ABS_X, u32::MAX)),
+            (1279, 799, 0, 0)
+        );
     }
 
     #[test]

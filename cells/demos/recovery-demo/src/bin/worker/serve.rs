@@ -24,21 +24,33 @@ pub struct Worker {
 
 pub fn run(mut worker: Worker) -> ! {
     loop {
-        let Some(rx) = common::recv_attested(0) else { continue };
+        let Some(rx) = common::recv_attested(0) else {
+            continue;
+        };
         if rx.sender == worker.authority {
             continue;
         }
-        let Some((cell, generation)) = rx.principal() else { continue };
+        let Some((cell, generation)) = rx.principal() else {
+            continue;
+        };
         let rights = rx.identity.map_or(0, |id| id.flags);
         match rx.msg {
             Some(Msg::Get) => {
-                common::send(rx.sender, Msg::Value {
-                    counter: worker.counter,
-                    revision: worker.revision,
-                    epoch: worker.epoch,
-                });
+                common::send(
+                    rx.sender,
+                    Msg::Value {
+                        counter: worker.counter,
+                        revision: worker.revision,
+                        epoch: worker.epoch,
+                    },
+                );
             }
-            Some(Msg::Mutate { request_id, method, amount, fault }) => {
+            Some(Msg::Mutate {
+                request_id,
+                method,
+                amount,
+                fault,
+            }) => {
                 let binding = Binding {
                     caller_cell: cell,
                     caller_generation: generation,
@@ -69,9 +81,20 @@ impl Worker {
 
     fn mutate(&mut self, client: usize, binding: Binding, fault: Fault) {
         let request_id = binding.request_id;
-        match self.call(Msg::Lookup { epoch: self.epoch, binding }) {
+        match self.call(Msg::Lookup {
+            epoch: self.epoch,
+            binding,
+        }) {
             Some(Msg::Present { revision, result }) => {
-                common::send(client, Msg::Done { request_id, result, revision, replayed: true });
+                common::send(
+                    client,
+                    Msg::Done {
+                        request_id,
+                        result,
+                        revision,
+                        replayed: true,
+                    },
+                );
                 return;
             }
             Some(Msg::Absent) => {}
@@ -88,16 +111,37 @@ impl Worker {
                 return self.refuse(client, request_id, Refusal::Denied);
             }
         }
-        let commit = Msg::Commit { epoch: self.epoch, expected_revision: self.revision, binding, new_state };
+        let commit = Msg::Commit {
+            epoch: self.epoch,
+            expected_revision: self.revision,
+            binding,
+            new_state,
+        };
         match self.call(commit) {
             Some(Msg::Committed { revision, result }) => {
                 self.revision = revision;
                 self.counter = result;
                 self.fault_point(fault, Fault::AfterCommit);
-                common::send(client, Msg::Done { request_id, result, revision, replayed: false });
+                common::send(
+                    client,
+                    Msg::Done {
+                        request_id,
+                        result,
+                        revision,
+                        replayed: false,
+                    },
+                );
             }
             Some(Msg::Present { revision, result }) => {
-                common::send(client, Msg::Done { request_id, result, revision, replayed: true });
+                common::send(
+                    client,
+                    Msg::Done {
+                        request_id,
+                        result,
+                        revision,
+                        replayed: true,
+                    },
+                );
             }
             Some(Msg::Refused(refusal)) => self.refuse(client, request_id, refusal),
             _ => self.refuse(client, request_id, Refusal::RecoveryFailed),
@@ -106,9 +150,18 @@ impl Worker {
 
     /// A fenced writer reports the refusal and exits: it can never commit again.
     fn refuse(&self, client: usize, request_id: u64, refusal: Refusal) {
-        common::send(client, Msg::Failed { request_id, refusal });
+        common::send(
+            client,
+            Msg::Failed {
+                request_id,
+                refusal,
+            },
+        );
         if refusal == Refusal::StaleEpoch {
-            println(&format!("[recovery-worker] epoch {} fenced: exiting", self.epoch));
+            println(&format!(
+                "[recovery-worker] epoch {} fenced: exiting",
+                self.epoch
+            ));
             ostd::syscall::sys_exit(EXIT_FENCED);
         }
     }

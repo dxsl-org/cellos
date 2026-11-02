@@ -11,10 +11,10 @@
 //! unmapped guard page on both ends once [`install_guards`] has run, which
 //! also unmaps the page below the BSP boot stack (`kernel/linker-x86-64.ld`).
 //!
-//! Size: the deepest path is the shared entry (160-byte frame + 16 alignment
-//! + 528-byte FXSAVE area) plus the fatal dispatch and serial writer, about
-//! 1 KiB. 8 KiB leaves an 8x margin; the IDT fixture reports the measured
-//! high-water mark (`ist-hw=`).
+//! Size: the deepest path is the shared entry (160-byte frame, 16 bytes of
+//! alignment and the 528-byte FXSAVE area) plus the fatal dispatch and serial
+//! writer, about 1 KiB. 8 KiB leaves an 8x margin; the IDT fixture reports the
+//! measured high-water mark (`ist-hw=`).
 
 use super::syscall::MAX_CPUS;
 use core::sync::atomic::{AtomicUsize, Ordering};

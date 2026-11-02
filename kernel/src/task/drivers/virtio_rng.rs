@@ -154,17 +154,23 @@ mod x86_rng {
         #[test]
         fn retry_exhaustion_is_bounded_and_zero_is_a_valid_sample() {
             let mut calls = 0;
-            assert_eq!(retry(|| {
-                calls += 1;
+            assert_eq!(
+                retry(|| {
+                    calls += 1;
+                    None
+                }),
                 None
-            }), None);
+            );
             assert_eq!(calls, ATTEMPTS);
 
             calls = 0;
-            assert_eq!(retry(|| {
-                calls += 1;
-                (calls == ATTEMPTS).then_some(0)
-            }), Some(0));
+            assert_eq!(
+                retry(|| {
+                    calls += 1;
+                    (calls == ATTEMPTS).then_some(0)
+                }),
+                Some(0)
+            );
             assert_eq!(calls, ATTEMPTS);
         }
 
@@ -186,10 +192,13 @@ mod x86_rng {
         fn final_partial_word_is_bounded_and_empty_output_consumes_nothing() {
             let mut buf = [0xA5; 9];
             let mut calls = 0;
-            assert_eq!(fill(&mut buf, || {
-                calls += 1;
-                Some(0)
-            }), 9);
+            assert_eq!(
+                fill(&mut buf, || {
+                    calls += 1;
+                    Some(0)
+                }),
+                9
+            );
             assert_eq!(calls, 2);
             assert_eq!(buf, [0; 9]);
             assert_eq!(fill(&mut [], || panic!("empty output sampled entropy")), 0);

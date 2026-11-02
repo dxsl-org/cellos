@@ -35,7 +35,10 @@ fn p01_transition(used: usize) {
         let epoch = P01_EPOCH.load(Ordering::Relaxed);
         if let Some(next) = epoch.checked_add(1) {
             P01_EPOCH.store(next, Ordering::Relaxed);
-            P01_PEAK.store(P01_PEAK.load(Ordering::Relaxed).max(used), Ordering::Relaxed);
+            P01_PEAK.store(
+                P01_PEAK.load(Ordering::Relaxed).max(used),
+                Ordering::Relaxed,
+            );
         } else {
             crate::p01_measurement::invalidate(1 << 12);
         }
@@ -101,14 +104,15 @@ pub mod size_hist {
     pub const BOUNDS: [usize; 7] = [64, 256, 1024, 4096, 16 * 1024, 64 * 1024, 256 * 1024];
     pub const BUCKETS: usize = 8;
 
-    static ALLOC_BYTES: [AtomicUsize; BUCKETS] =
-        [const { AtomicUsize::new(0) }; BUCKETS];
+    static ALLOC_BYTES: [AtomicUsize; BUCKETS] = [const { AtomicUsize::new(0) }; BUCKETS];
     static FREE_BYTES: [AtomicUsize; BUCKETS] = [const { AtomicUsize::new(0) }; BUCKETS];
-    static ALLOC_COUNT: [AtomicUsize; BUCKETS] =
-        [const { AtomicUsize::new(0) }; BUCKETS];
+    static ALLOC_COUNT: [AtomicUsize; BUCKETS] = [const { AtomicUsize::new(0) }; BUCKETS];
 
     fn bucket(size: usize) -> usize {
-        BOUNDS.iter().position(|&bound| size <= bound).unwrap_or(BUCKETS - 1)
+        BOUNDS
+            .iter()
+            .position(|&bound| size <= bound)
+            .unwrap_or(BUCKETS - 1)
     }
 
     pub(super) fn record_alloc(size: usize) {
@@ -184,11 +188,17 @@ impl QuotaAlloc {
         let ptr = {
             let mut heap = self.inner.lock();
             let before = heap.used();
-            let result = tagged.map_or(Err(()), |tagged| heap.allocate_first_fit(tagged))
+            let result = tagged
+                .map_or(Err(()), |tagged| heap.allocate_first_fit(tagged))
                 .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr());
             if !result.is_null() {
-                p01_owner::allocated(result, layout, origin, heap.used() - before,
-                    P01_EPOCH.load(Ordering::Relaxed).saturating_add(1) as u64);
+                p01_owner::allocated(
+                    result,
+                    layout,
+                    origin,
+                    heap.used() - before,
+                    P01_EPOCH.load(Ordering::Relaxed).saturating_add(1) as u64,
+                );
             }
             p01_transition(heap.used());
             result
@@ -205,7 +215,9 @@ impl QuotaAlloc {
         } else {
             // SAFETY: the block spans the tagged layout, so the tag word just
             // past the payload is inside it.
-            ptr.add(layout.size()).cast::<usize>().write_unaligned(owner);
+            ptr.add(layout.size())
+                .cast::<usize>()
+                .write_unaligned(owner);
             #[cfg(feature = "cell-scale-experiment")]
             size_hist::record_alloc(layout.size());
             #[cfg(feature = "bench-counters")]
@@ -257,14 +269,20 @@ impl Drop for HeapIrqMask {
 unsafe impl GlobalAlloc for QuotaAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let _irq = HeapIrqMask::enter();
-        self.alloc_impl(layout, #[cfg(cellos_p01_trace)] None)
+        self.alloc_impl(
+            layout,
+            #[cfg(cellos_p01_trace)]
+            None,
+        )
     }
 
     #[cfg(cellos_p01_trace)]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let _irq = HeapIrqMask::enter();
         let ptr = self.alloc_impl(layout, None);
-        if !ptr.is_null() { ptr.write_bytes(0, layout.size()); }
+        if !ptr.is_null() {
+            ptr.write_bytes(0, layout.size());
+        }
         ptr
     }
 
@@ -294,7 +312,8 @@ unsafe impl GlobalAlloc for QuotaAlloc {
         // the owner tag just past the payload and `tagged_layout` succeeded.
         let owner = ptr.add(layout.size()).cast::<usize>().read_unaligned();
         crate::memory::cell_quota::refund_owner(owner, layout.size());
-        let tagged = Layout::from_size_align_unchecked(layout.size() + OWNER_TAG_BYTES, layout.align());
+        let tagged =
+            Layout::from_size_align_unchecked(layout.size() + OWNER_TAG_BYTES, layout.align());
         #[cfg(not(cellos_p01_trace))]
         self.inner.dealloc(ptr, tagged);
         #[cfg(cellos_p01_trace)]
@@ -339,8 +358,12 @@ pub fn usage() -> (usize, usize) {
 pub(crate) fn p01_snapshot() -> (usize, usize, usize, usize) {
     let _irq = HeapIrqMask::enter();
     let heap = ALLOCATOR.inner.lock();
-    (heap.used(), heap.free(), P01_EPOCH.load(Ordering::Relaxed),
-        P01_PEAK.load(Ordering::Relaxed))
+    (
+        heap.used(),
+        heap.free(),
+        P01_EPOCH.load(Ordering::Relaxed),
+        P01_PEAK.load(Ordering::Relaxed),
+    )
 }
 
 #[cfg(cellos_p01_trace)]
@@ -388,12 +411,20 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     // it (the spawn path's per-cell structures are the recurring candidates).
     #[cfg(all(
         feature = "native-domains",
-        any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     ))]
     let mapping_entry = core::mem::size_of::<crate::memory::address_space::MappingEntry>();
     #[cfg(not(all(
         feature = "native-domains",
-        any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     )))]
     let mapping_entry = 0;
     log::error!(
@@ -465,9 +496,15 @@ mod tests {
         let _guard = crate::TEST_STATE_LOCK.lock();
         let previous = current_cell_id();
         let mut arena = alloc::vec![0u64; 1024];
-        let heap = QuotaAlloc { inner: LockedHeap::empty() };
+        let heap = QuotaAlloc {
+            inner: LockedHeap::empty(),
+        };
         // SAFETY: the arena outlives `heap` and is used by nothing else.
-        unsafe { heap.inner.lock().init(arena.as_mut_ptr().cast(), arena.len() * 8) };
+        unsafe {
+            heap.inner
+                .lock()
+                .init(arena.as_mut_ptr().cast(), arena.len() * 8)
+        };
         cell_quota::register(CellId(OWNER as u64), 4096);
         cell_quota::register(CellId(OTHER as u64), 4096);
         let small = Layout::from_size_align(24, 8).unwrap();
@@ -481,7 +518,11 @@ mod tests {
             set_current_cell_id(OTHER);
             let other = heap.alloc(aligned);
             assert!(!owned.is_null() && !other.is_null());
-            assert_eq!(other as usize % 64, 0, "payload keeps the requested alignment");
+            assert_eq!(
+                other as usize % 64,
+                0,
+                "payload keeps the requested alignment"
+            );
             assert_eq!((in_use(OWNER), in_use(OTHER)), (24, 40));
             heap.dealloc(owned, small);
             assert_eq!((in_use(OWNER), in_use(OTHER)), (0, 40));
@@ -506,7 +547,11 @@ mod tests {
             heap.dealloc(other, aligned);
         }
         assert_eq!((in_use(OWNER), in_use(OTHER)), (0, 0));
-        assert_eq!(heap.inner.lock().used(), 0, "tagged layouts round-trip exactly");
+        assert_eq!(
+            heap.inner.lock().used(),
+            0,
+            "tagged layouts round-trip exactly"
+        );
 
         set_current_cell_id(previous);
         cell_quota::deregister(CellId(OWNER as u64));

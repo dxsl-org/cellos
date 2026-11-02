@@ -23,11 +23,13 @@ impl ChallengeRound {
         !self.completed && current_time_ms < self.start_time_ms.saturating_add(self.max_lifetime_ms)
     }
 
-    pub fn complete(&mut self) -> Result<(), ()> {
+    /// Mark the round completed; returns `false` if it was already completed.
+    #[must_use]
+    pub fn complete(&mut self) -> bool {
         if self.completed {
-            return Err(());
+            return false;
         }
         self.completed = true;
-        Ok(())
+        true
     }
 }

@@ -18,11 +18,20 @@ pub struct ArticleExtract {
 
 /// Extract main article content from DOM tree.
 #[cfg(test)]
-pub fn extract_article(arena: &DocumentArena, base_url: &str, fallback_title: &str) -> ArticleExtract {
+pub fn extract_article(
+    arena: &DocumentArena,
+    base_url: &str,
+    fallback_title: &str,
+) -> ArticleExtract {
     extract_article_cached(arena, base_url, fallback_title, &[])
 }
 
-pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_title: &str, assets: &[DocNode]) -> ArticleExtract {
+pub fn extract_article_cached(
+    arena: &DocumentArena,
+    base_url: &str,
+    fallback_title: &str,
+    assets: &[DocNode],
+) -> ArticleExtract {
     let is_portal = is_portal_or_homepage(base_url);
 
     // 1. JSON-LD, Meta tags, Microdata, Semantic HTML5 Search & htmldate Cascade
@@ -54,12 +63,13 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
             }
 
             // Headline
-            if schema_headline.is_none() {
-                if matches!(itemprop, Some("headline" | "name")) || matches!(data_role, Some("title")) {
-                    let text = arena.get_text_content(node.id).trim().to_string();
-                    if text.chars().count() > 3 {
-                        schema_headline = Some(text);
-                    }
+            if schema_headline.is_none()
+                && (matches!(itemprop, Some("headline" | "name"))
+                    || matches!(data_role, Some("title")))
+            {
+                let text = arena.get_text_content(node.id).trim().to_string();
+                if text.chars().count() > 3 {
+                    schema_headline = Some(text);
                 }
             }
 
@@ -81,10 +91,11 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
             }
 
             // Article Body Container
-            if schema_body_node.is_none() {
-                if matches!(itemprop, Some("articleBody" | "articlebody")) || matches!(data_role, Some("content")) {
-                    schema_body_node = Some(node.id);
-                }
+            if schema_body_node.is_none()
+                && (matches!(itemprop, Some("articleBody" | "articlebody"))
+                    || matches!(data_role, Some("content")))
+            {
+                schema_body_node = Some(node.id);
             }
 
             // Author
@@ -95,7 +106,10 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                         schema_author = Some(text);
                     }
                 } else if let Some(cls) = class_val {
-                    if cls.contains("author-info") || cls.contains("author-item-name") || cls.contains("detail-author") {
+                    if cls.contains("author-info")
+                        || cls.contains("author-item-name")
+                        || cls.contains("detail-author")
+                    {
                         let text = arena.get_text_content(node.id).trim().to_string();
                         if !text.is_empty() && text.chars().count() < 40 {
                             schema_author = Some(text);
@@ -105,15 +119,17 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
             }
 
             // Publication Date
-            if schema_date.is_none() {
-                if matches!(itemprop, Some("datePublished" | "datepublished")) || matches!(data_role, Some("publishdate")) || tag == "time" {
-                    let text = arena.get_text_content(node.id).trim().to_string();
-                    if !text.is_empty() && text.chars().count() < 50 {
-                        schema_date = Some(normalize_date_display(&text));
-                    } else if let Some((_, dt)) = attributes.iter().find(|(k, _)| k == "datetime") {
-                        if !dt.is_empty() {
-                            schema_date = Some(normalize_date_display(dt));
-                        }
+            if schema_date.is_none()
+                && (matches!(itemprop, Some("datePublished" | "datepublished"))
+                    || matches!(data_role, Some("publishdate"))
+                    || tag == "time")
+            {
+                let text = arena.get_text_content(node.id).trim().to_string();
+                if !text.is_empty() && text.chars().count() < 50 {
+                    schema_date = Some(normalize_date_display(&text));
+                } else if let Some((_, dt)) = attributes.iter().find(|(k, _)| k == "datetime") {
+                    if !dt.is_empty() {
+                        schema_date = Some(normalize_date_display(dt));
                     }
                 }
             }
@@ -142,7 +158,14 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                 // Disqualify noise tags
                 if matches!(
                     tag_name,
-                    "nav" | "footer" | "header" | "aside" | "script" | "style" | "noscript" | "dialog"
+                    "nav"
+                        | "footer"
+                        | "header"
+                        | "aside"
+                        | "script"
+                        | "style"
+                        | "noscript"
+                        | "dialog"
                 ) {
                     continue;
                 }
@@ -255,7 +278,10 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
     } else if is_portal {
         (has_h1 && best_p_count >= 1 && highest_score >= 35) || best_p_count >= 3
     } else {
-        best_node.is_some() && (highest_score >= 35 || (has_h1 && best_p_count >= 1) || (best_p_count >= 3 && highest_score >= 20))
+        best_node.is_some()
+            && (highest_score >= 35
+                || (has_h1 && best_p_count >= 1)
+                || (best_p_count >= 3 && highest_score >= 20))
     };
 
     let target_node = if is_article { best_node } else { None };
@@ -267,7 +293,11 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
     } else {
         String::from(fallback_title)
     };
-    let display_title = if is_article { clean_article_title(&candidate, base_url) } else { None };
+    let display_title = if is_article {
+        clean_article_title(&candidate, base_url)
+    } else {
+        None
+    };
 
     // Extract main article content (clean subtree with paragraphs, images, headings)
     let mut article_nodes = Vec::new();
@@ -286,7 +316,12 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
 
     // 1. Logo (if available) - scaled to compact, elegant reader header
     if let Some(mut logo_node) = find_logo(arena, assets) {
-        if let DocNode::DomImage { ref mut width, ref mut height, .. } = logo_node {
+        if let DocNode::DomImage {
+            ref mut width,
+            ref mut height,
+            ..
+        } = logo_node
+        {
             let max_w = 140u32;
             let max_h = 36u32;
             let orig_w = (*width).max(1);
@@ -422,18 +457,24 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
                     let mut price_span = StyledSpan::plain(&format!("  💰 {}", price));
                     price_span.bold = true;
                     price_span.color = Some(crate::draw::Color::rgb(166, 227, 161));
-                    nodes.push(DocNode::Paragraph { spans: alloc::vec![price_span] });
+                    nodes.push(DocNode::Paragraph {
+                        spans: alloc::vec![price_span],
+                    });
                 }
                 if let Some(sapo) = card.sapo {
                     let mut text_span = StyledSpan::plain(&format!("  {}", sapo));
                     text_span.link = Some(card.url.clone());
-                    nodes.push(DocNode::Paragraph { spans: alloc::vec![text_span] });
+                    nodes.push(DocNode::Paragraph {
+                        spans: alloc::vec![text_span],
+                    });
                 }
                 if let Some(meta) = card.meta {
                     let mut meta_span = StyledSpan::plain(&format!("  {}", meta));
                     meta_span.italic = true;
                     meta_span.color = Some(crate::draw::theme::TEXT_MUTED);
-                    nodes.push(DocNode::Paragraph { spans: alloc::vec![meta_span] });
+                    nodes.push(DocNode::Paragraph {
+                        spans: alloc::vec![meta_span],
+                    });
                 }
                 nodes.push(DocNode::Rule);
             }
@@ -488,9 +529,7 @@ pub fn extract_article_cached(arena: &DocumentArena, base_url: &str, fallback_ti
         }
     }
 
-    let extract_title = display_title.unwrap_or_else(|| {
-        clean_portal_title(&candidate, base_url)
-    });
+    let extract_title = display_title.unwrap_or_else(|| clean_portal_title(&candidate, base_url));
     ArticleExtract {
         title: format!("{} [Reader]", extract_title),
         nodes,
@@ -517,9 +556,13 @@ fn count_words_in_nodes(nodes: &[DocNode]) -> usize {
                 }
             }
             DocNode::Table { headers, rows } => {
-                for h in headers { words += h.split_whitespace().count(); }
+                for h in headers {
+                    words += h.split_whitespace().count();
+                }
                 for row in rows {
-                    for cell in row { words += cell.split_whitespace().count(); }
+                    for cell in row {
+                        words += cell.split_whitespace().count();
+                    }
                 }
             }
             _ => {}
@@ -533,7 +576,14 @@ fn clean_portal_title(candidate: &str, base_url: &str) -> String {
     if !t.is_empty() && !t.contains("://") {
         return t.to_string();
     }
-    base_url.split("://").nth(1).unwrap_or(base_url).split('/').next().unwrap_or(base_url).to_string()
+    base_url
+        .split("://")
+        .nth(1)
+        .unwrap_or(base_url)
+        .split('/')
+        .next()
+        .unwrap_or(base_url)
+        .to_string()
 }
 
 fn extract_json_str(json: &str, field: &str) -> Option<String> {
@@ -542,8 +592,7 @@ fn extract_json_str(json: &str, field: &str) -> Option<String> {
     let after_key = &json[key_pos + key.len()..];
     let colon_pos = after_key.find(':')?;
     let after_colon = after_key[colon_pos + 1..].trim_start();
-    if after_colon.starts_with('"') {
-        let rest = &after_colon[1..];
+    if let Some(rest) = after_colon.strip_prefix('"') {
         let mut out = String::new();
         let mut escape = false;
         for c in rest.chars() {
@@ -583,7 +632,14 @@ fn extract_json_author(json: &str) -> Option<String> {
     None
 }
 
-fn extract_json_ld_metadata(arena: &DocumentArena) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+fn extract_json_ld_metadata(
+    arena: &DocumentArena,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     let mut headline = None;
     let mut sapo = None;
     let mut author = None;
@@ -622,7 +678,14 @@ fn extract_json_ld_metadata(arena: &DocumentArena) -> (Option<String>, Option<St
     (headline, sapo, author, date)
 }
 
-fn extract_meta_tags(arena: &DocumentArena) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+fn extract_meta_tags(
+    arena: &DocumentArena,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     let mut title = None;
     let mut sapo = None;
     let mut author = None;
@@ -647,8 +710,8 @@ fn extract_meta_tags(arena: &DocumentArena) -> (Option<String>, Option<String>, 
                     continue;
                 }
                 let lower_pn = pn.to_ascii_lowercase();
-                if date.is_none() {
-                    if matches!(
+                if date.is_none()
+                    && matches!(
                         lower_pn.as_str(),
                         "article:published_time"
                             | "og:article:published_time"
@@ -661,24 +724,33 @@ fn extract_meta_tags(arena: &DocumentArena) -> (Option<String>, Option<String>, 
                             | "parsely-pub-date"
                             | "sailthru.date"
                             | "rnews:datepublished"
-                    ) {
-                        date = Some(normalize_date_display(cnt));
-                    }
+                    )
+                {
+                    date = Some(normalize_date_display(cnt));
                 }
-                if title.is_none() {
-                    if matches!(lower_pn.as_str(), "og:title" | "twitter:title") && cnt.chars().count() > 3 {
-                        title = Some(cnt.to_string());
-                    }
+                if title.is_none()
+                    && matches!(lower_pn.as_str(), "og:title" | "twitter:title")
+                    && cnt.chars().count() > 3
+                {
+                    title = Some(cnt.to_string());
                 }
-                if sapo.is_none() {
-                    if matches!(lower_pn.as_str(), "og:description" | "description" | "twitter:description") && cnt.chars().count() > 10 {
-                        sapo = Some(cnt.to_string());
-                    }
+                if sapo.is_none()
+                    && matches!(
+                        lower_pn.as_str(),
+                        "og:description" | "description" | "twitter:description"
+                    )
+                    && cnt.chars().count() > 10
+                {
+                    sapo = Some(cnt.to_string());
                 }
-                if author.is_none() {
-                    if matches!(lower_pn.as_str(), "author" | "article:author" | "byl" | "dc.creator") && cnt.chars().count() < 50 {
-                        author = Some(cnt.to_string());
-                    }
+                if author.is_none()
+                    && matches!(
+                        lower_pn.as_str(),
+                        "author" | "article:author" | "byl" | "dc.creator"
+                    )
+                    && cnt.chars().count() < 50
+                {
+                    author = Some(cnt.to_string());
                 }
             }
         }
@@ -738,7 +810,10 @@ fn extract_date_from_url(url: &str) -> Option<String> {
                 let year: u32 = core::str::from_utf8(y_slice).ok()?.parse().ok()?;
                 let month: u32 = core::str::from_utf8(m_slice).ok()?.parse().ok()?;
                 let day: u32 = core::str::from_utf8(d_slice).ok()?.parse().ok()?;
-                if (1995..=2035).contains(&year) && (1..=12).contains(&month) && (1..=31).contains(&day) {
+                if (1995..=2035).contains(&year)
+                    && (1..=12).contains(&month)
+                    && (1..=31).contains(&day)
+                {
                     return Some(format!("{:02}/{:02}/{}", day, month, year));
                 }
             }
@@ -769,7 +844,9 @@ impl SubtreeStats {
         // matching the recursive walk, which never visited them either.
         let mut stack: Vec<(NodeId, bool, bool)> = alloc::vec![(arena.root, false, false)];
         while let Some((id, in_link, expanded)) = stack.pop() {
-            let Some(node) = arena.get(id) else { continue; };
+            let Some(node) = arena.get(id) else {
+                continue;
+            };
             let index = id.index();
             if expanded {
                 // Post-order: fold into parent.
@@ -777,7 +854,10 @@ impl SubtreeStats {
                     if !noisy[index] {
                         let own = stats[index];
                         let p = &mut stats[parent.index()];
-                        p.0 += own.0; p.1 += own.1; p.2 += own.2; p.3 += own.3;
+                        p.0 += own.0;
+                        p.1 += own.1;
+                        p.2 += own.2;
+                        p.3 += own.3;
                     }
                 }
                 continue;
@@ -786,8 +866,12 @@ impl SubtreeStats {
             match &node.data {
                 NodeData::Element { tag, attributes } => {
                     noisy[index] = parent_noisy || noise_element(tag, attributes);
-                    if noisy[index] { continue; }
-                    if tag == "p" { stats[index].2 = 1; }
+                    if noisy[index] {
+                        continue;
+                    }
+                    if tag == "p" {
+                        stats[index].2 = 1;
+                    }
                     let is_link = in_link || tag == "a";
                     stack.push((id, in_link, true));
                     let mut child = node.first_child;
@@ -798,12 +882,16 @@ impl SubtreeStats {
                 }
                 NodeData::Text(txt) => {
                     noisy[index] = parent_noisy;
-                    if noisy[index] { continue; }
+                    if noisy[index] {
+                        continue;
+                    }
                     let mut count = 0;
                     let mut punct = 0;
                     for c in txt.chars() {
                         count += 1;
-                        if matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '—' | '-') { punct += 1; }
+                        if matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '—' | '-') {
+                            punct += 1;
+                        }
                     }
                     stats[index] = (count, if in_link { count } else { 0 }, 0, punct);
                     stack.push((id, in_link, true));
@@ -811,7 +899,9 @@ impl SubtreeStats {
                 _ => {
                     // Document root and other non-element containers are transparent.
                     noisy[index] = parent_noisy;
-                    if noisy[index] { continue; }
+                    if noisy[index] {
+                        continue;
+                    }
                     stack.push((id, in_link, true));
                     let mut child = node.first_child;
                     while let Some(cid) = child {
@@ -823,8 +913,12 @@ impl SubtreeStats {
         }
         Self { noisy, stats }
     }
-    fn noisy(&self, id: NodeId) -> bool { self.noisy.get(id.index()).copied().unwrap_or(false) }
-    fn get(&self, id: NodeId) -> (usize, usize, usize, usize) { self.stats.get(id.index()).copied().unwrap_or((0, 0, 0, 0)) }
+    fn noisy(&self, id: NodeId) -> bool {
+        self.noisy.get(id.index()).copied().unwrap_or(false)
+    }
+    fn get(&self, id: NodeId) -> (usize, usize, usize, usize) {
+        self.stats.get(id.index()).copied().unwrap_or((0, 0, 0, 0))
+    }
 }
 
 /// Own-attribute noise test shared by `is_noise_or_modal` and `SubtreeStats`.
@@ -832,11 +926,19 @@ fn noise_element(tag: &str, attributes: &[(String, String)]) -> bool {
     if matches!(tag, "script" | "style" | "noscript" | "dialog") {
         return true;
     }
-    attributes.iter().any(|(k, v)| (k == "class" || k == "id") && {
-        let lower = v.to_ascii_lowercase();
-        lower.contains("modal") || lower.contains("popup") || lower.contains("dialog")
-            || lower.contains("overlay") || lower.contains("banner") || lower.contains("cookie")
-            || lower.contains("lightbox") || lower.contains("advertisement") || lower.contains("subscribe")
+    attributes.iter().any(|(k, v)| {
+        (k == "class" || k == "id") && {
+            let lower = v.to_ascii_lowercase();
+            lower.contains("modal")
+                || lower.contains("popup")
+                || lower.contains("dialog")
+                || lower.contains("overlay")
+                || lower.contains("banner")
+                || lower.contains("cookie")
+                || lower.contains("lightbox")
+                || lower.contains("advertisement")
+                || lower.contains("subscribe")
+        }
     })
 }
 
@@ -884,10 +986,18 @@ fn collect_single_button(arena: &DocumentArena, id: NodeId) -> Option<DocNode> {
                 .map(|(_, v)| v.as_str())
                 .unwrap_or("submit");
             let value = arena.get_text_content(id).trim().to_string();
-            let label = if value.is_empty() { String::from("Submit") } else { value };
+            let label = if value.is_empty() {
+                String::from("Submit")
+            } else {
+                value
+            };
             return Some(DocNode::Input {
                 input_type: String::from(btn_type),
-                name: attributes.iter().find(|(k, _)| k == "name").map(|(_, v)| v.clone()).unwrap_or_default(),
+                name: attributes
+                    .iter()
+                    .find(|(k, _)| k == "name")
+                    .map(|(_, v)| v.clone())
+                    .unwrap_or_default(),
                 value: label,
                 placeholder: String::new(),
                 checked: false,
@@ -903,8 +1013,16 @@ fn collect_single_textarea(arena: &DocumentArena, id: NodeId) -> Option<DocNode>
     if let NodeData::Element { tag, attributes } = &node.data {
         if tag == "textarea" {
             let text = arena.get_text_content(id).trim().to_string();
-            let name = attributes.iter().find(|(k, _)| k == "name").map(|(_, v)| v.clone()).unwrap_or_default();
-            let placeholder = attributes.iter().find(|(k, _)| k == "placeholder").map(|(_, v)| v.clone()).unwrap_or_default();
+            let name = attributes
+                .iter()
+                .find(|(k, _)| k == "name")
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+            let placeholder = attributes
+                .iter()
+                .find(|(k, _)| k == "placeholder")
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
             return Some(DocNode::Input {
                 input_type: String::from("textarea"),
                 name,
@@ -920,8 +1038,12 @@ fn collect_single_textarea(arena: &DocumentArena, id: NodeId) -> Option<DocNode>
 
 fn collect_form_nodes(arena: &DocumentArena, form_id: NodeId, out: &mut Vec<DocNode>) {
     fn walk_form(arena: &DocumentArena, nid: NodeId, out: &mut Vec<DocNode>) {
-        let Some(node) = arena.get(nid) else { return; };
-        if is_noise_or_modal(arena, nid) { return; }
+        let Some(node) = arena.get(nid) else {
+            return;
+        };
+        if is_noise_or_modal(arena, nid) {
+            return;
+        }
         if let NodeData::Element { tag, .. } = &node.data {
             match tag.as_str() {
                 "input" => {
@@ -944,7 +1066,9 @@ fn collect_form_nodes(arena: &DocumentArena, form_id: NodeId, out: &mut Vec<DocN
                     if !text.is_empty() {
                         let mut span = StyledSpan::plain(&text);
                         span.bold = true;
-                        out.push(DocNode::Paragraph { spans: alloc::vec![span] });
+                        out.push(DocNode::Paragraph {
+                            spans: alloc::vec![span],
+                        });
                     }
                 }
                 _ => {
@@ -958,7 +1082,9 @@ fn collect_form_nodes(arena: &DocumentArena, form_id: NodeId, out: &mut Vec<DocN
         }
     }
 
-    let Some(form_node) = arena.get(form_id) else { return; };
+    let Some(form_node) = arena.get(form_id) else {
+        return;
+    };
     let mut child = form_node.first_child;
     while let Some(cid) = child {
         walk_form(arena, cid, out);
@@ -1003,8 +1129,12 @@ fn extract_single_card(
     let mut thumbnail: Option<DocNode> = None;
     let mut stack = alloc::vec![card_id];
     while let Some(nid) = stack.pop() {
-        let Some(node) = arena.get(nid) else { continue; };
-        if is_noise_or_modal(arena, nid) { continue; }
+        let Some(node) = arena.get(nid) else {
+            continue;
+        };
+        if is_noise_or_modal(arena, nid) {
+            continue;
+        }
 
         if let NodeData::Element { tag, attributes } = &node.data {
             let tag_name = tag.as_str();
@@ -1012,30 +1142,39 @@ fn extract_single_card(
             let mut href_val = "";
             let mut dt_val = "";
             for (k, v) in attributes {
-                if k == "class" { class_val = v.as_str(); }
-                else if k == "href" { href_val = v.as_str(); }
-                else if k == "datetime" { dt_val = v.as_str(); }
+                if k == "class" {
+                    class_val = v.as_str();
+                } else if k == "href" {
+                    href_val = v.as_str();
+                } else if k == "datetime" {
+                    dt_val = v.as_str();
+                }
             }
             let lower_class = class_val.to_ascii_lowercase();
             if thumbnail.is_none() && tag_name == "img" {
-                if let Some(image) = assets.iter().find(|asset| matches!(asset, DocNode::DomImage { node_id, .. } if *node_id == nid)) {
-                    if let DocNode::DomImage { width, height, pixels, .. } = image {
-                        let max_w = 200u32;
-                        let max_h = 120u32;
-                        let orig_w = (*width).max(1);
-                        let orig_h = (*height).max(1);
-                        let scale_w = (max_w as f32) / (orig_w as f32);
-                        let scale_h = (max_h as f32) / (orig_h as f32);
-                        let scale = scale_w.min(scale_h).min(1.0);
-                        let thumb_w = (orig_w as f32 * scale).max(1.0) as u32;
-                        let thumb_h = (orig_h as f32 * scale).max(1.0) as u32;
-                        thumbnail = Some(DocNode::LinkedImage {
-                            width: thumb_w,
-                            height: thumb_h,
-                            pixels: pixels.clone(),
-                            link: String::new(),
-                        });
-                    }
+                if let Some(DocNode::DomImage {
+                    width,
+                    height,
+                    pixels,
+                    ..
+                }) = assets.iter().find(
+                    |asset| matches!(asset, DocNode::DomImage { node_id, .. } if *node_id == nid),
+                ) {
+                    let max_w = 200u32;
+                    let max_h = 120u32;
+                    let orig_w = (*width).max(1);
+                    let orig_h = (*height).max(1);
+                    let scale_w = (max_w as f32) / (orig_w as f32);
+                    let scale_h = (max_h as f32) / (orig_h as f32);
+                    let scale = scale_w.min(scale_h).min(1.0);
+                    let thumb_w = (orig_w as f32 * scale).max(1.0) as u32;
+                    let thumb_h = (orig_h as f32 * scale).max(1.0) as u32;
+                    thumbnail = Some(DocNode::LinkedImage {
+                        width: thumb_w,
+                        height: thumb_h,
+                        pixels: pixels.clone(),
+                        link: String::new(),
+                    });
                 }
             }
             if tag_name == "a" && !href_val.is_empty() {
@@ -1044,9 +1183,13 @@ fn extract_single_card(
                     let link_text = arena.get_text_content(nid).trim().to_string();
                     if link_text.chars().count() >= 5 {
                         let is_heading_anchor = lower_class.contains("title")
-                             || lower_class.contains("heading")
-                             || lower_class.contains("name")
-                             || node.parent.and_then(|p| arena.get(p)).and_then(|pn| pn.tag()).map_or(false, |t| t.starts_with('h'));
+                            || lower_class.contains("heading")
+                            || lower_class.contains("name")
+                            || node
+                                .parent
+                                .and_then(|p| arena.get(p))
+                                .and_then(|pn| pn.tag())
+                                .is_some_and(|t| t.starts_with('h'));
 
                         if is_heading_anchor || link_text.chars().count() > longest_link_text {
                             longest_link_text = link_text.chars().count();
@@ -1064,40 +1207,66 @@ fn extract_single_card(
                     }
                 } else {
                     let txt = arena.get_text_content(nid).trim().to_string();
-                    if (txt.contains('đ') || txt.contains("VND") || txt.contains('$') || txt.contains('€'))
-                        && txt.chars().any(|c| c.is_ascii_digit()) && txt.chars().count() < 30
+                    if (txt.contains('đ')
+                        || txt.contains("VND")
+                        || txt.contains('$')
+                        || txt.contains('€'))
+                        && txt.chars().any(|c| c.is_ascii_digit())
+                        && txt.chars().count() < 30
                     {
                         price = Some(txt);
                     }
                 }
             }
 
-            if sapo.is_none() && (tag_name == "p" || lower_class.contains("sapo") || lower_class.contains("desc") || lower_class.contains("summary")) {
+            if sapo.is_none()
+                && (tag_name == "p"
+                    || lower_class.contains("sapo")
+                    || lower_class.contains("desc")
+                    || lower_class.contains("summary"))
+            {
                 let txt = arena.get_text_content(nid).trim().to_string();
                 if txt.chars().count() >= 10 && txt.chars().count() <= 350 {
                     sapo = Some(txt);
                 }
             }
 
-            if date.is_none() {
-                if tag_name == "time" || lower_class.contains("date") || lower_class.contains("time") {
-                    let txt = if !dt_val.is_empty() { normalize_date_display(dt_val) } else { arena.get_text_content(nid).trim().to_string() };
-                    if !txt.is_empty() && txt.chars().count() < 40 {
-                        date = Some(txt);
-                    }
+            if date.is_none()
+                && (tag_name == "time"
+                    || lower_class.contains("date")
+                    || lower_class.contains("time"))
+            {
+                let txt = if !dt_val.is_empty() {
+                    normalize_date_display(dt_val)
+                } else {
+                    arena.get_text_content(nid).trim().to_string()
+                };
+                if !txt.is_empty() && txt.chars().count() < 40 {
+                    date = Some(txt);
                 }
             }
 
-            if author.is_none() && (lower_class.contains("author") || lower_class.contains("user") || lower_class.contains("byline")) {
+            if author.is_none()
+                && (lower_class.contains("author")
+                    || lower_class.contains("user")
+                    || lower_class.contains("byline"))
+            {
                 let txt = arena.get_text_content(nid).trim().to_string();
                 if !txt.is_empty() && txt.chars().count() < 40 {
                     author = Some(txt);
                 }
             }
 
-            if replies.is_none() && (lower_class.contains("reply") || lower_class.contains("comment") || lower_class.contains("response")) {
+            if replies.is_none()
+                && (lower_class.contains("reply")
+                    || lower_class.contains("comment")
+                    || lower_class.contains("response"))
+            {
                 let txt = arena.get_text_content(nid).trim().to_string();
-                if !txt.is_empty() && txt.chars().count() < 30 && txt.chars().any(|c| c.is_ascii_digit()) {
+                if !txt.is_empty()
+                    && txt.chars().count() < 30
+                    && txt.chars().any(|c| c.is_ascii_digit())
+                {
                     replies = Some(txt);
                 }
             }
@@ -1177,14 +1346,18 @@ fn extract_list_cards(arena: &DocumentArena, base_url: &str, assets: &[DocNode])
     let mut cards = Vec::new();
     let mut seen_urls = BTreeSet::new();
 
-    let article_nodes: Vec<NodeId> = arena.nodes.iter()
+    let article_nodes: Vec<NodeId> = arena
+        .nodes
+        .iter()
         .filter(|n| n.tag() == Some("article") && !is_noise_or_modal(arena, n.id))
         .map(|n| n.id)
         .collect();
 
     let mut candidate_container_nodes = article_nodes;
     for node in &arena.nodes {
-        if is_noise_or_modal(arena, node.id) || candidate_container_nodes.contains(&node.id) { continue; }
+        if is_noise_or_modal(arena, node.id) || candidate_container_nodes.contains(&node.id) {
+            continue;
+        }
         if let NodeData::Element { tag, attributes } = &node.data {
             let tag_name = tag.as_str();
             if matches!(tag_name, "div" | "section" | "li" | "tr") {
@@ -1207,10 +1380,16 @@ fn extract_list_cards(arena: &DocumentArena, base_url: &str, assets: &[DocNode])
                     let mut child = node.first_child;
                     while let Some(cid) = child {
                         if let Some(cnode) = arena.get(cid) {
-                            if let NodeData::Element { attributes: cattrs, .. } = &cnode.data {
-                                if !is_noise_or_modal(arena, cid) && !candidate_container_nodes.contains(&cid) {
+                            if let NodeData::Element {
+                                attributes: cattrs, ..
+                            } = &cnode.data
+                            {
+                                if !is_noise_or_modal(arena, cid)
+                                    && !candidate_container_nodes.contains(&cid)
+                                {
                                     let child_has_item_class = cattrs.iter().any(|(ck, cv)| {
-                                        (ck == "class" || ck == "id") && is_card_item_class(&cv.to_ascii_lowercase())
+                                        (ck == "class" || ck == "id")
+                                            && is_card_item_class(&cv.to_ascii_lowercase())
                                     });
                                     if !child_has_item_class {
                                         candidate_container_nodes.push(cid);
@@ -1239,14 +1418,19 @@ fn extract_pagination_links(arena: &DocumentArena, base_url: &str) -> Vec<(Strin
     let mut seen = BTreeSet::new();
 
     for node in &arena.nodes {
-        if is_noise_or_modal(arena, node.id) { continue; }
+        if is_noise_or_modal(arena, node.id) {
+            continue;
+        }
         if let NodeData::Element { tag, attributes } = &node.data {
             if tag == "a" {
                 let mut href_val = "";
                 let mut class_val = "";
                 for (k, v) in attributes {
-                    if k == "href" { href_val = v.as_str(); }
-                    else if k == "class" { class_val = v.as_str(); }
+                    if k == "href" {
+                        href_val = v.as_str();
+                    } else if k == "class" {
+                        class_val = v.as_str();
+                    }
                 }
                 let lower_class = class_val.to_ascii_lowercase();
                 let text = arena.get_text_content(node.id).trim().to_string();
@@ -1257,11 +1441,22 @@ fn extract_pagination_links(arena: &DocumentArena, base_url: &str) -> Vec<(Strin
                     || lower_class.contains("pager")
                     || matches!(
                         lower_text.as_str(),
-                        "trang sau" | "trang trước" | "tiếp" | "lùi" | "next" | "prev" | "previous" | "»" | "«" | ">" | "<"
+                        "trang sau"
+                            | "trang trước"
+                            | "tiếp"
+                            | "lùi"
+                            | "next"
+                            | "prev"
+                            | "previous"
+                            | "»"
+                            | "«"
+                            | ">"
+                            | "<"
                     );
 
                 if is_pagination && !href_val.is_empty() {
-                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val) {
+                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val)
+                    {
                         if !seen.contains(&resolved) {
                             seen.insert(resolved.clone());
                             pages.push((text, resolved));
@@ -1279,9 +1474,17 @@ fn is_portal_or_homepage(base_url: &str) -> bool {
     let path = without_scheme.split('/').nth(1).unwrap_or("");
     let path = path.split('?').next().unwrap_or(path);
     path.is_empty()
-        || path == "index.html" || path == "index.htm" || path == "index.php" || path == "home"
-        || (path.ends_with(".htm") || path.ends_with(".html")) && !path.chars().any(|c| c.is_ascii_digit())
-        || path.contains("category") || path.contains("topic") || path.contains("tag") || path.contains("channel") || path.contains("section")
+        || path == "index.html"
+        || path == "index.htm"
+        || path == "index.php"
+        || path == "home"
+        || (path.ends_with(".htm") || path.ends_with(".html"))
+            && !path.chars().any(|c| c.is_ascii_digit())
+        || path.contains("category")
+        || path.contains("topic")
+        || path.contains("tag")
+        || path.contains("channel")
+        || path.contains("section")
 }
 
 fn clean_article_title(title: &str, base_url: &str) -> Option<String> {
@@ -1300,16 +1503,21 @@ fn clean_article_title(title: &str, base_url: &str) -> Option<String> {
             }
         }
     }
-    let host = base_url.split("://").nth(1).unwrap_or(base_url).trim_end_matches('/');
+    let host = base_url
+        .split("://")
+        .nth(1)
+        .unwrap_or(base_url)
+        .trim_end_matches('/');
     if t.eq_ignore_ascii_case(base_url) || t.trim_end_matches('/') == host {
         return None;
     }
     Some(String::from(t))
 }
 
-
 fn find_first_h1(arena: &DocumentArena, id: NodeId, out: &mut String) {
-    let Some(node) = arena.get(id) else { return; };
+    let Some(node) = arena.get(id) else {
+        return;
+    };
     if node.tag() == Some("h1") {
         let text = arena.get_text_content(id).trim().to_string();
         if text.chars().count() > 3 {
@@ -1329,7 +1537,9 @@ fn find_first_h1(arena: &DocumentArena, id: NodeId, out: &mut String) {
 
 fn find_next_page_link(arena: &DocumentArena, base_url: &str) -> Option<String> {
     for node in &arena.nodes {
-        if is_noise_or_modal(arena, node.id) { continue; }
+        if is_noise_or_modal(arena, node.id) {
+            continue;
+        }
         if let NodeData::Element { tag, attributes } = &node.data {
             let tag_name = tag.as_str();
             if tag_name == "link" || tag_name == "a" {
@@ -1337,15 +1547,20 @@ fn find_next_page_link(arena: &DocumentArena, base_url: &str) -> Option<String> 
                 let mut href_val = "";
                 let mut class_val = "";
                 for (k, v) in attributes {
-                    if k == "rel" { rel_val = v.as_str(); }
-                    else if k == "href" { href_val = v.as_str(); }
-                    else if k == "class" { class_val = v.as_str(); }
+                    if k == "rel" {
+                        rel_val = v.as_str();
+                    } else if k == "href" {
+                        href_val = v.as_str();
+                    } else if k == "class" {
+                        class_val = v.as_str();
+                    }
                 }
                 let is_next = rel_val.eq_ignore_ascii_case("next")
                     || class_val.to_ascii_lowercase().contains("next-page")
                     || class_val.to_ascii_lowercase().contains("page-next");
                 if is_next && !href_val.is_empty() {
-                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val) {
+                    if let Some(resolved) = crate::resources::resolve_hyperlink(base_url, href_val)
+                    {
                         return Some(resolved);
                     }
                 }
@@ -1428,7 +1643,9 @@ fn is_in_nav_or_header(arena: &DocumentArena, id: NodeId) -> bool {
 fn is_noise_or_modal(arena: &DocumentArena, id: NodeId) -> bool {
     let mut cur = Some(id);
     while let Some(nid) = cur {
-        let Some(node) = arena.get(nid) else { break; };
+        let Some(node) = arena.get(nid) else {
+            break;
+        };
         if let NodeData::Element { tag, attributes } = &node.data {
             if noise_element(tag, attributes) {
                 return true;
@@ -1439,9 +1656,14 @@ fn is_noise_or_modal(arena: &DocumentArena, id: NodeId) -> bool {
     false
 }
 
-fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (Vec<(String, String)>, Vec<(String, String)>) {
-    let mut article_map: alloc::collections::BTreeMap<String, String> = alloc::collections::BTreeMap::new();
-    let mut general_map: alloc::collections::BTreeMap<String, String> = alloc::collections::BTreeMap::new();
+/// `(title, url)` pairs collected from page anchors.
+type PageLinks = Vec<(String, String)>;
+
+fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (PageLinks, PageLinks) {
+    let mut article_map: alloc::collections::BTreeMap<String, String> =
+        alloc::collections::BTreeMap::new();
+    let mut general_map: alloc::collections::BTreeMap<String, String> =
+        alloc::collections::BTreeMap::new();
 
     for node in &arena.nodes {
         if let NodeData::Element { tag, attributes } = &node.data {
@@ -1468,7 +1690,10 @@ fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (Vec<(String, St
                     }
                     let mut text = arena.get_text_content(node.id).trim().to_string();
                     if text.is_empty() {
-                        if let Some((_, title)) = attributes.iter().find(|(k, _)| k == "title" || k == "aria-label") {
+                        if let Some((_, title)) = attributes
+                            .iter()
+                            .find(|(k, _)| k == "title" || k == "aria-label")
+                        {
                             text = title.trim().to_string();
                         }
                     }
@@ -1497,9 +1722,16 @@ fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (Vec<(String, St
                     }
 
                     let in_nav = is_in_nav_or_header(arena, node.id);
-                    let slug = href.split('/').next_back().unwrap_or(href).split('?').next().unwrap_or(href);
+                    let slug = href
+                        .split('/')
+                        .next_back()
+                        .unwrap_or(href)
+                        .split('?')
+                        .next()
+                        .unwrap_or(href);
                     let is_article_slug = slug.ends_with(".htm") || slug.ends_with(".html");
-                    let has_id_or_dashes = (slug.chars().any(|c| c.is_ascii_digit()) && slug.contains('-'))
+                    let has_id_or_dashes = (slug.chars().any(|c| c.is_ascii_digit())
+                        && slug.contains('-'))
                         || slug.matches('-').count() >= 3;
                     let is_headline = clean_text.chars().count() >= 18;
 
@@ -1512,15 +1744,13 @@ fn collect_page_links(arena: &DocumentArena, base_url: &str) -> (Vec<(String, St
                         }
                     } else if (in_nav || (is_article_slug && slug.matches('-').count() <= 1))
                         && clean_text.chars().count() <= 25
+                        && !resolved.contains("google.com")
+                        && !resolved.contains("facebook.com")
+                        && !resolved.contains("youtube.com")
                     {
-                        if !resolved.contains("google.com")
-                            && !resolved.contains("facebook.com")
-                            && !resolved.contains("youtube.com")
-                        {
-                            let existing = general_map.entry(resolved).or_default();
-                            if clean_text.len() > existing.len() {
-                                *existing = clean_text;
-                            }
+                        let existing = general_map.entry(resolved).or_default();
+                        if clean_text.len() > existing.len() {
+                            *existing = clean_text;
                         }
                     }
                 }
@@ -1575,7 +1805,16 @@ fn render_clean_subtree(
                         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                             let level = tag[1..].parse::<u8>().unwrap_or(2);
                             let mut spans = Vec::new();
-                            collect_article_spans(arena, child_id, &mut spans, base_url, true, false, false, None);
+                            collect_article_spans(
+                                arena,
+                                child_id,
+                                &mut spans,
+                                base_url,
+                                SpanStyle {
+                                    bold: true,
+                                    ..SpanStyle::default()
+                                },
+                            );
                             if spans.iter().any(|s| s.link.is_some()) {
                                 out.push(DocNode::ListItem {
                                     bullet: '•',
@@ -1594,11 +1833,17 @@ fn render_clean_subtree(
                         }
                         "p" => {
                             let mut spans = Vec::new();
-                            collect_article_spans(arena, child_id, &mut spans, base_url, false, false, false, None);
+                            collect_article_spans(
+                                arena,
+                                child_id,
+                                &mut spans,
+                                base_url,
+                                SpanStyle::default(),
+                            );
                             if !spans.is_empty() {
                                 out.push(DocNode::Paragraph { spans });
                             }
-                            append_cached_images(arena,child_id,out,assets);
+                            append_cached_images(arena, child_id, out, assets);
                         }
                         "pre" | "code" => {
                             let text = arena.get_text_content(child_id);
@@ -1614,14 +1859,20 @@ fn render_clean_subtree(
                             out.push(DocNode::Blockquote { lines });
                         }
                         "img" => {
-                            let alt = attributes.iter().find(|(k, _)| k == "alt").map(|(_, v)| v.as_str()).unwrap_or("Image");
+                            let alt = attributes
+                                .iter()
+                                .find(|(k, _)| k == "alt")
+                                .map(|(_, v)| v.as_str())
+                                .unwrap_or("Image");
                             if let Some(image)=assets.iter().find(|node|matches!(node,DocNode::DomImage{node_id,..} if *node_id==child_id)) {
                                 out.push(image.clone());
                                 cur=child.next_sibling;continue;
                             }
                             let mut span = StyledSpan::plain(&format!("[🖼 {}]", alt));
                             span.color = Some(crate::draw::theme::TEXT_MUTED);
-                            out.push(DocNode::Paragraph { spans: alloc::vec![span] });
+                            out.push(DocNode::Paragraph {
+                                spans: alloc::vec![span],
+                            });
                         }
                         "figure" => {
                             render_clean_subtree(arena, child_id, out, assets, base_url);
@@ -1632,7 +1883,9 @@ fn render_clean_subtree(
                                 let mut span = StyledSpan::plain(&text);
                                 span.italic = true;
                                 span.color = Some(crate::draw::theme::TEXT_MUTED);
-                                out.push(DocNode::Paragraph { spans: alloc::vec![span] });
+                                out.push(DocNode::Paragraph {
+                                    spans: alloc::vec![span],
+                                });
                             }
                         }
                         "ul" | "ol" => {
@@ -1641,7 +1894,13 @@ fn render_clean_subtree(
                                 if let Some(li_node) = arena.get(li_id) {
                                     if li_node.tag() == Some("li") {
                                         let mut spans = Vec::new();
-                                        collect_article_spans(arena, li_id, &mut spans, base_url, false, false, false, None);
+                                        collect_article_spans(
+                                            arena,
+                                            li_id,
+                                            &mut spans,
+                                            base_url,
+                                            SpanStyle::default(),
+                                        );
                                         if !spans.is_empty() {
                                             out.push(DocNode::ListItem {
                                                 bullet: '•',
@@ -1671,7 +1930,13 @@ fn render_clean_subtree(
                         }
                         "a" => {
                             let mut spans = Vec::new();
-                            collect_article_spans(arena, child_id, &mut spans, base_url, false, false, false, None);
+                            collect_article_spans(
+                                arena,
+                                child_id,
+                                &mut spans,
+                                base_url,
+                                SpanStyle::default(),
+                            );
                             if !spans.is_empty() {
                                 out.push(DocNode::Paragraph { spans });
                             }
@@ -1699,17 +1964,31 @@ fn render_clean_subtree(
         cur = arena.get(child_id).and_then(|n| n.next_sibling);
     }
 }
+/// Inline formatting inherited while flattening an article subtree into spans.
+#[derive(Default)]
+struct SpanStyle {
+    bold: bool,
+    italic: bool,
+    code: bool,
+    link: Option<String>,
+}
+
 fn collect_article_spans(
     arena: &DocumentArena,
     node_id: NodeId,
     out: &mut Vec<StyledSpan>,
     base_url: &str,
-    bold: bool,
-    italic: bool,
-    code: bool,
-    link: Option<String>,
+    style: SpanStyle,
 ) {
-    let Some(node) = arena.get(node_id) else { return; };
+    let SpanStyle {
+        bold,
+        italic,
+        code,
+        link,
+    } = style;
+    let Some(node) = arena.get(node_id) else {
+        return;
+    };
     let mut cur = node.first_child;
     while let Some(child_id) = cur {
         if let Some(child) = arena.get(child_id) {
@@ -1719,7 +1998,8 @@ fn collect_article_spans(
                         cur = child.next_sibling;
                         continue;
                     }
-                    let next_bold = bold || matches!(tag.as_str(), "b" | "strong" | "h1" | "h2" | "h3");
+                    let next_bold =
+                        bold || matches!(tag.as_str(), "b" | "strong" | "h1" | "h2" | "h3");
                     let next_italic = italic || matches!(tag.as_str(), "i" | "em");
                     let next_code = code || tag == "code";
                     let next_link = if tag == "a" {
@@ -1735,7 +2015,16 @@ fn collect_article_spans(
                     };
 
                     collect_article_spans(
-                        arena, child_id, out, base_url, next_bold, next_italic, next_code, next_link,
+                        arena,
+                        child_id,
+                        out,
+                        base_url,
+                        SpanStyle {
+                            bold: next_bold,
+                            italic: next_italic,
+                            code: next_code,
+                            link: next_link,
+                        },
                     );
                 }
                 NodeData::Text(text) if !text.is_empty() => {
@@ -1784,7 +2073,9 @@ mod tests {
         let parsed = crate::parser::html::parse_html(html);
         let extracted = extract_article(&parsed.arena, "https://cellos.org/blog/1", "CellOS Blog");
 
-        assert!(extracted.title.contains("CellOS Revolutionizes Microkernels"));
+        assert!(extracted
+            .title
+            .contains("CellOS Revolutionizes Microkernels"));
         // The navigation and footer should be stripped!
         assert!(!extracted.nodes.iter().any(|node| match node {
             DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Copyright 2026")),
@@ -1792,7 +2083,9 @@ mod tests {
         }));
         // The main content should be extracted!
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("CellOS introduces a single address space")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("CellOS introduces a single address space")),
             _ => false,
         }));
     }
@@ -1827,7 +2120,10 @@ mod tests {
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Heading { level: 1, text } if text == "Breaking Scientific Discovery")));
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Paragraph { spans } if spans.iter().any(|s| s.text.contains("High-resolution panorama")))));
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Paragraph { spans } if spans.iter().any(|s| s.text.contains("Scientists have uncovered")))));
-        assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Rule)));
+        assert!(extracted
+            .nodes
+            .iter()
+            .any(|node| matches!(node, DocNode::Rule)));
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "Technology News" && s.link.as_deref() == Some("https://news.test/category/tech")))));
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "World News" && s.link.as_deref() == Some("https://news.test/category/world")))));
         assert!(!extracted.nodes.iter().any(|node| matches!(node, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "Ignored"))));
@@ -1860,26 +2156,35 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://tuoitre.vn/bai-viet.htm", "Tuổi Trẻ");
+        let extracted =
+            extract_article(&parsed.arena, "https://tuoitre.vn/bai-viet.htm", "Tuổi Trẻ");
         // Title
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Heading { level: 1, text } if text.contains("Đảng viên làm giàu"))));
         // Author & Date
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("HÀ SỸ ĐỒNG") && s.text.contains("18/10/2026")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("HÀ SỸ ĐỒNG") && s.text.contains("18/10/2026")),
             _ => false,
         }));
         // Sapo
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Tạo điều kiện khuyến khích")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Tạo điều kiện khuyến khích")),
             _ => false,
         }));
         // Full Article Body
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Đoạn văn thân bài thứ nhất")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Đoạn văn thân bài thứ nhất")),
             _ => false,
         }));
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Đoạn văn thân bài thứ hai")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Đoạn văn thân bài thứ hai")),
             _ => false,
         }));
         // Article links (bullet •)
@@ -1959,16 +2264,24 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://cellos.org/news/verification", "Blog");
+        let extracted = extract_article(
+            &parsed.arena,
+            "https://cellos.org/news/verification",
+            "Blog",
+        );
         assert!(extracted.title.contains("Formal Verification of CellOS"));
         // Author and normalized date in byline
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Dr. Alan Turing") && s.text.contains("19/10/2026")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Dr. Alan Turing") && s.text.contains("19/10/2026")),
             _ => false,
         }));
         // Sapo
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("mathematically proven complete isolation")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("mathematically proven complete isolation")),
             _ => false,
         }));
     }
@@ -1987,7 +2300,11 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://science.org/2026/05/18/mars-fossils.html", "Science");
+        let extracted = extract_article(
+            &parsed.arena,
+            "https://science.org/2026/05/18/mars-fossils.html",
+            "Science",
+        );
         assert!(extracted.nodes.iter().any(|node| match node {
             DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("18/05/2026")),
             _ => false,
@@ -2053,7 +2370,9 @@ mod tests {
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::Paragraph { spans } if spans.iter().any(|s| s.text.contains("1.650.000 đ")))));
         // Pagination links
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Trang sau »") && s.link.is_some()),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Trang sau »") && s.link.is_some()),
             _ => false,
         }));
     }
@@ -2082,12 +2401,16 @@ mod tests {
         assert_eq!(extracted.title, "Real Deep Analysis Article [Reader]");
         // Main content is extracted
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("This is a real prose article")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("This is a real prose article")),
             _ => false,
         }));
         // Sidebar links are not extracted as article body
         assert!(!extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Link A is very long text")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Link A is very long text")),
             _ => false,
         }));
     }
@@ -2117,15 +2440,23 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://voz.test/f/chuyen-tro-linh-tinh", "Forum");
+        let extracted = extract_article(
+            &parsed.arena,
+            "https://voz.test/f/chuyen-tro-linh-tinh",
+            "Forum",
+        );
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text.contains("[Review] Đánh giá CellOS G2")))));
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("dmin") && s.text.contains("19/10/2026") && s.text.contains("42 replies")),
+            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("dmin")
+                && s.text.contains("19/10/2026")
+                && s.text.contains("42 replies")),
             _ => false,
         }));
         assert!(extracted.nodes.iter().any(|node| matches!(node, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text.contains("Kinh nghiệm viết microkernel")))));
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("rustacean") && s.text.contains("128 replies")),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("rustacean") && s.text.contains("128 replies")),
             _ => false,
         }));
     }
@@ -2146,7 +2477,11 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://cellos.org/article/page-1.html", "Article");
+        let extracted = extract_article(
+            &parsed.arena,
+            "https://cellos.org/article/page-1.html",
+            "Article",
+        );
         assert!(extracted.nodes.iter().any(|n| matches!(n, DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text.contains("Đọc tiếp trang tiếp theo") && s.link.as_deref() == Some("https://cellos.org/article/page-2.html")))));
     }
     #[test]
@@ -2172,29 +2507,51 @@ mod tests {
             </html>
         "#;
         let parsed = crate::parser::html::parse_html(html);
-        let extracted = extract_article(&parsed.arena, "https://example.com/category/news", "News Portal");
+        let extracted = extract_article(
+            &parsed.arena,
+            "https://example.com/category/news",
+            "News Portal",
+        );
 
         // Title link
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::ListItem { spans, .. } => spans.iter().any(|s| s.text.contains("Tiêu đề bài viết số 1") && s.link == Some(String::from("https://example.com/post-101.html"))),
+            DocNode::ListItem { spans, .. } => spans
+                .iter()
+                .any(|s| s.text.contains("Tiêu đề bài viết số 1")
+                    && s.link == Some(String::from("https://example.com/post-101.html"))),
             _ => false,
         }));
 
         // Sapo summary link
         assert!(extracted.nodes.iter().any(|node| match node {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Đoạn tóm tắt") && s.link == Some(String::from("https://example.com/post-101.html"))),
+            DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Đoạn tóm tắt")
+                && s.link == Some(String::from("https://example.com/post-101.html"))),
             _ => false,
         }));
     }
 }
 
-fn append_cached_images(arena:&DocumentArena,id:NodeId,out:&mut Vec<DocNode>,assets:&[DocNode]) {
-    let Some(node)=arena.get(id)else{return;};
-    if node.tag()==Some("img") {
-        if let Some(image)=assets.iter().find(|asset|matches!(asset,DocNode::DomImage{node_id,..} if *node_id==id)){out.push(image.clone());}
+fn append_cached_images(
+    arena: &DocumentArena,
+    id: NodeId,
+    out: &mut Vec<DocNode>,
+    assets: &[DocNode],
+) {
+    let Some(node) = arena.get(id) else {
+        return;
+    };
+    if node.tag() == Some("img") {
+        if let Some(image) = assets
+            .iter()
+            .find(|asset| matches!(asset,DocNode::DomImage{node_id,..} if *node_id==id))
+        {
+            out.push(image.clone());
+        }
         return;
     }
-    let mut child=node.first_child;
-    while let Some(id)=child {append_cached_images(arena,id,out,assets);child=arena.get(id).and_then(|node|node.next_sibling);}
+    let mut child = node.first_child;
+    while let Some(id) = child {
+        append_cached_images(arena, id, out, assets);
+        child = arena.get(id).and_then(|node| node.next_sibling);
+    }
 }
-

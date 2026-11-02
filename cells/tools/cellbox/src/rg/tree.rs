@@ -15,9 +15,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::ipc::vfs_dir_page::EntryKind as VfsKind;
+use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::clients::vfs::VFS_DIR_PAGE_MAX;
 use ostd::clients::VfsClient;
-use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::prelude::ViError;
 use vigrep::io;
 use vigrep::walk::{DirEntry, EntryKind, FileState, Handle, PageInfo, ViSearchTree};
@@ -45,7 +45,12 @@ pub struct VfsTree {
 
 impl VfsTree {
     pub fn new() -> VfsTree {
-        VfsTree { client: VfsClient::new(), parent: None, page: vec![0; VFS_DIR_PAGE_MAX], open_files: 0 }
+        VfsTree {
+            client: VfsClient::new(),
+            parent: None,
+            page: vec![0; VFS_DIR_PAGE_MAX],
+            open_files: 0,
+        }
     }
 
     /// The cached handle of `dir`, opening it (and evicting the previous one) on a miss.
@@ -55,7 +60,10 @@ impl VfsTree {
                 return Ok(*handle);
             }
         }
-        debug_assert_eq!(self.open_files, 0, "a cached parent is evicted while a file from it is open");
+        debug_assert_eq!(
+            self.open_files, 0,
+            "a cached parent is evicted while a file from it is open"
+        );
         self.evict_parent();
         let handle = self.client.open_root_dir(utf8(dir)?).map_err(vfs_error)?;
         self.parent = Some((dir.to_vec(), handle));
@@ -76,7 +84,8 @@ impl Drop for VfsTree {
 }
 
 fn utf8(path: &[u8]) -> Result<&str, io::Error> {
-    core::str::from_utf8(path).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "path is not UTF-8"))
+    core::str::from_utf8(path)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "path is not UTF-8"))
 }
 
 /// A VFS answer on a held handle or a path request as a walk error. VFS answers
@@ -120,7 +129,11 @@ impl ViSearchTree for VfsTree {
         }
     }
 
-    fn next_page(&mut self, dir: &mut VfsDir, entries: &mut Vec<DirEntry>) -> Result<PageInfo, io::Error> {
+    fn next_page(
+        &mut self,
+        dir: &mut VfsDir,
+        entries: &mut Vec<DirEntry>,
+    ) -> Result<PageInfo, io::Error> {
         let page = self
             .client
             .list_page(dir.handle, dir.cursor, &mut self.page)
@@ -135,11 +148,15 @@ impl ViSearchTree for VfsTree {
             name: entry.name.as_bytes().to_vec(),
         }));
         dir.cursor = page.next;
-        Ok(PageInfo { complete: page.complete, changed: page.changed })
+        Ok(PageInfo {
+            complete: page.complete,
+            changed: page.changed,
+        })
     }
 
     fn open_file(&mut self, path: &[u8]) -> Result<VfsFile, io::Error> {
-        let (dir, name) = split(path).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "not a file path"))?;
+        let (dir, name) = split(path)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "not a file path"))?;
         let name = String::from(utf8(name)?);
         let parent = self.parent_handle(dir)?;
         let handle = self.client.open_file_at(parent, &name).map_err(vfs_error)?;
@@ -147,13 +164,23 @@ impl ViSearchTree for VfsTree {
         Ok(VfsFile { handle })
     }
 
-    fn read_chunk(&mut self, file: &mut VfsFile, offset: u64, buf: &mut [u8]) -> Result<usize, io::Error> {
-        self.client.read_chunk(file.handle, offset, buf).map_err(vfs_error)
+    fn read_chunk(
+        &mut self,
+        file: &mut VfsFile,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, io::Error> {
+        self.client
+            .read_chunk(file.handle, offset, buf)
+            .map_err(vfs_error)
     }
 
     fn file_state(&mut self, file: &mut VfsFile) -> Result<FileState, io::Error> {
         let state = self.client.file_state(file.handle).map_err(vfs_error)?;
-        Ok(FileState { size: state.size, modified: state.modified })
+        Ok(FileState {
+            size: state.size,
+            modified: state.modified,
+        })
     }
 
     fn close(&mut self, handle: Handle<VfsDir, VfsFile>) {

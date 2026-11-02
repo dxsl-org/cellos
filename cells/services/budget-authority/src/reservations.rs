@@ -23,6 +23,12 @@ pub struct ReservationTable {
     entries: BTreeMap<[u8; 16], ReservationEntry>,
 }
 
+impl Default for ReservationTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReservationTable {
     pub fn new() -> Self {
         Self {

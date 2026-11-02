@@ -159,7 +159,10 @@ const USER_CONTINUATION: &str = "USER+ ";
 
 impl ConsoleLine {
     const fn new() -> Self {
-        Self { owner: LINE_START, suspended: None }
+        Self {
+            owner: LINE_START,
+            suspended: None,
+        }
     }
 }
 
@@ -174,9 +177,15 @@ struct Tags {
     continuation: &'static str,
 }
 
-const USER_TAGS: Tags = Tags { prefix: USER_PREFIX, continuation: USER_CONTINUATION };
+const USER_TAGS: Tags = Tags {
+    prefix: USER_PREFIX,
+    continuation: USER_CONTINUATION,
+};
 /// Kernel records format their own `[LEVEL]` tag.
-const KERNEL_TAGS: Tags = Tags { prefix: "", continuation: "" };
+const KERNEL_TAGS: Tags = Tags {
+    prefix: "",
+    continuation: "",
+};
 
 /// Emit `msg` as console bytes owned by `writer`, tagging every physical line it
 /// begins with `tags`.
@@ -211,7 +220,11 @@ fn emit_record(
                     line.suspended = Some(line.owner);
                 }
             }
-            let tag = if line.suspended == Some(writer) { tags.continuation } else { tags.prefix };
+            let tag = if line.suspended == Some(writer) {
+                tags.continuation
+            } else {
+                tags.prefix
+            };
             if !kernel {
                 line.suspended = None;
             }
@@ -220,7 +233,11 @@ fn emit_record(
             }
         }
         emit(fragment);
-        line.owner = if fragment.ends_with('\n') { LINE_START } else { writer };
+        line.owner = if fragment.ends_with('\n') {
+            LINE_START
+        } else {
+            writer
+        };
         rest = tail;
     }
 }
@@ -260,7 +277,9 @@ impl fmt::Write for ConsoleRecord<'_> {
 
 /// Begin a kernel `log` record (the kernel logger's entry point).
 fn begin_record() -> ConsoleRecord<'static> {
-    ConsoleRecord { state: CONSOLE.lock() }
+    ConsoleRecord {
+        state: CONSOLE.lock(),
+    }
 }
 
 // Logger integration
@@ -312,8 +331,10 @@ const MAX_RX_BUFFERED: usize = 4096;
 pub fn init_input() {
     let mut input = RX_BUFFER.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     *input = Some(VecDeque::with_capacity(MAX_RX_BUFFERED));
     #[cfg(cellos_p01_trace)]
     drop(_semantic);
@@ -488,7 +509,9 @@ mod tests {
     fn kernel(line: &mut ConsoleLine, text: &str) -> String {
         let mut out = String::new();
         for fragment in [text, "\n"] {
-            emit_record(line, KERNEL_LOG_OWNER, &KERNEL_TAGS, fragment, |s| out.push_str(s));
+            emit_record(line, KERNEL_LOG_OWNER, &KERNEL_TAGS, fragment, |s| {
+                out.push_str(s)
+            });
         }
         out
     }
@@ -507,7 +530,11 @@ mod tests {
                 out.push_str(body);
             } else if let Some(body) = physical.strip_prefix("USER+ ") {
                 // The forced break that preceded the kernel line is not Cell output.
-                assert_eq!(out.pop(), Some('\n'), "continuation without an interrupted line");
+                assert_eq!(
+                    out.pop(),
+                    Some('\n'),
+                    "continuation without an interrupted line"
+                );
                 out.push_str(body);
             } else {
                 panic!("untagged physical line {physical:?}");
@@ -535,10 +562,16 @@ mod tests {
     #[test]
     fn tail_after_inner_newline_keeps_the_line_open() {
         let mut line = ConsoleLine::new();
-        assert_eq!(record(&mut line, 7, "{\"a\":1}\n{\"b\""), "USER: {\"a\":1}\nUSER: {\"b\"");
+        assert_eq!(
+            record(&mut line, 7, "{\"a\":1}\n{\"b\""),
+            "USER: {\"a\":1}\nUSER: {\"b\""
+        );
         assert_eq!(record(&mut line, 7, ":2}\n"), ":2}\n");
         assert_eq!(record(&mut line, 7, "{\"c\""), "USER: {\"c\"");
-        assert_eq!(kernel(&mut line, "[ INFO] Syscall::Exit"), "\n[ INFO] Syscall::Exit\n");
+        assert_eq!(
+            kernel(&mut line, "[ INFO] Syscall::Exit"),
+            "\n[ INFO] Syscall::Exit\n"
+        );
     }
 
     /// A record that writes nothing neither claims nor closes the line.
@@ -563,7 +596,10 @@ mod tests {
         const GUEST: usize = 6;
         const NET: usize = 5;
         let mut line = ConsoleLine::new();
-        assert_eq!(record(&mut line, GUEST, "ping -c 3 192.16"), "USER: ping -c 3 192.16");
+        assert_eq!(
+            record(&mut line, GUEST, "ping -c 3 192.16"),
+            "USER: ping -c 3 192.16"
+        );
         assert_eq!(
             record(&mut line, NET, "[net-loop] turns=215"),
             "\nUSER: [net-loop] turns=215"
@@ -625,7 +661,10 @@ mod tests {
         for (n, chunk) in chunks.iter().enumerate() {
             console.push_str(&record(&mut line, 7, chunk));
             if n % 2 == 1 {
-                console.push_str(&kernel(&mut line, &alloc::format!("[ INFO] Syscall::Exit: task {n}")));
+                console.push_str(&kernel(
+                    &mut line,
+                    &alloc::format!("[ INFO] Syscall::Exit: task {n}"),
+                ));
             }
         }
         console.push_str(&kernel(&mut line, "[ INFO] end"));
@@ -636,9 +675,15 @@ mod tests {
                 .or_else(|| physical.strip_prefix("[ INFO] "))
                 .unwrap_or_else(|| panic!("untagged physical line {physical:?}"));
             assert!(!body.contains("USER"), "tag inside a line: {physical:?}");
-            assert!(!body.contains("[ INFO]"), "kernel record spliced: {physical:?}");
+            assert!(
+                !body.contains("[ INFO]"),
+                "kernel record spliced: {physical:?}"
+            );
         }
-        assert!(console.contains("\nUSER+ "), "fixture must exercise a mid-line kernel interrupt");
+        assert!(
+            console.contains("\nUSER+ "),
+            "fixture must exercise a mid-line kernel interrupt"
+        );
         assert_eq!(rebuild(&console), stream + "\n");
     }
 }

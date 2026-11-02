@@ -14,8 +14,8 @@ use alloc::string::String;
 use api::ipc::{Observation, SaveExpect};
 use ostd::ViError;
 use terminal_sdk::codec::{KeyState, KeySymbol};
-use text_engine::editor::{EditBuffer, EditError, Found, MAX_QUERY};
 use text_engine::editor::highlight::Lang;
+use text_engine::editor::{EditBuffer, EditError, Found, MAX_QUERY};
 use vitui::event::{Event, Key};
 
 /// Longest Save As path typed at the prompt.
@@ -58,7 +58,10 @@ pub enum Mode {
     /// Ctrl-Q on a dirty buffer: Save / Discard / Cancel.
     DirtyExit,
     /// Save As onto an existing file, bound to what was observed.
-    Overwrite { path: String, expect: SaveExpect },
+    Overwrite {
+        path: String,
+        expect: SaveExpect,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,16 +112,33 @@ fn describe(error: EditError) -> &'static str {
 }
 
 impl Editor {
-    pub fn new(buf: EditBuffer, path: Option<String>, binding: Option<SaveExpect>, cwd: String) -> Self {
+    pub fn new(
+        buf: EditBuffer,
+        path: Option<String>,
+        binding: Option<SaveExpect>,
+        cwd: String,
+    ) -> Self {
         Self {
-            buf, path, binding, cwd,
-            mode: Mode::Edit, message: None, help: false, exit_after_save: false,
-            rows: 1, top: 0, left: 0,
+            buf,
+            path,
+            binding,
+            cwd,
+            mode: Mode::Edit,
+            message: None,
+            help: false,
+            exit_after_save: false,
+            rows: 1,
+            top: 0,
+            left: 0,
         }
     }
 
-    pub fn path(&self) -> Option<&str> { self.path.as_deref() }
-    pub fn lang(&self) -> Option<Lang> { self.path.as_deref().and_then(Lang::for_path) }
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+    pub fn lang(&self) -> Option<Lang> {
+        self.path.as_deref().and_then(Lang::for_path)
+    }
 
     fn note(&mut self, message: impl Into<String>) {
         self.message = Some(message.into());
@@ -132,7 +152,11 @@ impl Editor {
         if let Event::Eof = event {
             return Step::Exit(SESSION_LOST);
         }
-        if let Event::Key(Key { state: KeyState::Release, .. }) = event {
+        if let Event::Key(Key {
+            state: KeyState::Release,
+            ..
+        }) = event
+        {
             return Step::Continue;
         }
         match core::mem::replace(&mut self.mode, Mode::Edit) {
@@ -192,22 +216,56 @@ impl Editor {
     }
 
     fn control(&mut self, symbol: KeySymbol, store: &mut impl Store) -> Step {
-        let KeySymbol::Character(c) = symbol else { return Step::Continue };
+        let KeySymbol::Character(c) = symbol else {
+            return Step::Continue;
+        };
         let result = match c.to_ascii_lowercase() {
             's' => return self.save(store),
-            'o' => { self.mode = Mode::Prompt(PromptKind::SaveAs, String::new()); Ok(()) }
-            'q' if self.buf.is_dirty() => { self.mode = Mode::DirtyExit; Ok(()) }
+            'o' => {
+                self.mode = Mode::Prompt(PromptKind::SaveAs, String::new());
+                Ok(())
+            }
+            'q' if self.buf.is_dirty() => {
+                self.mode = Mode::DirtyExit;
+                Ok(())
+            }
             'q' => return Step::Exit(0),
-            'z' => { if !self.buf.undo() { self.note("nothing to undo"); } Ok(()) }
-            'y' => { if !self.buf.redo() { self.note("nothing to redo"); } Ok(()) }
-            ' ' => { self.buf.toggle_anchor(); Ok(()) }
+            'z' => {
+                if !self.buf.undo() {
+                    self.note("nothing to undo");
+                }
+                Ok(())
+            }
+            'y' => {
+                if !self.buf.redo() {
+                    self.note("nothing to redo");
+                }
+                Ok(())
+            }
+            ' ' => {
+                self.buf.toggle_anchor();
+                Ok(())
+            }
             'c' => self.buf.copy().map(drop),
             'x' => self.buf.cut().map(drop),
             'v' => self.buf.paste(),
-            'f' => { self.mode = Mode::Prompt(PromptKind::Find, String::new()); Ok(()) }
-            'n' => { let found = self.buf.find_next(); self.found(found); Ok(()) }
-            'g' => { self.mode = Mode::Prompt(PromptKind::GoTo, String::new()); Ok(()) }
-            'h' => { self.help = !self.help; Ok(()) }
+            'f' => {
+                self.mode = Mode::Prompt(PromptKind::Find, String::new());
+                Ok(())
+            }
+            'n' => {
+                let found = self.buf.find_next();
+                self.found(found);
+                Ok(())
+            }
+            'g' => {
+                self.mode = Mode::Prompt(PromptKind::GoTo, String::new());
+                Ok(())
+            }
+            'h' => {
+                self.help = !self.help;
+                Ok(())
+            }
             _ => Ok(()),
         };
         if let Err(error) = result {
@@ -224,19 +282,29 @@ impl Editor {
         }
     }
 
-    fn prompt(&mut self, kind: PromptKind, mut input: String, event: &Event, store: &mut impl Store) -> Step {
+    fn prompt(
+        &mut self,
+        kind: PromptKind,
+        mut input: String,
+        event: &Event,
+        store: &mut impl Store,
+    ) -> Step {
         let limit = match kind {
             PromptKind::SaveAs => MAX_PATH,
             PromptKind::Find => MAX_QUERY,
             PromptKind::GoTo => 10,
         };
         match event {
-            Event::Text(text) if input.len() + text.len() <= limit && !text.chars().any(char::is_control) => {
+            Event::Text(text)
+                if input.len() + text.len() <= limit && !text.chars().any(char::is_control) =>
+            {
                 input.push_str(text);
             }
             Event::Text(_) => self.note("prompt input too long"),
             Event::Key(key) => match key.symbol {
-                KeySymbol::Backspace => { input.pop(); }
+                KeySymbol::Backspace => {
+                    input.pop();
+                }
                 KeySymbol::Escape => {
                     self.exit_after_save = false;
                     return Step::Continue;
@@ -290,10 +358,18 @@ impl Editor {
         }
     }
 
-    fn overwrite(&mut self, path: String, expect: SaveExpect, event: &Event, store: &mut impl Store) -> Step {
+    fn overwrite(
+        &mut self,
+        path: String,
+        expect: SaveExpect,
+        event: &Event,
+        store: &mut impl Store,
+    ) -> Step {
         let answer = match event {
             Event::Text(text) => text.chars().next().map(|c| c.to_ascii_lowercase()),
-            Event::Key(key) if matches!(key.symbol, KeySymbol::Escape | KeySymbol::Enter) => Some('n'),
+            Event::Key(key) if matches!(key.symbol, KeySymbol::Escape | KeySymbol::Enter) => {
+                Some('n')
+            }
             _ => None,
         };
         match answer {
@@ -355,16 +431,25 @@ impl Editor {
         match result {
             SaveResult::Committed(binding) => {
                 self.buf.mark_saved();
-                self.note(format!("saved {} bytes to {path} (synced; not a power-loss guarantee)", bytes.len()));
+                self.note(format!(
+                    "saved {} bytes to {path} (synced; not a power-loss guarantee)",
+                    bytes.len()
+                ));
                 self.path = Some(path);
                 self.binding = Some(binding);
                 if exit {
                     return Step::Exit(0);
                 }
             }
-            SaveResult::Conflict => self.note(format!("save refused: {path} changed since it was read; nothing written, edits kept")),
-            SaveResult::NotPublished(reason) => self.note(format!("save failed ({reason}); {path} unchanged, edits kept")),
-            SaveResult::Indeterminate => self.note(format!("save outcome unknown for {path}; edits kept and still unsaved")),
+            SaveResult::Conflict => self.note(format!(
+                "save refused: {path} changed since it was read; nothing written, edits kept"
+            )),
+            SaveResult::NotPublished(reason) => self.note(format!(
+                "save failed ({reason}); {path} unchanged, edits kept"
+            )),
+            SaveResult::Indeterminate => self.note(format!(
+                "save outcome unknown for {path}; edits kept and still unsaved"
+            )),
             SaveResult::Failed(error) => self.note(refusal(&path, error)),
         }
         Step::Continue
@@ -373,7 +458,9 @@ impl Editor {
 
 fn refusal(path: &str, error: ViError) -> String {
     match error {
-        ViError::NotSupported => format!("save refused: {path} is not on a mount with conditional save (use /srv)"),
+        ViError::NotSupported => {
+            format!("save refused: {path} is not on a mount with conditional save (use /srv)")
+        }
         ViError::PermissionDenied => format!("save refused: permission denied for {path}"),
         ViError::OutOfMemory => format!("save refused: quota exceeded for {path}"),
         other => format!("save failed before publishing ({other:?}); {path} unchanged"),

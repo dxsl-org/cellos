@@ -122,18 +122,28 @@ fn http_owner_reserve_refuses_without_consuming_caps() {
     let mut sockets = SocketSet::new(&mut storage[..]);
     let handle = make_test_handle(&mut sockets);
     let mut table = SocketTable::new();
-    let http = SocketOwner { cell_id: 10, generation: 1 };
-    let other = SocketOwner { cell_id: 20, generation: 1 };
+    let http = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
+    let other = SocketOwner {
+        cell_id: 20,
+        generation: 1,
+    };
 
     for _ in 0..HTTP_OWNER_BUDGET {
-        table.insert(handle, http).expect("HTTP listener and 257 clients");
+        table
+            .insert(handle, http)
+            .expect("HTTP listener and 257 clients");
     }
     let next = table.next_cap_for_test();
     assert!(!table.can_insert(http));
     assert!(table.insert(handle, http).is_err());
     assert_eq!(table.next_cap_for_test(), next);
     for _ in 0..OTHER_OWNER_RESERVE {
-        table.insert(handle, other).expect("other services' reserve");
+        table
+            .insert(handle, other)
+            .expect("other services' reserve");
     }
     assert!(!table.can_insert(other));
 }
@@ -142,13 +152,21 @@ fn http_owner_reserve_refuses_without_consuming_caps() {
 fn owner_cleanup_preserves_other_generation() {
     let mut storage = [SocketStorage::EMPTY; 4];
     let mut sockets = SocketSet::new(&mut storage[..]);
-    let old = SocketOwner { cell_id: 10, generation: 1 };
-    let new = SocketOwner { cell_id: 10, generation: 2 };
+    let old = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
+    let new = SocketOwner {
+        cell_id: 10,
+        generation: 2,
+    };
     let closing_handle = make_test_handle(&mut sockets);
     let plain_handle = make_test_handle(&mut sockets);
     let new_handle = make_test_handle(&mut sockets);
     let mut table = SocketTable::new();
-    let closing_cap = table.insert(closing_handle, old).expect("old owner, closing");
+    let closing_cap = table
+        .insert(closing_handle, old)
+        .expect("old owner, closing");
     let plain_cap = table.insert(plain_handle, old).expect("old owner, plain");
     let new_cap = table.insert(new_handle, new).expect("new owner");
     table.begin_graceful_close(closing_cap, 100);
@@ -162,7 +180,11 @@ fn owner_cleanup_preserves_other_generation() {
     assert!(!table.is_aborting(closing_cap));
     assert_eq!(table.owned_cap(old), Some(closing_cap));
     assert_eq!(table.get(new_cap, new), Some(new_handle));
-    assert_eq!(table.abort_owner(old, &mut sockets, 50), (0, 0), "idempotent");
+    assert_eq!(
+        table.abort_owner(old, &mut sockets, 50),
+        (0, 0),
+        "idempotent"
+    );
 
     // The graceful reaper (not owner death) finishes it.
     assert!(table.remove_internal(closing_cap).is_some());
@@ -173,12 +195,16 @@ fn owner_cleanup_preserves_other_generation() {
 fn interface() -> (Loopback, Interface) {
     let mut device = Loopback::new(Medium::Ethernet);
     let mut iface = Interface::new(
-        Config::new(HardwareAddress::Ethernet(EthernetAddress([0x02, 0, 0, 0, 0, 1]))),
+        Config::new(HardwareAddress::Ethernet(EthernetAddress([
+            0x02, 0, 0, 0, 0, 1,
+        ]))),
         &mut device,
         Instant::from_millis(0),
     );
     iface.update_ip_addrs(|addresses| {
-        addresses.push(IpCidr::new(IpAddress::v4(10, 0, 0, 1), 24)).expect("address");
+        addresses
+            .push(IpCidr::new(IpAddress::v4(10, 0, 0, 1), 24))
+            .expect("address");
     });
     (device, iface)
 }
@@ -188,15 +214,25 @@ fn connecting_handle(sockets: &mut SocketSet<'_>, iface: &mut Interface) -> Sock
     let handle = make_test_handle(sockets);
     sockets
         .get_mut::<tcp::Socket>(handle)
-        .connect(iface.context(), IpEndpoint::new(IpAddress::v4(10, 0, 0, 1), 80), 49152)
+        .connect(
+            iface.context(),
+            IpEndpoint::new(IpAddress::v4(10, 0, 0, 1), 80),
+            49152,
+        )
         .expect("connect");
     handle
 }
 
 fn udp_handle(sockets: &mut SocketSet<'_>) -> SocketHandle {
     sockets.add(udp::Socket::new(
-        udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 1], alloc::vec![0u8; 64]),
-        udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 1], alloc::vec![0u8; 64]),
+        udp::PacketBuffer::new(
+            alloc::vec![udp::PacketMetadata::EMPTY; 1],
+            alloc::vec![0u8; 64],
+        ),
+        udp::PacketBuffer::new(
+            alloc::vec![udp::PacketMetadata::EMPTY; 1],
+            alloc::vec![0u8; 64],
+        ),
     ))
 }
 
@@ -204,15 +240,27 @@ fn udp_handle(sockets: &mut SocketSet<'_>) -> SocketHandle {
 fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
     let (mut device, mut iface) = interface();
     let mut sockets = SocketSet::new(alloc::vec::Vec::new());
-    let owner = SocketOwner { cell_id: 10, generation: 1 };
-    let other_cell = SocketOwner { cell_id: 20, generation: 1 };
-    let next_generation = SocketOwner { cell_id: 10, generation: 2 };
+    let owner = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
+    let other_cell = SocketOwner {
+        cell_id: 20,
+        generation: 1,
+    };
+    let next_generation = SocketOwner {
+        cell_id: 10,
+        generation: 2,
+    };
     let mut table = SocketTable::new();
 
     let connected_handle = connecting_handle(&mut sockets, &mut iface);
     let connected = table.insert(connected_handle, owner).expect("connected");
     let listener_handle = make_test_handle(&mut sockets);
-    sockets.get_mut::<tcp::Socket>(listener_handle).listen(80).expect("listen");
+    sockets
+        .get_mut::<tcp::Socket>(listener_handle)
+        .listen(80)
+        .expect("listen");
     let listener = table.insert(listener_handle, owner).expect("listener");
     let fresh_handle = make_test_handle(&mut sockets);
     let fresh = table.insert(fresh_handle, owner).expect("never connected");
@@ -224,9 +272,13 @@ fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
     let closing = table.insert(closing_handle, owner).expect("closing");
     table.begin_graceful_close(closing, 100);
     let foreign_handle = connecting_handle(&mut sockets, &mut iface);
-    let foreign = table.insert(foreign_handle, other_cell).expect("other cell");
+    let foreign = table
+        .insert(foreign_handle, other_cell)
+        .expect("other cell");
     let successor_handle = connecting_handle(&mut sockets, &mut iface);
-    let successor = table.insert(successor_handle, next_generation).expect("next generation");
+    let successor = table
+        .insert(successor_handle, next_generation)
+        .expect("next generation");
     let before = sockets.iter().count();
 
     // One RST owed (the connected socket); listener, never-connected and UDP freed now.
@@ -239,7 +291,10 @@ fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
 
     // The connected socket is closed with its tuple kept: smoltcp owes the RST.
     assert!(table.is_aborting(connected));
-    assert_eq!(table.aborting().collect::<alloc::vec::Vec<_>>(), [(connected, 1_000)]);
+    assert_eq!(
+        table.aborting().collect::<alloc::vec::Vec<_>>(),
+        [(connected, 1_000)]
+    );
     let socket = sockets.get::<tcp::Socket>(connected_handle);
     assert_eq!(socket.state(), tcp::State::Closed);
     assert!(socket.remote_endpoint().is_some());
@@ -247,14 +302,21 @@ fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
     // The graceful cap is left to its own reaper, still mid-handshake and not aborted.
     assert!(table.is_graceful_closing(closing));
     assert!(!table.is_aborting(closing));
-    assert_eq!(sockets.get::<tcp::Socket>(closing_handle).state(), tcp::State::SynSent);
+    assert_eq!(
+        sockets.get::<tcp::Socket>(closing_handle).state(),
+        tcp::State::SynSent
+    );
 
     // Another CellId and another generation of the same CellId are untouched.
-    for (cap, handle, who) in
-        [(foreign, foreign_handle, other_cell), (successor, successor_handle, next_generation)]
-    {
+    for (cap, handle, who) in [
+        (foreign, foreign_handle, other_cell),
+        (successor, successor_handle, next_generation),
+    ] {
         assert_eq!(table.get(cap, who), Some(handle));
-        assert_eq!(sockets.get::<tcp::Socket>(handle).state(), tcp::State::SynSent);
+        assert_eq!(
+            sockets.get::<tcp::Socket>(handle).state(),
+            tcp::State::SynSent
+        );
         assert!(!table.is_aborting(cap));
     }
 
@@ -269,7 +331,10 @@ fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
     for turn in 1..=6 {
         iface.poll(Instant::from_millis(turn * 10), &mut device, &mut sockets);
     }
-    assert!(sockets.get::<tcp::Socket>(connected_handle).remote_endpoint().is_none());
+    assert!(sockets
+        .get::<tcp::Socket>(connected_handle)
+        .remote_endpoint()
+        .is_none());
     assert!(table.remove_internal(connected).is_some());
     assert!(!table.is_aborting(connected));
     assert_eq!(table.entries.len(), entries - 1);
@@ -279,16 +344,24 @@ fn abort_owner_treats_each_socket_kind_by_what_the_peer_must_hear() {
 fn remove_internal_clears_the_abort_ledger_and_the_budget_returns() {
     let (_device, mut iface) = interface();
     let mut sockets = SocketSet::new(alloc::vec::Vec::new());
-    let owner = SocketOwner { cell_id: 10, generation: 1 };
+    let owner = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
     let mut table = SocketTable::new();
 
     // One owner may hold up to its whole HTTP budget; every one is aborted.
     for _ in 0..HTTP_OWNER_BUDGET {
         let handle = connecting_handle(&mut sockets, &mut iface);
-        table.insert(handle, owner).expect("within the owner budget");
+        table
+            .insert(handle, owner)
+            .expect("within the owner budget");
     }
     assert!(!table.can_insert(owner));
-    assert_eq!(table.abort_owner(owner, &mut sockets, 7), (HTTP_OWNER_BUDGET, 0));
+    assert_eq!(
+        table.abort_owner(owner, &mut sockets, 7),
+        (HTTP_OWNER_BUDGET, 0)
+    );
     // The ledger is bounded by the table, which is bounded by MAX_SOCKETS.
     assert_eq!(table.aborting().count(), HTTP_OWNER_BUDGET);
     assert!(table.aborting().count() <= MAX_SOCKETS);
@@ -310,7 +383,10 @@ fn remove_internal_clears_the_abort_ledger_and_the_budget_returns() {
 fn graceful_to_abort_keeps_a_cap_in_at_most_one_ledger() {
     let (_device, mut iface) = interface();
     let mut sockets = SocketSet::new(alloc::vec::Vec::new());
-    let owner = SocketOwner { cell_id: 10, generation: 1 };
+    let owner = SocketOwner {
+        cell_id: 10,
+        generation: 1,
+    };
     let mut table = SocketTable::new();
     let handle = connecting_handle(&mut sockets, &mut iface);
     let cap = table.insert(handle, owner).expect("cap");
@@ -319,14 +395,20 @@ fn graceful_to_abort_keeps_a_cap_in_at_most_one_ledger() {
     assert!(table.is_graceful_closing(cap));
     table.graceful_to_abort(cap, 500);
     assert!(!table.is_graceful_closing(cap));
-    assert_eq!(table.aborting().collect::<alloc::vec::Vec<_>>(), [(cap, 500)]);
+    assert_eq!(
+        table.aborting().collect::<alloc::vec::Vec<_>>(),
+        [(cap, 500)]
+    );
 
     // A repeated graceful request on an aborting cap is ignored.
     table.begin_graceful_close(cap, 900);
     assert_eq!(table.graceful_closes().count(), 0);
     // The first abort deadline wins.
     table.graceful_to_abort(cap, 700);
-    assert_eq!(table.aborting().collect::<alloc::vec::Vec<_>>(), [(cap, 500)]);
+    assert_eq!(
+        table.aborting().collect::<alloc::vec::Vec<_>>(),
+        [(cap, 500)]
+    );
 
     // The owner reclaim skips a cap that is already aborting.
     assert_eq!(table.abort_owner(owner, &mut sockets, 1_000), (0, 0));

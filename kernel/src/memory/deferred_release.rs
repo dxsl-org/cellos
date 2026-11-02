@@ -124,13 +124,17 @@ fn defer(
     #[cfg(cellos_p01_trace)]
     let frames = {
         let owner = crate::p01_resources::owner_for_domain(domain);
-        if owner.is_none() && crate::memory::heap::p01_owner::current_attempt().is_some()
-            && !frames.is_empty() {
+        if owner.is_none()
+            && crate::memory::heap::p01_owner::current_attempt().is_some()
+            && !frames.is_empty()
+        {
             // A selected prepublication retention has no exact domain binding.
             crate::p01_retained::fault();
         }
         let mut frames = frames;
-        for frame in &mut frames { frame.p01_retain(owner, reason); }
+        for frame in &mut frames {
+            frame.p01_retain(owner, reason);
+        }
         frames
     };
     // An entry is recorded even with no frames: the record is what makes the tag
@@ -141,7 +145,11 @@ fn defer(
         #[cfg(cellos_p01_trace)]
         if let Some(owner) = crate::p01_resources::owner_for_domain(domain) {
             crate::p01_resources::retained(owner, 6);
-            let token = crate::p01_resources::obligation(owner, 6, (frames.len() * crate::memory::paging::PAGE_SIZE) as u64);
+            let token = crate::p01_resources::obligation(
+                owner,
+                6,
+                (frames.len() * crate::memory::paging::PAGE_SIZE) as u64,
+            );
             crate::p01_resources::finish(token, 5);
         }
         // The reaper already gave up on this tag, so no acknowledgement will ever
@@ -198,12 +206,19 @@ fn place(
     release_tag_slot: bool,
 ) -> Placement {
     #[cfg(cellos_p01_trace)]
-    let p01_obligation = crate::p01_resources::owner_for_domain(domain).and_then(|owner|
-        crate::p01_resources::obligation(owner, 6, (frames.len() * crate::memory::paging::PAGE_SIZE) as u64));
+    let p01_obligation = crate::p01_resources::owner_for_domain(domain).and_then(|owner| {
+        crate::p01_resources::obligation(
+            owner,
+            6,
+            (frames.len() * crate::memory::paging::PAGE_SIZE) as u64,
+        )
+    });
     let mut queue = DEFERRED.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DOMAIN_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DOMAIN_SHARED,
+    );
     if let Some(index) = queue.iter().position(|entry| entry.asid == asid) {
         // One entry per tag: the invalidation is per tag, so a second retention
         // under the same tag is waiting on the same acknowledgement.
@@ -464,8 +479,10 @@ fn mark_abandoned(asid: usize) {
         return;
     }
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DOMAIN_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DOMAIN_SHARED,
+    );
     tags.push(asid);
     ABANDONED_ENTRIES.fetch_add(1, Ordering::AcqRel);
 }

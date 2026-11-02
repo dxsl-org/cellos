@@ -127,7 +127,6 @@ pub(crate) fn run_grant_pair() {
     ostd::io::println("Init: tier2-grant-pair complete.");
 }
 
-
 const PLATFORM_WAIT_MS: u64 = 60_000;
 const PLATFORM_PROCESS_ROWS: usize = 64;
 
@@ -143,11 +142,21 @@ pub(crate) enum PlatformWaitError {
 impl PlatformWaitError {
     pub(crate) fn diagnostic(&self) -> &'static str {
         match self {
-            Self::Listing => "Init: platform process listing failed — boot stopped before driver spawning.",
-            Self::FullTable => "Init: platform process table full — boot stopped before driver spawning.",
-            Self::Ambiguous => "Init: platform process lifetime ambiguous — boot stopped before driver spawning.",
-            Self::NoClock => "Init: platform live without a clock — boot stopped before driver spawning.",
-            Self::Deadline => "Init: platform still live at 60 s — boot stopped before driver spawning.",
+            Self::Listing => {
+                "Init: platform process listing failed — boot stopped before driver spawning."
+            }
+            Self::FullTable => {
+                "Init: platform process table full — boot stopped before driver spawning."
+            }
+            Self::Ambiguous => {
+                "Init: platform process lifetime ambiguous — boot stopped before driver spawning."
+            }
+            Self::NoClock => {
+                "Init: platform live without a clock — boot stopped before driver spawning."
+            }
+            Self::Deadline => {
+                "Init: platform still live at 60 s — boot stopped before driver spawning."
+            }
         }
     }
 }
@@ -246,7 +255,11 @@ mod platform_wait_tests {
     ];
 
     fn process(name: &str, state: usize) -> ProcessInfo {
-        let mut row = ProcessInfo { id: 1, state, ..ProcessInfo::default() };
+        let mut row = ProcessInfo {
+            id: 1,
+            state,
+            ..ProcessInfo::default()
+        };
         row.name[..name.len()].copy_from_slice(name.as_bytes());
         row
     }
@@ -301,9 +314,15 @@ mod platform_wait_tests {
                 );
                 assert_eq!(result, Ok(()));
                 let mut expected = vec![
-                    Event::Clock, Event::Snapshot, Event::Clock, Event::Yield,
-                    Event::Snapshot, Event::Clock, Event::Yield,
-                    Event::Snapshot, Event::Clock,
+                    Event::Clock,
+                    Event::Snapshot,
+                    Event::Clock,
+                    Event::Yield,
+                    Event::Snapshot,
+                    Event::Clock,
+                    Event::Yield,
+                    Event::Snapshot,
+                    Event::Clock,
                 ];
                 expected.extend(SPAWNS);
                 assert_eq!(trace, expected);
@@ -354,7 +373,10 @@ mod platform_wait_tests {
             &[Some(100), Some(100), None],
             PlatformWaitError::NoClock,
         );
-        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+        assert_eq!(
+            trace.iter().filter(|event| **event == Event::Yield).count(),
+            1
+        );
     }
 
     #[test]
@@ -362,10 +384,17 @@ mod platform_wait_tests {
         let live = [process("platform", 1)];
         let trace = assert_stopped(
             &[Ok(&live), Ok(&live)],
-            &[Some(100), Some(100 + PLATFORM_WAIT_MS - 1), Some(100 + PLATFORM_WAIT_MS)],
+            &[
+                Some(100),
+                Some(100 + PLATFORM_WAIT_MS - 1),
+                Some(100 + PLATFORM_WAIT_MS),
+            ],
             PlatformWaitError::Deadline,
         );
-        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+        assert_eq!(
+            trace.iter().filter(|event| **event == Event::Yield).count(),
+            1
+        );
     }
 
     #[test]
@@ -374,11 +403,18 @@ mod platform_wait_tests {
         let (result, trace) = run_flow(
             true,
             &[Ok(&live), Ok(&[])],
-            &[Some(100), Some(100 + PLATFORM_WAIT_MS - 1), Some(100 + PLATFORM_WAIT_MS)],
+            &[
+                Some(100),
+                Some(100 + PLATFORM_WAIT_MS - 1),
+                Some(100 + PLATFORM_WAIT_MS),
+            ],
         );
         assert_eq!(result, Ok(()));
         assert_eq!(&trace[trace.len() - SPAWNS.len()..], &SPAWNS);
-        assert_eq!(trace.iter().filter(|event| **event == Event::Yield).count(), 1);
+        assert_eq!(
+            trace.iter().filter(|event| **event == Event::Yield).count(),
+            1
+        );
     }
 
     #[test]
@@ -425,7 +461,11 @@ enum BlockWait {
 /// One step of the block-driver wait: settled once no driver is still starting;
 /// otherwise wait on until `BLOCK_DRIVER_WAIT_MS` (or, without a clock,
 /// `BLOCK_DRIVER_WAIT_YIELDS` yields) is spent.
-fn block_wait_step(drivers: &[DriverProgress], elapsed_ms: Option<u64>, yields: usize) -> BlockWait {
+fn block_wait_step(
+    drivers: &[DriverProgress],
+    elapsed_ms: Option<u64>,
+    yields: usize,
+) -> BlockWait {
     if !drivers.contains(&DriverProgress::Starting) {
         return BlockWait::Settled;
     }
@@ -433,7 +473,11 @@ fn block_wait_step(drivers: &[DriverProgress], elapsed_ms: Option<u64>, yields: 
         Some(ms) => ms >= BLOCK_DRIVER_WAIT_MS,
         None => yields >= BLOCK_DRIVER_WAIT_YIELDS,
     };
-    if spent { BlockWait::TimedOut } else { BlockWait::KeepWaiting }
+    if spent {
+        BlockWait::TimedOut
+    } else {
+        BlockWait::KeepWaiting
+    }
 }
 
 /// A block Driver Cell that init respawns when it dies with a failure status.
@@ -505,7 +549,9 @@ pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Ser
                 }
             })
             .collect();
-        let elapsed = started.and_then(|start| ostd::syscall::sys_get_time_ms().map(|now| now.saturating_sub(start)));
+        let elapsed = started.and_then(|start| {
+            ostd::syscall::sys_get_time_ms().map(|now| now.saturating_sub(start))
+        });
         match block_wait_step(&progress, elapsed, yields) {
             BlockWait::Settled => break,
             BlockWait::TimedOut => {
@@ -531,12 +577,20 @@ pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Ser
 
 #[cfg(test)]
 mod block_wait_tests {
-    use super::{block_wait_step, BlockWait, DriverProgress, BLOCK_DRIVER_WAIT_MS, BLOCK_DRIVER_WAIT_YIELDS};
+    use super::{
+        block_wait_step, BlockWait, DriverProgress, BLOCK_DRIVER_WAIT_MS, BLOCK_DRIVER_WAIT_YIELDS,
+    };
     use DriverProgress::{Routed, Starting, Terminated};
 
     #[test]
     fn every_driver_routed_or_terminated_ends_the_wait_at_once() {
-        for drivers in [&[][..], &[Routed], &[Terminated], &[Routed, Terminated, Routed], &[Terminated, Terminated]] {
+        for drivers in [
+            &[][..],
+            &[Routed],
+            &[Terminated],
+            &[Routed, Terminated, Routed],
+            &[Terminated, Terminated],
+        ] {
             for elapsed in [Some(0), None, Some(BLOCK_DRIVER_WAIT_MS + 1)] {
                 assert_eq!(block_wait_step(drivers, elapsed, 0), BlockWait::Settled);
             }
@@ -545,10 +599,20 @@ mod block_wait_tests {
 
     #[test]
     fn one_starting_driver_among_several_is_waited_for_up_to_the_budget() {
-        for drivers in [&[Routed, Starting][..], &[Starting, Terminated, Routed], &[Starting, Starting]] {
+        for drivers in [
+            &[Routed, Starting][..],
+            &[Starting, Terminated, Routed],
+            &[Starting, Starting],
+        ] {
             assert_eq!(block_wait_step(drivers, Some(0), 0), BlockWait::KeepWaiting);
-            assert_eq!(block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS - 1), 1_000_000), BlockWait::KeepWaiting);
-            assert_eq!(block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS), 0), BlockWait::TimedOut);
+            assert_eq!(
+                block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS - 1), 1_000_000),
+                BlockWait::KeepWaiting
+            );
+            assert_eq!(
+                block_wait_step(drivers, Some(BLOCK_DRIVER_WAIT_MS), 0),
+                BlockWait::TimedOut
+            );
         }
     }
 
@@ -556,11 +620,16 @@ mod block_wait_tests {
     fn without_a_clock_the_yield_bound_applies() {
         let drivers = [Routed, Starting];
         assert_eq!(block_wait_step(&drivers, None, 0), BlockWait::KeepWaiting);
-        assert_eq!(block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS - 1), BlockWait::KeepWaiting);
-        assert_eq!(block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS), BlockWait::TimedOut);
+        assert_eq!(
+            block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS - 1),
+            BlockWait::KeepWaiting
+        );
+        assert_eq!(
+            block_wait_step(&drivers, None, BLOCK_DRIVER_WAIT_YIELDS),
+            BlockWait::TimedOut
+        );
     }
 }
-
 
 /// The Phase-02 cross-tier fixture's service id (`tier2-rpc-proto::SERVICE_ID`).
 ///
@@ -630,7 +699,6 @@ pub(crate) fn spawn_test_fixtures() {
     // the image's own test root, whose exit is what ends the boot.
     #[cfg(feature = "tier2-grant-pair")]
     run_grant_pair();
-
 
     #[cfg(not(feature = "board-rpi3"))]
     {

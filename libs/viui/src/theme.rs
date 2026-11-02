@@ -784,7 +784,8 @@ mod tests {
             );
 
             // Inactive Tab text on Inactive Tab background
-            let tab_inactive_contrast = contrast_ratio(theme.tab_inactive_fg(), theme.tab_inactive_bg());
+            let tab_inactive_contrast =
+                contrast_ratio(theme.tab_inactive_fg(), theme.tab_inactive_bg());
             assert!(
                 tab_inactive_contrast >= 4.5,
                 "{name} theme inactive tab contrast {tab_inactive_contrast:.2} < 4.5"

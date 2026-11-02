@@ -38,14 +38,18 @@ impl Label {
 }
 
 impl ViNode for Label {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    let desired = Size {
-        w: font.measure(&self.text.get()),
-        h: font.line_height(),
-    };
-    let size = constraints.constrain(desired);
-    self.bounds = Rect::from_origin_size(constraints.origin, size);
-    size
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        let desired = Size {
+            w: font.measure(&self.text.get()),
+            h: font.line_height(),
+        };
+        let size = constraints.constrain(desired);
+        self.bounds = Rect::from_origin_size(constraints.origin, size);
+        size
     }
 
     fn bounds(&self) -> Rect {
@@ -87,7 +91,10 @@ mod tests {
     fn signal_update_marks_the_label_bounds_dirty() {
         let text = Signal::new(alloc::string::String::from("idle"));
         let mut label = Label::new(text.clone());
-        label.layout(Constraints::root(Size::new(80.0, 24.0)), &mut crate::font_context::FontContext::default());
+        label.layout(
+            Constraints::root(Size::new(80.0, 24.0)),
+            &mut crate::font_context::FontContext::default(),
+        );
         let dirty = Rc::new(RefCell::new(DirtyRect::new()));
         let _handles = label.collect_dirty_handles(Rc::clone(&dirty));
 

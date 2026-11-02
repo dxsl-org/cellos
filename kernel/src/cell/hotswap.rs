@@ -256,7 +256,9 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
     enter_frozen_state(task, swap_id);
     #[cfg(cellos_p01_trace)]
     let _semantic = crate::memory::heap::p01_owner::creation(
-        None, crate::memory::heap::p01_owner::SERVICE_SHARED);
+        None,
+        crate::memory::heap::p01_owner::SERVICE_SHARED,
+    );
     ceilings.insert(
         tid,
         CeilingState::Available {
@@ -358,8 +360,11 @@ pub(crate) fn commit_hotswap_barrier(
         let copied = {
             #[cfg(cellos_p01_trace)]
             let _semantic = crate::memory::heap::p01_owner::creation(
-                Some(crate::p01_resources::owner(sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?)),
-                crate::memory::heap::p01_owner::MIGRATION_COPY);
+                Some(crate::p01_resources::owner(
+                    sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?,
+                )),
+                crate::memory::heap::p01_owner::MIGRATION_COPY,
+            );
             let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
             let message = &source.pending_msgs.as_slice()[index];
             let wire = match &message.wire {
@@ -376,10 +381,14 @@ pub(crate) fn commit_hotswap_barrier(
         let pushed = copied.and_then(|message| {
             let target = sched.tasks.get_mut(&target_tid).ok_or(())?;
             #[cfg(cellos_p01_trace)]
-            target.pending_msgs.observe_owner(crate::p01_resources::owner(target));
+            target
+                .pending_msgs
+                .observe_owner(crate::p01_resources::owner(target));
             let result = target.pending_msgs.try_push(message);
             #[cfg(cellos_p01_trace)]
-            target.pending_msgs.observe_owner(crate::p01_resources::owner(target));
+            target
+                .pending_msgs
+                .observe_owner(crate::p01_resources::owner(target));
             result
         });
         if pushed.is_err() {

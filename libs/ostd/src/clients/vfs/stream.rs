@@ -79,18 +79,23 @@ pub(super) fn list_page<'b, T: VfsReadOps>(
     out: &'b mut [u8],
 ) -> ViResult<VfsDirPage<'b>> {
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let (next, flags, len) = match ops.call(&VfsRequest::ListAtPage { dir, cursor }, &mut resp_buf)? {
-        VfsResponse::DirPage { next, flags, entries } => {
-            if vfs_dir_page::entries(entries).any(|entry| entry == Err(MalformedPage)) {
-                return Err(ViError::IO);
+    let (next, flags, len) =
+        match ops.call(&VfsRequest::ListAtPage { dir, cursor }, &mut resp_buf)? {
+            VfsResponse::DirPage {
+                next,
+                flags,
+                entries,
+            } => {
+                if vfs_dir_page::entries(entries).any(|entry| entry == Err(MalformedPage)) {
+                    return Err(ViError::IO);
+                }
+                let target = out.get_mut(..entries.len()).ok_or(ViError::OutOfMemory)?;
+                target.copy_from_slice(entries);
+                (next, flags, entries.len())
             }
-            let target = out.get_mut(..entries.len()).ok_or(ViError::OutOfMemory)?;
-            target.copy_from_slice(entries);
-            (next, flags, entries.len())
-        }
-        VfsResponse::Err(code) => return Err(vfs_err_from_code(code)),
-        _ => return Err(ViError::IO),
-    };
+            VfsResponse::Err(code) => return Err(vfs_err_from_code(code)),
+            _ => return Err(ViError::IO),
+        };
     Ok(VfsDirPage {
         bytes: &out[..len],
         next,
@@ -125,7 +130,11 @@ pub(super) fn read_chunk<T: VfsReadOps>(
         return Ok(0);
     }
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let request = VfsRequest::ReadFileHandle { file, offset, max: max as u32 };
+    let request = VfsRequest::ReadFileHandle {
+        file,
+        offset,
+        max: max as u32,
+    };
     match ops.call(&request, &mut resp_buf)? {
         VfsResponse::Data(chunk) if chunk.len() <= max => {
             buf[..chunk.len()].copy_from_slice(chunk);
@@ -136,7 +145,10 @@ pub(super) fn read_chunk<T: VfsReadOps>(
     }
 }
 
-pub(super) fn file_state<T: VfsReadOps>(ops: &mut T, file: ViVfsFileHandle) -> ViResult<VfsFileState> {
+pub(super) fn file_state<T: VfsReadOps>(
+    ops: &mut T,
+    file: ViVfsFileHandle,
+) -> ViResult<VfsFileState> {
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match ops.call(&VfsRequest::FileHandleState { file }, &mut resp_buf)? {
         VfsResponse::FileState { size, modified } => Ok(VfsFileState { size, modified }),

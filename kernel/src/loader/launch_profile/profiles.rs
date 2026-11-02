@@ -145,11 +145,7 @@ pub(super) fn pipe_test_profile(route: LaunchRoute, target: &str) -> Option<Laun
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/pipe-peer" {
         return None;
     }
-    Some(LaunchProfile::new(
-        LEGACY,
-        "pipe-test-peer-edge",
-        false,
-    ))
+    Some(LaunchProfile::new(LEGACY, "pipe-test-peer-edge", false))
 }
 
 /// GUI Terminal (`terminal`) may run exactly one program: the multicall shell
@@ -219,15 +215,16 @@ pub(super) fn phase04_driver_profile(route: LaunchRoute, target: &str) -> Option
 /// authority is required like every init autoload edge. Compiled only under
 /// `phase04-driver-profile`.
 #[cfg(feature = "phase04-driver-profile")]
-pub(super) fn phase04_driver_init_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
-    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/phase04-terminal-driver" {
+pub(super) fn phase04_driver_init_profile(
+    route: LaunchRoute,
+    target: &str,
+) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf)
+        || target != "/bin/phase04-terminal-driver"
+    {
         return None;
     }
-    Some(LaunchProfile::new(
-        LEGACY,
-        "phase04-driver-init-edge",
-        true,
-    ))
+    Some(LaunchProfile::new(LEGACY, "phase04-driver-init-edge", true))
 }
 
 #[cfg(feature = "phase02-terminal-profile")]
@@ -279,11 +276,7 @@ pub(super) fn c_spawn_profile(route: LaunchRoute, target: &str) -> Option<Launch
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) || target != "/bin/c-spawn-child" {
         return None;
     }
-    Some(LaunchProfile::new(
-        LEGACY,
-        "c-spawn-child-edge",
-        false,
-    ))
+    Some(LaunchProfile::new(LEGACY, "c-spawn-child-edge", false))
 }
 
 /// The B0 supervisor library needs exactly one exact child edge: its worker.
@@ -330,15 +323,14 @@ pub(super) fn recovery_authority_profile(
 /// Lifecycle authority permits synchronous teardown of either worker class.
 pub(super) fn render_worker_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf)
-        || !matches!(target, "/bin/c2c-render-worker" | "/bin/c2c-render-domain-worker")
+        || !matches!(
+            target,
+            "/bin/c2c-render-worker" | "/bin/c2c-render-domain-worker"
+        )
     {
         return None;
     }
-    Some(LaunchProfile::new(
-        LEGACY,
-        "c2c-render-worker-edge",
-        true,
-    ))
+    Some(LaunchProfile::new(LEGACY, "c2c-render-worker-edge", true))
 }
 
 pub(super) fn supervisor_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {

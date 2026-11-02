@@ -173,11 +173,15 @@ pub(super) fn is_present() -> bool {
 #[cfg(cellos_p01_trace)]
 pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64, u64, u64)) {
     let root = VTD_ROOT_PHYS.load(Ordering::Relaxed) as u64;
-    if root != 0 { visit(root, 2, 0, 0, 0); }
+    if root != 0 {
+        visit(root, 2, 0, 0, 0);
+    }
     // Normal mutators use DOMAINS -> CONTEXTS, so do not reverse that order.
     let domains = VTD_DOMAINS.lock();
     let contexts = VTD_CONTEXTS.lock();
-    for (&bus, table) in contexts.iter() { visit(table.phys, 3, bus as u64, 0, root); }
+    for (&bus, table) in contexts.iter() {
+        visit(table.phys, 3, bus as u64, 0, root);
+    }
     for (&holder, domain) in domains.iter() {
         visit(domain.slpt.root_phys(), 4, holder, domain.did as u64, root);
     }
@@ -220,8 +224,10 @@ fn alloc_table(_kind: u64) -> (usize, u64) {
     // SAFETY: layout is non-zero and 4096-aligned.
     let ptr = {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         (unsafe { alloc_zeroed(layout) }) as usize
     };
     assert!(ptr != 0, "[vtd] OOM allocating IOMMU table");
@@ -269,8 +275,13 @@ fn wait_for_invalidation(off: usize, busy: u64) -> bool {
 }
 
 /// Hardware may invalidate more broadly than requested, never more narrowly.
-fn invalidation_acknowledged(command: u64, result: u64, request_shift: u32,
-    actual_shift: u32, busy: u64) -> bool {
+fn invalidation_acknowledged(
+    command: u64,
+    result: u64,
+    request_shift: u32,
+    actual_shift: u32,
+    busy: u64,
+) -> bool {
     let requested = (command >> request_shift) & 3;
     let actual = (result >> actual_shift) & 3;
     result & busy == 0 && actual != 0 && actual <= requested
@@ -285,10 +296,17 @@ fn issue_context_invalidation(cmd: u64) -> bool {
     // SAFETY: reg_base() + VTD_CCMD is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
     unsafe { write64(reg_base(), VTD_CCMD, cmd) };
-    if !wait_for_invalidation(VTD_CCMD, CCMD_ICC) { return false; }
+    if !wait_for_invalidation(VTD_CCMD, CCMD_ICC) {
+        return false;
+    }
     // SAFETY: the invalidation lock excludes a successor command/readback race.
-    invalidation_acknowledged(cmd, unsafe { read64(reg_base(), VTD_CCMD) },
-        61, 59, CCMD_ICC)
+    invalidation_acknowledged(
+        cmd,
+        unsafe { read64(reg_base(), VTD_CCMD) },
+        61,
+        59,
+        CCMD_ICC,
+    )
 }
 
 fn issue_iotlb_invalidation(cmd: u64, iva: Option<u64>) -> bool {
@@ -309,10 +327,17 @@ fn issue_iotlb_invalidation(cmd: u64, iva: Option<u64>) -> bool {
     // SAFETY: reg_base() + iotlb_off is identity-mapped VT-d MMIO and the
     // serialized precheck proved no earlier command remains in flight.
     unsafe { write64(reg_base(), iotlb_off, cmd) };
-    if !wait_for_invalidation(iotlb_off, IOTLB_IVT) { return false; }
+    if !wait_for_invalidation(iotlb_off, IOTLB_IVT) {
+        return false;
+    }
     // SAFETY: the invalidation lock still owns this register bank.
-    invalidation_acknowledged(cmd, unsafe { read64(reg_base(), iotlb_off) },
-        60, 57, IOTLB_IVT)
+    invalidation_acknowledged(
+        cmd,
+        unsafe { read64(reg_base(), iotlb_off) },
+        60,
+        57,
+        IOTLB_IVT,
+    )
 }
 
 fn ctx_flush_global() -> bool {
@@ -433,8 +458,10 @@ fn ensure_context_table(bus: u8) -> Option<usize> {
 
     let mut contexts = VTD_CONTEXTS.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     let table = contexts.entry(bus).or_insert_with(|| {
         let (virt, phys) = alloc_table(6);
         ContextTable {
@@ -528,7 +555,10 @@ pub(super) fn init_hw(dma: super::iommu::DmaIsolationInput) {
     // GCAP.ND = bits[2:0]: 2^(4 + 2*ND) domain IDs; ND = 7 is reserved.
     let nd = (gcap & 0x7) as u32;
     let Some(max_did) = did_limit(gcap) else {
-        log::warn!("[vtd] GCAP.ND={} reserved — per-Cell isolation disabled", nd);
+        log::warn!(
+            "[vtd] GCAP.ND={} reserved — per-Cell isolation disabled",
+            nd
+        );
         return;
     };
     log::info!(
@@ -592,12 +622,17 @@ pub(super) fn map_range_for_cell(
     // SAFETY: both words are within the selected allocated context page;
     // DOMAINS serializes every context mutator.
     let current = unsafe {
-        [core::ptr::read_volatile(slot as *const u64),
-         core::ptr::read_volatile((slot + 8) as *const u64)]
+        [
+            core::ptr::read_volatile(slot as *const u64),
+            core::ptr::read_volatile((slot + 8) as *const u64),
+        ]
     };
     let owned_here = domains.get(&tid).is_some_and(|domain| {
-        current == [(domain.slpt.root_phys() & !0xFFF) | CTX_PRESENT,
-                    ((domain.did as u64) << 8) | CTX_AW_39BIT_HI]
+        current
+            == [
+                (domain.slpt.root_phys() & !0xFFF) | CTX_PRESENT,
+                ((domain.did as u64) << 8) | CTX_AW_39BIT_HI,
+            ]
     });
     if !owned_here {
         // SAFETY: slot belongs to the allocated context page for this bus.
@@ -623,14 +658,19 @@ pub(super) fn map_range_for_cell(
 
     if let Some(did) = new_did {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         log::info!("[vtd] Cell {} allocated DID={}", tid, did);
-        domains.insert(tid, VtdDomain {
-            slpt: VtdSlpt::new(),
-            did,
-            bdfs: BTreeSet::new(),
-        });
+        domains.insert(
+            tid,
+            VtdDomain {
+                slpt: VtdSlpt::new(),
+                did,
+                bdfs: BTreeSet::new(),
+            },
+        );
         #[cfg(cellos_p01_trace)]
         drop(_semantic);
     }
@@ -640,8 +680,10 @@ pub(super) fn map_range_for_cell(
 
     entry.slpt.map_range(phys, size);
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     entry.bdfs.insert(bdf);
     #[cfg(cellos_p01_trace)]
     drop(_semantic);
@@ -844,8 +886,10 @@ pub(super) fn unmap_cell_domain(tid: u64) -> bool {
         // Cached translations may still reference the SLPT after a timeout.
         // Keep the domain and its page tables alive so teardown can be retried.
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         domains.insert(tid, domain);
         #[cfg(cellos_p01_trace)]
         drop(_semantic);
@@ -920,10 +964,23 @@ mod tests {
                 let command = busy | (requested << request_shift);
                 for actual in 0..=3 {
                     let result = actual << actual_shift;
-                    assert_eq!(invalidation_acknowledged(command, result,
-                        request_shift, actual_shift, busy), actual != 0 && actual <= requested);
-                    assert!(!invalidation_acknowledged(command, result | busy,
-                        request_shift, actual_shift, busy));
+                    assert_eq!(
+                        invalidation_acknowledged(
+                            command,
+                            result,
+                            request_shift,
+                            actual_shift,
+                            busy
+                        ),
+                        actual != 0 && actual <= requested
+                    );
+                    assert!(!invalidation_acknowledged(
+                        command,
+                        result | busy,
+                        request_shift,
+                        actual_shift,
+                        busy
+                    ));
                 }
             }
         }
@@ -949,12 +1006,20 @@ mod tests {
             for expected in 1..limit {
                 assert_eq!(dids.allocate(), Some(expected as u16));
             }
-            assert_eq!(dids.allocate(), None, "exhaustion refuses instead of wrapping");
+            assert_eq!(
+                dids.allocate(),
+                None,
+                "exhaustion refuses instead of wrapping"
+            );
             dids.release(0);
             if limit <= u16::MAX as u32 {
                 dids.release(limit as u16);
             }
-            assert_eq!(dids.allocate(), None, "DID 0 and out-of-range DIDs are never freed");
+            assert_eq!(
+                dids.allocate(),
+                None,
+                "DID 0 and out-of-range DIDs are never freed"
+            );
             let freed = (limit / 2) as u16;
             dids.release(freed);
             assert_eq!(dids.allocate(), Some(freed));
@@ -979,7 +1044,9 @@ mod tests {
         assert_eq!(&context[510..], &[0x3001, 0x00ff_ff01]);
         assert!(root[..510].iter().all(|word| *word == 0));
         assert!(context[..510].iter().all(|word| *word == 0));
-        unsafe { clear_ctx_slot(context_slot(ctx_virt, bdf)); }
+        unsafe {
+            clear_ctx_slot(context_slot(ctx_virt, bdf));
+        }
         assert_eq!(&context[510..], &[0, 0]);
         assert_eq!(&root[510..], &[0x2001, 0]);
     }

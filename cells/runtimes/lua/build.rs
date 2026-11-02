@@ -101,7 +101,9 @@ fn compile_lua_c(target: &str) {
 
     let mut build = cc::Build::new();
 
-    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v != "0").unwrap_or(false);
+    let use_zig = std::env::var("CELLOS_USE_ZIG")
+        .map(|v| v != "0")
+        .unwrap_or(false);
     let zig_cc = repo_wrapper("cellos-zig-cc");
     let zig_ar = repo_wrapper("cellos-zig-ar");
 

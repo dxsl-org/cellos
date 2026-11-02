@@ -579,7 +579,8 @@ impl ViApp {
         let toast_entries = &self.toast_entries;
 
         renderer.render(damage, &mut |canvas| {
-            let surface = crate::layout::Rect::new(0.0, 0.0, canvas.width() as f32, canvas.height() as f32);
+            let surface =
+                crate::layout::Rect::new(0.0, 0.0, canvas.width() as f32, canvas.height() as f32);
             let repaint = damage.unwrap_or(surface);
             canvas.clip_push(repaint);
             canvas.fill_rect(repaint, theme.bg().with_alpha(255));
@@ -703,10 +704,14 @@ mod tests {
     }
 
     impl ViNode for ProbeNode {
-        fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-        self.stats.layouts.set(self.stats.layouts.get() + 1);
-        self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-        constraints.max
+        fn layout(
+            &mut self,
+            constraints: Constraints,
+            font: &mut crate::font_context::FontContext,
+        ) -> Size {
+            self.stats.layouts.set(self.stats.layouts.get() + 1);
+            self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+            constraints.max
         }
 
         fn bounds(&self) -> Rect {
@@ -823,17 +828,28 @@ mod tests {
     }
 
     impl crate::renderer::ViRenderer for CapturedRenderer {
-        fn render(&mut self, damage: Option<Rect>, draw: &mut dyn FnMut(&mut dyn crate::canvas::ViCanvas)) {
+        fn render(
+            &mut self,
+            damage: Option<Rect>,
+            draw: &mut dyn FnMut(&mut dyn crate::canvas::ViCanvas),
+        ) {
             crate::renderer::ViRenderer::render(&mut self.surface, damage, draw);
             *self.pixels.borrow_mut() = self.surface.pixels().to_vec();
         }
 
-        fn size(&self) -> (u32, u32) { (200, 60) }
+        fn size(&self) -> (u32, u32) {
+            (200, 60)
+        }
     }
 
-    fn captured_label(text: Signal<alloc::string::String>) -> (ViApp, Rc<core::cell::RefCell<Vec<u8>>>) {
+    fn captured_label(
+        text: Signal<alloc::string::String>,
+    ) -> (ViApp, Rc<core::cell::RefCell<Vec<u8>>>) {
         let pixels = Rc::new(core::cell::RefCell::new(Vec::new()));
-        let renderer = CapturedRenderer { surface: ViSurfaceRenderer::new(200, 60), pixels: pixels.clone() };
+        let renderer = CapturedRenderer {
+            surface: ViSurfaceRenderer::new(200, 60),
+            pixels: pixels.clone(),
+        };
         let root = crate::node_widgets::label::Label::new(text);
         (ViApp::new(Box::new(root), Box::new(renderer)), pixels)
     }
@@ -846,18 +862,30 @@ mod tests {
         let first = pixels.borrow().clone();
         app.mark_dirty();
         app.tick(&[]);
-        assert_eq!(*pixels.borrow(), first, "coverage accumulated on repeated paint");
+        assert_eq!(
+            *pixels.borrow(),
+            first,
+            "coverage accumulated on repeated paint"
+        );
 
         // A paint-only dirty region still clears before blending, and leaves
         // unaffected surface bytes untouched.
         app.dirty_region.borrow_mut().mark(app.root.bounds());
         app.tick(&[]);
-        assert_eq!(*pixels.borrow(), first, "partial paint accumulated coverage");
+        assert_eq!(
+            *pixels.borrow(),
+            first,
+            "partial paint accumulated coverage"
+        );
 
         text.set(alloc::string::String::from("i"));
         app.tick(&[]);
         let (mut fresh, expected) = captured_label(Signal::new(alloc::string::String::from("i")));
         fresh.tick(&[]);
-        assert_eq!(*pixels.borrow(), *expected.borrow(), "shorter label retained old glyph ink");
+        assert_eq!(
+            *pixels.borrow(),
+            *expected.borrow(),
+            "shorter label retained old glyph ink"
+        );
     }
 }

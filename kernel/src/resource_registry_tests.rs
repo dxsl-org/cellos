@@ -91,7 +91,10 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
     release_bdfs_for(REPLACEMENT_TID);
     assert!(claim_bdf_owner(BDF, DEAD_TID));
 
-    assert!(!crate::task::teardown_dma_authority(DEAD_TID), "teardown must report retention");
+    assert!(
+        !crate::task::teardown_dma_authority(DEAD_TID),
+        "teardown must report retention"
+    );
     assert_eq!(owner_of_bdf(BDF), Some(DEAD_TID));
     assert!(!claim_bdf_owner(BDF, REPLACEMENT_TID));
 

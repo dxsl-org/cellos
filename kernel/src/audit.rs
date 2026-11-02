@@ -217,7 +217,12 @@ fn record_len_at(buf: &[u8; BUF_SIZE], at: usize) -> usize {
 /// the new tail and how many records were evicted. `tail` is always a record
 /// boundary (only this and `copy_whole_records` move it, by whole records), and
 /// a record (at most 265 bytes) always fits an empty ring.
-fn evict_for(buf: &[u8; BUF_SIZE], head: usize, mut tail: usize, record_len: usize) -> (usize, usize) {
+fn evict_for(
+    buf: &[u8; BUF_SIZE],
+    head: usize,
+    mut tail: usize,
+    record_len: usize,
+) -> (usize, usize) {
     let mut evicted = 0;
     while head.wrapping_sub(tail) + record_len > BUF_SIZE {
         tail = tail.wrapping_add(record_len_at(buf, tail));
@@ -258,7 +263,8 @@ pub fn drain(out: &mut [u8]) -> usize {
         // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
         let buf = unsafe { &*RING.buf.get() };
         let copied = copy_whole_records(buf, head, tail, out);
-        RING.tail.store(tail.wrapping_add(copied), Ordering::Release);
+        RING.tail
+            .store(tail.wrapping_add(copied), Ordering::Release);
         copied
     };
     // SAFETY: `saved_interrupts` was captured on this hart by the call above.
@@ -296,12 +302,22 @@ mod tests {
 
     /// The producer path of `log_event` over a local ring (the real one masks
     /// interrupts, which a host test cannot do): evict, write, advance head.
-    fn put(buf: &mut [u8; BUF_SIZE], head: &mut usize, tail: &mut usize, event: u8, payload: &[u8]) -> usize {
+    fn put(
+        buf: &mut [u8; BUF_SIZE],
+        head: &mut usize,
+        tail: &mut usize,
+        event: u8,
+        payload: &[u8],
+    ) -> usize {
         let record_len = 10 + payload.len();
         let (new_tail, evicted) = evict_for(buf, *head, *tail, record_len);
         *tail = new_tail;
         let mut pos = *head;
-        for &b in [0u8; 8].iter().chain(&[event, payload.len() as u8]).chain(payload) {
+        for &b in [0u8; 8]
+            .iter()
+            .chain(&[event, payload.len() as u8])
+            .chain(payload)
+        {
             buf[pos & MASK] = b;
             pos = pos.wrapping_add(1);
         }
@@ -328,15 +344,30 @@ mod tests {
             written += 1;
             assert!(head.wrapping_sub(tail) <= BUF_SIZE);
         }
-        assert!(evicted > 0, "4000 records of up to 210 bytes overflow 256 KiB");
+        assert!(
+            evicted > 0,
+            "4000 records of up to 210 bytes overflow 256 KiB"
+        );
 
         let mut out = alloc::vec![0u8; BUF_SIZE];
         let first_len = record_len_at(&buf, tail);
-        assert_eq!(copy_whole_records(&buf, head, tail, &mut out[..first_len + 3]), first_len, "short read stops at a boundary");
-        assert_eq!(copy_whole_records(&buf, head, tail, &mut out[..first_len - 1]), 0, "a record larger than the space is left");
+        assert_eq!(
+            copy_whole_records(&buf, head, tail, &mut out[..first_len + 3]),
+            first_len,
+            "short read stops at a boundary"
+        );
+        assert_eq!(
+            copy_whole_records(&buf, head, tail, &mut out[..first_len - 1]),
+            0,
+            "a record larger than the space is left"
+        );
 
         let n = copy_whole_records(&buf, head, tail, &mut out);
-        assert_eq!(n, head.wrapping_sub(tail), "an ample buffer drains everything");
+        assert_eq!(
+            n,
+            head.wrapping_sub(tail),
+            "an ample buffer drains everything"
+        );
         let mut at = 0;
         let mut survivors = 0u32;
         let mut ids = alloc::vec::Vec::new();
@@ -352,7 +383,14 @@ mod tests {
             at += len;
         }
         assert_eq!(ids.last(), Some(&3999), "the newest record survives");
-        assert!(ids.windows(2).all(|w| w[1] > w[0]), "survivors stay in write order");
-        assert_eq!(evicted as u32 + survivors, 4000, "every record is either evicted or still in the ring");
+        assert!(
+            ids.windows(2).all(|w| w[1] > w[0]),
+            "survivors stay in write order"
+        );
+        assert_eq!(
+            evicted as u32 + survivors,
+            4000,
+            "every record is either evicted or still in the ring"
+        );
     }
 }

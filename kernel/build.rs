@@ -14,7 +14,12 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CELLOS_P01_FAULT");
     let p01 = match std::env::var("CELLOS_P01_TRACE").as_deref() {
         Err(std::env::VarError::NotPresent) | Ok("0") => false,
-        Ok("1") if target_arch == "x86_64" && std::env::var_os("CARGO_FEATURE_TEST_HOOKS").is_some() => true,
+        Ok("1")
+            if target_arch == "x86_64"
+                && std::env::var_os("CARGO_FEATURE_TEST_HOOKS").is_some() =>
+        {
+            true
+        }
         Ok("1") => panic!("CELLOS_P01_TRACE requires test-hooks and x86_64"),
         Err(_) | Ok(_) => panic!("CELLOS_P01_TRACE must be absent, 0, or 1"),
     };
@@ -23,7 +28,11 @@ fn main() {
         Err(std::env::VarError::NotPresent) => String::new(),
         Err(_) => panic!("CELLOS_P01_FAULT must be valid UTF-8"),
     };
-    if !matches!(fault.as_str(), "" | "contention" | "full" | "unready" | "late") || (!p01 && !fault.is_empty()) {
+    if !matches!(
+        fault.as_str(),
+        "" | "contention" | "full" | "unready" | "late"
+    ) || (!p01 && !fault.is_empty())
+    {
         panic!("CELLOS_P01_FAULT requires private trace and a supported observer fault");
     }
     if p01 {
@@ -37,7 +46,9 @@ fn main() {
         Ok("1") if p01 && fault.is_empty() && target_os == "none" => {
             println!("cargo:rustc-cfg=cellos_g1_cpu");
         }
-        Ok("1") => panic!("CELLOS_G1_CPU requires x86_64 test-hooks private trace without observer faults"),
+        Ok("1") => {
+            panic!("CELLOS_G1_CPU requires x86_64 test-hooks private trace without observer faults")
+        }
         Err(_) | Ok(_) => panic!("CELLOS_G1_CPU must be absent, 0, or 1"),
     }
     let board_rpi3 = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
@@ -66,8 +77,7 @@ fn main() {
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     println!("cargo:rerun-if-env-changed=CELLOS_PHASE02_CELL_PUBLIC_KEY");
-    let phase02_profile =
-        std::env::var_os("CARGO_FEATURE_PHASE02_TERMINAL_PROFILE").is_some();
+    let phase02_profile = std::env::var_os("CARGO_FEATURE_PHASE02_TERMINAL_PROFILE").is_some();
     if phase02_profile {
         assert_eq!(target_arch, "x86_64", "Phase02 fixture requires x86_64");
         assert!(
@@ -80,7 +90,10 @@ fn main() {
         println!("cargo:rerun-if-changed={}", key_path.display());
         let key = fs::read(&key_path).expect("read Phase02 public key");
         assert_eq!(key.len(), 32, "Phase02 public key must be 32 raw bytes");
-        assert!(key.iter().any(|byte| *byte != 0), "zero Phase02 key refused");
+        assert!(
+            key.iter().any(|byte| *byte != 0),
+            "zero Phase02 key refused"
+        );
         fs::write(out_dir.join("phase02-cell-signing.pub"), key)
             .expect("copy private Phase02 public key");
     } else {
@@ -99,20 +112,34 @@ fn main() {
             "release-signing-key cannot be combined with dev-signing-key \
              (build with --no-default-features --features release-posture)"
         );
-        assert!(!phase02_profile, "release-signing-key cannot be combined with phase02-terminal-profile");
+        assert!(
+            !phase02_profile,
+            "release-signing-key cannot be combined with phase02-terminal-profile"
+        );
         let key_path = std::env::var_os("CELLOS_RELEASE_CELL_PUBLIC_KEY")
             .map(PathBuf::from)
             .expect("release-signing-key requires CELLOS_RELEASE_CELL_PUBLIC_KEY (32 raw bytes)");
         println!("cargo:rerun-if-changed={}", key_path.display());
         let key = fs::read(&key_path).expect("read release cell public key");
-        assert_eq!(key.len(), 32, "release cell public key must be 32 raw bytes");
-        assert!(key.iter().any(|byte| *byte != 0), "zero release key refused");
+        assert_eq!(
+            key.len(),
+            32,
+            "release cell public key must be 32 raw bytes"
+        );
+        assert!(
+            key.iter().any(|byte| *byte != 0),
+            "zero release key refused"
+        );
         // Dev key from scripts/sign-cell.py seed 0x43*32 (see kernel/src/signing.rs).
         const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
-            0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb, 0x0c, 0x0a,
-            0xa1, 0x4e, 0x02, 0x5a, 0x36, 0x5e, 0xc0, 0xe3, 0x42, 0xe8, 0x6e, 0x38, 0x29, 0xcb, 0x74, 0xb6,
+            0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb,
+            0x0c, 0x0a, 0xa1, 0x4e, 0x02, 0x5a, 0x36, 0x5e, 0xc0, 0xe3, 0x42, 0xe8, 0x6e, 0x38,
+            0x29, 0xcb, 0x74, 0xb6,
         ];
-        assert_ne!(key, DEV_CELL_SIGNER_PUBKEY, "the dev key cannot be the release key");
+        assert_ne!(
+            key, DEV_CELL_SIGNER_PUBKEY,
+            "the dev key cannot be the release key"
+        );
         fs::write(out_dir.join("release-cell-signing.pub"), key).expect("copy release public key");
     } else {
         assert!(
@@ -161,14 +188,14 @@ fn main() {
             std::env::var_os("EMBEDDED_OVERRIDE").is_some(),
             "Phase02 requires an explicit private embedded directory"
         );
-        let private = fs::canonicalize(&embedded_src)
-            .expect("resolve private Phase02 embedded directory");
-        let canonical = fs::canonicalize("src/embedded-x86_64")
-            .expect("resolve canonical embedded directory");
+        let private =
+            fs::canonicalize(&embedded_src).expect("resolve private Phase02 embedded directory");
+        let canonical =
+            fs::canonicalize("src/embedded-x86_64").expect("resolve canonical embedded directory");
         assert_ne!(private, canonical, "canonical Phase02 embedding refused");
         for artifact in ["init", "kernel_fs.img"] {
-            let source = fs::canonicalize(private.join(artifact))
-                .expect("Phase02 embedded input missing");
+            let source =
+                fs::canonicalize(private.join(artifact)).expect("Phase02 embedded input missing");
             assert!(
                 !source.starts_with(&canonical),
                 "canonical Phase02 embedded input refused"
@@ -183,7 +210,11 @@ fn main() {
         let src = embedded_src.join("p01_manifest.bin");
         println!("cargo:rerun-if-changed={}", src.display());
         let manifest = fs::read(&src).expect("private P01 build requires p01_manifest.bin");
-        assert_eq!(manifest.len(), 96, "P01 manifest is exactly three SHA256 digests");
+        assert_eq!(
+            manifest.len(),
+            96,
+            "P01 manifest is exactly three SHA256 digests"
+        );
         fs::write(embedded_out.join("p01_manifest.bin"), manifest).expect("embed P01 manifest");
     }
     // Only two artifacts are actually embedded: `init` (kernel/src/main.rs

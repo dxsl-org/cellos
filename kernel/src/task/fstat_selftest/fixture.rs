@@ -68,8 +68,10 @@ pub(super) fn install_tasks(ok: &mut bool) -> bool {
     crate::memory::heap::p01_owner::task_backing(&task_a);
     {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         scheduler.tasks.insert(TASK_A, task_a);
     }
     let task_b = Box::new(Task::new(TASK_B, CellId(0), "fstat-b", Vec::new()));
@@ -77,8 +79,10 @@ pub(super) fn install_tasks(ok: &mut bool) -> bool {
     crate::memory::heap::p01_owner::task_backing(&task_b);
     {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         scheduler.tasks.insert(TASK_B, task_b);
     }
     true
@@ -98,7 +102,9 @@ pub(super) fn install_failing_file() {
         if let Some(task) = scheduler.tasks.get_mut(&TASK_A) {
             #[cfg(cellos_p01_trace)]
             let _semantic = crate::memory::heap::p01_owner::creation(
-                Some(crate::p01_resources::owner(task)), crate::memory::heap::p01_owner::TASK_FIELDS);
+                Some(crate::p01_resources::owner(task)),
+                crate::memory::heap::p01_owner::TASK_FIELDS,
+            );
             task.open_files
                 .insert(FAILING_FD, api::fs::FileHandle::new(Box::new(FailingFile)));
         }

@@ -8,6 +8,7 @@ use viui::canvas::Color;
 
 use crate::draw::{draw_label, fill_rect, stroke_rect};
 use crate::model::FileItem;
+use crate::views::{ContentRect, ViewPalette};
 
 pub const CARD_W: u32 = 100;
 pub const CARD_H: u32 = 110;
@@ -18,15 +19,21 @@ pub fn render(
     fonts: &mut TextFonts,
     items: &[FileItem],
     selected_idx: usize,
-    content_x: i32,
-    content_y: i32,
-    content_w: u32,
-    content_h: u32,
-    theme_bg: Color,
-    theme_fg: Color,
-    theme_accent: Color,
-    theme_border: Color,
+    rect: ContentRect,
+    palette: ViewPalette,
 ) {
+    let ContentRect {
+        x: content_x,
+        y: content_y,
+        w: content_w,
+        h: content_h,
+    } = rect;
+    let ViewPalette {
+        bg: theme_bg,
+        fg: theme_fg,
+        accent: theme_accent,
+        border: theme_border,
+    } = palette;
     fill_rect(surf, content_x, content_y, content_w, content_h, theme_bg);
 
     let cols = ((content_w.saturating_sub(CARD_GAP)) / (CARD_W + CARD_GAP)).max(1) as usize;
@@ -56,16 +63,60 @@ pub fn render(
         // Preview box / icon
         let icon_box_y = cy + 10;
         let icon_box_h = 50;
-        fill_rect(surf, cx + 15, icon_box_y, CARD_W - 30, icon_box_h, if is_selected { theme_accent.with_alpha(30) } else { Color::rgb(240, 242, 248) });
-        draw_label(surf, fonts, cx + 20, icon_box_y + 12, CARD_W - 40, 24, item.icon, FontFace::UiSemibold, 18.0, if item.is_dir { theme_accent } else { theme_fg });
+        fill_rect(
+            surf,
+            cx + 15,
+            icon_box_y,
+            CARD_W - 30,
+            icon_box_h,
+            if is_selected {
+                theme_accent.with_alpha(30)
+            } else {
+                Color::rgb(240, 242, 248)
+            },
+        );
+        draw_label(
+            surf,
+            fonts,
+            cx + 20,
+            icon_box_y + 12,
+            CARD_W - 40,
+            24,
+            item.icon,
+            FontFace::UiSemibold,
+            18.0,
+            if item.is_dir { theme_accent } else { theme_fg },
+        );
 
         // Label
         let label_y = cy + 68;
-        draw_label(surf, fonts, cx + 6, label_y, CARD_W - 12, 18, &item.name, FontFace::UiRegular, 13.0, theme_fg);
+        draw_label(
+            surf,
+            fonts,
+            cx + 6,
+            label_y,
+            CARD_W - 12,
+            18,
+            &item.name,
+            FontFace::UiRegular,
+            13.0,
+            theme_fg,
+        );
 
         // Size subtext
         let size_str = item.formatted_size();
-        draw_label(surf, fonts, cx + 6, label_y + 18, CARD_W - 12, 16, &size_str, FontFace::UiRegular, 11.0, Color::rgb(130, 135, 150));
+        draw_label(
+            surf,
+            fonts,
+            cx + 6,
+            label_y + 18,
+            CARD_W - 12,
+            16,
+            &size_str,
+            FontFace::UiRegular,
+            11.0,
+            Color::rgb(130, 135, 150),
+        );
     }
 }
 

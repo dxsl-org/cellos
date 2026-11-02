@@ -53,11 +53,21 @@ pub(crate) trait VfsOps {
 }
 
 impl VfsOps for VfsClient {
-    fn stat(&mut self, path: &str) -> ViResult<(u64, bool)> { VfsClient::stat(self, path) }
-    fn list_dir(&mut self, path: &str) -> ViResult<Vec<u8>> { VfsClient::list_dir(self, path) }
-    fn read_file(&mut self, path: &str, max: usize) -> ViResult<Vec<u8>> { self.read_file_bounded(path, max) }
-    fn mkdir(&mut self, path: &str) -> ViResult<()> { VfsClient::mkdir(self, path) }
-    fn write_file(&mut self, path: &str, bytes: &[u8]) -> ViResult<()> { VfsClient::write_file(self, path, bytes) }
+    fn stat(&mut self, path: &str) -> ViResult<(u64, bool)> {
+        VfsClient::stat(self, path)
+    }
+    fn list_dir(&mut self, path: &str) -> ViResult<Vec<u8>> {
+        VfsClient::list_dir(self, path)
+    }
+    fn read_file(&mut self, path: &str, max: usize) -> ViResult<Vec<u8>> {
+        self.read_file_bounded(path, max)
+    }
+    fn mkdir(&mut self, path: &str) -> ViResult<()> {
+        VfsClient::mkdir(self, path)
+    }
+    fn write_file(&mut self, path: &str, bytes: &[u8]) -> ViResult<()> {
+        VfsClient::write_file(self, path, bytes)
+    }
 }
 
 /// Whether a complete CellosFS `ListDir` reply (`f:`/`d:` kind prefix, then
@@ -82,14 +92,22 @@ pub(crate) fn read_pin(ops: &mut impl VfsOps) -> PinRead {
         Ok((_, true)) => {}
         Ok((_, false)) => return PinRead::Unavailable("pin directory is a file"),
         Err(_) => {
-            return match ops.list_dir(SRV).ok().and_then(|names| listing_names(&names, b".cellos-machine")) {
+            return match ops
+                .list_dir(SRV)
+                .ok()
+                .and_then(|names| listing_names(&names, b".cellos-machine"))
+            {
                 Some(false) => PinRead::Absent,
                 Some(true) => PinRead::Unavailable("pin directory listed but not statable"),
                 None => PinRead::Unavailable("/srv not listable"),
             };
         }
     }
-    match ops.list_dir(PIN_DIR).ok().and_then(|names| listing_names(&names, b"pin")) {
+    match ops
+        .list_dir(PIN_DIR)
+        .ok()
+        .and_then(|names| listing_names(&names, b"pin"))
+    {
         Some(false) => PinRead::Absent,
         Some(true) => match ops.read_file(PIN_PATH, MACHINE_FACTS_CAPACITY) {
             Ok(bytes) => PinRead::Present(bytes),
@@ -116,7 +134,9 @@ pub(crate) struct VfsPinStore {
 
 impl VfsPinStore {
     pub(crate) fn new() -> Self {
-        Self { vfs: VfsClient::new() }
+        Self {
+            vfs: VfsClient::new(),
+        }
     }
 }
 

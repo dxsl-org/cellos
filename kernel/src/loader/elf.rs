@@ -55,17 +55,28 @@ impl ElfLoader {
             }
             let relative = usize::try_from(ph.virtual_addr()).map_err(|_| ViError::InvalidInput)?;
             let size = usize::try_from(ph.mem_size()).map_err(|_| ViError::InvalidInput)?;
-            let start = load_base.checked_add(relative).ok_or(ViError::InvalidInput)?;
+            let start = load_base
+                .checked_add(relative)
+                .ok_or(ViError::InvalidInput)?;
             let end = start.checked_add(size).ok_or(ViError::InvalidInput)?;
             let page_start = start & !(crate::memory::paging::PAGE_SIZE - 1);
-            let page_end = end.checked_add(crate::memory::paging::PAGE_SIZE - 1)
-                .ok_or(ViError::InvalidInput)? & !(crate::memory::paging::PAGE_SIZE - 1);
-            if slot_end.is_some_and(|limit| start >= limit || page_start < load_base || page_end > limit) {
-                log::error!("ELF: PIE extent {:#x}..{:#x} exceeds reserved {} MiB slot",
-                    start, end, super::va_alloc::CELL_VA_STRIDE / (1024 * 1024));
+            let page_end = end
+                .checked_add(crate::memory::paging::PAGE_SIZE - 1)
+                .ok_or(ViError::InvalidInput)?
+                & !(crate::memory::paging::PAGE_SIZE - 1);
+            if slot_end
+                .is_some_and(|limit| start >= limit || page_start < load_base || page_end > limit)
+            {
+                log::error!(
+                    "ELF: PIE extent {:#x}..{:#x} exceeds reserved {} MiB slot",
+                    start,
+                    end,
+                    super::va_alloc::CELL_VA_STRIDE / (1024 * 1024)
+                );
                 return Err(ViError::PermissionDenied);
             }
-            pages = pages.checked_add((page_end - page_start) / crate::memory::paging::PAGE_SIZE)
+            pages = pages
+                .checked_add((page_end - page_start) / crate::memory::paging::PAGE_SIZE)
                 .ok_or(ViError::InvalidInput)?;
         }
         Ok(pages)
@@ -372,7 +383,10 @@ impl ElfLoader {
     /// rejected ELF leaves its already-mapped pages resident, which both leaks
     /// the frames and poisons the VA-collision guard for the next spawn at the
     /// same base.
-    pub(crate) fn unwind(mapped: &[LoadedPage], frame_allocator: &mut crate::memory::frame::FrameAllocator) {
+    pub(crate) fn unwind(
+        mapped: &[LoadedPage],
+        frame_allocator: &mut crate::memory::frame::FrameAllocator,
+    ) {
         for page in mapped {
             let _ = crate::memory::paging::unmap_page(page.va);
             crate::memory::tlb_shootdown::flush_page(page.va);

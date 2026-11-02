@@ -26,7 +26,10 @@ fn read(fs: &mut CellosFs<MemDisk>, path: &str) -> Vec<u8> {
 
 fn observe(fs: &mut CellosFs<MemDisk>, path: &str) -> Expect {
     let inode = fs.lookup(path).unwrap();
-    Expect::Present { inode_num: inode.inode_num, generation: inode.generation }
+    Expect::Present {
+        inode_num: inode.inode_num,
+        generation: inode.generation,
+    }
 }
 
 #[test]
@@ -36,7 +39,10 @@ fn generation_advances_on_every_mutation_and_survives_reopen() {
     let first = fs.lookup("/f").unwrap().generation;
     put(&mut fs, "/f", b"one");
     let second = fs.lookup("/f").unwrap().generation;
-    assert!(second > first, "identical rewrite must still advance the generation");
+    assert!(
+        second > first,
+        "identical rewrite must still advance the generation"
+    );
     let mut fs = CellosFs::open(fs.into_disk()).unwrap();
     assert_eq!(fs.lookup("/f").unwrap().generation, second);
 }
@@ -51,7 +57,8 @@ fn replace_if_matching_observation_publishes_and_frees_old_blocks() {
     put(&mut fs, "/.stage", &new);
     let free_before = fs.free_blocks();
 
-    fs.rename_replace_if("/.stage", "/cfg.toml", expect).unwrap();
+    fs.rename_replace_if("/.stage", "/cfg.toml", expect)
+        .unwrap();
     fs.sync().unwrap();
 
     assert_eq!(fs.lookup("/.stage").err(), Some(FsError::NotFound));
@@ -74,7 +81,10 @@ fn stale_observation_conflicts_without_any_change() {
     let free = fs.free_blocks();
     let seq = fs.superblock().sequence;
 
-    assert_eq!(fs.rename_replace_if("/.stage", "/a", expect), Err(FsError::Conflict));
+    assert_eq!(
+        fs.rename_replace_if("/.stage", "/a", expect),
+        Err(FsError::Conflict)
+    );
     fs.sync().unwrap();
 
     assert_eq!(read(&mut fs, "/a"), b"original");
@@ -90,16 +100,23 @@ fn absent_and_present_expectations_are_enforced_both_ways() {
     put(&mut fs, "/.stage", b"new");
     // Destination created after an absent observation.
     put(&mut fs, "/b", b"raced");
-    assert_eq!(fs.rename_replace_if("/.stage", "/b", Expect::Absent), Err(FsError::Conflict));
+    assert_eq!(
+        fs.rename_replace_if("/.stage", "/b", Expect::Absent),
+        Err(FsError::Conflict)
+    );
     assert_eq!(read(&mut fs, "/b"), b"raced");
     // Destination removed after a present observation.
     let expect = observe(&mut fs, "/b");
     fs.unlink("/b").unwrap();
     fs.sync().unwrap();
-    assert_eq!(fs.rename_replace_if("/.stage", "/b", expect), Err(FsError::Conflict));
+    assert_eq!(
+        fs.rename_replace_if("/.stage", "/b", expect),
+        Err(FsError::Conflict)
+    );
     assert_eq!(fs.lookup("/b").err(), Some(FsError::NotFound));
     // Still absent: creation publishes.
-    fs.rename_replace_if("/.stage", "/b", Expect::Absent).unwrap();
+    fs.rename_replace_if("/.stage", "/b", Expect::Absent)
+        .unwrap();
     fs.sync().unwrap();
     assert_eq!(read(&mut fs, "/b"), b"new");
 }
@@ -112,8 +129,14 @@ fn directory_destination_and_cross_directory_publication() {
     fs.sync().unwrap();
     put(&mut fs, "/d/.stage", b"x");
     let dir = fs.lookup("/e").unwrap();
-    let as_dir = Expect::Present { inode_num: dir.inode_num, generation: dir.generation };
-    assert_eq!(fs.rename_replace_if("/d/.stage", "/e", as_dir), Err(FsError::Conflict));
+    let as_dir = Expect::Present {
+        inode_num: dir.inode_num,
+        generation: dir.generation,
+    };
+    assert_eq!(
+        fs.rename_replace_if("/d/.stage", "/e", as_dir),
+        Err(FsError::Conflict)
+    );
     put(&mut fs, "/e/t", b"old");
     let expect = observe(&mut fs, "/e/t");
     fs.rename_replace_if("/d/.stage", "/e/t", expect).unwrap();

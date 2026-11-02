@@ -74,67 +74,69 @@ pub fn run<const ALLOW_SHARED: bool>() -> ! {
                         let bytes = tile.rgb_bytes()?;
                         let (stats, compute_ns, pixels, processor_id_before, processor_id_after) =
                             match output {
-                            Output::Copied => {
-                                if bytes > COPIED_TILE_MAX_BYTES {
-                                    return Err(RenderError::InvalidOutput);
+                                Output::Copied => {
+                                    if bytes > COPIED_TILE_MAX_BYTES {
+                                        return Err(RenderError::InvalidOutput);
+                                    }
+                                    copied.resize(bytes, 0);
+                                    let processor_id_before = ostd::system_info::processor_id();
+                                    let started = clock.now_ns();
+                                    let stats = render_tile(&scene, config, tile, &mut copied)?;
+                                    let compute_ns = clock.elapsed_ns(started);
+                                    let processor_id_after = ostd::system_info::processor_id();
+                                    (
+                                        stats,
+                                        compute_ns,
+                                        core::mem::take(&mut copied),
+                                        processor_id_before,
+                                        processor_id_after,
+                                    )
                                 }
-                                copied.resize(bytes, 0);
-                                let processor_id_before = ostd::system_info::processor_id();
-                                let started = clock.now_ns();
-                                let stats = render_tile(&scene, config, tile, &mut copied)?;
-                                let compute_ns = clock.elapsed_ns(started);
-                                let processor_id_after = ostd::system_info::processor_id();
-                                (
-                                    stats,
-                                    compute_ns,
-                                    core::mem::take(&mut copied),
-                                    processor_id_before,
-                                    processor_id_after,
-                                )
-                            }
-                            Output::Shared {
-                                grant_id,
-                                bytes: declared,
-                            } => {
-                                // A compile-time boundary also excludes this
-                                // branch from the copied-only instantiation.
-                                if !ALLOW_SHARED {
-                                    return Err(RenderError::InvalidOutput);
+                                Output::Shared {
+                                    grant_id,
+                                    bytes: declared,
+                                } => {
+                                    // A compile-time boundary also excludes this
+                                    // branch from the copied-only instantiation.
+                                    if !ALLOW_SHARED {
+                                        return Err(RenderError::InvalidOutput);
+                                    }
+                                    if declared as usize != bytes {
+                                        return Err(RenderError::OutputLength);
+                                    }
+                                    let grant_id = usize::try_from(grant_id)
+                                        .map_err(|_| RenderError::InvalidOutput)?;
+                                    // The coordinator is blocked on this exact operation;
+                                    // the closure ends before reply and retains no mapping.
+                                    let (stats, duration, processor_id_before, processor_id_after) =
+                                        ostd::grant::with_shared_bytes_mut(grant_id, |buffer| {
+                                            let target = buffer
+                                                .get_mut(..bytes)
+                                                .ok_or(RenderError::OutputLength)?;
+                                            let processor_id_before =
+                                                ostd::system_info::processor_id();
+                                            let started = clock.now_ns();
+                                            let stats = render_tile(&scene, config, tile, target)?;
+                                            let duration = clock.elapsed_ns(started);
+                                            let processor_id_after =
+                                                ostd::system_info::processor_id();
+                                            Ok::<_, RenderError>((
+                                                stats,
+                                                duration,
+                                                processor_id_before,
+                                                processor_id_after,
+                                            ))
+                                        })
+                                        .ok_or(RenderError::InvalidOutput)??;
+                                    (
+                                        stats,
+                                        duration,
+                                        Vec::new(),
+                                        processor_id_before,
+                                        processor_id_after,
+                                    )
                                 }
-                                if declared as usize != bytes {
-                                    return Err(RenderError::OutputLength);
-                                }
-                                let grant_id = usize::try_from(grant_id)
-                                    .map_err(|_| RenderError::InvalidOutput)?;
-                                // The coordinator is blocked on this exact operation;
-                                // the closure ends before reply and retains no mapping.
-                                let (stats, duration, processor_id_before, processor_id_after) =
-                                    ostd::grant::with_shared_bytes_mut(grant_id, |buffer| {
-                                        let target = buffer
-                                            .get_mut(..bytes)
-                                            .ok_or(RenderError::OutputLength)?;
-                                        let processor_id_before = ostd::system_info::processor_id();
-                                        let started = clock.now_ns();
-                                        let stats = render_tile(&scene, config, tile, target)?;
-                                        let duration = clock.elapsed_ns(started);
-                                        let processor_id_after = ostd::system_info::processor_id();
-                                        Ok::<_, RenderError>((
-                                            stats,
-                                            duration,
-                                            processor_id_before,
-                                            processor_id_after,
-                                        ))
-                                    })
-                                    .ok_or(RenderError::InvalidOutput)??;
-                                (
-                                    stats,
-                                    duration,
-                                    Vec::new(),
-                                    processor_id_before,
-                                    processor_id_after,
-                                )
-                            }
-                        };
+                            };
                         Ok(Response::Done {
                             tile_id: tile.id,
                             scene_hash,

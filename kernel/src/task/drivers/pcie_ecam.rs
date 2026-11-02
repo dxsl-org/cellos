@@ -671,8 +671,10 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
             }
 
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::DRIVER_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED,
+            );
             devices.push(PciDevice {
                 bdf: (reported_bus, dev, fun),
                 vendor_id: vid,
@@ -715,7 +717,11 @@ pub fn config_space_admitted() -> bool {
 }
 
 fn split_bdf(bdf: u32) -> (u8, u8, u8) {
-    (((bdf >> 8) & 0xFF) as u8, ((bdf >> 3) & 0x1F) as u8, (bdf & 0x07) as u8)
+    (
+        ((bdf >> 8) & 0xFF) as u8,
+        ((bdf >> 3) & 0x1F) as u8,
+        (bdf & 0x07) as u8,
+    )
 }
 
 /// Enable MMIO decoding and bus mastering after the caller has established
@@ -833,7 +839,8 @@ unsafe fn quiesce_in_window(
     };
     // SAFETY (all accesses below): every pointer comes from
     // `config_addr_in_range` for the caller's window.
-    let read16 = |off: usize| addr(off).map(|p| unsafe { core::ptr::read_volatile(p as *const u16) });
+    let read16 =
+        |off: usize| addr(off).map(|p| unsafe { core::ptr::read_volatile(p as *const u16) });
     let read8 = |off: usize| addr(off).map(|p| unsafe { core::ptr::read_volatile(p as *const u8) });
     let changed = core::cell::Cell::new(false);
     let update = |off: usize, next: fn(u16) -> u16| -> Result<u16, QuiesceError> {
@@ -846,7 +853,11 @@ unsafe fn quiesce_in_window(
         }
         let read = unsafe { core::ptr::read_volatile(ptr) };
         if read != wrote {
-            return Err(QuiesceError::Readback { offset: off as u16, wrote, read });
+            return Err(QuiesceError::Readback {
+                offset: off as u16,
+                wrote,
+                read,
+            });
         }
         Ok(read)
     };
@@ -854,13 +865,23 @@ unsafe fn quiesce_in_window(
     // No function answers here (all-ones vendor): nothing can master the bus
     // or interrupt, and config writes would be dropped.
     if read16(CFG_VENDOR_ID)? == 0xFFFF {
-        return Ok(Quiesced { command: 0xFFFF, msi: false, msix: false, changed: false });
+        return Ok(Quiesced {
+            command: 0xFFFF,
+            msi: false,
+            msix: false,
+            changed: false,
+        });
     }
 
     // Function first: once Bus Master is off the device cannot start new DMA,
     // whatever the interrupt capabilities below turn out to hold.
     let command = update(CFG_COMMAND, quiesced_command)?;
-    let mut quiesced = Quiesced { command, msi: false, msix: false, changed: false };
+    let mut quiesced = Quiesced {
+        command,
+        msi: false,
+        msix: false,
+        changed: false,
+    };
 
     if read16(CFG_STATUS)? & STATUS_CAP_LIST != 0 {
         let mut cap = read8(CFG_CAP_PTR)? & 0xFC;
@@ -1047,8 +1068,10 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 
     let mut devices = PCI_DEVICES.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     devices.push(PciDevice {
         bdf: (bus, dev, fun),
         vendor_id,
@@ -1073,8 +1096,10 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 pub fn devices() -> Vec<PciDevice> {
     let devices = PCI_DEVICES.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
     devices.clone()
 }
 
@@ -1114,7 +1139,8 @@ unsafe fn fingerprint_in_window(
             let (vendor, device) =
                 unsafe { read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)? };
             // Dword at 0x08: revision ID, prog IF, subclass, class code.
-            let class_reg = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, 0x08)?;
+            let class_reg =
+                config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, 0x08)?;
             // SAFETY: the checked, 4-byte-aligned class register lies in the
             // same live function header.
             let class_code = unsafe { core::ptr::read_volatile(class_reg.cast::<u32>()) };
@@ -1223,10 +1249,10 @@ mod tests {
         assert!(ethernet_id_has_driver(0x8086, 0x100E)); // 82540EM, /bin/e1000
         assert!(ethernet_id_has_driver(0x8086, 0x10C9)); // QEMU igb model
         assert!(ethernet_id_has_driver(0x8086, 0x1533)); // i210 copper, external flash
-        // Everything else stays refused by name — notably the recorded
-        // e1000e/I219 follow-up, a non-Intel Ethernet controller, and the igb
-        // SKUs whose prerequisites the cell does not implement yet (flashless
-        // i210 and i211 need iNVM; fibre/SerDes/SGMII need media link setup).
+                                                         // Everything else stays refused by name — notably the recorded
+                                                         // e1000e/I219 follow-up, a non-Intel Ethernet controller, and the igb
+                                                         // SKUs whose prerequisites the cell does not implement yet (flashless
+                                                         // i210 and i211 need iNVM; fibre/SerDes/SGMII need media link setup).
         assert!(!ethernet_id_has_driver(0x8086, 0x10D3)); // e1000e/I219
         assert!(!ethernet_id_has_driver(0x8086, 0x1539)); // i211 — needs iNVM
         assert!(!ethernet_id_has_driver(0x8086, 0x157B)); // i210 flashless — needs iNVM
@@ -1300,9 +1326,20 @@ mod tests {
                 changed: true,
             })
         );
-        assert_eq!(read_config(&ecam, CFG_COMMAND), CMD_MEM_SPACE | CMD_INTX_DISABLE);
-        assert_eq!(read_config(&ecam, 0x42), 1 << 7, "MSI enable cleared, other bits kept");
-        assert_eq!(read_config(&ecam, 0x62), MSIX_FUNCTION_MASK | 0x7, "MSI-X off and masked");
+        assert_eq!(
+            read_config(&ecam, CFG_COMMAND),
+            CMD_MEM_SPACE | CMD_INTX_DISABLE
+        );
+        assert_eq!(
+            read_config(&ecam, 0x42),
+            1 << 7,
+            "MSI enable cleared, other bits kept"
+        );
+        assert_eq!(
+            read_config(&ecam, 0x62),
+            MSIX_FUNCTION_MASK | 0x7,
+            "MSI-X off and masked"
+        );
 
         // A retry after an IOMMU timeout repeats quiescence; it must not report
         // a second transition.
@@ -1339,7 +1376,10 @@ mod tests {
         // SAFETY: as above.
         let absent = unsafe { quiesce_in_window(base, 0, 0, 0x00FF) };
         assert_eq!(absent.map(|q| q.changed), Ok(false));
-        assert!(ecam.iter().all(|&byte| byte == 0xFF), "nothing written to an absent function");
+        assert!(
+            ecam.iter().all(|&byte| byte == 0xFF),
+            "nothing written to an absent function"
+        );
         // 0x02_00_00 decodes to 00:00.0 if the high bits are dropped.
         // SAFETY: as above.
         let overflow = unsafe { quiesce_in_window(base, 0, 0, 0x02_00_00) };

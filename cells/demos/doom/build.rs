@@ -89,7 +89,9 @@ fn main() {
     let mut build = cc::Build::new();
 
     let env_key = target.replace('-', "_");
-    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v == "1" || v == "true").unwrap_or(false);
+    let use_zig = std::env::var("CELLOS_USE_ZIG")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
     let custom_cc = std::env::var(format!("CC_{env_key}"))
         .or_else(|_| std::env::var("CC"))
         .ok();
@@ -119,11 +121,15 @@ fn main() {
 
     // RISC-V bare-metal toolchain
     if target.contains("riscv") {
-        if !use_zig && custom_cc.is_none() && std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
+        if !use_zig
+            && custom_cc.is_none()
+            && std::env::var("CC_riscv64gc_unknown_none_elf").is_err()
+        {
             build.compiler("riscv-none-elf-gcc");
         }
         build.flag("-mabi=lp64d");
-        if !use_zig && custom_ar.is_none()
+        if !use_zig
+            && custom_ar.is_none()
             && std::env::var("AR_riscv64gc_unknown_none_elf").is_err()
             && std::env::var("AR_riscv64gc-unknown-none-elf").is_err()
             && std::env::var("TARGET_AR").is_err()

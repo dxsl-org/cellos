@@ -105,7 +105,11 @@ impl NetClient {
         {
             NetResponse::Data(b) if b.len() >= 4 => {
                 let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
-                if n <= data.len() { Ok(n) } else { Err(ViError::IO) }
+                if n <= data.len() {
+                    Ok(n)
+                } else {
+                    Err(ViError::IO)
+                }
             }
             NetResponse::Ok => Ok(data.len()),
             NetResponse::Err(code) => Err(net_error(code)),

@@ -107,7 +107,9 @@ fn test_exhaustive_power_cut_injections() {
                     let mut buf = [0u8; 64];
                     match recovered_fs.read_file("/etc/config.json", 0, &mut buf) {
                         Ok(n) => assert!(n > 0),
-                        Err(error) => assert!(matches!(error, FsError::Corrupted | FsError::NotFound)),
+                        Err(error) => {
+                            assert!(matches!(error, FsError::Corrupted | FsError::NotFound))
+                        }
                     }
                 }
 
@@ -124,10 +126,7 @@ fn test_exhaustive_power_cut_injections() {
         "Write-cut observations: {} write steps, {} opens, {} refusals.",
         iterations, recovered_count, refused_count
     );
-    assert_eq!(
-        recovered_count + refused_count,
-        (iterations - 1) as usize
-    );
+    assert_eq!(recovered_count + refused_count, (iterations - 1) as usize);
 }
 
 /// Simple XorShift64 PRNG for deterministic, dependency-free fuzzing.
@@ -284,7 +283,11 @@ fn open_transport_geometry_and_allocator_failures_never_write() {
             _ => sb.free_block_count = u64::MAX,
         });
         let writes = disk.write_count();
-        assert_eq!(CellosFs::open(disk.clone()).err(), Some(FsError::Corrupted), "case {case}");
+        assert_eq!(
+            CellosFs::open(disk.clone()).err(),
+            Some(FsError::Corrupted),
+            "case {case}"
+        );
         assert_eq!(disk.write_count(), writes);
     }
     let mut disk = MemDisk::new(128);
@@ -300,7 +303,10 @@ fn open_transport_geometry_and_allocator_failures_never_write() {
         assert_eq!(observed.free_blocks(), 124);
     }
     assert_eq!(disk.write_count(), writes);
-    assert_eq!(CellosFs::format(disk.clone(), 127).err(), Some(FsError::PartitionOverflow));
+    assert_eq!(
+        CellosFs::format(disk.clone(), 127).err(),
+        Some(FsError::PartitionOverflow)
+    );
     assert_eq!(disk.write_count(), writes);
 }
 
@@ -348,14 +354,20 @@ fn preserved_data_metadata_and_rename_lookup_read_errors_propagate() {
             // Cached operations cannot encounter this read fault, but complete
             // both-root reconstruction must propagate it rather than skip a root.
             let writes = disk.write_count();
-            assert_eq!(CellosFs::open(control.clone()).err(), Some(FsError::IoError));
+            assert_eq!(
+                CellosFs::open(control.clone()).err(),
+                Some(FsError::IoError)
+            );
             assert_eq!(disk.write_count(), writes);
         }
         control.fail_read.set(None);
         let writes = disk.write_count();
         let mut observed = CellosFs::open(control.clone()).unwrap();
         let mut data = vec![0; 8192];
-        assert_eq!(observed.read_file("/file", 0, &mut data).unwrap(), data.len());
+        assert_eq!(
+            observed.read_file("/file", 0, &mut data).unwrap(),
+            data.len()
+        );
         if scenario == 0 {
             assert!(data.iter().all(|&b| b == 0x41));
         }
@@ -371,7 +383,8 @@ fn later_multiblock_read_and_data_write_failures_are_not_short_successes() {
         let control = FaultDisk::new(disk.clone());
         let mut fs = CellosFs::format(control.clone(), 128).unwrap();
         fs.create_file("/file").unwrap();
-        fs.replace_file("/file", &vec![0x77; 3 * BLOCK_SIZE]).unwrap();
+        fs.replace_file("/file", &vec![0x77; 3 * BLOCK_SIZE])
+            .unwrap();
         fs.sync().unwrap();
         if scenario == 0 {
             let inode = fs.lookup("/file").unwrap();
@@ -381,7 +394,10 @@ fn later_multiblock_read_and_data_write_failures_are_not_short_successes() {
             assert_eq!(fs.read_file("/file", 0, &mut output), Err(FsError::IoError));
         } else {
             disk.set_power_cut(disk.write_count() + 1);
-            assert_eq!(fs.replace_file("/file", &vec![0x88; 3 * BLOCK_SIZE]), Err(FsError::IoError));
+            assert_eq!(
+                fs.replace_file("/file", &vec![0x88; 3 * BLOCK_SIZE]),
+                Err(FsError::IoError)
+            );
         }
         drop(fs);
     }
@@ -448,10 +464,18 @@ fn malformed_inode_mappings_refuse_instead_of_short_or_fabricated_reads() {
         {
             let mut fs = CellosFs::open(disk.clone()).unwrap();
             let mut output = [0; 9000];
-            assert_eq!(fs.read_file("/file", 0, &mut output), Err(FsError::Corrupted), "case {case}");
+            assert_eq!(
+                fs.read_file("/file", 0, &mut output),
+                Err(FsError::Corrupted),
+                "case {case}"
+            );
         }
         #[cfg(feature = "g2-cow-experiment")]
-        assert_eq!(CellosFs::open(disk.clone()).err(), Some(FsError::Corrupted), "case {case}");
+        assert_eq!(
+            CellosFs::open(disk.clone()).err(),
+            Some(FsError::Corrupted),
+            "case {case}"
+        );
         assert_eq!(disk.write_count(), writes);
     }
 }
@@ -470,18 +494,34 @@ fn direct_library_seven_mutations_propagate_both_flush_failures() {
             let baseline = control.flush_calls.get();
             control.fail_flush.set(Some(baseline + flush_position));
             match operation {
-                0 => { fs.replace_file("/file", b"replacement").unwrap(); }
-                1 => { fs.write_file("/file", 1, b"position").unwrap(); }
+                0 => {
+                    fs.replace_file("/file", b"replacement").unwrap();
+                }
+                1 => {
+                    fs.write_file("/file", 1, b"position").unwrap();
+                }
                 2 => {
                     let size = fs.lookup("/file").unwrap().size;
                     fs.write_file("/file", size, b"append").unwrap();
                 }
-                3 => { fs.create_dir("/newdir").unwrap(); }
-                4 => { fs.rmdir("/dir").unwrap(); }
-                5 => { fs.unlink("/file").unwrap(); }
-                _ => { fs.rename("/file", "/renamed").unwrap(); }
+                3 => {
+                    fs.create_dir("/newdir").unwrap();
+                }
+                4 => {
+                    fs.rmdir("/dir").unwrap();
+                }
+                5 => {
+                    fs.unlink("/file").unwrap();
+                }
+                _ => {
+                    fs.rename("/file", "/renamed").unwrap();
+                }
             }
-            assert_eq!(fs.sync(), Err(FsError::IoError), "operation {operation}, flush {flush_position}");
+            assert_eq!(
+                fs.sync(),
+                Err(FsError::IoError),
+                "operation {operation}, flush {flush_position}"
+            );
             assert_eq!(control.flush_calls.get(), baseline + flush_position);
             drop(fs);
             control.fail_flush.set(None);
@@ -537,11 +577,20 @@ fn bounded_and_vectorized_requests_check_entire_range_before_io() {
     let observer = disk.clone();
     let mut bounded = cellos_fs::BoundedDisk::new(disk, u64::MAX, 4);
     let bytes = [0; BLOCK_SIZE];
-    assert_eq!(bounded.write_block(0, &bytes), Err(FsError::PartitionOverflow));
+    assert_eq!(
+        bounded.write_block(0, &bytes),
+        Err(FsError::PartitionOverflow)
+    );
     assert_eq!(observer.write_count(), 0);
     let mut disk = observer.clone();
-    assert_eq!(disk.write_blocks(15, 2, &[0; 2 * BLOCK_SIZE]), Err(FsError::PartitionOverflow));
-    assert_eq!(disk.write_blocks(u64::MAX, 2, &[0; 2 * BLOCK_SIZE]), Err(FsError::PartitionOverflow));
+    assert_eq!(
+        disk.write_blocks(15, 2, &[0; 2 * BLOCK_SIZE]),
+        Err(FsError::PartitionOverflow)
+    );
+    assert_eq!(
+        disk.write_blocks(u64::MAX, 2, &[0; 2 * BLOCK_SIZE]),
+        Err(FsError::PartitionOverflow)
+    );
     assert_eq!(disk.write_count(), 0);
     let mut short = [0; BLOCK_SIZE];
     assert_eq!(disk.read_blocks(0, 2, &mut short), Err(FsError::IoError));
@@ -568,7 +617,11 @@ fn open_refuses_selected_inode_table_blocks_marked_free_without_writing() {
         let writes = disk.write_count();
         let flushes = disk.flush_count();
         #[cfg(not(feature = "g2-cow-experiment"))]
-        assert_eq!(CellosFs::open(disk.clone()).err(), Some(FsError::Corrupted), "slot {slot}");
+        assert_eq!(
+            CellosFs::open(disk.clone()).err(),
+            Some(FsError::Corrupted),
+            "slot {slot}"
+        );
         #[cfg(feature = "g2-cow-experiment")]
         {
             let mut observed = CellosFs::open(disk.clone()).unwrap();

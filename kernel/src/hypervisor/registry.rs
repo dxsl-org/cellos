@@ -871,8 +871,8 @@ pub fn pi_monitor_smoke() {
     let mut vcpu = AArch64Vcpu::new(IPA);
     // These markers distinguish an unobserved EL2 write from a genuine trap
     // whose syndrome and PC happen to be zero.
-    vcpu.exit_esr = 0x534d_4f4b_4553_52;
-    vcpu.exit_elr = 0x534d_4f4b_4550_43;
+    vcpu.exit_esr = 0x0053_4d4f_4b45_5352;
+    vcpu.exit_elr = 0x0053_4d4f_4b45_5043;
     // Boot has DAIF.I set: defer the existing, still-routed physical timers
     // for a bounded 100 ms guest smoke window. Otherwise their pre-boot
     // pending IRQs can turn a conditional WFI into a NOP. Production vCPU
@@ -918,7 +918,9 @@ pub fn pi_monitor_smoke() {
             // EL1's own view of the same words EL2 reported: if they differ the
             // two regimes disagree about memory; if they agree, the divergence is
             // in what the *hardware* walk/fetch saw, not in what software reads.
-            let el1_root_leaf = unsafe { core::ptr::read_volatile(phys_to_virt(table.root_pa() as usize) as *const u64) };
+            let el1_root_leaf = unsafe {
+                core::ptr::read_volatile(phys_to_virt(table.root_pa() as usize) as *const u64)
+            };
             let el1_insn = unsafe { core::ptr::read_volatile(page) };
             log::warn!(
                 "[pi-monitor] HVC exit={:?} pc={:#x} esr={:#x} EL1 leaf0={:#x} EL1 insn={:#x}",

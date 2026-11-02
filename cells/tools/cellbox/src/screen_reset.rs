@@ -115,7 +115,9 @@ impl ModeTracker {
                 b'0'..=b'9' => {
                     if self.count <= MAX_PARAMS {
                         let param = &mut self.params[self.count - 1];
-                        *param = param.saturating_mul(10).saturating_add(u16::from(byte - b'0'));
+                        *param = param
+                            .saturating_mul(10)
+                            .saturating_add(u16::from(byte - b'0'));
                     }
                     State::Private
                 }
@@ -167,7 +169,9 @@ pub struct RelayScreen {
 
 impl RelayScreen {
     pub const fn new() -> Self {
-        Self { streams: [ModeTracker::new(); 2] }
+        Self {
+            streams: [ModeTracker::new(); 2],
+        }
     }
 
     /// Follow `bytes` the shell relays from a child's stdout (`diagnostic == false`)
@@ -212,16 +216,25 @@ mod tests {
         assert!(dirty_after(b"\x1b[?1049h"));
         assert!(dirty_after(b"\x1b[?25l"));
         assert!(dirty_after(b"\x1b[?2004h"));
-        assert!(dirty_after(&cat(&[TUI_ENTER, b"\x1b[?2004l\x1b[?25h"])), "alternate screen still on");
+        assert!(
+            dirty_after(&cat(&[TUI_ENTER, b"\x1b[?2004l\x1b[?25h"])),
+            "alternate screen still on"
+        );
     }
 
     #[test]
     fn tui_enter_then_restore_is_clean() {
-        assert!(!dirty_after(&cat(&[TUI_ENTER, b"\x1b[2J\x1b[1;1Hhello\x1b[0m", TUI_LEAVE])));
+        assert!(!dirty_after(&cat(&[
+            TUI_ENTER,
+            b"\x1b[2J\x1b[1;1Hhello\x1b[0m",
+            TUI_LEAVE
+        ])));
         // Baseline-preserving switches are no-ops.
         assert!(!dirty_after(b"\x1b[?1049l\x1b[?25h\x1b[?2004l"));
         // Ordinary output never dirties.
-        assert!(!dirty_after(b"p03-hex len=6 hex=00ff41fe807a\n\x00\xff\xfe\x80"));
+        assert!(!dirty_after(
+            b"p03-hex len=6 hex=00ff41fe807a\n\x00\xff\xfe\x80"
+        ));
     }
 
     #[test]

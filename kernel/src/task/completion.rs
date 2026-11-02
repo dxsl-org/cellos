@@ -46,7 +46,6 @@ pub const QUEUE_CAPACITY: usize = 32;
 /// Maximum number of concurrent registered waiters per cell completion queue.
 pub const MAX_WAITERS: usize = 32;
 
-
 /// Names one submission within the cell that reserved it.
 ///
 /// A slot — not a task id — is the identifier a completion carries. Task ids are
@@ -146,10 +145,16 @@ impl CompletionQueue {
     pub(crate) fn p01_bind(&self, owner: crate::p01_measurement::Owner) {
         let refused = {
             let previous = self.p01_tid.load(Ordering::Acquire);
-            if previous == owner.tid as usize { return; }
-            self.p01_tid.compare_exchange(0, owner.tid as usize, Ordering::Release, Ordering::Relaxed).is_err()
+            if previous == owner.tid as usize {
+                return;
+            }
+            self.p01_tid
+                .compare_exchange(0, owner.tid as usize, Ordering::Release, Ordering::Relaxed)
+                .is_err()
         };
-        if refused { crate::p01_resources::unknown(owner, 2); }
+        if refused {
+            crate::p01_resources::unknown(owner, 2);
+        }
     }
 
     /// Cell this queue belongs to.
@@ -169,14 +174,18 @@ impl CompletionQueue {
         let mut ring = self.ring.lock();
         let Some(index) = ring.slots.iter().position(|s| *s == Slot::Free) else {
             #[cfg(cellos_p01_trace)]
-            if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+            if let Some(owner) =
+                crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire))
+            {
                 crate::p01_resources::unknown(owner, 2);
             }
             return None;
         };
         ring.slots[index] = Slot::Reserved;
         #[cfg(cellos_p01_trace)]
-        if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+        if let Some(owner) =
+            crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire))
+        {
             ring.p01_obligations[index] = crate::p01_resources::completion_obligation(owner);
         }
         Some(SlotId(index as u16))
@@ -357,7 +366,9 @@ impl CompletionQueue {
     /// Returns `false` when another waiter replaced `tid`; the older wait must
     /// not erase the newer waiter's registration while unwinding.
     pub fn clear_waiter(&self, tid: usize) -> bool {
-        let _ = self.waiter.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Acquire);
+        let _ = self
+            .waiter
+            .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Acquire);
         let mut list = self.waiters.lock();
         if let Some(pos) = list.iter().position(|&x| x == tid) {
             list.swap_remove(pos);
@@ -403,7 +414,9 @@ impl Drop for CompletionQueue {
         for token in &mut ring.p01_obligations {
             crate::p01_resources::finish(token.take(), 1);
         }
-        if let Some(owner) = crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire)) {
+        if let Some(owner) =
+            crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire))
+        {
             crate::p01_resources::checked(owner, 2);
         }
     }
@@ -430,7 +443,10 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
         .find_map(|t| t.completion.clone())
         .unwrap_or_else(|| {
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::COMPLETION_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::COMPLETION_SHARED,
+            );
             Arc::new(CompletionQueue::new(cell))
         });
     #[cfg(cellos_p01_trace)]

@@ -291,17 +291,52 @@ fn test_fg_bg(jobs: &mut Jobs) {
 }
 
 fn test_top_batch(jobs: &mut Jobs) {
-    expect_status(jobs, "top batch Cell frame succeeds", "top -b -n 1 -d 0 -o cpu", 0);
-    expect_status(jobs, "top batch task frame succeeds", "top -b -n 1 -d 0 --tasks -o stack_bytes", 0);
-    expect_status(jobs, "top refuses a Cell-only sort key in the task view", "top -b -n 1 --tasks -o mem", 2);
+    expect_status(
+        jobs,
+        "top batch Cell frame succeeds",
+        "top -b -n 1 -d 0 -o cpu",
+        0,
+    );
+    expect_status(
+        jobs,
+        "top batch task frame succeeds",
+        "top -b -n 1 -d 0 --tasks -o stack_bytes",
+        0,
+    );
+    expect_status(
+        jobs,
+        "top refuses a Cell-only sort key in the task view",
+        "top -b -n 1 --tasks -o mem",
+        2,
+    );
     expect_status(jobs, "top refuses an unknown flag", "top -b --bogus", 2);
     // The harness has no terminal session: interactive top refuses before any capture.
-    expect_status(jobs, "interactive top refuses without a terminal session", "top -n 1", 2);
-    expect_status(jobs, "interactive top refuses a delay below 0.1 s", "top -d 0.05", 2);
+    expect_status(
+        jobs,
+        "interactive top refuses without a terminal session",
+        "top -n 1",
+        2,
+    );
+    expect_status(
+        jobs,
+        "interactive top refuses a delay below 0.1 s",
+        "top -d 0.05",
+        2,
+    );
     // A command substitution is a capture: interactive top refuses there with its own
     // status and the containing assignment never runs.
-    expect_status(jobs, "interactive top refuses inside a command substitution", "st_top_subst=$(top)", 2);
-    expect_output(jobs, "a refused substitution assigns nothing", "echo [$st_top_subst]", "[]\n");
+    expect_status(
+        jobs,
+        "interactive top refuses inside a command substitution",
+        "st_top_subst=$(top)",
+        2,
+    );
+    expect_output(
+        jobs,
+        "a refused substitution assigns nothing",
+        "echo [$st_top_subst]",
+        "[]\n",
+    );
     expect_status(jobs, "ps refuses an unknown flag", "ps --bogus", 2);
 }
 
@@ -743,7 +778,10 @@ fn expect_refused(jobs: &mut Jobs, name: &str, line: &str, sentinel: &str) {
     check(
         name,
         status == 2 && out.is_empty() && absent == 1,
-        &alloc::format!("status={status} output_bytes={} sentinel_status={absent}", out.len()),
+        &alloc::format!(
+            "status={status} output_bytes={} sentinel_status={absent}",
+            out.len()
+        ),
         "status=2 output_bytes=0 sentinel_status=1",
     );
 }
@@ -861,11 +899,36 @@ fn test_typed_admission_refusals(jobs: &mut Jobs) {
     // Stateful built-ins and sessions never run inside a pipeline; the parent
     // context is untouched.
     let (_, cwd_before) = run_captured(jobs, "pwd");
-    expect_status(jobs, "pipeline refuses cd stage", "cd /tmp | ps --records", 2);
-    expect_status(jobs, "legacy pipeline refuses assignment stage", "ST_TYPED_V=1 | cat", 2);
-    expect_status(jobs, "legacy pipeline refuses read stage", "echo x | read ST_TYPED_V", 2);
-    expect_status(jobs, "pipeline refuses an interactive top stage", "top | grep x", 2);
-    expect_status(jobs, "background refuses a stateful builtin", "cd /tmp &", 2);
+    expect_status(
+        jobs,
+        "pipeline refuses cd stage",
+        "cd /tmp | ps --records",
+        2,
+    );
+    expect_status(
+        jobs,
+        "legacy pipeline refuses assignment stage",
+        "ST_TYPED_V=1 | cat",
+        2,
+    );
+    expect_status(
+        jobs,
+        "legacy pipeline refuses read stage",
+        "echo x | read ST_TYPED_V",
+        2,
+    );
+    expect_status(
+        jobs,
+        "pipeline refuses an interactive top stage",
+        "top | grep x",
+        2,
+    );
+    expect_status(
+        jobs,
+        "background refuses a stateful builtin",
+        "cd /tmp &",
+        2,
+    );
     let (_, cwd_after) = run_captured(jobs, "pwd");
     check(
         "refused stateful stages leave cwd and variables unchanged",
@@ -911,7 +974,9 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
     expect_output(
         jobs,
         "sort-by --reverse then take",
-        &alloc::format!("cat {ROWS} | from jsonl | sort-by --reverse n | take 1 | to text --field name"),
+        &alloc::format!(
+            "cat {ROWS} | from jsonl | sort-by --reverse n | take 1 | to text --field name"
+        ),
         "c\n",
     );
     expect_output(
@@ -923,7 +988,9 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
     expect_output(
         jobs,
         "uint above i64::MAX compares exactly",
-        &alloc::format!("cat {NUMS} | from jsonl | where v == uint:18446744073709551615 | to text --field v"),
+        &alloc::format!(
+            "cat {NUMS} | from jsonl | where v == uint:18446744073709551615 | to text --field v"
+        ),
         "18446744073709551615\n",
     );
     expect_output(
@@ -932,7 +999,10 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
         &alloc::format!("cat {NUMS} | from jsonl | where v == int:0 | to text --field v"),
         "0\n",
     );
-    let (status, out) = run_captured(jobs, &alloc::format!("cat {NUMS} | from jsonl | where v == null | to jsonl"));
+    let (status, out) = run_captured(
+        jobs,
+        &alloc::format!("cat {NUMS} | from jsonl | where v == null | to jsonl"),
+    );
     let text = core::str::from_utf8(&out).unwrap_or("<invalid utf8>");
     check(
         "where == null selects only the null row",
@@ -965,7 +1035,9 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
         status == 0
             && out.is_empty()
             && encoded.lines().count() >= 1
-            && encoded.lines().all(|line| line.starts_with("{\"cellbox\":1,\"value\":[\"record\"")),
+            && encoded
+                .lines()
+                .all(|line| line.starts_with("{\"cellbox\":1,\"value\":[\"record\"")),
         &encoded,
         "typed JSONL lines",
     );
@@ -980,7 +1052,10 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
         "two lines",
     );
     exec(jobs, "rm /tmp/st_typed_text.txt");
-    exec(jobs, "ps --records --text | take 1 > /tmp/st_typed_text.txt");
+    exec(
+        jobs,
+        "ps --records --text | take 1 > /tmp/st_typed_text.txt",
+    );
     let plain = file_text("/tmp/st_typed_text.txt");
     check(
         "--text redirect is a plain table, not JSON",
@@ -989,7 +1064,10 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
         "plain table",
     );
     exec(jobs, "rm /tmp/st_typed_json.txt");
-    exec(jobs, "ps --records | take 1 | to json > /tmp/st_typed_json.txt");
+    exec(
+        jobs,
+        "ps --records | take 1 | to json > /tmp/st_typed_json.txt",
+    );
     let json = file_text("/tmp/st_typed_json.txt");
     check(
         "explicit to json serializes through a redirect",
@@ -1012,17 +1090,57 @@ fn test_typed_data_paths(jobs: &mut Jobs) {
         &file_text("/tmp/st_typed_keep.txt"),
         "KEEP",
     );
-    expect_status(jobs, "missing cat input fails with status 1", "cat /tmp/st_no_such.json | from json", 1);
-    expect_status(jobs, "missing from redirect fails with status 1", "from json < /tmp/st_no_such.json", 1);
-    expect_status(jobs, "producer error fails with status 1", "ls --records /tmp/st_no_such_dir | take 1", 1);
-    expect_status(jobs, "missing field fails with status 1", &alloc::format!("cat {ROWS} | from jsonl | select nosuch"), 1);
-    expect_status(jobs, "bad producer arguments are status 2", "ps --records --bogus", 2);
-    expect_status(jobs, "successful typed pipeline is status 0", "ps --records | take 1", 0);
+    expect_status(
+        jobs,
+        "missing cat input fails with status 1",
+        "cat /tmp/st_no_such.json | from json",
+        1,
+    );
+    expect_status(
+        jobs,
+        "missing from redirect fails with status 1",
+        "from json < /tmp/st_no_such.json",
+        1,
+    );
+    expect_status(
+        jobs,
+        "producer error fails with status 1",
+        "ls --records /tmp/st_no_such_dir | take 1",
+        1,
+    );
+    expect_status(
+        jobs,
+        "missing field fails with status 1",
+        &alloc::format!("cat {ROWS} | from jsonl | select nosuch"),
+        1,
+    );
+    expect_status(
+        jobs,
+        "bad producer arguments are status 2",
+        "ps --records --bogus",
+        2,
+    );
+    expect_status(
+        jobs,
+        "successful typed pipeline is status 0",
+        "ps --records | take 1",
+        0,
+    );
 
     // One job per pipeline with a whole-job status and member statuses.
     exec(jobs, "ps --records | take 1 | to jsonl");
-    assert_contains(jobs, "jobs lists a typed pipeline as one job", "jobs", "ps | take | to");
-    assert_contains(jobs, "jobs records the whole-pipeline status", "jobs", "status=0");
+    assert_contains(
+        jobs,
+        "jobs lists a typed pipeline as one job",
+        "jobs",
+        "ps | take | to",
+    );
+    assert_contains(
+        jobs,
+        "jobs records the whole-pipeline status",
+        "jobs",
+        "status=0",
+    );
 
     exec(jobs, "rm /tmp/st_typed_rows.jsonl");
     exec(jobs, "rm /tmp/st_typed_nums.jsonl");
@@ -1047,7 +1165,9 @@ impl text_engine::pipeline::RowSource for EndlessRows {
     ) -> Result<Option<text_engine::pipeline::Item>, text_engine::pipeline::PipelineError> {
         use text_engine::pipeline::{Item, PipelineError, Value};
         if self.fail_at == Some(self.next) {
-            return Err(PipelineError::Source(alloc::string::String::from("producer failed")));
+            return Err(PipelineError::Source(alloc::string::String::from(
+                "producer failed",
+            )));
         }
         self.next += 1;
         self.pulled.set(self.pulled.get() + 1);
@@ -1071,7 +1191,12 @@ fn endless(
 ) {
     let pulled = alloc::rc::Rc::new(core::cell::Cell::new(0));
     let closed = alloc::rc::Rc::new(core::cell::Cell::new(0));
-    let source = EndlessRows { next: 0, fail_at, pulled: pulled.clone(), closed: closed.clone() };
+    let source = EndlessRows {
+        next: 0,
+        fail_at,
+        pulled: pulled.clone(),
+        closed: closed.clone(),
+    };
     (alloc::boxed::Box::new(source), pulled, closed)
 }
 
@@ -1081,18 +1206,36 @@ fn test_typed_early_stop() {
 
     // take N closes an endless producer promptly: exactly N pulls, then close.
     let (source, pulled, closed) = endless(None);
-    let result = run_rows(source, Category::Rows, 0, &[Stage::Take { n: 3, frame: false }], DefaultSink::TypedJsonl);
-    let lines = result.as_ref().map(|bytes| bytes.iter().filter(|b| **b == b'\n').count());
+    let result = run_rows(
+        source,
+        Category::Rows,
+        0,
+        &[Stage::Take { n: 3, frame: false }],
+        DefaultSink::TypedJsonl,
+    );
+    let lines = result
+        .as_ref()
+        .map(|bytes| bytes.iter().filter(|b| **b == b'\n').count());
     check(
         "take closes the producer after N rows",
         lines == Ok(3) && pulled.get() == 3 && closed.get() >= 1,
-        &alloc::format!("lines={lines:?} pulled={} closed={}", pulled.get(), closed.get()),
+        &alloc::format!(
+            "lines={lines:?} pulled={} closed={}",
+            pulled.get(),
+            closed.get()
+        ),
         "lines=3 pulled=3 closed>=1",
     );
 
     // take 0 never pulls and still releases the producer.
     let (source, pulled, closed) = endless(None);
-    let result = run_rows(source, Category::Rows, 0, &[Stage::Take { n: 0, frame: false }], DefaultSink::TypedJsonl);
+    let result = run_rows(
+        source,
+        Category::Rows,
+        0,
+        &[Stage::Take { n: 0, frame: false }],
+        DefaultSink::TypedJsonl,
+    );
     check(
         "take 0 closes without pulling",
         matches!(&result, Ok(bytes) if bytes.is_empty()) && pulled.get() == 0 && closed.get() >= 1,
@@ -1103,7 +1246,16 @@ fn test_typed_early_stop() {
     // An upstream failure aborts the pull, is attributed to the producer stage
     // and releases it; no output bytes are produced.
     let (source, _pulled, closed) = endless(Some(2));
-    let result = run_rows(source, Category::Rows, 0, &[Stage::Take { n: 10, frame: false }], DefaultSink::TypedJsonl);
+    let result = run_rows(
+        source,
+        Category::Rows,
+        0,
+        &[Stage::Take {
+            n: 10,
+            frame: false,
+        }],
+        DefaultSink::TypedJsonl,
+    );
     check(
         "producer failure is attributed to stage 0 and closes the chain",
         matches!(&result, Err(failure) if failure.stage == 0) && closed.get() >= 1,
@@ -1113,18 +1265,26 @@ fn test_typed_early_stop() {
 
     // Global sort never waits on an infinite history: it errors at its bound.
     let (source, pulled, closed) = endless(None);
-    let sort = Stage::SortBy { field: alloc::string::String::from("n"), reverse: false, frame: false };
+    let sort = Stage::SortBy {
+        field: alloc::string::String::from("n"),
+        reverse: false,
+        frame: false,
+    };
     let result = run_rows(source, Category::Rows, 0, &[sort], DefaultSink::TypedJsonl);
     check(
         "sort-by over an endless source fails at its bound",
         result.is_err()
             && pulled.get() <= text_engine::pipeline::MAX_SORT_RECORDS as u64 + 1
             && closed.get() >= 1,
-        &alloc::format!("err={} pulled={} closed={}", result.is_err(), pulled.get(), closed.get()),
+        &alloc::format!(
+            "err={} pulled={} closed={}",
+            result.is_err(),
+            pulled.get(),
+            closed.get()
+        ),
         "Err within the sort bound, closed>=1",
     );
 }
-
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 

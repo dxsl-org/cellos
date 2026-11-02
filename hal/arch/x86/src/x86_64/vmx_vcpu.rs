@@ -76,6 +76,12 @@ impl VmxVcpu {
     /// * `hvm_info_gpa` - physical address of `hvm_start_info` struct (passed in `%ebx`).
     /// * `eptp` - formatted EPTP control value from [`NestedPageTable::eptp`].
     /// * `host_cr3` - host PML4 root physical address.
+    ///
+    /// # Safety
+    /// The CPU must be in VMX root operation, since this loads this vCPU's VMCS
+    /// and writes host state read from the live CR0/CR3/CR4 and segment
+    /// registers. `eptp` must name an EPT hierarchy that stays valid while the
+    /// guest runs, and `host_cr3` must map the kernel's VM-exit path.
     pub unsafe fn init_pvh(
         &mut self,
         entry_pc: u64,
@@ -154,10 +160,26 @@ impl VmxVcpu {
 
         // ── 2. Control Fields Setup ──────────────────────────────────────────
         let use_true = has_true_ctls();
-        let pin_msr = if use_true { MSR_IA32_VMX_TRUE_PINBASED_CTLS } else { MSR_IA32_VMX_PINBASED_CTLS };
-        let proc_msr = if use_true { MSR_IA32_VMX_TRUE_PROCBASED_CTLS } else { MSR_IA32_VMX_PROCBASED_CTLS };
-        let exit_msr = if use_true { MSR_IA32_VMX_TRUE_EXIT_CTLS } else { MSR_IA32_VMX_EXIT_CTLS };
-        let entry_msr = if use_true { MSR_IA32_VMX_TRUE_ENTRY_CTLS } else { MSR_IA32_VMX_ENTRY_CTLS };
+        let pin_msr = if use_true {
+            MSR_IA32_VMX_TRUE_PINBASED_CTLS
+        } else {
+            MSR_IA32_VMX_PINBASED_CTLS
+        };
+        let proc_msr = if use_true {
+            MSR_IA32_VMX_TRUE_PROCBASED_CTLS
+        } else {
+            MSR_IA32_VMX_PROCBASED_CTLS
+        };
+        let exit_msr = if use_true {
+            MSR_IA32_VMX_TRUE_EXIT_CTLS
+        } else {
+            MSR_IA32_VMX_EXIT_CTLS
+        };
+        let entry_msr = if use_true {
+            MSR_IA32_VMX_TRUE_ENTRY_CTLS
+        } else {
+            MSR_IA32_VMX_ENTRY_CTLS
+        };
 
         let pin_ctls = adjust_vmx_ctrl(PIN_EXTERNAL_INTERRUPT, pin_msr);
         vmwrite(PIN_BASED_VM_EXEC_CONTROL, pin_ctls as u64)?;
@@ -239,11 +261,36 @@ impl VmxVcpu {
 
         // DS, ES, SS, FS, GS: 32-bit flat data segments
         for &sel in &[
-            (GUEST_DS_SELECTOR, GUEST_DS_BASE, GUEST_DS_LIMIT, GUEST_DS_AR_BYTES),
-            (GUEST_ES_SELECTOR, GUEST_ES_BASE, GUEST_ES_LIMIT, GUEST_ES_AR_BYTES),
-            (GUEST_SS_SELECTOR, GUEST_SS_BASE, GUEST_SS_LIMIT, GUEST_SS_AR_BYTES),
-            (GUEST_FS_SELECTOR, GUEST_FS_BASE, GUEST_FS_LIMIT, GUEST_FS_AR_BYTES),
-            (GUEST_GS_SELECTOR, GUEST_GS_BASE, GUEST_GS_LIMIT, GUEST_GS_AR_BYTES),
+            (
+                GUEST_DS_SELECTOR,
+                GUEST_DS_BASE,
+                GUEST_DS_LIMIT,
+                GUEST_DS_AR_BYTES,
+            ),
+            (
+                GUEST_ES_SELECTOR,
+                GUEST_ES_BASE,
+                GUEST_ES_LIMIT,
+                GUEST_ES_AR_BYTES,
+            ),
+            (
+                GUEST_SS_SELECTOR,
+                GUEST_SS_BASE,
+                GUEST_SS_LIMIT,
+                GUEST_SS_AR_BYTES,
+            ),
+            (
+                GUEST_FS_SELECTOR,
+                GUEST_FS_BASE,
+                GUEST_FS_LIMIT,
+                GUEST_FS_AR_BYTES,
+            ),
+            (
+                GUEST_GS_SELECTOR,
+                GUEST_GS_BASE,
+                GUEST_GS_LIMIT,
+                GUEST_GS_AR_BYTES,
+            ),
         ] {
             vmwrite(sel.0, 0x18)?;
             vmwrite(sel.1, 0)?;
@@ -251,7 +298,7 @@ impl VmxVcpu {
             vmwrite(sel.3, 0xC093)?; // Present, Data, Writable, 32-bit (DB=1), 4KB gran (G=1)
         }
 
-// TR: busy 32-bit TSS (must not be null in VMX)
+        // TR: busy 32-bit TSS (must not be null in VMX)
         vmwrite(GUEST_TR_SELECTOR, 0x20)?;
         vmwrite(GUEST_TR_BASE, 0)?;
         vmwrite(GUEST_TR_LIMIT, 0x67)?; // >= 0x67 required by Intel SDM for 32-bit TSS
@@ -322,11 +369,12 @@ impl VmxVcpu {
                     if is_in {
                         return Ok(ViVmExit::PortIn { port, size });
                     } else {
-                        let val = (self.gpr[0] & match size {
-                            1 => 0xFF,
-                            2 => 0xFFFF,
-                            _ => 0xFFFF_FFFF,
-                        }) as u32;
+                        let val = (self.gpr[0]
+                            & match size {
+                                1 => 0xFF,
+                                2 => 0xFFFF,
+                                _ => 0xFFFF_FFFF,
+                            }) as u32;
                         return Ok(ViVmExit::PortOut { port, size, val });
                     }
                 }
@@ -396,9 +444,8 @@ impl VmxVcpu {
                             } else {
                                 MSR_IA32_VMX_ENTRY_CTLS
                             };
-                            let entry_ctls = unsafe {
-                                adjust_vmx_ctrl(ENTRY_IA32E_MODE_GUEST, entry_msr)
-                            };
+                            let entry_ctls =
+                                unsafe { adjust_vmx_ctrl(ENTRY_IA32E_MODE_GUEST, entry_msr) };
                             unsafe {
                                 let _ = vmwrite(VM_ENTRY_CONTROLS, entry_ctls as u64);
                                 let _ = vmwrite(GUEST_CR0, reg_val);

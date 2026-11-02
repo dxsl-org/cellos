@@ -62,15 +62,22 @@ impl Provider {
                 let _ = syscall::sys_notify_on_exit(tid);
                 self.auth.expect_worker(nonce, tid);
                 self.worker = Some(tid);
-                println(&format!("[recovery-authority] spawned worker tid={tid} restarts={}", self.restarts));
+                println(&format!(
+                    "[recovery-authority] spawned worker tid={tid} restarts={}",
+                    self.restarts
+                ));
             }
-            SyscallResult::Err(error) => self.recovery_failed(&format!("worker spawn failed: {error:?}")),
+            SyscallResult::Err(error) => {
+                self.recovery_failed(&format!("worker spawn failed: {error:?}"))
+            }
         }
     }
 
     pub fn recovery_failed(&mut self, why: &str) {
         self.state = state::RECOVERY_FAILED;
-        println(&format!("[recovery-authority] RecoveryFailed: {why}; no Ready publication"));
+        println(&format!(
+            "[recovery-authority] RecoveryFailed: {why}; no Ready publication"
+        ));
     }
 
     /// Death of the current worker root: fence, read the verdict, then decide.
@@ -89,10 +96,14 @@ impl Provider {
             None => println("[recovery-authority] verdict unavailable: treated as Unproven"),
         }
         self.discard_lent();
-        let unproven = self.verdict.map_or(true, |v| v.retirement_state() == Some(RetirementState::Unproven));
+        let unproven = self
+            .verdict
+            .is_none_or(|v| v.retirement_state() == Some(RetirementState::Unproven));
         if unproven {
             self.state = state::NODE_RECOVERY_REQUIRED;
-            println("[recovery-authority] node recovery required: containment unproven, no restart");
+            println(
+                "[recovery-authority] node recovery required: containment unproven, no restart",
+            );
             return;
         }
         if self.state == state::RECOVERY_FAILED {
@@ -110,7 +121,9 @@ impl Provider {
     /// A page the dead writer could modify holds unproven invariants: read the
     /// lock word for the record, then free it. It is never unlocked or reused.
     fn discard_lent(&mut self) {
-        let Some(grant) = self.lent.take() else { return };
+        let Some(grant) = self.lent.take() else {
+            return;
+        };
         let mut word = [0u8; 8];
         let _ = syscall::sys_grant_copy_to_slice(grant, &mut word);
         self.lock_word = u64::from_le_bytes(word);
@@ -149,7 +162,9 @@ fn wait_verdict(root_tid: usize) -> Option<ViRetirementV1> {
             Ok(v) if v.retirement_state() == Some(RetirementState::Pending) => common::sleep(1),
             Ok(v) => return Some(v),
             Err(error) => {
-                println(&format!("[recovery-authority] QueryRetirement({root_tid}) refused: {error:?}"));
+                println(&format!(
+                    "[recovery-authority] QueryRetirement({root_tid}) refused: {error:?}"
+                ));
                 return None;
             }
         }

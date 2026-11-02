@@ -25,33 +25,75 @@ fn state(record: &ViRetirementV1) -> Option<RetirementState> {
 
 #[test]
 fn classification_matrix() {
-    let clean = RetirementTally { member_threads: 2, grants_reclaimed: 3, ..Default::default() };
+    let clean = RetirementTally {
+        member_threads: 2,
+        grants_reclaimed: 3,
+        ..Default::default()
+    };
     assert_eq!(classify(&clean), (RetirementState::Contained, 0));
 
-    let borrow = RetirementTally { writable_borrows: 1, ..Default::default() };
-    assert_eq!(classify(&borrow), (RetirementState::Contained, reason::WRITABLE_BORROW));
-
-    let dma = RetirementTally { dma_deferred: 1, ..Default::default() };
-    assert_eq!(classify(&dma), (RetirementState::Quarantined, reason::DMA_DEFERRED));
-
-    for tracked in [
-        RetirementTally { quarantined_pages: 4, ..Default::default() },
-        RetirementTally { pins_quarantined: 1, ..Default::default() },
-        RetirementTally { vfs_leases_pending: 1, ..Default::default() },
-    ] {
-        assert_eq!(classify(&tracked), (RetirementState::Quarantined, reason::TRACKED_QUARANTINE));
-    }
-
-    let shm = RetirementTally { shm_frames_released: 1, dma_deferred: 1, ..Default::default() };
+    let borrow = RetirementTally {
+        writable_borrows: 1,
+        ..Default::default()
+    };
     assert_eq!(
-        classify(&shm),
-        (RetirementState::Unproven, reason::SHM_UNTRACKED | reason::DMA_DEFERRED)
+        classify(&borrow),
+        (RetirementState::Contained, reason::WRITABLE_BORROW)
     );
 
-    let leak = RetirementTally { leaked_pages: 2, pins_quarantined: 1, ..Default::default() };
+    let dma = RetirementTally {
+        dma_deferred: 1,
+        ..Default::default()
+    };
+    assert_eq!(
+        classify(&dma),
+        (RetirementState::Quarantined, reason::DMA_DEFERRED)
+    );
+
+    for tracked in [
+        RetirementTally {
+            quarantined_pages: 4,
+            ..Default::default()
+        },
+        RetirementTally {
+            pins_quarantined: 1,
+            ..Default::default()
+        },
+        RetirementTally {
+            vfs_leases_pending: 1,
+            ..Default::default()
+        },
+    ] {
+        assert_eq!(
+            classify(&tracked),
+            (RetirementState::Quarantined, reason::TRACKED_QUARANTINE)
+        );
+    }
+
+    let shm = RetirementTally {
+        shm_frames_released: 1,
+        dma_deferred: 1,
+        ..Default::default()
+    };
+    assert_eq!(
+        classify(&shm),
+        (
+            RetirementState::Unproven,
+            reason::SHM_UNTRACKED | reason::DMA_DEFERRED
+        )
+    );
+
+    let leak = RetirementTally {
+        leaked_pages: 2,
+        pins_quarantined: 1,
+        ..Default::default()
+    };
     assert_eq!(
         classify(&leak),
-        (RetirementState::Unproven, reason::QUARANTINE_OVERFLOW | reason::TRACKED_QUARANTINE)
+        (
+            RetirementState::Unproven,
+            reason::QUARANTINE_OVERFLOW | reason::TRACKED_QUARANTINE
+        )
     );
 }
 
@@ -62,7 +104,10 @@ fn record_is_pending_until_closed_then_final() {
     assert!(open(o, &[50]));
     let pending = query(50, false, o.root_tid as usize).unwrap();
     assert_eq!(state(&pending), Some(RetirementState::Pending));
-    assert_eq!((pending.cell_id, pending.generation), (o.cell_id, o.generation));
+    assert_eq!(
+        (pending.cell_id, pending.generation),
+        (o.cell_id, o.generation)
+    );
 
     let tally = RetirementTally {
         member_threads: 3,
@@ -74,7 +119,10 @@ fn record_is_pending_until_closed_then_final() {
     close(o, tally);
     let done = query(50, false, o.root_tid as usize).unwrap();
     assert_eq!(state(&done), Some(RetirementState::Unproven));
-    assert_eq!(done.reasons, reason::SHM_UNTRACKED | reason::WRITABLE_BORROW);
+    assert_eq!(
+        done.reasons,
+        reason::SHM_UNTRACKED | reason::WRITABLE_BORROW
+    );
     assert_eq!((done.member_threads, done.remote_hart_mask), (3, 0b10));
     assert_eq!(done.shm_frames_released, 2);
     assert_eq!(ViRetirementV1::decode(&done.encode()), Ok(done));
@@ -101,7 +149,10 @@ fn watchers_beyond_the_bound_are_not_admitted() {
     assert!(open(o, &many));
     let root = o.root_tid as usize;
     assert!(query(200 + MAX_WATCHERS - 1, false, root).is_ok());
-    assert_eq!(query(200 + MAX_WATCHERS, false, root), Err(QueryError::Denied));
+    assert_eq!(
+        query(200 + MAX_WATCHERS, false, root),
+        Err(QueryError::Denied)
+    );
 }
 
 #[test]
@@ -111,7 +162,10 @@ fn pending_records_are_never_evicted() {
         assert!(open(owner(n), &[50]));
     }
     assert!(!open(owner(500), &[50]), "every slot pending: not recorded");
-    assert_eq!(query(50, false, owner(500).root_tid as usize), Err(QueryError::NotFound));
+    assert_eq!(
+        query(50, false, owner(500).root_tid as usize),
+        Err(QueryError::NotFound)
+    );
     for n in 0..MAX_RECORDS as u64 {
         assert!(query(50, false, owner(n).root_tid as usize).is_ok());
     }
@@ -126,10 +180,19 @@ fn full_table_evicts_the_oldest_final_record() {
     close(owner(9), RetirementTally::default());
     close(owner(4), RetirementTally::default());
     assert!(open(owner(500), &[50]));
-    assert_eq!(query(50, false, owner(9).root_tid as usize), Err(QueryError::NotFound));
-    assert!(query(50, false, owner(4).root_tid as usize).is_ok(), "closed later, kept");
+    assert_eq!(
+        query(50, false, owner(9).root_tid as usize),
+        Err(QueryError::NotFound)
+    );
+    assert!(
+        query(50, false, owner(4).root_tid as usize).is_ok(),
+        "closed later, kept"
+    );
     assert!(open(owner(501), &[50]));
-    assert_eq!(query(50, false, owner(4).root_tid as usize), Err(QueryError::NotFound));
+    assert_eq!(
+        query(50, false, owner(4).root_tid as usize),
+        Err(QueryError::NotFound)
+    );
     assert!(!open(owner(502), &[50]), "only pending records remain");
 }
 
@@ -137,12 +200,31 @@ fn full_table_evicts_the_oldest_final_record() {
 fn closing_an_unknown_owner_is_a_no_op() {
     let _g = guard();
     let o = owner(5);
-    close(o, RetirementTally { leaked_pages: 1, ..Default::default() });
-    assert_eq!(query(50, true, o.root_tid as usize), Err(QueryError::NotFound));
+    close(
+        o,
+        RetirementTally {
+            leaked_pages: 1,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        query(50, true, o.root_tid as usize),
+        Err(QueryError::NotFound)
+    );
 
     assert!(open(o, &[50]));
     close(o, RetirementTally::default());
-    close(o, RetirementTally { leaked_pages: 1, ..Default::default() });
+    close(
+        o,
+        RetirementTally {
+            leaked_pages: 1,
+            ..Default::default()
+        },
+    );
     let record = query(50, false, o.root_tid as usize).unwrap();
-    assert_eq!(state(&record), Some(RetirementState::Contained), "final record is not rewritten");
+    assert_eq!(
+        state(&record),
+        Some(RetirementState::Contained),
+        "final record is not rewritten"
+    );
 }

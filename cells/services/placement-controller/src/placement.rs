@@ -18,15 +18,14 @@ pub struct CandidateNode {
 /// 2. Greater normalized capacity headroom
 /// 3. Lexicographical NodeId tie-break
 pub fn rank_nodes<'a>(candidates: &'a mut [CandidateNode]) -> Vec<&'a CandidateNode> {
-    let mut eligible: Vec<&'a CandidateNode> = candidates.iter().filter(|n| n.is_eligible).collect();
-    eligible.sort_by(|a, b| {
-        match a.app_replicas.cmp(&b.app_replicas) {
-            Ordering::Equal => match b.normalized_headroom.cmp(&a.normalized_headroom) {
-                Ordering::Equal => a.node_id.cmp(&b.node_id),
-                other => other,
-            },
+    let mut eligible: Vec<&'a CandidateNode> =
+        candidates.iter().filter(|n| n.is_eligible).collect();
+    eligible.sort_by(|a, b| match a.app_replicas.cmp(&b.app_replicas) {
+        Ordering::Equal => match b.normalized_headroom.cmp(&a.normalized_headroom) {
+            Ordering::Equal => a.node_id.cmp(&b.node_id),
             other => other,
-        }
+        },
+        other => other,
     });
     eligible
 }

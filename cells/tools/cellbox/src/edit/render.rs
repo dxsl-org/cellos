@@ -54,7 +54,11 @@ fn cells(text: &str) -> Vec<Cell> {
         };
         match out.last_mut() {
             Some(last) if width == 0 => last.text.push_str(&shown),
-            _ => out.push(Cell { text: shown, byte, width }),
+            _ => out.push(Cell {
+                text: shown,
+                byte,
+                width,
+            }),
         }
         col += width;
     }
@@ -108,7 +112,9 @@ pub fn draw(editor: &mut Editor, theme: &Theme, area: Rect, out: &mut Buffer) ->
     } else {
         for row in 0..rows {
             let index = editor.top + row;
-            let Some(line) = editor.buf.lines().get(index) else { break };
+            let Some(line) = editor.buf.lines().get(index) else {
+                break;
+            };
             spans.clear();
             if let Some(lang) = lang {
                 carry = highlight(lang, carry, &line.text, &mut spans);
@@ -123,10 +129,15 @@ pub fn draw(editor: &mut Editor, theme: &Theme, area: Rect, out: &mut Buffer) ->
                 }
                 let x = area.x + (start.saturating_sub(editor.left)) as u16;
                 let selected = selection.is_some_and(|(a, b)| {
-                    let here = text_engine::editor::Pos { line: index, byte: cell.byte };
+                    let here = text_engine::editor::Pos {
+                        line: index,
+                        byte: cell.byte,
+                    };
                     a <= here && here < b
                 });
-                let mut style = spans.iter().find(|s| s.start <= cell.byte && cell.byte < s.end)
+                let mut style = spans
+                    .iter()
+                    .find(|s| s.start <= cell.byte && cell.byte < s.end)
                     .map_or(theme.base(), |s| syntax_style(theme, s.kind));
                 if selected {
                     style = style.add_modifier(Modifier::REVERSED);
@@ -150,7 +161,10 @@ pub fn draw(editor: &mut Editor, theme: &Theme, area: Rect, out: &mut Buffer) ->
         cursor_col + 1,
     );
     let status_y = area.y + rows as u16;
-    out.set_style(Rect::new(area.x, status_y, area.width, 1), theme.status_line_style());
+    out.set_style(
+        Rect::new(area.x, status_y, area.width, 1),
+        theme.status_line_style(),
+    );
     out.set_stringn(area.x, status_y, &status, width, theme.status_line_style());
 
     let bottom_y = status_y + 1;
@@ -165,10 +179,16 @@ pub fn draw(editor: &mut Editor, theme: &Theme, area: Rect, out: &mut Buffer) ->
             let col = text.chars().map(cell_width).sum::<usize>();
             (text, Some(col))
         }
-        Mode::DirtyExit => (String::from("Unsaved changes: (s)ave, (d)iscard, (c)ancel"), None),
+        Mode::DirtyExit => (
+            String::from("Unsaved changes: (s)ave, (d)iscard, (c)ancel"),
+            None,
+        ),
         Mode::Overwrite { path, .. } => (format!("{path} exists: overwrite? (y/n)"), None),
         Mode::Edit => (
-            editor.message.clone().unwrap_or_else(|| String::from("^S save  ^O save as  ^Q quit  ^H help")),
+            editor
+                .message
+                .clone()
+                .unwrap_or_else(|| String::from("^S save  ^O save as  ^Q quit  ^H help")),
             None,
         ),
     };
@@ -176,7 +196,10 @@ pub fn draw(editor: &mut Editor, theme: &Theme, area: Rect, out: &mut Buffer) ->
         out.set_stringn(area.x, bottom_y, &bottom, width, theme.base());
     }
     match prompt_cursor {
-        Some(col) if area.height >= 2 => Some(Position::new(area.x + col.min(width.saturating_sub(1)) as u16, bottom_y)),
+        Some(col) if area.height >= 2 => Some(Position::new(
+            area.x + col.min(width.saturating_sub(1)) as u16,
+            bottom_y,
+        )),
         _ if editor.help || !matches!(editor.mode, Mode::Edit) => None,
         _ => Some(Position::new(
             area.x + (cursor_col - editor.left) as u16,

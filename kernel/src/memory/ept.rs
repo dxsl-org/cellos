@@ -151,9 +151,13 @@ impl NestedPageTable {
             core::ptr::write_bytes(root_va, 0, 512);
         }
         #[cfg(cellos_p01_trace)]
-        crate::p01_noncpu::created_frame(root_pa, match format {
-            NestedFormat::Npt => 1, NestedFormat::Ept => 2,
-        });
+        crate::p01_noncpu::created_frame(
+            root_pa,
+            match format {
+                NestedFormat::Npt => 1,
+                NestedFormat::Ept => 2,
+            },
+        );
         Some(Self {
             format,
             root_pa,

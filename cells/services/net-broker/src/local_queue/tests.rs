@@ -50,7 +50,12 @@ fn full_request_queue_returns_busy_before_rejecting_otherwise_valid_calls() {
             IngressDecision::Accepted
         );
     }
-    let overflow = state.handle_ingress(999, Some(identity(999, 1, 999)), Ok(parsed(999, b"x")), None);
+    let overflow = state.handle_ingress(
+        999,
+        Some(identity(999, 1, 999)),
+        Ok(parsed(999, b"x")),
+        None,
+    );
     match overflow {
         IngressDecision::Immediate(reply) => assert_eq!(reply.status, ReplyStatus::Busy),
         _ => panic!("expected busy"),
@@ -172,8 +177,12 @@ fn deferred_same_sender_replies_retain_distinct_operation_tokens() {
     }
     let first = state.take_next_request().unwrap();
     let second = state.take_next_request().unwrap();
-    state.complete_request(&second, QueuedReply::success(&second)).unwrap();
-    state.complete_request(&first, QueuedReply::success(&first)).unwrap();
+    state
+        .complete_request(&second, QueuedReply::success(&second))
+        .unwrap();
+    state
+        .complete_request(&first, QueuedReply::success(&first))
+        .unwrap();
     assert_eq!(state.take_next_reply().unwrap().operation, Some(102));
     assert_eq!(state.take_next_reply().unwrap().operation, Some(101));
 }

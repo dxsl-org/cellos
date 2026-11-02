@@ -12,9 +12,18 @@ use smoltcp::{
     wire::IpEndpoint,
 };
 
-const OWNER: SocketOwner = SocketOwner { cell_id: 10, generation: 1 };
-const NEXT_GENERATION: SocketOwner = SocketOwner { cell_id: 10, generation: 2 };
-const OTHER_CELL: SocketOwner = SocketOwner { cell_id: 20, generation: 1 };
+const OWNER: SocketOwner = SocketOwner {
+    cell_id: 10,
+    generation: 1,
+};
+const NEXT_GENERATION: SocketOwner = SocketOwner {
+    cell_id: 10,
+    generation: 2,
+};
+const OTHER_CELL: SocketOwner = SocketOwner {
+    cell_id: 20,
+    generation: 1,
+};
 const SERVER_PORT: u16 = 80;
 const PEER: [u8; 4] = [10, 0, 0, 1];
 
@@ -71,7 +80,11 @@ impl Stack {
 
     fn advance(&mut self, ms: i64) {
         self.clock_ms += ms;
-        self.iface.poll(Instant::from_millis(self.clock_ms), &mut self.device, &mut self.sockets);
+        self.iface.poll(
+            Instant::from_millis(self.clock_ms),
+            &mut self.device,
+            &mut self.sockets,
+        );
     }
 
     fn tcp(&mut self) -> SocketHandle {
@@ -90,7 +103,10 @@ impl Stack {
         let handle = self.tcp();
         let port = self.next_port;
         self.next_port += 1;
-        let remote = IpEndpoint::new(IpAddress::v4(PEER[0], PEER[1], PEER[2], PEER[3]), SERVER_PORT);
+        let remote = IpEndpoint::new(
+            IpAddress::v4(PEER[0], PEER[1], PEER[2], PEER[3]),
+            SERVER_PORT,
+        );
         self.sockets
             .get_mut::<tcp::Socket>(handle)
             .connect(self.iface.context(), remote, port)
@@ -138,7 +154,12 @@ impl Stack {
 }
 
 fn pending_ready(op_id: usize) -> PendingReady {
-    PendingReady { op_id, interests: heapless::Vec::new(), cursor: 0, deadline: u64::MAX }
+    PendingReady {
+        op_id,
+        interests: heapless::Vec::new(),
+        cursor: 0,
+        deadline: u64::MAX,
+    }
 }
 
 #[test]
@@ -152,16 +173,26 @@ fn silent_removal_leaves_the_peer_established_and_abort_resets_it() {
     control.sockets.remove(handle);
     control.pump(20);
     assert_eq!(control.socket(server).state(), tcp::State::Established);
-    assert!(control.socket(server).may_recv(), "no FIN, no RST: still open");
+    assert!(
+        control.socket(server).may_recv(),
+        "no FIN, no RST: still open"
+    );
 
     // Owner death: one RST reaches the peer, which is closed by it.
     let mut stack = Stack::new();
     let (cap, client, server) = stack.established(OWNER);
     assert_eq!(stack.reclaim(OWNER, u64::MAX), (1, 0));
     assert!(stack.table.is_aborting(cap));
-    assert!(stack.socket(client).remote_endpoint().is_some(), "RST still owed");
+    assert!(
+        stack.socket(client).remote_endpoint().is_some(),
+        "RST still owed"
+    );
     stack.pump(2);
-    assert_eq!(stack.socket(server).state(), tcp::State::Closed, "peer was reset");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::Closed,
+        "peer was reset"
+    );
     assert!(!stack.socket(server).may_recv());
     assert!(stack.socket(server).recv(|_| (0, ())).is_err());
     // smoltcp forgets the connection once the RST has gone: the entry is satisfied.
@@ -228,7 +259,9 @@ fn reclaim_frees_everything_the_dead_owner_held_and_nothing_else() {
     // The same CellId's next generation and another cell: untouched.
     let (successor_cap, successor) = stack.connecting(NEXT_GENERATION);
     let (foreign_cap, foreign) = stack.connecting(OTHER_CELL);
-    stack.pending_ready.insert(NEXT_GENERATION, pending_ready(2));
+    stack
+        .pending_ready
+        .insert(NEXT_GENERATION, pending_ready(2));
     stack.pending_ready.insert(OTHER_CELL, pending_ready(3));
 
     // DNS: the dead owner has 3 queries in flight, another cell has 2.
@@ -252,7 +285,11 @@ fn reclaim_frees_everything_the_dead_owner_held_and_nothing_else() {
                 })
                 .ok()
                 .expect("pending dns slot");
-            if owner == OWNER { dead_queries.push(query) } else { live_queries.push(query) }
+            if owner == OWNER {
+                dead_queries.push(query)
+            } else {
+                live_queries.push(query)
+            }
         }
     }
     let alive = stack.sockets_alive();
@@ -269,7 +306,10 @@ fn reclaim_frees_everything_the_dead_owner_held_and_nothing_else() {
     assert_eq!(stack.table.owned_cap(OWNER), Some(connect_cap));
     assert!(!stack.pending_ready.contains_key(&OWNER));
     assert_eq!(stack.pending_ready.len(), 2);
-    assert!(stack.pending_dns.iter().all(|pending| pending.owner != OWNER));
+    assert!(stack
+        .pending_dns
+        .iter()
+        .all(|pending| pending.owner != OWNER));
     assert_eq!(stack.pending_dns.len(), 2);
     // The dead owner's queries were cancelled in the resolver (a free slot panics
     // on any access); the other cell's are still pending.
@@ -280,11 +320,18 @@ fn reclaim_frees_everything_the_dead_owner_held_and_nothing_else() {
         assert!(freed.is_err(), "dead owner's DNS query slot was freed");
     }
     for query in live_queries {
-        assert_eq!(stack.resolver.poll_result(query, &mut stack.sockets), None, "still pending");
+        assert_eq!(
+            stack.resolver.poll_result(query, &mut stack.sockets),
+            None,
+            "still pending"
+        );
     }
 
     // The successor generation and the other cell keep their sockets and caps.
-    assert_eq!(stack.table.get(successor_cap, NEXT_GENERATION), Some(successor));
+    assert_eq!(
+        stack.table.get(successor_cap, NEXT_GENERATION),
+        Some(successor)
+    );
     assert_eq!(stack.table.get(foreign_cap, OTHER_CELL), Some(foreign));
     assert_eq!(stack.socket(successor).state(), tcp::State::SynSent);
     assert_eq!(stack.socket(foreign).state(), tcp::State::SynSent);
@@ -308,19 +355,28 @@ fn a_graceful_close_in_flight_is_flushed_not_pre_empted_and_only_its_reaper_ends
     // The FIN goes out: the peer sees an orderly close, not a reset.
     stack.pump(4);
     assert_eq!(stack.socket(server).state(), tcp::State::CloseWait);
-    assert!(!stack.socket(server).may_recv(), "orderly close: the peer saw a FIN");
+    assert!(
+        !stack.socket(server).may_recv(),
+        "orderly close: the peer saw a FIN"
+    );
     // The abort reaper never touches it; the graceful reaper keeps it while the
     // close is still running (TIME-WAIT) and ends it once the socket is Closed.
     stack.socket(server).close();
     stack.pump(4);
     assert_eq!(stack.socket(client).state(), tcp::State::TimeWait);
     reap_aborted(&mut stack.table, &mut stack.sockets, u64::MAX);
-    assert_eq!(reap_graceful_closes(&mut stack.table, &mut stack.sockets, 0), 0);
+    assert_eq!(
+        reap_graceful_closes(&mut stack.table, &mut stack.sockets, 0),
+        0
+    );
     assert!(stack.table.is_graceful_closing(cap), "still closing");
     stack.advance(11_000);
     stack.advance(10);
     assert_eq!(stack.socket(client).state(), tcp::State::Closed);
-    assert_eq!(reap_graceful_closes(&mut stack.table, &mut stack.sockets, 0), 0);
+    assert_eq!(
+        reap_graceful_closes(&mut stack.table, &mut stack.sockets, 0),
+        0
+    );
     assert!(stack.table.get_unchecked(cap).is_none());
     assert!(stack.table.owned_cap(OWNER).is_none());
 }
@@ -346,7 +402,16 @@ fn a_new_generation_of_a_cell_releases_only_the_old_generation() {
     assert_eq!(stale_generation_of(&watched, NEXT_GENERATION), Some(OWNER));
     // Never the same generation, never another cell.
     assert_eq!(stale_generation_of(&watched, OWNER), None);
-    assert_eq!(stale_generation_of(&watched, SocketOwner { cell_id: 30, generation: 1 }), None);
+    assert_eq!(
+        stale_generation_of(
+            &watched,
+            SocketOwner {
+                cell_id: 30,
+                generation: 1
+            }
+        ),
+        None
+    );
 
     // And through the real state reclaim: the old generation goes, the new stays.
     let mut stack = Stack::new();
@@ -381,17 +446,30 @@ fn fin_wait2_behind_a_closed_window(
     deadline: u64,
 ) -> (u64, SocketHandle, SocketHandle) {
     let (cap, client, server) = stack.established(owner);
-    stack.socket(server).send_slice(&[1u8; 256]).expect("fill the client's window");
+    stack
+        .socket(server)
+        .send_slice(&[1u8; 256])
+        .expect("fill the client's window");
     stack.pump(4);
-    stack.socket(server).send_slice(&[2u8; 256]).expect("queue behind the closed window");
+    stack
+        .socket(server)
+        .send_slice(&[2u8; 256])
+        .expect("queue behind the closed window");
     stack.pump(4);
-    assert_eq!(stack.socket(client).recv_queue(), 256, "client receive buffer is full");
+    assert_eq!(
+        stack.socket(client).recv_queue(),
+        256,
+        "client receive buffer is full"
+    );
     stack.socket(client).close();
     stack.table.begin_graceful_close(cap, deadline);
     stack.pump(10);
     assert_eq!(stack.socket(client).state(), tcp::State::FinWait2);
     assert_eq!(stack.socket(server).state(), tcp::State::CloseWait);
-    assert!(stack.socket(server).send_queue() > 0, "the peer's data is stuck");
+    assert!(
+        stack.socket(server).send_queue() > 0,
+        "the peer's data is stuck"
+    );
     (cap, client, server)
 }
 
@@ -403,8 +481,8 @@ impl Stack {
 
 #[test]
 fn graceful_end_decides_every_state() {
-    use GracefulEnd::{Abort as A, Free as F, Keep as K};
     use tcp::State;
+    use GracefulEnd::{Abort as A, Free as F, Keep as K};
     // Columns: (rst_owed, expired) = (no, no), (no, yes), (yes, no), (yes, yes).
     let expected = [
         (State::Closed, [F, F, A, A]),
@@ -421,7 +499,9 @@ fn graceful_end_decides_every_state() {
     ];
     for (state, row) in expected {
         for (column, (owed, expired)) in
-            [(false, false), (false, true), (true, false), (true, true)].into_iter().enumerate()
+            [(false, false), (false, true), (true, false), (true, true)]
+                .into_iter()
+                .enumerate()
         {
             assert_eq!(
                 graceful_end(state, owed, expired),
@@ -443,12 +523,19 @@ fn fin_wait2_peer_with_data_behind_a_closed_window_is_reset_at_the_deadline() {
     assert!(stack.table.is_graceful_closing(cap));
     assert_eq!(stack.socket(client).state(), tcp::State::FinWait2);
     stack.pump(4);
-    assert_eq!(stack.socket(server).state(), tcp::State::CloseWait, "the peer heard nothing");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::CloseWait,
+        "the peer heard nothing"
+    );
 
     // The deadline: aborted, the RST is owed and the slot is held until it left.
     assert_eq!(stack.reap_graceful(10_000), 1);
     assert_eq!(stack.socket(client).state(), tcp::State::Closed);
-    assert!(stack.socket(client).remote_endpoint().is_some(), "RST still owed");
+    assert!(
+        stack.socket(client).remote_endpoint().is_some(),
+        "RST still owed"
+    );
     assert!(stack.table.is_aborting(cap));
     assert!(!stack.table.is_graceful_closing(cap));
     assert_eq!(stack.table.get_unchecked(cap), Some(client));
@@ -459,7 +546,11 @@ fn fin_wait2_peer_with_data_behind_a_closed_window_is_reset_at_the_deadline() {
 
     // One network turn pair emits the RST: the peer is closed by it, not left half-open.
     stack.pump(2);
-    assert_eq!(stack.socket(server).state(), tcp::State::Closed, "peer was reset");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::Closed,
+        "peer was reset"
+    );
     assert!(stack.socket(server).recv(|_| (0, ())).is_err());
     assert!(stack.socket(client).remote_endpoint().is_none());
     reap_aborted(&mut stack.table, &mut stack.sockets, 10_000);
@@ -481,7 +572,11 @@ fn characterisation_a_silent_removal_resets_the_peer_only_on_its_next_segment() 
     assert_eq!(handle, client);
     quiet.sockets.remove(handle);
     quiet.pump(20);
-    assert_eq!(quiet.socket(server).state(), tcp::State::CloseWait, "nobody told the peer");
+    assert_eq!(
+        quiet.socket(server).state(),
+        tcp::State::CloseWait,
+        "nobody told the peer"
+    );
 
     // (ii) The same, but the peer speaks: the interface answers its segment with an RST.
     let mut talking = Stack::new();
@@ -489,11 +584,18 @@ fn characterisation_a_silent_removal_resets_the_peer_only_on_its_next_segment() 
     talking.socket(client).close();
     talking.pump(10);
     assert_eq!(talking.socket(client).state(), tcp::State::FinWait2);
-    talking.socket(server).send_slice(b"late").expect("peer data");
+    talking
+        .socket(server)
+        .send_slice(b"late")
+        .expect("peer data");
     let handle = talking.table.remove_internal(cap).expect("cap");
     talking.sockets.remove(handle);
     talking.pump(4);
-    assert_eq!(talking.socket(server).state(), tcp::State::Closed, "reset, but only because it spoke");
+    assert_eq!(
+        talking.socket(server).state(),
+        tcp::State::Closed,
+        "reset, but only because it spoke"
+    );
 }
 
 #[test]
@@ -510,7 +612,10 @@ fn a_time_wait_or_closed_socket_is_freed_at_the_deadline_without_an_rst() {
     let alive = stack.sockets_alive();
 
     assert_eq!(stack.reap_graceful(99), 0);
-    assert!(stack.table.is_graceful_closing(cap), "TIME-WAIT inside the deadline is kept");
+    assert!(
+        stack.table.is_graceful_closing(cap),
+        "TIME-WAIT inside the deadline is kept"
+    );
     assert_eq!(stack.reap_graceful(100), 0, "nothing is owed: no abort");
     assert!(stack.table.get_unchecked(cap).is_none());
     assert_eq!(stack.table.aborting().count(), 0);
@@ -529,7 +634,11 @@ fn fin_wait1_and_last_ack_are_aborted_at_the_deadline() {
     assert_eq!(stack.reap_graceful(100), 1);
     assert!(stack.table.is_aborting(cap));
     stack.pump(2);
-    assert_eq!(stack.socket(server).state(), tcp::State::Closed, "FIN-WAIT-1 peer reset");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::Closed,
+        "FIN-WAIT-1 peer reset"
+    );
 
     // LAST-ACK: the passive side closed and its final ACK never came.
     let mut stack = Stack::new();
@@ -543,33 +652,53 @@ fn fin_wait1_and_last_ack_are_aborted_at_the_deadline() {
     assert_eq!(stack.reap_graceful(100), 1);
     assert!(stack.table.is_aborting(cap));
     stack.pump(2);
-    assert_eq!(stack.socket(server).state(), tcp::State::Closed, "LAST-ACK peer reset");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::Closed,
+        "LAST-ACK peer reset"
+    );
 }
 
 #[test]
 fn a_close_that_finishes_before_its_deadline_keeps_its_output_and_is_never_reset() {
     let mut stack = Stack::new();
     let (cap, client, server) = stack.established(OWNER);
-    stack.socket(client).send_slice(&[7u8; 100]).expect("output");
+    stack
+        .socket(client)
+        .send_slice(&[7u8; 100])
+        .expect("output");
     stack.socket(client).close();
     stack.table.begin_graceful_close(cap, 10_000);
     stack.pump(6);
     let mut got = [0u8; 128];
-    let read = stack.socket(server).recv_slice(&mut got).expect("flushed output");
+    let read = stack
+        .socket(server)
+        .recv_slice(&mut got)
+        .expect("flushed output");
     assert_eq!(read, 100);
     assert_eq!(got[..100], [7u8; 100]);
-    assert!(!stack.socket(server).may_recv(), "orderly end: a FIN followed the data");
+    assert!(
+        !stack.socket(server).may_recv(),
+        "orderly end: a FIN followed the data"
+    );
     stack.socket(server).close();
     stack.pump(4);
     assert_eq!(stack.socket(client).state(), tcp::State::TimeWait);
     assert_eq!(stack.reap_graceful(5_000), 0);
-    assert!(stack.table.is_graceful_closing(cap), "TIME-WAIT is kept inside the deadline");
+    assert!(
+        stack.table.is_graceful_closing(cap),
+        "TIME-WAIT is kept inside the deadline"
+    );
 
     stack.advance(11_000);
     stack.advance(10);
     assert_eq!(stack.socket(client).state(), tcp::State::Closed);
     assert!(stack.socket(client).remote_endpoint().is_none());
-    assert_eq!(stack.reap_graceful(5_000), 0, "freed inside the deadline, nothing aborted");
+    assert_eq!(
+        stack.reap_graceful(5_000),
+        0,
+        "freed inside the deadline, nothing aborted"
+    );
     assert!(stack.table.get_unchecked(cap).is_none());
     assert_eq!(stack.socket(server).state(), tcp::State::Closed);
     assert_eq!(stack.table.aborting().count(), 0);
@@ -584,7 +713,11 @@ fn an_rst_that_smoltcp_already_owes_is_not_dropped_by_the_graceful_reaper() {
     assert!(stack.socket(client).remote_endpoint().is_some());
     stack.table.begin_graceful_close(cap, u64::MAX);
 
-    assert_eq!(stack.reap_graceful(0), 1, "an owed RST ends the graceful entry at once");
+    assert_eq!(
+        stack.reap_graceful(0),
+        1,
+        "an owed RST ends the graceful entry at once"
+    );
     assert!(stack.table.is_aborting(cap));
     assert!(!stack.table.is_graceful_closing(cap));
     assert_eq!(stack.table.get_unchecked(cap), Some(client));
@@ -646,7 +779,11 @@ fn a_dead_owner_graceful_cap_is_flushed_then_aborted_at_its_deadline() {
         Some("[net] graceful close deadline: aborted 1 TCP")
     );
     stack.pump(2);
-    assert_eq!(stack.socket(server).state(), tcp::State::Closed, "peer was reset");
+    assert_eq!(
+        stack.socket(server).state(),
+        tcp::State::Closed,
+        "peer was reset"
+    );
     reap_aborted(&mut stack.table, &mut stack.sockets, 10_000);
     assert!(stack.table.get_unchecked(cap).is_none());
     assert_eq!(stack.table.aborting().count(), 0);

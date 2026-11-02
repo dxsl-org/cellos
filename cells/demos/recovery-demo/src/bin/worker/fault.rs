@@ -34,13 +34,17 @@ pub fn scenario(mode: u8, arg: u64) -> ! {
         crash::SHM_EXPORT => {
             if let SyscallResult::Ok(handle) = syscall::sys_shm_alloc(4096) {
                 let mapped = matches!(syscall::sys_shm_map(handle, 0), SyscallResult::Ok(_));
-                println(&format!("[recovery-worker] crash: shm export handle={handle:#x} mapped={mapped}"));
+                println(&format!(
+                    "[recovery-worker] crash: shm export handle={handle:#x} mapped={mapped}"
+                ));
             }
             crash()
         }
         crash::LOCK_AND_DIE => {
             let held = syscall::sys_grant_copy_from_slice(arg as usize, &1u64.to_le_bytes());
-            println(&format!("[recovery-worker] crash: lock word set in authority grant ({held:?})"));
+            println(&format!(
+                "[recovery-worker] crash: lock word set in authority grant ({held:?})"
+            ));
             crash()
         }
         _ => crash(),
@@ -51,8 +55,12 @@ pub fn scenario(mode: u8, arg: u64) -> ! {
 /// lease the `recovery-fixture` VFS withholds, so owner death finds a live
 /// borrower that has not acknowledged.
 fn hold_lease() -> ! {
-    let Some(vfs) = common::lookup(api::syscall::service::VFS) else { crash() };
-    let Some(grant) = syscall::sys_grant_alloc(4096) else { crash() };
+    let Some(vfs) = common::lookup(api::syscall::service::VFS) else {
+        crash()
+    };
+    let Some(grant) = syscall::sys_grant_alloc(4096) else {
+        crash()
+    };
     syscall::sys_grant_share(grant, vfs, 2);
     let _ = ostd::task::spawn(|| {
         common::sleep(30);
@@ -61,8 +69,16 @@ fn hold_lease() -> ! {
     });
     let mut send = [0u8; 256];
     let mut recv = [0u8; 64];
-    let request = VfsRequest::ReadFileGrant { path: HOLD_LEASE_PATH, grant, max: 4096 };
-    let reply = ostd::ipc::service_call_typed::<_, VfsResponse>(vfs, &request, &mut send, &mut recv);
-    println(&format!("[recovery-worker] hold-lease read returned early: {}", reply.is_ok()));
+    let request = VfsRequest::ReadFileGrant {
+        path: HOLD_LEASE_PATH,
+        grant,
+        max: 4096,
+    };
+    let reply =
+        ostd::ipc::service_call_typed::<_, VfsResponse>(vfs, &request, &mut send, &mut recv);
+    println(&format!(
+        "[recovery-worker] hold-lease read returned early: {}",
+        reply.is_ok()
+    ));
     crash()
 }

@@ -47,13 +47,17 @@ impl TextEdit {
     }
 
     fn next_cursor(&self) -> usize {
-        self.text[self.cursor..].char_indices().skip(1)
+        self.text[self.cursor..]
+            .char_indices()
+            .skip(1)
             .find(|(_, ch)| !ostd::typography::is_combining_mark(*ch))
             .map_or(self.text.len(), |(i, _)| self.cursor + i)
     }
 
     fn previous_cursor(&self) -> usize {
-        self.text[..self.cursor].char_indices().rev()
+        self.text[..self.cursor]
+            .char_indices()
+            .rev()
             .find(|(_, ch)| !ostd::typography::is_combining_mark(*ch))
             .map_or(0, |(i, _)| i)
     }
@@ -76,19 +80,24 @@ impl TextEdit {
 }
 
 impl ViWidget for TextEdit {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
-    font.cursor_positions(&self.text, &mut self.cursor_positions.borrow_mut());
-    let w = match self.width {
-        Length::Fill | Length::FillPortion(_) => constraints.max.w,
-        Length::Fixed(v) => v,
-        Length::Shrink => {
-            (font.measure(&self.text) + font.measure("  ") + PAD * 2.0).max(40.0)
-        }
-    };
-    let size = constraints.constrain(Size { w, h: font.line_height() + PAD * 2.0 });
-    let bounds = Rect::from_origin_size(constraints.origin, size);
-    self.bounds.set(bounds);
-    LayoutNode::leaf(bounds)
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
+        font.cursor_positions(&self.text, &mut self.cursor_positions.borrow_mut());
+        let w = match self.width {
+            Length::Fill | Length::FillPortion(_) => constraints.max.w,
+            Length::Fixed(v) => v,
+            Length::Shrink => (font.measure(&self.text) + font.measure("  ") + PAD * 2.0).max(40.0),
+        };
+        let size = constraints.constrain(Size {
+            w,
+            h: font.line_height() + PAD * 2.0,
+        });
+        let bounds = Rect::from_origin_size(constraints.origin, size);
+        self.bounds.set(bounds);
+        LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -141,7 +150,10 @@ impl ViWidget for TextEdit {
                     }
                     // Move cursor to click position
                     let rel_x = (pos.x - bounds.x - PAD).max(0.0);
-                    self.cursor = crate::font_context::FontContext::hit_position(&self.cursor_positions.borrow(), rel_x);
+                    self.cursor = crate::font_context::FontContext::hit_position(
+                        &self.cursor_positions.borrow(),
+                        rel_x,
+                    );
                     cx.mark_dirty();
                     EventStatus::Consumed
                 } else {
@@ -224,12 +236,19 @@ mod tests {
         let mut state = crate::state_store::WidgetStateStore::new();
         let mut focus = crate::state_store::FocusManager::new();
         let mut cx = EventCx {
-            state: &mut state, focus: &mut focus, widget_id: edit.id,
-            layout: crate::layout::LayoutView(&layout), needs_repaint: false,
+            state: &mut state,
+            focus: &mut focus,
+            widget_id: edit.id,
+            layout: crate::layout::LayoutView(&layout),
+            needs_repaint: false,
         };
-        edit.event(&mut cx, &Event::MousePress {
-            pos: Point::new(PAD + font.measure("W"), 6.0), button: MouseButton::Left,
-        });
+        edit.event(
+            &mut cx,
+            &Event::MousePress {
+                pos: Point::new(PAD + font.measure("W"), 6.0),
+                button: MouseButton::Left,
+            },
+        );
         assert_eq!(edit.cursor, 1);
         edit.event(&mut cx, &Event::Char('x'));
         assert_eq!(edit.text, "Wxiii");

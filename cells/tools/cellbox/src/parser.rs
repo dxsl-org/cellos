@@ -125,7 +125,7 @@ pub enum Ast {
     Pipeline(Vec<Cmd>),
     /// `cmd1 | cmd2 &` — a background marker on a multi-stage pipeline. The
     /// executor refuses it before any effect; it is never run in the foreground.
-    BackgroundPipeline(Vec<Cmd>),
+    BackgroundPipeline,
     /// `cmd &` — run in background.
     Background(Cmd),
     /// Syntax the grammar rejects (misplaced `&`, empty pipeline stage, redirect
@@ -691,7 +691,7 @@ fn parse_pipeline(tokens: &[Tok]) -> Ast {
         return match cmds.len() {
             0 => Ast::Empty,
             1 => Ast::Background(cmds.into_iter().next().unwrap_or_else(Cmd::new)),
-            _ => Ast::BackgroundPipeline(cmds),
+            _ => Ast::BackgroundPipeline,
         };
     }
     match cmds.len() {
@@ -884,7 +884,10 @@ mod typed_syntax_tests {
 
     #[test]
     fn background_marker_on_a_pipeline_is_kept_not_ignored() {
-        assert!(matches!(parse("ps --records | take 1 &"), Ast::BackgroundPipeline(c) if c.len() == 2));
+        assert!(matches!(
+            parse("ps --records | take 1 &"),
+            Ast::BackgroundPipeline
+        ));
         assert!(matches!(parse("sleep 1 &"), Ast::Background(_)));
     }
 
@@ -908,7 +911,8 @@ mod typed_syntax_tests {
 
     #[test]
     fn quoted_comparison_operators_stay_arguments() {
-        let Ast::Pipeline(cmds) = parse("ps --records | where cpu_tenths '>' uint:0 | take 3") else {
+        let Ast::Pipeline(cmds) = parse("ps --records | where cpu_tenths '>' uint:0 | take 3")
+        else {
             panic!("expected Pipeline");
         };
         assert_eq!(cmds.len(), 3);

@@ -35,7 +35,9 @@ fn decimal(text: &str) -> Option<u64> {
 
 /// The worker count argument: `1..=MAX_WORKERS`.
 pub fn parse_workers(arg: &str) -> Option<usize> {
-    decimal(arg).and_then(|n| usize::try_from(n).ok()).filter(|n| (1..=MAX_WORKERS).contains(n))
+    decimal(arg)
+        .and_then(|n| usize::try_from(n).ok())
+        .filter(|n| (1..=MAX_WORKERS).contains(n))
 }
 
 /// Parse one command line. Counts are range-checked against `live` (the workers not yet
@@ -48,12 +50,16 @@ pub fn parse(line: &str, live: usize) -> Option<Command> {
         return None;
     }
     let workers = |text: Option<&str>| {
-        text.and_then(decimal).and_then(|n| usize::try_from(n).ok()).filter(|n| (1..=live).contains(n))
+        text.and_then(decimal)
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| (1..=live).contains(n))
     };
     match (verb, count) {
         ("busy", _) => workers(count).map(Command::Busy),
         ("exit", _) => workers(count).map(Command::Exit),
-        ("bench", Some(n)) => decimal(n).filter(|n| (1..=BENCH_MAX).contains(n)).map(Command::Bench),
+        ("bench", Some(n)) => decimal(n)
+            .filter(|n| (1..=BENCH_MAX).contains(n))
+            .map(Command::Bench),
         ("idle", None) => Some(Command::Idle),
         ("ping", None) => Some(Command::Ping),
         ("quit", None) => Some(Command::Quit),
@@ -70,7 +76,11 @@ pub struct InputLine {
 
 impl InputLine {
     pub const fn new() -> InputLine {
-        InputLine { bytes: [0; LINE_MAX], len: 0, overflow: false }
+        InputLine {
+            bytes: [0; LINE_MAX],
+            len: 0,
+            overflow: false,
+        }
     }
 
     pub fn push(&mut self, text: &str) {
@@ -104,7 +114,10 @@ pub struct OutputLine {
 
 impl OutputLine {
     pub const fn new() -> OutputLine {
-        OutputLine { bytes: [0; 512], len: 0 }
+        OutputLine {
+            bytes: [0; 512],
+            len: 0,
+        }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -114,7 +127,11 @@ impl OutputLine {
 
 impl fmt::Write for OutputLine {
     fn write_str(&mut self, text: &str) -> fmt::Result {
-        let end = self.len.checked_add(text.len()).filter(|&end| end <= self.bytes.len()).ok_or(fmt::Error)?;
+        let end = self
+            .len
+            .checked_add(text.len())
+            .filter(|&end| end <= self.bytes.len())
+            .ok_or(fmt::Error)?;
         self.bytes[self.len..end].copy_from_slice(text.as_bytes());
         self.len = end;
         Ok(())
@@ -154,7 +171,16 @@ mod tests {
     fn worker_counts_are_one_to_thirty_one() {
         assert_eq!(parse_workers("1"), Some(1));
         assert_eq!(parse_workers("31"), Some(31));
-        for bad in ["0", "32", "", "-1", "+3", " 3", "3x", "99999999999999999999"] {
+        for bad in [
+            "0",
+            "32",
+            "",
+            "-1",
+            "+3",
+            " 3",
+            "3x",
+            "99999999999999999999",
+        ] {
             assert_eq!(parse_workers(bad), None, "{bad:?}");
         }
     }
@@ -179,7 +205,9 @@ mod tests {
 
     #[test]
     fn unknown_or_extra_words_are_refused() {
-        for bad in ["", "   ", "Busy 1", "idle now", "ping 1", "quit 0", "busy 1 2", "spin 1", "busy x"] {
+        for bad in [
+            "", "   ", "Busy 1", "idle now", "ping 1", "quit 0", "busy 1 2", "spin 1", "busy x",
+        ] {
             assert_eq!(parse(bad, 31), None, "{bad:?}");
         }
     }
@@ -213,7 +241,12 @@ mod tests {
         assert_eq!(out.as_bytes(), b"");
         let all: [usize; MAX_WORKERS] = core::array::from_fn(|i| 1_000_000 + i);
         let mut out = OutputLine::new();
-        writeln!(out, "TOPLOAD ready workers={MAX_WORKERS} tids={}", Tids(&all)).unwrap();
+        writeln!(
+            out,
+            "TOPLOAD ready workers={MAX_WORKERS} tids={}",
+            Tids(&all)
+        )
+        .unwrap();
         assert!(out.as_bytes().ends_with(b",1000030\n"));
     }
 

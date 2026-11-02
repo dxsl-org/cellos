@@ -89,10 +89,14 @@ struct CpuTables {
     gdt: Gdt,
     tss: Tss,
 }
-static mut TABLES: [CpuTables; super::syscall::MAX_CPUS] = [
-    const { CpuTables { gdt: Gdt { entries: [GdtEntry::NULL; 8] }, tss: Tss::new() } };
-    super::syscall::MAX_CPUS
-];
+static mut TABLES: [CpuTables; super::syscall::MAX_CPUS] = [const {
+    CpuTables {
+        gdt: Gdt {
+            entries: [GdtEntry::NULL; 8],
+        },
+        tss: Tss::new(),
+    }
+}; super::syscall::MAX_CPUS];
 const _: () = {
     use core::mem::{offset_of, size_of};
     assert!(size_of::<Tss>() == 104);
@@ -104,7 +108,8 @@ const _: () = {
 /// IST stack top programmed into this CPU's TSS for slot `ist` (test oracle).
 pub fn ist_entry(ist: u8) -> u64 {
     unsafe {
-        let tables = core::ptr::addr_of!(TABLES).cast::<CpuTables>()
+        let tables = core::ptr::addr_of!(TABLES)
+            .cast::<CpuTables>()
             .add(super::syscall::current_cpu_id());
         let slots = core::ptr::read_unaligned(core::ptr::addr_of!((*tables).tss.ist));
         slots[usize::from(ist) - 1]
@@ -158,7 +163,8 @@ pub fn init() {
 /// Set RSP0 (kernel stack for Ring3->Ring0 transition).
 pub fn set_kernel_stack(sp: u64) {
     unsafe {
-        let tables = core::ptr::addr_of_mut!(TABLES).cast::<CpuTables>()
+        let tables = core::ptr::addr_of_mut!(TABLES)
+            .cast::<CpuTables>()
             .add(super::syscall::current_cpu_id());
         core::ptr::write_unaligned(core::ptr::addr_of_mut!((*tables).tss.rsp).cast::<u64>(), sp);
     }

@@ -12,9 +12,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-mod budget;
 mod browser;
 mod browser_runtime;
+mod budget;
 mod doc;
 mod draw;
 mod image;
@@ -32,7 +32,7 @@ use draw::{
     fill_rect, stroke_rect, theme, AddressBar, Color, NavigationButtons, ProgressIndicator,
     ScrollBar, StatusBar,
 };
-use loader::{load_document, LoadedDocument, DocumentLoadJob};
+use loader::{load_document, DocumentLoadJob, LoadedDocument};
 use parser::DocFormat;
 
 use api::display::PixelFormat;
@@ -82,12 +82,37 @@ const TOOLBAR_HEIGHT: u32 = 44;
 const TABBAR_HEIGHT: u32 = 0; // Cut over to compositor native session tabs (ADR-0027 Phase 06)
 const STATUS_HEIGHT: u32 = 24;
 
-fn ui_text(fonts:&mut TextFonts,surf:&mut ViSurface,rect:(i32,i32,u32,u32),
-    value:&str,color:Color,face:FontFace,px:f32,center:bool) {
-    let (x,y,w,h)=rect;
-    let left=if center {x as f32+((w as f32-fonts.measure(face,value,px))*0.5).max(0.0)}else{x as f32};
-    let top=y as f32+((h as f32-fonts.line_height(face,px))*0.5).max(0.0);
-    draw::text(fonts,surf,left,top,value,face,px,color,(x,y,x+w as i32,y+h as i32));
+// reason: toolbar/search text helper with many drawing call sites; bundling style args would
+// only churn callers.
+#[allow(clippy::too_many_arguments)]
+fn ui_text(
+    fonts: &mut TextFonts,
+    surf: &mut ViSurface,
+    rect: (i32, i32, u32, u32),
+    value: &str,
+    color: Color,
+    face: FontFace,
+    px: f32,
+    center: bool,
+) {
+    let (x, y, w, h) = rect;
+    let left = if center {
+        x as f32 + ((w as f32 - fonts.measure(face, value, px)) * 0.5).max(0.0)
+    } else {
+        x as f32
+    };
+    let top = y as f32 + ((h as f32 - fonts.line_height(face, px)) * 0.5).max(0.0);
+    draw::text(
+        fonts,
+        surf,
+        left,
+        top,
+        value,
+        face,
+        px,
+        color,
+        (x, y, x + w as i32, y + h as i32),
+    );
 }
 
 struct Tab {
@@ -105,7 +130,13 @@ struct Tab {
 }
 
 impl Tab {
-    fn new(url: &str, viewport_w: u32, viewport_h: u32, js_runtime: &mut js::Tier2JsBridge, fonts:&mut TextFonts) -> Self {
+    fn new(
+        url: &str,
+        viewport_w: u32,
+        viewport_h: u32,
+        js_runtime: &mut js::Tier2JsBridge,
+        fonts: &mut TextFonts,
+    ) -> Self {
         let mut tab = Self {
             title: String::new(),
             url: String::new(),
@@ -119,14 +150,24 @@ impl Tab {
             native_dom_dirty: false,
             browser: browser_runtime::DocumentBrowser::new(url),
         };
-        let (loaded_url, _fmt) = tab.install_loaded(load_document(url), viewport_w, viewport_h, js_runtime, fonts, Install::Web);
+        let (loaded_url, _fmt) = tab.install_loaded(
+            load_document(url),
+            viewport_w,
+            viewport_h,
+            js_runtime,
+            fonts,
+            Install::Web,
+        );
         tab.history = alloc::vec![loaded_url];
         tab
     }
 
     fn resident_bytes(&self) -> usize {
-        self.doc.resident_bytes().saturating_add(self.resources.resident_bytes())
-            .saturating_add(self.title.capacity()).saturating_add(self.url.capacity())
+        self.doc
+            .resident_bytes()
+            .saturating_add(self.resources.resident_bytes())
+            .saturating_add(self.title.capacity())
+            .saturating_add(self.url.capacity())
             .saturating_add(self.browser.resident_bytes())
             .saturating_add(self.history.capacity() * core::mem::size_of::<String>())
             .saturating_add(self.history.iter().map(String::capacity).sum::<usize>())
@@ -167,7 +208,11 @@ impl Tab {
         let mut load_error = None;
 
         let (nodes, scripts, mut arena, fmt_name) = if let Some(direct) = loaded.direct_nodes {
-            let format_name = if pdf::is_pdf_path(&loaded.url) { "PDF" } else { "Image" };
+            let format_name = if pdf::is_pdf_path(&loaded.url) {
+                "PDF"
+            } else {
+                "Image"
+            };
             (direct, alloc::vec::Vec::new(), None, format_name)
         } else if let Install::ReaderAssets(arena) = install {
             let t = trace::now();
@@ -178,7 +223,11 @@ impl Tab {
             let fmt = DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content);
             let t = trace::now();
             let (parsed_nodes, parsed_scripts, parsed_arena) =
-                match parser::parse_content_with_base_checked(fmt, &loaded.content, Some(&loaded.url)) {
+                match parser::parse_content_with_base_checked(
+                    fmt,
+                    &loaded.content,
+                    Some(&loaded.url),
+                ) {
                     Ok(parsed) => parsed,
                     Err(error) => {
                         load_error = Some(error);
@@ -205,11 +254,18 @@ impl Tab {
         let t_links = trace::now();
         if let Some(document) = &arena {
             for node in &document.nodes {
-                if node.tag() == Some("link") && node.get_attribute("rel").is_some_and(|rel| rel.split_ascii_whitespace().any(|value| value.eq_ignore_ascii_case("stylesheet"))) {
+                if node.tag() == Some("link")
+                    && node.get_attribute("rel").is_some_and(|rel| {
+                        rel.split_ascii_whitespace()
+                            .any(|value| value.eq_ignore_ascii_case("stylesheet"))
+                    })
+                {
                     if let Some(href) = node.get_attribute("href") {
                         match resources::load_text(&loaded.url, href) {
                             Ok(css) => self.doc.external_stylesheets.push((node.id, css)),
-                            Err(error) => ostd::io::println(&format!("[ocel] stylesheet error: {}", error)),
+                            Err(error) => {
+                                ostd::io::println(&format!("[ocel] stylesheet error: {}", error))
+                            }
                         }
                     }
                 }
@@ -220,16 +276,26 @@ impl Tab {
         let cookies = self.browser.session.cookies();
         self.browser = browser_runtime::DocumentBrowser::new(&loaded.url);
         self.browser.session.set_cookies(cookies);
-        self.browser.session.accept_response_cookies(&loaded.url, &loaded.response_headers);
-        let mut scripts_ready = match js_runtime.sync_script_document(arena.as_ref(), !reader && self.scripts_enabled && !scripts.is_empty(), &loaded.title) {
+        self.browser
+            .session
+            .accept_response_cookies(&loaded.url, &loaded.response_headers);
+        let mut scripts_ready = match js_runtime.sync_script_document(
+            arena.as_ref(),
+            !reader && self.scripts_enabled && !scripts.is_empty(),
+            &loaded.title,
+        ) {
             Ok(ready) => ready,
             Err(error) => {
                 ostd::io::println(&format!("[ocel] DOM sync failed: {:?}", error));
                 if let Some(document) = &mut arena {
                     let warning = document.alloc_node(dom_arena::NodeData::Element {
-                        tag: String::from("p"), attributes: Vec::new(),
+                        tag: String::from("p"),
+                        attributes: Vec::new(),
                     });
-                    let text = document.alloc_node(dom_arena::NodeData::Text(format!("JavaScript unavailable: {}", error.message)));
+                    let text = document.alloc_node(dom_arena::NodeData::Text(format!(
+                        "JavaScript unavailable: {}",
+                        error.message
+                    )));
                     document.append_child(warning, text);
                     document.append_child(document.root, warning);
                 }
@@ -253,29 +319,51 @@ impl Tab {
         let t = trace::now();
         use js::JsContext;
         if scripts_ready {
-            let configured = self.configure_browser(js_runtime, viewport_w, viewport_h)
-                .and_then(|_| self.pump_browser_frame(js_runtime, fonts, viewport_w, viewport_h, false));
+            let configured = self
+                .configure_browser(js_runtime, viewport_w, viewport_h)
+                .and_then(|_| {
+                    self.pump_browser_frame(js_runtime, fonts, viewport_w, viewport_h, false)
+                });
             if let Err(error) = configured {
                 ostd::io::println(&format!("[ocel] browser initialization failed: {error}"));
                 js_runtime.reset();
                 scripts_ready = false;
             }
         }
-        self.js_context_id = if scripts_ready { js_runtime.context_id() } else { 0 };
+        self.js_context_id = if scripts_ready {
+            js_runtime.context_id()
+        } else {
+            0
+        };
         for script in &scripts {
-            if !scripts_ready { break; }
+            if !scripts_ready {
+                break;
+            }
             let (node, source) = match script {
-                parser::html::ScriptSource::Inline(node) => (*node, self.doc.arena.as_ref()
-                    .map(|arena| arena.get_text_content(*node)).ok_or_else(|| String::from("Script document unavailable"))),
-                parser::html::ScriptSource::External { node, url } => (*node, resources::load_text(&loaded.url, url)),
+                parser::html::ScriptSource::Inline(node) => (
+                    *node,
+                    self.doc
+                        .arena
+                        .as_ref()
+                        .map(|arena| arena.get_text_content(*node))
+                        .ok_or_else(|| String::from("Script document unavailable")),
+                ),
+                parser::html::ScriptSource::External { node, url } => {
+                    (*node, resources::load_text(&loaded.url, url))
+                }
             };
             match source {
-                Ok(source) => if let Err(error) = self.eval_browser_script(js_runtime, &source, node, fonts, viewport_w, viewport_h) {
-                    ostd::io::println(&format!("[ocel] script error: {:?}", error));
-                },
+                Ok(source) => {
+                    if let Err(error) = self.eval_browser_script(
+                        js_runtime, &source, node, fonts, viewport_w, viewport_h,
+                    ) {
+                        ostd::io::println(&format!("[ocel] script error: {:?}", error));
+                    }
+                }
                 Err(error) => ostd::io::println(&format!("[ocel] script load error: {}", error)),
             }
-            if let Err(error) = self.drain_browser_output(js_runtime, fonts, viewport_w, viewport_h) {
+            if let Err(error) = self.drain_browser_output(js_runtime, fonts, viewport_w, viewport_h)
+            {
                 ostd::io::println(&format!("[ocel] JavaScript mutations rejected: {error}"));
                 js_runtime.reset();
                 self.browser.cancel();
@@ -284,21 +372,30 @@ impl Tab {
             }
         }
         if scripts_ready {
-            if let Err(error) = self.pump_browser_frame(js_runtime, fonts, viewport_w, viewport_h, true) {
+            if let Err(error) =
+                self.pump_browser_frame(js_runtime, fonts, viewport_w, viewport_h, true)
+            {
                 ostd::io::println(&format!("[ocel] browser ready event: {error}"));
             }
-            if let Err(error) = self.drain_browser_output(js_runtime, fonts, viewport_w, viewport_h) {
+            if let Err(error) = self.drain_browser_output(js_runtime, fonts, viewport_w, viewport_h)
+            {
                 ostd::io::println(&format!("[ocel] JavaScript mutations rejected: {error}"));
-                js_runtime.reset(); self.browser.cancel(); self.js_context_id = 0;
+                js_runtime.reset();
+                self.browser.cancel();
+                self.js_context_id = 0;
             }
         }
         trace::stamp_took("  scripts", t);
         self.url = loaded.url;
         self.scroll_y = 0;
-        if load_error.is_some() { self.doc.last_error = load_error; }
+        if load_error.is_some() {
+            self.doc.last_error = load_error;
+        }
         self.resources = resources::replace(previous_resources);
         if let Some((_, fragment)) = self.url.split_once('#') {
-            if let Some(y) = self.doc.anchor_y(fragment) { self.scroll_y = y.max(0); }
+            if let Some(y) = self.doc.anchor_y(fragment) {
+                self.scroll_y = y.max(0);
+            }
         }
         (self.url.clone(), fmt_name)
     }
@@ -351,7 +448,13 @@ impl OcelViewer {
         let mut js_runtime = js::Tier2JsBridge::new();
         let mut fonts = TextFonts::new();
         let viewport_w = width.saturating_sub(16);
-        let first_tab = Tab::new("file:///welcome.md", viewport_w, height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut js_runtime, &mut fonts);
+        let first_tab = Tab::new(
+            "file:///welcome.md",
+            viewport_w,
+            height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT),
+            &mut js_runtime,
+            &mut fonts,
+        );
         let requested_url = String::from(initial_url);
         let initial_url = first_tab.url.clone();
 
@@ -380,7 +483,9 @@ impl OcelViewer {
             zoomed_image: None,
             should_exit: false,
         };
-        if requested_url != viewer.url_input { viewer.load_url(&requested_url); }
+        if requested_url != viewer.url_input {
+            viewer.load_url(&requested_url);
+        }
 
         Some(viewer)
     }
@@ -395,18 +500,35 @@ impl OcelViewer {
 
     fn new_tab(&mut self, url: &str) {
         if self.tabs.len() >= budget::MAX_TABS {
-            self.status_text = format!("Tab limit reached ({}). Close a tab first.", budget::MAX_TABS);
+            self.status_text = format!(
+                "Tab limit reached ({}). Close a tab first.",
+                budget::MAX_TABS
+            );
             return;
         }
         self.current_tab_mut().browser.cancel();
         self.cancel_loading();
-        if self.tabs.iter().map(Tab::resident_bytes).sum::<usize>().saturating_add(128 * 1024) > budget::MAX_RESIDENT_BYTES {
+        if self
+            .tabs
+            .iter()
+            .map(Tab::resident_bytes)
+            .sum::<usize>()
+            .saturating_add(128 * 1024)
+            > budget::MAX_RESIDENT_BYTES
+        {
             self.status_text = String::from("Close a tab to free memory before opening another.");
             return;
         }
         self.clear_transient_state();
         let viewport_w = self.width.saturating_sub(16);
-        let tab = Tab::new("file:///welcome.md", viewport_w, self.height.saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT), &mut self.js_runtime, &mut self.fonts);
+        let tab = Tab::new(
+            "file:///welcome.md",
+            viewport_w,
+            self.height
+                .saturating_sub(TOOLBAR_HEIGHT + TABBAR_HEIGHT + STATUS_HEIGHT),
+            &mut self.js_runtime,
+            &mut self.fonts,
+        );
         self.tabs.push(tab);
         self.active_tab = self.tabs.len().saturating_sub(1);
         self.url_input = self.current_tab().url.clone();
@@ -420,7 +542,9 @@ impl OcelViewer {
         if self.search_open {
             self.perform_search();
         }
-        if url != "file:///welcome.md" { self.load_url(url); }
+        if url != "file:///welcome.md" {
+            self.load_url(url);
+        }
     }
 
     fn close_tab(&mut self, idx: usize) {
@@ -456,7 +580,9 @@ impl OcelViewer {
     }
 
     fn switch_tab(&mut self, index: usize) {
-        if index >= self.tabs.len() { return; }
+        if index >= self.tabs.len() {
+            return;
+        }
         if index != self.active_tab {
             self.cancel_loading();
             self.clear_transient_state();
@@ -477,7 +603,9 @@ impl OcelViewer {
                 tab.doc.relayout_from_arena(&mut self.fonts, w, h);
             }
         }
-        if self.search_open { self.perform_search(); }
+        if self.search_open {
+            self.perform_search();
+        }
     }
 
     fn hibernate_inactive_tabs(&mut self) {
@@ -507,13 +635,25 @@ impl OcelViewer {
 
     fn navigate_to(&mut self, url: &str) {
         let resolved = if url.starts_with('#') {
-            format!("{}{}", self.current_tab().url.split('#').next().unwrap_or(""), url)
+            format!(
+                "{}{}",
+                self.current_tab().url.split('#').next().unwrap_or(""),
+                url
+            )
         } else if !url.contains("://") {
-            let (reference, fragment) = url.split_once('#').map_or((url,None), |(path,fragment)| (path,Some(fragment)));
-            let mut result = resources::resolve(&self.current_tab().url, reference).unwrap_or_else(|_| String::from(reference));
-            if let Some(fragment) = fragment { result.push('#'); result.push_str(fragment); }
+            let (reference, fragment) = url
+                .split_once('#')
+                .map_or((url, None), |(path, fragment)| (path, Some(fragment)));
+            let mut result = resources::resolve(&self.current_tab().url, reference)
+                .unwrap_or_else(|_| String::from(reference));
+            if let Some(fragment) = fragment {
+                result.push('#');
+                result.push_str(fragment);
+            }
             result
-        } else { String::from(url) };
+        } else {
+            String::from(url)
+        };
         let current_base = self.current_tab().url.split('#').next().unwrap_or("");
         if let Some((base, fragment)) = resolved.split_once('#') {
             if base == current_base {
@@ -523,7 +663,9 @@ impl OcelViewer {
                     tab.url = resolved.clone();
                     tab.scroll_y = y.max(0);
                     tab.history.truncate(tab.history_idx + 1);
-                    if tab.history.len() == 128 { tab.history.remove(0); }
+                    if tab.history.len() == 128 {
+                        tab.history.remove(0);
+                    }
                     tab.history.push(resolved.clone());
                     tab.history_idx = tab.history.len() - 1;
                     self.url_input = resolved;
@@ -587,7 +729,8 @@ impl OcelViewer {
         match DocumentLoadJob::new(url) {
             Ok(mut job) => {
                 job.set_memory_budget(remaining);
-                let was_explicitly_web = self.tabs[self.active_tab].doc.arena.is_some() && !self.tabs[self.active_tab].doc.is_reader_mode();
+                let was_explicitly_web = self.tabs[self.active_tab].doc.arena.is_some()
+                    && !self.tabs[self.active_tab].doc.is_reader_mode();
                 let enable_reader = !was_explicitly_web;
                 if enable_reader {
                     job.set_reader_mode(true);
@@ -602,13 +745,27 @@ impl OcelViewer {
     }
 
     fn poll_loading(&mut self) {
-        let Some(mut pending) = self.pending_load.take() else { return; };
-        if self.tabs.iter().map(Tab::resident_bytes).sum::<usize>()
-            .saturating_add(pending.job.resident_bytes()) > budget::MAX_RESIDENT_BYTES {
+        let Some(mut pending) = self.pending_load.take() else {
+            return;
+        };
+        if self
+            .tabs
+            .iter()
+            .map(Tab::resident_bytes)
+            .sum::<usize>()
+            .saturating_add(pending.job.resident_bytes())
+            > budget::MAX_RESIDENT_BYTES
+        {
             self.hibernate_inactive_tabs();
         }
-        if self.tabs.iter().map(Tab::resident_bytes).sum::<usize>()
-            .saturating_add(pending.job.resident_bytes()) > budget::MAX_RESIDENT_BYTES {
+        if self
+            .tabs
+            .iter()
+            .map(Tab::resident_bytes)
+            .sum::<usize>()
+            .saturating_add(pending.job.resident_bytes())
+            > budget::MAX_RESIDENT_BYTES
+        {
             pending.job.cancel();
             self.status_text = String::from("Loading exceeded the shared tab memory budget.");
             self.render_chrome();
@@ -631,11 +788,16 @@ impl OcelViewer {
                 let changed = status != self.status_text;
                 self.status_text = status;
                 self.pending_load = Some(pending);
-                if changed { self.render_chrome(); }
+                if changed {
+                    self.render_chrome();
+                }
             }
             core::task::Poll::Ready(result) => {
                 match result {
-                    Ok(loaded) => { trace::stamp("final document (resources complete)"); self.finish_load(loaded, pending.navigation) },
+                    Ok(loaded) => {
+                        trace::stamp("final document (resources complete)");
+                        self.finish_load(loaded, pending.navigation)
+                    }
                     Err(error) => {
                         self.url_input = self.current_tab().url.clone();
                         self.status_text = format!("Load failed: {}", error);
@@ -649,7 +811,10 @@ impl OcelViewer {
     }
 
     fn finish_load(&mut self, loaded: LoadedDocument, navigation: Navigation) {
-        let retained: usize = self.tabs.iter().enumerate()
+        let retained: usize = self
+            .tabs
+            .iter()
+            .enumerate()
             .filter(|(i, _)| *i != self.active_tab)
             .map(|(_, t)| t.resident_bytes())
             .sum();
@@ -664,15 +829,30 @@ impl OcelViewer {
         let resource_warning = loaded.resources.warnings().next().map(String::from);
         // Reserve layout/text expansion before parsing; image buffers are shared,
         // but the encoded resource bundle remains owned by this tab.
-        let direct_bytes: usize = loaded.direct_nodes.as_ref().map_or(0, |nodes| nodes.iter().map(|n| {
-            if let DocNode::Image { pixels, .. } = n { pixels.len() } else { 256 }
-        }).sum());
-        let reserve = loaded.content.len().saturating_mul(24)
+        let direct_bytes: usize = loaded.direct_nodes.as_ref().map_or(0, |nodes| {
+            nodes
+                .iter()
+                .map(|n| {
+                    if let DocNode::Image { pixels, .. } = n {
+                        pixels.len()
+                    } else {
+                        256
+                    }
+                })
+                .sum()
+        });
+        let reserve = loaded
+            .content
+            .len()
+            .saturating_mul(24)
             .saturating_add(loaded.resources.resident_bytes())
             .saturating_add(decoded_bytes)
-            .saturating_add(direct_bytes).saturating_add(128 * 1024);
+            .saturating_add(direct_bytes)
+            .saturating_add(128 * 1024);
         if retained.saturating_add(reserve) > budget::MAX_RESIDENT_BYTES {
-            self.status_text = String::from("Document exceeds the remaining tab memory budget; close another tab.");
+            self.status_text = String::from(
+                "Document exceeds the remaining tab memory budget; close another tab.",
+            );
             self.url_input = self.current_tab().url.clone();
             return;
         }
@@ -680,47 +860,88 @@ impl OcelViewer {
         let viewport_h = self.viewport_height();
         let zoom = self.tabs[self.active_tab].doc.zoom_percent();
         let scripts_enabled = self.tabs[self.active_tab].scripts_enabled;
-        let was_explicitly_web = self.tabs[self.active_tab].doc.arena.is_some() && !self.tabs[self.active_tab].doc.is_reader_mode();
+        let was_explicitly_web = self.tabs[self.active_tab].doc.arena.is_some()
+            && !self.tabs[self.active_tab].doc.is_reader_mode();
         let enable_reader = !was_explicitly_web;
         let reader_column = self.tabs[self.active_tab].doc.reader_width();
         let is_asset_update = self.tabs[self.active_tab].url == loaded.url;
-        let existing_scroll = if is_asset_update { self.tabs[self.active_tab].scroll_y } else { 0 };
+        let existing_scroll = if is_asset_update {
+            self.tabs[self.active_tab].scroll_y
+        } else {
+            0
+        };
         let mut candidate = Tab {
-            title: String::new(), url: String::new(), doc: Document::new(),
-            scroll_y: existing_scroll, history: Vec::new(), history_idx: 0, js_context_id: 0,
-            scripts_enabled, resources: resources::ResourceBundle::default(),
+            title: String::new(),
+            url: String::new(),
+            doc: Document::new(),
+            scroll_y: existing_scroll,
+            history: Vec::new(),
+            history_idx: 0,
+            js_context_id: 0,
+            scripts_enabled,
+            resources: resources::ResourceBundle::default(),
             native_dom_dirty: false,
             browser: browser_runtime::DocumentBrowser::new(&loaded.url),
         };
-        candidate.browser.session.set_cookies(self.current_tab().browser.session.cookies());
-        candidate.doc.set_memory_budget(budget::MAX_RESIDENT_BYTES.saturating_sub(retained)
-            .saturating_sub(loaded.resources.resident_bytes()).saturating_sub(loaded.content.len()));
+        candidate
+            .browser
+            .session
+            .set_cookies(self.current_tab().browser.session.cookies());
+        candidate.doc.set_memory_budget(
+            budget::MAX_RESIDENT_BYTES
+                .saturating_sub(retained)
+                .saturating_sub(loaded.resources.resident_bytes())
+                .saturating_sub(loaded.content.len()),
+        );
         let install = if !enable_reader {
             Install::Web
         } else if is_asset_update && self.tabs[self.active_tab].doc.is_reader_mode() {
-            match self.tabs[self.active_tab].doc.arena.take() { Some(arena) => Install::ReaderAssets(arena), None => Install::Reader }
+            match self.tabs[self.active_tab].doc.arena.take() {
+                Some(arena) => Install::ReaderAssets(arena),
+                None => Install::Reader,
+            }
         } else {
             Install::Reader
         };
         let t = trace::now();
-        let (url, format) = candidate.install_loaded(loaded, viewport_w, viewport_h, &mut self.js_runtime, &mut self.fonts, install);
+        let (url, format) = candidate.install_loaded(
+            loaded,
+            viewport_w,
+            viewport_h,
+            &mut self.js_runtime,
+            &mut self.fonts,
+            install,
+        );
         trace::stamp_took("install_loaded", t);
         let tab = &mut candidate;
         tab.scroll_y = existing_scroll;
         if zoom != tab.doc.zoom_percent() && !(enable_reader && tab.doc.arena.is_some()) {
-            tab.doc.set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
+            tab.doc
+                .set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
         }
         if enable_reader && tab.doc.arena.is_some() {
-            tab.doc.set_reader_width(reader_column, &mut self.fonts, viewport_w, viewport_h);
+            tab.doc
+                .set_reader_width(reader_column, &mut self.fonts, viewport_w, viewport_h);
             let previous = resources::replace(core::mem::take(&mut tab.resources));
             let t = trace::now();
-            if tab.doc.toggle_reader(&mut self.fonts, viewport_w, viewport_h, &tab.url, &tab.title).is_ok() {
+            if tab
+                .doc
+                .toggle_reader(
+                    &mut self.fonts,
+                    viewport_w,
+                    viewport_h,
+                    &tab.url,
+                    &tab.title,
+                )
+                .is_ok()
+            {
                 self.status_text = String::from("Reader Mode · Alt+[ / Alt+] changes column width");
             }
             trace::stamp_took("toggle_reader (readability + reader layout)", t);
             tab.resources = resources::replace(previous);
             if zoom != tab.doc.zoom_percent() {
-                tab.doc.set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
+                tab.doc
+                    .set_zoom(zoom, &mut self.fonts, viewport_w, viewport_h);
             }
         }
         if let Some(error) = tab.doc.last_error.clone() {
@@ -735,7 +956,8 @@ impl OcelViewer {
             use js::JsContext;
             self.js_runtime.reset();
             self.restore_arena_if_reused(&mut candidate, is_asset_update);
-            self.status_text = String::from("Rendered document exceeds the shared tab memory budget.");
+            self.status_text =
+                String::from("Rendered document exceeds the shared tab memory budget.");
             self.url_input = self.current_tab().url.clone();
             return;
         }
@@ -746,26 +968,36 @@ impl OcelViewer {
             match navigation {
                 Navigation::Push => {
                     tab.history.truncate(tab.history_idx + 1);
-                    if tab.history.len() == 128 { tab.history.remove(0); }
+                    if tab.history.len() == 128 {
+                        tab.history.remove(0);
+                    }
                     tab.history.push(url.clone());
                     tab.history_idx = tab.history.len() - 1;
                 }
                 Navigation::Traverse(index) => tab.history_idx = index,
                 Navigation::Replace => {
-                    if let Some(entry) = tab.history.get_mut(tab.history_idx) { *entry = url.clone(); }
+                    if let Some(entry) = tab.history.get_mut(tab.history_idx) {
+                        *entry = url.clone();
+                    }
                 }
             }
         }
         self.tabs[self.active_tab] = candidate;
         self.url_input = url;
         let _ = self.surface.set_title(&self.current_tab().title);
-        ostd::io::println(&format!("[ocel] loaded {} ({}, {} items)",
-            self.url_input, format, self.current_tab().doc.nodes.len()));
+        ostd::io::println(&format!(
+            "[ocel] loaded {} ({}, {} items)",
+            self.url_input,
+            format,
+            self.current_tab().doc.nodes.len()
+        ));
         self.status_text = format!("Loaded {} · {}", format, self.script_status());
         if let Some(warning) = resource_warning {
             self.status_text = format!("Loaded with resource error: {}", warning);
         }
-        if self.search_open { self.perform_search(); }
+        if self.search_open {
+            self.perform_search();
+        }
     }
 
     /// A rejected asset pass must hand the reused DOM arena back to the tab that
@@ -781,7 +1013,11 @@ impl OcelViewer {
         if self.current_tab().doc.form_owner(input).is_none() {
             return;
         }
-        match self.current_tab().doc.form_url(input, &self.current_tab().url) {
+        match self
+            .current_tab()
+            .doc
+            .form_url(input, &self.current_tab().url)
+        {
             Ok(url) => self.navigate_to(&url),
             Err(error) => self.status_text = format!("Form: {}", error),
         }
@@ -790,12 +1026,24 @@ impl OcelViewer {
 
     fn reserve_active_document(&mut self) {
         let tab = &self.tabs[self.active_tab];
-        let metadata = tab.resident_bytes().saturating_sub(tab.doc.resident_bytes());
-        let others: usize = self.tabs.iter().enumerate().filter(|(i,_)| *i != self.active_tab)
-            .map(|(_,tab)| tab.resident_bytes()).sum();
-        let pending = self.pending_load.as_ref().map_or(0, |pending| pending.job.resident_bytes());
-        let remaining = budget::MAX_RESIDENT_BYTES.saturating_sub(others)
-            .saturating_sub(metadata).saturating_sub(pending);
+        let metadata = tab
+            .resident_bytes()
+            .saturating_sub(tab.doc.resident_bytes());
+        let others: usize = self
+            .tabs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != self.active_tab)
+            .map(|(_, tab)| tab.resident_bytes())
+            .sum();
+        let pending = self
+            .pending_load
+            .as_ref()
+            .map_or(0, |pending| pending.job.resident_bytes());
+        let remaining = budget::MAX_RESIDENT_BYTES
+            .saturating_sub(others)
+            .saturating_sub(metadata)
+            .saturating_sub(pending);
         self.tabs[self.active_tab].doc.set_memory_budget(remaining);
     }
 
@@ -806,23 +1054,36 @@ impl OcelViewer {
         self.reserve_active_document();
         let tab = &mut self.tabs[self.active_tab];
         let previous = resources::replace(core::mem::take(&mut tab.resources));
-        self.status_text = match tab.doc.toggle_reader(&mut self.fonts, w, h, &tab.url, &tab.title) {
+        self.status_text = match tab
+            .doc
+            .toggle_reader(&mut self.fonts, w, h, &tab.url, &tab.title)
+        {
             Ok(true) => String::from("Reader Mode · Alt+[ / Alt+] changes column width"),
             Ok(false) => String::from("Exited Reader Mode"),
             Err(error) => format!("Reader: {}", error),
         };
         tab.resources = resources::replace(previous);
         tab.scroll_y = 0;
-        if self.search_open { self.perform_search(); }
+        if self.search_open {
+            self.perform_search();
+        }
         self.render();
     }
 
     fn script_status(&self) -> &'static str {
         let tab = self.current_tab();
-        if !tab.scripts_enabled { "JS off" }
-        else if tab.js_context_id != 0 && tab.js_context_id == self.js_runtime.context_id() && self.js_runtime.is_active() { "JS active" }
-        else if tab.js_context_id != 0 { "JS inactive — reload to resume" }
-        else { "JS idle" }
+        if !tab.scripts_enabled {
+            "JS off"
+        } else if tab.js_context_id != 0
+            && tab.js_context_id == self.js_runtime.context_id()
+            && self.js_runtime.is_active()
+        {
+            "JS active"
+        } else if tab.js_context_id != 0 {
+            "JS inactive — reload to resume"
+        } else {
+            "JS idle"
+        }
     }
 
     fn set_zoom(&mut self, percent: u16) {
@@ -834,10 +1095,17 @@ impl OcelViewer {
         let old_scroll = tab.scroll_y;
         tab.doc.set_zoom(percent, &mut self.fonts, w, h);
         tab.scroll_y = ((old_scroll as i64 * tab.doc.total_height as i64) / old_height as i64)
-            .clamp(0, (tab.doc.total_height - h as i32).max(0) as i64) as i32;
-        if let Some(error) = &tab.doc.last_error { self.status_text = format!("Zoom: {}", error); }
-        if self.search_open { self.perform_search(); }
-        if self.toc_open { self.toc_entries = self.current_tab().doc.toc(); }
+            .clamp(0, (tab.doc.total_height - h as i32).max(0) as i64)
+            as i32;
+        if let Some(error) = &tab.doc.last_error {
+            self.status_text = format!("Zoom: {}", error);
+        }
+        if self.search_open {
+            self.perform_search();
+        }
+        if self.toc_open {
+            self.toc_entries = self.current_tab().doc.toc();
+        }
         self.render();
     }
 
@@ -846,7 +1114,9 @@ impl OcelViewer {
         if query.is_empty() {
             self.search_matches.clear();
             self.search_idx = 0;
-            self.tabs[self.active_tab].doc.set_search_highlight("", None);
+            self.tabs[self.active_tab]
+                .doc
+                .set_search_highlight("", None);
             return;
         }
 
@@ -861,7 +1131,9 @@ impl OcelViewer {
         self.search_matches = matches;
         self.search_idx = 0;
         ostd::io::println(&format!("[ocel] search \"{}\": {} match(es)", query, total));
-        self.tabs[self.active_tab].doc.set_search_highlight(query, if total == 0 { None } else { Some(0) });
+        self.tabs[self.active_tab]
+            .doc
+            .set_search_highlight(query, if total == 0 { None } else { Some(0) });
 
         if let Some(y) = first_match {
             if let Some(tab) = self.tabs.get_mut(self.active_tab) {
@@ -876,8 +1148,12 @@ impl OcelViewer {
         }
         self.search_idx = if backwards {
             (self.search_idx + self.search_matches.len() - 1) % self.search_matches.len()
-        } else { (self.search_idx + 1) % self.search_matches.len() };
-        self.tabs[self.active_tab].doc.set_search_highlight(&self.search_query, Some(self.search_idx));
+        } else {
+            (self.search_idx + 1) % self.search_matches.len()
+        };
+        self.tabs[self.active_tab]
+            .doc
+            .set_search_highlight(&self.search_query, Some(self.search_idx));
         let target_y = self.search_matches[self.search_idx];
         self.current_tab_mut().scroll_y = target_y.saturating_sub(60).max(0);
         ostd::io::println(&format!(
@@ -903,11 +1179,17 @@ impl OcelViewer {
         tab.scroll_y = (tab.scroll_y + delta).clamp(0, max_s);
     }
 
-    fn render(&mut self) { self.render_regions(true, true); }
+    fn render(&mut self) {
+        self.render_regions(true, true);
+    }
 
-    fn render_chrome(&mut self) { self.render_regions(false, true); }
+    fn render_chrome(&mut self) {
+        self.render_regions(false, true);
+    }
 
-    fn render_scroll(&mut self) { self.render_regions(true, false); }
+    fn render_scroll(&mut self) {
+        self.render_regions(true, false);
+    }
 
     fn render_regions(&mut self, document_dirty: bool, navigation_dirty: bool) {
         let w = self.width;
@@ -917,118 +1199,255 @@ impl OcelViewer {
 
         let active_scroll = self.tabs[self.active_tab].scroll_y;
         let max_s = self.max_scroll();
-        let sys_theme = self.reader_theme.resolved_theme(draw::active_system_palette());
+        let sys_theme = self
+            .reader_theme
+            .resolved_theme(draw::active_system_palette());
         let script_status = self.script_status();
         if document_dirty {
-        self.tabs[self.active_tab].browser.layout_dirty = true;
-        let is_reader = self.tabs[self.active_tab].doc.is_reader_mode();
-        let bg_color = if is_reader { self.reader_theme.bg_color() } else { theme::BG_DARK };
-        fill_rect(&mut self.surface, 0, view_y, w, view_h, bg_color);
-        self.tabs[self.active_tab].doc.render_viewport_themed(
-            &mut self.fonts,
-            &mut self.surface,
-            0,
-            view_y,
-            w.saturating_sub(16),
-            view_h,
-            active_scroll,
-            if is_reader { Some(self.reader_theme) } else { None },
-        );
-        // Reading Progress Indicator (2px thin bar at top of viewport)
-        if is_reader && max_s > 0 {
-            let progress_ratio = (active_scroll as f32 / max_s as f32).clamp(0.0, 1.0);
-            ProgressIndicator::render(&mut self.surface, sys_theme, 0, view_y, w, 2, progress_ratio);
-        }
-        // 3. Render Scrollbar on the right edge if content overflows
-        if max_s > 0 {
-            let sb_x = (w.saturating_sub(12)) as i32;
-            let doc_h = self.current_tab().doc.total_height;
-            ScrollBar::render(
+            self.tabs[self.active_tab].browser.layout_dirty = true;
+            let is_reader = self.tabs[self.active_tab].doc.is_reader_mode();
+            let bg_color = if is_reader {
+                self.reader_theme.bg_color()
+            } else {
+                theme::BG_DARK
+            };
+            fill_rect(&mut self.surface, 0, view_y, w, view_h, bg_color);
+            self.tabs[self.active_tab].doc.render_viewport_themed(
+                &mut self.fonts,
                 &mut self.surface,
-                sys_theme,
-                sb_x,
+                0,
                 view_y,
-                12,
+                w.saturating_sub(16),
                 view_h,
                 active_scroll,
-                max_s,
-                doc_h,
+                if is_reader {
+                    Some(self.reader_theme)
+                } else {
+                    None
+                },
             );
-        }
+            // Reading Progress Indicator (2px thin bar at top of viewport)
+            if is_reader && max_s > 0 {
+                let progress_ratio = (active_scroll as f32 / max_s as f32).clamp(0.0, 1.0);
+                ProgressIndicator::render(
+                    &mut self.surface,
+                    sys_theme,
+                    0,
+                    view_y,
+                    w,
+                    2,
+                    progress_ratio,
+                );
+            }
+            // 3. Render Scrollbar on the right edge if content overflows
+            if max_s > 0 {
+                let sb_x = (w.saturating_sub(12)) as i32;
+                let doc_h = self.current_tab().doc.total_height;
+                ScrollBar::render(
+                    &mut self.surface,
+                    sys_theme,
+                    sb_x,
+                    view_y,
+                    12,
+                    view_h,
+                    active_scroll,
+                    max_s,
+                    doc_h,
+                );
+            }
         }
 
         // Navigation chrome uses bounded, vertically centered Inter text.
-        let fonts=&mut self.fonts;
-        let surf=&mut self.surface;
-        let regular=FontFace::UiRegular;
-        let semibold=FontFace::UiSemibold;
+        let fonts = &mut self.fonts;
+        let surf = &mut self.surface;
+        let regular = FontFace::UiRegular;
+        let semibold = FontFace::UiSemibold;
         if navigation_dirty {
-        fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, sys_theme.surface());
-        fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, sys_theme.border());
-        let tab = &self.tabs[self.active_tab];
-        let can_back = tab.history_idx > 0;
-        let can_fwd = tab.history_idx + 1 < tab.history.len();
-        NavigationButtons::render(surf, fonts, sys_theme, 10, 8, can_back, can_fwd);
-        let addr_x = 76;
-        let addr_w = w.saturating_sub(176);
-        AddressBar::render(surf, fonts, sys_theme, addr_x, 8, addr_w, 28, &self.url_input);
-        let btn_x = addr_x + addr_w as i32 + 8;
-        fill_rect(surf, btn_x, 8, 38, 28, sys_theme.accent());
-        ui_text(fonts, surf, (btn_x, 8, 38, 28), "Go", Color::WHITE, semibold, 14.0, true);
-        let reader_x = btn_x + 44;
-        let reader = tab.doc.is_reader_mode() || tab.doc.web_layout.is_none();
-        let btn_w = 32u32;
-        if reader {
-            fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.accent());
-            draw::draw_book_icon(surf, reader_x + 16, 22, Color::WHITE);
-        } else {
-            fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.input_bg());
-            stroke_rect(surf, reader_x, 8, btn_w, 28, sys_theme.border());
-            draw::draw_globe_icon(surf, reader_x + 16, 22, sys_theme.accent());
-        }
+            fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, sys_theme.surface());
+            fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, sys_theme.border());
+            let tab = &self.tabs[self.active_tab];
+            let can_back = tab.history_idx > 0;
+            let can_fwd = tab.history_idx + 1 < tab.history.len();
+            NavigationButtons::render(surf, fonts, sys_theme, 10, 8, can_back, can_fwd);
+            let addr_x = 76;
+            let addr_w = w.saturating_sub(176);
+            AddressBar::render(
+                surf,
+                fonts,
+                sys_theme,
+                addr_x,
+                8,
+                addr_w,
+                28,
+                &self.url_input,
+            );
+            let btn_x = addr_x + addr_w as i32 + 8;
+            fill_rect(surf, btn_x, 8, 38, 28, sys_theme.accent());
+            ui_text(
+                fonts,
+                surf,
+                (btn_x, 8, 38, 28),
+                "Go",
+                Color::WHITE,
+                semibold,
+                14.0,
+                true,
+            );
+            let reader_x = btn_x + 44;
+            let reader = tab.doc.is_reader_mode() || tab.doc.web_layout.is_none();
+            let btn_w = 32u32;
+            if reader {
+                fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.accent());
+                draw::draw_book_icon(surf, reader_x + 16, 22, Color::WHITE);
+            } else {
+                fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.input_bg());
+                stroke_rect(surf, reader_x, 8, btn_w, 28, sys_theme.border());
+                draw::draw_globe_icon(surf, reader_x + 16, 22, sys_theme.accent());
+            }
 
-        if TABBAR_HEIGHT > 0 {
-            let tabbar_y=TOOLBAR_HEIGHT as i32;
-            fill_rect(surf,0,tabbar_y,w,TABBAR_HEIGHT,theme::BG_TOOLBAR);
-            fill_rect(surf,0,tabbar_y+TABBAR_HEIGHT as i32-1,w,1,theme::BORDER);
-            let num_tabs=self.tabs.len() as u32;
-            let tab_w=140u32.min(w.saturating_sub(60)/num_tabs.max(1));
-            for (i,tab) in self.tabs.iter().enumerate() {
-                let x=10+i as i32*tab_w as i32;
-                let active=i==self.active_tab;
-                fill_rect(surf,x,tabbar_y+2,tab_w.saturating_sub(2),TABBAR_HEIGHT-2,
-                    if active {theme::BG_DARK}else{theme::BG_INPUT});
-                if active {fill_rect(surf,x,tabbar_y,tab_w.saturating_sub(2),2,theme::ACCENT_CYAN);}
-                ui_text(fonts,surf,(x+6,tabbar_y+2,tab_w.saturating_sub(30),TABBAR_HEIGHT-4),
-                    &tab.title,if active{theme::TEXT_PRIMARY}else{theme::TEXT_MUTED},regular,14.0,false);
-                if tab_w>=24 {
-                    ui_text(fonts,surf,(x+tab_w as i32-20,tabbar_y+2,18,TABBAR_HEIGHT-4),
-                        "×",theme::TEXT_MUTED,regular,14.0,true);
+            // reason: TABBAR_HEIGHT is a layout config const that is 0 while tabs are
+            // compositor-native; the in-app tab bar stays available for nonzero values.
+            #[allow(clippy::absurd_extreme_comparisons)]
+            if TABBAR_HEIGHT > 0 {
+                let tabbar_y = TOOLBAR_HEIGHT as i32;
+                fill_rect(surf, 0, tabbar_y, w, TABBAR_HEIGHT, theme::BG_TOOLBAR);
+                fill_rect(
+                    surf,
+                    0,
+                    tabbar_y + TABBAR_HEIGHT as i32 - 1,
+                    w,
+                    1,
+                    theme::BORDER,
+                );
+                let num_tabs = self.tabs.len() as u32;
+                let tab_w = 140u32.min(w.saturating_sub(60) / num_tabs.max(1));
+                for (i, tab) in self.tabs.iter().enumerate() {
+                    let x = 10 + i as i32 * tab_w as i32;
+                    let active = i == self.active_tab;
+                    fill_rect(
+                        surf,
+                        x,
+                        tabbar_y + 2,
+                        tab_w.saturating_sub(2),
+                        TABBAR_HEIGHT - 2,
+                        if active {
+                            theme::BG_DARK
+                        } else {
+                            theme::BG_INPUT
+                        },
+                    );
+                    if active {
+                        fill_rect(
+                            surf,
+                            x,
+                            tabbar_y,
+                            tab_w.saturating_sub(2),
+                            2,
+                            theme::ACCENT_CYAN,
+                        );
+                    }
+                    ui_text(
+                        fonts,
+                        surf,
+                        (
+                            x + 6,
+                            tabbar_y + 2,
+                            tab_w.saturating_sub(30),
+                            TABBAR_HEIGHT - 4,
+                        ),
+                        &tab.title,
+                        if active {
+                            theme::TEXT_PRIMARY
+                        } else {
+                            theme::TEXT_MUTED
+                        },
+                        regular,
+                        14.0,
+                        false,
+                    );
+                    if tab_w >= 24 {
+                        ui_text(
+                            fonts,
+                            surf,
+                            (x + tab_w as i32 - 20, tabbar_y + 2, 18, TABBAR_HEIGHT - 4),
+                            "×",
+                            theme::TEXT_MUTED,
+                            regular,
+                            14.0,
+                            true,
+                        );
+                    }
+                }
+                let plus_x = 10 + num_tabs as i32 * tab_w as i32 + 6;
+                if plus_x + 22 < w as i32 {
+                    fill_rect(surf, plus_x, tabbar_y + 3, 22, 22, theme::BG_INPUT);
+                    ui_text(
+                        fonts,
+                        surf,
+                        (plus_x, tabbar_y + 3, 22, 22),
+                        "+",
+                        theme::ACCENT_BLUE,
+                        regular,
+                        16.0,
+                        true,
+                    );
                 }
             }
-            let plus_x=10+num_tabs as i32*tab_w as i32+6;
-            if plus_x+22<w as i32 {
-                fill_rect(surf,plus_x,tabbar_y+3,22,22,theme::BG_INPUT);
-                ui_text(fonts,surf,(plus_x,tabbar_y+3,22,22),"+",theme::ACCENT_BLUE,regular,16.0,true);
-            }
-        }
         }
 
         if document_dirty && self.search_open {
-            let sb_w=320u32.min(w.saturating_sub(30));
-            let sb_x=w.saturating_sub(sb_w+30) as i32;
-            let sb_y=(TOOLBAR_HEIGHT+TABBAR_HEIGHT+8) as i32;
-            fill_rect(surf,sb_x,sb_y,sb_w,34,theme::BG_INPUT);
-            stroke_rect(surf,sb_x,sb_y,sb_w,34,theme::ACCENT_BLUE);
-            let count=if self.search_matches.is_empty(){String::from("0/0")}
-                else{format!("{}/{}",self.search_idx+1,self.search_matches.len())};
-            let count_w=fonts.measure(regular,&count,14.0) as u32+12;
-            let label_w=fonts.measure(semibold,"Find:",14.0) as u32+8;
-            ui_text(fonts,surf,(sb_x+8,sb_y,label_w,34),"Find:",theme::TEXT_MUTED,semibold,14.0,false);
-            ui_text(fonts,surf,(sb_x+8+label_w as i32,sb_y,
-                sb_w.saturating_sub(label_w+count_w+20),34),&self.search_query,theme::TEXT_PRIMARY,regular,14.0,false);
-            ui_text(fonts,surf,(sb_x+sb_w.saturating_sub(count_w+8) as i32,sb_y,count_w,34),
-                &count,theme::TEXT_MUTED,regular,14.0,true);
+            let sb_w = 320u32.min(w.saturating_sub(30));
+            let sb_x = w.saturating_sub(sb_w + 30) as i32;
+            let sb_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT + 8) as i32;
+            fill_rect(surf, sb_x, sb_y, sb_w, 34, theme::BG_INPUT);
+            stroke_rect(surf, sb_x, sb_y, sb_w, 34, theme::ACCENT_BLUE);
+            let count = if self.search_matches.is_empty() {
+                String::from("0/0")
+            } else {
+                format!("{}/{}", self.search_idx + 1, self.search_matches.len())
+            };
+            let count_w = fonts.measure(regular, &count, 14.0) as u32 + 12;
+            let label_w = fonts.measure(semibold, "Find:", 14.0) as u32 + 8;
+            ui_text(
+                fonts,
+                surf,
+                (sb_x + 8, sb_y, label_w, 34),
+                "Find:",
+                theme::TEXT_MUTED,
+                semibold,
+                14.0,
+                false,
+            );
+            ui_text(
+                fonts,
+                surf,
+                (
+                    sb_x + 8 + label_w as i32,
+                    sb_y,
+                    sb_w.saturating_sub(label_w + count_w + 20),
+                    34,
+                ),
+                &self.search_query,
+                theme::TEXT_PRIMARY,
+                regular,
+                14.0,
+                false,
+            );
+            ui_text(
+                fonts,
+                surf,
+                (
+                    sb_x + sb_w.saturating_sub(count_w + 8) as i32,
+                    sb_y,
+                    count_w,
+                    34,
+                ),
+                &count,
+                theme::TEXT_MUTED,
+                regular,
+                14.0,
+                true,
+            );
         }
         if document_dirty && self.toc_open {
             let panel_w = 300u32.min(w.saturating_sub(16));
@@ -1037,27 +1456,86 @@ impl OcelViewer {
             let panel_h = view_h.saturating_sub(16);
             fill_rect(surf, panel_x, panel_y, panel_w, panel_h, theme::BG_INPUT);
             stroke_rect(surf, panel_x, panel_y, panel_w, panel_h, theme::ACCENT_BLUE);
-            ui_text(fonts,surf,(panel_x+10,panel_y+2,panel_w.saturating_sub(20),30),
-                "Contents · Esc closes",theme::ACCENT_CYAN,semibold,15.0,false);
+            ui_text(
+                fonts,
+                surf,
+                (panel_x + 10, panel_y + 2, panel_w.saturating_sub(20), 30),
+                "Contents · Esc closes",
+                theme::ACCENT_CYAN,
+                semibold,
+                15.0,
+                false,
+            );
             let rows = panel_h.saturating_sub(36) / 26;
-            for (row, entry) in self.toc_entries.iter().skip(self.toc_offset).take(rows as usize).enumerate() {
+            for (row, entry) in self
+                .toc_entries
+                .iter()
+                .skip(self.toc_offset)
+                .take(rows as usize)
+                .enumerate()
+            {
                 let indent = (entry.level.saturating_sub(1) as u32 * 12).min(60);
-                ui_text(fonts,surf,(panel_x+10+indent as i32,panel_y+34+row as i32*26,
-                    panel_w.saturating_sub(20+indent),26),&entry.title,
-                    theme::TEXT_PRIMARY,regular,14.0,false);
+                ui_text(
+                    fonts,
+                    surf,
+                    (
+                        panel_x + 10 + indent as i32,
+                        panel_y + 34 + row as i32 * 26,
+                        panel_w.saturating_sub(20 + indent),
+                        26,
+                    ),
+                    &entry.title,
+                    theme::TEXT_PRIMARY,
+                    regular,
+                    14.0,
+                    false,
+                );
             }
         }
         let status_y = h.saturating_sub(STATUS_HEIGHT) as i32;
-        let pct = if max_s > 0 { active_scroll * 100 / max_s } else { 100 };
-        let info = format!("{} · Zoom {}% · {}%", script_status, self.tabs[self.active_tab].doc.zoom_percent(), pct);
-        StatusBar::render_split(&mut self.surface, fonts, sys_theme, status_y, w, STATUS_HEIGHT, &self.status_text, &info);
+        let pct = if max_s > 0 {
+            active_scroll * 100 / max_s
+        } else {
+            100
+        };
+        let info = format!(
+            "{} · Zoom {}% · {}%",
+            script_status,
+            self.tabs[self.active_tab].doc.zoom_percent(),
+            pct
+        );
+        StatusBar::render_split(
+            &mut self.surface,
+            fonts,
+            sys_theme,
+            status_y,
+            w,
+            STATUS_HEIGHT,
+            &self.status_text,
+            &info,
+        );
         let top_h = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
         if navigation_dirty {
-            self.surface.damage(api::display::Rect { x:0, y:0, w, h:top_h });
+            self.surface.damage(api::display::Rect {
+                x: 0,
+                y: 0,
+                w,
+                h: top_h,
+            });
         }
-        self.surface.damage(api::display::Rect { x:0, y:h.saturating_sub(STATUS_HEIGHT) as i32, w, h:STATUS_HEIGHT });
+        self.surface.damage(api::display::Rect {
+            x: 0,
+            y: h.saturating_sub(STATUS_HEIGHT) as i32,
+            w,
+            h: STATUS_HEIGHT,
+        });
         if document_dirty {
-            self.surface.damage(api::display::Rect { x:0, y:view_y, w, h:view_h });
+            self.surface.damage(api::display::Rect {
+                x: 0,
+                y: view_y,
+                w,
+                h: view_h,
+            });
         }
         if let Some((iw, ih, pixels)) = &self.zoomed_image {
             fill_rect(&mut self.surface, 0, 0, w, h, Color::rgba(0, 0, 0, 220));
@@ -1070,8 +1548,27 @@ impl OcelViewer {
             let target_h = ((*ih as f32) * scale) as u32;
             let target_x = ((w.saturating_sub(target_w)) / 2) as i32;
             let target_y = ((h.saturating_sub(target_h)) / 2) as i32;
-            draw::draw_image_clipped(&mut self.surface, target_x, target_y, target_w, target_h, pixels, (*iw * 4) as usize, *ih, (0, 0, w as i32, h as i32));
-            ui_text(fonts, &mut self.surface, (0, 16, w, 24), "Image Zoom · Click or Escape to close", Color::rgb(240, 240, 240), FontFace::UiSemibold, 15.0, true);
+            draw::draw_image_clipped(
+                &mut self.surface,
+                target_x,
+                target_y,
+                target_w,
+                target_h,
+                pixels,
+                (*iw * 4) as usize,
+                *ih,
+                (0, 0, w as i32, h as i32),
+            );
+            ui_text(
+                fonts,
+                &mut self.surface,
+                (0, 16, w, 24),
+                "Image Zoom · Click or Escape to close",
+                Color::rgb(240, 240, 240),
+                FontFace::UiSemibold,
+                15.0,
+                true,
+            );
             self.surface.damage(api::display::Rect { x: 0, y: 0, w, h });
         }
     }
@@ -1083,7 +1580,9 @@ impl OcelViewer {
 
     fn handle_mouse_scroll(&mut self, dy: i32) {
         if self.toc_open {
-            self.toc_offset = (self.toc_offset as i32 - dy).clamp(0, self.toc_entries.len().saturating_sub(1) as i32) as usize;
+            self.toc_offset = (self.toc_offset as i32 - dy)
+                .clamp(0, self.toc_entries.len().saturating_sub(1) as i32)
+                as usize;
             self.render();
             return;
         }
@@ -1106,8 +1605,10 @@ impl OcelViewer {
         let w = self.width;
         let view_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT) as i32;
         let view_h = self.viewport_height() as i32;
-        if self.toc_open && (8..308.min(w as i32 - 8)).contains(&cx)
-            && (view_y + 8..view_y + view_h - 8).contains(&cy) {
+        if self.toc_open
+            && (8..308.min(w as i32 - 8)).contains(&cx)
+            && (view_y + 8..view_y + view_h - 8).contains(&cy)
+        {
             if cy >= view_y + 42 {
                 let row = ((cy - view_y - 42) / 26) as usize + self.toc_offset;
                 if let Some(entry) = self.toc_entries.get(row) {
@@ -1156,6 +1657,9 @@ impl OcelViewer {
 
         // 4. Tab Bar clicks (y in 44..72)
         let tabbar_y = TOOLBAR_HEIGHT as i32;
+        // reason: TABBAR_HEIGHT is a layout config const that is 0 while tabs are
+        // compositor-native; tab-bar hit testing stays available for nonzero values.
+        #[allow(clippy::absurd_extreme_comparisons)]
         if TABBAR_HEIGHT > 0 && (tabbar_y..tabbar_y + TABBAR_HEIGHT as i32).contains(&cy) {
             let max_tab_w = 140u32;
             let num_tabs = self.tabs.len() as u32;
@@ -1208,23 +1712,38 @@ impl OcelViewer {
 
             // Script listeners run before native form/link default actions.
             self.dispatch_document_click(cx, cy);
-            let hit_input = self.tabs[active_tab_idx].doc.hit_test_input_node(cx, cy, 0, view_y, active_scroll);
+            let hit_input =
+                self.tabs[active_tab_idx]
+                    .doc
+                    .hit_test_input_node(cx, cy, 0, view_y, active_scroll);
             if let Some(id) = hit_input {
-                let input_type = self.tabs[active_tab_idx].doc.input(id).map(|input| input.input_type.clone());
-                if !matches!(input_type.as_deref(), Some("text"|"textarea"|"search"|"email"|"url"|"password")) {
+                let input_type = self.tabs[active_tab_idx]
+                    .doc
+                    .input(id)
+                    .map(|input| input.input_type.clone());
+                if !matches!(
+                    input_type.as_deref(),
+                    Some("text" | "textarea" | "search" | "email" | "url" | "password")
+                ) {
                     self.focused_input = None;
                     self.tabs[active_tab_idx].doc.focus_input(None);
                 }
                 match input_type.as_deref() {
                     Some("checkbox") => {
                         let tab = &mut self.tabs[active_tab_idx];
-                        if tab.doc.toggle_input(id) { tab.native_dom_dirty = true; }
+                        if tab.doc.toggle_input(id) {
+                            tab.native_dom_dirty = true;
+                        }
                         self.render();
                         return;
                     }
-                    Some("submit") => { self.submit_form(id); return; }
+                    Some("submit") => {
+                        self.submit_form(id);
+                        return;
+                    }
                     Some("button") => self.render(),
-                    Some("text") | Some("textarea") | Some("search") | Some("email") | Some("url") | Some("password") => {
+                    Some("text") | Some("textarea") | Some("search") | Some("email")
+                    | Some("url") | Some("password") => {
                         self.focused_input = Some(id);
                         self.tabs[active_tab_idx].doc.focus_input(Some(id));
                         self.render();
@@ -1243,7 +1762,10 @@ impl OcelViewer {
             }
 
             // Check Hyperlink navigation
-            let hit_link = self.tabs[active_tab_idx].doc.hit_test_link(cx, cy, 0, view_y, active_scroll);
+            let hit_link =
+                self.tabs[active_tab_idx]
+                    .doc
+                    .hit_test_link(cx, cy, 0, view_y, active_scroll);
             if let Some(link_url) = hit_link {
                 ostd::io::print("[ocel] Clicked link -> navigating to: ");
                 ostd::io::println(&link_url);
@@ -1252,12 +1774,14 @@ impl OcelViewer {
                 return;
             }
             // Check Image Click to Zoom
-            if let Some(img) = self.tabs[active_tab_idx].doc.hit_test_image(cx, cy, 0, view_y, active_scroll) {
+            if let Some(img) =
+                self.tabs[active_tab_idx]
+                    .doc
+                    .hit_test_image(cx, cy, 0, view_y, active_scroll)
+            {
                 self.zoomed_image = Some(img);
                 self.render();
-                return;
             }
-
         }
     }
 
@@ -1266,55 +1790,77 @@ impl OcelViewer {
         let active_scroll = self.tabs[active_tab_idx].scroll_y;
         let view_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT) as i32;
         let view_h = self.viewport_height() as i32;
-            let hit_node = self.tabs[active_tab_idx].doc.hit_test_node(cx, cy, 0, view_y, active_scroll);
-            if let Some(node_id) = hit_node {
-                let active_tab = &self.tabs[active_tab_idx];
-                if !active_tab.scripts_enabled || active_tab.doc.is_reader_mode() { return; }
-                if active_tab.js_context_id == 0 || active_tab.js_context_id != self.js_runtime.context_id() || !self.js_runtime.is_active() {
-                    self.status_text = String::from("JavaScript inactive or unavailable; Ctrl+J changes script policy, F5 reloads.");
-                    self.render_chrome();
-                    return;
-                }
-                // Native edits are committed to the arena. Refresh the engine's
-                // snapshot before dispatch without replacing its listeners.
-                if active_tab.native_dom_dirty {
-                    if let Some(arena) = &active_tab.doc.arena {
-                        if let Err(error) = self.js_runtime.sync_document(arena, &active_tab.title) {
-                            self.status_text = format!("JavaScript synchronization failed: {}", error.message);
-                            self.render_chrome();
-                            return;
-                        }
-                    }
-                    self.tabs[active_tab_idx].native_dom_dirty = false;
-                }
-                ostd::io::print("[ocel] Clicked DOM Node #");
-                ostd::io::print_usize(node_id.index());
-                ostd::io::println(" -> dispatching Click event to Tier 2 JS");
-
-                let event = dom_arena::DomEvent {
-                    target: node_id,
-                    kind: dom_arena::EventKind::Click,
-                    client_x: cx,
-                    client_y: cy,
-                    key: None,
-                };
-
-                let viewport_w = self.width.saturating_sub(16);
-                self.reserve_active_document();
-                let tab = &mut self.tabs[active_tab_idx];
-                if let Err(error) = tab.dispatch_browser_event(&mut self.js_runtime, &event, &mut self.fonts, viewport_w, view_h as u32) {
-                    self.status_text = format!("JavaScript: {}", error.message);
-                    ostd::io::println(&format!("[ocel] {}", self.status_text));
-                }
-                if let Err(error) = tab.drain_browser_output(&mut self.js_runtime, &mut self.fonts, viewport_w, view_h as u32) {
-                    use js::JsContext;
-                    tab.browser.cancel();
-                    self.js_runtime.reset();
-                    tab.js_context_id = 0;
-                    self.status_text = format!("JavaScript document update rejected: {error}");
-                }
-                self.render();
+        let hit_node =
+            self.tabs[active_tab_idx]
+                .doc
+                .hit_test_node(cx, cy, 0, view_y, active_scroll);
+        if let Some(node_id) = hit_node {
+            let active_tab = &self.tabs[active_tab_idx];
+            if !active_tab.scripts_enabled || active_tab.doc.is_reader_mode() {
+                return;
             }
+            if active_tab.js_context_id == 0
+                || active_tab.js_context_id != self.js_runtime.context_id()
+                || !self.js_runtime.is_active()
+            {
+                self.status_text = String::from(
+                    "JavaScript inactive or unavailable; Ctrl+J changes script policy, F5 reloads.",
+                );
+                self.render_chrome();
+                return;
+            }
+            // Native edits are committed to the arena. Refresh the engine's
+            // snapshot before dispatch without replacing its listeners.
+            if active_tab.native_dom_dirty {
+                if let Some(arena) = &active_tab.doc.arena {
+                    if let Err(error) = self.js_runtime.sync_document(arena, &active_tab.title) {
+                        self.status_text =
+                            format!("JavaScript synchronization failed: {}", error.message);
+                        self.render_chrome();
+                        return;
+                    }
+                }
+                self.tabs[active_tab_idx].native_dom_dirty = false;
+            }
+            ostd::io::print("[ocel] Clicked DOM Node #");
+            ostd::io::print_usize(node_id.index());
+            ostd::io::println(" -> dispatching Click event to Tier 2 JS");
+
+            let event = dom_arena::DomEvent {
+                target: node_id,
+                kind: dom_arena::EventKind::Click,
+                client_x: cx,
+                client_y: cy,
+                key: None,
+            };
+
+            let viewport_w = self.width.saturating_sub(16);
+            self.reserve_active_document();
+            let tab = &mut self.tabs[active_tab_idx];
+            if let Err(error) = tab.dispatch_browser_event(
+                &mut self.js_runtime,
+                &event,
+                &mut self.fonts,
+                viewport_w,
+                view_h as u32,
+            ) {
+                self.status_text = format!("JavaScript: {}", error.message);
+                ostd::io::println(&format!("[ocel] {}", self.status_text));
+            }
+            if let Err(error) = tab.drain_browser_output(
+                &mut self.js_runtime,
+                &mut self.fonts,
+                viewport_w,
+                view_h as u32,
+            ) {
+                use js::JsContext;
+                tab.browser.cancel();
+                self.js_runtime.reset();
+                tab.js_context_id = 0;
+                self.status_text = format!("JavaScript document update rejected: {error}");
+            }
+            self.render();
+        }
     }
 
     fn handle_key(&mut self, sym: KeySym, ch: Option<char>, modifiers: Modifiers) {
@@ -1331,16 +1877,28 @@ impl OcelViewer {
         }
         if modifiers.contains(Modifiers::CTRL) {
             match ch {
-                Some('+') | Some('=') => { self.set_zoom(self.current_tab().doc.zoom_percent().saturating_add(10)); return; }
-                Some('-') => { self.set_zoom(self.current_tab().doc.zoom_percent().saturating_sub(10)); return; }
-                Some('0') => { self.set_zoom(100); return; }
+                Some('+') | Some('=') => {
+                    self.set_zoom(self.current_tab().doc.zoom_percent().saturating_add(10));
+                    return;
+                }
+                Some('-') => {
+                    self.set_zoom(self.current_tab().doc.zoom_percent().saturating_sub(10));
+                    return;
+                }
+                Some('0') => {
+                    self.set_zoom(100);
+                    return;
+                }
                 Some('m') => {
                     self.toc_open = !self.toc_open;
                     if self.toc_open {
                         self.toc_entries = self.current_tab().doc.toc();
                         self.toc_offset = 0;
-                        self.status_text = if self.toc_entries.is_empty() { String::from("No headings in this document") }
-                            else { String::from("Contents · click a heading, wheel or arrows to browse") };
+                        self.status_text = if self.toc_entries.is_empty() {
+                            String::from("No headings in this document")
+                        } else {
+                            String::from("Contents · click a heading, wheel or arrows to browse")
+                        };
                     }
                     self.render();
                     return;
@@ -1353,7 +1911,11 @@ impl OcelViewer {
                     self.current_tab_mut().browser.cancel();
                     self.status_text = if self.current_tab().scripts_enabled {
                         String::from("Scripts allowed for this tab; F5 reloads and executes")
-                    } else { String::from("Scripts disabled for this tab; F5 reloads a clean static document") };
+                    } else {
+                        String::from(
+                            "Scripts disabled for this tab; F5 reloads a clean static document",
+                        )
+                    };
                     self.render_chrome();
                     return;
                 }
@@ -1361,17 +1923,26 @@ impl OcelViewer {
             }
         }
         if modifiers.contains(Modifiers::ALT) && self.current_tab().doc.is_reader_mode() {
-            let delta = match ch { Some('[') => -80, Some(']') => 80, _ => 0 };
+            let delta = match ch {
+                Some('[') => -80,
+                Some(']') => 80,
+                _ => 0,
+            };
             if delta != 0 {
-                let width = (self.current_tab().doc.reader_width() as i32 + delta).clamp(320,1200) as u32;
+                let width =
+                    (self.current_tab().doc.reader_width() as i32 + delta).clamp(320, 1200) as u32;
                 let w = self.width.saturating_sub(16);
                 let h = self.viewport_height();
                 self.reserve_active_document();
-                self.tabs[self.active_tab].doc.set_reader_width(width, &mut self.fonts, w, h);
+                self.tabs[self.active_tab]
+                    .doc
+                    .set_reader_width(width, &mut self.fonts, w, h);
                 if let Some(error) = &self.tabs[self.active_tab].doc.last_error {
                     self.status_text = format!("Reader width: {}", error);
                 }
-                if self.search_open { self.perform_search(); }
+                if self.search_open {
+                    self.perform_search();
+                }
                 self.render();
                 return;
             }
@@ -1380,7 +1951,10 @@ impl OcelViewer {
             match sym {
                 KeySym::Escape => self.toc_open = false,
                 KeySym::Up => self.toc_offset = self.toc_offset.saturating_sub(1),
-                KeySym::Down => self.toc_offset = (self.toc_offset + 1).min(self.toc_entries.len().saturating_sub(1)),
+                KeySym::Down => {
+                    self.toc_offset =
+                        (self.toc_offset + 1).min(self.toc_entries.len().saturating_sub(1))
+                }
                 KeySym::Return => {
                     if let Some(entry) = self.toc_entries.get(self.toc_offset) {
                         let y = entry.y;
@@ -1393,12 +1967,8 @@ impl OcelViewer {
             self.render();
             return;
         }
-        let is_ctrl = |target: char| {
-            ch == Some(target) && modifiers.contains(Modifiers::CTRL)
-        };
-        let is_alt = |target: char| {
-            ch == Some(target) && modifiers.contains(Modifiers::ALT)
-        };
+        let is_ctrl = |target: char| ch == Some(target) && modifiers.contains(Modifiers::CTRL);
+        let is_alt = |target: char| ch == Some(target) && modifiers.contains(Modifiers::ALT);
         // Global Ctrl+T: New Tab
         if is_ctrl('t') {
             self.new_tab("file:///welcome.md");
@@ -1430,7 +2000,12 @@ impl OcelViewer {
         }
 
         // Global Escape: Exit Ocel when no dialog/search/input is active
-        if sym == KeySym::Escape && !self.search_open && self.pending_load.is_none() && self.focused_input.is_none() && !self.toc_open {
+        if sym == KeySym::Escape
+            && !self.search_open
+            && self.pending_load.is_none()
+            && self.focused_input.is_none()
+            && !self.toc_open
+        {
             self.should_exit = true;
             return;
         }
@@ -1442,23 +2017,40 @@ impl OcelViewer {
         // Global Alt+T: Cycle Reader Theme
         if is_alt('t') {
             self.reader_theme = self.reader_theme.next();
-            self.status_text = format!("Reader Theme: {} · Alt+T to cycle", self.reader_theme.name());
+            self.status_text = format!(
+                "Reader Theme: {} · Alt+T to cycle",
+                self.reader_theme.name()
+            );
             self.render();
             return;
         }
         // Global Alt+B: Toggle Bionic Reading Mode
         if is_alt('b') {
             let width = self.width.saturating_sub(16);
-            let state = self.tabs[self.active_tab].doc.toggle_bionic(&mut self.fonts, width);
-            self.status_text = format!("Bionic Reading: {} · Alt+B to toggle", if state { "ON" } else { "OFF" });
+            let state = self.tabs[self.active_tab]
+                .doc
+                .toggle_bionic(&mut self.fonts, width);
+            self.status_text = format!(
+                "Bionic Reading: {} · Alt+B to toggle",
+                if state { "ON" } else { "OFF" }
+            );
             self.render();
             return;
         }
         // Global Alt+F: Toggle Reader Font (Sans-serif vs Monospace)
         if is_alt('f') {
             let width = self.width.saturating_sub(16);
-            let state = self.tabs[self.active_tab].doc.toggle_mono(&mut self.fonts, width);
-            self.status_text = format!("Reader Font: {} · Alt+F to toggle", if state { "Tech Monospace (JetBrains)" } else { "Modern Sans-serif (Inter)" });
+            let state = self.tabs[self.active_tab]
+                .doc
+                .toggle_mono(&mut self.fonts, width);
+            self.status_text = format!(
+                "Reader Font: {} · Alt+F to toggle",
+                if state {
+                    "Tech Monospace (JetBrains)"
+                } else {
+                    "Modern Sans-serif (Inter)"
+                }
+            );
             self.render();
             return;
         }
@@ -1466,7 +2058,11 @@ impl OcelViewer {
         if is_alt('h') {
             let tab = self.current_tab();
             let url = tab.url.clone();
-            let title = if tab.title.is_empty() { &url } else { &tab.title };
+            let title = if tab.title.is_empty() {
+                &url
+            } else {
+                &tab.title
+            };
             let entry = format!("\n- Highlight: [{}]({})\n", title, url);
             let saved = if let Ok(mut file) = ostd::fs::File::open("/data/highlights.md") {
                 file.write_all(entry.as_bytes()).is_ok()
@@ -1484,11 +2080,11 @@ impl OcelViewer {
         // Global Ctrl+L / F6: Focus Address Bar
         if is_ctrl('l') || sym == KeySym::F6 {
             self.url_input.clear();
-            self.status_text = String::from("Address bar ready: type a URL or keywords, Enter to go.");
+            self.status_text =
+                String::from("Address bar ready: type a URL or keywords, Enter to go.");
             self.render_chrome();
             return;
         }
-
 
         // Global Ctrl+Tab: Next Tab
         if sym == KeySym::Tab && modifiers.contains(Modifiers::CTRL) {
@@ -1521,7 +2117,11 @@ impl OcelViewer {
         if is_ctrl('d') {
             let tab = self.current_tab();
             let url = tab.url.clone();
-            let title = if tab.title.is_empty() { &url } else { &tab.title };
+            let title = if tab.title.is_empty() {
+                &url
+            } else {
+                &tab.title
+            };
             let entry = format!("\n- [{}]({})", title, url);
             let saved = append_file_vfs("/data/bookmarks.md", entry.as_bytes());
             if saved {
@@ -1536,9 +2136,20 @@ impl OcelViewer {
         // Global Ctrl+S: Save Page Content to Markdown (.md) or Plain Text (.txt)
         if is_ctrl('s') {
             let tab = self.current_tab();
-            let title = if tab.title.is_empty() { "document" } else { &tab.title };
-            let slug: String = title.chars().filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_').collect();
-            let slug = if slug.is_empty() { String::from("document") } else { slug };
+            let title = if tab.title.is_empty() {
+                "document"
+            } else {
+                &tab.title
+            };
+            let slug: String = title
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            let slug = if slug.is_empty() {
+                String::from("document")
+            } else {
+                slug
+            };
 
             let save_as_text = modifiers.contains(Modifiers::SHIFT)
                 || tab.url.ends_with(".txt")
@@ -1553,14 +2164,23 @@ impl OcelViewer {
             let path = format!("/data/saved-{}.{}", slug, ext);
             let saved = save_file_vfs(&path, content.as_bytes());
             if saved {
-                self.status_text = format!("Saved {}: {} ({} bytes)", ext.to_ascii_uppercase(), path, content.len());
+                self.status_text = format!(
+                    "Saved {}: {} ({} bytes)",
+                    ext.to_ascii_uppercase(),
+                    path,
+                    content.len()
+                );
             } else {
-                self.status_text = format!("Exported {}: {} ({} bytes in memory)", ext.to_ascii_uppercase(), title, content.len());
+                self.status_text = format!(
+                    "Exported {}: {} ({} bytes in memory)",
+                    ext.to_ascii_uppercase(),
+                    title,
+                    content.len()
+                );
             }
             self.render_chrome();
             return;
         }
-
 
         if sym == KeySym::F3 || is_ctrl('f') {
             if sym == KeySym::F3 && self.search_open {
@@ -1576,7 +2196,9 @@ impl OcelViewer {
         // Escape: Close search bar
         if sym == KeySym::Escape && self.search_open {
             self.search_open = false;
-            self.tabs[self.active_tab].doc.set_search_highlight("", None);
+            self.tabs[self.active_tab]
+                .doc
+                .set_search_highlight("", None);
             self.render();
             return;
         }
@@ -1610,10 +2232,20 @@ impl OcelViewer {
             self.reserve_active_document();
             match sym {
                 KeySym::Return => {
-                    if self.current_tab().doc.input(id).is_some_and(|input|input.input_type=="textarea") {
+                    if self
+                        .current_tab()
+                        .doc
+                        .input(id)
+                        .is_some_and(|input| input.input_type == "textarea")
+                    {
                         let tab = self.current_tab_mut();
-                        if tab.doc.edit_input(id, '\n') { tab.native_dom_dirty = true; }
-                    } else { self.submit_form(id); return; }
+                        if tab.doc.edit_input(id, '\n') {
+                            tab.native_dom_dirty = true;
+                        }
+                    } else {
+                        self.submit_form(id);
+                        return;
+                    }
                 }
                 KeySym::Escape => {
                     self.focused_input = None;
@@ -1621,12 +2253,16 @@ impl OcelViewer {
                 }
                 KeySym::Backspace => {
                     let tab = self.current_tab_mut();
-                    if tab.doc.edit_input(id, '\u{8}') { tab.native_dom_dirty = true; }
+                    if tab.doc.edit_input(id, '\u{8}') {
+                        tab.native_dom_dirty = true;
+                    }
                 }
                 _ => {
                     if let Some(c) = ch.filter(|c| !c.is_control()) {
                         let tab = self.current_tab_mut();
-                        if tab.doc.edit_input(id, c) { tab.native_dom_dirty = true; }
+                        if tab.doc.edit_input(id, c) {
+                            tab.native_dom_dirty = true;
+                        }
                     }
                 }
             }
@@ -1880,11 +2516,19 @@ fn cell_main() {
                             let modified = ke.modifiers.contains(Modifiers::CTRL)
                                 || ke.modifiers.contains(Modifiers::ALT)
                                 || ke.modifiers.contains(Modifiers::META);
-                            let repeatable = matches!(ke.keysym,
-                                KeySym::Backspace | KeySym::Up | KeySym::Down
-                                | KeySym::Left | KeySym::Right | KeySym::PageUp
-                                | KeySym::PageDown | KeySym::Home | KeySym::End | KeySym::F3)
-                                || ke.char().is_some_and(|ch| !ch.is_control());
+                            let repeatable = matches!(
+                                ke.keysym,
+                                KeySym::Backspace
+                                    | KeySym::Up
+                                    | KeySym::Down
+                                    | KeySym::Left
+                                    | KeySym::Right
+                                    | KeySym::PageUp
+                                    | KeySym::PageDown
+                                    | KeySym::Home
+                                    | KeySym::End
+                                    | KeySym::F3
+                            ) || ke.char().is_some_and(|ch| !ch.is_control());
                             let navigation_shortcut = (ke.keysym == KeySym::Tab
                                 && ke.modifiers.contains(Modifiers::CTRL))
                                 || (matches!(ke.keysym, KeySym::Left | KeySym::Right)
@@ -1957,17 +2601,35 @@ mod main_ux_tests {
 
         // Verify dynamic zero-argument bg_color() follows active system palette
         draw::set_active_system_palette(SystemPalette::Dark);
-        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Dark.bg_color());
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.bg_color(),
+            ReaderThemeMode::Dark.bg_color()
+        );
 
         draw::set_active_system_palette(SystemPalette::Paper);
-        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Paper.bg_color());
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.bg_color(),
+            ReaderThemeMode::Paper.bg_color()
+        );
 
         draw::set_active_system_palette(SystemPalette::Light);
-        assert_eq!(ReaderThemeMode::FollowSystem.bg_color(), ReaderThemeMode::Light.bg_color());
+        assert_eq!(
+            ReaderThemeMode::FollowSystem.bg_color(),
+            ReaderThemeMode::Light.bg_color()
+        );
 
-        assert_ne!(ReaderThemeMode::Light.bg_color(), ReaderThemeMode::Dark.bg_color());
-        assert_ne!(ReaderThemeMode::Dark.bg_color(), ReaderThemeMode::Paper.bg_color());
-        assert_ne!(ReaderThemeMode::Paper.bg_color(), ReaderThemeMode::Light.bg_color());
+        assert_ne!(
+            ReaderThemeMode::Light.bg_color(),
+            ReaderThemeMode::Dark.bg_color()
+        );
+        assert_ne!(
+            ReaderThemeMode::Dark.bg_color(),
+            ReaderThemeMode::Paper.bg_color()
+        );
+        assert_ne!(
+            ReaderThemeMode::Paper.bg_color(),
+            ReaderThemeMode::Light.bg_color()
+        );
     }
 
     #[test]
@@ -1990,9 +2652,17 @@ mod main_ux_tests {
         let mut bold_span = doc::StyledSpan::plain("Bold Text");
         bold_span.bold = true;
         tab.doc.nodes = alloc::vec![
-            DocNode::Heading { level: 2, text: String::from("Introduction") },
-            DocNode::Paragraph { spans: alloc::vec![link_span, doc::StyledSpan::plain(" and "), bold_span] },
-            DocNode::CodeBlock { lang: String::from("rust"), lines: alloc::vec![String::from("fn main() {}")] },
+            DocNode::Heading {
+                level: 2,
+                text: String::from("Introduction")
+            },
+            DocNode::Paragraph {
+                spans: alloc::vec![link_span, doc::StyledSpan::plain(" and "), bold_span]
+            },
+            DocNode::CodeBlock {
+                lang: String::from("rust"),
+                lines: alloc::vec![String::from("fn main() {}")]
+            },
             DocNode::Rule,
         ];
         let md = export_tab_markdown(&tab);
@@ -2029,8 +2699,15 @@ mod main_ux_tests {
             browser: browser_runtime::DocumentBrowser::new("https://example.com/test"),
         };
         tab.doc.nodes = alloc::vec![
-            DocNode::Heading { level: 2, text: String::from("Introduction") },
-            DocNode::Paragraph { spans: alloc::vec![doc::StyledSpan::plain("Plain text without markdown markup.")] },
+            DocNode::Heading {
+                level: 2,
+                text: String::from("Introduction")
+            },
+            DocNode::Paragraph {
+                spans: alloc::vec![doc::StyledSpan::plain(
+                    "Plain text without markdown markup."
+                )]
+            },
         ];
         let text = export_tab_text(&tab);
         assert!(text.contains("Sample Article\n\nIntroduction"));

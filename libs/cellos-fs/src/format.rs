@@ -155,7 +155,10 @@ impl Superblock {
 
     /// Validate V1 geometry before using any on-disk address.
     pub fn validate_geometry(&self, device_blocks: u64) -> bool {
-        let Some(bitmap_end) = self.free_bitmap_block.checked_add(self.free_bitmap_blocks as u64) else {
+        let Some(bitmap_end) = self
+            .free_bitmap_block
+            .checked_add(self.free_bitmap_blocks as u64)
+        else {
             return false;
         };
         let bitmap_capacity = self.free_bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8;
@@ -168,8 +171,10 @@ impl Superblock {
             || self.free_bitmap_blocks == 0
             || bitmap_end >= self.total_blocks
             || bitmap_capacity < self.total_blocks
-            || usize::try_from(self.free_bitmap_blocks).ok()
-                .and_then(|n| n.checked_mul(BLOCK_SIZE)).is_none()
+            || usize::try_from(self.free_bitmap_blocks)
+                .ok()
+                .and_then(|n| n.checked_mul(BLOCK_SIZE))
+                .is_none()
             || self.free_block_count > self.total_blocks - bitmap_end
             || self.next_inode_num < 2
             || self.next_inode_num > inode_capacity + 1
@@ -180,9 +185,10 @@ impl Superblock {
             return false;
         }
         for (i, &block) in self.inode_blocks.iter().enumerate() {
-            if block != 0 && (block < bitmap_end
-                || block >= self.total_blocks
-                || self.inode_blocks[..i].contains(&block))
+            if block != 0
+                && (block < bitmap_end
+                    || block >= self.total_blocks
+                    || self.inode_blocks[..i].contains(&block))
             {
                 return false;
             }

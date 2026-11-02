@@ -36,5 +36,8 @@ fn failed_or_missing_entropy_stops_before_kexinit() {
     assert!(!vissh::install_entropy(os_entropy));
     let mut cli: Runner<'static, Client> = Runner::new_client_owned();
     let (failed, sent) = kexinit_sent(&mut cli);
-    assert!(failed && !sent, "failing source: failed={failed} sent={sent}");
+    assert!(
+        failed && !sent,
+        "failing source: failed={failed} sent={sent}"
+    );
 }

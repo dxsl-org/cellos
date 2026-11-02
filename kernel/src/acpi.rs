@@ -649,8 +649,8 @@ fn parse_dmar(virt: usize, length: usize, info: &mut AcpiInfo) {
         // SAFETY: the record header is inside the validated DMAR body.
         let record_type = unsafe { core::ptr::read_unaligned((virt + offset) as *const u16) };
         // SAFETY: same record header.
-        let record_len = unsafe { core::ptr::read_unaligned((virt + offset + 2) as *const u16) }
-            as usize;
+        let record_len =
+            unsafe { core::ptr::read_unaligned((virt + offset + 2) as *const u16) } as usize;
         if record_len < 4 || offset + record_len > length {
             log::warn!(
                 "[acpi] DMAR record type {} has invalid length {} — stopping the walk",
@@ -779,11 +779,7 @@ mod tests {
 
     #[test]
     fn dmar_prefers_the_all_inclusive_unit_and_skips_other_record_types() {
-        let table = dmar_table(&[
-            rmrr(),
-            drhd(0, 0, 0xAAAA_0000),
-            drhd(1, 0, 0xFED9_0000),
-        ]);
+        let table = dmar_table(&[rmrr(), drhd(0, 0, 0xAAAA_0000), drhd(1, 0, 0xFED9_0000)]);
         let mut info = AcpiInfo::default();
         parse_dmar(table.as_ptr() as usize, table.len(), &mut info);
         assert_eq!(info.dmar_base, 0xFED9_0000);
@@ -806,7 +802,11 @@ mod tests {
         // A unit on another segment is counted but never selected.
         let other_segment = dmar_table(&[drhd(1, 2, 0xFED9_0000)]);
         let mut info = AcpiInfo::default();
-        parse_dmar(other_segment.as_ptr() as usize, other_segment.len(), &mut info);
+        parse_dmar(
+            other_segment.as_ptr() as usize,
+            other_segment.len(),
+            &mut info,
+        );
         assert_eq!(info.dmar_base, 0);
         assert_eq!(info.dmar_units, 1);
 

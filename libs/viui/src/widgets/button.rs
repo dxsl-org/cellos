@@ -46,16 +46,20 @@ impl Button {
 }
 
 impl ViWidget for Button {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
-    let text_size = self.label.measure(font);
-    let desired = Size {
-        w: text_size.w + self.padding.h_total(),
-        h: text_size.h + self.padding.v_total(),
-    };
-    let size = constraints.constrain(desired);
-    let bounds = Rect::from_origin_size(constraints.origin, size);
-    self.bounds.set(bounds);
-    LayoutNode::leaf(bounds)
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
+        let text_size = self.label.measure(font);
+        let desired = Size {
+            w: text_size.w + self.padding.h_total(),
+            h: text_size.h + self.padding.v_total(),
+        };
+        let size = constraints.constrain(desired);
+        let bounds = Rect::from_origin_size(constraints.origin, size);
+        self.bounds.set(bounds);
+        LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -82,7 +86,10 @@ impl ViWidget for Button {
             cx.canvas.draw_line(a, bb, border);
         }
 
-        let text_pos = Point::new(bounds.x + (bounds.w - ts.w) * 0.5, bounds.y + (bounds.h - ts.h) * 0.5);
+        let text_pos = Point::new(
+            bounds.x + (bounds.w - ts.w) * 0.5,
+            bounds.y + (bounds.h - ts.h) * 0.5,
+        );
         cx.draw_text(text_pos, &self.label.text, cx.theme.text_primary(), 0.0);
     }
 

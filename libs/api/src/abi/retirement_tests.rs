@@ -33,7 +33,10 @@ fn round_trip_preserves_every_field() {
     let bytes = record.encode();
     assert_eq!(bytes.len(), RETIREMENT_RECORD_LEN);
     assert_eq!(ViRetirementV1::decode(&bytes), Ok(record));
-    assert_eq!(record.retirement_state(), Some(RetirementState::Quarantined));
+    assert_eq!(
+        record.retirement_state(),
+        Some(RetirementState::Quarantined)
+    );
 }
 
 #[test]
@@ -50,7 +53,10 @@ fn encoding_is_little_endian_at_declared_offsets() {
 #[test]
 fn length_other_than_exact_is_refused() {
     let bytes = sample().encode();
-    assert_eq!(ViRetirementV1::decode(&bytes[..95]), Err(RecordError::Length));
+    assert_eq!(
+        ViRetirementV1::decode(&bytes[..95]),
+        Err(RecordError::Length)
+    );
     let mut long = [0u8; RETIREMENT_RECORD_LEN + 1];
     long[..RETIREMENT_RECORD_LEN].copy_from_slice(&bytes);
     assert_eq!(ViRetirementV1::decode(&long), Err(RecordError::Length));
@@ -60,7 +66,10 @@ fn length_other_than_exact_is_refused() {
 #[test]
 fn unknown_version_is_refused() {
     for version in [0u16, 2, u16::MAX] {
-        let record = ViRetirementV1 { version, ..sample() };
+        let record = ViRetirementV1 {
+            version,
+            ..sample()
+        };
         assert_eq!(
             ViRetirementV1::decode(&record.encode()),
             Err(RecordError::UnsupportedVersion)
@@ -70,10 +79,22 @@ fn unknown_version_is_refused() {
 
 #[test]
 fn nonzero_reserved_is_refused() {
-    let r0 = ViRetirementV1 { reserved0: 1, ..sample() };
-    assert_eq!(ViRetirementV1::decode(&r0.encode()), Err(RecordError::Reserved));
-    let r1 = ViRetirementV1 { reserved1: 1 << 31, ..sample() };
-    assert_eq!(ViRetirementV1::decode(&r1.encode()), Err(RecordError::Reserved));
+    let r0 = ViRetirementV1 {
+        reserved0: 1,
+        ..sample()
+    };
+    assert_eq!(
+        ViRetirementV1::decode(&r0.encode()),
+        Err(RecordError::Reserved)
+    );
+    let r1 = ViRetirementV1 {
+        reserved1: 1 << 31,
+        ..sample()
+    };
+    assert_eq!(
+        ViRetirementV1::decode(&r1.encode()),
+        Err(RecordError::Reserved)
+    );
 }
 
 #[test]
@@ -81,16 +102,28 @@ fn undefined_state_is_refused() {
     for state in [0u16, 5, u16::MAX] {
         let record = ViRetirementV1 { state, ..sample() };
         assert_eq!(record.retirement_state(), None);
-        assert_eq!(ViRetirementV1::decode(&record.encode()), Err(RecordError::UnknownState));
+        assert_eq!(
+            ViRetirementV1::decode(&record.encode()),
+            Err(RecordError::UnknownState)
+        );
     }
 }
 
 #[test]
 fn undefined_reason_bit_is_refused() {
     for bit in [1u32 << 5, 1 << 31] {
-        let record = ViRetirementV1 { reasons: reason::KNOWN | bit, ..sample() };
-        assert_eq!(ViRetirementV1::decode(&record.encode()), Err(RecordError::UnknownReason));
+        let record = ViRetirementV1 {
+            reasons: reason::KNOWN | bit,
+            ..sample()
+        };
+        assert_eq!(
+            ViRetirementV1::decode(&record.encode()),
+            Err(RecordError::UnknownReason)
+        );
     }
-    let all = ViRetirementV1 { reasons: reason::KNOWN, ..sample() };
+    let all = ViRetirementV1 {
+        reasons: reason::KNOWN,
+        ..sample()
+    };
     assert!(ViRetirementV1::decode(&all.encode()).is_ok());
 }

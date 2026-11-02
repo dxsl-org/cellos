@@ -95,9 +95,8 @@ mod tests {
     fn other_cells_and_stale_providers_are_refused() {
         let live = live_table();
         let unregistered = AccessTable::with_service_lookup(|_| None);
-        let replaced = AccessTable::with_service_lookup(|id| {
-            (id == service::MACHINE_PIN).then_some(71)
-        });
+        let replaced =
+            AccessTable::with_service_lookup(|id| (id == service::MACHINE_PIN).then_some(71));
         // The tid is live for a different service, not for MACHINE_PIN.
         let wrong_service =
             AccessTable::with_service_lookup(|id| (id == service::KMS).then_some(70));
@@ -116,18 +115,32 @@ mod tests {
 
     #[test]
     fn zero_identity_is_refused() {
-        let table = AccessTable::with_service_lookup(|id| {
-            (id == service::MACHINE_PIN).then_some(0)
-        });
+        let table =
+            AccessTable::with_service_lookup(|id| (id == service::MACHINE_PIN).then_some(0));
         let live = live_table();
-        let no_cell = Caller { cell: CellId(0), ..PROVIDER };
-        let no_generation = Caller { generation: 0, ..PROVIDER };
-        let no_sender = Caller { sender_tid: 0, ..PROVIDER };
+        let no_cell = Caller {
+            cell: CellId(0),
+            ..PROVIDER
+        };
+        let no_generation = Caller {
+            generation: 0,
+            ..PROVIDER
+        };
+        let no_sender = Caller {
+            sender_tid: 0,
+            ..PROVIDER
+        };
         for path in INSIDE {
             assert!(!live.can_read(no_cell, path), "{path}: zero cell");
             assert!(!live.can_write(no_cell, path), "{path}: zero cell");
-            assert!(!live.can_read(no_generation, path), "{path}: zero generation");
-            assert!(!live.can_write(no_generation, path), "{path}: zero generation");
+            assert!(
+                !live.can_read(no_generation, path),
+                "{path}: zero generation"
+            );
+            assert!(
+                !live.can_write(no_generation, path),
+                "{path}: zero generation"
+            );
             // A registry answering 0 must not admit a zero sender tid.
             assert!(!table.can_read(no_sender, path), "{path}: zero sender");
             assert!(!table.can_write(no_sender, path), "{path}: zero sender");
@@ -185,12 +198,19 @@ mod tests {
     #[test]
     fn sibling_names_are_not_captured() {
         let table = live_table();
-        for path in ["/srv/.cellos-machinex", "/srv/.cellos-machinex/pin", "/srv/.cellos-machin"] {
+        for path in [
+            "/srv/.cellos-machinex",
+            "/srv/.cellos-machinex/pin",
+            "/srv/.cellos-machin",
+        ] {
             assert!(!is_machine_pin_namespace_path(path), "{path}: inside");
             assert!(!contains_machine_pin_namespace(path), "{path}: contained");
             assert!(table.can_read(OTHER, path), "{path}: ordinary read");
             assert!(table.can_write(OTHER, path), "{path}: ordinary write");
-            assert!(table.can_remove_tree(OTHER, path), "{path}: ordinary remove");
+            assert!(
+                table.can_remove_tree(OTHER, path),
+                "{path}: ordinary remove"
+            );
             assert!(table.can_remove_dir(OTHER, path), "{path}: ordinary rmdir");
         }
         for prefix in ["/srv/.cellos-machinex", "/srv/.cellos-machinex/", "/srv/"] {
@@ -203,14 +223,26 @@ mod tests {
     /// other caller and every other path still needs the flag.
     #[test]
     fn mutate_exception_covers_only_the_live_provider_inside_the_namespace() {
-        const INIT: Caller = Caller { flags: 0, ..PROVIDER };
+        const INIT: Caller = Caller {
+            flags: 0,
+            ..PROVIDER
+        };
         const UNFLAGGED: Caller = Caller { flags: 0, ..OTHER };
         let live = live_table();
         for path in INSIDE {
-            assert!(live.is_machine_pin_writer(INIT, path), "{path}: provider exception");
+            assert!(
+                live.is_machine_pin_writer(INIT, path),
+                "{path}: provider exception"
+            );
             assert!(live.can_write(INIT, path), "{path}: provider write");
-            assert!(!live.is_machine_pin_writer(UNFLAGGED, path), "{path}: other caller");
-            assert!(!live.can_write(UNFLAGGED, path), "{path}: other caller write");
+            assert!(
+                !live.is_machine_pin_writer(UNFLAGGED, path),
+                "{path}: other caller"
+            );
+            assert!(
+                !live.can_write(UNFLAGGED, path),
+                "{path}: other caller write"
+            );
             assert!(!live.can_remove_tree(INIT, path), "{path}: provider remove");
             assert!(!live.can_remove_dir(INIT, path), "{path}: provider rmdir");
         }
@@ -218,8 +250,14 @@ mod tests {
             AccessTable::with_service_lookup(|_| None),
             AccessTable::with_service_lookup(|id| (id == service::MACHINE_PIN).then_some(71)),
         ] {
-            assert!(!table.is_machine_pin_writer(INIT, "/srv/.cellos-machine/pin"), "stale provider");
-            assert!(!table.can_write(INIT, "/srv/.cellos-machine/pin"), "stale provider write");
+            assert!(
+                !table.is_machine_pin_writer(INIT, "/srv/.cellos-machine/pin"),
+                "stale provider"
+            );
+            assert!(
+                !table.can_write(INIT, "/srv/.cellos-machine/pin"),
+                "stale provider write"
+            );
         }
         for path in [
             "/srv/notes",
@@ -230,7 +268,10 @@ mod tests {
             "/srv//.cellos-machine/pin",
         ] {
             assert!(!live.is_machine_pin_writer(INIT, path), "{path}: outside");
-            assert!(!live.can_write(INIT, path), "{path}: provider without flag outside");
+            assert!(
+                !live.can_write(INIT, path),
+                "{path}: provider without flag outside"
+            );
         }
     }
 }

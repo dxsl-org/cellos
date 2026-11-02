@@ -37,8 +37,10 @@ fn insert(task: Box<Task>) {
         #[cfg(cellos_p01_trace)]
         crate::memory::heap::p01_owner::task_backing(&task);
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         sched.tasks.insert(task.id, task);
     }
 }

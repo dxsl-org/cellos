@@ -12,7 +12,9 @@ pub struct VfsStore {
 
 impl VfsStore {
     pub fn new() -> Self {
-        Self { vfs: VfsClient::new() }
+        Self {
+            vfs: VfsClient::new(),
+        }
     }
 }
 
@@ -31,17 +33,24 @@ impl Store for VfsStore {
     }
 
     fn save(&mut self, path: &str, bytes: &[u8], expect: SaveExpect) -> SaveResult {
-        let id = match self.vfs.save_stage(path, bytes, ostd::session::sha256(bytes)) {
+        let id = match self
+            .vfs
+            .save_stage(path, bytes, ostd::session::sha256(bytes))
+        {
             Ok(id) => id,
             Err(error) => return SaveResult::Failed(error),
         };
         // A lost commit reply proves nothing either way: ask about this same
         // transaction once, never commit again.
-        let outcome = self.vfs.save_commit(id, expect).or_else(|_| self.vfs.save_query(id));
+        let outcome = self
+            .vfs
+            .save_commit(id, expect)
+            .or_else(|_| self.vfs.save_query(id));
         let result = match outcome {
-            Ok(SaveOutcome::Committed { inode, generation } | SaveOutcome::CommittedDurable { inode, generation }) => {
-                SaveResult::Committed(SaveExpect::Present { inode, generation })
-            }
+            Ok(
+                SaveOutcome::Committed { inode, generation }
+                | SaveOutcome::CommittedDurable { inode, generation },
+            ) => SaveResult::Committed(SaveExpect::Present { inode, generation }),
             Ok(SaveOutcome::Conflict) => SaveResult::Conflict,
             Ok(SaveOutcome::NotPublished(code)) => SaveResult::NotPublished(reason(code)),
             Ok(SaveOutcome::Indeterminate) | Err(_) => SaveResult::Indeterminate,

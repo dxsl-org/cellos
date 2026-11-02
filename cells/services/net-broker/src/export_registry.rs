@@ -206,9 +206,13 @@ impl RemoteExports {
             && record.scope == ExportScope::Remote
             && matches!(
                 (record.retry_class, retry_class),
-                (RetryClass::Idempotent, crate::c2c_envelope::RetryClass::Idempotent)
-                    | (RetryClass::Conditional, crate::c2c_envelope::RetryClass::Conditional)
-                    | (RetryClass::Never, crate::c2c_envelope::RetryClass::Never)
+                (
+                    RetryClass::Idempotent,
+                    crate::c2c_envelope::RetryClass::Idempotent
+                ) | (
+                    RetryClass::Conditional,
+                    crate::c2c_envelope::RetryClass::Conditional
+                ) | (RetryClass::Never, crate::c2c_envelope::RetryClass::Never)
             )
     }
 }

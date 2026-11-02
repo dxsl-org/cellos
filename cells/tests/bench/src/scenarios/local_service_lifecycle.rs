@@ -47,8 +47,7 @@ const DEADLINE_TICKS: u64 = 3_000;
 const DEADLINE_HOLD_TICKS: usize = 3_200;
 
 fn scheduler_ticks() -> u64 {
-    ostd::syscall::sys_get_scheduler_ticks()
-        .unwrap_or_else(|| fail("scheduler clock unavailable"))
+    ostd::syscall::sys_get_scheduler_ticks().unwrap_or_else(|| fail("scheduler clock unavailable"))
 }
 
 /// TrySend is deliberately raw: it must not settle a captured operation.
@@ -83,7 +82,10 @@ fn control_recv(peer: usize, step: u8) {
 
 fn mailbox_empty() {
     let mut bytes = [0u8; 32];
-    if !matches!(ostd::syscall::sys_try_recv(0, &mut bytes), SyscallResult::Ok(0)) {
+    if !matches!(
+        ostd::syscall::sys_try_recv(0, &mut bytes),
+        SyscallResult::Ok(0)
+    ) {
         fail("excluded request was delivered");
     }
 }
@@ -99,11 +101,13 @@ fn expect_busy(peer: usize, sequence: u8) {
 
 fn take_reply(call: &ostd::ipc::PendingCall, sequence: u8) {
     let mut bytes = [0u8; 32];
-    let completion = call.wait_and_take(&mut bytes, ASYNC_WAIT_TICKS, ASYNC_WAIT_ROUNDS)
+    let completion = call
+        .wait_and_take(&mut bytes, ASYNC_WAIT_TICKS, ASYNC_WAIT_ROUNDS)
         .unwrap_or_else(|_| fail("reply take"))
         .unwrap_or_else(|| fail("reply take watchdog"));
     if completion.terminal != IpcTerminal::Reply
-        || completion.len != 2 || bytes[..2] != [REQ_TAG, sequence]
+        || completion.len != 2
+        || bytes[..2] != [REQ_TAG, sequence]
     {
         fail("reply identity or terminal");
     }
@@ -210,8 +214,8 @@ pub fn run_nested_provider() -> ! {
 }
 
 fn nested_reply_leg() {
-    let provider = spawn_probe("c2c-nested-reply")
-        .unwrap_or_else(|_| fail("nested provider spawn"));
+    let provider =
+        spawn_probe("c2c-nested-reply").unwrap_or_else(|_| fail("nested provider spawn"));
     settle();
     let call = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG])
         .unwrap_or_else(|_| fail("nested call submit"));
@@ -226,16 +230,21 @@ fn nested_reply_leg() {
         fail("short take consumed or lost retained reply");
     }
     let mut full = [0u8; 32];
-    let completion = call.try_take(&mut full)
+    let completion = call
+        .try_take(&mut full)
         .unwrap_or_else(|_| fail("retained reply take"))
         .unwrap_or_else(|| fail("retained reply missing"));
-    if completion.terminal != IpcTerminal::Reply || completion.len != 2 || full[..2] != [REQ_TAG, 7] {
+    if completion.terminal != IpcTerminal::Reply || completion.len != 2 || full[..2] != [REQ_TAG, 7]
+    {
         fail("reply was replaced by duplicate or peer death");
     }
     if call.try_take(&mut full) != Err(ostd::ipc::IpcError::InvalidOperation) {
         fail("terminal taken twice");
     }
-    if !matches!(ostd::syscall::sys_try_recv(provider, &mut full), SyscallResult::Ok(0)) {
+    if !matches!(
+        ostd::syscall::sys_try_recv(provider, &mut full),
+        SyscallResult::Ok(0)
+    ) {
         fail("duplicate reply escaped into ordinary mailbox");
     }
     println("[local-lifecycle] NESTED-REPLY=OK retained=true duplicate_quarantined=true");
@@ -257,8 +266,7 @@ pub fn run_reply_loop() -> ! {
 }
 
 fn sdk_slot_cleanup_leg() {
-    let provider = spawn_probe("c2c-reply-loop")
-        .unwrap_or_else(|_| fail("reply loop spawn"));
+    let provider = spawn_probe("c2c-reply-loop").unwrap_or_else(|_| fail("reply loop spawn"));
     settle();
     let mut send = [0u8; 32];
     let mut short = [0u8; 1];
@@ -272,8 +280,7 @@ fn sdk_slot_cleanup_leg() {
         }
     }
     let mut full = [0u8; 32];
-    if ostd::ipc::service_call(provider, &(REQ_TAG,), &mut send, &mut full)
-        != Ok(&[REQ_TAG, 7][..])
+    if ostd::ipc::service_call(provider, &(REQ_TAG,), &mut send, &mut full) != Ok(&[REQ_TAG, 7][..])
     {
         fail("SDK slot reuse or exact reply length");
     }
@@ -291,7 +298,10 @@ pub fn run_cancel_provider() -> ! {
     // Raw TrySend is an out-of-band handshake, not an operation reply. The
     // caller waits in masked Recv so cancellation is definitely post-dispatch.
     loop {
-        if matches!(ostd::syscall::sys_try_send(sender, &[REQ_TAG, 1]), SyscallResult::Ok(0)) {
+        if matches!(
+            ostd::syscall::sys_try_send(sender, &[REQ_TAG, 1]),
+            SyscallResult::Ok(0)
+        ) {
             break;
         }
         yield_now();
@@ -310,8 +320,8 @@ pub fn run_cancel_provider() -> ! {
 }
 
 fn cancelled_reply_leg() {
-    let provider = spawn_probe("c2c-cancel-reply")
-        .unwrap_or_else(|_| fail("cancel provider spawn"));
+    let provider =
+        spawn_probe("c2c-cancel-reply").unwrap_or_else(|_| fail("cancel provider spawn"));
     settle();
     let first = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1])
         .unwrap_or_else(|_| fail("cancel first submit"));
@@ -321,8 +331,11 @@ fn cancelled_reply_leg() {
     {
         fail("post-dispatch handshake");
     }
-    first.cancel().unwrap_or_else(|_| fail("cancel first operation"));
-    let terminal = first.try_take(&mut response)
+    first
+        .cancel()
+        .unwrap_or_else(|_| fail("cancel first operation"));
+    let terminal = first
+        .try_take(&mut response)
         .unwrap_or_else(|_| fail("cancel terminal take"))
         .unwrap_or_else(|| fail("cancel terminal absent"));
     if terminal.terminal != IpcTerminal::Indeterminate {
@@ -330,10 +343,12 @@ fn cancelled_reply_leg() {
     }
     let second = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 2])
         .unwrap_or_else(|_| fail("second submit"));
-    let terminal = second.wait_and_take(&mut response, ASYNC_WAIT_TICKS, ASYNC_WAIT_ROUNDS)
+    let terminal = second
+        .wait_and_take(&mut response, ASYNC_WAIT_TICKS, ASYNC_WAIT_ROUNDS)
         .unwrap_or_else(|_| fail("second take"))
         .unwrap_or_else(|| fail("second completion absent"));
-    if terminal.terminal != IpcTerminal::Reply || terminal.len != 2 || response[..2] != [REQ_TAG, 2] {
+    if terminal.terminal != IpcTerminal::Reply || terminal.len != 2 || response[..2] != [REQ_TAG, 2]
+    {
         fail("late old reply settled new operation");
     }
     println("[local-lifecycle] CANCEL-LATE-REPLY=OK outcome=Indeterminate next_seq=2");
@@ -352,8 +367,7 @@ pub fn run_saturation_provider() -> ! {
             fail("saturation provider request sequence");
         }
         caller = sender;
-        *operation = ostd::ipc::current()
-            .unwrap_or_else(|| fail("saturation provider token"));
+        *operation = ostd::ipc::current().unwrap_or_else(|| fail("saturation provider token"));
         raw_send(caller, &[CONTROL_TAG, sequence as u8]);
     }
     // A Busy request would be ahead of this raw command in the same mailbox.
@@ -385,8 +399,8 @@ pub fn run_saturation_provider() -> ! {
 }
 
 fn saturation_leg() {
-    let provider = spawn_probe("c2c-saturation")
-        .unwrap_or_else(|_| fail("saturation provider spawn"));
+    let provider =
+        spawn_probe("c2c-saturation").unwrap_or_else(|_| fail("saturation provider spawn"));
     let mut calls = Vec::with_capacity(QUOTA);
     for sequence in 0..QUOTA {
         let call = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, sequence as u8])
@@ -420,8 +434,7 @@ pub fn run_deadline_provider() -> ! {
     if bytes[..2] != [REQ_TAG, 1] {
         fail("deadline dispatched request");
     }
-    let operation = ostd::ipc::current()
-        .unwrap_or_else(|| fail("deadline dispatched token"));
+    let operation = ostd::ipc::current().unwrap_or_else(|| fail("deadline dispatched token"));
     raw_send(caller, &[CONTROL_TAG, 1]);
     if !matches!(
         ostd::syscall::sys_set_timer(DEADLINE_HOLD_TICKS),
@@ -452,8 +465,7 @@ pub fn run_deadline_provider() -> ! {
 }
 
 fn deadline_leg() {
-    let provider = spawn_probe("c2c-deadline")
-        .unwrap_or_else(|_| fail("deadline provider spawn"));
+    let provider = spawn_probe("c2c-deadline").unwrap_or_else(|_| fail("deadline provider spawn"));
     let dispatched_at = scheduler_ticks();
     let dispatched = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1])
         .unwrap_or_else(|_| fail("deadline dispatched submit"));
@@ -473,16 +485,28 @@ fn deadline_leg() {
     // Actual scheduler expiry, not cancellation or a fixture timeout override.
     for _ in 0..21 {
         for (call, start, expected, done) in [
-            (&dispatched, dispatched_at, IpcTerminal::Indeterminate, &mut dispatched_done),
-            (&queued, queued_at, IpcTerminal::PreDispatchTimeout, &mut queued_done),
+            (
+                &dispatched,
+                dispatched_at,
+                IpcTerminal::Indeterminate,
+                &mut dispatched_done,
+            ),
+            (
+                &queued,
+                queued_at,
+                IpcTerminal::PreDispatchTimeout,
+                &mut queued_done,
+            ),
         ] {
             if *done {
                 continue;
             }
-            if let Some(completion) = call.try_take(&mut bytes)
+            if let Some(completion) = call
+                .try_take(&mut bytes)
                 .unwrap_or_else(|_| fail("deadline terminal take"))
             {
-                if completion.terminal != expected || completion.len != 0
+                if completion.terminal != expected
+                    || completion.len != 0
                     || scheduler_ticks().saturating_sub(start) < DEADLINE_TICKS
                 {
                     fail("real deadline kind or elapsed ticks");
@@ -526,8 +550,7 @@ pub fn run_caller_death_provider() -> ! {
     if bounded_recv(0, &mut bytes) != parent || bytes[..2] != [REQ_TAG, 4] {
         fail("dead caller wire reached provider");
     }
-    let operation = ostd::ipc::current()
-        .unwrap_or_else(|| fail("caller-death fresh token"));
+    let operation = ostd::ipc::current().unwrap_or_else(|| fail("caller-death fresh token"));
     if ostd::ipc::reply(operation, &[REQ_TAG, 4]).is_err() {
         fail("caller-death fresh reply");
     }
@@ -538,7 +561,8 @@ pub fn run_caller_death_provider() -> ! {
 
 #[allow(dead_code)]
 pub fn run_doomed_caller(role: &str) -> ! {
-    let provider = role.strip_prefix(DOOMED_CALLER_PREFIX)
+    let provider = role
+        .strip_prefix(DOOMED_CALLER_PREFIX)
         .and_then(|tid| tid.parse::<usize>().ok())
         .unwrap_or_else(|| fail("doomed caller argument"));
     let mut bytes = [0u8; 32];
@@ -548,8 +572,10 @@ pub fn run_doomed_caller(role: &str) -> ! {
     }
     let mut calls = Vec::with_capacity(DEAD_CALLS);
     for sequence in 0..DEAD_CALLS {
-        calls.push(ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, sequence as u8])
-            .unwrap_or_else(|_| fail("doomed caller queued submit")));
+        calls.push(
+            ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, sequence as u8])
+                .unwrap_or_else(|_| fail("doomed caller queued submit")),
+        );
     }
     raw_send(parent, &[CONTROL_TAG, DEAD_CALLS as u8]);
     control_recv(parent, 1);
@@ -558,15 +584,18 @@ pub fn run_doomed_caller(role: &str) -> ! {
 }
 
 fn caller_death_leg() {
-    let provider = spawn_probe("c2c-caller-death")
-        .unwrap_or_else(|_| fail("caller-death provider spawn"));
+    let provider =
+        spawn_probe("c2c-caller-death").unwrap_or_else(|_| fail("caller-death provider spawn"));
     raw_send(provider, &[CONTROL_TAG, 0]);
     control_recv(provider, 0);
     let child = spawn_probe(&format!("{DOOMED_CALLER_PREFIX}{provider}"))
         .unwrap_or_else(|_| fail("doomed caller spawn"));
     raw_send(child, &[CONTROL_TAG, 0]);
     control_recv(child, DEAD_CALLS as u8);
-    if !matches!(ostd::syscall::sys_notify_on_exit(child), SyscallResult::Ok(0)) {
+    if !matches!(
+        ostd::syscall::sys_notify_on_exit(child),
+        SyscallResult::Ok(0)
+    ) {
         fail("caller-death exit watch");
     }
     raw_send(child, &[CONTROL_TAG, 1]);
@@ -604,8 +633,11 @@ pub fn run_restart_new() -> ! {
     if bytes[..2] != [REQ_TAG, 6] {
         fail("replacement request");
     }
-    let old = usize::from_le_bytes(bytes[2..2 + core::mem::size_of::<usize>()]
-        .try_into().unwrap());
+    let old = usize::from_le_bytes(
+        bytes[2..2 + core::mem::size_of::<usize>()]
+            .try_into()
+            .unwrap(),
+    );
     let fresh = ostd::ipc::current().unwrap_or_else(|| fail("replacement token"));
     if old == fresh || ostd::ipc::reply(old, &[REQ_TAG, 5]).is_ok() {
         fail("replacement accepted old token");
@@ -618,12 +650,14 @@ pub fn run_restart_new() -> ! {
 }
 
 fn restart_leg() {
-    let old_provider = spawn_probe("c2c-restart-old")
-        .unwrap_or_else(|_| fail("restart old spawn"));
+    let old_provider = spawn_probe("c2c-restart-old").unwrap_or_else(|_| fail("restart old spawn"));
     let old = ostd::ipc::PendingCall::submit(old_provider, &[REQ_TAG, 5])
         .unwrap_or_else(|_| fail("restart old submit"));
     control_recv(old_provider, 0);
-    if !matches!(ostd::syscall::sys_notify_on_exit(old_provider), SyscallResult::Ok(0)) {
+    if !matches!(
+        ostd::syscall::sys_notify_on_exit(old_provider),
+        SyscallResult::Ok(0)
+    ) {
         fail("restart exit watch");
     }
     raw_send(old_provider, &[CONTROL_TAG, 1]);
@@ -632,8 +666,8 @@ fn restart_leg() {
         fail("restart exit notification");
     }
     // Keep the old terminal reservation until after the replacement replies.
-    let replacement = spawn_probe("c2c-restart-new")
-        .unwrap_or_else(|_| fail("restart replacement spawn"));
+    let replacement =
+        spawn_probe("c2c-restart-new").unwrap_or_else(|_| fail("restart replacement spawn"));
     if replacement == old_provider {
         fail("replacement reused old task identity");
     }
@@ -644,16 +678,20 @@ fn restart_leg() {
         .unwrap_or_else(|_| fail("replacement submit"));
     take_reply(&fresh, 6);
     control_recv(replacement, 2);
-    let completion = old.try_take(&mut bytes)
+    let completion = old
+        .try_take(&mut bytes)
         .unwrap_or_else(|_| fail("restart old terminal"))
         .unwrap_or_else(|| fail("restart old terminal absent"));
-    if completion.terminal != IpcTerminal::PeerGone || completion.len != 0
+    if completion.terminal != IpcTerminal::PeerGone
+        || completion.len != 0
         || old.try_take(&mut bytes) != Err(ostd::ipc::IpcError::InvalidOperation)
     {
         fail("replacement altered old terminal");
     }
-    if !matches!(ostd::ipc::PendingCall::submit(old_provider, &[REQ_TAG, 7]),
-        Err(ostd::ipc::IpcSubmitError::PeerGone)) {
+    if !matches!(
+        ostd::ipc::PendingCall::submit(old_provider, &[REQ_TAG, 7]),
+        Err(ostd::ipc::IpcSubmitError::PeerGone)
+    ) {
         fail("restart dead endpoint accepted work");
     }
     println("[local-lifecycle] RESTART=OK old=PeerGone replacement=Reply old_token=refused dead_submit=PeerGone");
@@ -689,8 +727,8 @@ pub fn run_raw_event_source() -> ! {
 }
 
 fn event_coexistence_leg() {
-    let provider = spawn_probe("c2c-event-provider")
-        .unwrap_or_else(|_| fail("event provider spawn"));
+    let provider =
+        spawn_probe("c2c-event-provider").unwrap_or_else(|_| fail("event provider spawn"));
     let call = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 8])
         .unwrap_or_else(|_| fail("event coexistence submit"));
     control_recv(provider, 0);
@@ -698,8 +736,7 @@ fn event_coexistence_leg() {
     if call.try_take(&mut bytes) != Ok(None) {
         fail("RPC not pending before event");
     }
-    let source = spawn_probe("c2c-raw-event")
-        .unwrap_or_else(|_| fail("raw event source spawn"));
+    let source = spawn_probe("c2c-raw-event").unwrap_or_else(|_| fail("raw event source spawn"));
     raw_send(source, &[CONTROL_TAG, 0]);
     if bounded_recv(source, &mut bytes) != source || bytes[..2] != [0xE1, 0xA7] {
         fail("raw event payload or sender");
@@ -710,7 +747,10 @@ fn event_coexistence_leg() {
     raw_send(provider, &[CONTROL_TAG, 1]);
     take_reply(&call, 8);
     control_recv(provider, 2);
-    if !matches!(ostd::syscall::sys_try_recv(provider, &mut bytes), SyscallResult::Ok(0)) {
+    if !matches!(
+        ostd::syscall::sys_try_recv(provider, &mut bytes),
+        SyscallResult::Ok(0)
+    ) {
         fail("operation reply leaked into raw mailbox");
     }
     println("[local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true");
@@ -775,8 +815,10 @@ fn concurrent_input_leg() {
 
     let mut calls = Vec::with_capacity(8);
     for i in 0..8u8 {
-        calls.push(ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, i])
-            .unwrap_or_else(|_| fail("concurrent input submit")));
+        calls.push(
+            ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, i])
+                .unwrap_or_else(|_| fail("concurrent input submit")),
+        );
         control_recv(provider, i);
     }
 
@@ -787,8 +829,8 @@ fn concurrent_input_leg() {
         }
     }
 
-    let source = spawn_probe("c2c-input-source")
-        .unwrap_or_else(|_| fail("concurrent input source spawn"));
+    let source =
+        spawn_probe("c2c-input-source").unwrap_or_else(|_| fail("concurrent input source spawn"));
     raw_send(source, &[CONTROL_TAG, 0]);
 
     let mut input_events_drained = 0u8;
@@ -849,13 +891,14 @@ pub fn run_multi_caller_provider() -> ! {
     let mut operations = [0usize; QUOTA];
     for (sequence, operation) in operations.iter_mut().enumerate() {
         let sender = bounded_recv(0, &mut bytes);
-        if sender == coordinator || bytes[..2] != [REQ_TAG, sequence as u8]
-            || (caller_a != 0 && sender != caller_a) {
+        if sender == coordinator
+            || bytes[..2] != [REQ_TAG, sequence as u8]
+            || (caller_a != 0 && sender != caller_a)
+        {
             fail("multi-caller A request identity");
         }
         caller_a = sender;
-        *operation = ostd::ipc::current()
-            .unwrap_or_else(|| fail("multi-caller A token"));
+        *operation = ostd::ipc::current().unwrap_or_else(|| fail("multi-caller A token"));
         raw_send(caller_a, &[CONTROL_TAG, sequence as u8]);
     }
     // A's overflow would precede B or remain visible in the same mailbox.
@@ -878,11 +921,12 @@ pub fn run_multi_caller_provider() -> ! {
     if bounded_recv(0, &mut bytes) != coordinator || bytes[..2] != [REQ_TAG, 65] {
         fail("multi-caller B second request or retained overflow delivery");
     }
-    let second_b = ostd::ipc::current()
-        .unwrap_or_else(|| fail("multi-caller B second token"));
+    let second_b = ostd::ipc::current().unwrap_or_else(|| fail("multi-caller B second token"));
     mailbox_empty();
-    if second_b == call_b || operations.contains(&second_b)
-        || ostd::ipc::reply(second_b, &[REQ_TAG, 65]).is_err() {
+    if second_b == call_b
+        || operations.contains(&second_b)
+        || ostd::ipc::reply(second_b, &[REQ_TAG, 65]).is_err()
+    {
         fail("multi-caller B second reply");
     }
     raw_send(coordinator, &[CONTROL_TAG, 4]);
@@ -891,7 +935,8 @@ pub fn run_multi_caller_provider() -> ! {
 
 #[allow(dead_code)]
 pub fn run_full_caller(role: &str) -> ! {
-    let provider = role.strip_prefix("c2c-full-caller:")
+    let provider = role
+        .strip_prefix("c2c-full-caller:")
         .and_then(|tid| tid.parse::<usize>().ok())
         .unwrap_or_else(|| fail("full caller provider argument"));
     let mut bytes = [0u8; 32];
@@ -901,8 +946,10 @@ pub fn run_full_caller(role: &str) -> ! {
     }
     let mut calls = Vec::with_capacity(QUOTA);
     for sequence in 0..QUOTA {
-        calls.push(ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, sequence as u8])
-            .unwrap_or_else(|_| fail("full caller admission")));
+        calls.push(
+            ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, sequence as u8])
+                .unwrap_or_else(|_| fail("full caller admission")),
+        );
         control_recv(provider, sequence as u8);
     }
     expect_busy(provider, 254);
@@ -924,8 +971,8 @@ pub fn run_full_caller(role: &str) -> ! {
 }
 
 fn multi_caller_leg() {
-    let provider = spawn_probe("c2c-multi-provider")
-        .unwrap_or_else(|_| fail("multi-caller provider spawn"));
+    let provider =
+        spawn_probe("c2c-multi-provider").unwrap_or_else(|_| fail("multi-caller provider spawn"));
     raw_send(provider, &[CONTROL_TAG, 0]);
     control_recv(provider, 0);
     let caller_a = spawn_probe(&format!("c2c-full-caller:{provider}"))
@@ -949,8 +996,13 @@ fn multi_caller_leg() {
 
 type PressureSlots = [Option<(ostd::ipc::PendingCall, u8)>; QUOTA];
 
-fn pump_pressure(provider: usize, producer: u8, total: u8, mut next: u8,
-    mut slots: PressureSlots) -> (usize, u64) {
+fn pump_pressure(
+    provider: usize,
+    producer: u8,
+    total: u8,
+    mut next: u8,
+    mut slots: PressureSlots,
+) -> (usize, u64) {
     let started = scheduler_ticks();
     let mut done = 0u8;
     let mut busy = 0usize;
@@ -960,11 +1012,15 @@ fn pump_pressure(provider: usize, producer: u8, total: u8, mut next: u8,
     while done < total {
         for slot in &mut slots {
             if let Some((call, sequence)) = slot.as_ref() {
-                if let Some(completion) = call.try_take(&mut bytes)
-                    .unwrap_or_else(|_| fail("pressure take")) {
-                    if completion.terminal != IpcTerminal::Reply || completion.len != 3
+                if let Some(completion) = call
+                    .try_take(&mut bytes)
+                    .unwrap_or_else(|_| fail("pressure take"))
+                {
+                    if completion.terminal != IpcTerminal::Reply
+                        || completion.len != 3
                         || bytes[..3] != [REQ_TAG, producer, *sequence]
-                        || call.try_take(&mut bytes) != Err(ostd::ipc::IpcError::InvalidOperation) {
+                        || call.try_take(&mut bytes) != Err(ostd::ipc::IpcError::InvalidOperation)
+                    {
                         fail("pressure completion identity or duplicate");
                     }
                     let now = scheduler_ticks();
@@ -976,7 +1032,9 @@ fn pump_pressure(provider: usize, producer: u8, total: u8, mut next: u8,
             }
         }
         for slot in &mut slots {
-            if slot.is_some() || next == total { continue; }
+            if slot.is_some() || next == total {
+                continue;
+            }
             match ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, producer, next]) {
                 Ok(call) => {
                     *slot = Some((call, next));
@@ -992,7 +1050,9 @@ fn pump_pressure(provider: usize, producer: u8, total: u8, mut next: u8,
         if scheduler_ticks().saturating_sub(started) >= 1_000 {
             fail("pressure producer progress watchdog");
         }
-        if done < total { yield_now(); }
+        if done < total {
+            yield_now();
+        }
     }
     (busy, max_gap)
 }
@@ -1001,7 +1061,9 @@ fn pump_pressure(provider: usize, producer: u8, total: u8, mut next: u8,
 pub fn run_pressure_provider() -> ! {
     let mut bytes = [0u8; 32];
     let coordinator = bounded_recv(0, &mut bytes);
-    if bytes[..2] != [CONTROL_TAG, 0] { fail("pressure provider setup"); }
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("pressure provider setup");
+    }
     raw_send(coordinator, &[CONTROL_TAG, 0]);
     // A fills the queue and B proves refusal before this real timer expires.
     if !matches!(ostd::syscall::sys_set_timer(100), SyscallResult::Ok(0)) {
@@ -1014,12 +1076,19 @@ pub fn run_pressure_provider() -> ! {
         let sender = bounded_recv(0, &mut bytes);
         let producer = bytes[1] as usize;
         let sequence = bytes[2] as usize;
-        if bytes[0] != REQ_TAG || producer > 1 || sequence >= if producer == 0 {128} else {64}
-            || seen[producer][sequence] || (producer == 0 && sender != coordinator)
-            || (producer == 1 && (sender == coordinator || caller_b.is_some_and(|tid| tid != sender))) {
+        if bytes[0] != REQ_TAG
+            || producer > 1
+            || sequence >= if producer == 0 { 128 } else { 64 }
+            || seen[producer][sequence]
+            || (producer == 0 && sender != coordinator)
+            || (producer == 1
+                && (sender == coordinator || caller_b.is_some_and(|tid| tid != sender)))
+        {
             fail("pressure request identity or duplicate delivery");
         }
-        if producer == 1 { caller_b = Some(sender); }
+        if producer == 1 {
+            caller_b = Some(sender);
+        }
         seen[producer][sequence] = true;
         counts[producer] += 1;
         let operation = ostd::ipc::current().unwrap_or_else(|| fail("pressure dispatch token"));
@@ -1027,7 +1096,9 @@ pub fn run_pressure_provider() -> ! {
             fail("pressure exact reply");
         }
     }
-    if counts != [128, 64] { fail("pressure missing producer work"); }
+    if counts != [128, 64] {
+        fail("pressure missing producer work");
+    }
     mailbox_empty();
     println("[local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0");
     raw_send(coordinator, &[CONTROL_TAG, 3]);
@@ -1036,28 +1107,36 @@ pub fn run_pressure_provider() -> ! {
 
 #[allow(dead_code)]
 pub fn run_pressure_caller(role: &str) -> ! {
-    let provider = role.strip_prefix("c2c-pressure-caller:")
+    let provider = role
+        .strip_prefix("c2c-pressure-caller:")
         .and_then(|tid| tid.parse::<usize>().ok())
         .unwrap_or_else(|| fail("pressure caller argument"));
     let mut bytes = [0u8; 32];
     let coordinator = bounded_recv(0, &mut bytes);
-    if bytes[..2] != [CONTROL_TAG, 0] { fail("pressure caller setup"); }
-    if !matches!(ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1, 0]),
-        Err(ostd::ipc::IpcSubmitError::Busy)) {
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("pressure caller setup");
+    }
+    if !matches!(
+        ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1, 0]),
+        Err(ostd::ipc::IpcSubmitError::Busy)
+    ) {
         fail("full peer mailbox did not refuse independent caller");
     }
     raw_send(coordinator, &[CONTROL_TAG, 0]);
     control_recv(coordinator, 1);
     let (busy, max_gap) = pump_pressure(provider, 1, 64, 0, core::array::from_fn(|_| None));
-    println(&format!("[local-lifecycle] PRESSURE-CALLER b_completed=64 busy={} max_gap_ticks={}",
-        busy + 1, max_gap));
+    println(&format!(
+        "[local-lifecycle] PRESSURE-CALLER b_completed=64 busy={} max_gap_ticks={}",
+        busy + 1,
+        max_gap
+    ));
     raw_send(coordinator, &[CONTROL_TAG, 2]);
     sys_exit(0)
 }
 
 fn peer_pressure_leg() {
-    let provider = spawn_probe("c2c-pressure-provider")
-        .unwrap_or_else(|_| fail("pressure provider spawn"));
+    let provider =
+        spawn_probe("c2c-pressure-provider").unwrap_or_else(|_| fail("pressure provider spawn"));
     let started = scheduler_ticks();
     raw_send(provider, &[CONTROL_TAG, 0]);
     control_recv(provider, 0);
@@ -1078,7 +1157,9 @@ fn peer_pressure_leg() {
     let (busy, max_gap) = pump_pressure(provider, 0, 128, 64, slots);
     control_recv(caller_b, 2);
     control_recv(provider, 3);
-    println(&format!("[local-lifecycle] PRESSURE-CALLER a_completed=128 busy={busy} max_gap_ticks={max_gap}"));
+    println(&format!(
+        "[local-lifecycle] PRESSURE-CALLER a_completed=128 busy={busy} max_gap_ticks={max_gap}"
+    ));
     println("[local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0");
 }
 
@@ -1221,7 +1302,10 @@ fn sdk_leg() {
         .and_then(|context| context.cwd_grant());
     let (request, label) = match cwd {
         Some(grant) => (
-            VfsRequest::ListAtPage { dir: api::dir_handles::ViDirHandle(grant.id), cursor: 0 },
+            VfsRequest::ListAtPage {
+                dir: api::dir_handles::ViDirHandle(grant.id),
+                cursor: 0,
+            },
             "ListAtPage(cwd)",
         ),
         None => (VfsRequest::Stat("/"), "Stat(/)"),
@@ -1240,7 +1324,9 @@ fn sdk_leg() {
             fail("sdk-leg: VFS answered with a different response");
         }
         Err(error) => {
-            println(&format!("[local-lifecycle] SDK-VFS-CALL=ERR {label} {error:?}"));
+            println(&format!(
+                "[local-lifecycle] SDK-VFS-CALL=ERR {label} {error:?}"
+            ));
             fail("sdk-leg: ServiceRef call to a live VFS failed");
         }
     }

@@ -1211,7 +1211,6 @@ pub mod compositor_ops {
     /// Payload: empty  Reply: `[w: u32, h: u32]`
     pub const GET_SCREEN_SIZE: u8 = 0x10;
 
-
     /// Create a new session view inside a frame (or new frame if frame_id == 0).
     /// Payload: [`CreateViewRequest`] (64 bytes). Reply: [`ViewOpResponse`] (20 bytes).
     pub const CREATE_VIEW: u8 = 0x20;

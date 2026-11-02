@@ -5,13 +5,13 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub mod css;
+pub mod feed;
 pub mod html;
 pub mod markdown;
-pub mod syntax;
-pub mod css;
-pub mod web;
 pub mod readability;
-pub mod feed;
+pub mod syntax;
+pub mod web;
 use crate::doc::DocNode;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -29,9 +29,14 @@ impl DocFormat {
         let lower = path.to_ascii_lowercase();
         let trimmed = content.trim_start();
 
-        if lower.ends_with(".rss") || lower.ends_with("/rss") || lower.ends_with(".atom") || lower.ends_with("/feed")
+        if lower.ends_with(".rss")
+            || lower.ends_with("/rss")
+            || lower.ends_with(".atom")
+            || lower.ends_with("/feed")
             || ((lower.ends_with(".xml") || trimmed.starts_with("<?xml"))
-                && (trimmed.contains("<rss") || trimmed.contains("<feed") || trimmed.contains("<channel")))
+                && (trimmed.contains("<rss")
+                    || trimmed.contains("<feed")
+                    || trimmed.contains("<channel")))
         {
             return Self::Feed;
         }
@@ -51,18 +56,21 @@ impl DocFormat {
         if lower.ends_with(".html") || lower.ends_with(".htm") {
             return Self::Html;
         }
-        if lower.ends_with(".txt")
-            || lower.ends_with(".log")
-        {
+        if lower.ends_with(".txt") || lower.ends_with(".log") {
             return Self::PlainText;
         }
 
         // Content sniffing if extension is ambiguous or missing
         let trimmed = content.trim_start();
-        if ["<!doctype", "<html", "<head", "<body"].iter().any(|prefix| {
-            trimmed.as_bytes().get(..prefix.len())
-                .is_some_and(|start| start.eq_ignore_ascii_case(prefix.as_bytes()))
-        }) {
+        if ["<!doctype", "<html", "<head", "<body"]
+            .iter()
+            .any(|prefix| {
+                trimmed
+                    .as_bytes()
+                    .get(..prefix.len())
+                    .is_some_and(|start| start.eq_ignore_ascii_case(prefix.as_bytes()))
+            })
+        {
             return Self::Html;
         }
 
@@ -74,11 +82,15 @@ impl DocFormat {
     }
 }
 
+/// Parsed document nodes, discovered scripts, and the DOM arena for HTML documents.
+pub type ParsedContent = (
+    Vec<DocNode>,
+    Vec<html::ScriptSource>,
+    Option<dom_arena::DocumentArena>,
+);
+
 #[allow(dead_code)]
-pub fn parse_content(
-    format: DocFormat,
-    content: &str,
-) -> (Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>) {
+pub fn parse_content(format: DocFormat, content: &str) -> ParsedContent {
     parse_content_with_base(format, content, None)
 }
 
@@ -86,14 +98,22 @@ pub fn parse_content_with_base(
     format: DocFormat,
     content: &str,
     base_url: Option<&str>,
-) -> (Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>) {
+) -> ParsedContent {
     match format {
-        DocFormat::Markdown => (markdown::parse_markdown_with_base(content, base_url), Vec::new(), None),
+        DocFormat::Markdown => (
+            markdown::parse_markdown_with_base(content, base_url),
+            Vec::new(),
+            None,
+        ),
         DocFormat::Html => {
             let res = html::parse_html_with_base(content, base_url);
             (res.nodes, res.scripts, Some(res.arena))
         }
-        DocFormat::Feed => (feed::parse_feed_to_nodes(content, base_url), Vec::new(), None),
+        DocFormat::Feed => (
+            feed::parse_feed_to_nodes(content, base_url),
+            Vec::new(),
+            None,
+        ),
         DocFormat::Source(language) => (
             alloc::vec![DocNode::CodeBlock {
                 lang: String::from(language.name()),
@@ -113,15 +133,21 @@ pub fn parse_content_with_base(
 }
 
 pub fn parse_content_with_base_checked(
-    format: DocFormat, content: &str, base_url: Option<&str>,
-) -> Result<(Vec<DocNode>, Vec<html::ScriptSource>, Option<dom_arena::DocumentArena>), String> {
+    format: DocFormat,
+    content: &str,
+    base_url: Option<&str>,
+) -> Result<ParsedContent, String> {
     crate::budget::validate_text(content)?;
     if matches!(format, DocFormat::Html) {
         let output = html::parse_html_with_base_checked(content, base_url)?;
         return Ok((output.nodes, output.scripts, Some(output.arena)));
     }
     if matches!(format, DocFormat::Feed) {
-        return Ok((feed::parse_feed_to_nodes(content, base_url), Vec::new(), None));
+        return Ok((
+            feed::parse_feed_to_nodes(content, base_url),
+            Vec::new(),
+            None,
+        ));
     }
     if content.lines().count() > crate::budget::MAX_DOM_NODES {
         return Err(String::from("Document exceeds node/line budget"));
@@ -129,13 +155,20 @@ pub fn parse_content_with_base_checked(
     if matches!(format, DocFormat::Markdown) {
         crate::budget::validate_markdown(content)?;
         let mut images = Vec::new();
-        let mut fenced=false;
+        let mut fenced = false;
         for line in content.lines() {
             let line = line.trim();
-            if line.starts_with("```"){fenced=!fenced;continue;}
-            if fenced{continue;}
+            if line.starts_with("```") {
+                fenced = !fenced;
+                continue;
+            }
+            if fenced {
+                continue;
+            }
             if line.starts_with("![") && line.ends_with(')') {
-                if let Some(end) = line.find("](") { images.push(&line[end + 2..line.len() - 1]); }
+                if let Some(end) = line.find("](") {
+                    images.push(&line[end + 2..line.len() - 1]);
+                }
             }
         }
         validate_images(base_url, images.into_iter())?;
@@ -143,17 +176,27 @@ pub fn parse_content_with_base_checked(
     Ok(parse_content_with_base(format, content, base_url))
 }
 
-fn validate_images<'a>(base: Option<&str>, urls: impl Iterator<Item=&'a str>) -> Result<(), String> {
-    let mut count = 0usize; let mut bytes = 0usize;
+fn validate_images<'a>(
+    base: Option<&str>,
+    urls: impl Iterator<Item = &'a str>,
+) -> Result<(), String> {
+    let mut count = 0usize;
+    let mut bytes = 0usize;
     for url in urls {
         count += 1;
-        if count > crate::budget::MAX_IMAGES { return Err(String::from("Document exceeds image count budget")); }
+        if count > crate::budget::MAX_IMAGES {
+            return Err(String::from("Document exceeds image count budget"));
+        }
         if let Some(base) = base {
             if let Ok(data) = crate::resources::load_binary(base, url) {
                 match crate::budget::image_bytes(&data) {
                     Ok(size) => {
-                        bytes = bytes.checked_add(size).ok_or_else(|| String::from("Image budget overflow"))?;
-                        if bytes > crate::budget::MAX_IMAGE_TOTAL_BYTES { return Err(String::from("Document exceeds decoded image byte budget")); }
+                        bytes = bytes
+                            .checked_add(size)
+                            .ok_or_else(|| String::from("Image budget overflow"))?;
+                        if bytes > crate::budget::MAX_IMAGE_TOTAL_BYTES {
+                            return Err(String::from("Document exceeds decoded image byte budget"));
+                        }
                     }
                     Err(error) if error.contains("budget") => return Err(error),
                     Err(_) => {}
@@ -170,17 +213,50 @@ mod detection_tests {
 
     #[test]
     fn extensionless_html_is_case_insensitive() {
-        for prefix in ["<!doctype html>", "<!DOCTYPE HTML>", "<HtMl>", "<HEAD>", "<BoDy>"] {
+        for prefix in [
+            "<!doctype html>",
+            "<!DOCTYPE HTML>",
+            "<HtMl>",
+            "<HEAD>",
+            "<BoDy>",
+        ] {
             let content = alloc::format!(" \n{prefix}<p>Example Domain</p>");
-            assert_eq!(DocFormat::detect_from_url_or_content("http://example.com/", &content), DocFormat::Html);
+            assert_eq!(
+                DocFormat::detect_from_url_or_content("http://example.com/", &content),
+                DocFormat::Html
+            );
         }
-        assert_eq!(DocFormat::detect_from_url_or_content("file:///source.txt", "<!doctype html>"), DocFormat::PlainText);
-        assert_eq!(DocFormat::detect_from_url_or_content("file:///app.json", "{}"), DocFormat::Source(super::syntax::Language::Json));
-        assert_eq!(DocFormat::detect_from_url_or_content("file:///tsconfig.jsonc", "{ /* comment */ }"), DocFormat::Source(super::syntax::Language::Json));
-        assert_eq!(DocFormat::detect_from_url_or_content("file:///manifest.xml", "<manifest></manifest>"), DocFormat::Source(super::syntax::Language::Xml));
-        assert_eq!(DocFormat::detect_from_url_or_content("https://news.ycombinator.com/rss", ""), DocFormat::Feed);
-        assert_eq!(DocFormat::detect_from_url_or_content("https://blog.test/feed.atom", ""), DocFormat::Feed);
-        assert_eq!(DocFormat::detect_from_url_or_content("https://news.test/feed.xml", "<rss version='2.0'><channel><title>News</title></channel></rss>"), DocFormat::Feed);
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("file:///source.txt", "<!doctype html>"),
+            DocFormat::PlainText
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("file:///app.json", "{}"),
+            DocFormat::Source(super::syntax::Language::Json)
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("file:///tsconfig.jsonc", "{ /* comment */ }"),
+            DocFormat::Source(super::syntax::Language::Json)
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("file:///manifest.xml", "<manifest></manifest>"),
+            DocFormat::Source(super::syntax::Language::Xml)
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("https://news.ycombinator.com/rss", ""),
+            DocFormat::Feed
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content("https://blog.test/feed.atom", ""),
+            DocFormat::Feed
+        );
+        assert_eq!(
+            DocFormat::detect_from_url_or_content(
+                "https://news.test/feed.xml",
+                "<rss version='2.0'><channel><title>News</title></channel></rss>"
+            ),
+            DocFormat::Feed
+        );
     }
 
     #[test]
@@ -211,7 +287,9 @@ mod detection_tests {
         assert!(nodes.iter().any(|n| matches!(n, super::DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "Announcing CellOS G2 Architecture" && s.link.as_deref() == Some("https://cellos.org/posts/g2-launch")))));
         assert!(nodes.iter().any(|n| matches!(n, super::DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "Universal Reader Engine Released"))));
         assert!(nodes.iter().any(|n| match n {
-            super::DocNode::Paragraph { spans } => spans.iter().any(|s| s.text.contains("Formal memory isolation")),
+            super::DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.text.contains("Formal memory isolation")),
             _ => false,
         }));
 
@@ -230,5 +308,5 @@ mod detection_tests {
         let atom_nodes = super::feed::parse_feed_to_nodes(atom_xml, None);
         assert!(atom_nodes.iter().any(|n| matches!(n, super::DocNode::Heading { text, .. } if text.contains("Hacker News Atom"))));
         assert!(atom_nodes.iter().any(|n| matches!(n, super::DocNode::ListItem { spans, .. } if spans.iter().any(|s| s.text == "Show HN: Ocel Fast Reader" && s.link.as_deref() == Some("https://news.ycombinator.com/item?id=99999")))));
-}
+    }
 }

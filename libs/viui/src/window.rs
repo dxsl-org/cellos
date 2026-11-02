@@ -73,7 +73,12 @@ impl WindowChrome {
     /// Close button hit rect (surface-local, 20 DIP hit area per contract).
     pub fn close_btn_rect(&self, surf_w: u32) -> Rect {
         let x = surf_w as f32 - BTN_MARGIN - BTN_HIT_SIZE;
-        Rect::new(x, (TITLEBAR_H - BTN_HIT_SIZE) / 2.0, BTN_HIT_SIZE, BTN_HIT_SIZE)
+        Rect::new(
+            x,
+            (TITLEBAR_H - BTN_HIT_SIZE) / 2.0,
+            BTN_HIT_SIZE,
+            BTN_HIT_SIZE,
+        )
     }
 
     /// Close button visual icon rect (16 DIP icon centered inside 20 DIP hit area).
@@ -109,7 +114,10 @@ impl WindowChrome {
         // Title text (left-padded)
         canvas.draw_text_scaled(
             Point::new(8.0, (TITLEBAR_H - font.line_height()) * 0.5),
-            &self.title, font.size_px, TITLE_CLR, &mut font.atlas,
+            &self.title,
+            font.size_px,
+            TITLE_CLR,
+            &mut font.atlas,
         );
 
         // Buttons: close, max, min (right-aligned)
@@ -352,7 +360,10 @@ impl ManagedWindow {
         let stride = self.surf.stride() as u32;
         let pixels = self.surf.pixels_mut();
         let mut canvas = FramebufferCanvas::new(pixels, stride, w, h);
-        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, h as f32), crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255));
+        canvas.fill_rect(
+            Rect::new(0.0, 0.0, w as f32, h as f32),
+            crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255),
+        );
 
         // Chrome occupies top TITLEBAR_H rows; content paints below
         self.chrome.paint(&mut canvas, &mut self.font);
@@ -398,10 +409,13 @@ impl WindowManager {
         let chrome = WindowChrome::new(title);
         let mut tree = WidgetTree::rebuild(content);
         let mut font = crate::font_context::FontContext::default();
-        tree.layout(crate::layout::Size {
-            w: w as f32,
-            h: h as f32,
-        }, &mut font);
+        tree.layout(
+            crate::layout::Size {
+                w: w as f32,
+                h: h as f32,
+            },
+            &mut font,
+        );
         let id = WindowId(self.windows.len());
         self.windows.push(ManagedWindow {
             surf,

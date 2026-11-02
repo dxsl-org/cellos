@@ -4,9 +4,9 @@
 
 extern crate alloc;
 
-use alloc::{format, string::String, vec, vec::Vec};
 #[cfg(test)]
 use alloc::string::ToString;
+use alloc::{format, string::String, vec, vec::Vec};
 use app_c2c_render::{percentile, pixel_hash, Clock};
 use ostd::grant::GrantHandle;
 use ostd::syscall::{
@@ -521,19 +521,32 @@ struct Measurement {
     processor_ids: ProcessorIds,
 }
 
-fn validate_done<'a>(
-    raw: &'a [u8],
+/// Validated `Response::Done` fields: stats, compute ns, borrowed pixels, and the
+/// processor IDs observed before/after rendering.
+type ValidatedDone<'a> = (RenderStats, u64, &'a [u8], Option<u32>, Option<u32>);
+
+fn validate_done(
+    raw: &[u8],
     tile: Tile,
     config: RenderConfig,
     scene_hash: u64,
     shared: bool,
-) -> Result<(RenderStats, u64, &'a [u8], Option<u32>, Option<u32>), String> {
+) -> Result<ValidatedDone<'_>, String> {
     // Postcard encodes Response::Done as discriminant 0 followed by these
     // fields. Vec<u8>'s length-prefixed byte sequence can be borrowed directly:
     // copied pixels stay in this slot's reusable IPC buffer, without allocating
     // or copying another tile Vec. Tests encode the actual protocol Response.
     let (
-        (variant, tile_id, actual, stats, compute_ns, pixels, processor_id_before, processor_id_after),
+        (
+            variant,
+            tile_id,
+            actual,
+            stats,
+            compute_ns,
+            pixels,
+            processor_id_before,
+            processor_id_after,
+        ),
         remaining,
     ) = postcard::take_from_bytes::<(
         u32,
@@ -568,7 +581,13 @@ fn validate_done<'a>(
             "worker response ID/fingerprint/stats/pixel-length mismatch",
         ));
     }
-    Ok((stats, compute_ns, pixels, processor_id_before, processor_id_after))
+    Ok((
+        stats,
+        compute_ns,
+        pixels,
+        processor_id_before,
+        processor_id_after,
+    ))
 }
 
 fn assemble(image: &mut [u8], config: RenderConfig, tile: Tile, pixels: &[u8]) {
@@ -723,13 +742,14 @@ fn render(mode: Mode, opts: &Options, scene: &Scene, clock: Clock) -> Result<Mea
                         slot.worker.tid, completion.terminal,
                     ));
                 }
-                let (stats, duration, pixels, processor_id_before, processor_id_after) = validate_done(
-                    &slot.receive[..completion.len],
-                    active.tile,
-                    config,
-                    scene_hash,
-                    slot.grant.is_some(),
-                )?;
+                let (stats, duration, pixels, processor_id_before, processor_id_after) =
+                    validate_done(
+                        &slot.receive[..completion.len],
+                        active.tile,
+                        config,
+                        scene_hash,
+                        slot.grant.is_some(),
+                    )?;
                 for id in [processor_id_before, processor_id_after] {
                     measured.processor_ids.observe(id)?;
                     measured.worker_records[index].processor_ids.observe(id)?;
@@ -1075,7 +1095,10 @@ mod tests {
             let raw = postcard::to_allocvec(&Response::Done {
                 tile_id: tile.id,
                 scene_hash: 11,
-                stats: RenderStats { rays: 1, samples: 1 },
+                stats: RenderStats {
+                    rays: 1,
+                    samples: 1,
+                },
                 compute_ns: 7,
                 pixels: Vec::new(),
                 processor_id_before: before,
@@ -1084,7 +1107,10 @@ mod tests {
             .unwrap();
             let (_, duration, _, decoded_before, decoded_after) =
                 validate_done(&raw, tile, config, 11, true).unwrap();
-            assert_eq!((duration, decoded_before, decoded_after), (7, before, after));
+            assert_eq!(
+                (duration, decoded_before, decoded_after),
+                (7, before, after)
+            );
         }
     }
 

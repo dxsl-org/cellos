@@ -909,37 +909,39 @@ pub fn flush_leds(engine: &UsbHostEngine<'_>, iface: &mut HidInterface) {
             print_hex_u8(leds);
             println("");
         }
-        Err(_) => match led_failure_disposition(engine.last_was_stall()) {
-            LedFailureDisposition::Retry => {
-                iface.led_deferrals = iface.led_deferrals.saturating_add(1);
-                if iface.led_deferrals >= LED_MAX_DEFERRALS {
-                    // The endpoint keeps refusing the report. Endpoint zero is
-                    // shared with the NIC path through the hub translator, so
-                    // retrying it forever starves frames; leave the state for the
-                    // next lock-state transition instead.
-                    iface.desired_leds = None;
-                    iface.led_retry_frame = None;
+        Err(_) => {
+            match led_failure_disposition(engine.last_was_stall()) {
+                LedFailureDisposition::Retry => {
+                    iface.led_deferrals = iface.led_deferrals.saturating_add(1);
+                    if iface.led_deferrals >= LED_MAX_DEFERRALS {
+                        // The endpoint keeps refusing the report. Endpoint zero is
+                        // shared with the NIC path through the hub translator, so
+                        // retrying it forever starves frames; leave the state for the
+                        // next lock-state transition instead.
+                        iface.desired_leds = None;
+                        iface.led_retry_frame = None;
+                        print("[usb-hid] WARN: iface ");
+                        print_u8(iface.interface);
+                        println(" deferred the LED output report too often; waiting for lock-state change");
+                        return;
+                    }
                     print("[usb-hid] WARN: iface ");
                     print_u8(iface.interface);
-                    println(" deferred the LED output report too often; waiting for lock-state change");
-                    return;
+                    println(" deferred the LED output report");
                 }
-                print("[usb-hid] WARN: iface ");
-                print_u8(iface.interface);
-                println(" deferred the LED output report");
+                LedFailureDisposition::Reject => {
+                    // USB STALL is the device declining this report, not a busy hub.
+                    // Do not repeatedly consume endpoint zero or flood the console;
+                    // a later lock-state transition is still a fresh request.
+                    iface.desired_leds = None;
+                    iface.led_retry_frame = None;
+                    iface.led_deferrals = 0;
+                    print("[usb-hid] WARN: iface ");
+                    print_u8(iface.interface);
+                    println(" rejected the LED output report; waiting for lock-state change");
+                }
             }
-            LedFailureDisposition::Reject => {
-                // USB STALL is the device declining this report, not a busy hub.
-                // Do not repeatedly consume endpoint zero or flood the console;
-                // a later lock-state transition is still a fresh request.
-                iface.desired_leds = None;
-                iface.led_retry_frame = None;
-                iface.led_deferrals = 0;
-                print("[usb-hid] WARN: iface ");
-                print_u8(iface.interface);
-                println(" rejected the LED output report; waiting for lock-state change");
-            }
-        },
+        }
     }
 }
 
@@ -970,10 +972,7 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
         // nonblocking receive and never parks in Recv, and the kernel delivers a
         // TrySend only to a target parked in Recv, so a TrySend registration is
         // refused every time. Send queues it and returns once the service took it.
-        Ok(encoded) => matches!(
-            ostd::syscall::sys_send(tid, encoded),
-            SyscallResult::Ok(_)
-        ),
+        Ok(encoded) => matches!(ostd::syscall::sys_send(tid, encoded), SyscallResult::Ok(_)),
         Err(_) => false,
     }
 }

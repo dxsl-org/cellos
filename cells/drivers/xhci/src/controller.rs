@@ -163,7 +163,7 @@ impl XhciController {
         let dboff = mmio.read_u32(CAP_DBOFF)? as usize;
         let rtsoff = mmio.read_u32(CAP_RTSOFF)? as usize;
 
-        if caplen < 0x20 || caplen > 0x100 {
+        if !(0x20..=0x100).contains(&caplen) {
             let _ = print_fmt(format_args!(
                 "[xhci] unsupported capability length 0x{:x}; failing closed\n",
                 caplen
@@ -371,7 +371,10 @@ impl XhciController {
             control: trb_type(TYPE_ADDRESS_DEVICE) | ((self.slot as u32) << 24),
         })?;
         if code != CMPLT_SUCCESS {
-            let _ = print_fmt(format_args!("[xhci] address device failed (code={})\n", code));
+            let _ = print_fmt(format_args!(
+                "[xhci] address device failed (code={})\n",
+                code
+            ));
             return Err(ViError::IO);
         }
         let _ = print_fmt(format_args!("[xhci] slot {} addressed\n", self.slot));
@@ -428,7 +431,7 @@ impl XhciController {
         let got = self.control_in(
             BM_GET_DESCRIPTOR,
             USB_REQ_GET_DESCRIPTOR,
-            (USB_DT_CONFIG << 8) | 0,
+            USB_DT_CONFIG << 8,
             0,
             9,
         )?;
@@ -465,12 +468,13 @@ impl XhciController {
         let mut cfg = [0u8; 512];
         let cfg_len = total.min(cfg.len());
         self.data.read_bytes(0, &mut cfg[..cfg_len]);
-        let (iface, ep_num, mps, interval) = parse_boot_keyboard(&cfg[..cfg_len]).ok_or_else(|| {
-            let _ = print_fmt(format_args!(
-                "[xhci] device has no HID boot keyboard interface; failing closed\n"
-            ));
-            ViError::NotSupported
-        })?;
+        let (iface, ep_num, mps, interval) =
+            parse_boot_keyboard(&cfg[..cfg_len]).ok_or_else(|| {
+                let _ = print_fmt(format_args!(
+                    "[xhci] device has no HID boot keyboard interface; failing closed\n"
+                ));
+                ViError::NotSupported
+            })?;
         let _ = print_fmt(format_args!(
             "[xhci] HID boot keyboard interface={} endpoint=0x{:02x} mps={} interval={}\n",
             iface,
@@ -481,7 +485,12 @@ impl XhciController {
 
         // SET_CONFIGURATION(1) then SET_PROTOCOL(boot) on the interface.
         self.control_no_data(BM_SET_CONFIGURATION, USB_REQ_SET_CONFIGURATION, 1, 0)?;
-        self.control_no_data(BM_SET_PROTOCOL, USB_REQ_SET_PROTOCOL, HID_PROTOCOL_BOOT, iface as u16)?;
+        self.control_no_data(
+            BM_SET_PROTOCOL,
+            USB_REQ_SET_PROTOCOL,
+            HID_PROTOCOL_BOOT,
+            iface as u16,
+        )?;
 
         // DCI = 2*endpoint_number + direction (IN = 1): EP1 IN is DCI 3.
         self.int_dci = 2 * ep_num + 1;
@@ -506,10 +515,7 @@ impl XhciController {
                     self.report.read_bytes(0, &mut report);
                     got = Some(report);
                 } else {
-                    let _ = print_fmt(format_args!(
-                        "[xhci] interrupt IN failed (code={})\n",
-                        code
-                    ));
+                    let _ = print_fmt(format_args!("[xhci] interrupt IN failed (code={})\n", code));
                 }
                 self.int_armed = false;
             }
@@ -555,7 +561,7 @@ impl XhciController {
             if self.rd(reg)? & mask == expected {
                 return Ok(());
             }
-            if i % POLL_YIELD_EVERY == 0 {
+            if i.is_multiple_of(POLL_YIELD_EVERY) {
                 ostd::task::yield_now();
             }
             i += 1;
@@ -600,12 +606,15 @@ impl XhciController {
                 if event_type(event.control) == TYPE_COMMAND_COMPLETE {
                     return Ok((event_code(event.status), event_slot(event.control)));
                 }
-            } else if i % POLL_YIELD_EVERY == 0 {
+            } else if i.is_multiple_of(POLL_YIELD_EVERY) {
                 ostd::task::yield_now();
             }
             i += 1;
         }
-        let _ = print_fmt(format_args!("[xhci] command timed out (type=0x{:x})\n", trb.control));
+        let _ = print_fmt(format_args!(
+            "[xhci] command timed out (type=0x{:x})\n",
+            trb.control
+        ));
         Err(ViError::IO)
     }
 
@@ -638,16 +647,25 @@ impl XhciController {
         let portsc = self.rd(reg)?;
         // Assert Port Reset, preserving power/indicator and acknowledging any
         // latched change bits.
-        self.wr(
+        self.wr(reg, (portsc & PORTSC_PRESERVE) | PORTSC_PR | PORTSC_CHANGE)?;
+        self.wait_register(
             reg,
-            (portsc & PORTSC_PRESERVE) | PORTSC_PR | PORTSC_CHANGE,
+            PORTSC_PRC,
+            PORTSC_PRC,
+            RESET_POLL_LIMIT,
+            "port reset never completed",
         )?;
-        self.wait_register(reg, PORTSC_PRC, PORTSC_PRC, RESET_POLL_LIMIT, "port reset never completed")?;
         // Clear PRC, keep the port powered.
         let portsc = self.rd(reg)?;
         self.wr(reg, (portsc & PORTSC_PRESERVE) | PORTSC_PRC)?;
         // Wait for the port to be enabled.
-        self.wait_register(reg, PORTSC_PED, PORTSC_PED, RESET_POLL_LIMIT, "port never enabled")?;
+        self.wait_register(
+            reg,
+            PORTSC_PED,
+            PORTSC_PED,
+            RESET_POLL_LIMIT,
+            "port never enabled",
+        )?;
         let portsc = self.rd(reg)?;
         self.speed = (portsc >> 10) & 0xF;
         Ok(())
@@ -659,8 +677,7 @@ impl XhciController {
     fn build_ep0_context(&self) {
         self.input_ctx.zero();
         self.input_ctx.write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(1));
-        self.input_ctx
-            .write_u32(SLOT_CTX, slot_info(1, self.speed));
+        self.input_ctx.write_u32(SLOT_CTX, slot_info(1, self.speed));
         // Root Hub Port Number is slot-context dword 1 bits 23:16.
         self.input_ctx
             .write_u32(SLOT_CTX + 4, (self.port as u32) << 16);
@@ -676,13 +693,13 @@ impl XhciController {
     fn evaluate_ep0(&mut self, mps: u16) -> ViResult<()> {
         self.input_ctx.zero();
         self.input_ctx.write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(1));
-        self.input_ctx
-            .write_u32(SLOT_CTX, slot_info(1, self.speed));
+        self.input_ctx.write_u32(SLOT_CTX, slot_info(1, self.speed));
         self.input_ctx
             .write_u32(SLOT_CTX + 4, (self.port as u32) << 16);
         let ep0 = ep_ctx(1); // EP0 is DCI 1
         self.input_ctx.write_u32(ep0, 0);
-        self.input_ctx.write_u32(ep0 + 4, ep_dw1(mps, EP_TYPE_CONTROL));
+        self.input_ctx
+            .write_u32(ep0 + 4, ep_dw1(mps, EP_TYPE_CONTROL));
         self.input_ctx.write_u64(ep0 + 8, self.ep0_ring.iova() | 1);
         self.input_ctx.write_u32(ep0 + 16, 8);
         let (code, _) = self.command(Trb {
@@ -691,7 +708,10 @@ impl XhciController {
             control: trb_type(TYPE_EVALUATE_CONTEXT) | ((self.slot as u32) << 24),
         })?;
         if code != CMPLT_SUCCESS {
-            let _ = print_fmt(format_args!("[xhci] evaluate context failed (code={})\n", code));
+            let _ = print_fmt(format_args!(
+                "[xhci] evaluate context failed (code={})\n",
+                code
+            ));
             return Err(ViError::IO);
         }
         Ok(())
@@ -703,7 +723,8 @@ impl XhciController {
         // the DCI, not the endpoint number: EP1 IN is DCI 3.
         let dci = 2 * ep_num + 1;
         self.input_ctx.zero();
-        self.input_ctx.write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(dci));
+        self.input_ctx
+            .write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(dci));
         self.input_ctx
             .write_u32(SLOT_CTX, slot_info(dci as u32, self.speed));
         self.input_ctx
@@ -766,7 +787,7 @@ impl XhciController {
                 {
                     return Ok((event_code(event.status), event_residual(event.status)));
                 }
-            } else if i % POLL_YIELD_EVERY == 0 {
+            } else if i.is_multiple_of(POLL_YIELD_EVERY) {
                 ostd::task::yield_now();
             }
             i += 1;

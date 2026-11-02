@@ -137,7 +137,7 @@ impl TaskCopyView {
         guard
             .as_ref()
             .and_then(|s| s.tasks.get(&task_id))
-            .map(|t| Self::of(t))
+            .map(Self::of)
     }
     /// Whether this view uses the shared SAS root rather than a private Domain.
     #[cfg(all(

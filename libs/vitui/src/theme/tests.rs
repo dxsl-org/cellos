@@ -84,20 +84,35 @@ fn ansi_16_fallback_picks_the_nearest_vt_colour() {
 #[test]
 fn colour_mode_selects_the_representation() {
     let accent = Palette::DEFAULT.accent;
-    assert_eq!(Theme::new(ColorMode::TrueColor).color(accent), Color::Rgb(0xcb, 0xa6, 0xf7));
-    assert_eq!(Theme::new(ColorMode::Indexed256).color(accent), Color::Indexed(183));
-    assert_eq!(Theme::new(ColorMode::Ansi16).color(accent), Color::LightMagenta);
+    assert_eq!(
+        Theme::new(ColorMode::TrueColor).color(accent),
+        Color::Rgb(0xcb, 0xa6, 0xf7)
+    );
+    assert_eq!(
+        Theme::new(ColorMode::Indexed256).color(accent),
+        Color::Indexed(183)
+    );
+    assert_eq!(
+        Theme::new(ColorMode::Ansi16).color(accent),
+        Color::LightMagenta
+    );
     let ansi = Theme::new(ColorMode::Ansi16);
     assert_eq!(ansi.base(), Style::new().fg(Color::Gray).bg(Color::Black));
     assert_eq!(ansi.color(Rgb(255, 0, 0)), Color::Red);
     assert_eq!(ansi.color(Rgb(128, 128, 128)), Color::DarkGray);
-    assert_eq!(Theme::new(ColorMode::Indexed256).base(), Style::new().fg(Color::Indexed(189)).bg(Color::Indexed(235)));
+    assert_eq!(
+        Theme::new(ColorMode::Indexed256).base(),
+        Style::new().fg(Color::Indexed(189)).bg(Color::Indexed(235))
+    );
 }
 
 #[test]
 fn border_sets_are_ratatuis() {
     assert_eq!(Border::Plain.set(), ratatui_core::symbols::border::PLAIN);
-    assert_eq!(Border::Rounded.set(), ratatui_core::symbols::border::ROUNDED);
+    assert_eq!(
+        Border::Rounded.set(),
+        ratatui_core::symbols::border::ROUNDED
+    );
     assert_eq!(Border::Thick.set(), ratatui_core::symbols::border::THICK);
     assert_eq!(Border::Rounded.set().top_left, "\u{256d}");
     assert_eq!(Border::Thick.set().vertical_left, "\u{2503}");
@@ -113,10 +128,28 @@ fn helpers_produce_the_palette_styles() {
     let bold = Modifier::BOLD;
     assert_eq!(theme.base(), Style::new().fg(rgb(p.fg)).bg(rgb(p.bg)));
     assert_eq!(theme.border_style(), Style::new().fg(rgb(p.border)));
-    assert_eq!(theme.title_style(), Style::new().fg(rgb(p.accent)).add_modifier(bold));
-    assert_eq!(theme.title_bar_style(), Style::new().fg(rgb(p.bg)).bg(rgb(p.accent)).add_modifier(bold));
-    assert_eq!(theme.status_line_style(), Style::new().fg(rgb(p.fg)).bg(rgb(p.surface)));
-    assert_eq!(theme.highlight_style(), Style::new().fg(rgb(p.accent)).bg(rgb(p.highlight)).add_modifier(bold));
+    assert_eq!(
+        theme.title_style(),
+        Style::new().fg(rgb(p.accent)).add_modifier(bold)
+    );
+    assert_eq!(
+        theme.title_bar_style(),
+        Style::new()
+            .fg(rgb(p.bg))
+            .bg(rgb(p.accent))
+            .add_modifier(bold)
+    );
+    assert_eq!(
+        theme.status_line_style(),
+        Style::new().fg(rgb(p.fg)).bg(rgb(p.surface))
+    );
+    assert_eq!(
+        theme.highlight_style(),
+        Style::new()
+            .fg(rgb(p.accent))
+            .bg(rgb(p.highlight))
+            .add_modifier(bold)
+    );
     assert_eq!(HIGHLIGHT_SYMBOL, "\u{258c} ");
 
     let title = theme.title_bar(" app ");
@@ -179,7 +212,14 @@ fn themed_rounded_block_with_a_bar_renders_exactly() {
         .data([0u64, 2, 4, 6, 8, 10, 12, 14, 16, 16])
         .max(16)
         .style(Style::new().fg(rgb(p.success)))
-        .render(Rect { y: inner.y + 1, height: 1, ..inner }, &mut buf);
+        .render(
+            Rect {
+                y: inner.y + 1,
+                height: 1,
+                ..inner
+            },
+            &mut buf,
+        );
 
     assert_eq!(row(&buf, 0), "╭cpu───────╮");
     assert_eq!(row(&buf, 1), "│ ████░░░░░│");
@@ -211,7 +251,10 @@ fn themed_rounded_block_with_a_bar_renders_exactly() {
     }
     // Sparkline row: value * 8 / 16 eighths, one cell per value.
     let spark = base.fg(rgb(p.success));
-    for (x, symbol) in [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "█"].iter().enumerate() {
+    for (x, symbol) in [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "█"]
+        .iter()
+        .enumerate()
+    {
         expected[(x as u16 + 1, 2)] = cell(symbol, spark);
     }
     assert_eq!(buf, expected);

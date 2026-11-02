@@ -91,8 +91,10 @@ fn setup_task(tid: usize, cell: u64, name: &'static str, va: usize) -> Option<Ar
         #[cfg(cellos_p01_trace)]
         crate::memory::heap::p01_owner::task_backing(&task);
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         sched.tasks.insert(tid, task);
     }
     Some(space)

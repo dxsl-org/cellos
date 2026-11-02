@@ -20,12 +20,14 @@ pub(crate) mod qemu_time;
 /// Fleet flavors have no host time gate; the ticket is inert.
 #[cfg(not(feature = "qemu-dev-https"))]
 pub(crate) mod qemu_time {
-    pub fn demand() -> (u64, u64) { (0, 0) }
+    pub fn demand() -> (u64, u64) {
+        (0, 0)
+    }
 }
-#[cfg(feature = "qemu-dev-https")]
-mod public_pki;
 pub mod dispatch;
 pub mod provider;
+#[cfg(feature = "qemu-dev-https")]
+mod public_pki;
 #[cfg(test)]
 pub mod relay_certificate;
 #[cfg(test)]

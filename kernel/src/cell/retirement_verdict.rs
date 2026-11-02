@@ -73,7 +73,10 @@ struct Table {
     next_seq: u64,
 }
 
-static TABLE: Spinlock<Table> = Spinlock::new(Table { slots: [None; MAX_RECORDS], next_seq: 0 });
+static TABLE: Spinlock<Table> = Spinlock::new(Table {
+    slots: [None; MAX_RECORDS],
+    next_seq: 0,
+});
 
 /// State and reason bits for a final tally. Untracked SHM or a quarantine
 /// overflow is `Unproven`; else deferred DMA or any bounded quarantine is
@@ -148,7 +151,12 @@ pub(crate) fn close(owner: CellOwner, tally: RetirementTally) {
     let (state, reasons) = classify(&tally);
     let mut table = TABLE.lock();
     let seq = table.next_seq;
-    let Some(slot) = table.slots.iter_mut().flatten().find(|s| s.owns(owner) && s.pending()) else {
+    let Some(slot) = table
+        .slots
+        .iter_mut()
+        .flatten()
+        .find(|s| s.owns(owner) && s.pending())
+    else {
         return;
     };
     slot.seq = seq;

@@ -58,16 +58,20 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 pub const MAX_CPUS: usize = 2;
 #[repr(C, align(64))]
 struct CpuLocal {
-    kernel_rsp: u64, // offset 0  — gs:0
-    user_rsp: u64,   // offset 8  — gs:8
-    pku_value: u32,  // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
-    _pad: u32,       // offset 20 — alignment padding
-    user_cr3: u64,   // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
+    kernel_rsp: u64,   // offset 0  — gs:0
+    user_rsp: u64,     // offset 8  — gs:8
+    pku_value: u32,    // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
+    _pad: u32,         // offset 20 — alignment padding
+    user_cr3: u64,     // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
     logical_id: usize, // offset 32 — gs:32
 }
 impl CpuLocal {
     const EMPTY: Self = Self {
-        kernel_rsp: 0, user_rsp: 0, pku_value: 0, _pad: 0, user_cr3: 0,
+        kernel_rsp: 0,
+        user_rsp: 0,
+        pku_value: 0,
+        _pad: 0,
+        user_cr3: 0,
         logical_id: 0,
     };
 }
@@ -90,8 +94,16 @@ const _: () = {
 /// No other CPU may use this record.
 pub unsafe fn install_cpu(logical: usize) {
     assert!(logical < MAX_CPUS);
-    let local = core::ptr::addr_of_mut!(CPU_LOCALS).cast::<CpuLocal>().add(logical);
-    core::ptr::write(local, CpuLocal { logical_id: logical, ..CpuLocal::EMPTY });
+    let local = core::ptr::addr_of_mut!(CPU_LOCALS)
+        .cast::<CpuLocal>()
+        .add(logical);
+    core::ptr::write(
+        local,
+        CpuLocal {
+            logical_id: logical,
+            ..CpuLocal::EMPTY
+        },
+    );
     wrmsr(IA32_GSBASE, local as u64);
     wrmsr(IA32_KERNEL_GSBASE, 0);
 }
@@ -100,7 +112,9 @@ pub unsafe fn install_cpu(logical: usize) {
 #[inline(always)]
 pub fn current_cpu_id() -> usize {
     let logical: usize;
-    unsafe { asm!("mov {}, gs:[32]", out(reg) logical, options(nostack, readonly, preserves_flags)) };
+    unsafe {
+        asm!("mov {}, gs:[32]", out(reg) logical, options(nostack, readonly, preserves_flags))
+    };
     logical
 }
 /// Read the current CPU's user-CR3 scratch from gs:24.
@@ -156,7 +170,6 @@ pub fn init() {
     }
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
     wrmsr(IA32_FMASK, SYSCALL_FMASK);
-
 }
 
 /// Update the current CPU's syscall-entry stack while kernel GS is active.

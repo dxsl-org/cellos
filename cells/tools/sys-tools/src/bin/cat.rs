@@ -21,7 +21,10 @@ fn cell_main() {
     let fd = match syscall::sys_open(path) {
         Ok(f) => f,
         Err(_) => {
-            emit(output.stderr(), &[b"cat: ", path.as_bytes(), b": file not found\n"]);
+            emit(
+                output.stderr(),
+                &[b"cat: ", path.as_bytes(), b": file not found\n"],
+            );
             syscall::sys_exit(1);
         }
     };

@@ -26,7 +26,11 @@ impl AutoscaleDomainPolicy {
             min_replicas,
             max_replicas: max_replicas.max(min_replicas),
             cooldown_ms,
-            max_change_per_window: if max_change_per_window == 0 { 1 } else { max_change_per_window },
+            max_change_per_window: if max_change_per_window == 0 {
+                1
+            } else {
+                max_change_per_window
+            },
         }
     }
 }

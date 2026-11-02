@@ -84,7 +84,12 @@ fn pinned_text(pinned: &[u8; 32]) -> String {
 }
 
 fn status_line(state: PinState, current: &[u8; 32], pinned: &[u8; 32]) -> String {
-    format!("machine pin: state={} current={} pinned={}", state.name(), hex(current), pinned_text(pinned))
+    format!(
+        "machine pin: state={} current={} pinned={}",
+        state.name(),
+        hex(current),
+        pinned_text(pinned)
+    )
 }
 
 fn current_line(current: &[u8; 32]) -> String {
@@ -92,7 +97,10 @@ fn current_line(current: &[u8; 32]) -> String {
 }
 
 fn recorded_line(digest: &[u8; 32]) -> String {
-    format!("machine pin: recorded {}; reboot to start services", hex(digest))
+    format!(
+        "machine pin: recorded {}; reboot to start services",
+        hex(digest)
+    )
 }
 
 fn refused_line(refusal: Refusal) -> String {
@@ -115,8 +123,14 @@ pub fn cmd_machine(args: &[String]) -> i32 {
 }
 
 fn run(invocation: Invocation) -> Result<i32, Failure> {
-    let init = ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN).ok_or(Failure::Unavailable)?;
-    let MachinePinResponse::Status { state, current, pinned } = call(init, MachinePinRequest::Status)? else {
+    let init = ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN)
+        .ok_or(Failure::Unavailable)?;
+    let MachinePinResponse::Status {
+        state,
+        current,
+        pinned,
+    } = call(init, MachinePinRequest::Status)?
+    else {
         return Err(Failure::Malformed);
     };
     if invocation == Invocation::Status {
@@ -220,10 +234,22 @@ mod tests {
             status_line(PinState::Match, &current, &current),
             format!("machine pin: state=match current={ones} pinned={ones}")
         );
-        assert_eq!(current_line(&current), format!("machine pin: current={ones}"));
-        assert_eq!(recorded_line(&current), format!("machine pin: recorded {ones}; reboot to start services"));
-        assert_eq!(refused_line(Refusal::NotSafeMode), "machine pin: refused NotSafeMode");
-        assert_eq!(Failure::Unavailable.line(), "machine pin: init endpoint unavailable");
+        assert_eq!(
+            current_line(&current),
+            format!("machine pin: current={ones}")
+        );
+        assert_eq!(
+            recorded_line(&current),
+            format!("machine pin: recorded {ones}; reboot to start services")
+        );
+        assert_eq!(
+            refused_line(Refusal::NotSafeMode),
+            "machine pin: refused NotSafeMode"
+        );
+        assert_eq!(
+            Failure::Unavailable.line(),
+            "machine pin: init endpoint unavailable"
+        );
         assert_eq!(Failure::NoReply.line(), "machine pin: no reply from init");
         assert_eq!(Failure::Malformed.line(), "machine pin: malformed reply");
     }

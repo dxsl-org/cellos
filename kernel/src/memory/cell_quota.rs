@@ -67,7 +67,10 @@ static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CE
 /// Low bits of an `IN_USE` word: live bytes, at most 1 TiB per Cell.
 const GENERATION_SHIFT: u32 = 40;
 const BYTES_MASK: usize = (1 << GENERATION_SHIFT) - 1;
-const _: () = assert!(usize::BITS == 64, "IN_USE packs generation and bytes into 64 bits");
+const _: () = assert!(
+    usize::BITS == 64,
+    "IN_USE packs generation and bytes into 64 bits"
+);
 
 /// Owner token for allocations that are not charged to any Cell row.
 pub(crate) const UNCHARGED_OWNER: usize = 0;
@@ -87,12 +90,14 @@ struct BoundQuota {
 #[cfg(cellos_p01_trace)]
 static P01_SOURCE: crate::p01_resources::Source = crate::p01_resources::Source::new();
 #[cfg(cellos_p01_trace)]
-static P01_SUBJECTS: [BoundQuota; 9] = [const { BoundQuota {
-    ready: core::sync::atomic::AtomicBool::new(false),
-    cell: core::sync::atomic::AtomicU64::new(0),
-    generation: core::sync::atomic::AtomicU64::new(0),
-    retired: core::sync::atomic::AtomicBool::new(false),
-} }; 9];
+static P01_SUBJECTS: [BoundQuota; 9] = [const {
+    BoundQuota {
+        ready: core::sync::atomic::AtomicBool::new(false),
+        cell: core::sync::atomic::AtomicU64::new(0),
+        generation: core::sync::atomic::AtomicU64::new(0),
+        retired: core::sync::atomic::AtomicBool::new(false),
+    }
+}; 9];
 
 #[cfg(cellos_p01_trace)]
 pub(crate) fn p01_static_bytes() -> usize {
@@ -103,9 +108,18 @@ pub(crate) fn p01_static_bytes() -> usize {
 #[cfg(cellos_p01_trace)]
 pub(crate) fn p01_bind(subject: u8, cell: u64, generation: u64) {
     let _write = P01_SOURCE.write();
-    let Some(row) = P01_SUBJECTS.get(subject as usize) else { P01_SOURCE.fault(); return; };
-    if cell == 0 || cell as usize >= MAX_CELLS || generation == 0
-        || row.ready.load(Ordering::SeqCst) { P01_SOURCE.fault(); return; }
+    let Some(row) = P01_SUBJECTS.get(subject as usize) else {
+        P01_SOURCE.fault();
+        return;
+    };
+    if cell == 0
+        || cell as usize >= MAX_CELLS
+        || generation == 0
+        || row.ready.load(Ordering::SeqCst)
+    {
+        P01_SOURCE.fault();
+        return;
+    }
     row.cell.store(cell, Ordering::SeqCst);
     row.generation.store(generation, Ordering::SeqCst);
     row.ready.store(true, Ordering::SeqCst);
@@ -115,15 +129,21 @@ pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
     let before = P01_SOURCE.before();
     let mut charge = 0u64;
     for (index, row) in P01_SUBJECTS.iter().enumerate() {
-        if !row.ready.load(Ordering::SeqCst) || row.retired.load(Ordering::SeqCst) { continue; }
+        if !row.ready.load(Ordering::SeqCst) || row.retired.load(Ordering::SeqCst) {
+            continue;
+        }
         let cell = row.cell.load(Ordering::SeqCst);
         let generation = row.generation.load(Ordering::SeqCst);
         // Worker rows, if ever present, describe the same Cell charge. Never
         // multiply the execution-context counter by the number of task rows.
-        if P01_SUBJECTS[..index].iter().any(|prior| prior.ready.load(Ordering::SeqCst)
-            && !prior.retired.load(Ordering::SeqCst)
-            && prior.cell.load(Ordering::SeqCst) == cell
-            && prior.generation.load(Ordering::SeqCst) == generation) { continue; }
+        if P01_SUBJECTS[..index].iter().any(|prior| {
+            prior.ready.load(Ordering::SeqCst)
+                && !prior.retired.load(Ordering::SeqCst)
+                && prior.cell.load(Ordering::SeqCst) == cell
+                && prior.generation.load(Ordering::SeqCst) == generation
+        }) {
+            continue;
+        }
         let value = (IN_USE[cell as usize].load(Ordering::SeqCst) & BYTES_MASK) as u64;
         match charge.checked_add(value) {
             Some(next) => charge = next,
@@ -162,9 +182,13 @@ pub fn register(cell_id: CellId, limit: usize) {
         #[cfg(cellos_p01_trace)]
         let _write = P01_SOURCE.write();
         #[cfg(cellos_p01_trace)]
-        if P01_SUBJECTS.iter().any(|row| row.ready.load(Ordering::SeqCst)
-            && !row.retired.load(Ordering::SeqCst)
-            && row.cell.load(Ordering::SeqCst) == cell_id.0) { P01_SOURCE.fault(); }
+        if P01_SUBJECTS.iter().any(|row| {
+            row.ready.load(Ordering::SeqCst)
+                && !row.retired.load(Ordering::SeqCst)
+                && row.cell.load(Ordering::SeqCst) == cell_id.0
+        }) {
+            P01_SOURCE.fault();
+        }
         // A new incarnation: bump the generation and start from zero bytes.
         let _ = IN_USE[id].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
             Some((word & !BYTES_MASK).wrapping_add(1 << GENERATION_SHIFT))
@@ -178,8 +202,10 @@ pub fn register(cell_id: CellId, limit: usize) {
     {
         let mut limits = QUOTA_LIMITS.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::QUOTA_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::QUOTA_SHARED,
+        );
         limits.insert(id, limit);
     }
     crate::task::hart_local::set_current_cell_id(prev_cell);

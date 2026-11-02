@@ -78,11 +78,18 @@ fn handle<'o>(
         }
         ConfigRequest::List => {
             // Newline-separated key list, sent inline.
-            list = store.map.keys().map(String::as_str).collect::<Vec<_>>().join("\n");
+            list = store
+                .map
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("\n");
             ConfigResponse::Keys(list.as_str())
         }
     };
-    let encoded = api::ipc::encode(&response, out).ok().map(|slice| slice.len());
+    let encoded = api::ipc::encode(&response, out)
+        .ok()
+        .map(|slice| slice.len());
     match encoded {
         Some(len) => Some(&out[..len]),
         None => encode(&ConfigResponse::Err(ERR_MALFORMED), out),
@@ -227,10 +234,17 @@ mod tests {
     };
 
     /// Run `request` through the real handler and return the decoded reply.
-    fn call(store: &mut ConfigStore, request: ConfigRequest<'_>, caller: Option<&CallerIdentity>) -> String {
+    fn call(
+        store: &mut ConfigStore,
+        request: ConfigRequest<'_>,
+        caller: Option<&CallerIdentity>,
+    ) -> String {
         let mut out = [0u8; IPC_BUF_SIZE];
         let reply = handle(store, Some(request), caller, &mut out).expect("reply encodes");
-        alloc::format!("{:?}", api::ipc::decode::<ConfigResponse>(reply).expect("reply decodes"))
+        alloc::format!(
+            "{:?}",
+            api::ipc::decode::<ConfigResponse>(reply).expect("reply decodes")
+        )
     }
 
     fn snapshot(store: &ConfigStore) -> BTreeMap<String, String> {
@@ -243,12 +257,36 @@ mod tests {
         let before = snapshot(&store);
         let denied = alloc::format!("{:?}", ConfigResponse::Err(CONFIG_ERR_DENIED));
         for (request, caller) in [
-            (ConfigRequest::Set { key: "P01Q_PROBE", value: "x" }, Some(&PROBE)),
-            (ConfigRequest::Set { key: "P01Q_PROBE", value: "x" }, None),
+            (
+                ConfigRequest::Set {
+                    key: "P01Q_PROBE",
+                    value: "x",
+                },
+                Some(&PROBE),
+            ),
+            (
+                ConfigRequest::Set {
+                    key: "P01Q_PROBE",
+                    value: "x",
+                },
+                None,
+            ),
             (ConfigRequest::Delete("OS"), Some(&PROBE)),
             (ConfigRequest::Delete("OS"), Some(&SHELL)),
-            (ConfigRequest::Set { key: "PATH", value: "/tmp" }, Some(&SHELL)),
-            (ConfigRequest::Set { key: "a.b", value: "1" }, Some(&SHELL)),
+            (
+                ConfigRequest::Set {
+                    key: "PATH",
+                    value: "/tmp",
+                },
+                Some(&SHELL),
+            ),
+            (
+                ConfigRequest::Set {
+                    key: "a.b",
+                    value: "1",
+                },
+                Some(&SHELL),
+            ),
         ] {
             assert_eq!(call(&mut store, request, caller), denied);
             assert_eq!(snapshot(&store), before);
@@ -259,17 +297,42 @@ mod tests {
     fn granted_writes_mutate_and_reads_stay_open() {
         let mut store = ConfigStore::new();
         assert_eq!(
-            call(&mut store, ConfigRequest::Set { key: "P01Q_OK", value: "1" }, Some(&SHELL)),
+            call(
+                &mut store,
+                ConfigRequest::Set {
+                    key: "P01Q_OK",
+                    value: "1"
+                },
+                Some(&SHELL)
+            ),
             "Ok"
         );
         // Reads need no identity and no right.
-        assert_eq!(call(&mut store, ConfigRequest::Get("P01Q_OK"), None), "Value(\"1\")");
-        assert_eq!(call(&mut store, ConfigRequest::Get("PATH"), Some(&PROBE)), "Value(\"/bin\")");
-        assert_eq!(call(&mut store, ConfigRequest::List, None), "Keys(\"OS\\nP01Q_OK\\nPATH\")");
-        assert_eq!(call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)), "Ok");
-        assert_eq!(call(&mut store, ConfigRequest::Get("P01Q_OK"), None), "NotFound");
+        assert_eq!(
+            call(&mut store, ConfigRequest::Get("P01Q_OK"), None),
+            "Value(\"1\")"
+        );
+        assert_eq!(
+            call(&mut store, ConfigRequest::Get("PATH"), Some(&PROBE)),
+            "Value(\"/bin\")"
+        );
+        assert_eq!(
+            call(&mut store, ConfigRequest::List, None),
+            "Keys(\"OS\\nP01Q_OK\\nPATH\")"
+        );
+        assert_eq!(
+            call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)),
+            "Ok"
+        );
+        assert_eq!(
+            call(&mut store, ConfigRequest::Get("P01Q_OK"), None),
+            "NotFound"
+        );
         // Deleting an absent namespace key stays idempotent.
-        assert_eq!(call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)), "Ok");
+        assert_eq!(
+            call(&mut store, ConfigRequest::Delete("P01Q_OK"), Some(&SHELL)),
+            "Ok"
+        );
     }
 
     #[test]

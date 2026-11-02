@@ -238,22 +238,37 @@ const _: [(); 32] = [(); core::mem::size_of::<LimineMpResponse>()];
 #[cfg(target_arch = "x86_64")]
 pub fn mp_record_valid<T>(pointer: *const T, count: usize) -> bool {
     let start = pointer as usize;
-    if start == 0 || start % core::mem::align_of::<T>() != 0 {
+    if start == 0 || !start.is_multiple_of(core::mem::align_of::<T>()) {
         return false;
     }
-    let Some(size) = core::mem::size_of::<T>().checked_mul(count) else { return false };
-    let Some(end) = start.checked_add(size) else { return false };
-    let Some(offset) = get_hhdm_offset() else { return false };
-    let Some(physical) = (start as u64).checked_sub(offset) else { return false };
-    let Some(physical_end) = (end as u64).checked_sub(offset) else { return false };
-    let Some(map) = get_memory_map() else { return false };
+    let Some(size) = core::mem::size_of::<T>().checked_mul(count) else {
+        return false;
+    };
+    let Some(end) = start.checked_add(size) else {
+        return false;
+    };
+    let Some(offset) = get_hhdm_offset() else {
+        return false;
+    };
+    let Some(physical) = (start as u64).checked_sub(offset) else {
+        return false;
+    };
+    let Some(physical_end) = (end as u64).checked_sub(offset) else {
+        return false;
+    };
+    let Some(map) = get_memory_map() else {
+        return false;
+    };
     // Limine's memory-map response is already a mandatory trusted boot input.
     unsafe {
         (0..map.entry_count as usize).any(|index| {
             let entry = &**map.entries.add(index);
             entry.entry_type == 5
                 && physical >= entry.base
-                && entry.base.checked_add(entry.length).is_some_and(|limit| physical_end <= limit)
+                && entry
+                    .base
+                    .checked_add(entry.length)
+                    .is_some_and(|limit| physical_end <= limit)
         })
     }
 }

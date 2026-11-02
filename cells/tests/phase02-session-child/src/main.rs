@@ -79,7 +79,10 @@ fn parse_ref(id: &str, generation: &str) -> Option<ObjectRefV1> {
 fn granted(context: &ChildContext, slot: GrantSlot) -> Option<Endpoint> {
     let operation = OperationRef::from_raw(context.operation()).ok()?;
     let grant = context.grants().find(|g| g.slot == slot && g.kind == 1)?;
-    Some(Endpoint::new(EndpointRef::from_raw(grant.object).ok()?, operation))
+    Some(Endpoint::new(
+        EndpointRef::from_raw(grant.object).ok()?,
+        operation,
+    ))
 }
 
 fn argv_of(context: &ChildContext) -> Vec<String> {
@@ -147,7 +150,10 @@ fn ctx(context: &ChildContext, argv: &[String]) {
         match session.next_event(deadline) {
             Ok(event) => match event.kind {
                 EventKind::Text(text) => {
-                    mark(&format!("ctx text epoch={} seq={}", event.epoch, event.sequence));
+                    mark(&format!(
+                        "ctx text epoch={} seq={}",
+                        event.epoch, event.sequence
+                    ));
                     let _ = session.write_stdout(format!("got|{text}").as_bytes(), 0);
                 }
                 EventKind::Eof => {
@@ -256,7 +262,10 @@ fn spawn_writer(out: Endpoint, delay: &str, tag: &str, parent: OperationRef) -> 
     // Length is exact because the dummy grant has the same encoded size.
     let dummy = Grant::endpoint(
         GrantSlot::Stdout,
-        ObjectRefV1 { id: 1, generation: 1 },
+        ObjectRefV1 {
+            id: 1,
+            generation: 1,
+        },
         30,
     )?;
     let probe = ChildContext::new(operation.reference().raw(), &argv, b"", &[], &[dummy])?;
@@ -283,7 +292,9 @@ fn blocked_writer(context: &ChildContext) {
         match out.write(&block, u64::MAX) {
             Ok(n) => total += n,
             Err(status) => {
-                mark(&format!("blocked-writer woke status={status:?} total={total}"));
+                mark(&format!(
+                    "blocked-writer woke status={status:?} total={total}"
+                ));
                 return;
             }
         }
@@ -311,7 +322,10 @@ fn forged(argv: &[String]) {
         mark("FAIL forged malformed argv");
         return;
     };
-    let (Ok(operation), Ok(endpoint)) = (OperationRef::from_raw(operation), EndpointRef::from_raw(endpoint)) else {
+    let (Ok(operation), Ok(endpoint)) = (
+        OperationRef::from_raw(operation),
+        EndpointRef::from_raw(endpoint),
+    ) else {
         mark("FAIL forged refs");
         return;
     };
@@ -330,7 +344,10 @@ fn forged(argv: &[String]) {
         close.is_err(),
         cancel.is_err()
     ));
-    mark(&format!("forged detail read={read:?} dup={:?}", duplicate.map(|_| ())));
+    mark(&format!(
+        "forged detail read={read:?} dup={:?}",
+        duplicate.map(|_| ())
+    ));
 }
 
 /// Observe the death of the parent that held the only writer.

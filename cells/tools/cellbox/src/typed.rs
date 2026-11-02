@@ -35,7 +35,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use text_engine::pipeline::{
-    self, Category, Format, FrameEnd, Input, Item, PipelineError, RowSource, Stage, Value, MAX_STAGES,
+    self, Category, Format, FrameEnd, Input, Item, PipelineError, RowSource, Stage, Value,
+    MAX_STAGES,
 };
 
 use crate::rg::RgArgs;
@@ -115,7 +116,10 @@ const BUILTINS: &[&str] = &[
 fn is_assignment(argv: &[String]) -> bool {
     argv.len() == 1
         && argv[0].find('=').is_some_and(|eq| {
-            eq > 0 && argv[0].as_bytes()[..eq].iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            eq > 0
+                && argv[0].as_bytes()[..eq]
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
         })
 }
 
@@ -136,7 +140,11 @@ pub fn classify_command(argv: &[String]) -> CmdClass {
     }
     if prog == "edit" {
         // Bad argv is not a session: the built-in prints usage and exits 2.
-        return if crate::edit::valid_args(&argv[1..]) { CmdClass::Session } else { CmdClass::Builtin };
+        return if crate::edit::valid_args(&argv[1..]) {
+            CmdClass::Session
+        } else {
+            CmdClass::Builtin
+        };
     }
     if prog == "ssh" {
         // Bad argv is not a session: the built-in prints usage and exits 2. A publickey
@@ -145,7 +153,10 @@ pub fn classify_command(argv: &[String]) -> CmdClass {
         // parsable ssh (password, PTY shell) is an interactive session.
         return match vissh::args::parse_owned(&argv[1..]) {
             Err(_) => CmdClass::Builtin,
-            Ok(parsed) if matches!(parsed.auth, vissh::args::Auth::PublicKey { .. }) && parsed.command.is_some() => {
+            Ok(parsed)
+                if matches!(parsed.auth, vissh::args::Auth::PublicKey { .. })
+                    && parsed.command.is_some() =>
+            {
                 CmdClass::External
             }
             Ok(_) => CmdClass::Session,
@@ -193,14 +204,16 @@ fn cat_operand(argv: &[String]) -> Option<&str> {
 fn classify_stage(argv: &[String]) -> Class {
     let name = argv[0].as_str();
     match name {
-        "select" | "where" | "sort-by" | "take" | "to" | "from" => match pipeline::parse_stage(argv) {
-            Ok(stage) => match name {
-                "to" => Class::To(stage),
-                "from" => Class::From(stage),
-                _ => Class::Row(stage),
-            },
-            Err(error) => Class::Bad(format!("{}: {}", name, error)),
-        },
+        "select" | "where" | "sort-by" | "take" | "to" | "from" => {
+            match pipeline::parse_stage(argv) {
+                Ok(stage) => match name {
+                    "to" => Class::To(stage),
+                    "from" => Class::From(stage),
+                    _ => Class::Row(stage),
+                },
+                Err(error) => Class::Bad(format!("{}: {}", name, error)),
+            }
+        }
         "ps" | "ls" | "top" if argv[1..].iter().any(|arg| arg == "--records") => Class::Producer,
         // `rg` is always typed; its whole argv is checked here, before any effect.
         "rg" => match crate::rg::args::parse(argv) {
@@ -226,8 +239,10 @@ pub fn might_be_typed(first: &str, args: &[&str]) -> bool {
             None => false,
         };
     }
-    matches!(first, "select" | "where" | "sort-by" | "take" | "to" | "from" | "top" | "rg")
-        || first.contains('$')
+    matches!(
+        first,
+        "select" | "where" | "sort-by" | "take" | "to" | "from" | "top" | "rg"
+    ) || first.contains('$')
         || (matches!(first, "ps" | "ls") && args.contains(&"--records"))
 }
 
@@ -314,6 +329,10 @@ pub struct BytePlan {
     pub output: Option<(String, bool)>,
 }
 
+// reason: an Admission is returned once per admitted line and matched by value in
+// many places (including nested `TypedPlan { .. }` patterns); boxing the plan would
+// churn every match for no measurable gain.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Admission {
     /// Not a typed pipeline: run through the existing byte composition.
@@ -333,7 +352,10 @@ fn stateful_message(name: &str, context: &str) -> String {
 }
 
 fn session_message(name: &str) -> String {
-    format!("`{}` is an interactive session; it must be the only stage with no redirects", name)
+    format!(
+        "`{}` is an interactive session; it must be the only stage with no redirects",
+        name
+    )
 }
 
 /// Whole-pipeline static admission. `stages` is the complete, expanded pipeline
@@ -366,7 +388,10 @@ fn is_external(class: &Class) -> bool {
 }
 
 fn has_output_redirect(stage: &StageIn) -> bool {
-    stage.redirects.iter().any(|r| matches!(r.kind, RedirKind::Out | RedirKind::Append))
+    stage
+        .redirects
+        .iter()
+        .any(|r| matches!(r.kind, RedirKind::Out | RedirKind::Append))
 }
 
 /// Child-launch bound on the argument list (the immutable child context carries
@@ -388,7 +413,11 @@ fn check_external(stage: &StageIn) -> Result<(), String> {
     }
     // The child sees `ssh` as argv[0] (its entry keys on it), so an ssh stage's argument
     // list is the whole command; any other external passes only what follows its name.
-    let fits = if is_ssh_stage(&stage.argv) { argv_fits(&stage.argv) } else { argv_fits(&stage.argv[1..]) };
+    let fits = if is_ssh_stage(&stage.argv) {
+        argv_fits(&stage.argv)
+    } else {
+        argv_fits(&stage.argv[1..])
+    };
     if !fits {
         return reject(format!(
             "`{}`: argument list exceeds the {}-byte child launch limit",
@@ -401,7 +430,10 @@ fn check_external(stage: &StageIn) -> Result<(), String> {
 fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<Admission, String> {
     let n = stages.len();
     if n > MAX_STAGES {
-        return reject(format!("pipeline has {} stages; at most {} are allowed", n, MAX_STAGES));
+        return reject(format!(
+            "pipeline has {} stages; at most {} are allowed",
+            n, MAX_STAGES
+        ));
     }
     let classes: Vec<Class> = stages.iter().map(|s| classify_stage(&s.argv)).collect();
     let typed_any = classes.iter().any(|c| {
@@ -419,7 +451,9 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
 
     if !typed_any {
         if n == 1 {
-            if matches!(classes[0], Class::Other(CmdClass::Session)) && !stages[0].redirects.is_empty() {
+            if matches!(classes[0], Class::Other(CmdClass::Session))
+                && !stages[0].redirects.is_empty()
+            {
                 return reject(session_message(&stages[0].argv[0]));
             }
             // An external whose stdout is redirected runs as a one-stage byte pipeline:
@@ -435,7 +469,10 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
                     return reject(stateful_message(&stage.argv[0], "inside a pipeline"))
                 }
                 Class::Other(CmdClass::Function) => {
-                    return reject(stateful_message(&stage.argv[0], "inside a pipeline (functions run in the shell context)"))
+                    return reject(stateful_message(
+                        &stage.argv[0],
+                        "inside a pipeline (functions run in the shell context)",
+                    ))
                 }
                 Class::Other(CmdClass::Session) => return reject(session_message(&stage.argv[0])),
                 _ => {}
@@ -457,7 +494,10 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
                 return reject(stateful_message(name, "inside a pipeline"))
             }
             Class::Other(CmdClass::Function) => {
-                return reject(stateful_message(name, "inside a pipeline (functions run in the shell context)"))
+                return reject(stateful_message(
+                    name,
+                    "inside a pipeline (functions run in the shell context)",
+                ))
             }
             Class::Other(CmdClass::Session) => return reject(session_message(name)),
             Class::Other(CmdClass::External) => {
@@ -475,24 +515,39 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
 
     // Head. Leading external commands feed the `from` (or `rg -`) stage that must
     // follow them.
-    let external_head = classes.iter().take_while(|class| is_external(class)).count();
+    let external_head = classes
+        .iter()
+        .take_while(|class| is_external(class))
+        .count();
     let head = if external_head > 0 {
-        if !matches!(classes.get(external_head), Some(Class::From(_) | Class::SearchStdin(_))) {
+        if !matches!(
+            classes.get(external_head),
+            Some(Class::From(_) | Class::SearchStdin(_))
+        ) {
             return reject(format!(
                 "`{}` output is bytes: `from json|jsonl` must directly follow it",
                 stages[external_head - 1].argv[0]
             ));
         }
-        Head::External { count: external_head }
+        Head::External {
+            count: external_head,
+        }
     } else {
         match &classes[0] {
             Class::Producer | Class::Search(_) => Head::Producer,
             Class::Cat(path) => Head::Cat(path.clone()),
             Class::Other(CmdClass::Builtin) => Head::Capture,
             Class::From(_) | Class::SearchStdin(_) => {
-                match stages[0].redirects.iter().find(|r| r.kind == RedirKind::In).map(|r| r.path.clone()) {
+                match stages[0]
+                    .redirects
+                    .iter()
+                    .find(|r| r.kind == RedirKind::In)
+                    .map(|r| r.path.clone())
+                {
                     Some(path) => Head::FromFile(path),
-                    None if stdin_head && matches!(classes[0], Class::SearchStdin(_)) => Head::Stdin,
+                    None if stdin_head && matches!(classes[0], Class::SearchStdin(_)) => {
+                        Head::Stdin
+                    }
                     None => {
                         return reject(format!(
                             "`{}` needs byte input: pipe bytes into it or redirect `< FILE`",
@@ -502,7 +557,10 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
                 }
             }
             Class::Row(_) | Class::To(_) => {
-                return reject(format!("`{}` needs record input; start the pipeline with a record producer or `from`", stages[0].argv[0]))
+                return reject(format!(
+                    "`{}` needs record input; start the pipeline with a record producer or `from`",
+                    stages[0].argv[0]
+                ))
             }
             Class::Bad(_) | Class::Other(_) => unreachable_class()?,
         }
@@ -552,7 +610,10 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
     }
     // Anything after the typed run must be a byte consumer fed by an explicit `to`:
     // either built-ins over captured bytes or external commands, never both.
-    let tail_externals = classes[end..].iter().filter(|class| is_external(class)).count();
+    let tail_externals = classes[end..]
+        .iter()
+        .filter(|class| is_external(class))
+        .count();
     for (i, class) in classes.iter().enumerate().skip(end) {
         match class {
             Class::Other(CmdClass::External) => {
@@ -660,8 +721,14 @@ fn admit_inner(stages: &[StageIn], externals: bool, stdin_head: bool) -> Result<
         text_display = producer_argv.len() != before;
     }
     let search_text = search.is_some()
-        && typed.iter().all(|stage| matches!(stage, Stage::Where { .. } | Stage::Take { .. } | Stage::SortBy { .. }));
-    let search_status = search.is_some() && end == n && typed.iter().all(|stage| matches!(stage, Stage::To(_)));
+        && typed.iter().all(|stage| {
+            matches!(
+                stage,
+                Stage::Where { .. } | Stage::Take { .. } | Stage::SortBy { .. }
+            )
+        });
+    let search_status =
+        search.is_some() && end == n && typed.iter().all(|stage| matches!(stage, Stage::To(_)));
     let (search, search_index) = match search {
         Some((args, index)) => (Some(args), index),
         None => (None, 0),
@@ -734,7 +801,11 @@ fn admit_bytes(stages: &[StageIn], classes: &[Class]) -> Result<Admission, Strin
             }
         }
     }
-    Ok(Admission::Bytes(BytePlan { head, prefix, output }))
+    Ok(Admission::Bytes(BytePlan {
+        head,
+        prefix,
+        output,
+    }))
 }
 
 /// `classes[0]` was already narrowed away from these variants by the earlier loop;
@@ -759,12 +830,15 @@ pub fn background_refusal(stage: &StageIn) -> Option<String> {
             name
         )),
         Class::Other(CmdClass::Stateful) => Some(stateful_message(name, "in the background")),
-        Class::Other(CmdClass::Function) => {
-            Some(stateful_message(name, "in the background (functions run in the shell context)"))
-        }
+        Class::Other(CmdClass::Function) => Some(stateful_message(
+            name,
+            "in the background (functions run in the shell context)",
+        )),
         Class::Other(CmdClass::Session) => Some(session_message(name)),
         // An ssh stage is still a session in the background: never detached.
-        Class::Other(CmdClass::External) if is_ssh_stage(&stage.argv) => Some(session_message(name)),
+        Class::Other(CmdClass::External) if is_ssh_stage(&stage.argv) => {
+            Some(session_message(name))
+        }
         Class::Cat(_) | Class::Other(CmdClass::Builtin | CmdClass::External) => None,
     }
 }
@@ -783,7 +857,11 @@ pub struct RunFailure {
 
 impl RunFailure {
     fn new(stage: usize, message: String) -> Self {
-        RunFailure { stage, message, status: 1 }
+        RunFailure {
+            stage,
+            message,
+            status: 1,
+        }
     }
 }
 
@@ -848,7 +926,13 @@ impl RowSource for Observed {
 /// `source` plus the slot its completion status lands in once it is closed.
 pub fn observe_completion(source: Box<dyn RowSource>) -> (Box<dyn RowSource>, CompletionSlot) {
     let slot: CompletionSlot = Rc::new(core::cell::Cell::new(None));
-    (Box::new(Observed { inner: source, slot: slot.clone() }), slot)
+    (
+        Box::new(Observed {
+            inner: source,
+            slot: slot.clone(),
+        }),
+        slot,
+    )
 }
 
 /// What items become when the typed segment does not end in an explicit `to`.
@@ -877,8 +961,13 @@ pub fn default_sink(display: bool, plan: &TypedPlan) -> DefaultSink {
 
 /// Turn a byte payload into a row source with the leading `from` stage.
 pub fn rows_from_bytes(format: &Format, bytes: &[u8]) -> Result<Box<dyn RowSource>, PipelineError> {
-    Ok(Box::new(pipeline::VecSource::new(pipeline::decode_rows(format, bytes)?)))
+    Ok(Box::new(pipeline::VecSource::new(pipeline::decode_rows(
+        format, bytes,
+    )?)))
 }
+
+/// What [`build_chain`] hands back: `(chain, explicit_format, failure_slot, sink_stage)`.
+type BuiltChain = (Box<dyn RowSource>, Option<Format>, Slot, usize);
 
 /// The item chain for `stages` over `source`: the producer wrapped once with the
 /// order guard for its `category`, every row stage applied and tapped (so the first
@@ -890,10 +979,14 @@ fn build_chain(
     category: Category,
     first_stage: usize,
     stages: &[Stage],
-) -> Result<(Box<dyn RowSource>, Option<Format>, Slot, usize), RunFailure> {
+) -> Result<BuiltChain, RunFailure> {
     let slot: Slot = Rc::new(RefCell::new(None));
     let guarded = pipeline::check_items(source, category);
-    let mut chain: Box<dyn RowSource> = Box::new(Tap { inner: guarded, stage: first_stage, slot: slot.clone() });
+    let mut chain: Box<dyn RowSource> = Box::new(Tap {
+        inner: guarded,
+        stage: first_stage,
+        slot: slot.clone(),
+    });
     let (row_stages, explicit) = match stages.split_last() {
         Some((Stage::To(format), rest)) => (rest, Some(format.clone())),
         _ => (stages, None),
@@ -904,7 +997,11 @@ fn build_chain(
             Ok(next) => next,
             Err(error) => return Err(RunFailure::new(index, error.to_string())),
         };
-        chain = Box::new(Tap { inner: chain, stage: index, slot: slot.clone() });
+        chain = Box::new(Tap {
+            inner: chain,
+            stage: index,
+            slot: slot.clone(),
+        });
     }
     let sink_stage = first_stage + row_stages.len() + usize::from(explicit.is_some());
     Ok((chain, explicit, slot, sink_stage))
@@ -920,10 +1017,16 @@ pub struct CollectBound {
 }
 
 /// Every typed producer except `rg`.
-pub const COLLECT_BOUND: CollectBound = CollectBound { bytes: MAX_SINK_BYTES, status: 1 };
+pub const COLLECT_BOUND: CollectBound = CollectBound {
+    bytes: MAX_SINK_BYTES,
+    status: 1,
+};
 /// `rg`-headed Collected runs (D76-6): the general 4 MiB bound cannot fit the
 /// cellbox arena next to the search's regex/glob construction peak.
-pub const SEARCH_COLLECT_BOUND: CollectBound = CollectBound { bytes: 256 * 1024, status: 2 };
+pub const SEARCH_COLLECT_BOUND: CollectBound = CollectBound {
+    bytes: 256 * 1024,
+    status: 2,
+};
 
 /// Why collecting stopped.
 enum Collect {
@@ -962,10 +1065,11 @@ impl RowSource for Interruptible<'_> {
 /// Pull `source` (a producer of `category` items) through the row stages in `stages`
 /// (an optional trailing `to` selects an explicit serializer) and collect the sink bytes.
 ///
-/// `first_stage` is the pipeline index of `source`; row stage `k` is `first_stage
-/// + 1 + k`. The whole chain is closed on every exit path, so a satisfied `take`,
-/// an error or end of input always releases the producer. On failure NO bytes are
-/// returned and the caller opens no redirect.
+/// `first_stage` is the pipeline index of `source`; row stage `k` is
+/// `first_stage + 1 + k`. The whole chain is closed on every exit path, so a satisfied
+/// `take`, an error or end of input always releases the producer. On failure NO bytes
+/// are returned and the caller opens no redirect.
+#[cfg(any(test, feature = "shell_test"))]
 pub fn run_rows(
     source: Box<dyn RowSource>,
     category: Category,
@@ -973,7 +1077,15 @@ pub fn run_rows(
     stages: &[Stage],
     default_sink: DefaultSink,
 ) -> Result<Vec<u8>, RunFailure> {
-    run_rows_within(source, category, first_stage, stages, default_sink, COLLECT_BOUND, &mut || false)
+    run_rows_within(
+        source,
+        category,
+        first_stage,
+        stages,
+        default_sink,
+        COLLECT_BOUND,
+        &mut || false,
+    )
 }
 
 /// [`run_rows`] with an explicit collect bound and an interrupt poll, made before every
@@ -988,8 +1100,13 @@ pub fn run_rows_within(
     bound: CollectBound,
     interrupted: &mut dyn FnMut() -> bool,
 ) -> Result<Vec<u8>, RunFailure> {
-    let (mut chain, explicit, slot, sink_stage) = build_chain(source, category, first_stage, stages)?;
-    let mut gate = Interruptible { chain: &mut *chain, interrupted, hit: false };
+    let (mut chain, explicit, slot, sink_stage) =
+        build_chain(source, category, first_stage, stages)?;
+    let mut gate = Interruptible {
+        chain: &mut *chain,
+        interrupted,
+        hit: false,
+    };
     let result = match &explicit {
         Some(format) => encode_all(&mut gate, category, format, bound.bytes),
         None => match default_sink {
@@ -998,11 +1115,17 @@ pub fn run_rows_within(
                 Ok(bytes) => Ok(bytes),
                 Err(message) => Err(Collect::Failed(message)),
             },
-            DefaultSink::TypedJsonl => encode_all(&mut gate, category, &Format::JsonlTyped, bound.bytes),
+            DefaultSink::TypedJsonl => {
+                encode_all(&mut gate, category, &Format::JsonlTyped, bound.bytes)
+            }
             DefaultSink::SearchText => render_search_text(&mut gate, bound.bytes),
         },
     };
-    let result = if gate.hit { Err(Collect::Interrupted) } else { result };
+    let result = if gate.hit {
+        Err(Collect::Interrupted)
+    } else {
+        result
+    };
     chain.close();
     result.map_err(|stop| {
         slot.borrow_mut().take().unwrap_or(match stop {
@@ -1021,7 +1144,12 @@ pub fn run_rows_within(
     })
 }
 
-fn encode_all(chain: &mut dyn RowSource, category: Category, format: &Format, bound: usize) -> Result<Vec<u8>, Collect> {
+fn encode_all(
+    chain: &mut dyn RowSource,
+    category: Category,
+    format: &Format,
+    bound: usize,
+) -> Result<Vec<u8>, Collect> {
     let failed = |error: PipelineError| Collect::Failed(error.to_string());
     let mut out = Vec::new();
     let mut first = true;
@@ -1040,7 +1168,9 @@ fn encode_all(chain: &mut dyn RowSource, category: Category, format: &Format, bo
 fn search_line(item: Item, out: &mut Vec<u8>) -> Result<(), PipelineError> {
     match item {
         Item::Row(row) => crate::rg::text::render_row(&row, out),
-        _ => Err(PipelineError::Sequence(String::from("the search text renderer takes search rows only"))),
+        _ => Err(PipelineError::Sequence(String::from(
+            "the search text renderer takes search rows only",
+        ))),
     }
 }
 
@@ -1112,7 +1242,11 @@ struct Delivery<'a> {
 
 impl<'a> Delivery<'a> {
     fn new(sink: &'a mut dyn ChunkSink) -> Self {
-        Self { sink, pending: Vec::new(), last: None }
+        Self {
+            sink,
+            pending: Vec::new(),
+            last: None,
+        }
     }
 
     fn poll(&mut self) -> Result<(), Halt> {
@@ -1125,7 +1259,11 @@ impl<'a> Delivery<'a> {
 
     /// Hand the settled part of `pending` to the sink in bounded slices.
     fn flush(&mut self, end_of_output: bool) -> Result<(), Halt> {
-        let split = if end_of_output { self.pending.len() } else { complete_prefix(&self.pending) };
+        let split = if end_of_output {
+            self.pending.len()
+        } else {
+            complete_prefix(&self.pending)
+        };
         if split == 0 {
             return Ok(());
         }
@@ -1220,21 +1358,27 @@ pub fn stream_rows(
     default_sink: DefaultSink,
     sink: &mut dyn ChunkSink,
 ) -> Result<StreamEnd, RunFailure> {
-    let (mut chain, explicit, slot, sink_stage) = build_chain(source, category, first_stage, stages)?;
+    let (mut chain, explicit, slot, sink_stage) =
+        build_chain(source, category, first_stage, stages)?;
     let mut out = Delivery::new(sink);
     let outcome = match (&explicit, default_sink) {
         (Some(format), _) => stream_encoded(&mut *chain, category, format, &mut out),
-        (None, DefaultSink::Table) => write_tables(&mut *chain, category, &mut out).and_then(|()| out.finish()),
-        (None, DefaultSink::TypedJsonl) => stream_encoded(&mut *chain, category, &Format::JsonlTyped, &mut out),
+        (None, DefaultSink::Table) => {
+            write_tables(&mut *chain, category, &mut out).and_then(|()| out.finish())
+        }
+        (None, DefaultSink::TypedJsonl) => {
+            stream_encoded(&mut *chain, category, &Format::JsonlTyped, &mut out)
+        }
         (None, DefaultSink::SearchText) => stream_search_text(&mut *chain, &mut out),
     };
     chain.close();
     match outcome {
         Ok(()) => Ok(StreamEnd::Complete),
         Err(Halt::Interrupted) => Ok(StreamEnd::Interrupted),
-        Err(Halt::Failed(message)) => {
-            Err(slot.borrow_mut().take().unwrap_or(RunFailure::new(sink_stage, message)))
-        }
+        Err(Halt::Failed(message)) => Err(slot
+            .borrow_mut()
+            .take()
+            .unwrap_or(RunFailure::new(sink_stage, message))),
     }
 }
 
@@ -1265,13 +1409,22 @@ impl RowFeed {
         stages: &[Stage],
         default_sink: DefaultSink,
     ) -> Result<RowFeed, RunFailure> {
-        let (chain, explicit, slot, sink_stage) = build_chain(source, category, first_stage, stages)?;
+        let (chain, explicit, slot, sink_stage) =
+            build_chain(source, category, first_stage, stages)?;
         let format = match (explicit, default_sink) {
             (Some(format), _) => Some(format),
             (None, DefaultSink::SearchText) => None,
             (None, DefaultSink::Table | DefaultSink::TypedJsonl) => Some(Format::JsonlTyped),
         };
-        Ok(RowFeed { chain, category, format, first: true, slot, sink_stage, closed: false })
+        Ok(RowFeed {
+            chain,
+            category,
+            format,
+            first: true,
+            slot,
+            sink_stage,
+            closed: false,
+        })
     }
 
     /// Append encoded items to `out` until it holds at least `want` bytes or the items
@@ -1286,7 +1439,9 @@ impl RowFeed {
             match self.chain.next_item() {
                 Ok(Some(item)) => {
                     let encoded = match &self.format {
-                        Some(format) => pipeline::encode_item(format, self.category, item, self.first, out),
+                        Some(format) => {
+                            pipeline::encode_item(format, self.category, item, self.first, out)
+                        }
                         None => search_line(item, out),
                     };
                     if let Err(error) = encoded {
@@ -1309,7 +1464,10 @@ impl RowFeed {
 
     fn fail(&mut self, message: String) -> RunFailure {
         self.close();
-        self.slot.borrow_mut().take().unwrap_or(RunFailure::new(self.sink_stage, message))
+        self.slot
+            .borrow_mut()
+            .take()
+            .unwrap_or(RunFailure::new(self.sink_stage, message))
     }
 
     /// Release the producer chain (a closed `top` never samples again). Idempotent.
@@ -1391,7 +1549,8 @@ impl<S: ByteSource> StreamRows<S> {
         if self.lines() {
             if let Some(last) = self.pending.iter().rposition(|byte| *byte == b'\n') {
                 let complete: Vec<u8> = self.pending.drain(..=last).collect();
-                self.rows.extend(pipeline::decode_rows(&self.format, &complete)?);
+                self.rows
+                    .extend(pipeline::decode_rows(&self.format, &complete)?);
             }
             if self.pending.len() > pipeline::MAX_RECORD_LINE_BYTES {
                 return Err(PipelineError::RecordTooLarge);
@@ -1409,7 +1568,8 @@ impl<S: ByteSource> StreamRows<S> {
     fn end(&mut self) -> Result<(), PipelineError> {
         if !self.lines() || !self.pending.is_empty() {
             let tail = core::mem::take(&mut self.pending);
-            self.rows.extend(pipeline::decode_rows(&self.format, &tail)?);
+            self.rows
+                .extend(pipeline::decode_rows(&self.format, &tail)?);
         }
         self.state = StreamState::Ended;
         Ok(())
@@ -1445,7 +1605,9 @@ impl<S: ByteSource> RowSource for StreamRows<S> {
                 Ok(Some(count)) if count > 0 && count <= STREAM_CHUNK => self.push(&chunk[..count]),
                 Ok(Some(_)) => Err(PipelineError::Source(String::from("malformed stream read"))),
                 Ok(None) => self.end(),
-                Err(StreamStop::Interrupted) => Err(PipelineError::Source(String::from("interrupted"))),
+                Err(StreamStop::Interrupted) => {
+                    Err(PipelineError::Source(String::from("interrupted")))
+                }
                 Err(StreamStop::Failed(message)) => Err(PipelineError::Source(message)),
             };
             if let Err(error) = step {
@@ -1501,7 +1663,11 @@ pub const UPSTREAM_NOT_STARTED_STATUS: i32 = 141;
 /// spawn failure; the producer (and every stage before it) is simply not started and
 /// the last stage decides the pipeline status. `Cancelled` for the last stage, and
 /// every other spawn error, remains a failure.
-pub fn spawn_cancel_means_consumer_finished(status: api::cell_session::Status, index: usize, stages: usize) -> bool {
+pub fn spawn_cancel_means_consumer_finished(
+    status: api::cell_session::Status,
+    index: usize,
+    stages: usize,
+) -> bool {
     status == api::cell_session::Status::Cancelled && index + 1 < stages
 }
 
@@ -1530,7 +1696,9 @@ fn escape_text(text: &str, out: &mut String) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -1641,7 +1809,11 @@ fn collect_table(
             None => break None,
             Some(Item::End(end)) => break Some(end),
             Some(Item::Row(row)) => row,
-            Some(Item::Begin(_)) => return Err(Halt::Failed(String::from("frame begins inside another frame"))),
+            Some(Item::Begin(_)) => {
+                return Err(Halt::Failed(String::from(
+                    "frame begins inside another frame",
+                )))
+            }
         };
         if rows.len() >= MAX_TABLE_ROWS {
             return Err(Halt::Failed(format!(
@@ -1668,7 +1840,10 @@ fn collect_table(
             }
         }
         if payload > MAX_SINK_BYTES {
-            return Err(Halt::Failed(format!("table exceeds the {} byte bound", MAX_SINK_BYTES)));
+            return Err(Halt::Failed(format!(
+                "table exceeds the {} byte bound",
+                MAX_SINK_BYTES
+            )));
         }
         heap += table_row_heap(&cells);
         if heap > MAX_TABLE_HEAP_BYTES {
@@ -1688,7 +1863,14 @@ fn collect_table(
             widths[*col] = widths[*col].max(cell.chars().count());
         }
     }
-    Ok((Some(Table { columns, rows, widths }), stop))
+    Ok((
+        Some(Table {
+            columns,
+            rows,
+            widths,
+        }),
+        stop,
+    ))
 }
 
 impl Table {
@@ -1714,7 +1896,12 @@ impl Table {
 
     fn row(&self, index: usize, line: &mut String) {
         let cells = &self.rows[index];
-        self.fill(line, |col| cells.iter().find(|(c, _)| *c == col).map(|(_, text)| text.as_str()));
+        self.fill(line, |col| {
+            cells
+                .iter()
+                .find(|(c, _)| *c == col)
+                .map(|(_, text)| text.as_str())
+        });
     }
 }
 
@@ -1759,7 +1946,11 @@ fn frame_footer(end: &FrameEnd) -> String {
 /// Render the default table: one aligned table for a Rows stream; for a Frames stream
 /// one `-- sample N --` line, that frame's table and its footer, written at the frame's
 /// End so an endless producer is never buffered whole.
-fn write_tables(chain: &mut dyn RowSource, category: Category, out: &mut dyn TableOut) -> Result<(), Halt> {
+fn write_tables(
+    chain: &mut dyn RowSource,
+    category: Category,
+    out: &mut dyn TableOut,
+) -> Result<(), Halt> {
     if category == Category::Rows {
         let (table, _) = collect_table(chain, || out.interrupted())?;
         return match table {
@@ -1778,7 +1969,9 @@ fn write_tables(chain: &mut dyn RowSource, category: Category, out: &mut dyn Tab
         };
         let (table, end) = collect_table(chain, || out.interrupted())?;
         let Some(end) = end else {
-            return Err(Halt::Failed(String::from("frame stream ended inside a frame")));
+            return Err(Halt::Failed(String::from(
+                "frame stream ended inside a frame",
+            )));
         };
         out.emit(&format!("-- sample {} --\n", begin.sample_id))?;
         if let Some(table) = table {
@@ -1798,7 +1991,10 @@ impl TableOut for TableBuffer {
 
     fn emit(&mut self, text: &str) -> Result<(), Halt> {
         if self.0.len() + text.len() > MAX_SINK_BYTES {
-            return Err(Halt::Failed(format!("output exceeds the {} byte bound", MAX_SINK_BYTES)));
+            return Err(Halt::Failed(format!(
+                "output exceeds the {} byte bound",
+                MAX_SINK_BYTES
+            )));
         }
         self.0.extend_from_slice(text.as_bytes());
         Ok(())
@@ -1828,11 +2024,17 @@ mod tests {
     }
 
     fn stage(words: &[&str]) -> StageIn {
-        StageIn { argv: words.iter().map(|w| String::from(*w)).collect(), redirects: Vec::new() }
+        StageIn {
+            argv: words.iter().map(|w| String::from(*w)).collect(),
+            redirects: Vec::new(),
+        }
     }
 
     fn with(mut s: StageIn, kind: RedirKind, path: &str) -> StageIn {
-        s.redirects.push(Redir { kind, path: String::from(path) });
+        s.redirects.push(Redir {
+            kind,
+            path: String::from(path),
+        });
         s
     }
 
@@ -1875,7 +2077,12 @@ mod tests {
     fn counting(limit: u64) -> (Box<dyn RowSource>, Rc<Cell<u64>>, Rc<Cell<u32>>) {
         let pulled = Rc::new(Cell::new(0));
         let closed = Rc::new(Cell::new(0));
-        let source = Counting { next: 0, limit, pulled: pulled.clone(), closed: closed.clone() };
+        let source = Counting {
+            next: 0,
+            limit,
+            pulled: pulled.clone(),
+            closed: closed.clone(),
+        };
         (Box::new(source), pulled, closed)
     }
 
@@ -1896,7 +2103,10 @@ mod tests {
 
     #[test]
     fn plain_byte_pipelines_stay_legacy() {
-        assert!(matches!(admit(&[stage(&["echo", "x"]), stage(&["grep", "x"])]), Admission::Legacy));
+        assert!(matches!(
+            admit(&[stage(&["echo", "x"]), stage(&["grep", "x"])]),
+            Admission::Legacy
+        ));
         assert!(matches!(admit(&[stage(&["cd", "/"])]), Admission::Legacy));
     }
 
@@ -1931,7 +2141,12 @@ mod tests {
 
     #[test]
     fn stateful_and_session_stages_are_refused_before_effects() {
-        rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["/bin/cat"]), stage(&["cd", "/"])]);
+        rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["/bin/cat"]),
+            stage(&["cd", "/"]),
+        ]);
         rejected(&[stage(&["cd", "/tmp"]), stage(&["ps", "--records"])]);
         rejected(&[stage(&["echo", "x"]), stage(&["read", "V"])]);
         rejected(&[stage(&["top"]), stage(&["grep", "x"])]);
@@ -1952,24 +2167,61 @@ mod tests {
             stage(&["ps", "--records"]),
             with(stage(&["take", "1"]), RedirKind::Out, "/tmp/o"),
         ]);
-        assert!(matches!(ok, Admission::Typed(TypedPlan { output: Some(_), .. })));
-        rejected(&[with(stage(&["ps", "--records"]), RedirKind::Out, "/tmp/o"), stage(&["take", "1"])]);
-        rejected(&[stage(&["ps", "--records"]), with(stage(&["take", "1"]), RedirKind::Err, "/tmp/e")]);
+        assert!(matches!(
+            ok,
+            Admission::Typed(TypedPlan {
+                output: Some(_),
+                ..
+            })
+        ));
+        rejected(&[
+            with(stage(&["ps", "--records"]), RedirKind::Out, "/tmp/o"),
+            stage(&["take", "1"]),
+        ]);
+        rejected(&[
+            stage(&["ps", "--records"]),
+            with(stage(&["take", "1"]), RedirKind::Err, "/tmp/e"),
+        ]);
         rejected(&[with(stage(&["ps", "--records"]), RedirKind::In, "/tmp/i")]);
     }
 
     #[test]
     fn from_redirect_heads_a_typed_pipeline() {
-        let admitted = admit(&[with(stage(&["from", "jsonl"]), RedirKind::In, "/tmp/in"), stage(&["take", "1"])]);
-        assert!(matches!(admitted, Admission::Typed(TypedPlan { head: Head::FromFile(_), typed_cmds: 2, .. })));
+        let admitted = admit(&[
+            with(stage(&["from", "jsonl"]), RedirKind::In, "/tmp/in"),
+            stage(&["take", "1"]),
+        ]);
+        assert!(matches!(
+            admitted,
+            Admission::Typed(TypedPlan {
+                head: Head::FromFile(_),
+                typed_cmds: 2,
+                ..
+            })
+        ));
         rejected(&[stage(&["from", "jsonl"])]);
     }
 
     #[test]
     fn to_feeds_builtin_byte_consumers_only() {
-        let admitted = admit(&[stage(&["ps", "--records"]), stage(&["to", "text", "--field", "name"]), stage(&["grep", "sh"])]);
-        assert!(matches!(admitted, Admission::Typed(TypedPlan { typed_cmds: 2, output: None, .. })));
-        rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["take", "1"])]);
+        let admitted = admit(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "text", "--field", "name"]),
+            stage(&["grep", "sh"]),
+        ]);
+        assert!(matches!(
+            admitted,
+            Admission::Typed(TypedPlan {
+                typed_cmds: 2,
+                output: None,
+                ..
+            })
+        ));
+        rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["take", "1"]),
+        ]);
     }
 
     #[test]
@@ -1983,7 +2235,14 @@ mod tests {
     #[test]
     fn take_closes_the_producer_after_n_rows() {
         let (source, pulled, closed) = counting(1000);
-        let out = run_rows(source, Category::Rows, 0, &[Stage::Take { n: 2, frame: false }], DefaultSink::TypedJsonl).unwrap();
+        let out = run_rows(
+            source,
+            Category::Rows,
+            0,
+            &[Stage::Take { n: 2, frame: false }],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         assert_eq!(pulled.get(), 2);
         assert!(closed.get() >= 1);
         assert_eq!(out.iter().filter(|b| **b == b'\n').count(), 2);
@@ -1992,7 +2251,14 @@ mod tests {
     #[test]
     fn take_zero_never_pulls() {
         let (source, pulled, closed) = counting(1000);
-        let out = run_rows(source, Category::Rows, 0, &[Stage::Take { n: 0, frame: false }], DefaultSink::TypedJsonl).unwrap();
+        let out = run_rows(
+            source,
+            Category::Rows,
+            0,
+            &[Stage::Take { n: 0, frame: false }],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         assert!(out.is_empty());
         assert_eq!(pulled.get(), 0);
         assert!(closed.get() >= 1);
@@ -2000,8 +2266,10 @@ mod tests {
 
     #[test]
     fn table_aligns_columns_and_is_not_json() {
-        let source: Box<dyn RowSource> =
-            Box::new(pipeline::VecSource::new(vec![record(1, "running"), record(22, "dead")]));
+        let source: Box<dyn RowSource> = Box::new(pipeline::VecSource::new(vec![
+            record(1, "running"),
+            record(22, "dead"),
+        ]));
         let out = run_rows(source, Category::Rows, 0, &[], DefaultSink::Table).unwrap();
         let text = String::from_utf8(out).unwrap();
         let lines: Vec<&str> = text.lines().collect();
@@ -2049,7 +2317,11 @@ mod tests {
 
     #[test]
     fn external_head_must_be_followed_by_from() {
-        let plan = match admit(&[stage(&["/bin/echo", "{}"]), stage(&["from", "jsonl"]), stage(&["take", "1"])]) {
+        let plan = match admit(&[
+            stage(&["/bin/echo", "{}"]),
+            stage(&["from", "jsonl"]),
+            stage(&["take", "1"]),
+        ]) {
             Admission::Typed(plan) => plan,
             other => panic!("{:?}", other),
         };
@@ -2061,8 +2333,17 @@ mod tests {
         rejected(&[stage(&["/bin/echo", "{}"]), stage(&["to", "json"])]);
         // An external head may feed built-in consumers after an explicit `to`.
         assert!(matches!(
-            admit(&[stage(&["/bin/echo"]), stage(&["from", "json"]), stage(&["to", "text"]), stage(&["wc"])]),
-            Admission::Typed(TypedPlan { typed_cmds: 3, tail_externals: 0, .. })
+            admit(&[
+                stage(&["/bin/echo"]),
+                stage(&["from", "json"]),
+                stage(&["to", "text"]),
+                stage(&["wc"])
+            ]),
+            Admission::Typed(TypedPlan {
+                typed_cmds: 3,
+                tail_externals: 0,
+                ..
+            })
         ));
     }
 
@@ -2076,15 +2357,32 @@ mod tests {
         ]);
         // Rows reach an external stage only through an explicit `to`.
         rejected(&[stage(&["ps", "--records"]), stage(&["/bin/cat"])]);
-        rejected(&[stage(&["ps", "--records"]), stage(&["take", "1"]), stage(&["/bin/cat"])]);
+        rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["take", "1"]),
+            stage(&["/bin/cat"]),
+        ]);
         // Built-ins and externals never mix after `to`.
-        rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["/bin/cat"]), stage(&["wc"])]);
-        rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["wc"]), stage(&["/bin/cat"])]);
+        rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["/bin/cat"]),
+            stage(&["wc"]),
+        ]);
+        rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["wc"]),
+            stage(&["/bin/cat"]),
+        ]);
     }
 
     #[test]
     fn external_byte_pipelines() {
-        let plan = match admit(&[stage(&["/bin/echo", "x"]), with(stage(&["/bin/cat"]), RedirKind::Append, "/tmp/o")]) {
+        let plan = match admit(&[
+            stage(&["/bin/echo", "x"]),
+            with(stage(&["/bin/cat"]), RedirKind::Append, "/tmp/o"),
+        ]) {
             Admission::Bytes(plan) => plan,
             other => panic!("{:?}", other),
         };
@@ -2095,15 +2393,26 @@ mod tests {
             Admission::Bytes(plan) => plan,
             other => panic!("{:?}", other),
         };
-        assert_eq!((plan.head, plan.prefix), (ByteHead::Cat(String::from("/tmp/f")), 1));
-        let plan = match admit(&[stage(&["echo", "x"]), stage(&["grep", "x"]), stage(&["/bin/cat"])]) {
+        assert_eq!(
+            (plan.head, plan.prefix),
+            (ByteHead::Cat(String::from("/tmp/f")), 1)
+        );
+        let plan = match admit(&[
+            stage(&["echo", "x"]),
+            stage(&["grep", "x"]),
+            stage(&["/bin/cat"]),
+        ]) {
             Admission::Bytes(plan) => plan,
             other => panic!("{:?}", other),
         };
         assert_eq!((plan.head, plan.prefix), (ByteHead::Capture, 2));
         // A built-in never consumes an external stage's output.
         assert!(rejected(&[stage(&["/bin/echo", "x"]), stage(&["wc"])]).contains("external"));
-        rejected(&[stage(&["/bin/cat"]), stage(&["/bin/cat"]), stage(&["grep", "x"])]);
+        rejected(&[
+            stage(&["/bin/cat"]),
+            stage(&["/bin/cat"]),
+            stage(&["grep", "x"]),
+        ]);
         // A single external stage keeps today's foreground launch, unless its stdout is
         // redirected: then it is a one-stage byte pipeline into the file.
         assert!(matches!(admit(&[stage(&["/bin/cat"])]), Admission::Legacy));
@@ -2116,30 +2425,65 @@ mod tests {
             assert_eq!(plan.output, Some((String::from("/tmp/x"), append)));
         }
         // Without a terminal session, and for built-ins, a redirect changes nothing.
-        assert!(matches!(admit_legacy(&[with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/x")]), Admission::Legacy));
-        assert!(matches!(admit(&[with(stage(&["echo", "x"]), RedirKind::Out, "/tmp/x")]), Admission::Legacy));
+        assert!(matches!(
+            admit_legacy(&[with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/x")]),
+            Admission::Legacy
+        ));
+        assert!(matches!(
+            admit(&[with(stage(&["echo", "x"]), RedirKind::Out, "/tmp/x")]),
+            Admission::Legacy
+        ));
         // A lone `2>` keeps the foreground launch; `2>` with `>` is refused before effects.
-        assert!(matches!(admit(&[with(stage(&["/bin/cat"]), RedirKind::Err, "/tmp/e")]), Admission::Legacy));
-        rejected(&[with(with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/x"), RedirKind::Err, "/tmp/e")]);
+        assert!(matches!(
+            admit(&[with(stage(&["/bin/cat"]), RedirKind::Err, "/tmp/e")]),
+            Admission::Legacy
+        ));
+        rejected(&[with(
+            with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/x"),
+            RedirKind::Err,
+            "/tmp/e",
+        )]);
     }
 
     #[test]
     fn external_pipelines_refuse_bad_forms_before_effects() {
         rejected(&[stage(&["/bin/cat"]), stage(&["cd", "/"])]);
         rejected(&[stage(&["/bin/cat"]), stage(&["top"])]);
-        rejected(&[stage(&["echo", "x"]), stage(&["/bin/cat"]), with(stage(&["/bin/cat"]), RedirKind::Err, "/tmp/e")]);
-        rejected(&[with(stage(&["/bin/cat"]), RedirKind::In, "/tmp/i"), stage(&["/bin/cat"])]);
-        rejected(&[with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/o"), stage(&["/bin/cat"])]);
-        rejected(&[with(stage(&["cat", "/tmp/f"]), RedirKind::In, "/tmp/i"), stage(&["/bin/cat"])]);
+        rejected(&[
+            stage(&["echo", "x"]),
+            stage(&["/bin/cat"]),
+            with(stage(&["/bin/cat"]), RedirKind::Err, "/tmp/e"),
+        ]);
+        rejected(&[
+            with(stage(&["/bin/cat"]), RedirKind::In, "/tmp/i"),
+            stage(&["/bin/cat"]),
+        ]);
+        rejected(&[
+            with(stage(&["/bin/cat"]), RedirKind::Out, "/tmp/o"),
+            stage(&["/bin/cat"]),
+        ]);
+        rejected(&[
+            with(stage(&["cat", "/tmp/f"]), RedirKind::In, "/tmp/i"),
+            stage(&["/bin/cat"]),
+        ]);
         // `<` stays valid on a built-in producer that is captured.
         assert!(matches!(
-            admit(&[with(stage(&["wc"]), RedirKind::In, "/tmp/i"), stage(&["/bin/cat"])]),
+            admit(&[
+                with(stage(&["wc"]), RedirKind::In, "/tmp/i"),
+                stage(&["/bin/cat"])
+            ]),
             Admission::Bytes(_)
         ));
         let long = "x".repeat(600);
-        assert!(rejected(&[stage(&["/bin/echo", &long]), stage(&["/bin/cat"])]).contains("512-byte"));
-        assert!(rejected(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["/bin/echo", &long])])
-            .contains("512-byte"));
+        assert!(
+            rejected(&[stage(&["/bin/echo", &long]), stage(&["/bin/cat"])]).contains("512-byte")
+        );
+        assert!(rejected(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["/bin/echo", &long])
+        ])
+        .contains("512-byte"));
         rejected(&[stage(&["/bin/echo", "a\0b"]), stage(&["/bin/cat"])]);
     }
 
@@ -2157,16 +2501,26 @@ mod tests {
     #[test]
     fn only_a_publickey_exec_is_an_external_ssh_stage() {
         // Publickey with a command needs nothing on the terminal: an external byte stage.
-        assert_eq!(classify_command(&ssh(&KEY, &["--command", "cat > f"])), CmdClass::External);
+        assert_eq!(
+            classify_command(&ssh(&KEY, &["--command", "cat > f"])),
+            CmdClass::External
+        );
         assert!(is_ssh_stage(&ssh(&KEY, &["--command", "cat > f"])));
         // Every other parsable form is an interactive session: publickey PTY, password in
         // either mode.
-        for words in [ssh(&KEY, &[]), ssh(&PASSWORD, &[]), ssh(&PASSWORD, &["--command", "true"])] {
+        for words in [
+            ssh(&KEY, &[]),
+            ssh(&PASSWORD, &[]),
+            ssh(&PASSWORD, &["--command", "true"]),
+        ] {
             assert_eq!(classify_command(&words), CmdClass::Session, "{words:?}");
             assert!(!is_ssh_stage(&words));
         }
         // Bad argv is not a session: the built-in prints the usage and exits 2.
-        for words in [vec![String::from("ssh")], ssh(&["--auth", "publickey"], &["--command", "c"])] {
+        for words in [
+            vec![String::from("ssh")],
+            ssh(&["--auth", "publickey"], &["--command", "c"]),
+        ] {
             assert_eq!(classify_command(&words), CmdClass::Builtin, "{words:?}");
             assert!(!is_ssh_stage(&words));
         }
@@ -2177,33 +2531,51 @@ mod tests {
     #[test]
     fn an_ssh_publickey_exec_may_join_a_byte_pipeline_and_nothing_else_of_ssh_may() {
         let exec = ssh(&KEY, &["--command", "cat > f"]);
-        let stage_of = |words: &Vec<String>| StageIn { argv: words.clone(), redirects: Vec::new() };
+        let stage_of = |words: &Vec<String>| StageIn {
+            argv: words.clone(),
+            redirects: Vec::new(),
+        };
         // `cat FILE | ssh ...`: the exact bytes of the file feed the stage.
         let plan = match admit(&[stage(&["cat", "/tmp/blob"]), stage_of(&exec)]) {
             Admission::Bytes(plan) => plan,
             other => panic!("{:?}", other),
         };
-        assert_eq!((plan.head, plan.prefix), (ByteHead::Cat(String::from("/tmp/blob")), 1));
+        assert_eq!(
+            (plan.head, plan.prefix),
+            (ByteHead::Cat(String::from("/tmp/blob")), 1)
+        );
         // Alone with an output redirect it is a one-stage byte pipeline into the file.
         let plan = match admit(&[with(stage_of(&exec), RedirKind::Out, "/tmp/out")]) {
             Admission::Bytes(plan) => plan,
             other => panic!("{:?}", other),
         };
-        assert_eq!((plan.head, plan.prefix, plan.output), (ByteHead::None, 0, Some((String::from("/tmp/out"), false))));
+        assert_eq!(
+            (plan.head, plan.prefix, plan.output),
+            (ByteHead::None, 0, Some((String::from("/tmp/out"), false)))
+        );
         // Alone and not redirected it keeps the foreground launch.
         assert!(matches!(admit(&[stage_of(&exec)]), Admission::Legacy));
         // An ssh stage may follow and feed other externals.
-        assert!(matches!(admit(&[stage_of(&exec), stage(&["/bin/cat"])]), Admission::Bytes(_)));
+        assert!(matches!(
+            admit(&[stage_of(&exec), stage(&["/bin/cat"])]),
+            Admission::Bytes(_)
+        ));
         // Password mode and a publickey PTY session are not stages.
         for words in [ssh(&PASSWORD, &["--command", "true"]), ssh(&KEY, &[])] {
             let message = rejected(&[stage(&["cat", "/tmp/blob"]), stage_of(&words)]);
             assert!(message.contains("interactive session"), "{message}");
-            assert!(matches!(admit(&[with(stage_of(&words), RedirKind::Out, "/tmp/out")]), Admission::Reject(_)));
+            assert!(matches!(
+                admit(&[with(stage_of(&words), RedirKind::Out, "/tmp/out")]),
+                Admission::Reject(_)
+            ));
         }
         // A built-in cannot consume the output of an external, ssh included.
         assert!(rejected(&[stage_of(&exec), stage(&["grep", "x"])]).contains("cannot consume"));
         // Without a terminal session the legacy composition is unchanged.
-        assert!(matches!(admit_legacy(&[stage(&["cat", "/tmp/blob"]), stage_of(&exec)]), Admission::Legacy));
+        assert!(matches!(
+            admit_legacy(&[stage(&["cat", "/tmp/blob"]), stage_of(&exec)]),
+            Admission::Legacy
+        ));
         // The child sees `ssh` plus every argument: that whole list has to fit one launch.
         let long = ssh(&KEY, &["--command", &"x".repeat(600)]);
         assert!(rejected(&[stage(&["cat", "/tmp/blob"]), stage_of(&long)]).contains("512-byte"));
@@ -2212,14 +2584,26 @@ mod tests {
     #[test]
     fn an_ssh_exec_never_runs_in_the_background() {
         // External commands may run detached; an ssh stage is still a session.
-        assert!(background_refusal(&StageIn { argv: ssh(&KEY, &["--command", "true"]), redirects: Vec::new() }).is_some());
-        assert!(background_refusal(&StageIn { argv: ssh(&PASSWORD, &["--command", "true"]), redirects: Vec::new() }).is_some());
+        assert!(background_refusal(&StageIn {
+            argv: ssh(&KEY, &["--command", "true"]),
+            redirects: Vec::new()
+        })
+        .is_some());
+        assert!(background_refusal(&StageIn {
+            argv: ssh(&PASSWORD, &["--command", "true"]),
+            redirects: Vec::new()
+        })
+        .is_some());
         assert!(background_refusal(&stage(&["/bin/cat"])).is_none());
     }
 
     #[test]
     fn externals_stay_refused_without_a_terminal_session() {
-        let message = match admit_legacy(&[stage(&["ps", "--records"]), stage(&["to", "jsonl"]), stage(&["/bin/cat"])]) {
+        let message = match admit_legacy(&[
+            stage(&["ps", "--records"]),
+            stage(&["to", "jsonl"]),
+            stage(&["/bin/cat"]),
+        ]) {
             Admission::Reject(message) => message,
             other => panic!("{:?}", other),
         };
@@ -2229,7 +2613,10 @@ mod tests {
             Admission::Reject(_)
         ));
         // Plain byte pipelines keep the legacy composition there.
-        assert!(matches!(admit_legacy(&[stage(&["/bin/echo", "x"]), stage(&["/bin/cat"])]), Admission::Legacy));
+        assert!(matches!(
+            admit_legacy(&[stage(&["/bin/echo", "x"]), stage(&["/bin/cat"])]),
+            Admission::Legacy
+        ));
     }
 
     #[test]
@@ -2244,12 +2631,32 @@ mod tests {
     #[test]
     fn upstream_cancel_at_spawn_is_a_finished_consumer() {
         use api::cell_session::Status;
-        assert!(spawn_cancel_means_consumer_finished(Status::Cancelled, 0, 2));
-        assert!(spawn_cancel_means_consumer_finished(Status::Cancelled, 1, 3));
+        assert!(spawn_cancel_means_consumer_finished(
+            Status::Cancelled,
+            0,
+            2
+        ));
+        assert!(spawn_cancel_means_consumer_finished(
+            Status::Cancelled,
+            1,
+            3
+        ));
         // The last stage has no consumer in the segment, and other errors stay failures.
-        assert!(!spawn_cancel_means_consumer_finished(Status::Cancelled, 1, 2));
-        assert!(!spawn_cancel_means_consumer_finished(Status::Cancelled, 0, 1));
-        assert!(!spawn_cancel_means_consumer_finished(Status::NotFound, 0, 2));
+        assert!(!spawn_cancel_means_consumer_finished(
+            Status::Cancelled,
+            1,
+            2
+        ));
+        assert!(!spawn_cancel_means_consumer_finished(
+            Status::Cancelled,
+            0,
+            1
+        ));
+        assert!(!spawn_cancel_means_consumer_finished(
+            Status::NotFound,
+            0,
+            2
+        ));
         assert!(!spawn_cancel_means_consumer_finished(Status::Denied, 0, 2));
         assert_eq!(UPSTREAM_NOT_STARTED_STATUS, 141);
     }
@@ -2272,11 +2679,17 @@ mod tests {
     #[test]
     fn earlier_stage_failures_are_listed_unless_the_shell_cancelled() {
         let names = ["a", "b", "c"];
-        assert_eq!(earlier_failures(&names, &[1, 0, 2], false), ["a exited with status 1"]);
+        assert_eq!(
+            earlier_failures(&names, &[1, 0, 2], false),
+            ["a exited with status 1"]
+        );
         assert!(earlier_failures(&names, &[1, 1, 1], true).is_empty());
         assert!(earlier_failures(&names, &[0, 0, 0], false).is_empty());
         // A stage that only lost its consumer (141) is normal pipe behaviour.
-        assert_eq!(earlier_failures(&names, &[141, 7, 0], false), ["b exited with status 7"]);
+        assert_eq!(
+            earlier_failures(&names, &[141, 7, 0], false),
+            ["b exited with status 7"]
+        );
     }
 
     /// Endless record source that counts pulls and closes.
@@ -2298,18 +2711,36 @@ mod tests {
         }
         let pulled = Rc::new(Cell::new(0));
         let closed = Rc::new(Cell::new(0));
-        (Box::new(Endless { next: 0, pulled: pulled.clone(), closed: closed.clone() }), pulled, closed)
+        (
+            Box::new(Endless {
+                next: 0,
+                pulled: pulled.clone(),
+                closed: closed.clone(),
+            }),
+            pulled,
+            closed,
+        )
     }
 
     #[test]
     fn row_feed_pulls_only_what_the_consumer_takes() {
         let (source, pulled, closed) = endless_rows();
-        let mut feed = RowFeed::new(source, Category::Rows, 0, &[Stage::To(Format::Jsonl)], DefaultSink::TypedJsonl).unwrap();
+        let mut feed = RowFeed::new(
+            source,
+            Category::Rows,
+            0,
+            &[Stage::To(Format::Jsonl)],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         assert_eq!(pulled.get(), 0, "constructing the feed pulls nothing");
         let mut out = Vec::new();
         assert!(feed.fill(&mut out, 100).unwrap());
         let first_fill = pulled.get();
-        assert!(out.len() >= 100 && first_fill < 10, "one bounded fill, not the whole stream");
+        assert!(
+            out.len() >= 100 && first_fill < 10,
+            "one bounded fill, not the whole stream"
+        );
         assert!(out.ends_with(b"\n"));
         out.clear();
         assert!(feed.fill(&mut out, 100).unwrap());
@@ -2317,7 +2748,11 @@ mod tests {
         assert_eq!(closed.get(), 0);
         feed.close();
         feed.close();
-        assert_eq!(closed.get(), 1, "closing is idempotent and stops the producer");
+        assert_eq!(
+            closed.get(),
+            1,
+            "closing is idempotent and stops the producer"
+        );
         assert_eq!(feed.fill(&mut out, 100), Ok(false));
         drop(feed);
         assert_eq!(closed.get(), 1);
@@ -2338,17 +2773,36 @@ mod tests {
                 polls.set(polls.get() + 1);
                 polls.get() > 5
             };
-            let failure = run_rows_within(source, Category::Rows, 0, &stages, sink, COLLECT_BOUND, &mut interrupted)
-                .unwrap_err();
+            let failure = run_rows_within(
+                source,
+                Category::Rows,
+                0,
+                &stages,
+                sink,
+                COLLECT_BOUND,
+                &mut interrupted,
+            )
+            .unwrap_err();
             assert_eq!(failure.status, INTERRUPTED_STATUS);
             assert_eq!(pulled.get(), 5, "no pull after the interrupt");
             assert_eq!(closed.get(), 1, "the producer is released");
         }
         // Without an interrupt the same producer runs to the bound (unchanged behaviour).
         let (source, _, closed) = endless_rows();
-        let bound = CollectBound { bytes: 1024, status: 1 };
-        let failure = run_rows_within(source, Category::Rows, 0, &[], DefaultSink::TypedJsonl, bound, &mut || false)
-            .unwrap_err();
+        let bound = CollectBound {
+            bytes: 1024,
+            status: 1,
+        };
+        let failure = run_rows_within(
+            source,
+            Category::Rows,
+            0,
+            &[],
+            DefaultSink::TypedJsonl,
+            bound,
+            &mut || false,
+        )
+        .unwrap_err();
         assert_eq!((failure.status, closed.get()), (1, 1));
     }
 
@@ -2356,11 +2810,20 @@ mod tests {
     fn row_feed_streams_the_same_bytes_as_run_rows() {
         for format in [Format::Jsonl, Format::JsonlTyped, Format::Json] {
             let rows = || -> Box<dyn RowSource> {
-                Box::new(pipeline::VecSource::new(vec![record(1, "running"), record(22, "dead"), record(3, "x")]))
+                Box::new(pipeline::VecSource::new(vec![
+                    record(1, "running"),
+                    record(22, "dead"),
+                    record(3, "x"),
+                ]))
             };
-            let stages = [Stage::Take { n: 2, frame: false }, Stage::To(format.clone())];
-            let whole = run_rows(rows(), Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
-            let mut feed = RowFeed::new(rows(), Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
+            let stages = [
+                Stage::Take { n: 2, frame: false },
+                Stage::To(format.clone()),
+            ];
+            let whole =
+                run_rows(rows(), Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
+            let mut feed =
+                RowFeed::new(rows(), Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
             let mut streamed = Vec::new();
             let mut out = Vec::new();
             loop {
@@ -2374,7 +2837,14 @@ mod tests {
             assert_eq!(streamed, whole, "{:?}", format);
         }
         // Zero rows still end a `json` document.
-        let mut feed = RowFeed::new(Box::new(pipeline::VecSource::new(Vec::new())), Category::Rows, 0, &[Stage::To(Format::Json)], DefaultSink::TypedJsonl).unwrap();
+        let mut feed = RowFeed::new(
+            Box::new(pipeline::VecSource::new(Vec::new())),
+            Category::Rows,
+            0,
+            &[Stage::To(Format::Json)],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         let mut out = Vec::new();
         assert_eq!(feed.fill(&mut out, 16), Ok(false));
         assert_eq!(out, b"[]\n");
@@ -2391,7 +2861,12 @@ mod tests {
 
     impl RecordingSink {
         fn new(interrupt_after: Option<usize>) -> Self {
-            Self { bytes: Vec::new(), writes: 0, largest: 0, interrupt_after }
+            Self {
+                bytes: Vec::new(),
+                writes: 0,
+                largest: 0,
+                interrupt_after,
+            }
         }
     }
 
@@ -2403,22 +2878,32 @@ mod tests {
             Ok(())
         }
         fn interrupted(&mut self) -> bool {
-            self.interrupt_after.is_some_and(|limit| self.writes >= limit)
+            self.interrupt_after
+                .is_some_and(|limit| self.writes >= limit)
         }
     }
 
     #[test]
     fn endless_terminal_stream_is_live_bounded_and_interruptible() {
         for stages in [vec![Stage::To(Format::Jsonl)], Vec::new()] {
-            let default_sink = if stages.is_empty() { DefaultSink::TypedJsonl } else { DefaultSink::Table };
+            let default_sink = if stages.is_empty() {
+                DefaultSink::TypedJsonl
+            } else {
+                DefaultSink::Table
+            };
             let (source, pulled, closed) = endless_rows();
             let mut sink = RecordingSink::new(Some(5_000));
-            let end = stream_rows(source, Category::Rows, 0, &stages, default_sink, &mut sink).unwrap();
+            let end =
+                stream_rows(source, Category::Rows, 0, &stages, default_sink, &mut sink).unwrap();
             assert_eq!(end.status(), 130);
             assert_eq!(closed.get(), 1, "Ctrl-C closes the producer");
             // One write per pulled row: each row reaches the terminal before the next pull.
             assert_eq!(sink.writes as u64, pulled.get());
-            assert!(sink.largest < 128, "one row per write, got {}", sink.largest);
+            assert!(
+                sink.largest < 128,
+                "one row per write, got {}",
+                sink.largest
+            );
             assert_eq!(sink.bytes.iter().filter(|b| **b == b'\n').count(), 5_000);
         }
     }
@@ -2426,14 +2911,24 @@ mod tests {
     #[test]
     fn terminal_stream_matches_collected_output() {
         let rows = || -> Box<dyn RowSource> {
-            Box::new(pipeline::VecSource::new(vec![record(1, "running"), record(22, "dead"), record(3, "x")]))
+            Box::new(pipeline::VecSource::new(vec![
+                record(1, "running"),
+                record(22, "dead"),
+                record(3, "x"),
+            ]))
         };
         let cases: [(&[Stage], DefaultSink); 5] = [
             (&[Stage::To(Format::Jsonl)], DefaultSink::Table),
             (&[Stage::To(Format::Json)], DefaultSink::Table),
-            (&[Stage::Take { n: 2, frame: false }], DefaultSink::TypedJsonl),
+            (
+                &[Stage::Take { n: 2, frame: false }],
+                DefaultSink::TypedJsonl,
+            ),
             (&[], DefaultSink::Table),
-            (&[Stage::Take { n: 0, frame: false }, Stage::To(Format::Json)], DefaultSink::Table),
+            (
+                &[Stage::Take { n: 0, frame: false }, Stage::To(Format::Json)],
+                DefaultSink::Table,
+            ),
         ];
         for (stages, default_sink) in cases {
             let mut whole = run_rows(rows(), Category::Rows, 0, stages, default_sink).unwrap();
@@ -2441,7 +2936,10 @@ mod tests {
                 whole.push(b'\n');
             }
             let mut sink = RecordingSink::new(None);
-            assert_eq!(stream_rows(rows(), Category::Rows, 0, stages, default_sink, &mut sink), Ok(StreamEnd::Complete));
+            assert_eq!(
+                stream_rows(rows(), Category::Rows, 0, stages, default_sink, &mut sink),
+                Ok(StreamEnd::Complete)
+            );
             assert_eq!(sink.bytes, whole, "{:?}", stages);
         }
     }
@@ -2449,20 +2947,38 @@ mod tests {
     #[test]
     fn collected_sink_still_refuses_past_its_bound() {
         let (source, _, closed) = endless_rows();
-        let failure = run_rows(source, Category::Rows, 0, &[Stage::To(Format::Jsonl)], DefaultSink::Table).unwrap_err();
-        assert_eq!(failure.message, format!("output exceeds the {} byte bound", MAX_SINK_BYTES));
+        let failure = run_rows(
+            source,
+            Category::Rows,
+            0,
+            &[Stage::To(Format::Jsonl)],
+            DefaultSink::Table,
+        )
+        .unwrap_err();
+        assert_eq!(
+            failure.message,
+            format!("output exceeds the {} byte bound", MAX_SINK_BYTES)
+        );
         assert_eq!(closed.get(), 1);
     }
 
     #[test]
     fn row_feed_failure_names_its_stage_and_closes_the_producer() {
         let (source, _, closed) = endless_rows();
-        let stages = [Stage::Select(vec![String::from("nosuchfield")]), Stage::To(Format::Jsonl)];
-        let mut feed = RowFeed::new(source, Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
+        let stages = [
+            Stage::Select(vec![String::from("nosuchfield")]),
+            Stage::To(Format::Jsonl),
+        ];
+        let mut feed =
+            RowFeed::new(source, Category::Rows, 0, &stages, DefaultSink::TypedJsonl).unwrap();
         let mut out = Vec::new();
         let failure = feed.fill(&mut out, 64).unwrap_err();
         assert_eq!(failure.stage, 1);
-        assert!(failure.message.contains("nosuchfield"), "{}", failure.message);
+        assert!(
+            failure.message.contains("nosuchfield"),
+            "{}",
+            failure.message
+        );
         assert_eq!(closed.get(), 1);
     }
 
@@ -2488,11 +3004,22 @@ mod tests {
                 Ok(Some(match pos {
                     0 => {
                         self.sample += 1;
-                        let meta = Value::Record(vec![(String::from("schema"), Value::String(String::from("t.v1")))]);
-                        Item::Begin(pipeline::FrameBegin { sample_id: self.sample, monotonic_ns: self.sample * 7, meta: Some(meta) })
+                        let meta = Value::Record(vec![(
+                            String::from("schema"),
+                            Value::String(String::from("t.v1")),
+                        )]);
+                        Item::Begin(pipeline::FrameBegin {
+                            sample_id: self.sample,
+                            monotonic_ns: self.sample * 7,
+                            meta: Some(meta),
+                        })
                     }
                     p if p <= self.rows => Item::Row(record(self.sample * 100 + p, "running")),
-                    _ => Item::End(FrameEnd { complete: false, unavailable_fields: vec![String::from("cpu_tenths")], dropped: 2 }),
+                    _ => Item::End(FrameEnd {
+                        complete: false,
+                        unavailable_fields: vec![String::from("cpu_tenths")],
+                        dropped: 2,
+                    }),
                 }))
             }
             fn close(&mut self) {
@@ -2501,7 +3028,13 @@ mod tests {
         }
         let pulled = Rc::new(Cell::new(0));
         let closed = Rc::new(Cell::new(0));
-        let source = Frames { rows, sample: 0, pos: 0, pulled: pulled.clone(), closed: closed.clone() };
+        let source = Frames {
+            rows,
+            sample: 0,
+            pos: 0,
+            pulled: pulled.clone(),
+            closed: closed.clone(),
+        };
         (Box::new(source), pulled, closed)
     }
 
@@ -2511,10 +3044,20 @@ mod tests {
 
     #[test]
     fn producer_category_is_decided_by_name() {
-        let argv = |words: &[&str]| -> Vec<String> { words.iter().map(|w| String::from(*w)).collect() };
-        assert_eq!(crate::native_rows::producer_category(&argv(&["top", "--records"])), Category::Frames);
-        assert_eq!(crate::native_rows::producer_category(&argv(&["ps", "--records"])), Category::Rows);
-        assert_eq!(crate::native_rows::producer_category(&argv(&["ls", "--records"])), Category::Rows);
+        let argv =
+            |words: &[&str]| -> Vec<String> { words.iter().map(|w| String::from(*w)).collect() };
+        assert_eq!(
+            crate::native_rows::producer_category(&argv(&["top", "--records"])),
+            Category::Frames
+        );
+        assert_eq!(
+            crate::native_rows::producer_category(&argv(&["ps", "--records"])),
+            Category::Rows
+        );
+        assert_eq!(
+            crate::native_rows::producer_category(&argv(&["ls", "--records"])),
+            Category::Rows
+        );
     }
 
     #[test]
@@ -2525,9 +3068,18 @@ mod tests {
         assert!(rejected(&[top(), stage(&["sort-by", "cpu_tenths"])]).contains("--frame"));
         rejected(&[top(), stage(&["to", "json"])]);
         rejected(&[top(), stage(&["to", "text", "--field", "name"])]);
-        rejected(&[top(), take_stage_frame(1), stage(&["to", "json", "--typed"])]);
+        rejected(&[
+            top(),
+            take_stage_frame(1),
+            stage(&["to", "json", "--typed"]),
+        ]);
         rejected(&[stage(&["ps", "--records"]), take_stage_frame(1)]);
-        let plan = match admit(&[top(), take_stage_frame(2), stage(&["sort-by", "--frame", "cpu_tenths"]), stage(&["to", "jsonl"])]) {
+        let plan = match admit(&[
+            top(),
+            take_stage_frame(2),
+            stage(&["sort-by", "--frame", "cpu_tenths"]),
+            stage(&["to", "jsonl"]),
+        ]) {
             Admission::Typed(plan) => plan,
             other => panic!("{:?}", other),
         };
@@ -2552,7 +3104,14 @@ mod tests {
             let whole = run_rows(source, Category::Frames, 0, &stages, DefaultSink::Table).unwrap();
             assert_eq!(closed.get(), 1);
             let (source, _, _) = endless_frames(2);
-            let mut feed = RowFeed::new(source, Category::Frames, 0, &stages, DefaultSink::TypedJsonl).unwrap();
+            let mut feed = RowFeed::new(
+                source,
+                Category::Frames,
+                0,
+                &stages,
+                DefaultSink::TypedJsonl,
+            )
+            .unwrap();
             let mut streamed = Vec::new();
             loop {
                 let want = streamed.len() + 7;
@@ -2568,13 +3127,36 @@ mod tests {
     #[test]
     fn redirect_default_for_frames_is_typed_envelopes() {
         let (source, _, _) = endless_frames(1);
-        let out = run_rows(source, Category::Frames, 0, &[take_frames(2)], DefaultSink::TypedJsonl).unwrap();
+        let out = run_rows(
+            source,
+            Category::Frames,
+            0,
+            &[take_frames(2)],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         let envelopes = pipeline::decode_jsonl_typed(&out).unwrap();
-        let kinds: Vec<&Value> = envelopes.iter().map(|e| e.get_field("frame").unwrap()).collect();
+        let kinds: Vec<&Value> = envelopes
+            .iter()
+            .map(|e| e.get_field("frame").unwrap())
+            .collect();
         let s = |k: &str| Value::String(String::from(k));
-        assert_eq!(kinds, [&s("begin"), &s("row"), &s("end"), &s("begin"), &s("row"), &s("end")]);
+        assert_eq!(
+            kinds,
+            [
+                &s("begin"),
+                &s("row"),
+                &s("end"),
+                &s("begin"),
+                &s("row"),
+                &s("end")
+            ]
+        );
         assert_eq!(envelopes[2].get_field("dropped"), Some(&Value::UInt(2)));
-        assert_eq!(envelopes[2].get_field("complete"), Some(&Value::Bool(false)));
+        assert_eq!(
+            envelopes[2].get_field("complete"),
+            Some(&Value::Bool(false))
+        );
     }
 
     /// Records how many items had been pulled when each write reached the terminal.
@@ -2596,8 +3178,19 @@ mod tests {
     #[test]
     fn terminal_table_streams_one_frame_at_a_time() {
         let (source, pulled, closed) = endless_frames(3);
-        let mut sink = PullTrackingSink { pulled: pulled.clone(), writes: Vec::new() };
-        let end = stream_rows(source, Category::Frames, 0, &[take_frames(4)], DefaultSink::Table, &mut sink).unwrap();
+        let mut sink = PullTrackingSink {
+            pulled: pulled.clone(),
+            writes: Vec::new(),
+        };
+        let end = stream_rows(
+            source,
+            Category::Frames,
+            0,
+            &[take_frames(4)],
+            DefaultSink::Table,
+            &mut sink,
+        )
+        .unwrap();
         assert_eq!(end, StreamEnd::Complete);
         assert_eq!(closed.get(), 1);
         // Every frame (Begin + 3 rows + End = 5 items) is written at its End, before the
@@ -2605,8 +3198,15 @@ mod tests {
         let per_frame = 5;
         let mut frames_seen: Vec<u64> = sink.writes.iter().map(|(p, _)| *p).collect();
         frames_seen.dedup();
-        assert_eq!(frames_seen, [per_frame, 2 * per_frame, 3 * per_frame, 4 * per_frame]);
-        let text: Vec<u8> = sink.writes.into_iter().flat_map(|(_, bytes)| bytes).collect();
+        assert_eq!(
+            frames_seen,
+            [per_frame, 2 * per_frame, 3 * per_frame, 4 * per_frame]
+        );
+        let text: Vec<u8> = sink
+            .writes
+            .into_iter()
+            .flat_map(|(_, bytes)| bytes)
+            .collect();
         let text = String::from_utf8(text).unwrap();
         // Per frame: a sample line, a header, three rows and a completeness line; no JSON.
         assert_eq!(text.lines().count(), 4 * 6);
@@ -2618,14 +3218,28 @@ mod tests {
         }
         // The collected (`--text` redirect) form is the same text.
         let (source, _, _) = endless_frames(3);
-        let whole = run_rows(source, Category::Frames, 0, &[take_frames(4)], DefaultSink::Table).unwrap();
+        let whole = run_rows(
+            source,
+            Category::Frames,
+            0,
+            &[take_frames(4)],
+            DefaultSink::Table,
+        )
+        .unwrap();
         assert_eq!(whole, text.as_bytes());
     }
 
     #[test]
     fn frames_out_of_order_fail_at_the_producer_stage() {
         let source: Box<dyn RowSource> = Box::new(pipeline::VecSource::new(vec![record(1, "x")]));
-        let failure = run_rows(source, Category::Frames, 0, &[take_frames(1)], DefaultSink::TypedJsonl).unwrap_err();
+        let failure = run_rows(
+            source,
+            Category::Frames,
+            0,
+            &[take_frames(1)],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap_err();
         assert_eq!(failure.stage, 0);
     }
 
@@ -2693,7 +3307,14 @@ mod tests {
         let (mut source, reads, closed) = scripted(&[]);
         source.endless = Some(b"{\"a\":1}\n".to_vec());
         let rows: Box<dyn RowSource> = Box::new(StreamRows::new(source, Format::Jsonl));
-        let out = run_rows(rows, Category::Rows, 0, &[Stage::Take { n: 2, frame: false }], DefaultSink::TypedJsonl).unwrap();
+        let out = run_rows(
+            rows,
+            Category::Rows,
+            0,
+            &[Stage::Take { n: 2, frame: false }],
+            DefaultSink::TypedJsonl,
+        )
+        .unwrap();
         assert_eq!(out.iter().filter(|b| **b == b'\n').count(), 2);
         // Two rows needed two reads; the producer was told it was not drained.
         assert_eq!(reads.get(), 2);

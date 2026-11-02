@@ -113,7 +113,10 @@ fn kind_index(kind: RowKind) -> usize {
 
 fn row_id(frame: &Frame, index: usize) -> Option<RowId> {
     match &frame.rows {
-        Rows::Cells(rows) => rows.get(index).map(|row| RowId::Cell { cell_id: row.cell_id, generation: row.generation }),
+        Rows::Cells(rows) => rows.get(index).map(|row| RowId::Cell {
+            cell_id: row.cell_id,
+            generation: row.generation,
+        }),
         Rows::Tasks(rows) => rows.get(index).map(|row| RowId::Task { tid: row.tid }),
     }
 }
@@ -124,8 +127,12 @@ fn position(frame: &Frame, id: RowId) -> Option<usize> {
 
 fn has_incarnation(frame: &Frame, cell_id: u64, generation: u64) -> bool {
     match &frame.rows {
-        Rows::Tasks(rows) => rows.iter().any(|row| row.cell_id == Some(cell_id) && row.generation == Some(generation)),
-        Rows::Cells(rows) => rows.iter().any(|row| row.cell_id == cell_id && row.generation == generation),
+        Rows::Tasks(rows) => rows
+            .iter()
+            .any(|row| row.cell_id == Some(cell_id) && row.generation == Some(generation)),
+        Rows::Cells(rows) => rows
+            .iter()
+            .any(|row| row.cell_id == cell_id && row.generation == generation),
     }
 }
 
@@ -146,7 +153,10 @@ fn seconds(ns: u64) -> String {
 impl ViewState {
     pub fn new(options: &TopOptions) -> Self {
         let kind = kind_index(options.view.row_kind());
-        let mut sort = [SortSpec::default_for(View::Cells), SortSpec::default_for(View::Tasks)];
+        let mut sort = [
+            SortSpec::default_for(View::Cells),
+            SortSpec::default_for(View::Tasks),
+        ];
         sort[kind] = options.sort;
         let mut fields = [None, None];
         fields[kind] = options.fields.clone();
@@ -197,7 +207,10 @@ impl ViewState {
     /// and keep the selection on the same row.
     pub fn prepare(&mut self, frame: &mut Frame) {
         self.notice = match self.view {
-            View::Cell { cell_id, generation } if frame.complete && !has_incarnation(frame, cell_id, generation) => {
+            View::Cell {
+                cell_id,
+                generation,
+            } if frame.complete && !has_incarnation(frame, cell_id, generation) => {
                 Some(Notice::Gone)
             }
             _ => None,
@@ -329,7 +342,10 @@ impl ViewState {
         let Some(row) = rows.get(self.index) else {
             return Step::Idle;
         };
-        self.view = View::Cell { cell_id: row.cell_id, generation: row.generation };
+        self.view = View::Cell {
+            cell_id: row.cell_id,
+            generation: row.generation,
+        };
         self.cell_name = row.name.clone();
         self.return_to = self.selected;
         self.reset_selection();
@@ -374,8 +390,16 @@ impl ViewState {
     fn open_picker(&mut self) {
         let kind = self.view.row_kind();
         let shown: Vec<Field> = self.columns(kind).into_iter().map(Column::field).collect();
-        let checked = kind.fields().iter().map(|field| shown.contains(field)).collect();
-        self.picker = Some(FieldPicker { kind, checked, cursor: 0 });
+        let checked = kind
+            .fields()
+            .iter()
+            .map(|field| shown.contains(field))
+            .collect();
+        self.picker = Some(FieldPicker {
+            kind,
+            checked,
+            cursor: 0,
+        });
     }
 
     /// The checked fields in record order, exactly as `--fields` would name them; an
@@ -399,14 +423,24 @@ impl ViewState {
         match self.view {
             View::Cells => String::from("Cells"),
             View::Tasks => String::from("Tasks"),
-            View::Cell { cell_id, generation } => format!("Cell {cell_id}:{generation} {}", self.cell_name),
+            View::Cell {
+                cell_id,
+                generation,
+            } => format!("Cell {cell_id}:{generation} {}", self.cell_name),
         }
     }
 
     /// Draw `frame` into `area` of `buf`: title bar, status line, the bordered table
     /// over the full width, key hints; the field picker on top when open. `clamped`
     /// says the session is larger than `area` (the size cap).
-    pub fn draw(&mut self, frame: &Frame, theme: &Theme, area: Rect, clamped: bool, buf: &mut Buffer) {
+    pub fn draw(
+        &mut self,
+        frame: &Frame,
+        theme: &Theme,
+        area: Rect,
+        clamped: bool,
+        buf: &mut Buffer,
+    ) {
         buf.set_style(area, theme.base());
         if area.height <= BARS_ABOVE + BARS_BELOW || area.width == 0 {
             return;
@@ -420,12 +454,19 @@ impl ViewState {
             if sort.descending { "desc" } else { "asc" },
             seconds(self.delay_ns)
         );
-        Paragraph::new(theme.title_bar(&bar)).style(theme.title_bar_style()).render(row(area.y), buf);
+        Paragraph::new(theme.title_bar(&bar))
+            .style(theme.title_bar_style())
+            .render(row(area.y), buf);
         self.draw_status(frame, theme, area, clamped, row(area.y + 1), buf);
         Paragraph::new(theme.key_hints(&KEY_HINTS))
             .style(theme.status_line_style())
             .render(row(area.bottom() - 1), buf);
-        let body = Rect::new(area.x, area.y + BARS_ABOVE, area.width, area.height - BARS_ABOVE - BARS_BELOW);
+        let body = Rect::new(
+            area.x,
+            area.y + BARS_ABOVE,
+            area.width,
+            area.height - BARS_ABOVE - BARS_BELOW,
+        );
         let block = theme.block(&title);
         let inner = block.inner(body);
         block.render(body, buf);
@@ -435,7 +476,15 @@ impl ViewState {
         }
     }
 
-    fn draw_status(&self, frame: &Frame, theme: &Theme, area: Rect, clamped: bool, line: Rect, buf: &mut Buffer) {
+    fn draw_status(
+        &self,
+        frame: &Frame,
+        theme: &Theme,
+        area: Rect,
+        clamped: bool,
+        line: Rect,
+        buf: &mut Buffer,
+    ) {
         let warning = Style::new().fg(theme.color(theme.palette.warning));
         let mut spans: Vec<Span> = text::header_parts(frame)
             .into_iter()
@@ -447,9 +496,14 @@ impl ViewState {
             .collect();
         spans.insert(0, Span::raw(" "));
         if clamped {
-            spans.push(Span::styled(format!("  clamped {}x{}", area.width, area.height), warning));
+            spans.push(Span::styled(
+                format!("  clamped {}x{}", area.width, area.height),
+                warning,
+            ));
         }
-        Paragraph::new(Line::from(spans)).style(theme.status_line_style()).render(line, buf);
+        Paragraph::new(Line::from(spans))
+            .style(theme.status_line_style())
+            .render(line, buf);
     }
 
     fn draw_table(&mut self, frame: &Frame, theme: &Theme, inner: Rect, buf: &mut Buffer) {
@@ -472,19 +526,36 @@ impl ViewState {
         let visible = self.offset..len.min(self.offset + self.page);
         let cell = |text: String, column: Column| {
             let line = Line::from(text);
-            Cell::from(if column.right_aligned() { line.right_aligned() } else { line })
+            Cell::from(if column.right_aligned() {
+                line.right_aligned()
+            } else {
+                line
+            })
         };
         let rows: Vec<Row> = match &frame.rows {
             Rows::Cells(rows) => rows[visible.clone()]
                 .iter()
-                .map(|row| columns.iter().map(|&column| cell(text::cell_text(row, column), column)).collect())
+                .map(|row| {
+                    columns
+                        .iter()
+                        .map(|&column| cell(text::cell_text(row, column), column))
+                        .collect()
+                })
                 .collect(),
             Rows::Tasks(rows) => rows[visible.clone()]
                 .iter()
-                .map(|row| columns.iter().map(|&column| cell(text::task_text(row, column), column)).collect())
+                .map(|row| {
+                    columns
+                        .iter()
+                        .map(|&column| cell(text::task_text(row, column), column))
+                        .collect()
+                })
                 .collect(),
         };
-        let header: Row = columns.iter().map(|&column| cell(column.label(), column)).collect();
+        let header: Row = columns
+            .iter()
+            .map(|&column| cell(column.label(), column))
+            .collect();
         let constraints = widths.iter().map(|&width| Constraint::Length(width as u16));
         let table = Table::new(rows, constraints)
             .header(header.style(theme.title_style()))
@@ -502,13 +573,26 @@ impl ViewState {
         };
         if let (Some(notice), true) = (notice, inner.height > 1) {
             let text = match (notice, self.view) {
-                (Notice::Gone, View::Cell { cell_id, generation }) => {
+                (
+                    Notice::Gone,
+                    View::Cell {
+                        cell_id,
+                        generation,
+                    },
+                ) => {
                     format!("Cell {cell_id}:{generation} has exited; Esc returns to the Cells view")
                 }
                 _ => String::from("no rows"),
             };
-            let line = Rect::new(inner.x + HIGHLIGHT_WIDTH, inner.y + 1, inner.width - HIGHLIGHT_WIDTH, 1);
-            Paragraph::new(text).style(Style::new().fg(theme.color(theme.palette.warning))).render(line, buf);
+            let line = Rect::new(
+                inner.x + HIGHLIGHT_WIDTH,
+                inner.y + 1,
+                inner.width - HIGHLIGHT_WIDTH,
+                1,
+            );
+            Paragraph::new(text)
+                .style(Style::new().fg(theme.color(theme.palette.warning)))
+                .render(line, buf);
         }
     }
 
@@ -529,7 +613,13 @@ impl ViewState {
         let items: Vec<ListItem> = fields
             .iter()
             .zip(&picker.checked)
-            .map(|(field, &checked)| ListItem::new(format!("[{}] {}", if checked { 'x' } else { ' ' }, field.name())))
+            .map(|(field, &checked)| {
+                ListItem::new(format!(
+                    "[{}] {}",
+                    if checked { 'x' } else { ' ' },
+                    field.name()
+                ))
+            })
             .collect();
         let list = List::new(items)
             .block(theme.block("fields"))

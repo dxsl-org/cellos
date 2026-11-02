@@ -59,7 +59,10 @@ pub(super) fn handle_syscall(frame: &mut ViTrapFrame) -> bool {
     {
         super::probe::fail();
     }
-    super::probe_ist::run_kernel_protection(CODE_BASE.load(Ordering::Acquire), frame.sstatus as u64);
+    super::probe_ist::run_kernel_protection(
+        CODE_BASE.load(Ordering::Acquire),
+        frame.sstatus as u64,
+    );
     transition(READY, B_PARKED);
     vi_x86_idt_cpl3_park_b();
     if STATE.load(Ordering::Acquire) != A_TIMER_ENTERED {

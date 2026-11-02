@@ -80,7 +80,10 @@ pub struct DistributedTask {
 /// Result of a task dispatch attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DispatchStatus {
-    Routed { task_id: TaskId, target_node: NodeId },
+    Routed {
+        task_id: TaskId,
+        target_node: NodeId,
+    },
     RefusedNoCapacity,
     RefusedNoEligibleNode,
 }
@@ -133,7 +136,12 @@ impl HailyClusterCoordinator {
     }
 
     /// Dispatch and route a distributed task across the enrolled nodes.
-    pub fn dispatch_task(&mut self, session_id: &str, kind: TaskKind, payload: &str) -> (DistributedTask, DispatchStatus) {
+    pub fn dispatch_task(
+        &mut self,
+        session_id: &str,
+        kind: TaskKind,
+        payload: &str,
+    ) -> (DistributedTask, DispatchStatus) {
         self.next_task_id += 1;
         let task_id = self.next_task_id;
 
@@ -148,21 +156,45 @@ impl HailyClusterCoordinator {
 
         // 1. Check Session Affinity
         if let Some(&preferred_id) = self.session_affinity.get(session_id) {
-            if let Some(node) = self.nodes.iter_mut().find(|n| n.id == preferred_id && n.state == NodeState::Active) {
+            if let Some(node) = self
+                .nodes
+                .iter_mut()
+                .find(|n| n.id == preferred_id && n.state == NodeState::Active)
+            {
                 if node.active_tasks < node.capacity_weight * 2 {
                     node.active_tasks += 1;
                     task.assigned_node = Some(node.id);
-                    return (task, DispatchStatus::Routed { task_id, target_node: node.id });
+                    return (
+                        task,
+                        DispatchStatus::Routed {
+                            task_id,
+                            target_node: node.id,
+                        },
+                    );
                 }
             }
         }
 
         // 2. Filter eligible nodes by role and active state
-        let eligible: Vec<usize> = self.nodes.iter().enumerate()
-            .filter(|(_, n)| n.state == NodeState::Active && match kind {
-                TaskKind::CodeAnalysis => matches!(n.role, NodeRole::Worker | NodeRole::SandboxExecutor | NodeRole::Coordinator),
-                TaskKind::ResearchSynthesis => matches!(n.role, NodeRole::Worker | NodeRole::Coordinator),
-                TaskKind::ModelInference => matches!(n.role, NodeRole::ModelInference | NodeRole::Worker | NodeRole::Coordinator),
+        let eligible: Vec<usize> = self
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| {
+                n.state == NodeState::Active
+                    && match kind {
+                        TaskKind::CodeAnalysis => matches!(
+                            n.role,
+                            NodeRole::Worker | NodeRole::SandboxExecutor | NodeRole::Coordinator
+                        ),
+                        TaskKind::ResearchSynthesis => {
+                            matches!(n.role, NodeRole::Worker | NodeRole::Coordinator)
+                        }
+                        TaskKind::ModelInference => matches!(
+                            n.role,
+                            NodeRole::ModelInference | NodeRole::Worker | NodeRole::Coordinator
+                        ),
+                    }
             })
             .map(|(idx, _)| idx)
             .collect();
@@ -173,11 +205,16 @@ impl HailyClusterCoordinator {
 
         // 3. Lowest-load selection based on active_tasks / capacity_weight ratio
         let mut best_idx = eligible[0];
-        let mut min_load = (self.nodes[best_idx].active_tasks as f32) / (self.nodes[best_idx].capacity_weight as f32).max(1.0);
+        let mut min_load = (self.nodes[best_idx].active_tasks as f32)
+            / (self.nodes[best_idx].capacity_weight as f32).max(1.0);
 
         for &idx in &eligible[1..] {
-            let load = (self.nodes[idx].active_tasks as f32) / (self.nodes[idx].capacity_weight as f32).max(1.0);
-            if load < min_load || (load == min_load && self.nodes[idx].capacity_weight > self.nodes[best_idx].capacity_weight) {
+            let load = (self.nodes[idx].active_tasks as f32)
+                / (self.nodes[idx].capacity_weight as f32).max(1.0);
+            if load < min_load
+                || (load == min_load
+                    && self.nodes[idx].capacity_weight > self.nodes[best_idx].capacity_weight)
+            {
                 min_load = load;
                 best_idx = idx;
             }
@@ -193,16 +230,27 @@ impl HailyClusterCoordinator {
         task.assigned_node = Some(target_node);
 
         // Bind session affinity for future turns
-        self.session_affinity.insert(String::from(session_id), target_node);
+        self.session_affinity
+            .insert(String::from(session_id), target_node);
 
-        (task, DispatchStatus::Routed { task_id, target_node })
+        (
+            task,
+            DispatchStatus::Routed {
+                task_id,
+                target_node,
+            },
+        )
     }
 
     /// Reconcile active tasks assigned to a node that unexpectedly disconnected.
     ///
     /// Preserves Spec 20 §2.6 invariants: unacknowledged tasks become `Indeterminate`
     /// rather than silently re-executing non-idempotent operations.
-    pub fn reconcile_disconnection(&mut self, disconnected_node_id: NodeId, active_tasks: &mut [DistributedTask]) -> usize {
+    pub fn reconcile_disconnection(
+        &mut self,
+        disconnected_node_id: NodeId,
+        active_tasks: &mut [DistributedTask],
+    ) -> usize {
         let _ = self.update_node_state(disconnected_node_id, NodeState::Disconnected);
         let mut reconciled = 0;
 
@@ -214,7 +262,8 @@ impl HailyClusterCoordinator {
         }
 
         // Drop session affinity pointing to disconnected node
-        self.session_affinity.retain(|_, &mut node_id| node_id != disconnected_node_id);
+        self.session_affinity
+            .retain(|_, &mut node_id| node_id != disconnected_node_id);
 
         reconciled
     }
@@ -247,53 +296,71 @@ mod tests {
     #[test]
     fn test_task_dispatch_and_affinity() {
         let mut coord = HailyClusterCoordinator::new(1001);
-        coord.enroll_node(HailyNode {
-            id: 2002,
-            name: String::from("Node-02"),
-            role: NodeRole::Worker,
-            state: NodeState::Active,
-            capacity_weight: 50,
-            active_tasks: 0,
-        }).unwrap();
+        coord
+            .enroll_node(HailyNode {
+                id: 2002,
+                name: String::from("Node-02"),
+                role: NodeRole::Worker,
+                state: NodeState::Active,
+                capacity_weight: 50,
+                active_tasks: 0,
+            })
+            .unwrap();
 
         // First turn: routes to Node-02 (weight 50 > weight 10)
-        let (task1, status1) = coord.dispatch_task("sess-01", TaskKind::ResearchSynthesis, "payload");
+        let (task1, status1) =
+            coord.dispatch_task("sess-01", TaskKind::ResearchSynthesis, "payload");
         assert_eq!(task1.assigned_node, Some(2002));
-        assert_eq!(status1, DispatchStatus::Routed { task_id: task1.task_id, target_node: 2002 });
+        assert_eq!(
+            status1,
+            DispatchStatus::Routed {
+                task_id: task1.task_id,
+                target_node: 2002
+            }
+        );
 
         // Second turn with same session: preserves affinity to Node-02
         let (task2, status2) = coord.dispatch_task("sess-01", TaskKind::CodeAnalysis, "payload 2");
         assert_eq!(task2.assigned_node, Some(2002));
-        assert_eq!(status2, DispatchStatus::Routed { task_id: task2.task_id, target_node: 2002 });
+        assert_eq!(
+            status2,
+            DispatchStatus::Routed {
+                task_id: task2.task_id,
+                target_node: 2002
+            }
+        );
     }
 
     #[test]
     fn test_node_disconnection_reconciliation() {
         let mut coord = HailyClusterCoordinator::new(1001);
-        coord.enroll_node(HailyNode {
-            id: 2002,
-            name: String::from("Node-02"),
-            role: NodeRole::Worker,
-            state: NodeState::Active,
-            capacity_weight: 20,
-            active_tasks: 1,
-        }).unwrap();
+        coord
+            .enroll_node(HailyNode {
+                id: 2002,
+                name: String::from("Node-02"),
+                role: NodeRole::Worker,
+                state: NodeState::Active,
+                capacity_weight: 20,
+                active_tasks: 1,
+            })
+            .unwrap();
 
-        let mut tasks = alloc::vec![
-            DistributedTask {
-                task_id: 1001,
-                session_id: String::from("sess-01"),
-                kind: TaskKind::ResearchSynthesis,
-                payload: String::from("work"),
-                assigned_node: Some(2002),
-                outcome: None,
-            }
-        ];
+        let mut tasks = alloc::vec![DistributedTask {
+            task_id: 1001,
+            session_id: String::from("sess-01"),
+            kind: TaskKind::ResearchSynthesis,
+            payload: String::from("work"),
+            assigned_node: Some(2002),
+            outcome: None,
+        }];
 
         // Reconcile node 2002 disconnect
         let count = coord.reconcile_disconnection(2002, &mut tasks);
         assert_eq!(count, 1);
         assert_eq!(tasks[0].outcome, Some(TaskOutcome::Indeterminate));
-        assert_eq!(coord.nodes.iter().find(|n| n.id == 2002).unwrap().state, NodeState::Disconnected);
+        assert_eq!(
+            coord.nodes.iter().find(|n| n.id == 2002).unwrap().state,
+            NodeState::Disconnected
+        );
     }
 }

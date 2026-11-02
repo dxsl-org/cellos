@@ -60,7 +60,7 @@ fn tokenize_html(input: &str) -> Vec<HtmlToken> {
             // Read tag content
             let mut tag_content = String::new();
             let mut quote = None;
-            while let Some(ch) = chars.next() {
+            for ch in chars.by_ref() {
                 if quote == Some(ch) {
                     quote = None;
                 } else if quote.is_none() && matches!(ch, '"' | '\'') {
@@ -87,12 +87,20 @@ fn tokenize_html(input: &str) -> Vec<HtmlToken> {
                 let name = tag_body[..name_end].to_ascii_lowercase();
                 let attributes = parse_attributes(&tag_body[name_end..]);
                 if matches!(name.as_str(), "script" | "style") && !self_closing {
-                    tokens.push(HtmlToken::StartTag { name: name.clone(), attributes, self_closing });
+                    tokens.push(HtmlToken::StartTag {
+                        name: name.clone(),
+                        attributes,
+                        self_closing,
+                    });
                     let mut body = String::new();
                     while let Some(ch) = chars.next() {
-                        if ch=='<' {
-                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),&name) {
-                                for _ in 0..count{chars.next();}
+                        if ch == '<' {
+                            if let Some(count) =
+                                crate::budget::rawtext_close_chars(chars.clone(), &name)
+                            {
+                                for _ in 0..count {
+                                    chars.next();
+                                }
                                 break;
                             }
                         }
@@ -102,18 +110,33 @@ fn tokenize_html(input: &str) -> Vec<HtmlToken> {
                     tokens.push(HtmlToken::EndTag { name });
                     continue;
                 }
-                if matches!(name.as_str(),"textarea"|"title"|"xmp"|"iframe"|"noembed"|"noframes")&&!self_closing {
-                    tokens.push(HtmlToken::StartTag{name:name.clone(),attributes,self_closing});
-                    let mut body=String::new();
-                    while let Some(c)=chars.next() {
-                        if c=='<' {
-                            if let Some(count)=crate::budget::rawtext_close_chars(chars.clone(),&name) {
-                                for _ in 0..count{chars.next();}break;
+                if matches!(
+                    name.as_str(),
+                    "textarea" | "title" | "xmp" | "iframe" | "noembed" | "noframes"
+                ) && !self_closing
+                {
+                    tokens.push(HtmlToken::StartTag {
+                        name: name.clone(),
+                        attributes,
+                        self_closing,
+                    });
+                    let mut body = String::new();
+                    while let Some(c) = chars.next() {
+                        if c == '<' {
+                            if let Some(count) =
+                                crate::budget::rawtext_close_chars(chars.clone(), &name)
+                            {
+                                for _ in 0..count {
+                                    chars.next();
+                                }
+                                break;
                             }
                         }
                         body.push(c);
                     }
-                    tokens.push(HtmlToken::Text(decode_entities(&body)));tokens.push(HtmlToken::EndTag{name});continue;
+                    tokens.push(HtmlToken::Text(decode_entities(&body)));
+                    tokens.push(HtmlToken::EndTag { name });
+                    continue;
                 }
 
                 tokens.push(HtmlToken::StartTag {
@@ -146,21 +169,34 @@ fn parse_attributes(input: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut chars = input.chars().peekable();
     while chars.peek().is_some() {
-        while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+        while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
+            chars.next();
+        }
         let mut key = String::new();
-        while chars.peek().is_some_and(|ch| !ch.is_whitespace() && *ch != '=') {
+        while chars
+            .peek()
+            .is_some_and(|ch| !ch.is_whitespace() && *ch != '=')
+        {
             key.push(chars.next().unwrap());
         }
-        if key.is_empty() { break; }
-        while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+        if key.is_empty() {
+            break;
+        }
+        while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
+            chars.next();
+        }
         let mut value = String::new();
         if chars.peek() == Some(&'=') {
             chars.next();
-            while chars.peek().is_some_and(|ch| ch.is_whitespace()) { chars.next(); }
+            while chars.peek().is_some_and(|ch| ch.is_whitespace()) {
+                chars.next();
+            }
             if chars.peek().is_some_and(|ch| matches!(ch, '"' | '\'')) {
                 let quote = chars.next().unwrap();
                 for ch in chars.by_ref() {
-                    if ch == quote { break; }
+                    if ch == quote {
+                        break;
+                    }
                     value.push(ch);
                 }
             } else {
@@ -187,21 +223,28 @@ pub fn parse_html_with_base(input: &str, base_url: Option<&str>) -> HtmlOutput {
     parse_html_with_base_checked(input, base_url).expect("HTML document budget")
 }
 
-pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Result<HtmlOutput, String> {
+pub fn parse_html_with_base_checked(
+    input: &str,
+    base_url: Option<&str>,
+) -> Result<HtmlOutput, String> {
     crate::budget::validate_html(input)?;
     let tokens = tokenize_html(input);
     let mut arena = DocumentArena::new();
     let mut tag_stack: Vec<(String, NodeId)> = alloc::vec![(String::from("root"), arena.root)];
 
     for tok in tokens {
-        if arena.nodes.len()>=crate::budget::MAX_DOM_NODES {return Err(String::from("HTML exceeds DOM node budget"));}
+        if arena.nodes.len() >= crate::budget::MAX_DOM_NODES {
+            return Err(String::from("HTML exceeds DOM node budget"));
+        }
         match tok {
             HtmlToken::StartTag {
                 name,
                 attributes,
                 self_closing,
             } => {
-                if !self_closing && tag_stack.len()>crate::budget::MAX_DOM_DEPTH {return Err(String::from("HTML exceeds DOM depth budget"));}
+                if !self_closing && tag_stack.len() > crate::budget::MAX_DOM_DEPTH {
+                    return Err(String::from("HTML exceeds DOM depth budget"));
+                }
                 let parent_id = tag_stack.last().map(|(_, id)| *id).unwrap_or(arena.root);
                 let node_id = arena.alloc_node(NodeData::Element {
                     tag: name.clone(),
@@ -233,19 +276,31 @@ pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Resu
     }
     let mut scripts = Vec::new();
     for node in &arena.nodes {
-        if node.tag() != Some("script") { continue; }
+        if node.tag() != Some("script") {
+            continue;
+        }
         let kind = node.get_attribute("type").unwrap_or("").trim();
-        if !matches!(kind, "" | "text/javascript" | "application/javascript") { continue; }
+        if !matches!(kind, "" | "text/javascript" | "application/javascript") {
+            continue;
+        }
         let mut ancestor = node.parent;
         let mut inert = false;
         while let Some(id) = ancestor {
-            let Some(parent) = arena.get(id) else { break; };
-            if parent.tag() == Some("template") { inert = true; break; }
+            let Some(parent) = arena.get(id) else {
+                break;
+            };
+            if parent.tag() == Some("template") {
+                inert = true;
+                break;
+            }
             ancestor = parent.parent;
         }
         if !inert {
             scripts.push(match node.get_attribute("src") {
-                Some(url) => ScriptSource::External { node: node.id, url: String::from(url) },
+                Some(url) => ScriptSource::External {
+                    node: node.id,
+                    url: String::from(url),
+                },
                 None => ScriptSource::Inline(node.id),
             });
         }
@@ -254,11 +309,19 @@ pub fn parse_html_with_base_checked(input: &str, base_url: Option<&str>) -> Resu
     let mut images = Vec::new();
     let mut css = String::new();
     for node in &arena.nodes {
-        if node.tag() == Some("img") { if let Some(src) = node.get_attribute("src") { images.push(src); } }
+        if node.tag() == Some("img") {
+            if let Some(src) = node.get_attribute("src") {
+                images.push(src);
+            }
+        }
         if node.tag() == Some("style") {
             css.push_str(&arena.get_text_content(node.id));
         }
-        if let Some(style) = node.get_attribute("style") { css.push_str("x{"); css.push_str(style); css.push('}'); }
+        if let Some(style) = node.get_attribute("style") {
+            css.push_str("x{");
+            css.push_str(style);
+            css.push('}');
+        }
     }
     crate::budget::validate_css(&css)?;
     super::validate_images(base_url, images.into_iter())?;
@@ -274,23 +337,39 @@ pub fn arena_to_doc_nodes_with_base(arena: &DocumentArena, base_url: Option<&str
     let mut doc_nodes = Vec::new();
     render_children(arena, arena.root, &mut doc_nodes, base_url);
     for node in &arena.nodes {
-        if node.tag()!=Some("img")||doc_nodes.iter().any(|asset|matches!(asset,DocNode::DomImage{node_id,..} if *node_id==node.id)){continue;}
-        if let (Some(base),Some(src))=(base_url,node.get_attribute("src")) {
-            match crate::resources::load_binary(base,src) {
-                Ok(bytes) => {
-                    match crate::image::decode(&bytes) {
-                        Some(image) => doc_nodes.push(DocNode::DomImage{node_id:node.id,width:image.width,height:image.height,pixels:alloc::rc::Rc::new(image.pixels)}),
-                        None => ostd::io::println(&alloc::format!("[ocel] image decode failed for: {}", src)),
-                    }
+        if node.tag() != Some("img")
+            || doc_nodes
+                .iter()
+                .any(|asset| matches!(asset,DocNode::DomImage{node_id,..} if *node_id==node.id))
+        {
+            continue;
+        }
+        if let (Some(base), Some(src)) = (base_url, node.get_attribute("src")) {
+            if let Ok(bytes) = crate::resources::load_binary(base, src) {
+                match crate::image::decode(&bytes) {
+                    Some(image) => doc_nodes.push(DocNode::DomImage {
+                        node_id: node.id,
+                        width: image.width,
+                        height: image.height,
+                        pixels: alloc::rc::Rc::new(image.pixels),
+                    }),
+                    None => ostd::io::println(&alloc::format!(
+                        "[ocel] image decode failed for: {}",
+                        src
+                    )),
                 }
-                Err(_) => {}
             }
         }
     }
     doc_nodes
 }
 
-fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNode>, base_url: Option<&str>) {
+fn render_children(
+    arena: &DocumentArena,
+    parent_id: NodeId,
+    out: &mut Vec<DocNode>,
+    base_url: Option<&str>,
+) {
     let Some(parent) = arena.get(parent_id) else {
         return;
     };
@@ -392,22 +471,23 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                             let mut loaded = false;
                             if let (Some(src_val), Some(base)) = (src, base_url) {
                                 if !base.is_empty() {
-                                    match crate::resources::load_binary(base, src_val) {
-                                        Ok(bytes) => {
-                                            match crate::image::decode(&bytes) {
-                                                Some(img) => {
-                                                    out.push(DocNode::DomImage {
-                                                        node_id: child_id,
-                                                        width: img.width,
-                                                        height: img.height,
-                                                        pixels: alloc::rc::Rc::new(img.pixels),
-                                                    });
-                                                    loaded = true;
-                                                }
-                                                None => ostd::io::println(&alloc::format!("[ocel] render_children decode failed: {}", src_val)),
+                                    if let Ok(bytes) = crate::resources::load_binary(base, src_val)
+                                    {
+                                        match crate::image::decode(&bytes) {
+                                            Some(img) => {
+                                                out.push(DocNode::DomImage {
+                                                    node_id: child_id,
+                                                    width: img.width,
+                                                    height: img.height,
+                                                    pixels: alloc::rc::Rc::new(img.pixels),
+                                                });
+                                                loaded = true;
                                             }
+                                            None => ostd::io::println(&alloc::format!(
+                                                "[ocel] render_children decode failed: {}",
+                                                src_val
+                                            )),
                                         }
-                                        Err(_) => {}
                                     }
                                 }
                             }
@@ -420,10 +500,14 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                             }
                         }
                         "input" => {
-                            let itype = child.get_attribute("type").unwrap_or("text").to_ascii_lowercase();
+                            let itype = child
+                                .get_attribute("type")
+                                .unwrap_or("text")
+                                .to_ascii_lowercase();
                             let name = child.get_attribute("name").unwrap_or("").into();
                             let value = child.get_attribute("value").unwrap_or("").into();
-                            let placeholder = child.get_attribute("placeholder").unwrap_or("").into();
+                            let placeholder =
+                                child.get_attribute("placeholder").unwrap_or("").into();
                             let checked = child.get_attribute("checked").is_some();
                             out.push(DocNode::Input {
                                 input_type: itype,
@@ -436,7 +520,8 @@ fn render_children(arena: &DocumentArena, parent_id: NodeId, out: &mut Vec<DocNo
                         }
                         "textarea" => {
                             let name = child.get_attribute("name").unwrap_or("").into();
-                            let placeholder = child.get_attribute("placeholder").unwrap_or("").into();
+                            let placeholder =
+                                child.get_attribute("placeholder").unwrap_or("").into();
                             let value = arena.get_text_content(child_id).trim().into();
                             out.push(DocNode::Input {
                                 input_type: String::from("textarea"),
@@ -490,7 +575,10 @@ fn collect_inline_spans(
         if let Some(child) = arena.get(child_id) {
             match &child.data {
                 NodeData::Element { tag, attributes } => {
-                    if matches!(tag.as_str(), "script" | "style" | "template" | "meta" | "link" | "title") {
+                    if matches!(
+                        tag.as_str(),
+                        "script" | "style" | "template" | "meta" | "link" | "title"
+                    ) {
                         cur = child.next_sibling;
                         continue;
                     }
@@ -517,7 +605,11 @@ fn collect_inline_spans(
                         next_link,
                     );
                     if tag == "img" {
-                        let alt = attributes.iter().find(|(k, _)| k == "alt").map(|(_, v)| v.as_str()).unwrap_or("Image");
+                        let alt = attributes
+                            .iter()
+                            .find(|(k, _)| k == "alt")
+                            .map(|(_, v)| v.as_str())
+                            .unwrap_or("Image");
                         let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", alt));
                         span.color = Some(theme::TEXT_MUTED);
                         out.push(span);
@@ -646,7 +738,10 @@ pub fn decode_entities(input: &str) -> String {
 }
 
 fn decode_entity_token(entity: &str) -> Option<char> {
-    if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+    if let Some(hex) = entity
+        .strip_prefix("#x")
+        .or_else(|| entity.strip_prefix("#X"))
+    {
         let code = u32::from_str_radix(hex, 16).ok()?;
         return char::from_u32(code);
     }
@@ -714,32 +809,72 @@ mod tokenizer_tests {
     #[test]
     fn quoted_attributes_and_raw_styles_survive_tokenization() {
         let parsed = parse_html("<style>.a > .b { color: red; }</style><p class=\"a b\" title='x > y' data-x=\"a&amp;b\">hello</p>");
-        let paragraph = parsed.arena.nodes.iter().find(|node| node.tag() == Some("p")).unwrap();
+        let paragraph = parsed
+            .arena
+            .nodes
+            .iter()
+            .find(|node| node.tag() == Some("p"))
+            .unwrap();
         assert_eq!(paragraph.get_attribute("class"), Some("a b"));
         assert_eq!(paragraph.get_attribute("title"), Some("x > y"));
         assert_eq!(paragraph.get_attribute("data-x"), Some("a&b"));
-        let style = parsed.arena.nodes.iter().find(|node| node.tag() == Some("style")).unwrap();
-        assert_eq!(parsed.arena.get_text_content(style.id), ".a > .b { color: red; }");
+        let style = parsed
+            .arena
+            .nodes
+            .iter()
+            .find(|node| node.tag() == Some("style"))
+            .unwrap();
+        assert_eq!(
+            parsed.arena.get_text_content(style.id),
+            ".a > .b { color: red; }"
+        );
     }
     #[test]
     fn classic_scripts_preserve_source_order_without_executing_data_or_modules() {
         let parsed = parse_html("<script src='app.js'>ignored()</script><script>second()</script><script type='application/json'>{}</script><script type='module'>module()</script>");
-        assert!(matches!(&parsed.scripts[0], ScriptSource::External { node, url } if url == "app.js" && parsed.arena.get(*node).unwrap().tag() == Some("script")));
-        assert!(matches!(&parsed.scripts[1], ScriptSource::Inline(node) if parsed.arena.get_text_content(*node) == "second()"));
+        assert!(
+            matches!(&parsed.scripts[0], ScriptSource::External { node, url } if url == "app.js" && parsed.arena.get(*node).unwrap().tag() == Some("script"))
+        );
+        assert!(
+            matches!(&parsed.scripts[1], ScriptSource::Inline(node) if parsed.arena.get_text_content(*node) == "second()")
+        );
         assert_eq!(parsed.scripts.len(), 2);
     }
     #[test]
     fn script_nodes_remain_queryable_but_inert_text_never_becomes_document_content() {
         let parsed = parse_html("<body><script id='boot'>window.x = '<b>&amp;'</script><template><script src='inert.js'></script></template><p>Visible</p></body>");
-        let script = parsed.arena.nodes.iter().find(|node| node.get_attribute("id") == Some("boot")).unwrap();
-        assert_eq!(parsed.arena.get_text_content(script.id), "window.x = '<b>&amp;'");
-        assert!(matches!(parsed.scripts.as_slice(), [ScriptSource::Inline(id)] if *id == script.id));
-        let text: String = parsed.nodes.iter().filter_map(|node| match node {
-            DocNode::Paragraph { spans } => Some(spans.iter().map(|span| span.text.as_str()).collect::<String>()),
-            _ => None,
-        }).collect();
+        let script = parsed
+            .arena
+            .nodes
+            .iter()
+            .find(|node| node.get_attribute("id") == Some("boot"))
+            .unwrap();
+        assert_eq!(
+            parsed.arena.get_text_content(script.id),
+            "window.x = '<b>&amp;'"
+        );
+        assert!(
+            matches!(parsed.scripts.as_slice(), [ScriptSource::Inline(id)] if *id == script.id)
+        );
+        let text: String = parsed
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                DocNode::Paragraph { spans } => Some(
+                    spans
+                        .iter()
+                        .map(|span| span.text.as_str())
+                        .collect::<String>(),
+                ),
+                _ => None,
+            })
+            .collect();
         assert_eq!(text, "Visible");
-        assert!(resource_references_checked("<template><script src='inert.js'></script></template>").unwrap().is_empty());
+        assert!(resource_references_checked(
+            "<template><script src='inert.js'></script></template>"
+        )
+        .unwrap()
+        .is_empty());
     }
     #[test]
     fn vietnamese_numeric_and_named_entities_are_decoded() {
@@ -750,30 +885,81 @@ mod tokenizer_tests {
 }
 
 /// Resource discovery shares tokenization with the actual document parser.
-pub fn resource_references_checked(input:&str)->Result<Vec<(String,bool)>,String> {
+pub fn resource_references_checked(input: &str) -> Result<Vec<(String, bool)>, String> {
     crate::budget::validate_html(input)?;
-    let tokens=tokenize_html(input);
-    let mut refs=Vec::new();let mut images=0usize;let mut inert=0usize;
-    let mut add=|url:String,image:bool|->Result<(),String>{
-        if url.len()>2048{return Err(String::from("Resource URL exceeds byte budget"));}
-        if image{images+=1;if images>crate::budget::MAX_IMAGES{return Err(String::from("Document exceeds image count budget"));}}
-        if refs.len()>=crate::budget::MAX_REFERENCES{return Err(String::from("Document exceeds resource count budget"));}
-        refs.push((url,image));Ok(())
+    let tokens = tokenize_html(input);
+    let mut refs = Vec::new();
+    let mut images = 0usize;
+    let mut inert = 0usize;
+    let mut add = |url: String, image: bool| -> Result<(), String> {
+        if url.len() > 2048 {
+            return Err(String::from("Resource URL exceeds byte budget"));
+        }
+        if image {
+            images += 1;
+            if images > crate::budget::MAX_IMAGES {
+                return Err(String::from("Document exceeds image count budget"));
+            }
+        }
+        if refs.len() >= crate::budget::MAX_REFERENCES {
+            return Err(String::from("Document exceeds resource count budget"));
+        }
+        refs.push((url, image));
+        Ok(())
     };
-    for token in tokens {match token {
-        HtmlToken::StartTag{name,attributes,self_closing}=>{
-            if name=="template" {if !self_closing{inert+=1;}continue;}
-            if inert>0{continue;}
-            if name=="img" {if let Some((_,url))=attributes.iter().find(|(name,_)|name=="src"){add(url.clone(),true)?;}}
-            if name=="link"&&attributes.iter().any(|(name,value)|name=="rel"&&value.split_whitespace().any(|word|word.eq_ignore_ascii_case("stylesheet"))) {
-                if let Some((_,url))=attributes.iter().find(|(name,_)|name=="href"){add(url.clone(),false)?;}
+    for token in tokens {
+        match token {
+            HtmlToken::StartTag {
+                name,
+                attributes,
+                self_closing,
+            } => {
+                if name == "template" {
+                    if !self_closing {
+                        inert += 1;
+                    }
+                    continue;
+                }
+                if inert > 0 {
+                    continue;
+                }
+                if name == "img" {
+                    if let Some((_, url)) = attributes.iter().find(|(name, _)| name == "src") {
+                        add(url.clone(), true)?;
+                    }
+                }
+                if name == "link"
+                    && attributes.iter().any(|(name, value)| {
+                        name == "rel"
+                            && value
+                                .split_whitespace()
+                                .any(|word| word.eq_ignore_ascii_case("stylesheet"))
+                    })
+                {
+                    if let Some((_, url)) = attributes.iter().find(|(name, _)| name == "href") {
+                        add(url.clone(), false)?;
+                    }
+                }
+                if name == "script"
+                    && matches!(
+                        attributes
+                            .iter()
+                            .find(|(name, _)| name == "type")
+                            .map(|(_, value)| value.trim())
+                            .unwrap_or(""),
+                        "" | "text/javascript" | "application/javascript"
+                    )
+                {
+                    if let Some((_, url)) = attributes.iter().find(|(name, _)| name == "src") {
+                        add(url.clone(), false)?;
+                    }
+                }
             }
-            if name=="script"&&matches!(attributes.iter().find(|(name,_)|name=="type").map(|(_,value)|value.trim()).unwrap_or(""), ""|"text/javascript"|"application/javascript") {
-                if let Some((_,url))=attributes.iter().find(|(name,_)|name=="src"){add(url.clone(),false)?;}
+            HtmlToken::EndTag { name } if name == "template" => {
+                inert = inert.saturating_sub(1);
             }
-        },
-        HtmlToken::EndTag{name}=>{if name=="template"{inert=inert.saturating_sub(1);}},
-        _=>{}
-    }}
+            _ => {}
+        }
+    }
     Ok(refs)
 }

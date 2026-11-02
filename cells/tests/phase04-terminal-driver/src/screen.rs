@@ -37,7 +37,11 @@ pub struct Pen {
 }
 
 impl Pen {
-    pub const DEFAULT: Pen = Pen { fg: Color::Default, bg: Color::Default, attrs: 0 };
+    pub const DEFAULT: Pen = Pen {
+        fg: Color::Default,
+        bg: Color::Default,
+        attrs: 0,
+    };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,7 +51,10 @@ pub struct Cell {
 }
 
 impl Cell {
-    pub const BLANK: Cell = Cell { ch: ' ', pen: Pen::DEFAULT };
+    pub const BLANK: Cell = Cell {
+        ch: ' ',
+        pen: Pen::DEFAULT,
+    };
 
     /// Neither a glyph nor a background: what an untouched cell looks like.
     pub fn is_default(&self) -> bool {
@@ -186,15 +193,25 @@ impl Screen {
 
     /// Characters of row `y`, columns `x0..x1` of the active screen.
     pub fn text(&self, y: usize, x0: usize, x1: usize) -> String {
-        (x0..x1.min(self.cols)).map(|x| self.cell(x, y).ch).collect()
+        (x0..x1.min(self.cols))
+            .map(|x| self.cell(x, y).ch)
+            .collect()
     }
 
     fn grid(&self) -> &[Cell] {
-        if self.alt { &self.alternate } else { &self.primary }
+        if self.alt {
+            &self.alternate
+        } else {
+            &self.primary
+        }
     }
 
     fn grid_mut(&mut self) -> &mut [Cell] {
-        if self.alt { &mut self.alternate } else { &mut self.primary }
+        if self.alt {
+            &mut self.alternate
+        } else {
+            &mut self.primary
+        }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
@@ -332,7 +349,15 @@ impl Screen {
         let mut value: Option<u32> = None;
         for &b in body {
             match b {
-                b'0'..=b'9' => value = Some(value.unwrap_or(0).saturating_mul(10).saturating_add(u32::from(b - b'0')).min(65_535)),
+                b'0'..=b'9' => {
+                    value = Some(
+                        value
+                            .unwrap_or(0)
+                            .saturating_mul(10)
+                            .saturating_add(u32::from(b - b'0'))
+                            .min(65_535),
+                    )
+                }
                 b';' | b':' => out.push(value.take().unwrap_or(0)),
                 _ => {}
             }
@@ -421,7 +446,13 @@ impl Screen {
     }
 
     fn erased(&self) -> Cell {
-        Cell { ch: ' ', pen: Pen { bg: self.pen.bg, ..Pen::DEFAULT } }
+        Cell {
+            ch: ' ',
+            pen: Pen {
+                bg: self.pen.bg,
+                ..Pen::DEFAULT
+            },
+        }
     }
 
     fn fill(&mut self, from: usize, to: usize) {
@@ -544,7 +575,10 @@ impl Screen {
         while y < self.rows && self.cell(0, y).ch == VERTICAL {
             y += 1;
         }
-        if y >= self.rows || self.cell(0, y).ch != BOTTOM_LEFT || self.cell(w - 1, y).ch != BOTTOM_RIGHT {
+        if y >= self.rows
+            || self.cell(0, y).ch != BOTTOM_LEFT
+            || self.cell(w - 1, y).ch != BOTTOM_RIGHT
+        {
             return None;
         }
         let h = y + 2;
@@ -576,8 +610,10 @@ impl Screen {
 pub fn is_cell_identity(token: &str) -> bool {
     match token.split_once(':') {
         Some((id, generation)) => {
-            !id.is_empty() && !generation.is_empty()
-                && id.bytes().all(|b| b.is_ascii_digit()) && generation.bytes().all(|b| b.is_ascii_digit())
+            !id.is_empty()
+                && !generation.is_empty()
+                && id.bytes().all(|b| b.is_ascii_digit())
+                && generation.bytes().all(|b| b.is_ascii_digit())
         }
         None => false,
     }
@@ -610,7 +646,10 @@ impl Frame<'_> {
 
     /// The status row's sample id: its first integer token.
     pub fn sample(&self) -> Option<u64> {
-        self.s.text(1, 0, self.w).split_whitespace().find_map(|t| t.parse().ok())
+        self.s
+            .text(1, 0, self.w)
+            .split_whitespace()
+            .find_map(|t| t.parse().ok())
     }
 
     /// The status row's text (row 1: sample id, `complete`/`TRUNCATED n`, units, memory).
@@ -620,7 +659,11 @@ impl Frame<'_> {
 
     /// Table column labels (row 3 inside the border).
     pub fn header(&self) -> Vec<String> {
-        self.s.text(3, 1, self.w - 1).split_whitespace().map(String::from).collect()
+        self.s
+            .text(3, 1, self.w - 1)
+            .split_whitespace()
+            .map(String::from)
+            .collect()
     }
 
     /// Tokens of each visible data row (right of the highlight column), top to bottom,
@@ -628,7 +671,12 @@ impl Frame<'_> {
     pub fn rows(&self) -> Vec<Vec<String>> {
         let mut out = Vec::new();
         for y in 4..self.h - 2 {
-            let tokens: Vec<String> = self.s.text(y, 3, self.w - 1).split_whitespace().map(String::from).collect();
+            let tokens: Vec<String> = self
+                .s
+                .text(y, 3, self.w - 1)
+                .split_whitespace()
+                .map(String::from)
+                .collect();
             if tokens.is_empty() {
                 break;
             }
@@ -671,12 +719,15 @@ impl Frame<'_> {
     /// Row `y` has one background on all `w` cells.
     pub fn row_background(&self, y: usize) -> Option<Color> {
         let bg = self.cell(0, y).pen.bg;
-        (0..self.w).all(|x| self.cell(x, y).pen.bg == bg).then_some(bg)
+        (0..self.w)
+            .all(|x| self.cell(x, y).pen.bg == bg)
+            .then_some(bg)
     }
 
     /// Nothing is drawn outside the area (a clamped session).
     pub fn outside_blank(&self) -> bool {
         let (cols, rows) = self.s.size();
-        (0..rows).all(|y| (0..cols).all(|x| (x < self.w && y < self.h) || self.cell(x, y).ch == ' '))
+        (0..rows)
+            .all(|y| (0..cols).all(|x| (x < self.w && y < self.h) || self.cell(x, y).ch == ' '))
     }
 }

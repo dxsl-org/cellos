@@ -100,7 +100,10 @@ pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocN
                         }
                     }
                     if !loaded {
-                        let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", if alt.is_empty() { "Image" } else { alt }));
+                        let mut span = StyledSpan::plain(&alloc::format!(
+                            "[🖼 {}]",
+                            if alt.is_empty() { "Image" } else { alt }
+                        ));
                         span.color = Some(crate::draw::theme::TEXT_MUTED);
                         nodes.push(DocNode::Paragraph {
                             spans: alloc::vec![span],
@@ -110,7 +113,6 @@ pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocN
                 }
             }
         }
-
 
         // 4. Headings
         if let Some(rest) = trimmed.strip_prefix("# ") {
@@ -169,9 +171,12 @@ pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocN
             continue;
         }
         let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
-        if digits > 0 && (trimmed[digits..].starts_with(". ") || trimmed[digits..].starts_with(") ")) {
+        if digits > 0
+            && (trimmed[digits..].starts_with(". ") || trimmed[digits..].starts_with(") "))
+        {
             nodes.push(DocNode::ListItem {
-                bullet: '\0', indent,
+                bullet: '\0',
+                indent,
                 spans: parse_inlines(trimmed),
             });
             continue;
@@ -211,30 +216,50 @@ pub fn parse_inlines(text: &str) -> Vec<StyledSpan> {
     let mut plain = String::new();
     let mut rest = text;
     while !rest.is_empty() {
-        let delimiter = if rest.starts_with("**") { Some(("**", 2u8)) }
-            else if rest.starts_with('`') { Some(("`", 1u8)) } else { None };
+        let delimiter = if rest.starts_with("**") {
+            Some(("**", 2u8))
+        } else if rest.starts_with('`') {
+            Some(("`", 1u8))
+        } else {
+            None
+        };
         if let Some((marker, kind)) = delimiter {
             if let Some(end) = rest[marker.len()..].find(marker) {
-                if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); plain.clear(); }
+                if !plain.is_empty() {
+                    spans.push(StyledSpan::plain(&plain));
+                    plain.clear();
+                }
                 let end = marker.len() + end;
                 let mut span = StyledSpan::plain(&rest[marker.len()..end]);
-                span.code = kind == 1; span.bold = kind == 2;
-                spans.push(span); rest = &rest[end + marker.len()..]; continue;
+                span.code = kind == 1;
+                span.bold = kind == 2;
+                spans.push(span);
+                rest = &rest[end + marker.len()..];
+                continue;
             }
         }
         if let Some(after) = rest.strip_prefix('[') {
             if let Some(close) = after.find("](") {
                 if let Some(end) = after[close + 2..].find(')') {
-                    if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); plain.clear(); }
+                    if !plain.is_empty() {
+                        spans.push(StyledSpan::plain(&plain));
+                        plain.clear();
+                    }
                     let mut span = StyledSpan::plain(&after[..close]);
                     span.link = Some(String::from(&after[close + 2..close + 2 + end]));
                     span.color = Some(crate::draw::theme::ACCENT_BLUE);
-                    spans.push(span); rest = &after[close + 3 + end..]; continue;
+                    spans.push(span);
+                    rest = &after[close + 3 + end..];
+                    continue;
                 }
             }
         }
-        let c = rest.chars().next().unwrap(); plain.push(c); rest = &rest[c.len_utf8()..];
+        let c = rest.chars().next().unwrap();
+        plain.push(c);
+        rest = &rest[c.len_utf8()..];
     }
-    if !plain.is_empty() { spans.push(StyledSpan::plain(&plain)); }
+    if !plain.is_empty() {
+        spans.push(StyledSpan::plain(&plain));
+    }
     spans
 }

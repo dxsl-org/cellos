@@ -10,9 +10,14 @@ use std::rc::Rc;
 
 use common::*;
 use vissh::client::{HostKey, Transport, TransportError};
-use vissh::session::{run, AuthKind, Credential, Dispatch, Ending, Input, Local, Mode, Phase, Point, RekeyPolicy, SignRequest, Signed, Trust, CHUNK};
+use vissh::session::{
+    AuthKind, CHUNK, Credential, Dispatch, Ending, Input, Local, Mode, Phase, Point, RekeyPolicy,
+    SignRequest, Signed, Trust, run,
+};
 use vissh::sunset::ed25519_dalek::{Signer, SigningKey};
-use vissh::sunset::{ChanData, ChanHandle, Event, KeyType, PubKey, RekeyLimits, Runner, ServEvent, Server, SignKey};
+use vissh::sunset::{
+    ChanData, ChanHandle, Event, KeyType, PubKey, RekeyLimits, Runner, ServEvent, Server, SignKey,
+};
 use vissh::userauth;
 
 #[derive(Default)]
@@ -97,12 +102,20 @@ impl ToServer {
             }
             Ok(Event::Serv(ServEvent::PasswordAuth(a))) => {
                 self.seen.passwords += 1;
-                if a.password().unwrap() == "right" { a.allow().unwrap() } else { a.reject().unwrap() }
+                if a.password().unwrap() == "right" {
+                    a.allow().unwrap()
+                } else {
+                    a.reject().unwrap()
+                }
             }
             Ok(Event::Serv(ServEvent::PubkeyAuth(a))) => {
                 self.seen.pubkey_events += 1;
                 let known = matches!(a.pubkey(), Ok(PubKey::Ed25519(k)) if Some(k.key.0) == self.authorized);
-                if known && !(self.refuse_signed && self.seen.pubkey_events >= 2) { a.allow().unwrap() } else { a.reject().unwrap() }
+                if known && !(self.refuse_signed && self.seen.pubkey_events >= 2) {
+                    a.allow().unwrap()
+                } else {
+                    a.reject().unwrap()
+                }
             }
             Ok(Event::Serv(ServEvent::OpenSession(o))) => accepted = Some(o.accept().unwrap()),
             Ok(Event::Serv(ServEvent::SessionExec(x))) => {
@@ -119,8 +132,12 @@ impl ToServer {
         if let Some(chan) = self.chan.as_ref() {
             if self.seen.command.is_some() && !self.replied {
                 self.replied = true;
-                self.srv.write_channel(chan, ChanData::Normal, b"out:").unwrap();
-                self.srv.write_channel(chan, ChanData::Stderr, b"err!").unwrap();
+                self.srv
+                    .write_channel(chan, ChanData::Normal, b"out:")
+                    .unwrap();
+                self.srv
+                    .write_channel(chan, ChanData::Stderr, b"err!")
+                    .unwrap();
             }
             // Like a real server, read the client's data as it arrives (bounded by the
             // window it granted) and echo it as the client's window allows.
@@ -129,9 +146,19 @@ impl ToServer {
                 self.seen.stdin.extend_from_slice(&b[..n]);
                 self.echo.extend_from_slice(&b[..n]);
             }
-            let room = self.srv.write_channel_ready(chan, ChanData::Normal).ok().flatten().unwrap_or(0).min(256).min(self.echo.len());
+            let room = self
+                .srv
+                .write_channel_ready(chan, ChanData::Normal)
+                .ok()
+                .flatten()
+                .unwrap_or(0)
+                .min(256)
+                .min(self.echo.len());
             if room > 0 {
-                let n = self.srv.write_channel(chan, ChanData::Normal, &self.echo[..room]).unwrap();
+                let n = self
+                    .srv
+                    .write_channel(chan, ChanData::Normal, &self.echo[..room])
+                    .unwrap();
                 self.echo.drain(..n);
             }
             if self.srv.is_channel_eof(chan) {
@@ -168,7 +195,11 @@ impl Transport for ToServer {
     }
     fn idle(&mut self) -> Result<(), TransportError> {
         self.idle += 1;
-        if self.idle > 200_000 { Err(TransportError::TimedOut) } else { Ok(()) }
+        if self.idle > 200_000 {
+            Err(TransportError::TimedOut)
+        } else {
+            Ok(())
+        }
     }
     fn now_ms(&mut self) -> u64 {
         self.clock += 1;
@@ -207,10 +238,25 @@ struct Me {
 impl Me {
     fn new(trust: Trust, password: &'static str) -> Self {
         Me {
-            trust, confirm: Trust::Refused, confirmed: 0, password, asked: 0, keys: Vec::new(),
-            stdin: b"a\0\xff".to_vec(), expect: b"a\0\xff".to_vec(), sent_eof: false, stdout: Vec::new(), stderr: Vec::new(),
-            progress: Vec::new(), points: Vec::new(), kill_at: None, killed: Rc::new(Cell::new(false)), exec_seen: Rc::new(Cell::new(false)),
-            max_read: usize::MAX, idle_every: 0, reads: 0,
+            trust,
+            confirm: Trust::Refused,
+            confirmed: 0,
+            password,
+            asked: 0,
+            keys: Vec::new(),
+            stdin: b"a\0\xff".to_vec(),
+            expect: b"a\0\xff".to_vec(),
+            sent_eof: false,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+            progress: Vec::new(),
+            points: Vec::new(),
+            kill_at: None,
+            killed: Rc::new(Cell::new(false)),
+            exec_seen: Rc::new(Cell::new(false)),
+            max_read: usize::MAX,
+            idle_every: 0,
+            reads: 0,
             pk: Pk::default(),
         }
     }
@@ -284,7 +330,11 @@ impl Local for Me {
         self.trust
     }
     fn confirm_unknown(&mut self, key: &HostKey) -> Trust {
-        assert_eq!(self.keys.last(), Some(key), "confirms the key it was asked about");
+        assert_eq!(
+            self.keys.last(),
+            Some(key),
+            "confirms the key it was asked about"
+        );
         assert_eq!(self.asked, 0, "before any credential");
         self.confirmed += 1;
         self.confirm
@@ -295,18 +345,30 @@ impl Local for Me {
     }
     fn sign(&mut self, r: &SignRequest<'_>) -> Result<Signed, Credential> {
         self.pk.sign_calls += 1;
-        self.pk.requests.push((r.session_id, r.username.to_string(), r.message_sha256));
+        self.pk
+            .requests
+            .push((r.session_id, r.username.to_string(), r.message_sha256));
         let public = test_public();
-        let input = |session: &[u8; 32], user: &str| userauth::signing_input(session, user, &public).unwrap();
+        let input = |session: &[u8; 32], user: &str| {
+            userauth::signing_input(session, user, &public).unwrap()
+        };
         let (signed, reported) = match self.pk.sign {
             Sign::Refuse(credential) => return Err(credential),
             Sign::Good => (input(&r.session_id, r.username), r.message_sha256),
             Sign::OtherSession => (input(&[0xAB; 32], r.username), r.message_sha256),
             Sign::OtherUser => (input(&r.session_id, "someone"), r.message_sha256),
             Sign::WrongDigest => (input(&r.session_id, r.username), [0x77; 32]),
-            Sign::Garbage => return Ok(Signed { signature: [0x11; 64], message_sha256: r.message_sha256 }),
+            Sign::Garbage => {
+                return Ok(Signed {
+                    signature: [0x11; 64],
+                    message_sha256: r.message_sha256,
+                });
+            }
         };
-        Ok(Signed { signature: test_key().sign(&signed).to_bytes(), message_sha256: reported })
+        Ok(Signed {
+            signature: test_key().sign(&signed).to_bytes(),
+            message_sha256: reported,
+        })
     }
     fn password(&mut self, secret: &mut String) -> bool {
         self.asked += 1;
@@ -329,7 +391,11 @@ impl Local for Me {
             return Input::Eof;
         }
         // Once the echo and the stderr line are back, end the session locally.
-        if self.stdout.len() == 4 + self.expect.len() && !self.stderr.is_empty() { Input::Disconnect } else { Input::Idle }
+        if self.stdout.len() == 4 + self.expect.len() && !self.stderr.is_empty() {
+            Input::Disconnect
+        } else {
+            Input::Idle
+        }
     }
     fn stdout(&mut self, data: &[u8]) {
         self.stdout.extend_from_slice(data);
@@ -343,7 +409,10 @@ impl Local for Me {
     fn progress(&mut self, phase: Phase, dispatch: Dispatch) {
         if dispatch == Dispatch::MayHaveRun && self.progress.last() != Some(&(phase, dispatch)) {
             // Write-ahead: recorded before the server can have seen the request.
-            assert!(!self.exec_seen.get(), "MayHaveRun after the request was sent");
+            assert!(
+                !self.exec_seen.get(),
+                "MayHaveRun after the request was sent"
+            );
         }
         self.progress.push((phase, dispatch));
     }
@@ -358,7 +427,14 @@ impl Local for Me {
 }
 
 fn exec(t: &mut ToServer, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
-    run(t, me, "tester", AuthKind::Password, &Mode::Exec("cmd".into()), policy)
+    run(
+        t,
+        me,
+        "tester",
+        AuthKind::Password,
+        &Mode::Exec("cmd".into()),
+        policy,
+    )
 }
 
 const PROD: &RekeyPolicy = &RekeyPolicy::PRODUCTION;
@@ -369,9 +445,15 @@ fn untrusted_host_key_ends_before_any_password() {
         let mut t = ToServer::new();
         let mut me = Me::new(trust, "right");
         let out = exec(&mut t, &mut me, PROD);
-        assert!(matches!(out.ending, Ending::HostKey(got, _) if got == trust), "{out:?}");
+        assert!(
+            matches!(out.ending, Ending::HostKey(got, _) if got == trust),
+            "{out:?}"
+        );
         // A known-different or unavailable answer never prompts.
-        assert_eq!((me.asked, me.confirmed, out.dispatch), (0, 0, Dispatch::NotSent));
+        assert_eq!(
+            (me.asked, me.confirmed, out.dispatch),
+            (0, 0, Dispatch::NotSent)
+        );
         assert_eq!(me.progress, [(Phase::Trust, Dispatch::NotSent)]);
         for _ in 0..20 {
             t.step();
@@ -383,13 +465,26 @@ fn untrusted_host_key_ends_before_any_password() {
 #[test]
 fn an_unknown_key_continues_only_after_a_stored_confirmation() {
     // Any confirmation outcome but KnownExact ends the session before any credential.
-    for confirm in [Trust::Refused, Trust::Expired, Trust::NoConfirmation, Trust::Mismatch, Trust::Unavailable, Trust::Unknown] {
+    for confirm in [
+        Trust::Refused,
+        Trust::Expired,
+        Trust::NoConfirmation,
+        Trust::Mismatch,
+        Trust::Unavailable,
+        Trust::Unknown,
+    ] {
         let mut t = ToServer::new();
         let mut me = Me::new(Trust::Unknown, "right");
         me.confirm = confirm;
         let out = exec(&mut t, &mut me, PROD);
-        assert!(matches!(out.ending, Ending::HostKey(got, _) if got == confirm), "{out:?}");
-        assert_eq!((me.confirmed, me.asked, out.dispatch), (1, 0, Dispatch::NotSent));
+        assert!(
+            matches!(out.ending, Ending::HostKey(got, _) if got == confirm),
+            "{out:?}"
+        );
+        assert_eq!(
+            (me.confirmed, me.asked, out.dispatch),
+            (1, 0, Dispatch::NotSent)
+        );
         for _ in 0..20 {
             t.step();
         }
@@ -400,7 +495,10 @@ fn an_unknown_key_continues_only_after_a_stored_confirmation() {
     let mut me = Me::new(Trust::Unknown, "right");
     me.confirm = Trust::KnownExact;
     let out = exec(&mut t, &mut me, PROD);
-    assert_eq!((out.ending, out.dispatch), (Ending::Disconnected, Dispatch::Accepted));
+    assert_eq!(
+        (out.ending, out.dispatch),
+        (Ending::Disconnected, Dispatch::Accepted)
+    );
     assert_eq!((me.confirmed, me.asked, t.seen.passwords), (1, 1, 1));
     assert_eq!(t.seen.command.as_deref(), Some("cmd"));
 }
@@ -411,7 +509,10 @@ fn wrong_password_is_tried_once_and_nothing_runs() {
     let mut me = Me::new(Trust::KnownExact, "wrong");
     let out = exec(&mut t, &mut me, PROD);
     assert_eq!(out.ending, Ending::Auth, "{out:?}");
-    assert_eq!((me.asked, t.seen.passwords, out.dispatch), (1, 1, Dispatch::NotSent));
+    assert_eq!(
+        (me.asked, t.seen.passwords, out.dispatch),
+        (1, 1, Dispatch::NotSent)
+    );
     assert_eq!(t.seen.command, None);
 }
 
@@ -420,20 +521,43 @@ fn exec_sends_exact_command_keeps_streams_apart_and_reports_lifecycle_write_ahea
     let mut t = ToServer::new();
     let mut me = Me::new(Trust::KnownExact, "right").wired(&t);
     let cmd = "printf 'x y'; exit 7 # \u{e9}";
-    let out = run(&mut t, &mut me, "tester", AuthKind::Password, &Mode::Exec(cmd.into()), PROD);
+    let out = run(
+        &mut t,
+        &mut me,
+        "tester",
+        AuthKind::Password,
+        &Mode::Exec(cmd.into()),
+        PROD,
+    );
     assert_eq!(out.ending, Ending::Disconnected, "{out:?}");
     assert_eq!((out.dispatch, out.rekeys), (Dispatch::Accepted, 0));
     assert_eq!(t.seen.command.as_deref(), Some(cmd));
     assert_eq!(t.seen.stdin, b"a\0\xff");
-    assert!(t.seen.stdin_eof || { for _ in 0..20 { t.step(); } t.seen.stdin_eof });
+    assert!(
+        t.seen.stdin_eof || {
+            for _ in 0..20 {
+                t.step();
+            }
+            t.seen.stdin_eof
+        }
+    );
     assert_eq!(me.stdout, b"out:a\0\xff");
     assert_eq!(me.stderr, b"err!");
     assert_eq!(me.keys.len(), 1);
-    assert_eq!(me.progress, [
-        (Phase::Trust, Dispatch::NotSent), (Phase::Auth, Dispatch::NotSent), (Phase::Request, Dispatch::NotSent),
-        (Phase::Request, Dispatch::MayHaveRun), (Phase::Running, Dispatch::Accepted),
-    ]);
-    assert_eq!(me.points, [Point::BeforeRequest, Point::RequestSent, Point::Accepted]);
+    assert_eq!(
+        me.progress,
+        [
+            (Phase::Trust, Dispatch::NotSent),
+            (Phase::Auth, Dispatch::NotSent),
+            (Phase::Request, Dispatch::NotSent),
+            (Phase::Request, Dispatch::MayHaveRun),
+            (Phase::Running, Dispatch::Accepted),
+        ]
+    );
+    assert_eq!(
+        me.points,
+        [Point::BeforeRequest, Point::RequestSent, Point::Accepted]
+    );
 }
 
 #[test]
@@ -441,17 +565,37 @@ fn a_silent_peer_times_out_before_anything_is_sent() {
     vissh::install_entropy(os_entropy);
     struct Silent(u32);
     impl Transport for Silent {
-        fn send(&mut self, d: &[u8]) -> Result<usize, TransportError> { Ok(d.len()) }
-        fn recv(&mut self, _: &mut [u8]) -> Result<usize, TransportError> { Ok(0) }
+        fn send(&mut self, d: &[u8]) -> Result<usize, TransportError> {
+            Ok(d.len())
+        }
+        fn recv(&mut self, _: &mut [u8]) -> Result<usize, TransportError> {
+            Ok(0)
+        }
         fn idle(&mut self) -> Result<(), TransportError> {
             self.0 += 1;
-            if self.0 > 5 { Err(TransportError::TimedOut) } else { Ok(()) }
+            if self.0 > 5 {
+                Err(TransportError::TimedOut)
+            } else {
+                Ok(())
+            }
         }
-        fn now_ms(&mut self) -> u64 { 0 }
+        fn now_ms(&mut self) -> u64 {
+            0
+        }
     }
     let mut me = Me::new(Trust::KnownExact, "right");
-    let out = run(&mut Silent(0), &mut me, "tester", AuthKind::Password, &Mode::Exec("true".into()), PROD);
-    assert_eq!((out.ending, out.dispatch, me.keys.len()), (Ending::TimedOut, Dispatch::NotSent, 0));
+    let out = run(
+        &mut Silent(0),
+        &mut me,
+        "tester",
+        AuthKind::Password,
+        &Mode::Exec("true".into()),
+        PROD,
+    );
+    assert_eq!(
+        (out.ending, out.dispatch, me.keys.len()),
+        (Ending::TimedOut, Dispatch::NotSent, 0)
+    );
 }
 
 #[test]
@@ -461,17 +605,43 @@ fn a_stalled_key_exchange_ends_at_its_own_deadline() {
     // per-KEX deadline can end this (the clock advances one ms per reading).
     struct Stalled(u64);
     impl Transport for Stalled {
-        fn send(&mut self, d: &[u8]) -> Result<usize, TransportError> { Ok(d.len()) }
-        fn recv(&mut self, _: &mut [u8]) -> Result<usize, TransportError> { Ok(0) }
-        fn idle(&mut self) -> Result<(), TransportError> { Ok(()) }
-        fn now_ms(&mut self) -> u64 { self.0 += 1; self.0 }
+        fn send(&mut self, d: &[u8]) -> Result<usize, TransportError> {
+            Ok(d.len())
+        }
+        fn recv(&mut self, _: &mut [u8]) -> Result<usize, TransportError> {
+            Ok(0)
+        }
+        fn idle(&mut self) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn now_ms(&mut self) -> u64 {
+            self.0 += 1;
+            self.0
+        }
     }
     let mut me = Me::new(Trust::KnownExact, "right");
-    let policy = RekeyPolicy { kex_ms: 500, ..RekeyPolicy::PRODUCTION };
+    let policy = RekeyPolicy {
+        kex_ms: 500,
+        ..RekeyPolicy::PRODUCTION
+    };
     let mut stalled = Stalled(0);
-    let out = run(&mut stalled, &mut me, "tester", AuthKind::Password, &Mode::Exec("true".into()), &policy);
-    assert_eq!((out.ending, out.dispatch), (Ending::TimedOut, Dispatch::NotSent));
-    assert!(stalled.0 >= 500 && stalled.0 < 10_000, "ended at the KEX deadline, clock {}", stalled.0);
+    let out = run(
+        &mut stalled,
+        &mut me,
+        "tester",
+        AuthKind::Password,
+        &Mode::Exec("true".into()),
+        &policy,
+    );
+    assert_eq!(
+        (out.ending, out.dispatch),
+        (Ending::TimedOut, Dispatch::NotSent)
+    );
+    assert!(
+        stalled.0 >= 500 && stalled.0 < 10_000,
+        "ended at the KEX deadline, clock {}",
+        stalled.0
+    );
 }
 
 /// Enough stdin to cross the lowered thresholds in both directions (it is echoed).
@@ -482,15 +652,24 @@ fn bulk() -> Vec<u8> {
 #[test]
 fn rekey_on_bytes_and_on_packets_keeps_the_session_and_its_bytes() {
     let lowered = [
-        RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 },
+        RekeyLimits {
+            bytes: 8 * 1024,
+            packets: 1 << 30,
+        },
         // The in-memory peer echoes in 256-byte packets (about 640 inbound packets); up to
         // a 64 KiB window of them is in flight when the threshold is crossed.
-        RekeyLimits { bytes: 1 << 30, packets: 200 },
+        RekeyLimits {
+            bytes: 1 << 30,
+            packets: 200,
+        },
     ];
     for limits in lowered {
         let mut t = ToServer::new();
         let mut me = Me::new(Trust::KnownExact, "right").with_stdin(bulk());
-        let policy = RekeyPolicy { limits, ..RekeyPolicy::PRODUCTION };
+        let policy = RekeyPolicy {
+            limits,
+            ..RekeyPolicy::PRODUCTION
+        };
         let out = exec(&mut t, &mut me, &policy);
         assert_eq!(out.ending, Ending::Disconnected, "{limits:?} {out:?}");
         assert!(out.rekeys >= 1, "{limits:?}: no rekey");
@@ -498,9 +677,19 @@ fn rekey_on_bytes_and_on_packets_keeps_the_session_and_its_bytes() {
         assert_eq!(me.keys.len(), 1);
         assert_eq!(&me.stdout[4..], &bulk()[..]);
         assert_eq!(t.seen.stdin, bulk());
-        assert!(me.points.iter().filter(|p| **p == Point::RekeyStart).count() as u32 >= out.rekeys);
+        assert!(
+            me.points
+                .iter()
+                .filter(|p| **p == Point::RekeyStart)
+                .count() as u32
+                >= out.rekeys
+        );
         // Bounded local buffers: inbound pending at most one transport read, reads at most one chunk.
-        assert!(out.peaks.pending <= 2048 && out.peaks.chunk <= CHUNK && out.peaks.chunk > 0, "{:?}", out.peaks);
+        assert!(
+            out.peaks.pending <= 2048 && out.peaks.chunk <= CHUNK && out.peaks.chunk > 0,
+            "{:?}",
+            out.peaks
+        );
     }
 }
 
@@ -509,17 +698,32 @@ fn rekey_on_age_and_at_the_peers_request_with_the_same_host_key() {
     // Age: the embedder's clock (one ms per reading) passes the lowered age.
     let mut t = ToServer::new();
     let mut me = Me::new(Trust::KnownExact, "right").with_stdin(bulk());
-    let policy = RekeyPolicy { max_age_ms: 50, ..RekeyPolicy::PRODUCTION };
+    let policy = RekeyPolicy {
+        max_age_ms: 50,
+        ..RekeyPolicy::PRODUCTION
+    };
     let out = exec(&mut t, &mut me, &policy);
     assert_eq!(out.ending, Ending::Disconnected, "{out:?}");
     assert!(out.rekeys >= 1, "{out:?}");
     assert_eq!(me.keys.len(), 1);
     // The peer rekeys (its own lowered limits); simultaneous when both sides are low.
-    for client in [RekeyLimits::PRODUCTION, RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 }] {
+    for client in [
+        RekeyLimits::PRODUCTION,
+        RekeyLimits {
+            bytes: 8 * 1024,
+            packets: 1 << 30,
+        },
+    ] {
         let mut t = ToServer::new();
-        t.srv.set_rekey_limits(RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 });
+        t.srv.set_rekey_limits(RekeyLimits {
+            bytes: 8 * 1024,
+            packets: 1 << 30,
+        });
         let mut me = Me::new(Trust::KnownExact, "right").with_stdin(bulk());
-        let policy = RekeyPolicy { limits: client, ..RekeyPolicy::PRODUCTION };
+        let policy = RekeyPolicy {
+            limits: client,
+            ..RekeyPolicy::PRODUCTION
+        };
         let out = exec(&mut t, &mut me, &policy);
         assert_eq!(out.ending, Ending::Disconnected, "{client:?} {out:?}");
         assert!(out.rekeys >= 1);
@@ -532,11 +736,22 @@ fn a_changed_host_key_on_rekey_is_refused_without_asking_the_trust_store() {
     let mut t = ToServer::new();
     t.next_key = Some(SignKey::generate(KeyType::Ed25519, None).unwrap());
     let mut me = Me::new(Trust::KnownExact, "right").with_stdin(bulk());
-    let policy = RekeyPolicy { limits: RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 }, ..RekeyPolicy::PRODUCTION };
+    let policy = RekeyPolicy {
+        limits: RekeyLimits {
+            bytes: 8 * 1024,
+            packets: 1 << 30,
+        },
+        ..RekeyPolicy::PRODUCTION
+    };
     let out = exec(&mut t, &mut me, &policy);
-    let Ending::HostKey(Trust::Mismatch, offered) = &out.ending else { panic!("{out:?}") };
+    let Ending::HostKey(Trust::Mismatch, offered) = &out.ending else {
+        panic!("{out:?}")
+    };
     assert_ne!(Some(offered), me.keys.first());
-    assert_eq!((me.keys.len(), out.dispatch, out.rekeys), (1, Dispatch::Accepted, 0));
+    assert_eq!(
+        (me.keys.len(), out.dispatch, out.rekeys),
+        (1, Dispatch::Accepted, 0)
+    );
 }
 
 #[test]
@@ -550,12 +765,20 @@ fn interruption_at_each_point_reports_dispatch_and_never_replays() {
         let mut me = Me::new(Trust::KnownExact, "right").wired(&t);
         me.kill_at = Some(point);
         let out = exec(&mut t, &mut me, PROD);
-        assert_eq!((out.ending.clone(), out.dispatch), (Ending::TransportLost, dispatch), "{point:?}");
+        assert_eq!(
+            (out.ending.clone(), out.dispatch),
+            (Ending::TransportLost, dispatch),
+            "{point:?}"
+        );
         assert!(!out.stdout_complete && !out.stderr_complete);
         // The request reached the server at most once and was never resent. At
         // RequestSent the frame exists but was never written: the record still says it
         // may have run, though this server never saw it.
-        assert_eq!(t.seen.execs, u32::from(point == Point::Accepted), "{point:?}");
+        assert_eq!(
+            t.seen.execs,
+            u32::from(point == Point::Accepted),
+            "{point:?}"
+        );
         assert_eq!(me.points.last(), Some(&point));
     }
 }
@@ -569,7 +792,14 @@ fn pk_server() -> ToServer {
 }
 
 fn login_with(t: &mut ToServer, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
-    run(t, me, "tester", AuthKind::PublicKey, &Mode::Exec("cmd".into()), policy)
+    run(
+        t,
+        me,
+        "tester",
+        AuthKind::PublicKey,
+        &Mode::Exec("cmd".into()),
+        policy,
+    )
 }
 
 fn login(t: &mut ToServer, me: &mut Me) -> vissh::session::Outcome {
@@ -577,11 +807,19 @@ fn login(t: &mut ToServer, me: &mut Me) -> vissh::session::Outcome {
 }
 
 /// The login stopped before the server decided: nothing ran, no password was asked.
-fn assert_refused_locally(out: &vissh::session::Outcome, me: &Me, t: &ToServer, credential: Credential) {
+fn assert_refused_locally(
+    out: &vissh::session::Outcome,
+    me: &Me,
+    t: &ToServer,
+    credential: Credential,
+) {
     assert_eq!(out.ending, Ending::Credential(credential), "{out:?}");
     assert_eq!(out.dispatch, Dispatch::NotSent);
     assert_eq!(me.progress.last(), Some(&(Phase::Auth, Dispatch::NotSent)));
-    assert_eq!((me.asked, t.seen.passwords, t.seen.command.as_deref()), (0, 0, None));
+    assert_eq!(
+        (me.asked, t.seen.passwords, t.seen.command.as_deref()),
+        (0, 0, None)
+    );
 }
 
 #[test]
@@ -589,10 +827,22 @@ fn publickey_login_signs_through_the_local_side_and_the_server_verifies_the_sign
     let mut t = pk_server();
     let mut me = Me::new(Trust::KnownExact, "unused").wired(&t).publickey();
     let out = login(&mut t, &mut me);
-    assert_eq!((out.ending.clone(), out.dispatch), (Ending::Disconnected, Dispatch::Accepted), "{out:?}");
+    assert_eq!(
+        (out.ending.clone(), out.dispatch),
+        (Ending::Disconnected, Dispatch::Accepted),
+        "{out:?}"
+    );
     // One identity call, one signature, no password anywhere; the server saw the key
     // query and then the signed request (which it verified against its own session id).
-    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords), (1, 1, 0, 0));
+    assert_eq!(
+        (
+            me.pk.identity_calls,
+            me.pk.sign_calls,
+            me.asked,
+            t.seen.passwords
+        ),
+        (1, 1, 0, 0)
+    );
     assert_eq!(t.seen.pubkey_events, 2);
     assert_eq!(t.seen.command.as_deref(), Some("cmd"));
     assert_eq!(me.stdout, b"out:a\0\xff");
@@ -602,7 +852,14 @@ fn publickey_login_signs_through_the_local_side_and_the_server_verifies_the_sign
     assert_eq!((user.as_str(), *session == [0u8; 32]), ("tester", false));
     let input = userauth::signing_input(session, "tester", &test_public()).unwrap();
     assert_eq!(*digest, userauth::digest(&input));
-    assert_eq!(&me.progress[..3], [(Phase::Trust, Dispatch::NotSent), (Phase::Auth, Dispatch::NotSent), (Phase::Request, Dispatch::NotSent)]);
+    assert_eq!(
+        &me.progress[..3],
+        [
+            (Phase::Trust, Dispatch::NotSent),
+            (Phase::Auth, Dispatch::NotSent),
+            (Phase::Request, Dispatch::NotSent)
+        ]
+    );
     assert_eq!(me.keys.len(), 1);
 }
 
@@ -613,7 +870,9 @@ fn a_signature_for_another_session_or_user_never_reaches_the_server() {
     // is never sent (the server saw only the key query) and no password is offered.
     for sign in [Sign::OtherSession, Sign::OtherUser, Sign::Garbage] {
         let mut t = pk_server();
-        let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(sign);
+        let mut me = Me::new(Trust::KnownExact, "right")
+            .publickey()
+            .signing(sign);
         let out = login(&mut t, &mut me);
         assert_refused_locally(&out, &me, &t, Credential::BadSignature);
         assert_eq!((me.pk.sign_calls, t.seen.pubkey_events), (1, 1), "{sign:?}");
@@ -623,7 +882,9 @@ fn a_signature_for_another_session_or_user_never_reaches_the_server() {
 #[test]
 fn a_digest_of_other_bytes_is_an_input_mismatch_before_anything_is_sent() {
     let mut t = pk_server();
-    let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(Sign::WrongDigest);
+    let mut me = Me::new(Trust::KnownExact, "right")
+        .publickey()
+        .signing(Sign::WrongDigest);
     let out = login(&mut t, &mut me);
     assert_refused_locally(&out, &me, &t, Credential::InputMismatch);
     assert_eq!((me.pk.sign_calls, t.seen.pubkey_events), (1, 1));
@@ -631,21 +892,40 @@ fn a_digest_of_other_bytes_is_an_input_mismatch_before_anything_is_sent() {
 
 #[test]
 fn a_refusal_of_identity_or_signing_ends_the_login_with_that_credential() {
-    for credential in [Credential::UnknownIdentity, Credential::Denied, Credential::Unavailable, Credential::Protocol] {
+    for credential in [
+        Credential::UnknownIdentity,
+        Credential::Denied,
+        Credential::Unavailable,
+        Credential::Protocol,
+    ] {
         let mut t = pk_server();
         let mut me = Me::new(Trust::KnownExact, "right");
         me.pk.identity = Some(Err(credential));
         let out = login(&mut t, &mut me);
         assert_refused_locally(&out, &me, &t, credential);
         // No key was offered: the server never saw a publickey request.
-        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 0, 0));
+        assert_eq!(
+            (me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events),
+            (1, 0, 0)
+        );
     }
-    for credential in [Credential::UnlockCancelled, Credential::UnlockFailed, Credential::UnlockLocked, Credential::Timeout, Credential::UnlockNeedsTerminal] {
+    for credential in [
+        Credential::UnlockCancelled,
+        Credential::UnlockFailed,
+        Credential::UnlockLocked,
+        Credential::Timeout,
+        Credential::UnlockNeedsTerminal,
+    ] {
         let mut t = pk_server();
-        let mut me = Me::new(Trust::KnownExact, "right").publickey().signing(Sign::Refuse(credential));
+        let mut me = Me::new(Trust::KnownExact, "right")
+            .publickey()
+            .signing(Sign::Refuse(credential));
         let out = login(&mut t, &mut me);
         assert_refused_locally(&out, &me, &t, credential);
-        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 1, 1));
+        assert_eq!(
+            (me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events),
+            (1, 1, 1)
+        );
     }
     // A key that is not a valid curve point is refused as a protocol error.
     let mut t = pk_server();
@@ -663,7 +943,16 @@ fn a_server_without_publickey_ends_auth_with_no_identity_and_no_password_prompt(
     let out = login(&mut t, &mut me);
     assert_eq!(out.ending, Ending::Auth, "{out:?}");
     assert_eq!(out.dispatch, Dispatch::NotSent);
-    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (0, 0, 0, 0, 0));
+    assert_eq!(
+        (
+            me.pk.identity_calls,
+            me.pk.sign_calls,
+            me.asked,
+            t.seen.passwords,
+            t.seen.pubkey_events
+        ),
+        (0, 0, 0, 0, 0)
+    );
 }
 
 #[test]
@@ -674,7 +963,16 @@ fn a_server_that_does_not_know_the_key_never_costs_a_signature_or_a_password() {
     assert_eq!(out.ending, Ending::Auth, "{out:?}");
     assert_eq!(out.dispatch, Dispatch::NotSent);
     // The key was offered once; `sign` (the passphrase prompt) was never reached.
-    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (1, 0, 0, 0, 1));
+    assert_eq!(
+        (
+            me.pk.identity_calls,
+            me.pk.sign_calls,
+            me.asked,
+            t.seen.passwords,
+            t.seen.pubkey_events
+        ),
+        (1, 0, 0, 0, 1)
+    );
 }
 
 #[test]
@@ -685,19 +983,37 @@ fn a_refused_signature_is_tried_once_and_nothing_else_is_offered() {
     let out = login(&mut t, &mut me);
     assert_eq!(out.ending, Ending::Auth, "{out:?}");
     assert_eq!(out.dispatch, Dispatch::NotSent);
-    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked, t.seen.passwords, t.seen.pubkey_events), (1, 1, 0, 0, 2));
+    assert_eq!(
+        (
+            me.pk.identity_calls,
+            me.pk.sign_calls,
+            me.asked,
+            t.seen.passwords,
+            t.seen.pubkey_events
+        ),
+        (1, 1, 0, 0, 2)
+    );
     assert_eq!(t.seen.command, None);
 }
 
 #[test]
 fn an_untrusted_or_changed_host_key_never_reaches_identity_or_sign() {
-    for (trust, confirm) in [(Trust::Mismatch, Trust::Refused), (Trust::Denied, Trust::Refused), (Trust::Unavailable, Trust::Refused), (Trust::Unknown, Trust::Refused), (Trust::Unknown, Trust::NoConfirmation)] {
+    for (trust, confirm) in [
+        (Trust::Mismatch, Trust::Refused),
+        (Trust::Denied, Trust::Refused),
+        (Trust::Unavailable, Trust::Refused),
+        (Trust::Unknown, Trust::Refused),
+        (Trust::Unknown, Trust::NoConfirmation),
+    ] {
         let mut t = pk_server();
         let mut me = Me::new(trust, "right").publickey();
         me.confirm = confirm;
         let out = login(&mut t, &mut me);
         assert!(matches!(out.ending, Ending::HostKey(..)), "{out:?}");
-        assert_eq!((me.pk.identity_calls, me.pk.sign_calls, me.asked), (0, 0, 0));
+        assert_eq!(
+            (me.pk.identity_calls, me.pk.sign_calls, me.asked),
+            (0, 0, 0)
+        );
         for _ in 0..20 {
             t.step();
         }
@@ -710,22 +1026,44 @@ fn password_mode_with_both_methods_offered_never_touches_the_key() {
     let mut t = pk_server();
     let mut me = Me::new(Trust::KnownExact, "right").wired(&t).publickey();
     let out = exec(&mut t, &mut me, PROD);
-    assert_eq!((out.ending, out.dispatch), (Ending::Disconnected, Dispatch::Accepted));
+    assert_eq!(
+        (out.ending, out.dispatch),
+        (Ending::Disconnected, Dispatch::Accepted)
+    );
     // `Pubkey`/`AgentSign` skipped, the password asked once.
     assert_eq!((me.asked, t.seen.passwords), (1, 1));
-    assert_eq!((me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (0, 0, 0));
+    assert_eq!(
+        (me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events),
+        (0, 0, 0)
+    );
 }
 
 #[test]
 fn a_publickey_session_rekeys_without_a_second_authentication() {
     let mut t = pk_server();
-    let mut me = Me::new(Trust::KnownExact, "right").publickey().with_stdin(bulk());
-    let policy = RekeyPolicy { limits: RekeyLimits { bytes: 8 * 1024, packets: 1 << 30 }, ..RekeyPolicy::PRODUCTION };
+    let mut me = Me::new(Trust::KnownExact, "right")
+        .publickey()
+        .with_stdin(bulk());
+    let policy = RekeyPolicy {
+        limits: RekeyLimits {
+            bytes: 8 * 1024,
+            packets: 1 << 30,
+        },
+        ..RekeyPolicy::PRODUCTION
+    };
     let out = login_with(&mut t, &mut me, &policy);
     assert_eq!(out.ending, Ending::Disconnected, "{out:?}");
     assert!(out.rekeys >= 1, "{out:?}");
     // The host key rule holds as in password mode: one trust decision, one signature.
-    assert_eq!((me.keys.len(), me.pk.identity_calls, me.pk.sign_calls, t.seen.pubkey_events), (1, 1, 1, 2));
+    assert_eq!(
+        (
+            me.keys.len(),
+            me.pk.identity_calls,
+            me.pk.sign_calls,
+            t.seen.pubkey_events
+        ),
+        (1, 1, 1, 2)
+    );
     assert_eq!(&me.stdout[4..], &bulk()[..]);
 }
 
@@ -736,9 +1074,23 @@ fn sunsets_own_message_equals_the_rfc_4252_construction_for_every_user_name_leng
     for user in ["u", "a.b_c-9", "tester", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] {
         let mut t = pk_server();
         let mut me = Me::new(Trust::KnownExact, "unused").wired(&t).publickey();
-        let out = run(&mut t, &mut me, user, AuthKind::PublicKey, &Mode::Exec("cmd".into()), PROD);
-        assert_eq!((out.ending.clone(), out.dispatch), (Ending::Disconnected, Dispatch::Accepted), "{user}: {out:?}");
-        assert_eq!((me.pk.requests[0].1.as_str(), t.seen.pubkey_events), (user, 2));
+        let out = run(
+            &mut t,
+            &mut me,
+            user,
+            AuthKind::PublicKey,
+            &Mode::Exec("cmd".into()),
+            PROD,
+        );
+        assert_eq!(
+            (out.ending.clone(), out.dispatch),
+            (Ending::Disconnected, Dispatch::Accepted),
+            "{user}: {out:?}"
+        );
+        assert_eq!(
+            (me.pk.requests[0].1.as_str(), t.seen.pubkey_events),
+            (user, 2)
+        );
     }
 }
 
@@ -759,7 +1111,12 @@ fn xorshift(s: &mut u64) -> u64 {
 
 /// Seeds per test: `VISSH_SEEDS` of them (default 16, `2000` for the soak) starting at `VISSH_SEED0`.
 fn seed_range() -> std::ops::Range<u64> {
-    let var = |k: &str, d: u64| std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+    let var = |k: &str, d: u64| {
+        std::env::var(k)
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(d)
+    };
     let start = var("VISSH_SEED0", 0);
     start..start + var("VISSH_SEEDS", 16)
 }
@@ -821,8 +1178,20 @@ impl Lossy {
         let mut t = ToServer::new();
         t.tolerant = true;
         Lossy {
-            t, rng: seed.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1, send_caps, recv_caps, fault: Fault::None, arm_at: 0, fired: false,
-            fail_send_after: None, fail_recv_after: None, accepted: 0, recv_calls: 0, sends: 0, partial: 0, zero: 0,
+            t,
+            rng: seed.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1,
+            send_caps,
+            recv_caps,
+            fault: Fault::None,
+            arm_at: 0,
+            fired: false,
+            fail_send_after: None,
+            fail_recv_after: None,
+            accepted: 0,
+            recv_calls: 0,
+            sends: 0,
+            partial: 0,
+            zero: 0,
         }
     }
     fn cap(&mut self, recv: bool) -> usize {
@@ -855,7 +1224,12 @@ impl Transport for Lossy {
         self.accepted += k as u64;
         let mut bytes = data[..k].to_vec();
         // Only a chunk that starts at a packet boundary (everything before was fully accepted).
-        if self.fault != Fault::None && !self.fired && k == data.len() && k >= 64 && self.t.seen.stdin.len() >= self.arm_at {
+        if self.fault != Fault::None
+            && !self.fired
+            && k == data.len()
+            && k >= 64
+            && self.t.seen.stdin.len() >= self.arm_at
+        {
             self.fired = true;
             match self.fault {
                 Fault::None => {}
@@ -891,7 +1265,14 @@ impl Transport for Lossy {
 }
 
 fn lossy_run(l: &mut Lossy, me: &mut Me, policy: &RekeyPolicy) -> vissh::session::Outcome {
-    run(l, me, "tester", AuthKind::Password, &Mode::Exec("cmd".into()), policy)
+    run(
+        l,
+        me,
+        "tester",
+        AuthKind::Password,
+        &Mode::Exec("cmd".into()),
+        policy,
+    )
 }
 
 /// The client of the lane's stdin: at most 512 bytes per read, an `Idle` every few reads.
@@ -903,14 +1284,30 @@ fn lane_stdin(me: Me, seed: u64) -> Me {
 }
 
 /// T-partial: one session of `len` bytes up and echoed back under the lane's partial policy.
-fn partial_session(seed: u64, len: usize, policy: &RekeyPolicy) -> (Lossy, vissh::session::Outcome) {
+fn partial_session(
+    seed: u64,
+    len: usize,
+    policy: &RekeyPolicy,
+) -> (Lossy, vissh::session::Outcome) {
     let blob = lane_blob(seed, len);
     let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
-    let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+    let mut me = lane_stdin(
+        Me::new(Trust::KnownExact, "right")
+            .wired(&l.t)
+            .with_stdin(blob.clone()),
+        seed,
+    );
     let out = lossy_run(&mut l, &mut me, policy);
     let ctx = format!(
         "seed {seed}: {out:?}; wire_err {:?}; sends {} partial {} zero {}; server stdin {} of {}; echo {} of {}",
-        l.t.wire_err, l.sends, l.partial, l.zero, l.t.seen.stdin.len(), blob.len(), me.stdout.len().saturating_sub(4), blob.len()
+        l.t.wire_err,
+        l.sends,
+        l.partial,
+        l.zero,
+        l.t.seen.stdin.len(),
+        blob.len(),
+        me.stdout.len().saturating_sub(4),
+        blob.len()
     );
     assert!(l.t.wire_err.is_none(), "{ctx}");
     assert_eq!(out.ending, Ending::Disconnected, "{ctx}");
@@ -928,18 +1325,29 @@ fn partial_acceptance_short_reads_and_idle_stdin_keep_every_byte_in_order() {
     let (mut sends, mut partial, mut zero) = (0u64, 0u64, 0u64);
     for seed in seed_range() {
         let (l, out) = partial_session(seed, 512 * 1024, PROD);
-        assert_eq!(out.rekeys, 0, "seed {seed}: no rekey in a lane-sized session");
+        assert_eq!(
+            out.rekeys, 0,
+            "seed {seed}: no rekey in a lane-sized session"
+        );
         sends += u64::from(l.sends);
         partial += u64::from(l.partial);
         zero += u64::from(l.zero);
     }
-    println!("T-partial: {n} seeds x 512 KiB clean; writes {sends}, partial {partial}, zero {zero}");
+    println!(
+        "T-partial: {n} seeds x 512 KiB clean; writes {sends}, partial {partial}, zero {zero}"
+    );
 }
 
 #[test]
 fn partial_acceptance_across_rekeys_keeps_every_byte_in_order() {
     let n = seed_range().count();
-    let policy = RekeyPolicy { limits: RekeyLimits { bytes: 24 * 1024, packets: 1 << 30 }, ..RekeyPolicy::PRODUCTION };
+    let policy = RekeyPolicy {
+        limits: RekeyLimits {
+            bytes: 24 * 1024,
+            packets: 1 << 30,
+        },
+        ..RekeyPolicy::PRODUCTION
+    };
     for seed in seed_range() {
         let (_, out) = partial_session(seed, 160 * 1024, &policy);
         assert!(out.rekeys >= 1, "seed {seed}: no rekey");
@@ -952,7 +1360,12 @@ fn faulted(fault: Fault, seed: u64) -> (Lossy, vissh::session::Outcome) {
     let mut l = Lossy::new(seed, &[usize::MAX], &[2048]);
     l.fault = fault;
     l.arm_at = 1024 + (seed as usize * 4099) % (96 * 1024);
-    let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(bulk()), seed);
+    let mut me = lane_stdin(
+        Me::new(Trust::KnownExact, "right")
+            .wired(&l.t)
+            .with_stdin(bulk()),
+        seed,
+    );
     let out = lossy_run(&mut l, &mut me, PROD);
     (l, out)
 }
@@ -987,11 +1400,24 @@ fn the_servers_first_error_tells_a_lost_packet_from_a_damaged_byte() {
         let mut in_range = 0;
         for seed in seed_range() {
             let (l, out) = faulted(fault, seed);
-            assert!(l.fired, "{fault:?} seed {seed}: never fired (session {out:?})");
-            let got = l.t.wire_err.as_ref().map(class).unwrap_or_else(|| "none".into());
-            if random_length && got != expect && (got.starts_with("SSHProto") || got == "BadDecrypt") {
+            assert!(
+                l.fired,
+                "{fault:?} seed {seed}: never fired (session {out:?})"
+            );
+            let got =
+                l.t.wire_err
+                    .as_ref()
+                    .map(class)
+                    .unwrap_or_else(|| "none".into());
+            if random_length
+                && got != expect
+                && (got.starts_with("SSHProto") || got == "BadDecrypt")
+            {
                 in_range += 1;
-                assert!(in_range <= in_range_allowed, "{fault:?} seed {seed}: {in_range} in-range lengths: {got}");
+                assert!(
+                    in_range <= in_range_allowed,
+                    "{fault:?} seed {seed}: {in_range} in-range lengths: {got}"
+                );
             } else {
                 assert_eq!(got, expect, "{fault:?} seed {seed}: {out:?}");
             }
@@ -1011,21 +1437,55 @@ fn a_transport_error_mid_stream_is_transport_lost_and_the_server_saw_a_prefix() 
         let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
         let limit = 2000 + (seed * 7919) % 150_000;
         l.fail_send_after = Some(limit);
-        let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+        let mut me = lane_stdin(
+            Me::new(Trust::KnownExact, "right")
+                .wired(&l.t)
+                .with_stdin(blob.clone()),
+            seed,
+        );
         let out = lossy_run(&mut l, &mut me, PROD);
-        assert_eq!(out.ending, Ending::TransportLost, "send limit {limit}: {out:?}");
-        assert!(l.t.wire_err.is_none(), "send limit {limit}: {:?}", l.t.wire_err);
+        assert_eq!(
+            out.ending,
+            Ending::TransportLost,
+            "send limit {limit}: {out:?}"
+        );
+        assert!(
+            l.t.wire_err.is_none(),
+            "send limit {limit}: {:?}",
+            l.t.wire_err
+        );
         assert_eq!(l.accepted, limit);
-        assert!(blob.starts_with(&l.t.seen.stdin), "send limit {limit}: server stdin is not a prefix of the input");
+        assert!(
+            blob.starts_with(&l.t.seen.stdin),
+            "send limit {limit}: server stdin is not a prefix of the input"
+        );
         // Reads: the transport fails after this many calls.
         let mut l = Lossy::new(seed, SEND_CAPS, RECV_CAPS);
         let calls = 20 + (seed as u32 * 37) % 200;
         l.fail_recv_after = Some(calls);
-        let mut me = lane_stdin(Me::new(Trust::KnownExact, "right").wired(&l.t).with_stdin(blob.clone()), seed);
+        let mut me = lane_stdin(
+            Me::new(Trust::KnownExact, "right")
+                .wired(&l.t)
+                .with_stdin(blob.clone()),
+            seed,
+        );
         let out = lossy_run(&mut l, &mut me, PROD);
-        assert_eq!(out.ending, Ending::TransportLost, "recv after {calls}: {out:?}");
-        assert!(l.t.wire_err.is_none(), "recv after {calls}: {:?}", l.t.wire_err);
-        assert!(blob.starts_with(&l.t.seen.stdin), "recv after {calls}: server stdin is not a prefix of the input");
+        assert_eq!(
+            out.ending,
+            Ending::TransportLost,
+            "recv after {calls}: {out:?}"
+        );
+        assert!(
+            l.t.wire_err.is_none(),
+            "recv after {calls}: {:?}",
+            l.t.wire_err
+        );
+        assert!(
+            blob.starts_with(&l.t.seen.stdin),
+            "recv after {calls}: server stdin is not a prefix of the input"
+        );
     }
-    println!("T-busy: {n} seeds, write and read errors end TransportLost with a prefix at the server");
+    println!(
+        "T-busy: {n} seeds, write and read errors end TransportLost with a prefix at the server"
+    );
 }

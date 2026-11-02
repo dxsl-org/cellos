@@ -10,11 +10,11 @@
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
-extern crate ostd;
 extern crate alloc;
+extern crate ostd;
 
-use api::display::PixelFormat;
 use alloc::string::String;
+use api::display::PixelFormat;
 use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::syscall::{sys_exit, sys_read_log, sys_yield};
 use ostd::typography::{is_combining_mark, FontFace, TextFonts};
@@ -281,7 +281,11 @@ struct Utf8Decoder {
 
 impl Utf8Decoder {
     const fn new() -> Self {
-        Self { bytes: [0; 4], len: 0, expected: 0 }
+        Self {
+            bytes: [0; 4],
+            len: 0,
+            expected: 0,
+        }
     }
 
     fn push(&mut self, byte: u8) -> [Option<char>; 2] {
@@ -315,7 +319,7 @@ impl Utf8Decoder {
 
         let c = match byte {
             0x00..=0x7f => Some(byte as char),
-            0xc2..=0xdf | 0xe0..=0xef | 0xf0..=0xf4 => {
+            0xc2..=0xf4 => {
                 self.bytes[0] = byte;
                 self.len = 1;
                 self.expected = match byte {
@@ -354,7 +358,10 @@ mod tests {
         let mut cluster = String::from("a");
         assert!(super::append_combining_mark(&mut cluster, '\u{302}'));
         assert!(super::append_combining_mark(&mut cluster, '\u{301}'));
-        assert_eq!(ostd::typography::normalized_chars(&cluster).collect::<String>(), "ấ");
+        assert_eq!(
+            ostd::typography::normalized_chars(&cluster).collect::<String>(),
+            "ấ"
+        );
         for _ in 0..10_000 {
             super::append_combining_mark(&mut cluster, '\u{301}');
         }
@@ -406,7 +413,10 @@ mod tests {
             (&[0xc0, 0xaf], "\u{fffd}\u{fffd}"),
             (&[0xe0, 0x80, 0x80], "\u{fffd}\u{fffd}\u{fffd}"),
             (&[0xed, 0xa0, 0x80], "\u{fffd}\u{fffd}\u{fffd}"),
-            (&[0xf4, 0x90, 0x80, 0x80], "\u{fffd}\u{fffd}\u{fffd}\u{fffd}"),
+            (
+                &[0xf4, 0x90, 0x80, 0x80],
+                "\u{fffd}\u{fffd}\u{fffd}\u{fffd}",
+            ),
             (&[0xf5, 0xff], "\u{fffd}\u{fffd}"),
             (&[0xe2, 0x82, b'A'], "\u{fffd}A"),
             (&[0xe2, 0x82, 0xc3, 0xa9], "\u{fffd}é"),

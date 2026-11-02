@@ -116,7 +116,12 @@ impl ViRetirementV1 {
         for (i, v) in head.iter().enumerate() {
             out[4 + i * 4..8 + i * 4].copy_from_slice(&v.to_le_bytes());
         }
-        let ids = [self.cell_id, self.generation, self.root_tid, self.remote_hart_mask];
+        let ids = [
+            self.cell_id,
+            self.generation,
+            self.root_tid,
+            self.remote_hart_mask,
+        ];
         for (i, v) in ids.iter().enumerate() {
             out[16 + i * 8..24 + i * 8].copy_from_slice(&v.to_le_bytes());
         }
@@ -144,7 +149,10 @@ impl ViRetirementV1 {
             return Err(RecordError::Length);
         }
         let le = |at: usize, n: usize| {
-            bytes[at..at + n].iter().rev().fold(0u64, |acc, b| acc << 8 | u64::from(*b))
+            bytes[at..at + n]
+                .iter()
+                .rev()
+                .fold(0u64, |acc, b| acc << 8 | u64::from(*b))
         };
         let record = Self {
             version: le(0, 2) as u16,

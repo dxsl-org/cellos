@@ -60,7 +60,10 @@ impl Text {
         }
         let mut bytes = [0; TEXT_MAX];
         bytes[..raw.len()].copy_from_slice(raw);
-        Some(Self { len: raw.len() as u8, bytes })
+        Some(Self {
+            len: raw.len() as u8,
+            bytes,
+        })
     }
     pub fn as_str(&self) -> &str {
         // Validated graphic ASCII on construction and decode.
@@ -107,15 +110,24 @@ impl CompletionV1 {
         f[2] = self.phase as u8;
         f[3] = self.dispatch as u8;
         f[4] = self.outcome as u8;
-        f[5] = u8::from(self.stdout_complete) | u8::from(self.stderr_complete) << 1 | u8::from(self.remote_status.is_some()) << 2;
+        f[5] = u8::from(self.stdout_complete)
+            | u8::from(self.stderr_complete) << 1
+            | u8::from(self.remote_status.is_some()) << 2;
         f[6] = text_field(self.remote_signal, &mut f[12..44]);
         f[7] = text_field(self.error_code, &mut f[44..76]);
         f[8..12].copy_from_slice(&self.remote_status.unwrap_or(0).to_le_bytes());
         f
     }
 
+    // reason: the unit error is this public decoder's API; a malformed frame has
+    // no cause callers act on, and changing the type is a libs/api ABI change.
+    #[allow(clippy::result_unit_err)]
     pub fn decode(f: &[u8]) -> Result<Self, ()> {
-        if f.len() != FRAME_LEN || f[0] != VERSION || f[5] & !7 != 0 || f[76..].iter().any(|b| *b != 0) {
+        if f.len() != FRAME_LEN
+            || f[0] != VERSION
+            || f[5] & !7 != 0
+            || f[76..].iter().any(|b| *b != 0)
+        {
             return Err(());
         }
         let status = u32::from_le_bytes([f[8], f[9], f[10], f[11]]);
@@ -137,8 +149,12 @@ impl CompletionV1 {
 
     /// The record as one `key=value` line, fields in schema order.
     pub fn render(&self) -> String {
-        fn text(t: &Option<Text>) -> &str { t.as_ref().map_or("null", Text::as_str) }
-        let status = self.remote_status.map_or(String::from("null"), |n| format!("{n}"));
+        fn text(t: &Option<Text>) -> &str {
+            t.as_ref().map_or("null", Text::as_str)
+        }
+        let status = self
+            .remote_status
+            .map_or(String::from("null"), |n| format!("{n}"));
         format!(
             "schema={SCHEMA} schema_version={VERSION} mode={} phase={} dispatch={} outcome={} remote_status={status} \
 remote_signal={} error_code={} stdout_complete={} stderr_complete={}",
@@ -150,7 +166,10 @@ remote_signal={} error_code={} stdout_complete={} stderr_complete={}",
 
 /// The newest whole, valid frame in `bytes` (a partial trailing frame is ignored).
 pub fn last_frame(bytes: &[u8]) -> Option<CompletionV1> {
-    bytes.chunks_exact(FRAME_LEN).rev().find_map(|f| CompletionV1::decode(f).ok())
+    bytes
+        .chunks_exact(FRAME_LEN)
+        .rev()
+        .find_map(|f| CompletionV1::decode(f).ok())
 }
 
 #[cfg(test)]
@@ -159,15 +178,28 @@ mod tests {
 
     fn record() -> CompletionV1 {
         CompletionV1 {
-            mode: Mode::Exec, phase: Phase::Running, dispatch: Dispatch::Accepted, outcome: Outcome::RemoteExit,
-            remote_status: Some(300), remote_signal: None, error_code: Text::new("transport_lost"),
-            stdout_complete: false, stderr_complete: true,
+            mode: Mode::Exec,
+            phase: Phase::Running,
+            dispatch: Dispatch::Accepted,
+            outcome: Outcome::RemoteExit,
+            remote_status: Some(300),
+            remote_signal: None,
+            error_code: Text::new("transport_lost"),
+            stdout_complete: false,
+            stderr_complete: true,
         }
     }
 
     #[test]
     fn frames_round_trip_and_the_newest_whole_frame_wins() {
-        let first = CompletionV1 { phase: Phase::Request, dispatch: Dispatch::MayHaveRun, outcome: Outcome::Unknown, remote_status: None, error_code: None, ..record() };
+        let first = CompletionV1 {
+            phase: Phase::Request,
+            dispatch: Dispatch::MayHaveRun,
+            outcome: Outcome::Unknown,
+            remote_status: None,
+            error_code: None,
+            ..record()
+        };
         let mut ring = alloc::vec::Vec::new();
         ring.extend_from_slice(&first.encode());
         assert_eq!(last_frame(&ring), Some(first));
@@ -187,7 +219,16 @@ remote_status=300 remote_signal=null error_code=transport_lost stdout_complete=f
     fn malformed_frames_are_refused() {
         let good = record().encode();
         let mut cases = alloc::vec::Vec::new();
-        for (at, value) in [(0, 2), (1, 2), (2, 7), (3, 3), (4, 7), (5, 8), (7, 33), (79, 1)] {
+        for (at, value) in [
+            (0, 2),
+            (1, 2),
+            (2, 7),
+            (3, 3),
+            (4, 7),
+            (5, 8),
+            (7, 33),
+            (79, 1),
+        ] {
             let mut f = good;
             f[at] = value;
             cases.push(f);

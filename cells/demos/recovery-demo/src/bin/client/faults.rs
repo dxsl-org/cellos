@@ -11,7 +11,11 @@ use crate::driver::{fail, state_name, Client};
 
 fn expect_contained(step: &str, v: &api::retirement::ViRetirementV1) {
     if state_name(v) != "Contained" {
-        fail(&format!("{step}: retirement {} reasons={:#x}", state_name(v), v.reasons));
+        fail(&format!(
+            "{step}: retirement {} reasons={:#x}",
+            state_name(v),
+            v.reasons
+        ));
     }
 }
 
@@ -19,12 +23,19 @@ fn expect_contained(step: &str, v: &api::retirement::ViRetirementV1) {
 pub fn commit_faults(client: &mut Client) {
     let (base, _, _) = client.get();
     let old = client.worker;
-    if client.mutate(1001, METHOD_INC, 1, Fault::BeforeCommit).is_some() {
+    if client
+        .mutate(1001, METHOD_INC, 1, Fault::BeforeCommit)
+        .is_some()
+    {
         fail("E1: crashed worker replied");
     }
     expect_contained("E1", &client.await_replacement(old));
     match client.mutate(1001, METHOD_INC, 1, Fault::None) {
-        Some(Msg::Done { replayed: false, result, .. }) if result == base + 1 => {}
+        Some(Msg::Done {
+            replayed: false,
+            result,
+            ..
+        }) if result == base + 1 => {}
         other => fail(&format!("E1 resubmit: {other:?}")),
     }
     if client.get().0 != base + 1 {
@@ -33,12 +44,19 @@ pub fn commit_faults(client: &mut Client) {
     println(&format!("[recovery-client] E1 PASS fault-before-commit: old revision kept, resubmit applied once (counter {})", base + 1));
 
     let old = client.worker;
-    if client.mutate(1002, METHOD_INC, 1, Fault::AfterCommit).is_some() {
+    if client
+        .mutate(1002, METHOD_INC, 1, Fault::AfterCommit)
+        .is_some()
+    {
         fail("E2: crashed worker replied");
     }
     expect_contained("E2", &client.await_replacement(old));
     match client.mutate(1002, METHOD_INC, 1, Fault::None) {
-        Some(Msg::Done { replayed: true, result, .. }) if result == base + 2 => {}
+        Some(Msg::Done {
+            replayed: true,
+            result,
+            ..
+        }) if result == base + 2 => {}
         other => fail(&format!("E2 resubmit: {other:?}")),
     }
     if client.get().0 != base + 2 {
@@ -52,7 +70,10 @@ pub fn conflicts(client: &mut Client) {
     let before = client.get();
     for (step, method, amount) in [("E3", METHOD_INC, 5), ("E4", METHOD_ADD_TWICE, 1)] {
         match client.mutate(1002, method, amount, Fault::None) {
-            Some(Msg::Failed { refusal: Refusal::Conflict, .. }) => {}
+            Some(Msg::Failed {
+                refusal: Refusal::Conflict,
+                ..
+            }) => {}
             other => fail(&format!("{step}: {other:?}")),
         }
         if client.get() != before {
@@ -78,7 +99,10 @@ pub fn fenced_writer(client: &mut Client) {
         fail("E5: go");
     }
     match crate::common::recv_from(old, 400) {
-        Some(Msg::Failed { refusal: Refusal::StaleEpoch, .. }) => {}
+        Some(Msg::Failed {
+            refusal: Refusal::StaleEpoch,
+            ..
+        }) => {}
         other => fail(&format!("E5 delayed commit: {other:?}")),
     }
     expect_contained("E5", &client.await_replacement(old));
@@ -94,7 +118,10 @@ pub fn whole_cell(client: &mut Client) -> u64 {
     let v = client.crash(crash::SPIN, 0);
     expect_contained("E7", &v);
     if v.member_threads < 2 {
-        fail(&format!("E7: only {} member thread(s) retired", v.member_threads));
+        fail(&format!(
+            "E7: only {} member thread(s) retired",
+            v.member_threads
+        ));
     }
     println(&format!("[recovery-client] E7 PASS whole-Cell retirement: threads={} remote_harts={:#x} state=Contained",
         v.member_threads, v.remote_hart_mask));
@@ -110,7 +137,10 @@ pub fn abandoned_lock(client: &mut Client) {
     let before = client.get();
     let v = client.crash(crash::LOCK_AND_DIE, grant);
     if v.writable_borrows == 0 || v.reasons & api::retirement::reason::WRITABLE_BORROW == 0 {
-        fail(&format!("E10: writable borrow not reported ({:#x})", v.reasons));
+        fail(&format!(
+            "E10: writable borrow not reported ({:#x})",
+            v.reasons
+        ));
     }
     let status = client.status();
     if status.lock_word != 1 {

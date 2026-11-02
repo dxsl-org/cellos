@@ -27,7 +27,11 @@ static TLS_SOCKETS: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// All pointers must remain valid, exclusive, and point at the same socket set
 /// until `clear_tls_context` is called. No future may be polled after its socket
 /// has been removed.
-pub unsafe fn set_tls_context(iface: *mut Interface, device: *mut VirtioNetDevice, sockets: *mut ()) {
+pub unsafe fn set_tls_context(
+    iface: *mut Interface,
+    device: *mut VirtioNetDevice,
+    sockets: *mut (),
+) {
     TLS_IFACE.store(iface.cast(), Ordering::Relaxed);
     TLS_DEVICE.store(device.cast(), Ordering::Relaxed);
     TLS_SOCKETS.store(sockets, Ordering::Relaxed);

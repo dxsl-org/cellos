@@ -29,7 +29,9 @@ pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
         return;
     }
     #[cfg(cellos_p01_trace)]
-    for frame in &frames { frame.p01_quarantine(); }
+    for frame in &frames {
+        frame.p01_quarantine();
+    }
     log::error!(
         "[aspace] quarantining {} frame(s): {} — they will not be reused",
         count,
@@ -37,8 +39,10 @@ pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
     );
     let mut quarantined = QUARANTINED_FRAMES.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::DOMAIN_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DOMAIN_SHARED,
+    );
     quarantined.extend(frames);
 }
 
@@ -338,7 +342,10 @@ impl AddressSpaceBuilder {
         Ok(())
     }
     pub fn build(self) -> Result<Arc<AddressSpace>, AddressSpaceError> {
-        self.build_inner(#[cfg(cellos_p01_trace)] None)
+        self.build_inner(
+            #[cfg(cellos_p01_trace)]
+            None,
+        )
     }
 
     fn build_inner(
@@ -348,9 +355,14 @@ impl AddressSpaceBuilder {
         // Observe the actual Arc/header and retained Vec allocations. A fixture
         // root has shared source custody; launch supplies its finalized root owner.
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(owner,
-            if owner.is_some() { crate::memory::heap::p01_owner::DOMAIN_BACKING }
-            else { crate::memory::heap::p01_owner::DOMAIN_SHARED });
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            owner,
+            if owner.is_some() {
+                crate::memory::heap::p01_owner::DOMAIN_BACKING
+            } else {
+                crate::memory::heap::p01_owner::DOMAIN_SHARED
+            },
+        );
         // Every published private root carries the shared supervisor ranges.
         // Production callers ask for them through `map_registered_execution`;
         // a fixture that only wants a private mapping gets them here, because
@@ -494,9 +506,14 @@ pub struct AddressSpace {
 impl AddressSpace {
     #[cfg(cellos_p01_trace)]
     fn p01_creation(&self) -> crate::memory::heap::p01_owner::Creation {
-        crate::memory::heap::p01_owner::creation(self.p01_owner,
-            if self.p01_owner.is_some() { crate::memory::heap::p01_owner::DOMAIN_BACKING }
-            else { crate::memory::heap::p01_owner::DOMAIN_SHARED })
+        crate::memory::heap::p01_owner::creation(
+            self.p01_owner,
+            if self.p01_owner.is_some() {
+                crate::memory::heap::p01_owner::DOMAIN_BACKING
+            } else {
+                crate::memory::heap::p01_owner::DOMAIN_SHARED
+            },
+        )
     }
 
     pub fn identity(&self) -> DomainId {
@@ -1224,9 +1241,13 @@ pub fn create_cell_domain(
         builder.map_existing_user_page(va, phys, kind, flags)?;
     }
     #[cfg(cellos_p01_trace)]
-    { builder.build_inner(Some(owner)) }
+    {
+        builder.build_inner(Some(owner))
+    }
     #[cfg(not(cellos_p01_trace))]
-    { builder.build() }
+    {
+        builder.build()
+    }
 }
 
 impl Drop for AddressSpace {
@@ -1246,8 +1267,9 @@ impl Drop for AddressSpace {
             #[cfg(cellos_p01_trace)]
             let p01_owner = crate::p01_resources::owner_for_domain(self.identity.raw());
             #[cfg(cellos_p01_trace)]
-            let p01_obligation = p01_owner.and_then(|owner|
-                crate::p01_resources::obligation(owner, 6, ((frames.len() + 1) * PAGE_SIZE) as u64));
+            let p01_obligation = p01_owner.and_then(|owner| {
+                crate::p01_resources::obligation(owner, 6, ((frames.len() + 1) * PAGE_SIZE) as u64)
+            });
             #[cfg(feature = "test-hooks")]
             log::info!(
                 "[selftest] DOMAIN-FRAME-RELEASE: PASS tag={} frames={} quarantined={}",
@@ -1260,7 +1282,9 @@ impl Drop for AddressSpace {
             #[cfg(cellos_p01_trace)]
             {
                 crate::p01_resources::finish(p01_obligation, 1);
-                if let Some(owner) = p01_owner { crate::p01_resources::checked(owner, 6); }
+                if let Some(owner) = p01_owner {
+                    crate::p01_resources::checked(owner, 6);
+                }
             }
         } else {
             // The invalidation is unconfirmed, so the root and every frame behind

@@ -35,7 +35,10 @@ pub fn run() {
     let total: usize = pages.iter().map(|page| page.1.len()).sum();
     assert!(pages.len() >= 2 && total > MAX_INLINE_PAYLOAD);
     for (index, (flags, _)) in pages.iter().enumerate() {
-        assert_eq!(flags & vfs_dir_page::COMPLETE != 0, index + 1 == pages.len());
+        assert_eq!(
+            flags & vfs_dir_page::COMPLETE != 0,
+            index + 1 == pages.len()
+        );
         assert_eq!(flags & vfs_dir_page::CHANGED, 0);
     }
     let mut seen: Vec<Vec<u8>> = pages.iter().flat_map(|page| names_of(&page.1)).collect();
@@ -47,12 +50,19 @@ pub fn run() {
 
     assert!(vfs.write("/tmp/s72/created-after-open", b""));
     let pages = walk(&mut vfs, dir);
-    assert!(pages.iter().all(|(flags, _)| flags & vfs_dir_page::CHANGED != 0));
+    assert!(pages
+        .iter()
+        .all(|(flags, _)| flags & vfs_dir_page::CHANGED != 0));
     ostd::io::println("[vfs-dir-page] child-create-sets-changed PASS");
 
     let first = name(0);
     let mut resp = [0u8; IPC_BUF_SIZE];
-    let file = match handle(&mut vfs, CELL, &VfsRequest::OpenFileAt { dir, name: &first }, &mut resp) {
+    let file = match handle(
+        &mut vfs,
+        CELL,
+        &VfsRequest::OpenFileAt { dir, name: &first },
+        &mut resp,
+    ) {
         VfsResponse::FileHandle(file) => file,
         _ => panic!("open file"),
     };
@@ -75,8 +85,16 @@ fn walk(vfs: &mut VfsManager, dir: ViDirHandle) -> Vec<(u8, Vec<u8>)> {
     let mut cursor = 0;
     loop {
         let mut resp = [0u8; IPC_BUF_SIZE];
-        let VfsResponse::DirPage { next, flags, entries } =
-            handle(vfs, CELL, &VfsRequest::ListAtPage { dir, cursor }, &mut resp)
+        let VfsResponse::DirPage {
+            next,
+            flags,
+            entries,
+        } = handle(
+            vfs,
+            CELL,
+            &VfsRequest::ListAtPage { dir, cursor },
+            &mut resp,
+        )
         else {
             panic!("list page");
         };
@@ -90,5 +108,7 @@ fn walk(vfs: &mut VfsManager, dir: ViDirHandle) -> Vec<(u8, Vec<u8>)> {
 }
 
 fn names_of(page: &[u8]) -> Vec<Vec<u8>> {
-    entries(page).map(|entry| entry.expect("well-formed").name.as_bytes().to_vec()).collect()
+    entries(page)
+        .map(|entry| entry.expect("well-formed").name.as_bytes().to_vec())
+        .collect()
 }

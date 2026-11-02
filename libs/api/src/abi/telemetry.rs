@@ -65,7 +65,8 @@ pub mod header_flags {
     /// they are not instant-consistent with membership and CPU.
     pub const MEMORY_INTERVAL: u32 = 1 << 4;
     /// Every defined header flag.
-    pub const ALL: u32 = COMPLETE | CPU_AVAILABLE | SYSMEM_PRESENT | SYSMEM_DENIED | MEMORY_INTERVAL;
+    pub const ALL: u32 =
+        COMPLETE | CPU_AVAILABLE | SYSMEM_PRESENT | SYSMEM_DENIED | MEMORY_INTERVAL;
 }
 
 /// [`TelemetryCellV1::flags`].
@@ -277,7 +278,12 @@ impl TelemetryHeaderV1 {
         if self.scope != SCOPE_SYSTEM {
             return Err(TelemetryDecodeError::Scope(self.scope));
         }
-        let memory = [self.mem_total_frames, self.mem_used_frames, self.mem_free_frames, self.mem_page_size];
+        let memory = [
+            self.mem_total_frames,
+            self.mem_used_frames,
+            self.mem_free_frames,
+            self.mem_page_size,
+        ];
         let malformed = self.flags & !ALL != 0
             || self.provider_epoch == 0
             || self.sample_id == 0
@@ -287,7 +293,11 @@ impl TelemetryHeaderV1 {
             || (self.has(SYSMEM_PRESENT) && self.has(SYSMEM_DENIED))
             || (!self.has(SYSMEM_PRESENT) && memory.iter().any(|&word| word != 0))
             || (self.has(CPU_AVAILABLE) && self.capture_end_ns < self.capture_start_ns);
-        if malformed { Err(TelemetryDecodeError::Malformed) } else { Ok(()) }
+        if malformed {
+            Err(TelemetryDecodeError::Malformed)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -400,7 +410,11 @@ impl<'a> TelemetrySnapshot<'a> {
             return Err(TelemetryDecodeError::Length);
         }
         let split = HEADER_LEN + header.emitted_cells as usize * CELL_LEN;
-        let snapshot = Self { header, cells: &bytes[HEADER_LEN..split], tasks: &bytes[split..] };
+        let snapshot = Self {
+            header,
+            cells: &bytes[HEADER_LEN..split],
+            tasks: &bytes[split..],
+        };
         let mut previous = 0u64;
         for cell in snapshot.cells() {
             if !cell.valid() || cell.generation <= previous {
@@ -445,9 +459,21 @@ mod tests {
 
     #[test]
     fn layouts_match_the_documented_offsets() {
-        assert_eq!((size_of::<TelemetryHeaderV1>(), align_of::<TelemetryHeaderV1>()), (HEADER_LEN, 8));
-        assert_eq!((size_of::<TelemetryCellV1>(), align_of::<TelemetryCellV1>()), (CELL_LEN, 8));
-        assert_eq!((size_of::<TelemetryTaskV1>(), align_of::<TelemetryTaskV1>()), (TASK_LEN, 8));
+        assert_eq!(
+            (
+                size_of::<TelemetryHeaderV1>(),
+                align_of::<TelemetryHeaderV1>()
+            ),
+            (HEADER_LEN, 8)
+        );
+        assert_eq!(
+            (size_of::<TelemetryCellV1>(), align_of::<TelemetryCellV1>()),
+            (CELL_LEN, 8)
+        );
+        assert_eq!(
+            (size_of::<TelemetryTaskV1>(), align_of::<TelemetryTaskV1>()),
+            (TASK_LEN, 8)
+        );
         assert_eq!(offset_of!(TelemetryHeaderV1, online_cpus), 40);
         assert_eq!(offset_of!(TelemetryHeaderV1, mem_total_frames), 64);
         assert_eq!(offset_of!(TelemetryCellV1, task_count), 48);
@@ -475,19 +501,43 @@ mod tests {
     }
 
     fn cell(generation: u64) -> TelemetryCellV1 {
-        TelemetryCellV1 { cell_id: 3, generation, root_tid: 9, cpu_ns: 5, task_count: 1,
-            flags: cell_flags::CPU_AVAILABLE, name: encode_name("cell").0, ..TelemetryCellV1::default() }
+        TelemetryCellV1 {
+            cell_id: 3,
+            generation,
+            root_tid: 9,
+            cpu_ns: 5,
+            task_count: 1,
+            flags: cell_flags::CPU_AVAILABLE,
+            name: encode_name("cell").0,
+            ..TelemetryCellV1::default()
+        }
     }
 
     fn task(generation: u64, tid: u64) -> TelemetryTaskV1 {
-        TelemetryTaskV1 { tid, cell_id: 3, generation, cpu_ns: 5, state: task_state::RUNNING,
-            flags: task_flags::CPU_AVAILABLE, name: encode_name("task").0, ..TelemetryTaskV1::default() }
+        TelemetryTaskV1 {
+            tid,
+            cell_id: 3,
+            generation,
+            cpu_ns: 5,
+            state: task_state::RUNNING,
+            flags: task_flags::CPU_AVAILABLE,
+            name: encode_name("task").0,
+            ..TelemetryTaskV1::default()
+        }
     }
 
-    fn encode(header: &TelemetryHeaderV1, cells: &[TelemetryCellV1], tasks: &[TelemetryTaskV1]) -> alloc::vec::Vec<u8> {
+    fn encode(
+        header: &TelemetryHeaderV1,
+        cells: &[TelemetryCellV1],
+        tasks: &[TelemetryTaskV1],
+    ) -> alloc::vec::Vec<u8> {
         let mut out = alloc::vec::Vec::from(header.to_bytes());
-        cells.iter().for_each(|c| out.extend_from_slice(&c.to_bytes()));
-        tasks.iter().for_each(|t| out.extend_from_slice(&t.to_bytes()));
+        cells
+            .iter()
+            .for_each(|c| out.extend_from_slice(&c.to_bytes()));
+        tasks
+            .iter()
+            .for_each(|t| out.extend_from_slice(&t.to_bytes()));
         out
     }
 
@@ -506,11 +556,20 @@ mod tests {
     #[test]
     fn byte_count_must_match_the_emitted_rows() {
         let bytes = encode(&header(1, 0), &[cell(4)], &[]);
-        assert_eq!(TelemetrySnapshot::parse(&bytes[..bytes.len() - 1]).err(), Some(TelemetryDecodeError::Length));
-        assert_eq!(TelemetrySnapshot::parse(&bytes[..HEADER_LEN - 1]).err(), Some(TelemetryDecodeError::Short));
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes[..bytes.len() - 1]).err(),
+            Some(TelemetryDecodeError::Length)
+        );
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes[..HEADER_LEN - 1]).err(),
+            Some(TelemetryDecodeError::Short)
+        );
         let mut longer = bytes.clone();
         longer.push(0);
-        assert_eq!(TelemetrySnapshot::parse(&longer).err(), Some(TelemetryDecodeError::Length));
+        assert_eq!(
+            TelemetrySnapshot::parse(&longer).err(),
+            Some(TelemetryDecodeError::Length)
+        );
     }
 
     #[test]
@@ -518,19 +577,31 @@ mod tests {
         let mut h = header(1, 0);
         h.total_cells = 2;
         let bytes = encode(&h, &[cell(4)], &[]);
-        assert_eq!(TelemetrySnapshot::parse(&bytes).err(), Some(TelemetryDecodeError::Malformed));
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes).err(),
+            Some(TelemetryDecodeError::Malformed)
+        );
         h.flags &= !header_flags::COMPLETE;
         let bytes = encode(&h, &[cell(4)], &[]);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("explicitly truncated");
-        assert_eq!(snapshot.header().total_cells - snapshot.header().emitted_cells, 1);
+        assert_eq!(
+            snapshot.header().total_cells - snapshot.header().emitted_cells,
+            1
+        );
     }
 
     #[test]
     fn rows_out_of_order_or_unknown_bits_are_refused() {
         let bytes = encode(&header(2, 0), &[cell(6), cell(4)], &[]);
-        assert_eq!(TelemetrySnapshot::parse(&bytes).err(), Some(TelemetryDecodeError::Malformed));
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes).err(),
+            Some(TelemetryDecodeError::Malformed)
+        );
         let bytes = encode(&header(0, 2), &[], &[task(4, 20), task(4, 11)]);
-        assert_eq!(TelemetrySnapshot::parse(&bytes).err(), Some(TelemetryDecodeError::Malformed));
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes).err(),
+            Some(TelemetryDecodeError::Malformed)
+        );
         let mut odd = cell(4);
         odd.reserved = 1;
         assert!(TelemetrySnapshot::parse(&encode(&header(1, 0), &[odd], &[])).is_err());
@@ -539,7 +610,10 @@ mod tests {
         assert!(TelemetrySnapshot::parse(&encode(&h, &[], &[])).is_err());
         h = header(0, 0);
         h.version = 2;
-        assert_eq!(TelemetrySnapshot::parse(&encode(&h, &[], &[])).err(), Some(TelemetryDecodeError::Version(2)));
+        assert_eq!(
+            TelemetrySnapshot::parse(&encode(&h, &[], &[])).err(),
+            Some(TelemetryDecodeError::Version(2))
+        );
     }
 
     #[test]

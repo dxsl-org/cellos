@@ -71,7 +71,11 @@ pub enum Refusal {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MachinePinResponse {
     /// `pinned` is zero when no readable record exists.
-    Status { state: PinState, current: [u8; 32], pinned: [u8; 32] },
+    Status {
+        state: PinState,
+        current: [u8; 32],
+        pinned: [u8; 32],
+    },
     /// The current facts are now the pin; reboot to start services.
     Recorded { digest: [u8; 32] },
     /// Nothing was written.
@@ -167,7 +171,9 @@ impl MachinePinRequest {
         }
         match frame[9] {
             1 if zero(&frame[16..48]) => Some(Self::Status),
-            2 => Some(Self::Confirm { digest: digest_at(frame, 16) }),
+            2 => Some(Self::Confirm {
+                digest: digest_at(frame, 16),
+            }),
             _ => None,
         }
     }
@@ -187,7 +193,11 @@ impl MachinePinResponse {
         frame[..8].copy_from_slice(RESPONSE_MAGIC);
         frame[8] = FRAME_VERSION;
         match self {
-            Self::Status { state, current, pinned } => {
+            Self::Status {
+                state,
+                current,
+                pinned,
+            } => {
                 frame[9] = 1;
                 frame[10] = state as u8;
                 frame[16..48].copy_from_slice(&current);
@@ -216,9 +226,9 @@ impl MachinePinResponse {
                 current: digest_at(frame, 16),
                 pinned: digest_at(frame, 48),
             }),
-            2 if frame[10] == 0 && zero(&frame[48..80]) => {
-                Some(Self::Recorded { digest: digest_at(frame, 16) })
-            }
+            2 if frame[10] == 0 && zero(&frame[48..80]) => Some(Self::Recorded {
+                digest: digest_at(frame, 16),
+            }),
             3 if zero(&frame[16..80]) => Some(Self::Refused(Refusal::decode(frame[10])?)),
             _ => None,
         }
@@ -232,7 +242,10 @@ mod tests {
     #[test]
     fn requests_round_trip_and_fit_inits_payload() {
         const { assert!(REQUEST_BYTES <= 64) };
-        for request in [MachinePinRequest::Status, MachinePinRequest::Confirm { digest: [7; 32] }] {
+        for request in [
+            MachinePinRequest::Status,
+            MachinePinRequest::Confirm { digest: [7; 32] },
+        ] {
             let frame = request.encode();
             assert_eq!(MachinePinRequest::decode(&frame), Some(request));
             let mut padded = [0u8; 64];
@@ -259,7 +272,9 @@ mod tests {
         refuse(&|f| f[15] = 1);
         refuse(&|f| f[48] = 1);
         refuse(&|f| f[63] = 1);
-        refuse(&|f| { f[9] = 1; });
+        refuse(&|f| {
+            f[9] = 1;
+        });
         assert_eq!(MachinePinRequest::decode(&base[..47]), None);
         assert!(!MachinePinRequest::is_claimed(b"OCLSREQ1"));
     }
@@ -267,29 +282,63 @@ mod tests {
     #[test]
     fn responses_round_trip() {
         for response in [
-            MachinePinResponse::Status { state: PinState::Mismatch, current: [1; 32], pinned: [2; 32] },
-            MachinePinResponse::Status { state: PinState::StoreUnavailable, current: [1; 32], pinned: [0; 32] },
+            MachinePinResponse::Status {
+                state: PinState::Mismatch,
+                current: [1; 32],
+                pinned: [2; 32],
+            },
+            MachinePinResponse::Status {
+                state: PinState::StoreUnavailable,
+                current: [1; 32],
+                pinned: [0; 32],
+            },
             MachinePinResponse::Recorded { digest: [3; 32] },
             MachinePinResponse::Refused(Refusal::DigestStale),
         ] {
-            assert_eq!(MachinePinResponse::decode(&response.encode()), Some(response));
+            assert_eq!(
+                MachinePinResponse::decode(&response.encode()),
+                Some(response)
+            );
         }
     }
 
     #[test]
     fn malformed_responses_are_refused() {
-        let status = MachinePinResponse::Status { state: PinState::Match, current: [1; 32], pinned: [1; 32] }.encode();
-        let mut bad = status; bad[10] = 0; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = status; bad[10] = 7; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = status; bad[11] = 1; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = status; bad[9] = 4; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = status; bad[8] = 0; assert_eq!(MachinePinResponse::decode(&bad), None);
+        let status = MachinePinResponse::Status {
+            state: PinState::Match,
+            current: [1; 32],
+            pinned: [1; 32],
+        }
+        .encode();
+        let mut bad = status;
+        bad[10] = 0;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = status;
+        bad[10] = 7;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = status;
+        bad[11] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = status;
+        bad[9] = 4;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = status;
+        bad[8] = 0;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
         let refused = MachinePinResponse::Refused(Refusal::NotSafeMode).encode();
-        let mut bad = refused; bad[10] = 5; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = refused; bad[20] = 1; assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = refused;
+        bad[10] = 5;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = refused;
+        bad[20] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
         let recorded = MachinePinResponse::Recorded { digest: [3; 32] }.encode();
-        let mut bad = recorded; bad[10] = 1; assert_eq!(MachinePinResponse::decode(&bad), None);
-        let mut bad = recorded; bad[50] = 1; assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = recorded;
+        bad[10] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = recorded;
+        bad[50] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
         assert_eq!(MachinePinResponse::decode(&status[..79]), None);
     }
 }

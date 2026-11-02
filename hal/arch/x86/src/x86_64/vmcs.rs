@@ -128,6 +128,11 @@ pub const MSR_IA32_VMX_TRUE_ENTRY_CTLS: u32 = 0x490;
 ///
 /// Intel SDM 31.5.1: Bits that must be 1 (allowed 0 is 0) are forced on;
 /// bits that cannot be 1 (allowed 1 is 0) are forced off.
+///
+/// # Safety
+///
+/// Executes `rdmsr` on `msr`: the caller must run at CPL 0 on a CPU that
+/// implements that VMX capability MSR, or the instruction raises #GP.
 #[inline]
 pub unsafe fn adjust_vmx_ctrl(desired: u32, msr: u32) -> u32 {
     let mut lo: u32;
@@ -143,6 +148,11 @@ pub unsafe fn adjust_vmx_ctrl(desired: u32, msr: u32) -> u32 {
 }
 
 /// Check whether the CPU supports the "TRUE" capability MSRs (IA32_VMX_BASIC[55] == 1).
+///
+/// # Safety
+///
+/// Executes `rdmsr` on `IA32_VMX_BASIC`: the caller must run at CPL 0 on a
+/// CPU that supports VMX, or the instruction raises #GP.
 #[inline]
 pub unsafe fn has_true_ctls() -> bool {
     let mut lo: u32;

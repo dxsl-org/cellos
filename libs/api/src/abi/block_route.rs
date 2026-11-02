@@ -89,13 +89,19 @@ pub enum RouteRecordError {
 impl ViBlockRouteV1 {
     /// The slot's device key.
     pub fn device(&self) -> DeviceKey {
-        DeviceKey { kind: self.kind, id: self.id }
+        DeviceKey {
+            kind: self.kind,
+            id: self.id,
+        }
     }
 
     /// The live provider's `(tid, cell_id, generation)`, if any.
     pub fn provider(&self) -> Option<(u64, u64, u64)> {
-        (self.flags & FLAG_PROVIDER_LIVE != 0)
-            .then_some((self.provider_tid, self.cell_id, self.generation))
+        (self.flags & FLAG_PROVIDER_LIVE != 0).then_some((
+            self.provider_tid,
+            self.cell_id,
+            self.generation,
+        ))
     }
 
     /// Little-endian wire bytes.
@@ -117,7 +123,10 @@ impl ViBlockRouteV1 {
             return Err(RouteRecordError::Length);
         }
         let le = |at: usize, n: usize| {
-            bytes[at..at + n].iter().rev().fold(0u64, |acc, b| acc << 8 | u64::from(*b))
+            bytes[at..at + n]
+                .iter()
+                .rev()
+                .fold(0u64, |acc, b| acc << 8 | u64::from(*b))
         };
         let record = Self {
             version: le(0, 2) as u16,

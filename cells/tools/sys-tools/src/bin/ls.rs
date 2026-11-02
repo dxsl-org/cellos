@@ -26,7 +26,10 @@ fn cell_main() {
             }
         }
         Err(_) => {
-            emit(output.stderr(), &[b"ls: ", path.as_bytes(), b": no such directory\n"]);
+            emit(
+                output.stderr(),
+                &[b"ls: ", path.as_bytes(), b": no such directory\n"],
+            );
             syscall::sys_exit(1);
         }
     }

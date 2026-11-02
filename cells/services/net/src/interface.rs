@@ -214,7 +214,10 @@ mod guest_mac_routing_tests {
         dev.set_guest_mac(HYPERVISOR_BELIEF);
 
         dev.route_rx(&frame([0xff; 6], [0x00, 0x11, 0x22, 0x33, 0x44, 0x55], 64));
-        assert!(dev.pop_guest_rx().is_some(), "broadcast must be offered to the guest");
+        assert!(
+            dev.pop_guest_rx().is_some(),
+            "broadcast must be offered to the guest"
+        );
     }
 }
 
@@ -239,8 +242,15 @@ mod tx_queue_retry_tests {
         dev.queue_tx(Box::from(&[0xAAu8; 64][..]));
 
         for attempt in 1..MAX_TX_REFUSALS {
-            assert!(!dev.settle_tx_verdict(STATUS_FAILED), "attempt {attempt} is not a send");
-            assert_eq!(dev.tx_queue.len(), 1, "attempt {attempt} must keep the frame");
+            assert!(
+                !dev.settle_tx_verdict(STATUS_FAILED),
+                "attempt {attempt} is not a send"
+            );
+            assert_eq!(
+                dev.tx_queue.len(),
+                1,
+                "attempt {attempt} must keep the frame"
+            );
             assert_eq!(dev.tx_queue.front().expect("queued").refusals, attempt);
         }
         assert!(!dev.settle_tx_verdict(STATUS_FAILED));
@@ -283,7 +293,10 @@ struct OutboundFrame {
 }
 
 #[derive(Clone, Copy)]
-enum ReplyTo { Async(usize), Legacy(usize) }
+enum ReplyTo {
+    Async(usize),
+    Legacy(usize),
+}
 
 impl VirtioNetDevice {
     pub fn new() -> Self {
@@ -374,10 +387,20 @@ impl VirtioNetDevice {
     /// L2Send returns success only after the NIC driver ACKs. A None result
     /// means the request was queued; pump_rx_split sends its eventual reply.
     pub fn send_l2(&mut self, frame: &[u8], sender: usize) -> Option<bool> {
-        if frame.is_empty() || frame.len() > MAX_FRAME { return Some(false); }
-        if nic_driver_tid().is_none() { return Some(sys_net_tx(frame)); }
-        if self.tx_queue.len() >= TX_QUEUE_LIMIT { return Some(false); }
-        if self.tx_queue.iter().filter(|pending| pending.reply.is_some()).count()
+        if frame.is_empty() || frame.len() > MAX_FRAME {
+            return Some(false);
+        }
+        if nic_driver_tid().is_none() {
+            return Some(sys_net_tx(frame));
+        }
+        if self.tx_queue.len() >= TX_QUEUE_LIMIT {
+            return Some(false);
+        }
+        if self
+            .tx_queue
+            .iter()
+            .filter(|pending| pending.reply.is_some())
+            .count()
             + self.l2_replies.len()
             >= TX_QUEUE_LIMIT
         {
@@ -530,7 +553,9 @@ impl VirtioNetDevice {
                 self.l2_replies.push_back((target, status, now));
             }
             if !FIRST_BRIDGE_TX.swap(true, Ordering::Relaxed) {
-                println(&alloc::format!("[net-bridge] first e1000 TX accepted={accepted}"));
+                println(&alloc::format!(
+                    "[net-bridge] first e1000 TX accepted={accepted}"
+                ));
             }
             if accepted {
                 FIRST_BRIDGE_TX_OK.store(true, Ordering::Relaxed);
@@ -564,7 +589,7 @@ impl VirtioNetDevice {
             // board showed the alternative: `first e1000 RX len=1`, a status
             // byte routed into the stack as a frame.
             let n = u16::from_le_bytes([reply[0], reply[1]]) as usize;
-            if n < MIN_FRAME || n > MAX_FRAME {
+            if !(MIN_FRAME..=MAX_FRAME).contains(&n) {
                 break;
             }
             self.route_rx(&reply[2..n + 2]);
@@ -575,7 +600,10 @@ impl VirtioNetDevice {
 
     fn route_rx(&mut self, frame: &[u8]) {
         if !FIRST_BRIDGE_RX.swap(true, Ordering::Relaxed) {
-            println(&alloc::format!("[net-bridge] first e1000 RX len={}", frame.len()));
+            println(&alloc::format!(
+                "[net-bridge] first e1000 RX len={}",
+                frame.len()
+            ));
         }
         match self.guest_mac {
             Some(mac) if frame.len() >= 6 && frame[..6] == mac => {
@@ -610,7 +638,11 @@ impl VirtioNetDevice {
 
     fn queue_tx(&mut self, frame: Box<[u8]>) {
         debug_assert!(self.tx_queue.len() < TX_QUEUE_LIMIT);
-        self.tx_queue.push_back(OutboundFrame { bytes: frame, reply: None, refusals: 0 });
+        self.tx_queue.push_back(OutboundFrame {
+            bytes: frame,
+            reply: None,
+            refusals: 0,
+        });
     }
 
     /// Apply one driver verdict to the head of the TX queue.
@@ -631,7 +663,9 @@ impl VirtioNetDevice {
             return true;
         }
         let refusals = {
-            let Some(frame) = self.tx_queue.front_mut() else { return false };
+            let Some(frame) = self.tx_queue.front_mut() else {
+                return false;
+            };
             frame.reply = None;
             frame.refusals = frame.refusals.saturating_add(1);
             frame.refusals
@@ -651,7 +685,9 @@ impl VirtioNetDevice {
 
     fn flush_l2_replies(&mut self, now: u64) {
         for _ in 0..4 {
-            let Some((target, status, since)) = self.l2_replies.front() else { break };
+            let Some((target, status, since)) = self.l2_replies.front() else {
+                break;
+            };
             // The driver's verdict for a frame the guest sent — `l2_replies` only
             // ever holds L2Send targets. "Did the command I typed in the guest
             // leave the board" is the first half of any such question, and one
@@ -666,7 +702,11 @@ impl VirtioNetDevice {
                     core::sync::atomic::AtomicBool::new(false);
                 static FIRST_GUEST_TX_FAIL: core::sync::atomic::AtomicBool =
                     core::sync::atomic::AtomicBool::new(false);
-                let witness = if accepted { &FIRST_GUEST_TX_OK } else { &FIRST_GUEST_TX_FAIL };
+                let witness = if accepted {
+                    &FIRST_GUEST_TX_OK
+                } else {
+                    &FIRST_GUEST_TX_FAIL
+                };
                 if !witness.swap(true, core::sync::atomic::Ordering::Relaxed) {
                     println(&alloc::format!(
                         "[net-bridge] first guest TX accepted={accepted} status={status}"
@@ -679,19 +719,28 @@ impl VirtioNetDevice {
             } else {
                 api::ipc::NetResponse::Err(status)
             };
-            let Ok(bytes) = api::ipc::encode(&response, &mut encoded) else { break };
-            let delivered = match target {
-                ReplyTo::Async(op) => { let _ = ostd::ipc::reply(*op, bytes); true }
-                ReplyTo::Legacy(sender) =>
-                    matches!(sys_try_send(*sender, bytes), SyscallResult::Ok(0))
-                        || now.saturating_sub(*since) > DRV_REPLY_TIMEOUT_TICKS * DRIVER_TICKS_PER_SCHEDULER_TICK,
+            let Ok(bytes) = api::ipc::encode(&response, &mut encoded) else {
+                break;
             };
-            if delivered { self.l2_replies.pop_front(); } else { break; }
+            let delivered = match target {
+                ReplyTo::Async(op) => {
+                    let _ = ostd::ipc::reply(*op, bytes);
+                    true
+                }
+                ReplyTo::Legacy(sender) => {
+                    matches!(sys_try_send(*sender, bytes), SyscallResult::Ok(0))
+                        || now.saturating_sub(*since)
+                            > DRV_REPLY_TIMEOUT_TICKS * DRIVER_TICKS_PER_SCHEDULER_TICK
+                }
+            };
+            if delivered {
+                self.l2_replies.pop_front();
+            } else {
+                break;
+            }
         }
     }
-
 }
-
 
 pub struct NetRxToken(Box<[u8]>);
 pub struct NetTxToken<'a>(&'a mut VirtioNetDevice);
@@ -729,8 +778,12 @@ impl Device for VirtioNetDevice {
         Self: 'a;
 
     fn receive(&mut self, _ts: Instant) -> Option<(NetRxToken, NetTxToken<'_>)> {
-        if self.tx_queue.len() >= TX_QUEUE_LIMIT { return None; }
-        self.rx_queue.pop_front().map(|frame| (NetRxToken(frame), NetTxToken(self)))
+        if self.tx_queue.len() >= TX_QUEUE_LIMIT {
+            return None;
+        }
+        self.rx_queue
+            .pop_front()
+            .map(|frame| (NetRxToken(frame), NetTxToken(self)))
     }
 
     fn transmit(&mut self, _ts: Instant) -> Option<NetTxToken<'_>> {

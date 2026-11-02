@@ -66,7 +66,11 @@ pub const RG_PROFILE: RgProfile = RgProfile {
     dfa_size_limit: 64 * 1024,
     buffer_capacity: 16 * 1024,
     heap_limit: 16 * 1024 + 65_536,
-    limits: Limits { queue_rows: 8, queue_bytes: 32 * 1024, max_submatches: 4096 },
+    limits: Limits {
+        queue_rows: 8,
+        queue_bytes: 32 * 1024,
+        max_submatches: 4096,
+    },
     stdin_window: 96 * 1024,
     walk: WalkLimits {
         max_depth: 64,
@@ -129,7 +133,9 @@ pub(crate) fn build_matcher(args: &RgArgs, profile: &RgProfile) -> Result<RegexM
     if !args.search_binary {
         builder.ban_byte(Some(0));
     }
-    builder.build_many(&args.patterns).map_err(|error| format!("regex: {}", error))
+    builder
+        .build_many(&args.patterns)
+        .map_err(|error| format!("regex: {}", error))
 }
 
 pub(crate) fn build_searcher(args: &RgArgs, profile: &RgProfile) -> Searcher {
@@ -151,14 +157,22 @@ pub(crate) fn build_walk(
 ) -> Result<WalkBuilder, String> {
     let mut overrides = OverrideBuilder::new(cwd);
     for glob in &args.globs {
-        overrides.add(glob).map_err(|error| format!("glob: {}", error))?;
+        overrides
+            .add(glob)
+            .map_err(|error| format!("glob: {}", error))?;
     }
-    let overrides = overrides.build().map_err(|error| format!("glob: {}", error))?;
+    let overrides = overrides
+        .build()
+        .map_err(|error| format!("glob: {}", error))?;
     let mut walk = WalkBuilder::new(roots);
     walk.hidden(args.hidden)
         .ignore_files(!args.no_ignore)
         .overrides(overrides)
-        .binary(if args.search_binary { BinaryMode::Search } else { BinaryMode::Skip })
+        .binary(if args.search_binary {
+            BinaryMode::Search
+        } else {
+            BinaryMode::Skip
+        })
         .limits(profile.walk);
     Ok(walk)
 }
@@ -181,7 +195,10 @@ fn roots(args: &RgArgs) -> Result<(Vec<Vec<u8>>, Vec<u8>), String> {
     let roots = if args.paths.is_empty() {
         alloc::vec![cwd.clone().into_bytes()]
     } else {
-        args.paths.iter().map(|path| crate::cmd_fs::resolve_path_from(&cwd, path).into_bytes()).collect()
+        args.paths
+            .iter()
+            .map(|path| crate::cmd_fs::resolve_path_from(&cwd, path).into_bytes())
+            .collect()
     };
     Ok((roots, cwd.into_bytes()))
 }

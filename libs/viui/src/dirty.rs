@@ -29,7 +29,10 @@ pub struct DirtyRect {
 
 impl DirtyRect {
     pub const fn new() -> Self {
-        Self { region: None, layout_dirty: false }
+        Self {
+            region: None,
+            layout_dirty: false,
+        }
     }
 
     /// Union `rect` into the accumulated damage region.

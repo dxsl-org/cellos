@@ -40,7 +40,11 @@ impl PreviewKind {
             Self::Image
         } else if name.ends_with(".md") {
             Self::Markdown
-        } else if name.ends_with(".rs") || name.ends_with(".c") || name.ends_with(".toml") || name.ends_with(".txt") {
+        } else if name.ends_with(".rs")
+            || name.ends_with(".c")
+            || name.ends_with(".toml")
+            || name.ends_with(".txt")
+        {
             Self::Code
         } else if name.ends_with(".pdf") {
             Self::Pdf
@@ -100,10 +104,15 @@ impl QuickLookState {
                         .map(|line| line.chars().take(PREVIEW_COLS).collect::<String>()),
                 );
             }
-            Some(Err(e)) => self.lines.push(format!("Cannot read {}: {}", item.name, e.describe())),
-            None if item.is_dir => self.lines.push(String::from("Folder. Press Enter to open it.")),
+            Some(Err(e)) => self
+                .lines
+                .push(format!("Cannot read {}: {}", item.name, e.describe())),
+            None if item.is_dir => self
+                .lines
+                .push(String::from("Folder. Press Enter to open it.")),
             None => {
-                self.lines.push(format!("No inline preview for {}.", self.kind.name()));
+                self.lines
+                    .push(format!("No inline preview for {}.", self.kind.name()));
                 self.lines.push(format!("Size: {}", item.formatted_size()));
             }
         }
@@ -118,7 +127,12 @@ impl QuickLookState {
 fn hud_rect(win_w: u32, win_h: u32) -> (i32, i32, u32, u32) {
     let ql_w = QUICK_LOOK_W.min(win_w.saturating_sub(40));
     let ql_h = QUICK_LOOK_H.min(win_h.saturating_sub(60));
-    ((win_w as i32 - ql_w as i32) / 2, (win_h as i32 - ql_h as i32) / 2, ql_w, ql_h)
+    (
+        (win_w as i32 - ql_w as i32) / 2,
+        (win_h as i32 - ql_h as i32) / 2,
+        ql_w,
+        ql_h,
+    )
 }
 
 /// A click while Quick Look is open: outside the HUD dismisses it. Returns whether the
@@ -156,10 +170,28 @@ pub fn render(
     // Header bar (36 DIP)
     let header_h = 36;
     fill_rect(surf, ql_x, ql_y, ql_w, header_h, Color::rgb(240, 242, 248));
-    fill_rect(surf, ql_x, ql_y + header_h as i32 - 1, ql_w, 1, Color::rgb(215, 218, 224));
+    fill_rect(
+        surf,
+        ql_x,
+        ql_y + header_h as i32 - 1,
+        ql_w,
+        1,
+        Color::rgb(215, 218, 224),
+    );
 
     let title_text = format!("{}  ·  {}", state.file_name, state.kind.name());
-    draw_label(surf, fonts, ql_x + 14, ql_y + 8, ql_w.saturating_sub(28), 20, &title_text, FontFace::UiSemibold, 14.0, Color::rgb(20, 20, 28));
+    draw_label(
+        surf,
+        fonts,
+        ql_x + 14,
+        ql_y + 8,
+        ql_w.saturating_sub(28),
+        20,
+        &title_text,
+        FontFace::UiSemibold,
+        14.0,
+        Color::rgb(20, 20, 28),
+    );
 
     let body_x = ql_x + 20;
     let body_w = ql_w.saturating_sub(40);
@@ -170,7 +202,18 @@ pub fn render(
     };
     let mut line_y = ql_y + header_h as i32 + 16;
     for line in &state.lines {
-        draw_label(surf, fonts, body_x, line_y, body_w, 20, line, face, size, Color::rgb(40, 45, 55));
+        draw_label(
+            surf,
+            fonts,
+            body_x,
+            line_y,
+            body_w,
+            20,
+            line,
+            face,
+            size,
+            Color::rgb(40, 45, 55),
+        );
         line_y += 24;
     }
 
@@ -208,8 +251,14 @@ mod tests {
         assert_eq!(PreviewKind::of(&file("readme.md")), PreviewKind::Markdown);
         assert_eq!(PreviewKind::of(&file("a.txt")), PreviewKind::Code);
         assert_eq!(PreviewKind::of(&file("manual.pdf")), PreviewKind::Pdf);
-        assert_eq!(PreviewKind::of(&file("archive.tar")), PreviewKind::Unsupported);
-        assert_eq!(PreviewKind::of(&FileItem::new("d", "/d", true, None)), PreviewKind::Folder);
+        assert_eq!(
+            PreviewKind::of(&file("archive.tar")),
+            PreviewKind::Unsupported
+        );
+        assert_eq!(
+            PreviewKind::of(&FileItem::new("d", "/d", true, None)),
+            PreviewKind::Folder
+        );
     }
 
     #[test]
@@ -226,8 +275,14 @@ mod tests {
         assert_eq!(ql.lines[0], "first");
         assert_eq!(ql.lines[1].chars().count(), PREVIEW_COLS);
 
-        ql.show(&file("a.txt"), Some(Err(FsError::Vfs(ViError::PermissionDenied))));
-        assert_eq!(ql.lines, ["Cannot read a.txt: permission denied (VFS ERR_DENIED)"]);
+        ql.show(
+            &file("a.txt"),
+            Some(Err(FsError::Vfs(ViError::PermissionDenied))),
+        );
+        assert_eq!(
+            ql.lines,
+            ["Cannot read a.txt: permission denied (VFS ERR_DENIED)"]
+        );
 
         ql.show(&file("photo.png"), None);
         assert_eq!(ql.lines, ["No inline preview for Image.", "Size: 5 B"]);

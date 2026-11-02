@@ -18,9 +18,7 @@ pub fn is_image_path(path: &str) -> bool {
         let supported = ["bmp", "png", "jpg", "jpeg", "webp", "svg"];
         #[cfg(not(feature = "desktop"))]
         let supported = ["bmp", "png", "jpg", "jpeg", "webp"];
-        supported
-            .iter()
-            .any(|s| extension.eq_ignore_ascii_case(s))
+        supported.iter().any(|s| extension.eq_ignore_ascii_case(s))
     })
 }
 
@@ -62,7 +60,11 @@ pub fn decode(data: &[u8]) -> Option<DecodedImage> {
         let channels = if has_alpha { 4 } else { 3 };
         let mut raw = alloc::vec![0u8; count * channels];
         decoder.read_image(&mut raw).ok()?;
-        let colorspace = if has_alpha { ColorSpace::RGBA } else { ColorSpace::RGB };
+        let colorspace = if has_alpha {
+            ColorSpace::RGBA
+        } else {
+            ColorSpace::RGB
+        };
         return convert(width, height, count, raw, colorspace);
     }
     #[cfg(feature = "desktop")]

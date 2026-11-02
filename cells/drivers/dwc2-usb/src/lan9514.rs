@@ -362,9 +362,7 @@ impl<'a> Lan9514Device<'a> {
             (addrh & 0xFF) as u8,
             ((addrh >> 8) & 0xFF) as u8,
         ];
-        let plausible = read_mac != [0; 6]
-            && read_mac != [0xFF; 6]
-            && read_mac[0] & 0x01 == 0; // unicast
+        let plausible = read_mac != [0; 6] && read_mac != [0xFF; 6] && read_mac[0] & 0x01 == 0; // unicast
         if plausible {
             self.mac = read_mac;
         } else {
@@ -507,7 +505,10 @@ impl<'a> Lan9514Device<'a> {
         };
         let _ = self.write_phy_reg(0, bmcr | BMCR_LOOPBACK);
         for _ in 0..20 {
-            if self.read_phy_reg(0).is_some_and(|value| value & BMCR_LOOPBACK != 0) {
+            if self
+                .read_phy_reg(0)
+                .is_some_and(|value| value & BMCR_LOOPBACK != 0)
+            {
                 break;
             }
             ostd::syscall::sys_yield();
@@ -585,7 +586,9 @@ impl<'a> Lan9514Device<'a> {
         packet[8..8 + frame.len()].copy_from_slice(frame);
 
         let total = 8 + frame.len();
-        let result = self.engine.bulk_transmit(self.dev_addr, 2, &packet[..total]);
+        let result = self
+            .engine
+            .bulk_transmit(self.dev_addr, 2, &packet[..total]);
         if let Err(error) = result {
             static FIRST_TX_ERROR: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);

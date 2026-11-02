@@ -14,9 +14,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::backend::{fill_page, FsBackend, ListPage};
-use api::ipc::vfs_dir_page::EntryKind;
 use crate::blk_router::DeviceRef;
 use crate::block_stream::{BlockStream, CachedBlockStream};
+use api::ipc::vfs_dir_page::EntryKind;
 use ostd::io::println;
 
 /// Concrete `fatfs::FileSystem` type for the VirtIO FAT volume.
@@ -64,7 +64,11 @@ impl FatBackend {
     pub fn mount(prefix: &str, dev: DeviceRef, base_lba: u64) -> Self {
         if probe_exfat(dev, base_lba) {
             println("[vfs] exFAT volume detected — not supported; reformat to FAT32 or use /data (littlefs)");
-            return Self { fs: None, prefix: prefix.into(), dev };
+            return Self {
+                fs: None,
+                prefix: prefix.into(),
+                dev,
+            };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
         let fs = match fatfs::FileSystem::new(CachedBlockStream::new(dev, base_lba), opts) {
@@ -83,7 +87,11 @@ impl FatBackend {
                 None
             }
         };
-        Self { fs, prefix: prefix.into(), dev }
+        Self {
+            fs,
+            prefix: prefix.into(),
+            dev,
+        }
     }
 
     /// Whether a FAT32 volume was opened.
@@ -121,7 +129,11 @@ impl FatBackend {
         let fs = self.fs.as_ref()?;
         let rel = self.rel_allow_root(path);
         let root = fs.root_dir();
-        let dir = if rel.is_empty() { root } else { root.open_dir(rel).ok()? };
+        let dir = if rel.is_empty() {
+            root
+        } else {
+            root.open_dir(rel).ok()?
+        };
         page_dir(&dir, start, out, skip)
     }
 }
@@ -282,7 +294,11 @@ impl FsBackend for FatBackend {
         // can reject a valid TOML prefix from a truncated file.
         let (parent, name) = rel.rsplit_once('/').unwrap_or(("", rel));
         let root = fs.root_dir();
-        let directory = if parent.is_empty() { root } else { root.open_dir(parent).ok()? };
+        let directory = if parent.is_empty() {
+            root
+        } else {
+            root.open_dir(parent).ok()?
+        };
         for entry in directory.iter() {
             let entry = entry.ok()?;
             if entry.file_name().eq_ignore_ascii_case(name)
@@ -298,7 +314,9 @@ impl FsBackend for FatBackend {
     }
 
     fn file_size(&self, path: &str) -> u64 {
-        self.stat(path).filter(|(_, is_dir)| !is_dir).map_or(0, |(size, _)| size)
+        self.stat(path)
+            .filter(|(_, is_dir)| !is_dir)
+            .map_or(0, |(size, _)| size)
     }
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {

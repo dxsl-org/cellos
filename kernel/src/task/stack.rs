@@ -414,8 +414,12 @@ impl Drop for Stack {
         if self.p01_obligation.is_some() {
             let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
             if owner.is_some() {
-                crate::p01_retained::begin(owner, self.base, total_pages,
-                    crate::p01_retained::Reason::TaskStackForget);
+                crate::p01_retained::begin(
+                    owner,
+                    self.base,
+                    total_pages,
+                    crate::p01_retained::Reason::TaskStackForget,
+                );
             }
             crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }
@@ -476,10 +480,16 @@ impl CellSegments {
     /// Publication calls this while holding SCHEDULER with the final identity.
     #[cfg(cellos_p01_trace)]
     pub(crate) fn p01_backing(&self, owner: crate::p01_measurement::Owner) {
-        crate::memory::heap::p01_owner::runtime_vec(&self.pages, owner,
-            crate::memory::heap::p01_owner::TASK_SEGMENTS);
-        crate::memory::heap::p01_owner::runtime_vec(&self.writable_pages, owner,
-            crate::memory::heap::p01_owner::TASK_SEGMENTS);
+        crate::memory::heap::p01_owner::runtime_vec(
+            &self.pages,
+            owner,
+            crate::memory::heap::p01_owner::TASK_SEGMENTS,
+        );
+        crate::memory::heap::p01_owner::runtime_vec(
+            &self.writable_pages,
+            owner,
+            crate::memory::heap::p01_owner::TASK_SEGMENTS,
+        );
     }
 
     pub fn is_writable(&self, va: types::VAddr) -> bool {

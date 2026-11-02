@@ -1,6 +1,6 @@
 use api::display::Rect;
 
-use super::{clip_to_screen, control_rect, end, Control, TITLE};
+use super::{clip_to_screen, control_rect, end, Control};
 
 const FRAME_COLOR: [u8; 4] = [0x20, 0x20, 0x24, 0xff];
 const TAB_ACTIVE: [u8; 4] = [0x20, 0xd2, 0xfd, 0xff]; // Haiku Golden Yellow (BGRA: R=253, G=210, B=32)
@@ -91,7 +91,11 @@ pub(super) fn paint(
 
     // 5. Paint Haiku Tab sitting on top of the window frame
     let tab_bg = if active { TAB_ACTIVE } else { TAB_INACTIVE };
-    let tab_hl = if active { TAB_ACTIVE_HL } else { TAB_INACTIVE_HL };
+    let tab_hl = if active {
+        TAB_ACTIVE_HL
+    } else {
+        TAB_INACTIVE_HL
+    };
     paint_rect(pixels, width, height, tab, dirty, tab_bg);
 
     // Tab top highlight line (1px)
@@ -99,7 +103,12 @@ pub(super) fn paint(
         pixels,
         width,
         height,
-        Rect { x: tab.x, y: tab.y, w: tab.w, h: 1 },
+        Rect {
+            x: tab.x,
+            y: tab.y,
+            w: tab.w,
+            h: 1,
+        },
         dirty,
         tab_hl,
     );
@@ -108,7 +117,12 @@ pub(super) fn paint(
         pixels,
         width,
         height,
-        Rect { x: tab.x, y: tab.y, w: 1, h: tab.h },
+        Rect {
+            x: tab.x,
+            y: tab.y,
+            w: 1,
+            h: tab.h,
+        },
         dirty,
         FRAME_COLOR,
     );
@@ -117,7 +131,12 @@ pub(super) fn paint(
         pixels,
         width,
         height,
-        Rect { x: tab_end.saturating_sub(1), y: tab.y, w: 1, h: tab.h },
+        Rect {
+            x: tab_end.saturating_sub(1),
+            y: tab.y,
+            w: 1,
+            h: tab.h,
+        },
         dirty,
         FRAME_COLOR,
     );
@@ -126,7 +145,12 @@ pub(super) fn paint(
         pixels,
         width,
         height,
-        Rect { x: tab.x, y: tab.y, w: tab.w, h: 1 },
+        Rect {
+            x: tab.x,
+            y: tab.y,
+            w: tab.w,
+            h: 1,
+        },
         dirty,
         FRAME_COLOR,
     );
@@ -149,7 +173,11 @@ pub(super) fn paint(
                     h: rect.h - 2,
                 },
                 dirty,
-                if active { BTN_ACTIVE_BG } else { BTN_INACTIVE_BG },
+                if active {
+                    BTN_ACTIVE_BG
+                } else {
+                    BTN_INACTIVE_BG
+                },
             );
         }
         paint_symbol(pixels, width, height, rect, dirty, control);
@@ -252,8 +280,18 @@ mod tests {
 
     #[test]
     fn disjoint_rects_never_underflow_to_bogus_decorations() {
-        let title = Rect { x: 124, y: 32, w: 1032, h: 28 };
-        let cursor_dirty = Rect { x: 200, y: 150, w: 16, h: 16 };
+        let title = Rect {
+            x: 124,
+            y: 32,
+            w: 1032,
+            h: 28,
+        };
+        let cursor_dirty = Rect {
+            x: 200,
+            y: 150,
+            w: 16,
+            h: 16,
+        };
         assert_eq!(intersect(title, cursor_dirty), None);
 
         let mut pixels = alloc::vec![0u8; 1280 * 800 * 4];
@@ -263,8 +301,26 @@ mod tests {
 
     #[test]
     fn overlapping_rects_compute_exact_intersection() {
-        let a = Rect { x: 10, y: 20, w: 100, h: 50 };
-        let b = Rect { x: 50, y: 40, w: 100, h: 50 };
-        assert_eq!(intersect(a, b), Some(Rect { x: 50, y: 40, w: 60, h: 30 }));
+        let a = Rect {
+            x: 10,
+            y: 20,
+            w: 100,
+            h: 50,
+        };
+        let b = Rect {
+            x: 50,
+            y: 40,
+            w: 100,
+            h: 50,
+        };
+        assert_eq!(
+            intersect(a, b),
+            Some(Rect {
+                x: 50,
+                y: 40,
+                w: 60,
+                h: 30
+            })
+        );
     }
 }

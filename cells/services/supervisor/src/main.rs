@@ -83,7 +83,10 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_SNAPSHOT {
-                if !SNAPSHOT_CALLER_NAMES.iter().any(|name| sender_has_exact_name(sender_tid, name)) {
+                if !SNAPSHOT_CALLER_NAMES
+                    .iter()
+                    .any(|name| sender_has_exact_name(sender_tid, name))
+                {
                     let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }

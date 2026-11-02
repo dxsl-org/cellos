@@ -105,7 +105,10 @@ impl X86PlatformProfile {
             if port.irq >= 16 {
                 return Err(ValidationError::InvalidIsaIrq);
             }
-            if self.serial_ports[..index].iter().any(|p| p.base == port.base) {
+            if self.serial_ports[..index]
+                .iter()
+                .any(|p| p.base == port.base)
+            {
                 return Err(ValidationError::DuplicateSerialPort);
             }
         }

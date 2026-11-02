@@ -31,7 +31,10 @@ pub enum TopError {
     /// The snapshot bytes did not decode.
     Malformed,
     /// Rows were dropped and the consumer cannot carry truncation.
-    Incomplete { emitted: u64, total: u64 },
+    Incomplete {
+        emitted: u64,
+        total: u64,
+    },
 }
 
 impl TopError {
@@ -150,7 +153,11 @@ impl Column {
         !matches!(
             self,
             Column::Field(
-                Field::Name | Field::State | Field::CpuQuality | Field::NameTruncated | Field::StackInQuota
+                Field::Name
+                    | Field::State
+                    | Field::CpuQuality
+                    | Field::NameTruncated
+                    | Field::StackInQuota
             )
         )
     }
@@ -225,7 +232,9 @@ fn push_cell(out: &mut String, row: &CellSample, column: Column) {
         Field::CpuNs | Field::CpuTenths | Field::CpuQuality => push_cpu_field(out, &row.cpu, field),
         Field::QuotaBytes => push_opt(out, row.quota_bytes, push_bytes),
         Field::LimitBytes => push_opt(out, row.limit_bytes, push_bytes),
-        Field::Tid | Field::StackBytes | Field::SegmentBytes | Field::StackInQuota => out.push_str(NULL_TEXT),
+        Field::Tid | Field::StackBytes | Field::SegmentBytes | Field::StackInQuota => {
+            out.push_str(NULL_TEXT)
+        }
     }
 }
 
@@ -248,7 +257,9 @@ fn push_task(out: &mut String, row: &TaskSample, column: Column) {
         Field::StackBytes => push_bytes(out, row.stack_bytes),
         Field::SegmentBytes => push_bytes(out, row.segment_bytes),
         Field::StackInQuota => push_flag(out, row.stack_in_quota),
-        Field::RootTid | Field::Tasks | Field::QuotaBytes | Field::LimitBytes => out.push_str(NULL_TEXT),
+        Field::RootTid | Field::Tasks | Field::QuotaBytes | Field::LimitBytes => {
+            out.push_str(NULL_TEXT)
+        }
     }
 }
 
@@ -302,17 +313,28 @@ pub fn header_parts(frame: &Frame) -> Vec<HeaderPart> {
     let status = if frame.complete {
         part("complete".to_string(), HeaderMark::Plain)
     } else {
-        part(format!("TRUNCATED {}", frame.dropped), HeaderMark::Truncated)
+        part(
+            format!("TRUNCATED {}", frame.dropped),
+            HeaderMark::Truncated,
+        )
     };
     let mem = match frame.meta.mem {
-        SysMem::Present { total_bytes, used_bytes, .. } => {
-            part(format!("{}/{}", format_bytes(used_bytes), format_bytes(total_bytes)), HeaderMark::Plain)
-        }
+        SysMem::Present {
+            total_bytes,
+            used_bytes,
+            ..
+        } => part(
+            format!("{}/{}", format_bytes(used_bytes), format_bytes(total_bytes)),
+            HeaderMark::Plain,
+        ),
         SysMem::Denied => part("denied".to_string(), HeaderMark::Unavailable),
         SysMem::Absent => part("n/a".to_string(), HeaderMark::Unavailable),
     };
     alloc::vec![
-        part(format!("sample {}  ", frame.meta.sample_id), HeaderMark::Plain),
+        part(
+            format!("sample {}  ", frame.meta.sample_id),
+            HeaderMark::Plain
+        ),
         status,
         part("  cpu% per core  mem ".to_string(), HeaderMark::Plain),
         mem,
@@ -321,7 +343,10 @@ pub fn header_parts(frame: &Frame) -> Vec<HeaderPart> {
 
 /// The header line ([`header_parts`] joined), unclipped.
 pub fn header_text(frame: &Frame) -> String {
-    header_parts(frame).into_iter().map(|part| part.text).collect()
+    header_parts(frame)
+        .into_iter()
+        .map(|part| part.text)
+        .collect()
 }
 
 /// Column widths for `columns` of `frame` within `max_width`: each column is as
@@ -331,7 +356,10 @@ pub fn header_text(frame: &Frame) -> String {
 /// shorter than `columns` (dropped columns). Cell texts are formatted into one
 /// reused buffer; nothing is retained.
 pub fn widths(frame: &Frame, columns: &[Column], max_width: usize) -> Vec<usize> {
-    let mut widths: Vec<usize> = columns.iter().map(|column| width(&column.label())).collect();
+    let mut widths: Vec<usize> = columns
+        .iter()
+        .map(|column| width(&column.label()))
+        .collect();
     let mut text = String::new();
     let mut widen = |widths: &mut Vec<usize>, push: &mut dyn FnMut(&mut String, Column)| {
         for (index, &column) in columns.iter().enumerate() {
@@ -341,8 +369,12 @@ pub fn widths(frame: &Frame, columns: &[Column], max_width: usize) -> Vec<usize>
         }
     };
     match &frame.rows {
-        Rows::Cells(rows) => rows.iter().for_each(|row| widen(&mut widths, &mut |out, column| push_cell(out, row, column))),
-        Rows::Tasks(rows) => rows.iter().for_each(|row| widen(&mut widths, &mut |out, column| push_task(out, row, column))),
+        Rows::Cells(rows) => rows
+            .iter()
+            .for_each(|row| widen(&mut widths, &mut |out, column| push_cell(out, row, column))),
+        Rows::Tasks(rows) => rows
+            .iter()
+            .for_each(|row| widen(&mut widths, &mut |out, column| push_task(out, row, column))),
     }
     fit_widths(columns, &mut widths, max_width);
     widths
@@ -359,13 +391,34 @@ pub fn render_frame(frame: &Frame, fields: Option<&[Field]>, out: &mut String) {
     let widths = widths(frame, &chosen, MAX_WIDTH);
     let mut line = String::new();
     let mut cell = String::new();
-    push_line(out, &mut line, &mut cell, &chosen, &widths, &mut |text, column| text.push_str(&column.label()));
+    push_line(
+        out,
+        &mut line,
+        &mut cell,
+        &chosen,
+        &widths,
+        &mut |text, column| text.push_str(&column.label()),
+    );
     match &frame.rows {
         Rows::Cells(rows) => rows.iter().for_each(|row| {
-            push_line(out, &mut line, &mut cell, &chosen, &widths, &mut |text, column| push_cell(text, row, column))
+            push_line(
+                out,
+                &mut line,
+                &mut cell,
+                &chosen,
+                &widths,
+                &mut |text, column| push_cell(text, row, column),
+            )
         }),
         Rows::Tasks(rows) => rows.iter().for_each(|row| {
-            push_line(out, &mut line, &mut cell, &chosen, &widths, &mut |text, column| push_task(text, row, column))
+            push_line(
+                out,
+                &mut line,
+                &mut cell,
+                &chosen,
+                &widths,
+                &mut |text, column| push_task(text, row, column),
+            )
         }),
     }
 }
@@ -391,12 +444,12 @@ fn push_line(
         let pad = column_width - width(text);
         let last = index + 1 == widths.len();
         if columns[index].right_aligned() {
-            line.extend(core::iter::repeat(' ').take(pad));
+            line.extend(core::iter::repeat_n(' ', pad));
             line.push_str(text);
         } else {
             line.push_str(text);
             if !last {
-                line.extend(core::iter::repeat(' ').take(pad));
+                line.extend(core::iter::repeat_n(' ', pad));
             }
         }
     }
@@ -408,10 +461,16 @@ fn push_line(
 /// with the name column at its minimum, then narrow the name column only as
 /// far as needed.
 fn fit_widths(columns: &[Column], widths: &mut Vec<usize>, max_width: usize) {
-    let total = |widths: &[usize]| widths.iter().sum::<usize>() + GAP.len() * widths.len().saturating_sub(1);
-    let name = columns.iter().position(|&column| column == Column::Field(Field::Name));
+    let total = |widths: &[usize]| {
+        widths.iter().sum::<usize>() + GAP.len() * widths.len().saturating_sub(1)
+    };
+    let name = columns
+        .iter()
+        .position(|&column| column == Column::Field(Field::Name));
     let narrowest = |widths: &[usize]| match name {
-        Some(name) if name < widths.len() => total(widths) - widths[name] + widths[name].min(MIN_NAME_WIDTH),
+        Some(name) if name < widths.len() => {
+            total(widths) - widths[name] + widths[name].min(MIN_NAME_WIDTH)
+        }
         _ => total(widths),
     };
     while widths.len() > 1 && narrowest(widths) > max_width {

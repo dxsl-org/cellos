@@ -125,7 +125,9 @@ impl Highlighter {
                             i = bytes.len();
                         }
                         color = theme::TEXT_MUTED;
-                    } else if language == Language::Xml && (bytes[i] == b'<' || bytes[i] == b'>' || bytes[i] == b'/') {
+                    } else if language == Language::Xml
+                        && (bytes[i] == b'<' || bytes[i] == b'>' || bytes[i] == b'/')
+                    {
                         i += 1;
                         color = theme::ACCENT_BLUE;
                     } else if let Some((prefix, hashes)) = (language == Language::Rust)

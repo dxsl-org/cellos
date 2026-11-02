@@ -150,14 +150,22 @@ impl DirTable {
 
     /// Mark every handle on directory `path` (see `paths::may_alias`) as changed.
     pub(crate) fn mark_changed(&mut self, path: &str) {
-        for entry in self.entries.values_mut().filter(|e| may_alias(&e.path, path)) {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| may_alias(&e.path, path))
+        {
             entry.changed = true;
         }
     }
 
     /// Mark every handle to `path` or to a directory below it as changed.
     pub(crate) fn mark_changed_within(&mut self, path: &str) {
-        for entry in self.entries.values_mut().filter(|e| may_alias_within(&e.path, path)) {
+        for entry in self
+            .entries
+            .values_mut()
+            .filter(|e| may_alias_within(&e.path, path))
+        {
             entry.changed = true;
         }
     }
@@ -169,7 +177,9 @@ impl DirTable {
     }
 
     pub(crate) fn owned(&self, caller: Caller, dir: ViDirHandle) -> Option<&DirEntry> {
-        self.entries.get(&dir.0).filter(|e| e.owner == caller && e.published)
+        self.entries
+            .get(&dir.0)
+            .filter(|e| e.owner == caller && e.published)
     }
 
     pub(crate) fn insert(
@@ -223,13 +233,19 @@ mod tests {
         table.on_contact(peer);
         table.next = u64::MAX - 1;
         let live = table.open_root(owner, "/data/owner").unwrap();
-        assert_eq!(table.open_root(peer, "/data/peer"), Err(DirError::TooManyHandles));
+        assert_eq!(
+            table.open_root(peer, "/data/peer"),
+            Err(DirError::TooManyHandles)
+        );
         assert_eq!(table.dir_path(owner, live), Some("/data/owner"));
         assert_eq!(table.dir_path(peer, live), None);
         assert_eq!(table.held_by(owner), 1);
         assert_eq!(table.held_by(peer), 0);
         table.revoke(owner, live).unwrap();
-        assert_eq!(table.open_root(peer, "/data/again"), Err(DirError::TooManyHandles));
+        assert_eq!(
+            table.open_root(peer, "/data/again"),
+            Err(DirError::TooManyHandles)
+        );
         assert_eq!(table.held_by(peer), 0);
     }
 
@@ -247,11 +263,14 @@ mod tests {
             generation: child.generation,
             spawner_cell_id: owner.cell.0,
             spawner_generation: owner.generation,
-            set: DirHandleSet::from_carrier(
-                &ViSpawnDirHandles::new(&[first, second]).unwrap()).unwrap(),
+            set: DirHandleSet::from_carrier(&ViSpawnDirHandles::new(&[first, second]).unwrap())
+                .unwrap(),
         };
         table.next = u64::MAX - 1;
-        assert_eq!(table.bind_inherited(child, &record), bind::BindOutcome::Refused);
+        assert_eq!(
+            table.bind_inherited(child, &record),
+            bind::BindOutcome::Refused
+        );
         assert_eq!(table.held_by(child), 0);
         assert_eq!(table.entries.len(), 2);
         assert_eq!(table.dir_path(owner, first), Some("/data/first"));

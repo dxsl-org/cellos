@@ -2,15 +2,29 @@
 //! The headless, bounded `cellos-vt1` logical input codec.
 
 extern crate alloc;
+use crate::error::TerminalError;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use crate::error::TerminalError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeySymbol {
-    Character(char), Enter, Backspace, Tab, Escape, Up, Down, Right, Left,
-    Home, End, Insert, Delete, PageUp, PageDown, F(u8),
+    Character(char),
+    Enter,
+    Backspace,
+    Tab,
+    Escape,
+    Up,
+    Down,
+    Right,
+    Left,
+    Home,
+    End,
+    Insert,
+    Delete,
+    PageUp,
+    PageDown,
+    F(u8),
 }
 
 impl fmt::Display for KeySymbol {
@@ -24,26 +38,57 @@ impl fmt::Display for KeySymbol {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct Modifiers { pub shift: bool, pub alt: bool, pub control: bool }
+pub struct Modifiers {
+    pub shift: bool,
+    pub alt: bool,
+    pub control: bool,
+}
 
 impl Modifiers {
-    pub const NONE: Self = Self { shift: false, alt: false, control: false };
-    pub const SHIFT: Self = Self { shift: true, ..Self::NONE };
-    pub const ALT: Self = Self { alt: true, ..Self::NONE };
-    pub const CONTROL: Self = Self { control: true, ..Self::NONE };
+    pub const NONE: Self = Self {
+        shift: false,
+        alt: false,
+        control: false,
+    };
+    pub const SHIFT: Self = Self {
+        shift: true,
+        ..Self::NONE
+    };
+    pub const ALT: Self = Self {
+        alt: true,
+        ..Self::NONE
+    };
+    pub const CONTROL: Self = Self {
+        control: true,
+        ..Self::NONE
+    };
 
     pub fn csi_parameter(&self) -> u8 {
         1 + self.shift as u8 + 2 * self.alt as u8 + 4 * self.control as u8
     }
     pub fn from_csi_parameter(m: u8) -> Result<Self, TerminalError> {
-        if !(2..=8).contains(&m) { return Err(TerminalError::UnsupportedInput); }
+        if !(2..=8).contains(&m) {
+            return Err(TerminalError::UnsupportedInput);
+        }
         let n = m - 1;
-        Ok(Self { shift: n & 1 != 0, alt: n & 2 != 0, control: n & 4 != 0 })
+        Ok(Self {
+            shift: n & 1 != 0,
+            alt: n & 2 != 0,
+            control: n & 4 != 0,
+        })
     }
-    pub fn is_empty(&self) -> bool { !self.shift && !self.alt && !self.control }
+    pub fn is_empty(&self) -> bool {
+        !self.shift && !self.alt && !self.control
+    }
     pub fn from_bits(bits: u32) -> Result<Self, TerminalError> {
-        if bits & !7 != 0 { return Err(TerminalError::UnsupportedInput); }
-        Ok(Self { shift: bits & 1 != 0, control: bits & 2 != 0, alt: bits & 4 != 0 })
+        if bits & !7 != 0 {
+            return Err(TerminalError::UnsupportedInput);
+        }
+        Ok(Self {
+            shift: bits & 1 != 0,
+            control: bits & 2 != 0,
+            alt: bits & 4 != 0,
+        })
     }
     pub fn bits(self) -> u32 {
         self.shift as u32 | ((self.control as u32) << 1) | ((self.alt as u32) << 2)
@@ -52,29 +97,45 @@ impl Modifiers {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum KeyState { Release = 0, Press = 1, Repeat = 2 }
+pub enum KeyState {
+    Release = 0,
+    Press = 1,
+    Repeat = 2,
+}
 
 /// Text and Key are mutually exclusive for a single logical action. A Paste is
 /// one completely validated batch, never an incrementally delivered prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyAction {
     Text(String),
-    Key { symbol: KeySymbol, modifiers: Modifiers, state: KeyState },
+    Key {
+        symbol: KeySymbol,
+        modifiers: Modifiers,
+        state: KeyState,
+    },
     Paste(String),
 }
 
 impl KeySymbol {
     pub fn from_code(code: u32) -> Result<Self, TerminalError> {
         Ok(match code {
-            0x20..=0x10ffff if code != 0x7f => Self::Character(
-                char::from_u32(code).ok_or(TerminalError::UnsupportedInput)?),
-            0x110001 => Self::Enter, 0x110002 => Self::Escape,
-            0x110003 => Self::Backspace, 0x110004 => Self::Tab,
-            0x110005 => Self::Delete, 0x110006 => Self::Insert,
-            0x110010 => Self::Up, 0x110011 => Self::Down,
-            0x110012 => Self::Left, 0x110013 => Self::Right,
-            0x110014 => Self::Home, 0x110015 => Self::End,
-            0x110016 => Self::PageUp, 0x110017 => Self::PageDown,
+            0x20..=0x10ffff if code != 0x7f => {
+                Self::Character(char::from_u32(code).ok_or(TerminalError::UnsupportedInput)?)
+            }
+            0x110001 => Self::Enter,
+            0x110002 => Self::Escape,
+            0x110003 => Self::Backspace,
+            0x110004 => Self::Tab,
+            0x110005 => Self::Delete,
+            0x110006 => Self::Insert,
+            0x110010 => Self::Up,
+            0x110011 => Self::Down,
+            0x110012 => Self::Left,
+            0x110013 => Self::Right,
+            0x110014 => Self::Home,
+            0x110015 => Self::End,
+            0x110016 => Self::PageUp,
+            0x110017 => Self::PageDown,
             0x110020..=0x11002b => Self::F((code - 0x110020 + 1) as u8),
             _ => return Err(TerminalError::UnsupportedInput),
         })
@@ -82,13 +143,20 @@ impl KeySymbol {
     pub fn code(self) -> Result<u32, TerminalError> {
         Ok(match self {
             Self::Character(c) if c >= ' ' && c != '\u{7f}' => c as u32,
-            Self::Enter => 0x110001, Self::Escape => 0x110002,
-            Self::Backspace => 0x110003, Self::Tab => 0x110004,
-            Self::Delete => 0x110005, Self::Insert => 0x110006,
-            Self::Up => 0x110010, Self::Down => 0x110011,
-            Self::Left => 0x110012, Self::Right => 0x110013,
-            Self::Home => 0x110014, Self::End => 0x110015,
-            Self::PageUp => 0x110016, Self::PageDown => 0x110017,
+            Self::Enter => 0x110001,
+            Self::Escape => 0x110002,
+            Self::Backspace => 0x110003,
+            Self::Tab => 0x110004,
+            Self::Delete => 0x110005,
+            Self::Insert => 0x110006,
+            Self::Up => 0x110010,
+            Self::Down => 0x110011,
+            Self::Left => 0x110012,
+            Self::Right => 0x110013,
+            Self::Home => 0x110014,
+            Self::End => 0x110015,
+            Self::PageUp => 0x110016,
+            Self::PageDown => 0x110017,
             Self::F(n @ 1..=12) => 0x110020 + n as u32 - 1,
             _ => return Err(TerminalError::UnsupportedInput),
         })
@@ -100,15 +168,25 @@ impl KeyAction {
         let symbol = KeySymbol::from_code(code)?;
         let modifiers = Modifiers::from_bits(modifiers)?;
         let state = match pressed {
-            0 => KeyState::Release, 1 => KeyState::Press, 2 => KeyState::Repeat,
+            0 => KeyState::Release,
+            1 => KeyState::Press,
+            2 => KeyState::Repeat,
             _ => return Err(TerminalError::UnsupportedInput),
         };
         validate_key(symbol, modifiers)?;
-        Ok(Self::Key { symbol, modifiers, state })
+        Ok(Self::Key {
+            symbol,
+            modifiers,
+            state,
+        })
     }
     pub fn key_fields(&self) -> Result<(u32, u32, u8), TerminalError> {
         match self {
-            Self::Key { symbol, modifiers, state } => {
+            Self::Key {
+                symbol,
+                modifiers,
+                state,
+            } => {
                 validate_key(*symbol, *modifiers)?;
                 Ok((symbol.code()?, modifiers.bits(), *state as u8))
             }
@@ -146,20 +224,39 @@ pub fn encode_key_action(action: &KeyAction, out: &mut Vec<u8>) -> Result<(), Te
     encode_key_action_with_paste(action, true, out)
 }
 
-pub fn encode_key_action_with_paste(action: &KeyAction, bracketed: bool, out: &mut Vec<u8>) -> Result<(), TerminalError> {
+pub fn encode_key_action_with_paste(
+    action: &KeyAction,
+    bracketed: bool,
+    out: &mut Vec<u8>,
+) -> Result<(), TerminalError> {
     match action {
-        KeyAction::Text(text) => { validate_text(text.as_bytes())?; out.extend_from_slice(text.as_bytes()); }
+        KeyAction::Text(text) => {
+            validate_text(text.as_bytes())?;
+            out.extend_from_slice(text.as_bytes());
+        }
         KeyAction::Paste(text) => {
             validate_paste(text.as_bytes())?;
-            if bracketed { out.extend_from_slice(b"\x1b[200~"); }
+            if bracketed {
+                out.extend_from_slice(b"\x1b[200~");
+            }
             out.extend_from_slice(text.as_bytes());
-            if bracketed { out.extend_from_slice(b"\x1b[201~"); }
+            if bracketed {
+                out.extend_from_slice(b"\x1b[201~");
+            }
         }
-        KeyAction::Key { symbol, modifiers, state } => {
+        KeyAction::Key {
+            symbol,
+            modifiers,
+            state,
+        } => {
             let mut bytes = ostd::session::Scrub::<16>::new();
             let count = api::services::session::encode_key(
-                symbol.code()?, modifiers.bits(), *state as u8, &mut bytes,
-            ).map_err(codec_error)?;
+                symbol.code()?,
+                modifiers.bits(),
+                *state as u8,
+                &mut bytes,
+            )
+            .map_err(codec_error)?;
             out.extend_from_slice(&bytes[..count]);
         }
     }
@@ -177,7 +274,11 @@ pub struct Decoder {
     paste: Vec<u8>,
 }
 
-impl Default for Decoder { fn default() -> Self { Self::new() } }
+impl Default for Decoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Decoder {
     pub const MAX_CONTROL_LEN: usize = 256;
@@ -186,45 +287,79 @@ impl Decoder {
     pub const ESC_TIMEOUT_NS: u64 = 30_000_000;
 
     pub fn new() -> Self {
-        Self { inner: api::services::session::SerialDecoder::new(),
-            last_now: None, in_paste: false, paste: Vec::new() }
+        Self {
+            inner: api::services::session::SerialDecoder::new(),
+            last_now: None,
+            in_paste: false,
+            paste: Vec::new(),
+        }
     }
-    pub fn deadline_ns(&self) -> Option<u64> { self.inner.deadline_ns() }
+    pub fn deadline_ns(&self) -> Option<u64> {
+        self.inner.deadline_ns()
+    }
     fn clock(&mut self, now: u64) -> Result<(), TerminalError> {
-        if self.last_now.is_some_and(|last| now < last) { return Err(TerminalError::InvalidInput); }
+        if self.last_now.is_some_and(|last| now < last) {
+            return Err(TerminalError::InvalidInput);
+        }
         self.last_now = Some(now);
         Ok(())
     }
     fn reset(&mut self) {
         // A fresh decoder (not `reset`) also overwrites the pending-sequence bytes.
-        self.inner = api::services::session::SerialDecoder::new(); self.in_paste = false;
+        self.inner = api::services::session::SerialDecoder::new();
+        self.in_paste = false;
         ostd::session::zeroize_vec(&mut self.paste);
     }
-    pub fn feed(&mut self, input: &[u8], now_ns: u64, out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
+    pub fn feed(
+        &mut self,
+        input: &[u8],
+        now_ns: u64,
+        out: &mut Vec<KeyAction>,
+    ) -> Result<(), TerminalError> {
         self.expire(now_ns, out)?;
         let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
         for &byte in input {
-            let result = self.inner.feed(byte, now_ns, &mut frame).map_err(codec_error)
+            let result = self
+                .inner
+                .feed(byte, now_ns, &mut frame)
+                .map_err(codec_error)
                 .and_then(|count| self.frame(&frame[..count], out));
-            if let Err(error) = result { self.reset(); return Err(error); }
+            if let Err(error) = result {
+                self.reset();
+                return Err(error);
+            }
         }
         Ok(())
     }
     pub fn expire(&mut self, now_ns: u64, out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
         self.clock(now_ns)?;
         let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
-        let result = self.inner.expire(now_ns, &mut frame).map_err(codec_error)
+        let result = self
+            .inner
+            .expire(now_ns, &mut frame)
+            .map_err(codec_error)
             .and_then(|count| self.frame(&frame[..count], out));
-        if result.is_err() { self.reset(); }
+        if result.is_err() {
+            self.reset();
+        }
         result
     }
     /// EOF never completes a missing scalar, control or paste terminator.
     pub fn flush(&mut self, out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
         let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
-        let result = self.inner.finish(&mut frame).map_err(codec_error)
+        let result = self
+            .inner
+            .finish(&mut frame)
+            .map_err(codec_error)
             .and_then(|count| self.frame(&frame[..count], out))
-            .and_then(|()| if self.in_paste { Err(TerminalError::UnsupportedInput) } else { Ok(()) });
-        if result.is_err() { self.reset(); }
+            .and(if self.in_paste {
+                Err(TerminalError::UnsupportedInput)
+            } else {
+                Ok(())
+            });
+        if result.is_err() {
+            self.reset();
+        }
         result
     }
     fn frame(&mut self, mut frames: &[u8], out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
@@ -247,7 +382,9 @@ impl Decoder {
         let _epoch = reader.u64().map_err(codec_error)?;
         let kind = reader.u16().map_err(codec_error)?;
         let length = reader.u16().map_err(codec_error)? as usize;
-        if reader.u32().map_err(codec_error)? != 0 { return Err(TerminalError::InvalidInput); }
+        if reader.u32().map_err(codec_error)? != 0 {
+            return Err(TerminalError::InvalidInput);
+        }
         let payload = reader.take(length).map_err(codec_error)?;
         reader.finish().map_err(codec_error)?;
         match kind {
@@ -263,8 +400,14 @@ impl Decoder {
                 out.push(KeyAction::from_key(code, modifiers, pressed)?);
             }
             event_kind::TEXT if self.in_paste => {
-                let next = self.paste.len().checked_add(payload.len()).ok_or(TerminalError::BufferOverflow)?;
-                if next > Self::MAX_PASTE_LEN { return Err(TerminalError::BufferOverflow); }
+                let next = self
+                    .paste
+                    .len()
+                    .checked_add(payload.len())
+                    .ok_or(TerminalError::BufferOverflow)?;
+                if next > Self::MAX_PASTE_LEN {
+                    return Err(TerminalError::BufferOverflow);
+                }
                 self.paste.extend_from_slice(payload);
             }
             event_kind::TEXT => {
@@ -291,11 +434,17 @@ impl Decoder {
         Ok(())
     }
 }
-impl Drop for Decoder { fn drop(&mut self) { self.reset(); } }
+impl Drop for Decoder {
+    fn drop(&mut self) {
+        self.reset();
+    }
+}
 
 impl KeyAction {
     /// Wipe the text of a `Text`/`Paste` action in place once it has been consumed.
     pub fn scrub(&mut self) {
-        if let Self::Text(text) | Self::Paste(text) = self { ostd::session::zeroize_string(text); }
+        if let Self::Text(text) | Self::Paste(text) = self {
+            ostd::session::zeroize_string(text);
+        }
     }
 }

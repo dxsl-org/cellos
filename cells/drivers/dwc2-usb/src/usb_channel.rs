@@ -1385,8 +1385,7 @@ impl<'a> UsbHostEngine<'a> {
         if self.port_enabled() {
             return false;
         }
-        static FIRST: core::sync::atomic::AtomicBool =
-            core::sync::atomic::AtomicBool::new(false);
+        static FIRST: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
         if !FIRST.swap(true, core::sync::atomic::Ordering::Relaxed) {
             ostd::io::println("[dwc2] a transfer was refused: the root port is disabled");
         }
@@ -1872,8 +1871,7 @@ impl<'a> UsbHostEngine<'a> {
     fn report_channel_error(&self, ch: usize, int: u32) {
         /// Dumps printed before the line alone carries the count.
         const DUMPS: usize = 4;
-        static DUMPED: core::sync::atomic::AtomicUsize =
-            core::sync::atomic::AtomicUsize::new(0);
+        static DUMPED: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
         if !claim_failure_report("channel", &ViError::IO, int) {
             return;
         }
@@ -2294,7 +2292,10 @@ mod tests {
 
         // An `ACK` that never halted prints `unknown` through `describe_hcint`,
         // like a missing status bit, so one report covers both.
-        assert_eq!(failure_cause(&ViError::IO, 1 << 5), failure_cause(&ViError::IO, 0));
+        assert_eq!(
+            failure_cause(&ViError::IO, 1 << 5),
+            failure_cause(&ViError::IO, 0)
+        );
     }
 
     /// Endpoint toggles are indexed per device and endpoint, so a mis-indexed slot

@@ -114,7 +114,8 @@ impl TerminalSession {
     /// A new window of `cols`×`rows` for this Cell: resume the same shell on a fresh
     /// frontend. The shell redraws its prompt line; the grid keeps the transcript.
     pub fn reattach(&mut self, cols: usize, rows: usize) -> Result<(), Status> {
-        if (cols, rows) != (self.grid.cols, self.grid.rows) && self.grid.resize(cols, rows).is_err() {
+        if (cols, rows) != (self.grid.cols, self.grid.rows) && self.grid.resize(cols, rows).is_err()
+        {
             return Err(Status::Malformed);
         }
         let host = self.host.as_mut().ok_or(Status::NotFound)?;
@@ -143,13 +144,19 @@ impl TerminalSession {
     }
 
     fn submit(&mut self, input: HostInput) -> bool {
-        let Some(host) = self.host.as_mut() else { return false };
+        let Some(host) = self.host.as_mut() else {
+            return false;
+        };
         let result = match input {
             HostInput::Text(ch) => {
                 let mut buf = [0u8; 4];
                 host.submit_text(ch.encode_utf8(&mut buf))
             }
-            HostInput::Key { code, modifiers, pressed } => host.submit_key(code, modifiers, pressed),
+            HostInput::Key {
+                code,
+                modifiers,
+                pressed,
+            } => host.submit_key(code, modifiers, pressed),
         };
         match result {
             Ok(()) => false,
@@ -169,7 +176,10 @@ impl TerminalSession {
         }
         // A refused grid keeps the previous size; the session is then not resized either.
         if let Err(error) = self.grid.resize(cols, rows) {
-            self.notice(&format!("[terminal: resize to {}x{} refused: {:?}]", cols, rows, error));
+            self.notice(&format!(
+                "[terminal: resize to {}x{} refused: {:?}]",
+                cols, rows, error
+            ));
             return;
         }
         if let Some(host) = self.host.as_mut() {
@@ -182,7 +192,9 @@ impl TerminalSession {
     /// Drain pending output into the grid, notice the shell attaching the frontend and
     /// notice its exit. Returns whether the grid changed (true = re-render).
     pub fn pump(&mut self) -> bool {
-        let Some(host) = self.host.as_mut() else { return false };
+        let Some(host) = self.host.as_mut() else {
+            return false;
+        };
         match drain(host, &mut self.sink, &mut self.grid) {
             Ok(true) => return true,
             Ok(false) => {}
@@ -209,7 +221,10 @@ impl TerminalSession {
                 self.state = RunState::Exited;
                 self.notice("[shell exited - Enter restarts, Esc closes]");
                 if let Err(status) = tail {
-                    self.notice(&format!("[terminal: final output drain failed: {:?}]", status));
+                    self.notice(&format!(
+                        "[terminal: final output drain failed: {:?}]",
+                        status
+                    ));
                 }
                 true
             }
@@ -235,7 +250,10 @@ impl TerminalSession {
         self.stop_host();
         self.reset_screen();
         self.state = RunState::Failed(status);
-        self.notice(&format!("[terminal: {}: {:?} - Enter retries, Esc closes]", what, status));
+        self.notice(&format!(
+            "[terminal: {}: {:?} - Enter retries, Esc closes]",
+            what, status
+        ));
     }
 
     /// The session's program is gone (or a new one starts): whatever screen modes it left
@@ -268,7 +286,11 @@ trait Streams {
 
 impl Streams for FrontendHost {
     fn read(&mut self, stderr: bool, out: &mut [u8]) -> Result<usize, Status> {
-        if stderr { self.drain_stderr(out) } else { self.drain_stdout(out) }
+        if stderr {
+            self.drain_stderr(out)
+        } else {
+            self.drain_stdout(out)
+        }
     }
 }
 
@@ -279,7 +301,11 @@ impl Streams for FrontendHost {
 /// own and its children's output to this Cell's stdout writer; the stderr ring stays
 /// empty and the drain order between the two endpoints is irrelevant. Only a child's own
 /// stdout/stderr interleaving is unordered: the shell relays its two rings in turns.
-fn drain<S: Streams>(host: &mut S, sink: &mut ByteSink, grid: &mut TerminalGrid) -> Result<bool, Status> {
+fn drain<S: Streams>(
+    host: &mut S,
+    sink: &mut ByteSink,
+    grid: &mut TerminalGrid,
+) -> Result<bool, Status> {
     let mut buf = [0u8; 512];
     let mut any = false;
     for stderr in [false, true] {
@@ -303,11 +329,21 @@ mod tests {
     use std::string::String;
 
     fn key(keysym: KeySym, state: KeyState) -> KeyEvent {
-        KeyEvent { timestamp_ticks: 0, scancode: 0, keysym, character: 0, modifiers: Modifiers(0), state, _pad: [0; 2] }
+        KeyEvent {
+            timestamp_ticks: 0,
+            scancode: 0,
+            keysym,
+            character: 0,
+            modifiers: Modifiers(0),
+            state,
+            _pad: [0; 2],
+        }
     }
 
     fn row(grid: &TerminalGrid, r: usize) -> String {
-        let text: String = (0..grid.cols).map(|c| grid.cell_at(c, r).unwrap().ch).collect();
+        let text: String = (0..grid.cols)
+            .map(|c| grid.cell_at(c, r).unwrap().ch)
+            .collect();
         text.trim_end().into()
     }
 
@@ -348,7 +384,9 @@ mod tests {
     fn a_failed_session_leaves_the_alternate_screen_before_its_notice() {
         let mut session = TerminalSession::new(80, 24);
         session.grid.write_str("Cellos > tui");
-        session.sink.feed(&mut session.grid, b"\x1b[?1049h\x1b[?25l\x1b[31mframe\x1b[");
+        session
+            .sink
+            .feed(&mut session.grid, b"\x1b[?1049h\x1b[?25l\x1b[31mframe\x1b[");
         session.fail("output failed", Status::Revoked);
         assert!(!session.grid.alternate_active() && session.grid.cursor_visible());
         assert!(session.sink.is_ground());
@@ -359,7 +397,9 @@ mod tests {
     #[test]
     fn resize_with_the_alternate_screen_up_keeps_the_primary_screen() {
         let mut session = TerminalSession::new(80, 24);
-        session.sink.feed(&mut session.grid, b"Cellos > top\r\n\x1b[?1049h\x1b[HTUI");
+        session
+            .sink
+            .feed(&mut session.grid, b"Cellos > top\r\n\x1b[?1049h\x1b[HTUI");
         session.resize(100, 30);
         assert_eq!(row(&session.grid, 0), "TUI");
         session.sink.feed(&mut session.grid, b"\x1b[?1049l");
@@ -401,9 +441,21 @@ mod tests {
         assert_eq!(SHELL_ENV, [("CELLBOX_STREAMS", "merged")]);
         // The exact list the launch passes survives the context encoder's validation
         // (sorted unique keys, no NUL/`=`) and reads back unchanged.
-        let context = ChildContext::new(ObjectRefV1 { id: 1, generation: 1 }, &SHELL_ARGV, b"", &SHELL_ENV, &[])
-            .expect("launch environment must be a valid child context");
-        assert_eq!(context.environment().collect::<alloc::vec::Vec<_>>(), [("CELLBOX_STREAMS", "merged")]);
+        let context = ChildContext::new(
+            ObjectRefV1 {
+                id: 1,
+                generation: 1,
+            },
+            &SHELL_ARGV,
+            b"",
+            &SHELL_ENV,
+            &[],
+        )
+        .expect("launch environment must be a valid child context");
+        assert_eq!(
+            context.environment().collect::<alloc::vec::Vec<_>>(),
+            [("CELLBOX_STREAMS", "merged")]
+        );
     }
 }
 
@@ -433,7 +485,9 @@ mod drain_tests {
     }
 
     fn row(grid: &TerminalGrid, r: usize) -> String {
-        let text: String = (0..grid.cols).map(|c| grid.cell_at(c, r).unwrap().ch).collect();
+        let text: String = (0..grid.cols)
+            .map(|c| grid.cell_at(c, r).unwrap().ch)
+            .collect();
         text.trim_end().into()
     }
 
@@ -453,7 +507,11 @@ mod drain_tests {
     #[test]
     fn merged_shell_output_keeps_program_order_on_the_single_stdout_stream() {
         let mut host = Scripted {
-            out: VecDeque::from([b"Cellos > ls /x\r\n".as_slice(), b"ls: /x: no such directory\n".as_slice(), b"Cellos > ".as_slice()]),
+            out: VecDeque::from([
+                b"Cellos > ls /x\r\n".as_slice(),
+                b"ls: /x: no such directory\n".as_slice(),
+                b"Cellos > ".as_slice(),
+            ]),
             err: VecDeque::new(),
         };
         let (mut sink, mut grid) = (ByteSink::new(), TerminalGrid::new(80, 24));
@@ -465,12 +523,17 @@ mod drain_tests {
 
     #[test]
     fn drain_error_is_propagated_and_empty_streams_report_nothing() {
-        let mut idle = Scripted { out: VecDeque::new(), err: VecDeque::new() };
+        let mut idle = Scripted {
+            out: VecDeque::new(),
+            err: VecDeque::new(),
+        };
         let (mut sink, mut grid) = (ByteSink::new(), TerminalGrid::new(80, 24));
         assert_eq!(drain(&mut idle, &mut sink, &mut grid), Ok(false));
         struct Dead;
         impl Streams for Dead {
-            fn read(&mut self, _: bool, _: &mut [u8]) -> Result<usize, Status> { Err(Status::Revoked) }
+            fn read(&mut self, _: bool, _: &mut [u8]) -> Result<usize, Status> {
+                Err(Status::Revoked)
+            }
         }
         assert_eq!(drain(&mut Dead, &mut sink, &mut grid), Err(Status::Revoked));
     }

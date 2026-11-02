@@ -13,9 +13,14 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use spin::Mutex;
 
-use api::ipc::{net_ready, encode_tcp_interests, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE};
+use api::ipc::{
+    encode_tcp_interests, net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent,
+    NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
+};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult};
+use ostd::syscall::{
+    sys_lookup_service, sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult,
+};
 
 /// An observed I/O readiness event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,27 +36,47 @@ pub struct Event {
 impl Event {
     /// Create a new event with arbitrary readability and writability.
     pub const fn new(key: usize, readable: bool, writable: bool) -> Self {
-        Self { key, readable, writable }
+        Self {
+            key,
+            readable,
+            writable,
+        }
     }
 
     /// An event signaling readability.
     pub const fn readable(key: usize) -> Self {
-        Self { key, readable: true, writable: false }
+        Self {
+            key,
+            readable: true,
+            writable: false,
+        }
     }
 
     /// An event signaling writability.
     pub const fn writable(key: usize) -> Self {
-        Self { key, readable: false, writable: true }
+        Self {
+            key,
+            readable: false,
+            writable: true,
+        }
     }
 
     /// An event signaling both readability and writability.
     pub const fn all(key: usize) -> Self {
-        Self { key, readable: true, writable: true }
+        Self {
+            key,
+            readable: true,
+            writable: true,
+        }
     }
 
     /// An empty event.
     pub const fn none(key: usize) -> Self {
-        Self { key, readable: false, writable: false }
+        Self {
+            key,
+            readable: false,
+            writable: false,
+        }
     }
 
     /// Convert event flags into CellOS `net_ready` mask.
@@ -81,7 +106,9 @@ impl Events {
 
     /// Create an empty event list with pre-allocated capacity.
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { list: Vec::with_capacity(capacity) }
+        Self {
+            list: Vec::with_capacity(capacity),
+        }
     }
 
     /// Clear all events in the list.
@@ -184,7 +211,11 @@ impl Poller {
     }
 
     /// Wait for readiness events across registered sockets.
-    pub fn wait(&self, events: &mut Events, timeout: Option<Duration>) -> Result<usize, PollerError> {
+    pub fn wait(
+        &self,
+        events: &mut Events,
+        timeout: Option<Duration>,
+    ) -> Result<usize, PollerError> {
         events.clear();
 
         // 1. Drain any pending same-cell notify wakeup
@@ -270,7 +301,10 @@ impl Poller {
         };
 
         match response {
-            NetResponse::TcpReady { events: ready_slice, .. } => {
+            NetResponse::TcpReady {
+                events: ready_slice,
+                ..
+            } => {
                 let lock = self.interests.lock();
                 for chunk in ready_slice.chunks_exact(NET_READY_RECORD_BYTES) {
                     if let Some(ev) = TcpReadyEvent::decode(chunk) {
@@ -309,7 +343,10 @@ mod tests {
 
         let all = Event::all(30);
         assert!(all.readable && all.writable);
-        assert_eq!(all.to_net_mask(), net_ready::READ | net_ready::ACCEPT | net_ready::WRITE);
+        assert_eq!(
+            all.to_net_mask(),
+            net_ready::READ | net_ready::ACCEPT | net_ready::WRITE
+        );
     }
 
     #[test]
@@ -321,7 +358,10 @@ mod tests {
         assert_eq!(poller.add(socket_cap, Event::readable(1)), Ok(()));
 
         // Duplicate add must fail with AlreadyExists
-        assert_eq!(poller.add(socket_cap, Event::writable(1)), Err(PollerError::AlreadyExists));
+        assert_eq!(
+            poller.add(socket_cap, Event::writable(1)),
+            Err(PollerError::AlreadyExists)
+        );
 
         // Modify existing interest
         assert_eq!(poller.modify(socket_cap, Event::all(2)), Ok(()));

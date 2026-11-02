@@ -108,6 +108,16 @@ fn queue_dirty(pending_dirty: &mut Option<Rect>, dirty: Rect) {
     });
 }
 
+/// Screen geometry used to clamp and route pointer events.
+pub struct ScreenBounds {
+    /// Physical screen width in pixels.
+    pub width: u32,
+    /// Physical screen height in pixels.
+    pub height: u32,
+    /// Area available to maximized windows.
+    pub maximum: Rect,
+}
+
 /// Dispatch a raw IPC buffer received from the input service.
 ///
 /// Only called when `sender == state.input_tid`. Pointer events update the
@@ -115,13 +125,16 @@ fn queue_dirty(pending_dirty: &mut Option<Rect>, dirty: Rect) {
 pub fn handle_input_event(
     buf: &[u8; 512],
     state: &mut InputState,
-    screen_w: u32,
-    screen_h: u32,
-    maximum: Rect,
+    screen: ScreenBounds,
     table: &mut SurfaceTable,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
+    let ScreenBounds {
+        width: screen_w,
+        height: screen_h,
+        maximum,
+    } = screen;
     if buf[0] != INPUT_EVENT_OPCODE {
         return;
     }
@@ -195,11 +208,7 @@ fn find_shell_tid() -> usize {
 /// Re-send the key-event frame to the focused surface owner, or fallback to shell.
 fn forward_key(buf: &[u8; 512], state: &InputState) {
     let owner = state.pointer.focused_owner();
-    let target = if owner != 0 {
-        owner
-    } else {
-        find_shell_tid()
-    };
+    let target = if owner != 0 { owner } else { find_shell_tid() };
     if target != 0 {
         let _ = sys_try_send(target, &buf[..INPUT_FRAME_LEN]);
     }

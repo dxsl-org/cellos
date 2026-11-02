@@ -176,7 +176,8 @@ mod tests {
 
     const SYS_TOOLS_MANIFEST: &str = include_str!("../../sys-tools/Cargo.toml");
     const NET_TOOLS_MANIFEST: &str = include_str!("../../net-tools/Cargo.toml");
-    const CATALOG: &str = include_str!("../../../../.agents/261020-1750-cellbox-cli/command-catalog.md");
+    const CATALOG: &str =
+        include_str!("../../../../.agents/261020-1750-cellbox-cli/command-catalog.md");
 
     /// `name = "…"` of every `[[bin]]` table in a Cargo manifest.
     fn bin_names(manifest: &str) -> Vec<&str> {
@@ -213,7 +214,12 @@ mod tests {
         let mut seen = BTreeSet::new();
         for entry in LEDGER {
             let key = (entry.surface as u8, entry.name);
-            assert!(seen.insert(key), "{:?} {} listed twice", entry.surface, entry.name);
+            assert!(
+                seen.insert(key),
+                "{:?} {} listed twice",
+                entry.surface,
+                entry.name
+            );
         }
     }
 
@@ -231,7 +237,11 @@ mod tests {
     #[test]
     fn builtin_entries_equal_the_executor_builtins() {
         let executor = crate::executor::BUILTINS;
-        assert_eq!(executor.len(), as_set(executor.iter().copied()).len(), "BUILTINS has a duplicate");
+        assert_eq!(
+            executor.len(),
+            as_set(executor.iter().copied()).len(),
+            "BUILTINS has a duplicate"
+        );
         assert_eq!(as_set(names_of(Builtin)), as_set(executor.iter().copied()));
     }
 
@@ -248,7 +258,11 @@ mod tests {
     #[test]
     fn every_separate_elf_is_a_retained_worker_and_never_in_the_suite() {
         for entry in LEDGER.iter().filter(|e| e.surface != Builtin) {
-            assert_eq!(entry.disposition, RetainedWorker, "{:?} {}", entry.surface, entry.name);
+            assert_eq!(
+                entry.disposition, RetainedWorker,
+                "{:?} {}",
+                entry.surface, entry.name
+            );
         }
         for entry in LEDGER.iter().filter(|e| e.surface == Builtin) {
             assert_ne!(entry.disposition, RetainedWorker, "builtin {}", entry.name);
@@ -262,17 +276,31 @@ mod tests {
             .filter(|e| e.disposition == InSuiteEffectDenied)
             .map(|e| (e.surface as u8, e.name))
             .collect();
-        let expected: BTreeSet<_> = DENIAL_CHECKS.iter().map(|(name, _)| (Builtin as u8, *name)).collect();
-        assert_eq!(denied, expected, "EffectDenied entries and DENIAL_CHECKS must be the same set");
+        let expected: BTreeSet<_> = DENIAL_CHECKS
+            .iter()
+            .map(|(name, _)| (Builtin as u8, *name))
+            .collect();
+        assert_eq!(
+            denied, expected,
+            "EffectDenied entries and DENIAL_CHECKS must be the same set"
+        );
     }
 
     #[test]
     fn every_effect_denied_entry_names_a_runner_check_that_exists() {
         let runner = include_str!("../../../../scripts/qemu-phase03-pipeline-test.sh");
         for (name, check) in DENIAL_CHECKS {
-            assert_eq!(disposition(Builtin, name), Some(InSuiteEffectDenied), "{name}");
+            assert_eq!(
+                disposition(Builtin, name),
+                Some(InSuiteEffectDenied),
+                "{name}"
+            );
             let needle = alloc::format!("chk(\"{check}\"");
-            assert_eq!(runner.matches(needle.as_str()).count(), 1, "runner must define `{check}` exactly once");
+            assert_eq!(
+                runner.matches(needle.as_str()).count(),
+                1,
+                "runner must define `{check}` exactly once"
+            );
         }
     }
 
@@ -283,8 +311,14 @@ mod tests {
             .filter(|e| e.disposition == InSuiteRefused)
             .map(|e| (e.surface as u8, e.name))
             .collect();
-        let expected: BTreeSet<_> = REFUSAL_CHECKS.iter().map(|(name, _)| (Builtin as u8, *name)).collect();
-        assert_eq!(refused, expected, "Refused entries and REFUSAL_CHECKS must be the same set");
+        let expected: BTreeSet<_> = REFUSAL_CHECKS
+            .iter()
+            .map(|(name, _)| (Builtin as u8, *name))
+            .collect();
+        assert_eq!(
+            refused, expected,
+            "Refused entries and REFUSAL_CHECKS must be the same set"
+        );
         let names: BTreeSet<_> = refused.iter().map(|(_, name)| *name).collect();
         assert_eq!(names, BTreeSet::from(["kill", "snapshot"]));
     }
@@ -295,7 +329,11 @@ mod tests {
         for (name, check) in REFUSAL_CHECKS {
             assert_eq!(disposition(Builtin, name), Some(InSuiteRefused), "{name}");
             let needle = alloc::format!("chk(\"{check}\"");
-            assert_eq!(runner.matches(needle.as_str()).count(), 1, "runner must define `{check}` exactly once");
+            assert_eq!(
+                runner.matches(needle.as_str()).count(),
+                1,
+                "runner must define `{check}` exactly once"
+            );
         }
     }
 
@@ -318,7 +356,9 @@ mod tests {
 
     /// The catalog table, exactly as `command-catalog.md` must carry it.
     fn catalog_block() -> String {
-        let mut out = String::from("<!-- ledger:begin -->\n| Surface | Name | Disposition |\n|---|---|---|\n");
+        let mut out = String::from(
+            "<!-- ledger:begin -->\n| Surface | Name | Disposition |\n|---|---|---|\n",
+        );
         for entry in LEDGER {
             out.push_str("| ");
             out.push_str(surface_label(entry.surface));
@@ -334,8 +374,13 @@ mod tests {
 
     #[test]
     fn catalog_table_is_generated_from_the_ledger() {
-        let begin = CATALOG.find("<!-- ledger:begin -->").expect("catalog ledger begin marker");
-        let end = CATALOG.find("<!-- ledger:end -->").expect("catalog ledger end marker") + "<!-- ledger:end -->".len();
+        let begin = CATALOG
+            .find("<!-- ledger:begin -->")
+            .expect("catalog ledger begin marker");
+        let end = CATALOG
+            .find("<!-- ledger:end -->")
+            .expect("catalog ledger end marker")
+            + "<!-- ledger:end -->".len();
         let expected = catalog_block();
         assert!(
             &CATALOG[begin..end] == expected.as_str(),

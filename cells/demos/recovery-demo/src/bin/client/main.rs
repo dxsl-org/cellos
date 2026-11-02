@@ -13,22 +13,34 @@ extern crate alloc;
 
 #[path = "../common.rs"]
 mod common;
-mod faults;
 mod cycles;
 mod driver;
 mod extra;
+mod faults;
 
 use alloc::format;
 use ostd::io::println;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Log, Exit, Send, Recv, RecvTimeout, SetTimer, LookupService, MemInfo, StateRestore];
+api::declare_syscalls![
+    Log,
+    Exit,
+    Send,
+    Recv,
+    RecvTimeout,
+    SetTimer,
+    LookupService,
+    MemInfo,
+    StateRestore
+];
 
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
     let args = ostd::args();
-    let Some(group) = args.first().map(|s| s.as_str()) else { driver::fail("no scenario group argument") };
+    let Some(group) = args.first().map(|s| s.as_str()) else {
+        driver::fail("no scenario group argument")
+    };
     let mut client = driver::Client::connect();
     match group {
         "core" => {
@@ -40,7 +52,9 @@ fn cell_main() {
             cycles::restore_refusals(&mut client);
             remote += cycles::ten_cycles(&mut client);
             cycles::identities(&client);
-            println(&format!("[recovery-client] remote-hart retirement waits: {remote} of 11 spin crashes"));
+            println(&format!(
+                "[recovery-client] remote-hart retirement waits: {remote} of 11 spin crashes"
+            ));
         }
         "foreign" => {
             let id = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1002);

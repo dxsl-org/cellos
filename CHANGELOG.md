@@ -7,6 +7,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **RPi3 Tier-3 guests no longer randomly SIGSEGV** (`Attempted to kill init! exitcode=0x0000000b`, ~1 in 3 runs).
+  - **Cause:** the world switch saved the guest's `ESR_EL1`/`FAR_EL1` but never restored them. When a host tick exited the guest between taking an exception and reading its syndrome, the Pi host (running at EL1) overwrote both. The guest then decoded the host's syndrome, for example a page fault arrived as an SVC.
+  - **Fix:** `run_vcpu_impl` now restores both registers on entry.
+  - **Result:** the machinery gate passes 10/10.
+- **x86 boot log records are no longer dropped before the heap exists.** The logger is registered as soon as the 16550 serial port is configured, the same way RV64 does it. This makes the allocator ranges, firmware-range rejections, ACPI MCFG/HPET/DMAR findings and RT heap lines visible. The `early_uart` workarounds are folded back into `log`, and `kernel/src/early_uart.rs` is removed.
 - **AArch64 QEMU virt guests receive interrupts, and the hypervisor-machinery lane reaches the guest shell.**
   - **Cause:** GICV was mapped read-only in stage 2, so the guest's `GICC_CTLR`/`PMR`/`EOIR` writes were dropped. List registers were also loaded as Group 1, which Linux never enables. No device completion was delivered, and the guest hung at its first disk read.
   - **GIC fix:** GICV is now writable. Interrupts are loaded as Group 0. `GICH_VMCR`, `GICH_APR` and active list registers are saved and restored per vCPU (`vgic::CpuIfState`).
@@ -450,6 +455,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - a closed consumer stops the producer with kernel reason 3, reported 141.
 
 ### Changed
+- **The hv/aarch64 machinery lane now requires the guest shell.** `qemu-hypervisor-smoke.sh` passes only when the guest prints `~ #`, under both TCG and KVM, and stops QEMU as soon as the prompt appears. The tolerated address-size fault signature and the memory-init fallback are gone.
+- **Guest initramfs names are board-neutral:** `scripts/pi-guest-init` and `tools/prepare-guest-initramfs.py`. The in-guest path `/bin/pi-guest-init` is unchanged.
+- **Lint debt cleared.**
+  - The workspace passes `cargo fmt --all --check`. The vendored `third_party/sunset` is excluded from rustfmt so it stays byte-exact with its patches.
+  - The CI clippy jobs (riscv64 workspace, aarch64 and x86_64 kernel) pass with `-D warnings`.
+  - Internal APIs changed: `TaskTable::get` now returns `Option<&Task>`, and a few unused `Result<_, ()>` returns are now `bool`. There is no `libs/api` change; `ssh_completion` gets a scoped `#[allow]`.
 - **The shared AArch64 core no longer branches on `board-rpi*`** (ADR-0029 §6, plan `261031-1241-aarch64-core-backend-split` phases 01–04; checkpoints approved 2026-11-02). Board behaviour sits behind a static, zero-cost `hal::aarch64::backend::Board` (`QemuVirt`, `Bcm2837`, `Bcm2711`), selected in one place. It covers:
   - console and diagnostics;
   - interrupt controller, tick, IRQ dispatch, IPI and secondary start;

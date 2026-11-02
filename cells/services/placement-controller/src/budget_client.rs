@@ -13,6 +13,12 @@ pub struct BudgetAuthorityClient {
     pub authority_epoch: u64,
 }
 
+impl Default for BudgetAuthorityClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BudgetAuthorityClient {
     pub const fn new() -> Self {
         Self { authority_epoch: 1 }

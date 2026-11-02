@@ -228,7 +228,11 @@ pub enum VfsRequest<'a> {
     SaveBegin { dst: &'a str },
     /// Append staged bytes; `offset` must equal the bytes staged so far and
     /// `bytes` is at most [`VFS_SAVE_CHUNK`].
-    SaveChunk { id: u32, offset: u64, bytes: &'a [u8] },
+    SaveChunk {
+        id: u32,
+        offset: u64,
+        bytes: &'a [u8],
+    },
     /// Seal the staged bytes: the service reads them back and requires exactly
     /// `len` bytes with this SHA-256. No further chunks are accepted.
     SaveSeal { id: u32, len: u64, sha256: [u8; 32] },
@@ -244,14 +248,26 @@ pub enum VfsRequest<'a> {
     /// host identifier and port in the protected host-trust store and compare the
     /// complete public key. Answered with [`VfsResponse::Trust`]. Needs the caller's
     /// attested outbound-connect right; never reveals store contents.
-    TrustLookup { host: &'a str, port: u16, algorithm: &'a str, key: &'a [u8] },
+    TrustLookup {
+        host: &'a str,
+        port: u16,
+        algorithm: &'a str,
+        key: &'a [u8],
+    },
     /// Phase 09 S9-4c first trust: for a host and port that [`Self::TrustLookup`] reports
     /// Unknown, the service registers a 60-second challenge with the input owner bound to
     /// the caller, the exact key and the store's current state, and answers
     /// [`VfsResponse::TrustChallenged`] (or [`VfsResponse::Trust`] with the refusal). The
     /// caller then runs `BeginTrustConfirmation` with `confirmation` on `session` at
     /// `epoch`, its own terminal session. Needs the attested outbound-connect right.
-    TrustChallenge { host: &'a str, port: u16, algorithm: &'a str, key: &'a [u8], session: ObjectRefV1, epoch: u64 },
+    TrustChallenge {
+        host: &'a str,
+        port: u16,
+        algorithm: &'a str,
+        key: &'a [u8],
+        session: ObjectRefV1,
+        epoch: u64,
+    },
     /// Phase 09 S9-4c: complete the caller's own `challenge`. Answered with
     /// [`VfsResponse::Trust`]: `PENDING` while undecided; after an accepted confirmation
     /// the store is updated and the answer is `KNOWN_EXACT` (or `MISMATCH` when another
@@ -271,14 +287,22 @@ pub enum SaveExpect {
     Absent,
     /// Exact file identity: `inode` is never reused on the volume and
     /// `generation` advances on every mutation, even a byte-identical one.
-    Present { inode: u64, generation: u64 },
+    Present {
+        inode: u64,
+        generation: u64,
+    },
 }
 
 /// `Observe` reply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Observation {
     Absent,
-    Present { inode: u64, generation: u64, size: u64, regular: bool },
+    Present {
+        inode: u64,
+        generation: u64,
+        size: u64,
+        regular: bool,
+    },
 }
 
 impl Observation {
@@ -287,8 +311,12 @@ impl Observation {
     pub fn expect(self) -> Option<SaveExpect> {
         match self {
             Self::Absent => Some(SaveExpect::Absent),
-            Self::Present { inode, generation, regular: true, .. } =>
-                Some(SaveExpect::Present { inode, generation }),
+            Self::Present {
+                inode,
+                generation,
+                regular: true,
+                ..
+            } => Some(SaveExpect::Present { inode, generation }),
             Self::Present { .. } => None,
         }
     }
@@ -350,9 +378,8 @@ impl SaveOutcome {
     /// The published object for either successful outcome.
     pub fn published(self) -> Option<(u64, u64)> {
         match self {
-            Self::Committed { inode, generation } | Self::CommittedDurable { inode, generation } => {
-                Some((inode, generation))
-            }
+            Self::Committed { inode, generation }
+            | Self::CommittedDurable { inode, generation } => Some((inode, generation)),
             Self::Conflict | Self::NotPublished(_) | Self::Indeterminate => None,
         }
     }
@@ -524,7 +551,10 @@ pub enum VfsResponse<'a> {
     Trust(u8),
     /// `TrustChallenge` reply: the input-issued confirmation to begin, and the
     /// service-issued challenge to commit.
-    TrustChallenged { confirmation: ObjectRefV1, challenge: ObjectRefV1 },
+    TrustChallenged {
+        confirmation: ObjectRefV1,
+        challenge: ObjectRefV1,
+    },
 }
 
 /// Packed entry format and flag bits of [`VfsResponse::DirPage`].
@@ -689,7 +719,9 @@ pub struct TcpReadyEvent {
 
 impl TcpInterest {
     pub fn decode(record: &[u8]) -> Option<Self> {
-        if record.len() != NET_READY_RECORD_BYTES { return None; }
+        if record.len() != NET_READY_RECORD_BYTES {
+            return None;
+        }
         Some(Self {
             cap_id: u32::from_le_bytes(record[..4].try_into().ok()?),
             mask: record[4],
@@ -699,7 +731,9 @@ impl TcpInterest {
 
 impl TcpReadyEvent {
     pub fn decode(record: &[u8]) -> Option<Self> {
-        if record.len() != NET_READY_RECORD_BYTES { return None; }
+        if record.len() != NET_READY_RECORD_BYTES {
+            return None;
+        }
         Some(Self {
             cap_id: u32::from_le_bytes(record[..4].try_into().ok()?),
             ready: record[4],
@@ -713,8 +747,13 @@ pub fn encode_tcp_interests<'a>(
     output: &'a mut [u8],
 ) -> Option<&'a [u8]> {
     let len = interests.len().checked_mul(NET_READY_RECORD_BYTES)?;
-    if output.len() < len { return None; }
-    for (interest, chunk) in interests.iter().zip(output[..len].chunks_exact_mut(NET_READY_RECORD_BYTES)) {
+    if output.len() < len {
+        return None;
+    }
+    for (interest, chunk) in interests
+        .iter()
+        .zip(output[..len].chunks_exact_mut(NET_READY_RECORD_BYTES))
+    {
         chunk[..4].copy_from_slice(&interest.cap_id.to_le_bytes());
         chunk[4] = interest.mask;
     }
@@ -802,12 +841,20 @@ pub enum NetRequest<'a> {
         wait: bool,
     },
     /// Explicit no-data / EOF TCP read, unlike legacy TcpRecv's empty Data.
-    TcpRecvReady { cap_id: u32, buf_len: u32 },
+    TcpRecvReady {
+        cap_id: u32,
+        buf_len: u32,
+    },
     /// Explicit partial progress / not-ready / EOF TCP send.
-    TcpSendReady { cap_id: u32, data: &'a [u8] },
+    TcpSendReady {
+        cap_id: u32,
+        data: &'a [u8],
+    },
     /// Queue FIN after accepted TCP output; net reclaims at terminal/deadline.
     /// Legacy TcpClose remains an immediate abort and is unchanged.
-    TcpCloseGraceful { cap_id: u32 },
+    TcpCloseGraceful {
+        cap_id: u32,
+    },
 }
 
 /// Responses from the network service.
@@ -824,10 +871,7 @@ pub enum NetResponse<'a> {
     State(u8),
     Ok,
     Err(u8),
-    TcpReady {
-        events: &'a [u8],
-        next_cursor: u16,
-    },
+    TcpReady { events: &'a [u8], next_cursor: u16 },
     NotReady,
     Eof,
     WriteProgress(u32),
@@ -1001,7 +1045,10 @@ mod session_wire_tests {
             (InputRequest::SetFocus { cell_tid: 7 }, &b"\x00\x07"[..]),
             (InputRequest::GetFocus, &b"\x01"[..]),
             (InputRequest::ClearFocus { cell_tid: 7 }, &b"\x02\x07"[..]),
-            (InputRequest::RegisterEventSource { kind: 2 }, &b"\x03\x02"[..]),
+            (
+                InputRequest::RegisterEventSource { kind: 2 },
+                &b"\x03\x02"[..],
+            ),
         ] {
             assert_eq!(encode(&request, &mut out).unwrap(), expected);
         }
@@ -1018,20 +1065,35 @@ mod session_wire_tests {
     fn new_envelopes_append_and_borrow_without_consuming_receive_padding() {
         let mut record = [0; crate::cell_session::MAX_SERVICE_RECORD_LEN];
         crate::cell_session::RequestHeaderV1 {
-            selector: 1, total_len: record.len() as u32, request_id: 1,
-        }.encode(&mut record).unwrap();
+            selector: 1,
+            total_len: record.len() as u32,
+            request_id: 1,
+        }
+        .encode(&mut record)
+        .unwrap();
         let mut out = [0; IPC_BUF_SIZE - crate::caller_identity::CALLER_IDENTITY_LEN];
         let encoded = encode(&InputRequest::SessionV1(&record), &mut out).unwrap();
         assert_eq!(encoded[0], 4);
         let encoded_len = encoded.len();
         let decoded: InputRequest<'_> = decode(&out).unwrap();
-        let InputRequest::SessionV1(inner) = decoded else { panic!("wrong variant"); };
+        let InputRequest::SessionV1(inner) = decoded else {
+            panic!("wrong variant");
+        };
         assert_eq!(inner, record);
         assert_eq!(inner.as_ptr(), out[encoded_len - record.len()..].as_ptr());
         crate::cell_session::RequestHeaderV1::decode(inner).unwrap();
-        assert_eq!(encode(&InputResponse::SessionV1(&record), &mut out).unwrap()[0], 3);
-        assert_eq!(encode(&VfsRequest::PreparedChildV1(&record), &mut out).unwrap()[0], 30);
-        assert_eq!(encode(&VfsResponse::PreparedChildV1(&record), &mut out).unwrap()[0], 10);
+        assert_eq!(
+            encode(&InputResponse::SessionV1(&record), &mut out).unwrap()[0],
+            3
+        );
+        assert_eq!(
+            encode(&VfsRequest::PreparedChildV1(&record), &mut out).unwrap()[0],
+            30
+        );
+        assert_eq!(
+            encode(&VfsResponse::PreparedChildV1(&record), &mut out).unwrap()[0],
+            10
+        );
         assert!(!VfsRequest::PreparedChildV1(&record).is_path_addressed());
         assert!(!VfsRequest::PreparedChildV1(&record).requires_mutation_authority());
     }
@@ -1039,8 +1101,14 @@ mod session_wire_tests {
     #[test]
     fn existing_vfs_tail_and_path_semantics_are_unchanged() {
         let mut out = [0; 32];
-        assert_eq!(encode(&VfsRequest::GetFile("a"), &mut out).unwrap(), b"\x00\x01a");
-        assert_eq!(encode(&VfsRequest::Rename { old: "a", new: "b" }, &mut out).unwrap(), b"\x1d\x01a\x01b");
+        assert_eq!(
+            encode(&VfsRequest::GetFile("a"), &mut out).unwrap(),
+            b"\x00\x01a"
+        );
+        assert_eq!(
+            encode(&VfsRequest::Rename { old: "a", new: "b" }, &mut out).unwrap(),
+            b"\x1d\x01a\x01b"
+        );
         assert_eq!(encode(&VfsResponse::Err(7), &mut out).unwrap(), b"\x04\x07");
         assert!(VfsRequest::Rename { old: "a", new: "b" }.is_path_addressed());
         assert!(VfsRequest::Rename { old: "a", new: "b" }.requires_mutation_authority());
@@ -1051,28 +1119,54 @@ mod session_wire_tests {
         use crate::dir_handles::ViDirHandle;
         use crate::vfs_file_handles::ViVfsFileHandle;
         let mut out = [0; 32];
-        let page = VfsRequest::ListAtPage { dir: ViDirHandle(5), cursor: 300 };
+        let page = VfsRequest::ListAtPage {
+            dir: ViDirHandle(5),
+            cursor: 300,
+        };
         assert_eq!(encode(&page, &mut out).unwrap(), b"\x1f\x05\xac\x02");
-        let state = VfsRequest::FileHandleState { file: ViVfsFileHandle(7) };
+        let state = VfsRequest::FileHandleState {
+            file: ViVfsFileHandle(7),
+        };
         assert_eq!(encode(&state, &mut out).unwrap(), b"\x20\x07");
         for request in [page, state] {
             assert!(!request.is_path_addressed());
             assert!(!request.requires_mutation_authority());
         }
-        let reply = VfsResponse::DirPage { next: 3, flags: vfs_dir_page::COMPLETE, entries: b"\x00\x01a" };
-        assert_eq!(encode(&reply, &mut out).unwrap(), b"\x0b\x03\x01\x03\x00\x01a");
-        let reply = VfsResponse::FileState { size: 4001, modified: true };
+        let reply = VfsResponse::DirPage {
+            next: 3,
+            flags: vfs_dir_page::COMPLETE,
+            entries: b"\x00\x01a",
+        };
+        assert_eq!(
+            encode(&reply, &mut out).unwrap(),
+            b"\x0b\x03\x01\x03\x00\x01a"
+        );
+        let reply = VfsResponse::FileState {
+            size: 4001,
+            modified: true,
+        };
         assert_eq!(encode(&reply, &mut out).unwrap(), b"\x0c\xa1\x1f\x01");
         // Earlier indices keep their bytes.
-        assert_eq!(encode(&VfsResponse::PreparedChildV1(b""), &mut out).unwrap(), b"\x0a\x00");
+        assert_eq!(
+            encode(&VfsResponse::PreparedChildV1(b""), &mut out).unwrap(),
+            b"\x0a\x00"
+        );
     }
 
     #[test]
     fn trust_lookup_appends_after_save_abort() {
         let mut out = [0; 64];
-        let req = VfsRequest::TrustLookup { host: "h", port: 22, algorithm: "a", key: b"k" };
+        let req = VfsRequest::TrustLookup {
+            host: "h",
+            port: 22,
+            algorithm: "a",
+            key: b"k",
+        };
         assert_eq!(encode(&req, &mut out).unwrap(), b"\x28\x01h\x16\x01a\x01k");
-        assert_eq!(encode(&VfsResponse::Trust(ssh_trust::MISMATCH), &mut out).unwrap(), b"\x10\x02");
+        assert_eq!(
+            encode(&VfsResponse::Trust(ssh_trust::MISMATCH), &mut out).unwrap(),
+            b"\x10\x02"
+        );
         // Read-only and host-addressed: neither mutation authority nor a path.
         assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
     }
@@ -1081,15 +1175,34 @@ mod session_wire_tests {
     fn first_trust_variants_append_after_trust_lookup() {
         let mut out = [0; 64];
         let r = |id, generation| ObjectRefV1 { id, generation };
-        let challenge = VfsRequest::TrustChallenge { host: "h", port: 22, algorithm: "a", key: b"k", session: r(5, 300), epoch: 2 };
-        assert_eq!(encode(&challenge, &mut out).unwrap(), b"\x29\x01h\x16\x01a\x01k\x05\xac\x02\x02");
+        let challenge = VfsRequest::TrustChallenge {
+            host: "h",
+            port: 22,
+            algorithm: "a",
+            key: b"k",
+            session: r(5, 300),
+            epoch: 2,
+        };
+        assert_eq!(
+            encode(&challenge, &mut out).unwrap(),
+            b"\x29\x01h\x16\x01a\x01k\x05\xac\x02\x02"
+        );
         let commit = VfsRequest::TrustCommit { challenge: r(1, 2) };
         assert_eq!(encode(&commit, &mut out).unwrap(), b"\x2a\x01\x02");
-        let reply = VfsResponse::TrustChallenged { confirmation: r(3, 1), challenge: r(1, 2) };
+        let reply = VfsResponse::TrustChallenged {
+            confirmation: r(3, 1),
+            challenge: r(1, 2),
+        };
         assert_eq!(encode(&reply, &mut out).unwrap(), b"\x11\x03\x01\x01\x02");
         // Earlier indices keep their bytes; the commit answers are new `Trust` codes.
-        assert_eq!(encode(&VfsResponse::Trust(ssh_trust::PENDING), &mut out).unwrap(), b"\x10\x07");
-        assert_eq!((ssh_trust::REFUSED, ssh_trust::EXPIRED, ssh_trust::PENDING), (5, 6, 7));
+        assert_eq!(
+            encode(&VfsResponse::Trust(ssh_trust::PENDING), &mut out).unwrap(),
+            b"\x10\x07"
+        );
+        assert_eq!(
+            (ssh_trust::REFUSED, ssh_trust::EXPIRED, ssh_trust::PENDING),
+            (5, 6, 7)
+        );
         // Host-addressed, and the caller's mutation authority is never what writes the store.
         for req in [challenge, commit] {
             assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
@@ -1099,17 +1212,41 @@ mod session_wire_tests {
     #[test]
     fn conditional_save_variants_append_after_file_handle_state() {
         let mut out = [0; 64];
-        let expect = SaveExpect::Present { inode: 9, generation: 300 };
-        assert_eq!(encode(&VfsRequest::Observe { path: "a" }, &mut out).unwrap(), b"\x21\x01a");
-        assert_eq!(encode(&VfsRequest::SaveBegin { dst: "a" }, &mut out).unwrap(), b"\x22\x01a");
-        assert_eq!(encode(&VfsRequest::SaveAbort { id: 1 }, &mut out).unwrap(), b"\x27\x01");
-        assert_eq!(encode(&VfsRequest::SaveCommit { id: 1, expect }, &mut out).unwrap(),
-            b"\x25\x01\x01\x09\xac\x02");
-        assert_eq!(encode(&VfsResponse::SaveOutcome(SaveOutcome::Conflict), &mut out).unwrap(), b"\x0f\x01");
-        assert_eq!(encode(&VfsResponse::Observed(Observation::Absent), &mut out).unwrap(), b"\x0d\x00");
+        let expect = SaveExpect::Present {
+            inode: 9,
+            generation: 300,
+        };
+        assert_eq!(
+            encode(&VfsRequest::Observe { path: "a" }, &mut out).unwrap(),
+            b"\x21\x01a"
+        );
+        assert_eq!(
+            encode(&VfsRequest::SaveBegin { dst: "a" }, &mut out).unwrap(),
+            b"\x22\x01a"
+        );
+        assert_eq!(
+            encode(&VfsRequest::SaveAbort { id: 1 }, &mut out).unwrap(),
+            b"\x27\x01"
+        );
+        assert_eq!(
+            encode(&VfsRequest::SaveCommit { id: 1, expect }, &mut out).unwrap(),
+            b"\x25\x01\x01\x09\xac\x02"
+        );
+        assert_eq!(
+            encode(&VfsResponse::SaveOutcome(SaveOutcome::Conflict), &mut out).unwrap(),
+            b"\x0f\x01"
+        );
+        assert_eq!(
+            encode(&VfsResponse::Observed(Observation::Absent), &mut out).unwrap(),
+            b"\x0d\x00"
+        );
         // Every step that changes storage needs mutation authority; only the
         // destination-naming steps are path-addressed.
-        let seal = VfsRequest::SaveSeal { id: 1, len: 0, sha256: [0; 32] };
+        let seal = VfsRequest::SaveSeal {
+            id: 1,
+            len: 0,
+            sha256: [0; 32],
+        };
         assert!(seal.requires_mutation_authority() && !seal.is_path_addressed());
         let begin = VfsRequest::SaveBegin { dst: "a" };
         assert!(begin.requires_mutation_authority() && begin.is_path_addressed());
@@ -1117,7 +1254,12 @@ mod session_wire_tests {
         assert!(!observe.requires_mutation_authority() && observe.is_path_addressed());
         assert!(!VfsRequest::SaveQuery { id: 1 }.requires_mutation_authority());
         // A directory observation never yields a replaceable expectation.
-        let dir = Observation::Present { inode: 2, generation: 1, size: 0, regular: false };
+        let dir = Observation::Present {
+            inode: 2,
+            generation: 1,
+            size: 0,
+            regular: false,
+        };
         assert_eq!(dir.expect(), None);
     }
 
@@ -1125,27 +1267,51 @@ mod session_wire_tests {
     fn dir_page_entries_round_trip_and_reject_what_a_handle_cannot_name() {
         use vfs_dir_page::{entries, push_entry, Entry, EntryKind, MalformedPage};
         let mut page = [0u8; 16];
-        let pos = push_entry(&mut page, 0, EntryKind::Dir, b"src").unwrap().unwrap();
-        let pos = push_entry(&mut page, pos, EntryKind::Mount, b"tmp").unwrap().unwrap();
+        let pos = push_entry(&mut page, 0, EntryKind::Dir, b"src")
+            .unwrap()
+            .unwrap();
+        let pos = push_entry(&mut page, pos, EntryKind::Mount, b"tmp")
+            .unwrap()
+            .unwrap();
         assert_eq!(pos, 10);
         // Does not fit: nothing written, position unchanged by the caller.
-        assert_eq!(push_entry(&mut page, pos, EntryKind::File, b"too-long"), Ok(None));
+        assert_eq!(
+            push_entry(&mut page, pos, EntryKind::File, b"too-long"),
+            Ok(None)
+        );
         assert_eq!(page[pos..], [0; 6]);
         for bad in [&b""[..], b".", b"..", b"a/b", b"a\\b", b"a\nb", b"\xff"] {
-            assert!(push_entry(&mut page, 0, EntryKind::File, bad).is_err(), "{bad:?}");
+            assert!(
+                push_entry(&mut page, 0, EntryKind::File, bad).is_err(),
+                "{bad:?}"
+            );
         }
         let decoded: Vec<_> = entries(&page[..pos]).collect();
-        assert_eq!(decoded, [
-            Ok(Entry { kind: EntryKind::Dir, name: "src" }),
-            Ok(Entry { kind: EntryKind::Mount, name: "tmp" }),
-        ]);
+        assert_eq!(
+            decoded,
+            [
+                Ok(Entry {
+                    kind: EntryKind::Dir,
+                    name: "src"
+                }),
+                Ok(Entry {
+                    kind: EntryKind::Mount,
+                    name: "tmp"
+                }),
+            ]
+        );
         assert_eq!(entries(&[]).count(), 0);
         // Unknown kind, truncated name, a bad name: one error, then the end.
         for malformed in [&b"\x04\x01a"[..], b"\x00\x05ab", b"\x00", b"\x00\x02.."] {
             let decoded: Vec<_> = entries(malformed).collect();
             assert_eq!(decoded, [Err(MalformedPage)], "{malformed:?}");
         }
-        for kind in [EntryKind::File, EntryKind::Dir, EntryKind::Mount, EntryKind::Other] {
+        for kind in [
+            EntryKind::File,
+            EntryKind::Dir,
+            EntryKind::Mount,
+            EntryKind::Other,
+        ] {
             assert_eq!(EntryKind::from_wire(kind.wire()), Some(kind));
         }
     }
@@ -1154,7 +1320,11 @@ mod session_wire_tests {
     fn a_full_inline_page_fits_one_reply_frame() {
         let entries = [b'x'; IPC_BUF_SIZE - 96];
         let mut out = [0; IPC_BUF_SIZE];
-        let reply = VfsResponse::DirPage { next: u32::MAX, flags: 0xff, entries: &entries };
+        let reply = VfsResponse::DirPage {
+            next: u32::MAX,
+            flags: 0xff,
+            entries: &entries,
+        };
         assert!(encode(&reply, &mut out).is_ok());
     }
 }

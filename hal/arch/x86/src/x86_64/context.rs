@@ -13,11 +13,17 @@ pub struct FpuControl {
 
 impl FpuControl {
     pub const fn new() -> Self {
-        Self { mxcsr: 0x1f80, x87_control: 0x037f, _reserved: 0 }
+        Self {
+            mxcsr: 0x1f80,
+            x87_control: 0x037f,
+            _reserved: 0,
+        }
     }
 }
 impl Default for FpuControl {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[repr(C, align(16))]

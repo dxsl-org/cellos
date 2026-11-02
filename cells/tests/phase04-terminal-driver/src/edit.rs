@@ -17,13 +17,22 @@ const RIGHT: u32 = 0x110013;
 const END: u32 = 0x110015;
 
 const EDIT_MARKERS: [&str; 10] = [
-    "edit-refusals", "edit-save-reopen-exact", "edit-conflict-keeps-buffer",
-    "edit-saveas-overwrite-race", "edit-fat-save-refused", "edit-paste-one-group",
-    "edit-dirty-exit-no-default", "edit-resize", "edit-quit-restores", "edit-find-select-redo",
+    "edit-refusals",
+    "edit-save-reopen-exact",
+    "edit-conflict-keeps-buffer",
+    "edit-saveas-overwrite-race",
+    "edit-fat-save-refused",
+    "edit-paste-one-group",
+    "edit-dirty-exit-no-default",
+    "edit-resize",
+    "edit-quit-restores",
+    "edit-find-select-redo",
 ];
 
 fn ctrl(t: &mut Term, c: char) -> Result<(), String> {
-    t.host.submit_key(c as u32, CTRL, 1).map_err(|s| format!("ctrl-{c} {s:?}"))
+    t.host
+        .submit_key(c as u32, CTRL, 1)
+        .map_err(|s| format!("ctrl-{c} {s:?}"))
 }
 
 fn row(s: &Screen, y: usize) -> String {
@@ -40,21 +49,32 @@ fn bottom_row(s: &Screen) -> String {
 
 /// Wait for the editor's status row to name `name`.
 fn opened(t: &mut Term, name: &str) -> Result<(), String> {
-    wait_screen(t, EDIT_MS, "edit status row", |s| s.alternate().then(|| status_row(s)).filter(|r| r.contains(name)).map(drop))
+    wait_screen(t, EDIT_MS, "edit status row", |s| {
+        s.alternate()
+            .then(|| status_row(s))
+            .filter(|r| r.contains(name))
+            .map(drop)
+    })
 }
 
 fn bottom_has(t: &mut Term, what: &str) -> Result<(), String> {
-    wait_screen(t, EDIT_MS, what, |s| bottom_row(s).contains(what).then_some(()))
+    wait_screen(t, EDIT_MS, what, |s| {
+        bottom_row(s).contains(what).then_some(())
+    })
 }
 
 fn dirty_mark(t: &mut Term, dirty: bool) -> Result<(), String> {
-    wait_screen(t, EDIT_MS, "dirty mark", |s| (status_row(s).contains(" * ") == dirty).then_some(()))
+    wait_screen(t, EDIT_MS, "dirty mark", |s| {
+        (status_row(s).contains(" * ") == dirty).then_some(())
+    })
 }
 
 /// Wait for the status row to report the cursor at `line`, `col`.
 fn at(t: &mut Term, line: usize, col: usize) -> Result<(), String> {
     let want = format!("Ln {line}, Col {col}");
-    wait_screen(t, EDIT_MS, &want, |s| status_row(s).contains(&want).then_some(()))
+    wait_screen(t, EDIT_MS, &want, |s| {
+        status_row(s).contains(&want).then_some(())
+    })
 }
 
 /// Answer a Ctrl-F / Ctrl-G prompt.
@@ -68,15 +88,28 @@ fn prompt(t: &mut Term, key: char, answer: &str) -> Result<(), String> {
 /// whatever the prompt layout after them. (Cellbox `wc` reads only RamFS paths.)
 fn stored(a: &mut Term, path: &str) -> Result<Vec<u8>, String> {
     let (dir, name) = path.rsplit_once('/').ok_or_else(|| String::from("path"))?;
-    let query = format!("ls --records {dir} | where name '==' '\"{name}\"' | select size | to jsonl");
+    let query =
+        format!("ls --records {dir} | where name '==' '\"{name}\"' | select size | to jsonl");
     let rows = a.run(&query, 30_000)?;
-    let len: usize = rows.iter().find_map(|l| l.strip_prefix("{\"size\":")?.strip_suffix('}')?.parse().ok())
+    let len: usize = rows
+        .iter()
+        .find_map(|l| {
+            l.strip_prefix("{\"size\":")?
+                .strip_suffix('}')?
+                .parse()
+                .ok()
+        })
         .ok_or_else(|| format!("size {rows:?}"))?;
     let cmd = format!("cat {path}");
     a.run(&cmd, 30_000)?;
-    let body = a.out.strip_prefix(cmd.as_bytes()).and_then(|r| r.strip_prefix(b"\n"))
+    let body = a
+        .out
+        .strip_prefix(cmd.as_bytes())
+        .and_then(|r| r.strip_prefix(b"\n"))
         .ok_or_else(|| String::from("cat echo"))?;
-    body.get(..len).map(<[u8]>::to_vec).ok_or_else(|| format!("cat short of {len}"))
+    body.get(..len)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| format!("cat short of {len}"))
 }
 
 fn last_status(t: &mut Term, var: &str) -> Result<String, String> {
@@ -106,7 +139,11 @@ pub(crate) fn edit_checks(a: &mut Term) {
         format!("echo -en 'dst' | /bin/p03-filter cat > {ED}/d.txt"),
         String::from("echo -en 'fat' | /bin/p03-filter cat > /mnt/sd/edfat.txt"),
     ];
-    let failed: Vec<String> = setup.iter().filter(|cmd| a.run(cmd, 30_000).is_err()).cloned().collect();
+    let failed: Vec<String> = setup
+        .iter()
+        .filter(|cmd| a.run(cmd, 30_000).is_err())
+        .cloned()
+        .collect();
     if !failed.is_empty() {
         return skip(&EDIT_MARKERS, &format!("setup {failed:?}"));
     }
@@ -130,14 +167,25 @@ pub(crate) fn edit_checks(a: &mut Term) {
 /// runs; none of them draws a screen.
 fn edit_refusals(a: &mut Term) {
     let enters = a.screen.enters;
-    let usage = a.run("edit one two", 30_000).and_then(|_| last_status(a, "stu"));
-    let dir = a.run(&format!("edit {ED}"), 30_000).and_then(|_| last_status(a, "std"));
-    let pipe = a.run(&format!("edit {ED}/m.txt | cat"), 30_000).and_then(|_| last_status(a, "stp"));
+    let usage = a
+        .run("edit one two", 30_000)
+        .and_then(|_| last_status(a, "stu"));
+    let dir = a
+        .run(&format!("edit {ED}"), 30_000)
+        .and_then(|_| last_status(a, "std"));
+    let pipe = a
+        .run(&format!("edit {ED}/m.txt | cat"), 30_000)
+        .and_then(|_| last_status(a, "stp"));
     check(
         "edit-refusals",
-        usage.as_deref() == Ok("stu=2") && dir.as_deref() == Ok("std=1")
-            && pipe.as_ref().is_ok_and(|s| s != "stp=0") && a.screen.enters == enters,
-        &format!("usage={usage:?} dir={dir:?} pipe={pipe:?} enters={}", a.screen.enters - enters),
+        usage.as_deref() == Ok("stu=2")
+            && dir.as_deref() == Ok("std=1")
+            && pipe.as_ref().is_ok_and(|s| s != "stp=0")
+            && a.screen.enters == enters,
+        &format!(
+            "usage={usage:?} dir={dir:?} pipe={pipe:?} enters={}",
+            a.screen.enters - enters
+        ),
     );
 }
 
@@ -173,8 +221,12 @@ fn edit_save_reopen(a: &mut Term, t: &mut Term) {
     let bytes = stored(a, &path);
     check(
         "edit-save-reopen-exact",
-        run.as_deref() == Ok("sts=0") && bytes.as_deref() == Ok(b"one1\r\ntwo2\n\tnew\nlast\n".as_slice()),
-        &format!("run={run:?} bytes={:?}", bytes.map(|b| String::from_utf8_lossy(&b).into_owned())),
+        run.as_deref() == Ok("sts=0")
+            && bytes.as_deref() == Ok(b"one1\r\ntwo2\n\tnew\nlast\n".as_slice()),
+        &format!(
+            "run={run:?} bytes={:?}",
+            bytes.map(|b| String::from_utf8_lossy(&b).into_owned())
+        ),
     );
 }
 
@@ -236,7 +288,10 @@ fn edit_conflict(a: &mut Term, t: &mut Term) {
         opened(t, "c.txt")?;
         type_keys(t, "X")?;
         dirty_mark(t, true)?;
-        a.run(&format!("echo -en 'other' | /bin/p03-filter cat > {path}"), 30_000)?;
+        a.run(
+            &format!("echo -en 'other' | /bin/p03-filter cat > {path}"),
+            30_000,
+        )?;
         ctrl(t, 's')?;
         bottom_has(t, "changed since it was read")?;
         dirty_mark(t, true)
@@ -265,7 +320,10 @@ fn edit_saveas_race(a: &mut Term, t: &mut Term) {
         type_keys(t, &dst)?;
         press(t, ENTER)?;
         bottom_has(t, "overwrite? (y/n)")?;
-        a.run(&format!("echo -en 'raced' | /bin/p03-filter cat > {dst}"), 30_000)?;
+        a.run(
+            &format!("echo -en 'raced' | /bin/p03-filter cat > {dst}"),
+            30_000,
+        )?;
         type_keys(t, "y")?;
         bottom_has(t, "changed since it was read")?;
         ctrl(t, 'o')?;
@@ -280,7 +338,9 @@ fn edit_saveas_race(a: &mut Term, t: &mut Term) {
     let created = stored(a, &fresh);
     check(
         "edit-saveas-overwrite-race",
-        run.is_ok() && raced.as_deref() == Ok(b"raced".as_slice()) && created.as_deref() == Ok(b"mine".as_slice()),
+        run.is_ok()
+            && raced.as_deref() == Ok(b"raced".as_slice())
+            && created.as_deref() == Ok(b"mine".as_slice()),
         &format!("run={run:?} raced={raced:?} created={created:?}"),
     );
 }
@@ -313,13 +373,17 @@ fn edit_paste(a: &mut Term, t: &mut Term) {
     let run = (|| {
         t.send(&format!("edit {path}"))?;
         opened(t, "p.txt")?;
-        t.host.submit_paste("a\nb\r\nc").map_err(|s| format!("paste {s:?}"))?;
+        t.host
+            .submit_paste("a\nb\r\nc")
+            .map_err(|s| format!("paste {s:?}"))?;
         dirty_mark(t, true)?;
         ctrl(t, 'z')?;
         dirty_mark(t, false)?;
         quit(t, false)
     })();
-    let absent = a.run(&format!("ls {path}"), 30_000).and_then(|_| last_status(a, "stl"));
+    let absent = a
+        .run(&format!("ls {path}"), 30_000)
+        .and_then(|_| last_status(a, "stl"));
     check(
         "edit-paste-one-group",
         run.is_ok() && absent.as_ref().is_ok_and(|s| s != "stl=0"),
@@ -357,7 +421,11 @@ fn edit_dirty_exit(t: &mut Term) {
         run == Ok(true) && st.as_deref() == Ok("stx=0"),
         &format!("run={run:?} st={st:?}"),
     );
-    check("edit-quit-restores", restored && model, &format!("restore={at:?} {}", t.screen.summary()));
+    check(
+        "edit-quit-restores",
+        restored && model,
+        &format!("restore={at:?} {}", t.screen.summary()),
+    );
 }
 
 /// A resize repaints the status row at the new last-but-one row; the buffer survives.
@@ -367,10 +435,18 @@ fn edit_resize(t: &mut Term) {
         opened(t, "[unnamed]")?;
         type_keys(t, "keep")?;
         press(t, RIGHT)?;
-        t.host.resize(30, 100).map_err(|s| format!("resize {s:?}"))?;
-        wait_screen(t, EDIT_MS, "status at row 28", |s| (s.size() == (100, 30) && row(s, 28).contains("Ln 1, Col 5")).then_some(()))?;
-        t.host.resize(ROWS, COLS).map_err(|s| format!("resize {s:?}"))?;
-        wait_screen(t, EDIT_MS, "status at row 22", |s| (s.size() == (80, 24) && row(s, 22).contains("Ln 1, Col 5")).then_some(()))?;
+        t.host
+            .resize(30, 100)
+            .map_err(|s| format!("resize {s:?}"))?;
+        wait_screen(t, EDIT_MS, "status at row 28", |s| {
+            (s.size() == (100, 30) && row(s, 28).contains("Ln 1, Col 5")).then_some(())
+        })?;
+        t.host
+            .resize(ROWS, COLS)
+            .map_err(|s| format!("resize {s:?}"))?;
+        wait_screen(t, EDIT_MS, "status at row 22", |s| {
+            (s.size() == (80, 24) && row(s, 22).contains("Ln 1, Col 5")).then_some(())
+        })?;
         quit(t, true)
     })();
     check("edit-resize", run.is_ok(), &format!("run={run:?}"));

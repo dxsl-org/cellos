@@ -45,7 +45,13 @@ impl core::fmt::Display for BlockDeviceName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let id = self.0.id;
         if self.0.kind == BLOCK_DEVICE_PCI {
-            write!(f, "pci-{:02x}-{:02x}-{:x}", (id >> 8) & 0xff, (id >> 3) & 0x1f, id & 7)
+            write!(
+                f,
+                "pci-{:02x}-{:02x}-{:x}",
+                (id >> 8) & 0xff,
+                (id >> 3) & 0x1f,
+                id & 7
+            )
         } else {
             write!(f, "mmio-{:x}", id)
         }
@@ -147,10 +153,16 @@ pub(crate) fn publish_block_route(key: DeviceKey, provider: BlockProvider) -> Op
     }
     let _publication = ROLE_PUBLICATION.lock();
     let tid = provider.0;
-    let bound = Some(BlockRouteSlot { key, provider: Some(provider) });
+    let bound = Some(BlockRouteSlot {
+        key,
+        provider: Some(provider),
+    });
     let outcome = {
         let mut routes = BLOCK_ROUTES.lock();
-        match routes.iter().position(|slot| slot.is_some_and(|slot| slot.key == key)) {
+        match routes
+            .iter()
+            .position(|slot| slot.is_some_and(|slot| slot.key == key))
+        {
             Some(index) => match routes[index].and_then(|slot| slot.provider) {
                 Some((holder, _, _)) if holder != tid => Bind::Held(index, holder),
                 _ => {
@@ -191,7 +203,10 @@ pub(crate) fn publish_block_route(key: DeviceKey, provider: BlockProvider) -> Op
             None
         }
         Bind::Full => {
-            log::warn!("[driver_cell] block route table full; device {} refused", name);
+            log::warn!(
+                "[driver_cell] block route table full; device {} refused",
+                name
+            );
             None
         }
     }
@@ -388,7 +403,11 @@ mod tests {
         deregister_all_for(41);
 
         assert_eq!(provider_of(0), None, "exit clears the provider");
-        assert_eq!(block_route_record(0).map(|r| r.device()), Some(pci(0xF8)), "key stays");
+        assert_eq!(
+            block_route_record(0).map(|r| r.device()),
+            Some(pci(0xF8)),
+            "key stays"
+        );
         let state = *NIC_DRIVER_STATE.lock();
         assert_eq!(state.owner_tid, 0);
         assert_eq!(state.virtio_irq, 0);
@@ -418,20 +437,36 @@ mod tests {
         let mmio = DeviceKey::new(BLOCK_DEVICE_MMIO, 0x1000_1000).expect("valid base");
         assert_eq!(publish_block_route(pci(0xF8), (5, 50, 1)), Some(0));
         assert_eq!(publish_block_route(mmio, (6, 60, 1)), Some(1));
-        assert_eq!(publish_block_route(pci(0xF8), (5, 50, 1)), Some(0), "idempotent");
+        assert_eq!(
+            publish_block_route(pci(0xF8), (5, 50, 1)),
+            Some(0),
+            "idempotent"
+        );
 
-        assert_eq!(publish_block_route(pci(0xF8), (7, 50, 1)), None, "live foreign provider");
+        assert_eq!(
+            publish_block_route(pci(0xF8), (7, 50, 1)),
+            None,
+            "live foreign provider"
+        );
         assert_eq!(provider_of(0), Some((5, 50, 1)));
 
         deregister_all_for(5);
-        assert_eq!(publish_block_route(pci(0xF8), (7, 70, 2)), Some(0), "same slot, new provider");
+        assert_eq!(
+            publish_block_route(pci(0xF8), (7, 70, 2)),
+            Some(0),
+            "same slot, new provider"
+        );
         assert_eq!(provider_of(0), Some((7, 70, 2)));
         assert_eq!(provider_of(1), Some((6, 60, 1)), "sibling untouched");
 
         for (n, bdf) in (2..MAX_BLOCK_ROUTES).zip(0x100u64..) {
             assert_eq!(publish_block_route(pci(bdf), (8, 80, 1)), Some(n));
         }
-        assert_eq!(publish_block_route(pci(0x200), (9, 90, 1)), None, "table full");
+        assert_eq!(
+            publish_block_route(pci(0x200), (9, 90, 1)),
+            None,
+            "table full"
+        );
         assert!(block_route_record(MAX_BLOCK_ROUTES).is_none());
         assert!((0..MAX_BLOCK_ROUTES).all(|i| block_route_record(i).is_some_and(|r| r.id != 0x200)));
         reset_block_routes();
@@ -439,8 +474,14 @@ mod tests {
 
     #[test]
     fn block_device_names_follow_the_pci_location_and_mmio_base() {
-        assert_eq!(alloc::format!("{}", BlockDeviceName(pci(0xFA))), "pci-00-1f-2");
-        assert_eq!(alloc::format!("{}", BlockDeviceName(pci(0x0300))), "pci-03-00-0");
+        assert_eq!(
+            alloc::format!("{}", BlockDeviceName(pci(0xFA))),
+            "pci-00-1f-2"
+        );
+        assert_eq!(
+            alloc::format!("{}", BlockDeviceName(pci(0x0300))),
+            "pci-03-00-0"
+        );
         let mmio = DeviceKey::new(BLOCK_DEVICE_MMIO, 0x1000_1000).expect("valid base");
         assert_eq!(alloc::format!("{}", BlockDeviceName(mmio)), "mmio-10001000");
     }

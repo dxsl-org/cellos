@@ -7,8 +7,8 @@ extern crate alloc;
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::fmt;
 use api::syscall::service;
+use core::fmt;
 use serde::Deserialize;
 
 pub const MAX_CONFIG_BYTES: usize = 16_384;
@@ -48,7 +48,9 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self { default_cell_heap_mib: 16 }
+        Self {
+            default_cell_heap_mib: 16,
+        }
     }
 }
 
@@ -125,8 +127,12 @@ pub struct CellSpec {
     pub ready_timeout_ticks: u64,
 }
 
-const fn enabled_default() -> bool { true }
-const fn timeout_default() -> u64 { 500 }
+const fn enabled_default() -> bool {
+    true
+}
+const fn timeout_default() -> u64 {
+    500
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -138,7 +144,10 @@ pub struct CellConfig {
 
 impl Default for CellConfig {
     fn default() -> Self {
-        Self { version: 1, cells: Vec::new() }
+        Self {
+            version: 1,
+            cells: Vec::new(),
+        }
     }
 }
 
@@ -151,9 +160,19 @@ pub enum ConfigError {
     UnsupportedVersion(u32),
     HeapOutOfRange,
     TooManyCells,
-    InvalidCell { name: String, field: &'static str },
-    Duplicate { field: &'static str, name: String },
-    Dependency { name: String, dependency: String, reason: &'static str },
+    InvalidCell {
+        name: String,
+        field: &'static str,
+    },
+    Duplicate {
+        field: &'static str,
+        name: String,
+    },
+    Dependency {
+        name: String,
+        dependency: String,
+        reason: &'static str,
+    },
     Cycle,
 }
 
@@ -164,20 +183,30 @@ impl fmt::Display for ConfigError {
             Self::TooLarge => write!(f, "configuration exceeds {MAX_CONFIG_BYTES} bytes"),
             Self::InvalidUtf8 => f.write_str("configuration is not UTF-8"),
             Self::Toml(error) => write!(f, "invalid TOML schema: {error}"),
-            Self::UnsupportedVersion(version) => write!(f, "unsupported configuration version {version}"),
+            Self::UnsupportedVersion(version) => {
+                write!(f, "unsupported configuration version {version}")
+            }
             Self::HeapOutOfRange => f.write_str("default_cell_heap_mib must be in 1..=16"),
             Self::TooManyCells => write!(f, "configuration exceeds {MAX_CELLS} combined cells"),
             Self::InvalidCell { name, field } => write!(f, "cell {name:?}: invalid {field}"),
             Self::Duplicate { field, name } => write!(f, "cell {name:?}: duplicate {field}"),
-            Self::Dependency { name, dependency, reason } => write!(f, "cell {name:?}: dependency {dependency:?} {reason}"),
+            Self::Dependency {
+                name,
+                dependency,
+                reason,
+            } => write!(f, "cell {name:?}: dependency {dependency:?} {reason}"),
             Self::Cycle => f.write_str("cell dependency cycle"),
         }
     }
 }
 
 fn parse<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, ConfigError> {
-    if bytes.is_empty() { return Err(ConfigError::Empty); }
-    if bytes.len() > MAX_CONFIG_BYTES { return Err(ConfigError::TooLarge); }
+    if bytes.is_empty() {
+        return Err(ConfigError::Empty);
+    }
+    if bytes.len() > MAX_CONFIG_BYTES {
+        return Err(ConfigError::TooLarge);
+    }
     let text = core::str::from_utf8(bytes).map_err(|_| ConfigError::InvalidUtf8)?;
     toml::from_str(text).map_err(|error| ConfigError::Toml(error.to_string()))
 }
@@ -205,45 +234,83 @@ pub fn parse_cells(bytes: &[u8]) -> Result<CellConfig, ConfigError> {
 }
 
 fn check_version(version: u32) -> Result<(), ConfigError> {
-    if version == 1 { Ok(()) } else { Err(ConfigError::UnsupportedVersion(version)) }
+    if version == 1 {
+        Ok(())
+    } else {
+        Err(ConfigError::UnsupportedVersion(version))
+    }
 }
 
 fn valid_name(name: &str) -> bool {
-    !name.is_empty() && name.len() <= MAX_NAME_BYTES
-        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-        && name != "." && name != ".."
+    !name.is_empty()
+        && name.len() <= MAX_NAME_BYTES
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        && name != "."
+        && name != ".."
 }
 
 fn invalid(cell: &CellSpec, field: &'static str) -> ConfigError {
-    ConfigError::InvalidCell { name: cell.name.clone(), field }
+    ConfigError::InvalidCell {
+        name: cell.name.clone(),
+        field,
+    }
 }
 
 fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
     check_version(config.version)?;
-    if config.cells.len() > MAX_CELLS { return Err(ConfigError::TooManyCells); }
+    if config.cells.len() > MAX_CELLS {
+        return Err(ConfigError::TooManyCells);
+    }
     for (index, cell) in config.cells.iter().enumerate() {
-        if !valid_name(&cell.name) { return Err(invalid(cell, "name")); }
+        if !valid_name(&cell.name) {
+            return Err(invalid(cell, "name"));
+        }
         let basename = cell.path.strip_prefix("/bin/").unwrap_or("");
-        if cell.path.len() > MAX_PATH_BYTES || basename.is_empty()
-            || basename == "." || basename == ".."
-            || !basename.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        if cell.path.len() > MAX_PATH_BYTES
+            || basename.is_empty()
+            || basename == "."
+            || basename == ".."
+            || !basename
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
         {
             return Err(invalid(cell, "path (expected /bin/<basename>)"));
         }
         const FIXED_NAMES: &[&str] = &["init", "vfs", "block", "nvme", "ahci"];
         const FIXED_PATHS: &[&str] = &[
-            "/bin/init", "/bin/vfs", "/bin/block", "/bin/nvme", "/bin/ahci",
-            "/bin/ocel-js", "/bin/ocel-quickjs", "/bin/ocel-pdf",
+            "/bin/init",
+            "/bin/vfs",
+            "/bin/block",
+            "/bin/nvme",
+            "/bin/ahci",
+            "/bin/ocel-js",
+            "/bin/ocel-quickjs",
+            "/bin/ocel-pdf",
         ];
-        if FIXED_NAMES.iter().any(|name| cell.name.eq_ignore_ascii_case(name))
-            || FIXED_PATHS.iter().any(|path| cell.path.eq_ignore_ascii_case(path))
-            || cell.service_id.is_some_and(|id| matches!(id,
-                service::VFS | service::BLOCK_DRIVER | service::OCEL_ACTIVATOR
-                | service::OCEL_JS | service::OCEL_PDF))
+        if FIXED_NAMES
+            .iter()
+            .any(|name| cell.name.eq_ignore_ascii_case(name))
+            || FIXED_PATHS
+                .iter()
+                .any(|path| cell.path.eq_ignore_ascii_case(path))
+            || cell.service_id.is_some_and(|id| {
+                matches!(
+                    id,
+                    service::VFS
+                        | service::BLOCK_DRIVER
+                        | service::OCEL_ACTIVATOR
+                        | service::OCEL_JS
+                        | service::OCEL_PDF
+                )
+            })
         {
             return Err(invalid(cell, "reserved bootstrap or demand-only identity"));
         }
-        if cell.service_id == Some(0) { return Err(invalid(cell, "service_id")); }
+        if cell.service_id == Some(0) {
+            return Err(invalid(cell, "service_id"));
+        }
         if cell.registration == Registration::SelfReady && cell.service_id.is_none() {
             return Err(invalid(cell, "self-ready registration requires service_id"));
         }
@@ -252,15 +319,23 @@ fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
         }
         let mut argv_bytes = ARGV_PREFIX_BYTES;
         for arg in &cell.args {
-            if arg.as_bytes().contains(&0) { return Err(invalid(cell, "args contain NUL")); }
-            argv_bytes = argv_bytes.checked_add(arg.len()).and_then(|n| n.checked_add(1))
+            if arg.as_bytes().contains(&0) {
+                return Err(invalid(cell, "args contain NUL"));
+            }
+            argv_bytes = argv_bytes
+                .checked_add(arg.len())
+                .and_then(|n| n.checked_add(1))
                 .filter(|n| *n <= MAX_ARGV_BYTES)
                 .ok_or_else(|| invalid(cell, "encoded args exceed 512 bytes"))?;
         }
         for dependency in &cell.after {
-            if !valid_name(dependency) { return Err(invalid(cell, "after")); }
+            if !valid_name(dependency) {
+                return Err(invalid(cell, "after"));
+            }
         }
-        for earlier in &config.cells[..index] { check_unique(earlier, cell)?; }
+        for earlier in &config.cells[..index] {
+            check_unique(earlier, cell)?;
+        }
     }
     Ok(())
 }
@@ -276,7 +351,10 @@ fn check_unique(earlier: &CellSpec, cell: &CellSpec) -> Result<(), ConfigError> 
     } else {
         return Ok(());
     };
-    Err(ConfigError::Duplicate { field, name: cell.name.clone() })
+    Err(ConfigError::Duplicate {
+        field,
+        name: cell.name.clone(),
+    })
 }
 
 fn validate_pair(config: &CellConfig, prior: &CellConfig) -> Result<(), ConfigError> {
@@ -286,20 +364,36 @@ fn validate_pair(config: &CellConfig, prior: &CellConfig) -> Result<(), ConfigEr
         return Err(ConfigError::TooManyCells);
     }
     for cell in &config.cells {
-        for earlier in &prior.cells { check_unique(earlier, cell)?; }
+        for earlier in &prior.cells {
+            check_unique(earlier, cell)?;
+        }
     }
     Ok(())
 }
 
 fn dependency_error(cell: &CellSpec, dependency: &str, reason: &'static str) -> ConfigError {
-    ConfigError::Dependency { name: cell.name.clone(), dependency: dependency.to_string(), reason }
+    ConfigError::Dependency {
+        name: cell.name.clone(),
+        dependency: dependency.to_string(),
+        reason,
+    }
 }
 
 fn validate_dependencies(config: &CellConfig, prior: &CellConfig) -> Result<(), ConfigError> {
     for cell in &config.cells {
         for dependency in &cell.after {
-            let target = config.cells.iter().chain(&prior.cells).find(|entry| entry.name == *dependency)
-                .ok_or_else(|| dependency_error(cell, dependency, "does not exist in this or the earlier stage"))?;
+            let target = config
+                .cells
+                .iter()
+                .chain(&prior.cells)
+                .find(|entry| entry.name == *dependency)
+                .ok_or_else(|| {
+                    dependency_error(
+                        cell,
+                        dependency,
+                        "does not exist in this or the earlier stage",
+                    )
+                })?;
             if !target.enabled {
                 return Err(dependency_error(cell, dependency, "is disabled"));
             }
@@ -338,10 +432,16 @@ fn walk_order(config: &CellConfig, mut visit: impl FnMut(usize)) -> Result<(), C
     while count < enabled {
         let before = count;
         for (index, cell) in config.cells.iter().enumerate() {
-            if !cell.enabled || emitted[index] { continue; }
+            if !cell.enabled || emitted[index] {
+                continue;
+            }
             let ready = cell.after.iter().all(|dependency| {
-                config.cells.iter().position(|entry| entry.name == *dependency)
-                    .map(|target| emitted[target]).unwrap_or(true)
+                config
+                    .cells
+                    .iter()
+                    .position(|entry| entry.name == *dependency)
+                    .map(|target| emitted[target])
+                    .unwrap_or(true)
             });
             if ready {
                 emitted[index] = true;
@@ -349,7 +449,9 @@ fn walk_order(config: &CellConfig, mut visit: impl FnMut(usize)) -> Result<(), C
                 visit(index);
             }
         }
-        if count == before { return Err(ConfigError::Cycle); }
+        if count == before {
+            return Err(ConfigError::Cycle);
+        }
     }
     Ok(())
 }

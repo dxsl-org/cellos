@@ -84,15 +84,16 @@ mod edit;
 mod executor;
 mod jobs;
 // Command disposition ledger: plain data, consumed only by host tests (S2-lite).
-#[allow(dead_code)] // reason: production code never reads the ledger; host tests diff it against the registries
+#[allow(dead_code)]
+// reason: production code never reads the ledger; host tests diff it against the registries
 mod ledger;
 mod native_rows;
+mod oneshot;
 mod parser;
 mod rg;
-mod oneshot;
-mod ssh;
 mod screen_reset;
 mod shell_state;
+mod ssh;
 mod text_engine;
 mod text_tools;
 mod top;
@@ -141,7 +142,9 @@ pub fn main() {
             match oneshot::classify(context.frontend_grant().is_some(), &argv) {
                 // The ssh client Cell, which the shell itself starts from
                 // `/bin/cellbox-ssh` with argv `["ssh", ...]`.
-                oneshot::Launch::Ssh => ostd::syscall::sys_exit(ssh::run_child(&context) as u32 as usize),
+                oneshot::Launch::Ssh => {
+                    ostd::syscall::sys_exit(ssh::run_child(&context) as u32 as usize)
+                }
                 oneshot::Launch::Shell => run_frontend_shell(&context),
                 launch => {
                     let status = oneshot::run(&context, launch, &argv);
@@ -153,7 +156,8 @@ pub fn main() {
             context_session::Launch::Legacy => run_legacy_shell(),
             context_session::Launch::Refused(status) => {
                 let _ = ostd::syscall::sys_log(&alloc::format!(
-                    "shell: launch context refused: {:?}\n", status
+                    "shell: launch context refused: {:?}\n",
+                    status
                 ));
                 ostd::syscall::sys_exit(125);
             }
@@ -175,19 +179,22 @@ fn run_frontend_shell(context: &ostd::child_context::ChildContext) {
             executor::start_frontend_session(launch.session, launch.output, launch.merged);
             if let Err(status) = context_session::ensure_default_cwd() {
                 let _ = ostd::syscall::sys_log(&alloc::format!(
-                    "shell: default cwd unavailable: {:?}\n", status
+                    "shell: default cwd unavailable: {:?}\n",
+                    status
                 ));
             }
             if let Err(status) = run_session_loop() {
                 let _ = ostd::syscall::sys_log(&alloc::format!(
-                    "shell: frontend session failed: {:?}\n", status
+                    "shell: frontend session failed: {:?}\n",
+                    status
                 ));
                 ostd::syscall::sys_exit(125);
             }
         }
         Err(status) => {
             let _ = ostd::syscall::sys_log(&alloc::format!(
-                "shell: launch context refused: {:?}\n", status
+                "shell: launch context refused: {:?}\n",
+                status
             ));
             ostd::syscall::sys_exit(125);
         }
@@ -206,7 +213,8 @@ fn run_legacy_shell() {
         ostd::executor::block_on(shell.run());
     } else if let Err(status) = run_serial_session() {
         let _ = ostd::syscall::sys_log(&alloc::format!(
-            "shell: authenticated serial session failed: {:?}\n", status
+            "shell: authenticated serial session failed: {:?}\n",
+            status
         ));
         ostd::syscall::sys_exit(125);
     }
@@ -226,7 +234,9 @@ fn run_serial_session() -> Result<(), api::cell_session::Status> {
 fn run_session_loop() -> Result<(), api::cell_session::Status> {
     let mut shell = ViShell::new();
     let mut lines = alloc::vec::Vec::<alloc::string::String>::new();
-    executor::terminal_stdout("\n=== Cellos shell ready — type 'help' for commands ===\n".as_bytes())?;
+    executor::terminal_stdout(
+        "\n=== Cellos shell ready — type 'help' for commands ===\n".as_bytes(),
+    )?;
     loop {
         executor::terminal_stdout(b"Cellos > ")?;
         let Some(mut line) = executor::terminal_read_line(&mut lines)? else {

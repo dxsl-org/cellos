@@ -107,7 +107,9 @@ pub enum TaskState {
         deadline: Option<u64>,
     },
     /// Parked only when there is no retained terminal async RPC result.
-    WaitIpc { deadline: Option<u64> },
+    WaitIpc {
+        deadline: Option<u64>,
+    },
     /// Cell is suspended during a hot-swap sequence identified by `swap_id`.
     ///
     /// Invariants while Frozen:
@@ -787,7 +789,9 @@ impl Task {
 
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation(
-            Some(crate::p01_resources::owner(self)), crate::memory::heap::p01_owner::TASK_FIELDS);
+            Some(crate::p01_resources::owner(self)),
+            crate::memory::heap::p01_owner::TASK_FIELDS,
+        );
         self.leases.insert(id, lease);
         id
     }
@@ -806,7 +810,9 @@ impl Task {
         self.next_grant_id += 1;
         #[cfg(cellos_p01_trace)]
         let _semantic = crate::memory::heap::p01_owner::creation(
-            Some(crate::p01_resources::owner(self)), crate::memory::heap::p01_owner::TASK_FIELDS);
+            Some(crate::p01_resources::owner(self)),
+            crate::memory::heap::p01_owner::TASK_FIELDS,
+        );
         self.grant_table.insert(
             id,
             GrantEntry {
@@ -954,12 +960,18 @@ impl Drop for Task {
                     {
                         let owner = crate::p01_resources::owner(self);
                         // Unlike the existing runtime leak counter, include guard frames.
-                        crate::p01_retained::begin(Some(owner), kernel_stack.base,
+                        crate::p01_retained::begin(
+                            Some(owner),
+                            kernel_stack.base,
                             kernel_stack.pages + kernel_stack.guard_pages,
-                            crate::p01_retained::Reason::TaskStackForget);
-                        crate::p01_retained::begin(Some(owner), user_stack.base,
+                            crate::p01_retained::Reason::TaskStackForget,
+                        );
+                        crate::p01_retained::begin(
+                            Some(owner),
+                            user_stack.base,
                             user_stack.pages + user_stack.guard_pages,
-                            crate::p01_retained::Reason::TaskStackForget);
+                            crate::p01_retained::Reason::TaskStackForget,
+                        );
                         crate::p01_resources::retained(owner, 1);
                         crate::p01_resources::finish(kernel_stack.p01_obligation.take(), 5);
                         crate::p01_resources::finish(user_stack.p01_obligation.take(), 5);

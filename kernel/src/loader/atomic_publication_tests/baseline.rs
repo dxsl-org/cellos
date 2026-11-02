@@ -134,11 +134,10 @@ impl SharedStateBaseline {
                 crate::memory::heap::p01_owner::task_backing(&task);
                 #[cfg(cellos_p01_trace)]
                 let _semantic = crate::memory::heap::p01_owner::creation(
-                    None, crate::memory::heap::p01_owner::SCHEDULER_SHARED);
-                assert!(sched
-                    .tasks
-                    .insert(tid, task)
-                    .is_none());
+                    None,
+                    crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+                );
+                assert!(sched.tasks.insert(tid, task).is_none());
             }
             sched
                 .tasks

@@ -1,9 +1,9 @@
 // HTTP response handlers: HTML pages, VFS file serving, and JSON REST API.
 
 extern crate alloc;
-use alloc::{format, string::String, vec::Vec};
 #[cfg(target_os = "none")]
 use ai_proto::MAX_PROMPT_BYTES;
+use alloc::{format, string::String, vec::Vec};
 
 #[cfg(target_arch = "riscv64")]
 const ARCH: &str = "riscv64";
@@ -18,7 +18,6 @@ const ARCH: &str = "x86_64";
 )))]
 const ARCH: &str = "unknown";
 
-
 // ── Response helpers ──────────────────────────────────────────────────────────
 
 pub(crate) struct Response {
@@ -28,11 +27,21 @@ pub(crate) struct Response {
 
 pub(crate) fn response(status: u16, content_type: &str, body: &[u8], json: bool) -> Response {
     let status_text = match status {
-        200 => "OK", 204 => "No Content", 400 => "Bad Request",
-        408 => "Request Timeout", 413 => "Payload Too Large", 404 => "Not Found",
-        500 => "Internal Server Error", 503 => "Service Unavailable", _ => "OK",
+        200 => "OK",
+        204 => "No Content",
+        400 => "Bad Request",
+        408 => "Request Timeout",
+        413 => "Payload Too Large",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
+        _ => "OK",
     };
-    let cors = if json { "Access-Control-Allow-Origin: *\r\n" } else { "" };
+    let cors = if json {
+        "Access-Control-Allow-Origin: *\r\n"
+    } else {
+        ""
+    };
     Response {
         header: format!(
             "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n",
@@ -46,8 +55,11 @@ pub(crate) fn response_owned(status: u16, content_type: &str, body: Vec<u8>) -> 
     Response {
         header: format!(
             "HTTP/1.1 {} OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            status, content_type, body.len()
-        ).into_bytes(),
+            status,
+            content_type,
+            body.len()
+        )
+        .into_bytes(),
         body,
     }
 }
@@ -182,9 +194,21 @@ pub(crate) fn api_cells() -> Response {
 
 pub(crate) fn api_cluster() -> Response {
     use ostd::service::{lookup, service};
-    let broker_status = if lookup(service::NET_BROKER).is_some() { "Online" } else { "Offline" };
-    let router_status = if lookup(service::NET).is_some() { "Available" } else { "Unavailable" };
-    let supervisor_status = if lookup(service::SUPERVISOR).is_some() { "Active" } else { "Inactive" };
+    let broker_status = if lookup(service::NET_BROKER).is_some() {
+        "Online"
+    } else {
+        "Offline"
+    };
+    let router_status = if lookup(service::NET).is_some() {
+        "Available"
+    } else {
+        "Unavailable"
+    };
+    let supervisor_status = if lookup(service::SUPERVISOR).is_some() {
+        "Active"
+    } else {
+        "Inactive"
+    };
     let text = format!(
         r#"{{"cluster":"CellOS-x86-Cluster","protocol_version":1,"net_broker":"{}","workload_routing":"{}","supervisor":"{}","c2c_envelope_bytes":112}}"#,
         broker_status, router_status, supervisor_status
@@ -213,8 +237,11 @@ pub(crate) fn api_c2c_dispatch(body: &[u8]) -> Response {
 
 pub(crate) fn api_files(path: &str, raw: &[u8]) -> Response {
     let listing = core::str::from_utf8(raw).unwrap_or("");
-    let entries: Vec<String> = listing.lines().filter(|l| !l.is_empty())
-        .map(|name| format!(r#"{{"name":"{}"}}"#, name)).collect();
+    let entries: Vec<String> = listing
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|name| format!(r#"{{"name":"{}"}}"#, name))
+        .collect();
     let text = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, entries.join(","));
     json(200, &text)
 }
@@ -231,17 +258,33 @@ pub(crate) fn infer_prompt(body: &[u8]) -> Result<&str, Response> {
 }
 
 #[cfg(target_os = "none")]
-pub(crate) fn infer_success(model: &str, prompt_bytes: usize, tokens: usize, finish: ai_proto::FinishReason, text: &str) -> Response {
+pub(crate) fn infer_success(
+    model: &str,
+    prompt_bytes: usize,
+    tokens: usize,
+    finish: ai_proto::FinishReason,
+    text: &str,
+) -> Response {
     let text = format!(
         r#"{{"model":"{}","prompt_bytes":{},"tokens":{},"finish":"{:?}","text":"{}"}}"#,
-        json_escape(model), prompt_bytes, tokens, finish, json_escape(text)
+        json_escape(model),
+        prompt_bytes,
+        tokens,
+        finish,
+        json_escape(text)
     );
     json(200, &text)
 }
 
 #[cfg(target_os = "none")]
 pub(crate) fn infer_failed(error: &str) -> Response {
-    json(503, &format!(r#"{{"error":"inference unavailable","cause":"{}"}}"#, json_escape(error)))
+    json(
+        503,
+        &format!(
+            r#"{{"error":"inference unavailable","cause":"{}"}}"#,
+            json_escape(error)
+        ),
+    )
 }
 
 #[cfg(target_os = "none")]

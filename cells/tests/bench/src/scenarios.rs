@@ -1,9 +1,9 @@
 //! Benchmark scenarios — one module per measurement target.
 
 #[allow(dead_code)]
-pub mod base_tray_handoff;
-#[allow(dead_code)]
 pub mod async_lifecycle;
+#[allow(dead_code)]
+pub mod base_tray_handoff;
 #[allow(dead_code)]
 pub mod c2c_broker_oracle;
 #[allow(dead_code)]

@@ -11,10 +11,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use sunset::packets::WinChange;
-use sunset::{ChanData, ChanHandle, CliEvent, CliSessionExit, Client, Event, OwnedSig, PubKey, Pty, RekeyLimits, Runner, SignKey};
+use sunset::{
+    ChanData, ChanHandle, CliEvent, CliSessionExit, Client, Event, OwnedSig, Pty, PubKey,
+    RekeyLimits, Runner, SignKey,
+};
 use zeroize::Zeroize;
 
-use crate::client::{pump, ClientError, HostKey, Transport, TransportError, RECV_CHUNK};
+use crate::client::{ClientError, HostKey, RECV_CHUNK, Transport, TransportError, pump};
 use crate::sunset::ed25519_dalek::VerifyingKey;
 use crate::userauth;
 
@@ -39,7 +42,11 @@ pub enum Trust {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
     /// PTY shell with `TERM` and the terminal size at start.
-    Pty { term: &'static str, rows: u16, cols: u16 },
+    Pty {
+        term: &'static str,
+        rows: u16,
+        cols: u16,
+    },
     /// One non-PTY command string, sent byte-for-byte.
     Exec(String),
 }
@@ -155,7 +162,11 @@ pub struct RekeyPolicy {
 }
 
 impl RekeyPolicy {
-    pub const PRODUCTION: Self = Self { max_age_ms: 3_600_000, limits: RekeyLimits::PRODUCTION, kex_ms: 30_000 };
+    pub const PRODUCTION: Self = Self {
+        max_age_ms: 3_600_000,
+        limits: RekeyLimits::PRODUCTION,
+        kex_ms: 30_000,
+    };
 }
 
 /// The local side of the session.
@@ -261,29 +272,55 @@ impl Outcome {
 /// Largest channel data read at once (§4.2: chunks of at most 16 KiB).
 pub const CHUNK: usize = 16 * 1024;
 
-pub fn run<T: Transport, L: Local>(t: &mut T, local: &mut L, user: &str, auth: AuthKind, mode: &Mode, policy: &RekeyPolicy) -> Outcome {
+pub fn run<T: Transport, L: Local>(
+    t: &mut T,
+    local: &mut L,
+    user: &str,
+    auth: AuthKind,
+    mode: &Mode,
+    policy: &RekeyPolicy,
+) -> Outcome {
     let mut runner: Runner<'static, Client> = Runner::new_client_owned();
     runner.set_rekey_limits(policy.limits);
     let mut state = State {
-        dispatch: Dispatch::NotSent, chan: None, exit: None, password_asked: false, key_offered: false, signed: false,
-        identity: None, eof_sent: false, host: None, clock: RekeyClock::default(), peaks: Peaks::default(),
+        dispatch: Dispatch::NotSent,
+        chan: None,
+        exit: None,
+        password_asked: false,
+        key_offered: false,
+        signed: false,
+        identity: None,
+        eof_sent: false,
+        host: None,
+        clock: RekeyClock::default(),
+        peaks: Peaks::default(),
     };
-    let ending = drive(&mut runner, t, local, user, auth, mode, policy, &mut state).unwrap_or_else(|e| match e {
-        ClientError::Transport(TransportError::TimedOut) => Ending::TimedOut,
-        ClientError::Transport(_) | ClientError::Ended => Ending::TransportLost,
-        ClientError::Protocol(sunset::Error::NoAuthMethods) => Ending::Auth,
-        other => Ending::Error(alloc::format!("{other}")),
-    });
+    let ending =
+        drive(&mut runner, t, local, user, auth, mode, policy, &mut state).unwrap_or_else(|e| {
+            match e {
+                ClientError::Transport(TransportError::TimedOut) => Ending::TimedOut,
+                ClientError::Transport(_) | ClientError::Ended => Ending::TransportLost,
+                ClientError::Protocol(sunset::Error::NoAuthMethods) => Ending::Auth,
+                other => Ending::Error(alloc::format!("{other}")),
+            }
+        });
     // An exit status that arrived before the transport ended stands; the incomplete
     // output is reported by `stdout_complete`.
     let ending = match (ending, state.exit.take()) {
         (Ending::Unknown | Ending::TransportLost, Some(exit)) => exit,
         (ending, _) => ending,
     };
-    let complete = state.chan.as_ref().is_some_and(|c| runner.is_channel_eof(c));
+    let complete = state
+        .chan
+        .as_ref()
+        .is_some_and(|c| runner.is_channel_eof(c));
     Outcome {
-        dispatch: state.dispatch, ending, stdout_complete: complete, stderr_complete: complete,
-        rekeys: runner.newkeys_count().saturating_sub(1), peaks: state.peaks,
+        dispatch: state.dispatch,
+        ending,
+        stdout_complete: complete,
+        stderr_complete: complete,
+        rekeys: runner.newkeys_count().saturating_sub(1),
+        peaks: state.peaks,
     }
 }
 
@@ -317,7 +354,12 @@ struct RekeyClock {
 /// Service only the transport for `ms` (a fault-injection hold): runner output goes
 /// out and input is queued, but no packet is processed. A closed or failed transport
 /// ends the hold with its error.
-fn hold<T: Transport>(runner: &mut Runner<'static, Client>, t: &mut T, pending: &mut Vec<u8>, ms: u64) -> Result<(), ClientError> {
+fn hold<T: Transport>(
+    runner: &mut Runner<'static, Client>,
+    t: &mut T,
+    pending: &mut Vec<u8>,
+    ms: u64,
+) -> Result<(), ClientError> {
     if ms == 0 {
         return Ok(());
     }
@@ -393,7 +435,10 @@ fn drive<T: Transport, L: Local>(
             Err(e) => return Err(e.into()),
             Ok(Event::Cli(CliEvent::Hostkey(h))) => {
                 let key = match h.hostkey()? {
-                    PubKey::Ed25519(k) => HostKey { algorithm: "ssh-ed25519", key: k.key.0 },
+                    PubKey::Ed25519(k) => HostKey {
+                        algorithm: "ssh-ed25519",
+                        key: k.key.0,
+                    },
                     #[allow(unreachable_patterns)]
                     _ => return Ok(Ending::Error(String::from("unsupported host key type"))),
                 };
@@ -456,7 +501,9 @@ fn drive<T: Transport, L: Local>(
                 }
                 AuthKind::PublicKey => {
                     let offered = local.identity().and_then(|key| {
-                        VerifyingKey::from_bytes(&key).map(|verifying| (key, verifying)).map_err(|_| Credential::Protocol)
+                        VerifyingKey::from_bytes(&key)
+                            .map(|verifying| (key, verifying))
+                            .map_err(|_| Credential::Protocol)
                     });
                     match offered {
                         Ok((key, verifying)) => {
@@ -472,7 +519,8 @@ fn drive<T: Transport, L: Local>(
                 }
             },
             Ok(Event::Cli(CliEvent::AgentSign(s))) => match (auth, st.identity, st.signed) {
-                (AuthKind::PublicKey, Some(key), false) => match answer_sign(s, local, user, &key)? {
+                (AuthKind::PublicKey, Some(key), false) => match answer_sign(s, local, user, &key)?
+                {
                     None => st.signed = true,
                     Some(credential) => stop = Some(Ending::Credential(credential)),
                 },
@@ -502,7 +550,9 @@ fn drive<T: Transport, L: Local>(
                             height: 0,
                             modes: heapless::Vec::new(),
                         };
-                        pty.term.push_str(term).map_err(|_| ClientError::Protocol(sunset::Error::msg("TERM")))?;
+                        pty.term
+                            .push_str(term)
+                            .map_err(|_| ClientError::Protocol(sunset::Error::msg("TERM")))?;
                         o.pty(pty)?;
                         o.shell()?;
                     }
@@ -526,7 +576,9 @@ fn drive<T: Transport, L: Local>(
             Ok(Event::Cli(CliEvent::Banner(_))) => {}
             Ok(Event::Cli(CliEvent::Defunct)) => {
                 return Ok(st.exit.take().unwrap_or(match st.dispatch {
-                    Dispatch::NotSent if !(st.password_asked || st.signed) => Ending::Error(String::from("server closed the connection")),
+                    Dispatch::NotSent if !(st.password_asked || st.signed) => {
+                        Ending::Error(String::from("server closed the connection"))
+                    }
                     Dispatch::NotSent => Ending::Auth,
                     _ => Ending::Unknown,
                 }));
@@ -600,22 +652,31 @@ fn drive<T: Transport, L: Local>(
                     return Ok(Ending::Disconnected);
                 }
             } else if st.dispatch != Dispatch::NotSent {
-                if let Some((rows, cols)) = local.resized() {
-                    if matches!(mode, Mode::Pty { .. }) {
-                        let w = WinChange { cols: u32::from(cols), rows: u32::from(rows), width: 0, height: 0 };
-                        runner.term_window_change(chan, &w)?;
-                        progressed = true;
-                    }
+                if let Some((rows, cols)) = local.resized()
+                    && matches!(mode, Mode::Pty { .. })
+                {
+                    let w = WinChange {
+                        cols: u32::from(cols),
+                        rows: u32::from(rows),
+                        width: 0,
+                        height: 0,
+                    };
+                    runner.term_window_change(chan, &w)?;
+                    progressed = true;
                 }
                 // At most one unsent chunk waits (KEX pause, window or buffer full); the
                 // next turn retries it after `progress()` had its chance to move the KEX.
                 if unsent.1 > unsent.0 {
-                    let w = runner.write_channel(chan, ChanData::Normal, &out[unsent.0..unsent.1])?;
+                    let w =
+                        runner.write_channel(chan, ChanData::Normal, &out[unsent.0..unsent.1])?;
                     out[unsent.0..unsent.0 + w].zeroize();
                     unsent.0 += w;
                     progressed |= w > 0;
                 } else {
-                    let room = runner.write_channel_ready(chan, ChanData::Normal)?.unwrap_or(0).min(CHUNK);
+                    let room = runner
+                        .write_channel_ready(chan, ChanData::Normal)?
+                        .unwrap_or(0)
+                        .min(CHUNK);
                     if room > 0 {
                         match local.input(&mut out[..room]) {
                             Input::Data(n) => {
@@ -657,12 +718,16 @@ fn answer_sign<L: Local>(
     identity: &[u8; 32],
 ) -> Result<Option<Credential>, ClientError> {
     let mut msg = [0u8; 256];
-    let written = s.message().and_then(|m| sunset::sshwire::write_ssh(&mut msg, &m));
+    let written = s
+        .message()
+        .and_then(|m| sunset::sshwire::write_ssh(&mut msg, &m));
     let mut session_id = [0u8; 32];
     let expected = match written {
         Ok(n) if n >= 36 && msg[..4] == [0, 0, 0, 32] => {
             session_id.copy_from_slice(&msg[4..36]);
-            userauth::signing_input(&session_id, user, identity).filter(|e| e.as_slice() == &msg[..n]).map(|_| n)
+            userauth::signing_input(&session_id, user, identity)
+                .filter(|e| e.as_slice() == &msg[..n])
+                .map(|_| n)
         }
         _ => None,
     };
@@ -670,7 +735,11 @@ fn answer_sign<L: Local>(
         let _ = s.skip();
         return Ok(Some(Credential::InputMismatch));
     };
-    let request = SignRequest { session_id, username: user, message_sha256: userauth::digest(&msg[..n]) };
+    let request = SignRequest {
+        session_id,
+        username: user,
+        message_sha256: userauth::digest(&msg[..n]),
+    };
     let signed = match local.sign(&request) {
         Ok(signed) => signed,
         Err(credential) => {

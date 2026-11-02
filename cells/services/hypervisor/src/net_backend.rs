@@ -167,7 +167,12 @@ pub fn transmit(connection: &mut Connection, frame: &[u8]) -> bool {
         }
         connection.mark_unavailable(
             active_tid,
-            matches!(&result, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate)),
+            matches!(
+                &result,
+                Err(ostd::ipc::IpcError::Recv
+                    | ostd::ipc::IpcError::PeerGone
+                    | ostd::ipc::IpcError::Indeterminate)
+            ),
         );
     }
     ok
@@ -299,8 +304,15 @@ pub fn try_receive(connection: &mut Connection) -> Option<Box<[u8]>> {
         }
         Ok(NetResponse::Data(_)) | Ok(NetResponse::Ok) => None,
         error => {
-            connection
-                .mark_unavailable(active_tid, matches!(error, Err(ostd::ipc::IpcError::Recv | ostd::ipc::IpcError::PeerGone | ostd::ipc::IpcError::Indeterminate)));
+            connection.mark_unavailable(
+                active_tid,
+                matches!(
+                    error,
+                    Err(ostd::ipc::IpcError::Recv
+                        | ostd::ipc::IpcError::PeerGone
+                        | ostd::ipc::IpcError::Indeterminate)
+                ),
+            );
             None
         }
     }

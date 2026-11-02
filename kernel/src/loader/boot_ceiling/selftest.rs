@@ -52,7 +52,10 @@ pub fn run() -> bool {
             "/bin/cellbox holds network",
             !boot_ceiling("/bin/cellbox").network,
         ),
-        ("/bin/cellbox holds spawn", !boot_ceiling("/bin/cellbox").spawn),
+        (
+            "/bin/cellbox holds spawn",
+            !boot_ceiling("/bin/cellbox").spawn,
+        ),
         (
             "/bin/cellbox holds block_regions",
             boot_ceiling("/bin/cellbox").block_regions == 0,
@@ -181,7 +184,10 @@ pub fn run() -> bool {
             .intersect(boot_ceiling(path));
         if !(g.observe_tasks && g.observe_memory && g.vfs_mutate) {
             ok = false;
-            log::error!("[selftest] boot-ceiling: {} lost a pre-annex X/M/W right", path);
+            log::error!(
+                "[selftest] boot-ceiling: {} lost a pre-annex X/M/W right",
+                path
+            );
         }
     }
     for path in ["/apps/demo", "/data/bin/tool", "/home/user/app"] {
@@ -197,7 +203,9 @@ pub fn run() -> bool {
     // Network rights (annex S2-N §5): each boot-started sender keeps exactly its
     // grant after request ∩ ceiling, and the shell, the net service itself and
     // silo receive none.
-    let net_cases: [(&str, (bool, bool, bool, bool)); 6] = [
+    // (net_resolve, net_connect, net_listen, net_l2)
+    type NetRights = (bool, bool, bool, bool);
+    let net_cases: [(&str, NetRights); 6] = [
         ("/bin/sshd", (false, false, true, false)),
         ("/bin/net-broker", (true, true, true, false)),
         ("/bin/hypervisor", (false, false, false, true)),
@@ -340,7 +348,9 @@ pub fn run() -> bool {
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/cellbox-ssh").is_some() {
         ok = false;
-        log::error!("[selftest] launch-profile: caller-owned ELF borrowed /bin/cellbox-ssh network right");
+        log::error!(
+            "[selftest] launch-profile: caller-owned ELF borrowed /bin/cellbox-ssh network right"
+        );
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs-test").is_none() {
         ok = false;

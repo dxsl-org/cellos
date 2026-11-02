@@ -80,20 +80,39 @@ fn task_value(row: &mut TaskSample, field: Field) -> Value {
 
 /// One `top.cell.v1` record.
 pub fn cell_record(mut row: CellSample) -> Value {
-    Value::Record(RowKind::Cells.fields().iter().map(|&field| (field.name().into(), cell_value(&mut row, field))).collect())
+    Value::Record(
+        RowKind::Cells
+            .fields()
+            .iter()
+            .map(|&field| (field.name().into(), cell_value(&mut row, field)))
+            .collect(),
+    )
 }
 
 /// One `top.task.v1` record.
 pub fn task_record(mut row: TaskSample) -> Value {
-    Value::Record(RowKind::Tasks.fields().iter().map(|&field| (field.name().into(), task_value(&mut row, field))).collect())
+    Value::Record(
+        RowKind::Tasks
+            .fields()
+            .iter()
+            .map(|&field| (field.name().into(), task_value(&mut row, field)))
+            .collect(),
+    )
 }
 
 /// The Begin `meta` record of a frame of `kind` rows.
 pub fn meta_record(meta: &FrameMeta, kind: RowKind) -> Value {
     let (mem_state, total, used, free) = match meta.mem {
-        SysMem::Present { total_bytes, used_bytes, free_bytes } => {
-            ("present", Some(total_bytes), Some(used_bytes), Some(free_bytes))
-        }
+        SysMem::Present {
+            total_bytes,
+            used_bytes,
+            free_bytes,
+        } => (
+            "present",
+            Some(total_bytes),
+            Some(used_bytes),
+            Some(free_bytes),
+        ),
         SysMem::Denied => ("denied", None, None, None),
         SysMem::Absent => ("absent", None, None, None),
     };
@@ -115,7 +134,13 @@ pub fn meta_record(meta: &FrameMeta, kind: RowKind) -> Value {
         uint(free),
         Value::Bool(meta.memory_interval),
     ];
-    Value::Record(META_FIELDS.iter().zip(values).map(|(&name, value)| (String::from(name), value)).collect())
+    Value::Record(
+        META_FIELDS
+            .iter()
+            .zip(values)
+            .map(|(&name, value)| (String::from(name), value))
+            .collect(),
+    )
 }
 
 enum RowIter {
@@ -173,7 +198,11 @@ pub fn frame_items(frame: Frame) -> FrameItems {
         unavailable_fields: frame.unavailable_fields,
         dropped: frame.dropped,
     };
-    FrameItems { begin: Some(begin), rows: RowIter::new(frame.rows), end: Some(end) }
+    FrameItems {
+        begin: Some(begin),
+        rows: RowIter::new(frame.rows),
+        end: Some(end),
+    }
 }
 
 /// `top.task.v1` records of a task frame, one per pull (`ps --records`); a Cell
@@ -195,5 +224,7 @@ pub fn task_rows(frame: Frame) -> TaskRows {
         Rows::Tasks(rows) => rows,
         Rows::Cells(_) => Vec::new(),
     };
-    TaskRows { rows: rows.into_iter() }
+    TaskRows {
+        rows: rows.into_iter(),
+    }
 }

@@ -238,7 +238,7 @@ pub fn main() {
             _ => {
                 if idle_work {
                     idle_turns = idle_turns.wrapping_add(1);
-                    if idle_turns % IDLE_RECONCILE_EVERY == 0 {
+                    if idle_turns.is_multiple_of(IDLE_RECONCILE_EVERY) {
                         if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
                             prepared_cwd::reconcile(vfs);
                             idle_work = prepared_cwd::idle_work(vfs);

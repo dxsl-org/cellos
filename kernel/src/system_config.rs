@@ -28,7 +28,9 @@ pub fn load_from_vifs1() {
         }
         Err(error) => panic!("[system-config] {}: {}", SYSTEM_PATH, error),
     };
-    crate::memory::cell_quota::set_default_quota_bytes(config.memory.default_cell_heap_mib * 1024 * 1024);
+    crate::memory::cell_quota::set_default_quota_bytes(
+        config.memory.default_cell_heap_mib * 1024 * 1024,
+    );
     LOGGING_EXPLICIT.store(config.logging_explicit, Ordering::Release);
     log::set_max_level(match config.logging.level {
         LogLevel::Off => log::LevelFilter::Off,
@@ -38,7 +40,11 @@ pub fn load_from_vifs1() {
         LogLevel::Debug => log::LevelFilter::Debug,
         LogLevel::Trace => log::LevelFilter::Trace,
     });
-    log::info!("[system-config] applied: logging={:?}, default_cell_heap_mib={}", config.logging.level, config.memory.default_cell_heap_mib);
+    log::info!(
+        "[system-config] applied: logging={:?}, default_cell_heap_mib={}",
+        config.logging.level,
+        config.memory.default_cell_heap_mib
+    );
 }
 
 /// Do not use fs::read_file_from_vifs1: that legacy ELF reader treats empty as
@@ -54,29 +60,48 @@ fn read_system() -> Result<Option<Vec<u8>>, &'static str> {
             Err(ViError::NotFound) => return Ok(None),
             Err(_) => return Err("cannot stat embedded configuration"),
         };
-        if !stat.exists || stat.is_dir { return Err("configuration is not a regular file"); }
-        if stat.size == 0 { return Err("configuration is empty"); }
-        if stat.size > MAX_CONFIG_BYTES as u64 { return Err("configuration exceeds 16384 bytes"); }
-        let size = usize::try_from(stat.size).map_err(|_| "configuration size is not representable")?;
+        if !stat.exists || stat.is_dir {
+            return Err("configuration is not a regular file");
+        }
+        if stat.size == 0 {
+            return Err("configuration is empty");
+        }
+        if stat.size > MAX_CONFIG_BYTES as u64 {
+            return Err("configuration exceeds 16384 bytes");
+        }
+        let size =
+            usize::try_from(stat.size).map_err(|_| "configuration size is not representable")?;
         #[cfg(cellos_p01_trace)]
-        let _scratch = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
-        let file = fs.open(SYSTEM_PATH, OpenMode::Read).map_err(|_| "cannot open embedded configuration")?;
+        let _scratch = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED,
+        );
+        let file = fs
+            .open(SYSTEM_PATH, OpenMode::Read)
+            .map_err(|_| "cannot open embedded configuration")?;
         (file, size)
     };
     let mut bytes = Vec::new();
     #[cfg(cellos_p01_trace)]
-    let scratch = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED);
-    bytes.try_reserve_exact(size).map_err(|_| "cannot allocate configuration buffer")?;
+    let scratch = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED,
+    );
+    bytes
+        .try_reserve_exact(size)
+        .map_err(|_| "cannot allocate configuration buffer")?;
     #[cfg(cellos_p01_trace)]
     drop(scratch);
     bytes.resize(size, 0);
     let mut offset = 0;
     while offset < size {
         let end = (offset + 4096).min(size);
-        let count = file.read(&mut bytes[offset..end]).map_err(|_| "cannot read embedded configuration")?;
-        if count == 0 || count > end - offset { return Err("configuration is truncated or inconsistent"); }
+        let count = file
+            .read(&mut bytes[offset..end])
+            .map_err(|_| "cannot read embedded configuration")?;
+        if count == 0 || count > end - offset {
+            return Err("configuration is truncated or inconsistent");
+        }
         offset += count;
     }
     Ok(Some(bytes))

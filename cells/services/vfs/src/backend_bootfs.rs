@@ -12,11 +12,11 @@
 //! which runs with interrupts disabled in the CALLER's context — never
 //! blocks inside this backend; readers fall back to the ReadAsync copy path.
 
+use crate::backend::{fill_page, FsBackend, ListPage};
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::RefCell;
-use crate::backend::{fill_page, FsBackend, ListPage};
 use api::ipc::vfs_dir_page::EntryKind;
+use core::cell::RefCell;
 use ostd::syscall::{
     sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir, sys_seek_cap,
 };
@@ -121,7 +121,11 @@ fn dir_entries(fd: &Fd) -> impl Iterator<Item = Result<(EntryKind, BootName), ()
             Ok(None) => return None,
             Err(_) => return Some(Err(())),
         };
-        let len = entry.name.iter().position(|&b| b == 0).unwrap_or(entry.name.len());
+        let len = entry
+            .name
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(entry.name.len());
         let name = &entry.name[..len];
         if len == 0 || name == b"." || name == b".." {
             continue;
@@ -139,7 +143,10 @@ impl BootFsProxy {
     /// Every entry name of directory `path`; `None` when it cannot be read whole.
     pub(crate) fn names(&self, path: &str) -> Option<Vec<BootName>> {
         let fd = open(path)?;
-        dir_entries(&fd).map(|entry| entry.map(|(_, name)| name)).collect::<Result<_, _>>().ok()
+        dir_entries(&fd)
+            .map(|entry| entry.map(|(_, name)| name))
+            .collect::<Result<_, _>>()
+            .ok()
     }
 }
 

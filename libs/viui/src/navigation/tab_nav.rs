@@ -68,24 +68,28 @@ impl TabNavigator {
 }
 
 impl ViNode for TabNavigator {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    let full = Size::new(constraints.max.w, constraints.max.h);
-    self.bounds
-        .set(Rect::from_origin_size(constraints.origin, full));
-    
-    self.ensure_page(self.active);
-    
-    let page_h = (constraints.max.h - self.tab_bar_h).max(0.0);
-    let page_constraints =
-        Constraints::new(constraints.origin, Size::new(constraints.max.w, page_h));
-    
-    if let Some(tab) = self.tabs.get_mut(self.active) {
-        if let Some(page) = &mut tab.cached {
-            page.layout(page_constraints, font);
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        let full = Size::new(constraints.max.w, constraints.max.h);
+        self.bounds
+            .set(Rect::from_origin_size(constraints.origin, full));
+
+        self.ensure_page(self.active);
+
+        let page_h = (constraints.max.h - self.tab_bar_h).max(0.0);
+        let page_constraints =
+            Constraints::new(constraints.origin, Size::new(constraints.max.w, page_h));
+
+        if let Some(tab) = self.tabs.get_mut(self.active) {
+            if let Some(page) = &mut tab.cached {
+                page.layout(page_constraints, font);
+            }
         }
-    }
-    
-    full
+
+        full
     }
 
     fn bounds(&self) -> Rect {

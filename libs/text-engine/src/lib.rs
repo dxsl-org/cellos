@@ -40,8 +40,8 @@ pub mod matcher;
 pub mod records;
 
 pub mod awk;
-pub mod grep;
-pub mod sed;
 pub mod editor;
+pub mod grep;
 pub mod pipeline;
+pub mod sed;
 pub mod top;

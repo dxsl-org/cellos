@@ -40,16 +40,17 @@ impl BoundedQueue {
         before_count - self.items.len()
     }
 
-    /// Push an item if capacity allows.
-    pub fn push(&mut self, item: QueuedItem) -> Result<(), ()> {
+    /// Push an item if capacity allows; returns `false` if the queue is full.
+    #[must_use]
+    pub fn push(&mut self, item: QueuedItem) -> bool {
         if self.items.len() >= self.max_items
             || self.current_bytes.saturating_add(item.payload_len) > self.max_bytes
         {
-            return Err(());
+            return false;
         }
         self.current_bytes += item.payload_len;
         self.items.push_back(item);
-        Ok(())
+        true
     }
 
     pub fn len(&self) -> usize {

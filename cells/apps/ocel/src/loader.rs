@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 //! Bounded document acquisition and cooperative network/resource loading.
 extern crate alloc;
+use crate::{
+    doc::DocNode,
+    resources::{Reference, ResourceBundle},
+};
 use alloc::{format, string::String, vec::Vec};
 use core::task::Poll;
-use crate::{doc::DocNode, resources::{ResourceBundle, Reference}};
 
 pub struct LoadedDocument {
     pub url: String,
@@ -16,18 +19,46 @@ pub struct LoadedDocument {
 }
 impl LoadedDocument {
     fn text(url: &str, title: String, content: String) -> Self {
-        Self { url: url.into(), title, content, direct_nodes: None, resources: ResourceBundle::default(), response_headers: Vec::new() }
+        Self {
+            url: url.into(),
+            title,
+            content,
+            direct_nodes: None,
+            resources: ResourceBundle::default(),
+            response_headers: Vec::new(),
+        }
     }
     fn resident_bytes(&self) -> usize {
-        self.url.capacity() + self.title.capacity() + self.content.capacity() + self.resources.resident_bytes()
+        self.url.capacity()
+            + self.title.capacity()
+            + self.content.capacity()
+            + self.resources.resident_bytes()
             + self.response_headers.capacity() * core::mem::size_of::<(String, String)>()
-            + self.response_headers.iter().map(|(key,value)| key.capacity()+value.capacity()).sum::<usize>()
-            + self.direct_nodes.as_ref().map(|nodes| nodes.capacity() * core::mem::size_of::<DocNode>()
-                + nodes.iter().map(|node| match node { DocNode::Image { pixels, .. } => pixels.capacity(), _ => 256 }).sum::<usize>()).unwrap_or(0)
+            + self
+                .response_headers
+                .iter()
+                .map(|(key, value)| key.capacity() + value.capacity())
+                .sum::<usize>()
+            + self
+                .direct_nodes
+                .as_ref()
+                .map(|nodes| {
+                    nodes.capacity() * core::mem::size_of::<DocNode>()
+                        + nodes
+                            .iter()
+                            .map(|node| match node {
+                                DocNode::Image { pixels, .. } => pixels.capacity(),
+                                _ => 256,
+                            })
+                            .sum::<usize>()
+                })
+                .unwrap_or(0)
     }
 }
 
-pub fn poll_cleanup() { crate::net::http::poll_cleanup(); }
+pub fn poll_cleanup() {
+    crate::net::http::poll_cleanup();
+}
 
 /// A navigation owns its exact operations. Dropping/cancelling cannot publish a
 /// completion to another navigation, even when the provider replies late.
@@ -57,35 +88,63 @@ pub struct DocumentLoadJob {
 impl DocumentLoadJob {
     pub fn new(url: &str) -> Result<Self, String> {
         let url = url.trim();
-        if url.is_empty() || url.len() > 2048 { return Err("Empty or overlong document URL".into()); }
+        if url.is_empty() || url.len() > 2048 {
+            return Err("Empty or overlong document URL".into());
+        }
         let network = if is_network(url) {
-            let path = url.split(|c| c == '?' || c == '#').next().unwrap_or(url);
-            if crate::pdf::is_pdf_path(path) { return Err("Network PDF viewing is unsupported; open a local PDF file".into()); }
-            let limit = if crate::image::is_image_path(path) { crate::budget::MAX_ENCODED_IMAGE_BYTES } else { crate::budget::MAX_TEXT_BYTES };
+            let path = url.split(['?', '#']).next().unwrap_or(url);
+            if crate::pdf::is_pdf_path(path) {
+                return Err("Network PDF viewing is unsupported; open a local PDF file".into());
+            }
+            let limit = if crate::image::is_image_path(path) {
+                crate::budget::MAX_ENCODED_IMAGE_BYTES
+            } else {
+                crate::budget::MAX_TEXT_BYTES
+            };
             Some(crate::net::http::FetchJob::new(url, limit)?)
         } else {
-            if url.contains("://") && !url.starts_with("file://") && !matches!(url, "ocel://welcome" | "ocel://help" | "ocel://bookmarks") {
+            if url.contains("://")
+                && !url.starts_with("file://")
+                && !matches!(url, "ocel://welcome" | "ocel://help" | "ocel://bookmarks")
+            {
                 return Err("Unsupported document URL scheme".into());
             }
             None
         };
-            let now = ostd::syscall::sys_get_time_ms().unwrap_or(0);
-            let deadline = now.saturating_add(60_000);
-            Ok(Self { url: url.into(), network, active_fetches: Vec::new(), loaded: None, references: Vec::new(),
-                next_resource: 0, completed_resources: 0,
-                deadline, progress: "Opening document".into(), finished: false, memory_budget: crate::budget::MAX_RESIDENT_BYTES,
-                reader_mode: false, early_document_taken: false })
+        let now = ostd::syscall::sys_get_time_ms().unwrap_or(0);
+        let deadline = now.saturating_add(60_000);
+        Ok(Self {
+            url: url.into(),
+            network,
+            active_fetches: Vec::new(),
+            loaded: None,
+            references: Vec::new(),
+            next_resource: 0,
+            completed_resources: 0,
+            deadline,
+            progress: "Opening document".into(),
+            finished: false,
+            memory_budget: crate::budget::MAX_RESIDENT_BYTES,
+            reader_mode: false,
+            early_document_taken: false,
+        })
     }
-    pub fn set_reader_mode(&mut self, reader: bool) { self.reader_mode = reader; }
-    pub fn is_reader_mode(&self) -> bool { self.reader_mode }
+    pub fn set_reader_mode(&mut self, reader: bool) {
+        self.reader_mode = reader;
+    }
+    #[cfg(test)]
+    pub fn is_reader_mode(&self) -> bool {
+        self.reader_mode
+    }
     pub fn take_early_document(&mut self) -> Option<LoadedDocument> {
         if self.early_document_taken || self.finished {
             return None;
         }
         let loaded = self.loaded.as_ref()?;
-        if !matches!(crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content),
-            crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown)
-        {
+        if !matches!(
+            crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content),
+            crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown
+        ) {
             return None;
         }
         self.early_document_taken = true;
@@ -99,37 +158,72 @@ impl DocumentLoadJob {
         })
     }
     pub fn resident_bytes(&self) -> usize {
-        core::mem::size_of::<Self>() + self.url.capacity() + self.progress.capacity()
+        core::mem::size_of::<Self>()
+            + self.url.capacity()
+            + self.progress.capacity()
             + self.references.capacity() * core::mem::size_of::<Reference>()
-            + self.references.iter().map(|reference| reference.url.capacity()).sum::<usize>()
-            + self.loaded.as_ref().map(LoadedDocument::resident_bytes).unwrap_or(0)
-            + self.network.as_ref().map(crate::net::http::FetchJob::resident_bytes).unwrap_or(0)
-            + self.active_fetches.iter().map(|a| a.job.resident_bytes() + a.url.capacity()).sum::<usize>()
+            + self
+                .references
+                .iter()
+                .map(|reference| reference.url.capacity())
+                .sum::<usize>()
+            + self
+                .loaded
+                .as_ref()
+                .map(LoadedDocument::resident_bytes)
+                .unwrap_or(0)
+            + self
+                .network
+                .as_ref()
+                .map(crate::net::http::FetchJob::resident_bytes)
+                .unwrap_or(0)
+            + self
+                .active_fetches
+                .iter()
+                .map(|a| a.job.resident_bytes() + a.url.capacity())
+                .sum::<usize>()
     }
-    pub fn set_memory_budget(&mut self, bytes: usize) { self.memory_budget = bytes.min(crate::budget::MAX_RESIDENT_BYTES); }
+    pub fn set_memory_budget(&mut self, bytes: usize) {
+        self.memory_budget = bytes.min(crate::budget::MAX_RESIDENT_BYTES);
+    }
     pub fn progress(&self) -> &str {
-        if self.loaded.is_none() { if let Some(network) = &self.network { return network.progress(); } }
+        if self.loaded.is_none() {
+            if let Some(network) = &self.network {
+                return network.progress();
+            }
+        }
         &self.progress
     }
     pub fn cancel(&mut self) {
-        if let Some(mut network) = self.network.take() { network.cancel(); }
+        if let Some(mut network) = self.network.take() {
+            network.cancel();
+        }
         for mut active in core::mem::take(&mut self.active_fetches) {
             active.job.cancel();
         }
-        self.loaded = None; self.references.clear(); self.finished = true;
+        self.loaded = None;
+        self.references.clear();
+        self.finished = true;
         self.progress = "Cancelled".into();
     }
-    fn fail(&mut self, error: String) -> Poll<Result<LoadedDocument, String>> { self.cancel(); Poll::Ready(Err(error)) }
+    fn fail(&mut self, error: String) -> Poll<Result<LoadedDocument, String>> {
+        self.cancel();
+        Poll::Ready(Err(error))
+    }
     pub fn poll(&mut self) -> Poll<Result<LoadedDocument, String>> {
         poll_cleanup();
-        if self.finished { return Poll::Pending; }
+        if self.finished {
+            return Poll::Pending;
+        }
         if let Some(now) = ostd::syscall::sys_get_time_ms() {
             if now >= self.deadline {
                 return self.fail("Document/resource loading deadline exceeded".into());
             }
         }
         let resident = self.resident_bytes();
-        if resident.saturating_add(64 * 1024) > self.memory_budget { return self.fail("Document acquisition exceeds remaining tab memory budget".into()); }
+        if resident.saturating_add(64 * 1024) > self.memory_budget {
+            return self.fail("Document acquisition exceeds remaining tab memory budget".into());
+        }
         let available = self.memory_budget.saturating_sub(resident + 64 * 1024);
         if let Some(network) = &mut self.network {
             network.set_memory_budget(available.saturating_add(network.resident_bytes()));
@@ -141,14 +235,34 @@ impl DocumentLoadJob {
                     Poll::Ready(Err(error)) => return self.fail(error),
                     Poll::Ready(Ok(result)) => network_document(result, available),
                 }
-            } else { load_local(&self.url, available) };
+            } else {
+                load_local(&self.url, available)
+            };
             self.network = None;
-            let loaded = match result { Ok(loaded) => loaded, Err(error) => return self.fail(error) };
-            if loaded.content.len().saturating_mul(12).saturating_add(128 * 1024) > available {
-                return self.fail("Document resource discovery exceeds remaining tab memory budget".into());
+            let loaded = match result {
+                Ok(loaded) => loaded,
+                Err(error) => return self.fail(error),
+            };
+            if loaded
+                .content
+                .len()
+                .saturating_mul(12)
+                .saturating_add(128 * 1024)
+                > available
+            {
+                return self.fail(
+                    "Document resource discovery exceeds remaining tab memory budget".into(),
+                );
             }
             let t = crate::trace::now();
-            self.references = if loaded.direct_nodes.is_none() && matches!(crate::parser::DocFormat::detect_from_url_or_content(&loaded.url, &loaded.content), crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown) {
+            self.references = if loaded.direct_nodes.is_none()
+                && matches!(
+                    crate::parser::DocFormat::detect_from_url_or_content(
+                        &loaded.url,
+                        &loaded.content
+                    ),
+                    crate::parser::DocFormat::Html | crate::parser::DocFormat::Markdown
+                ) {
                 match crate::resources::references(&loaded.url, &loaded.content) {
                     Ok(mut references) => {
                         if self.reader_mode {
@@ -165,8 +279,13 @@ impl DocumentLoadJob {
                         }
                     }
                 }
-            } else { Vec::new() };
-            crate::trace::stamp_took(&alloc::format!("reference discovery ({} refs)", self.references.len()), t);
+            } else {
+                Vec::new()
+            };
+            crate::trace::stamp_took(
+                &alloc::format!("reference discovery ({} refs)", self.references.len()),
+                t,
+            );
             self.loaded = Some(loaded);
             return Poll::Pending;
         }
@@ -184,15 +303,27 @@ impl DocumentLoadJob {
                     self.completed_resources += 1;
                     let body_result = match result {
                         Ok(res) => {
-                            ostd::io::println(&alloc::format!("[ocel] resource fetched: {} ({} bytes)", active.url, res.body.len()));
+                            ostd::io::println(&alloc::format!(
+                                "[ocel] resource fetched: {} ({} bytes)",
+                                active.url,
+                                res.body.len()
+                            ));
                             Ok(res.body)
                         }
                         Err(err) => {
-                            ostd::io::println(&alloc::format!("[ocel] resource fetch failed: {} ({})", active.url, err));
+                            ostd::io::println(&alloc::format!(
+                                "[ocel] resource fetch failed: {} ({})",
+                                active.url,
+                                err
+                            ));
                             Err(err)
                         }
                     };
-                    if let Err(error) = loaded.resources.insert(active.url, body_result, active.image) {
+                    if let Err(error) =
+                        loaded
+                            .resources
+                            .insert(active.url, body_result, active.image)
+                    {
                         return self.fail(error);
                     }
                 }
@@ -200,13 +331,22 @@ impl DocumentLoadJob {
         }
 
         // 2. Replenish worker pool up to MAX_CONCURRENT_RESOURCE_FETCHES:
-        while self.active_fetches.len() < MAX_CONCURRENT_RESOURCE_FETCHES && self.next_resource < self.references.len() {
+        while self.active_fetches.len() < MAX_CONCURRENT_RESOURCE_FETCHES
+            && self.next_resource < self.references.len()
+        {
             let reference = &self.references[self.next_resource];
             self.next_resource += 1;
-            let limit = (if reference.image { crate::budget::MAX_ENCODED_IMAGE_BYTES } else { crate::budget::MAX_CSS_BYTES })
-                .min(loaded.resources.remaining_bytes()).min(available);
+            let limit = (if reference.image {
+                crate::budget::MAX_ENCODED_IMAGE_BYTES
+            } else {
+                crate::budget::MAX_CSS_BYTES
+            })
+            .min(loaded.resources.remaining_bytes())
+            .min(available);
             let resource_url = &reference.url;
-            if limit == 0 { return self.fail("Document resource budget exhausted".into()); }
+            if limit == 0 {
+                return self.fail("Document resource budget exhausted".into());
+            }
             if is_network(resource_url) {
                 match crate::net::http::FetchJob::same_site(resource_url, limit, &loaded.url) {
                     Ok(job) => {
@@ -217,8 +357,16 @@ impl DocumentLoadJob {
                         });
                     }
                     Err(error) => {
-                        ostd::io::println(&alloc::format!("[ocel] resource same_site rejected: {} ({})", resource_url, error));
-                        if let Err(error) = loaded.resources.insert(resource_url.clone(), Err(error), reference.image) {
+                        ostd::io::println(&alloc::format!(
+                            "[ocel] resource same_site rejected: {} ({})",
+                            resource_url,
+                            error
+                        ));
+                        if let Err(error) = loaded.resources.insert(
+                            resource_url.clone(),
+                            Err(error),
+                            reference.image,
+                        ) {
                             return self.fail(error);
                         }
                         self.completed_resources += 1;
@@ -226,7 +374,11 @@ impl DocumentLoadJob {
                 }
             } else {
                 let result = crate::resources::read_local(resource_url, limit);
-                if let Err(error) = loaded.resources.insert(resource_url.clone(), result, reference.image) {
+                if let Err(error) =
+                    loaded
+                        .resources
+                        .insert(resource_url.clone(), result, reference.image)
+                {
                     return self.fail(error);
                 }
                 self.completed_resources += 1;
@@ -237,7 +389,11 @@ impl DocumentLoadJob {
         if self.references.is_empty() {
             self.progress = "Loaded".into();
         } else {
-            self.progress = format!("Loading resources ({}/{})...", self.completed_resources.min(self.references.len()), self.references.len());
+            self.progress = format!(
+                "Loading resources ({}/{})...",
+                self.completed_resources.min(self.references.len()),
+                self.references.len()
+            );
         }
 
         // 4. Check completion:
@@ -250,27 +406,44 @@ impl DocumentLoadJob {
         Poll::Pending
     }
 }
-impl Drop for DocumentLoadJob { fn drop(&mut self) { self.cancel(); } }
-fn is_network(url: &str) -> bool { url.starts_with("http://") || url.starts_with("https://") || url.starts_with("gemini://") }
+impl Drop for DocumentLoadJob {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+fn is_network(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://") || url.starts_with("gemini://")
+}
 
-fn network_document(result: crate::net::http::FetchResult, memory_budget: usize) -> Result<LoadedDocument, String> {
-    let path = result.url.split(|c| c == '?' || c == '#').next().unwrap_or(&result.url);
+fn network_document(
+    result: crate::net::http::FetchResult,
+    memory_budget: usize,
+) -> Result<LoadedDocument, String> {
+    let path = result.url.split(['?', '#']).next().unwrap_or(&result.url);
     let media_type = result.media_type.split(';').next().unwrap_or("").trim();
     if media_type.eq_ignore_ascii_case("application/pdf") {
         return Err("Network PDF viewing is unsupported; open a local PDF file".into());
     }
-    if crate::image::is_image_path(path) || media_type.split_once('/').is_some_and(|(major, subtype)| major.eq_ignore_ascii_case("image") && !subtype.is_empty()) {
+    if crate::image::is_image_path(path)
+        || media_type.split_once('/').is_some_and(|(major, subtype)| {
+            major.eq_ignore_ascii_case("image") && !subtype.is_empty()
+        })
+    {
         let mut loaded = image_document(&result.url, &result.body, memory_budget)?;
         loaded.response_headers = result.headers;
         return Ok(loaded);
     }
-    let content = String::from_utf8(result.body).map_err(|_| String::from("Network document is not UTF-8"))?;
+    let content = String::from_utf8(result.body)
+        .map_err(|_| String::from("Network document is not UTF-8"))?;
     crate::budget::validate_text(&content)?;
     let mut loaded = LoadedDocument::text(&result.url, format!("Ocel — {}", result.url), content);
     loaded.response_headers = result.headers;
     if result.gemini && media_type.eq_ignore_ascii_case("text/gemini") {
         let lines = loaded.content.lines().count();
-        let reserve = loaded.content.len().saturating_mul(8)
+        let reserve = loaded
+            .content
+            .len()
+            .saturating_mul(8)
             .saturating_add(lines.saturating_mul(core::mem::size_of::<DocNode>() * 4));
         if lines > crate::budget::MAX_DOM_NODES || reserve > memory_budget {
             return Err("Gemtext exceeds document node/memory budget".into());
@@ -281,46 +454,102 @@ fn network_document(result: crate::net::http::FetchResult, memory_budget: usize)
 }
 
 fn image_document(url: &str, bytes: &[u8], memory_budget: usize) -> Result<LoadedDocument, String> {
-    if bytes.len() > crate::budget::MAX_ENCODED_IMAGE_BYTES { return Err("Image exceeds encoded byte budget".into()); }
-    if crate::budget::image_bytes(bytes)? > memory_budget { return Err("Image decoding exceeds remaining tab memory budget".into()); }
-    let image = crate::image::decode(bytes).ok_or("Unsupported, corrupt, or oversized image (PNG/JPEG/BMP only)")?;
+    if bytes.len() > crate::budget::MAX_ENCODED_IMAGE_BYTES {
+        return Err("Image exceeds encoded byte budget".into());
+    }
+    if crate::budget::image_bytes(bytes)? > memory_budget {
+        return Err("Image decoding exceeds remaining tab memory budget".into());
+    }
+    let image = crate::image::decode(bytes)
+        .ok_or("Unsupported, corrupt, or oversized image (PNG/JPEG/BMP only)")?;
     let mut loaded = LoadedDocument::text(url, format!("Ocel — Image ({})", url), String::new());
-    loaded.direct_nodes = Some(alloc::vec![DocNode::Image { width: image.width, height: image.height, pixels: alloc::rc::Rc::new(image.pixels) }]);
+    loaded.direct_nodes = Some(alloc::vec![DocNode::Image {
+        width: image.width,
+        height: image.height,
+        pixels: alloc::rc::Rc::new(image.pixels)
+    }]);
     Ok(loaded)
 }
 
 fn load_local(url: &str, memory_budget: usize) -> Result<LoadedDocument, String> {
-    let suffixless = url.split(|c| c == '?' || c == '#').next().unwrap_or(url);
+    let suffixless = url.split(['?', '#']).next().unwrap_or(url);
     let path = suffixless.strip_prefix("file://").unwrap_or(suffixless);
-    if suffixless == "ocel://welcome" || matches!(path, "welcome" | "/welcome" | "/welcome.md" | "welcome.md") {
-        return Ok(LoadedDocument::text("file:///welcome.md", "Ocel — Welcome Guide".into(), get_welcome_content()));
+    if suffixless == "ocel://welcome"
+        || matches!(path, "welcome" | "/welcome" | "/welcome.md" | "welcome.md")
+    {
+        return Ok(LoadedDocument::text(
+            "file:///welcome.md",
+            "Ocel — Welcome Guide".into(),
+            get_welcome_content(),
+        ));
     }
     if suffixless == "ocel://help" || matches!(path, "help" | "/help" | "/help.md" | "help.md") {
-        return Ok(LoadedDocument::text("file:///help.md", "Ocel — Keyboard & Usage Help".into(), get_help_content()));
+        return Ok(LoadedDocument::text(
+            "file:///help.md",
+            "Ocel — Keyboard & Usage Help".into(),
+            get_help_content(),
+        ));
     }
-    if suffixless == "ocel://bookmarks" || matches!(path, "bookmarks" | "/bookmarks" | "/bookmarks.md" | "bookmarks.md") {
-        return Ok(LoadedDocument::text("ocel://bookmarks", "Ocel — Bookmarks".into(), get_bookmarks_content()));
+    if suffixless == "ocel://bookmarks"
+        || matches!(
+            path,
+            "bookmarks" | "/bookmarks" | "/bookmarks.md" | "bookmarks.md"
+        )
+    {
+        return Ok(LoadedDocument::text(
+            "ocel://bookmarks",
+            "Ocel — Bookmarks".into(),
+            get_bookmarks_content(),
+        ));
     }
     let path = crate::resources::local_path(url)?;
     if crate::pdf::is_pdf_path(&path) {
-        if memory_budget < crate::budget::MAX_IMAGE_TOTAL_BYTES { return Err("PDF raster exceeds remaining tab memory budget".into()); }
-        let page = crate::pdf::page_number(url).and_then(|page| crate::pdf::load_page(&path, page))?;
+        if memory_budget < crate::budget::MAX_IMAGE_TOTAL_BYTES {
+            return Err("PDF raster exceeds remaining tab memory budget".into());
+        }
+        let page =
+            crate::pdf::page_number(url).and_then(|page| crate::pdf::load_page(&path, page))?;
         let mut loaded = LoadedDocument::text(url, format!("Ocel — PDF ({})", path), String::new());
-        loaded.direct_nodes = Some(page.into_nodes(url)); return Ok(loaded);
+        loaded.direct_nodes = Some(page.into_nodes(url));
+        return Ok(loaded);
     }
     if crate::image::is_image_path(&path) {
-        let bytes = crate::resources::read_local(url, crate::budget::MAX_ENCODED_IMAGE_BYTES.min(memory_budget / 2))?;
+        let bytes = crate::resources::read_local(
+            url,
+            crate::budget::MAX_ENCODED_IMAGE_BYTES.min(memory_budget / 2),
+        )?;
         return image_document(url, &bytes, memory_budget.saturating_sub(bytes.capacity()));
     }
-    let content = String::from_utf8(crate::resources::read_local(url, crate::budget::MAX_TEXT_BYTES.min(memory_budget / 12))?).map_err(|_| String::from("Local document is not UTF-8"))?;
+    let content = String::from_utf8(crate::resources::read_local(
+        url,
+        crate::budget::MAX_TEXT_BYTES.min(memory_budget / 12),
+    )?)
+    .map_err(|_| String::from("Local document is not UTF-8"))?;
     crate::budget::validate_text(&content)?;
-    Ok(LoadedDocument::text(url, format!("Ocel — {}", path.rsplit('/').next().unwrap_or(&path)), content))
+    Ok(LoadedDocument::text(
+        url,
+        format!("Ocel — {}", path.rsplit('/').next().unwrap_or(&path)),
+        content,
+    ))
 }
 
 /// Local-only convenience for built-ins/tests. Network navigation must use a job.
 pub fn load_document(url: &str) -> LoadedDocument {
-    let result = if is_network(url) { Err(String::from("Network navigation requires DocumentLoadJob")) } else { load_local(url.trim(), crate::budget::MAX_RESIDENT_BYTES) };
-    result.unwrap_or_else(|error| LoadedDocument::text(url, "Ocel — Load Error".into(), format!("# Document Load Error\n\nCould not open `{}`.\n\n{}", url, error)))
+    let result = if is_network(url) {
+        Err(String::from("Network navigation requires DocumentLoadJob"))
+    } else {
+        load_local(url.trim(), crate::budget::MAX_RESIDENT_BYTES)
+    };
+    result.unwrap_or_else(|error| {
+        LoadedDocument::text(
+            url,
+            "Ocel — Load Error".into(),
+            format!(
+                "# Document Load Error\n\nCould not open `{}`.\n\n{}",
+                url, error
+            ),
+        )
+    })
 }
 
 fn get_welcome_content() -> String {
@@ -367,7 +596,8 @@ fn main() {{
 
 *Built with passion for CellOS.*
 "#,
-        crate::budget::PROFILE_NAME, crate::budget::HEAP_BYTES / (1024 * 1024),
+        crate::budget::PROFILE_NAME,
+        crate::budget::HEAP_BYTES / (1024 * 1024),
         crate::budget::MAX_RESIDENT_BYTES / (1024 * 1024),
     )
 }
@@ -408,20 +638,26 @@ fn get_help_content() -> String {
 - `file:///welcome.md` — Built-in Welcome guide.
 - `file:///help.md` — This help page.
 "#,
-        crate::budget::PROFILE_NAME, crate::budget::HEAP_BYTES / (1024 * 1024),
-        crate::budget::MAX_RESIDENT_BYTES / (1024 * 1024), crate::budget::MAX_TEXT_BYTES / (1024 * 1024),
+        crate::budget::PROFILE_NAME,
+        crate::budget::HEAP_BYTES / (1024 * 1024),
+        crate::budget::MAX_RESIDENT_BYTES / (1024 * 1024),
+        crate::budget::MAX_TEXT_BYTES / (1024 * 1024),
         crate::budget::MAX_RESOURCE_BYTES / (1024 * 1024),
     )
 }
 
 fn get_bookmarks_content() -> String {
     if let Ok(mut file) = ostd::fs::File::open("/data/bookmarks.md") {
-        let mut bytes = Vec::new(); let mut chunk = [0u8; 4096];
+        let mut bytes = Vec::new();
+        let mut chunk = [0u8; 4096];
         loop {
             match file.read(&mut chunk) {
                 Ok(0) => break,
                 Ok(count) => {
-                    if count > crate::budget::MAX_TEXT_BYTES.saturating_sub(bytes.len()) { return "# Bookmarks Error\n\nBookmarks file exceeds text byte budget.".into(); }
+                    if count > crate::budget::MAX_TEXT_BYTES.saturating_sub(bytes.len()) {
+                        return "# Bookmarks Error\n\nBookmarks file exceeds text byte budget."
+                            .into();
+                    }
                     bytes.extend_from_slice(&chunk[..count]);
                 }
                 Err(_) => return "# Bookmarks Error\n\nCould not read the bookmarks file.".into(),
@@ -429,7 +665,7 @@ fn get_bookmarks_content() -> String {
         }
         match String::from_utf8(bytes) {
             Ok(content) if !content.trim().is_empty() => return content,
-            Ok(_) => {},
+            Ok(_) => {}
             Err(_) => return "# Bookmarks Error\n\nBookmarks file is not UTF-8.".into(),
         }
     }
@@ -481,7 +717,8 @@ pub fn classify_smart_url(input: &str) -> String {
 
     let has_spaces = s.contains(char::is_whitespace);
     let has_dot = s.contains('.');
-    let is_localhost = s.starts_with("localhost") || s.starts_with("127.0.0.1") || s.starts_with("10.0.2.2");
+    let is_localhost =
+        s.starts_with("localhost") || s.starts_with("127.0.0.1") || s.starts_with("10.0.2.2");
 
     if !has_spaces && (has_dot || is_localhost) {
         return format!("https://{}", s);
@@ -513,13 +750,31 @@ mod tests {
         assert_eq!(classify_smart_url("   "), "file:///welcome.md");
         assert_eq!(classify_smart_url("welcome"), "ocel://welcome");
         assert_eq!(classify_smart_url("bookmarks"), "ocel://bookmarks");
-        assert_eq!(classify_smart_url("https://cellos.org"), "https://cellos.org");
-        assert_eq!(classify_smart_url("http://example.com/foo"), "http://example.com/foo");
-        assert_eq!(classify_smart_url("file:///data/demo.html"), "file:///data/demo.html");
+        assert_eq!(
+            classify_smart_url("https://cellos.org"),
+            "https://cellos.org"
+        );
+        assert_eq!(
+            classify_smart_url("http://example.com/foo"),
+            "http://example.com/foo"
+        );
+        assert_eq!(
+            classify_smart_url("file:///data/demo.html"),
+            "file:///data/demo.html"
+        );
         assert_eq!(classify_smart_url("/etc/hosts"), "file:///etc/hosts");
-        assert_eq!(classify_smart_url("news.ycombinator.com"), "https://news.ycombinator.com");
-        assert_eq!(classify_smart_url("wikipedia.org/wiki/Rust"), "https://wikipedia.org/wiki/Rust");
-        assert_eq!(classify_smart_url("localhost:8080/api"), "https://localhost:8080/api");
+        assert_eq!(
+            classify_smart_url("news.ycombinator.com"),
+            "https://news.ycombinator.com"
+        );
+        assert_eq!(
+            classify_smart_url("wikipedia.org/wiki/Rust"),
+            "https://wikipedia.org/wiki/Rust"
+        );
+        assert_eq!(
+            classify_smart_url("localhost:8080/api"),
+            "https://localhost:8080/api"
+        );
         assert_eq!(
             classify_smart_url("rust microkernel"),
             "https://html.duckduckgo.com/html/?q=rust+microkernel"
@@ -549,15 +804,27 @@ mod tests {
         bmp.resize(crate::budget::MAX_ENCODED_IMAGE_BYTES, 0);
         assert!(image_document("https://host/asset", &bmp, 4096).is_ok());
         bmp.push(0);
-        assert!(matches!(image_document("https://host/asset", &bmp, 4096), Err(error) if error.contains("encoded byte budget")));
+        assert!(
+            matches!(image_document("https://host/asset", &bmp, 4096), Err(error) if error.contains("encoded byte budget"))
+        );
         bmp.truncate(58);
         let result = crate::net::http::FetchResult {
-            url: "https://host/asset?id=1".into(), body: bmp,
-            media_type: " Image/BMP ; profile=screen".into(), gemini: false,
-            status: 200, headers: Vec::new(),
+            url: "https://host/asset?id=1".into(),
+            body: bmp,
+            media_type: " Image/BMP ; profile=screen".into(),
+            gemini: false,
+            status: 200,
+            headers: Vec::new(),
         };
         let loaded = network_document(result, 4096).unwrap();
-        assert!(matches!(loaded.direct_nodes.as_ref().and_then(|nodes| nodes.first()), Some(DocNode::Image { width: 1, height: 1, .. })));
+        assert!(matches!(
+            loaded.direct_nodes.as_ref().and_then(|nodes| nodes.first()),
+            Some(DocNode::Image {
+                width: 1,
+                height: 1,
+                ..
+            })
+        ));
     }
 
     #[test]

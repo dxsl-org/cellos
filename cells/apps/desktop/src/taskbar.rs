@@ -35,14 +35,13 @@ impl Layout {
         let tray_x = (width as i32 - tray_width - 8).max(APPS_X);
         let available = (tray_x - 12 - APPS_X).max(0);
         // Reserve both arrows and More so page changes never move into the tray.
-        let capacity = ((available - 2 * PAGE_STEP - MORE_WIDTH as i32 - 6).max(0)
-            / APP_STEP) as usize;
+        let capacity =
+            ((available - 2 * PAGE_STEP - MORE_WIDTH as i32 - 6).max(0) / APP_STEP) as usize;
         let capacity = capacity.min(MAX_VISIBLE_APPS);
-        let start = if capacity == 0 {
-            0
-        } else {
-            offset.min(total.saturating_sub(1)) / capacity * capacity
-        };
+        let start = offset
+            .min(total.saturating_sub(1))
+            .checked_div(capacity)
+            .map_or(0, |page| page * capacity);
         Self {
             tray_x,
             start,
@@ -139,7 +138,18 @@ pub fn render(
     } else {
         theme::BTN_NORMAL
     };
-    draw_button(surf, fonts, 8, BUTTON_Y, 84, BUTTON_HEIGHT, "CellOS", cellos_bg, theme::TASKBAR_BORDER, theme::ACCENT_CYAN);
+    draw_button(
+        surf,
+        fonts,
+        8,
+        BUTTON_Y,
+        84,
+        BUTTON_HEIGHT,
+        "CellOS",
+        cellos_bg,
+        theme::TASKBAR_BORDER,
+        theme::ACCENT_CYAN,
+    );
     fill_rect(surf, 98, 10, 1, 28, theme::TASKBAR_BORDER);
 
     if layout.paged && layout.start > 0 {
@@ -148,21 +158,51 @@ pub fn render(
     let mut cursor_x = layout.apps_x();
     for app in &pinned[layout.start..layout.end] {
         let bg = if is_inside(
-            state.mouse_x, state.mouse_y, cursor_x, BUTTON_Y, APP_WIDTH, BUTTON_HEIGHT,
+            state.mouse_x,
+            state.mouse_y,
+            cursor_x,
+            BUTTON_Y,
+            APP_WIDTH,
+            BUTTON_HEIGHT,
         ) {
             theme::BTN_HOVER
         } else {
             theme::BTN_NORMAL
         };
         fill_rect(surf, cursor_x, BUTTON_Y, APP_WIDTH, BUTTON_HEIGHT, bg);
-        stroke_rect(surf, cursor_x, BUTTON_Y, APP_WIDTH, BUTTON_HEIGHT, theme::TASKBAR_BORDER);
-        draw_label(
-            surf, fonts, cursor_x + 6, BUTTON_Y, 28, BUTTON_HEIGHT, app.icon,
-            FontFace::UiRegular, 14.0, theme::ACCENT_CYAN, true,
+        stroke_rect(
+            surf,
+            cursor_x,
+            BUTTON_Y,
+            APP_WIDTH,
+            BUTTON_HEIGHT,
+            theme::TASKBAR_BORDER,
         );
         draw_label(
-            surf, fonts, cursor_x + 40, BUTTON_Y, APP_WIDTH - 48, BUTTON_HEIGHT,
-            app.name, FontFace::UiRegular, 14.0, theme::TEXT_PRIMARY, false,
+            surf,
+            fonts,
+            cursor_x + 6,
+            BUTTON_Y,
+            28,
+            BUTTON_HEIGHT,
+            app.icon,
+            FontFace::UiRegular,
+            14.0,
+            theme::ACCENT_CYAN,
+            true,
+        );
+        draw_label(
+            surf,
+            fonts,
+            cursor_x + 40,
+            BUTTON_Y,
+            APP_WIDTH - 48,
+            BUTTON_HEIGHT,
+            app.name,
+            FontFace::UiRegular,
+            14.0,
+            theme::TEXT_PRIMARY,
+            false,
         );
         cursor_x += APP_STEP;
     }
@@ -173,14 +213,29 @@ pub fn render(
         let x = layout.more_x();
         let bg = if state.sub_taskbar_open {
             theme::BTN_ACTIVE
-        } else if is_inside(state.mouse_x, state.mouse_y, x, BUTTON_Y, MORE_WIDTH, BUTTON_HEIGHT) {
+        } else if is_inside(
+            state.mouse_x,
+            state.mouse_y,
+            x,
+            BUTTON_Y,
+            MORE_WIDTH,
+            BUTTON_HEIGHT,
+        ) {
             theme::BTN_HOVER
         } else {
             theme::BTN_NORMAL
         };
         draw_button(
-            surf, fonts, x, BUTTON_Y, MORE_WIDTH, BUTTON_HEIGHT, "More", bg,
-            theme::TASKBAR_BORDER, theme::ACCENT_CYAN,
+            surf,
+            fonts,
+            x,
+            BUTTON_Y,
+            MORE_WIDTH,
+            BUTTON_HEIGHT,
+            "More",
+            bg,
+            theme::TASKBAR_BORDER,
+            theme::ACCENT_CYAN,
         );
     }
 
@@ -192,18 +247,40 @@ pub fn render(
             ("VFS", state.vfs_online, theme::ACCENT_GREEN),
             ("AI", state.ai_online, theme::ACCENT_CYAN),
         ] {
-            let color = if online { online_color } else { theme::TEXT_MUTED };
+            let color = if online {
+                online_color
+            } else {
+                theme::TEXT_MUTED
+            };
             draw_label(
-                surf, fonts, right_x, BUTTON_Y, 42, BUTTON_HEIGHT, label,
-                FontFace::UiRegular, 14.0, color, true,
+                surf,
+                fonts,
+                right_x,
+                BUTTON_Y,
+                42,
+                BUTTON_HEIGHT,
+                label,
+                FontFace::UiRegular,
+                14.0,
+                color,
+                true,
             );
             right_x += 48;
         }
     }
     let clock = core::str::from_utf8(&state.clock_buf).unwrap_or("12:00");
     draw_label(
-        surf, fonts, right_x, BUTTON_Y, 64, BUTTON_HEIGHT, clock,
-        FontFace::UiSemibold, 14.0, theme::TEXT_PRIMARY, true,
+        surf,
+        fonts,
+        right_x,
+        BUTTON_Y,
+        64,
+        BUTTON_HEIGHT,
+        clock,
+        FontFace::UiSemibold,
+        14.0,
+        theme::TEXT_PRIMARY,
+        true,
     );
     surf.damage_all();
 }
@@ -215,14 +292,29 @@ fn render_page_button(
     x: i32,
     text: &str,
 ) {
-    let bg = if is_inside(state.mouse_x, state.mouse_y, x, BUTTON_Y, PAGE_WIDTH, BUTTON_HEIGHT) {
+    let bg = if is_inside(
+        state.mouse_x,
+        state.mouse_y,
+        x,
+        BUTTON_Y,
+        PAGE_WIDTH,
+        BUTTON_HEIGHT,
+    ) {
         theme::BTN_HOVER
     } else {
         theme::BTN_NORMAL
     };
     draw_button(
-        surf, fonts, x, BUTTON_Y, PAGE_WIDTH, BUTTON_HEIGHT, text, bg,
-        theme::TASKBAR_BORDER, theme::TEXT_PRIMARY,
+        surf,
+        fonts,
+        x,
+        BUTTON_Y,
+        PAGE_WIDTH,
+        BUTTON_HEIGHT,
+        text,
+        bg,
+        theme::TASKBAR_BORDER,
+        theme::TEXT_PRIMARY,
     );
 }
 
@@ -238,7 +330,8 @@ pub fn handle_click(
     }
     let pinned = registry.pinned_apps();
     let layout = Layout::new(width, pinned.len(), state.page_offset);
-    if layout.paged && layout.start > 0
+    if layout.paged
+        && layout.start > 0
         && is_inside(x, y, APPS_X, BUTTON_Y, PAGE_WIDTH, BUTTON_HEIGHT)
     {
         state.page_offset = layout.start.saturating_sub(layout.capacity);
@@ -251,20 +344,24 @@ pub fn handle_click(
         }
         cursor_x += APP_STEP;
     }
-    if layout.capacity > 0 && layout.paged && layout.end < pinned.len()
+    if layout.capacity > 0
+        && layout.paged
+        && layout.end < pinned.len()
         && is_inside(x, y, layout.next_x(), BUTTON_Y, PAGE_WIDTH, BUTTON_HEIGHT)
     {
         state.page_offset = layout.end;
         return TaskbarAction::None;
     }
-    if layout.paged
-        && is_inside(x, y, layout.more_x(), BUTTON_Y, MORE_WIDTH, BUTTON_HEIGHT)
-    {
+    if layout.paged && is_inside(x, y, layout.more_x(), BUTTON_Y, MORE_WIDTH, BUTTON_HEIGHT) {
         if layout.capacity == 0 {
             return TaskbarAction::OpenSpotlight;
         }
         state.sub_taskbar_open = !state.sub_taskbar_open;
-        state.page_offset = if layout.end < pinned.len() { layout.end } else { 0 };
+        state.page_offset = if layout.end < pinned.len() {
+            layout.end
+        } else {
+            0
+        };
         return TaskbarAction::ToggleSubTaskbar;
     }
     TaskbarAction::None
@@ -289,7 +386,13 @@ mod tests {
             assert!(layout.more_x() >= APPS_X);
             assert!(layout.more_x() + (MORE_WIDTH as i32) < layout.tray_x);
             assert!(matches!(
-                handle_click(&mut registry, &mut state, layout.more_x() + 1, BUTTON_Y + 1, width),
+                handle_click(
+                    &mut registry,
+                    &mut state,
+                    layout.more_x() + 1,
+                    BUTTON_Y + 1,
+                    width
+                ),
                 TaskbarAction::OpenSpotlight
             ));
         }

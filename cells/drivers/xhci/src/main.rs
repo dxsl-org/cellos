@@ -198,7 +198,12 @@ fn poll() {
         return;
     };
     state.events.clear();
-    decode_boot_report(HidKind::Keyboard, &report, &mut state.boot, &mut state.events);
+    decode_boot_report(
+        HidKind::Keyboard,
+        &report,
+        &mut state.boot,
+        &mut state.events,
+    );
     for event in state.events.drain(..) {
         if let EvdevEvent::Key { code, pressed } = event {
             let _ = print_fmt(format_args!(

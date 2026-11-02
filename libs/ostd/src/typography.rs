@@ -17,9 +17,12 @@ pub use unicode_normalization::char::is_combining_mark;
 pub const INTER_REGULAR: &[u8] = include_bytes!("../assets/fonts/inter/Inter-Regular.ttf");
 pub const INTER_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/inter/Inter-SemiBold.ttf");
 pub const INTER_ITALIC: &[u8] = include_bytes!("../assets/fonts/inter/Inter-Italic.ttf");
-pub const INTER_SEMIBOLD_ITALIC: &[u8] = include_bytes!("../assets/fonts/inter/Inter-SemiBoldItalic.ttf");
-pub const JETBRAINS_MONO_REGULAR: &[u8] = include_bytes!("../assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf");
-pub const JETBRAINS_MONO_BOLD: &[u8] = include_bytes!("../assets/fonts/jetbrains-mono/JetBrainsMono-Bold.ttf");
+pub const INTER_SEMIBOLD_ITALIC: &[u8] =
+    include_bytes!("../assets/fonts/inter/Inter-SemiBoldItalic.ttf");
+pub const JETBRAINS_MONO_REGULAR: &[u8] =
+    include_bytes!("../assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf");
+pub const JETBRAINS_MONO_BOLD: &[u8] =
+    include_bytes!("../assets/fonts/jetbrains-mono/JetBrainsMono-Bold.ttf");
 
 /// Canonically compose text without allocating a copy of the complete string.
 pub fn normalized_chars(text: &str) -> impl Iterator<Item = char> + '_ {
@@ -61,9 +64,9 @@ impl TextFonts {
     }
 
     pub fn atlas(&mut self, face: FontFace) -> &mut GlyphAtlas {
-        self.faces.entry(face).or_insert_with(|| {
-            GlyphAtlas::from_static(face.bytes()).expect("invalid bundled font")
-        })
+        self.faces
+            .entry(face)
+            .or_insert_with(|| GlyphAtlas::from_static(face.bytes()).expect("invalid bundled font"))
     }
 
     pub fn measure(&mut self, face: FontFace, text: &str, px: f32) -> f32 {
@@ -103,6 +106,7 @@ impl TextFonts {
         color: [u8; 4],
         clip: (i32, i32, i32, i32),
     ) -> f32 {
-        self.atlas(face).draw_text(pixels, width, height, stride, x, y, text, px, color, clip)
+        self.atlas(face)
+            .draw_text(pixels, width, height, stride, x, y, text, px, color, clip)
     }
 }

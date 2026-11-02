@@ -56,14 +56,18 @@ pub(crate) struct Deadline {
 impl Deadline {
     /// A wait of `budget_ms` starting at `now` (`None`: no clock).
     pub(crate) fn start(budget_ms: u64, now: Option<u64>) -> Self {
-        Self { start_ms: now, budget_ms, polls: 0 }
+        Self {
+            start_ms: now,
+            budget_ms,
+            polls: 0,
+        }
     }
 
     /// Count one poll; `true` when this poll is a yield point, where the caller yields and
     /// then calls [`check`](Self::check).
     pub(crate) fn tick(&mut self) -> bool {
         self.polls += 1;
-        self.polls % POLL_YIELD_EVERY == 0
+        self.polls.is_multiple_of(POLL_YIELD_EVERY)
     }
 
     /// `Some` once the budget is spent at `now`: elapsed milliseconds with a clock, the poll
@@ -95,7 +99,10 @@ mod tests {
         let deadline = Deadline::start(IO_BUDGET_MS, Some(1_000));
         assert_eq!(deadline.check(Some(1_000)), None);
         assert_eq!(deadline.check(Some(1_000 + IO_BUDGET_MS - 1)), None);
-        assert_eq!(deadline.check(Some(1_000 + IO_BUDGET_MS)), Some(Spent::Millis(IO_BUDGET_MS)));
+        assert_eq!(
+            deadline.check(Some(1_000 + IO_BUDGET_MS)),
+            Some(Spent::Millis(IO_BUDGET_MS))
+        );
         // A clock that went backwards is no time at all, never an early expiry.
         assert_eq!(deadline.check(Some(10)), None);
     }
@@ -123,7 +130,9 @@ mod tests {
     #[test]
     fn a_yield_point_every_8192_polls() {
         let mut deadline = Deadline::start(IO_BUDGET_MS, Some(0));
-        let yields = (0..3 * POLL_YIELD_EVERY).filter(|_| deadline.tick()).count();
+        let yields = (0..3 * POLL_YIELD_EVERY)
+            .filter(|_| deadline.tick())
+            .count();
         assert_eq!(yields, 3);
         assert_eq!(deadline.polls, 3 * POLL_YIELD_EVERY);
     }
@@ -142,7 +151,10 @@ mod tests {
     fn slow_completions_are_reported_from_one_second() {
         let deadline = Deadline::start(IO_BUDGET_MS, Some(100));
         assert_eq!(deadline.slow(Some(100 + SLOW_COMPLETION_MS - 1)), None);
-        assert_eq!(deadline.slow(Some(100 + SLOW_COMPLETION_MS)), Some(SLOW_COMPLETION_MS));
+        assert_eq!(
+            deadline.slow(Some(100 + SLOW_COMPLETION_MS)),
+            Some(SLOW_COMPLETION_MS)
+        );
         assert_eq!(deadline.slow(None), None);
         assert_eq!(Deadline::start(IO_BUDGET_MS, None).slow(Some(5_000)), None);
         assert_eq!(alloc::format!("{}", Spent::Millis(30_000)), "30000 ms");

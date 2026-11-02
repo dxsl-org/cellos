@@ -18,8 +18,8 @@
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_try_send};
 use ostd::session::{zeroize, Scrub};
+use ostd::syscall::{sys_lookup_service, sys_try_send};
 
 /// Report every Nth dropped keyboard event, so a stalled consumer is visible
 /// without one log line per keystroke.

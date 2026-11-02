@@ -15,10 +15,13 @@ pub(crate) fn submit<T: Serialize>(peer: usize, req: &T) -> Result<Op, IpcSubmit
 
 /// A terminal operation is removed from kernel storage on successful take.
 /// The borrowed response must not outlive `reply`.
-pub(crate) fn take<'a>(op: Op, reply: &'a mut [u8; IPC_BUF_SIZE]) -> Option<Result<&'a [u8], IpcTerminal>> {
+pub(crate) fn take(op: Op, reply: &mut [u8; IPC_BUF_SIZE]) -> Option<Result<&[u8], IpcTerminal>> {
     match ipc::take(op, reply) {
         Ok(IpcTakeResult::Pending) => None,
-        Ok(IpcTakeResult::Terminal { status: IpcTerminal::Reply, len }) if len <= reply.len() => Some(Ok(&reply[..len])),
+        Ok(IpcTakeResult::Terminal {
+            status: IpcTerminal::Reply,
+            len,
+        }) if len <= reply.len() => Some(Ok(&reply[..len])),
         Ok(IpcTakeResult::Terminal { status, .. }) => Some(Err(status)),
         Err(_) => Some(Err(IpcTerminal::Indeterminate)),
     }
@@ -57,7 +60,10 @@ pub(crate) fn request_complete_len(buf: &[u8]) -> Result<Option<usize>, RequestR
     let header_end = header_end + 4;
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut request = httparse::Request::new(&mut headers);
-    if !matches!(request.parse(&buf[..header_end]), Ok(httparse::Status::Complete(_))) {
+    if !matches!(
+        request.parse(&buf[..header_end]),
+        Ok(httparse::Status::Complete(_))
+    ) {
         return Err(RequestReadError::BadRequest);
     }
     let mut body_len = None;
@@ -69,11 +75,19 @@ pub(crate) fn request_complete_len(buf: &[u8]) -> Result<Option<usize>, RequestR
             if body_len.is_some() {
                 return Err(RequestReadError::BadRequest);
             }
-            let value = core::str::from_utf8(header.value).map_err(|_| RequestReadError::BadRequest)?;
-            body_len = Some(value.trim().parse::<usize>().map_err(|_| RequestReadError::BadRequest)?);
+            let value =
+                core::str::from_utf8(header.value).map_err(|_| RequestReadError::BadRequest)?;
+            body_len = Some(
+                value
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|_| RequestReadError::BadRequest)?,
+            );
         }
     }
-    let expected = header_end.checked_add(body_len.unwrap_or(0)).ok_or(RequestReadError::TooLarge)?;
+    let expected = header_end
+        .checked_add(body_len.unwrap_or(0))
+        .ok_or(RequestReadError::TooLarge)?;
     if expected > MAX_HTTP_REQUEST_BYTES {
         return Err(RequestReadError::TooLarge);
     }
@@ -99,10 +113,14 @@ mod framing_tests {
         for header in [
             b"POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nx".as_slice(),
             b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n".as_slice(),
-            b"POST / HTTP/1.1\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx".as_slice(),
+            b"POST / HTTP/1.1\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\nx"
+                .as_slice(),
             b"POST / HTTP/1.1\r\nContent-Length: -2\r\n\r\n".as_slice(),
         ] {
-            assert_eq!(request_complete_len(header), Err(RequestReadError::BadRequest));
+            assert_eq!(
+                request_complete_len(header),
+                Err(RequestReadError::BadRequest)
+            );
         }
     }
 

@@ -71,7 +71,11 @@ fn number(value: Option<&str>, min: u32, max: u32, what: &'static str) -> Result
         return Err(ArgError::Invalid(what));
     }
     let n: u32 = v.parse().map_err(|_| ArgError::Invalid(what))?;
-    if (min..=max).contains(&n) { Ok(n) } else { Err(ArgError::Invalid(what)) }
+    if (min..=max).contains(&n) {
+        Ok(n)
+    } else {
+        Err(ArgError::Invalid(what))
+    }
 }
 
 fn set<T>(slot: &mut Option<T>, value: T, what: &'static str) -> Result<(), ArgError> {
@@ -83,11 +87,15 @@ fn set<T>(slot: &mut Option<T>, value: T, what: &'static str) -> Result<(), ArgE
 }
 
 fn valid_user(u: &str) -> bool {
-    (1..=31).contains(&u.len()) && u.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    (1..=31).contains(&u.len())
+        && u.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 
 fn valid_key_id(k: &str) -> bool {
-    (1..=64).contains(&k.len()) && k.bytes().all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+    (1..=64).contains(&k.len())
+        && k.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
 }
 
 /// Parse HOST as an IP literal (canonical form) or an ASCII DNS name (lowercased,
@@ -98,7 +106,10 @@ pub fn parse_host(raw: &str) -> Result<Host, ArgError> {
         return Ok(Host::V4(a));
     }
     if raw.contains(':') {
-        return raw.parse::<Ipv6Addr>().map(Host::V6).map_err(|_| ArgError::Invalid("host"));
+        return raw
+            .parse::<Ipv6Addr>()
+            .map(Host::V6)
+            .map_err(|_| ArgError::Invalid("host"));
     }
     let name = raw.strip_suffix('.').unwrap_or(raw);
     let ok = (1..=253).contains(&name.len())
@@ -151,8 +162,16 @@ pub fn parse<'a>(argv: impl IntoIterator<Item = &'a str>) -> Result<Args, ArgErr
                 let p = number(it.next(), 1, 65535, "port")? as u16;
                 set(&mut port, p, "--port")?;
             }
-            "--connect-timeout" => set(&mut ct, number(it.next(), 1, 300, "connect timeout")?, "--connect-timeout")?,
-            "--timeout" => set(&mut timeout, number(it.next(), 1, 86400, "timeout")?, "--timeout")?,
+            "--connect-timeout" => set(
+                &mut ct,
+                number(it.next(), 1, 300, "connect timeout")?,
+                "--connect-timeout",
+            )?,
+            "--timeout" => set(
+                &mut timeout,
+                number(it.next(), 1, 86400, "timeout")?,
+                "--timeout",
+            )?,
             "--" => {
                 host = Some(it.next().ok_or(ArgError::Missing("HOST"))?);
                 break;

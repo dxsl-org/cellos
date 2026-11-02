@@ -31,7 +31,11 @@ pub struct BlockStream {
 
 impl BlockStream {
     pub fn new(dev: DeviceRef, base_lba: u64) -> Self {
-        Self { dev, pos: 0, base_lba }
+        Self {
+            dev,
+            pos: 0,
+            base_lba,
+        }
     }
 }
 

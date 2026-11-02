@@ -129,9 +129,14 @@ fn promised(hart: usize, priority: u8) -> usize {
 /// recorded. Caller holds the hart's ready lock.
 #[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
 fn vacate(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> Option<usize> {
-    debug_assert!(claims.rollback.load(PromiseOrdering::Relaxed) == 0,
-        "one pending selection per hart bucket");
-    claims.rollback.store(claims.rollback.load(PromiseOrdering::Relaxed) + 1, PromiseOrdering::Relaxed);
+    debug_assert!(
+        claims.rollback.load(PromiseOrdering::Relaxed) == 0,
+        "one pending selection per hart bucket"
+    );
+    claims.rollback.store(
+        claims.rollback.load(PromiseOrdering::Relaxed) + 1,
+        PromiseOrdering::Relaxed,
+    );
     claims.rollback_ahead.store(index, PromiseOrdering::Relaxed);
     queue.remove(index)
 }
@@ -144,7 +149,9 @@ fn reinsert(queue: &mut VecDeque<usize>, claims: &BucketClaims, tid: usize) {
         rollback != 0 && queue.len() < queue.capacity(),
         "selection rollback promise lost its reserved slot"
     );
-    claims.rollback.store(rollback - 1, PromiseOrdering::Relaxed);
+    claims
+        .rollback
+        .store(rollback - 1, PromiseOrdering::Relaxed);
     let ahead = claims.rollback_ahead.load(PromiseOrdering::Relaxed);
     debug_assert!(ahead <= queue.len());
     queue.insert(ahead.min(queue.len()), tid);
@@ -154,12 +161,18 @@ fn note_removed(claims: &BucketClaims, index: usize) {
     if claims.rollback.load(PromiseOrdering::Relaxed) != 0 {
         let ahead = claims.rollback_ahead.load(PromiseOrdering::Relaxed);
         if index < ahead {
-            claims.rollback_ahead.store(ahead - 1, PromiseOrdering::Relaxed);
+            claims
+                .rollback_ahead
+                .store(ahead - 1, PromiseOrdering::Relaxed);
         }
     }
 }
 /// `queue.remove(index)` that keeps a pending rollback cursor exact.
-fn remove_tracked(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> Option<usize> {
+fn remove_tracked(
+    queue: &mut VecDeque<usize>,
+    claims: &BucketClaims,
+    index: usize,
+) -> Option<usize> {
     note_removed(claims, index);
     queue.remove(index)
 }
@@ -170,12 +183,16 @@ fn forget_tracked(queue: &mut VecDeque<usize>, claims: &BucketClaims, id: usize)
     let (mut position, mut removed_ahead) = (0usize, 0usize);
     queue.retain(|&queued| {
         let keep = queued != id;
-        if !keep && position < ahead { removed_ahead += 1; }
+        if !keep && position < ahead {
+            removed_ahead += 1;
+        }
         position += 1;
         keep
     });
     if pending {
-        claims.rollback_ahead.store(ahead - removed_ahead, PromiseOrdering::Relaxed);
+        claims
+            .rollback_ahead
+            .store(ahead - removed_ahead, PromiseOrdering::Relaxed);
     }
 }
 /// Remove a key that exists only to hold a now-released publication claim.
@@ -224,8 +241,10 @@ impl PublicationReservation {
         }
         let mut ready = HART_LOCALS[hart].ready.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         let claims = claims(hart, priority);
         let publication = claims.publication.load(PromiseOrdering::Relaxed);
         let wanted = promised(hart, priority) + 1;
@@ -241,8 +260,14 @@ impl PublicationReservation {
         if !existed {
             claims.created.store(true, PromiseOrdering::Relaxed);
         }
-        claims.publication.store(publication + 1, PromiseOrdering::Relaxed);
-        Ok(Self { hart, priority, armed: true })
+        claims
+            .publication
+            .store(publication + 1, PromiseOrdering::Relaxed);
+        Ok(Self {
+            hart,
+            priority,
+            armed: true,
+        })
     }
 
     /// The hart and priority the promise is pinned to; the integrating
@@ -256,12 +281,16 @@ impl PublicationReservation {
             let mut ready = HART_LOCALS[self.hart].ready.lock();
             let claims = claims(self.hart, self.priority);
             let publication = claims.publication.load(PromiseOrdering::Relaxed);
-            let queue = ready.get_mut(&self.priority).expect("promised ready bucket");
+            let queue = ready
+                .get_mut(&self.priority)
+                .expect("promised ready bucket");
             assert!(
                 publication != 0 && queue.len() < queue.capacity(),
                 "ready publication promise lost its reserved slot"
             );
-            claims.publication.store(publication - 1, PromiseOrdering::Relaxed);
+            claims
+                .publication
+                .store(publication - 1, PromiseOrdering::Relaxed);
             claims.created.store(false, PromiseOrdering::Relaxed);
             queue.push_back(tid);
         }
@@ -274,7 +303,9 @@ impl Drop for PublicationReservation {
             let mut ready = HART_LOCALS[self.hart].ready.lock();
             let claims = claims(self.hart, self.priority);
             let publication = claims.publication.load(PromiseOrdering::Relaxed);
-            claims.publication.store(publication.saturating_sub(1), PromiseOrdering::Relaxed);
+            claims
+                .publication
+                .store(publication.saturating_sub(1), PromiseOrdering::Relaxed);
             drop_unused_bucket(&mut ready, self.hart, self.priority);
         }
     }
@@ -300,10 +331,15 @@ fn drop_unused_bucket_if_new(
 pub(crate) fn test_shape(hart: usize, priority: u8) -> (usize, usize, usize, usize) {
     let ready = HART_LOCALS[hart].ready.lock();
     let claims = claims(hart, priority);
-    let (len, capacity) = ready.get(&priority).map_or((0, 0), |q| (q.len(), q.capacity()));
-    (len, capacity,
+    let (len, capacity) = ready
+        .get(&priority)
+        .map_or((0, 0), |q| (q.len(), q.capacity()));
+    (
+        len,
+        capacity,
         claims.publication.load(PromiseOrdering::Relaxed) as usize,
-        claims.rollback.load(PromiseOrdering::Relaxed) as usize)
+        claims.rollback.load(PromiseOrdering::Relaxed) as usize,
+    )
 }
 /// Whether this target invokes `vi_context_switch_complete` from the incoming
 /// stack of every raw context switch.
@@ -347,8 +383,10 @@ pub fn push_on_hart(hart_id: usize, id: usize, priority: u8) {
     if hart_id < MAX_HARTS {
         let mut ready = HART_LOCALS[hart_id].ready.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         // A wake/requeue is infallible and never consumes a promise: keep the
         // outstanding publication/rollback slots free beside the new entry.
         // Growth here is the pre-existing infallible ready-queue growth and
@@ -388,7 +426,10 @@ pub fn owned_by_another_hart(hart_id: usize, task_id: usize) -> bool {
 
 #[cfg(cellos_g1_cpu)]
 pub(crate) struct SelectionReservation {
-    hart: usize, priority: u8, tid: usize, armed: bool,
+    hart: usize,
+    priority: u8,
+    tid: usize,
+    armed: bool,
 }
 #[cfg(cellos_g1_cpu)]
 impl Drop for SelectionReservation {
@@ -398,7 +439,9 @@ impl Drop for SelectionReservation {
             let _ready = HART_LOCALS[self.hart].ready.lock();
             let claims = claims(self.hart, self.priority);
             let rollback = claims.rollback.load(PromiseOrdering::Relaxed);
-            claims.rollback.store(rollback.saturating_sub(1), PromiseOrdering::Relaxed);
+            claims
+                .rollback
+                .store(rollback.saturating_sub(1), PromiseOrdering::Relaxed);
         }
     }
 }
@@ -410,7 +453,9 @@ pub(crate) fn restore_selection(mut reservation: SelectionReservation) {
     // took entries ahead of it adjusted the recorded position meanwhile.
     let mut ready = HART_LOCALS[reservation.hart].ready.lock();
     let claims = claims(reservation.hart, reservation.priority);
-    let queue = ready.get_mut(&reservation.priority).expect("reserved ready queue");
+    let queue = ready
+        .get_mut(&reservation.priority)
+        .expect("reserved ready queue");
     reinsert(queue, claims, reservation.tid);
     reservation.armed = false;
 }
@@ -420,13 +465,17 @@ pub(crate) fn restore_selection(mut reservation: SelectionReservation) {
 /// that preserves priority/FIFO order and prevents a protected-only queue from
 /// spinning the scheduler or losing its wake.
 pub fn pick_local_eligible(hart_id: usize) -> Option<usize> {
-    pick_local_eligible_with(hart_id,
-        #[cfg(cellos_g1_cpu)] &|_| true,
-        #[cfg(cellos_g1_cpu)] &mut None,
+    pick_local_eligible_with(
+        hart_id,
+        #[cfg(cellos_g1_cpu)]
+        &|_| true,
+        #[cfg(cellos_g1_cpu)]
+        &mut None,
     )
 }
 
-pub(crate) fn pick_local_eligible_with(hart_id: usize,
+pub(crate) fn pick_local_eligible_with(
+    hart_id: usize,
     #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
     #[cfg(cellos_g1_cpu)] reservation: &mut Option<SelectionReservation>,
 ) -> Option<usize> {
@@ -435,14 +484,18 @@ pub(crate) fn pick_local_eligible_with(hart_id: usize,
     }
     let mut rq = HART_LOCALS[hart_id].ready.lock();
     for (&_priority, queue) in rq.iter_mut().rev() {
-        if let Some(index) = queue
-            .iter()
-            .position(|&id| !owned_by_another_hart(hart_id, id)
-                && {
-                    #[cfg(cellos_g1_cpu)] { eligible(id) }
-                    #[cfg(not(cellos_g1_cpu))] { true }
-                })
-        {
+        if let Some(index) = queue.iter().position(|&id| {
+            !owned_by_another_hart(hart_id, id) && {
+                #[cfg(cellos_g1_cpu)]
+                {
+                    eligible(id)
+                }
+                #[cfg(not(cellos_g1_cpu))]
+                {
+                    true
+                }
+            }
+        }) {
             #[cfg(cellos_g1_cpu)]
             {
                 // The removed slot stays promised to this selection until it is
@@ -450,7 +503,11 @@ pub(crate) fn pick_local_eligible_with(hart_id: usize,
                 let tid = queue[index];
                 let removed = vacate(queue, claims(hart_id, _priority), index);
                 *reservation = Some(SelectionReservation {
-                    hart: hart_id, priority: _priority, tid, armed: true });
+                    hart: hart_id,
+                    priority: _priority,
+                    tid,
+                    armed: true,
+                });
                 return removed;
             }
             #[cfg(not(cellos_g1_cpu))]
@@ -655,12 +712,15 @@ pub fn any_hart_running(task_id: usize) -> bool {
 ///
 /// Always locks hart 0 then hart 1 (ABBA-safe for MAX_HARTS=2).
 pub fn steal_from_busiest(thief: usize) {
-    steal_from_busiest_with(thief,
-        #[cfg(cellos_g1_cpu)] &|_| true,
+    steal_from_busiest_with(
+        thief,
+        #[cfg(cellos_g1_cpu)]
+        &|_| true,
     );
 }
 
-pub(crate) fn steal_from_busiest_with(thief: usize,
+pub(crate) fn steal_from_busiest_with(
+    thief: usize,
     #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
 ) {
     if thief >= MAX_HARTS {
@@ -673,8 +733,10 @@ pub(crate) fn steal_from_busiest_with(thief: usize,
     let mut g0 = HART_LOCALS[0].ready.lock();
     let mut g1 = HART_LOCALS[1].ready.lock();
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+    );
     let (victim_map, thief_map) = if victim == 0 {
         (&mut *g0, &mut *g1)
     } else {
@@ -687,12 +749,16 @@ pub(crate) fn steal_from_busiest_with(thief: usize,
     // windows; a stale ownership value merely defers work until the next pick
     // and can never permit simultaneous execution.
     let permits = |id: usize| -> bool {
-        !owned_by_another_hart(thief, id)
-            && !test_dispatch_reserved_by_another_hart(thief, id)
-            && {
-                #[cfg(cellos_g1_cpu)] { eligible(id) }
-                #[cfg(not(cellos_g1_cpu))] { true }
+        !owned_by_another_hart(thief, id) && !test_dispatch_reserved_by_another_hart(thief, id) && {
+            #[cfg(cellos_g1_cpu)]
+            {
+                eligible(id)
             }
+            #[cfg(not(cellos_g1_cpu))]
+            {
+                true
+            }
+        }
     };
     let stealable: usize = victim_map
         .iter()
@@ -756,43 +822,67 @@ pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
     let mut queue: VecDeque<usize> = (1..=6).collect();
     queue.reserve(2);
     let tid = queue[2];
-    if vacate(&mut queue, &local, 2) != Some(tid) { return false; }
+    if vacate(&mut queue, &local, 2) != Some(tid) {
+        return false;
+    }
     remove_tracked(&mut queue, &local, 0);
     remove_tracked(&mut queue, &local, 2);
     reinsert(&mut queue, &local, tid);
-    if queue != [2, 3, 4, 6] || local.rollback.load(PromiseOrdering::Relaxed) != 0 { return false; }
+    if queue != [2, 3, 4, 6] || local.rollback.load(PromiseOrdering::Relaxed) != 0 {
+        return false;
+    }
     let local = NO_CLAIMS;
     let mut queue: VecDeque<usize> = (1..=6).collect();
     queue.reserve(2);
     let tid = queue[3];
-    if vacate(&mut queue, &local, 3) != Some(tid) { return false; }
+    if vacate(&mut queue, &local, 3) != Some(tid) {
+        return false;
+    }
     forget_tracked(&mut queue, &local, 2);
     forget_tracked(&mut queue, &local, 6);
     reinsert(&mut queue, &local, tid);
-    if queue != [1, 3, 4, 5] { return false; }
+    if queue != [1, 3, 4, 5] {
+        return false;
+    }
     // Real buckets: the production steal runs while the selection is vacated.
-    if super::super::smp::is_rt_hart_online() || total_ready_count() != 0 { return true; }
+    if super::super::smp::is_rt_hart_online() || total_ready_count() != 0 {
+        return true;
+    }
     let hart = super::current_hart_id();
-    if hart >= MAX_HARTS || MAX_HARTS < 2 { return true; }
+    if hart >= MAX_HARTS || MAX_HARTS < 2 {
+        return true;
+    }
     let victim = 1 - hart;
     let priority = api::TaskPriority::Normal as u8;
     let tids: [usize; 6] = core::array::from_fn(|n| base + n);
-    for tid in tids { push_on_hart(victim, tid, priority); }
+    for tid in tids {
+        push_on_hart(victim, tid, priority);
+    }
     let selected = {
         let mut ready = HART_LOCALS[victim].ready.lock();
-        let Some(queue) = ready.get_mut(&priority) else { return false };
+        let Some(queue) = ready.get_mut(&priority) else {
+            return false;
+        };
         vacate(queue, claims(victim, priority), 2)
     };
     steal_from_busiest(hart);
     let order: alloc::vec::Vec<usize> = {
         let mut ready = HART_LOCALS[victim].ready.lock();
-        let Some(queue) = ready.get_mut(&priority) else { return false };
+        let Some(queue) = ready.get_mut(&priority) else {
+            return false;
+        };
         reinsert(queue, claims(victim, priority), tids[2]);
         queue.iter().copied().collect()
     };
-    let stolen: alloc::vec::Vec<usize> = HART_LOCALS[hart].ready.lock().get(&priority)
-        .map(|queue| queue.iter().copied().collect()).unwrap_or_default();
-    for tid in tids { remove_from_all(tid); }
+    let stolen: alloc::vec::Vec<usize> = HART_LOCALS[hart]
+        .ready
+        .lock()
+        .get(&priority)
+        .map(|queue| queue.iter().copied().collect())
+        .unwrap_or_default();
+    for tid in tids {
+        remove_from_all(tid);
+    }
     selected == Some(tids[2])
         && stolen == [tids[0], tids[1]]
         && order == [tids[2], tids[3], tids[4], tids[5]]

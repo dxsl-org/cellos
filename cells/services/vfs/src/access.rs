@@ -64,7 +64,11 @@ impl AccessTable {
     /// a live handle.
     #[cfg(test)]
     pub(crate) fn with_rules(exact: &'static [PathRule], prefixes: &'static [PathRule]) -> Self {
-        Self { exact, prefixes, service_lookup: default_service_lookup }
+        Self {
+            exact,
+            prefixes,
+            service_lookup: default_service_lookup,
+        }
     }
 
     /// Whether `caller` may write to `path`.
@@ -200,10 +204,12 @@ fn touches_boot_configuration(path: &str) -> bool {
     }
     let path = path.strip_suffix('/').unwrap_or(path);
     if path.len() <= ROOT.len() {
-        ROOT.get(..path.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(path))
+        ROOT.get(..path.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(path))
             && (path.len() == ROOT.len() || ROOT.as_bytes()[path.len()] == b'/')
     } else {
-        path.get(..ROOT.len()).is_some_and(|prefix| prefix.eq_ignore_ascii_case(ROOT))
+        path.get(..ROOT.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(ROOT))
             && path.as_bytes()[ROOT.len()] == b'/'
     }
 }

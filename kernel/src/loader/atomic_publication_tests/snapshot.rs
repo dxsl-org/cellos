@@ -489,8 +489,11 @@ pub(super) fn denied_with_full_rollback(
     arm_failure(case);
     let result = action();
     let reserve_refusal = matches!(case, "AP-RF" | "AP-RM" | "AP-RW");
-    let denied = if reserve_refusal { matches!(result, Err(ViError::OutOfMemory)) }
-        else { result.is_err() };
+    let denied = if reserve_refusal {
+        matches!(result, Err(ViError::OutOfMemory))
+    } else {
+        result.is_err()
+    };
     let restored = snapshot_matches(case, "denial-rollback", &before, &snapshot());
     let unpublished_cleanup = !check_pages || super::probe::ap02_cleanup_complete();
     let reached = failure_reached();

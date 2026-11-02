@@ -70,8 +70,7 @@ ostd::cell_main!(cell_main);
 
 /// date — print wall-clock time from hardware RTC (UTC).
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let epoch = ostd::syscall::sys_get_wall_secs();
     if epoch == 0 {
         // RTC absent — fall back to uptime display.

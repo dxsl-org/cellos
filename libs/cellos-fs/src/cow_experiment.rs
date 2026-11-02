@@ -3,9 +3,10 @@
 //! Mutations stage a candidate; only successful FS2 in `sync` acknowledges it.
 
 use crate::disk::{BlockDevice, FsError};
-use crate::format::{DirEntryRecord, Extent, InodeRecord, Superblock, BLOCK_SIZE,
-    FIRST_USABLE_BLOCK, INODES_PER_BLOCK, INODE_FLAG_INLINE, INODE_MODE_DIR,
-    INODE_PAYLOAD_SIZE, INODE_SIZE};
+use crate::format::{
+    DirEntryRecord, Extent, InodeRecord, Superblock, BLOCK_SIZE, FIRST_USABLE_BLOCK,
+    INODES_PER_BLOCK, INODE_FLAG_INLINE, INODE_MODE_DIR, INODE_PAYLOAD_SIZE, INODE_SIZE,
+};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -21,7 +22,9 @@ type Bits = [u8; BIT_BYTES];
 fn has(bits: &Bits, block: u64) -> bool {
     bits[block as usize / 8] & (1 << (block % 8)) != 0
 }
-fn set(bits: &mut Bits, block: u64) { bits[block as usize / 8] |= 1 << (block % 8); }
+fn set(bits: &mut Bits, block: u64) {
+    bits[block as usize / 8] |= 1 << (block % 8);
+}
 
 // One fixed allocation keeps the large image out of return/init stack frames.
 // Its capacity does not depend on disk geometry or mutation count.
@@ -61,13 +64,18 @@ impl<D: BlockDevice> Cow<D> {
         unsafe {
             unsafe fn array<T: Copy, const N: usize>(pointer: *mut [T; N], value: T) {
                 let elements = pointer.cast::<T>();
-                for index in 0..N { elements.add(index).write(value); }
+                for index in 0..N {
+                    elements.add(index).write(value);
+                }
             }
             array(core::ptr::addr_of_mut!((*pointer).roots), None);
             core::ptr::addr_of_mut!((*pointer).active).write(active);
             core::ptr::addr_of_mut!((*pointer).slot).write(0);
             core::ptr::addr_of_mut!((*pointer).closed).write(false);
-            array(core::ptr::addr_of_mut!((*pointer).reachable), [0; BIT_BYTES]);
+            array(
+                core::ptr::addr_of_mut!((*pointer).reachable),
+                [0; BIT_BYTES],
+            );
             array(core::ptr::addr_of_mut!((*pointer).reservations), 0);
             array(core::ptr::addr_of_mut!((*pointer).scratch), 0);
             array(core::ptr::addr_of_mut!((*pointer).roles), 0);
@@ -79,25 +87,36 @@ impl<D: BlockDevice> Cow<D> {
             core::ptr::addr_of_mut!((*pointer).cursor).write(RESERVED_END);
             core::ptr::addr_of_mut!((*pointer).free_count).write(0);
             array(core::ptr::addr_of_mut!((*pointer).buffer), 0);
-            Self { disk, state: allocation.assume_init() }
+            Self {
+                disk,
+                state: allocation.assume_init(),
+            }
         }
     }
 
     fn bound(total: u64) -> Result<(), FsError> {
-        if !(16..=MAX_BLOCKS as u64).contains(&total) { return Err(FsError::NoSpace); }
+        if !(16..=MAX_BLOCKS as u64).contains(&total) {
+            return Err(FsError::NoSpace);
+        }
         Ok(())
     }
 
     fn geometry(sb: &Superblock, total: u64) -> Result<(), FsError> {
         Self::bound(total)?;
-        if !sb.validate_geometry(total) || sb.free_bitmap_block != FIRST_USABLE_BLOCK
-            || sb.free_bitmap_blocks != 1 || sb.sequence == 0
-        { return Err(FsError::Corrupted); }
+        if !sb.validate_geometry(total)
+            || sb.free_bitmap_block != FIRST_USABLE_BLOCK
+            || sb.free_bitmap_blocks != 1
+            || sb.sequence == 0
+        {
+            return Err(FsError::Corrupted);
+        }
         Ok(())
     }
 
     pub(crate) fn format(disk: D, total: u64) -> Result<Self, FsError> {
-        if disk.total_blocks() != total { return Err(FsError::PartitionOverflow); }
+        if disk.total_blocks() != total {
+            return Err(FsError::PartitionOverflow);
+        }
         Self::bound(total)?;
         let mut fs = Self::empty(disk, Superblock::new(total, 1));
         fs.state.inodes[0] = Some(InodeRecord::new(1, INODE_MODE_DIR));
@@ -106,7 +125,9 @@ impl<D: BlockDevice> Cow<D> {
         fs.disk.write_block(RESERVED_END, &fs.state.buffer)?;
         fs.state.buffer.fill(0);
         fs.disk.write_block(1, &fs.state.buffer)?;
-        for block in 0..=RESERVED_END { set(&mut fs.state.reachable[0], block); }
+        for block in 0..=RESERVED_END {
+            set(&mut fs.state.reachable[0], block);
+        }
         fs.state.free_count = total - RESERVED_END - 1;
         fs.write_bitmap()?;
         fs.disk.flush()?; // FS1: bootstrap payload and advisory bitmap.
@@ -125,10 +146,18 @@ impl<D: BlockDevice> Cow<D> {
         for slot in 0..2 {
             fs.disk.read_block(slot as u64, &mut fs.state.buffer)?;
             fs.state.roots[slot] = Superblock::from_bytes(&fs.state.buffer);
-            if let Some(sb) = fs.state.roots[slot].as_ref() { Self::geometry(sb, total)?; }
+            if let Some(sb) = fs.state.roots[slot].as_ref() {
+                Self::geometry(sb, total)?;
+            }
         }
         fs.state.slot = match (&fs.state.roots[0], &fs.state.roots[1]) {
-            (Some(a), Some(b)) => if a.sequence >= b.sequence { 0 } else { 1 },
+            (Some(a), Some(b)) => {
+                if a.sequence >= b.sequence {
+                    0
+                } else {
+                    1
+                }
+            }
             (Some(_), None) => 0,
             (None, Some(_)) => 1,
             (None, None) => return Err(FsError::Corrupted),
@@ -152,14 +181,19 @@ impl<D: BlockDevice> Cow<D> {
         self.state.inodes.fill(None);
         for slot in 0..32 {
             let block = sb.inode_blocks[slot];
-            if block == 0 { continue; }
+            if block == 0 {
+                continue;
+            }
             self.disk.read_block(block, &mut self.state.buffer)?;
             for index in 0..INODES_PER_BLOCK {
                 let number = slot * INODES_PER_BLOCK + index + 1;
                 let off = index * INODE_SIZE;
                 let bytes: &[u8; INODE_SIZE] = self.state.buffer[off..off + INODE_SIZE]
-                    .try_into().map_err(|_| FsError::Corrupted)?;
-                if bytes.iter().all(|&byte| byte == 0) { continue; }
+                    .try_into()
+                    .map_err(|_| FsError::Corrupted)?;
+                if bytes.iter().all(|&byte| byte == 0) {
+                    continue;
+                }
                 let record = InodeRecord::from_bytes(bytes).ok_or(FsError::Corrupted)?;
                 if record.inode_num != number as u64 || record.inode_num >= sb.next_inode_num {
                     return Err(FsError::Corrupted);
@@ -176,7 +210,9 @@ impl<D: BlockDevice> Cow<D> {
         }
         if cross {
             let old = self.state.roles[block as usize];
-            if old != 0 && old != role { return Err(FsError::Corrupted); }
+            if old != 0 && old != role {
+                return Err(FsError::Corrupted);
+            }
             self.state.roles[block as usize] = role;
         }
         set(&mut self.state.scratch, block);
@@ -184,27 +220,45 @@ impl<D: BlockDevice> Cow<D> {
     }
 
     fn entry(inode: &InodeRecord, index: usize) -> Result<DirEntryRecord, FsError> {
-        if index >= MAX_ENTRIES { return Err(FsError::Corrupted); }
+        if index >= MAX_ENTRIES {
+            return Err(FsError::Corrupted);
+        }
         let off = index * DirEntryRecord::SIZE;
-        DirEntryRecord::from_bytes(inode.payload[off..off + DirEntryRecord::SIZE]
-            .try_into().map_err(|_| FsError::Corrupted)?).ok_or(FsError::Corrupted)
+        DirEntryRecord::from_bytes(
+            inode.payload[off..off + DirEntryRecord::SIZE]
+                .try_into()
+                .map_err(|_| FsError::Corrupted)?,
+        )
+        .ok_or(FsError::Corrupted)
     }
 
     fn extent(inode: &InodeRecord, index: usize) -> Result<Extent, FsError> {
-        if index >= MAX_EXTENTS { return Err(FsError::Corrupted); }
+        if index >= MAX_EXTENTS {
+            return Err(FsError::Corrupted);
+        }
         let off = index * Extent::SIZE;
-        Ok(Extent::from_bytes(inode.payload[off..off + Extent::SIZE]
-            .try_into().map_err(|_| FsError::Corrupted)?))
+        Ok(Extent::from_bytes(
+            inode.payload[off..off + Extent::SIZE]
+                .try_into()
+                .map_err(|_| FsError::Corrupted)?,
+        ))
     }
 
     fn validate_graph(&mut self, sb: &Superblock, cross: bool) -> Result<(), FsError> {
         Self::geometry(sb, self.disk.total_blocks())?;
         self.state.scratch.fill(0);
         self.state.seen.fill(false);
-        for block in 0..RESERVED_END { set(&mut self.state.scratch, block); }
+        for block in 0..RESERVED_END {
+            set(&mut self.state.scratch, block);
+        }
         for slot in 0..32 {
             if sb.inode_blocks[slot] != 0 {
-                self.mark(sb.inode_blocks[slot], slot as u32 + 1, sb.total_blocks, cross)?;
+                self.mark(
+                    sb.inode_blocks[slot],
+                    slot as u32 + 1,
+                    sb.total_blocks,
+                    cross,
+                )?;
             }
         }
         // Queue visits each inode once. Multiple incoming edges (including root
@@ -217,22 +271,37 @@ impl<D: BlockDevice> Cow<D> {
             let number = self.state.queue[head] as usize;
             head += 1;
             let inode = self.state.inodes[number - 1].ok_or(FsError::Corrupted)?;
-            if inode.inode_num != number as u64 || inode.inode_num >= sb.next_inode_num
-                || inode.flags & !INODE_FLAG_INLINE != 0 || inode.nlink != 1
-            { return Err(FsError::Corrupted); }
+            if inode.inode_num != number as u64
+                || inode.inode_num >= sb.next_inode_num
+                || inode.flags & !INODE_FLAG_INLINE != 0
+                || inode.nlink != 1
+            {
+                return Err(FsError::Corrupted);
+            }
             if inode.is_dir() {
-                if !inode.is_inline() || inode.extent_count as usize > MAX_ENTRIES
-                    || inode.size != 0 || inode.inline_size != 0
-                { return Err(FsError::Corrupted); }
+                if !inode.is_inline()
+                    || inode.extent_count as usize > MAX_ENTRIES
+                    || inode.size != 0
+                    || inode.inline_size != 0
+                {
+                    return Err(FsError::Corrupted);
+                }
                 for index in 0..inode.extent_count as usize {
                     let entry = Self::entry(&inode, index)?;
                     let name = entry.name_as_str();
-                    if entry.inode_num == 0 || entry.inode_num >= sb.next_inode_num
-                        || entry.inode_num > MAX_INODES as u64 || entry.name_len == 0
+                    if entry.inode_num == 0
+                        || entry.inode_num >= sb.next_inode_num
+                        || entry.inode_num > MAX_INODES as u64
+                        || entry.name_len == 0
                         || core::str::from_utf8(&entry.name[..entry.name_len as usize]).is_err()
-                        || name.contains('/') || name.contains('\0') || name == "." || name == ".."
+                        || name.contains('/')
+                        || name.contains('\0')
+                        || name == "."
+                        || name == ".."
                         || !matches!(entry.file_type, 1 | 2)
-                    { return Err(FsError::Corrupted); }
+                    {
+                        return Err(FsError::Corrupted);
+                    }
                     for previous in 0..index {
                         if Self::entry(&inode, previous)?.name_as_str() == name {
                             return Err(FsError::Corrupted);
@@ -243,15 +312,21 @@ impl<D: BlockDevice> Cow<D> {
                     if self.state.seen[child] || (entry.file_type == 2) != record.is_dir() {
                         return Err(FsError::Corrupted);
                     }
-                    if tail >= MAX_INODES { return Err(FsError::Corrupted); }
+                    if tail >= MAX_INODES {
+                        return Err(FsError::Corrupted);
+                    }
                     self.state.seen[child] = true;
                     self.state.queue[tail] = entry.inode_num as u16;
                     tail += 1;
                 }
             } else if inode.is_file() {
                 if inode.is_inline() {
-                    if inode.size > INODE_PAYLOAD_SIZE as u64 || inode.inline_size as u64 != inode.size
-                        || inode.extent_count != 0 { return Err(FsError::Corrupted); }
+                    if inode.size > INODE_PAYLOAD_SIZE as u64
+                        || inode.inline_size as u64 != inode.size
+                        || inode.extent_count != 0
+                    {
+                        return Err(FsError::Corrupted);
+                    }
                 } else {
                     if inode.extent_count as usize > MAX_EXTENTS || inode.inline_size != 0 {
                         return Err(FsError::Corrupted);
@@ -259,60 +334,110 @@ impl<D: BlockDevice> Cow<D> {
                     let mut logical = 0u32;
                     for index in 0..inode.extent_count as usize {
                         let extent = Self::extent(&inode, index)?;
-                        let end = extent.physical_block.checked_add(extent.block_count as u64)
+                        let end = extent
+                            .physical_block
+                            .checked_add(extent.block_count as u64)
                             .ok_or(FsError::Corrupted)?;
-                        if extent.block_count == 0 || extent.logical_block != logical
-                            || end > sb.total_blocks { return Err(FsError::Corrupted); }
-                        for offset in 0..extent.block_count {
-                            let data_index = logical.checked_add(offset).ok_or(FsError::Corrupted)?;
-                            if data_index >= MAX_BLOCKS as u32 { return Err(FsError::Corrupted); }
-                            let role = ((number as u32) << 16) | (data_index + 1);
-                            self.mark(extent.physical_block + offset as u64, role, sb.total_blocks, cross)?;
+                        if extent.block_count == 0
+                            || extent.logical_block != logical
+                            || end > sb.total_blocks
+                        {
+                            return Err(FsError::Corrupted);
                         }
-                        logical = logical.checked_add(extent.block_count).ok_or(FsError::Corrupted)?;
+                        for offset in 0..extent.block_count {
+                            let data_index =
+                                logical.checked_add(offset).ok_or(FsError::Corrupted)?;
+                            if data_index >= MAX_BLOCKS as u32 {
+                                return Err(FsError::Corrupted);
+                            }
+                            let role = ((number as u32) << 16) | (data_index + 1);
+                            self.mark(
+                                extent.physical_block + offset as u64,
+                                role,
+                                sb.total_blocks,
+                                cross,
+                            )?;
+                        }
+                        logical = logical
+                            .checked_add(extent.block_count)
+                            .ok_or(FsError::Corrupted)?;
                     }
                     if inode.size.div_ceil(BLOCK_SIZE as u64) != logical as u64 {
                         return Err(FsError::Corrupted);
                     }
                 }
-            } else { return Err(FsError::Corrupted); }
+            } else {
+                return Err(FsError::Corrupted);
+            }
         }
-        if !self.state.inodes[0].ok_or(FsError::Corrupted)?.is_dir() { return Err(FsError::Corrupted); }
+        if !self.state.inodes[0].ok_or(FsError::Corrupted)?.is_dir() {
+            return Err(FsError::Corrupted);
+        }
         for index in 0..MAX_INODES {
-            if self.state.inodes[index].is_some() && !self.state.seen[index] { return Err(FsError::Corrupted); }
+            if self.state.inodes[index].is_some() && !self.state.seen[index] {
+                return Err(FsError::Corrupted);
+            }
         }
         Ok(())
     }
 
     fn admitted(&self) -> Result<(), FsError> {
-        if self.state.closed { Err(FsError::Corrupted) } else { Ok(()) }
+        if self.state.closed {
+            Err(FsError::Corrupted)
+        } else {
+            Ok(())
+        }
     }
 
     fn mutate<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, FsError>) -> Result<T, FsError> {
         self.admitted()?;
-        let result = self.state.active.sequence.checked_add(1).ok_or(FsError::NoSpace)
+        let result = self
+            .state
+            .active
+            .sequence
+            .checked_add(1)
+            .ok_or(FsError::NoSpace)
             .and_then(|_| f(self));
-        if result.is_err() { self.state.closed = true; }
+        if result.is_err() {
+            self.state.closed = true;
+        }
         result
     }
 
-    pub(crate) fn superblock(&self) -> &Superblock { &self.state.active }
-    pub(crate) fn into_disk(self) -> D { self.disk }
-    fn protected(&self, block: u64) -> bool {
-        block < RESERVED_END || has(&self.state.reachable[0], block) || has(&self.state.reachable[1], block)
+    pub(crate) fn superblock(&self) -> &Superblock {
+        &self.state.active
     }
-    pub(crate) fn free_blocks(&self) -> u64 { self.state.free_count }
+    pub(crate) fn into_disk(self) -> D {
+        self.disk
+    }
+    fn protected(&self, block: u64) -> bool {
+        block < RESERVED_END
+            || has(&self.state.reachable[0], block)
+            || has(&self.state.reachable[1], block)
+    }
+    pub(crate) fn free_blocks(&self) -> u64 {
+        self.state.free_count
+    }
     fn count_free(&self) -> u64 {
         (RESERVED_END..self.state.active.total_blocks)
-            .filter(|&block| !self.protected(block) && !has(&self.state.reservations, block)).count() as u64
+            .filter(|&block| !self.protected(block) && !has(&self.state.reservations, block))
+            .count() as u64
     }
 
     // Explicit reservation events refuse aliases, including earlier unpublished
     // preparations. No freeing on failure or candidate supersession is allowed.
     fn reserve_at(&mut self, block: u64) -> Result<(), FsError> {
-        if block >= self.state.active.total_blocks || self.protected(block)
-            || has(&self.state.reservations, block) { return Err(FsError::Corrupted); }
-        let remaining = self.state.free_count.checked_sub(1).ok_or(FsError::Corrupted)?;
+        if block >= self.state.active.total_blocks
+            || self.protected(block)
+            || has(&self.state.reservations, block)
+        {
+            return Err(FsError::Corrupted);
+        }
+        let remaining = self
+            .state
+            .free_count
+            .checked_sub(1)
+            .ok_or(FsError::Corrupted)?;
         set(&mut self.state.reservations, block);
         self.state.free_count = remaining;
         Ok(())
@@ -329,7 +454,9 @@ impl<D: BlockDevice> Cow<D> {
         Err(FsError::NoSpace)
     }
     fn reserve_table(&mut self, number: u64) -> Result<(), FsError> {
-        if number == 0 || number > MAX_INODES as u64 { return Err(FsError::NoSpace); }
+        if number == 0 || number > MAX_INODES as u64 {
+            return Err(FsError::NoSpace);
+        }
         let slot = (number as usize - 1) / INODES_PER_BLOCK;
         if self.state.dirty & (1 << slot) == 0 {
             self.state.tables[slot] = self.reserve()?;
@@ -345,14 +472,18 @@ impl<D: BlockDevice> Cow<D> {
     fn find(inode: &InodeRecord, name: &str) -> Result<Option<DirEntryRecord>, FsError> {
         for index in 0..inode.extent_count as usize {
             let entry = Self::entry(inode, index)?;
-            if entry.name_as_str() == name { return Ok(Some(entry)); }
+            if entry.name_as_str() == name {
+                return Ok(Some(entry));
+            }
         }
         Ok(None)
     }
     fn lookup_inner(&self, path: &str) -> Result<InodeRecord, FsError> {
         let mut inode = self.state.inodes[0].ok_or(FsError::Corrupted)?;
         for component in path.trim_matches('/').split('/').filter(|c| !c.is_empty()) {
-            if !inode.is_dir() { return Err(FsError::NotADirectory); }
+            if !inode.is_dir() {
+                return Err(FsError::NotADirectory);
+            }
             let entry = Self::find(&inode, component)?.ok_or(FsError::NotFound)?;
             inode = self.state.inodes[entry.inode_num as usize - 1].ok_or(FsError::Corrupted)?;
         }
@@ -364,7 +495,9 @@ impl<D: BlockDevice> Cow<D> {
     }
     fn split(path: &str) -> Result<(&str, &str), FsError> {
         let path = path.trim_matches('/');
-        if path.is_empty() { return Err(FsError::InvalidName); }
+        if path.is_empty() {
+            return Err(FsError::InvalidName);
+        }
         let (parent, leaf) = match path.rfind('/') {
             Some(index) => (&path[..index], &path[index + 1..]),
             None => ("", path),
@@ -375,9 +508,13 @@ impl<D: BlockDevice> Cow<D> {
         Ok((parent, leaf))
     }
     fn insert(parent: &mut InodeRecord, entry: DirEntryRecord) -> Result<(), FsError> {
-        if Self::find(parent, entry.name_as_str())?.is_some() { return Err(FsError::AlreadyExists); }
+        if Self::find(parent, entry.name_as_str())?.is_some() {
+            return Err(FsError::AlreadyExists);
+        }
         let index = parent.extent_count as usize;
-        if index >= MAX_ENTRIES { return Err(FsError::NoSpace); }
+        if index >= MAX_ENTRIES {
+            return Err(FsError::NoSpace);
+        }
         let off = index * DirEntryRecord::SIZE;
         parent.payload[off..off + DirEntryRecord::SIZE].copy_from_slice(&entry.to_bytes());
         parent.extent_count += 1;
@@ -387,10 +524,14 @@ impl<D: BlockDevice> Cow<D> {
         let count = parent.extent_count as usize;
         for index in 0..count {
             let entry = Self::entry(parent, index)?;
-            if entry.name_as_str() != name { continue; }
+            if entry.name_as_str() != name {
+                continue;
+            }
             let off = index * DirEntryRecord::SIZE;
             let last = (count - 1) * DirEntryRecord::SIZE;
-            parent.payload.copy_within(last..last + DirEntryRecord::SIZE, off);
+            parent
+                .payload
+                .copy_within(last..last + DirEntryRecord::SIZE, off);
             parent.payload[last..last + DirEntryRecord::SIZE].fill(0);
             parent.extent_count -= 1;
             return Ok(entry.inode_num);
@@ -400,15 +541,22 @@ impl<D: BlockDevice> Cow<D> {
 
     pub(crate) fn create(&mut self, path: &str, mode: u16) -> Result<InodeRecord, FsError> {
         self.mutate(|fs| {
-            if path.trim_matches('/').is_empty() { return Err(FsError::AlreadyExists); }
+            if path.trim_matches('/').is_empty() {
+                return Err(FsError::AlreadyExists);
+            }
             let (parent_path, leaf) = Self::split(path)?;
             let mut parent = fs.lookup_inner(parent_path)?;
-            if !parent.is_dir() { return Err(FsError::NotADirectory); }
+            if !parent.is_dir() {
+                return Err(FsError::NotADirectory);
+            }
             let number = fs.state.active.next_inode_num;
             let next = number.checked_add(1).ok_or(FsError::NoSpace)?;
-            if number > MAX_INODES as u64 { return Err(FsError::NoSpace); }
-            let entry = DirEntryRecord::new(number, if mode == INODE_MODE_DIR { 2 } else { 1 }, leaf)
-                .ok_or(FsError::InvalidName)?;
+            if number > MAX_INODES as u64 {
+                return Err(FsError::NoSpace);
+            }
+            let entry =
+                DirEntryRecord::new(number, if mode == INODE_MODE_DIR { 2 } else { 1 }, leaf)
+                    .ok_or(FsError::InvalidName)?;
             Self::insert(&mut parent, entry)?;
             fs.reserve_table(parent.inode_num)?;
             fs.reserve_table(number)?;
@@ -423,17 +571,28 @@ impl<D: BlockDevice> Cow<D> {
     fn mapped(inode: &InodeRecord, logical: u32) -> Result<u64, FsError> {
         for index in 0..inode.extent_count as usize {
             let extent = Self::extent(inode, index)?;
-            if logical >= extent.logical_block && logical - extent.logical_block < extent.block_count {
+            if logical >= extent.logical_block
+                && logical - extent.logical_block < extent.block_count
+            {
                 return Ok(extent.physical_block + (logical - extent.logical_block) as u64);
             }
         }
         Err(FsError::Corrupted)
     }
-    pub(crate) fn read_file(&mut self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
+    pub(crate) fn read_file(
+        &mut self,
+        path: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, FsError> {
         self.admitted()?;
         let inode = self.lookup_inner(path)?;
-        if !inode.is_file() { return Err(FsError::IsADirectory); }
-        if offset >= inode.size { return Ok(0); }
+        if !inode.is_file() {
+            return Err(FsError::IsADirectory);
+        }
+        if offset >= inode.size {
+            return Ok(0);
+        }
         let count = buf.len().min((inode.size - offset) as usize);
         if inode.is_inline() {
             buf[..count].copy_from_slice(&inode.payload[offset as usize..offset as usize + count]);
@@ -456,32 +615,49 @@ impl<D: BlockDevice> Cow<D> {
         Ok(count)
     }
 
-    pub(crate) fn write_file(&mut self, path: &str, offset: u64, data: &[u8], replace: bool)
-        -> Result<usize, FsError>
-    {
+    pub(crate) fn write_file(
+        &mut self,
+        path: &str,
+        offset: u64,
+        data: &[u8],
+        replace: bool,
+    ) -> Result<usize, FsError> {
         self.mutate(|fs| fs.write_inner(path, offset, data, replace))
     }
-    fn write_inner(&mut self, path: &str, offset: u64, data: &[u8], replace: bool)
-        -> Result<usize, FsError>
-    {
+    fn write_inner(
+        &mut self,
+        path: &str,
+        offset: u64,
+        data: &[u8],
+        replace: bool,
+    ) -> Result<usize, FsError> {
         let end = crate::engine::CellosFs::<D>::validate_write_range(offset, data.len())?;
         let mut inode = self.lookup_inner(path)?;
-        if !inode.is_file() { return Err(FsError::IsADirectory); }
-        if !replace && data.is_empty() { return Ok(0); }
+        if !inode.is_file() {
+            return Err(FsError::IsADirectory);
+        }
+        if !replace && data.is_empty() {
+            return Ok(0);
+        }
         let old = inode;
         let old_size = if replace { 0 } else { old.size };
         let size = if replace { end } else { old.size.max(end) };
         let needed = size.div_ceil(BLOCK_SIZE as u64);
-        if needed > self.state.active.total_blocks { return Err(FsError::NoSpace); }
+        if needed > self.state.active.total_blocks {
+            return Err(FsError::NoSpace);
+        }
         self.reserve_table(inode.inode_num)?;
         if size <= INODE_PAYLOAD_SIZE as u64 {
             inode.payload.fill(0);
             if old_size != 0 {
                 if old.is_inline() {
-                    inode.payload[..old_size as usize].copy_from_slice(&old.payload[..old_size as usize]);
+                    inode.payload[..old_size as usize]
+                        .copy_from_slice(&old.payload[..old_size as usize]);
                 } else {
-                    self.disk.read_block(Self::mapped(&old, 0)?, &mut self.state.buffer)?;
-                    inode.payload[..old_size as usize].copy_from_slice(&self.state.buffer[..old_size as usize]);
+                    self.disk
+                        .read_block(Self::mapped(&old, 0)?, &mut self.state.buffer)?;
+                    inode.payload[..old_size as usize]
+                        .copy_from_slice(&self.state.buffer[..old_size as usize]);
                 }
             }
             inode.payload[offset as usize..end as usize].copy_from_slice(data);
@@ -494,16 +670,27 @@ impl<D: BlockDevice> Cow<D> {
         }
         // Reserve the COMPLETE candidate before any data write. Prior candidates
         // stay reserved even if another staged write supersedes their mappings.
-        if needed > self.free_blocks() { return Err(FsError::NoSpace); }
+        if needed > self.free_blocks() {
+            return Err(FsError::NoSpace);
+        }
         let mut extents = [Extent::default(); MAX_EXTENTS];
         let mut count = 0usize;
         for logical in 0..needed as u32 {
             let block = self.reserve()?;
-            if count != 0 && extents[count - 1].physical_block + extents[count - 1].block_count as u64 == block {
+            if count != 0
+                && extents[count - 1].physical_block + extents[count - 1].block_count as u64
+                    == block
+            {
                 extents[count - 1].block_count += 1;
             } else {
-                if count == MAX_EXTENTS { return Err(FsError::NoSpace); }
-                extents[count] = Extent { logical_block: logical, block_count: 1, physical_block: block };
+                if count == MAX_EXTENTS {
+                    return Err(FsError::NoSpace);
+                }
+                extents[count] = Extent {
+                    logical_block: logical,
+                    block_count: 1,
+                    physical_block: block,
+                };
                 count += 1;
             }
         }
@@ -521,9 +708,11 @@ impl<D: BlockDevice> Cow<D> {
             self.state.buffer.fill(0);
             if start < old_size {
                 if old.is_inline() {
-                    self.state.buffer[..old_size as usize].copy_from_slice(&old.payload[..old_size as usize]);
+                    self.state.buffer[..old_size as usize]
+                        .copy_from_slice(&old.payload[..old_size as usize]);
                 } else {
-                    self.disk.read_block(Self::mapped(&old, logical)?, &mut self.state.buffer)?;
+                    self.disk
+                        .read_block(Self::mapped(&old, logical)?, &mut self.state.buffer)?;
                     let preserved = (old_size - start).min(BLOCK_SIZE as u64) as usize;
                     self.state.buffer[preserved..].fill(0);
                 }
@@ -536,7 +725,8 @@ impl<D: BlockDevice> Cow<D> {
                 self.state.buffer[(copy_start - start) as usize..(copy_end - start) as usize]
                     .copy_from_slice(&data[source..source + len]);
             }
-            self.disk.write_block(Self::mapped(&inode, logical)?, &self.state.buffer)?;
+            self.disk
+                .write_block(Self::mapped(&inode, logical)?, &self.state.buffer)?;
         }
         self.put(inode);
         Ok(data.len())
@@ -545,12 +735,15 @@ impl<D: BlockDevice> Cow<D> {
     pub(crate) fn list_dir(&mut self, path: &str) -> Result<Vec<(String, bool, u64)>, FsError> {
         self.admitted()?;
         let inode = self.lookup_inner(path)?;
-        if !inode.is_dir() { return Err(FsError::NotADirectory); }
+        if !inode.is_dir() {
+            return Err(FsError::NotADirectory);
+        }
         // This is the existing API's bounded output allocation, not traversal state.
         let mut result = Vec::with_capacity(inode.extent_count as usize);
         for index in 0..inode.extent_count as usize {
             let entry = Self::entry(&inode, index)?;
-            let child = self.state.inodes[entry.inode_num as usize - 1].ok_or(FsError::Corrupted)?;
+            let child =
+                self.state.inodes[entry.inode_num as usize - 1].ok_or(FsError::Corrupted)?;
             result.push((entry.name_as_str().to_string(), child.is_dir(), child.size));
         }
         Ok(result)
@@ -559,12 +752,22 @@ impl<D: BlockDevice> Cow<D> {
         self.mutate(|fs| {
             let (parent_path, name) = Self::split(path)?;
             let child = fs.lookup_inner(path)?;
-            if directory && !child.is_dir() { return Err(FsError::NotADirectory); }
-            if !directory && child.is_dir() { return Err(FsError::IsADirectory); }
-            if directory && child.extent_count != 0 { return Err(FsError::AlreadyExists); }
+            if directory && !child.is_dir() {
+                return Err(FsError::NotADirectory);
+            }
+            if !directory && child.is_dir() {
+                return Err(FsError::IsADirectory);
+            }
+            if directory && child.extent_count != 0 {
+                return Err(FsError::AlreadyExists);
+            }
             let mut parent = fs.lookup_inner(parent_path)?;
-            if !parent.is_dir() { return Err(FsError::NotADirectory); }
-            if Self::remove_entry(&mut parent, name)? != child.inode_num { return Err(FsError::Corrupted); }
+            if !parent.is_dir() {
+                return Err(FsError::NotADirectory);
+            }
+            if Self::remove_entry(&mut parent, name)? != child.inode_num {
+                return Err(FsError::Corrupted);
+            }
             fs.reserve_table(parent.inode_num)?;
             fs.reserve_table(child.inode_num)?;
             fs.put(parent);
@@ -577,21 +780,34 @@ impl<D: BlockDevice> Cow<D> {
             let (old_parent, old_name) = Self::split(old)?;
             let (new_parent, new_name) = Self::split(new)?;
             let child = fs.lookup_inner(old)?;
-            if child.is_dir() { return Err(FsError::IsADirectory); }
-            if old.trim_matches('/') == new.trim_matches('/') { return Ok(()); }
+            if child.is_dir() {
+                return Err(FsError::IsADirectory);
+            }
+            if old.trim_matches('/') == new.trim_matches('/') {
+                return Ok(());
+            }
             let mut source = fs.lookup_inner(old_parent)?;
             let mut destination = fs.lookup_inner(new_parent)?;
-            if !source.is_dir() || !destination.is_dir() { return Err(FsError::NotADirectory); }
-            if Self::find(&destination, new_name)?.is_some() { return Err(FsError::AlreadyExists); }
-            let entry = DirEntryRecord::new(child.inode_num, 1, new_name).ok_or(FsError::InvalidName)?;
+            if !source.is_dir() || !destination.is_dir() {
+                return Err(FsError::NotADirectory);
+            }
+            if Self::find(&destination, new_name)?.is_some() {
+                return Err(FsError::AlreadyExists);
+            }
+            let entry =
+                DirEntryRecord::new(child.inode_num, 1, new_name).ok_or(FsError::InvalidName)?;
             Self::remove_entry(&mut source, old_name)?;
             if source.inode_num == destination.inode_num {
                 Self::insert(&mut source, entry)?;
-            } else { Self::insert(&mut destination, entry)?; }
+            } else {
+                Self::insert(&mut destination, entry)?;
+            }
             fs.reserve_table(source.inode_num)?;
             fs.reserve_table(destination.inode_num)?;
             fs.put(source);
-            if source.inode_num != destination.inode_num { fs.put(destination); }
+            if source.inode_num != destination.inode_num {
+                fs.put(destination);
+            }
             Ok(())
         })
     }
@@ -603,7 +819,8 @@ impl<D: BlockDevice> Cow<D> {
                 self.state.buffer[block as usize / 8] &= !(1 << (block % 8));
             }
         }
-        self.disk.write_block(FIRST_USABLE_BLOCK, &self.state.buffer)
+        self.disk
+            .write_block(FIRST_USABLE_BLOCK, &self.state.buffer)
     }
     pub(crate) fn sync(&mut self) -> Result<(), FsError> {
         self.mutate(|fs| fs.sync_inner())
@@ -612,12 +829,16 @@ impl<D: BlockDevice> Cow<D> {
         let mut candidate = self.state.active;
         candidate.sequence = candidate.sequence.checked_add(1).ok_or(FsError::NoSpace)?;
         for slot in 0..32 {
-            if self.state.dirty & (1 << slot) != 0 { candidate.inode_blocks[slot] = self.state.tables[slot]; }
+            if self.state.dirty & (1 << slot) != 0 {
+                candidate.inode_blocks[slot] = self.state.tables[slot];
+            }
         }
         candidate.root_inode_block = candidate.inode_blocks[0];
         self.validate_graph(&candidate, false)?;
         for slot in 0..32 {
-            if self.state.dirty & (1 << slot) == 0 { continue; }
+            if self.state.dirty & (1 << slot) == 0 {
+                continue;
+            }
             let block = self.state.tables[slot];
             if !has(&self.state.reservations, block) || self.protected(block) {
                 return Err(FsError::Corrupted);
@@ -633,15 +854,19 @@ impl<D: BlockDevice> Cow<D> {
         }
         self.write_bitmap()?;
         self.disk.flush()?; // FS1: all candidate data and table blocks are durable.
-        // Encode the allocation state AFTER durable displacement, not the
-        // larger pre-publication union. Superseded unpublished candidates are
-        // omitted here, but remain reserved in memory until observed FS2.
+                            // Encode the allocation state AFTER durable displacement, not the
+                            // larger pre-publication union. Superseded unpublished candidates are
+                            // omitted here, but remain reserved in memory until observed FS2.
         candidate.free_block_count = (RESERVED_END..candidate.total_blocks)
-            .filter(|&block| !has(&self.state.reachable[self.state.slot], block)
-                && !has(&self.state.scratch, block)).count() as u64;
+            .filter(|&block| {
+                !has(&self.state.reachable[self.state.slot], block)
+                    && !has(&self.state.scratch, block)
+            })
+            .count() as u64;
         candidate.update_checksum();
         let target = 1 - self.state.slot;
-        self.disk.write_block(target as u64, &candidate.to_bytes())?;
+        self.disk
+            .write_block(target as u64, &candidate.to_bytes())?;
         self.disk.flush()?; // FS2: only observed success admits acknowledgement/reuse.
         self.state.roots[target] = Some(candidate);
         self.state.reachable[target].copy_from_slice(&self.state.scratch);
@@ -683,7 +908,9 @@ mod tests {
         let next = fs.reserve().unwrap();
         assert_ne!(first, next);
         assert!(fs.mutate(|fs| fs.reserve_at(first)).is_err());
-        assert!(fs.create("/closed", crate::format::INODE_MODE_FILE).is_err());
+        assert!(fs
+            .create("/closed", crate::format::INODE_MODE_FILE)
+            .is_err());
         assert!(fs.sync().is_err());
     }
 }

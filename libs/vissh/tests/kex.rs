@@ -2,9 +2,7 @@
 mod common;
 
 use common::*;
-use vissh::sunset::{
-    CliEvent, Client, Event, KeyType, PubKey, Runner, ServEvent, Server, SignKey,
-};
+use vissh::sunset::{CliEvent, Client, Event, KeyType, PubKey, Runner, ServEvent, Server, SignKey};
 
 fn setup() {
     vissh::install_entropy(os_entropy);
@@ -34,7 +32,11 @@ fn run(accept_host: bool, password: &str) -> (Seen, Result<(), vissh::sunset::Er
                     if let PubKey::Ed25519(k) = h.hostkey()? {
                         seen.hostkey = Some(k.key.0);
                     }
-                    if accept_host { h.accept()? } else { h.reject()? }
+                    if accept_host {
+                        h.accept()?
+                    } else {
+                        h.reject()?
+                    }
                 }
                 Event::Cli(CliEvent::Username(u)) => u.username("tester")?,
                 Event::Cli(CliEvent::Password(p)) => {
@@ -60,7 +62,11 @@ fn run(accept_host: bool, password: &str) -> (Seen, Result<(), vissh::sunset::Er
                 Event::Serv(ServEvent::Hostkeys(h)) => h.hostkeys(&[&key])?,
                 Event::Serv(ServEvent::FirstAuth(a)) => a.reject()?,
                 Event::Serv(ServEvent::PasswordAuth(a)) => {
-                    if a.password()? == "right" { a.allow()? } else { a.reject()? }
+                    if a.password()? == "right" {
+                        a.allow()?
+                    } else {
+                        a.reject()?
+                    }
                 }
                 _ => {}
             }
@@ -97,7 +103,12 @@ fn client_offers_only_the_cellbox_profile() {
     let kex: Vec<&str> = lists[0].iter().map(String::as_str).collect();
     assert_eq!(
         kex,
-        ["curve25519-sha256", "ext-info-c", "kex-strict-c-v00@openssh.com", "kexguess2@matt.ucc.asn.au"]
+        [
+            "curve25519-sha256",
+            "ext-info-c",
+            "kex-strict-c-v00@openssh.com",
+            "kexguess2@matt.ucc.asn.au"
+        ]
     );
     assert_eq!(lists[1], ["ssh-ed25519"]);
     assert_eq!(lists[2], ["chacha20-poly1305@openssh.com"]);

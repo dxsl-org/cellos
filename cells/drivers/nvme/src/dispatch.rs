@@ -106,7 +106,10 @@ pub fn handle(
                     ));
                     ostd::syscall::sys_exit(70);
                 }
-                if payload.windows(15).any(|window| window == b"F09C-DIE-ISSUED") {
+                if payload
+                    .windows(15)
+                    .any(|window| window == b"F09C-DIE-ISSUED")
+                {
                     ctrl.exit_after_next_doorbell();
                 }
             }

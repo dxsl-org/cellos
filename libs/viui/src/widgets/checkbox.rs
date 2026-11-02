@@ -38,16 +38,20 @@ impl Checkbox {
 }
 
 impl ViWidget for Checkbox {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
-    let label_size = self.label.measure(font);
-    let desired = Size {
-        w: BOX_SIZE + GAP + label_size.w,
-        h: BOX_SIZE.max(label_size.h),
-    };
-    let size = constraints.constrain(desired);
-    let bounds = Rect::from_origin_size(constraints.origin, size);
-    self.bounds.set(bounds);
-    LayoutNode::leaf(bounds)
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
+        let label_size = self.label.measure(font);
+        let desired = Size {
+            w: BOX_SIZE + GAP + label_size.w,
+            h: BOX_SIZE.max(label_size.h),
+        };
+        let size = constraints.constrain(desired);
+        let bounds = Rect::from_origin_size(constraints.origin, size);
+        self.bounds.set(bounds);
+        LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -99,7 +103,10 @@ impl ViWidget for Checkbox {
             );
         }
 
-        let text_pos = Point::new(bounds.x + BOX_SIZE + GAP, bounds.y + (bounds.h - cx.font.line_height()) * 0.5);
+        let text_pos = Point::new(
+            bounds.x + BOX_SIZE + GAP,
+            bounds.y + (bounds.h - cx.font.line_height()) * 0.5,
+        );
         cx.draw_text(text_pos, &self.label.text, cx.theme.text_primary(), 0.0);
     }
 

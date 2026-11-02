@@ -29,34 +29,33 @@ use crate::jobs::{JobState, Jobs};
 use crate::parser::{Ast, Cmd, QuoteStyle, Redirect, Word};
 use crate::screen_reset::{RelayScreen, SOFT_RESET};
 use crate::shell_state::{self as state, CaptureGuard, LoopSignal};
-use crate::typed::{
-    self, Admission, BytePlan, ByteHead, DefaultSink, Head, Redir, RedirKind, StageIn, StreamStop,
-    TypedPlan, INTERRUPTED_STATUS,
-};
 use crate::text_engine::args::{with_legacy_parts, ArgCursor, UtilityStatus};
 use crate::text_engine::records::{extend_input, InputBufferError, MAX_INPUT_BYTES};
 use crate::text_tools::{awk, sed};
+use crate::typed::{
+    self, Admission, ByteHead, BytePlan, DefaultSink, Head, Redir, RedirKind, StageIn, StreamStop,
+    TypedPlan, INTERRUPTED_STATUS,
+};
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use text_engine::pipeline::InterruptLatch;
 use ostd::prelude::*;
 use ostd::syscall;
+use text_engine::pipeline::InterruptLatch;
 
 use api::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
 use api::cell_session::Status;
 use core::sync::atomic::{AtomicBool, Ordering};
 use terminal_sdk::input::EventKind;
-use terminal_sdk::session::{FrontendOutput, TerminalSession};
 use terminal_sdk::pipe_child::{PipeChild, PipeSpec, Pipeline};
+use terminal_sdk::session::{FrontendOutput, TerminalSession};
 use terminal_sdk::stream::Endpoint;
 
 /// The one terminal session of this shell, which it created and controls: for the
 /// physical serial frontend (`create_serial`) or for a frontend holder that launched it
 /// (`create_for_frontend`). Every terminal sink below goes through it.
-static SERIAL_SESSION: ostd::sync::Mutex<Option<TerminalSession>> =
-    ostd::sync::Mutex::new(None);
+static SERIAL_SESSION: ostd::sync::Mutex<Option<TerminalSession>> = ostd::sync::Mutex::new(None);
 
 /// The frontend holder's output writers when the session was created for a frontend
 /// (`FrontendHost`). The serial-controller relay then forwards the session's output and
@@ -139,7 +138,12 @@ fn frontend_notice(reason: u32) -> bool {
 /// Write `bytes` to one holder writer, waiting politely while the holder has not drained.
 fn forward_to_frontend(endpoint: Endpoint, bytes: &[u8]) -> Result<(), Status> {
     let mut backoff = crate::context_session::Backoff::new();
-    write_terminal_bytes(bytes, |pending| endpoint.write(pending, 0), || Ok::<(), Status>(()), || backoff.pause())
+    write_terminal_bytes(
+        bytes,
+        |pending| endpoint.write(pending, 0),
+        || Ok::<(), Status>(()),
+        || backoff.pause(),
+    )
 }
 
 /// One relayed chunk to the frontend device: the physical UART (fd 1/2) on serial, the
@@ -176,7 +180,10 @@ fn render_serial(session: &mut TerminalSession) -> Result<(), Status> {
 /// `render_serial` that also hands every relayed byte to `screen` (the output of a
 /// foreground child, see `screen_reset`). `Ok(true)` when a stream still had bytes after
 /// its bounded turn.
-fn relay_serial(session: &mut TerminalSession, mut screen: Option<&mut RelayScreen>) -> Result<bool, Status> {
+fn relay_serial(
+    session: &mut TerminalSession,
+    mut screen: Option<&mut RelayScreen>,
+) -> Result<bool, Status> {
     // Child/command output may echo secrets: the staging buffer is wiped on every exit path.
     let mut bytes = ostd::session::Scrub::<512>::new();
     let mut pending = false;
@@ -212,7 +219,15 @@ fn relay_serial(session: &mut TerminalSession, mut screen: Option<&mut RelayScre
 /// only from the notice's fields. Input admitted them as graphic ASCII, so no control
 /// byte from the descriptor can reach the terminal.
 fn trust_prompt_text(kind: &EventKind) -> Option<String> {
-    let EventKind::TrustPrompt { host, port, algorithm, fingerprint } = kind else { return None; };
+    let EventKind::TrustPrompt {
+        host,
+        port,
+        algorithm,
+        fingerprint,
+    } = kind
+    else {
+        return None;
+    };
     Some(alloc::format!(
         "\r\nThe authenticity of host '{host}' (port {port}) can't be established.\r\n{algorithm} key fingerprint is {fingerprint}.\r\nType 'yes' and Enter to trust it permanently; anything else refuses: "
     ))
@@ -224,12 +239,17 @@ const ACK_ATTEMPTS: u32 = 64;
 /// Acknowledge one owner notice: `ack` is retried with `pause` between calls while input
 /// answers transiently (mid-transition, busy, uncertain transport), at most
 /// [`ACK_ATTEMPTS`] calls. Any other refusal, or exhausted retries, is returned.
-fn acknowledge_with(mut ack: impl FnMut() -> Result<(), Status>, mut pause: impl FnMut()) -> Result<(), Status> {
+fn acknowledge_with(
+    mut ack: impl FnMut() -> Result<(), Status>,
+    mut pause: impl FnMut(),
+) -> Result<(), Status> {
     let mut attempt = 1;
     loop {
         match ack() {
             Ok(()) => return Ok(()),
-            Err(Status::WouldBlock | Status::TimedOut | Status::Indeterminate) if attempt < ACK_ATTEMPTS => {
+            Err(Status::WouldBlock | Status::TimedOut | Status::Indeterminate)
+                if attempt < ACK_ATTEMPTS =>
+            {
                 attempt += 1;
                 pause();
             }
@@ -287,15 +307,26 @@ impl OwnerPrompt {
                 Err(status) => return self.give_up(status),
             };
             let drawn = match &event.kind {
-                EventKind::TrustPromptEnd { .. } if self.drawn => relay_device(false, b"\r\n").map(|()| false),
+                EventKind::TrustPromptEnd { .. } if self.drawn => {
+                    relay_device(false, b"\r\n").map(|()| false)
+                }
                 kind => match trust_prompt_text(kind) {
                     // Drawn from the first byte: a failed write may leave part of it on screen.
-                    Some(text) => { self.drawn = true; relay_device(false, text.as_bytes()).map(|()| true) }
+                    Some(text) => {
+                        self.drawn = true;
+                        relay_device(false, text.as_bytes()).map(|()| true)
+                    }
                     None => Ok(false),
                 },
             };
             let mut backoff = crate::context_session::Backoff::new();
-            match drawn.and_then(|drawn| acknowledge_with(|| session.acknowledge_owner_notice(&event), || backoff.pause()).map(|()| drawn)) {
+            match drawn.and_then(|drawn| {
+                acknowledge_with(
+                    || session.acknowledge_owner_notice(&event),
+                    || backoff.pause(),
+                )
+                .map(|()| drawn)
+            }) {
                 Ok(drawn) => self.drawn = drawn,
                 Err(status) => return self.give_up(status),
             }
@@ -306,25 +337,45 @@ impl OwnerPrompt {
     fn give_up(&mut self, status: Status) {
         self.failed = true;
         self.cancel = Some(crate::context_session::Backoff::new());
-        if core::mem::take(&mut self.drawn) { let _ = relay_device(false, b"\r\n"); }
-        let _ = syscall::sys_log(&alloc::format!("shell: trust prompt handshake failed: {:?}\n", status));
+        if core::mem::take(&mut self.drawn) {
+            let _ = relay_device(false, b"\r\n");
+        }
+        let _ = syscall::sys_log(&alloc::format!(
+            "shell: trust prompt handshake failed: {:?}\n",
+            status
+        ));
     }
-    fn relay(&mut self, session: &mut TerminalSession, screen: &mut RelayScreen) -> Result<bool, Status> {
-        if self.drawn { Ok(false) } else { relay_serial(session, Some(screen)) }
+    fn relay(
+        &mut self,
+        session: &mut TerminalSession,
+        screen: &mut RelayScreen,
+    ) -> Result<bool, Status> {
+        if self.drawn {
+            Ok(false)
+        } else {
+            relay_serial(session, Some(screen))
+        }
     }
     fn restored(&mut self) {
         self.cancel = None;
-        if core::mem::take(&mut self.drawn) { let _ = relay_device(false, b"\r\n"); }
+        if core::mem::take(&mut self.drawn) {
+            let _ = relay_device(false, b"\r\n");
+        }
     }
     /// One turn of a pending cancellation (nothing when none is pending).
     fn cancel_turn(&mut self, cancel: impl FnOnce() -> Result<(), Status>) {
-        let Some(backoff) = self.cancel.as_mut() else { return; };
+        let Some(backoff) = self.cancel.as_mut() else {
+            return;
+        };
         match cancel_step(cancel()) {
             CancelStep::Done => self.cancel = None,
             CancelStep::Retry => backoff.pause(),
             CancelStep::Stop(status) => {
                 self.cancel = None;
-                let _ = syscall::sys_log(&alloc::format!("shell: foreground cancel after a failed trust prompt refused: {:?}\n", status));
+                let _ = syscall::sys_log(&alloc::format!(
+                    "shell: foreground cancel after a failed trust prompt refused: {:?}\n",
+                    status
+                ));
             }
         }
     }
@@ -439,7 +490,7 @@ fn restore_screen_locked(session: &mut TerminalSession) {
             write
         },
         || Ok(()),
-        || ostd::task::yield_now(),
+        ostd::task::yield_now,
     );
     if written.is_err() {
         let _ = syscall::sys_log("shell: terminal soft reset delivery failed\n");
@@ -489,7 +540,10 @@ pub fn with_tui<R>(run: impl FnOnce(&mut TerminalSession, TuiSink<'_>) -> R) -> 
     let mut slot = SERIAL_SESSION.lock();
     let session = slot.as_mut().ok_or(Status::WrongSession)?;
     while relay_serial(session, None)? {}
-    let screen = core::cell::Cell::new(TuiScreen { tracker: crate::screen_reset::ModeTracker::new(), failed: false });
+    let screen = core::cell::Cell::new(TuiScreen {
+        tracker: crate::screen_reset::ModeTracker::new(),
+        failed: false,
+    });
     let result = run(session, TuiSink { screen: &screen });
     let screen = screen.get();
     if (screen.failed || screen.tracker.dirty()) && relay_device(false, SOFT_RESET).is_err() {
@@ -544,7 +598,10 @@ pub fn shell_console(text: &str) {
 /// session answers its capabilities.
 pub fn interactive_terminal() -> bool {
     terminal_is_ours(serial_active(), state::capture_depth())
-        && SERIAL_SESSION.lock().as_ref().is_some_and(|session| session.capabilities().is_ok())
+        && SERIAL_SESSION
+            .lock()
+            .as_ref()
+            .is_some_and(|session| session.capabilities().is_ok())
 }
 
 /// The terminal belongs to the running command: a session exists and nothing but the
@@ -558,21 +615,29 @@ fn terminal_is_ours(session: bool, capture_depth: usize) -> bool {
 /// 128-byte line limit can never reallocate (a realloc would free an unwiped copy).
 struct Wiped(String);
 impl Wiped {
-    fn with_capacity(capacity: usize) -> Self { Self(String::with_capacity(capacity)) }
+    fn with_capacity(capacity: usize) -> Self {
+        Self(String::with_capacity(capacity))
+    }
     fn replace(&mut self, text: &str) {
         ostd::session::zeroize_string(&mut self.0);
         self.0.push_str(text);
     }
-    fn take(&mut self) -> String { core::mem::take(&mut self.0) }
+    fn take(&mut self) -> String {
+        core::mem::take(&mut self.0)
+    }
 }
 impl Drop for Wiped {
-    fn drop(&mut self) { ostd::session::zeroize_string(&mut self.0); }
+    fn drop(&mut self) {
+        ostd::session::zeroize_string(&mut self.0);
+    }
 }
 
 /// Terminal events carry typed text: every exit path wipes the event it was holding.
 struct ScrubbedEvent(terminal_sdk::input::Event);
 impl Drop for ScrubbedEvent {
-    fn drop(&mut self) { self.0.scrub(); }
+    fn drop(&mut self) {
+        self.0.scrub();
+    }
 }
 
 /// Longest command line the editor accepts, in bytes.
@@ -623,64 +688,68 @@ pub fn terminal_read_line(history: &mut Vec<String>) -> Result<Option<String>, S
     loop {
         let event = ScrubbedEvent({
             let mut slot = SERIAL_SESSION.lock();
-            slot.as_mut().ok_or(Status::WrongSession)?.next_event(u64::MAX)?
+            slot.as_mut()
+                .ok_or(Status::WrongSession)?
+                .next_event(u64::MAX)?
         });
         match &event.0.kind {
-            EventKind::Text(text) => {
-                if push_line_text(&mut line, &mut overflow, text) {
-                    terminal_stdout(text.as_bytes())?;
-                }
+            EventKind::Text(text) if push_line_text(&mut line, &mut overflow, text) => {
+                terminal_stdout(text.as_bytes())?;
             }
             EventKind::PasteBegin => paste = true,
             EventKind::PasteEnd => paste = false,
-            EventKind::Key { code, modifiers, pressed: 1 | 2 } if !paste => {
-                match line_key(*code, *modifiers) {
-                    0x110001 if overflow => {
-                        line.replace("");
-                        overflow = false;
-                        history_index = history.len();
-                        shell_stderrln(&alloc::format!(
-                            "\nshell: line longer than {} bytes; discarded",
-                            SHELL_LINE_MAX
-                        ));
-                        terminal_stdout(b"Cellos > ")?;
-                    }
-                    0x110001 => {
-                        terminal_stdout(b"\n")?;
-                        if !line.0.trim().is_empty()
-                            && history.last().map(String::as_str) != Some(line.0.as_str())
-                        {
-                            if history.len() == 128 {
-                                history.remove(0);
-                            }
-                            history.push(line.0.clone());
-                        }
-                        return Ok(Some(line.take()));
-                    }
-                    0x110003 => {
-                        if line.0.pop().is_some() {
-                            terminal_stdout(b"\x08 \x08")?;
-                        }
-                    }
-                    0x110010 | 0x110011 => {
-                        if history_index == history.len() {
-                            draft.replace(&line.0);
-                        }
-                        overflow = false;
-                        if *code == 0x110010 {
-                            history_index = history_index.saturating_sub(1);
-                        } else {
-                            history_index = (history_index + 1).min(history.len());
-                        }
-                        line.replace(history.get(history_index).map(String::as_str).unwrap_or(draft.0.as_str()));
-                        terminal_stdout(b"\r\x1b[2KCellos > ")?;
-                        terminal_stdout(line.0.as_bytes())?;
-                    }
-                    _ => {}
+            EventKind::Key {
+                code,
+                modifiers,
+                pressed: 1 | 2,
+            } if !paste => match line_key(*code, *modifiers) {
+                0x110001 if overflow => {
+                    line.replace("");
+                    overflow = false;
+                    history_index = history.len();
+                    shell_stderrln(&alloc::format!(
+                        "\nshell: line longer than {} bytes; discarded",
+                        SHELL_LINE_MAX
+                    ));
+                    terminal_stdout(b"Cellos > ")?;
                 }
-            }
+                0x110001 => {
+                    terminal_stdout(b"\n")?;
+                    if !line.0.trim().is_empty()
+                        && history.last().map(String::as_str) != Some(line.0.as_str())
+                    {
+                        if history.len() == 128 {
+                            history.remove(0);
+                        }
+                        history.push(line.0.clone());
+                    }
+                    return Ok(Some(line.take()));
+                }
+                0x110003 if line.0.pop().is_some() => {
+                    terminal_stdout(b"\x08 \x08")?;
+                }
+                0x110010 | 0x110011 => {
+                    if history_index == history.len() {
+                        draft.replace(&line.0);
+                    }
+                    overflow = false;
+                    if *code == 0x110010 {
+                        history_index = history_index.saturating_sub(1);
+                    } else {
+                        history_index = (history_index + 1).min(history.len());
+                    }
+                    line.replace(
+                        history
+                            .get(history_index)
+                            .map(String::as_str)
+                            .unwrap_or(draft.0.as_str()),
+                    );
+                    terminal_stdout(b"\r\x1b[2KCellos > ")?;
+                    terminal_stdout(line.0.as_bytes())?;
+                }
+                _ => {}
+            },
             EventKind::Interrupt => {
-                paste = false;
                 terminal_stdout(b"^C\n")?;
                 return Ok(Some(String::new()));
             }
@@ -707,7 +776,10 @@ pub fn terminal_read_line(history: &mut Vec<String>) -> Result<Option<String>, S
                 history_index = history.len();
                 overflow = false;
                 paste = false;
-                shell_stderrln(&alloc::format!("\nshell: input lost (reason {}); line discarded", reason));
+                shell_stderrln(&alloc::format!(
+                    "\nshell: input lost (reason {}); line discarded",
+                    reason
+                ));
                 terminal_stdout(b"Cellos > ")?;
             }
             _ => {}
@@ -721,20 +793,25 @@ enum SecretEnd {
     Eof,
 }
 
-fn read_secret_events(session: &mut TerminalSession, line: &mut Wiped) -> Result<SecretEnd, Status> {
+fn read_secret_events(
+    session: &mut TerminalSession,
+    line: &mut Wiped,
+) -> Result<SecretEnd, Status> {
     let mut paste = false;
     loop {
         let event = ScrubbedEvent(session.next_event(u64::MAX)?);
         match &event.0.kind {
             // No echo, no cursor edits, no history navigation: only text, Backspace and Enter.
-            EventKind::Text(text) => {
-                if line.0.len() + text.len() <= 128 {
-                    line.0.push_str(text);
-                }
+            EventKind::Text(text) if line.0.len() + text.len() <= 128 => {
+                line.0.push_str(text);
             }
             EventKind::PasteBegin => paste = true,
             EventKind::PasteEnd => paste = false,
-            EventKind::Key { code, modifiers, pressed: 1 | 2 } if !paste => match line_key(*code, *modifiers) {
+            EventKind::Key {
+                code,
+                modifiers,
+                pressed: 1 | 2,
+            } if !paste => match line_key(*code, *modifiers) {
                 0x110001 => return Ok(SecretEnd::Enter),
                 0x110003 => {
                     line.0.pop();
@@ -818,7 +895,11 @@ impl TerminalKeys {
                 self.paste = false;
                 None
             }
-            EventKind::Key { code, modifiers: 0, pressed: 1 | 2 } if !self.paste => match *code {
+            EventKind::Key {
+                code,
+                modifiers: 0,
+                pressed: 1 | 2,
+            } if !self.paste => match *code {
                 0x110001 => Some(TerminalKey::Enter),
                 0x110003 => Some(TerminalKey::Backspace),
                 _ => None,
@@ -835,7 +916,11 @@ impl TerminalKeys {
     /// Next key press from `session` (the caller holds the session guard, see `with_tui`).
     /// `deadline_ns` is an absolute monotonic time: `0` polls without blocking and
     /// `u64::MAX` waits forever. `Ok(None)` means no key arrived before the deadline.
-    pub fn read_from(&mut self, session: &mut TerminalSession, deadline_ns: u64) -> Result<Option<TerminalKey>, Status> {
+    pub fn read_from(
+        &mut self,
+        session: &mut TerminalSession,
+        deadline_ns: u64,
+    ) -> Result<Option<TerminalKey>, Status> {
         loop {
             let event = match session.next_event(deadline_ns) {
                 Ok(event) => ScrubbedEvent(event),
@@ -891,7 +976,11 @@ fn prompt_step(line: &mut Wiped, paste: &mut bool, kind: &EventKind) -> PromptSt
             *paste = false;
             PromptStep::Idle
         }
-        EventKind::Key { code, modifiers, pressed: 1 | 2 } if !*paste => match line_key(*code, *modifiers) {
+        EventKind::Key {
+            code,
+            modifiers,
+            pressed: 1 | 2,
+        } if !*paste => match line_key(*code, *modifiers) {
             0x110001 => PromptStep::Enter,
             0x110003 if line.0.pop().is_some() => PromptStep::Erased,
             _ => PromptStep::Idle,
@@ -918,7 +1007,9 @@ pub fn terminal_prompt_line() -> Result<PromptLine, Status> {
     loop {
         let event = ScrubbedEvent({
             let mut slot = SERIAL_SESSION.lock();
-            slot.as_mut().ok_or(Status::WrongSession)?.next_event(u64::MAX)?
+            slot.as_mut()
+                .ok_or(Status::WrongSession)?
+                .next_event(u64::MAX)?
         });
         match prompt_step(&mut line, &mut paste, &event.0.kind) {
             PromptStep::Idle => {}
@@ -965,12 +1056,66 @@ pub fn shell_stdin() -> Vec<u8> {
 /// All recognized shell built-in names, used by tab completion.
 #[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
-    "alias", "awk", "bg", "blktest", "break", "cat", "cd", "clear", "continue", "date", "echo", "edit",
-    "ssh", "completion",
-    "env", "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "history", "hv",
-    "ifconfig", "ip", "jobs", "kill", "ls", "machine", "mkdir", "mv", "ps", "pwd", "read", "rg", "rm", "rmdir",
-    "sed", "shutdown", "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top",
-    "touch", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
+    "alias",
+    "awk",
+    "bg",
+    "blktest",
+    "break",
+    "cat",
+    "cd",
+    "clear",
+    "continue",
+    "date",
+    "echo",
+    "edit",
+    "ssh",
+    "completion",
+    "env",
+    "exec",
+    "exit",
+    "export",
+    "fg",
+    "find",
+    "free",
+    "grep",
+    "head",
+    "help",
+    "history",
+    "hv",
+    "ifconfig",
+    "ip",
+    "jobs",
+    "kill",
+    "ls",
+    "machine",
+    "mkdir",
+    "mv",
+    "ps",
+    "pwd",
+    "read",
+    "rg",
+    "rm",
+    "rmdir",
+    "sed",
+    "shutdown",
+    "sleep",
+    "snapshot",
+    "sort",
+    "source",
+    "tail",
+    "tee",
+    "test",
+    "top",
+    "touch",
+    "unalias",
+    "uniq",
+    "unset",
+    "uname",
+    "uptime",
+    "vappend",
+    "vcat",
+    "vwrite",
+    "wc",
     "cp",
 ];
 
@@ -1106,7 +1251,8 @@ fn expand_token(s: &str) -> Result<String, SubstFailed> {
                 // `${NAME}` — the value; `${#NAME}` — its length in characters. Anything
                 // else (unclosed, empty or not a name) stays literal.
                 let close = bytes[i + 2..].iter().position(|&b| b == b'}');
-                let inner = close.and_then(|close| core::str::from_utf8(&bytes[i + 2..i + 2 + close]).ok());
+                let inner =
+                    close.and_then(|close| core::str::from_utf8(&bytes[i + 2..i + 2 + close]).ok());
                 if let (Some(close), Some(inner)) = (close, inner) {
                     let (length, name) = match inner.strip_prefix('#') {
                         Some(name) => (true, name),
@@ -1228,7 +1374,7 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
         Ast::Simple(cmd) => exec_simple(cmd, jobs),
         Ast::Pipeline(cmds) => exec_pipeline(cmds, jobs),
         Ast::Invalid(reason) => reject_line(reason),
-        Ast::BackgroundPipeline(_) => reject_line(
+        Ast::BackgroundPipeline => reject_line(
             "background `&` is supported only for a single external command; the pipeline was not started",
         ),
         Ast::Background(cmd) => {
@@ -1373,7 +1519,10 @@ fn stage_input(cmd: &Cmd) -> Result<StageIn, SubstFailed> {
             Redirect::StdinFrom(word) => (RedirKind::In, word),
             Redirect::StderrTo(word) => (RedirKind::Err, word),
         };
-        redirects.push(Redir { kind, path: expand_word(word)? });
+        redirects.push(Redir {
+            kind,
+            path: expand_word(word)?,
+        });
     }
     Ok(StageIn { argv, redirects })
 }
@@ -1388,7 +1537,11 @@ fn explicit_form(mut argv: Vec<String>) -> Result<Vec<String>, (i32, bool, Strin
             argv.remove(0);
             Ok(argv)
         }
-        crate::oneshot::Prefixed::Answer { status, stdout, text } => Err((status, stdout, text)),
+        crate::oneshot::Prefixed::Answer {
+            status,
+            stdout,
+            text,
+        } => Err((status, stdout, text)),
     }
 }
 
@@ -1409,7 +1562,10 @@ fn explicit_argv(argv: Vec<String>) -> Result<Vec<String>, i32> {
 /// [`explicit_argv`] on an expanded stage; its redirects are kept.
 fn explicit_stage(stage: StageIn) -> Result<StageIn, i32> {
     let StageIn { argv, redirects } = stage;
-    Ok(StageIn { argv: explicit_argv(argv)?, redirects })
+    Ok(StageIn {
+        argv: explicit_argv(argv)?,
+        redirects,
+    })
 }
 
 /// One simple command. Only commands that can be typed stages or interactive
@@ -1418,12 +1574,14 @@ fn explicit_stage(stage: StageIn) -> Result<StageIn, i32> {
 /// everything else is unchanged.
 fn exec_simple(cmd: &Cmd, jobs: &mut Jobs) -> i32 {
     if let Some(first) = cmd.argv.first() {
-        let args: Vec<&str> = cmd.argv[1..].iter().map(|word| word.text.as_str()).collect();
+        let args: Vec<&str> = cmd.argv[1..]
+            .iter()
+            .map(|word| word.text.as_str())
+            .collect();
         let redirected_external = serial_active()
-            && cmd
-                .redirects
-                .iter()
-                .any(|redirect| matches!(redirect, Redirect::StdoutTo(_) | Redirect::StdoutAppend(_)))
+            && cmd.redirects.iter().any(|redirect| {
+                matches!(redirect, Redirect::StdoutTo(_) | Redirect::StdoutAppend(_))
+            })
             && (matches!(
                 typed::classify_command(core::slice::from_ref(&first.text)),
                 typed::CmdClass::External
@@ -1444,10 +1602,20 @@ fn exec_simple(cmd: &Cmd, jobs: &mut Jobs) -> i32 {
                 Admission::Legacy => {}
                 Admission::Reject(reason) => return reject_line(&reason),
                 Admission::Typed(plan) => {
-                    return exec_typed(&plan, core::slice::from_ref(cmd), core::slice::from_ref(&stage), jobs)
+                    return exec_typed(
+                        &plan,
+                        core::slice::from_ref(cmd),
+                        core::slice::from_ref(&stage),
+                        jobs,
+                    )
                 }
                 Admission::Bytes(plan) => {
-                    return exec_bytes(&plan, core::slice::from_ref(cmd), core::slice::from_ref(&stage), jobs)
+                    return exec_bytes(
+                        &plan,
+                        core::slice::from_ref(cmd),
+                        core::slice::from_ref(&stage),
+                        jobs,
+                    )
                 }
             }
         }
@@ -1492,7 +1660,12 @@ fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
 /// stage runs directly through the current sink so its exit code is preserved
 /// and any outer capture (nested pipeline or `$(...)`) captures it correctly.
 /// `statuses` receives one status per stage run. `cmds` must be non-empty.
-fn run_byte_chain(cmds: &[Cmd], mut stdin_data: Vec<u8>, jobs: &mut Jobs, statuses: &mut Vec<i32>) -> i32 {
+fn run_byte_chain(
+    cmds: &[Cmd],
+    mut stdin_data: Vec<u8>,
+    jobs: &mut Jobs,
+    statuses: &mut Vec<i32>,
+) -> i32 {
     let last_idx = cmds.len() - 1;
     for (i, cmd) in cmds.iter().enumerate() {
         if i == last_idx {
@@ -1584,8 +1757,9 @@ struct OneShotSink;
 
 impl typed::ChunkSink for OneShotSink {
     fn write(&mut self, bytes: &[u8]) -> Result<(), typed::SinkStop> {
-        state::oneshot_stdout(bytes)
-            .map_err(|status| typed::SinkStop::Failed(alloc::format!("stdout failed: {:?}", status)))
+        state::oneshot_stdout(bytes).map_err(|status| {
+            typed::SinkStop::Failed(alloc::format!("stdout failed: {:?}", status))
+        })
     }
 
     fn interrupted(&mut self) -> bool {
@@ -1699,7 +1873,11 @@ fn run_bytes(
                 if let Some(member) = members.get_mut(index) {
                     member.1 = *status;
                     if *status != 0 {
-                        shell_stderrln(&alloc::format!("shell: {} exited with status {}", member.0, status));
+                        shell_stderrln(&alloc::format!(
+                            "shell: {} exited with status {}",
+                            member.0,
+                            status
+                        ));
                     }
                 }
             }
@@ -1719,11 +1897,16 @@ fn run_bytes(
 fn byte_head(plan: &TypedPlan, cmds: &[Cmd], jobs: &mut Jobs) -> Result<(Vec<u8>, usize), i32> {
     match &plan.head {
         Head::Cat(path) => crate::native_rows::read_file_bytes_exact(path).map(|bytes| (bytes, 1)),
-        Head::FromFile(path) => crate::native_rows::read_file_bytes_exact(path).map(|bytes| (bytes, 0)),
+        Head::FromFile(path) => {
+            crate::native_rows::read_file_bytes_exact(path).map(|bytes| (bytes, 0))
+        }
         Head::Capture => {
             let (bytes, code) = capture_cmd(&cmds[0], &[], jobs);
             if code != 0 {
-                shell_stderrln(&alloc::format!("shell: stage 0 exited with status {}", code));
+                shell_stderrln(&alloc::format!(
+                    "shell: stage 0 exited with status {}",
+                    code
+                ));
                 Err(code)
             } else {
                 Ok((bytes, 1))
@@ -1752,7 +1935,9 @@ fn run_typed(
     let mut tail = if plan.tail_externals > 0 {
         match ExtRun::start(&stages[plan.typed_cmds..], true, &latch) {
             Ok(run) => Some(run),
-            Err(failed) => return fail_member(members, plan.typed_cmds + failed.stage, failed.status),
+            Err(failed) => {
+                return fail_member(members, plan.typed_cmds + failed.stage, failed.status)
+            }
         }
     } else {
         None
@@ -1797,7 +1982,8 @@ fn run_typed(
                 }
                 (None, format) => {
                     let format = format.unwrap_or(text_engine::pipeline::Format::JsonlTyped);
-                    let rows: Box<dyn RowSource> = Box::new(typed::StreamRows::new(ChildBytes(shared), format));
+                    let rows: Box<dyn RowSource> =
+                        Box::new(typed::StreamRows::new(ChildBytes(shared), format));
                     (rows, *count, &plan.stages[1..])
                 }
             }
@@ -1825,7 +2011,11 @@ fn run_typed(
                 match typed::rows_from_bytes(format, &bytes) {
                     Ok(source) => (source, from_index, &plan.stages[1..]),
                     Err(error) => {
-                        shell_stderrln(&alloc::format!("shell: {}: {}", members[from_index].0, error));
+                        shell_stderrln(&alloc::format!(
+                            "shell: {}: {}",
+                            members[from_index].0,
+                            error
+                        ));
                         return fail_member(members, from_index, 1);
                     }
                 }
@@ -1834,16 +2024,25 @@ fn run_typed(
     };
     // The producer's completion status, published when the chain releases it.
     let (source, completion) = typed::observe_completion(source);
-    let search = plan.search.as_ref().map(|_| SearchMember { index: plan.search_index, completion });
+    let search = plan.search.as_ref().map(|_| SearchMember {
+        index: plan.search_index,
+        completion,
+    });
 
     // Rows feeding external commands: serialized into the first stage's stdin as it
     // consumes them (bounded memory, consumer-driven), never collected.
     if let Some(mut run) = tail.take() {
-        let feed_sink = if plan.search_text && plan.text_display { DefaultSink::SearchText } else { DefaultSink::TypedJsonl };
+        let feed_sink = if plan.search_text && plan.text_display {
+            DefaultSink::SearchText
+        } else {
+            DefaultSink::TypedJsonl
+        };
         let feed = match typed::RowFeed::new(source, plan.category, first_stage, rest, feed_sink) {
             Ok(feed) => feed,
             Err(failure) => {
-                let name = members.get(failure.stage).map_or("pipeline", |member| member.0.as_str());
+                let name = members
+                    .get(failure.stage)
+                    .map_or("pipeline", |member| member.0.as_str());
                 shell_stderrln(&alloc::format!("shell: {}: {}", name, failure.message));
                 return fail_member(members, failure.stage, failure.status);
             }
@@ -1863,12 +2062,20 @@ fn run_typed(
             if let Some(search) = &search {
                 search.record(members, &latch, false);
             }
-            let name = members.get(failure.stage).map_or("pipeline", |member| member.0.as_str());
+            let name = members
+                .get(failure.stage)
+                .map_or("pipeline", |member| member.0.as_str());
             shell_stderrln(&alloc::format!("shell: {}: {}", name, failure.message));
             return fail_member(members, failure.stage, failure.status);
         }
         // The feed (and the producer) is released with the run, before its status is read.
-        let status = settle_external_segment(run, driven, members, plan.typed_cmds, plan.tail_output.as_ref());
+        let status = settle_external_segment(
+            run,
+            driven,
+            members,
+            plan.typed_cmds,
+            plan.tail_output.as_ref(),
+        );
         if let Some(search) = &search {
             search.record(members, &latch, status != INTERRUPTED_STATUS);
         }
@@ -1884,18 +2091,44 @@ fn run_typed(
     // a closed reader stops the producer at once. Only a redirect target, a byte
     // consumer or an enclosing capture (`$(...)`) need the whole, bounded buffer.
     let outcome = if terminal && oneshot && state::capture_depth() == 0 {
-        LocalOutcome::Streamed(typed::stream_rows(source, plan.category, first_stage, rest, default_sink, &mut OneShotSink))
+        LocalOutcome::Streamed(typed::stream_rows(
+            source,
+            plan.category,
+            first_stage,
+            rest,
+            default_sink,
+            &mut OneShotSink,
+        ))
     } else if terminal && serial_active() && state::capture_depth() <= 1 {
         flush_repl_capture();
-        let mut sink = TerminalSink { latch: latch.clone() };
-        LocalOutcome::Streamed(typed::stream_rows(source, plan.category, first_stage, rest, default_sink, &mut sink))
+        let mut sink = TerminalSink {
+            latch: latch.clone(),
+        };
+        LocalOutcome::Streamed(typed::stream_rows(
+            source,
+            plan.category,
+            first_stage,
+            rest,
+            default_sink,
+            &mut sink,
+        ))
     } else {
         // A Collected run polls Ctrl-C before every pull (S10-3b), so an endless
         // producer feeding a byte consumer (`| cat`) stops with 130 and writes nothing.
-        let bound = if plan.search.is_some() { typed::SEARCH_COLLECT_BOUND } else { typed::COLLECT_BOUND };
-        LocalOutcome::Collected(typed::run_rows_within(source, plan.category, first_stage, rest, default_sink, bound, &mut || {
-            latch.poll_now()
-        }))
+        let bound = if plan.search.is_some() {
+            typed::SEARCH_COLLECT_BOUND
+        } else {
+            typed::COLLECT_BOUND
+        };
+        LocalOutcome::Collected(typed::run_rows_within(
+            source,
+            plan.category,
+            first_stage,
+            rest,
+            default_sink,
+            bound,
+            &mut || latch.poll_now(),
+        ))
     };
 
     // An external head is reaped whatever the typed segment did: a satisfied `take`
@@ -1911,14 +2144,20 @@ fn run_typed(
                 member.1 = *status;
                 // A stage that never started ran nothing and reports no exit.
                 if *status != 0 && !cancelled && index >= not_started && !latch.is_set() {
-                    shell_stderrln(&alloc::format!("shell: {} exited with status {}", member.0, status));
+                    shell_stderrln(&alloc::format!(
+                        "shell: {} exited with status {}",
+                        member.0,
+                        status
+                    ));
                 }
             }
         }
     }
     // The search member's status; reported as an earlier failure unless it is the
     // pipeline status itself (D76-8, D76-15).
-    let search_status = search.as_ref().map(|search| search.record(members, &latch, !plan.search_status));
+    let search_status = search
+        .as_ref()
+        .map(|search| search.record(members, &latch, !plan.search_status));
     // Ctrl-C ends the job with 130 whoever saw it; a Collected run writes nothing.
     if latch.is_set() {
         shell_console("^C\n");
@@ -1938,7 +2177,9 @@ fn run_typed(
         }
         LocalOutcome::Collected(Ok(bytes)) => bytes,
         LocalOutcome::Streamed(Err(failure)) | LocalOutcome::Collected(Err(failure)) => {
-            let name = members.get(failure.stage).map_or("pipeline", |member| member.0.as_str());
+            let name = members
+                .get(failure.stage)
+                .map_or("pipeline", |member| member.0.as_str());
             shell_stderrln(&alloc::format!("shell: {}: {}", name, failure.message));
             return fail_member(members, failure.stage, failure.status);
         }
@@ -1958,7 +2199,11 @@ fn run_typed(
             if let Some(member) = members.get_mut(index) {
                 member.1 = *status;
                 if *status != 0 && offset + 1 < statuses.len() {
-                    shell_stderrln(&alloc::format!("shell: {} exited with status {}", member.0, status));
+                    shell_stderrln(&alloc::format!(
+                        "shell: {} exited with status {}",
+                        member.0,
+                        status
+                    ));
                 }
             }
         }
@@ -2000,7 +2245,11 @@ impl SearchMember {
         if let Some(member) = members.get_mut(self.index) {
             member.1 = status;
             if report && status != 0 && !latch.is_set() {
-                shell_stderrln(&alloc::format!("shell: {} exited with status {}", member.0, status));
+                shell_stderrln(&alloc::format!(
+                    "shell: {} exited with status {}",
+                    member.0,
+                    status
+                ));
             }
         }
         status
@@ -2274,7 +2523,11 @@ fn catalog_handler(prog: &str) -> Option<Catalog> {
             cmd_test(&refs).map(|_| 0).unwrap_or(1)
         }),
         "[" => Status(|args| {
-            let refs: Vec<&str> = args.iter().map(String::as_str).filter(|arg| *arg != "]").collect();
+            let refs: Vec<&str> = args
+                .iter()
+                .map(String::as_str)
+                .filter(|arg| *arg != "]")
+                .collect();
             cmd_test(&refs).map(|_| 0).unwrap_or(1)
         }),
         _ => return None,
@@ -2300,15 +2553,25 @@ fn dispatch_catalog(prog: &str, args: &[String]) -> Option<i32> {
 /// table. Nothing here launches a Cell.
 #[cfg(all(not(test), not(feature = "shell_test")))]
 pub fn run_catalog_command(argv: &[String]) -> i32 {
-    let stage = StageIn { argv: argv.to_vec(), redirects: Vec::new() };
+    let stage = StageIn {
+        argv: argv.to_vec(),
+        redirects: Vec::new(),
+    };
     let status = match typed::admit_oneshot(&stage) {
         Admission::Typed(plan) => {
             let mut jobs = Jobs::new();
             let cmd = literal_cmd(argv);
-            exec_typed(&plan, core::slice::from_ref(&cmd), core::slice::from_ref(&stage), &mut jobs)
+            exec_typed(
+                &plan,
+                core::slice::from_ref(&cmd),
+                core::slice::from_ref(&stage),
+                &mut jobs,
+            )
         }
         Admission::Reject(reason) => reject_line(&reason),
-        Admission::Legacy => dispatch_catalog(&argv[0], &argv[1..]).unwrap_or(crate::oneshot::UNKNOWN_STATUS),
+        Admission::Legacy => {
+            dispatch_catalog(&argv[0], &argv[1..]).unwrap_or(crate::oneshot::UNKNOWN_STATUS)
+        }
         // Admission without external stages never plans a byte pipeline.
         Admission::Bytes(_) => crate::oneshot::REFUSED_STATUS,
     };
@@ -2325,10 +2588,17 @@ fn literal_cmd(argv: &[String]) -> Cmd {
         .map(|text| Word {
             text: text.clone(),
             quote: QuoteStyle::Single,
-            segments: alloc::vec![crate::parser::WordSegment { text: text.clone(), quote: QuoteStyle::Single }],
+            segments: alloc::vec![crate::parser::WordSegment {
+                text: text.clone(),
+                quote: QuoteStyle::Single
+            }],
         })
         .collect();
-    Cmd { argv: words, redirects: Vec::new(), malformed: None }
+    Cmd {
+        argv: words,
+        redirects: Vec::new(),
+        malformed: None,
+    }
 }
 
 /// Dispatch to the matching shell built-in: the catalog table first, then the
@@ -2575,7 +2845,9 @@ fn cmd_read(args: &[&str]) -> ViResult<()> {
         match read {
             Ok(Some(line)) => line,
             Err(Status::Unsupported) if silent => {
-                shell_stderrln("read: -s is unsupported on this console (echo cannot be suppressed)");
+                shell_stderrln(
+                    "read: -s is unsupported on this console (echo cannot be suppressed)",
+                );
                 return Err(ViError::NotSupported);
             }
             Ok(None) | Err(_) => return Err(ViError::IO),
@@ -3011,7 +3283,10 @@ mod tests {
 
     #[test]
     fn builtin_output_stays_on_the_capture_stack_and_top_has_no_terminal_without_a_session() {
-        use super::{interactive_terminal, serial_active, shell_print, shell_println, terminal_is_ours, CaptureGuard};
+        use super::{
+            interactive_terminal, serial_active, shell_print, shell_println, terminal_is_ours,
+            CaptureGuard,
+        };
         use crate::shell_state::capture_depth;
         // The only test that touches the process-global capture stack.
         assert!(!serial_active());
@@ -3025,7 +3300,10 @@ mod tests {
             let inner = CaptureGuard::new();
             assert_eq!(capture_depth(), 2);
             shell_print("inner");
-            assert!(!interactive_terminal(), "a nested capture never gets the TUI");
+            assert!(
+                !interactive_terminal(),
+                "a nested capture never gets the TUI"
+            );
             assert_eq!(inner.finish(), b"inner");
         }
         {
@@ -3049,26 +3327,48 @@ mod tests {
         use terminal_sdk::input::EventKind;
         let mut keys = TerminalKeys::new();
         let text = |s: &str| EventKind::Text(alloc::string::String::from(s));
-        let key = |code, modifiers, pressed| EventKind::Key { code, modifiers, pressed };
+        let key = |code, modifiers, pressed| EventKind::Key {
+            code,
+            modifiers,
+            pressed,
+        };
         assert_eq!(keys.classify(&text("q")), Some(TerminalKey::Char('q')));
         assert_eq!(keys.classify(&text("Qx")), Some(TerminalKey::Char('Q')));
         assert_eq!(keys.classify(&text("")), None);
-        assert_eq!(keys.classify(&key(0x110001, 0, 1)), Some(TerminalKey::Enter));
-        assert_eq!(keys.classify(&key(0x110001, 0, 2)), Some(TerminalKey::Enter));
-        assert_eq!(keys.classify(&key(0x110003, 0, 1)), Some(TerminalKey::Backspace));
+        assert_eq!(
+            keys.classify(&key(0x110001, 0, 1)),
+            Some(TerminalKey::Enter)
+        );
+        assert_eq!(
+            keys.classify(&key(0x110001, 0, 2)),
+            Some(TerminalKey::Enter)
+        );
+        assert_eq!(
+            keys.classify(&key(0x110003, 0, 1)),
+            Some(TerminalKey::Backspace)
+        );
         assert_eq!(keys.classify(&key(0x110001, 0, 0)), None);
         assert_eq!(keys.classify(&key(0x110001, 4, 1)), None);
         assert_eq!(keys.classify(&key(0x110010, 0, 1)), None);
-        assert_eq!(keys.classify(&EventKind::Resize { rows: 24, cols: 80 }), None);
+        assert_eq!(
+            keys.classify(&EventKind::Resize { rows: 24, cols: 80 }),
+            None
+        );
         assert_eq!(keys.classify(&EventKind::Lost(1)), None);
-        assert_eq!(keys.classify(&EventKind::Interrupt), Some(TerminalKey::Interrupt));
+        assert_eq!(
+            keys.classify(&EventKind::Interrupt),
+            Some(TerminalKey::Interrupt)
+        );
         assert_eq!(keys.classify(&EventKind::Eof), Some(TerminalKey::Eof));
         // Nothing typed inside a paste is a key press, across separate polls too.
         assert_eq!(keys.classify(&EventKind::PasteBegin), None);
         assert_eq!(keys.classify(&text("q")), None);
         assert_eq!(keys.classify(&key(0x110001, 0, 1)), None);
         // Ctrl-C always cancels, even inside a paste, and ends the paste state.
-        assert_eq!(keys.classify(&EventKind::Interrupt), Some(TerminalKey::Interrupt));
+        assert_eq!(
+            keys.classify(&EventKind::Interrupt),
+            Some(TerminalKey::Interrupt)
+        );
         assert_eq!(keys.classify(&text("q")), Some(TerminalKey::Char('q')));
         assert_eq!(keys.classify(&EventKind::PasteBegin), None);
         assert_eq!(keys.classify(&EventKind::PasteEnd), None);
@@ -3085,7 +3385,11 @@ mod tests {
         assert!(push_line_text(&mut line, &mut overflow, &long));
         assert_eq!(line.0, long);
         // Exactly at the limit is accepted.
-        assert!(push_line_text(&mut line, &mut overflow, &"y".repeat(SHELL_LINE_MAX - 300)));
+        assert!(push_line_text(
+            &mut line,
+            &mut overflow,
+            &"y".repeat(SHELL_LINE_MAX - 300)
+        ));
         assert_eq!(line.0.len(), SHELL_LINE_MAX);
         assert!(!overflow);
         // One byte more marks the line overflowed; later short text is not appended either,
@@ -3104,29 +3408,72 @@ mod tests {
         let mut line = Wiped::with_capacity(128);
         let mut paste = false;
         let text = |s: &str| EventKind::Text(alloc::string::String::from(s));
-        let key = |code, pressed| EventKind::Key { code, modifiers: 0, pressed };
-        assert!(matches!(prompt_step(&mut line, &mut paste, &text("y")), PromptStep::Appended(0)));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &text("es")), PromptStep::Appended(1)));
+        let key = |code, pressed| EventKind::Key {
+            code,
+            modifiers: 0,
+            pressed,
+        };
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &text("y")),
+            PromptStep::Appended(0)
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &text("es")),
+            PromptStep::Appended(1)
+        ));
         assert_eq!(line.0, "yes");
-        assert!(matches!(prompt_step(&mut line, &mut paste, &key(0x110003, 1)), PromptStep::Erased));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &key(0x110003, 1)),
+            PromptStep::Erased
+        ));
         assert_eq!(line.0, "ye");
         // Backspace on an empty line echoes nothing.
         let mut empty = Wiped::with_capacity(128);
-        assert!(matches!(prompt_step(&mut empty, &mut paste, &key(0x110003, 1)), PromptStep::Idle));
+        assert!(matches!(
+            prompt_step(&mut empty, &mut paste, &key(0x110003, 1)),
+            PromptStep::Idle
+        ));
         // The 128-byte bound drops overflowing text instead of growing the allocation.
         let mut full = Wiped::with_capacity(128);
         full.replace(&"n".repeat(127));
-        assert!(matches!(prompt_step(&mut full, &mut paste, &text("zz")), PromptStep::Idle));
+        assert!(matches!(
+            prompt_step(&mut full, &mut paste, &text("zz")),
+            PromptStep::Idle
+        ));
         assert_eq!(full.0.len(), 127);
         // Paste: text is inert, Enter inside the paste does not answer; a later Enter does.
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::PasteBegin), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &key(0x110001, 1)), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::PasteEnd), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &key(0x110001, 1)), PromptStep::Enter));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Interrupt), PromptStep::Cancel));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Eof), PromptStep::Eof));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Lost(3)), PromptStep::Lost));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &key(0x110010, 1)), PromptStep::Idle));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::PasteBegin),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &key(0x110001, 1)),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::PasteEnd),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &key(0x110001, 1)),
+            PromptStep::Enter
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::Interrupt),
+            PromptStep::Cancel
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::Eof),
+            PromptStep::Eof
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::Lost(3)),
+            PromptStep::Lost
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &key(0x110010, 1)),
+            PromptStep::Idle
+        ));
     }
 
     #[test]
@@ -3156,14 +3503,39 @@ mod tests {
         use terminal_sdk::input::EventKind;
         let mut line = Wiped::with_capacity(128);
         let mut paste = false;
-        let ctrl = |c: u8, pressed| EventKind::Key { code: u32::from(c), modifiers: modifiers::CONTROL, pressed };
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Text("y".into())), PromptStep::Appended(0)));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &ctrl(b'j', 0)), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &ctrl(b'k', 1)), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::PasteBegin), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &ctrl(b'j', 1)), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::PasteEnd), PromptStep::Idle));
-        assert!(matches!(prompt_step(&mut line, &mut paste, &ctrl(b'j', 1)), PromptStep::Enter));
+        let ctrl = |c: u8, pressed| EventKind::Key {
+            code: u32::from(c),
+            modifiers: modifiers::CONTROL,
+            pressed,
+        };
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::Text("y".into())),
+            PromptStep::Appended(0)
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &ctrl(b'j', 0)),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &ctrl(b'k', 1)),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::PasteBegin),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &ctrl(b'j', 1)),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::PasteEnd),
+            PromptStep::Idle
+        ));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &ctrl(b'j', 1)),
+            PromptStep::Enter
+        ));
         assert_eq!(line.0, "y");
     }
 
@@ -3183,7 +3555,8 @@ mod tests {
                 let n = decoder.feed(*byte, i as u64, &mut frames).unwrap();
                 let mut offset = 0;
                 while offset < n {
-                    let len = u16::from_le_bytes([frames[offset + 18], frames[offset + 19]]) as usize;
+                    let len =
+                        u16::from_le_bytes([frames[offset + 18], frames[offset + 19]]) as usize;
                     let mut frame = frames[offset..offset + EVENT_HEADER_LEN + len].to_vec();
                     frame[..8].copy_from_slice(&1u64.to_le_bytes()); // sequence, assigned by the owner
                     frame[8..16].copy_from_slice(&1u64.to_le_bytes()); // epoch
@@ -3208,7 +3581,10 @@ mod tests {
         assert_eq!(submissions(b"echo x\n"), ["echo x"]);
         assert_eq!(submissions(b"echo x\r"), ["echo x"]);
         assert_eq!(submissions(b"a\r\n"), ["a", ""]);
-        assert_eq!(submissions(b"\x1b[200~a\nb\x1b[201~"), alloc::vec::Vec::<alloc::string::String>::new());
+        assert_eq!(
+            submissions(b"\x1b[200~a\nb\x1b[201~"),
+            alloc::vec::Vec::<alloc::string::String>::new()
+        );
         assert_eq!(submissions(b"\x1b[200~a\nb\x1b[201~\n"), ["a\nb"]);
     }
 
@@ -3225,8 +3601,13 @@ mod tests {
         let bytes = b"\0\xffA\r\n\x80Z";
         let mut accepted = alloc::vec::Vec::new();
         let mut replies = alloc::collections::VecDeque::from([
-            Ok(1), Err(Status::WouldBlock), Ok(2), Err(Status::WouldBlock),
-            Err(Status::WouldBlock), Ok(1), Ok(3),
+            Ok(1),
+            Err(Status::WouldBlock),
+            Ok(2),
+            Err(Status::WouldBlock),
+            Err(Status::WouldBlock),
+            Ok(1),
+            Ok(3),
         ]);
         let polls = Cell::new(0);
         let pauses = Cell::new(0);
@@ -3296,7 +3677,12 @@ mod tests {
     #[test]
     fn terminal_forwarding_does_not_relabel_endpoint_errors_as_ctrl_c() {
         use super::{write_terminal_bytes, Status, TerminalWriteStop};
-        for status in [Status::Cancelled, Status::BrokenPipe, Status::Revoked, Status::Io] {
+        for status in [
+            Status::Cancelled,
+            Status::BrokenPipe,
+            Status::Revoked,
+            Status::Io,
+        ] {
             let result = write_terminal_bytes::<TerminalWriteStop>(
                 b"payload",
                 |_| Err(status),
@@ -3328,7 +3714,13 @@ mod tests {
 
     impl FakeRings {
         fn new(chunk: usize, block_every: usize) -> Self {
-            Self { stdout: alloc::vec::Vec::new(), stderr: alloc::vec::Vec::new(), chunk, block_every, calls: 0 }
+            Self {
+                stdout: alloc::vec::Vec::new(),
+                stderr: alloc::vec::Vec::new(),
+                chunk,
+                block_every,
+                calls: 0,
+            }
         }
 
         fn write(&mut self, sink: super::Sink, pending: &[u8]) -> Result<usize, super::Status> {
@@ -3378,7 +3770,10 @@ mod tests {
             for (bytes, _) in SCRIPT {
                 expected.extend_from_slice(bytes);
             }
-            assert_eq!(rings.stdout, expected, "chunk {chunk} block_every {block_every}");
+            assert_eq!(
+                rings.stdout, expected,
+                "chunk {chunk} block_every {block_every}"
+            );
             assert!(rings.stderr.is_empty());
         }
     }
@@ -3422,7 +3817,12 @@ mod tests {
         assert!(rings.stderr.is_empty());
         // Endpoint errors keep their status when routed to stdout.
         let failed = route_terminal_write::<TerminalWriteStop>(
-            b"x", true, true, |_, _| Err(Status::BrokenPipe), || Ok(()), || {},
+            b"x",
+            true,
+            true,
+            |_, _| Err(Status::BrokenPipe),
+            || Ok(()),
+            || {},
         );
         assert_eq!(failed, Err(TerminalWriteStop::Output(Status::BrokenPipe)));
     }
@@ -3459,10 +3859,16 @@ mod tests {
         let mut paste = false;
         line.0.push_str("y");
         for reason in [LOST_FRONTEND, FRONTEND_ATTACHED] {
-            assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Lost(reason)), PromptStep::Idle));
+            assert!(matches!(
+                prompt_step(&mut line, &mut paste, &EventKind::Lost(reason)),
+                PromptStep::Idle
+            ));
         }
         assert_eq!(line.0, "y");
-        assert!(matches!(prompt_step(&mut line, &mut paste, &EventKind::Lost(3)), PromptStep::Lost));
+        assert!(matches!(
+            prompt_step(&mut line, &mut paste, &EventKind::Lost(3)),
+            PromptStep::Lost
+        ));
     }
 
     #[test]
@@ -3471,18 +3877,35 @@ mod tests {
         use api::cell_session::trust::TrustPromptV1;
         use api::services::session::{event_kind, EventHeaderV1};
         // The exact frame input writes to the controller's control ring.
-        let prompt = TrustPromptV1 { port: 2222, host: "gateway.lan", algorithm: "ssh-ed25519", fingerprint: "SHA256:q0FkTQ5Ty1Wl7ixbhN5bNqH8eqbt4o2" };
+        let prompt = TrustPromptV1 {
+            port: 2222,
+            host: "gateway.lan",
+            algorithm: "ssh-ed25519",
+            fingerprint: "SHA256:q0FkTQ5Ty1Wl7ixbhN5bNqH8eqbt4o2",
+        };
         let mut frame = alloc::vec![0u8; 24 + TrustPromptV1::MAX_LEN];
         let len = prompt.encode(&mut frame[24..]).unwrap();
         frame.truncate(24 + len);
-        EventHeaderV1 { sequence: 9, epoch: 4, kind: event_kind::TRUST_PROMPT, payload_len: len as u16, flags: 0 }.encode(&mut frame).unwrap();
+        EventHeaderV1 {
+            sequence: 9,
+            epoch: 4,
+            kind: event_kind::TRUST_PROMPT,
+            payload_len: len as u16,
+            flags: 0,
+        }
+        .encode(&mut frame)
+        .unwrap();
         let event = terminal_sdk::input::Event::decode(&frame).unwrap();
         assert_eq!(
             trust_prompt_text(&event.kind).unwrap().as_bytes(),
             &b"\r\nThe authenticity of host 'gateway.lan' (port 2222) can't be established.\r\nssh-ed25519 key fingerprint is SHA256:q0FkTQ5Ty1Wl7ixbhN5bNqH8eqbt4o2.\r\nType 'yes' and Enter to trust it permanently; anything else refuses: "[..]
         );
         // Every other event draws nothing.
-        for kind in [EventKind::TrustPromptEnd { accepted: true }, EventKind::Lost(4), EventKind::Eof] {
+        for kind in [
+            EventKind::TrustPromptEnd { accepted: true },
+            EventKind::Lost(4),
+            EventKind::Eof,
+        ] {
             assert!(trust_prompt_text(&kind).is_none());
         }
     }
@@ -3495,21 +3918,52 @@ mod tests {
         fn run(script: &[Result<(), Status>]) -> (Result<(), Status>, usize, usize) {
             let (mut calls, mut pauses) = (0usize, 0usize);
             let result = acknowledge_with(
-                || { let answer = script.get(calls).copied().unwrap_or(Err(Status::WouldBlock)); calls += 1; answer },
+                || {
+                    let answer = script
+                        .get(calls)
+                        .copied()
+                        .unwrap_or(Err(Status::WouldBlock));
+                    calls += 1;
+                    answer
+                },
                 || pauses += 1,
             );
             (result, calls, pauses)
         }
         assert_eq!(run(&[Ok(())]), (Ok(()), 1, 0));
         // A busy, mid-transition or uncertain owner is retried with a pause between calls.
-        assert_eq!(run(&[Err(Status::WouldBlock), Err(Status::TimedOut), Err(Status::Indeterminate), Ok(())]), (Ok(()), 4, 3));
+        assert_eq!(
+            run(&[
+                Err(Status::WouldBlock),
+                Err(Status::TimedOut),
+                Err(Status::Indeterminate),
+                Ok(())
+            ]),
+            (Ok(()), 4, 3)
+        );
         // A definite refusal (session lost, foreground over, wrong epoch) gives up at once.
-        for status in [Status::Stale, Status::Denied, Status::WrongEpoch, Status::Revoked, Status::Malformed] {
-            assert_eq!(run(&[Err(Status::WouldBlock), Err(status)]), (Err(status), 2, 1));
+        for status in [
+            Status::Stale,
+            Status::Denied,
+            Status::WrongEpoch,
+            Status::Revoked,
+            Status::Malformed,
+        ] {
+            assert_eq!(
+                run(&[Err(Status::WouldBlock), Err(status)]),
+                (Err(status), 2, 1)
+            );
         }
         // Retries are bounded: the caller then cancels the foreground child.
         let (result, calls, pauses) = run(&[]);
-        assert_eq!((result, calls, pauses), (Err(Status::WouldBlock), ACK_ATTEMPTS as usize, ACK_ATTEMPTS as usize - 1));
+        assert_eq!(
+            (result, calls, pauses),
+            (
+                Err(Status::WouldBlock),
+                ACK_ATTEMPTS as usize,
+                ACK_ATTEMPTS as usize - 1
+            )
+        );
     }
 
     #[test]
@@ -3517,7 +3971,12 @@ mod tests {
         use super::{cancel_step, CancelStep, OwnerPrompt};
         use api::cell_session::Status;
         // Cancelled now, already, or the operation is over: nothing left to do.
-        for result in [Ok(()), Err(Status::Cancelled), Err(Status::Stale), Err(Status::Revoked)] {
+        for result in [
+            Ok(()),
+            Err(Status::Cancelled),
+            Err(Status::Stale),
+            Err(Status::Revoked),
+        ] {
             assert_eq!(cancel_step(result), CancelStep::Done, "{result:?}");
         }
         // Busy or uncertain: retried next turn, never dropped.
@@ -3532,29 +3991,62 @@ mod tests {
         // pending until a turn reports it in, then stops being issued.
         let mut prompt = OwnerPrompt::default();
         let mut calls = 0;
-        prompt.cancel_turn(|| { calls += 1; Ok(()) });
+        prompt.cancel_turn(|| {
+            calls += 1;
+            Ok(())
+        });
         assert_eq!(calls, 0);
         prompt.cancel = Some(crate::context_session::Backoff::new());
-        prompt.cancel_turn(|| { calls += 1; Err(Status::Cancelled) });
+        prompt.cancel_turn(|| {
+            calls += 1;
+            Err(Status::Cancelled)
+        });
         assert!(prompt.cancel.is_none());
-        prompt.cancel_turn(|| { calls += 1; Ok(()) });
+        prompt.cancel_turn(|| {
+            calls += 1;
+            Ok(())
+        });
         assert_eq!(calls, 1);
     }
 
     fn strings(words: &[&str]) -> alloc::vec::Vec<alloc::string::String> {
-        words.iter().map(|word| alloc::string::String::from(*word)).collect()
+        words
+            .iter()
+            .map(|word| alloc::string::String::from(*word))
+            .collect()
     }
 
     #[test]
     fn one_shot_words_are_literal_and_never_expanded() {
         set_var("HOME", "/home/test");
-        let argv = strings(&["echo", "", "a b", "|", ";", "$HOME", "*", ">", "$(echo x)", "&&"]);
+        let argv = strings(&[
+            "echo",
+            "",
+            "a b",
+            "|",
+            ";",
+            "$HOME",
+            "*",
+            ">",
+            "$(echo x)",
+            "&&",
+        ]);
         let cmd = super::literal_cmd(&argv);
-        let expanded: alloc::vec::Vec<_> = cmd.argv.iter().map(|word| expand_word(word).expect("literal")).collect();
+        let expanded: alloc::vec::Vec<_> = cmd
+            .argv
+            .iter()
+            .map(|word| expand_word(word).expect("literal"))
+            .collect();
         assert_eq!(expanded, argv);
         assert!(cmd.redirects.is_empty() && cmd.malformed.is_none());
-        let stage = crate::typed::StageIn { argv: argv.clone(), redirects: alloc::vec::Vec::new() };
-        assert!(matches!(crate::typed::admit_oneshot(&stage), crate::typed::Admission::Legacy));
+        let stage = crate::typed::StageIn {
+            argv: argv.clone(),
+            redirects: alloc::vec::Vec::new(),
+        };
+        assert!(matches!(
+            crate::typed::admit_oneshot(&stage),
+            crate::typed::Admission::Legacy
+        ));
     }
 
     #[test]
@@ -3573,28 +4065,63 @@ mod tests {
         // A Run argv either admits as typed / is refused, or is a closed-table name: the
         // one-shot never falls through to an unknown-name path, let alone a spawn.
         for argv in [
-            &["ls", "/"][..], &["ls", "--records"], &["ps", "--records", "--text"], &["top"], &["top", "-b"],
-            &["top", "--records"], &["edit", "f"], &["rg", "x", "/tmp"], &["rg", "-a", "x", "-"], &["rg"],
-            &["cat"], &["cat", "/p04"], &["echo", "a b", ""], &["[", "1", "]"],
+            &["ls", "/"][..],
+            &["ls", "--records"],
+            &["ps", "--records", "--text"],
+            &["top"],
+            &["top", "-b"],
+            &["top", "--records"],
+            &["edit", "f"],
+            &["rg", "x", "/tmp"],
+            &["rg", "-a", "x", "-"],
+            &["rg"],
+            &["cat"],
+            &["cat", "/p04"],
+            &["echo", "a b", ""],
+            &["[", "1", "]"],
         ] {
             let argv = strings(argv);
             assert_eq!(classify(false, &argv), Launch::Run, "{argv:?}");
-            match admit_oneshot(&StageIn { argv: argv.clone(), redirects: alloc::vec::Vec::new() }) {
+            match admit_oneshot(&StageIn {
+                argv: argv.clone(),
+                redirects: alloc::vec::Vec::new(),
+            }) {
                 Admission::Typed(_) | Admission::Reject(_) => {}
-                Admission::Legacy => assert!(super::catalog_handler(&argv[0]).is_some(), "{argv:?}"),
+                Admission::Legacy => {
+                    assert!(super::catalog_handler(&argv[0]).is_some(), "{argv:?}")
+                }
                 Admission::Bytes(_) => panic!("{argv:?}: a one-shot never plans external stages"),
             }
         }
-        for name in ["nope", "/bin/ls", "/bin/echo", "/bin/cellbox", "cellbox", "hotswap", "curl", "cd", "exec", "hv", "ssh", "source", "."] {
+        for name in [
+            "nope",
+            "/bin/ls",
+            "/bin/echo",
+            "/bin/cellbox",
+            "cellbox",
+            "hotswap",
+            "curl",
+            "cd",
+            "exec",
+            "hv",
+            "ssh",
+            "source",
+            ".",
+        ] {
             assert!(super::catalog_handler(name).is_none(), "{name}");
         }
     }
 
     #[test]
     fn one_shot_records_default_to_typed_jsonl_and_text_selects_the_table() {
-        use crate::typed::{admit_oneshot, default_sink, Admission, DefaultSink, Head, StageIn, TypedPlan};
+        use crate::typed::{
+            admit_oneshot, default_sink, Admission, DefaultSink, Head, StageIn, TypedPlan,
+        };
         let plan = |words: &[&str]| -> TypedPlan {
-            match admit_oneshot(&StageIn { argv: strings(words), redirects: alloc::vec::Vec::new() }) {
+            match admit_oneshot(&StageIn {
+                argv: strings(words),
+                redirects: alloc::vec::Vec::new(),
+            }) {
                 Admission::Typed(plan) => plan,
                 other => panic!("{words:?}: {other:?}"),
             }
@@ -3610,12 +4137,24 @@ mod tests {
         let rg = plan(&["rg", "x", "/tmp"]);
         assert!(rg.search_status && rg.search_text);
         assert_eq!(default_sink(false, &rg), DefaultSink::TypedJsonl);
-        assert_eq!(default_sink(false, &plan(&["rg", "--text", "x", "/tmp"])), DefaultSink::SearchText);
+        assert_eq!(
+            default_sink(false, &plan(&["rg", "--text", "x", "/tmp"])),
+            DefaultSink::SearchText
+        );
         // `rg … -` searches the one-shot stdin; the shell still needs piped bytes or `< FILE`.
         let stdin = plan(&["rg", "-a", "x", "-"]);
-        assert_eq!((stdin.head.clone(), stdin.search_index, stdin.typed_cmds), (Head::Stdin, 0, 1));
+        assert_eq!(
+            (stdin.head.clone(), stdin.search_index, stdin.typed_cmds),
+            (Head::Stdin, 0, 1)
+        );
         assert!(matches!(
-            crate::typed::admit(&[StageIn { argv: strings(&["rg", "-a", "x", "-"]), redirects: alloc::vec::Vec::new() }], true),
+            crate::typed::admit(
+                &[StageIn {
+                    argv: strings(&["rg", "-a", "x", "-"]),
+                    redirects: alloc::vec::Vec::new()
+                }],
+                true
+            ),
             Admission::Reject(_)
         ));
 
@@ -3633,22 +4172,40 @@ mod tests {
         }
         let rows = || -> alloc::boxed::Box<dyn RowSource> {
             alloc::boxed::Box::new(VecSource::new(alloc::vec![
-                Value::Record(alloc::vec![(alloc::string::String::from("tid"), Value::UInt(7))]),
-                Value::Record(alloc::vec![(alloc::string::String::from("tid"), Value::UInt(42))]),
+                Value::Record(alloc::vec![(
+                    alloc::string::String::from("tid"),
+                    Value::UInt(7)
+                )]),
+                Value::Record(alloc::vec![(
+                    alloc::string::String::from("tid"),
+                    Value::UInt(42)
+                )]),
             ]))
         };
-        for (sink, jsonl) in [(default_sink(false, &ps), true), (default_sink(false, &text), false)] {
+        for (sink, jsonl) in [
+            (default_sink(false, &ps), true),
+            (default_sink(false, &text), false),
+        ] {
             let mut out = Collect(alloc::vec::Vec::new());
-            let end = crate::typed::stream_rows(rows(), Category::Rows, 0, &[], sink, &mut out).expect("streamed");
+            let end = crate::typed::stream_rows(rows(), Category::Rows, 0, &[], sink, &mut out)
+                .expect("streamed");
             assert_eq!(end.status(), 0);
             assert!(!out.0.contains(&0x1b), "{sink:?} wrote an ESC byte");
             let text = core::str::from_utf8(&out.0).expect("utf-8");
             let lines: alloc::vec::Vec<&str> = text.lines().collect();
             if jsonl {
                 assert_eq!(lines.len(), 2, "{text}");
-                assert!(lines.iter().all(|line| line.starts_with('{') && line.ends_with('}')), "{text}");
+                assert!(
+                    lines
+                        .iter()
+                        .all(|line| line.starts_with('{') && line.ends_with('}')),
+                    "{text}"
+                );
             } else {
-                assert!(lines.len() >= 3 && lines.iter().all(|line| !line.starts_with('{')), "{text}");
+                assert!(
+                    lines.len() >= 3 && lines.iter().all(|line| !line.starts_with('{')),
+                    "{text}"
+                );
             }
         }
     }
@@ -3669,20 +4226,40 @@ mod tests {
             Err((status, false, text)) => (status, text),
             other => panic!("{line}: {other:?}"),
         };
-        assert_eq!(refused("cellbox cd /"), (2, crate::oneshot::refusal_message(crate::oneshot::Class::State, "cd")));
+        assert_eq!(
+            refused("cellbox cd /"),
+            (
+                2,
+                crate::oneshot::refusal_message(crate::oneshot::Class::State, "cd")
+            )
+        );
         assert_eq!(refused("/bin/cellbox cd /").0, 2);
         assert_eq!(refused("cellbox").0, 2);
-        assert_eq!(refused("cellbox sh"), (2, alloc::string::String::from(crate::oneshot::SHELL_DOES_NOT_NEST)));
+        assert_eq!(
+            refused("cellbox sh"),
+            (
+                2,
+                alloc::string::String::from(crate::oneshot::SHELL_DOES_NOT_NEST)
+            )
+        );
         assert_eq!(refused("cellbox /bin/ls /").0, 127);
         assert_eq!(refused("cellbox exec /bin/echo x").0, 2);
         // Typed admission sees through the prefix, before and after expansion.
-        assert!(crate::typed::might_be_typed("cellbox", &["ps", "--records"]));
+        assert!(crate::typed::might_be_typed(
+            "cellbox",
+            &["ps", "--records"]
+        ));
         assert!(crate::typed::might_be_typed("/bin/cellbox", &["rg", "x"]));
         assert!(!crate::typed::might_be_typed("cellbox", &["ls", "/"]));
         assert!(!crate::typed::might_be_typed("cellbox", &[]));
-        let head = crate::typed::StageIn { argv: explicit("cellbox ps --records").expect("strip"), redirects: alloc::vec::Vec::new() };
+        let head = crate::typed::StageIn {
+            argv: explicit("cellbox ps --records").expect("strip"),
+            redirects: alloc::vec::Vec::new(),
+        };
         match crate::typed::admit(&[head, stage("select tid")], false) {
-            crate::typed::Admission::Typed(plan) => assert_eq!(plan.producer_argv, stage("ps --records").argv),
+            crate::typed::Admission::Typed(plan) => {
+                assert_eq!(plan.producer_argv, stage("ps --records").argv)
+            }
             other => panic!("{other:?}"),
         }
     }
@@ -3729,7 +4306,10 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
         Ok(child) => child,
         Err(status) => {
             drop(slot);
-            shell_stderrln(&alloc::format!("shell: foreground preparation failed: {:?}", status));
+            shell_stderrln(&alloc::format!(
+                "shell: foreground preparation failed: {:?}",
+                status
+            ));
             return (if status == Status::NotFound { 127 } else { 126 }, None);
         }
     };
@@ -3740,9 +4320,7 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
         // Publication already happened: retain the real handle, cancel it and
         // complete owner-proven restoration/reaping instead of retrying spawn.
         let _ = session.cancel_foreground(&child, 2);
-        let diagnostic = alloc::format!(
-            "shell: foreground activation failed: {:?}\n", status
-        );
+        let diagnostic = alloc::format!("shell: foreground activation failed: {:?}\n", status);
         let mut offset = 0;
         let sink = sink_for(true, streams_merged());
         while offset < diagnostic.len() {
@@ -3776,18 +4354,23 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
             let _ = session.cancel_foreground(&child, 2);
             let _ = syscall::sys_wait(tid);
             let _ = syscall::sys_log(&alloc::format!(
-                "shell: foreground output failed: {:?}\n", status
+                "shell: foreground output failed: {:?}\n",
+                status
             ));
             syscall::sys_exit(125);
         }
         match session.finish_foreground(&mut child) {
-            Ok(()) => { prompt.restored(); break; }
+            Ok(()) => {
+                prompt.restored();
+                break;
+            }
             Err(Status::WouldBlock | Status::TimedOut) => ostd::task::yield_now(),
             Err(status) => {
                 let _ = session.cancel_foreground(&child, 2);
                 let _ = syscall::sys_wait(tid);
                 let _ = syscall::sys_log(&alloc::format!(
-                    "shell: foreground owner restoration failed: {:?}\n", status
+                    "shell: foreground owner restoration failed: {:?}\n",
+                    status
                 ));
                 // Never resume a prompt without authenticated restoration.
                 syscall::sys_exit(125);
@@ -3822,15 +4405,20 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
     }
     // The ssh Cell's lifecycle record: whatever it wrote before it ended (read before the
     // operation is closed; a torn trailing frame is ignored).
-    let record = completion.then(|| {
-        let mut frames = [0u8; 4096];
-        let n = child.read_completion(&mut frames).unwrap_or(0);
-        api::services::ssh_completion::last_frame(&frames[..n])
-    }).flatten();
+    let record = completion
+        .then(|| {
+            let mut frames = [0u8; 4096];
+            let n = child.read_completion(&mut frames).unwrap_or(0);
+            api::services::ssh_completion::last_frame(&frames[..n])
+        })
+        .flatten();
     // Reaped and restored: release the child operation so the session's 32-child
     // quota is reusable. Failure is diagnostic only; the command already ran.
     if let Err(status) = session.close_foreground(&child) {
-        let _ = syscall::sys_log(&alloc::format!("shell: foreground operation close failed: {:?}\n", status));
+        let _ = syscall::sys_log(&alloc::format!(
+            "shell: foreground operation close failed: {:?}\n",
+            status
+        ));
     }
     (code, record)
 }
@@ -3881,8 +4469,14 @@ struct StartFailure {
 }
 
 fn setup_failure(status: Status) -> StartFailure {
-    shell_stderrln(&alloc::format!("shell: pipeline preparation failed: {:?}", status));
-    StartFailure { stage: 0, status: 126 }
+    shell_stderrln(&alloc::format!(
+        "shell: pipeline preparation failed: {:?}",
+        status
+    ));
+    StartFailure {
+        stage: 0,
+        status: 126,
+    }
 }
 
 struct ExtStage {
@@ -3946,17 +4540,30 @@ impl ExtRun {
     /// A `Cancelled` spawn of a stage that has a consumer in the segment is not a
     /// failure: the consumer already exited and the kernel closed the pipeline, so that
     /// stage and the ones before it are left unstarted (`not_started`, status 141).
-    fn start(commands: &[StageIn], with_input: bool, latch: &Rc<InterruptLatch>) -> Result<ExtRun, StartFailure> {
-        let operation = SERIAL_SESSION.lock().as_ref().map(|session| session.operation());
+    fn start(
+        commands: &[StageIn],
+        with_input: bool,
+        latch: &Rc<InterruptLatch>,
+    ) -> Result<ExtRun, StartFailure> {
+        let operation = SERIAL_SESSION
+            .lock()
+            .as_ref()
+            .map(|session| session.operation());
         let Some(operation) = operation else {
             shell_stderrln("shell: external commands need a terminal session");
-            return Err(StartFailure { stage: 0, status: 125 });
+            return Err(StartFailure {
+                stage: 0,
+                status: 125,
+            });
         };
         let cwd = match crate::cmd_cwd::get_shell_cwd() {
             Ok(cwd) => cwd,
             Err(_) => {
                 shell_stderrln("shell: cannot obtain current directory");
-                return Err(StartFailure { stage: 0, status: 1 });
+                return Err(StartFailure {
+                    stage: 0,
+                    status: 1,
+                });
             }
         };
         let pipeline = Pipeline::create(operation).map_err(setup_failure)?;
@@ -3964,7 +4571,11 @@ impl ExtRun {
             pipeline: Some(pipeline),
             stages: commands
                 .iter()
-                .map(|command| ExtStage { name: command.argv[0].clone(), child: None, ssh: typed::is_ssh_stage(&command.argv) })
+                .map(|command| ExtStage {
+                    name: command.argv[0].clone(),
+                    child: None,
+                    ssh: typed::is_ssh_stage(&command.argv),
+                })
                 .collect(),
             statuses: Vec::new(),
             input: None,
@@ -3998,12 +4609,18 @@ impl ExtRun {
     /// Close a shell-held endpoint copy and forget it.
     fn release(&mut self, endpoint: Option<Endpoint>) {
         if let Some(endpoint) = endpoint {
-            self.held.retain(|held| held.reference() != endpoint.reference());
+            self.held
+                .retain(|held| held.reference() != endpoint.reference());
             let _ = endpoint.close();
         }
     }
 
-    fn launch(&mut self, commands: &[StageIn], cwd: &str, with_input: bool) -> Result<(), StartFailure> {
+    fn launch(
+        &mut self,
+        commands: &[StageIn],
+        cwd: &str,
+        with_input: bool,
+    ) -> Result<(), StartFailure> {
         match self.pipeline.as_mut() {
             Some(pipeline) => pipeline.layout(commands.len()).map_err(setup_failure)?,
             None => return Err(setup_failure(Status::Revoked)),
@@ -4043,7 +4660,13 @@ impl ExtRun {
                 };
                 let (reader, writer) = match link {
                     Ok(pair) => pair,
-                    Err(status) if typed::spawn_cancel_means_consumer_finished(status, index, commands.len()) => {
+                    Err(status)
+                        if typed::spawn_cancel_means_consumer_finished(
+                            status,
+                            index,
+                            commands.len(),
+                        ) =>
+                    {
                         self.not_started = index + 1;
                         break;
                     }
@@ -4059,9 +4682,15 @@ impl ExtRun {
             // entry keys on it) and a completion stream, so that it leaves the record the
             // contract requires for every ssh run.
             let (path, args): (String, Vec<&str>) = if ssh {
-                (String::from(crate::ssh::SSH_PATH), crate::ssh::stage_argv(words))
+                (
+                    String::from(crate::ssh::SSH_PATH),
+                    crate::ssh::stage_argv(words),
+                )
             } else {
-                (external_path(&words[0]), words[1..].iter().map(String::as_str).collect())
+                (
+                    external_path(&words[0]),
+                    words[1..].iter().map(String::as_str).collect(),
+                )
             };
             let spec = PipeSpec {
                 path: &path,
@@ -4072,7 +4701,13 @@ impl ExtRun {
                 completion: ssh,
             };
             let spawned = match self.pipeline.as_ref() {
-                Some(pipeline) => pipeline.spawn(index, &spec, stdin_for_stage, stdout_for_stage, error_writer),
+                Some(pipeline) => pipeline.spawn(
+                    index,
+                    &spec,
+                    stdin_for_stage,
+                    stdout_for_stage,
+                    error_writer,
+                ),
                 None => Err(Status::Revoked),
             };
             // The child holds its own delegated copies now (or nothing was published).
@@ -4080,7 +4715,13 @@ impl ExtRun {
             self.release(stdin_for_stage);
             match spawned {
                 Ok(child) => self.stages[index].child = Some(child),
-                Err(status) if typed::spawn_cancel_means_consumer_finished(status, index, commands.len()) => {
+                Err(status)
+                    if typed::spawn_cancel_means_consumer_finished(
+                        status,
+                        index,
+                        commands.len(),
+                    ) =>
+                {
                     // The consumer finished before this producer was committed: pipe
                     // semantics, not a spawn failure. This stage and every one before it
                     // stay unstarted; the last stage decides the pipeline status.
@@ -4092,10 +4733,17 @@ impl ExtRun {
                         shell_stderr("shell: command not found: ");
                         shell_stderrln(&words[0]);
                     } else {
-                        shell_stderrln(&alloc::format!("shell: cannot start {}: {:?}", words[0], status));
+                        shell_stderrln(&alloc::format!(
+                            "shell: cannot start {}: {:?}",
+                            words[0],
+                            status
+                        ));
                     }
                     let code = if status == Status::NotFound { 127 } else { 126 };
-                    return Err(StartFailure { stage: index, status: code });
+                    return Err(StartFailure {
+                        stage: index,
+                        status: code,
+                    });
                 }
             }
             if let Some(writer) = upstream_writer {
@@ -4225,7 +4873,10 @@ impl ExtRun {
                     break;
                 }
                 Err(status) => {
-                    return Err(StreamStop::Failed(alloc::format!("input stream failed: {:?}", status)))
+                    return Err(StreamStop::Failed(alloc::format!(
+                        "input stream failed: {:?}",
+                        status
+                    )))
                 }
             }
         }
@@ -4252,7 +4903,8 @@ impl ExtRun {
             } else {
                 Ok(())
             }
-        }).map_err(|stop| match stop {
+        })
+        .map_err(|stop| match stop {
             TerminalWriteStop::Interrupted => StreamStop::Interrupted,
             TerminalWriteStop::Output(status) => {
                 StreamStop::Failed(alloc::format!("terminal output failed: {:?}", status))
@@ -4276,7 +4928,8 @@ impl ExtRun {
                         Ok(()) => {}
                         Err(StreamStop::Interrupted) => break,
                         Err(StreamStop::Failed(_)) => {
-                            let _ = syscall::sys_log("shell: terminal diagnostic delivery failed\n");
+                            let _ =
+                                syscall::sys_log("shell: terminal diagnostic delivery failed\n");
                         }
                     }
                 }
@@ -4306,7 +4959,7 @@ impl ExtRun {
         self.steps = self.steps.wrapping_add(1);
         let mut progress = self.feed_step()?;
         progress |= self.drain_errors();
-        if !progress || self.steps % 16 == 0 {
+        if !progress || self.steps.is_multiple_of(16) {
             self.poll_interrupt();
         }
         if self.interrupted {
@@ -4341,7 +4994,7 @@ impl ExtRun {
                     self.idle = 0;
                     // A busy producer must not starve feeding, diagnostics or Ctrl-C.
                     self.reads = self.reads.wrapping_add(1);
-                    if self.reads % 8 == 0 {
+                    if self.reads.is_multiple_of(8) {
                         self.step()?;
                     }
                     return Ok(Some(count));
@@ -4360,7 +5013,10 @@ impl ExtRun {
                 }
                 Err(Status::WouldBlock | Status::TimedOut) => {}
                 Err(status) => {
-                    return Err(StreamStop::Failed(alloc::format!("output stream failed: {:?}", status)))
+                    return Err(StreamStop::Failed(alloc::format!(
+                        "output stream failed: {:?}",
+                        status
+                    )))
                 }
             }
             let progress = self.step()?;
@@ -4437,10 +5093,16 @@ impl ExtRun {
                         waited = child.wait_status();
                     }
                     let code = match waited {
-                        Ok(record) => typed::reaped_status(Some(record.exit_code), record.reason, self.cancelled),
+                        Ok(record) => typed::reaped_status(
+                            Some(record.exit_code),
+                            record.reason,
+                            self.cancelled,
+                        ),
                         Err(status) => {
                             let _ = syscall::sys_log(&alloc::format!(
-                                "shell: {}: exit status unavailable: {:?}\n", stage.name, status
+                                "shell: {}: exit status unavailable: {:?}\n",
+                                stage.name,
+                                status
                             ));
                             typed::reaped_status(None, 0, self.cancelled)
                         }
@@ -4452,7 +5114,11 @@ impl ExtRun {
                         let mut frames = [0u8; 4096];
                         let n = child.read_completion(&mut frames).unwrap_or(0);
                         let record = api::services::ssh_completion::last_frame(&frames[..n]);
-                        set_ssh_completion(crate::ssh::settle(record, code, api::services::ssh_completion::Mode::Exec));
+                        set_ssh_completion(crate::ssh::settle(
+                            record,
+                            code,
+                            api::services::ssh_completion::Mode::Exec,
+                        ));
                     }
                     code
                 }
@@ -4464,7 +5130,8 @@ impl ExtRun {
         if let Some(pipeline) = self.pipeline.take() {
             if let Err(status) = pipeline.close() {
                 let _ = syscall::sys_log(&alloc::format!(
-                    "shell: pipeline operation close failed: {:?}\n", status
+                    "shell: pipeline operation close failed: {:?}\n",
+                    status
                 ));
             }
         }

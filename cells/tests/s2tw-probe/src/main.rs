@@ -48,6 +48,7 @@ extern crate ostd;
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
@@ -56,8 +57,8 @@ use api::telemetry::{header_flags, request, TelemetrySnapshot};
 use ostd::child_context::{ChildContext, GrantSlot};
 use ostd::service::VfsRef;
 use ostd::syscall::{
-    sys_exit, sys_get_procs, sys_get_procs2, sys_mem_info, sys_telemetry_snapshot,
-    telemetry_bytes, SyscallError,
+    sys_exit, sys_get_procs, sys_get_procs2, sys_mem_info, sys_telemetry_snapshot, telemetry_bytes,
+    SyscallError,
 };
 use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};
 
@@ -111,7 +112,10 @@ const TRUNC_WORDS: usize = (api::telemetry::HEADER_LEN + api::telemetry::CELL_LE
 fn granted(context: &ChildContext, slot: GrantSlot) -> Option<Endpoint> {
     let operation = OperationRef::from_raw(context.operation()).ok()?;
     let grant = context.grants().find(|g| g.slot == slot && g.kind == 1)?;
-    Some(Endpoint::new(EndpointRef::from_raw(grant.object).ok()?, operation))
+    Some(Endpoint::new(
+        EndpointRef::from_raw(grant.object).ok()?,
+        operation,
+    ))
 }
 
 /// Write every byte of `data`; the stream accepts at most 512 per call.
@@ -145,13 +149,15 @@ fn get_procs2() -> String {
 }
 
 fn telemetry_snapshot() -> String {
-    let mut out: Vec<u64> = Vec::new();
-    out.resize(TELEMETRY_WORDS, 0);
+    let mut out: Vec<u64> = vec![0; TELEMETRY_WORDS];
     match sys_telemetry_snapshot(&mut out, request::TASKS) {
         Ok(written) => match TelemetrySnapshot::parse(telemetry_bytes(&out, written)) {
             Ok(snapshot) => {
                 let header = snapshot.header();
-                format!("other:cells-{}-tasks-{}", header.total_cells, header.total_tasks)
+                format!(
+                    "other:cells-{}-tasks-{}",
+                    header.total_cells, header.total_tasks
+                )
             }
             Err(why) => format!("other:malformed-{why:?}"),
         },
@@ -240,7 +246,11 @@ fn vfs_write(context: &ChildContext, tag: &str) -> String {
     }
     let name = format!("s2tw-probe-{tag}");
     let content = format!("s2tw-{tag}\n");
-    let request = VfsRequest::WriteAt { dir, name: &name, content: content.as_bytes() };
+    let request = VfsRequest::WriteAt {
+        dir,
+        name: &name,
+        content: content.as_bytes(),
+    };
     let mut reply = [0u8; IPC_BUF_SIZE];
     match vfs.call::<VfsRequest, VfsResponse>(&request, &mut reply) {
         Ok(VfsResponse::Err(VFS_ERR_DENIED)) => String::from("denied"),
@@ -262,7 +272,10 @@ fn run() -> i32 {
         return USAGE;
     }
     if tag == "trunc" {
-        return match write_all(output, format!("S2TW telemetry-trunc {}\n", telemetry_trunc()).as_bytes()) {
+        return match write_all(
+            output,
+            format!("S2TW telemetry-trunc {}\n", telemetry_trunc()).as_bytes(),
+        ) {
             Ok(()) => OK,
             Err(code) => code,
         };
@@ -292,7 +305,10 @@ fn cell_main() {
 #[cfg(test)]
 mod tests {
     use super::trunc_result;
-    use api::telemetry::{cell_state, header_flags, TelemetryCellV1, TelemetryHeaderV1, SCOPE_SYSTEM, TELEMETRY_VERSION};
+    use api::telemetry::{
+        cell_state, header_flags, TelemetryCellV1, TelemetryHeaderV1, SCOPE_SYSTEM,
+        TELEMETRY_VERSION,
+    };
 
     fn header(total_cells: u32, emitted_cells: u32, flags: u32) -> TelemetryHeaderV1 {
         TelemetryHeaderV1 {
@@ -311,14 +327,24 @@ mod tests {
     }
 
     fn cell() -> [u8; api::telemetry::CELL_LEN] {
-        TelemetryCellV1 { cell_id: 1, generation: 3, root_tid: 9, task_count: 2, state: cell_state::LIVE, ..TelemetryCellV1::default() }
-            .to_bytes()
+        TelemetryCellV1 {
+            cell_id: 1,
+            generation: 3,
+            root_tid: 9,
+            task_count: 2,
+            state: cell_state::LIVE,
+            ..TelemetryCellV1::default()
+        }
+        .to_bytes()
     }
 
     #[test]
     fn truncated_capture_reports_whole_rows_against_totals() {
         let bytes = [&header(5, 1, 0).to_bytes()[..], &cell()[..]].concat();
-        assert_eq!(trunc_result(&bytes), "other:cells-1/5-tasks-0/40-complete-0");
+        assert_eq!(
+            trunc_result(&bytes),
+            "other:cells-1/5-tasks-0/40-complete-0"
+        );
     }
 
     #[test]
@@ -327,7 +353,11 @@ mod tests {
         let bytes = [&header(5, 1, 0).to_bytes()[..], &cell()[..], &[0u8; 8][..]].concat();
         assert_eq!(trunc_result(&bytes), "other:malformed-Length");
         // COMPLETE with fewer emitted than total Cells.
-        let bytes = [&header(5, 1, header_flags::COMPLETE).to_bytes()[..], &cell()[..]].concat();
+        let bytes = [
+            &header(5, 1, header_flags::COMPLETE).to_bytes()[..],
+            &cell()[..],
+        ]
+        .concat();
         assert_eq!(trunc_result(&bytes), "other:malformed-Malformed");
     }
 }

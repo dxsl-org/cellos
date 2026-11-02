@@ -143,7 +143,6 @@ global_asm!(
     "pop rbx",
     "pop rbp",
     "ret",
-
     ".global vmx_vmrun",
     "vmx_vmrun:",
     ".byte 0xF3, 0x0F, 0x1E, 0xFA", // ENDBR64
@@ -154,20 +153,16 @@ global_asm!(
     "push r14",
     "push r15",
     "push rdi", // [rsp] = gpr_ptr
-
     // Update HOST_RSP (0x6C14) to current rsp
     "mov rax, 0x6C14",
     "vmwrite rax, rsp",
-
     // Update HOST_RIP (0x6C16) to VM-exit landing pad (label 2)
     "lea rdx, [rip + 2f]",
     "mov rax, 0x6C16",
     "vmwrite rax, rdx",
-
     // Test launched flag (rsi)
     "test rsi, rsi",
     "jnz 10f",
-
     // vmlaunch path (first launch)
     "mov rax, [rdi + 0]",
     "mov rcx, [rdi + 8]",
@@ -186,7 +181,6 @@ global_asm!(
     "mov rdi, [rdi + 56]",
     "vmlaunch",
     "jmp 3f",
-
     // vmresume path (subsequent resumes)
     "10:",
     "mov rax, [rdi + 0]",
@@ -206,7 +200,6 @@ global_asm!(
     "mov rdi, [rdi + 56]",
     "vmresume",
     "jmp 3f",
-
     // VM-entry failed: CPU sets CF (VMfailInvalid) or ZF (VMfailValid)
     "3:",
     "pop rdi",
@@ -228,7 +221,6 @@ global_asm!(
     "pop rbx",
     "pop rbp",
     "ret",
-
     // VM-exit landing pad (CPU jumped here on exit, with RSP=HOST_RSP)
     "2:",
     "push rax",

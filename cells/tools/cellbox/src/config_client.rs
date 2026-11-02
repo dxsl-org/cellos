@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::String;
-use api::config::ViConfig;
 use api::caller_identity::CALLER_IDENTITY_LEN;
+use api::config::ViConfig;
 use api::ipc::{ConfigRequest, ConfigResponse, CONFIG_ERR_DENIED, IPC_BUF_SIZE};
 use ostd::prelude::*;
 use ostd::sync::Mutex;
@@ -132,7 +132,9 @@ fn set_reply(raw: &[u8]) -> ViResult<()> {
 pub fn export_outcome(key: &str, result: ViResult<()>) -> (i32, Option<String>) {
     match result {
         Ok(()) => (0, None),
-        Err(ViError::PermissionDenied) => (1, Some(alloc::format!("export: {key}: permission denied"))),
+        Err(ViError::PermissionDenied) => {
+            (1, Some(alloc::format!("export: {key}: permission denied")))
+        }
         Err(_) => (1, Some(alloc::format!("export: {key}: config unavailable"))),
     }
 }
@@ -143,7 +145,9 @@ mod tests {
 
     fn reply(response: ConfigResponse<'_>) -> alloc::vec::Vec<u8> {
         let mut out = [0u8; 64];
-        api::ipc::encode(&response, &mut out).expect("encodes").to_vec()
+        api::ipc::encode(&response, &mut out)
+            .expect("encodes")
+            .to_vec()
     }
 
     #[test]
@@ -153,7 +157,11 @@ mod tests {
             set_reply(&reply(ConfigResponse::Err(CONFIG_ERR_DENIED))),
             Err(ViError::PermissionDenied)
         );
-        for other in [ConfigResponse::Err(0xFF), ConfigResponse::NotFound, ConfigResponse::Value("x")] {
+        for other in [
+            ConfigResponse::Err(0xFF),
+            ConfigResponse::NotFound,
+            ConfigResponse::Value("x"),
+        ] {
             assert_eq!(set_reply(&reply(other)), Err(ViError::IO));
         }
         assert_eq!(set_reply(&[]), Err(ViError::IO));
@@ -177,6 +185,9 @@ mod tests {
         let mut buf = [0u8; IPC_BUF_SIZE];
         assert!(encode_set("K", "v", &mut buf).is_ok());
         let long = "v".repeat(IPC_BUF_SIZE - CALLER_IDENTITY_LEN);
-        assert_eq!(encode_set("K", &long, &mut buf), Err(ViError::InvalidArgument));
+        assert_eq!(
+            encode_set("K", &long, &mut buf),
+            Err(ViError::InvalidArgument)
+        );
     }
 }

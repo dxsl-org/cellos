@@ -1,6 +1,6 @@
 //! Selected-image G1 action schedule; markers are pacing observations, never CPU proof.
-use ostd::syscall::{self, SyscallResult};
 use core::sync::atomic::{AtomicU8, Ordering};
+use ostd::syscall::{self, SyscallResult};
 
 static STARTED: AtomicU8 = AtomicU8::new(0);
 
@@ -11,23 +11,32 @@ const MAX_CHUNKS: usize = 1_000_000;
 /// concurrent workers. Formatting directly into stack storage also keeps
 /// measurement bookkeeping out of the workload's allocator behavior.
 fn record(args: core::fmt::Arguments<'_>) {
-    struct Buffer { bytes: [u8; 256], len: usize }
+    struct Buffer {
+        bytes: [u8; 256],
+        len: usize,
+    }
     impl core::fmt::Write for Buffer {
         fn write_str(&mut self, text: &str) -> core::fmt::Result {
             let end = self.len.checked_add(text.len()).ok_or(core::fmt::Error)?;
-            if end > self.bytes.len() { return Err(core::fmt::Error); }
+            if end > self.bytes.len() {
+                return Err(core::fmt::Error);
+            }
             self.bytes[self.len..end].copy_from_slice(text.as_bytes());
             self.len = end;
             Ok(())
         }
     }
-    let mut buffer = Buffer { bytes: [0; 256], len: 0 };
+    let mut buffer = Buffer {
+        bytes: [0; 256],
+        len: 0,
+    };
     if core::fmt::write(&mut buffer, args).is_err()
-        || core::fmt::Write::write_str(&mut buffer, "\n").is_err() {
+        || core::fmt::Write::write_str(&mut buffer, "\n").is_err()
+    {
         syscall::sys_exit(1);
     }
-    let text = core::str::from_utf8(&buffer.bytes[..buffer.len])
-        .unwrap_or_else(|_| syscall::sys_exit(1));
+    let text =
+        core::str::from_utf8(&buffer.bytes[..buffer.len]).unwrap_or_else(|_| syscall::sys_exit(1));
     let _ = syscall::sys_log(text);
 }
 
@@ -55,7 +64,10 @@ fn worker(index: usize, yields: bool) {
     }
     let mut start_gate = [0u8; 3];
     if !matches!(syscall::sys_recv(0, &mut start_gate), SyscallResult::Ok(0))
-        || start_gate[0] != 0x74 || !matches!(start_gate[1], 1 | 2) || start_gate[2] != 0 {
+        || start_gate[0] != 0x74
+        || !matches!(start_gate[1], 1 | 2)
+        || start_gate[2] != 0
+    {
         invalid("compute-barrier");
     }
     if start_gate[1] == 2 {
@@ -68,13 +80,23 @@ fn worker(index: usize, yields: bool) {
             }
             core::hint::spin_loop();
         }
-        if !both_started { invalid("distinct-hart-start-bound"); }
+        if !both_started {
+            invalid("distinct-hart-start-bound");
+        }
     }
     let start = now();
-    record(format_args!("G1-ACTION worker={} action=start sender_tid={} sender_cell={} sender_generation={} ms={}", index, sender, caller.cell_id, caller.generation, start));
+    record(format_args!(
+        "G1-ACTION worker={} action=start sender_tid={} sender_cell={} sender_generation={} ms={}",
+        index, sender, caller.cell_id, caller.generation, start
+    ));
     if yields {
         for action in 0..4 {
-            record(format_args!("G1-ACTION worker={} action=yield ordinal={} ms={}", index, action, now()));
+            record(format_args!(
+                "G1-ACTION worker={} action=yield ordinal={} ms={}",
+                index,
+                action,
+                now()
+            ));
             ostd::task::yield_now();
         }
     }
@@ -86,7 +108,11 @@ fn worker(index: usize, yields: bool) {
             value = value.wrapping_mul(6364136223846793005).wrapping_add(1);
             core::hint::black_box(value);
         }
-        if now().checked_sub(start).unwrap_or_else(|| invalid("pacing-regression")) >= duration {
+        if now()
+            .checked_sub(start)
+            .unwrap_or_else(|| invalid("pacing-regression"))
+            >= duration
+        {
             ended = true;
             break;
         }
@@ -98,15 +124,20 @@ fn worker(index: usize, yields: bool) {
     // the TID. The private kernel handshake releases this receive only after
     // the real root waiter is installed; exit and quiescent reaping stay real.
     let mut join = [0u8; 2];
-    if !matches!(syscall::sys_recv(0, &mut join), SyscallResult::Ok(0))
-        || join != [0x73, 0] {
+    if !matches!(syscall::sys_recv(0, &mut join), SyscallResult::Ok(0)) || join != [0x73, 0] {
         invalid("join-registration");
     }
-    record(format_args!("G1-ACTION worker={} action=exit ms={}", index, now()));
+    record(format_args!(
+        "G1-ACTION worker={} action=exit ms={}",
+        index,
+        now()
+    ));
 }
 
 pub fn run(role: &str) -> ! {
-    let mode = role.strip_prefix("cpu-accounting:").unwrap_or_else(|| invalid("role"));
+    let mode = role
+        .strip_prefix("cpu-accounting:")
+        .unwrap_or_else(|| invalid("role"));
     if !matches!(mode, "overlap" | "yield" | "retention") {
         invalid("mode");
     }
@@ -118,31 +149,59 @@ pub fn run(role: &str) -> ! {
             SyscallResult::Ok(tid) if tid != 0 => tid,
             _ => invalid("thread-admission"),
         };
-        record(format_args!("G1-ACTION worker={} action=admit tid={} ms={}", index, tid, now()));
+        record(format_args!(
+            "G1-ACTION worker={} action=admit tid={} ms={}",
+            index,
+            tid,
+            now()
+        ));
     }
     for (index, &tid) in tids.iter().enumerate() {
-        record(format_args!("G1-ACTION worker={} action=release tid={} ms={}", index, tid, now()));
-        if !matches!(syscall::sys_send(tid, &[0x71, index as u8]), SyscallResult::Ok(_)) {
+        record(format_args!(
+            "G1-ACTION worker={} action=release tid={} ms={}",
+            index,
+            tid,
+            now()
+        ));
+        if !matches!(
+            syscall::sys_send(tid, &[0x71, index as u8]),
+            SyscallResult::Ok(_)
+        ) {
             invalid("release-send");
         }
     }
     for (index, tid) in tids.into_iter().enumerate() {
         match syscall::sys_wait(tid) {
-            SyscallResult::Ok(0) => {},
+            SyscallResult::Ok(0) => {}
             _ => invalid("thread-terminal"),
         }
-        record(format_args!("G1-ACTION worker={} action=joined tid={} ms={}", index, tid, now()));
+        record(format_args!(
+            "G1-ACTION worker={} action=joined tid={} ms={}",
+            index,
+            tid,
+            now()
+        ));
     }
-    record(format_args!("G1-ACTION worker=2 action=delay-start ms={}", now()));
+    record(format_args!(
+        "G1-ACTION worker=2 action=delay-start ms={}",
+        now()
+    ));
     let mut message = [0u8; 2];
     // One existing blocking receive. Only the selected private kernel producer
     // releases this wait at checked HPET period 16; software ticks are pacing
     // observations, not a conversion certificate for the charge clock.
-    if !matches!(syscall::sys_recv(0, &mut message), SyscallResult::Ok(0))
-        || message != [0x72, 16] {
+    if !matches!(syscall::sys_recv(0, &mut message), SyscallResult::Ok(0)) || message != [0x72, 16]
+    {
         invalid("delay-terminal");
     }
-    record(format_args!("G1-ACTION worker=2 action=delay-end ms={}", now()));
-    record(format_args!("G1-WORKLOAD mode={} workers=2 status=terminal ms={}", mode, now()));
+    record(format_args!(
+        "G1-ACTION worker=2 action=delay-end ms={}",
+        now()
+    ));
+    record(format_args!(
+        "G1-WORKLOAD mode={} workers=2 status=terminal ms={}",
+        mode,
+        now()
+    ));
     syscall::sys_exit(0)
 }

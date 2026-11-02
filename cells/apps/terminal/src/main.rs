@@ -13,10 +13,10 @@ extern crate alloc;
 
 mod grid;
 mod keymap;
-mod session;
-mod sink;
 #[cfg(test)]
 mod roundtrip;
+mod session;
+mod sink;
 
 use api::display::PixelFormat;
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
@@ -97,7 +97,14 @@ impl TerminalApp {
         for (col_x, row_y, cell, span) in self.visible_cells() {
             let (_, bg) = cell_colors(cell);
             if bg != DEFAULT_BG {
-                fill_rect(surf, col_x as i32, row_y as i32, (self.cell_w * span as f32) as u32, self.cell_h as u32, bg);
+                fill_rect(
+                    surf,
+                    col_x as i32,
+                    row_y as i32,
+                    (self.cell_w * span as f32) as u32,
+                    self.cell_h as u32,
+                    bg,
+                );
             }
         }
 
@@ -108,11 +115,23 @@ impl TerminalApp {
             }
             let mut buf = [0u8; 8];
             let len = cell.ch.encode_utf8(&mut buf).len();
-            let len = len + cell.mark.map_or(0, |mark| mark.encode_utf8(&mut buf[len..]).len());
+            let len = len
+                + cell
+                    .mark
+                    .map_or(0, |mark| mark.encode_utf8(&mut buf[len..]).len());
             let text = core::str::from_utf8(&buf[..len]).unwrap_or("\u{fffd}");
             let (fg, _) = cell_colors(cell);
-            let face = if cell.pen.bold { FontFace::MonoBold } else { FontFace::MonoRegular };
-            let clip = (col_x as i32, row_y as i32, (col_x + self.cell_w * span as f32) as i32 + 2, (row_y + self.cell_h) as i32);
+            let face = if cell.pen.bold {
+                FontFace::MonoBold
+            } else {
+                FontFace::MonoRegular
+            };
+            let clip = (
+                col_x as i32,
+                row_y as i32,
+                (col_x + self.cell_w * span as f32) as i32 + 2,
+                (row_y + self.cell_h) as i32,
+            );
             fonts.draw_text(
                 surf.pixels_mut(),
                 surf_w,
@@ -133,7 +152,14 @@ impl TerminalApp {
             let cur_x = PAD_X + grid.cursor_x as f32 * self.cell_w;
             let cur_y = PAD_Y + grid.cursor_y as f32 * self.cell_h;
             if cur_x + self.cell_w <= sw as f32 && cur_y + self.cell_h <= sh as f32 {
-                fill_rect(surf, cur_x as i32, cur_y as i32 + 2, self.cell_w as u32, (self.cell_h - 4.0) as u32, Color::rgb(0, 200, 255).with_alpha(160));
+                fill_rect(
+                    surf,
+                    cur_x as i32,
+                    cur_y as i32 + 2,
+                    self.cell_w as u32,
+                    (self.cell_h - 4.0) as u32,
+                    Color::rgb(0, 200, 255).with_alpha(160),
+                );
             }
         }
         surf.damage_all();
@@ -179,7 +205,10 @@ const FONT_PX: f32 = 14.0;
 pub fn grid_dims(width: u32, height: u32, cell_w: f32, cell_h: f32) -> (usize, usize) {
     let cols = ((width as f32 - PAD_X).max(0.0) / cell_w) as usize;
     let rows = ((height as f32 - PAD_Y).max(0.0) / cell_h) as usize;
-    (cols.clamp(MIN_COLS, MAX_COLS), rows.clamp(MIN_ROWS, MAX_ROWS))
+    (
+        cols.clamp(MIN_COLS, MAX_COLS),
+        rows.clamp(MIN_ROWS, MAX_ROWS),
+    )
 }
 
 /// The 16 ANSI colours (SGR 30-37 / 90-97 and indexes 0-15).
@@ -281,7 +310,10 @@ fn cell_main() {
         for ev in ostd::input::poll_events(16) {
             busy = true;
             match ev {
-                InputEvent::MouseButton { button: MouseButton::Left, state: KeyState::Pressed } => {
+                InputEvent::MouseButton {
+                    button: MouseButton::Left,
+                    state: KeyState::Pressed,
+                } => {
                     let _ = ostd::input::request_focus();
                 }
                 InputEvent::Key(ke) => {
@@ -294,12 +326,12 @@ fn cell_main() {
         let mut close_serial = None;
         for ev in poll_surface_events(8) {
             match ev {
-                SurfaceEvent::Configure(configure) => {
-                    if configure.cap == surf.cap() && surf.apply_configure(configure).is_ok() {
-                        app.resize(surf.width(), surf.height());
-                        need_render = true;
-                        busy = true;
-                    }
+                SurfaceEvent::Configure(configure)
+                    if configure.cap == surf.cap() && surf.apply_configure(configure).is_ok() =>
+                {
+                    app.resize(surf.width(), surf.height());
+                    need_render = true;
+                    busy = true;
                 }
                 SurfaceEvent::CloseRequest(request) if request.cap == surf.cap() => {
                     close_serial = Some(request.serial);
@@ -321,8 +353,13 @@ fn cell_main() {
             let released = app.session.detach();
             surf.destroy();
             match released {
-                Ok(()) => ostd::io::println("[terminal] window closed; frontend released, shell detached"),
-                Err(status) => ostd::io::println(&alloc::format!("[terminal] window closed; frontend release failed: {:?}", status)),
+                Ok(()) => {
+                    ostd::io::println("[terminal] window closed; frontend released, shell detached")
+                }
+                Err(status) => ostd::io::println(&alloc::format!(
+                    "[terminal] window closed; frontend release failed: {:?}",
+                    status
+                )),
             }
             surf = open_window(comp_tid, win_w, win_h);
             while !ostd::input::request_focus() {
@@ -332,8 +369,13 @@ fn cell_main() {
             app.height = surf.height();
             let (cols, rows) = grid_dims(app.width, app.height, app.cell_w, app.cell_h);
             match app.session.reattach(cols, rows) {
-                Ok(()) => ostd::io::println("[terminal] window re-created; frontend re-attached to the same shell"),
-                Err(status) => ostd::io::println(&alloc::format!("[terminal] window re-created; re-attach failed: {:?}", status)),
+                Ok(()) => ostd::io::println(
+                    "[terminal] window re-created; frontend re-attached to the same shell",
+                ),
+                Err(status) => ostd::io::println(&alloc::format!(
+                    "[terminal] window re-created; re-attach failed: {:?}",
+                    status
+                )),
             }
             need_render = true;
             busy = true;
@@ -399,23 +441,57 @@ mod tests {
     fn every_grid_cell_is_drawn_in_full_and_one_more_would_not_fit() {
         // Exact fits (728 = 8 + 80 * 9, 474 = 6 + 26 * 18), one pixel short of them, and
         // ordinary sizes.
-        for (w, h) in [(720, 480), (727, 473), (728, 474), (729, 475), (800, 600), (900, 600), (1280, 764), (4096, 4096)] {
+        for (w, h) in [
+            (720, 480),
+            (727, 473),
+            (728, 474),
+            (729, 475),
+            (800, 600),
+            (900, 600),
+            (1280, 764),
+            (4096, 4096),
+        ] {
             let mut app = TerminalApp::new(w, h);
             let (cols, rows) = (app.session.grid.cols, app.session.grid.rows);
             let (cell_w, cell_h) = (app.cell_w, app.cell_h);
-            assert!(PAD_X + cols as f32 * cell_w <= w as f32, "{w}x{h}: {cols} columns overflow");
-            assert!(PAD_X + (cols + 1) as f32 * cell_w > w as f32, "{w}x{h}: column {} would fit", cols + 1);
-            assert!(PAD_Y + rows as f32 * cell_h <= h as f32, "{w}x{h}: {rows} rows overflow");
-            assert!(PAD_Y + (rows + 1) as f32 * cell_h > h as f32, "{w}x{h}: row {} would fit", rows + 1);
+            assert!(
+                PAD_X + cols as f32 * cell_w <= w as f32,
+                "{w}x{h}: {cols} columns overflow"
+            );
+            assert!(
+                PAD_X + (cols + 1) as f32 * cell_w > w as f32,
+                "{w}x{h}: column {} would fit",
+                cols + 1
+            );
+            assert!(
+                PAD_Y + rows as f32 * cell_h <= h as f32,
+                "{w}x{h}: {rows} rows overflow"
+            );
+            assert!(
+                PAD_Y + (rows + 1) as f32 * cell_h > h as f32,
+                "{w}x{h}: row {} would fit",
+                rows + 1
+            );
             // The renderer draws every cell the grid (and so the session) has, the last
             // column and row included.
             assert_eq!(app.visible_cells().count(), cols * rows, "{w}x{h}");
-            let last = (PAD_X + (cols - 1) as f32 * cell_w, PAD_Y + (rows - 1) as f32 * cell_h);
-            assert_eq!(app.visible_cells().last().map(|(x, y, _, _)| (x, y)), Some(last), "{w}x{h}");
+            let last = (
+                PAD_X + (cols - 1) as f32 * cell_w,
+                PAD_Y + (rows - 1) as f32 * cell_h,
+            );
+            assert_eq!(
+                app.visible_cells().last().map(|(x, y, _, _)| (x, y)),
+                Some(last),
+                "{w}x{h}"
+            );
             // The resize path sizes the grid with the same function.
             app.resize(w + 1, h + 1);
             app.resize(w, h);
-            assert_eq!((app.session.grid.cols, app.session.grid.rows), (cols, rows), "{w}x{h} after resize");
+            assert_eq!(
+                (app.session.grid.cols, app.session.grid.rows),
+                (cols, rows),
+                "{w}x{h} after resize"
+            );
         }
         assert_eq!(grid_dims(727, 473, 9.0, 18.0), (79, 25));
         assert_eq!(grid_dims(728, 474, 9.0, 18.0), (80, 26));
@@ -424,14 +500,38 @@ mod tests {
     #[test]
     fn colours_resolve_to_the_documented_palette_and_inverse_swaps_them() {
         assert_eq!(resolve(GridColor::Default, DEFAULT_FG), DEFAULT_FG);
-        assert_eq!(resolve(GridColor::Indexed(1), DEFAULT_FG), Color::rgb(205, 49, 49));
-        assert_eq!(resolve(GridColor::Indexed(15), DEFAULT_FG), Color::rgb(255, 255, 255));
-        assert_eq!(resolve(GridColor::Indexed(16), DEFAULT_FG), Color::rgb(0, 0, 0));
-        assert_eq!(resolve(GridColor::Indexed(196), DEFAULT_FG), Color::rgb(255, 0, 0));
-        assert_eq!(resolve(GridColor::Indexed(231), DEFAULT_FG), Color::rgb(255, 255, 255));
-        assert_eq!(resolve(GridColor::Indexed(232), DEFAULT_FG), Color::rgb(8, 8, 8));
-        assert_eq!(resolve(GridColor::Indexed(255), DEFAULT_FG), Color::rgb(238, 238, 238));
-        assert_eq!(resolve(GridColor::Rgb(1, 2, 3), DEFAULT_FG), Color::rgb(1, 2, 3));
+        assert_eq!(
+            resolve(GridColor::Indexed(1), DEFAULT_FG),
+            Color::rgb(205, 49, 49)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(15), DEFAULT_FG),
+            Color::rgb(255, 255, 255)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(16), DEFAULT_FG),
+            Color::rgb(0, 0, 0)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(196), DEFAULT_FG),
+            Color::rgb(255, 0, 0)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(231), DEFAULT_FG),
+            Color::rgb(255, 255, 255)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(232), DEFAULT_FG),
+            Color::rgb(8, 8, 8)
+        );
+        assert_eq!(
+            resolve(GridColor::Indexed(255), DEFAULT_FG),
+            Color::rgb(238, 238, 238)
+        );
+        assert_eq!(
+            resolve(GridColor::Rgb(1, 2, 3), DEFAULT_FG),
+            Color::rgb(1, 2, 3)
+        );
         let mut cell = TerminalCell::BLANK;
         cell.pen.inverse = true;
         assert_eq!(cell_colors(&cell), (DEFAULT_BG, DEFAULT_FG));
@@ -441,8 +541,19 @@ mod tests {
     fn visible_cells_skip_trailing_halves_and_stop_at_the_window_edge() {
         let mut app = TerminalApp::new(720, 480);
         app.session.grid.write_str("a\u{4e16}b");
-        let row0: std::vec::Vec<_> = app.visible_cells().take(3).map(|(x, y, cell, span)| (x, y, cell.ch, span)).collect();
-        assert_eq!(row0, [(8.0, 6.0, 'a', 1), (17.0, 6.0, '\u{4e16}', 2), (35.0, 6.0, 'b', 1)]);
+        let row0: std::vec::Vec<_> = app
+            .visible_cells()
+            .take(3)
+            .map(|(x, y, cell, span)| (x, y, cell.ch, span))
+            .collect();
+        assert_eq!(
+            row0,
+            [
+                (8.0, 6.0, 'a', 1),
+                (17.0, 6.0, '\u{4e16}', 2),
+                (35.0, 6.0, 'b', 1)
+            ]
+        );
         // 720 px fit 79 whole columns after the 8 px pad, the grid's own width; 26 rows;
         // minus one trailing half.
         assert_eq!(app.visible_cells().count(), 79 * 26 - 1);

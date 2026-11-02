@@ -19,13 +19,15 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use text_engine::pipeline::{typed_json_len, InterruptLatch, Item, PipelineError, RowSource, Value};
+use text_engine::pipeline::{
+    typed_json_len, InterruptLatch, Item, PipelineError, RowSource, Value,
+};
 use vigrep::io;
 use vigrep::regex::RegexMatcher;
 use vigrep::searcher::{BinaryDetection, Searcher, Sink, SinkContext, SinkMatch};
 use vigrep::walk::{
-    line_submatches, Begun, FileSearch, ResumableSearch, ResumeError, ResumeInput, SearchFileError, Step,
-    ViSearchTree, WalkError, WalkEvent, Walker,
+    line_submatches, Begun, FileSearch, ResumableSearch, ResumeError, ResumeInput, SearchFileError,
+    Step, ViSearchTree, WalkError, WalkEvent, Walker,
 };
 
 use super::text::{escape_line, escape_path};
@@ -91,7 +93,14 @@ fn field(name: &str, value: Value) -> (String, Value) {
 }
 
 /// One `cellbox.search.line` record in the contract's field order.
-fn search_row(kind: &str, path: Option<&[u8]>, line_number: u64, offset: u64, bytes: &[u8], subs: &[(usize, usize)]) -> Value {
+fn search_row(
+    kind: &str,
+    path: Option<&[u8]>,
+    line_number: u64,
+    offset: u64,
+    bytes: &[u8],
+    subs: &[(usize, usize)],
+) -> Value {
     let (line, terminator): (&[u8], &[u8]) = match bytes.strip_suffix(b"\n") {
         Some(line) => (line, b"\n"),
         None => (bytes, b""),
@@ -103,14 +112,20 @@ fn search_row(kind: &str, path: Option<&[u8]>, line_number: u64, offset: u64, by
     let submatches = subs
         .iter()
         .map(|&(start, end)| {
-            Value::Record(alloc::vec![field("start", Value::UInt(start as u64)), field("end", Value::UInt(end as u64))])
+            Value::Record(alloc::vec![
+                field("start", Value::UInt(start as u64)),
+                field("end", Value::UInt(end as u64))
+            ])
         })
         .collect();
     Value::Record(alloc::vec![
         field("schema", Value::String(String::from("cellbox.search.line"))),
         field("schema_version", Value::UInt(1)),
         field("kind", Value::String(String::from(kind))),
-        field("path", path.map_or(Value::Null, |path| Value::Path(path.to_vec()))),
+        field(
+            "path",
+            path.map_or(Value::Null, |path| Value::Path(path.to_vec()))
+        ),
         field("line_number", Value::UInt(line_number)),
         field("absolute_offset", Value::UInt(offset)),
         field("line_bytes", Value::Bytes(line.to_vec())),
@@ -133,11 +148,15 @@ struct RowSink<'a> {
 impl RowSink<'_> {
     fn push(&mut self, row: Value) -> Result<bool, io::Error> {
         if typed_json_len(&row).map_or(true, |len| len > MAX_ROW_JSON_BYTES) {
-            return Err(io::Error::other(format!("record exceeds the {}-byte bound", MAX_ROW_JSON_BYTES)));
+            return Err(io::Error::other(format!(
+                "record exceeds the {}-byte bound",
+                MAX_ROW_JSON_BYTES
+            )));
         }
         self.rows.bytes += row.payload_bytes();
         self.rows.queue.push_back(row);
-        Ok(self.rows.queue.len() < self.limits.queue_rows && self.rows.bytes < self.limits.queue_bytes)
+        Ok(self.rows.queue.len() < self.limits.queue_rows
+            && self.rows.bytes < self.limits.queue_bytes)
     }
 }
 
@@ -166,7 +185,11 @@ impl Sink for RowSink<'_> {
         Ok(true)
     }
 
-    fn context(&mut self, _searcher: &Searcher, context: &SinkContext<'_>) -> Result<bool, io::Error> {
+    fn context(
+        &mut self,
+        _searcher: &Searcher,
+        context: &SinkContext<'_>,
+    ) -> Result<bool, io::Error> {
         if self.quiet {
             return Ok(true);
         }
@@ -468,12 +491,23 @@ impl<T: ViSearchTree> Drop for TreeSource<T> {
 /// (forward only, behind the search's resume window).
 enum Input {
     Bytes(Vec<u8>),
-    Stream { source: Box<dyn crate::typed::ByteSource>, offset: u64, ended: bool, closed: bool },
+    Stream {
+        source: Box<dyn crate::typed::ByteSource>,
+        offset: u64,
+        ended: bool,
+        closed: bool,
+    },
 }
 
 impl Input {
     fn close(&mut self) {
-        if let Input::Stream { source, ended, closed, .. } = self {
+        if let Input::Stream {
+            source,
+            ended,
+            closed,
+            ..
+        } = self
+        {
             if !*closed {
                 *closed = true;
                 source.close(*ended);
@@ -486,12 +520,19 @@ impl ResumeInput for Input {
     fn read_at(&mut self, offset: u64, buf: &mut [u8]) -> Result<usize, io::Error> {
         match self {
             Input::Bytes(bytes) => {
-                let start = usize::try_from(offset).unwrap_or(usize::MAX).min(bytes.len());
+                let start = usize::try_from(offset)
+                    .unwrap_or(usize::MAX)
+                    .min(bytes.len());
                 let count = buf.len().min(bytes.len() - start);
                 buf[..count].copy_from_slice(&bytes[start..start + count]);
                 Ok(count)
             }
-            Input::Stream { source, offset: at, ended, closed } => {
+            Input::Stream {
+                source,
+                offset: at,
+                ended,
+                closed,
+            } => {
                 if *ended || *closed {
                     return Ok(0);
                 }
@@ -514,7 +555,9 @@ impl ResumeInput for Input {
                         *ended = true;
                         Ok(0)
                     }
-                    Err(StreamStop::Interrupted) => Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted")),
+                    Err(StreamStop::Interrupted) => {
+                        Err(io::Error::new(io::ErrorKind::Interrupted, "interrupted"))
+                    }
                     Err(StreamStop::Failed(message)) => Err(io::Error::other(message)),
                 }
             }
@@ -559,7 +602,15 @@ impl StdinSource {
         searcher.set_binary_detection(BinaryDetection::none());
         let (input, window) = match input {
             StdinInput::Bytes(bytes) => (Input::Bytes(bytes), 0),
-            StdinInput::Stream(source) => (Input::Stream { source, offset: 0, ended: false, closed: false }, window),
+            StdinInput::Stream(source) => (
+                Input::Stream {
+                    source,
+                    offset: 0,
+                    ended: false,
+                    closed: false,
+                },
+                window,
+            ),
         };
         StdinSource {
             input,
@@ -653,14 +704,22 @@ impl RowSource for StdinSource {
                 quiet: self.quiet,
                 limits: self.limits,
             };
-            match search.step(&mut self.input, &mut self.searcher, &self.matcher, &mut sink, &mut cancel) {
+            match search.step(
+                &mut self.input,
+                &mut self.searcher,
+                &self.matcher,
+                &mut sink,
+                &mut cancel,
+            ) {
                 Ok(Step::Paused) => {}
                 Ok(Step::Finished) => self.finish(),
                 Err(ResumeError::Cancelled) => {
                     self.interrupt();
                     return Ok(None);
                 }
-                Err(ResumeError::Io(error)) if error.kind() == io::ErrorKind::Interrupted || self.latch.is_set() => {
+                Err(ResumeError::Io(error))
+                    if error.kind() == io::ErrorKind::Interrupted || self.latch.is_set() =>
+                {
                     self.interrupt();
                     return Ok(None);
                 }

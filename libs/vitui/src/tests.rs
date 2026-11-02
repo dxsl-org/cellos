@@ -404,9 +404,13 @@ fn events_map_sdk_kinds_and_fold_pastes() {
 fn cursor_moves(bytes: &str) -> Vec<(u16, u16)> {
     let mut moves = Vec::new();
     for part in bytes.split("\x1b[").skip(1) {
-        let Some(end) = part.find(|c: char| !(c.is_ascii_digit() || c == ';')) else { continue };
+        let Some(end) = part.find(|c: char| !(c.is_ascii_digit() || c == ';')) else {
+            continue;
+        };
         if part[end..].starts_with('H') {
-            let mut numbers = part[..end].split(';').map(|n| n.parse::<u16>().unwrap_or(1));
+            let mut numbers = part[..end]
+                .split(';')
+                .map(|n| n.parse::<u16>().unwrap_or(1));
             moves.push((numbers.next().unwrap_or(1), numbers.next().unwrap_or(1)));
         }
     }
@@ -443,7 +447,9 @@ fn bounded_viewport_never_exceeds_its_cap_and_the_backend_size_is_exact() {
     // The resize cleared the screen, then exactly the capped cells were painted.
     assert!(bytes.contains("\x1b[J"), "{bytes:?}");
     assert_eq!(bytes.matches('#').count(), 120 * 40);
-    assert!(cursor_moves(&bytes).iter().all(|&(row, col)| row <= 40 && col <= 120));
+    assert!(cursor_moves(&bytes)
+        .iter()
+        .all(|&(row, col)| row <= 40 && col <= 120));
     // Shrinking below the cap follows the session again.
     apply_resize(&mut terminal, 80, 24, Some(max)).unwrap();
     assert_eq!(terminal.size().unwrap(), Size::new(80, 24));

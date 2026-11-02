@@ -224,7 +224,11 @@ pub struct Theme {
 impl Theme {
     /// [`Palette::DEFAULT`] with rounded borders.
     pub const fn new(mode: ColorMode) -> Self {
-        Self { palette: Palette::DEFAULT, mode, border: Border::Rounded }
+        Self {
+            palette: Palette::DEFAULT,
+            mode,
+            border: Border::Rounded,
+        }
     }
 
     /// `rgb` in this theme's colour mode.
@@ -238,7 +242,9 @@ impl Theme {
 
     /// Body text on the panel background.
     pub fn base(&self) -> Style {
-        Style::new().fg(self.color(self.palette.fg)).bg(self.color(self.palette.bg))
+        Style::new()
+            .fg(self.color(self.palette.fg))
+            .bg(self.color(self.palette.bg))
     }
 
     pub fn border_style(&self) -> Style {
@@ -247,7 +253,9 @@ impl Theme {
 
     /// Block titles: bold accent.
     pub fn title_style(&self) -> Style {
-        Style::new().fg(self.color(self.palette.accent)).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(self.color(self.palette.accent))
+            .add_modifier(Modifier::BOLD)
     }
 
     /// A bordered block in this theme's border set, on the panel background, titled `title`.
@@ -274,7 +282,9 @@ impl Theme {
 
     /// The status line: body text on the surface colour.
     pub fn status_line_style(&self) -> Style {
-        Style::new().fg(self.color(self.palette.fg)).bg(self.color(self.palette.surface))
+        Style::new()
+            .fg(self.color(self.palette.fg))
+            .bg(self.color(self.palette.surface))
     }
 
     /// `text` as a status line; rendered as a widget it fills its whole row.
@@ -292,7 +302,9 @@ impl Theme {
     }
 
     pub fn key_style(&self) -> Style {
-        Style::new().fg(self.color(self.palette.accent)).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(self.color(self.palette.accent))
+            .add_modifier(Modifier::BOLD)
     }
 
     pub fn muted_style(&self) -> Style {

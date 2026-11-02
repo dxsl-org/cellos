@@ -362,9 +362,15 @@ impl FlexBox {
             let item = &mut self.children[ci];
             if item.flex_grow == 0.0 {
                 let sz = if is_row {
-                    item.node.layout(Constraints::new(dummy, Size::new(inner_main, cross_budget)), font)
+                    item.node.layout(
+                        Constraints::new(dummy, Size::new(inner_main, cross_budget)),
+                        font,
+                    )
                 } else {
-                    item.node.layout(Constraints::new(dummy, Size::new(cross_budget, inner_main)), font)
+                    item.node.layout(
+                        Constraints::new(dummy, Size::new(cross_budget, inner_main)),
+                        font,
+                    )
                 };
                 let m = if is_row { sz.w } else { sz.h };
                 // Apply max_size cap to fixed children too.
@@ -556,7 +562,11 @@ impl FlexBox {
 
     // ── Row layout ────────────────────────────────────────────────────────────
 
-    fn layout_row(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    fn layout_row(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
         let available_main = (constraints.max.w - 2.0 * self.padding).max(0.0);
         let available_cross = (constraints.max.h - 2.0 * self.padding).max(0.0);
 
@@ -603,11 +613,14 @@ impl FlexBox {
                 } else {
                     0.0
                 };
-                let sz = self.children[ci].node.layout(Constraints {
-                    origin: dummy,
-                    min: Size::new(min_w, 0.0),
-                    max: Size::new(main_w, available_cross),
-                }, font);
+                let sz = self.children[ci].node.layout(
+                    Constraints {
+                        origin: dummy,
+                        min: Size::new(min_w, 0.0),
+                        max: Size::new(main_w, available_cross),
+                    },
+                    font,
+                );
                 max_cross = max_cross.max(sz.h);
             }
             line_cross_sizes[li] = max_cross;
@@ -654,22 +667,28 @@ impl FlexBox {
                     available_cross
                 };
                 let min_w = if item.flex_grow > 0.0 { main_w } else { 0.0 };
-                let sz = self.children[ci].node.layout(Constraints {
-                    origin: Point::new(x, cross_y),
-                    min: Size::new(min_w, 0.0),
-                    max: Size::new(main_w, child_cross),
-                }, font);
+                let sz = self.children[ci].node.layout(
+                    Constraints {
+                        origin: Point::new(x, cross_y),
+                        min: Size::new(min_w, 0.0),
+                        max: Size::new(main_w, child_cross),
+                    },
+                    font,
+                );
 
                 // Cross-axis positioning.
                 let real_item_cross = sz.h;
                 let cy_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cy_off.abs() > 0.01 {
                     // Re-layout at corrected y (cross offset inside line).
-                    self.children[ci].node.layout(Constraints {
-                        origin: Point::new(x, cross_y + cy_off),
-                        min: Size::new(min_w, 0.0),
-                        max: Size::new(main_w, child_cross),
-                    }, font);
+                    self.children[ci].node.layout(
+                        Constraints {
+                            origin: Point::new(x, cross_y + cy_off),
+                            min: Size::new(min_w, 0.0),
+                            max: Size::new(main_w, child_cross),
+                        },
+                        font,
+                    );
                 }
 
                 x += main_w + self.gap_main + between;
@@ -696,7 +715,11 @@ impl FlexBox {
 
     // ── Column layout ─────────────────────────────────────────────────────────
 
-    fn layout_column(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
+    fn layout_column(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
         let available_main = (constraints.max.h - 2.0 * self.padding).max(0.0);
         let available_cross = (constraints.max.w - 2.0 * self.padding).max(0.0);
 
@@ -729,11 +752,14 @@ impl FlexBox {
                 } else {
                     0.0
                 };
-                let sz = self.children[ci].node.layout(Constraints {
-                    origin: dummy,
-                    min: Size::new(0.0, min_h),
-                    max: Size::new(available_cross, main_h),
-                }, font);
+                let sz = self.children[ci].node.layout(
+                    Constraints {
+                        origin: dummy,
+                        min: Size::new(0.0, min_h),
+                        max: Size::new(available_cross, main_h),
+                    },
+                    font,
+                );
                 max_cross = max_cross.max(sz.w);
             }
             line_cross_sizes[li] = max_cross;
@@ -774,20 +800,26 @@ impl FlexBox {
                 };
 
                 let min_h = if item.flex_grow > 0.0 { main_h } else { 0.0 };
-                let sz = self.children[ci].node.layout(Constraints {
-                    origin: Point::new(cross_x, y),
-                    min: Size::new(0.0, min_h),
-                    max: Size::new(child_cross, main_h),
-                }, font);
+                let sz = self.children[ci].node.layout(
+                    Constraints {
+                        origin: Point::new(cross_x, y),
+                        min: Size::new(0.0, min_h),
+                        max: Size::new(child_cross, main_h),
+                    },
+                    font,
+                );
 
                 let real_item_cross = sz.w;
                 let cx_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cx_off.abs() > 0.01 {
-                    self.children[ci].node.layout(Constraints {
-                        origin: Point::new(cross_x + cx_off, y),
-                        min: Size::new(0.0, min_h),
-                        max: Size::new(child_cross, main_h),
-                    }, font);
+                    self.children[ci].node.layout(
+                        Constraints {
+                            origin: Point::new(cross_x + cx_off, y),
+                            min: Size::new(0.0, min_h),
+                            max: Size::new(child_cross, main_h),
+                        },
+                        font,
+                    );
                 }
 
                 y += main_h + self.gap_main + between;
@@ -816,7 +848,12 @@ impl FlexBox {
     ///
     /// When `wrap == NoWrap` returns a single line with all children.
     /// Items that cannot fit alone on a line are placed on their own line anyway.
-    fn compute_lines(&mut self, available_main: f32, is_row: bool, font: &mut crate::font_context::FontContext) -> Vec<Vec<usize>> {
+    fn compute_lines(
+        &mut self,
+        available_main: f32,
+        is_row: bool,
+        font: &mut crate::font_context::FontContext,
+    ) -> Vec<Vec<usize>> {
         let n = self.children.len();
         if n == 0 {
             return Vec::new();
@@ -834,11 +871,15 @@ impl FlexBox {
         for i in 0..n {
             // Measure natural size for this item.
             let sz = if is_row {
-                self.children[i]
-                    .node.layout(Constraints::new(dummy, Size::new(available_main, f32::MAX)), font)
+                self.children[i].node.layout(
+                    Constraints::new(dummy, Size::new(available_main, f32::MAX)),
+                    font,
+                )
             } else {
-                self.children[i]
-                    .node.layout(Constraints::new(dummy, Size::new(f32::MAX, available_main)), font)
+                self.children[i].node.layout(
+                    Constraints::new(dummy, Size::new(f32::MAX, available_main)),
+                    font,
+                )
             };
             let item_main = if is_row { sz.w } else { sz.h };
 
@@ -893,21 +934,25 @@ impl FlexBox {
 // ─── ViNode ───────────────────────────────────────────────────────────────────
 
 impl ViNode for FlexBox {
-    fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-    if self.children.is_empty() {
-        let size = constraints.constrain(Size {
-            w: constraints.max.w,
-            h: 2.0 * self.padding,
-        });
-        self.bounds_cache
-            .set(Rect::from_origin_size(constraints.origin, size));
-        return size;
-    }
-    
-    match self.direction {
-        FlexDirection::Row => self.layout_row(constraints, font),
-        FlexDirection::Column => self.layout_column(constraints, font),
-    }
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        if self.children.is_empty() {
+            let size = constraints.constrain(Size {
+                w: constraints.max.w,
+                h: 2.0 * self.padding,
+            });
+            self.bounds_cache
+                .set(Rect::from_origin_size(constraints.origin, size));
+            return size;
+        }
+
+        match self.direction {
+            FlexDirection::Row => self.layout_row(constraints, font),
+            FlexDirection::Column => self.layout_column(constraints, font),
+        }
     }
 
     fn bounds(&self) -> Rect {
@@ -974,10 +1019,14 @@ mod tests {
     }
 
     impl ViNode for FixedLeaf {
-        fn layout(&mut self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> Size {
-        let size = constraints.constrain(Size::new(self.w, self.h));
-        self.bounds = Rect::from_origin_size(constraints.origin, size);
-        size
+        fn layout(
+            &mut self,
+            constraints: Constraints,
+            font: &mut crate::font_context::FontContext,
+        ) -> Size {
+            let size = constraints.constrain(Size::new(self.w, self.h));
+            self.bounds = Rect::from_origin_size(constraints.origin, size);
+            size
         }
         fn bounds(&self) -> Rect {
             self.bounds
@@ -1005,7 +1054,10 @@ mod tests {
             .child(FixedLeaf::new(30.0, 20.0))
             .flex_child(FixedLeaf::new(999.0, 20.0), 1.0);
 
-        let size = fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        let size = fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
         assert_eq!(size.w, 200.0, "row should fill full width");
 
         // Flex child is the third item — its layout bounds should be 140px wide.
@@ -1027,7 +1079,10 @@ mod tests {
             .flex_child(FixedLeaf::new(50.0, 20.0), 1.0)
             .flex_child(FixedLeaf::new(50.0, 20.0), 1.0);
 
-        fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1046,7 +1101,10 @@ mod tests {
             .flex_child(FixedLeaf::new(10.0, 10.0), 1.0)
             .flex_child(FixedLeaf::new(10.0, 10.0), 2.0);
 
-        fb.layout(root(300.0, 50.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(300.0, 50.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1064,7 +1122,10 @@ mod tests {
             .flex_child(FixedLeaf::new(10.0, 20.0), 1.0)
             .flex_child(FixedLeaf::new(10.0, 20.0), 1.0);
 
-        let size = fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        let size = fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1090,7 +1151,10 @@ mod tests {
             .flex_child(FixedLeaf::new(50.0, 20.0), 1.0)
             .flex_child(FixedLeaf::new(50.0, 20.0), 1.0);
 
-        fb.layout(root(100.0, 200.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(100.0, 200.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1109,7 +1173,10 @@ mod tests {
             .child(FixedLeaf::new(50.0, 40.0))
             .flex_child(FixedLeaf::new(50.0, 10.0), 1.0);
 
-        fb.layout(root(100.0, 200.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(100.0, 200.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1123,7 +1190,10 @@ mod tests {
     #[test]
     fn empty_flexbox_returns_padded_size() {
         let mut fb = FlexBox::row().padding(8.0);
-        let size = fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        let size = fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
         assert_eq!(size.h, 16.0, "empty row h should be 2*padding=16");
     }
 
@@ -1131,7 +1201,10 @@ mod tests {
     fn single_child_no_gap() {
         let mut fb = FlexBox::row().gap(10.0).child(FixedLeaf::new(50.0, 30.0));
 
-        fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
         // Single child — no gap should be applied.
         let b = fb.children[0].node.bounds();
         assert_eq!(b.x, 0.0, "single child should be at x=0");
@@ -1146,7 +1219,10 @@ mod tests {
             .child(FixedLeaf::new(90.0, 10.0))
             .min_child(FixedLeaf::new(10.0, 10.0), 1.0, 80.0);
 
-        fb.layout(root(100.0, 50.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(100.0, 50.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b1 = fb.children[1].node.bounds();
         assert!(
@@ -1159,10 +1235,10 @@ mod tests {
     #[test]
     fn row_bounds_cache_set_correctly() {
         let mut fb = FlexBox::row().child(FixedLeaf::new(50.0, 30.0));
-        fb.layout(Constraints::new(
-            Point::new(10.0, 20.0),
-            Size::new(200.0, 100.0),
-        ), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            Constraints::new(Point::new(10.0, 20.0), Size::new(200.0, 100.0)),
+            &mut crate::font_context::FontContext::default(),
+        );
         let b = fb.bounds();
         assert_eq!(b.x, 10.0);
         assert_eq!(b.y, 20.0);
@@ -1181,7 +1257,10 @@ mod tests {
             .child(FixedLeaf::new(20.0, 10.0))
             .child(FixedLeaf::new(20.0, 10.0));
 
-        fb.layout(root(200.0, 50.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 50.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         // free = 200 - 60 = 140; slot = 140/4 = 35
         let b0 = fb.children[0].node.bounds();
@@ -1202,7 +1281,10 @@ mod tests {
             .child(FixedLeaf::new(50.0, 10.0))
             .child(FixedLeaf::new(50.0, 10.0));
 
-        fb.layout(root(200.0, 50.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 50.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         // free = 100; slot = 50; start = 25
         let b0 = fb.children[0].node.bounds();
@@ -1225,7 +1307,10 @@ mod tests {
         // Set shrink on second item via FlexItem mutation.
         fb.children[1].flex_shrink = 2.0;
 
-        fb.layout(root(150.0, 50.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(150.0, 50.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1245,7 +1330,10 @@ mod tests {
             .child(FixedLeaf::new(80.0, 20.0))
             .child(FixedLeaf::new(80.0, 20.0));
 
-        fb.layout(root(200.0, 200.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 200.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         // Item 0 and 1 on line 1; item 2 on line 2.
         let b0 = fb.children[0].node.bounds();
@@ -1272,7 +1360,10 @@ mod tests {
             .child(FixedLeaf::new(50.0, 20.0))
             .child(FixedLeaf::new(50.0, 20.0));
 
-        fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
 
         let b0 = fb.children[0].node.bounds();
         let b1 = fb.children[1].node.bounds();
@@ -1296,7 +1387,10 @@ mod tests {
             .align_content(AlignContent::Start)
             .child(FixedLeaf::new(50.0, 30.0));
 
-        let size = fb.layout(root(200.0, 100.0), &mut crate::font_context::FontContext::default());
+        let size = fb.layout(
+            root(200.0, 100.0),
+            &mut crate::font_context::FontContext::default(),
+        );
         assert!(size.w > 0.0);
     }
 }

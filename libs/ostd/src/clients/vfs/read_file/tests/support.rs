@@ -11,13 +11,23 @@ use api::vfs_file_handles::ViVfsFileHandle;
 pub(super) enum MockReply {
     Dir(u64),
     File(u64),
-    Stat { size: u64, is_dir: bool },
+    Stat {
+        size: u64,
+        is_dir: bool,
+    },
     DataLen(usize, u8),
     Data(Vec<u8>),
     Ok,
     Err(u8),
-    Page { next: u32, flags: u8, entries: Vec<u8> },
-    State { size: u64, modified: bool },
+    Page {
+        next: u32,
+        flags: u8,
+        entries: Vec<u8>,
+    },
+    State {
+        size: u64,
+        modified: bool,
+    },
 }
 
 pub(super) struct MockOps {
@@ -59,9 +69,17 @@ impl VfsReadOps for MockOps {
             }
             MockReply::Ok => VfsResponse::Ok,
             MockReply::Err(code) => VfsResponse::Err(code),
-            MockReply::Page { next, flags, entries } => {
+            MockReply::Page {
+                next,
+                flags,
+                entries,
+            } => {
                 resp_buf[..entries.len()].copy_from_slice(&entries);
-                VfsResponse::DirPage { next, flags, entries: &resp_buf[..entries.len()] }
+                VfsResponse::DirPage {
+                    next,
+                    flags,
+                    entries: &resp_buf[..entries.len()],
+                }
             }
             MockReply::State { size, modified } => VfsResponse::FileState { size, modified },
         })

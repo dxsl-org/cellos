@@ -23,6 +23,10 @@ mod fs;
 mod model;
 mod preview;
 mod views;
+use crate::app::{FilesApp, PromptKind};
+use crate::fs::FileSystem;
+use crate::model::ViewMode;
+use crate::views::places::PLACES_WIDTH;
 use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
@@ -33,10 +37,6 @@ use viui::surface::components::{
     SegmentedControl, StatusBar, Toolbar,
 };
 use viui::theme::{ViTheme, LIGHT_THEME};
-use crate::app::{FilesApp, PromptKind};
-use crate::fs::FileSystem;
-use crate::model::ViewMode;
-use crate::views::places::PLACES_WIDTH;
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 api::declare_syscalls![
     Log,
@@ -175,28 +175,45 @@ impl<F: FileSystem> FilesApp<F> {
                     fonts,
                     &self.items,
                     self.selected_index,
-                    content_x,
-                    content_y,
-                    content_w,
-                    content_h,
-                    theme.bg(),
-                    theme.text_primary(),
-                    theme.accent(),
-                    theme.border(),
+                    views::ContentRect {
+                        x: content_x,
+                        y: content_y,
+                        w: content_w,
+                        h: content_h,
+                    },
+                    views::ViewPalette {
+                        bg: theme.bg(),
+                        fg: theme.text_primary(),
+                        accent: theme.accent(),
+                        border: theme.border(),
+                    },
                 );
             }
         }
 
         // 4. Status Bar Component (Bottom 24 DIP): listing summary, prompt or operation result.
         let status_y = sh as i32 - STATUS_HEIGHT as i32;
-        StatusBar::render(surf, fonts, theme, status_y, sw, STATUS_HEIGHT, &self.status_message);
+        StatusBar::render(
+            surf,
+            fonts,
+            theme,
+            status_y,
+            sw,
+            STATUS_HEIGHT,
+            &self.status_message,
+        );
         preview::render(surf, fonts, &self.quick_look, sw, sh);
         surf.damage_all();
     }
 }
 
 /// Keys while the path/name prompt is open. Returns whether the prompt consumed the key.
-fn prompt_key<F: FileSystem>(app: &mut FilesApp<F>, keysym: KeySym, ch: Option<char>, modifiers: Modifiers) -> bool {
+fn prompt_key<F: FileSystem>(
+    app: &mut FilesApp<F>,
+    keysym: KeySym,
+    ch: Option<char>,
+    modifiers: Modifiers,
+) -> bool {
     if app.prompt.is_none() {
         return false;
     }
@@ -256,12 +273,15 @@ fn cell_main() {
                     cursor_x = x;
                     cursor_y = y;
                 }
-                InputEvent::Key(ke) if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) => {
+                InputEvent::Key(ke)
+                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) =>
+                {
                     let ch = ke.char();
                     // Only navigation and prompt typing repeat; opening, deletion, paste and
                     // toggles are one-shot.
-                    let repeatable = matches!(ke.keysym, KeySym::Up | KeySym::Down | KeySym::Backspace)
-                        || (app.prompt.is_some() && ch.is_some_and(|c| !c.is_control()));
+                    let repeatable =
+                        matches!(ke.keysym, KeySym::Up | KeySym::Down | KeySym::Backspace)
+                            || (app.prompt.is_some() && ch.is_some_and(|c| !c.is_control()));
                     if ke.state == KeyState::Repeated && !repeatable {
                         continue;
                     }
@@ -316,16 +336,27 @@ fn cell_main() {
                         },
                     }
                 }
-                InputEvent::MouseButton { button: MouseButton::Left, state: KeyState::Pressed } => {
+                InputEvent::MouseButton {
+                    button: MouseButton::Left,
+                    state: KeyState::Pressed,
+                } => {
                     // A click in the window takes the keyboard back, as the Terminal does.
                     let _ = ostd::input::request_focus();
                     need_render = true;
-                    if preview::handle_click(&mut app.quick_look, cursor_x, cursor_y, app.width, app.height) {
+                    if preview::handle_click(
+                        &mut app.quick_look,
+                        cursor_x,
+                        cursor_y,
+                        app.width,
+                        app.height,
+                    ) {
                         continue;
                     }
                     // Check toolbar view mode SegmentedControl
                     let btn_start_x = app.width as i32 - 180;
-                    if let Some(idx) = SegmentedControl::hit_test(cursor_x, cursor_y, btn_start_x, 8, 54, 28, 3) {
+                    if let Some(idx) =
+                        SegmentedControl::hit_test(cursor_x, cursor_y, btn_start_x, 8, 54, 28, 3)
+                    {
                         let new_mode = match idx {
                             0 => ViewMode::List,
                             1 => ViewMode::Grid,
@@ -335,7 +366,9 @@ fn cell_main() {
                     }
 
                     // Check Places sidebar
-                    if let Some(target_path) = views::places::handle_click(&app.places, cursor_x, cursor_y) {
+                    if let Some(target_path) =
+                        views::places::handle_click(&app.places, cursor_x, cursor_y)
+                    {
                         app.load_directory(target_path);
                     }
 
@@ -344,9 +377,29 @@ fn cell_main() {
                     let content_y = TOOLBAR_HEIGHT as i32;
                     let content_w = app.width.saturating_sub(PLACES_WIDTH);
                     let clicked_idx = match app.view_mode {
-                        ViewMode::List => ListView::hit_test(cursor_x, cursor_y, content_x, content_y, content_w, app.items.len()),
-                        ViewMode::Grid => GridView::hit_test(cursor_x, cursor_y, content_x, content_y, content_w, app.items.len()),
-                        ViewMode::Columns => views::columns::handle_click(app.items.len(), content_x, content_y, cursor_x, cursor_y),
+                        ViewMode::List => ListView::hit_test(
+                            cursor_x,
+                            cursor_y,
+                            content_x,
+                            content_y,
+                            content_w,
+                            app.items.len(),
+                        ),
+                        ViewMode::Grid => GridView::hit_test(
+                            cursor_x,
+                            cursor_y,
+                            content_x,
+                            content_y,
+                            content_w,
+                            app.items.len(),
+                        ),
+                        ViewMode::Columns => views::columns::handle_click(
+                            app.items.len(),
+                            content_x,
+                            content_y,
+                            cursor_x,
+                            cursor_y,
+                        ),
                     };
                     if let Some(idx) = clicked_idx {
                         app.selected_index = idx;
@@ -374,7 +427,10 @@ mod tests {
     use crate::fs::fake::FakeFs;
 
     fn sample() -> FilesApp<FakeFs> {
-        let fs = FakeFs::new().dir("/data").file("/data/notes.md", b"# n\n").file("/data/b.rs", b"");
+        let fs = FakeFs::new()
+            .dir("/data")
+            .file("/data/notes.md", b"# n\n")
+            .file("/data/b.rs", b"");
         FilesApp::new(fs, "/data", 800, 600)
     }
 
@@ -396,12 +452,32 @@ mod tests {
     fn prompt_keys_are_routed_before_shortcuts() {
         let mut app = sample();
         app.begin_prompt(PromptKind::GoTo);
-        assert!(prompt_key(&mut app, KeySym::Printable, Some('/'), Modifiers::default()));
-        assert!(prompt_key(&mut app, KeySym::Printable, Some('c'), Modifiers::CTRL));
+        assert!(prompt_key(
+            &mut app,
+            KeySym::Printable,
+            Some('/'),
+            Modifiers::default()
+        ));
+        assert!(prompt_key(
+            &mut app,
+            KeySym::Printable,
+            Some('c'),
+            Modifiers::CTRL
+        ));
         assert_eq!(app.status_message, "Go to: /_");
-        assert!(prompt_key(&mut app, KeySym::Return, None, Modifiers::default()));
+        assert!(prompt_key(
+            &mut app,
+            KeySym::Return,
+            None,
+            Modifiers::default()
+        ));
         assert_eq!(app.current_path, "/");
-        assert!(!prompt_key(&mut app, KeySym::Return, None, Modifiers::default()));
+        assert!(!prompt_key(
+            &mut app,
+            KeySym::Return,
+            None,
+            Modifiers::default()
+        ));
     }
 
     #[test]
@@ -420,15 +496,35 @@ mod tests {
         let content_x = PLACES_WIDTH as i32;
         let content_y = TOOLBAR_HEIGHT as i32;
         let content_w = 800 - PLACES_WIDTH;
-        let list_clicked = views::list::handle_click(app.items.len(), content_x, content_y, content_w, content_x + 50, content_y + 35);
+        let list_clicked = views::list::handle_click(
+            app.items.len(),
+            content_x,
+            content_y,
+            content_w,
+            content_x + 50,
+            content_y + 35,
+        );
         assert_eq!(list_clicked, Some(0));
 
         // Click on Grid item 0
-        let grid_clicked = views::grid::handle_click(app.items.len(), content_x, content_y, content_w, content_x + 30, content_y + 30);
+        let grid_clicked = views::grid::handle_click(
+            app.items.len(),
+            content_x,
+            content_y,
+            content_w,
+            content_x + 30,
+            content_y + 30,
+        );
         assert_eq!(grid_clicked, Some(0));
 
         // Click on Columns item 0
-        let col_clicked = views::columns::handle_click(app.items.len(), content_x, content_y, content_x + 30, content_y + 10);
+        let col_clicked = views::columns::handle_click(
+            app.items.len(),
+            content_x,
+            content_y,
+            content_x + 30,
+            content_y + 10,
+        );
         assert_eq!(col_clicked, Some(0));
     }
 }

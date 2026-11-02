@@ -95,7 +95,9 @@ impl ChromeApp {
             is_url_focused: false,
             is_fullscreen: false,
             saved_dims: (w, h),
-            guest_status: String::from("Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App"),
+            guest_status: String::from(
+                "Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App",
+            ),
             should_close: false,
             next_tab_id: 3,
         }
@@ -155,7 +157,8 @@ impl ChromeApp {
             String::from("Web Page")
         };
         self.tabs[self.active_tab].content_heading = format!("Loaded: {}", clean_url);
-        self.tabs[self.active_tab].content_text = format!("Rendering interactive guest web page from {}", clean_url);
+        self.tabs[self.active_tab].content_text =
+            format!("Rendering interactive guest web page from {}", clean_url);
         self.url_input = clean_url;
         self.is_url_focused = false;
     }
@@ -175,12 +178,12 @@ impl ChromeApp {
 
     pub fn handle_click(&mut self, x: i32, y: i32) -> bool {
         // Tab strip is y: 0..32
-        if y >= 0 && y < 32 {
+        if (0..32).contains(&y) {
             let mut cur_x = 8;
             for (idx, _tab) in self.tabs.iter().enumerate() {
                 let tab_w = 140;
                 let close_btn_x = cur_x + tab_w - 20;
-                if x >= close_btn_x && x < close_btn_x + 16 && y >= 8 && y < 24 {
+                if x >= close_btn_x && x < close_btn_x + 16 && (8..24).contains(&y) {
                     self.close_tab(idx);
                     return true;
                 }
@@ -191,14 +194,14 @@ impl ChromeApp {
                 cur_x += tab_w + 4;
             }
             // '+' button
-            if x >= cur_x && x < cur_x + 28 && y >= 4 && y < 28 {
+            if x >= cur_x && x < cur_x + 28 && (4..28).contains(&y) {
                 self.new_tab("https://cellos.internal/newtab", "New Tab");
                 return true;
             }
         }
 
         // Toolbar is y: 32..72
-        if y >= 32 && y < 72 {
+        if (32..72).contains(&y) {
             // Address bar is x: 120 .. (width - 60)
             let addr_end = (self.width.saturating_sub(60)) as i32;
             if x >= 120 && x < addr_end {
@@ -212,12 +215,12 @@ impl ChromeApp {
                 return true;
             }
             // Back button
-            if x >= 8 && x < 40 {
+            if (8..40).contains(&x) {
                 self.navigate("https://cellos.internal/welcome");
                 return true;
             }
             // Reload button
-            if x >= 76 && x < 108 {
+            if (76..108).contains(&x) {
                 let nav_target = self.url_input.clone();
                 self.navigate(&nav_target);
                 return true;
@@ -322,7 +325,11 @@ impl ChromeApp {
                 (cur_x + 8) as f32,
                 10.0,
                 &tab.title,
-                if is_active { FontFace::UiSemibold } else { FontFace::UiRegular },
+                if is_active {
+                    FontFace::UiSemibold
+                } else {
+                    FontFace::UiRegular
+                },
                 12.0,
                 [230, 230, 240, 255],
                 clip,
@@ -366,9 +373,39 @@ impl ChromeApp {
         // 3. Navigation Toolbar (y: 32..72, height: 40)
         fill_rect(surf, 0, 32, sw, 40, Color::rgb(32, 35, 45));
         // Back / Forward / Reload buttons
-        draw_button(surf, fonts, 8, 38, 28, 28, "<", Color::rgb(42, 46, 58), [220, 220, 230, 255]);
-        draw_button(surf, fonts, 40, 38, 28, 28, ">", Color::rgb(42, 46, 58), [220, 220, 230, 255]);
-        draw_button(surf, fonts, 74, 38, 28, 28, "R", Color::rgb(42, 46, 58), [220, 220, 230, 255]);
+        draw_button(
+            surf,
+            fonts,
+            8,
+            38,
+            28,
+            28,
+            "<",
+            Color::rgb(42, 46, 58),
+            [220, 220, 230, 255],
+        );
+        draw_button(
+            surf,
+            fonts,
+            40,
+            38,
+            28,
+            28,
+            ">",
+            Color::rgb(42, 46, 58),
+            [220, 220, 230, 255],
+        );
+        draw_button(
+            surf,
+            fonts,
+            74,
+            38,
+            28,
+            28,
+            "R",
+            Color::rgb(42, 46, 58),
+            [220, 220, 230, 255],
+        );
 
         // Address Bar
         let addr_w = sw.saturating_sub(180);
@@ -414,7 +451,17 @@ impl ChromeApp {
 
         // Go / Navigate button
         let go_x = (110 + addr_w + 6) as i32;
-        draw_button(surf, fonts, go_x, 38, 44, 28, "Go", Color::rgb(70, 130, 245), [255, 255, 255, 255]);
+        draw_button(
+            surf,
+            fonts,
+            go_x,
+            38,
+            44,
+            28,
+            "Go",
+            Color::rgb(70, 130, 245),
+            [255, 255, 255, 255],
+        );
 
         // 4. Viewport (y: 72..sh-24): Guest Web Content Surface
         let view_h = sh.saturating_sub(96);
@@ -423,7 +470,14 @@ impl ChromeApp {
         // Render Web Card in Viewport
         if let Some(tab) = self.tabs.get(self.active_tab) {
             // Heading card
-            fill_rect(surf, 24, 96, sw.saturating_sub(48), 64, Color::rgb(240, 243, 250));
+            fill_rect(
+                surf,
+                24,
+                96,
+                sw.saturating_sub(48),
+                64,
+                Color::rgb(240, 243, 250),
+            );
             fonts.draw_text(
                 surf.pixels_mut(),
                 surf_w,
@@ -499,6 +553,8 @@ fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, col: Color) {
     }
 }
 
+// reason: rendering helper whose geometry/colour args are spelled out at each call site.
+#[allow(clippy::too_many_arguments)]
 fn draw_button(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
@@ -589,12 +645,15 @@ fn cell_main() {
                     cursor_x = x;
                     cursor_y = y;
                 }
-                InputEvent::MouseButton { button: MouseButton::Left, state: KeyState::Pressed } => {
-                    if app.handle_click(cursor_x, cursor_y) {
-                        need_render = true;
-                    }
+                InputEvent::MouseButton {
+                    button: MouseButton::Left,
+                    state: KeyState::Pressed,
+                } if app.handle_click(cursor_x, cursor_y) => {
+                    need_render = true;
                 }
-                InputEvent::Key(ke) if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) => {
+                InputEvent::Key(ke)
+                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) =>
+                {
                     // Repeat URL editing without repeating tab actions, submission or fullscreen.
                     if ke.state == KeyState::Repeated
                         && (matches!(ke.keysym, KeySym::Return | KeySym::Escape | KeySym::F11)

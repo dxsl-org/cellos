@@ -230,6 +230,13 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 // Layout: [rbx, rbp, r12, r13, r14, r15, rsp, rip, _spare]
 //          0    8    16   24   32   40   48   56   64
 
+/// C `setjmp` — saves rbx, rbp, r12–r15, the caller's rsp and the return
+/// address into `env`, returns 0.
+///
+/// # Safety
+/// `env` must point to a valid, writable [`JmpBuf`] that outlives every
+/// matching `longjmp`. Standard C setjmp/longjmp rules apply: the calling
+/// frame must still be live when `longjmp` restores it.
 #[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 #[no_mangle]
@@ -252,6 +259,14 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
     )
 }
 
+/// C `longjmp` — restores the environment saved by `setjmp(env)` and makes
+/// that `setjmp` call return `val` (or 1 if `val == 0`).
+///
+/// # Safety
+/// `env` must point to a [`JmpBuf`] filled by `setjmp` on this same stack,
+/// and the frame that called that `setjmp` must still be live; restoring
+/// rsp/rbp into a returned frame corrupts the stack. Never returns to its
+/// caller.
 #[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 #[no_mangle]

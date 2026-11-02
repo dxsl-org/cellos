@@ -6,11 +6,10 @@
 #![forbid(unsafe_code)]
 
 extern crate alloc;
-use alloc::vec::Vec;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_get_procs, sys_get_scheduler_ticks, sys_lookup_service, sys_yield};
+use ostd::syscall::{sys_lookup_service, sys_yield};
 
 mod cipher;
 mod kex;
@@ -86,7 +85,7 @@ fn cell_main() {
             );
             if let Ok(NetResponse::CapId(client_cap)) = resp {
                 println("[sshd] Client connected! Starting SSH handshake...");
-                let mut session = SshSession::new();
+                let session = SshSession::new();
                 let initial = session.initial_outbound();
 
                 // Send version banner: SSH-2.0-Cellos_1.0\r\n

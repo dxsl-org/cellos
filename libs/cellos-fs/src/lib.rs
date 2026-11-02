@@ -21,9 +21,9 @@ extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
+pub mod allocator;
 #[cfg(all(feature = "g2-cow-experiment", not(target_os = "none")))]
 mod cow_experiment;
-pub mod allocator;
 pub mod crc32;
 pub mod disk;
 pub mod engine;

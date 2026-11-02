@@ -82,8 +82,16 @@ fn poll_spent(deadline: &mut Deadline) -> Option<Spent> {
 /// Log a completion that took at least `SLOW_COMPLETION_MS` (the first few only).
 fn note_slow(deadline: &Deadline, what: &str, opc: u8) {
     if let Some(ms) = deadline.slow(now_ms()) {
-        if SLOW_LOG.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| left.checked_sub(1)).is_ok() {
-            let _ = print_fmt(format_args!("[nvme] slow completion {} opc={} ms={}\n", what, opc, ms));
+        if SLOW_LOG
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+        {
+            let _ = print_fmt(format_args!(
+                "[nvme] slow completion {} opc={} ms={}\n",
+                what, opc, ms
+            ));
         }
     }
 }
@@ -124,7 +132,10 @@ impl NvmeController {
         let dstrd = ((cap >> 32) & 0xF) as usize;
         let db_stride = 4 << dstrd;
         let rdy_budget_ms = deadline::rdy_budget_ms(cap);
-        let _ = print_fmt(format_args!("[nvme] CAP=0x{:016x} ready budget {} ms (CAP.TO)\n", cap, rdy_budget_ms));
+        let _ = print_fmt(format_args!(
+            "[nvme] CAP=0x{:016x} ready budget {} ms (CAP.TO)\n",
+            cap, rdy_budget_ms
+        ));
 
         // 2. Allocate admin queues.
         //
@@ -157,7 +168,9 @@ impl NvmeController {
         }
         // Reset proof for a replacement incarnation (Phase 08C): the controller
         // left whatever state its previous owner died in.
-        let _ = print_fmt(format_args!("[nvme] controller reset complete (CC.EN=0, CSTS.RDY=0)\n"));
+        let _ = print_fmt(format_args!(
+            "[nvme] controller reset complete (CC.EN=0, CSTS.RDY=0)\n"
+        ));
 
         // 4. Program AQA, ASQ, ACQ.
         let aqa = ((ADMIN_QUEUE_DEPTH as u32 - 1) << 16) | (ADMIN_QUEUE_DEPTH as u32 - 1);
@@ -233,7 +246,10 @@ impl NvmeController {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
             let id_buf = AuthorizedDma::authorize(id_buf, |buf| buf.authorize(bdf))
                 .map_err(|_| ViError::PermissionDenied)?;
-            let _ = print_fmt(format_args!("[nvme] dma iovas: identify=0x{:x}\n", id_buf.iova()));
+            let _ = print_fmt(format_args!(
+                "[nvme] dma iovas: identify=0x{:x}\n",
+                id_buf.iova()
+            ));
             ctrl.admin_cmd(
                 ADMIN_OPC_IDENTIFY,
                 0,
@@ -344,11 +360,19 @@ impl NvmeController {
 
     fn wait_command(&mut self, qid: usize, cid: u16, wait: &mut Deadline) -> Result<u16, Spent> {
         let doorbell = self.mmio.base() + REG_DB_BASE + (qid * 2 + 1) * self.db_stride;
-        let queue = if qid == 0 { &mut self.admin } else { &mut self.io };
-        queue.wait_completion(cid, |head| {
-            // SAFETY: the CQ doorbell belongs to the controller's granted BAR0 mapping.
-            unsafe { core::ptr::write_volatile(doorbell as *mut u32, head as u32) };
-        }, || poll_spent(wait))
+        let queue = if qid == 0 {
+            &mut self.admin
+        } else {
+            &mut self.io
+        };
+        queue.wait_completion(
+            cid,
+            |head| {
+                // SAFETY: the CQ doorbell belongs to the controller's granted BAR0 mapping.
+                unsafe { core::ptr::write_volatile(doorbell as *mut u32, head as u32) };
+            },
+            || poll_spent(wait),
+        )
     }
 
     /// Cold failure diagnostics: actual registers and the current (not cached) CQ slot.
@@ -421,7 +445,11 @@ impl NvmeController {
         };
         note_slow(&wait, "admin", opc);
         if status != 0 {
-            ostd::io::println(&alloc::format!("[nvme] admin error opc={} status={}", opc, status));
+            ostd::io::println(&alloc::format!(
+                "[nvme] admin error opc={} status={}",
+                opc,
+                status
+            ));
             return Err(ViError::IO);
         }
         Ok(())
@@ -486,7 +514,11 @@ impl NvmeController {
             // Reads past the namespace end are expected during volume probes.
             if IO_ERR_LOG.fetch_sub(1, Ordering::Relaxed) > 0 {
                 ostd::io::println(&alloc::format!(
-                    "[nvme] io error opc={} lba={} nlb={} status={}", opc, lba, nlb, status
+                    "[nvme] io error opc={} lba={} nlb={} status={}",
+                    opc,
+                    lba,
+                    nlb,
+                    status
                 ));
             }
             return Err(BlockOutcome::Indeterminate);

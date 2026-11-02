@@ -112,7 +112,11 @@ const ONESHOT_WRITE_NS: u64 = 30_000_000_000;
 /// Install the one-shot's output grants (once, before the command runs).
 #[cfg(all(not(test), not(feature = "shell_test")))]
 pub fn install_oneshot_output(output: ProcessOutput) {
-    *ONESHOT.lock() = Some(OneShot { output, stdout_failure: None, stderr_failed: false });
+    *ONESHOT.lock() = Some(OneShot {
+        output,
+        stdout_failure: None,
+        stderr_failed: false,
+    });
 }
 
 /// True while a one-shot owns this process's output.
@@ -139,7 +143,8 @@ pub fn oneshot_stdout(bytes: &[u8]) -> Result<(), Status> {
     if let Some(failure) = oneshot.stdout_failure {
         return Err(failure);
     }
-    let written = write_deadline().and_then(|deadline| oneshot.output.stdout().write_all(bytes, deadline));
+    let written =
+        write_deadline().and_then(|deadline| oneshot.output.stdout().write_all(bytes, deadline));
     if let Err(failure) = written {
         oneshot.stdout_failure = Some(failure);
     }
@@ -155,20 +160,27 @@ pub fn oneshot_stderr(bytes: &[u8]) {
     if oneshot.stderr_failed {
         return;
     }
-    let written = write_deadline().and_then(|deadline| oneshot.output.stderr().write_all(bytes, deadline));
+    let written =
+        write_deadline().and_then(|deadline| oneshot.output.stderr().write_all(bytes, deadline));
     oneshot.stderr_failed = written.is_err();
 }
 
 /// The first one-shot stdout failure, if any.
 #[cfg(all(not(test), not(feature = "shell_test")))]
 pub fn oneshot_stdout_failure() -> Option<Status> {
-    ONESHOT.lock().as_ref().and_then(|oneshot| oneshot.stdout_failure)
+    ONESHOT
+        .lock()
+        .as_ref()
+        .and_then(|oneshot| oneshot.stdout_failure)
 }
 
 /// Take everything the innermost capture holds so far, leaving it empty and
 /// active (empty when no capture is in flight).
 pub fn take_capture() -> Vec<u8> {
-    SINK.lock().last_mut().map(core::mem::take).unwrap_or_default()
+    SINK.lock()
+        .last_mut()
+        .map(core::mem::take)
+        .unwrap_or_default()
 }
 
 /// Number of in-flight captures. A serial REPL line always holds exactly one.
@@ -219,10 +231,13 @@ pub fn clear_stdin() {
     STDIN.lock().clear();
 }
 
+/// Producer of a one-shot's stdin bytes.
+type StdinLoader = fn() -> Vec<u8>;
+
 /// A one-shot's stdin (S10-0.5): installed only for a stdin-consuming command and run
 /// once, on the command's first demand, so a command that got a file operand never
 /// touches the Stdin grant.
-static STDIN_LOADER: Mutex<Option<fn() -> Vec<u8>>> = Mutex::new(None);
+static STDIN_LOADER: Mutex<Option<StdinLoader>> = Mutex::new(None);
 
 /// Defer the one-shot stdin to `loader`, called on the first [`stdin_bytes`] demand.
 #[cfg(all(not(test), not(feature = "shell_test")))]

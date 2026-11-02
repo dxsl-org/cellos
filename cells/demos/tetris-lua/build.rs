@@ -84,7 +84,9 @@ fn compile_lua(target: &str, manifest: &str) {
 
     let mut build = cc::Build::new();
 
-    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v != "0").unwrap_or(false);
+    let use_zig = std::env::var("CELLOS_USE_ZIG")
+        .map(|v| v != "0")
+        .unwrap_or(false);
     let zig_cc = repo_wrapper("cellos-zig-cc");
     let zig_ar = repo_wrapper("cellos-zig-ar");
 
@@ -109,7 +111,9 @@ fn compile_lua(target: &str, manifest: &str) {
     build.warnings(false);
     build.pic(true);
     build.flag_if_supported("-std=c99");
-    build.flag("-include").flag(format!("{glue_dir}/lua_vios_config.h"));
+    build
+        .flag("-include")
+        .flag(format!("{glue_dir}/lua_vios_config.h"));
     build.include(&src_dir);
     build.include(&glue_dir);
     for inc in [

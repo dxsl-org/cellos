@@ -60,7 +60,8 @@ impl VfsManager {
 
     /// Whether `caller`'s root death will reach the receive loop as a notification.
     pub fn watches_owner(&self, caller: Caller) -> bool {
-        self.watched_owners.contains_key(&(caller.cell.0, caller.generation))
+        self.watched_owners
+            .contains_key(&(caller.cell.0, caller.generation))
     }
 
     fn purge_owned_state(&mut self, caller: Caller) -> usize {

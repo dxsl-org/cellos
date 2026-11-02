@@ -38,7 +38,10 @@ pub(crate) fn shell_key_admitted(key: &str) -> bool {
 ///
 /// No `_` arm: a new `ConfigRequest` variant does not compile until it is
 /// classified here.
-pub(crate) fn admit(request: &ConfigRequest<'_>, caller: Option<&CallerIdentity>) -> Result<(), u8> {
+pub(crate) fn admit(
+    request: &ConfigRequest<'_>,
+    caller: Option<&CallerIdentity>,
+) -> Result<(), u8> {
     let key = match request {
         ConfigRequest::Get(_) | ConfigRequest::List => return Ok(()),
         ConfigRequest::Set { key, .. } => key,
@@ -70,12 +73,19 @@ mod tests {
     const NO_Q: CallerIdentity = caller(CALLER_FLAG_VFS_MUTATE | CALLER_FLAG_NET_RIGHTS_MASK);
 
     fn writes(key: &str) -> [ConfigRequest<'_>; 2] {
-        [ConfigRequest::Set { key, value: "v" }, ConfigRequest::Delete(key)]
+        [
+            ConfigRequest::Set { key, value: "v" },
+            ConfigRequest::Delete(key),
+        ]
     }
 
     #[test]
     fn reads_are_open_to_every_caller() {
-        for request in [ConfigRequest::Get("PATH"), ConfigRequest::Get(""), ConfigRequest::List] {
+        for request in [
+            ConfigRequest::Get("PATH"),
+            ConfigRequest::Get(""),
+            ConfigRequest::List,
+        ] {
             assert_eq!(admit(&request, None), Ok(()));
             assert_eq!(admit(&request, Some(&NO_Q)), Ok(()));
             assert_eq!(admit(&request, Some(&SHELL)), Ok(()));
@@ -85,7 +95,17 @@ mod tests {
     #[test]
     fn granted_caller_writes_shell_identifiers() {
         let longest = "K".repeat(MAX_SHELL_KEY);
-        for key in ["A", "_", "P01Q_OK", "path", "Path", "OS_", "_PATH", "a1_b2", longest.as_str()] {
+        for key in [
+            "A",
+            "_",
+            "P01Q_OK",
+            "path",
+            "Path",
+            "OS_",
+            "_PATH",
+            "a1_b2",
+            longest.as_str(),
+        ] {
             for request in writes(key) {
                 assert_eq!(admit(&request, Some(&SHELL)), Ok(()), "{request:?}");
             }
@@ -96,7 +116,11 @@ mod tests {
     fn missing_identity_or_right_denies_every_write() {
         for caller in [None, Some(&NO_Q), Some(&caller(0))] {
             for request in writes("P01Q_OK") {
-                assert_eq!(admit(&request, caller), Err(CONFIG_ERR_DENIED), "{request:?}");
+                assert_eq!(
+                    admit(&request, caller),
+                    Err(CONFIG_ERR_DENIED),
+                    "{request:?}"
+                );
             }
         }
     }
@@ -105,10 +129,25 @@ mod tests {
     fn keys_outside_the_namespace_are_denied_even_with_the_right() {
         let too_long = "K".repeat(MAX_SHELL_KEY + 1);
         for key in [
-            "PATH", "OS", "", "1A", "a.b", "a-b", "a b", "a=b", "/bin", "ä", "A\u{0}", too_long.as_str(),
+            "PATH",
+            "OS",
+            "",
+            "1A",
+            "a.b",
+            "a-b",
+            "a b",
+            "a=b",
+            "/bin",
+            "ä",
+            "A\u{0}",
+            too_long.as_str(),
         ] {
             for request in writes(key) {
-                assert_eq!(admit(&request, Some(&SHELL)), Err(CONFIG_ERR_DENIED), "{request:?}");
+                assert_eq!(
+                    admit(&request, Some(&SHELL)),
+                    Err(CONFIG_ERR_DENIED),
+                    "{request:?}"
+                );
             }
         }
     }

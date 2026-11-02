@@ -67,7 +67,10 @@ pub struct PaintCx<'a> {
 
 impl<'a> PaintCx<'a> {
     /// Root PaintCx with `DarkTheme` default and origin at (0, 0).
-    pub fn root(canvas: &'a mut dyn ViCanvas, font: &'a mut crate::font_context::FontContext) -> Self {
+    pub fn root(
+        canvas: &'a mut dyn ViCanvas,
+        font: &'a mut crate::font_context::FontContext,
+    ) -> Self {
         Self {
             canvas,
             origin: Point::ZERO,
@@ -77,7 +80,11 @@ impl<'a> PaintCx<'a> {
     }
 
     /// Root PaintCx with an explicit theme.
-    pub fn with_theme(canvas: &'a mut dyn ViCanvas, theme: &'a dyn ViTheme, font: &'a mut crate::font_context::FontContext) -> Self {
+    pub fn with_theme(
+        canvas: &'a mut dyn ViCanvas,
+        theme: &'a dyn ViTheme,
+        font: &'a mut crate::font_context::FontContext,
+    ) -> Self {
         Self {
             canvas,
             origin: Point::ZERO,
@@ -97,8 +104,13 @@ impl<'a> PaintCx<'a> {
     }
 
     pub fn draw_text(&mut self, pos: Point, text: &str, color: crate::canvas::Color, size_px: f32) {
-        let px = if size_px > 0.0 { size_px } else { self.font.size_px };
-        self.canvas.draw_text_scaled(pos, text, px, color, &mut self.font.atlas);
+        let px = if size_px > 0.0 {
+            size_px
+        } else {
+            self.font.size_px
+        };
+        self.canvas
+            .draw_text_scaled(pos, text, px, color, &mut self.font.atlas);
     }
 
     /// Translate a widget-local rect to screen-space.
@@ -127,7 +139,11 @@ pub trait ViWidget: 'static {
     ///
     /// Returns screen-space `LayoutNode`. `constraints.origin` is the top-left
     /// of the allocated slot; the returned `bounds` must fit within `constraints.max`.
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode;
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode;
 
     /// Paint this widget (and its children) into `cx.canvas`.
     fn paint(&self, cx: &mut PaintCx);

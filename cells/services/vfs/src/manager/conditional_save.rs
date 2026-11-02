@@ -19,19 +19,31 @@ impl VfsManager {
     }
 
     pub fn stage_create(&mut self, stage: &str) -> bool {
-        self.mounts.backend_mut(stage).is_some_and(|b| b.stage_create(stage))
+        self.mounts
+            .backend_mut(stage)
+            .is_some_and(|b| b.stage_create(stage))
     }
 
     pub fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> bool {
-        self.mounts.backend_mut(stage).is_some_and(|b| b.stage_write(stage, offset, bytes))
+        self.mounts
+            .backend_mut(stage)
+            .is_some_and(|b| b.stage_write(stage, offset, bytes))
     }
 
     /// Remove an unpublished staging object (synced like any unlink).
     pub fn stage_remove(&mut self, stage: &str) -> bool {
-        self.mounts.backend_mut(stage).is_some_and(|b| b.unlink(stage))
+        self.mounts
+            .backend_mut(stage)
+            .is_some_and(|b| b.unlink(stage))
     }
 
-    pub fn publish_if(&mut self, stage: &str, sealed: (u64, u64), dst: &str, expect: SaveExpect) -> SaveOutcome {
+    pub fn publish_if(
+        &mut self,
+        stage: &str,
+        sealed: (u64, u64),
+        dst: &str,
+        expect: SaveExpect,
+    ) -> SaveOutcome {
         let created = self.would_create(dst);
         let outcome = match self.mounts.backend_mut(dst) {
             Some(backend) => backend.publish_if(stage, sealed, dst, expect),

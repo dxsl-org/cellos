@@ -8,13 +8,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::cipher::CipherMode;
-use crate::kex::{KexState, SERVER_VERSION, SERVER_VERSION_RAW};
+use crate::kex::{KexState, SERVER_VERSION};
 use crate::ssh_packet::{
-    PacketReader, PacketWriter, SSH_MSG_CHANNEL_CLOSE, SSH_MSG_CHANNEL_DATA,
-    SSH_MSG_CHANNEL_EOF, SSH_MSG_CHANNEL_OPEN, SSH_MSG_CHANNEL_OPEN_CONFIRMATION,
-    SSH_MSG_CHANNEL_REQUEST, SSH_MSG_CHANNEL_SUCCESS, SSH_MSG_CHANNEL_WINDOW_ADJUST,
-    SSH_MSG_KEXINIT, SSH_MSG_KEX_ECDH_INIT, SSH_MSG_NEWKEYS, SSH_MSG_SERVICE_ACCEPT,
-    SSH_MSG_SERVICE_REQUEST, SSH_MSG_USERAUTH_FAILURE, SSH_MSG_USERAUTH_REQUEST,
+    PacketReader, PacketWriter, SSH_MSG_CHANNEL_CLOSE, SSH_MSG_CHANNEL_DATA, SSH_MSG_CHANNEL_EOF,
+    SSH_MSG_CHANNEL_OPEN, SSH_MSG_CHANNEL_OPEN_CONFIRMATION, SSH_MSG_CHANNEL_REQUEST,
+    SSH_MSG_CHANNEL_SUCCESS, SSH_MSG_CHANNEL_WINDOW_ADJUST, SSH_MSG_KEXINIT, SSH_MSG_KEX_ECDH_INIT,
+    SSH_MSG_NEWKEYS, SSH_MSG_SERVICE_ACCEPT, SSH_MSG_SERVICE_REQUEST, SSH_MSG_USERAUTH_REQUEST,
     SSH_MSG_USERAUTH_SUCCESS,
 };
 
@@ -85,53 +84,47 @@ impl SshSession {
                         break; // wait for more data
                     }
                 }
-                SessionPhase::KexInit => {
-                    match self.cipher.unpack_inbound(&self.rx_buf) {
-                        Ok(Some((payload, consumed))) => {
-                            self.rx_buf.drain(..consumed);
-                            if !payload.is_empty() && payload[0] == SSH_MSG_KEXINIT {
-                                self.kex.client_kexinit = payload;
-                                self.phase = SessionPhase::EcdhInit;
-                            }
-                        }
-                        Ok(None) => break,
-                        Err(_) => {
-                            self.phase = SessionPhase::Closed;
-                            break;
+                SessionPhase::KexInit => match self.cipher.unpack_inbound(&self.rx_buf) {
+                    Ok(Some((payload, consumed))) => {
+                        self.rx_buf.drain(..consumed);
+                        if !payload.is_empty() && payload[0] == SSH_MSG_KEXINIT {
+                            self.kex.client_kexinit = payload;
+                            self.phase = SessionPhase::EcdhInit;
                         }
                     }
-                }
-                SessionPhase::EcdhInit => {
-                    match self.cipher.unpack_inbound(&self.rx_buf) {
-                        Ok(Some((payload, consumed))) => {
-                            self.rx_buf.drain(..consumed);
-                            if !payload.is_empty() && payload[0] == SSH_MSG_KEX_ECDH_INIT {
-                                let mut r = PacketReader::new(&payload[1..]);
-                                if let Some(client_pubkey) = r.read_string() {
-                                    if let Some((ecdh_reply, newkeys)) =
-                                        self.kex.handle_ecdh_init(client_pubkey)
-                                    {
-                                        responses.extend_from_slice(
-                                            &self.cipher.pack_outbound(&ecdh_reply),
-                                        );
-                                        responses.extend_from_slice(
-                                            &self.cipher.pack_outbound(&newkeys),
-                                        );
-                                        self.phase = SessionPhase::WaitNewKeys;
-                                    } else {
-                                        self.phase = SessionPhase::Closed;
-                                        break;
-                                    }
+                    Ok(None) => break,
+                    Err(_) => {
+                        self.phase = SessionPhase::Closed;
+                        break;
+                    }
+                },
+                SessionPhase::EcdhInit => match self.cipher.unpack_inbound(&self.rx_buf) {
+                    Ok(Some((payload, consumed))) => {
+                        self.rx_buf.drain(..consumed);
+                        if !payload.is_empty() && payload[0] == SSH_MSG_KEX_ECDH_INIT {
+                            let mut r = PacketReader::new(&payload[1..]);
+                            if let Some(client_pubkey) = r.read_string() {
+                                if let Some((ecdh_reply, newkeys)) =
+                                    self.kex.handle_ecdh_init(client_pubkey)
+                                {
+                                    responses
+                                        .extend_from_slice(&self.cipher.pack_outbound(&ecdh_reply));
+                                    responses
+                                        .extend_from_slice(&self.cipher.pack_outbound(&newkeys));
+                                    self.phase = SessionPhase::WaitNewKeys;
+                                } else {
+                                    self.phase = SessionPhase::Closed;
+                                    break;
                                 }
                             }
                         }
-                        Ok(None) => break,
-                        Err(_) => {
-                            self.phase = SessionPhase::Closed;
-                            break;
-                        }
                     }
-                }
+                    Ok(None) => break,
+                    Err(_) => {
+                        self.phase = SessionPhase::Closed;
+                        break;
+                    }
+                },
                 SessionPhase::WaitNewKeys => {
                     match self.cipher.unpack_inbound(&self.rx_buf) {
                         Ok(Some((payload, consumed))) => {
@@ -140,8 +133,7 @@ impl SshSession {
                                 // Transition to ChaCha20-Poly1305
                                 let c2s_key = self.kex.derive_key(b'C', 64);
                                 let s2c_key = self.kex.derive_key(b'D', 64);
-                                self.cipher =
-                                    CipherMode::new_chacha20(&c2s_key, &s2c_key, 3, 3);
+                                self.cipher = CipherMode::new_chacha20(&c2s_key, &s2c_key, 3, 3);
                                 self.phase = SessionPhase::ServiceRequest;
                             }
                         }
@@ -152,23 +144,23 @@ impl SshSession {
                         }
                     }
                 }
-                SessionPhase::ServiceRequest | SessionPhase::UserAuth | SessionPhase::ActiveSession => {
-                    match self.cipher.unpack_inbound(&self.rx_buf) {
-                        Ok(Some((payload, consumed))) => {
-                            ostd::io::println("[sshd] decrypted packet!");
-                            self.rx_buf.drain(..consumed);
-                            if let Some(resp) = self.handle_authenticated_packet(&payload) {
-                                responses.extend_from_slice(&resp);
-                            }
-                        }
-                        Ok(None) => break,
-                        Err(_) => {
-                            ostd::io::println("[sshd] cipher.unpack_inbound returned Err!");
-                            self.phase = SessionPhase::Closed;
-                            break;
+                SessionPhase::ServiceRequest
+                | SessionPhase::UserAuth
+                | SessionPhase::ActiveSession => match self.cipher.unpack_inbound(&self.rx_buf) {
+                    Ok(Some((payload, consumed))) => {
+                        ostd::io::println("[sshd] decrypted packet!");
+                        self.rx_buf.drain(..consumed);
+                        if let Some(resp) = self.handle_authenticated_packet(&payload) {
+                            responses.extend_from_slice(&resp);
                         }
                     }
-                }
+                    Ok(None) => break,
+                    Err(_) => {
+                        ostd::io::println("[sshd] cipher.unpack_inbound returned Err!");
+                        self.phase = SessionPhase::Closed;
+                        break;
+                    }
+                },
                 SessionPhase::Closed => break,
             }
         }
@@ -220,9 +212,9 @@ impl SshSession {
                     let mut w = PacketWriter::new();
                     w.write_byte(SSH_MSG_CHANNEL_OPEN_CONFIRMATION);
                     w.write_u32(sender_channel); // recipient_channel
-                    w.write_u32(0);              // server channel = 0
-                    w.write_u32(2_000_000);      // initial window size
-                    w.write_u32(32768);          // max packet size
+                    w.write_u32(0); // server channel = 0
+                    w.write_u32(2_000_000); // initial window size
+                    w.write_u32(32768); // max packet size
                     Some(self.cipher.pack_outbound(w.as_slice()))
                 } else {
                     None
@@ -273,7 +265,7 @@ impl SshSession {
                 Some(out)
             }
             SSH_MSG_CHANNEL_DATA => {
-                let recipient_channel = r.read_u32()?;
+                let _recipient_channel = r.read_u32()?;
                 let data = r.read_string()?;
                 let mut out = Vec::new();
 

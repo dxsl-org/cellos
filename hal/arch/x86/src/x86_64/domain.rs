@@ -146,8 +146,7 @@ pub fn init_secondary_pcid() -> bool {
     let enabled = pcid_usable();
     let cr4 = read_cr4();
     if enabled {
-        if !pcid_supported() || !invpcid_supported()
-            || !pcid_enable_allowed(cr4, read_cr3()) {
+        if !pcid_supported() || !invpcid_supported() || !pcid_enable_allowed(cr4, read_cr3()) {
             return false;
         }
         unsafe { write_cr4(cr4 | CR4_PCIDE) };

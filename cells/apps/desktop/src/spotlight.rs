@@ -110,37 +110,80 @@ pub fn render(
     let input_y = 10;
     let input_w = sw.saturating_sub(28);
     let input_h = 38;
-    fill_rect(surf, input_x, input_y, input_w, input_h, Color::rgb(32, 35, 45));
+    fill_rect(
+        surf,
+        input_x,
+        input_y,
+        input_w,
+        input_h,
+        Color::rgb(32, 35, 45),
+    );
     stroke_rect(surf, input_x, input_y, input_w, input_h, theme::ACCENT_BLUE);
     draw_label(
-        surf, fonts, input_x + 8, input_y, 22, input_h, "?",
-        FontFace::UiSemibold, 16.0, theme::ACCENT_CYAN, true,
+        surf,
+        fonts,
+        input_x + 8,
+        input_y,
+        22,
+        input_h,
+        "?",
+        FontFace::UiSemibold,
+        16.0,
+        theme::ACCENT_CYAN,
+        true,
     );
     let query_x = input_x + 36;
     let query_w = input_w.saturating_sub(48);
-    let query_y = input_y as f32 + (input_h as f32
-        - fonts.line_height(FontFace::UiRegular, 16.0)) / 2.0;
+    let query_y =
+        input_y as f32 + (input_h as f32 - fonts.line_height(FontFace::UiRegular, 16.0)) / 2.0;
     if state.query.is_empty() {
         draw_label(
-            surf, fonts, query_x, input_y, query_w, input_h,
+            surf,
+            fonts,
+            query_x,
+            input_y,
+            query_w,
+            input_h,
             match state.section {
                 SpotlightSection::Cells => "Type cell name to filter...",
                 SpotlightSection::ActiveCells => "Browse active cells...",
                 SpotlightSection::System => "System settings...",
             },
-            FontFace::UiRegular, 14.0, theme::TEXT_MUTED, false,
+            FontFace::UiRegular,
+            14.0,
+            theme::TEXT_MUTED,
+            false,
         );
     } else {
-        let clip = (query_x, input_y, query_x + query_w as i32, input_y + input_h as i32);
+        let clip = (
+            query_x,
+            input_y,
+            query_x + query_w as i32,
+            input_y + input_h as i32,
+        );
         let query_width = fonts.measure(FontFace::UiRegular, &state.query, 16.0);
         let visible_width = query_w.saturating_sub(3) as f32;
         let offset = (query_width - visible_width).max(0.0);
         draw_text(
-            surf, fonts, query_x as f32 - offset, query_y, &state.query,
-            FontFace::UiRegular, 16.0, theme::TEXT_PRIMARY, clip,
+            surf,
+            fonts,
+            query_x as f32 - offset,
+            query_y,
+            &state.query,
+            FontFace::UiRegular,
+            16.0,
+            theme::TEXT_PRIMARY,
+            clip,
         );
         let caret_x = query_x + (query_width.min(visible_width) + 0.5) as i32;
-        fill_rect(surf, caret_x, input_y + 8, 1, input_h - 16, theme::TEXT_PRIMARY);
+        fill_rect(
+            surf,
+            caret_x,
+            input_y + 8,
+            1,
+            input_h - 16,
+            theme::TEXT_PRIMARY,
+        );
     }
 
     // Three Section Headers: [1 Applications] [2 Tasks] [3 System]
@@ -150,17 +193,47 @@ pub fn render(
         let is_active = (i == 0 && state.section == SpotlightSection::Cells)
             || (i == 1 && state.section == SpotlightSection::ActiveCells)
             || (i == 2 && state.section == SpotlightSection::System);
-        let tab_col = if is_active { theme::ACCENT_CYAN } else { theme::TEXT_MUTED };
+        let tab_col = if is_active {
+            theme::ACCENT_CYAN
+        } else {
+            theme::TEXT_MUTED
+        };
         draw_label(
-            surf, fonts, tx, TABS_Y, tab_w, TABS_HEIGHT, name,
-            if is_active { FontFace::UiSemibold } else { FontFace::UiRegular },
-            13.0, tab_col, true,
+            surf,
+            fonts,
+            tx,
+            TABS_Y,
+            tab_w,
+            TABS_HEIGHT,
+            name,
+            if is_active {
+                FontFace::UiSemibold
+            } else {
+                FontFace::UiRegular
+            },
+            13.0,
+            tab_col,
+            true,
         );
         if is_active {
-            fill_rect(surf, tx + 8, TABS_Y + TABS_HEIGHT as i32 - 2, tab_w - 16, 2, theme::ACCENT_BLUE);
+            fill_rect(
+                surf,
+                tx + 8,
+                TABS_Y + TABS_HEIGHT as i32 - 2,
+                tab_w - 16,
+                2,
+                theme::ACCENT_BLUE,
+            );
         }
     }
-    fill_rect(surf, 0, TABS_Y + TABS_HEIGHT as i32, sw, 1, theme::MODAL_BORDER);
+    fill_rect(
+        surf,
+        0,
+        TABS_Y + TABS_HEIGHT as i32,
+        sw,
+        1,
+        theme::MODAL_BORDER,
+    );
 
     // Section Content
     match state.section {
@@ -179,9 +252,17 @@ pub fn render(
     let footer_y = sh as i32 - 28;
     fill_rect(surf, 0, footer_y, sw, 1, theme::MODAL_BORDER);
     draw_label(
-        surf, fonts, 14, footer_y + 1, sw.saturating_sub(28), 26,
+        surf,
+        fonts,
+        14,
+        footer_y + 1,
+        sw.saturating_sub(28),
+        26,
         "Tab Switch Section    Esc Close    Enter Select Cell",
-        FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
+        FontFace::UiRegular,
+        13.0,
+        theme::TEXT_MUTED,
+        false,
     );
     surf.damage_all();
 }
@@ -196,9 +277,17 @@ fn render_applications(
     let results = registry.filtered(&state.query);
     if results.is_empty() {
         draw_label(
-            surf, fonts, 24, LIST_START_Y + 28, sw.saturating_sub(48), 32,
-            "No matching cells found", FontFace::UiRegular,
-            15.0, theme::TEXT_MUTED, true,
+            surf,
+            fonts,
+            24,
+            LIST_START_Y + 28,
+            sw.saturating_sub(48),
+            32,
+            "No matching cells found",
+            FontFace::UiRegular,
+            15.0,
+            theme::TEXT_MUTED,
+            true,
         );
         return;
     }
@@ -224,35 +313,85 @@ fn render_applications(
             fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
         }
         stroke_rect(
-            surf, 14, row_y, row_w, ROW_HEIGHT,
-            if is_selected { theme::ACCENT_BLUE } else { theme::TASKBAR_BORDER },
+            surf,
+            14,
+            row_y,
+            row_w,
+            ROW_HEIGHT,
+            if is_selected {
+                theme::ACCENT_BLUE
+            } else {
+                theme::TASKBAR_BORDER
+            },
         );
         draw_label(
-            surf, fonts, 24, row_y, 34, ROW_HEIGHT, app.icon,
-            FontFace::UiRegular, 14.0, theme::ACCENT_CYAN, true,
+            surf,
+            fonts,
+            24,
+            row_y,
+            34,
+            ROW_HEIGHT,
+            app.icon,
+            FontFace::UiRegular,
+            14.0,
+            theme::ACCENT_CYAN,
+            true,
         );
 
         let text_x = 70;
         let text_w = (pin_x(sw) - 10 - text_x).max(0) as u32;
         let text_y = row_y + (ROW_HEIGHT as i32 - name_height as i32 - desc_height as i32 - 4) / 2;
         draw_label(
-            surf, fonts, text_x, text_y, text_w, name_height, app.name,
-            FontFace::UiSemibold, 15.0, theme::TEXT_PRIMARY, false,
+            surf,
+            fonts,
+            text_x,
+            text_y,
+            text_w,
+            name_height,
+            app.name,
+            FontFace::UiSemibold,
+            15.0,
+            theme::TEXT_PRIMARY,
+            false,
         );
         draw_label(
-            surf, fonts, text_x, text_y + name_height as i32 + 4,
-            text_w, desc_height, app.description,
-            FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
+            surf,
+            fonts,
+            text_x,
+            text_y + name_height as i32 + 4,
+            text_w,
+            desc_height,
+            app.description,
+            FontFace::UiRegular,
+            13.0,
+            theme::TEXT_MUTED,
+            false,
         );
 
         let pin_text = if app.is_pinned { "Unpin" } else { "Pin" };
         draw_button(
-            surf, fonts, pin_x(sw), row_y + ACTION_Y, ACTION_WIDTH, ACTION_HEIGHT,
-            pin_text, theme::BTN_NORMAL, theme::BTN_HOVER, theme::TEXT_PRIMARY,
+            surf,
+            fonts,
+            pin_x(sw),
+            row_y + ACTION_Y,
+            ACTION_WIDTH,
+            ACTION_HEIGHT,
+            pin_text,
+            theme::BTN_NORMAL,
+            theme::BTN_HOVER,
+            theme::TEXT_PRIMARY,
         );
         draw_button(
-            surf, fonts, run_x(sw), row_y + ACTION_Y, ACTION_WIDTH, ACTION_HEIGHT,
-            "Open", theme::BTN_NORMAL, theme::BTN_HOVER, theme::TEXT_PRIMARY,
+            surf,
+            fonts,
+            run_x(sw),
+            row_y + ACTION_Y,
+            ACTION_WIDTH,
+            ACTION_HEIGHT,
+            "Open",
+            theme::BTN_NORMAL,
+            theme::BTN_HOVER,
+            theme::TEXT_PRIMARY,
         );
     }
 }
@@ -290,39 +429,84 @@ fn render_running_tasks(
             fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
         }
         stroke_rect(
-            surf, 14, row_y, row_w, ROW_HEIGHT,
-            if is_selected { theme::ACCENT_BLUE } else { theme::TASKBAR_BORDER },
+            surf,
+            14,
+            row_y,
+            row_w,
+            ROW_HEIGHT,
+            if is_selected {
+                theme::ACCENT_BLUE
+            } else {
+                theme::TASKBAR_BORDER
+            },
         );
         draw_label(
-            surf, fonts, 24, row_y, 34, ROW_HEIGHT, icon,
-            FontFace::UiRegular, 14.0, theme::ACCENT_CYAN, true,
+            surf,
+            fonts,
+            24,
+            row_y,
+            34,
+            ROW_HEIGHT,
+            icon,
+            FontFace::UiRegular,
+            14.0,
+            theme::ACCENT_CYAN,
+            true,
         );
 
         let text_x = 70;
         let text_w = (run_x(sw) - 10 - text_x).max(0) as u32;
         let text_y = row_y + (ROW_HEIGHT as i32 - name_height as i32 - desc_height as i32 - 4) / 2;
         draw_label(
-            surf, fonts, text_x, text_y, text_w, name_height, name,
-            FontFace::UiSemibold, 15.0, theme::TEXT_PRIMARY, false,
+            surf,
+            fonts,
+            text_x,
+            text_y,
+            text_w,
+            name_height,
+            name,
+            FontFace::UiSemibold,
+            15.0,
+            theme::TEXT_PRIMARY,
+            false,
         );
         draw_label(
-            surf, fonts, text_x, text_y + name_height as i32 + 4,
-            text_w, desc_height, status,
-            FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
+            surf,
+            fonts,
+            text_x,
+            text_y + name_height as i32 + 4,
+            text_w,
+            desc_height,
+            status,
+            FontFace::UiRegular,
+            13.0,
+            theme::TEXT_MUTED,
+            false,
         );
 
         draw_button(
-            surf, fonts, run_x(sw), row_y + ACTION_Y, ACTION_WIDTH, ACTION_HEIGHT,
-            "Switch", theme::BTN_NORMAL, theme::BTN_HOVER, theme::TEXT_PRIMARY,
+            surf,
+            fonts,
+            run_x(sw),
+            row_y + ACTION_Y,
+            ACTION_WIDTH,
+            ACTION_HEIGHT,
+            "Switch",
+            theme::BTN_NORMAL,
+            theme::BTN_HOVER,
+            theme::TEXT_PRIMARY,
         );
     }
 }
 
 /// System section rows: (icon, name, description, button). Power off and reboot are not
 /// offered: no platform provider exists for either, so a button could only pretend.
-const SYSTEM_ACTIONS: &[(&str, &str, &str, &str)] = &[
-    ("[T]", "Appearance Theme", "Cycle Light / Dark / Paper", "Cycle"),
-];
+const SYSTEM_ACTIONS: &[(&str, &str, &str, &str)] = &[(
+    "[T]",
+    "Appearance Theme",
+    "Cycle Light / Dark / Paper",
+    "Cycle",
+)];
 
 fn system_action(index: usize) -> SpotlightAction {
     match index {
@@ -331,12 +515,7 @@ fn system_action(index: usize) -> SpotlightAction {
     }
 }
 
-fn render_system(
-    surf: &mut ViSurface,
-    fonts: &mut TextFonts,
-    state: &SpotlightState,
-    sw: u32,
-) {
+fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightState, sw: u32) {
     let name_height = (fonts.line_height(FontFace::UiSemibold, 15.0) + 1.0) as u32;
     let desc_height = (fonts.line_height(FontFace::UiRegular, 13.0) + 1.0) as u32;
 
@@ -358,30 +537,72 @@ fn render_system(
             fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
         }
         stroke_rect(
-            surf, 14, row_y, row_w, ROW_HEIGHT,
-            if is_selected { theme::ACCENT_BLUE } else { theme::TASKBAR_BORDER },
+            surf,
+            14,
+            row_y,
+            row_w,
+            ROW_HEIGHT,
+            if is_selected {
+                theme::ACCENT_BLUE
+            } else {
+                theme::TASKBAR_BORDER
+            },
         );
         draw_label(
-            surf, fonts, 24, row_y, 34, ROW_HEIGHT, icon,
-            FontFace::UiRegular, 14.0, theme::ACCENT_CYAN, true,
+            surf,
+            fonts,
+            24,
+            row_y,
+            34,
+            ROW_HEIGHT,
+            icon,
+            FontFace::UiRegular,
+            14.0,
+            theme::ACCENT_CYAN,
+            true,
         );
 
         let text_x = 70;
         let text_w = (run_x(sw) - 10 - text_x).max(0) as u32;
         let text_y = row_y + (ROW_HEIGHT as i32 - name_height as i32 - desc_height as i32 - 4) / 2;
         draw_label(
-            surf, fonts, text_x, text_y, text_w, name_height, name,
-            FontFace::UiSemibold, 15.0, theme::TEXT_PRIMARY, false,
+            surf,
+            fonts,
+            text_x,
+            text_y,
+            text_w,
+            name_height,
+            name,
+            FontFace::UiSemibold,
+            15.0,
+            theme::TEXT_PRIMARY,
+            false,
         );
         draw_label(
-            surf, fonts, text_x, text_y + name_height as i32 + 4,
-            text_w, desc_height, desc,
-            FontFace::UiRegular, 13.0, theme::TEXT_MUTED, false,
+            surf,
+            fonts,
+            text_x,
+            text_y + name_height as i32 + 4,
+            text_w,
+            desc_height,
+            desc,
+            FontFace::UiRegular,
+            13.0,
+            theme::TEXT_MUTED,
+            false,
         );
 
         draw_button(
-            surf, fonts, run_x(sw), row_y + ACTION_Y, ACTION_WIDTH, ACTION_HEIGHT,
-            btn_text, theme::BTN_NORMAL, theme::BTN_HOVER, theme::TEXT_PRIMARY,
+            surf,
+            fonts,
+            run_x(sw),
+            row_y + ACTION_Y,
+            ACTION_WIDTH,
+            ACTION_HEIGHT,
+            btn_text,
+            theme::BTN_NORMAL,
+            theme::BTN_HOVER,
+            theme::TEXT_PRIMARY,
         );
     }
 }
@@ -402,26 +623,24 @@ pub fn handle_key(
             state.selected_index = 0;
             SpotlightAction::None
         }
-        KeySym::Return => {
-            match state.section {
-                SpotlightSection::Cells => {
-                    let results = registry.filtered(&state.query);
-                    if let Some(app) = results.get(state.selected_index) {
-                        let path = app.path;
-                        state.close();
-                        SpotlightAction::LaunchApp(path)
-                    } else {
-                        SpotlightAction::None
-                    }
-                }
-                SpotlightSection::ActiveCells => {
-                    let idx = state.selected_index;
+        KeySym::Return => match state.section {
+            SpotlightSection::Cells => {
+                let results = registry.filtered(&state.query);
+                if let Some(app) = results.get(state.selected_index) {
+                    let path = app.path;
                     state.close();
-                    SpotlightAction::SwitchTask(idx)
+                    SpotlightAction::LaunchApp(path)
+                } else {
+                    SpotlightAction::None
                 }
-                SpotlightSection::System => system_action(state.selected_index),
             }
-        }
+            SpotlightSection::ActiveCells => {
+                let idx = state.selected_index;
+                state.close();
+                SpotlightAction::SwitchTask(idx)
+            }
+            SpotlightSection::System => system_action(state.selected_index),
+        },
         KeySym::Up => {
             if state.selected_index > 0 {
                 state.selected_index -= 1;
@@ -567,15 +786,36 @@ mod tests {
         // Theme is the only System action: Down stays on it, and no row below it acts.
         handle_key(&registry, &mut state, KeySym::Down, None);
         assert_eq!(state.selected_index, 0);
-        assert_eq!(handle_click(&mut AppRegistry::new(), &mut state, 30, LIST_START_Y + ROW_STEP + 10, SPOTLIGHT_WIDTH), SpotlightAction::None);
-        assert_eq!(handle_click(&mut AppRegistry::new(), &mut state, 30, LIST_START_Y + 2 * ROW_STEP + 10, SPOTLIGHT_WIDTH), SpotlightAction::None);
+        assert_eq!(
+            handle_click(
+                &mut AppRegistry::new(),
+                &mut state,
+                30,
+                LIST_START_Y + ROW_STEP + 10,
+                SPOTLIGHT_WIDTH
+            ),
+            SpotlightAction::None
+        );
+        assert_eq!(
+            handle_click(
+                &mut AppRegistry::new(),
+                &mut state,
+                30,
+                LIST_START_Y + 2 * ROW_STEP + 10,
+                SPOTLIGHT_WIDTH
+            ),
+            SpotlightAction::None
+        );
 
         // Searching for power words finds no cell to launch.
         state.open();
         for word in ["shutdown", "reboot", "power"] {
             state.query = String::from(word);
             assert!(registry.filtered(&state.query).is_empty(), "{word}");
-            assert_eq!(handle_key(&registry, &mut state, KeySym::Return, None), SpotlightAction::None);
+            assert_eq!(
+                handle_key(&registry, &mut state, KeySym::Return, None),
+                SpotlightAction::None
+            );
         }
         state.query.clear();
 

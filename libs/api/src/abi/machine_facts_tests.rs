@@ -13,13 +13,24 @@ fn fold(bytes: &[u8]) -> [u8; 32] {
 }
 
 fn pci(vendor: u16, device: u16, class: u8) -> PciFunctionId {
-    PciFunctionId { vendor, device, class, subclass: 0, prog_if: 0 }
+    PciFunctionId {
+        vendor,
+        device,
+        class,
+        subclass: 0,
+        prog_if: 0,
+    }
 }
 
 fn sample() -> ViMachineFactsV1 {
     ViMachineFactsV1 {
-        flags: FLAG_ACPI_OEM | FLAG_SMBIOS | FLAG_SMBIOS_UUID | FLAG_DMAR_PRESENT
-            | FLAG_VTD_ACTIVE | FLAG_HYPERVISOR | FLAG_PCI_ECAM,
+        flags: FLAG_ACPI_OEM
+            | FLAG_SMBIOS
+            | FLAG_SMBIOS_UUID
+            | FLAG_DMAR_PRESENT
+            | FLAG_VTD_ACTIVE
+            | FLAG_HYPERVISOR
+            | FLAG_PCI_ECAM,
         profile_source: PROFILE_SOURCE_CMDLINE,
         slug: FactString::new(b"qemu-q35-x86_64").unwrap(),
         acpi_oem_revision: 1,
@@ -28,7 +39,11 @@ fn sample() -> ViMachineFactsV1 {
         smbios_uuid: [0x11; 16],
         smbios_manufacturer: FactString::new(b"QEMU").unwrap(),
         smbios_product: FactString::new(b"Standard PC (Q35 + ICH9, 2009)").unwrap(),
-        pci: alloc::vec![pci(0x1af4, 0x1000, 2), pci(0x8086, 0x100e, 2), pci(0x8086, 0x29c0, 6)],
+        pci: alloc::vec![
+            pci(0x1af4, 0x1000, 2),
+            pci(0x8086, 0x100e, 2),
+            pci(0x8086, 0x29c0, 6)
+        ],
     }
 }
 
@@ -93,7 +108,9 @@ fn minimal_and_full_records_round_trip() {
     assert_eq!(ViMachineFactsV1::decode(&bytes).unwrap().0, minimal);
 
     let mut full = sample();
-    full.pci = (0..MACHINE_FACTS_PCI_MAX as u16).map(|n| pci(0x8086, n, 1)).collect();
+    full.pci = (0..MACHINE_FACTS_PCI_MAX as u16)
+        .map(|n| pci(0x8086, n, 1))
+        .collect();
     let bytes = full.encode(fold).unwrap();
     assert_eq!(bytes.len(), MACHINE_FACTS_CAPACITY);
     assert_eq!(ViMachineFactsV1::decode(&bytes).unwrap().0, full);
@@ -102,17 +119,37 @@ fn minimal_and_full_records_round_trip() {
 #[test]
 fn encoder_refuses_values_the_decoder_would_refuse() {
     let refuse = |facts: ViMachineFactsV1, error| assert_eq!(facts.encode(fold), Err(error));
-    let mut v = sample(); v.flags |= 1 << 7; refuse(v, MachineFactsError::UnknownFlag);
-    let mut v = sample(); v.profile_source = 3; refuse(v, MachineFactsError::ProfileSource);
-    let mut v = sample(); v.slug = FactString::EMPTY; refuse(v, MachineFactsError::Slug);
-    let mut v = sample(); v.slug = FactString::new(b"Q35").unwrap(); refuse(v, MachineFactsError::Slug);
-    let mut v = sample(); v.flags &= !FLAG_SMBIOS; refuse(v, MachineFactsError::Smbios);
-    let mut v = sample(); v.flags &= !FLAG_SMBIOS_UUID; refuse(v, MachineFactsError::Smbios);
-    let mut v = sample(); v.flags &= !FLAG_ACPI_OEM; refuse(v, MachineFactsError::Acpi);
-    let mut v = sample(); v.flags &= !FLAG_PCI_ECAM; refuse(v, MachineFactsError::Pci);
-    let mut v = sample(); v.pci.reverse(); refuse(v, MachineFactsError::Unsorted);
     let mut v = sample();
-    v.pci = (0..=MACHINE_FACTS_PCI_MAX as u16).map(|n| pci(1, n, 0)).collect();
+    v.flags |= 1 << 7;
+    refuse(v, MachineFactsError::UnknownFlag);
+    let mut v = sample();
+    v.profile_source = 3;
+    refuse(v, MachineFactsError::ProfileSource);
+    let mut v = sample();
+    v.slug = FactString::EMPTY;
+    refuse(v, MachineFactsError::Slug);
+    let mut v = sample();
+    v.slug = FactString::new(b"Q35").unwrap();
+    refuse(v, MachineFactsError::Slug);
+    let mut v = sample();
+    v.flags &= !FLAG_SMBIOS;
+    refuse(v, MachineFactsError::Smbios);
+    let mut v = sample();
+    v.flags &= !FLAG_SMBIOS_UUID;
+    refuse(v, MachineFactsError::Smbios);
+    let mut v = sample();
+    v.flags &= !FLAG_ACPI_OEM;
+    refuse(v, MachineFactsError::Acpi);
+    let mut v = sample();
+    v.flags &= !FLAG_PCI_ECAM;
+    refuse(v, MachineFactsError::Pci);
+    let mut v = sample();
+    v.pci.reverse();
+    refuse(v, MachineFactsError::Unsorted);
+    let mut v = sample();
+    v.pci = (0..=MACHINE_FACTS_PCI_MAX as u16)
+        .map(|n| pci(1, n, 0))
+        .collect();
     refuse(v, MachineFactsError::Length);
     assert!(FactString::new(&[b'a'; 65]).is_none());
 }
@@ -124,7 +161,11 @@ fn decoder_refuses_every_layout_violation() {
     let refuse = |mutate: &dyn Fn(&mut Vec<u8>), error: MachineFactsError| {
         let mut bytes = base.clone();
         mutate(&mut bytes);
-        assert_eq!(ViMachineFactsV1::decode(&bytes).map(|_| ()), Err(error), "{error:?}");
+        assert_eq!(
+            ViMachineFactsV1::decode(&bytes).map(|_| ()),
+            Err(error),
+            "{error:?}"
+        );
     };
     use MachineFactsError as E;
     refuse(&|b| b[0] = 2, E::UnsupportedVersion);
@@ -133,7 +174,13 @@ fn decoder_refuses_every_layout_violation() {
     refuse(&|b| b.push(0), E::Length);
     refuse(&|b| b[4] ^= 8, E::Length);
     refuse(&|b| b[12] = 4, E::Length);
-    refuse(&|b| { b[12] = 0x01; b[13] = 0x01; }, E::Length);
+    refuse(
+        &|b| {
+            b[12] = 0x01;
+            b[13] = 0x01;
+        },
+        E::Length,
+    );
     refuse(&|b| b[3] = 0x80, E::UnknownFlag);
     refuse(&|b| b[8] = 0, E::ProfileSource);
     refuse(&|b| b[8] = 3, E::ProfileSource);
@@ -155,8 +202,14 @@ fn decoder_refuses_every_layout_violation() {
     refuse(&|b| b[184 + 63] = 1, E::Reserved);
     refuse(&|b| b[256 + 7] = 1, E::Reserved);
     // Swap the first two PCI entries.
-    refuse(&|b| { let (x, y) = (b[256..264].to_vec(), b[264..272].to_vec());
-        b[256..264].copy_from_slice(&y); b[264..272].copy_from_slice(&x); }, E::Unsorted);
+    refuse(
+        &|b| {
+            let (x, y) = (b[256..264].to_vec(), b[264..272].to_vec());
+            b[256..264].copy_from_slice(&y);
+            b[264..272].copy_from_slice(&x);
+        },
+        E::Unsorted,
+    );
 }
 
 #[test]
@@ -169,7 +222,10 @@ fn smbios_uuid_requires_smbios_and_strings_require_the_flag() {
     let mut bytes = v.encode(fold).unwrap();
     assert!(ViMachineFactsV1::decode(&bytes).is_ok());
     bytes[2] |= FLAG_SMBIOS_UUID as u8;
-    assert_eq!(ViMachineFactsV1::decode(&bytes).map(|_| ()), Err(MachineFactsError::Smbios));
+    assert_eq!(
+        ViMachineFactsV1::decode(&bytes).map(|_| ()),
+        Err(MachineFactsError::Smbios)
+    );
 }
 
 #[test]

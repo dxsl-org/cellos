@@ -78,21 +78,33 @@ fn test_pie_slot_admission_precedes_mapping() {
     assert_eq!(super::va_alloc::slot_end(base), Some(base + stride));
     assert!(super::va_alloc::slot_end(base + 1).is_none());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
-    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(), stride / 4096);
+    assert_eq!(
+        super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(),
+        stride / 4096
+    );
 
     // An unaligned segment touching the final byte still fits exactly.
     image[80..88].copy_from_slice(&1u64.to_le_bytes());
     image[104..112].copy_from_slice(&((stride - 1) as u64).to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
-    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(), stride / 4096);
+    assert_eq!(
+        super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(),
+        stride / 4096
+    );
 
     image[104..112].copy_from_slice(&(stride as u64).to_le_bytes());
     let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
     let allocator = frames.as_mut().expect("ELF selftest needs frame allocator");
     let before = allocator.used_frames();
-    assert!(matches!(super::ElfLoader.load_segments(&image, allocator, base),
-        Err(ViError::PermissionDenied)));
-    assert_eq!(allocator.used_frames(), before, "oversized PIE must not allocate frames");
+    assert!(matches!(
+        super::ElfLoader.load_segments(&image, allocator, base),
+        Err(ViError::PermissionDenied)
+    ));
+    assert_eq!(
+        allocator.used_frames(),
+        before,
+        "oversized PIE must not allocate frames"
+    );
     assert!(crate::memory::paging::virt_to_phys(base).is_none());
     drop(frames);
 
@@ -100,10 +112,16 @@ fn test_pie_slot_admission_precedes_mapping() {
     image[80..88].copy_from_slice(&0u64.to_le_bytes());
     image[104..112].copy_from_slice(&(128u64 * 1024 * 1024).to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
-    assert_eq!(super::elf::ElfLoader::preflight_pages(&elf, base).is_ok(), cfg!(feature = "large-cell-va"));
+    assert_eq!(
+        super::elf::ElfLoader::preflight_pages(&elf, base).is_ok(),
+        cfg!(feature = "large-cell-va")
+    );
     image[80..88].copy_from_slice(&u64::MAX.to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
-    assert!(matches!(super::elf::ElfLoader::preflight_pages(&elf, base), Err(ViError::InvalidInput)));
+    assert!(matches!(
+        super::elf::ElfLoader::preflight_pages(&elf, base),
+        Err(ViError::InvalidInput)
+    ));
     super::va_alloc::free_cell_va(base);
     log::info!("  [ok] PIE slot boundaries reject oversized images before mapping");
 }
@@ -870,7 +888,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[48] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated e_flags must be rejected"
     );
 
@@ -878,7 +897,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[24] ^= 0x40;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated e_entry must be rejected"
     );
 
@@ -886,7 +906,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[68] ^= 2;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated Phdr p_flags must be rejected"
     );
 
@@ -894,7 +915,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[216] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated sig sh_offset must be rejected"
     );
 
@@ -902,7 +924,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[280] ^= 1;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated shstrtab sh_offset must be rejected"
     );
 
@@ -910,7 +933,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[385] ^= b'x';
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated section name must be rejected"
     );
 
@@ -918,7 +942,8 @@ fn test_signing_metadata_tamper_rejected() {
     let mut elf_bad = elf.clone();
     elf_bad[120] ^= 0xFF;
     assert!(
-        !crate::signing::verify_cell(&elf_bad, &sig).expect("verification must not run out of memory"),
+        !crate::signing::verify_cell(&elf_bad, &sig)
+            .expect("verification must not run out of memory"),
         "CELLOS-LOADER-SIG-001: mutated PT_LOAD code byte must be rejected"
     );
 

@@ -9,20 +9,20 @@ pub use ssh::{SSH_FRAME_TICKS, SSH_SIGN_TICKS};
 /// depend on `ostd` alone (no extra `types` edge).
 pub use types::kms::{
     ssh_chunk_count, validate_ssh_key_name, validate_ssh_username, KmsCustodyPosture, KmsErrorCode,
-    KmsSshKeyCustody, KmsWireError, SshChunkAckPayload, SshKeyStatusPayload, SshSignResponsePayload,
-    SshTransferBeginResponsePayload, KMS_SSH_CHUNK_LEN, KMS_SSH_IMPORT_MAX_LEN,
-    KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX, KMS_SSH_SESSION_ID_LEN,
-    KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
+    KmsSshKeyCustody, KmsWireError, SshChunkAckPayload, SshKeyStatusPayload,
+    SshSignResponsePayload, SshTransferBeginResponsePayload, KMS_SSH_CHUNK_LEN,
+    KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX,
+    KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
 };
 
 use crate::{syscall, task};
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use types::kms::{
-    AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsOpcode,
-    KmsRequestV1, KmsResponseV1, NodeIdentityHandle, NodeIdentityStatusPayload,
-    NoiseStaticDhRequestPayload, NoiseStaticDhResponsePayload, RelayP256StatusPayload,
-    RotateNodeIdentityReason, RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload,
-    ServiceNetBindingPayload, KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C,
+    AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsOpcode, KmsRequestV1,
+    KmsResponseV1, NodeIdentityHandle, NodeIdentityStatusPayload, NoiseStaticDhRequestPayload,
+    NoiseStaticDhResponsePayload, RelayP256StatusPayload, RotateNodeIdentityReason,
+    RotateNodeIdentityRequestPayload, RotateNodeIdentityResponsePayload, ServiceNetBindingPayload,
+    KMS_MESSAGE_LEN, KMS_NODE_KEY_ID_C2C,
 };
 
 const FIRST_REQUEST_ID: u32 = 1;
@@ -336,8 +336,11 @@ impl<const N: usize> Drop for Wiped<N> {
 /// Host-test seam: replaces the kernel round trip with a scripted service.
 #[cfg(test)]
 mod scripted {
-    use super::{KmsClient, KmsClientError, AtomicBool, AtomicU32, AtomicU64, FIRST_PAYLOAD_ID, FIRST_REQUEST_ID};
     use super::KMS_MESSAGE_LEN;
+    use super::{
+        AtomicBool, AtomicU32, AtomicU64, KmsClient, KmsClientError, FIRST_PAYLOAD_ID,
+        FIRST_REQUEST_ID,
+    };
     use alloc::boxed::Box;
     use alloc::vec::Vec;
     use core::cell::RefCell;
@@ -369,13 +372,19 @@ mod scripted {
                 next_request_id: AtomicU32::new(FIRST_REQUEST_ID),
                 next_payload_id: AtomicU64::new(FIRST_PAYLOAD_ID),
                 poisoned: AtomicBool::new(false),
-                script: Some(Script { sent: RefCell::new(Vec::new()), responder: RefCell::new(responder) }),
+                script: Some(Script {
+                    sent: RefCell::new(Vec::new()),
+                    responder: RefCell::new(responder),
+                }),
             }
         }
 
         /// Every request frame sent so far.
         pub fn sent_frames(&self) -> Vec<([u8; KMS_MESSAGE_LEN], u64)> {
-            self.script.as_ref().map(|s| s.sent.borrow().clone()).unwrap_or_default()
+            self.script
+                .as_ref()
+                .map(|s| s.sent.borrow().clone())
+                .unwrap_or_default()
         }
     }
 }

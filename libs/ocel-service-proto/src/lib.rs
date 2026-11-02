@@ -11,13 +11,23 @@ const RESPONSE_MAGIC: &[u8; 8] = b"OCLSRSP1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Engine { JavaScript = 1, Pdf = 2 }
+pub enum Engine {
+    JavaScript = 1,
+    Pdf = 2,
+}
 impl Engine {
     pub const fn path(self) -> &'static str {
-        match self { Self::JavaScript => "/bin/ocel-quickjs", Self::Pdf => "/bin/ocel-pdf" }
+        match self {
+            Self::JavaScript => "/bin/ocel-quickjs",
+            Self::Pdf => "/bin/ocel-pdf",
+        }
     }
     fn decode(value: u8) -> Option<Self> {
-        match value { 1 => Some(Self::JavaScript), 2 => Some(Self::Pdf), _ => None }
+        match value {
+            1 => Some(Self::JavaScript),
+            2 => Some(Self::Pdf),
+            _ => None,
+        }
     }
 }
 
@@ -28,7 +38,9 @@ pub enum Request {
 }
 impl Request {
     pub const fn engine(self) -> Engine {
-        match self { Self::Acquire { engine } | Self::Release { engine, .. } => engine }
+        match self {
+            Self::Acquire { engine } | Self::Release { engine, .. } => engine,
+        }
     }
     pub fn encode(self) -> [u8; FRAME_BYTES] {
         let mut frame = [0; FRAME_BYTES];
@@ -36,14 +48,21 @@ impl Request {
         frame[9] = self.engine() as u8;
         match self {
             Self::Acquire { .. } => frame[8] = 1,
-            Self::Release { lease, .. } => { frame[8] = 2; frame[16..24].copy_from_slice(&lease.to_le_bytes()); }
+            Self::Release { lease, .. } => {
+                frame[8] = 2;
+                frame[16..24].copy_from_slice(&lease.to_le_bytes());
+            }
         }
         frame
     }
     pub fn decode(frame: &[u8]) -> Option<Self> {
-        if frame.len() < FRAME_BYTES || &frame[..8] != REQUEST_MAGIC
+        if frame.len() < FRAME_BYTES
+            || &frame[..8] != REQUEST_MAGIC
             || frame[10..16].iter().any(|byte| *byte != 0)
-            || frame[24..32].iter().any(|byte| *byte != 0) { return None; }
+            || frame[24..32].iter().any(|byte| *byte != 0)
+        {
+            return None;
+        }
         let engine = Engine::decode(frame[9])?;
         let lease = u64::from_le_bytes(frame[16..24].try_into().ok()?);
         match (frame[8], lease) {
@@ -56,22 +75,46 @@ impl Request {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Failure { Unavailable = 2, Denied = 3, Busy = 4, Failed = 5 }
+pub enum Failure {
+    Unavailable = 2,
+    Denied = 3,
+    Busy = 4,
+    Failed = 5,
+}
 impl Failure {
     fn decode(value: u8) -> Option<Self> {
-        match value { 2 => Some(Self::Unavailable), 3 => Some(Self::Denied), 4 => Some(Self::Busy), 5 => Some(Self::Failed), _ => None }
+        match value {
+            2 => Some(Self::Unavailable),
+            3 => Some(Self::Denied),
+            4 => Some(Self::Busy),
+            5 => Some(Self::Failed),
+            _ => None,
+        }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Response {
-    Ready { engine: Engine, lease: u64, tid: u64 },
-    Released { engine: Engine },
-    Error { engine: Engine, failure: Failure },
+    Ready {
+        engine: Engine,
+        lease: u64,
+        tid: u64,
+    },
+    Released {
+        engine: Engine,
+    },
+    Error {
+        engine: Engine,
+        failure: Failure,
+    },
 }
 impl Response {
     pub const fn engine(self) -> Engine {
-        match self { Self::Ready { engine, .. } | Self::Released { engine } | Self::Error { engine, .. } => engine }
+        match self {
+            Self::Ready { engine, .. } | Self::Released { engine } | Self::Error { engine, .. } => {
+                engine
+            }
+        }
     }
     pub fn encode(self) -> [u8; FRAME_BYTES] {
         let mut frame = [0; FRAME_BYTES];
@@ -88,15 +131,22 @@ impl Response {
         frame
     }
     pub fn decode(frame: &[u8]) -> Option<Self> {
-        if frame.len() < FRAME_BYTES || &frame[..8] != RESPONSE_MAGIC
-            || frame[10..16].iter().any(|byte| *byte != 0) { return None; }
+        if frame.len() < FRAME_BYTES
+            || &frame[..8] != RESPONSE_MAGIC
+            || frame[10..16].iter().any(|byte| *byte != 0)
+        {
+            return None;
+        }
         let engine = Engine::decode(frame[9])?;
         let lease = u64::from_le_bytes(frame[16..24].try_into().ok()?);
         let tid = u64::from_le_bytes(frame[24..32].try_into().ok()?);
         match (frame[8], lease, tid) {
             (0, lease, tid) if lease != 0 && tid != 0 => Some(Self::Ready { engine, lease, tid }),
             (1, 0, 0) => Some(Self::Released { engine }),
-            (status, 0, 0) => Some(Self::Error { engine, failure: Failure::decode(status)? }),
+            (status, 0, 0) => Some(Self::Error {
+                engine,
+                failure: Failure::decode(status)?,
+            }),
             _ => None,
         }
     }
@@ -107,14 +157,27 @@ mod tests {
     use super::*;
     #[test]
     fn malformed_selectors_and_lease_shapes_fail_closed() {
-        let mut acquire = Request::Acquire { engine: Engine::Pdf }.encode();
-        for selector in [0, 3, 255] { acquire[9] = selector; assert!(Request::decode(&acquire).is_none()); }
+        let mut acquire = Request::Acquire {
+            engine: Engine::Pdf,
+        }
+        .encode();
+        for selector in [0, 3, 255] {
+            acquire[9] = selector;
+            assert!(Request::decode(&acquire).is_none());
+        }
         acquire[9] = Engine::Pdf as u8;
         acquire[16] = 1;
         assert!(Request::decode(&acquire).is_none());
-        let release = Request::Release { engine: Engine::Pdf, lease: 0 }.encode();
+        let release = Request::Release {
+            engine: Engine::Pdf,
+            lease: 0,
+        }
+        .encode();
         assert!(Request::decode(&release).is_none());
-        let mut valid = Request::Acquire { engine: Engine::JavaScript }.encode();
+        let mut valid = Request::Acquire {
+            engine: Engine::JavaScript,
+        }
+        .encode();
         valid[10] = 1;
         assert!(Request::decode(&valid).is_none());
         assert!(Request::decode(&valid[..31]).is_none());
@@ -122,12 +185,25 @@ mod tests {
     #[test]
     fn provider_response_cannot_hide_invalid_handles_or_status() {
         for (lease, tid) in [(0, 1), (1, 0), (0, 0)] {
-            assert!(Response::decode(&Response::Ready { engine: Engine::Pdf, lease, tid }.encode()).is_none());
+            assert!(Response::decode(
+                &Response::Ready {
+                    engine: Engine::Pdf,
+                    lease,
+                    tid
+                }
+                .encode()
+            )
+            .is_none());
         }
-        let mut error = Response::Error { engine: Engine::Pdf, failure: Failure::Unavailable }.encode();
+        let mut error = Response::Error {
+            engine: Engine::Pdf,
+            failure: Failure::Unavailable,
+        }
+        .encode();
         error[24] = 1;
         assert!(Response::decode(&error).is_none());
-        error[24] = 0; error[8] = 255;
+        error[24] = 0;
+        error[8] = 255;
         assert!(Response::decode(&error).is_none());
     }
 }

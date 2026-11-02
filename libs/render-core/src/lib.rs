@@ -68,11 +68,11 @@ impl Tile {
             || self
                 .x
                 .checked_add(self.width)
-                .map_or(true, |end| end > config.width)
+                .is_none_or(|end| end > config.width)
             || self
                 .y
                 .checked_add(self.height)
-                .map_or(true, |end| end > config.height)
+                .is_none_or(|end| end > config.height)
         {
             return Err(RenderError::InvalidTile);
         }

@@ -131,7 +131,9 @@ fn test_inline_metadata_write_cut_read_only_reopen() {
 
     // Try to open and write on the disk with power cut limit
     let mut crashed_fs = CellosFs::open(disk.clone()).expect("open");
-    crashed_fs.write_file("/audit.log", 0, b"commit-2-torn-write").unwrap();
+    crashed_fs
+        .write_file("/audit.log", 0, b"commit-2-torn-write")
+        .unwrap();
     let sync_result = crashed_fs.sync();
     assert!(sync_result.is_err()); // Crashed!
     drop(crashed_fs);
@@ -199,10 +201,16 @@ fn replacement_truncates_and_positional_writes_preserve_multiblock_data() {
     fs.sync().unwrap();
     let mut fs = CellosFs::open(fs.into_disk()).unwrap();
     let mut result = vec![0; expected.len()];
-    assert_eq!(fs.read_file("/data", 0, &mut result).unwrap(), expected.len());
+    assert_eq!(
+        fs.read_file("/data", 0, &mut result).unwrap(),
+        expected.len()
+    );
     assert_eq!(result, expected);
     let mut slice = vec![0; 9000];
-    assert_eq!(fs.read_file("/data", 4089, &mut slice).unwrap(), slice.len());
+    assert_eq!(
+        fs.read_file("/data", 4089, &mut slice).unwrap(),
+        slice.len()
+    );
     assert_eq!(slice, expected[4089..4089 + slice.len()]);
     let shorter = vec![0x33; 4096 + 7];
     fs.replace_file("/data", &shorter).unwrap();
@@ -256,10 +264,19 @@ fn creation_and_mapping_limits_refuse_without_counter_or_disk_changes() {
         let next = fs.superblock().next_inode_num;
         let writes = observer.write_count();
         match scenario {
-            0 => assert_eq!(fs.create_file(&format!("/{}", "x".repeat(47))).err(), Some(FsError::InvalidName)),
+            0 => assert_eq!(
+                fs.create_file(&format!("/{}", "x".repeat(47))).err(),
+                Some(FsError::InvalidName)
+            ),
             1 => assert_eq!(fs.create_file("/full").err(), Some(FsError::NoSpace)),
-            2 => assert_eq!(fs.write_file("/f0", u64::MAX, b"x"), Err(FsError::InvalidOffset)),
-            _ => assert_eq!(fs.write_file("/f0", u32::MAX as u64 * 4096, b"x"), Err(FsError::InvalidOffset)),
+            2 => assert_eq!(
+                fs.write_file("/f0", u64::MAX, b"x"),
+                Err(FsError::InvalidOffset)
+            ),
+            _ => assert_eq!(
+                fs.write_file("/f0", u32::MAX as u64 * 4096, b"x"),
+                Err(FsError::InvalidOffset)
+            ),
         }
         assert_eq!(fs.superblock().next_inode_num, next);
         assert_eq!(observer.write_count(), writes);
@@ -274,7 +291,10 @@ fn rename_refuses_duplicates_and_normalizes_parent_identity() {
         fs.create_file("/dir/old").unwrap();
         fs.create_file("/dir/taken").unwrap();
         if duplicate {
-            assert_eq!(fs.rename("/dir/old", "/dir//taken"), Err(FsError::AlreadyExists));
+            assert_eq!(
+                fs.rename("/dir/old", "/dir//taken"),
+                Err(FsError::AlreadyExists)
+            );
         } else {
             fs.rename("/dir/old", "/dir//new").unwrap();
             assert_eq!(fs.lookup("/dir/old").err(), Some(FsError::NotFound));
@@ -309,7 +329,10 @@ fn fragmented_mapping_capacity_refuses_instead_of_omitting_extents() {
     }
     assert_eq!(fs.lookup("/a").unwrap().extent_count, 26);
     let writes = observer.write_count();
-    assert_eq!(fs.write_file("/a", 26 * 4096, &[0xAA; 4096]), Err(FsError::NoSpace));
+    assert_eq!(
+        fs.write_file("/a", 26 * 4096, &[0xAA; 4096]),
+        Err(FsError::NoSpace)
+    );
     assert_eq!(observer.write_count(), writes);
     // Failed engine entry ends this disposable instance; no retry or sync.
 }
@@ -317,8 +340,10 @@ fn fragmented_mapping_capacity_refuses_instead_of_omitting_extents() {
 #[cfg(feature = "g2-cow-experiment")]
 #[test]
 fn fragmented_mapping_capacity_refuses_instead_of_omitting_extents() {
-    use cellos_fs::{BlockDevice, DirEntryRecord, InodeRecord, Superblock, BLOCK_SIZE,
-        INODE_MODE_DIR, INODE_MODE_FILE, INODE_SIZE};
+    use cellos_fs::{
+        BlockDevice, DirEntryRecord, InodeRecord, Superblock, BLOCK_SIZE, INODE_MODE_DIR,
+        INODE_MODE_FILE, INODE_SIZE,
+    };
     for blocks in [26, 27] {
         // Fresh offline V1 fixture: 32 valid inode tables alternate with free
         // blocks. Empty table slots are legal and still owned by the root.
@@ -327,7 +352,9 @@ fn fragmented_mapping_capacity_refuses_instead_of_omitting_extents() {
         let mut sb = Superblock::new(66, 1);
         sb.next_inode_num = 3;
         sb.free_block_count = 31;
-        for slot in 1..32 { sb.inode_blocks[slot] = 3 + 2 * slot as u64; }
+        for slot in 1..32 {
+            sb.inode_blocks[slot] = 3 + 2 * slot as u64;
+        }
         sb.update_checksum();
         let mut root = InodeRecord::new(1, INODE_MODE_DIR);
         let entry = DirEntryRecord::new(2, 1, "a").unwrap();
@@ -356,7 +383,10 @@ fn fragmented_mapping_capacity_refuses_instead_of_omitting_extents() {
             fs.sync().unwrap();
             let mut observed = CellosFs::open(fs.into_disk()).unwrap();
             let mut actual = vec![0; data.len()];
-            assert_eq!(observed.read_file("/a", 0, &mut actual).unwrap(), data.len());
+            assert_eq!(
+                observed.read_file("/a", 0, &mut actual).unwrap(),
+                data.len()
+            );
             assert_eq!(actual, data);
         }
     }
@@ -368,14 +398,16 @@ fn published_free_count_matches_displacement_and_reopen() {
     use cellos_fs::BLOCK_SIZE;
     let mut fs = CellosFs::format(MemDisk::new(64), 64).unwrap();
     fs.create_file("/file").unwrap();
-    fs.replace_file("/file", &vec![0x11; 3 * BLOCK_SIZE]).unwrap();
+    fs.replace_file("/file", &vec![0x11; 3 * BLOCK_SIZE])
+        .unwrap();
     fs.sync().unwrap();
     // Union: three fixed reserved blocks, bootstrap table, candidate table,
     // and three candidate data blocks.
     assert_eq!(fs.free_blocks(), 56);
     assert_eq!(fs.superblock().free_block_count, 56);
 
-    fs.replace_file("/file", &vec![0x22; 2 * BLOCK_SIZE]).unwrap();
+    fs.replace_file("/file", &vec![0x22; 2 * BLOCK_SIZE])
+        .unwrap();
     fs.sync().unwrap();
     // Bootstrap table was displaced: two tables and five data blocks remain.
     assert_eq!(fs.free_blocks(), 54);
@@ -384,7 +416,8 @@ fn published_free_count_matches_displacement_and_reopen() {
     // A three-block unpublished candidate is superseded by inline content.
     // Its reservation must be retained before FS2, then excluded from the
     // published count along with the displaced oldest table/data graph.
-    fs.replace_file("/file", &vec![0x33; 3 * BLOCK_SIZE]).unwrap();
+    fs.replace_file("/file", &vec![0x33; 3 * BLOCK_SIZE])
+        .unwrap();
     fs.replace_file("/file", b"final").unwrap();
     assert_eq!(fs.free_blocks(), 50);
     fs.sync().unwrap();

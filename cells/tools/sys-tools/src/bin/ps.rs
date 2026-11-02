@@ -8,12 +8,14 @@ ostd::cell_main!(cell_main);
 
 /// List running tasks from the kernel task table.
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| syscall::sys_exit(1));
     let mut buf = [api::syscall::ProcessInfo::default(); 32];
     match syscall::sys_get_procs(&mut buf) {
         Ok(count) => {
-            emit(output.stdout(), &[b"PID   STATE     NAME\n------------------------\n"]);
+            emit(
+                output.stdout(),
+                &[b"PID   STATE     NAME\n------------------------\n"],
+            );
             for info in buf.iter().take(count) {
                 let name = core::str::from_utf8(&info.name)
                     .unwrap_or("?")
@@ -27,7 +29,10 @@ fn cell_main() {
                 };
                 let mut id_buf = [0u8; 20];
                 let id = decimal(info.id as u64, &mut id_buf);
-                emit(output.stdout(), &[id, b"  ", state.as_bytes(), b"  ", name.as_bytes(), b"\n"]);
+                emit(
+                    output.stdout(),
+                    &[id, b"  ", state.as_bytes(), b"  ", name.as_bytes(), b"\n"],
+                );
             }
         }
         Err(_) => emit(output.stderr(), &[b"ps: cannot read process table\n"]),

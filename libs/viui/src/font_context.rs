@@ -43,23 +43,36 @@ impl FontContext {
         let mut start = 0;
         let mut pen = 0.0;
         let mut previous = None;
-        for end in text.char_indices()
-            .filter_map(|(i, ch)| if i > 0 && !ostd::typography::is_combining_mark(ch) { Some(i) } else { None })
+        for end in text
+            .char_indices()
+            .filter_map(|(i, ch)| {
+                if i > 0 && !ostd::typography::is_combining_mark(ch) {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
             .chain(core::iter::once(text.len()))
         {
             for ch in ostd::typography::normalized_chars(&text[start..end]) {
-                if let Some(left) = previous { pen += self.atlas.kerning(left, ch, self.size_px); }
+                if let Some(left) = previous {
+                    pen += self.atlas.kerning(left, ch, self.size_px);
+                }
                 pen += self.atlas.advance(ch, self.size_px);
                 previous = Some(ch);
             }
-            if end > 0 { positions.push((end, pen)); }
+            if end > 0 {
+                positions.push((end, pen));
+            }
             start = end;
         }
     }
 
     pub fn hit_position(positions: &[(usize, f32)], x: f32) -> usize {
         for pair in positions.windows(2) {
-            if x < (pair[0].1 + pair[1].1) * 0.5 { return pair[0].0; }
+            if x < (pair[0].1 + pair[1].1) * 0.5 {
+                return pair[0].0;
+            }
         }
         positions.last().map_or(0, |p| p.0)
     }
@@ -131,7 +144,9 @@ mod tests {
             assert_eq!(r[2], b[0]);
             assert_eq!(r[0], 0);
             assert_eq!(b[2], 0);
-            if index % 100 < 4 || index % 100 >= 14 { assert_eq!(r[3], 0); }
+            if index % 100 < 4 || index % 100 >= 14 {
+                assert_eq!(r[3], 0);
+            }
             painted |= r[3] > 0;
             partial_coverage |= r[3] > 0 && r[3] < 255;
         }

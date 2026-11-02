@@ -25,17 +25,19 @@ extern crate ostd;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::cell_session::{ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Status, Writer, HEADER_LEN};
+use api::cell_session::{
+    ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Status, Writer, HEADER_LEN,
+};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 use ostd::io::println;
 use ostd::syscall::{sys_exit, sys_mem_info, sys_set_timer};
-use terminal_sdk::{ChildPoll, FrontendHost, FrontendState};
 use terminal_sdk::stream::{Endpoint, EndpointRights, Operation};
+use terminal_sdk::{ChildPoll, FrontendHost, FrontendState};
 
 mod edit;
-mod records;
 mod oneshot;
+mod records;
 mod rg;
 mod screen;
 #[cfg(feature = "phase09-ssh")]
@@ -137,14 +139,21 @@ fn evidence(name: &str, bytes: &[u8]) {
 }
 
 fn stream_evidence(name: &str, term: &Term, cmd: &str) {
-    evidence(&format!("{name}.stdout"), term.raw_result(cmd).unwrap_or(&term.out));
+    evidence(
+        &format!("{name}.stdout"),
+        term.raw_result(cmd).unwrap_or(&term.out),
+    );
     evidence(&format!("{name}.stderr"), &term.err);
 }
 
 fn clip(text: &str) -> String {
     let mut out = String::new();
     for ch in text.chars().take(200) {
-        out.push(if ch.is_ascii_graphic() || ch == ' ' { ch } else { '.' });
+        out.push(if ch.is_ascii_graphic() || ch == ' ' {
+            ch
+        } else {
+            '.'
+        });
     }
     out
 }
@@ -179,7 +188,9 @@ fn strip_ansi(bytes: &[u8]) -> String {
 }
 
 fn lines_of(text: &str) -> Vec<String> {
-    text.split('\n').map(|l| String::from(l.trim_end_matches('\r'))).collect()
+    text.split('\n')
+        .map(|l| String::from(l.trim_end_matches('\r')))
+        .collect()
 }
 
 /// One frontend host (and the shell controlling its own session behind it), the
@@ -194,7 +205,12 @@ struct Term {
 impl Term {
     fn open(rows: u16, cols: u16) -> Result<Term, Status> {
         let host = FrontendHost::open(rows, cols)?;
-        Ok(Term { host, out: Vec::new(), err: Vec::new(), screen: Screen::new(usize::from(cols), usize::from(rows)) })
+        Ok(Term {
+            host,
+            out: Vec::new(),
+            err: Vec::new(),
+            screen: Screen::new(usize::from(cols), usize::from(rows)),
+        })
     }
 
     fn launch_shell(&mut self) -> Result<(), Status> {
@@ -207,7 +223,8 @@ impl Term {
 
     fn pump(&mut self) {
         // The model follows the session size the host last set (resize/re-attach).
-        self.screen.fit(usize::from(self.host.cols()), usize::from(self.host.rows()));
+        self.screen
+            .fit(usize::from(self.host.cols()), usize::from(self.host.rows()));
         let mut buf = [0u8; 512];
         for stderr in [false, true] {
             for _ in 0..16 {
@@ -248,7 +265,7 @@ impl Term {
                 return Ok(());
             }
             spins += 1;
-            if spins % 32 == 0 {
+            if spins.is_multiple_of(32) {
                 match self.host.poll_child() {
                     Ok(ChildPoll::Exited) => {
                         self.pump();
@@ -263,7 +280,14 @@ impl Term {
             }
             if now_ms() >= end {
                 let tail = strip_ansi(&self.out);
-                let tail: String = tail.chars().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect();
+                let tail: String = tail
+                    .chars()
+                    .rev()
+                    .take(80)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
                 return Err(format!("prompt-timeout tail={tail:?}"));
             }
             let _ = sys_set_timer(1);
@@ -275,15 +299,23 @@ impl Term {
         self.pump();
         self.out.clear();
         self.err.clear();
-        self.host.submit_text(cmd).map_err(|s| format!("submit_text {s:?}"))?;
-        self.host.submit_key(ENTER, 0, 1).map_err(|s| format!("submit_key {s:?}"))
+        self.host
+            .submit_text(cmd)
+            .map_err(|s| format!("submit_text {s:?}"))?;
+        self.host
+            .submit_key(ENTER, 0, 1)
+            .map_err(|s| format!("submit_key {s:?}"))
     }
 
     /// Output lines of the finished command: the echoed command line and the trailing
     /// prompt are removed, ANSI sequences stripped.
     fn result(&self, cmd: &str) -> Vec<String> {
         let mut lines = lines_of(&strip_ansi(&self.out));
-        if lines.last().map(|l| l.starts_with(PROMPT.trim_end())).unwrap_or(false) {
+        if lines
+            .last()
+            .map(|l| l.starts_with(PROMPT.trim_end()))
+            .unwrap_or(false)
+        {
             lines.pop();
         }
         if lines.first().map(String::as_str) == Some(cmd) {
@@ -294,7 +326,10 @@ impl Term {
 
     /// Remove only the exact editor echo and prompt, leaving arbitrary data intact.
     fn raw_result(&self, cmd: &str) -> Option<&[u8]> {
-        self.out.strip_prefix(cmd.as_bytes())?.strip_prefix(b"\n")?.strip_suffix(PROMPT.as_bytes())
+        self.out
+            .strip_prefix(cmd.as_bytes())?
+            .strip_prefix(b"\n")?
+            .strip_suffix(PROMPT.as_bytes())
     }
 
     fn run(&mut self, cmd: &str, ms: u64) -> Result<Vec<String>, String> {
@@ -303,7 +338,11 @@ impl Term {
         // Diagnostics of the scripted command (never secrets: fixed scripts only).
         let diagnostic = self.stderr_text();
         if !diagnostic.trim().is_empty() {
-            println(&format!("P04 INFO stderr cmd={} text={}", clip(cmd), clip(diagnostic.trim())));
+            println(&format!(
+                "P04 INFO stderr cmd={} text={}",
+                clip(cmd),
+                clip(diagnostic.trim())
+            ));
         }
         Ok(self.result(cmd))
     }
@@ -314,11 +353,17 @@ impl Term {
 }
 
 fn rows_of(lines: &[String]) -> Vec<&String> {
-    lines.iter().filter(|l| l.starts_with('{') && l.ends_with('}')).collect()
+    lines
+        .iter()
+        .filter(|l| l.starts_with('{') && l.ends_with('}'))
+        .collect()
 }
 
 fn count_cellbox(term: &mut Term) -> Result<usize, String> {
-    let lines = term.run("ps --records | where name '==' '\"cellbox\"' | select tid | to jsonl", 30_000)?;
+    let lines = term.run(
+        "ps --records | where name '==' '\"cellbox\"' | select tid | to jsonl",
+        30_000,
+    )?;
     Ok(rows_of(&lines).len())
 }
 
@@ -340,7 +385,11 @@ fn cell_main() {
         Ok(()) => a.wait_prompt(60_000),
         Err(status) => Err(format!("launch {status:?}")),
     };
-    check("shell-prompt", prompt.is_ok(), prompt.as_ref().err().map(String::as_str).unwrap_or(""));
+    check(
+        "shell-prompt",
+        prompt.is_ok(),
+        prompt.as_ref().err().map(String::as_str).unwrap_or(""),
+    );
     // Phase 09 lane (`scripts/qemu-phase09-ssh-test.sh`): only the ssh checks run.
     #[cfg(all(feature = "phase09-ssh", not(feature = "kssh")))]
     if prompt.is_ok() {
@@ -397,7 +446,9 @@ fn finish() -> ! {
     if failures == 0 {
         println(&format!("P04-TERMINAL: PASS checks={checks}"));
     } else {
-        println(&format!("P04-TERMINAL: FAIL failures={failures} checks={checks}"));
+        println(&format!(
+            "P04-TERMINAL: FAIL failures={failures} checks={checks}"
+        ));
     }
     sys_exit(if failures == 0 { 0 } else { 1 });
 }
@@ -419,10 +470,15 @@ fn builtins(a: &mut Term) {
 
     let free = a.run("free", 30_000);
     let free_ok = free.as_ref().ok().is_some_and(|l| {
-        l.iter().find(|x| x.starts_with("Mem (KiB):")).is_some_and(|row| {
-            let n: Vec<u64> = row["Mem (KiB):".len()..].split_whitespace().filter_map(|t| t.parse().ok()).collect();
-            n.len() == 3 && n[0] > 0 && n[0] == n[1] + n[2]
-        })
+        l.iter()
+            .find(|x| x.starts_with("Mem (KiB):"))
+            .is_some_and(|row| {
+                let n: Vec<u64> = row["Mem (KiB):".len()..]
+                    .split_whitespace()
+                    .filter_map(|t| t.parse().ok())
+                    .collect();
+                n.len() == 3 && n[0] > 0 && n[0] == n[1] + n[2]
+            })
     });
     check("builtin-free", free_ok, &format!("{free:?}"));
 
@@ -430,9 +486,7 @@ fn builtins(a: &mut Term) {
     let first = a.run("date", 30_000);
     sleep_ms(2500);
     let second = a.run("date", 30_000);
-    let shaped = |r: &Result<Vec<String>, String>| {
-        matches!(r, Ok(l) if l.len() == 1 && (l[0].contains(" UTC ") || l[0].contains("uptime")))
-    };
+    let shaped = |r: &Result<Vec<String>, String>| matches!(r, Ok(l) if l.len() == 1 && (l[0].contains(" UTC ") || l[0].contains("uptime")));
     check(
         "builtin-date-changes",
         shaped(&first) && shaped(&second) && first != second,
@@ -441,7 +495,9 @@ fn builtins(a: &mut Term) {
 
     let ps = a.run("ps --records | select tid name | to jsonl", 30_000);
     let has = |l: &Vec<String>, name: &str| {
-        rows_of(l).iter().any(|r| r.contains(&format!("\"name\":\"{name}\"")))
+        rows_of(l)
+            .iter()
+            .any(|r| r.contains(&format!("\"name\":\"{name}\"")))
     };
     check(
         "builtin-ps-records",
@@ -459,7 +515,10 @@ fn builtins(a: &mut Term) {
 }
 
 fn typed_pipeline(a: &mut Term) {
-    let pipe = a.run("ps --records | where tid '>=' int:0 | sort-by tid | select tid name | take 2 | to jsonl", 30_000);
+    let pipe = a.run(
+        "ps --records | where tid '>=' int:0 | sort-by tid | select tid name | take 2 | to jsonl",
+        30_000,
+    );
     let ok = matches!(&pipe, Ok(l) if {
         let rows = rows_of(l);
         rows.len() == 2 && rows.iter().all(|r| r.starts_with("{\"tid\":") && r.contains("\"name\":"))
@@ -468,7 +527,11 @@ fn typed_pipeline(a: &mut Term) {
 
     // A typed stage's own refusal is a diagnostic, not silent output.
     let stage = a.run("ps --records | take 0 | to jsonl", 30_000);
-    check("typed-pipeline-empty", matches!(&stage, Ok(l) if rows_of(l).is_empty()), &format!("{stage:?}"));
+    check(
+        "typed-pipeline-empty",
+        matches!(&stage, Ok(l) if rows_of(l).is_empty()),
+        &format!("{stage:?}"),
+    );
 }
 
 fn file_create_ls(a: &mut Term) {
@@ -479,11 +542,16 @@ fn file_create_ls(a: &mut Term) {
     let listed = a.run("ls --records /tmp | select name | to jsonl", 30_000);
     check(
         "file-create-ls",
-        create.is_ok() && matches!(&listed, Ok(l) if rows_of(l).iter().any(|r| r.contains(&format!("\"{file}\"")))),
+        create.is_ok()
+            && matches!(&listed, Ok(l) if rows_of(l).iter().any(|r| r.contains(&format!("\"{file}\"")))),
         &format!("create={create:?} ls={listed:?}"),
     );
     let cat = a.run(&format!("cat /tmp/{file}"), 30_000);
-    check("file-cat-roundtrip", matches!(&cat, Ok(l) if l.len() == 1 && l[0] == body), &format!("{cat:?}"));
+    check(
+        "file-cat-roundtrip",
+        matches!(&cat, Ok(l) if l.len() == 1 && l[0] == body),
+        &format!("{cat:?}"),
+    );
 }
 
 /// Contents of the private fixture `/srv/cellos/p04-secret` in the boot ramdisk (VIFS1).
@@ -509,14 +577,19 @@ fn secret_namespace(a: &mut Term) {
     let mut leaked = false;
     for (index, cmd) in DENIED.iter().enumerate() {
         let run = a.run(cmd, 30_000);
-        let shown = strip_ansi(&a.out).contains(SECRET_TOKEN) || a.stderr_text().contains(SECRET_TOKEN);
+        let shown =
+            strip_ansi(&a.out).contains(SECRET_TOKEN) || a.stderr_text().contains(SECRET_TOKEN);
         leaked |= shown;
         let st = a.run("echo sk=$?", 30_000);
-        let refused = matches!(&st, Ok(l) if l.len() == 1 && l[0].starts_with("sk=") && l[0] != "sk=0");
+        let refused =
+            matches!(&st, Ok(l) if l.len() == 1 && l[0].starts_with("sk=") && l[0] != "sk=0");
         check(
             &format!("secret-denied-{index}"),
             run.is_ok() && refused && !shown,
-            &format!("cmd={cmd} run={:?} st={st:?} shown={shown}", run.map(|l| l.len())),
+            &format!(
+                "cmd={cmd} run={:?} st={st:?} shown={shown}",
+                run.map(|l| l.len())
+            ),
         );
     }
     // A copy that was refused left nothing behind to read.
@@ -524,14 +597,19 @@ fn secret_namespace(a: &mut Term) {
     let copied = strip_ansi(&a.out).contains(SECRET_TOKEN);
     leaked |= copied;
     check("secret-no-copy", !copied, &format!("{leak:?}"));
-    check("secret-never-shown", !leaked, "fixture bytes reached a shell stream");
+    check(
+        "secret-never-shown",
+        !leaked,
+        "fixture bytes reached a shell stream",
+    );
 
     // Positive control: the ramdisk fallback still serves a policy-readable file.
     let wc = a.run("wc /p04-list/alpha-entry", 30_000);
     let st = a.run("echo sw=$?", 30_000);
     check(
         "ramdisk-read-still-works",
-        matches!(&wc, Ok(l) if !l.is_empty()) && matches!(&st, Ok(l) if l == &[String::from("sw=0")]),
+        matches!(&wc, Ok(l) if !l.is_empty())
+            && matches!(&st, Ok(l) if l == &[String::from("sw=0")]),
         &format!("{wc:?} {st:?}"),
     );
 }
@@ -570,17 +648,29 @@ fn secret_read(a: &mut Term) {
     // take its echo-off lease first (keys queued before it would still reach the silent
     // reader: the line editor is not reading while a command runs).
     sleep_ms(1500);
-    let typed = a.host.submit_text(READ_SECRET_TOKEN).and_then(|_| a.host.submit_key(ENTER, 0, 1));
+    let typed = a
+        .host
+        .submit_text(READ_SECRET_TOKEN)
+        .and_then(|_| a.host.submit_key(ENTER, 0, 1));
     let back = a.wait_prompt(30_000).is_ok();
     seen.extend_from_slice(&a.out);
     seen.extend_from_slice(&a.err);
     let silent = a.out == format!("{cmd}\n\n{PROMPT}").as_bytes() && a.err.is_empty();
     check(
         "secret-read-silent",
-        cleared.is_ok() && sent.is_ok() && typed.is_ok() && back && silent && occurrences(&seen, token) == 0,
+        cleared.is_ok()
+            && sent.is_ok()
+            && typed.is_ok()
+            && back
+            && silent
+            && occurrences(&seen, token) == 0,
         &format!(
             "cleared={} sent={} typed={} back={back} silent={silent} out_len={} err_len={}",
-            cleared.is_ok(), sent.is_ok(), status(&typed), a.out.len(), a.err.len()
+            cleared.is_ok(),
+            sent.is_ok(),
+            status(&typed),
+            a.out.len(),
+            a.err.len()
         ),
     );
 
@@ -589,9 +679,21 @@ fn secret_read(a: &mut Term) {
     seen.extend_from_slice(&a.err);
     let want = format!("{}", token.len());
     // Only digits are ever echoed into a FAIL line.
-    let shown: Vec<String> = length.as_ref().map(|lines| {
-        lines.iter().map(|l| if l.bytes().all(|b| b.is_ascii_digit()) { l.clone() } else { String::from("<non-numeric>") }).collect()
-    }).unwrap_or_default();
+    let shown: Vec<String> = length
+        .as_ref()
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|l| {
+                    if l.bytes().all(|b| b.is_ascii_digit()) {
+                        l.clone()
+                    } else {
+                        String::from("<non-numeric>")
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     check(
         "secret-read-length",
         matches!(&length, Ok(lines) if lines.len() == 1 && lines[0] == want),
@@ -601,12 +703,21 @@ fn secret_read(a: &mut Term) {
     let history = a.run("history", 30_000);
     seen.extend_from_slice(&a.out);
     seen.extend_from_slice(&a.err);
-    let entries = history.as_ref().ok().and_then(|lines| history_entries(lines));
-    let typed_only = ["read -s SECRET", "echo ${#SECRET}", "history"].map(String::from).to_vec();
+    let entries = history
+        .as_ref()
+        .ok()
+        .and_then(|lines| history_entries(lines));
+    let typed_only = ["read -s SECRET", "echo ${#SECRET}", "history"]
+        .map(String::from)
+        .to_vec();
     check(
         "secret-read-history",
         entries.as_ref() == Some(&typed_only),
-        &format!("ok={} entries={:?}", history.is_ok(), entries.as_ref().map(Vec::len)),
+        &format!(
+            "ok={} entries={:?}",
+            history.is_ok(),
+            entries.as_ref().map(Vec::len)
+        ),
     );
     let unset = a.run("unset SECRET", 30_000);
     seen.extend_from_slice(&a.out);
@@ -634,14 +745,21 @@ fn hostile_output(a: &mut Term) {
     let st = a.run("echo sthostile=$?", 30_000);
     check(
         "hostile-cat-relayed",
-        cleared.is_ok() && shown.is_ok() && relayed > 3 * 4096 && a.err.is_empty()
+        cleared.is_ok()
+            && shown.is_ok()
+            && relayed > 3 * 4096
+            && a.err.is_empty()
             && matches!(&st, Ok(l) if l == &[String::from("sthostile=0")]),
-        &format!("cleared={} shown={shown:?} relayed={relayed} st={st:?}", cleared.is_ok()),
+        &format!(
+            "cleared={} shown={shown:?} relayed={relayed} st={st:?}",
+            cleared.is_ok()
+        ),
     );
 
     let next = "echo p04-after-hostile";
     let ran = a.run(next, 30_000);
-    let exact = a.out == format!("{next}\np04-after-hostile\n{PROMPT}").as_bytes() && a.err.is_empty();
+    let exact =
+        a.out == format!("{next}\np04-after-hostile\n{PROMPT}").as_bytes() && a.err.is_empty();
     check(
         "hostile-next-command-exact",
         ran.is_ok() && exact,
@@ -649,8 +767,13 @@ fn hostile_output(a: &mut Term) {
     );
 
     let history = a.run("history", 30_000);
-    let entries = history.as_ref().ok().and_then(|lines| history_entries(lines));
-    let typed_only = [cmd.as_str(), "echo sthostile=$?", next, "history"].map(String::from).to_vec();
+    let entries = history
+        .as_ref()
+        .ok()
+        .and_then(|lines| history_entries(lines));
+    let typed_only = [cmd.as_str(), "echo sthostile=$?", next, "history"]
+        .map(String::from)
+        .to_vec();
     check(
         "hostile-history-typed-only",
         entries.as_ref() == Some(&typed_only) && a.at_prompt(),
@@ -664,18 +787,40 @@ const PASTE_INJECTION: &str =
     "echo p04-paste-ran > /tmp/p04-paste-ran\x1b[201~\necho p04-paste-ran > /tmp/p04-paste-ran\n";
 
 /// One input-owner request on `op` built here (bypassing the SDK's own validation).
-fn raw_input(op: ObjectRefV1, selector: InputOp, body: &[u8], reply: &mut [u8]) -> Result<(Status, usize), Status> {
+fn raw_input(
+    op: ObjectRefV1,
+    selector: InputOp,
+    body: &[u8],
+    reply: &mut [u8],
+) -> Result<(Status, usize), Status> {
     let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
-    let header = ostd::session::service_call(owner, api::syscall::service::INPUT, op, selector as u16, true, body, reply)?;
+    let header = ostd::session::service_call(
+        owner,
+        api::syscall::service::INPUT,
+        op,
+        selector as u16,
+        true,
+        body,
+        reply,
+    )?;
     Ok((header.status, header.total_len as usize))
 }
 
 /// PreparePaste / WritePaste / CommitPaste of `text` sent straight to the input owner, then
 /// AbortPaste. Returns the (write, commit, abort) statuses.
-fn raw_paste(op: ObjectRefV1, session: ObjectRefV1, attachment: ObjectRefV1, text: &[u8]) -> Result<(Status, Status, Status), Status> {
+fn raw_paste(
+    op: ObjectRefV1,
+    session: ObjectRefV1,
+    attachment: ObjectRefV1,
+    text: &[u8],
+) -> Result<(Status, Status, Status), Status> {
     let mut body = [0u8; 48];
     let mut w = Writer::new(&mut body);
-    w.reference(session)?; w.reference(attachment)?; w.u64(0)?; w.u32(text.len() as u32)?; w.u32(0)?;
+    w.reference(session)?;
+    w.reference(attachment)?;
+    w.u64(0)?;
+    w.u32(text.len() as u32)?;
+    w.u32(0)?;
     let mut reply = [0u8; HEADER_LEN + 16];
     let (prepared, n) = raw_input(op, InputOp::PreparePaste, &body, &mut reply)?;
     if prepared != Status::Ok {
@@ -684,11 +829,29 @@ fn raw_paste(op: ObjectRefV1, session: ObjectRefV1, attachment: ObjectRefV1, tex
     let paste = ObjectRefV1::from_bytes(&reply[HEADER_LEN..n])?;
     let mut body = [0u8; 600];
     let mut w = Writer::new(&mut body);
-    w.reference(paste)?; w.u32(0)?; w.u32(text.len() as u32)?; w.bytes(text)?;
+    w.reference(paste)?;
+    w.u32(0)?;
+    w.u32(text.len() as u32)?;
+    w.bytes(text)?;
     let len = w.position();
-    let (written, _) = raw_input(op, InputOp::WritePaste, &body[..len], &mut [0u8; HEADER_LEN + 8])?;
-    let (committed, _) = raw_input(op, InputOp::CommitPaste, &paste.to_bytes(), &mut [0u8; HEADER_LEN + 8])?;
-    let (aborted, _) = raw_input(op, InputOp::AbortPaste, &paste.to_bytes(), &mut [0u8; HEADER_LEN])?;
+    let (written, _) = raw_input(
+        op,
+        InputOp::WritePaste,
+        &body[..len],
+        &mut [0u8; HEADER_LEN + 8],
+    )?;
+    let (committed, _) = raw_input(
+        op,
+        InputOp::CommitPaste,
+        &paste.to_bytes(),
+        &mut [0u8; HEADER_LEN + 8],
+    )?;
+    let (aborted, _) = raw_input(
+        op,
+        InputOp::AbortPaste,
+        &paste.to_bytes(),
+        &mut [0u8; HEADER_LEN],
+    )?;
     Ok((written, committed, aborted))
 }
 
@@ -705,13 +868,27 @@ fn paste_injection(a: &mut Term) {
     check(
         "paste-clean-control",
         clean.is_ok() && enter.is_ok() && ran.is_ok(),
-        &format!("paste={} enter={} ran={ran:?}", status(&clean), status(&enter)),
+        &format!(
+            "paste={} enter={} ran={ran:?}",
+            status(&clean),
+            status(&enter)
+        ),
     );
 
     let sdk = a.host.submit_paste(PASTE_INJECTION);
-    check("paste-escape-rejected-sdk", sdk == Err(Status::UnsupportedInput), &status(&sdk));
-    let owner = match (a.host.shell_operation(), a.host.session(), a.host.attachment()) {
-        (Some(op), Some(session), Some(attachment)) => raw_paste(op.raw(), session, attachment, PASTE_INJECTION.as_bytes()),
+    check(
+        "paste-escape-rejected-sdk",
+        sdk == Err(Status::UnsupportedInput),
+        &status(&sdk),
+    );
+    let owner = match (
+        a.host.shell_operation(),
+        a.host.session(),
+        a.host.attachment(),
+    ) {
+        (Some(op), Some(session), Some(attachment)) => {
+            raw_paste(op.raw(), session, attachment, PASTE_INJECTION.as_bytes())
+        }
         _ => Err(Status::NotFound),
     };
     check(
@@ -723,67 +900,110 @@ fn paste_injection(a: &mut Term) {
     sleep_ms(1000);
     let next = "echo p04-after-paste";
     let alive = a.run(next, 30_000);
-    let exact = a.out == format!("{next}\np04-after-paste\n{PROMPT}").as_bytes() && a.err.is_empty();
+    let exact =
+        a.out == format!("{next}\np04-after-paste\n{PROMPT}").as_bytes() && a.err.is_empty();
     let listed = a.run("ls --records /tmp | select name | to jsonl", 30_000);
     check(
         "paste-escape-nothing-executed",
-        alive.is_ok() && exact
+        alive.is_ok()
+            && exact
             && matches!(&listed, Ok(l) if !rows_of(l).is_empty() && !rows_of(l).iter().any(|r| r.contains("p04-paste-ran"))),
-        &format!("alive={alive:?} exact={exact} listed={:?}", listed.map(|l| l.len())),
+        &format!(
+            "alive={alive:?} exact={exact} listed={:?}",
+            listed.map(|l| l.len())
+        ),
     );
 }
 
 fn externals(a: &mut Term) {
     let echo_cmd = "/bin/echo p04-e'x't two";
     let echo = a.run(echo_cmd, 40_000);
-    let echo_ok = echo.is_ok() && a.raw_result(echo_cmd) == Some(b"p04-ext two\n".as_slice()) && a.err.is_empty();
+    let echo_ok = echo.is_ok()
+        && a.raw_result(echo_cmd) == Some(b"p04-ext two\n".as_slice())
+        && a.err.is_empty();
     stream_evidence("echo", a, echo_cmd);
     let st = a.run("echo stecho=$?", 30_000);
-    check("external-echo", echo_ok && matches!(&st, Ok(l) if l == &[String::from("stecho=0")]), "exact stdout/empty stderr/status");
+    check(
+        "external-echo",
+        echo_ok && matches!(&st, Ok(l) if l == &[String::from("stecho=0")]),
+        "exact stdout/empty stderr/status",
+    );
 
     let ls_cmd = "/bin/ls /p04-list";
     let ls = a.run(ls_cmd, 40_000);
     let listed = a.raw_result(ls_cmd);
-    let ls_ok = ls.is_ok() && a.err.is_empty()
-        && matches!(listed, Some(b".\n..\nalpha-entry\nbeta-entry\n" | b".\n..\nbeta-entry\nalpha-entry\n"));
+    let ls_ok = ls.is_ok()
+        && a.err.is_empty()
+        && matches!(
+            listed,
+            Some(b".\n..\nalpha-entry\nbeta-entry\n" | b".\n..\nbeta-entry\nalpha-entry\n")
+        );
     stream_evidence("ls", a, ls_cmd);
     let st = a.run("echo stls=$?", 30_000);
-    check("external-ls", ls_ok && matches!(&st, Ok(l) if l == &[String::from("stls=0")]), "known directory exact entries/stdout/status");
+    check(
+        "external-ls",
+        ls_ok && matches!(&st, Ok(l) if l == &[String::from("stls=0")]),
+        "known directory exact entries/stdout/status",
+    );
 
     let bad_cmd = "/bin/ls /p04-output-missing";
     let bad = a.run(bad_cmd, 40_000);
-    let bad_ok = bad.is_ok() && a.raw_result(bad_cmd) == Some(b"".as_slice())
+    let bad_ok = bad.is_ok()
+        && a.raw_result(bad_cmd) == Some(b"".as_slice())
         && a.err == b"ls: /p04-output-missing: no such directory\n";
     stream_evidence("ls-error", a, bad_cmd);
     let st = a.run("echo stbadls=$?", 30_000);
-    check("external-ls-stderr", bad_ok && matches!(&st, Ok(l) if l == &[String::from("stbadls=1")]), "stderr only/nonzero");
+    check(
+        "external-ls-stderr",
+        bad_ok && matches!(&st, Ok(l) if l == &[String::from("stbadls=1")]),
+        "stderr only/nonzero",
+    );
 
     let cat_cmd = format!("/bin/cat {BINARY_PATH} /p04-ignored-second-path");
     let cat = a.run(&cat_cmd, 40_000);
     let expected = fixture_bytes(1600);
-    let cat_ok = cat.is_ok() && a.raw_result(&cat_cmd) == Some(expected.as_slice()) && a.err.is_empty();
+    let cat_ok =
+        cat.is_ok() && a.raw_result(&cat_cmd) == Some(expected.as_slice()) && a.err.is_empty();
     stream_evidence("cat", a, &cat_cmd);
     let st = a.run("echo stcat=$?", 30_000);
-    check("external-cat", cat_ok && matches!(&st, Ok(l) if l == &[String::from("stcat=0")]), "raw bytes/NUL/invalid UTF8/512 boundary/first path");
-    check("external-stdout-not-stderr", echo_ok && ls_ok && cat_ok, "successful stock command leaked to stderr");
+    check(
+        "external-cat",
+        cat_ok && matches!(&st, Ok(l) if l == &[String::from("stcat=0")]),
+        "raw bytes/NUL/invalid UTF8/512 boundary/first path",
+    );
+    check(
+        "external-stdout-not-stderr",
+        echo_ok && ls_ok && cat_ok,
+        "successful stock command leaked to stderr",
+    );
 
     let free = a.run("/bin/free", 40_000);
-    let free_ok = free.is_ok() && a.err.is_empty()
-        && a.raw_result("/bin/free").is_some_and(|bytes| bytes.starts_with(b"              total        used        free\nMem (KiB):"));
+    let free_ok = free.is_ok()
+        && a.err.is_empty()
+        && a.raw_result("/bin/free").is_some_and(|bytes| {
+            bytes.starts_with(b"              total        used        free\nMem (KiB):")
+        });
     stream_evidence("free", a, "/bin/free");
     let st = a.run("echo stfree=$?", 30_000);
-    check("external-free", free_ok && matches!(&st, Ok(l) if l == &[String::from("stfree=0")]), "free finite deadline syscall/stream/status");
+    check(
+        "external-free",
+        free_ok && matches!(&st, Ok(l) if l == &[String::from("stfree=0")]),
+        "free finite deadline syscall/stream/status",
+    );
 
     // A single external is the controlling shell's foreground child: its stdin is the
     // session, so the empty input is the user's end of input (EndInput through the
     // frontend) once the child reads. /bin/p03-filter is the Phase03 private fixture that
     // reads/writes its Stdin/Stdout grants; exact bytes reach the host.
     let single_cmd = "/bin/p03-filter hex";
-    let single = a.send(single_cmd).and_then(|_| {
-        sleep_ms(2000);
-        a.host.end_input().map_err(|s| format!("end_input {s:?}"))?;
-        a.wait_prompt(40_000)
-    }).map(|_| a.result(single_cmd));
+    let single = a
+        .send(single_cmd)
+        .and_then(|_| {
+            sleep_ms(2000);
+            a.host.end_input().map_err(|s| format!("end_input {s:?}"))?;
+            a.wait_prompt(40_000)
+        })
+        .map(|_| a.result(single_cmd));
     check(
         "external-filter-single",
         matches!(&single, Ok(l) if l == &[String::from("p03-hex len=0 hex=")]),
@@ -812,7 +1032,10 @@ const SOFT_RESET: &[u8] = b"\x1b[?1049l\x1b[?25h\x1b[?2004l\x1b[0m";
 const ROWS_JSONL: &[u8] = b"{\"a\":1}\n{\"a\":2}\n";
 
 fn occurrences(haystack: &[u8], needle: &[u8]) -> usize {
-    haystack.windows(needle.len()).filter(|window| *window == needle).count()
+    haystack
+        .windows(needle.len())
+        .filter(|window| *window == needle)
+        .count()
 }
 
 /// No soft reset on either stream of the last command.
@@ -829,11 +1052,16 @@ fn soft_reset(a: &mut Term) {
     let expected = [TUI_ABANDON, SOFT_RESET].concat();
     for (name, cmd, status_var) in [
         ("tui-abandon", "/bin/p03-filter tui-abandon", "sttui"),
-        ("tui-pipeline", "/bin/p03-filter tui-abandon | /bin/p03-filter cat", "sttuipipe"),
+        (
+            "tui-pipeline",
+            "/bin/p03-filter tui-abandon | /bin/p03-filter cat",
+            "sttuipipe",
+        ),
     ] {
         let run = a.run(cmd, 40_000);
         let once = occurrences(&a.out, SOFT_RESET) == 1 && occurrences(&a.err, SOFT_RESET) == 0;
-        let exact = run.is_ok() && a.raw_result(cmd) == Some(expected.as_slice()) && a.err.is_empty();
+        let exact =
+            run.is_ok() && a.raw_result(cmd) == Some(expected.as_slice()) && a.err.is_empty();
         stream_evidence(name, a, cmd);
         let st = a.run(&format!("echo {status_var}=$?"), 30_000);
         let after = no_reset(a);
@@ -846,7 +1074,11 @@ fn soft_reset(a: &mut Term) {
 
     let plain: [(&str, &str, &[u8]); 3] = [
         ("builtin-echo", "echo p04-plain-reset", b"p04-plain-reset\n"),
-        ("external-echo", "/bin/echo p04-plain-reset", b"p04-plain-reset\n"),
+        (
+            "external-echo",
+            "/bin/echo p04-plain-reset",
+            b"p04-plain-reset\n",
+        ),
         ("filter", "/bin/p03-filter rows", ROWS_JSONL),
     ];
     for (name, cmd, output) in plain {
@@ -877,12 +1109,15 @@ fn stock_backpressure(a: &mut Term) {
     }
     let resumed = a.wait_prompt(90_000);
     let expected = fixture_bytes(LARGE_LEN);
-    let exact = resumed.is_ok() && a.raw_result(&cmd) == Some(expected.as_slice()) && a.err.is_empty();
+    let exact =
+        resumed.is_ok() && a.raw_result(&cmd) == Some(expected.as_slice()) && a.err.is_empty();
     stream_evidence("large-cat", a, &cmd);
     let st = a.run("echo stlarge=$?", 30_000);
     check(
         "stock-full-ring-drain-exact",
-        sent.is_ok() && matches!(read, Ok(137)) && exact
+        sent.is_ok()
+            && matches!(read, Ok(137))
+            && exact
             && matches!(&st, Ok(l) if l == &[String::from("stlarge=0")]),
         "withheld drain/resume: every binary byte once and successful stock exit",
     );
@@ -890,9 +1125,15 @@ fn stock_backpressure(a: &mut Term) {
     // ls emits 60-byte names plus separate newline writes, deliberately not a
     // divisor of the 4096-byte ring. Withheld drains force its helper to retain
     // the remainder of a partially accepted name rather than replay that name.
-    let names: Vec<String> = (0..256).map(|i| format!("p04-pressure-{i:03}-{}", "x".repeat(43))).collect();
+    let names: Vec<String> = (0..256)
+        .map(|i| format!("p04-pressure-{i:03}-{}", "x".repeat(43)))
+        .collect();
     let mut listing = Vec::from(b".\n..\n".as_slice());
-    listing.extend(names.iter().flat_map(|name| name.bytes().chain(core::iter::once(b'\n'))));
+    listing.extend(
+        names
+            .iter()
+            .flat_map(|name| name.bytes().chain(core::iter::once(b'\n'))),
+    );
     let ls_cmd = "/bin/ls /p04-pressure";
     let sent = a.send(ls_cmd);
     sleep_ms(1500);
@@ -902,14 +1143,19 @@ fn stock_backpressure(a: &mut Term) {
     let st = a.run("echo stpressure=$?", 30_000);
     check(
         "stock-fragmented-ring-drain-exact",
-        sent.is_ok() && back.is_ok() && exact
+        sent.is_ok()
+            && back.is_ok()
+            && exact
             && matches!(&st, Ok(l) if l == &[String::from("stpressure=0")]),
         "stock helper non-aligned fragments across full ring without replay",
     );
 
     // A real external downstream closes without reading the stock cat's output.
     let close_start = now_ms();
-    let broken = a.run(&format!("/bin/cat {LARGE_PATH} | /bin/p03-filter exit 0"), 15_000);
+    let broken = a.run(
+        &format!("/bin/cat {LARGE_PATH} | /bin/p03-filter exit 0"),
+        15_000,
+    );
     let close_elapsed = now_ms() - close_start;
     evidence("stock-close-transcript.stdout", &a.out);
     evidence("stock-close-transcript.stderr", &a.err);
@@ -943,9 +1189,15 @@ fn stock_backpressure(a: &mut Term) {
     println(&format!("P04 INFO stock-cancel elapsed_ms={cancel_elapsed} sent={sent:?} key={} recovered={recovered:?} probe={st:?}", status(&key)));
     check(
         "stock-full-ring-cancel",
-        sent.is_ok() && key.is_ok() && recovered.is_ok() && cancel_elapsed < 15_000
+        sent.is_ok()
+            && key.is_ok()
+            && recovered.is_ok()
+            && cancel_elapsed < 15_000
             && matches!(&st, Ok(l) if l == &[String::from("stockcc=130")]),
-        &format!("elapsed_ms={cancel_elapsed} sent={sent:?} key={} recovered={recovered:?} probe={st:?}", status(&key)),
+        &format!(
+            "elapsed_ms={cancel_elapsed} sent={sent:?} key={} recovered={recovered:?} probe={st:?}",
+            status(&key)
+        ),
     );
 
     let result = (|| -> Result<(), String> {
@@ -960,7 +1212,11 @@ fn stock_backpressure(a: &mut Term) {
         }
         Ok(())
     })();
-    check("stock-full-ring-host-close", result.is_ok(), result.as_ref().err().map(String::as_str).unwrap_or(""));
+    check(
+        "stock-full-ring-host-close",
+        result.is_ok(),
+        result.as_ref().err().map(String::as_str).unwrap_or(""),
+    );
 }
 
 /// Query the canonical terminal record of a directly prepared child; do not
@@ -970,20 +1226,34 @@ fn direct_child_exit(op: Operation, child: ChildRefV1) -> Result<i32, Status> {
     loop {
         let mut reply = [0u8; HEADER_LEN + 24];
         let h = ostd::session::kernel_call(
-            KernelOp::QueryChild, op.reference().raw(), false, &child.to_bytes(), &mut reply,
+            KernelOp::QueryChild,
+            op.reference().raw(),
+            false,
+            &child.to_bytes(),
+            &mut reply,
         )?;
-        if h.status != Status::Ok { return Err(h.status); }
+        if h.status != Status::Ok {
+            return Err(h.status);
+        }
         let mut body = Reader::new(&reply[HEADER_LEN..h.total_len as usize]);
         let state = body.u32()?;
         let reason = body.u32()?;
         let code = body.i32()?;
-        if body.u32()? != 0 { return Err(Status::Malformed); }
+        if body.u32()? != 0 {
+            return Err(Status::Malformed);
+        }
         let _sequence = body.u64()?;
         body.finish()?;
         if state == 3 {
-            return if reason == 0 { Ok(code) } else { Err(Status::Cancelled) };
+            return if reason == 0 {
+                Ok(code)
+            } else {
+                Err(Status::Cancelled)
+            };
         }
-        if now_ms() >= end { return Err(Status::TimedOut); }
+        if now_ms() >= end {
+            return Err(Status::TimedOut);
+        }
         let _ = sys_set_timer(1);
     }
 }
@@ -1020,37 +1290,72 @@ fn stock_negative_grants(a: &mut Term) {
             let grants_count = usize::from(stdout) + usize::from(stderr);
             let context_len = 48 + 7 + payload.len() + 1 + grants_count * 40;
             let outcome = (|| -> Result<(), Status> {
-            let mut prepared = op.prepare_child("/bin/echo", context_len)?;
-            let mut grants = Vec::new();
-            for (slot, enabled, source) in [
-                (GrantSlot::Stdout, stdout, out_write),
-                (GrantSlot::Stderr, stderr, err_write),
-            ] {
-                if enabled {
-                    let reference = if invalid && slot == GrantSlot::Stdout {
-                        ObjectRefV1 { id: u64::MAX - 17, generation: 1 }
-                    } else {
-                        source.delegate(&prepared, EndpointRights::WRITE_ONLY)?.reference().raw()
-                    };
-                    grants.push(Grant::endpoint(slot, reference, EndpointRights::WRITE_ONLY.bits() as u16)?);
-                }
-            }
-            let context = ChildContext::new(op.reference().raw(), &[&payload], b"", &[], &grants)?;
-            let published = prepared.write_context(&context).and_then(|_| prepared.commit());
-            match published {
-                Ok(child) => {
-                    let result = direct_child_exit(op, child);
-                    println(&format!("P04 INFO negative-child name={name} exit={result:?} published=true"));
-                    if invalid { Err(Status::Malformed) } else {
-                        match result { Ok(code) if code != 0 => Ok(()), Ok(_) => Err(Status::Malformed), Err(s) => Err(s) }
+                let mut prepared = op.prepare_child("/bin/echo", context_len)?;
+                let mut grants = Vec::new();
+                for (slot, enabled, source) in [
+                    (GrantSlot::Stdout, stdout, out_write),
+                    (GrantSlot::Stderr, stderr, err_write),
+                ] {
+                    if enabled {
+                        let reference = if invalid && slot == GrantSlot::Stdout {
+                            ObjectRefV1 {
+                                id: u64::MAX - 17,
+                                generation: 1,
+                            }
+                        } else {
+                            source
+                                .delegate(&prepared, EndpointRights::WRITE_ONLY)?
+                                .reference()
+                                .raw()
+                        };
+                        grants.push(Grant::endpoint(
+                            slot,
+                            reference,
+                            EndpointRights::WRITE_ONLY.bits() as u16,
+                        )?);
                     }
                 }
-                Err(s) if invalid && matches!(s, Status::Denied | Status::Stale | Status::Revoked | Status::NotFound | Status::WrongOwner | Status::WrongSession | Status::Malformed) => {
-                    println(&format!("P04 INFO negative-invalid-ref admission={s:?} helper-executed=false"));
-                    Ok(())
+                let context =
+                    ChildContext::new(op.reference().raw(), &[&payload], b"", &[], &grants)?;
+                let published = prepared
+                    .write_context(&context)
+                    .and_then(|_| prepared.commit());
+                match published {
+                    Ok(child) => {
+                        let result = direct_child_exit(op, child);
+                        println(&format!(
+                            "P04 INFO negative-child name={name} exit={result:?} published=true"
+                        ));
+                        if invalid {
+                            Err(Status::Malformed)
+                        } else {
+                            match result {
+                                Ok(code) if code != 0 => Ok(()),
+                                Ok(_) => Err(Status::Malformed),
+                                Err(s) => Err(s),
+                            }
+                        }
+                    }
+                    Err(s)
+                        if invalid
+                            && matches!(
+                                s,
+                                Status::Denied
+                                    | Status::Stale
+                                    | Status::Revoked
+                                    | Status::NotFound
+                                    | Status::WrongOwner
+                                    | Status::WrongSession
+                                    | Status::Malformed
+                            ) =>
+                    {
+                        println(&format!(
+                            "P04 INFO negative-invalid-ref admission={s:?} helper-executed=false"
+                        ));
+                        Ok(())
+                    }
+                    Err(s) => Err(s),
                 }
-                Err(s) => Err(s),
-            }
             })();
             let _ = (out_write.close(), err_write.close());
             let observed_out = drain_endpoint(out_read);
@@ -1060,13 +1365,19 @@ fn stock_negative_grants(a: &mut Term) {
             let quiet = observed_out.is_empty() && observed_err.is_empty();
             let _ = op.cancel(2);
             let _ = (out_read.close(), err_read.close(), op.close());
-            if !quiet { return Err(Status::Malformed); }
+            if !quiet {
+                return Err(Status::Malformed);
+            }
             outcome
         })();
         check(name, attempt.is_ok(), &status(&attempt));
     }
     a.pump();
-    check("negative-grants-host-isolation", baseline == (a.out.len(), a.err.len()), "direct negative child contaminated unrelated host streams");
+    check(
+        "negative-grants-host-isolation",
+        baseline == (a.out.len(), a.err.len()),
+        "direct negative child contaminated unrelated host streams",
+    );
 }
 
 fn exit_status(a: &mut Term) {
@@ -1093,14 +1404,22 @@ fn exit_status(a: &mut Term) {
     let stu = a.run("echo stu=$?", 30_000);
     check(
         "exit-status-unknown-program",
-        unknown.is_ok() && matches!(&stu, Ok(l) if l.len() == 1 && l[0].starts_with("stu=") && l[0] != "stu=0"),
+        unknown.is_ok()
+            && matches!(&stu, Ok(l) if l.len() == 1 && l[0].starts_with("stu=") && l[0] != "stu=0"),
         &format!("{stu:?}"),
     );
 }
 
 /// Every rights-gated `NetRequest`, in the order `/bin/p03-filter net-probe` sends them.
-const NET_PROBE_OPS: [&str; 7] =
-    ["resolve", "tcp-connect", "udp-create", "udp-bind", "tcp-listen", "multicast-join", "l2-send"];
+const NET_PROBE_OPS: [&str; 7] = [
+    "resolve",
+    "tcp-connect",
+    "udp-create",
+    "udp-bind",
+    "tcp-listen",
+    "multicast-join",
+    "l2-send",
+];
 
 /// S2-N: a Cell launched on a capability-free edge (`cellbox -> /bin/p03-filter`, the
 /// shell's own rights) is refused every gated net operation with `Err(0xFC)`, while
@@ -1124,11 +1443,16 @@ fn net_rights(a: &mut Term) {
         );
     }
     let st = a.run("echo stnp=$?", 30_000);
-    let probe_lines: Vec<&String> = lines.iter().filter(|l| l.starts_with("NETPROBE ")).collect();
+    let probe_lines: Vec<&String> = lines
+        .iter()
+        .filter(|l| l.starts_with("NETPROBE "))
+        .collect();
     check(
         "net-probe-done",
         probe_lines.len() == NET_PROBE_OPS.len() + 1
-            && probe_lines.last().is_some_and(|l| l.as_str() == "NETPROBE DONE")
+            && probe_lines
+                .last()
+                .is_some_and(|l| l.as_str() == "NETPROBE DONE")
             && matches!(&st, Ok(l) if l == &[String::from("stnp=0")]),
         &format!("lines={} st={st:?}", probe_lines.len()),
     );
@@ -1142,12 +1466,25 @@ fn net_rights(a: &mut Term) {
     let started = now_ms();
     let curl = a.run(curl_cmd, 180_000);
     let elapsed = now_ms().saturating_sub(started);
-    let streams = format!("{}\n{}", strip_ansi(a.raw_result(curl_cmd).unwrap_or(&a.out)), a.stderr_text());
+    let streams = format!(
+        "{}\n{}",
+        strip_ansi(a.raw_result(curl_cmd).unwrap_or(&a.out)),
+        a.stderr_text()
+    );
     let st = a.run("echo stcurl=$?", 30_000);
-    println(&format!("P04 INFO net-curl-end elapsed_ms={elapsed} status={st:?}"));
-    let refused = ["cannot resolve host", "connect failed", "denied", "Denied", "permission", "Permission"]
-        .iter()
-        .any(|needle| streams.contains(needle));
+    println(&format!(
+        "P04 INFO net-curl-end elapsed_ms={elapsed} status={st:?}"
+    ));
+    let refused = [
+        "cannot resolve host",
+        "connect failed",
+        "denied",
+        "Denied",
+        "permission",
+        "Permission",
+    ]
+    .iter()
+    .any(|needle| streams.contains(needle));
     check(
         "net-curl-admitted",
         curl.is_ok()
@@ -1168,7 +1505,11 @@ fn config_probe(a: &mut Term, args: &str) -> String {
         Err(error) => return format!("run-error:{error}"),
     };
     let mut words = args.split(' ');
-    let prefix = format!("CFGPROBE {} {} ", words.next().unwrap_or(""), words.next().unwrap_or(""));
+    let prefix = format!(
+        "CFGPROBE {} {} ",
+        words.next().unwrap_or(""),
+        words.next().unwrap_or("")
+    );
     let seen: Vec<&String> = lines.iter().filter(|l| l.starts_with(&prefix)).collect();
     match seen.as_slice() {
         [line] => String::from(&line[prefix.len()..]),
@@ -1231,7 +1572,10 @@ fn config_rights(a: &mut Term) {
         "config-denial-on-stderr-only",
         system_out.is_empty()
             && out.is_empty()
-            && !system_out.iter().chain(out.iter()).any(|l| l.contains("permission denied")),
+            && !system_out
+                .iter()
+                .chain(out.iter())
+                .any(|l| l.contains("permission denied")),
         &format!("system={system_out:?} namespace={out:?}"),
     );
 
@@ -1267,19 +1611,34 @@ fn run_s2tw_probe(a: &mut Term, cmd: &str, status_var: &str) -> ProbeRun {
     let st = a.run(&format!("echo {status_var}=$?"), 30_000);
     let lines: Vec<String> = run
         .as_ref()
-        .map(|l| l.iter().filter(|l| l.starts_with("S2TW ")).cloned().collect())
+        .map(|l| {
+            l.iter()
+                .filter(|l| l.starts_with("S2TW "))
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     let complete = lines.len() == S2TW_RIGHTS.len() + 1
         && lines.last().is_some_and(|l| l.as_str() == "S2TW DONE")
         && matches!(&st, Ok(l) if l == &[format!("{status_var}=0")]);
-    let why = format!("cmd={cmd} lines={lines:?} run={:?} st={st:?}", run.as_ref().map(Vec::len));
-    ProbeRun { lines, complete, why }
+    let why = format!(
+        "cmd={cmd} lines={lines:?} run={:?} st={st:?}",
+        run.as_ref().map(Vec::len)
+    );
+    ProbeRun {
+        lines,
+        complete,
+        why,
+    }
 }
 
 /// The value the probe reported for `right`, when it reported it exactly once.
 fn s2tw_result<'a>(probe: &'a ProbeRun, right: &str) -> Option<&'a str> {
     let prefix = format!("S2TW {right} ");
-    let mut seen = probe.lines.iter().filter_map(|l| l.strip_prefix(prefix.as_str()));
+    let mut seen = probe
+        .lines
+        .iter()
+        .filter_map(|l| l.strip_prefix(prefix.as_str()));
     let first = seen.next()?;
     seen.next().is_none().then_some(first)
 }
@@ -1314,16 +1673,23 @@ fn sandbox_rights(a: &mut Term) {
             && matches!(&cst, Ok(l) if l.len() == 1 && l[0].starts_with("stsbcat=") && l[0] != "stsbcat=0")
             && matches!(&listed, Ok(l) if !rows_of(l).iter().any(|r| r.contains("s2tw-probe-sb")))
             && matches!(&lst, Ok(l) if l == &[String::from("stsbls=0")]),
-        &format!("cat={cat:?} shown={shown} missing={missing} cst={cst:?} ls={listed:?} lst={lst:?}"),
+        &format!(
+            "cat={cat:?} shown={shown} missing={missing} cst={cst:?} ls={listed:?} lst={lst:?}"
+        ),
     );
 
     let control = run_s2tw_probe(a, "/bin/s2tw-probe ok", "sts2ok");
     for right in S2TW_RIGHTS {
         // An admitted snapshot must also decode as a V1 snapshot, not merely succeed.
-        let admitted = if right == "telemetry" { "other:cells-" } else { "other:" };
+        let admitted = if right == "telemetry" {
+            "other:cells-"
+        } else {
+            "other:"
+        };
         check(
             &format!("control-allowed-{right}"),
-            control.complete && s2tw_result(&control, right).is_some_and(|r| r.starts_with(admitted)),
+            control.complete
+                && s2tw_result(&control, right).is_some_and(|r| r.starts_with(admitted)),
             &control.why,
         );
     }
@@ -1339,7 +1705,12 @@ fn sandbox_rights(a: &mut Term) {
 
 /// Type `cmd`, wait until `needle` shows (the producer is running), let it run `run_ms`
 /// longer, press Ctrl-C (`submit_key`) and wait for the prompt. `Ok(true)` = needle seen.
-fn interrupt_run(a: &mut Term, cmd: &str, needle: Option<&str>, run_ms: u64) -> Result<bool, String> {
+fn interrupt_run(
+    a: &mut Term,
+    cmd: &str,
+    needle: Option<&str>,
+    run_ms: u64,
+) -> Result<bool, String> {
     a.send(cmd)?;
     let mut seen = needle.is_none();
     if let Some(needle) = needle {
@@ -1355,7 +1726,9 @@ fn interrupt_run(a: &mut Term, cmd: &str, needle: Option<&str>, run_ms: u64) -> 
     }
     sleep_ms(run_ms);
     a.pump();
-    a.host.submit_key(0x63, CTRL, 1).map_err(|s| format!("submit_key {s:?}"))?;
+    a.host
+        .submit_key(0x63, CTRL, 1)
+        .map_err(|s| format!("submit_key {s:?}"))?;
     a.wait_prompt(60_000)?;
     Ok(seen)
 }
@@ -1364,21 +1737,47 @@ fn interrupt_run(a: &mut Term, cmd: &str, needle: Option<&str>, run_ms: u64) -> 
 /// pipeline and prompts again with status 130 (the shell itself is never cancelled).
 fn ctrl_c(a: &mut Term) {
     // An endless typed producer feeding an external consumer.
-    let top = interrupt_run(a, "top --records --frames 100000 | to jsonl | /bin/p03-filter cat", Some("{\""), 500);
-    check("ctrl-c-recovers", matches!(top, Ok(true)), &format!("{top:?}"));
+    let top = interrupt_run(
+        a,
+        "top --records --frames 100000 | to jsonl | /bin/p03-filter cat",
+        Some("{\""),
+        500,
+    );
+    check(
+        "ctrl-c-recovers",
+        matches!(top, Ok(true)),
+        &format!("{top:?}"),
+    );
     // Nothing keeps flowing after the prompt is back.
     a.pump();
     let settled = a.out.len();
     sleep_ms(1500);
     a.pump();
-    check("ctrl-c-output-stops", a.out.len() == settled && a.at_prompt(), "output continued after the prompt");
+    check(
+        "ctrl-c-output-stops",
+        a.out.len() == settled && a.at_prompt(),
+        "output continued after the prompt",
+    );
     let st = a.run("echo cc=$?", 30_000);
-    check("ctrl-c-status-130", matches!(&st, Ok(l) if l == &[String::from("cc=130")]), &format!("{st:?}"));
+    check(
+        "ctrl-c-status-130",
+        matches!(&st, Ok(l) if l == &[String::from("cc=130")]),
+        &format!("{st:?}"),
+    );
     let alive = a.run("echo p04-after-ctrl-c", 30_000);
-    check("ctrl-c-shell-alive", matches!(&alive, Ok(l) if l == &[String::from("p04-after-ctrl-c")]), &format!("{alive:?}"));
+    check(
+        "ctrl-c-shell-alive",
+        matches!(&alive, Ok(l) if l == &[String::from("p04-after-ctrl-c")]),
+        &format!("{alive:?}"),
+    );
 
     // An endless external producer feeding an external consumer.
-    let ext = interrupt_run(a, "/bin/p03-filter endless | /bin/p03-filter hex", None, 3000);
+    let ext = interrupt_run(
+        a,
+        "/bin/p03-filter endless | /bin/p03-filter hex",
+        None,
+        3000,
+    );
     let st = a.run("echo cc2=$?", 30_000);
     check(
         "ctrl-c-external-pipeline",
@@ -1394,7 +1793,9 @@ fn ctrl_c(a: &mut Term) {
     let idle = a.run("echo p04-idle-ok", 30_000);
     check(
         "ctrl-c-idle-prompt",
-        key.is_ok() && back.is_ok() && matches!(&idle, Ok(l) if l == &[String::from("p04-idle-ok")]),
+        key.is_ok()
+            && back.is_ok()
+            && matches!(&idle, Ok(l) if l == &[String::from("p04-idle-ok")]),
         &format!("key={} back={back:?} idle={idle:?}", status(&key)),
     );
 }
@@ -1467,7 +1868,10 @@ fn endless_local_sink(a: &mut Term) {
             && back.is_ok()
             && elapsed < 15_000
             && matches!(&st, Ok(l) if l == &[String::from("ccsink=130")]),
-        &format!("key={} back={back:?} elapsed={elapsed} st={st:?}", status(&key)),
+        &format!(
+            "key={} back={back:?} elapsed={elapsed} st={st:?}",
+            status(&key)
+        ),
     );
     let alive = a.run("echo alive", 30_000);
     oom |= oom_text(a);
@@ -1476,7 +1880,11 @@ fn endless_local_sink(a: &mut Term) {
         matches!(&alive, Ok(l) if l == &[String::from("alive")]),
         &format!("{alive:?}"),
     );
-    check("endless-local-sink-no-oom", !oom, "OOM/heap exhausted text on the terminal streams");
+    check(
+        "endless-local-sink-no-oom",
+        !oom,
+        "OOM/heap exhausted text on the terminal streams",
+    );
 }
 
 fn resize(a: &mut Term) {
@@ -1485,8 +1893,14 @@ fn resize(a: &mut Term) {
     let alive = a.run("echo p04-after-resize", 30_000);
     check(
         "resize-accepted",
-        grow.is_ok() && shrink.is_ok() && matches!(&alive, Ok(l) if l.len() == 1 && l[0] == "p04-after-resize"),
-        &format!("grow={} shrink={} alive={alive:?}", status(&grow), status(&shrink)),
+        grow.is_ok()
+            && shrink.is_ok()
+            && matches!(&alive, Ok(l) if l.len() == 1 && l[0] == "p04-after-resize"),
+        &format!(
+            "grow={} shrink={} alive={alive:?}",
+            status(&grow),
+            status(&shrink)
+        ),
     );
 }
 
@@ -1526,7 +1940,12 @@ fn settle(term: &mut Term) {
 
 /// Pump `term` until `pred` yields a value on its grid model, re-checked on the settled
 /// frame. `Err` carries a structure-only description of the screen.
-fn wait_screen<T>(term: &mut Term, ms: u64, what: &str, mut pred: impl FnMut(&Screen) -> Option<T>) -> Result<T, String> {
+fn wait_screen<T>(
+    term: &mut Term,
+    ms: u64,
+    what: &str,
+    mut pred: impl FnMut(&Screen) -> Option<T>,
+) -> Result<T, String> {
     let end = now_ms() + ms;
     loop {
         term.pump();
@@ -1546,20 +1965,45 @@ fn wait_screen<T>(term: &mut Term, ms: u64, what: &str, mut pred: impl FnMut(&Sc
 /// Pump until the grid model shows, inside the TUI's bordered block, a data row whose
 /// `id:gen` token is followed by `name`; returns that identity.
 fn wait_cell_row(a: &mut Term, name: &str, ms: u64) -> Result<String, String> {
-    wait_screen(a, ms, "drawn Cell row", |s| s.frame().and_then(|f| f.cell_row(name)))
+    wait_screen(a, ms, "drawn Cell row", |s| {
+        s.frame().and_then(|f| f.cell_row(name))
+    })
 }
 
 /// One `SubmitEvents` of text through `attachment`, built here (not through the host) so a
 /// stale attachment can be presented to the input owner. Returns the owner's status.
-fn raw_submit_text(op: ObjectRefV1, session: ObjectRefV1, attachment: ObjectRefV1, text: &[u8]) -> Result<Status, Status> {
+fn raw_submit_text(
+    op: ObjectRefV1,
+    session: ObjectRefV1,
+    attachment: ObjectRefV1,
+    text: &[u8],
+) -> Result<Status, Status> {
     let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
     let mut body = [0u8; 128];
     let mut w = Writer::new(&mut body);
-    w.reference(session)?; w.reference(attachment)?; w.u64(0)?; w.u16(1)?; w.u16(0)?; w.u32((24 + text.len()) as u32)?;
-    w.u64(0)?; w.u64(0)?; w.u16(2)?; w.u16(text.len() as u16)?; w.u32(0)?; w.bytes(text)?;
+    w.reference(session)?;
+    w.reference(attachment)?;
+    w.u64(0)?;
+    w.u16(1)?;
+    w.u16(0)?;
+    w.u32((24 + text.len()) as u32)?;
+    w.u64(0)?;
+    w.u64(0)?;
+    w.u16(2)?;
+    w.u16(text.len() as u16)?;
+    w.u32(0)?;
+    w.bytes(text)?;
     let len = w.position();
     let mut reply = [0u8; HEADER_LEN + 8];
-    let header = ostd::session::service_call(owner, api::syscall::service::INPUT, op, InputOp::SubmitEvents as u16, true, &body[..len], &mut reply)?;
+    let header = ostd::session::service_call(
+        owner,
+        api::syscall::service::INPUT,
+        op,
+        InputOp::SubmitEvents as u16,
+        true,
+        &body[..len],
+        &mut reply,
+    )?;
     Ok(header.status)
 }
 
@@ -1574,7 +2018,10 @@ fn frontend(a: &mut Term) {
     let attached = a.host.state() == FrontendState::Attached;
     check(
         "frontend-controller-session",
-        attached && a.host.session().is_some() && a.host.attachment().is_some() && a.host.child().is_some(),
+        attached
+            && a.host.session().is_some()
+            && a.host.attachment().is_some()
+            && a.host.child().is_some(),
         &format!("state={:?}", a.host.state()),
     );
 
@@ -1585,35 +2032,56 @@ fn frontend(a: &mut Term) {
     let made = a.run(&format!("echo rmi > /tmp/{name}"), 30_000);
     let cmd = format!("rm -i /tmp/{name}");
     let asked = a.send(&cmd).and_then(|_| wait_text(a, "'? (y/n) ", 30_000));
-    let answered = a.host.submit_text("y").and_then(|_| a.host.submit_key(ENTER, 0, 1));
+    let answered = a
+        .host
+        .submit_text("y")
+        .and_then(|_| a.host.submit_key(ENTER, 0, 1));
     let back = a.wait_prompt(30_000);
     let st = a.run("echo strmi=$?", 30_000);
     let listed = a.run("ls --records /tmp | select name | to jsonl", 30_000);
     check(
         "frontend-rm-interactive",
-        made.is_ok() && asked.is_ok() && answered.is_ok() && back.is_ok()
+        made.is_ok()
+            && asked.is_ok()
+            && answered.is_ok()
+            && back.is_ok()
             && matches!(&st, Ok(l) if l == &[String::from("strmi=0")])
             && matches!(&listed, Ok(l) if !rows_of(l).is_empty() && !rows_of(l).iter().any(|r| r.contains(&name))),
-        &format!("asked={asked:?} answered={} back={back:?} st={st:?}", status(&answered)),
+        &format!(
+            "asked={asked:?} answered={} back={back:?} st={st:?}",
+            status(&answered)
+        ),
     );
 
     // Interactive `top` draws frames until `q` typed on the frontend quits it. A frame is
     // shown once the grid model has a data row, inside the bordered block, with an
     // `id:gen` token followed by `cellbox` (a shell's Cell).
-    let shown = a.send("top").and_then(|_| wait_cell_row(a, "cellbox", 30_000));
+    let shown = a
+        .send("top")
+        .and_then(|_| wait_cell_row(a, "cellbox", 30_000));
     let quit = a.host.submit_text("q");
     let back = a.wait_prompt(30_000);
     let st = a.run("echo sttop=$?", 30_000);
     check(
         "frontend-top-quit",
-        shown.is_ok() && quit.is_ok() && back.is_ok() && matches!(&st, Ok(l) if l == &[String::from("sttop=0")]),
-        &format!("shown={shown:?} quit={} back={back:?} st={st:?}", status(&quit)),
+        shown.is_ok()
+            && quit.is_ok()
+            && back.is_ok()
+            && matches!(&st, Ok(l) if l == &[String::from("sttop=0")]),
+        &format!(
+            "shown={shown:?} quit={} back={back:?} st={st:?}",
+            status(&quit)
+        ),
     );
 
     // State the re-attached frontend must find again.
     let cd = a.run("cd /tmp", 30_000);
     let marked = a.run("echo p04-frontend-history", 30_000);
-    let (session, old, op) = (a.host.session(), a.host.attachment(), a.host.shell_operation());
+    let (session, old, op) = (
+        a.host.session(),
+        a.host.attachment(),
+        a.host.shell_operation(),
+    );
 
     a.pump();
     let released = a.host.release();
@@ -1623,9 +2091,18 @@ fn frontend(a: &mut Term) {
     let local = a.host.submit_text("x");
     check(
         "frontend-release-detached",
-        cd.is_ok() && marked.is_ok() && released.is_ok() && a.host.state() == FrontendState::Detached
-            && running == Ok(ChildPoll::Running) && local == Err(Status::WouldBlock),
-        &format!("release={} state={:?} child={running:?} local={}", status(&released), a.host.state(), status(&local)),
+        cd.is_ok()
+            && marked.is_ok()
+            && released.is_ok()
+            && a.host.state() == FrontendState::Detached
+            && running == Ok(ChildPoll::Running)
+            && local == Err(Status::WouldBlock),
+        &format!(
+            "release={} state={:?} child={running:?} local={}",
+            status(&released),
+            a.host.state(),
+            status(&local)
+        ),
     );
 
     a.out.clear();
@@ -1634,28 +2111,47 @@ fn frontend(a: &mut Term) {
     let redrawn = a.wait_prompt(30_000);
     check(
         "frontend-reattach-redraw",
-        reattached.is_ok() && redrawn.is_ok() && a.host.state() == FrontendState::Attached
-            && a.host.session() == session && a.host.attachment().is_some() && a.host.attachment() != old,
-        &format!("reattach={} redraw={redrawn:?} state={:?}", status(&reattached), a.host.state()),
+        reattached.is_ok()
+            && redrawn.is_ok()
+            && a.host.state() == FrontendState::Attached
+            && a.host.session() == session
+            && a.host.attachment().is_some()
+            && a.host.attachment() != old,
+        &format!(
+            "reattach={} redraw={redrawn:?} state={:?}",
+            status(&reattached),
+            a.host.state()
+        ),
     );
     let pwd = a.run("pwd", 30_000);
-    check("frontend-reattach-cwd-preserved", matches!(&pwd, Ok(l) if l == &[String::from("/tmp")]), &format!("{pwd:?}"));
+    check(
+        "frontend-reattach-cwd-preserved",
+        matches!(&pwd, Ok(l) if l == &[String::from("/tmp")]),
+        &format!("{pwd:?}"),
+    );
 
     // History of the same shell: the line before the re-attach `pwd` is two Ups back;
     // Enter runs it again.
     a.pump();
     a.out.clear();
     a.err.clear();
-    let keys = a.host.submit_key(0x110010, 0, 1)
+    let keys = a
+        .host
+        .submit_key(0x110010, 0, 1)
         .and_then(|_| a.host.submit_key(0x110010, 0, 1))
         .and_then(|_| a.host.submit_key(ENTER, 0, 1));
     // The recall redraws the prompt before the line: wait for the command's own output.
-    let rerun = wait_text(a, "\np04-frontend-history\n", 30_000).and_then(|_| a.wait_prompt(30_000));
+    let rerun =
+        wait_text(a, "\np04-frontend-history\n", 30_000).and_then(|_| a.wait_prompt(30_000));
     let lines = lines_of(&strip_ansi(&a.out));
     check(
         "frontend-reattach-history-preserved",
         keys.is_ok() && rerun.is_ok() && lines.iter().any(|l| l == "p04-frontend-history"),
-        &format!("keys={} rerun={rerun:?} lines={}", status(&keys), lines.len()),
+        &format!(
+            "keys={} rerun={rerun:?} lines={}",
+            status(&keys),
+            lines.len()
+        ),
     );
 
     let stale = match (op, session, old) {
@@ -1665,16 +2161,27 @@ fn frontend(a: &mut Term) {
     let alive = a.run("echo p04-after-stale", 30_000);
     check(
         "frontend-old-attachment-stale",
-        stale == Ok(Status::Stale) && matches!(&alive, Ok(l) if l == &[String::from("p04-after-stale")]),
+        stale == Ok(Status::Stale)
+            && matches!(&alive, Ok(l) if l == &[String::from("p04-after-stale")]),
         &format!("stale={stale:?} alive={alive:?}"),
     );
     let restored = a.host.resize(24, 80);
-    check("frontend-resize-after-reattach", restored.is_ok(), &status(&restored));
+    check(
+        "frontend-resize-after-reattach",
+        restored.is_ok(),
+        &status(&restored),
+    );
 }
 
 /// Screen-mode bytes no one-shot or batch command may emit: alternate screen enter/leave,
 /// hidden cursor, bracketed paste on, and the shell's soft reset.
-const TUI_MODES: [&[u8]; 5] = [b"\x1b[?1049h", b"\x1b[?1049l", b"\x1b[?25l", b"\x1b[?2004h", SOFT_RESET];
+const TUI_MODES: [&[u8]; 5] = [
+    b"\x1b[?1049h",
+    b"\x1b[?1049l",
+    b"\x1b[?25l",
+    b"\x1b[?2004h",
+    SOFT_RESET,
+];
 
 fn tui_bytes(bytes: &[u8]) -> bool {
     TUI_MODES.iter().any(|seq| occurrences(bytes, seq) > 0)
@@ -1733,8 +2240,15 @@ fn selective_tui(a: &mut Term) {
 
 /// Phase 06 S6-4 §7.2 markers of the interactive Ratatui `top` on the driver's hosts.
 const TOP_TUI_MARKERS: [&str; 10] = [
-    "top-tui-frame", "top-tui-refresh", "top-tui-drill", "top-tui-keys", "top-tui-no-lifecycle",
-    "top-tui-resize", "top-tui-quit-restores", "top-tui-two-sessions", "top-tui-idle-cost",
+    "top-tui-frame",
+    "top-tui-refresh",
+    "top-tui-drill",
+    "top-tui-keys",
+    "top-tui-no-lifecycle",
+    "top-tui-resize",
+    "top-tui-quit-restores",
+    "top-tui-two-sessions",
+    "top-tui-idle-cost",
     "top-tui-ctrl-c-130",
 ];
 const ESCAPE: u32 = 0x110002;
@@ -1752,7 +2266,12 @@ const BORDER: Color = Color::Rgb(0x89, 0xb4, 0xfa);
 /// draws on a bounded (fixed) Ratatui viewport, whose clear erases row by row from column
 /// 1 (`CUP y;1` + `ED 0`); its first step homes the cursor with the default pen and erases
 /// to the end of the screen, i.e. clears the whole screen.
-const TUI_ENTRY: [&[u8]; 4] = [b"\x1b[?1049h", b"\x1b[?25l", b"\x1b[?2004h", b"\x1b[1;1H\x1b[0m\x1b[J"];
+const TUI_ENTRY: [&[u8]; 4] = [
+    b"\x1b[?1049h",
+    b"\x1b[?25l",
+    b"\x1b[?2004h",
+    b"\x1b[1;1H\x1b[0m\x1b[J",
+];
 /// The CANONICAL transition every `top` exit sends.
 const TUI_RESTORE: [&[u8]; 3] = [b"\x1b[?1049l", b"\x1b[?25h", b"\x1b[?2004l"];
 /// Ceiling for a Cell idling in interactive `top` (CPU% tenths of one core). An
@@ -1761,13 +2280,18 @@ const TUI_RESTORE: [&[u8]; 3] = [b"\x1b[?1049l", b"\x1b[?25h", b"\x1b[?2004l"];
 const IDLE_COST_MAX_TENTHS: u64 = 500;
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 /// Every sequence of `seqs` occurs in `bytes`, first occurrences in this order.
 fn in_order(bytes: &[u8], seqs: &[&[u8]]) -> (bool, Vec<Option<usize>>) {
     let at: Vec<Option<usize>> = seqs.iter().map(|seq| find(bytes, seq)).collect();
-    (at.iter().all(Option::is_some) && at.windows(2).all(|pair| pair[0] < pair[1]), at)
+    (
+        at.iter().all(Option::is_some) && at.windows(2).all(|pair| pair[0] < pair[1]),
+        at,
+    )
 }
 
 fn skip(names: &[&str], why: &str) {
@@ -1777,16 +2301,22 @@ fn skip(names: &[&str], why: &str) {
 }
 
 fn press(term: &mut Term, code: u32) -> Result<(), String> {
-    term.host.submit_key(code, 0, 1).map_err(|s| format!("submit_key {s:?}"))
+    term.host
+        .submit_key(code, 0, 1)
+        .map_err(|s| format!("submit_key {s:?}"))
 }
 
 fn type_keys(term: &mut Term, text: &str) -> Result<(), String> {
-    term.host.submit_text(text).map_err(|s| format!("submit_text {s:?}"))
+    term.host
+        .submit_text(text)
+        .map_err(|s| format!("submit_text {s:?}"))
 }
 
 /// The `id:gen` of the host's shell Cell: its committed child principal.
 fn shell_identity(term: &Term) -> Option<String> {
-    term.host.child().map(|child| format!("{}:{}", child.principal.cell_id, child.principal.generation))
+    term.host
+        .child()
+        .map(|child| format!("{}:{}", child.principal.cell_id, child.principal.generation))
 }
 
 /// A fresh host of `rows` x `cols` with its shell at the prompt.
@@ -1821,7 +2351,12 @@ fn drain_for(term: &mut Term, ms: u64) {
 }
 
 /// `Term::run` on `term` while `other` (running `top`) keeps being drained.
-fn run_beside(term: &mut Term, other: &mut Term, cmd: &str, ms: u64) -> Result<Vec<String>, String> {
+fn run_beside(
+    term: &mut Term,
+    other: &mut Term,
+    cmd: &str,
+    ms: u64,
+) -> Result<Vec<String>, String> {
     term.send(cmd)?;
     let end = now_ms() + ms;
     loop {
@@ -1847,7 +2382,10 @@ fn tid_set(a: &mut Term, other: &mut Term) -> Result<Vec<String>, String> {
 
 /// Integer first tokens of `lines` (the TID column of a task table), sorted.
 fn first_ints(lines: &[String]) -> Vec<u64> {
-    let mut ints: Vec<u64> = lines.iter().filter_map(|l| l.split_whitespace().next()?.parse().ok()).collect();
+    let mut ints: Vec<u64> = lines
+        .iter()
+        .filter_map(|l| l.split_whitespace().next()?.parse().ok())
+        .collect();
     ints.sort_unstable();
     ints
 }
@@ -1866,7 +2404,9 @@ fn bytes_value(text: &str) -> Option<u128> {
     };
     let number = &text[..text.len() - 1];
     let tenths = match number.split_once('.') {
-        Some((whole, tenth)) if tenth.len() == 1 => whole.parse::<u128>().ok()? * 10 + tenth.parse::<u128>().ok()?,
+        Some((whole, tenth)) if tenth.len() == 1 => {
+            whole.parse::<u128>().ok()? * 10 + tenth.parse::<u128>().ok()?
+        }
         None if shift == 0 => number.parse::<u128>().ok()? * 10,
         _ => return None,
     };
@@ -1927,14 +2467,21 @@ fn top_subst_refused(a: &mut Term) {
     let enters = a.screen.enters;
     let cmd = "x=$(top)";
     let run = a.run(cmd, 30_000);
-    let clean = a.raw_result(cmd) == Some(b"".as_slice()) && !tui_bytes(&a.out) && !tui_bytes(&a.err);
+    let clean =
+        a.raw_result(cmd) == Some(b"".as_slice()) && !tui_bytes(&a.out) && !tui_bytes(&a.err);
     let named = a.stderr_text().contains("-b");
     let st = a.run("echo stsub=$?", 30_000);
     check(
         "top-subst-refused",
-        run.is_ok() && clean && named && a.screen.enters == enters
+        run.is_ok()
+            && clean
+            && named
+            && a.screen.enters == enters
             && matches!(&st, Ok(l) if l == &[String::from("stsub=2")]),
-        &format!("run={:?} clean={clean} names-b={named} st={st:?}", run.as_ref().err()),
+        &format!(
+            "run={:?} clean={clean} names-b={named} st={st:?}",
+            run.as_ref().err()
+        ),
     );
 }
 
@@ -1959,7 +2506,14 @@ fn top_frame(t: &mut Term) -> bool {
             && f.row_background(f.h - 1) == Some(SURFACE)
             && corners.iter().all(|&(x, y)| f.cell(x, y).pen.fg == BORDER)
     });
-    let bars = s.frame().map(|f| (f.row_background(0), f.row_background(1), f.row_background(f.h - 1), f.cell(0, 2).pen.fg));
+    let bars = s.frame().map(|f| {
+        (
+            f.row_background(0),
+            f.row_background(1),
+            f.row_background(f.h - 1),
+            f.cell(0, 2).pen.fg,
+        )
+    });
     check(
         "top-tui-frame",
         shown.is_ok() && ordered && modes && layout,
@@ -1980,7 +2534,9 @@ fn top_refresh(t: &mut Term) {
     for _ in 0..3 {
         let last = seen.last().copied();
         let next = wait_screen(t, 15_000, "next sample", |s| {
-            s.frame().and_then(|f| f.sample()).filter(|v| last != Some(*v))
+            s.frame()
+                .and_then(|f| f.sample())
+                .filter(|v| last != Some(*v))
         });
         match next {
             Ok(sample) => seen.push(sample),
@@ -2007,14 +2563,22 @@ fn select_row(t: &mut Term, id: &str) -> Result<(), String> {
                 .iter()
                 .position(|r| r.first().map(String::as_str) == Some(id))
                 .ok_or_else(|| format!("{id} not among {} rows", rows.len()))?;
-            (target, f.selected().ok_or_else(|| String::from("no highlighted row"))?, f.selected_id())
+            (
+                target,
+                f.selected()
+                    .ok_or_else(|| String::from("no highlighted row"))?,
+                f.selected_id(),
+            )
         };
         if target == selected {
             return Ok(());
         }
         press(t, if target > selected { DOWN } else { UP })?;
         wait_screen(t, 5_000, "highlight move", |s| {
-            s.frame().and_then(|f| f.selected_id()).filter(|now| Some(now) != current.as_ref()).map(|_| ())
+            s.frame()
+                .and_then(|f| f.selected_id())
+                .filter(|now| Some(now) != current.as_ref())
+                .map(|_| ())
         })?;
     }
     Err(format!("{id} never highlighted"))
@@ -2041,7 +2605,10 @@ fn top_drill(t: &mut Term) -> Result<(String, Vec<u64>), String> {
     press(t, ESCAPE)?;
     wait_screen(t, 30_000, "Cells view after Esc", |s| {
         let f = s.frame()?;
-        let listed = f.rows().iter().any(|r| r.len() >= 2 && r[0] == own && r[1] == "cellbox");
+        let listed = f
+            .rows()
+            .iter()
+            .any(|r| r.len() >= 2 && r[0] == own && r[1] == "cellbox");
         (listed && f.selected_id().as_deref() == Some(own.as_str())).then_some(())
     })?;
     Ok((own, tids))
@@ -2067,28 +2634,46 @@ fn top_drill_compare(t: &mut Term, drill: Result<(String, Vec<u64>), String>) {
 /// Type a sort key and wait for the redraw it causes (the title names the sort); returns
 /// the rows of the settled frame.
 fn sort_key(t: &mut Term, key: &str) -> Result<Vec<Vec<String>>, String> {
-    let title = t.screen.frame().map(|f| f.title()).ok_or_else(|| String::from("no frame"))?;
+    let title = t
+        .screen
+        .frame()
+        .map(|f| f.title())
+        .ok_or_else(|| String::from("no frame"))?;
     type_keys(t, key)?;
-    wait_screen(t, 10_000, &format!("redraw after {key}"), |s| s.frame().filter(|f| f.title() != title).map(|f| f.rows()))
+    wait_screen(t, 10_000, &format!("redraw after {key}"), |s| {
+        s.frame().filter(|f| f.title() != title).map(|f| f.rows())
+    })
 }
 
 /// Press `code` and wait until the highlight is on visible data row `want`.
 fn nav(t: &mut Term, code: u32, want: usize) -> Result<(), String> {
     press(t, code)?;
-    wait_screen(t, 10_000, &format!("highlight on row {want} after key {code:#x}"), |s| {
-        s.frame().and_then(|f| f.selected()).filter(|&row| row == want).map(|_| ())
-    })
+    wait_screen(
+        t,
+        10_000,
+        &format!("highlight on row {want} after key {code:#x}"),
+        |s| {
+            s.frame()
+                .and_then(|f| f.selected())
+                .filter(|&row| row == want)
+                .map(|_| ())
+        },
+    )
 }
 
 /// `f` opens the field picker, Space toggles its first field (`cell_id`, which the CELL
 /// column counts as), Enter applies: the shown column count afterwards.
 fn toggle_first_field(t: &mut Term, before: usize) -> Result<usize, String> {
     type_keys(t, "f")?;
-    wait_screen(t, 10_000, "field picker", |s| s.frame().filter(|f| f.popup()).map(|_| ()))?;
+    wait_screen(t, 10_000, "field picker", |s| {
+        s.frame().filter(|f| f.popup()).map(|_| ())
+    })?;
     type_keys(t, " ")?;
     press(t, ENTER)?;
     wait_screen(t, 10_000, "applied fields", |s| {
-        s.frame().filter(|f| !f.popup() && f.header().len() != before).map(|f| f.header().len())
+        s.frame()
+            .filter(|f| !f.popup() && f.header().len() != before)
+            .map(|f| f.header().len())
     })
 }
 
@@ -2099,7 +2684,10 @@ fn toggle_first_field(t: &mut Term, before: usize) -> Result<usize, String> {
 /// the first field drops exactly one column, the same again restores it.
 fn keys_walk(t: &mut Term) -> Result<String, String> {
     let rows = sort_key(t, "o")?;
-    let quotas: Vec<u128> = rows.iter().filter_map(|r| r.get(4).and_then(|v| bytes_value(v))).collect();
+    let quotas: Vec<u128> = rows
+        .iter()
+        .filter_map(|r| r.get(4).and_then(|v| bytes_value(v)))
+        .collect();
     if quotas.len() < 2 || !quotas.windows(2).all(|pair| pair[0] >= pair[1]) {
         return Err(format!("o: QUOTA not descending {quotas:?}"));
     }
@@ -2110,10 +2698,16 @@ fn keys_walk(t: &mut Term) -> Result<String, String> {
     let rows = sort_key(t, "r")?;
     let again = cell_ids(&rows);
     let strict = |ids: &Option<Vec<u64>>, up: bool| {
-        ids.as_ref().is_some_and(|v| v.len() >= 2 && v.windows(2).all(|p| if up { p[0] < p[1] } else { p[0] > p[1] }))
+        ids.as_ref().is_some_and(|v| {
+            v.len() >= 2
+                && v.windows(2)
+                    .all(|p| if up { p[0] < p[1] } else { p[0] > p[1] })
+        })
     };
     if !strict(&ascending, true) || !strict(&reversed, false) || !strict(&again, true) {
-        return Err(format!("CELL order o={ascending:?} r={reversed:?} r={again:?}"));
+        return Err(format!(
+            "CELL order o={ascending:?} r={reversed:?} r={again:?}"
+        ));
     }
     let n = rows.len();
     if n < 3 {
@@ -2123,11 +2717,17 @@ fn keys_walk(t: &mut Term) -> Result<String, String> {
     nav(t, DOWN, 1)?;
     nav(t, PAGE_DOWN, n - 1)?;
     nav(t, UP, n - 2)?;
-    let columns = t.screen.frame().map(|f| f.header().len()).ok_or_else(|| String::from("no frame"))?;
+    let columns = t
+        .screen
+        .frame()
+        .map(|f| f.header().len())
+        .ok_or_else(|| String::from("no frame"))?;
     let fewer = toggle_first_field(t, columns)?;
     let restored = toggle_first_field(t, fewer)?;
     if fewer + 1 != columns || restored != columns {
-        return Err(format!("fields: {columns} -> {fewer} -> {restored} columns"));
+        return Err(format!(
+            "fields: {columns} -> {fewer} -> {restored} columns"
+        ));
     }
     Ok(format!("rows={n} columns={columns}->{fewer}->{restored}"))
 }
@@ -2141,13 +2741,17 @@ fn top_keys(t: &mut Term) {
 /// after, and `t` is still drawing its view.
 fn top_no_lifecycle(a: &mut Term, t: &mut Term) {
     let before = tid_set(a, t);
-    let keys = type_keys(t, "k").and_then(|_| type_keys(t, "K")).and_then(|_| press(t, DELETE));
+    let keys = type_keys(t, "k")
+        .and_then(|_| type_keys(t, "K"))
+        .and_then(|_| press(t, DELETE));
     drain_for(t, 2_000);
     let after = tid_set(a, t);
     let still = t.screen.frame().is_some() && t.host.poll_child() == Ok(ChildPoll::Running);
     check(
         "top-tui-no-lifecycle",
-        keys.is_ok() && still && matches!((&before, &after), (Ok(x), Ok(y)) if !x.is_empty() && x == y),
+        keys.is_ok()
+            && still
+            && matches!((&before, &after), (Ok(x), Ok(y)) if !x.is_empty() && x == y),
         &format!(
             "keys={keys:?} still={still} before={:?} after={:?}",
             before.as_ref().map(Vec::len),
@@ -2162,18 +2766,35 @@ fn top_no_lifecycle(a: &mut Term, t: &mut Term) {
 fn top_resize(t: &mut Term) {
     let mut ok = true;
     let mut steps = Vec::new();
-    for (rows, cols, want) in [(40u16, 120u16, (120, 40)), (24, 80, (80, 24)), (50, 132, (120, 40)), (30, 100, (100, 30))] {
+    for (rows, cols, want) in [
+        (40u16, 120u16, (120, 40)),
+        (24, 80, (80, 24)),
+        (50, 132, (120, 40)),
+        (30, 100, (100, 30)),
+    ] {
         let clears = t.screen.clears;
         let resized = t.host.resize(rows, cols);
         let drawn = wait_screen(t, 30_000, "repaint", |s| {
-            s.frame().filter(|f| s.clears > clears && (f.w, f.h) == want && f.closed() && f.outside_blank()).map(|_| ())
+            s.frame()
+                .filter(|f| {
+                    s.clears > clears && (f.w, f.h) == want && f.closed() && f.outside_blank()
+                })
+                .map(|_| ())
         });
         ok &= resized.is_ok() && drawn.is_ok();
-        steps.push(format!("{cols}x{rows}:{}:{:?}", status(&resized), drawn.err()));
+        steps.push(format!(
+            "{cols}x{rows}:{}:{:?}",
+            status(&resized),
+            drawn.err()
+        ));
     }
     let alive = t.host.poll_child() == Ok(ChildPoll::Running) && t.screen.alternate();
     let clean = !oom_text(t);
-    check("top-tui-resize", ok && alive && clean, &format!("{} alive={alive} clean={clean}", steps.join(" ")));
+    check(
+        "top-tui-resize",
+        ok && alive && clean,
+        &format!("{} alive={alive} clean={clean}", steps.join(" ")),
+    );
 }
 
 /// Host u starts `top`; t quits it (restore + prompt + status 0), compares its drill, then
@@ -2194,7 +2815,10 @@ fn top_sessions(t: &mut Term, drill: Result<(String, Vec<u64>), String>) {
             let _ = type_keys(u, "q");
             let _ = u.wait_prompt(30_000);
         }
-        _ => skip(&["top-tui-two-sessions", "top-tui-idle-cost"], &format!("host u {:?}", since.as_ref().err())),
+        _ => skip(
+            &["top-tui-two-sessions", "top-tui-idle-cost"],
+            &format!("host u {:?}", since.as_ref().err()),
+        ),
     }
     top_ctrl_c(t);
     if let Ok(u) = u.as_mut() {
@@ -2218,7 +2842,11 @@ fn top_quit_restores(t: &mut Term) {
     let st = t.run("echo stq=$?", 30_000);
     check(
         "top-tui-quit-restores",
-        quit.is_ok() && back.is_ok() && restored && model && matches!(&st, Ok(l) if l == &[String::from("stq=0")]),
+        quit.is_ok()
+            && back.is_ok()
+            && restored
+            && model
+            && matches!(&st, Ok(l) if l == &[String::from("stq=0")]),
         &format!("quit={quit:?} back={back:?} restore={at:?} {summary} st={st:?}"),
     );
 }
@@ -2230,12 +2858,17 @@ fn top_two_sessions(t: &mut Term, u: &mut Term) {
     settle(u);
     let before = u.screen.frame().and_then(|f| f.sample());
     let drawing = wait_screen(u, 15_000, "u redraw after t quit", |s| {
-        s.frame().and_then(|f| f.sample()).filter(|v| before.is_some_and(|b| *v > b))
+        s.frame()
+            .and_then(|f| f.sample())
+            .filter(|v| before.is_some_and(|b| *v > b))
     });
     t.pump();
     let t_quiet = !tui_bytes(&t.out) && !tui_bytes(&t.err) && t.at_prompt();
-    let own = u.screen.alternate() && u.screen.enters == 1 && u.screen.leaves == 0
-        && t.screen.enters == 1 && t.screen.leaves == 1;
+    let own = u.screen.alternate()
+        && u.screen.enters == 1
+        && u.screen.leaves == 0
+        && t.screen.enters == 1
+        && t.screen.leaves == 1;
     check(
         "top-tui-two-sessions",
         drawing.is_ok() && t_quiet && own,
@@ -2260,12 +2893,19 @@ fn top_idle_cost(t: &mut Term, u: &mut Term, since: u64) {
         .map(|lines| {
             lines
                 .iter()
-                .map(|l| l.split_whitespace().map(String::from).collect::<Vec<String>>())
+                .map(|l| {
+                    l.split_whitespace()
+                        .map(String::from)
+                        .collect::<Vec<String>>()
+                })
                 .filter(|r| r.first() == Some(&id))
                 .collect()
         })
         .unwrap_or_default();
-    let cpu = mine.last().and_then(|r| r.get(3)).and_then(|v| tenths_value(v));
+    let cpu = mine
+        .last()
+        .and_then(|r| r.get(3))
+        .and_then(|v| tenths_value(v));
     println(&format!(
         "P04 INFO top-tui-idle-cost cell={id} cpu_tenths={cpu:?} threshold_tenths={IDLE_COST_MAX_TENTHS} (implementation choice, D64-6 W1)"
     ));
@@ -2294,7 +2934,8 @@ fn top_ctrl_c(t: &mut Term) {
     let back = t.wait_prompt(30_000);
     let (restored, at) = in_order(&t.out, &TUI_RESTORE);
     let caret = find(&t.out, b"^C\n");
-    let after = matches!((at.last().copied().flatten(), caret), (Some(restore), Some(c)) if c > restore);
+    let after =
+        matches!((at.last().copied().flatten(), caret), (Some(restore), Some(c)) if c > restore);
     let model = !t.screen.alternate() && !t.screen.cursor_hidden() && !t.screen.bracketed_paste();
     let st = t.run("echo stc=$?", 30_000);
     check(
@@ -2314,7 +2955,11 @@ fn two_hosts(a: &mut Term) {
     let mut b = match Term::open(30, 100) {
         Ok(term) => term,
         Err(status) => {
-            check("two-hosts-independent-output", false, &format!("open {status:?}"));
+            check(
+                "two-hosts-independent-output",
+                false,
+                &format!("open {status:?}"),
+            );
             return;
         }
     };
@@ -2345,10 +2990,14 @@ fn two_hosts(a: &mut Term) {
     stream_evidence("host-b", &b, cmd_b);
     check(
         "two-hosts-independent-output",
-        sent_a.is_ok() && sent_b.is_ok() && wa.is_ok() && wb.is_ok()
+        sent_a.is_ok()
+            && sent_b.is_ok()
+            && wa.is_ok()
+            && wb.is_ok()
             && a.raw_result(cmd_a) == Some(b"p04-stock-from-a\n".as_slice())
             && b.raw_result(cmd_b) == Some(b"p04-stock-from-b\n".as_slice())
-            && a.err.is_empty() && b.err.is_empty(),
+            && a.err.is_empty()
+            && b.err.is_empty(),
         "concurrent stock echo exact stdout and empty stderr",
     );
     let err_a = "/bin/ls /p04-missing-host-a";
@@ -2361,7 +3010,10 @@ fn two_hosts(a: &mut Term) {
     stream_evidence("host-b-error", &b, err_b);
     check(
         "two-hosts-independent-stderr",
-        sa.is_ok() && sb.is_ok() && wa.is_ok() && wb.is_ok()
+        sa.is_ok()
+            && sb.is_ok()
+            && wa.is_ok()
+            && wb.is_ok()
             && a.raw_result(err_a) == Some(b"".as_slice())
             && b.raw_result(err_b) == Some(b"".as_slice())
             && a.err == b"ls: /p04-missing-host-a: no such directory\n"
@@ -2375,7 +3027,9 @@ fn two_hosts(a: &mut Term) {
     let pb = b.run("pwd", 30_000);
     check(
         "two-hosts-independent-state",
-        cd.is_ok() && matches!(&pa, Ok(l) if l == &[String::from("/bin")]) && matches!(&pb, Ok(l) if l.len() == 1 && l[0] != "/bin"),
+        cd.is_ok()
+            && matches!(&pa, Ok(l) if l == &[String::from("/bin")])
+            && matches!(&pb, Ok(l) if l.len() == 1 && l[0] != "/bin"),
         &format!("a={pa:?} b={pb:?}"),
     );
 
@@ -2444,7 +3098,12 @@ fn child_exit_then_close() {
     check(
         "child-exit-then-close",
         sent.is_ok() && exited.is_ok() && closed.is_ok() && again.is_ok() && after.is_err(),
-        &format!("exit={exited:?} close={} again={} after={}", status(&closed), status(&again), status(&after)),
+        &format!(
+            "exit={exited:?} close={} again={} after={}",
+            status(&closed),
+            status(&again),
+            status(&after)
+        ),
     );
 }
 
@@ -2472,7 +3131,9 @@ fn relaunch_after_exit() {
         t.err.clear();
         match t.launch_shell() {
             Err(status) => Err(format!("relaunch {status:?}")),
-            Ok(()) => t.wait_prompt(60_000).and_then(|_| t.run("echo p04-relaunched", 30_000)),
+            Ok(()) => t
+                .wait_prompt(60_000)
+                .and_then(|_| t.run("echo p04-relaunched", 30_000)),
         }
     };
     let closed = t.host.close();
@@ -2503,13 +3164,22 @@ fn repeat_open_close(a: &mut Term) {
             Err(status) => Err(format!("launch {status:?}")),
         };
         let cmd = format!("echo p04-round-{round}");
-        let echoed = if up.is_ok() { t.run(&cmd, 30_000) } else { Err(String::from("no prompt")) };
+        let echoed = if up.is_ok() {
+            t.run(&cmd, 30_000)
+        } else {
+            Err(String::from("no prompt"))
+        };
         // Closing with the shell still running cancels and reaps it.
         let closed = t.host.close();
-        let good = up.is_ok() && matches!(&echoed, Ok(l) if l.len() == 1 && l[0] == format!("p04-round-{round}")) && closed.is_ok();
+        let good = up.is_ok()
+            && matches!(&echoed, Ok(l) if l.len() == 1 && l[0] == format!("p04-round-{round}"))
+            && closed.is_ok();
         if !good {
             ok = false;
-            why = format!("round {round} up={up:?} echo={echoed:?} close={}", status(&closed));
+            why = format!(
+                "round {round} up={up:?} echo={echoed:?} close={}",
+                status(&closed)
+            );
             break;
         }
         drop(t);
@@ -2560,6 +3230,10 @@ fn cancel_child() {
     check(
         "cancel-child",
         cancelled.is_ok() && exited.is_ok() && closed.is_ok(),
-        &format!("cancel={} exit={exited:?} close={}", status(&cancelled), status(&closed)),
+        &format!(
+            "cancel={} exit={exited:?} close={}",
+            status(&cancelled),
+            status(&closed)
+        ),
     );
 }

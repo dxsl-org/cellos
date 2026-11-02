@@ -1,0 +1,4 @@
+# Cellos-added (not upstream). The vendored sources stay byte-exact against
+# PATCHES/upstream-files.sha256 and PATCHES/cellos.diff, so the workspace-wide
+# `cargo fmt --all` must not reformat them.
+disable_all_formatting = true

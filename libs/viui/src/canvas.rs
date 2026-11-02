@@ -465,9 +465,21 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
     ) {
         let clip = self.active_clip();
         atlas.draw_text(
-            self.pixels, self.width, self.height, self.stride as usize,
-            pos.x, pos.y, text, px, [color.b(), color.g(), color.r(), color.a()],
-            (clip.x as i32, clip.y as i32, (clip.x + clip.w) as i32, (clip.y + clip.h) as i32),
+            self.pixels,
+            self.width,
+            self.height,
+            self.stride as usize,
+            pos.x,
+            pos.y,
+            text,
+            px,
+            [color.b(), color.g(), color.r(), color.a()],
+            (
+                clip.x as i32,
+                clip.y as i32,
+                (clip.x + clip.w) as i32,
+                (clip.y + clip.h) as i32,
+            ),
         );
     }
 

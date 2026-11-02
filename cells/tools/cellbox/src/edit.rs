@@ -77,8 +77,9 @@ pub fn cmd_edit(args: &[String]) -> i32 {
     let mut editor = Editor::new(buf, path, binding, cwd);
     editor.message = note;
     crate::executor::flush_repl_capture();
-    let status = crate::executor::with_tui(|session, sink| interact(session, sink, &mut editor, &mut store))
-        .unwrap_or_else(|status| Err(format!("terminal unavailable: {status:?}")));
+    let status =
+        crate::executor::with_tui(|session, sink| interact(session, sink, &mut editor, &mut store))
+            .unwrap_or_else(|status| Err(format!("terminal unavailable: {status:?}")));
     match status {
         Ok(status) => status,
         Err(message) => {
@@ -101,16 +102,30 @@ fn open_error(error: OpenError) -> String {
 }
 
 fn read_bytes(path: &str) -> Result<alloc::vec::Vec<u8>, String> {
-    ostd::clients::VfsClient::new().read_file_bounded(path, MAX_BYTES)
+    ostd::clients::VfsClient::new()
+        .read_file_bounded(path, MAX_BYTES)
         .map_err(|error| format!("cannot read ({error:?})"))
 }
 
 /// Read `path` bound to one observation: the observation is taken before and
 /// after the read and must not change, so the bytes are exactly that state.
-fn open(store: &mut VfsStore, path: &str) -> Result<(EditBuffer, Option<SaveExpect>, Option<String>), String> {
+fn open(
+    store: &mut VfsStore,
+    path: &str,
+) -> Result<(EditBuffer, Option<SaveExpect>, Option<String>), String> {
     match store.observe(path) {
-        Ok(Observation::Absent) => Ok((EditBuffer::new(), Some(SaveExpect::Absent), Some(String::from("new file")))),
-        Ok(observation @ Observation::Present { regular: true, size, .. }) => {
+        Ok(Observation::Absent) => Ok((
+            EditBuffer::new(),
+            Some(SaveExpect::Absent),
+            Some(String::from("new file")),
+        )),
+        Ok(
+            observation @ Observation::Present {
+                regular: true,
+                size,
+                ..
+            },
+        ) => {
             if size > MAX_BYTES as u64 {
                 return Err(open_error(OpenError::TooLarge));
             }
@@ -124,11 +139,19 @@ fn open(store: &mut VfsStore, path: &str) -> Result<(EditBuffer, Option<SaveExpe
         Ok(Observation::Present { .. }) => Err(String::from("not a regular file")),
         Err(ViError::NotSupported) => {
             // D78-1: editable, but this mount cannot publish conditionally.
-            let note = Some(String::from("this mount has no conditional save: use Save As (^O) under /srv"));
+            let note = Some(String::from(
+                "this mount has no conditional save: use Save As (^O) under /srv",
+            ));
             match ostd::clients::VfsClient::new().stat(path) {
                 Ok((_, true)) => Err(String::from("is a directory")),
-                Ok((size, false)) if size > MAX_BYTES as u64 => Err(open_error(OpenError::TooLarge)),
-                Ok((_, false)) => Ok((EditBuffer::from_bytes(&read_bytes(path)?).map_err(open_error)?, None, note)),
+                Ok((size, false)) if size > MAX_BYTES as u64 => {
+                    Err(open_error(OpenError::TooLarge))
+                }
+                Ok((_, false)) => Ok((
+                    EditBuffer::from_bytes(&read_bytes(path)?).map_err(open_error)?,
+                    None,
+                    note,
+                )),
                 Err(_) => Ok((EditBuffer::new(), None, note)),
             }
         }
@@ -136,7 +159,12 @@ fn open(store: &mut VfsStore, path: &str) -> Result<(EditBuffer, Option<SaveExpe
     }
 }
 
-fn interact(session: &mut TerminalSession, sink: TuiSink<'_>, editor: &mut Editor, store: &mut impl Store) -> Result<i32, String> {
+fn interact(
+    session: &mut TerminalSession,
+    sink: TuiSink<'_>,
+    editor: &mut Editor,
+    store: &mut impl Store,
+) -> Result<i32, String> {
     let theme = match session.capabilities() {
         Ok(capabilities) => Theme::new(crate::top::tui::color_mode(capabilities.frontend)),
         Err(status) => return Err(format!("terminal unavailable: {status:?}")),
@@ -166,7 +194,11 @@ fn interact(session: &mut TerminalSession, sink: TuiSink<'_>, editor: &mut Edito
     }
 }
 
-fn draw<W: vitui::backend::ByteSink>(tui: &mut TuiSession<'_, W>, editor: &mut Editor, theme: &Theme) -> Result<(), String> {
+fn draw<W: vitui::backend::ByteSink>(
+    tui: &mut TuiSession<'_, W>,
+    editor: &mut Editor,
+    theme: &Theme,
+) -> Result<(), String> {
     tui.terminal()
         .draw(|frame| {
             let area = frame.area();
@@ -186,7 +218,8 @@ fn run_loop<W: vitui::backend::ByteSink>(
 ) -> Result<i32, String> {
     draw(tui, editor, theme)?;
     loop {
-        let deadline = ostd::session::monotonic_ns().map_err(|status| format!("clock unavailable: {status:?}"))?
+        let deadline = ostd::session::monotonic_ns()
+            .map_err(|status| format!("clock unavailable: {status:?}"))?
             .saturating_add(1_000_000_000);
         match tui.next_event(deadline) {
             Ok(mut event) => {
@@ -195,7 +228,9 @@ fn run_loop<W: vitui::backend::ByteSink>(
                     Event::Lost(reason) if *reason == LOST_FRONTEND => Step::Exit(SESSION_LOST),
                     Event::Lost(reason) if *reason == FRONTEND_ATTACHED => Step::Continue,
                     Event::Lost(_) => {
-                        editor.message = Some(String::from("some input was lost; nothing was applied from it"));
+                        editor.message = Some(String::from(
+                            "some input was lost; nothing was applied from it",
+                        ));
                         Step::Continue
                     }
                     _ => editor.handle(&event, store),

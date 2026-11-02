@@ -35,10 +35,7 @@ pub fn claim_reservation(
 }
 
 /// Atomically transition a reservation to Closing.
-pub fn mark_closing(
-    table: &mut ReservationTable,
-    key: &[u8; 16],
-) -> Result<(), ClaimError> {
+pub fn mark_closing(table: &mut ReservationTable, key: &[u8; 16]) -> Result<(), ClaimError> {
     let entry = table.get_mut(key).ok_or(ClaimError::NotFound)?;
     match entry.state {
         ReservationState::Reserved | ReservationState::Claimed { .. } => {

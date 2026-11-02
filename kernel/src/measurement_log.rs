@@ -91,18 +91,22 @@ fn advance_aggregate(log: &mut Log, hash: &[u8; 32]) {
 #[cfg(cellos_p01_trace)]
 fn attribute_log_buffers(log: &Log) {
     if log.entries.capacity() != 0 {
-        crate::memory::heap::p01_owner::shared_buffer(log.entries.as_ptr() as usize,
+        crate::memory::heap::p01_owner::shared_buffer(
+            log.entries.as_ptr() as usize,
             core::alloc::Layout::array::<MeasureEntry>(log.entries.capacity()).unwrap(),
-            crate::memory::heap::p01_owner::LOG_SHARED);
+            crate::memory::heap::p01_owner::LOG_SHARED,
+        );
     }
 }
 
 #[cfg(cellos_p01_trace)]
 fn attribute_path(path: &String) {
     if path.capacity() != 0 {
-        crate::memory::heap::p01_owner::shared_buffer(path.as_ptr() as usize,
+        crate::memory::heap::p01_owner::shared_buffer(
+            path.as_ptr() as usize,
             core::alloc::Layout::array::<u8>(path.capacity()).unwrap(),
-            crate::memory::heap::p01_owner::LOG_PATH);
+            crate::memory::heap::p01_owner::LOG_PATH,
+        );
     }
 }
 
@@ -124,7 +128,10 @@ pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
     {
         let mut log = LOG.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::LOG_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::LOG_SHARED,
+        );
         #[cfg(cellos_p01_trace)]
         attribute_log_buffers(&log);
         advance_aggregate(&mut log, &hash);
@@ -191,9 +198,15 @@ impl PublicationReservation {
         if promised >= CREATOR_SHARE {
             return Err(types::ViError::OutOfMemory);
         }
-        let own = log.entries.iter().position(|entry| entry.creator == creator);
+        let own = log
+            .entries
+            .iter()
+            .position(|entry| entry.creator == creator);
         let committed = if own.is_some() {
-            log.entries.iter().filter(|entry| entry.creator == creator).count()
+            log.entries
+                .iter()
+                .filter(|entry| entry.creator == creator)
+                .count()
         } else {
             0
         };
@@ -213,7 +226,10 @@ impl PublicationReservation {
         };
         let additional = log.promises + 1;
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::LOG_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::LOG_SHARED,
+        );
         log.entries
             .try_reserve(additional)
             .map_err(|_| types::ViError::OutOfMemory)?;
@@ -223,7 +239,10 @@ impl PublicationReservation {
                 log.shares
                     .try_reserve(1)
                     .map_err(|_| types::ViError::OutOfMemory)?;
-                log.shares.push(Share { creator, promised: 1 });
+                log.shares.push(Share {
+                    creator,
+                    promised: 1,
+                });
             }
         }
         if let Some(index) = evict {
@@ -231,7 +250,10 @@ impl PublicationReservation {
             drop(log.entries.remove(index));
         }
         log.promises += 1;
-        Ok(Self { armed: true, creator })
+        Ok(Self {
+            armed: true,
+            creator,
+        })
     }
 
     /// Publish the promised entry. The path was staged and owned before this
@@ -249,7 +271,11 @@ impl PublicationReservation {
             log.promises -= 1;
             // The promise becomes a committed entry: it stops counting as outstanding
             // for the creator (no allocation: the row is only shrunk or swapped out).
-            if let Some(i) = log.shares.iter().position(|share| share.creator == self.creator) {
+            if let Some(i) = log
+                .shares
+                .iter()
+                .position(|share| share.creator == self.creator)
+            {
                 log.shares[i].promised = log.shares[i].promised.saturating_sub(1);
                 if log.shares[i].promised == 0 {
                     log.shares.swap_remove(i);
@@ -275,7 +301,11 @@ impl Drop for PublicationReservation {
             let mut log = LOG.lock();
             log.promises = log.promises.saturating_sub(1);
             // The promise returns to the creator.
-            if let Some(i) = log.shares.iter().position(|share| share.creator == self.creator) {
+            if let Some(i) = log
+                .shares
+                .iter()
+                .position(|share| share.creator == self.creator)
+            {
                 log.shares[i].promised = log.shares[i].promised.saturating_sub(1);
                 if log.shares[i].promised == 0 {
                     log.shares.swap_remove(i);
@@ -289,7 +319,12 @@ impl Drop for PublicationReservation {
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_shape() -> (usize, usize, usize, usize) {
     let log = LOG.lock();
-    (log.entries.len(), log.entries.capacity(), log.promises, MAX_ENTRIES)
+    (
+        log.entries.len(),
+        log.entries.capacity(),
+        log.promises,
+        MAX_ENTRIES,
+    )
 }
 
 /// `(outstanding promises, retained committed entries)` charged to `creator`.
@@ -297,15 +332,25 @@ pub(crate) fn test_shape() -> (usize, usize, usize, usize) {
 pub(crate) fn test_creator_used(creator: Creator) -> (usize, usize) {
     let log = LOG.lock();
     (
-        log.shares.iter().find(|share| share.creator == creator).map_or(0, |share| share.promised),
-        log.entries.iter().filter(|entry| entry.creator == creator).count(),
+        log.shares
+            .iter()
+            .find(|share| share.creator == creator)
+            .map_or(0, |share| share.promised),
+        log.entries
+            .iter()
+            .filter(|entry| entry.creator == creator)
+            .count(),
     )
 }
 
 /// Path of the oldest retained entry committed by `creator`.
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_oldest_path(creator: Creator) -> Option<String> {
-    LOG.lock().entries.iter().find(|entry| entry.creator == creator).map(|entry| entry.path.clone())
+    LOG.lock()
+        .entries
+        .iter()
+        .find(|entry| entry.creator == creator)
+        .map(|entry| entry.path.clone())
 }
 
 /// Rolling aggregate over every measured cell (for future remote attestation).

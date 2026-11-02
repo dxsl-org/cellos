@@ -25,7 +25,10 @@ pub const MAX_STRING: usize = 4096;
 enum State {
     Ground,
     /// Partial UTF-8 scalar: `have` of `need` bytes collected.
-    Utf8 { need: u8, have: u8 },
+    Utf8 {
+        need: u8,
+        have: u8,
+    },
     /// After ESC.
     Esc,
     /// ESC followed by intermediate bytes (0x20..=0x2f); the final byte ends it.
@@ -52,7 +55,12 @@ struct Csi {
 }
 
 impl Csi {
-    const EMPTY: Self = Self { params: [0; MAX_PARAMS], count: 0, private: 0, ignore: false };
+    const EMPTY: Self = Self {
+        params: [0; MAX_PARAMS],
+        count: 0,
+        private: 0,
+        ignore: false,
+    };
 }
 
 /// Incremental parser; keep one per output stream pair (state survives chunk edges).
@@ -72,7 +80,12 @@ impl Default for ByteSink {
 
 impl ByteSink {
     pub const fn new() -> Self {
-        Self { state: State::Ground, utf8: [0; 4], len: 0, csi: Csi::EMPTY }
+        Self {
+            state: State::Ground,
+            utf8: [0; 4],
+            len: 0,
+            csi: Csi::EMPTY,
+        }
     }
 
     /// Drop any half-parsed sequence (new session / restart).
@@ -106,7 +119,10 @@ impl ByteSink {
                             .unwrap_or('\u{fffd}');
                         grid.print(ch);
                     } else {
-                        self.state = State::Utf8 { need, have: have + 1 };
+                        self.state = State::Utf8 {
+                            need,
+                            have: have + 1,
+                        };
                     }
                 } else {
                     // Truncated scalar: replace it, then handle this byte afresh.
@@ -245,7 +261,9 @@ impl ByteSink {
                 }
                 if csi.count <= MAX_PARAMS {
                     let param = &mut csi.params[csi.count - 1];
-                    *param = param.saturating_mul(10).saturating_add(u16::from(byte - b'0'));
+                    *param = param
+                        .saturating_mul(10)
+                        .saturating_add(u16::from(byte - b'0'));
                 }
             }
             b';' => {
@@ -308,7 +326,9 @@ fn dispatch(grid: &mut TerminalGrid, csi: &Csi, final_byte: u8) {
         // With parameters these are other controls (DECSLRM, ...), not in the profile.
         (0, b's') if params.is_empty() => grid.save_cursor(),
         (0, b'u') if params.is_empty() => grid.restore_cursor(),
-        (0, b'r') if params.len() <= 2 => grid.set_scroll_region(usize::from(arg(0)), usize::from(arg(1))),
+        (0, b'r') if params.len() <= 2 => {
+            grid.set_scroll_region(usize::from(arg(0)), usize::from(arg(1)))
+        }
         (0, b'S') if params.len() <= 1 => grid.scroll_up(n(0)),
         (0, b'T') if params.len() <= 1 => grid.scroll_down(n(0)),
         (b'?', b'h' | b'l') => {
@@ -357,12 +377,28 @@ mod tests {
     }
 
     /// Full observable state: every cell, cursor, modes, pen.
-    fn snapshot(grid: &TerminalGrid) -> (Vec<TerminalCell>, (usize, usize), [bool; 4], Pen, (usize, usize)) {
-        let cells = (0..grid.rows).flat_map(|r| (0..grid.cols).map(move |c| (c, r))).map(|(c, r)| *grid.cell_at(c, r).unwrap()).collect();
+    fn snapshot(
+        grid: &TerminalGrid,
+    ) -> (
+        Vec<TerminalCell>,
+        (usize, usize),
+        [bool; 4],
+        Pen,
+        (usize, usize),
+    ) {
+        let cells = (0..grid.rows)
+            .flat_map(|r| (0..grid.cols).map(move |c| (c, r)))
+            .map(|(c, r)| *grid.cell_at(c, r).unwrap())
+            .collect();
         (
             cells,
             (grid.cursor_x, grid.cursor_y),
-            [grid.alternate_active(), grid.cursor_visible(), grid.bracketed_paste(), grid.autowrap()],
+            [
+                grid.alternate_active(),
+                grid.cursor_visible(),
+                grid.bracketed_paste(),
+                grid.autowrap(),
+            ],
             grid.pen(),
             grid.margins(),
         )
@@ -445,13 +481,19 @@ mod tests {
         };
         assert_eq!(erase(b"\x1b[K"), ["0123456789", "abcd", "ABCDEFGHIJ"]);
         assert_eq!(erase(b"\x1b[0K"), ["0123456789", "abcd", "ABCDEFGHIJ"]);
-        assert_eq!(erase(b"\x1b[1K"), ["0123456789", "     fghij", "ABCDEFGHIJ"]);
+        assert_eq!(
+            erase(b"\x1b[1K"),
+            ["0123456789", "     fghij", "ABCDEFGHIJ"]
+        );
         assert_eq!(erase(b"\x1b[2K"), ["0123456789", "", "ABCDEFGHIJ"]);
         assert_eq!(erase(b"\x1b[J"), ["0123456789", "abcd", ""]);
         assert_eq!(erase(b"\x1b[1J"), ["", "     fghij", "ABCDEFGHIJ"]);
         assert_eq!(erase(b"\x1b[2J"), ["", "", ""]);
         // Unsupported modes change nothing; erase never moves the cursor.
-        assert_eq!(erase(b"\x1b[3J\x1b[5K"), ["0123456789", "abcdefghij", "ABCDEFGHIJ"]);
+        assert_eq!(
+            erase(b"\x1b[3J\x1b[5K"),
+            ["0123456789", "abcdefghij", "ABCDEFGHIJ"]
+        );
         let (grid, _) = render_sized(10, 3, &[fill, b"\x1b[2J"]);
         assert_eq!((grid.cursor_x, grid.cursor_y), (4, 1));
     }
@@ -460,7 +502,13 @@ mod tests {
     fn erase_uses_the_current_background_and_default_attributes() {
         let (grid, _) = render_sized(10, 2, &[b"\x1b[1;7;31;44mab\x1b[K"]);
         let erased = grid.cell_at(5, 0).unwrap();
-        assert_eq!(erased.pen, Pen { bg: Color::Indexed(4), ..Pen::DEFAULT });
+        assert_eq!(
+            erased.pen,
+            Pen {
+                bg: Color::Indexed(4),
+                ..Pen::DEFAULT
+            }
+        );
         assert_eq!(erased.ch, ' ');
     }
 
@@ -468,13 +516,48 @@ mod tests {
     fn sgr_colors_and_attributes() {
         let (grid, _) = render(&[b"\x1b[1;31mA\x1b[22;7;42mB\x1b[27;39;49mC\x1b[95;104mD\x1b[38;5;200;48;2;1;2;3mE\x1b[0mF\x1b[1mG\x1b[mH"]);
         let pen = |c: usize| grid.cell_at(c, 0).unwrap().pen;
-        assert_eq!(pen(0), Pen { fg: Color::Indexed(1), bold: true, ..Pen::DEFAULT });
-        assert_eq!(pen(1), Pen { fg: Color::Indexed(1), bg: Color::Indexed(2), inverse: true, bold: false });
+        assert_eq!(
+            pen(0),
+            Pen {
+                fg: Color::Indexed(1),
+                bold: true,
+                ..Pen::DEFAULT
+            }
+        );
+        assert_eq!(
+            pen(1),
+            Pen {
+                fg: Color::Indexed(1),
+                bg: Color::Indexed(2),
+                inverse: true,
+                bold: false
+            }
+        );
         assert_eq!(pen(2), Pen::DEFAULT);
-        assert_eq!(pen(3), Pen { fg: Color::Indexed(13), bg: Color::Indexed(12), ..Pen::DEFAULT });
-        assert_eq!(pen(4), Pen { fg: Color::Indexed(200), bg: Color::Rgb(1, 2, 3), ..Pen::DEFAULT });
+        assert_eq!(
+            pen(3),
+            Pen {
+                fg: Color::Indexed(13),
+                bg: Color::Indexed(12),
+                ..Pen::DEFAULT
+            }
+        );
+        assert_eq!(
+            pen(4),
+            Pen {
+                fg: Color::Indexed(200),
+                bg: Color::Rgb(1, 2, 3),
+                ..Pen::DEFAULT
+            }
+        );
         assert_eq!(pen(5), Pen::DEFAULT);
-        assert_eq!(pen(6), Pen { bold: true, ..Pen::DEFAULT });
+        assert_eq!(
+            pen(6),
+            Pen {
+                bold: true,
+                ..Pen::DEFAULT
+            }
+        );
         assert_eq!(pen(7), Pen::DEFAULT);
         assert_eq!(row(&grid, 0), "ABCDEFGH");
     }
@@ -483,10 +566,22 @@ mod tests {
     fn sgr_accepts_unsupported_attributes_and_stops_at_a_malformed_extended_color() {
         let (grid, _) = render(&[b"\x1b[2;3;4;5;9;31mA\x1b[0m\x1b[38;5;300;1mB\x1b[0m\x1b[32;38;2;1;2mC\x1b[0m\x1b[38;7;1mD"]);
         let pen = |c: usize| grid.cell_at(c, 0).unwrap().pen;
-        assert_eq!(pen(0), Pen { fg: Color::Indexed(1), ..Pen::DEFAULT });
+        assert_eq!(
+            pen(0),
+            Pen {
+                fg: Color::Indexed(1),
+                ..Pen::DEFAULT
+            }
+        );
         // Index 300 is malformed: the rest of that SGR (bold) is not applied.
         assert_eq!(pen(1), Pen::DEFAULT);
-        assert_eq!(pen(2), Pen { fg: Color::Indexed(2), ..Pen::DEFAULT });
+        assert_eq!(
+            pen(2),
+            Pen {
+                fg: Color::Indexed(2),
+                ..Pen::DEFAULT
+            }
+        );
         assert_eq!(pen(3), Pen::DEFAULT);
     }
 
@@ -555,7 +650,10 @@ mod tests {
         let (mut grid, mut sink) = render_sized(20, 4, &[prompt, b"\x1b[?1049h"]);
         assert!(grid.alternate_active());
         assert_eq!(screen(&grid), ["", "", "", ""]);
-        sink.feed(&mut grid, b"\x1b[?25l\x1b[H\x1b[44mTUI\x1b[2;1Hframe\x1b[0m\x1b7\x1b[4;1Hbottom");
+        sink.feed(
+            &mut grid,
+            b"\x1b[?25l\x1b[H\x1b[44mTUI\x1b[2;1Hframe\x1b[0m\x1b7\x1b[4;1Hbottom",
+        );
         assert_eq!(screen(&grid), ["TUI", "frame", "", "bottom"]);
         sink.feed(&mut grid, b"\x1b[?1049l\x1b[?25h");
         assert!(!grid.alternate_active());
@@ -715,7 +813,8 @@ mod tests {
         assert_eq!(grid.cell_at(0, 0).unwrap().pen, Pen::DEFAULT);
         assert!(sink.is_ground());
         // Exactly sixteen still apply; huge values saturate instead of overflowing.
-        let (grid, _) = render(&[b"\x1b[1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;31mB\x1b[99999999999;99999999999HC"]);
+        let (grid, _) =
+            render(&[b"\x1b[1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;31mB\x1b[99999999999;99999999999HC"]);
         assert_eq!(grid.cell_at(0, 0).unwrap().pen.fg, Color::Indexed(1));
         assert_eq!((grid.cursor_x, grid.cursor_y), (39, 5));
         // Thousands of separators never grow anything and recover to ground.
@@ -735,7 +834,10 @@ mod tests {
         input.extend_from_slice(b"mAFTER");
         let (grid, sink) = render_sized(80, 3, &[&input]);
         // ESC [ plus 254 digits fill the 256-byte bound; the rest is ordinary text.
-        let expected: String = core::iter::repeat('1').take(298 - (MAX_CONTROL - 2)).chain("mAFTER".chars()).collect();
+        let expected: String = core::iter::repeat('1')
+            .take(298 - (MAX_CONTROL - 2))
+            .chain("mAFTER".chars())
+            .collect();
         assert_eq!(row(&grid, 0), expected);
         assert!(sink.is_ground());
         assert_eq!(grid.pen(), Pen::DEFAULT);
@@ -793,10 +895,34 @@ mod tests {
         // query here is consumed in bounds and leaves the full state untouched.
         let (before, _) = render(&[b"ok"]);
         let queries: &[&[u8]] = &[
-            b"\x1b[c", b"\x1b[>c", b"\x1b[=c", b"\x1b[5n", b"\x1b[6n", b"\x1b[?6n", b"\x1b[18t", b"\x1b[14t",
-            b"\x1b]10;?\x07", b"\x1b]11;?\x1b\\", b"\x1bP+q544e\x1b\\", b"\x1bZ", b"\x1b[?1000h", b"\x1b[!p",
-            b"\x1b[ q", b"\x1b[4h", b"\x1b[?1;2c", b"\x1bc", b"\x1b(0", b"\x1b#8", b"\x1b[1:2m", b"\x1b[>4;1m",
-            b"\x1b[5;5s", b"\x1b[1;2;3r", b"\x1b[1;2;3;4;5T", b"\x1bM", b"\x1bD", b"\x1bE",
+            b"\x1b[c",
+            b"\x1b[>c",
+            b"\x1b[=c",
+            b"\x1b[5n",
+            b"\x1b[6n",
+            b"\x1b[?6n",
+            b"\x1b[18t",
+            b"\x1b[14t",
+            b"\x1b]10;?\x07",
+            b"\x1b]11;?\x1b\\",
+            b"\x1bP+q544e\x1b\\",
+            b"\x1bZ",
+            b"\x1b[?1000h",
+            b"\x1b[!p",
+            b"\x1b[ q",
+            b"\x1b[4h",
+            b"\x1b[?1;2c",
+            b"\x1bc",
+            b"\x1b(0",
+            b"\x1b#8",
+            b"\x1b[1:2m",
+            b"\x1b[>4;1m",
+            b"\x1b[5;5s",
+            b"\x1b[1;2;3r",
+            b"\x1b[1;2;3;4;5T",
+            b"\x1bM",
+            b"\x1bD",
+            b"\x1bE",
         ];
         for query in queries {
             let (grid, sink) = render(&[b"ok", query]);
@@ -859,7 +985,10 @@ mod tests {
                 };
                 sink.feed(&mut grid, &[byte]);
                 assert!(grid.cursor_x < grid.cols && grid.cursor_y < grid.rows);
-                assert_ne!(grid.cell_at(grid.cursor_x, grid.cursor_y).unwrap().width, Width::Trail);
+                assert_ne!(
+                    grid.cell_at(grid.cursor_x, grid.cursor_y).unwrap().width,
+                    Width::Trail
+                );
             }
             assert!(grid.scrollback_len() <= crate::grid::MAX_SCROLLBACK_LINES);
         }

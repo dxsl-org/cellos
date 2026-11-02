@@ -59,7 +59,9 @@ fn main() {
     let custom_cxx = std::env::var(format!("CXX_{env_key}"))
         .or_else(|_| std::env::var("CXX"))
         .ok();
-    let use_zig = std::env::var("CELLOS_USE_ZIG").map(|v| v == "1" || v == "true").unwrap_or(false);
+    let use_zig = std::env::var("CELLOS_USE_ZIG")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
     if use_zig {
         if let Some(wrapper) = repo_wrapper("cellos-zig-cxx") {
             build.compiler(wrapper);

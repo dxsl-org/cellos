@@ -45,7 +45,10 @@ pub(super) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
     let mut attempts: u32 = 0;
     while now_ms() < end {
         attempts += 1;
-        let probe = attempt(a, &format!("ssh --user tester --auth password -p {} host", f.port));
+        let probe = attempt(
+            a,
+            &format!("ssh --user tester --auth password -p {} host", f.port),
+        );
         if let Ok((st, err)) = &probe {
             if st == "st=255" && err.contains("HOST KEY CHANGED") && err.contains(&f.fp) {
                 println(&format!("P04 INFO ssh-guest-ready attempts={attempts}"));
@@ -57,7 +60,9 @@ pub(super) fn wait_ready(a: &mut Term, f: &Fixture) -> bool {
         }
         sleep_ms(RETRY_MS);
     }
-    println(&format!("P04 INFO ssh-guest-ready never attempts={attempts}"));
+    println(&format!(
+        "P04 INFO ssh-guest-ready never attempts={attempts}"
+    ));
     false
 }
 
@@ -68,8 +73,14 @@ fn follow_up(t: &mut Term, f: &Fixture, cmd: &str, logins: &mut u32) -> Result<R
     let mut last = Err(String::from("no attempt"));
     for _ in 0..3 {
         *logins += 1;
-        last = case(t, "ssh-guest-follow-up", &ssh_line(f.port, &format!("10.0.2.2 --command '{cmd}'")), &f.password, SSH_MS,
-            |_| Ok(()));
+        last = case(
+            t,
+            "ssh-guest-follow-up",
+            &ssh_line(f.port, &format!("10.0.2.2 --command '{cmd}'")),
+            &f.password,
+            SSH_MS,
+            |_| Ok(()),
+        );
         if last.as_ref().is_ok_and(|run| run.st == "st=0") {
             break;
         }
@@ -87,19 +98,35 @@ pub(super) fn guest_checks(a: &mut Term, f: &Fixture) {
 
     // 1. Producer traffic stops on consumer close.
     logins += 1;
-    let r = case(a, "ssh-guest-cancel-producer", &ssh_line(f.port, "10.0.2.2 --command 'echo p09-started; p9 produce'"), pw,
-        SSH_MS, |t| {
+    let r = case(
+        a,
+        "ssh-guest-cancel-producer",
+        &ssh_line(f.port, "10.0.2.2 --command 'echo p09-started; p9 produce'"),
+        pw,
+        SSH_MS,
+        |t| {
             wait_stdout(t, b"p09-started")?;
             sleep_ms(500);
-            t.host.submit_key(0x63, CTRL, 1).map_err(|s| format!("ctrl-c {s:?}"))
-        });
+            t.host
+                .submit_key(0x63, CTRL, 1)
+                .map_err(|s| format!("ctrl-c {s:?}"))
+        },
+    );
     let cancelled = r.as_ref().is_ok_and(|run| {
         run.st == "st=130"
-            && run.rec_has(&[("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "cancelled"),
-                ("remote_status", "null"), ("remote_signal", "null")])
+            && run.rec_has(&[
+                ("mode", "exec"),
+                ("phase", "running"),
+                ("dispatch", "accepted"),
+                ("outcome", "cancelled"),
+                ("remote_status", "null"),
+                ("remote_signal", "null"),
+            ])
     });
     let gone = follow_up(a, f, "p9 gone", &mut logins);
-    let gone_ok = gone.as_ref().is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
+    let gone_ok = gone
+        .as_ref()
+        .is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
     check(
         "ssh-guest-cancel-producer",
         cancelled && gone_ok,
@@ -108,18 +135,35 @@ pub(super) fn guest_checks(a: &mut Term, f: &Fixture) {
 
     // 2. A session lost after dispatch: unknown outcome, exit 255, no automatic retry.
     logins += 1;
-    let r = case(a, "ssh-guest-fault-may-have-run", &ssh_line(f.port, "10.0.2.2 --command 'p9 selfkill'"), pw, SSH_MS, |_| Ok(()));
+    let r = case(
+        a,
+        "ssh-guest-fault-may-have-run",
+        &ssh_line(f.port, "10.0.2.2 --command 'p9 selfkill'"),
+        pw,
+        SSH_MS,
+        |_| Ok(()),
+    );
     if let Some(Ok(rec)) = r.as_ref().ok().map(|run| &run.rec) {
-        println(&format!("P04 INFO ssh-guest-selfkill dispatch={}", field(rec, "dispatch").unwrap_or("?")));
+        println(&format!(
+            "P04 INFO ssh-guest-selfkill dispatch={}",
+            field(rec, "dispatch").unwrap_or("?")
+        ));
     }
     judge(
         "ssh-guest-fault-may-have-run",
         &r,
         "st=255",
-        &[("mode", "exec"), ("outcome", "unknown"), ("remote_status", "null"), ("remote_signal", "null")],
+        &[
+            ("mode", "exec"),
+            ("outcome", "unknown"),
+            ("remote_status", "null"),
+            ("remote_signal", "null"),
+        ],
         |run| {
             // The command's own `sleep 20` after the kill must not be what ended the session.
-            run.rec.as_ref().is_ok_and(|rec| matches!(field(rec, "dispatch"), Some("accepted" | "may_have_run"))) && run.ms < 18_000
+            run.rec.as_ref().is_ok_and(|rec| {
+                matches!(field(rec, "dispatch"), Some("accepted" | "may_have_run"))
+            }) && run.ms < 18_000
         },
     );
 
@@ -128,13 +172,26 @@ pub(super) fn guest_checks(a: &mut Term, f: &Fixture) {
     let (selfkill, lines) = match &ledger {
         Ok(run) if run.st == "st=0" => {
             let text = String::from_utf8_lossy(&run.out).into_owned();
-            let all: Vec<&str> = text.lines().map(str::trim).filter(|l| l.starts_with("p09x-")).collect();
-            (all.iter().filter(|l| **l == "p09x-selfkill").count(), all.len())
+            let all: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|l| l.starts_with("p09x-"))
+                .collect();
+            (
+                all.iter().filter(|l| **l == "p09x-selfkill").count(),
+                all.len(),
+            )
         }
         _ => (usize::MAX, 0),
     };
-    println(&format!("P04 INFO ssh-guest-ledger selfkill={selfkill} lines={lines}"));
-    check("ssh-guest-no-replay-ledger", selfkill == 1, &describe(&ledger));
+    println(&format!(
+        "P04 INFO ssh-guest-ledger selfkill={selfkill} lines={lines}"
+    ));
+    check(
+        "ssh-guest-no-replay-ledger",
+        selfkill == 1,
+        &describe(&ledger),
+    );
     println(&format!("P04 INFO ssh-guest-logins {logins}"));
 }
 
@@ -154,9 +211,21 @@ const MARK_SETTLE_MS: u64 = 1_500;
 /// A long description as several short serial lines (the `check` line is clipped at 200 chars).
 #[cfg(feature = "guest-diag")]
 fn detail(name: &str, text: &str) {
-    let clean: Vec<char> = text.chars().map(|c| if c.is_ascii_graphic() || c == ' ' { c } else { '.' }).collect();
+    let clean: Vec<char> = text
+        .chars()
+        .map(|c| {
+            if c.is_ascii_graphic() || c == ' ' {
+                c
+            } else {
+                '.'
+            }
+        })
+        .collect();
     for (i, part) in clean.chunks(160).enumerate() {
-        println(&format!("P04 INFO ssh-guest-diag-detail {name} part={i} {}", part.iter().collect::<String>()));
+        println(&format!(
+            "P04 INFO ssh-guest-diag-detail {name} part={i} {}",
+            part.iter().collect::<String>()
+        ));
     }
 }
 
@@ -169,12 +238,18 @@ fn snap(a: &mut Term, f: &Fixture, name: &str, t0: u64, at_ms: u64, logins: &mut
     if now_ms() < target {
         sleep_ms(target - now_ms());
     }
-    println(&format!("P04 INFO ssh-guest-diag-mark {name} off_ms={}", now_ms().saturating_sub(t0)));
+    println(&format!(
+        "P04 INFO ssh-guest-diag-mark {name} off_ms={}",
+        now_ms().saturating_sub(t0)
+    ));
     sleep_ms(MARK_SETTLE_MS);
     let r = follow_up(a, f, "p9 snap", logins);
     match &r {
         Ok(run) => {
-            println(&format!("P04 INFO ssh-guest-snap {name} st={} ms={}", run.st, run.ms));
+            println(&format!(
+                "P04 INFO ssh-guest-snap {name} st={} ms={}",
+                run.st, run.ms
+            ));
             for line in String::from_utf8_lossy(&run.out).lines() {
                 let line = line.trim();
                 if !line.is_empty() {
@@ -182,7 +257,10 @@ fn snap(a: &mut Term, f: &Fixture, name: &str, t0: u64, at_ms: u64, logins: &mut
                 }
             }
         }
-        Err(why) => println(&format!("P04 INFO ssh-guest-snap {name} error {}", clip(why))),
+        Err(why) => println(&format!(
+            "P04 INFO ssh-guest-snap {name} error {}",
+            clip(why)
+        )),
     }
     println(&format!("P04 INFO ssh-guest-snap {name} end"));
 }
@@ -200,58 +278,115 @@ pub(super) fn diag_checks(a: &mut Term, f: &Fixture) {
     // (the flood overwrites the terminal buffer); the judge checks it from the guest's own
     // `p9 snap` (the `diag pid=` line `produce` appends) and from the process table.
     logins += 1;
-    let r = case(a, "ssh-guest-consumer-close-producer",
-        &ssh_line(f.port, "--timeout 8 10.0.2.2 --command 'echo p09-started; p9 produce'"), pw, SSH_MS, |_| Ok(()));
+    let r = case(
+        a,
+        "ssh-guest-consumer-close-producer",
+        &ssh_line(
+            f.port,
+            "--timeout 8 10.0.2.2 --command 'echo p09-started; p9 produce'",
+        ),
+        pw,
+        SSH_MS,
+        |_| Ok(()),
+    );
     let timed_out = r.as_ref().is_ok_and(|run| {
         run.st == "st=124"
-            && run.rec_has(&[("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "timeout")])
+            && run.rec_has(&[
+                ("mode", "exec"),
+                ("phase", "running"),
+                ("dispatch", "accepted"),
+                ("outcome", "timeout"),
+            ])
     });
     let gone = follow_up(a, f, "p9 gone", &mut logins);
-    let gone_ok = gone.as_ref().is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
+    let gone_ok = gone
+        .as_ref()
+        .is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
     detail("control-client", &describe(&r));
     detail("control-follow-up", &describe(&gone));
-    check("ssh-guest-consumer-close-producer", timed_out && gone_ok, &format!("timed_out={timed_out} gone_ok={gone_ok}"));
+    check(
+        "ssh-guest-consumer-close-producer",
+        timed_out && gone_ok,
+        &format!("timed_out={timed_out} gone_ok={gone_ok}"),
+    );
 
     // 2. The cancel scenario, unchanged, as an observation.
     logins += 1;
-    let r = case(a, "ssh-guest-cancel-producer", &ssh_line(f.port, "10.0.2.2 --command 'echo p09-started; p9 produce'"), pw,
-        SSH_MS, |t| {
+    let r = case(
+        a,
+        "ssh-guest-cancel-producer",
+        &ssh_line(f.port, "10.0.2.2 --command 'echo p09-started; p9 produce'"),
+        pw,
+        SSH_MS,
+        |t| {
             wait_stdout(t, b"p09-started")?;
             sleep_ms(500);
-            t.host.submit_key(0x63, CTRL, 1).map_err(|s| format!("ctrl-c {s:?}"))
-        });
+            t.host
+                .submit_key(0x63, CTRL, 1)
+                .map_err(|s| format!("ctrl-c {s:?}"))
+        },
+    );
     let t0 = now_ms();
     println("P04 INFO ssh-guest-diag-mark cancel-done off_ms=0");
     let cancelled = r.as_ref().is_ok_and(|run| {
         run.st == "st=130"
-            && run.rec_has(&[("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "cancelled"),
-                ("remote_status", "null"), ("remote_signal", "null")])
+            && run.rec_has(&[
+                ("mode", "exec"),
+                ("phase", "running"),
+                ("dispatch", "accepted"),
+                ("outcome", "cancelled"),
+                ("remote_status", "null"),
+                ("remote_signal", "null"),
+            ])
     });
     // `p9 gone` retries up to three times (as in T3-D, ~60 s when the producer stays alive), so
     // snap-a and snap-b are taken before it and snap-c after it; each mark prints its real offset.
     snap(a, f, "snap-a", t0, SNAP_A_MS, &mut logins);
     snap(a, f, "snap-b", t0, SNAP_B_MS, &mut logins);
     let gone = follow_up(a, f, "p9 gone", &mut logins);
-    let gone_ok = gone.as_ref().is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
+    let gone_ok = gone
+        .as_ref()
+        .is_ok_and(|run| run.st == "st=0" && run.out.windows(8).any(|w| w == b"p09-gone"));
     detail("cancel-client", &describe(&r));
     detail("cancel-follow-up", &describe(&gone));
-    check("ssh-guest-cancel-producer", cancelled && gone_ok, &format!("cancelled={cancelled} gone_ok={gone_ok}"));
+    check(
+        "ssh-guest-cancel-producer",
+        cancelled && gone_ok,
+        &format!("cancelled={cancelled} gone_ok={gone_ok}"),
+    );
     snap(a, f, "snap-c", t0, SNAP_C_MS, &mut logins);
 
     // 3. A session lost after dispatch: unknown outcome, exit 255, no automatic retry.
     logins += 1;
-    let r = case(a, "ssh-guest-fault-may-have-run", &ssh_line(f.port, "10.0.2.2 --command 'p9 selfkill'"), pw, SSH_MS, |_| Ok(()));
+    let r = case(
+        a,
+        "ssh-guest-fault-may-have-run",
+        &ssh_line(f.port, "10.0.2.2 --command 'p9 selfkill'"),
+        pw,
+        SSH_MS,
+        |_| Ok(()),
+    );
     if let Some(Ok(rec)) = r.as_ref().ok().map(|run| &run.rec) {
-        println(&format!("P04 INFO ssh-guest-selfkill dispatch={}", field(rec, "dispatch").unwrap_or("?")));
+        println(&format!(
+            "P04 INFO ssh-guest-selfkill dispatch={}",
+            field(rec, "dispatch").unwrap_or("?")
+        ));
     }
     judge(
         "ssh-guest-fault-may-have-run",
         &r,
         "st=255",
-        &[("mode", "exec"), ("outcome", "unknown"), ("remote_status", "null"), ("remote_signal", "null")],
+        &[
+            ("mode", "exec"),
+            ("outcome", "unknown"),
+            ("remote_status", "null"),
+            ("remote_signal", "null"),
+        ],
         |run| {
             // The command's own `sleep 20` after the kill must not be what ended the session.
-            run.rec.as_ref().is_ok_and(|rec| matches!(field(rec, "dispatch"), Some("accepted" | "may_have_run"))) && run.ms < 18_000
+            run.rec.as_ref().is_ok_and(|rec| {
+                matches!(field(rec, "dispatch"), Some("accepted" | "may_have_run"))
+            }) && run.ms < 18_000
         },
     );
 
@@ -260,13 +395,26 @@ pub(super) fn diag_checks(a: &mut Term, f: &Fixture) {
     let (selfkill, lines) = match &ledger {
         Ok(run) if run.st == "st=0" => {
             let text = String::from_utf8_lossy(&run.out).into_owned();
-            let all: Vec<&str> = text.lines().map(str::trim).filter(|l| l.starts_with("p09x-")).collect();
-            (all.iter().filter(|l| **l == "p09x-selfkill").count(), all.len())
+            let all: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|l| l.starts_with("p09x-"))
+                .collect();
+            (
+                all.iter().filter(|l| **l == "p09x-selfkill").count(),
+                all.len(),
+            )
         }
         _ => (usize::MAX, 0),
     };
-    println(&format!("P04 INFO ssh-guest-ledger selfkill={selfkill} lines={lines}"));
-    check("ssh-guest-no-replay-ledger", selfkill == 1, &describe(&ledger));
+    println(&format!(
+        "P04 INFO ssh-guest-ledger selfkill={selfkill} lines={lines}"
+    ));
+    check(
+        "ssh-guest-no-replay-ledger",
+        selfkill == 1,
+        &describe(&ledger),
+    );
     println(&format!("P04 INFO ssh-guest-logins {logins}"));
 }
 
@@ -288,10 +436,14 @@ mod pipe {
     const STDIN_FILE: &str = "/tmp/p09-pipe-in";
     const RT_FILE: &str = "/tmp/p09-rt.bin";
     const MARKERS: [&str; 5] = [
-        "ssh-guest-pk-import", "ssh-guest-pk-exec", "ssh-guest-pipe-refusals", "ssh-guest-pipe-stdin-exact",
+        "ssh-guest-pk-import",
+        "ssh-guest-pk-exec",
+        "ssh-guest-pipe-refusals",
+        "ssh-guest-pipe-stdin-exact",
         "ssh-guest-pipe-roundtrip",
     ];
-    const POSTURE_VOLATILE: &str = "  posture: DEV_POSTURE volatile: lost when the key service restarts";
+    const POSTURE_VOLATILE: &str =
+        "  posture: DEV_POSTURE volatile: lost when the key service restarts";
 
     /// `/t3p/pipe.conf` (public values only): `t3pipe-conf 1`, `blob sha256=HEX len=N`,
     /// `keyfp SHA256:FP`, `name NAME`, `nonce HEX`.
@@ -320,19 +472,40 @@ mod pipe {
 
     impl Out {
         fn describe(&self) -> String {
-            let err = if self.withheld { String::from("<withheld>") } else { clip(self.err.trim()) };
-            format!("{} ms={} out_lines={} err={err}", self.st, self.ms, self.out.len())
+            let err = if self.withheld {
+                String::from("<withheld>")
+            } else {
+                clip(self.err.trim())
+            };
+            format!(
+                "{} ms={} out_lines={} err={err}",
+                self.st,
+                self.ms,
+                self.out.len()
+            )
         }
 
         /// The stage's `completion` record is a clean exec exit.
         fn rec_ok(&self) -> bool {
             self.rec.as_ref().is_ok_and(|r| {
-                has(r, &[("mode", "exec"), ("outcome", "remote_exit"), ("remote_status", "0"), ("error_code", "null")])
+                has(
+                    r,
+                    &[
+                        ("mode", "exec"),
+                        ("outcome", "remote_exit"),
+                        ("remote_status", "0"),
+                        ("error_code", "null"),
+                    ],
+                )
             })
         }
 
         fn rec_code(&self) -> &str {
-            self.rec.as_ref().ok().and_then(|r| field(r, "error_code")).unwrap_or("-")
+            self.rec
+                .as_ref()
+                .ok()
+                .and_then(|r| field(r, "error_code"))
+                .unwrap_or("-")
         }
 
         /// No password, passphrase or first-trust prompt anywhere.
@@ -356,7 +529,10 @@ mod pipe {
     fn out_lines(a: &Term) -> Vec<String> {
         let text = strip_ansi(after_echo(&a.out));
         let mut lines = lines_of(&text);
-        if lines.last().is_some_and(|l| l.starts_with(PROMPT.trim_end())) {
+        if lines
+            .last()
+            .is_some_and(|l| l.starts_with(PROMPT.trim_end()))
+        {
             lines.pop();
         }
         while lines.last().is_some_and(|l| l.is_empty()) {
@@ -371,7 +547,11 @@ mod pipe {
         let mut hit = false;
         for needle in &c.needles {
             let n = needle.as_bytes();
-            if find(&a.out, n).is_some() || find(&a.err, n).is_some() || out.contains(needle.as_str()) || err.contains(needle.as_str()) {
+            if find(&a.out, n).is_some()
+                || find(&a.err, n).is_some()
+                || out.contains(needle.as_str())
+                || err.contains(needle.as_str())
+            {
                 hit = true;
                 c.hits += 1;
                 println(&format!("P04 INFO ssh-guest-pipe-scan-hit step={step}"));
@@ -418,8 +598,12 @@ mod pipe {
             return Err(format!("pipe.conf: no header in {} lines", lines.len()));
         }
         let blob = kv(&lines, "blob ").ok_or_else(|| String::from("pipe.conf: no blob line"))?;
-        let (sha, len) = blob.split_once(" len=").ok_or_else(|| String::from("pipe.conf: blob line shape"))?;
-        let sha = sha.strip_prefix("sha256=").ok_or_else(|| String::from("pipe.conf: blob sha256"))?;
+        let (sha, len) = blob
+            .split_once(" len=")
+            .ok_or_else(|| String::from("pipe.conf: blob line shape"))?;
+        let sha = sha
+            .strip_prefix("sha256=")
+            .ok_or_else(|| String::from("pipe.conf: blob sha256"))?;
         let keyfp = kv(&lines, "keyfp ").ok_or_else(|| String::from("pipe.conf: no keyfp"))?;
         let name = kv(&lines, "name ").ok_or_else(|| String::from("pipe.conf: no name"))?;
         let nonce = kv(&lines, "nonce ").ok_or_else(|| String::from("pipe.conf: no nonce"))?;
@@ -479,15 +663,36 @@ mod pipe {
         scan(a, c, id);
         let withheld = c.hits != hits;
         let st = status(a)?;
-        let rec = if rec { completion(a) } else { Err(String::from("not read")) };
-        Ok(Out { st, out, err, ms: end.saturating_sub(start), rec, withheld })
+        let rec = if rec {
+            completion(a)
+        } else {
+            Err(String::from("not read"))
+        };
+        Ok(Out {
+            st,
+            out,
+            err,
+            ms: end.saturating_sub(start),
+            rec,
+            withheld,
+        })
     }
 
     /// One shell line to the prompt, then `$?` and optionally the `completion` record.
-    fn stage(a: &mut Term, c: &mut Ctx, id: &str, line: &str, ms: u64, rec: bool) -> Result<Out, String> {
+    fn stage(
+        a: &mut Term,
+        c: &mut Ctx,
+        id: &str,
+        line: &str,
+        ms: u64,
+        rec: bool,
+    ) -> Result<Out, String> {
         println(&format!("P04 INFO ssh-guest-pipe-case {id}"));
         if line.len() > SHELL_LINE_MAX {
-            return Err(format!("command line of {} bytes exceeds the shell's {SHELL_LINE_MAX}", line.len()));
+            return Err(format!(
+                "command line of {} bytes exceeds the shell's {SHELL_LINE_MAX}",
+                line.len()
+            ));
         }
         let start = now_ms();
         let r = (|| {
@@ -504,8 +709,16 @@ mod pipe {
     }
 
     fn fin(name: &str, conds: &[(&str, bool)], detail: String) {
-        let failed: Vec<&str> = conds.iter().filter(|(_, ok)| !ok).map(|(n, _)| *n).collect();
-        check(name, failed.is_empty(), &format!("failed={failed:?} {detail}"));
+        let failed: Vec<&str> = conds
+            .iter()
+            .filter(|(_, ok)| !ok)
+            .map(|(n, _)| *n)
+            .collect();
+        check(
+            name,
+            failed.is_empty(),
+            &format!("failed={failed:?} {detail}"),
+        );
     }
 
     fn fin_err(name: &str, why: &str) {
@@ -540,7 +753,9 @@ mod pipe {
             if wait_stderr_or_prompt(a, "Paste the OpenSSH private key now", SSH_MS)? {
                 // The reader takes the echo-off lease right after the prompt: let it.
                 sleep_ms(500);
-                a.host.submit_paste(text).map_err(|s| format!("paste {s:?}"))?;
+                a.host
+                    .submit_paste(text)
+                    .map_err(|s| format!("paste {s:?}"))?;
             }
             a.wait_prompt(SSH_MS)
         })();
@@ -550,7 +765,10 @@ mod pipe {
     }
 
     pub(crate) fn pipe_checks(a: &mut Term, f: &Fixture) {
-        let mut c = Ctx { needles: Vec::new(), hits: 0 };
+        let mut c = Ctx {
+            needles: Vec::new(),
+            hits: 0,
+        };
         let conf = match read_conf(a) {
             Ok(conf) => conf,
             Err(why) => return skip(&MARKERS, &why),
@@ -567,7 +785,9 @@ mod pipe {
                 println(&format!("P04 INFO ssh-guest-pk-status attempts={attempts}"));
                 import(a, &mut c, name, &key)
             }
-            None => Err(String::from("the key service never answered `kms-ssh-admin status`")),
+            None => Err(String::from(
+                "the key service never answered `kms-ssh-admin status`",
+            )),
         };
         drop(key);
         match &r {
@@ -591,7 +811,14 @@ mod pipe {
         }
 
         // 4. Foreground publickey exec: isolates publickey-to-guest failures from pipeline failures.
-        let r = stage(a, &mut c, "pk-exec", &pk_line(f, name, HOST, &format!("echo {}", conf.nonce)), SSH_MS, true);
+        let r = stage(
+            a,
+            &mut c,
+            "pk-exec",
+            &pk_line(f, name, HOST, &format!("echo {}", conf.nonce)),
+            SSH_MS,
+            true,
+        );
         match &r {
             Ok(o) => fin(
                 "ssh-guest-pk-exec",
@@ -613,50 +840,97 @@ mod pipe {
             a,
             &mut c,
             "refuse-password-pipeline",
-            &format!("{feed}ssh --user tester --auth password -p {} {HOST} --command cat", f.port),
+            &format!(
+                "{feed}ssh --user tester --auth password -p {} {HOST} --command cat",
+                f.port
+            ),
             SSH_MS,
             false,
         );
-        let unknown = stage(a, &mut c, "refuse-unknown-identity", &format!("{feed}{}", pk_line(f, "nope", HOST, "cat")), SSH_MS, true);
+        let unknown = stage(
+            a,
+            &mut c,
+            "refuse-unknown-identity",
+            &format!("{feed}{}", pk_line(f, "nope", HOST, "cat")),
+            SSH_MS,
+            true,
+        );
         println("P04 INFO ssh-guest-pipe-mark neg-ab-end");
         println("P04 INFO ssh-guest-pipe-mark neg-c-begin");
-        let host = stage(a, &mut c, "refuse-unknown-host", &format!("{feed}{}", pk_line(f, name, "gateway", "true")), SSH_MS, true);
+        let host = stage(
+            a,
+            &mut c,
+            "refuse-unknown-host",
+            &format!("{feed}{}", pk_line(f, name, "gateway", "true")),
+            SSH_MS,
+            true,
+        );
         println("P04 INFO ssh-guest-pipe-mark neg-c-end");
         let mut conds: Vec<(&str, bool)> = Vec::new();
         conds.push(("a-st2", pw.as_ref().is_ok_and(|o| o.st == "st=2")));
         conds.push((
             "a-message",
             pw.as_ref().is_ok_and(|o| {
-                o.err.contains("interactive session") && !o.err.contains("password: ") && !o.err.contains("SHA256:")
+                o.err.contains("interactive session")
+                    && !o.err.contains("password: ")
+                    && !o.err.contains("SHA256:")
             }),
         ));
         conds.push(("b-st255", unknown.as_ref().is_ok_and(|o| o.st == "st=255")));
-        conds.push(("b-message", unknown.as_ref().is_ok_and(|o| o.err.contains("no such identity"))));
-        conds.push(("b-code", unknown.as_ref().is_ok_and(|o| o.rec_code() == "identity_unknown")));
+        conds.push((
+            "b-message",
+            unknown
+                .as_ref()
+                .is_ok_and(|o| o.err.contains("no such identity")),
+        ));
+        conds.push((
+            "b-code",
+            unknown
+                .as_ref()
+                .is_ok_and(|o| o.rec_code() == "identity_unknown"),
+        ));
         conds.push(("c-st255", host.as_ref().is_ok_and(|o| o.st == "st=255")));
         conds.push((
             "c-message",
-            host.as_ref()
-                .is_ok_and(|o| o.err.contains("host key not trusted; confirmation needs an interactive frontend")),
+            host.as_ref().is_ok_and(|o| {
+                o.err
+                    .contains("host key not trusted; confirmation needs an interactive frontend")
+            }),
         ));
         conds.push(("c-no-prompt", host.as_ref().is_ok_and(|o| o.quiet())));
         let detail = |r: &Result<Out, String>| match r {
             Ok(o) => o.describe(),
             Err(why) => why.clone(),
         };
-        fin("ssh-guest-pipe-refusals", &conds, format!("a: {} | b: {} | c: {}", detail(&pw), detail(&unknown), detail(&host)));
+        fin(
+            "ssh-guest-pipe-refusals",
+            &conds,
+            format!(
+                "a: {} | b: {} | c: {}",
+                detail(&pw),
+                detail(&unknown),
+                detail(&host)
+            ),
+        );
 
         // 6. Exact stdin: the blob reaches the guest unchanged, one EOF.
         let line = format!(
             "{feed}{}",
-            pk_line(f, name, HOST, &format!("cat > {STDIN_FILE}; sha256sum {STDIN_FILE}; wc -c < {STDIN_FILE}"))
+            pk_line(
+                f,
+                name,
+                HOST,
+                &format!("cat > {STDIN_FILE}; sha256sum {STDIN_FILE}; wc -c < {STDIN_FILE}")
+            )
         );
         let r = stage(a, &mut c, "pipe-stdin-exact", &line, PIPE_MS, true);
         match &r {
             Ok(o) => {
                 let sha = o.out.first().and_then(|l| sha256_word(l)).unwrap_or("none");
                 let len = o.out.get(1).map(|l| l.trim()).unwrap_or("none");
-                println(&format!("P04 INFO ssh-guest-pipe-digest which=stdin sha={sha} len={len}"));
+                println(&format!(
+                    "P04 INFO ssh-guest-pipe-digest which=stdin sha={sha} len={len}"
+                ));
                 fin(
                     "ssh-guest-pipe-stdin-exact",
                     &[
@@ -664,8 +938,15 @@ mod pipe {
                         ("no-prompt", o.quiet()),
                         ("stderr-empty", o.err.trim().is_empty()),
                         ("two-lines", o.out.len() == 2),
-                        ("sha", o.out.first().map(String::as_str) == Some(format!("{}  {STDIN_FILE}", conf.sha).as_str())),
-                        ("len", o.out.get(1).map(String::as_str) == Some(conf.len.as_str())),
+                        (
+                            "sha",
+                            o.out.first().map(String::as_str)
+                                == Some(format!("{}  {STDIN_FILE}", conf.sha).as_str()),
+                        ),
+                        (
+                            "len",
+                            o.out.get(1).map(String::as_str) == Some(conf.len.as_str()),
+                        ),
                         ("completion", o.rec_ok()),
                     ],
                     o.describe(),
@@ -682,22 +963,40 @@ mod pipe {
         let back = stage(a, &mut c, "pipe-roundtrip-sum", &line, PIPE_MS, true);
         if let Ok(o) = &back {
             let sha = o.out.first().and_then(|l| sha256_word(l)).unwrap_or("none");
-            println(&format!("P04 INFO ssh-guest-pipe-digest which=roundtrip sha={sha} len=-"));
+            println(&format!(
+                "P04 INFO ssh-guest-pipe-digest which=roundtrip sha={sha} len=-"
+            ));
         }
         let want = format!("{}  -", conf.sha);
         let conds = [
             ("up-st0", up.as_ref().is_ok_and(|o| o.st == "st=0")),
             ("up-no-prompt", up.as_ref().is_ok_and(|o| o.quiet())),
-            ("up-stderr-empty", up.as_ref().is_ok_and(|o| o.err.trim().is_empty())),
-            ("up-stdout-empty", up.as_ref().is_ok_and(|o| o.out.is_empty())),
+            (
+                "up-stderr-empty",
+                up.as_ref().is_ok_and(|o| o.err.trim().is_empty()),
+            ),
+            (
+                "up-stdout-empty",
+                up.as_ref().is_ok_and(|o| o.out.is_empty()),
+            ),
             ("up-completion", up.as_ref().is_ok_and(|o| o.rec_ok())),
             ("sum-st0", back.as_ref().is_ok_and(|o| o.st == "st=0")),
             ("sum-no-prompt", back.as_ref().is_ok_and(|o| o.quiet())),
-            ("sum-stderr-empty", back.as_ref().is_ok_and(|o| o.err.trim().is_empty())),
-            ("sum-digest", back.as_ref().is_ok_and(|o| o.out == [want.clone()])),
+            (
+                "sum-stderr-empty",
+                back.as_ref().is_ok_and(|o| o.err.trim().is_empty()),
+            ),
+            (
+                "sum-digest",
+                back.as_ref().is_ok_and(|o| o.out == [want.clone()]),
+            ),
             ("sum-completion", back.as_ref().is_ok_and(|o| o.rec_ok())),
         ];
-        fin("ssh-guest-pipe-roundtrip", &conds, format!("up: {} | sum: {}", detail(&up), detail(&back)));
+        fin(
+            "ssh-guest-pipe-roundtrip",
+            &conds,
+            format!("up: {} | sum: {}", detail(&up), detail(&back)),
+        );
 
         println("P04 INFO ssh-guest-pipe-logins 4");
     }

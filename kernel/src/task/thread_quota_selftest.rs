@@ -53,8 +53,10 @@ fn insert_parent() {
         #[cfg(cellos_p01_trace)]
         crate::memory::heap::p01_owner::task_backing(&parent);
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         sched.tasks.insert(PARENT_TID, parent);
     }
 }

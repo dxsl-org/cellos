@@ -97,7 +97,8 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let mut info = PcieDeviceInfo::zeroed();
             let mut found = false;
             for _ in 0..200 {
-                if let Ok(true) = sys_find_pcie_device(SATA_CLASS, SATA_SUB, AHCI_PROGIF, &mut info) {
+                if let Ok(true) = sys_find_pcie_device(SATA_CLASS, SATA_SUB, AHCI_PROGIF, &mut info)
+                {
                     found = true;
                     break;
                 }
@@ -160,8 +161,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                             ostd::syscall::sys_exit(1)
                         }
                     };
-                    let io_buf = match AuthorizedDma::authorize(io_buf, |b| b.authorize(info.bdf))
-                    {
+                    let io_buf = match AuthorizedDma::authorize(io_buf, |b| b.authorize(info.bdf)) {
                         Ok(buf) => buf,
                         Err(_) => {
                             let _ = print_fmt(format_args!(
@@ -175,9 +175,9 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     // Publish state before registration: VFS may route requests
                     // as soon as the syscall succeeds.
                     *STATE.lock() = Some(AhciState { ctrl, io_buf });
-                    if let Err(error) =
-                        sys_register_block_device(BlockDevice::Pci { bdf: info.bdf as u16 })
-                    {
+                    if let Err(error) = sys_register_block_device(BlockDevice::Pci {
+                        bdf: info.bdf as u16,
+                    }) {
                         *STATE.lock() = None;
                         let _ = print_fmt(format_args!(
                             "[ahci] block driver registration failed: {:?}\n",

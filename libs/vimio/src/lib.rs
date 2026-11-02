@@ -13,9 +13,14 @@ use alloc::vec::Vec;
 use core::time::Duration;
 use spin::Mutex;
 
-use api::ipc::{net_ready, encode_tcp_interests, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE};
+use api::ipc::{
+    encode_tcp_interests, net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent,
+    NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
+};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult};
+use ostd::syscall::{
+    sys_lookup_service, sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult,
+};
 
 /// An opaque token used to identify an event source.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -79,7 +84,9 @@ impl Events {
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { list: Vec::with_capacity(capacity) }
+        Self {
+            list: Vec::with_capacity(capacity),
+        }
     }
 
     pub fn clear(&mut self) {
@@ -123,11 +130,21 @@ impl<'a> Registry<'a> {
         Self { selector }
     }
 
-    pub fn register(&self, socket_cap: u32, token: Token, interests: Interest) -> Result<(), MioError> {
+    pub fn register(
+        &self,
+        socket_cap: u32,
+        token: Token,
+        interests: Interest,
+    ) -> Result<(), MioError> {
         self.selector.register(socket_cap, token, interests)
     }
 
-    pub fn reregister(&self, socket_cap: u32, token: Token, interests: Interest) -> Result<(), MioError> {
+    pub fn reregister(
+        &self,
+        socket_cap: u32,
+        token: Token,
+        interests: Interest,
+    ) -> Result<(), MioError> {
         self.selector.reregister(socket_cap, token, interests)
     }
 
@@ -141,8 +158,18 @@ pub mod event {
 
     /// Trait implemented by event sources (e.g. TcpStream, TcpListener).
     pub trait Source {
-        fn register(&mut self, registry: &Registry<'_>, token: Token, interests: Interest) -> Result<(), MioError>;
-        fn reregister(&mut self, registry: &Registry<'_>, token: Token, interests: Interest) -> Result<(), MioError>;
+        fn register(
+            &mut self,
+            registry: &Registry<'_>,
+            token: Token,
+            interests: Interest,
+        ) -> Result<(), MioError>;
+        fn reregister(
+            &mut self,
+            registry: &Registry<'_>,
+            token: Token,
+            interests: Interest,
+        ) -> Result<(), MioError>;
         fn deregister(&mut self, registry: &Registry<'_>) -> Result<(), MioError>;
     }
 }
@@ -161,7 +188,12 @@ impl Selector {
         })
     }
 
-    pub fn register(&self, socket_cap: u32, token: Token, interests: Interest) -> Result<(), MioError> {
+    pub fn register(
+        &self,
+        socket_cap: u32,
+        token: Token,
+        interests: Interest,
+    ) -> Result<(), MioError> {
         let mut lock = self.interests.lock();
         if lock.contains_key(&socket_cap) {
             return Err(MioError::AlreadyExists);
@@ -174,7 +206,12 @@ impl Selector {
         Ok(())
     }
 
-    pub fn reregister(&self, socket_cap: u32, token: Token, interests: Interest) -> Result<(), MioError> {
+    pub fn reregister(
+        &self,
+        socket_cap: u32,
+        token: Token,
+        interests: Interest,
+    ) -> Result<(), MioError> {
         let mut lock = self.interests.lock();
         let entry = lock.get_mut(&socket_cap).ok_or(MioError::NotFound)?;
         let mask = interests.to_net_mask();
@@ -199,7 +236,11 @@ impl Selector {
         if let SyscallResult::Ok(sender) = sys_try_recv(0, &mut drain_buf) {
             if sender > 0 && drain_buf.first() == Some(&REACTOR_WAKE_OPCODE) {
                 if let Some(token) = *self.waker_token.lock() {
-                    events.push(Event { token, readable: true, writable: false });
+                    events.push(Event {
+                        token,
+                        readable: true,
+                        writable: false,
+                    });
                 }
                 return Ok(());
             }
@@ -267,7 +308,11 @@ impl Selector {
         if sender != net_tid {
             if resp_buf.first() == Some(&REACTOR_WAKE_OPCODE) {
                 if let Some(token) = *self.waker_token.lock() {
-                    events.push(Event { token, readable: true, writable: false });
+                    events.push(Event {
+                        token,
+                        readable: true,
+                        writable: false,
+                    });
                 }
             }
             return Ok(());
@@ -277,7 +322,11 @@ impl Selector {
             return Err(MioError::IpcError);
         };
 
-        if let NetResponse::TcpReady { events: ready_slice, .. } = response {
+        if let NetResponse::TcpReady {
+            events: ready_slice,
+            ..
+        } = response
+        {
             let lock = self.interests.lock();
             for chunk in ready_slice.chunks_exact(NET_READY_RECORD_BYTES) {
                 if let Some(ev) = TcpReadyEvent::decode(chunk) {
@@ -285,7 +334,11 @@ impl Selector {
                         let readable = ev.ready & (net_ready::READ | net_ready::ACCEPT) != 0;
                         let writable = ev.ready & net_ready::WRITE != 0;
                         if readable || writable {
-                            events.push(Event { token, readable, writable });
+                            events.push(Event {
+                                token,
+                                readable,
+                                writable,
+                            });
                         }
                     }
                 }
@@ -345,7 +398,10 @@ mod tests {
         let token = Token(1);
 
         assert_eq!(selector.register(cap, token, Interest::READABLE), Ok(()));
-        assert_eq!(selector.register(cap, token, Interest::WRITABLE), Err(MioError::AlreadyExists));
+        assert_eq!(
+            selector.register(cap, token, Interest::WRITABLE),
+            Err(MioError::AlreadyExists)
+        );
         assert_eq!(selector.reregister(cap, token, Interest::WRITABLE), Ok(()));
         assert_eq!(selector.deregister(cap), Ok(()));
         assert_eq!(selector.deregister(cap), Err(MioError::NotFound));

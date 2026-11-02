@@ -62,10 +62,14 @@ impl ServiceEntry {
     /// a binding, so `LookupServiceBound` treats it exactly like an absent provider.
     fn identity(self) -> Option<(u64, u64)> {
         let (ServiceEntry::Active {
-            cell_id, generation, ..
+            cell_id,
+            generation,
+            ..
         }
         | ServiceEntry::Paused {
-            cell_id, generation, ..
+            cell_id,
+            generation,
+            ..
         }) = self;
         (cell_id != 0 && generation != 0).then_some((cell_id, generation))
     }
@@ -102,8 +106,10 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
         return false;
     }
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::SERVICE_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::SERVICE_SHARED,
+    );
     map.insert(
         service_id,
         ServiceEntry::Active {
@@ -224,10 +230,9 @@ pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
 /// IPC admission uses this as the quiesce barrier for callers that cached the
 /// provider tid before the mapping was paused.
 pub fn is_paused_tid(tid: usize) -> bool {
-    REGISTRY
-        .lock()
-        .values()
-        .any(|entry| matches!(entry, ServiceEntry::Paused { tid: provider, .. } if *provider == tid))
+    REGISTRY.lock().values().any(
+        |entry| matches!(entry, ServiceEntry::Paused { tid: provider, .. } if *provider == tid),
+    )
 }
 
 /// Return whether `tid` is the active or paused provider of any trusted

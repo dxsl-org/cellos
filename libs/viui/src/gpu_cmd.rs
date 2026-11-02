@@ -16,9 +16,16 @@ use alloc::{string::String, vec::Vec};
 #[derive(Debug)]
 pub enum GpuCmd {
     /// Fill a pre-clipped solid rectangle.
-    FillRect { rect: Rect, color: Color },
+    FillRect {
+        rect: Rect,
+        color: Color,
+    },
     /// Draw a line from `a` to `b` (Bresenham, handled by executor).
-    DrawLine { a: Point, b: Point, color: Color },
+    DrawLine {
+        a: Point,
+        b: Point,
+        color: Color,
+    },
     /// Record Inter text at its exact scalable pixel size.
     DrawText {
         pos: Point,
@@ -43,7 +50,9 @@ pub enum GpuCmd {
         size_px: f32,
     },
     /// Clip state is replayed so recorded text observes the paint damage clip.
-    ClipPush { rect: Rect },
+    ClipPush {
+        rect: Rect,
+    },
     ClipPop,
 }
 
@@ -108,7 +117,9 @@ impl GpuCommandBuffer {
 
     /// Supply bounds measured by the recording font instead of guessing advances.
     pub fn set_last_bounds(&mut self, bounds: Option<Rect>) {
-        if let Some(last) = self.cmds.last_mut() { last.bounds = bounds; }
+        if let Some(last) = self.cmds.last_mut() {
+            last.bounds = bounds;
+        }
     }
 
     /// Iterate recorded commands with pre-computed bounds.

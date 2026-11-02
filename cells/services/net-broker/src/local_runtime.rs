@@ -170,7 +170,9 @@ pub fn receive_once() {
             }
             let immediate = {
                 let mut state = lock_runtime_state(false);
-                state.broker.handle_ingress(sender, identity, parsed, operation)
+                state
+                    .broker
+                    .handle_ingress(sender, identity, parsed, operation)
             };
             if let IngressDecision::Immediate(mut reply) = immediate {
                 reply.operation = operation;

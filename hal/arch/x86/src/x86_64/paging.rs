@@ -754,11 +754,29 @@ mod tests {
         };
         let entry = 0x1b0000000;
         let supervisor = entry + PAGE_SIZE;
-        root.map(supervisor, 0x200000, PageFlags::from_bits(PageFlags::READ | PageFlags::WRITE), &mut allocate).unwrap();
-        root.map(entry, 0x100000, PageFlags::from_bits(PageFlags::READ | PageFlags::EXECUTE | PageFlags::USER), &mut allocate).unwrap();
+        root.map(
+            supervisor,
+            0x200000,
+            PageFlags::from_bits(PageFlags::READ | PageFlags::WRITE),
+            &mut allocate,
+        )
+        .unwrap();
+        root.map(
+            entry,
+            0x100000,
+            PageFlags::from_bits(PageFlags::READ | PageFlags::EXECUTE | PageFlags::USER),
+            &mut allocate,
+        )
+        .unwrap();
         // Exercise high PDPT and PT indices as well as the failing PD index.
         let high = (255usize << 39) | (511usize << 30) | (511usize << 21) | (511usize << 12);
-        root.map(high, 0x300000, PageFlags::from_bits(PageFlags::READ | PageFlags::USER), &mut allocate).unwrap();
+        root.map(
+            high,
+            0x300000,
+            PageFlags::from_bits(PageFlags::READ | PageFlags::USER),
+            &mut allocate,
+        )
+        .unwrap();
 
         fn chain(root: &PageTable, va: usize) -> [u64; 4] {
             let mut entries = [0; 4];
@@ -769,7 +787,9 @@ mod tests {
                 assert_ne!(entry & PTE_PRESENT, 0);
                 if level < 3 {
                     // SAFETY: the test owns all aligned intermediate frames.
-                    table = unsafe { &*(phys_to_virt_ptr((entry & PTE_ADDR_MASK) as usize) as *const PageTable) };
+                    table = unsafe {
+                        &*(phys_to_virt_ptr((entry & PTE_ADDR_MASK) as usize) as *const PageTable)
+                    };
                 }
             }
             entries

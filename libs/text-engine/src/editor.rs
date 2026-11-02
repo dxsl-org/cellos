@@ -143,7 +143,13 @@ pub struct EditBuffer {
 
 impl Default for EditBuffer {
     fn default() -> Self {
-        Self::from_parsed(alloc::vec![Line { text: String::new(), ending: Ending::None }], 0)
+        Self::from_parsed(
+            alloc::vec![Line {
+                text: String::new(),
+                ending: Ending::None
+            }],
+            0,
+        )
     }
 }
 
@@ -153,12 +159,22 @@ fn parse(s: &str) -> Vec<Line> {
     let mut start = 0;
     for (i, &b) in bytes.iter().enumerate() {
         if b == b'\n' {
-            let (end, ending) = if i > start && bytes[i - 1] == b'\r' { (i - 1, Ending::CrLf) } else { (i, Ending::Lf) };
-            lines.push(Line { text: String::from(&s[start..end]), ending });
+            let (end, ending) = if i > start && bytes[i - 1] == b'\r' {
+                (i - 1, Ending::CrLf)
+            } else {
+                (i, Ending::Lf)
+            };
+            lines.push(Line {
+                text: String::from(&s[start..end]),
+                ending,
+            });
             start = i + 1;
         }
     }
-    lines.push(Line { text: String::from(&s[start..]), ending: Ending::None });
+    lines.push(Line {
+        text: String::from(&s[start..]),
+        ending: Ending::None,
+    });
     lines
 }
 
@@ -214,13 +230,27 @@ impl EditBuffer {
         out
     }
 
-    pub fn len(&self) -> usize { self.len }
-    pub fn is_empty(&self) -> bool { self.len == 0 }
-    pub fn lines(&self) -> &[Line] { &self.lines }
-    pub fn line_count(&self) -> usize { self.lines.len() }
-    pub fn cursor(&self) -> Pos { self.cursor }
-    pub fn clipboard(&self) -> &str { &self.clipboard }
-    pub fn last_query(&self) -> &str { &self.query }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    pub fn lines(&self) -> &[Line] {
+        &self.lines
+    }
+    pub fn line_count(&self) -> usize {
+        self.lines.len()
+    }
+    pub fn cursor(&self) -> Pos {
+        self.cursor
+    }
+    pub fn clipboard(&self) -> &str {
+        &self.clipboard
+    }
+    pub fn last_query(&self) -> &str {
+        &self.query
+    }
 
     /// Ordered half-open selection, when an anchor is set and differs from the cursor.
     pub fn selection(&self) -> Option<(Pos, Pos)> {
@@ -228,17 +258,25 @@ impl EditBuffer {
         (anchor != self.cursor).then(|| (anchor.min(self.cursor), anchor.max(self.cursor)))
     }
 
-    pub fn has_anchor(&self) -> bool { self.anchor.is_some() }
+    pub fn has_anchor(&self) -> bool {
+        self.anchor.is_some()
+    }
 
     /// Whether the bytes may differ from the last saved state. Conservative:
     /// an edit and its manual reversal stay dirty; undo back to the saved
     /// state is clean.
-    pub fn is_dirty(&self) -> bool { self.state() != self.saved }
+    pub fn is_dirty(&self) -> bool {
+        self.state() != self.saved
+    }
 
     /// The current bytes were committed to storage.
-    pub fn mark_saved(&mut self) { self.saved = self.state(); }
+    pub fn mark_saved(&mut self) {
+        self.saved = self.state();
+    }
 
-    fn state(&self) -> u64 { self.undo.back().map_or(self.floor, |g| g.id) }
+    fn state(&self) -> u64 {
+        self.undo.back().map_or(self.floor, |g| g.id)
+    }
 
     // ── Offsets ──────────────────────────────────────────────────────────
 
@@ -246,7 +284,9 @@ impl EditBuffer {
         self.lines[..line].iter().map(serialized_len).sum()
     }
 
-    fn offset(&self, pos: Pos) -> usize { self.line_start(pos.line) + pos.byte }
+    fn offset(&self, pos: Pos) -> usize {
+        self.line_start(pos.line) + pos.byte
+    }
 
     /// Line containing serialized offset `off` and that line's start.
     fn line_at(&self, off: usize) -> (usize, usize) {
@@ -266,9 +306,15 @@ impl EditBuffer {
         let (line, start) = self.line_at(off);
         let byte = off - start;
         if byte > self.lines[line].text.len() && line + 1 < self.lines.len() {
-            return Pos { line: line + 1, byte: 0 };
+            return Pos {
+                line: line + 1,
+                byte: 0,
+            };
         }
-        Pos { line, byte: byte.min(self.lines[line].text.len()) }
+        Pos {
+            line,
+            byte: byte.min(self.lines[line].text.len()),
+        }
     }
 
     /// Replace `len` serialized bytes at `off` with `ins`; returns the removed bytes.
@@ -312,7 +358,11 @@ impl EditBuffer {
             return Err(EditError::UndoBudget);
         }
         // Each '\n' ends a line, so a removed range holds one per line boundary it spans.
-        let removed_breaks = if len == 0 { 0 } else { self.line_at(off + len).0 - self.line_at(off).0 };
+        let removed_breaks = if len == 0 {
+            0
+        } else {
+            self.line_at(off + len).0 - self.line_at(off).0
+        };
         let added = ins.bytes().filter(|&b| b == b'\n').count();
         if self.lines.len() - removed_breaks + added > MAX_LINES {
             return Err(EditError::TooManyLines);
@@ -325,14 +375,24 @@ impl EditBuffer {
         self.desired_col = None;
         let group = Group {
             id: self.next_id,
-            edit: Edit { offset: off, removed, inserted: String::from(ins), cursor_before, anchor_before, cursor_after: self.cursor },
+            edit: Edit {
+                offset: off,
+                removed,
+                inserted: String::from(ins),
+                cursor_before,
+                anchor_before,
+                cursor_after: self.cursor,
+            },
         };
         self.next_id += 1;
         self.retained -= self.redo.drain(..).map(|g| g.payload()).sum::<usize>();
         self.retained += group.payload();
         self.undo.push_back(group);
-        while self.undo.len() + self.redo.len() > MAX_UNDO_GROUPS || self.retained > MAX_UNDO_BYTES {
-            let Some(oldest) = self.undo.pop_front() else { break };
+        while self.undo.len() + self.redo.len() > MAX_UNDO_GROUPS || self.retained > MAX_UNDO_BYTES
+        {
+            let Some(oldest) = self.undo.pop_front() else {
+                break;
+            };
             self.retained -= oldest.payload();
             self.floor = oldest.id;
         }
@@ -348,7 +408,9 @@ impl EditBuffer {
 
     /// Insert text at the cursor, replacing the selection.
     pub fn insert(&mut self, text: &str) -> Result<(), EditError> {
-        let (off, len) = self.selection_range().unwrap_or((self.offset(self.cursor), 0));
+        let (off, len) = self
+            .selection_range()
+            .unwrap_or((self.offset(self.cursor), 0));
         self.edit(off, len, text)
     }
 
@@ -356,7 +418,10 @@ impl EditBuffer {
     /// preceding one, else the first in the document, else LF.
     pub fn newline_ending(&self) -> Ending {
         let line = self.cursor.line;
-        self.lines[..=line].iter().rev().map(|l| l.ending)
+        self.lines[..=line]
+            .iter()
+            .rev()
+            .map(|l| l.ending)
             .chain(self.lines[line..].iter().map(|l| l.ending))
             .find(|e| *e != Ending::None)
             .unwrap_or(Ending::Lf)
@@ -374,7 +439,10 @@ impl EditBuffer {
         let Pos { line, byte } = self.cursor;
         let off = self.offset(self.cursor);
         if byte > 0 {
-            let prev = self.lines[line].text[..byte].chars().next_back().map_or(0, char::len_utf8);
+            let prev = self.lines[line].text[..byte]
+                .chars()
+                .next_back()
+                .map_or(0, char::len_utf8);
             self.edit(off - prev, prev, "")
         } else if line > 0 {
             let unit = self.lines[line - 1].ending.as_str().len();
@@ -403,12 +471,17 @@ impl EditBuffer {
 
     fn selected_text(&self) -> Option<String> {
         let (off, len) = self.selection_range()?;
-        Some(String::from_utf8(self.to_bytes()[off..off + len].to_vec()).expect("scalar-boundary range"))
+        Some(
+            String::from_utf8(self.to_bytes()[off..off + len].to_vec())
+                .expect("scalar-boundary range"),
+        )
     }
 
     /// Copy the selection; `Ok(false)` when there is none.
     pub fn copy(&mut self) -> Result<bool, EditError> {
-        let Some(text) = self.selected_text() else { return Ok(false) };
+        let Some(text) = self.selected_text() else {
+            return Ok(false);
+        };
         if text.len() > MAX_CLIPBOARD {
             return Err(EditError::ClipboardFull);
         }
@@ -418,7 +491,9 @@ impl EditBuffer {
 
     /// Copy, then delete the selection.
     pub fn cut(&mut self) -> Result<bool, EditError> {
-        let Some(text) = self.selected_text() else { return Ok(false) };
+        let Some(text) = self.selected_text() else {
+            return Ok(false);
+        };
         if text.len() > MAX_CLIPBOARD {
             return Err(EditError::ClipboardFull);
         }
@@ -448,7 +523,9 @@ impl EditBuffer {
     }
 
     pub fn undo(&mut self) -> bool {
-        let Some(group) = self.undo.pop_back() else { return false };
+        let Some(group) = self.undo.pop_back() else {
+            return false;
+        };
         let e = &group.edit;
         self.splice(e.offset, e.inserted.len(), &e.removed);
         self.cursor = e.cursor_before;
@@ -459,7 +536,9 @@ impl EditBuffer {
     }
 
     pub fn redo(&mut self) -> bool {
-        let Some(group) = self.redo.pop() else { return false };
+        let Some(group) = self.redo.pop() else {
+            return false;
+        };
         let e = &group.edit;
         self.splice(e.offset, e.removed.len(), &e.inserted);
         self.cursor = e.cursor_after;
@@ -469,8 +548,12 @@ impl EditBuffer {
         true
     }
 
-    pub fn undo_depth(&self) -> (usize, usize) { (self.undo.len(), self.redo.len()) }
-    pub fn retained_undo_bytes(&self) -> usize { self.retained }
+    pub fn undo_depth(&self) -> (usize, usize) {
+        (self.undo.len(), self.redo.len())
+    }
+    pub fn retained_undo_bytes(&self) -> usize {
+        self.retained
+    }
 
     // ── Selection and motion ─────────────────────────────────────────────
 
@@ -482,7 +565,9 @@ impl EditBuffer {
         };
     }
 
-    pub fn clear_selection(&mut self) { self.anchor = None; }
+    pub fn clear_selection(&mut self) {
+        self.anchor = None;
+    }
 
     fn moved(&mut self, pos: Pos) {
         self.cursor = pos;
@@ -492,27 +577,50 @@ impl EditBuffer {
     pub fn left(&mut self) {
         let Pos { line, byte } = self.cursor;
         if byte > 0 {
-            let prev = self.lines[line].text[..byte].chars().next_back().map_or(0, char::len_utf8);
-            self.moved(Pos { line, byte: byte - prev });
+            let prev = self.lines[line].text[..byte]
+                .chars()
+                .next_back()
+                .map_or(0, char::len_utf8);
+            self.moved(Pos {
+                line,
+                byte: byte - prev,
+            });
         } else if line > 0 {
-            self.moved(Pos { line: line - 1, byte: self.lines[line - 1].text.len() });
+            self.moved(Pos {
+                line: line - 1,
+                byte: self.lines[line - 1].text.len(),
+            });
         }
     }
 
     pub fn right(&mut self) {
         let Pos { line, byte } = self.cursor;
         match self.lines[line].text[byte..].chars().next() {
-            Some(c) => self.moved(Pos { line, byte: byte + c.len_utf8() }),
-            None if line + 1 < self.lines.len() => self.moved(Pos { line: line + 1, byte: 0 }),
+            Some(c) => self.moved(Pos {
+                line,
+                byte: byte + c.len_utf8(),
+            }),
+            None if line + 1 < self.lines.len() => self.moved(Pos {
+                line: line + 1,
+                byte: 0,
+            }),
             None => {}
         }
     }
 
-    pub fn home(&mut self) { self.moved(Pos { line: self.cursor.line, byte: 0 }); }
+    pub fn home(&mut self) {
+        self.moved(Pos {
+            line: self.cursor.line,
+            byte: 0,
+        });
+    }
 
     pub fn end(&mut self) {
         let line = self.cursor.line;
-        self.moved(Pos { line, byte: self.lines[line].text.len() });
+        self.moved(Pos {
+            line,
+            byte: self.lines[line].text.len(),
+        });
     }
 
     /// Display column of `byte` in `line`: tabs to the next stop, other
@@ -520,7 +628,11 @@ impl EditBuffer {
     pub fn column(&self, line: usize, byte: usize, width: &dyn Fn(char) -> usize) -> usize {
         let mut col = 0;
         for c in self.lines[line].text[..byte].chars() {
-            col = if c == '\t' { (col / TAB_STOP + 1) * TAB_STOP } else { col + width(c) };
+            col = if c == '\t' {
+                (col / TAB_STOP + 1) * TAB_STOP
+            } else {
+                col + width(c)
+            };
         }
         col
     }
@@ -528,12 +640,19 @@ impl EditBuffer {
     /// Move `delta` lines keeping the desired display column, landing on the
     /// closest scalar boundary and never inside a wide cell.
     pub fn vertical(&mut self, delta: isize, width: &dyn Fn(char) -> usize) {
-        let desired = self.desired_col.unwrap_or_else(|| self.column(self.cursor.line, self.cursor.byte, width));
-        let target = (self.cursor.line as isize + delta).clamp(0, self.lines.len() as isize - 1) as usize;
+        let desired = self
+            .desired_col
+            .unwrap_or_else(|| self.column(self.cursor.line, self.cursor.byte, width));
+        let target =
+            (self.cursor.line as isize + delta).clamp(0, self.lines.len() as isize - 1) as usize;
         let mut col = 0;
         let mut byte = 0;
         for c in self.lines[target].text.chars() {
-            let next = if c == '\t' { (col / TAB_STOP + 1) * TAB_STOP } else { col + width(c) };
+            let next = if c == '\t' {
+                (col / TAB_STOP + 1) * TAB_STOP
+            } else {
+                col + width(c)
+            };
             if next > desired {
                 if next - desired < desired - col {
                     byte += c.len_utf8();
@@ -558,7 +677,10 @@ impl EditBuffer {
         if n == 0 || n > self.lines.len() {
             return false;
         }
-        self.moved(Pos { line: n - 1, byte: 0 });
+        self.moved(Pos {
+            line: n - 1,
+            byte: 0,
+        });
         true
     }
 
@@ -578,7 +700,10 @@ impl EditBuffer {
         }
         let doc = String::from_utf8(self.to_bytes()).expect("buffer is UTF-8");
         let here = self.offset(self.cursor);
-        let from = doc[here..].chars().next().map_or(here, |c| here + c.len_utf8());
+        let from = doc[here..]
+            .chars()
+            .next()
+            .map_or(here, |c| here + c.len_utf8());
         let found = match doc[from..].find(self.query.as_str()) {
             Some(i) => Found::At(self.pos_of(from + i)),
             None => match doc.find(self.query.as_str()) {

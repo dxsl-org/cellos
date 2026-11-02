@@ -50,25 +50,33 @@ impl ScreenControls {
     }
 
     pub fn cursor_up(n: u16, out: &mut Vec<u8>) {
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         let seq = format!("\x1b[{}A", n);
         out.extend_from_slice(seq.as_bytes());
     }
 
     pub fn cursor_down(n: u16, out: &mut Vec<u8>) {
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         let seq = format!("\x1b[{}B", n);
         out.extend_from_slice(seq.as_bytes());
     }
 
     pub fn cursor_forward(n: u16, out: &mut Vec<u8>) {
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         let seq = format!("\x1b[{}C", n);
         out.extend_from_slice(seq.as_bytes());
     }
 
     pub fn cursor_back(n: u16, out: &mut Vec<u8>) {
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         let seq = format!("\x1b[{}D", n);
         out.extend_from_slice(seq.as_bytes());
     }
@@ -129,11 +137,21 @@ impl ScreenControls {
     pub fn apply_attributes(attrs: &TextAttributes, out: &mut Vec<u8>) {
         let mut codes = Vec::new();
         codes.push("0");
-        if attrs.bold { codes.push("1"); }
-        if attrs.dim { codes.push("2"); }
-        if attrs.italic { codes.push("3"); }
-        if attrs.underline { codes.push("4"); }
-        if attrs.reverse { codes.push("7"); }
+        if attrs.bold {
+            codes.push("1");
+        }
+        if attrs.dim {
+            codes.push("2");
+        }
+        if attrs.italic {
+            codes.push("3");
+        }
+        if attrs.underline {
+            codes.push("4");
+        }
+        if attrs.reverse {
+            codes.push("7");
+        }
 
         let sgr_init = format!("\x1b[{}m", codes.join(";"));
         out.extend_from_slice(sgr_init.as_bytes());
@@ -159,14 +177,30 @@ impl ScreenControls {
             Color::Magenta => out.extend_from_slice(format!("\x1b[{}m", base + 5).as_bytes()),
             Color::Cyan => out.extend_from_slice(format!("\x1b[{}m", base + 6).as_bytes()),
             Color::White => out.extend_from_slice(format!("\x1b[{}m", base + 7).as_bytes()),
-            Color::BrightBlack => out.extend_from_slice(format!("\x1b[{}m", bright_base).as_bytes()),
-            Color::BrightRed => out.extend_from_slice(format!("\x1b[{}m", bright_base + 1).as_bytes()),
-            Color::BrightGreen => out.extend_from_slice(format!("\x1b[{}m", bright_base + 2).as_bytes()),
-            Color::BrightYellow => out.extend_from_slice(format!("\x1b[{}m", bright_base + 3).as_bytes()),
-            Color::BrightBlue => out.extend_from_slice(format!("\x1b[{}m", bright_base + 4).as_bytes()),
-            Color::BrightMagenta => out.extend_from_slice(format!("\x1b[{}m", bright_base + 5).as_bytes()),
-            Color::BrightCyan => out.extend_from_slice(format!("\x1b[{}m", bright_base + 6).as_bytes()),
-            Color::BrightWhite => out.extend_from_slice(format!("\x1b[{}m", bright_base + 7).as_bytes()),
+            Color::BrightBlack => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base).as_bytes())
+            }
+            Color::BrightRed => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 1).as_bytes())
+            }
+            Color::BrightGreen => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 2).as_bytes())
+            }
+            Color::BrightYellow => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 3).as_bytes())
+            }
+            Color::BrightBlue => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 4).as_bytes())
+            }
+            Color::BrightMagenta => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 5).as_bytes())
+            }
+            Color::BrightCyan => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 6).as_bytes())
+            }
+            Color::BrightWhite => {
+                out.extend_from_slice(format!("\x1b[{}m", bright_base + 7).as_bytes())
+            }
             Color::Indexed(idx) => {
                 let code = if is_fg { 38 } else { 48 };
                 out.extend_from_slice(format!("\x1b[{};5;{}m", code, idx).as_bytes());
@@ -209,7 +243,11 @@ impl ViewportSize {
     }
 
     pub fn try_new(rows: u16, cols: u16) -> Result<Self, crate::error::TerminalError> {
-        let size = Self { rows, cols, size_known: true };
+        let size = Self {
+            rows,
+            cols,
+            size_known: true,
+        };
         size.validate()?;
         Ok(size)
     }

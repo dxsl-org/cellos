@@ -20,8 +20,10 @@ unsafe impl Hal for VirtioHal {
         // satisfies VirtIO virtqueue alignment requirement of ≥16 bytes).
         let ptr = {
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::DRIVER_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED,
+            );
             unsafe { alloc::alloc::alloc(layout) }
         };
 

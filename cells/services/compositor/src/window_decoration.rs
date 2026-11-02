@@ -9,11 +9,10 @@ mod raster;
 pub const FRAME: i32 = 3;
 pub const TITLE: i32 = 24;
 pub(super) const CONTROL: i32 = 14;
-pub(super) const INSET: i32 = 2;
 
 pub fn tab_width(content_w: u32) -> u32 {
     let half = content_w / 2;
-    let clamped = if half < 160 { 160 } else if half > 240 { 240 } else { half };
+    let clamped = half.clamp(160, 240);
     clamped.min(content_w.saturating_add((FRAME * 2) as u32))
 }
 

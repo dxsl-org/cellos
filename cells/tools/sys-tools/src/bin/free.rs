@@ -9,8 +9,7 @@ ostd::cell_main!(cell_main);
 
 /// free — print one physical-frame allocator snapshot in KiB.
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let info = match ostd::syscall::sys_mem_info() {
         Ok(info) => info,
         Err(_) => {

@@ -7,11 +7,11 @@
 //! authorities use a generation no real Cell reaches and are retired afterwards.
 
 use super::cspace::{
-    dispatch_handle_control, register_cell_authority, retire_cell_authority, ControlStatus, Principal,
-    ResourceKind, CELL_AUTHORITIES,
+    dispatch_handle_control, register_cell_authority, retire_cell_authority, ControlStatus,
+    Principal, ResourceKind, CELL_AUTHORITIES,
 };
 use crate::task::cap::CapSet;
-use core::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use types::CellId;
 
 const SOURCE: (u64, u64) = (44, 0x07C0_0001);
@@ -59,9 +59,13 @@ fn probe() -> Result<(), &'static str> {
         return Err("equal-rights local derive refused");
     }
     let mut auths = CELL_AUTHORITIES.lock();
-    let slot = auths.get_mut(&SOURCE).and_then(|auth| auth.verify_ticket(child).ok());
+    let slot = auths
+        .get_mut(&SOURCE)
+        .and_then(|auth| auth.verify_ticket(child).ok());
     match slot {
-        Some(slot) if slot.issuer == Principal::Kernel && slot.rights == 0x3 && slot.delegable => Ok(()),
+        Some(slot) if slot.issuer == Principal::Kernel && slot.rights == 0x3 && slot.delegable => {
+            Ok(())
+        }
         _ => Err("derived slot lost issuer, rights or delegability"),
     }
 }
@@ -69,7 +73,11 @@ fn probe() -> Result<(), &'static str> {
 fn report(hart: usize, result: Result<(), &'static str>) -> bool {
     match result {
         Ok(()) => log::info!("[selftest] AUTHORITY-PROVENANCE: PASS hart={}", hart),
-        Err(why) => log::error!("[selftest] AUTHORITY-PROVENANCE: FAIL hart={} ({})", hart, why),
+        Err(why) => log::error!(
+            "[selftest] AUTHORITY-PROVENANCE: FAIL hart={} ({})",
+            hart,
+            why
+        ),
     }
     result.is_ok()
 }
@@ -83,7 +91,9 @@ pub fn run_primary() {
     }
     {
         let mut auths = CELL_AUTHORITIES.lock();
-        let Some(auth) = auths.get_mut(&SOURCE) else { return };
+        let Some(auth) = auths.get_mut(&SOURCE) else {
+            return;
+        };
         let (Ok(root), Ok(file)) = (
             auth.mint_kernel_root(ResourceKind::CSpaceAuthority, 0x3, true),
             auth.mint_kernel_root(ResourceKind::BootFSFile, 0x1, false),

@@ -23,7 +23,6 @@ const MSR_IA32_VMX_CR0_FIXED1: u32 = 0x487;
 const MSR_IA32_VMX_CR4_FIXED0: u32 = 0x488;
 const MSR_IA32_VMX_CR4_FIXED1: u32 = 0x489;
 
-
 /// Returns `true` if the CPU advertises VMX (`CPUID.1:ECX[5]`).
 pub fn supported() -> bool {
     let leaf = core::arch::x86_64::__cpuid(1);

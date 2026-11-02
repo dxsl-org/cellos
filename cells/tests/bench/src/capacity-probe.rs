@@ -47,11 +47,8 @@ fn cell_main() {
         for index in 0..heavy {
             // A dedicated binary: its 16 MiB heap arena is declared at build time, so
             // the light children (which are `bench-probe`) keep their small one.
-            match ostd::syscall::sys_spawn_pinned(
-                "/bin/heavy-probe",
-                TaskPriority::Normal as u8,
-                0,
-            ) {
+            match ostd::syscall::sys_spawn_pinned("/bin/heavy-probe", TaskPriority::Normal as u8, 0)
+            {
                 SyscallResult::Ok(_) => {}
                 SyscallResult::Err(error) => {
                     ostd::io::println(&alloc::format!(

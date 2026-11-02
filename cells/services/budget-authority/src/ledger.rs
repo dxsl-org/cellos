@@ -54,13 +54,13 @@ impl ApplicationLedger {
 
     /// Check whether allocating `delta` fits within the current ceiling.
     pub fn can_allocate(&self, delta: &ResourceVector) -> bool {
-        for d in 0..VECTOR_DIMENSIONS {
-            match self.allocated_vector[d].checked_add(delta[d]) {
-                Some(sum) if sum <= self.ceiling_vector[d] => {}
-                _ => return false,
-            }
-        }
-        true
+        self.allocated_vector
+            .iter()
+            .zip(delta)
+            .zip(&self.ceiling_vector)
+            .all(|((&allocated, &d), &ceiling)| {
+                matches!(allocated.checked_add(d), Some(sum) if sum <= ceiling)
+            })
     }
 
     /// Atomically debit the ledger for a new reservation.
@@ -68,8 +68,8 @@ impl ApplicationLedger {
         if !self.can_allocate(delta) {
             return Err(LedgerError::CapacityExceeded);
         }
-        for d in 0..VECTOR_DIMENSIONS {
-            self.allocated_vector[d] = self.allocated_vector[d].checked_add(delta[d]).unwrap();
+        for (allocated, &d) in self.allocated_vector.iter_mut().zip(delta) {
+            *allocated = allocated.checked_add(d).unwrap();
         }
         self.revision = self.revision.saturating_add(1);
         Ok(())
@@ -77,11 +77,11 @@ impl ApplicationLedger {
 
     /// Release an allocated delta back to the ledger (credit once).
     pub fn release(&mut self, delta: &ResourceVector) -> Result<(), LedgerError> {
-        for d in 0..VECTOR_DIMENSIONS {
-            if delta[d] > self.allocated_vector[d] {
+        for (allocated, &d) in self.allocated_vector.iter_mut().zip(delta) {
+            if d > *allocated {
                 return Err(LedgerError::MonotonicityViolation);
             }
-            self.allocated_vector[d] -= delta[d];
+            *allocated -= d;
         }
         self.revision = self.revision.saturating_add(1);
         Ok(())

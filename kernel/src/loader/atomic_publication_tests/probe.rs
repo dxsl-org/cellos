@@ -29,12 +29,17 @@ pub(super) fn observe_unpublished_pages(pages: &[crate::loader::elf::LoadedPage]
 }
 
 fn observe_pages(pages: impl Iterator<Item = (usize, usize)>) {
-    if !["AP-02", "AP-RF", "AP-RM", "AP-RW"].iter().any(|case| failure_is_armed(case)) {
+    if !["AP-02", "AP-RF", "AP-RM", "AP-RW"]
+        .iter()
+        .any(|case| failure_is_armed(case))
+    {
         return;
     }
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
+    );
     let mappings = pages
         .map(|(va, frame)| {
             let translation = crate::memory::paging::translation_probe(va)?;
@@ -64,7 +69,9 @@ pub(super) fn ap02_cleanup_complete() -> bool {
         .all(|mapping| crate::memory::tlb_shootdown::test_flush_observed(mapping.va));
     crate::memory::tlb_shootdown::finish_test_flush_observation();
     let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let Some(allocator) = frames.as_ref() else { return false; };
+    let Some(allocator) = frames.as_ref() else {
+        return false;
+    };
     !mappings.is_empty()
         && tlb_absent
         && mappings.into_iter().all(|mapping| {

@@ -22,7 +22,9 @@ use portable_atomic::AtomicU64;
 #[cfg(all(feature = "large-cell-va", target_pointer_width = "32"))]
 compile_error!("large-cell-va requires a 64-bit paged target");
 #[cfg(all(feature = "large-cell-va", feature = "cell-scale-experiment"))]
-compile_error!("large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half");
+compile_error!(
+    "large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half"
+);
 
 /// Cell VA region start — 4 GiB (0x1_0000_0000).
 ///

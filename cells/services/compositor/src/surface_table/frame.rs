@@ -4,7 +4,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use api::display::{
-    CreateViewRequest, FramePlacement, Rect, SnapZone, SurfaceRole, ViewOpResponse, ViewOpResult,
+    CreateViewRequest, FramePlacement, FrameRef, Rect, SnapZone, ViewOpResponse, ViewOpResult,
     ViewRef,
 };
 
@@ -13,7 +13,6 @@ pub const MAX_FRAMES: usize = 64;
 
 #[derive(Debug, Clone)]
 pub struct Frame {
-    pub frame_id: u32,
     pub generation: u32,
     pub x: i32,
     pub y: i32,
@@ -30,14 +29,10 @@ pub struct Frame {
 
 #[derive(Debug, Clone)]
 pub struct View {
-    pub view_id: u32,
     pub incarnation: u32,
     pub frame_id: u32,
     pub surface_cap: u64,
     pub owner_tid: usize,
-    pub role: SurfaceRole,
-    pub min_w: u32,
-    pub min_h: u32,
 }
 
 #[derive(Default)]
@@ -85,7 +80,6 @@ impl FrameRegistry {
                 self.next_frame_id = 1;
             }
             let frame = Frame {
-                frame_id: fid,
                 generation: 1,
                 x: 100,
                 y: 100,
@@ -102,7 +96,10 @@ impl FrameRegistry {
             self.frames.insert(fid, frame);
             fid
         } else {
-            let frame = self.frames.get_mut(&req.frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let frame = self
+                .frames
+                .get_mut(&req.frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             if frame.generation != req.frame_generation {
                 return Err(ViewOpResult::StaleGeneration);
             }
@@ -119,16 +116,15 @@ impl FrameRegistry {
             req.frame_id
         };
 
-        let frame_gen = self.frames.get(&target_frame_id).map_or(1, |f| f.generation);
+        let frame_gen = self
+            .frames
+            .get(&target_frame_id)
+            .map_or(1, |f| f.generation);
         let view = View {
-            view_id,
             incarnation: 1,
             frame_id: target_frame_id,
             surface_cap,
             owner_tid: caller_tid,
-            role: req.role,
-            min_w: req.min_w,
-            min_h: req.min_h,
         };
         self.views.insert(view_id, view);
 
@@ -163,14 +159,17 @@ impl FrameRegistry {
             return Err(ViewOpResult::FrameNotFound);
         }
 
-        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        let frame = self
+            .frames
+            .get_mut(&frame_id)
+            .ok_or(ViewOpResult::FrameNotFound)?;
         if frame.generation != frame_gen {
             return Err(ViewOpResult::StaleGeneration);
         }
 
         frame.generation = frame.generation.wrapping_add(1);
         frame.views.retain(|v| v.view_id != view_id);
-        if frame.selected_view.map_or(false, |v| v.view_id == view_id) {
+        if frame.selected_view.is_some_and(|v| v.view_id == view_id) {
             frame.selected_view = frame.views.first().copied();
         }
 
@@ -212,7 +211,10 @@ impl FrameRegistry {
             return Err(ViewOpResult::FrameNotFound);
         }
 
-        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        let frame = self
+            .frames
+            .get_mut(&frame_id)
+            .ok_or(ViewOpResult::FrameNotFound)?;
         if frame.generation != frame_gen {
             return Err(ViewOpResult::StaleGeneration);
         }
@@ -237,14 +239,23 @@ impl FrameRegistry {
     /// Move a view from source frame to target frame.
     pub fn group_view(
         &mut self,
-        target_frame_id: u32,
-        target_frame_gen: u32,
-        source_frame_id: u32,
-        source_frame_gen: u32,
-        view_id: u32,
-        view_inc: u32,
+        target: FrameRef,
+        source: FrameRef,
+        view: ViewRef,
         caller_tid: usize,
     ) -> Result<ViewOpResponse, ViewOpResult> {
+        let FrameRef {
+            frame_id: target_frame_id,
+            generation: target_frame_gen,
+        } = target;
+        let FrameRef {
+            frame_id: source_frame_id,
+            generation: source_frame_gen,
+        } = source;
+        let ViewRef {
+            view_id,
+            incarnation: view_inc,
+        } = view;
         let view = self.views.get(&view_id).ok_or(ViewOpResult::ViewNotFound)?;
         if view.incarnation != view_inc {
             return Err(ViewOpResult::StaleGeneration);
@@ -256,7 +267,10 @@ impl FrameRegistry {
             return Err(ViewOpResult::FrameNotFound);
         }
         if target_frame_id == source_frame_id {
-            let frame = self.frames.get(&target_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let frame = self
+                .frames
+                .get(&target_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             return Ok(ViewOpResponse {
                 opcode: api::display::compositor_ops::GROUP_VIEW,
                 result: ViewOpResult::Success,
@@ -269,11 +283,17 @@ impl FrameRegistry {
         }
 
         {
-            let src = self.frames.get(&source_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let src = self
+                .frames
+                .get(&source_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             if src.generation != source_frame_gen {
                 return Err(ViewOpResult::StaleGeneration);
             }
-            let dst = self.frames.get(&target_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let dst = self
+                .frames
+                .get(&target_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             if dst.generation != target_frame_gen {
                 return Err(ViewOpResult::StaleGeneration);
             }
@@ -289,10 +309,13 @@ impl FrameRegistry {
 
         // Remove from source
         let src_empty = {
-            let src = self.frames.get_mut(&source_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let src = self
+                .frames
+                .get_mut(&source_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             src.generation = src.generation.wrapping_add(1);
             src.views.retain(|v| v.view_id != view_id);
-            if src.selected_view.map_or(false, |v| v.view_id == view_id) {
+            if src.selected_view.is_some_and(|v| v.view_id == view_id) {
                 src.selected_view = src.views.first().copied();
             }
             src.views.is_empty()
@@ -303,7 +326,10 @@ impl FrameRegistry {
 
         // Add to target
         let dst_gen = {
-            let dst = self.frames.get_mut(&target_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let dst = self
+                .frames
+                .get_mut(&target_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             dst.generation = dst.generation.wrapping_add(1);
             dst.views.push(view_ref);
             dst.selected_view = Some(view_ref);
@@ -327,14 +353,20 @@ impl FrameRegistry {
     /// Detach a view into a new floating frame.
     pub fn detach_view(
         &mut self,
-        source_frame_id: u32,
-        source_frame_gen: u32,
-        view_id: u32,
-        view_inc: u32,
+        source: FrameRef,
+        view: ViewRef,
         x: i32,
         y: i32,
         caller_tid: usize,
     ) -> Result<ViewOpResponse, ViewOpResult> {
+        let FrameRef {
+            frame_id: source_frame_id,
+            generation: source_frame_gen,
+        } = source;
+        let ViewRef {
+            view_id,
+            incarnation: view_inc,
+        } = view;
         let view = self.views.get(&view_id).ok_or(ViewOpResult::ViewNotFound)?;
         if view.incarnation != view_inc {
             return Err(ViewOpResult::StaleGeneration);
@@ -357,13 +389,16 @@ impl FrameRegistry {
 
         // Remove from source
         let (w, h, min_w, min_h, src_empty) = {
-            let src = self.frames.get_mut(&source_frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+            let src = self
+                .frames
+                .get_mut(&source_frame_id)
+                .ok_or(ViewOpResult::FrameNotFound)?;
             if src.generation != source_frame_gen {
                 return Err(ViewOpResult::StaleGeneration);
             }
             src.generation = src.generation.wrapping_add(1);
             src.views.retain(|v| v.view_id != view_id);
-            if src.selected_view.map_or(false, |v| v.view_id == view_id) {
+            if src.selected_view.is_some_and(|v| v.view_id == view_id) {
                 src.selected_view = src.views.first().copied();
             }
             (src.w, src.h, src.min_w, src.min_h, src.views.is_empty())
@@ -379,7 +414,6 @@ impl FrameRegistry {
         }
 
         let new_frame = Frame {
-            frame_id: new_fid,
             generation: 1,
             x,
             y,
@@ -436,7 +470,10 @@ impl FrameRegistry {
         zone: SnapZone,
         work_area: Rect,
     ) -> Result<(ViewOpResponse, Rect), ViewOpResult> {
-        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        let frame = self
+            .frames
+            .get_mut(&frame_id)
+            .ok_or(ViewOpResult::FrameNotFound)?;
         if frame.generation != frame_gen {
             return Err(ViewOpResult::StaleGeneration);
         }
@@ -484,7 +521,10 @@ impl FrameRegistry {
         screen_w: u32,
         screen_h: u32,
     ) -> Result<(ViewOpResponse, Rect), ViewOpResult> {
-        let frame = self.frames.get_mut(&frame_id).ok_or(ViewOpResult::FrameNotFound)?;
+        let frame = self
+            .frames
+            .get_mut(&frame_id)
+            .ok_or(ViewOpResult::FrameNotFound)?;
         if frame.generation != frame_gen {
             return Err(ViewOpResult::StaleGeneration);
         }
@@ -504,7 +544,12 @@ impl FrameRegistry {
             frame.h = screen_h;
             frame.placement = FramePlacement::Fullscreen;
             frame.generation = frame.generation.wrapping_add(1);
-            Rect { x: 0, y: 0, w: screen_w, h: screen_h }
+            Rect {
+                x: 0,
+                y: 0,
+                w: screen_w,
+                h: screen_h,
+            }
         } else {
             let restored = frame.saved_floating_rect.take().unwrap_or(Rect {
                 x: 100,
@@ -516,7 +561,10 @@ impl FrameRegistry {
             frame.y = restored.y;
             frame.w = restored.w;
             frame.h = restored.h;
-            frame.placement = frame.saved_placement.take().unwrap_or(FramePlacement::Floating);
+            frame.placement = frame
+                .saved_placement
+                .take()
+                .unwrap_or(FramePlacement::Floating);
             restored
         };
 
@@ -533,7 +581,6 @@ impl FrameRegistry {
             result_rect,
         ))
     }
-
 
     /// Clean up all views owned by a dying TID.
     pub fn cleanup_owner(&mut self, dead_tid: usize) -> Vec<u64> {
@@ -552,7 +599,7 @@ impl FrameRegistry {
                 if let Some(frame) = self.frames.get_mut(&view.frame_id) {
                     frame.generation = frame.generation.wrapping_add(1);
                     frame.views.retain(|v| v.view_id != vid);
-                    if frame.selected_view.map_or(false, |v| v.view_id == vid) {
+                    if frame.selected_view.is_some_and(|v| v.view_id == vid) {
                         frame.selected_view = frame.views.first().copied();
                     }
                     if frame.views.is_empty() {
@@ -615,6 +662,7 @@ pub fn calculate_snap_rect(zone: SnapZone, work_area: Rect) -> Rect {
 mod tests {
     extern crate std;
     use super::*;
+    use api::display::SurfaceRole;
 
     fn dummy_req(frame_id: u32, frame_gen: u32) -> CreateViewRequest {
         CreateViewRequest {
@@ -635,14 +683,36 @@ mod tests {
         }
     }
 
+    fn frame_ref(frame_id: u32, generation: u32) -> FrameRef {
+        FrameRef {
+            frame_id,
+            generation,
+        }
+    }
+
+    fn view_ref(view_id: u32, incarnation: u32) -> ViewRef {
+        ViewRef {
+            view_id,
+            incarnation,
+        }
+    }
+
     #[test]
     fn test_group_view_same_frame_does_not_panic() {
         let mut reg = FrameRegistry::new();
         let tid_a = 100;
         let r1 = reg.create_view(&dummy_req(0, 0), tid_a, 10).unwrap();
         // Call group_view with target_frame_id == source_frame_id
-        let res = reg.group_view(r1.frame_id, r1.frame_generation, r1.frame_id, r1.frame_generation, r1.view_id, r1.view_incarnation, tid_a);
-        assert!(res.is_ok(), "same-frame group_view must succeed or no-op safely without panicking");
+        let res = reg.group_view(
+            frame_ref(r1.frame_id, r1.frame_generation),
+            frame_ref(r1.frame_id, r1.frame_generation),
+            view_ref(r1.view_id, r1.view_incarnation),
+            tid_a,
+        );
+        assert!(
+            res.is_ok(),
+            "same-frame group_view must succeed or no-op safely without panicking"
+        );
     }
 
     #[test]
@@ -685,12 +755,29 @@ mod tests {
         let tid_a = 100;
 
         let resp1 = reg.create_view(&dummy_req(0, 0), tid_a, 10).unwrap();
-        let resp2 = reg.create_view(&dummy_req(resp1.frame_id, resp1.frame_generation), tid_a, 11).unwrap();
+        let resp2 = reg
+            .create_view(
+                &dummy_req(resp1.frame_id, resp1.frame_generation),
+                tid_a,
+                11,
+            )
+            .unwrap();
 
         // Select view 2
-        let sel = reg.select_view(resp2.frame_id, resp2.frame_generation, resp2.view_id, resp2.view_incarnation).unwrap();
+        let sel = reg
+            .select_view(
+                resp2.frame_id,
+                resp2.frame_generation,
+                resp2.view_id,
+                resp2.view_incarnation,
+            )
+            .unwrap();
         assert_eq!(sel.result, ViewOpResult::Success);
-        assert_eq!(reg.selected_view_for_frame(resp2.frame_id).map(|v| v.view_id), Some(resp2.view_id));
+        assert_eq!(
+            reg.selected_view_for_frame(resp2.frame_id)
+                .map(|v| v.view_id),
+            Some(resp2.view_id)
+        );
 
         // Stale frame generation rejected
         let err1 = reg.select_view(resp2.frame_id, 999, resp2.view_id, resp2.view_incarnation);
@@ -712,24 +799,51 @@ mod tests {
         let tid_b = 200;
 
         let r1 = reg.create_view(&dummy_req(0, 0), tid_a, 10).unwrap();
-        let r2 = reg.create_view(&dummy_req(r1.frame_id, r1.frame_generation), tid_a, 11).unwrap();
-        let r3 = reg.create_view(&dummy_req(r2.frame_id, r2.frame_generation), tid_b, 12).unwrap();
+        let r2 = reg
+            .create_view(&dummy_req(r1.frame_id, r1.frame_generation), tid_a, 11)
+            .unwrap();
+        let r3 = reg
+            .create_view(&dummy_req(r2.frame_id, r2.frame_generation), tid_b, 12)
+            .unwrap();
 
         // Detach view 3 (owned by tid_b) into new floating frame at (200, 200)
-        let detach = reg.detach_view(r3.frame_id, r3.frame_generation, r3.view_id, r3.view_incarnation, 200, 200, tid_b).unwrap();
+        let detach = reg
+            .detach_view(
+                frame_ref(r3.frame_id, r3.frame_generation),
+                view_ref(r3.view_id, r3.view_incarnation),
+                200,
+                200,
+                tid_b,
+            )
+            .unwrap();
         assert_eq!(detach.result, ViewOpResult::Success);
         let new_frame_id = detach.frame_id;
         assert_ne!(new_frame_id, r1.frame_id);
         assert_eq!(reg.frame_for_view(r3.view_id), Some(new_frame_id));
         assert_eq!(reg.frames.get(&r1.frame_id).unwrap().views.len(), 2);
-        assert_eq!(reg.frames.get(&r1.frame_id).unwrap().generation, r3.frame_generation + 1);
+        assert_eq!(
+            reg.frames.get(&r1.frame_id).unwrap().generation,
+            r3.frame_generation + 1
+        );
         // Forged caller cannot group view 3
         let cur_r1_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
-        let forged = reg.group_view(r1.frame_id, cur_r1_gen, new_frame_id, detach.frame_generation, r3.view_id, r3.view_incarnation, tid_a);
+        let forged = reg.group_view(
+            frame_ref(r1.frame_id, cur_r1_gen),
+            frame_ref(new_frame_id, detach.frame_generation),
+            view_ref(r3.view_id, r3.view_incarnation),
+            tid_a,
+        );
         assert_eq!(forged, Err(ViewOpResult::AccessDenied));
 
         // Authorized owner groups view 3 back into frame 1
-        let group = reg.group_view(r1.frame_id, cur_r1_gen, new_frame_id, detach.frame_generation, r3.view_id, r3.view_incarnation, tid_b).unwrap();
+        let group = reg
+            .group_view(
+                frame_ref(r1.frame_id, cur_r1_gen),
+                frame_ref(new_frame_id, detach.frame_generation),
+                view_ref(r3.view_id, r3.view_incarnation),
+                tid_b,
+            )
+            .unwrap();
         assert_eq!(group.result, ViewOpResult::Success);
         assert_eq!(reg.frame_for_view(r3.view_id), Some(r1.frame_id));
         assert_eq!(reg.frames.get(&r1.frame_id).unwrap().views.len(), 3);
@@ -744,12 +858,25 @@ mod tests {
         let tid_b = 200;
 
         let r1 = reg.create_view(&dummy_req(0, 0), tid_a, 10).unwrap();
-        let r2 = reg.create_view(&dummy_req(r1.frame_id, r1.frame_generation), tid_a, 11).unwrap();
-        let r3 = reg.create_view(&dummy_req(r2.frame_id, r2.frame_generation), tid_b, 12).unwrap();
+        let r2 = reg
+            .create_view(&dummy_req(r1.frame_id, r1.frame_generation), tid_a, 11)
+            .unwrap();
+        let r3 = reg
+            .create_view(&dummy_req(r2.frame_id, r2.frame_generation), tid_b, 12)
+            .unwrap();
 
         // Select view 3
-        reg.select_view(r3.frame_id, r3.frame_generation, r3.view_id, r3.view_incarnation).unwrap();
-        assert_eq!(reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id), Some(r3.view_id));
+        reg.select_view(
+            r3.frame_id,
+            r3.frame_generation,
+            r3.view_id,
+            r3.view_incarnation,
+        )
+        .unwrap();
+        assert_eq!(
+            reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id),
+            Some(r3.view_id)
+        );
 
         // Process B crashes
         let dead_caps = reg.cleanup_owner(tid_b);
@@ -757,18 +884,40 @@ mod tests {
         assert_eq!(reg.views.len(), 2);
         assert_eq!(reg.frames.get(&r1.frame_id).unwrap().views.len(), 2);
         // Focus cleanly reverted to surviving view
-        assert_eq!(reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id), Some(r1.view_id));
+        assert_eq!(
+            reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id),
+            Some(r1.view_id)
+        );
 
         // Destroy view 1
         let cur_gen1 = reg.frames.get(&r1.frame_id).unwrap().generation;
-        let (d1, cap1) = reg.destroy_view(r1.frame_id, cur_gen1, r1.view_id, r1.view_incarnation, tid_a).unwrap();
+        let (d1, cap1) = reg
+            .destroy_view(
+                r1.frame_id,
+                cur_gen1,
+                r1.view_id,
+                r1.view_incarnation,
+                tid_a,
+            )
+            .unwrap();
         assert_eq!(cap1, 10);
         assert_eq!(d1.result, ViewOpResult::Success);
-        assert_eq!(reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id), Some(r2.view_id));
+        assert_eq!(
+            reg.selected_view_for_frame(r1.frame_id).map(|v| v.view_id),
+            Some(r2.view_id)
+        );
 
         // Destroy view 2 -> frame destroyed
         let cur_gen2 = reg.frames.get(&r1.frame_id).unwrap().generation;
-        let (d2, cap2) = reg.destroy_view(r1.frame_id, cur_gen2, r2.view_id, r2.view_incarnation, tid_a).unwrap();
+        let (d2, cap2) = reg
+            .destroy_view(
+                r1.frame_id,
+                cur_gen2,
+                r2.view_id,
+                r2.view_incarnation,
+                tid_a,
+            )
+            .unwrap();
         assert_eq!(cap2, 11);
         assert_eq!(d2.result, ViewOpResult::Success);
         assert!(reg.frames.is_empty());
@@ -781,7 +930,12 @@ mod tests {
         let tid = 100;
         let r1 = reg.create_view(&dummy_req(0, 0), tid, 10).unwrap();
 
-        let work_area = Rect { x: 0, y: 0, w: 1280, h: 800 - 36 }; // 1280x764
+        let work_area = Rect {
+            x: 0,
+            y: 0,
+            w: 1280,
+            h: 800 - 36,
+        }; // 1280x764
 
         // Test all 6 zones
         let zones = [
@@ -795,7 +949,9 @@ mod tests {
 
         for zone in zones {
             let cur_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
-            let (resp, rect) = reg.snap_frame(r1.frame_id, cur_gen, zone, work_area).expect("snap zone");
+            let (resp, rect) = reg
+                .snap_frame(r1.frame_id, cur_gen, zone, work_area)
+                .expect("snap zone");
             assert_eq!(resp.result, ViewOpResult::Success);
             assert_eq!(rect, calculate_snap_rect(zone, work_area));
             let frame = reg.frames.get(&r1.frame_id).unwrap();
@@ -814,7 +970,10 @@ mod tests {
         let refused = reg.snap_frame(r2.frame_id, cur_gen2, SnapZone::LeftHalf, work_area);
         assert_eq!(refused, Err(ViewOpResult::Refused));
         // Frame remains floating
-        assert_eq!(reg.frames.get(&r2.frame_id).unwrap().placement, FramePlacement::Floating);
+        assert_eq!(
+            reg.frames.get(&r2.frame_id).unwrap().placement,
+            FramePlacement::Floating
+        );
     }
 
     #[test]
@@ -826,35 +985,72 @@ mod tests {
         let cur_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
 
         // Enter fullscreen
-        let (fs_resp, fs_rect) = reg.toggle_fullscreen(r1.frame_id, cur_gen, true, 1280, 800).expect("enter fullscreen");
+        let (fs_resp, fs_rect) = reg
+            .toggle_fullscreen(r1.frame_id, cur_gen, true, 1280, 800)
+            .expect("enter fullscreen");
         assert_eq!(fs_resp.result, ViewOpResult::Success);
-        assert_eq!(fs_rect, Rect { x: 0, y: 0, w: 1280, h: 800 });
+        assert_eq!(
+            fs_rect,
+            Rect {
+                x: 0,
+                y: 0,
+                w: 1280,
+                h: 800
+            }
+        );
         let frame_fs = reg.frames.get(&r1.frame_id).unwrap();
         assert_eq!(frame_fs.placement, FramePlacement::Fullscreen);
 
         // Exit fullscreen (restore floating)
         let cur_gen_fs = frame_fs.generation;
-        let (rest_resp, rest_rect) = reg.toggle_fullscreen(r1.frame_id, cur_gen_fs, false, 1280, 800).expect("exit fullscreen");
+        let (rest_resp, rest_rect) = reg
+            .toggle_fullscreen(r1.frame_id, cur_gen_fs, false, 1280, 800)
+            .expect("exit fullscreen");
         assert_eq!(rest_resp.result, ViewOpResult::Success);
-        assert_eq!(rest_rect, Rect { x: 100, y: 100, w: 800, h: 600 });
+        assert_eq!(
+            rest_rect,
+            Rect {
+                x: 100,
+                y: 100,
+                w: 800,
+                h: 600
+            }
+        );
         let frame_rest = reg.frames.get(&r1.frame_id).unwrap();
         assert_eq!(frame_rest.placement, FramePlacement::Floating);
         assert_eq!(frame_rest.w, 800);
         assert_eq!(frame_rest.h, 600);
 
         // Snap to LeftHalf, then enter and exit fullscreen — verify Snapped placement is restored!
-        let work_area = Rect { x: 0, y: 0, w: 1280, h: 764 };
+        let work_area = Rect {
+            x: 0,
+            y: 0,
+            w: 1280,
+            h: 764,
+        };
         let cur_gen_rest = frame_rest.generation;
-        let (snap_resp, snap_rect) = reg.snap_frame(r1.frame_id, cur_gen_rest, SnapZone::LeftHalf, work_area).unwrap();
+        let (snap_resp, snap_rect) = reg
+            .snap_frame(r1.frame_id, cur_gen_rest, SnapZone::LeftHalf, work_area)
+            .unwrap();
         assert_eq!(snap_resp.result, ViewOpResult::Success);
 
         let snap_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
-        let _ = reg.toggle_fullscreen(r1.frame_id, snap_gen, true, 1280, 800).unwrap();
-        assert_eq!(reg.frames.get(&r1.frame_id).unwrap().placement, FramePlacement::Fullscreen);
+        let _ = reg
+            .toggle_fullscreen(r1.frame_id, snap_gen, true, 1280, 800)
+            .unwrap();
+        assert_eq!(
+            reg.frames.get(&r1.frame_id).unwrap().placement,
+            FramePlacement::Fullscreen
+        );
 
         let fs_gen = reg.frames.get(&r1.frame_id).unwrap().generation;
-        let (_, exit_rect) = reg.toggle_fullscreen(r1.frame_id, fs_gen, false, 1280, 800).unwrap();
+        let (_, exit_rect) = reg
+            .toggle_fullscreen(r1.frame_id, fs_gen, false, 1280, 800)
+            .unwrap();
         assert_eq!(exit_rect, snap_rect);
-        assert_eq!(reg.frames.get(&r1.frame_id).unwrap().placement, FramePlacement::Snapped(SnapZone::LeftHalf));
+        assert_eq!(
+            reg.frames.get(&r1.frame_id).unwrap().placement,
+            FramePlacement::Snapped(SnapZone::LeftHalf)
+        );
     }
 }

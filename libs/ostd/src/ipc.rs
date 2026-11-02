@@ -186,9 +186,7 @@ impl Completion {
     pub fn is_definite(&self) -> bool {
         matches!(
             self.terminal,
-            IpcTerminal::Reply
-                | IpcTerminal::PreDispatchTimeout
-                | IpcTerminal::Cancelled
+            IpcTerminal::Reply | IpcTerminal::PreDispatchTimeout | IpcTerminal::Cancelled
         )
     }
 
@@ -196,7 +194,10 @@ impl Completion {
     /// work delegated to a sibling service task. Never retry blindly; reconcile
     /// by request identity and application policy.
     pub fn is_uncertain(&self) -> bool {
-        matches!(self.terminal, IpcTerminal::Indeterminate | IpcTerminal::PeerGone)
+        matches!(
+            self.terminal,
+            IpcTerminal::Indeterminate | IpcTerminal::PeerGone
+        )
     }
 }
 
@@ -251,7 +252,9 @@ impl PendingCall {
                     0
                 } else {
                     let ticks = remaining(started, ticks_per_round)?;
-                    if ticks == 0 { break; }
+                    if ticks == 0 {
+                        break;
+                    }
                     ticks
                 };
                 match crate::syscall::sys_ipc_wait(ticks) {
@@ -352,12 +355,12 @@ fn exchange(
                         return Err(error);
                     }
                     // A concurrent reply wins over cancellation and is still taken.
-                    let completion = take_call(&call, reply)?
-                        .ok_or(IpcError::InvalidOperation);
+                    let completion = take_call(&call, reply)?.ok_or(IpcError::InvalidOperation);
                     return match completion {
-                        Ok(Completion { terminal: IpcTerminal::Cancelled, .. }) => {
-                            Err(IpcError::PreDispatchTimeout)
-                        }
+                        Ok(Completion {
+                            terminal: IpcTerminal::Cancelled,
+                            ..
+                        }) => Err(IpcError::PreDispatchTimeout),
                         Ok(completion) => completion_len(completion),
                         Err(error) => {
                             discard_call(&call);
@@ -404,7 +407,7 @@ fn reply_sender(peer_tid: usize, result: SyscallResult) -> Result<(), IpcError> 
 /// Receive a raw mailbox message from one peer. A masked `Recv` can still deliver
 /// a queued NotifyOnExit record for another task; never decode it as the peer's
 /// message. This interface cannot report the payload length; RPC uses exact operations.
-pub fn recv_from<'r>(peer_tid: usize, recv_buf: &'r mut [u8]) -> Result<&'r [u8], IpcError> {
+pub fn recv_from(peer_tid: usize, recv_buf: &mut [u8]) -> Result<&[u8], IpcError> {
     reply_sender(peer_tid, sys_recv(peer_tid, recv_buf))?;
     Ok(recv_buf)
 }
@@ -433,7 +436,10 @@ mod tests {
 
     #[test]
     fn masked_receive_rejects_unrelated_death_instead_of_decoding_reason() {
-        assert_eq!(reply_sender(17, SyscallResult::Ok(31)), Err(IpcError::WrongSender));
+        assert_eq!(
+            reply_sender(17, SyscallResult::Ok(31)),
+            Err(IpcError::WrongSender)
+        );
         assert_eq!(
             reply_sender(17, SyscallResult::Err(SyscallError::TryAgain)),
             Err(IpcError::Recv)
@@ -444,22 +450,40 @@ mod tests {
     #[test]
     fn exact_completion_preserves_reply_length_and_terminal_outcomes() {
         assert_eq!(
-            completion_len(Completion { terminal: IpcTerminal::Reply, len: 3 }),
+            completion_len(Completion {
+                terminal: IpcTerminal::Reply,
+                len: 3
+            }),
             Ok(3)
         );
         for (terminal, error) in [
             (IpcTerminal::PeerGone, IpcError::PeerGone),
-            (IpcTerminal::PreDispatchTimeout, IpcError::PreDispatchTimeout),
+            (
+                IpcTerminal::PreDispatchTimeout,
+                IpcError::PreDispatchTimeout,
+            ),
             (IpcTerminal::Indeterminate, IpcError::Indeterminate),
             (IpcTerminal::Cancelled, IpcError::Cancelled),
         ] {
             assert_eq!(completion_len(Completion { terminal, len: 0 }), Err(error));
         }
-        let gone = Completion { terminal: IpcTerminal::PeerGone, len: 0 };
-        assert!(gone.is_uncertain(), "provider death does not prove no side effects");
+        let gone = Completion {
+            terminal: IpcTerminal::PeerGone,
+            len: 0,
+        };
+        assert!(
+            gone.is_uncertain(),
+            "provider death does not prove no side effects"
+        );
         assert!(!gone.is_definite());
-        let cancelled = Completion { terminal: IpcTerminal::Cancelled, len: 0 };
-        assert!(cancelled.is_definite(), "pre-dispatch cancellation prevents execution");
+        let cancelled = Completion {
+            terminal: IpcTerminal::Cancelled,
+            len: 0,
+        };
+        assert!(
+            cancelled.is_definite(),
+            "pre-dispatch cancellation prevents execution"
+        );
         assert!(!cancelled.is_uncertain());
     }
 }

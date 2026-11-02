@@ -4,6 +4,8 @@
 pub use viui::canvas::Color;
 pub use viui::surface::{draw_button, draw_text, fill_rect, stroke_rect};
 
+// reason: thin rendering wrapper mirroring `draw_label_aligned`, called from many sites.
+#[allow(clippy::too_many_arguments)]
 #[inline]
 pub fn draw_label(
     surf: &mut ostd::display::ViSurface,

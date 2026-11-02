@@ -50,9 +50,11 @@ extern "C" {
     pub fn JS_SetMaxStackSize(rt: *mut JSRuntime, stack_size: usize);
     pub fn JS_SetMemoryLimit(rt: *mut JSRuntime, limit: usize);
     pub fn JS_SetGCThreshold(rt: *mut JSRuntime, gc_threshold: usize);
-    pub fn JS_SetInterruptHandler(rt: *mut JSRuntime,
+    pub fn JS_SetInterruptHandler(
+        rt: *mut JSRuntime,
         handler: Option<unsafe extern "C" fn(*mut JSRuntime, *mut c_void) -> c_int>,
-        opaque: *mut c_void);
+        opaque: *mut c_void,
+    );
     pub fn JS_ExecutePendingJob(rt: *mut JSRuntime, ctx: *mut *mut JSContext) -> c_int;
     pub fn JS_RunGC(rt: *mut JSRuntime);
 
@@ -79,10 +81,19 @@ extern "C" {
     pub fn vios_js_is_float(v: JSValue) -> c_int;
     pub fn vios_js_as_float(v: JSValue) -> f64;
     pub fn vios_js_free(ctx: *mut JSContext, v: JSValue);
-    pub fn vios_js_to_bounded_string(ctx: *mut JSContext, value: JSValue,
-        limit: usize, length: *mut usize) -> *const c_char;
-    pub fn vios_js_install_native_layout(ctx: *mut JSContext, opaque: *mut c_void,
-        callback: Option<unsafe extern "C" fn(*mut JSContext, *mut c_void, u32, *const c_char, usize) -> JSValue>);
+    pub fn vios_js_to_bounded_string(
+        ctx: *mut JSContext,
+        value: JSValue,
+        limit: usize,
+        length: *mut usize,
+    ) -> *const c_char;
+    pub fn vios_js_install_native_layout(
+        ctx: *mut JSContext,
+        opaque: *mut c_void,
+        callback: Option<
+            unsafe extern "C" fn(*mut JSContext, *mut c_void, u32, *const c_char, usize) -> JSValue,
+        >,
+    );
     pub fn vios_js_throw_error(ctx: *mut JSContext, message: *const c_char) -> JSValue;
 }
 

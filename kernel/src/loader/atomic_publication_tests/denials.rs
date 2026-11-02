@@ -1,8 +1,7 @@
 use super::baseline::with_populated_baseline;
 use super::snapshot::{
     denied_with_full_rollback, denied_with_governed_rollback, denied_with_logged_denial,
-    platform_singleton_denial,
-    denied_without_frame_allocator,
+    denied_without_frame_allocator, platform_singleton_denial,
 };
 
 const NO_AUDIT_RECORDS: usize = 0;
@@ -33,7 +32,9 @@ pub(super) fn run() -> usize {
             })
         })
     });
-    for case in ["AP-01", "AP-02", "AP-03", "AP-04", "AP-RF", "AP-RM", "AP-RW"] {
+    for case in [
+        "AP-01", "AP-02", "AP-03", "AP-04", "AP-RF", "AP-RM", "AP-RW",
+    ] {
         record(case, &mut failures, || {
             with_populated_baseline(case, NO_AUDIT_RECORDS, || {
                 denied_with_full_rollback(case, || {
@@ -52,9 +53,12 @@ pub(super) fn run() -> usize {
         with_populated_baseline("AP-FA", NO_AUDIT_RECORDS, || {
             denied_without_frame_allocator(|| {
                 crate::task::prepare_elf_task(
-                    crate::INIT_ELF, "atomic-no-allocator", types::CellId(0),
+                    crate::INIT_ELF,
+                    "atomic-no-allocator",
+                    types::CellId(0),
                     alloc::vec::Vec::new(),
-                ).map(|_| ())
+                )
+                .map(|_| ())
             })
         })
     });
@@ -129,7 +133,11 @@ pub(super) fn run() -> usize {
     record("AP-PQ", &mut failures, session_query_child_contract);
     record("AP-PG", &mut failures, session_frontend_receipt_contract);
     record("AP-PX", &mut failures, serial_raw_relay_contract);
-    record("AP-PZ", &mut failures, crate::task::syscall::test_raw_shutdown_gate);
+    record(
+        "AP-PZ",
+        &mut failures,
+        crate::task::syscall::test_raw_shutdown_gate,
+    );
     failures
 }
 
@@ -147,27 +155,51 @@ fn measurement_reservation_contract() -> bool {
         return true;
     }
     let aggregate0 = log::aggregate();
-    let Ok(dropped) = log::PublicationReservation::reserve(CREATOR) else { return false };
+    let Ok(dropped) = log::PublicationReservation::reserve(CREATOR) else {
+        return false;
+    };
     let (_, capacity, promises, _) = log::test_shape();
-    if promises != 1 || capacity < len0 + 1 { return false; }
+    if promises != 1 || capacity < len0 + 1 {
+        return false;
+    }
     drop(dropped);
     if log::test_shape().2 != 0 || log::entry_count() != len0 || log::aggregate() != aggregate0 {
         return false;
     }
-    let (Ok(first), Ok(second)) = (log::PublicationReservation::reserve(CREATOR), log::PublicationReservation::reserve(CREATOR))
-    else { return false };
+    let (Ok(first), Ok(second)) = (
+        log::PublicationReservation::reserve(CREATOR),
+        log::PublicationReservation::reserve(CREATOR),
+    ) else {
+        return false;
+    };
     // An ordinary launch appends around the promises and keeps their capacity.
-    log::commit_staged(0x7ff0_0001, alloc::string::String::from("/atomic/ordinary"), HASH_A);
+    log::commit_staged(
+        0x7ff0_0001,
+        alloc::string::String::from("/atomic/ordinary"),
+        HASH_A,
+    );
     let (len1, capacity1, promises1, _) = log::test_shape();
-    if len1 != len0 + 1 || promises1 != 2 || capacity1 < len1 + promises1 { return false; }
+    if len1 != len0 + 1 || promises1 != 2 || capacity1 < len1 + promises1 {
+        return false;
+    }
     let aggregate1 = log::aggregate();
-    first.commit(0x7ff0_0002, alloc::string::String::from("/atomic/reserved"), HASH_B);
+    first.commit(
+        0x7ff0_0002,
+        alloc::string::String::from("/atomic/reserved"),
+        HASH_B,
+    );
     let (len2, capacity2, promises2, _) = log::test_shape();
-    if len2 != len1 + 1 || promises2 != 1 || capacity2 != capacity1 || log::aggregate() == aggregate1 {
+    if len2 != len1 + 1
+        || promises2 != 1
+        || capacity2 != capacity1
+        || log::aggregate() == aggregate1
+    {
         return false;
     }
     drop(second);
-    if log::test_shape().2 != 0 { return false; }
+    if log::test_shape().2 != 0 {
+        return false;
+    }
     // At the documented maximum, preparation is refused and ordinary launches
     // cannot steal a promised slot (their aggregate still advances).
     let mut held = alloc::vec::Vec::new();
@@ -178,12 +210,18 @@ fn measurement_reservation_contract() -> bool {
             held.push(reservation);
         }
         let (len, _, promises, _) = log::test_shape();
-        if len + promises == maximum { break; }
+        if len + promises == maximum {
+            break;
+        }
     }
     let (len3, _, promises3, _) = log::test_shape();
     let exhausted = len3 + promises3 == maximum && promises3 == held.len();
     let aggregate3 = log::aggregate();
-    log::commit_staged(0x7ff0_0003, alloc::string::String::from("/atomic/refused"), HASH_A);
+    log::commit_staged(
+        0x7ff0_0003,
+        alloc::string::String::from("/atomic/refused"),
+        HASH_A,
+    );
     let stolen = log::entry_count() != len3 || log::test_shape().2 != promises3;
     let advanced = log::aggregate() != aggregate3;
     drop(held);
@@ -205,14 +243,20 @@ fn ready_reservation_contract() -> bool {
             ready::remove_from_all(*tid);
         }
     };
-    let Ok(reservation) = ready::PublicationReservation::reserve(normal) else { return false };
+    let Ok(reservation) = ready::PublicationReservation::reserve(normal) else {
+        return false;
+    };
     let (hart, priority) = reservation.destination();
-    if hart >= crate::task::smp::MAX_HARTS { return false; }
+    if hart >= crate::task::smp::MAX_HARTS {
+        return false;
+    }
     let covers = |promises: usize| {
         let (len, capacity, publication, rollback) = ready::test_shape(hart, priority);
         publication == promises && rollback == 0 && capacity >= len + publication + rollback
     };
-    if !covers(1) { return false; }
+    if !covers(1) {
+        return false;
+    }
     let mut pushed = alloc::vec::Vec::new();
     for n in 0..40 {
         ready::push_on_hart(hart, BASE + n, priority);
@@ -227,25 +271,40 @@ fn ready_reservation_contract() -> bool {
     reservation.commit(BASE + 99);
     pushed.push(BASE + 99);
     let (len_after, capacity_after, publication, _) = ready::test_shape(hart, priority);
-    let tail = HART_LOCALS[hart].ready.lock().get(&priority).and_then(|queue| queue.back().copied());
+    let tail = HART_LOCALS[hart]
+        .ready
+        .lock()
+        .get(&priority)
+        .and_then(|queue| queue.back().copied());
     cleanup(&pushed);
-    if len_after != len_before + 1 || capacity_after != capacity_before || publication != 0
-        || tail != Some(BASE + 99) || ready::total_ready_count() != 0 {
+    if len_after != len_before + 1
+        || capacity_after != capacity_before
+        || publication != 0
+        || tail != Some(BASE + 99)
+        || ready::total_ready_count() != 0
+    {
         return false;
     }
     // Dropping a reservation releases the promise and any key it created.
     let before = HART_LOCALS[hart].ready.lock().clone();
-    let Ok(transient) = ready::PublicationReservation::reserve(5) else { return false };
+    let Ok(transient) = ready::PublicationReservation::reserve(5) else {
+        return false;
+    };
     let (transient_hart, transient_priority) = transient.destination();
     let promised = ready::test_shape(transient_hart, transient_priority).2;
     drop(transient);
-    if promised != 1 || ready::test_shape(transient_hart, transient_priority).2 != 0
-        || transient_hart != hart || *HART_LOCALS[hart].ready.lock() != before {
+    if promised != 1
+        || ready::test_shape(transient_hart, transient_priority).2 != 0
+        || transient_hart != hart
+        || *HART_LOCALS[hart].ready.lock() != before
+    {
         return false;
     }
     // Stealing into the promised bucket keeps headroom for the promise, moves
     // exactly (stealable / 2).max(1) in victim order, and leaves the rest queued.
-    let Ok(held) = ready::PublicationReservation::reserve(normal) else { return false };
+    let Ok(held) = ready::PublicationReservation::reserve(normal) else {
+        return false;
+    };
     let victim = 1 - hart;
     let mut victims = alloc::vec::Vec::new();
     for n in 0..8 {
@@ -253,9 +312,17 @@ fn ready_reservation_contract() -> bool {
         victims.push(BASE + 200 + n);
     }
     ready::steal_from_busiest(hart);
-    let moved: alloc::vec::Vec<usize> = HART_LOCALS[hart].ready.lock().get(&normal)
-        .map(|queue| queue.iter().copied().collect()).unwrap_or_default();
-    let remaining = HART_LOCALS[victim].ready.lock().get(&normal).map_or(0, |queue| queue.len());
+    let moved: alloc::vec::Vec<usize> = HART_LOCALS[hart]
+        .ready
+        .lock()
+        .get(&normal)
+        .map(|queue| queue.iter().copied().collect())
+        .unwrap_or_default();
+    let remaining = HART_LOCALS[victim]
+        .ready
+        .lock()
+        .get(&normal)
+        .map_or(0, |queue| queue.len());
     let (len, capacity, publication, _) = ready::test_shape(hart, normal);
     let shape_ok = publication == 1 && capacity >= len + publication;
     let order_ok = moved == [BASE + 200, BASE + 201, BASE + 202, BASE + 203] && remaining == 4;
@@ -272,22 +339,34 @@ fn ready_reservation_contract() -> bool {
 fn task_table_reservation_contract() -> bool {
     const FIRST: usize = 77_001;
     const SECOND: usize = 77_002;
-    let task = |tid: usize| alloc::boxed::Box::new(crate::task::Task::new(
-        tid, types::CellId(0), "reservation", alloc::vec::Vec::new()));
+    let task = |tid: usize| {
+        alloc::boxed::Box::new(crate::task::Task::new(
+            tid,
+            types::CellId(0),
+            "reservation",
+            alloc::vec::Vec::new(),
+        ))
+    };
     let mut guard = crate::task::SCHEDULER.lock();
-    let Some(sched) = guard.as_mut() else { return false };
+    let Some(sched) = guard.as_mut() else {
+        return false;
+    };
     let (rows0, _, reservations0) = sched.tasks.test_shape();
     if reservations0 != 0 || sched.tasks.contains_key(&FIRST) || sched.tasks.contains_key(&SECOND) {
         return false;
     }
-    if sched.tasks.reserve_publication().is_err() { return false; }
+    if sched.tasks.reserve_publication().is_err() {
+        return false;
+    }
     let invisible = !sched.tasks.contains_key(&SECOND);
     sched.tasks.insert(FIRST, task(FIRST));
     let (rows1, capacity1, reservations1) = sched.tasks.test_shape();
     let covered = rows1 == rows0 + 1 && reservations1 == 1 && capacity1 >= rows1 + reservations1;
     sched.tasks.publish_reserved(SECOND, task(SECOND));
     let (rows2, capacity2, reservations2) = sched.tasks.test_shape();
-    let published = rows2 == rows0 + 2 && reservations2 == 0 && capacity2 == capacity1
+    let published = rows2 == rows0 + 2
+        && reservations2 == 0
+        && capacity2 == capacity1
         && sched.tasks.contains_key(&SECOND);
     sched.tasks.remove(&FIRST);
     sched.tasks.remove(&SECOND);
@@ -307,30 +386,48 @@ fn authority_reservation_contract() -> bool {
     let generation = 0x5EA1_0001u64;
     let key = (cell.0, generation);
     let (rows0, _, reservations0) = CELL_AUTHORITIES.lock().test_shape();
-    if reservations0 != 0 || CELL_AUTHORITIES.lock().get_mut(&key).is_some() { return false; }
-    let Ok(aborted) = AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
-    else { return false };
+    if reservations0 != 0 || CELL_AUTHORITIES.lock().get_mut(&key).is_some() {
+        return false;
+    }
+    let Ok(aborted) =
+        AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
+    else {
+        return false;
+    };
     let addressable = CELL_AUTHORITIES.lock().get_mut(&key).is_some();
     let promised = CELL_AUTHORITIES.lock().test_shape().2;
     let hidden = !addressable && promised == 1;
     drop(aborted);
     let (rows1, _, reservations1) = CELL_AUTHORITIES.lock().test_shape();
-    let Ok(reservation) = AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
-    else { return false };
+    let Ok(reservation) =
+        AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
+    else {
+        return false;
+    };
     let (_, capacity_before, _) = CELL_AUTHORITIES.lock().test_shape();
     reservation.commit();
     let (rows2, capacity_after, reservations2) = CELL_AUTHORITIES.lock().test_shape();
     let published = CELL_AUTHORITIES.lock().get_mut(&key).is_some();
-    let file = CELL_AUTHORITIES.lock().get_mut(&key)
-        .and_then(|auth| auth.allocate_file_slot(alloc::boxed::Box::new(InertFile), 0x1).ok());
+    let file = CELL_AUTHORITIES.lock().get_mut(&key).and_then(|auth| {
+        auth.allocate_file_slot(alloc::boxed::Box::new(InertFile), 0x1)
+            .ok()
+    });
     let attached = file.is_some_and(|ticket| has_ticket_file((key.0, key.1, ticket)));
     retire_cell_authority(cell, generation);
     let (rows3, _, reservations3) = CELL_AUTHORITIES.lock().test_shape();
-    let removed = CELL_AUTHORITIES.lock().get_mut(&key).is_none() && rows3 == rows0 && reservations3 == 0;
+    let removed =
+        CELL_AUTHORITIES.lock().get_mut(&key).is_none() && rows3 == rows0 && reservations3 == 0;
     let released = file.is_some_and(|ticket| !has_ticket_file((key.0, key.1, ticket)));
-    hidden && rows1 == rows0 && reservations1 == 0
-        && rows2 == rows0 + 1 && capacity_after == capacity_before && reservations2 == 0 && published
-        && attached && removed && released
+    hidden
+        && rows1 == rows0
+        && reservations1 == 0
+        && rows2 == rows0 + 1
+        && capacity_after == capacity_before
+        && reservations2 == 0
+        && published
+        && attached
+        && removed
+        && released
 }
 
 /// The real transport entry rejects a zero correlation ID as a header-only
@@ -355,8 +452,12 @@ fn session_header_contract() -> bool {
     zero_id && denied
 }
 
-fn session_call(tid: usize, selector: u16, id: u64, body: &[u8])
-    -> (api::cell_session::Status, alloc::vec::Vec<u8>) {
+fn session_call(
+    tid: usize,
+    selector: u16,
+    id: u64,
+    body: &[u8],
+) -> (api::cell_session::Status, alloc::vec::Vec<u8>) {
     let mut request = alloc::vec::Vec::new();
     request.extend_from_slice(&1u32.to_le_bytes());
     request.extend_from_slice(&selector.to_le_bytes());
@@ -370,7 +471,10 @@ fn session_call(tid: usize, selector: u16, id: u64, body: &[u8])
     // Mirror the syscall layer: the reply was copied out, so it is observed.
     crate::task::cell_session::delivered(tid, &request);
     match api::cell_session::ResultHeaderV1::decode(&result[..len]) {
-        Ok(header) => (header.status, result[api::cell_session::HEADER_LEN..len].to_vec()),
+        Ok(header) => (
+            header.status,
+            result[api::cell_session::HEADER_LEN..len].to_vec(),
+        ),
         Err(status) => (status, alloc::vec::Vec::new()),
     }
 }
@@ -379,15 +483,17 @@ fn session_call(tid: usize, selector: u16, id: u64, body: &[u8])
 /// request-ID fence, exact-holder checks, partial IO that keeps WouldBlock, EOF
 /// and Cancelled distinct, acknowledgement, and subtree cancellation.
 fn session_owner_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::thread_cap_selftest::{insert, mk_task, remove};
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_001;
     const FOREIGN_TID: usize = 92_002;
     const GENERATION: u64 = 0x5E55_1001;
     let mut cells = [0u64; 2];
     {
         let guard = crate::task::SCHEDULER.lock();
-        let Some(sched) = guard.as_ref() else { return false };
+        let Some(sched) = guard.as_ref() else {
+            return false;
+        };
         let mut found = 0;
         for raw in (1..crate::memory::cell_quota::MAX_CELLS).rev() {
             if found < 2 && sched.cell_owner_slot_is_empty(types::CellId(raw as u64)) {
@@ -395,7 +501,9 @@ fn session_owner_contract() -> bool {
                 found += 1;
             }
         }
-        if found < 2 { return false; }
+        if found < 2 {
+            return false;
+        }
     }
     for (tid, cell) in [(OWNER_TID, cells[0]), (FOREIGN_TID, cells[1])] {
         let mut task = mk_task(tid, cell);
@@ -421,7 +529,10 @@ fn session_owner_contract() -> bool {
     create.extend_from_slice(&64u32.to_le_bytes());
     create.extend_from_slice(&0u32.to_le_bytes());
     let (status, streams) = session_call(OWNER_TID, 2, 1, &create);
-    let (reader, writer) = (refs(streams.get(..16).unwrap_or(&[])), refs(streams.get(16..32).unwrap_or(&[])));
+    let (reader, writer) = (
+        refs(streams.get(..16).unwrap_or(&[])),
+        refs(streams.get(16..32).unwrap_or(&[])),
+    );
     ok &= status == Status::Ok && reader != Ref::ZERO && writer != Ref::ZERO;
     let mut changed = create.clone();
     changed[16..20].copy_from_slice(&128u32.to_le_bytes());
@@ -439,7 +550,9 @@ fn session_owner_contract() -> bool {
     let (status, wrote) = session_call(OWNER_TID, 6, 2, &io(writer, 5, 0, b"hello"));
     ok &= status == Status::Ok && wrote.get(..4) == Some(&5u32.to_le_bytes()[..]);
     let (status, read) = session_call(OWNER_TID, 5, 3, &io(reader, 16, 0, &[]));
-    ok &= status == Status::Ok && read.get(..4) == Some(&5u32.to_le_bytes()[..]) && read.get(8..13) == Some(&b"hello"[..]);
+    ok &= status == Status::Ok
+        && read.get(..4) == Some(&5u32.to_le_bytes()[..])
+        && read.get(8..13) == Some(&b"hello"[..]);
     // Nonblocking empty read is WouldBlock; EOF is a distinct status later.
     ok &= session_call(OWNER_TID, 5, 4, &io(reader, 16, 0, &[])).0 == Status::WouldBlock;
     // Direction is part of the right: writing through the read end is refused.
@@ -474,7 +587,10 @@ fn session_owner_contract() -> bool {
     for (tid, cell) in [(OWNER_TID, cells[0]), (FOREIGN_TID, cells[1])] {
         remove(tid);
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            crate::task::cell_session::retired(sched, api::cell_owner::CellOwner::new(cell, GENERATION, tid as u64));
+            crate::task::cell_session::retired(
+                sched,
+                api::cell_owner::CellOwner::new(cell, GENERATION, tid as u64),
+            );
         }
     }
     ok
@@ -494,7 +610,9 @@ fn two_session_cells(tids: [usize; 2], generation: u64) -> Option<[u64; 2]> {
                 found += 1;
             }
         }
-        if found < 2 { return None; }
+        if found < 2 {
+            return None;
+        }
     }
     for (tid, cell) in tids.into_iter().zip(cells) {
         let mut task = mk_task(tid, cell);
@@ -508,7 +626,10 @@ fn retire_session_cells(tids: [usize; 2], cells: [u64; 2], generation: u64) {
     for (tid, cell) in tids.into_iter().zip(cells) {
         crate::task::thread_cap_selftest::remove(tid);
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            crate::task::cell_session::retired(sched, api::cell_owner::CellOwner::new(cell, generation, tid as u64));
+            crate::task::cell_session::retired(
+                sched,
+                api::cell_owner::CellOwner::new(cell, generation, tid as u64),
+            );
         }
     }
 }
@@ -524,10 +645,16 @@ fn session_ledger_contract() -> bool {
     const GUESSER_TID: usize = 92_004;
     const GENERATION: u64 = 0x5E55_1002;
     let tids = [OWNER_TID, GUESSER_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let count = |actor: Option<(u64, u64)>| {
-        crate::task::SCHEDULER.lock().as_ref()
-            .map_or(usize::MAX, |sched| crate::task::cell_session::test_hooks::ledgers(sched, actor))
+        crate::task::SCHEDULER
+            .lock()
+            .as_ref()
+            .map_or(usize::MAX, |sched| {
+                crate::task::cell_session::test_hooks::ledgers(sched, actor)
+            })
     };
     let owner = Some((cells[0], GENERATION));
     let guesser = Some((cells[1], GENERATION));
@@ -545,14 +672,20 @@ fn session_ledger_contract() -> bool {
     let operation = refs(&created);
     ok &= status == Status::Ok && operation != Ref::ZERO;
     let (status, streams) = session_call(OWNER_TID, 2, 1, &stream_body(operation));
-    let (reader, writer) = (refs(streams.get(..16).unwrap_or(&[])), refs(streams.get(16..32).unwrap_or(&[])));
+    let (reader, writer) = (
+        refs(streams.get(..16).unwrap_or(&[])),
+        refs(streams.get(16..32).unwrap_or(&[])),
+    );
     ok &= status == Status::Ok && reader != Ref::ZERO && writer != Ref::ZERO;
     ok &= count(owner) == 2;
     let before_total = count(None);
     // The guesser walks sequential references well past the table size.
     let mut stale_only = true;
     for guess in 0..1200u64 {
-        let guessed = Ref { id: operation.id + 1_000 + guess, generation: 1 };
+        let guessed = Ref {
+            id: operation.id + 1_000 + guess,
+            generation: 1,
+        };
         stale_only &= session_call(GUESSER_TID, 2, 1, &stream_body(guessed)).0 == Status::Stale;
         stale_only &= session_call(GUESSER_TID, 20, 1, &guessed.to_bytes()).0 == Status::Stale;
     }
@@ -582,13 +715,15 @@ fn session_ledger_contract() -> bool {
 /// stale state-0 receipt would otherwise survive a running child); binding the
 /// same receipt moves the refusal on to the next, unrelated precondition.
 fn session_unbound_receipt_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::test_hooks as hooks;
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_005;
     const OTHER_TID: usize = 92_006;
     const GENERATION: u64 = 0x5E55_1003;
     let tids = [OWNER_TID, OTHER_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (status, created) = session_call(OWNER_TID, 1, 1, &Ref::ZERO.to_bytes());
     let operation = Ref::from_bytes(&created).unwrap_or(Ref::ZERO);
     let mut ok = status == Status::Ok && operation != Ref::ZERO;
@@ -597,7 +732,8 @@ fn session_unbound_receipt_contract() -> bool {
     // issuer is not the registered provider.
     let mut guard = crate::task::SCHEDULER.lock();
     if let Some(sched) = guard.as_mut() {
-        if let Some(prepared) = hooks::stage_unbound_receipt(sched, cells[0], GENERATION, operation) {
+        if let Some(prepared) = hooks::stage_unbound_receipt(sched, cells[0], GENERATION, operation)
+        {
             // Unbound receipt: the commit is refused before any mutation.
             ok &= hooks::commit(sched, prepared) == Some(Status::Denied);
             ok &= hooks::prepared_state(sched, prepared) == Some(0);
@@ -623,22 +759,34 @@ fn session_unbound_receipt_contract() -> bool {
 /// another child's, or another frontend's receipt is `InvalidChild`, and
 /// `BindOwnerReceipt` refuses another child's receipt outright.
 fn session_frontend_receipt_contract() -> bool {
+    use crate::task::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     use api::service_binding::ServiceBinding;
-    use crate::task::cell_session::test_hooks as hooks;
     const OWNER_TID: usize = 92_017;
     const OTHER_TID: usize = 92_018;
     const GENERATION: u64 = 0x5E55_1009;
-    const FRONTEND: Ref = Ref { id: u64::MAX - 6, generation: 1 };
-    const FOREIGN: Ref = Ref { id: u64::MAX - 7, generation: 1 };
+    const FRONTEND: Ref = Ref {
+        id: u64::MAX - 6,
+        generation: 1,
+    };
+    const FOREIGN: Ref = Ref {
+        id: u64::MAX - 7,
+        generation: 1,
+    };
     let tids = [OWNER_TID, OTHER_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (status, created) = session_call(OWNER_TID, 1, 1, &Ref::ZERO.to_bytes());
     let operation = Ref::from_bytes(&created).unwrap_or(Ref::ZERO);
     let mut ok = status == Status::Ok && operation != Ref::ZERO;
     ok &= with_session_hold(|sched| {
-        let a = hooks::stage_frontend_child(sched, cells[0], GENERATION, operation, 93_006_001, FRONTEND)?;
-        let b = hooks::stage_frontend_child(sched, cells[0], GENERATION, operation, 93_006_002, FRONTEND)?;
+        let a = hooks::stage_frontend_child(
+            sched, cells[0], GENERATION, operation, 93_006_001, FRONTEND,
+        )?;
+        let b = hooks::stage_frontend_child(
+            sched, cells[0], GENERATION, operation, 93_006_002, FRONTEND,
+        )?;
         let (pa, pb) = (a.prepared_ref(), b.prepared_ref());
         let mut ok = true;
         // No receipt at all.
@@ -666,7 +814,8 @@ fn session_frontend_receipt_contract() -> bool {
         let exact = hooks::stage_frontend_receipt(sched, pa, a, FRONTEND)?;
         hooks::force_frontend_bind(sched, pa, exact)?;
         ok &= hooks::commit(sched, pa) == Some(Status::Revoked);
-        ok &= hooks::prepared_state(sched, pa) == Some(0) && hooks::prepared_state(sched, pb) == Some(0);
+        ok &= hooks::prepared_state(sched, pa) == Some(0)
+            && hooks::prepared_state(sched, pb) == Some(0);
         hooks::discard_all(sched, &[pa, pb]);
         Some(ok)
     });
@@ -680,7 +829,9 @@ type Sched = crate::task::scheduler::Scheduler;
 /// can interleave with the staged records and the production transitions.
 fn with_session_hold(probe: impl FnOnce(&mut Sched) -> Option<bool>) -> bool {
     let mut guard = crate::task::SCHEDULER.lock();
-    let Some(sched) = guard.as_mut() else { return false };
+    let Some(sched) = guard.as_mut() else {
+        return false;
+    };
     probe(sched).unwrap_or(false)
 }
 
@@ -699,11 +850,17 @@ fn result_ref(bytes: &[u8], n: usize) -> Option<api::cell_session::ObjectRefV1> 
 
 /// Create an operation (`parent` or zero for a root) as `(cell, generation)` through the
 /// production transition.
-fn stage_operation(sched: &mut Sched, cell: u64, generation: u64, parent: api::cell_session::ObjectRefV1)
-    -> Option<api::cell_session::ObjectRefV1> {
+fn stage_operation(
+    sched: &mut Sched,
+    cell: u64,
+    generation: u64,
+    parent: api::cell_session::ObjectRefV1,
+) -> Option<api::cell_session::ObjectRefV1> {
     use crate::task::cell_session::test_hooks as hooks;
     let (status, bytes) = hooks::exec(sched, cell, generation, 1, &parent.to_bytes());
-    if status != api::cell_session::Status::Ok { return None; }
+    if status != api::cell_session::Status::Ok {
+        return None;
+    }
     result_ref(&bytes, 0)
 }
 
@@ -725,15 +882,41 @@ fn measurement_creator_share_contract() -> bool {
     let other: log::Creator = (u64::MAX - 11, 0x5E55_2001);
     let label = |n: usize| alloc::format!("/atomic/share-{n}");
     // Another creator and an ordinary launch each hold one entry.
-    let Ok(peer) = log::PublicationReservation::reserve(other) else { { ::log::error!("AP-PC early exit #1 entries={} shape={:?}", log::entry_count(), log::test_shape()); return false } };
-    peer.commit(0x7ff0_0020, alloc::string::String::from("/atomic/share-other"), HASH);
-    log::commit_staged(0x7ff0_0021, alloc::string::String::from("/atomic/share-ordinary"), HASH);
+    let Ok(peer) = log::PublicationReservation::reserve(other) else {
+        {
+            ::log::error!(
+                "AP-PC early exit #1 entries={} shape={:?}",
+                log::entry_count(),
+                log::test_shape()
+            );
+            return false;
+        }
+    };
+    peer.commit(
+        0x7ff0_0020,
+        alloc::string::String::from("/atomic/share-other"),
+        HASH,
+    );
+    log::commit_staged(
+        0x7ff0_0021,
+        alloc::string::String::from("/atomic/share-ordinary"),
+        HASH,
+    );
     let held_elsewhere = log::entry_count() == len0 + 2;
     // One creator keeps launching well past its share: every reserve succeeds,
     // every commit advances the aggregate, and it retains exactly its share.
     let mut advanced = true;
     for n in 0..log::CREATOR_SHARE + EXTRA {
-        let Ok(reservation) = log::PublicationReservation::reserve(greedy) else { { ::log::error!("AP-PC early exit #2 entries={} shape={:?}", log::entry_count(), log::test_shape()); return false } };
+        let Ok(reservation) = log::PublicationReservation::reserve(greedy) else {
+            {
+                ::log::error!(
+                    "AP-PC early exit #2 entries={} shape={:?}",
+                    log::entry_count(),
+                    log::test_shape()
+                );
+                return false;
+            }
+        };
         let before = log::aggregate();
         reservation.commit(0x7ff0_1000 + n, label(n), HASH);
         advanced &= log::aggregate() != before;
@@ -751,7 +934,14 @@ fn measurement_creator_share_contract() -> bool {
     while held.len() < log::CREATOR_SHARE {
         match log::PublicationReservation::reserve(greedy) {
             Ok(reservation) => held.push(reservation),
-            Err(_) => { ::log::error!("AP-PC early exit #3 entries={} shape={:?}", log::entry_count(), log::test_shape()); return false },
+            Err(_) => {
+                ::log::error!(
+                    "AP-PC early exit #3 entries={} shape={:?}",
+                    log::entry_count(),
+                    log::test_shape()
+                );
+                return false;
+            }
         }
     }
     let len_full = log::entry_count();
@@ -759,10 +949,20 @@ fn measurement_creator_share_contract() -> bool {
         && log::entry_count() == len_full
         && log::test_creator_used(greedy) == (log::CREATOR_SHARE, 0);
     // Another creator still reserves while that creator is at its bound.
-    let Ok(peer_again) = log::PublicationReservation::reserve(other) else { { ::log::error!("AP-PC early exit #4 entries={} shape={:?}", log::entry_count(), log::test_shape()); return false } };
+    let Ok(peer_again) = log::PublicationReservation::reserve(other) else {
+        {
+            ::log::error!(
+                "AP-PC early exit #4 entries={} shape={:?}",
+                log::entry_count(),
+                log::test_shape()
+            );
+            return false;
+        }
+    };
     drop(peer_again);
     drop(held);
-    let tail = log::test_creator_used(greedy).0 == 0 && log::test_shape().2 == 0
+    let tail = log::test_creator_used(greedy).0 == 0
+        && log::test_shape().2 == 0
         && log::test_creator_used(other) == (0, 1);
     if !(refused && held_elsewhere && advanced && retained && oldest && untouched && tail) {
         ::log::error!("AP-PC detail: refused={refused} held_elsewhere={held_elsewhere} advanced={advanced} retained={retained} oldest={oldest} untouched={untouched} tail={tail} greedy={:?} other={:?} entries={} len0={len0}",
@@ -782,15 +982,17 @@ fn ready_rollback_fifo_contract() -> bool {
 /// consumer-loss cascade across a long producer chain reaches the first stage,
 /// an unrelated operation survives, and cancelling again is a no-op.
 fn session_cancel_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::test_hooks as hooks;
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_011;
     const WORKER_TID: usize = 92_012;
     const GENERATION: u64 = 0x5E55_1006;
     const NESTED: usize = 24;
     const STAGES: usize = 24;
     let tids = [CONTROLLER_TID, WORKER_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (controller, worker) = (cells[0], cells[1]);
     let ok = with_session_hold(|sched| {
         let mut ok = true;
@@ -801,36 +1003,66 @@ fn session_cancel_contract() -> bool {
             parent = stage_operation(sched, controller, GENERATION, parent)?;
             chain.push(parent);
         }
-        let (status, leaf) = hooks::exec(sched, controller, GENERATION, 2, &create_stream_body(*chain.last()?));
+        let (status, leaf) = hooks::exec(
+            sched,
+            controller,
+            GENERATION,
+            2,
+            &create_stream_body(*chain.last()?),
+        );
         ok &= status == Status::Ok;
         let (leaf_reader, leaf_writer) = (result_ref(&leaf, 0)?, result_ref(&leaf, 1)?);
         // Producer chain: stage i feeds the ring consumed in stage i + 1.
         let mut stages = alloc::vec::Vec::new();
-        for _ in 0..STAGES { stages.push(stage_operation(sched, controller, GENERATION, Ref::ZERO)?); }
+        for _ in 0..STAGES {
+            stages.push(stage_operation(sched, controller, GENERATION, Ref::ZERO)?);
+        }
         let mut producers = alloc::vec::Vec::new();
         for i in 0..STAGES - 1 {
-            let (status, ring) = hooks::exec(sched, controller, GENERATION, 2, &create_stream_body(stages[i + 1]));
+            let (status, ring) = hooks::exec(
+                sched,
+                controller,
+                GENERATION,
+                2,
+                &create_stream_body(stages[i + 1]),
+            );
             ok &= status == Status::Ok;
             let writer = result_ref(&ring, 1)?;
-            producers.push(hooks::stage_holder(sched, writer, stages[i], worker, GENERATION)?);
+            producers.push(hooks::stage_holder(
+                sched, writer, stages[i], worker, GENERATION,
+            )?);
             ok &= hooks::close_endpoint(sched, writer);
         }
         let bystander = stage_operation(sched, controller, GENERATION, Ref::ZERO)?;
-        let (status, spare) = hooks::exec(sched, controller, GENERATION, 2, &create_stream_body(bystander));
+        let (status, spare) = hooks::exec(
+            sched,
+            controller,
+            GENERATION,
+            2,
+            &create_stream_body(bystander),
+        );
         ok &= status == Status::Ok;
         let (spare_reader, spare_writer) = (result_ref(&spare, 0)?, result_ref(&spare, 1)?);
         // Consumer loss at the end of the producer chain cascades to its first stage.
         hooks::cancel_operation(sched, *stages.last()?);
-        ok &= stages.iter().all(|stage| hooks::operation_state(sched, *stage) == Some(1));
-        ok &= producers.iter().all(|p| hooks::endpoint_state(sched, *p) == Some(2));
+        ok &= stages
+            .iter()
+            .all(|stage| hooks::operation_state(sched, *stage) == Some(1));
+        ok &= producers
+            .iter()
+            .all(|p| hooks::endpoint_state(sched, *p) == Some(2));
         // The unrelated operation and the nested chain are untouched.
         ok &= hooks::operation_state(sched, bystander) == Some(0)
             && hooks::endpoint_state(sched, spare_reader) == Some(0)
             && hooks::endpoint_state(sched, spare_writer) == Some(0);
-        ok &= chain.iter().all(|op| hooks::operation_state(sched, *op) == Some(0));
+        ok &= chain
+            .iter()
+            .all(|op| hooks::operation_state(sched, *op) == Some(0));
         // Root cancellation of the nested chain revokes every descendant holder.
         hooks::cancel_operation(sched, chain[0]);
-        ok &= chain.iter().all(|op| hooks::operation_state(sched, *op) == Some(1));
+        ok &= chain
+            .iter()
+            .all(|op| hooks::operation_state(sched, *op) == Some(1));
         ok &= hooks::endpoint_state(sched, leaf_reader) == Some(3)
             && hooks::endpoint_state(sched, leaf_writer) == Some(3);
         // Repeating either cancellation changes nothing.
@@ -850,13 +1082,15 @@ fn session_cancel_contract() -> bool {
 /// cancels only the committed child writing to it: the controller's own holders,
 /// the other session of the same bootstrap operation and its child survive.
 fn session_close_scope_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::test_hooks as hooks;
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_007;
     const CHILD_TID: usize = 92_008;
     const GENERATION: u64 = 0x5E55_1004;
     let tids = [CONTROLLER_TID, CHILD_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (controller, child) = (cells[0], cells[1]);
     let ok = with_session_hold(|sched| {
         let root = stage_operation(sched, controller, GENERATION, Ref::ZERO)?;
@@ -869,7 +1103,8 @@ fn session_close_scope_contract() -> bool {
         let second = hooks::stage_bootstrap(sched, controller, GENERATION, root)?;
         let first_out = hooks::stage_holder(sched, first[1], first_child, child, GENERATION)?;
         let second_out = hooks::stage_holder(sched, second[1], second_child, child, GENERATION)?;
-        let (status, rest) = hooks::exec(sched, controller, GENERATION, 2, &create_stream_body(root));
+        let (status, rest) =
+            hooks::exec(sched, controller, GENERATION, 2, &create_stream_body(root));
         let (spare_reader, spare_writer) = (result_ref(&rest, 0)?, result_ref(&rest, 1)?);
         let mut ok = status == Status::Ok;
         // The frontend of the first session loses its output reader.
@@ -887,7 +1122,9 @@ fn session_close_scope_contract() -> bool {
         ok &= hooks::operation_state(sched, root) == Some(0)
             && hooks::operation_state(sched, second_child) == Some(0)
             && hooks::endpoint_state(sched, second_out) == Some(0);
-        for endpoint in second { ok &= hooks::endpoint_state(sched, endpoint) == Some(0); }
+        for endpoint in second {
+            ok &= hooks::endpoint_state(sched, endpoint) == Some(0);
+        }
         ok &= hooks::endpoint_state(sched, spare_reader) == Some(0)
             && hooks::endpoint_state(sched, spare_writer) == Some(0);
         // Releasing the controller's operation then cancels all of it.
@@ -906,24 +1143,34 @@ fn session_close_scope_contract() -> bool {
 /// even while another outcome of the same operation is still outstanding; the
 /// record an outstanding outcome names stays resolvable so its replay is exact.
 fn session_reclaim_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::test_hooks as hooks;
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_009;
     const PEER_TID: usize = 92_010;
     const GENERATION: u64 = 0x5E55_1005;
     let tids = [OWNER_TID, PEER_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let state = |endpoint: Ref| {
-        crate::task::SCHEDULER.lock().as_ref().and_then(|sched| hooks::endpoint_state(sched, endpoint))
+        crate::task::SCHEDULER
+            .lock()
+            .as_ref()
+            .and_then(|sched| hooks::endpoint_state(sched, endpoint))
     };
     let (status, created) = session_call(OWNER_TID, 1, 1, &Ref::ZERO.to_bytes());
     let operation = result_ref(&created, 0).unwrap_or(Ref::ZERO);
     let mut ok = status == Status::Ok && operation != Ref::ZERO;
     let (_, first) = session_call(OWNER_TID, 2, 1, &create_stream_body(operation));
     let (_, second) = session_call(OWNER_TID, 2, 2, &create_stream_body(operation));
-    let (Some(first_reader), Some(first_writer), Some(second_reader), Some(second_writer)) =
-        (result_ref(&first, 0), result_ref(&first, 1), result_ref(&second, 0), result_ref(&second, 1))
-    else { return false };
+    let (Some(first_reader), Some(first_writer), Some(second_reader), Some(second_writer)) = (
+        result_ref(&first, 0),
+        result_ref(&first, 1),
+        result_ref(&second, 0),
+        result_ref(&second, 1),
+    ) else {
+        return false;
+    };
     ok &= session_call(OWNER_TID, 7, 3, &first_writer.to_bytes()).0 == Status::Ok;
     ok &= session_call(OWNER_TID, 7, 4, &first_reader.to_bytes()).0 == Status::Ok;
     ok &= session_call(OWNER_TID, 7, 5, &second_writer.to_bytes()).0 == Status::Ok;
@@ -946,7 +1193,8 @@ fn session_reclaim_contract() -> bool {
         cancel.extend_from_slice(&2u32.to_le_bytes());
         cancel.extend_from_slice(&0u32.to_le_bytes());
         cancel
-    }).0 == Status::Ok;
+    })
+    .0 == Status::Ok;
     retire_session_cells(tids, cells, GENERATION);
     ok
 }
@@ -956,27 +1204,44 @@ fn session_reclaim_contract() -> bool {
 /// child is terminal the dead issuer's receipt is drained instead of pinning
 /// the shared receipt table.
 fn session_issuer_replacement_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::{self, test_hooks as hooks};
+    use api::cell_session::{ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_013;
     const CHILD_TID: usize = 92_014;
     const GENERATION: u64 = 0x5E55_1007;
     const CHILD_ROOT: u64 = 93_002_000;
     let tids = [PREPARER_TID, CHILD_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (preparer, child) = (cells[0], cells[1]);
     let ok = with_session_hold(|sched| {
         let operation = stage_operation(sched, preparer, GENERATION, Ref::ZERO)?;
         let mut writers = [Ref::ZERO; 2];
         for writer in &mut writers {
-            let (status, ring) = hooks::exec(sched, preparer, GENERATION, 2, &create_stream_body(operation));
-            if status != Status::Ok { return None; }
+            let (status, ring) = hooks::exec(
+                sched,
+                preparer,
+                GENERATION,
+                2,
+                &create_stream_body(operation),
+            );
+            if status != Status::Ok {
+                return None;
+            }
             *writer = result_ref(&ring, 1)?;
         }
         let (prepared, peers) = hooks::stage_issuer_receipt(
-            sched, (preparer, GENERATION), (child, GENERATION), operation, writers)?;
+            sched,
+            (preparer, GENERATION),
+            (child, GENERATION),
+            operation,
+            writers,
+        )?;
         let mut ok = hooks::receipts_on(sched, operation) == 1
-            && peers.iter().all(|peer| hooks::endpoint_state(sched, *peer) == Some(0))
+            && peers
+                .iter()
+                .all(|peer| hooks::endpoint_state(sched, *peer) == Some(0))
             && hooks::prepared_flags(sched, prepared) == Some((1, 0, false))
             && hooks::operation_state(sched, operation) == Some(0);
         // The recorded issuer is not the registered provider: cut the child's
@@ -984,7 +1249,9 @@ fn session_issuer_replacement_contract() -> bool {
         hooks::maintain(sched);
         ok &= hooks::prepared_flags(sched, prepared) == Some((1, 4, true))
             && hooks::operation_state(sched, operation) == Some(1)
-            && peers.iter().all(|peer| hooks::endpoint_state(sched, *peer) == Some(3));
+            && peers
+                .iter()
+                .all(|peer| hooks::endpoint_state(sched, *peer) == Some(3));
         // The child dies; its terminal state remains queryable by the preparer
         // while the dead issuer's receipt is drained.
         let owner = api::cell_owner::CellOwner::new(child, GENERATION, CHILD_ROOT);
@@ -1008,15 +1275,17 @@ fn session_issuer_replacement_contract() -> bool {
 /// blocks `CloseOperation` once terminal and is released by it. A child that
 /// carried only a VFS cwd receipt keeps its record after the receipt is removed.
 fn session_query_child_contract() -> bool {
-    use api::cell_session::{ChildRefV1, ObjectRefV1 as Ref, Status};
     use crate::task::cell_session::{self, test_hooks as hooks};
+    use api::cell_session::{ChildRefV1, ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_015;
     const FOREIGN_TID: usize = 92_016;
     const GENERATION: u64 = 0x5E55_1008;
     const CHILD_ROOT: u64 = 93_003_000;
     const EXIT_CODE: usize = 7;
     let tids = [PREPARER_TID, FOREIGN_TID];
-    let Some(cells) = two_session_cells(tids, GENERATION) else { return false };
+    let Some(cells) = two_session_cells(tids, GENERATION) else {
+        return false;
+    };
     let (status, created) = session_call(PREPARER_TID, 1, 1, &Ref::ZERO.to_bytes());
     let operation = result_ref(&created, 0).unwrap_or(Ref::ZERO);
     let mut ok = status == Status::Ok && operation != Ref::ZERO;
@@ -1024,7 +1293,13 @@ fn session_query_child_contract() -> bool {
     let child_generation = GENERATION + 1;
     let mut staged = None;
     ok &= with_session_hold(|sched| {
-        staged = hooks::stage_receiptless_child(sched, (cells[0], GENERATION), (cells[1], child_generation), operation, CHILD_ROOT);
+        staged = hooks::stage_receiptless_child(
+            sched,
+            (cells[0], GENERATION),
+            (cells[1], child_generation),
+            operation,
+            CHILD_ROOT,
+        );
         Some(staged.is_some())
     });
     let Some(child) = staged else {
@@ -1034,8 +1309,15 @@ fn session_query_child_contract() -> bool {
     let query = |tid: usize, id: u64, child: ChildRefV1| {
         let (status, body) = session_call(tid, 30, id, &child.to_bytes());
         let fields = (body.len() == 24).then(|| {
-            let word = |at: usize| u32::from_le_bytes(body[at..at + 4].try_into().unwrap_or([0; 4]));
-            (word(0), word(4), word(8) as i32, word(12), u64::from_le_bytes(body[16..24].try_into().unwrap_or([0; 8])))
+            let word =
+                |at: usize| u32::from_le_bytes(body[at..at + 4].try_into().unwrap_or([0; 4]));
+            (
+                word(0),
+                word(4),
+                word(8) as i32,
+                word(12),
+                u64::from_le_bytes(body[16..24].try_into().unwrap_or([0; 8])),
+            )
         });
         (status, fields)
     };
@@ -1046,10 +1328,16 @@ fn session_query_child_contract() -> bool {
     // A foreign principal is denied and learns nothing.
     ok &= query(FOREIGN_TID, 201, child) == (Status::WrongOwner, None);
     // Unknown generation, and a known reference with a different identity, are stale.
-    let unknown = ChildRefV1 { publication_generation: child.publication_generation + 1, ..child };
+    let unknown = ChildRefV1 {
+        publication_generation: child.publication_generation + 1,
+        ..child
+    };
     ok &= query(PREPARER_TID, 202, unknown) == (Status::Stale, None);
     let other_identity = ChildRefV1 {
-        principal: api::cell_session::PrincipalV1 { cell_id: child.principal.cell_id, generation: child.principal.generation + 1 },
+        principal: api::cell_session::PrincipalV1 {
+            cell_id: child.principal.cell_id,
+            generation: child.principal.generation + 1,
+        },
         ..child
     };
     ok &= query(PREPARER_TID, 203, other_identity) == (Status::Stale, None);
@@ -1065,12 +1353,19 @@ fn session_query_child_contract() -> bool {
     ok &= session_call(PREPARER_TID, 20, 4, &operation.to_bytes()).0 == Status::WouldBlock;
     // The child exits: retiring (code recorded), then retired (canonical sequence).
     ok &= with_session_hold(|sched| {
-        cell_session::retiring(sched, api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT), EXIT_CODE);
+        cell_session::retiring(
+            sched,
+            api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
+            EXIT_CODE,
+        );
         Some(true)
     });
     ok &= query(PREPARER_TID, 205, child) == (Status::Ok, Some((2, 0, EXIT_CODE as i32, 0, 0)));
     ok &= with_session_hold(|sched| {
-        cell_session::retired(sched, api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT));
+        cell_session::retired(
+            sched,
+            api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
+        );
         Some(true)
     });
     let terminal = query(PREPARER_TID, 206, child);
@@ -1091,7 +1386,13 @@ fn session_query_child_contract() -> bool {
     // issuer is not the registered provider would be cancelled by maintenance.
     let mut staged = None;
     ok &= with_session_hold(|sched| {
-        staged = hooks::stage_vfs_receipted_child(sched, (cells[0], GENERATION), (cells[1], child_generation), operation, VFS_CHILD_ROOT);
+        staged = hooks::stage_vfs_receipted_child(
+            sched,
+            (cells[0], GENERATION),
+            (cells[1], child_generation),
+            operation,
+            VFS_CHILD_ROOT,
+        );
         let owner = api::cell_owner::CellOwner::new(cells[1], child_generation, VFS_CHILD_ROOT);
         cell_session::retiring(sched, owner, EXIT_CODE);
         cell_session::retired(sched, owner);
@@ -1103,7 +1404,10 @@ fn session_query_child_contract() -> bool {
     };
     let vfs_terminal = query(PREPARER_TID, 211, vfs_child);
     ok &= matches!(vfs_terminal, (Status::Ok, Some((3, 0, 7, 0, sequence))) if sequence != 0);
-    ok &= with_session_hold(|sched| { hooks::materialize_receipts(sched, operation); Some(true) });
+    ok &= with_session_hold(|sched| {
+        hooks::materialize_receipts(sched, operation);
+        Some(true)
+    });
     // A fresh request and its acknowledgement run `reclaim` on the operation.
     let (_, stream) = session_call(PREPARER_TID, 2, 5, &create_stream_body(operation));
     let (Some(reader), Some(writer)) = (result_ref(&stream, 0), result_ref(&stream, 1)) else {
@@ -1121,8 +1425,12 @@ fn session_query_child_contract() -> bool {
     ok &= with_session_hold(|sched| Some(hooks::prepared_exists(sched, vfs_child.prepared_ref())));
     // The terminal records do not pin CloseOperation, and closing releases them.
     ok &= session_call(PREPARER_TID, 20, 8, &operation.to_bytes()).0 == Status::Ok;
-    ok &= with_session_hold(|sched| Some(!hooks::prepared_exists(sched, child.prepared_ref())
-        && !hooks::prepared_exists(sched, vfs_child.prepared_ref())));
+    ok &= with_session_hold(|sched| {
+        Some(
+            !hooks::prepared_exists(sched, child.prepared_ref())
+                && !hooks::prepared_exists(sched, vfs_child.prepared_ref()),
+        )
+    });
     ok &= query(PREPARER_TID, 209, child) == (Status::Stale, None);
     ok &= query(PREPARER_TID, 214, vfs_child) == (Status::Stale, None);
     retire_session_cells(tids, cells, GENERATION);

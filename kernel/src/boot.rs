@@ -659,7 +659,7 @@ fn conservative_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
         unsafe {
             let end = addr_of!(__stack_top) as usize;
             let kernel_len = if end > ram_base {
-                (end as usize - ram_base + ALIGN_2M - 1) & !(ALIGN_2M - 1)
+                (end - ram_base + ALIGN_2M - 1) & !(ALIGN_2M - 1)
             } else {
                 descriptor_usable.base as usize - ram_base
             };

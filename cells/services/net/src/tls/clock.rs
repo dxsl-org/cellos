@@ -18,17 +18,19 @@ fn reject_untrusted_time(_raw_rtc_secs: Option<u64>) -> Option<u64> {
 /// Return authenticated certificate time, never raw platform wall time.
 pub fn observe() -> Option<u64> {
     #[cfg(feature = "qemu-dev-https")]
-    { super::qemu_time::observe() }
+    {
+        super::qemu_time::observe()
+    }
     #[cfg(not(feature = "qemu-dev-https"))]
-    { reject_untrusted_time(None) }
+    {
+        reject_untrusted_time(None)
+    }
 }
 
 /// Conservative certificate-validity bounds for the selected time authority.
+#[cfg(feature = "qemu-dev-https")]
 pub fn validity_window() -> Option<(u64, u64)> {
-    #[cfg(feature = "qemu-dev-https")]
-    { super::qemu_time::validity_window() }
-    #[cfg(not(feature = "qemu-dev-https"))]
-    { observe().map(|now| (now, now)) }
+    super::qemu_time::validity_window()
 }
 
 /// A TLS clock that remains unavailable until protected time is integrated.

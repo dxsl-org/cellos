@@ -18,7 +18,11 @@ struct FakeStore {
 
 impl FakeStore {
     fn new(answer: PinRead, writable: bool) -> Self {
-        Self { answer: Some(answer), writable, written: Vec::new() }
+        Self {
+            answer: Some(answer),
+            writable,
+            written: Vec::new(),
+        }
     }
 }
 
@@ -33,7 +37,13 @@ impl PinStore for FakeStore {
 }
 
 fn pci(vendor: u16, device: u16, class: u8) -> PciFunctionId {
-    PciFunctionId { vendor, device, class, subclass: 0, prog_if: 0 }
+    PciFunctionId {
+        vendor,
+        device,
+        class,
+        subclass: 0,
+        prog_if: 0,
+    }
 }
 
 fn facts(slug: &[u8], source: u8, extra: &[PciFunctionId]) -> ViMachineFactsV1 {
@@ -41,7 +51,12 @@ fn facts(slug: &[u8], source: u8, extra: &[PciFunctionId]) -> ViMachineFactsV1 {
     devices.extend_from_slice(extra);
     devices.sort_unstable();
     ViMachineFactsV1 {
-        flags: FLAG_ACPI_OEM | FLAG_SMBIOS | FLAG_DMAR_PRESENT | FLAG_VTD_ACTIVE | FLAG_HYPERVISOR | FLAG_PCI_ECAM,
+        flags: FLAG_ACPI_OEM
+            | FLAG_SMBIOS
+            | FLAG_DMAR_PRESENT
+            | FLAG_VTD_ACTIVE
+            | FLAG_HYPERVISOR
+            | FLAG_PCI_ECAM,
         profile_source: source,
         slug: FactString::new(slug).unwrap(),
         acpi_oem_revision: 1,
@@ -93,20 +108,34 @@ fn equal_bytes_match_without_writing() {
 #[test]
 fn a_changed_machine_is_a_mismatch_with_a_field_diff_and_no_write() {
     let pinned = pc();
-    let current = record(&facts(b"x86_64-pc", PROFILE_SOURCE_DEFAULT, &[pci(0x8086, 0x100e, 2)]));
+    let current = record(&facts(
+        b"x86_64-pc",
+        PROFILE_SOURCE_DEFAULT,
+        &[pci(0x8086, 0x100e, 2)],
+    ));
     let mut store = FakeStore::new(PinRead::Present(pinned.bytes().to_vec()), true);
     let gate = evaluate(Some(current), &mut store);
     assert_eq!(gate.state, PinState::Mismatch);
     assert!(store.written.is_empty(), "never re-pinned automatically");
     assert!(gate.safe_mode());
-    assert!(gate.lines.iter().any(|line| line == "pci +8086:100e 02:00:00"), "{:?}", gate.lines);
+    assert!(
+        gate.lines
+            .iter()
+            .any(|line| line == "pci +8086:100e 02:00:00"),
+        "{:?}",
+        gate.lines
+    );
 }
 
 #[test]
 fn unreadable_records_and_unknown_versions_are_safe_mode_not_first_boot() {
     let mut unknown_version = pc().bytes().to_vec();
     unknown_version[0] = 2;
-    for answer in [PinRead::Present(vec![0xAB; 40]), PinRead::Present(unknown_version), PinRead::Oversized] {
+    for answer in [
+        PinRead::Present(vec![0xAB; 40]),
+        PinRead::Present(unknown_version),
+        PinRead::Oversized,
+    ] {
         let mut store = FakeStore::new(answer, true);
         let gate = evaluate(Some(pc()), &mut store);
         assert_eq!(gate.state, PinState::RecordUnreadable);
@@ -125,7 +154,10 @@ fn an_unavailable_store_is_never_written_and_only_q35_continues() {
     assert!(!gate.safe_mode(), "q35 warns and continues");
 
     let mut store = FakeStore::new(PinRead::Unavailable("/srv not mounted"), true);
-    assert!(evaluate(Some(pc()), &mut store).safe_mode(), "PC profile is strict");
+    assert!(
+        evaluate(Some(pc()), &mut store).safe_mode(),
+        "PC profile is strict"
+    );
 
     let mut no_hv = facts(b"qemu-q35-x86_64", PROFILE_SOURCE_CMDLINE, &[]);
     no_hv.flags &= !FLAG_HYPERVISOR;
@@ -144,7 +176,11 @@ fn no_facts_is_safe_mode_and_touches_no_store() {
 
 #[test]
 fn diff_names_each_changed_field_and_escapes_firmware_strings() {
-    let old = facts(b"qemu-q35-x86_64", PROFILE_SOURCE_CMDLINE, &[pci(0x8086, 0x100e, 2)]);
+    let old = facts(
+        b"qemu-q35-x86_64",
+        PROFILE_SOURCE_CMDLINE,
+        &[pci(0x8086, 0x100e, 2)],
+    );
     let mut new = old.clone();
     new.flags &= !(FLAG_DMAR_PRESENT | FLAG_VTD_ACTIVE);
     new.profile_source = PROFILE_SOURCE_DEFAULT;
@@ -175,15 +211,30 @@ fn pci_lines_are_capped() {
 
 #[test]
 fn duplicate_functions_diff_as_a_multiset() {
-    let old = facts(b"x86_64-pc", PROFILE_SOURCE_DEFAULT, &[pci(0x8086, 0x100e, 2)]);
-    let new = facts(b"x86_64-pc", PROFILE_SOURCE_DEFAULT, &[pci(0x8086, 0x100e, 2), pci(0x8086, 0x100e, 2)]);
-    assert_eq!(diff::lines(&old, &new), vec![String::from("pci +8086:100e 02:00:00")]);
+    let old = facts(
+        b"x86_64-pc",
+        PROFILE_SOURCE_DEFAULT,
+        &[pci(0x8086, 0x100e, 2)],
+    );
+    let new = facts(
+        b"x86_64-pc",
+        PROFILE_SOURCE_DEFAULT,
+        &[pci(0x8086, 0x100e, 2), pci(0x8086, 0x100e, 2)],
+    );
+    assert_eq!(
+        diff::lines(&old, &new),
+        vec![String::from("pci +8086:100e 02:00:00")]
+    );
 }
 
 #[test]
 fn safe_set_is_input_and_the_cellbox_shell_from_the_shipped_plan() {
-    let plan = cellos_boot_config::parse_cells(include_bytes!("../../../../../config/services.toml")).unwrap();
-    let autoload = cellos_boot_config::parse_cells(include_bytes!("../../../../../config/autoload.toml")).unwrap();
+    let plan =
+        cellos_boot_config::parse_cells(include_bytes!("../../../../../config/services.toml"))
+            .unwrap();
+    let autoload =
+        cellos_boot_config::parse_cells(include_bytes!("../../../../../config/autoload.toml"))
+            .unwrap();
     let autoload_offset = 1 + plan.cells.len();
     let mut services = vec![Service::bootstrap_vfs()];
     services.extend(plan.cells.into_iter().map(Service::new));
@@ -192,21 +243,44 @@ fn safe_set_is_input_and_the_cellbox_shell_from_the_shipped_plan() {
     let service = service.expect("input in the plan");
     let shell = shell.expect("cellbox in autoload");
     assert_eq!(services[service].spec.name, "input");
-    assert_eq!((services[shell].spec.name.as_str(), services[shell].spec.args.as_slice()), ("cellbox", &[String::from("sh")][..]));
+    assert_eq!(
+        (
+            services[shell].spec.name.as_str(),
+            services[shell].spec.args.as_slice()
+        ),
+        ("cellbox", &[String::from("sh")][..])
+    );
     assert!(shell >= autoload_offset);
     for name in ["net", "silo"] {
-        assert!(withheld.iter().any(|entry| entry == name), "{name} withheld: {withheld:?}");
+        assert!(
+            withheld.iter().any(|entry| entry == name),
+            "{name} withheld: {withheld:?}"
+        );
     }
-    assert!(!withheld.iter().any(|entry| entry == "input" || entry == "cellbox" || entry == "vfs"));
+    assert!(!withheld
+        .iter()
+        .any(|entry| entry == "input" || entry == "cellbox" || entry == "vfs"));
 }
 
 #[test]
 fn confirm_needs_safe_mode_then_the_shell_then_the_current_digest() {
     let digest = [7; 32];
-    assert_eq!(authorize_confirm(false, true, digest, Some(digest)), Err(Refusal::NotSafeMode));
-    assert_eq!(authorize_confirm(true, false, digest, Some(digest)), Err(Refusal::NotConsoleShell));
-    assert_eq!(authorize_confirm(true, true, [8; 32], Some(digest)), Err(Refusal::DigestStale));
-    assert_eq!(authorize_confirm(true, true, digest, None), Err(Refusal::DigestStale));
+    assert_eq!(
+        authorize_confirm(false, true, digest, Some(digest)),
+        Err(Refusal::NotSafeMode)
+    );
+    assert_eq!(
+        authorize_confirm(true, false, digest, Some(digest)),
+        Err(Refusal::NotConsoleShell)
+    );
+    assert_eq!(
+        authorize_confirm(true, true, [8; 32], Some(digest)),
+        Err(Refusal::DigestStale)
+    );
+    assert_eq!(
+        authorize_confirm(true, true, digest, None),
+        Err(Refusal::DigestStale)
+    );
     assert_eq!(authorize_confirm(true, true, digest, Some(digest)), Ok(()));
 }
 
@@ -219,11 +293,19 @@ struct FakeVfs {
 
 impl store::VfsOps for FakeVfs {
     fn stat(&mut self, path: &str) -> ostd::ViResult<(u64, bool)> {
-        let (_, answer) = self.stats.iter().find(|(p, _)| *p == path).expect("scripted stat");
+        let (_, answer) = self
+            .stats
+            .iter()
+            .find(|(p, _)| *p == path)
+            .expect("scripted stat");
         answer.clone().map(|is_dir| (0, is_dir))
     }
     fn list_dir(&mut self, path: &str) -> ostd::ViResult<Vec<u8>> {
-        let (_, answer) = self.lists.iter().find(|(p, _)| *p == path).expect("scripted list");
+        let (_, answer) = self
+            .lists
+            .iter()
+            .find(|(p, _)| *p == path)
+            .expect("scripted list");
         answer.clone().map(<[u8]>::to_vec)
     }
     fn read_file(&mut self, _: &str, _: usize) -> ostd::ViResult<Vec<u8>> {
@@ -259,7 +341,10 @@ fn only_a_complete_listing_without_the_entry_proves_absence() {
 
     let mut transient = vfs(Err(IO));
     transient.lists.push(("/srv", Ok(b"d:.cellos-machine\n")));
-    assert!(matches!(read_pin(&mut transient), PinRead::Unavailable(_)), "listed but stat failed");
+    assert!(
+        matches!(read_pin(&mut transient), PinRead::Unavailable(_)),
+        "listed but stat failed"
+    );
 
     let mut unlistable = vfs(Err(IO));
     unlistable.lists.push(("/srv", Err(IO)));
@@ -268,26 +353,39 @@ fn only_a_complete_listing_without_the_entry_proves_absence() {
     let long: &'static [u8] = Vec::leak(vec![b'x'; 3_800]);
     let mut truncated = vfs(Err(IO));
     truncated.lists.push(("/srv", Ok(long)));
-    assert!(matches!(read_pin(&mut truncated), PinRead::Unavailable(_)), "possibly truncated listing");
+    assert!(
+        matches!(read_pin(&mut truncated), PinRead::Unavailable(_)),
+        "possibly truncated listing"
+    );
 
     let mut no_file = vfs(Ok(true));
-    no_file.lists.push(("/srv/.cellos-machine", Ok(b"f:pin.tmp\n")));
+    no_file
+        .lists
+        .push(("/srv/.cellos-machine", Ok(b"f:pin.tmp\n")));
     assert_eq!(read_pin(&mut no_file), PinRead::Absent);
 
     let mut dir_unlistable = vfs(Ok(true));
     dir_unlistable.lists.push(("/srv/.cellos-machine", Err(IO)));
-    assert!(matches!(read_pin(&mut dir_unlistable), PinRead::Unavailable(_)));
+    assert!(matches!(
+        read_pin(&mut dir_unlistable),
+        PinRead::Unavailable(_)
+    ));
 
     let mut present = vfs(Ok(true));
     present.lists.push(("/srv/.cellos-machine", Ok(b"f:pin\n")));
     assert_eq!(read_pin(&mut present), PinRead::Present(vec![1, 2, 3]));
 
     let mut unreadable = vfs(Ok(true));
-    unreadable.lists.push(("/srv/.cellos-machine", Ok(b"f:pin\n")));
+    unreadable
+        .lists
+        .push(("/srv/.cellos-machine", Ok(b"f:pin\n")));
     unreadable.file = Err(IO);
     assert!(matches!(read_pin(&mut unreadable), PinRead::Unavailable(_)));
 
     let mut unmounted = vfs(Ok(true));
     unmounted.stats[0].1 = Err(IO);
-    assert_eq!(read_pin(&mut unmounted), PinRead::Unavailable("/srv not mounted"));
+    assert_eq!(
+        read_pin(&mut unmounted),
+        PinRead::Unavailable("/srv not mounted")
+    );
 }

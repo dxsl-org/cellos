@@ -7,7 +7,6 @@ use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, Rect, Size};
 use crate::widget::{PaintCx, ViWidget};
 
-
 pub struct Label {
     pub text: String,
     pub style: TextStyle,
@@ -30,18 +29,29 @@ impl Label {
 
     /// Measure with the font and size used to paint this label.
     pub fn measure(&self, font: &mut crate::font_context::FontContext) -> Size {
-        let px = if self.style.size_px > 0 { self.style.size_px as f32 } else { font.size_px };
-        Size { w: font.atlas.measure(&self.text, px), h: font.atlas.line_height(px) }
+        let px = if self.style.size_px > 0 {
+            self.style.size_px as f32
+        } else {
+            font.size_px
+        };
+        Size {
+            w: font.atlas.measure(&self.text, px),
+            h: font.atlas.line_height(px),
+        }
     }
 }
 
 impl ViWidget for Label {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
-    let desired = self.measure(font);
-    let size = constraints.constrain(desired);
-    let bounds = Rect::from_origin_size(constraints.origin, size);
-    self.bounds.set(bounds);
-    LayoutNode::leaf(bounds)
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
+        let desired = self.measure(font);
+        let size = constraints.constrain(desired);
+        let bounds = Rect::from_origin_size(constraints.origin, size);
+        self.bounds.set(bounds);
+        LayoutNode::leaf(bounds)
     }
 
     fn paint(&self, cx: &mut PaintCx) {

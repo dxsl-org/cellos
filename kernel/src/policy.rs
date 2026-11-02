@@ -893,8 +893,12 @@ fn v7_parse_cases() -> bool {
     };
     let legacy = v6.entries[0].caps;
     legacy.config_write
-        && decision_to_caps("/bin/cellbox", shell_request, PolicyDecision::Permit(legacy))
-            .config_write
+        && decision_to_caps(
+            "/bin/cellbox",
+            shell_request,
+            PolicyDecision::Permit(legacy),
+        )
+        .config_write
 }
 
 /// magic | version=8 | flags=0 | count=1 | len=9 "/bin/curl" | 21 cap bytes:
@@ -989,7 +993,8 @@ fn v8_parse_cases() -> bool {
         if legacy.kms_ssh_sign || legacy.kms_ssh_admin {
             return false;
         }
-        let narrowed = decision_to_caps("/bin/cellbox-ssh", request, PolicyDecision::Permit(legacy));
+        let narrowed =
+            decision_to_caps("/bin/cellbox-ssh", request, PolicyDecision::Permit(legacy));
         if narrowed.kms_ssh_sign || narrowed.kms_ssh_admin {
             return false;
         }
@@ -1282,7 +1287,10 @@ mod tests {
         for q in [0u8, 1] {
             let mut body = V7_CURL;
             body[V7_CURL_Q] = q;
-            let c = parse(&body).expect("v7 body with a literal 0|1 Q byte parses").entries[0].caps;
+            let c = parse(&body)
+                .expect("v7 body with a literal 0|1 Q byte parses")
+                .entries[0]
+                .caps;
             assert_eq!(c.config_write, q == 1);
             // The v6 prefix is unaffected by the appended byte.
             assert_eq!(net_rights(c), (true, true, false, false));
@@ -1309,11 +1317,14 @@ mod tests {
             let legacy = parse(body).expect("legacy body parses").entries[0].caps;
             assert!(legacy.config_write);
             assert!(
-                decision_to_caps("/bin/cellbox", shell, PolicyDecision::Permit(legacy)).config_write,
+                decision_to_caps("/bin/cellbox", shell, PolicyDecision::Permit(legacy))
+                    .config_write,
                 "a pre-v7 Permit must not strip Q from the shell"
             );
             let curl = CapSet::EMPTY.with_path_caps("/bin/curl");
-            assert!(!decision_to_caps("/bin/curl", curl, PolicyDecision::Permit(legacy)).config_write);
+            assert!(
+                !decision_to_caps("/bin/curl", curl, PolicyDecision::Permit(legacy)).config_write
+            );
         }
         // A v7 Permit with Q=0 does strip it.
         let v7 = parse(&V7_CURL).expect("v7 body parses").entries[0].caps;
@@ -1449,7 +1460,10 @@ mod tests {
             let mut body = V8_CURL;
             body[V8_CURL_SIGN] = sign;
             body[V8_CURL_ADMIN] = admin;
-            let c = parse(&body).expect("v8 body with literal 0|1 KMS bytes parses").entries[0].caps;
+            let c = parse(&body)
+                .expect("v8 body with literal 0|1 KMS bytes parses")
+                .entries[0]
+                .caps;
             assert_eq!((c.kms_ssh_sign, c.kms_ssh_admin), (sign == 1, admin == 1));
             // The v7 prefix is unaffected by the appended bytes.
             assert_eq!(net_rights(c), (true, true, false, false));
@@ -1464,7 +1478,10 @@ mod tests {
             }
         }
         for len in HEADER_LEN..V8_CURL.len() {
-            assert!(parse(&V8_CURL[..len]).is_none(), "truncation to {len} bytes must reject");
+            assert!(
+                parse(&V8_CURL[..len]).is_none(),
+                "truncation to {len} bytes must reject"
+            );
         }
         // A v7 body relabelled v8 no longer fits the 21-byte stride.
         let mut v7_as_v8 = V7_CURL;
@@ -1473,7 +1490,10 @@ mod tests {
         // The entry stride is exactly the two appended bytes.
         assert_eq!(V8_CURL.len() - V7_CURL.len(), CAP_BYTES_V8 - CAP_BYTES_V7);
         assert_eq!(V8_CURL_ADMIN, V8_CURL.len() - 1);
-        assert_eq!(V8_CURL_SIGN, HEADER_LEN + 1 + "/bin/curl".len() + CAP_BYTES_V7);
+        assert_eq!(
+            V8_CURL_SIGN,
+            HEADER_LEN + 1 + "/bin/curl".len() + CAP_BYTES_V7
+        );
         // Version 9 is unknown.
         let mut bad_ver = V8_CURL;
         bad_ver[4] = 9;
@@ -1495,7 +1515,8 @@ mod tests {
             let legacy = parse(body).expect("legacy body parses").entries[0].caps;
             assert!(!legacy.kms_ssh_sign && !legacy.kms_ssh_admin);
             assert!(
-                !decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(legacy)).kms_ssh_sign,
+                !decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(legacy))
+                    .kms_ssh_sign,
                 "a pre-v8 Permit must strip the sign right"
             );
             assert!(
@@ -1516,9 +1537,12 @@ mod tests {
             decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(on)).kms_ssh_admin
         );
         let off = parse(&V8_CURL).expect("v8 body parses").entries[0].caps;
-        assert!(!decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(off)).kms_ssh_sign);
         assert!(
-            !decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(off)).kms_ssh_admin
+            !decision_to_caps("/bin/cellbox-ssh", ssh, PolicyDecision::Permit(off)).kms_ssh_sign
+        );
+        assert!(
+            !decision_to_caps("/bin/kms-ssh-admin", admin, PolicyDecision::Permit(off))
+                .kms_ssh_admin
         );
         // A Permit never widens: the shell requests neither right and keeps neither.
         let shell = CapSet::EMPTY.with_path_caps("/bin/cellbox");
@@ -1552,7 +1576,10 @@ mod tests {
             let absent = PolicyDecision::NoEntry {
                 policy_loaded: false,
             };
-            assert_eq!(decision_to_caps("/bin/cellbox-ssh", request, absent), request);
+            assert_eq!(
+                decision_to_caps("/bin/cellbox-ssh", request, absent),
+                request
+            );
             // The P-TRUST strip of the same arm is unchanged.
             let driver = CapSet {
                 pcie_driver: true,
@@ -1635,8 +1662,7 @@ mod tests {
                 e.path
             );
             assert_eq!(
-                e.caps.config_write,
-                requested.config_write,
+                e.caps.config_write, requested.config_write,
                 "{}: policy Q right drifts from the kernel request rule",
                 e.path
             );
@@ -1695,7 +1721,11 @@ mod tests {
         // request helpers must name the same paths as `with_path_kms_ssh_rights`.
         let script = std::fs::read_to_string(repo.join("scripts/sign-policy.py"))
             .expect("signer source is readable");
-        assert_eq!(script.matches("7: 19, 8: 21}").count(), 2, "both stride tables");
+        assert_eq!(
+            script.matches("7: 19, 8: 21}").count(),
+            2,
+            "both stride tables"
+        );
         assert!(script.contains("KMS_SSH_SIGN_PATHS = (\"/bin/cellbox-ssh\",)"));
         assert!(script.contains("KMS_SSH_ADMIN_PATHS = (\"/bin/kms-ssh-admin\",)"));
     }

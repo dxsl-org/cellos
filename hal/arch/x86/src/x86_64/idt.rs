@@ -112,7 +112,9 @@ pub fn init() {
 
 /// APs load the immutable BSP-built IDT, never rebuild or run BSP probes.
 pub fn load_current_cpu() -> bool {
-    if !IDT_READY.load(Ordering::Acquire) { return false; }
+    if !IDT_READY.load(Ordering::Acquire) {
+        return false;
+    }
     let pointer = IdtPointer {
         limit: (core::mem::size_of::<Idt>() - 1) as u16,
         base: core::ptr::addr_of!(IDT) as u64,

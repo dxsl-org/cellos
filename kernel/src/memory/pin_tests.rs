@@ -327,7 +327,11 @@ fn retirement_attribution_counts_only_named_tasks() {
         assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
     }
     assert_eq!(quarantined_pages_attributed(&[930, 931]), 2);
-    assert_eq!(quarantined_pages_attributed(&[330]), 1, "the lease holder is named too");
+    assert_eq!(
+        quarantined_pages_attributed(&[330]),
+        1,
+        "the lease holder is named too"
+    );
     assert_eq!(quarantined_pages_attributed(&[939]), 1);
     assert_eq!(quarantined_pages_attributed(&[]), 0);
 

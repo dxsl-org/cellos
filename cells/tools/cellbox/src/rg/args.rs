@@ -168,7 +168,10 @@ const SPELLINGS: &[(&str, Opt)] = &[
 ];
 
 fn lookup(word: &str) -> Option<Opt> {
-    SPELLINGS.iter().find(|(spelling, _)| *spelling == word).map(|&(_, opt)| opt)
+    SPELLINGS
+        .iter()
+        .find(|(spelling, _)| *spelling == word)
+        .map(|&(_, opt)| opt)
 }
 
 fn usage<T>(msg: String) -> Result<T, Usage> {
@@ -216,9 +219,14 @@ pub fn parse(argv: &[String]) -> Result<RgArgs, Usage> {
 /// [`parse`] with an explicit encoded-argv bound. The 512-byte argv bound shadows the
 /// 4,096-byte pattern and glob bounds, which stay enforced (and testable) independently.
 pub(super) fn parse_within(argv: &[String], max_argv_bytes: usize) -> Result<RgArgs, Usage> {
-    let encoded = argv.iter().fold(0usize, |sum, word| sum.saturating_add(word.len()).saturating_add(1));
+    let encoded = argv.iter().fold(0usize, |sum, word| {
+        sum.saturating_add(word.len()).saturating_add(1)
+    });
     if encoded > max_argv_bytes {
-        return usage(format!("argv is {} bytes encoded; the limit is {}", encoded, max_argv_bytes));
+        return usage(format!(
+            "argv is {} bytes encoded; the limit is {}",
+            encoded, max_argv_bytes
+        ));
     }
     if argv.iter().any(|word| word.as_bytes().contains(&0)) {
         return usage(String::from("an argument contains a NUL byte"));
@@ -250,7 +258,9 @@ pub(super) fn parse_within(argv: &[String], max_argv_bytes: usize) -> Result<RgA
         seen |= opt.bit();
         index += 1;
         match opt {
-            Opt::Regexp => args.patterns.push(String::from(value(words, &mut index, word)?)),
+            Opt::Regexp => args
+                .patterns
+                .push(String::from(value(words, &mut index, word)?)),
             Opt::Fixed => args.fixed = true,
             Opt::IgnoreCase => args.ignore_case = true,
             Opt::Word => args.word = true,
@@ -261,14 +271,19 @@ pub(super) fn parse_within(argv: &[String], max_argv_bytes: usize) -> Result<RgA
             Opt::After => args.after = context_lines(word, value(words, &mut index, word)?)?,
             Opt::Before => args.before = context_lines(word, value(words, &mut index, word)?)?,
             Opt::Context => context = Some(context_lines(word, value(words, &mut index, word)?)?),
-            Opt::Glob => args.globs.push(String::from(value(words, &mut index, word)?)),
+            Opt::Glob => args
+                .globs
+                .push(String::from(value(words, &mut index, word)?)),
             Opt::Hidden => args.hidden = true,
             Opt::NoIgnore => args.no_ignore = true,
             Opt::Binary => args.search_binary = true,
             Opt::Encoding => {
                 let encoding = value(words, &mut index, word)?;
                 if encoding != "none" {
-                    return usage(format!("unsupported encoding: {} (only 'none')", shown(encoding)));
+                    return usage(format!(
+                        "unsupported encoding: {} (only 'none')",
+                        shown(encoding)
+                    ));
                 }
             }
             Opt::Text => args.text_display = true,
@@ -276,7 +291,10 @@ pub(super) fn parse_within(argv: &[String], max_argv_bytes: usize) -> Result<RgA
                 if words.len() != 1 {
                     return usage(format!("{} must be the only argument", word));
                 }
-                return Ok(RgArgs { help: true, ..RgArgs::default() });
+                return Ok(RgArgs {
+                    help: true,
+                    ..RgArgs::default()
+                });
             }
         }
     }
@@ -328,10 +346,15 @@ pub(super) fn parse_within(argv: &[String], max_argv_bytes: usize) -> Result<RgA
         return usage(format!("at most {} patterns", MAX_PATTERNS));
     }
     if args.patterns.iter().map(String::len).sum::<usize>() > MAX_PATTERN_BYTES {
-        return usage(format!("patterns exceed {} bytes in total", MAX_PATTERN_BYTES));
+        return usage(format!(
+            "patterns exceed {} bytes in total",
+            MAX_PATTERN_BYTES
+        ));
     }
     if args.patterns.iter().any(|pattern| pattern.contains('\n')) {
-        return usage(String::from("a pattern contains a line feed (multiline search is unsupported)"));
+        return usage(String::from(
+            "a pattern contains a line feed (multiline search is unsupported)",
+        ));
     }
     if args.globs.len() > MAX_GLOBS {
         return usage(format!("at most {} globs", MAX_GLOBS));

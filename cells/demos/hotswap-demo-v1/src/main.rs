@@ -115,7 +115,9 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     state.counter = restored.counter;
                     println("[hotswap-demo-v1] state restored");
                 }
-                Err(_) => recovery_failed("[hotswap-demo-v1] RecoveryFailed: no valid stashed state — no Ready"),
+                Err(_) => recovery_failed(
+                    "[hotswap-demo-v1] RecoveryFailed: no valid stashed state — no Ready",
+                ),
             }
             // MUST be the last call in the Restore handler: Ready only after a
             // complete restore. Unblocks the hotswap orchestrator's Step 4 wait.

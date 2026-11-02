@@ -65,7 +65,10 @@ fn bitmap_rejects_unimplemented_masks_and_pixels_overlapping_header() {
     bmp[54..58].copy_from_slice(&[12, 34, 56, 255]);
     assert_eq!(decode(&bmp).unwrap().pixels, [12, 34, 56, 255]);
     bmp[30..34].copy_from_slice(&3u32.to_le_bytes());
-    assert!(decode(&bmp).is_none(), "bitfields must not silently use BGRA byte order");
+    assert!(
+        decode(&bmp).is_none(),
+        "bitfields must not silently use BGRA byte order"
+    );
     bmp[30..34].copy_from_slice(&0u32.to_le_bytes());
     bmp[10..14].copy_from_slice(&20u32.to_le_bytes());
     assert!(decode(&bmp).is_none(), "DIB bytes are not pixels");
@@ -119,14 +122,14 @@ fn wide_images_fit_viewport_without_changing_aspect_ratio() {
 #[test]
 fn webp_decoding_lossy_and_lossless() {
     const WEBP_LOSSLESS: &[u8] = &[
-        82, 73, 70, 70, 28, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 76, 15, 0, 0, 0, 47, 1, 64, 0,
-        0, 7, 16, 253, 143, 254, 7, 34, 162, 255, 1, 0,
+        82, 73, 70, 70, 28, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 76, 15, 0, 0, 0, 47, 1, 64, 0, 0,
+        7, 16, 253, 143, 254, 7, 34, 162, 255, 1, 0,
     ];
     const WEBP_LOSSY: &[u8] = &[
-        82, 73, 70, 70, 60, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32, 48, 0, 0, 0, 208, 1, 0,
-        157, 1, 42, 2, 0, 2, 0, 1, 64, 38, 37, 160, 2, 116, 186, 1, 248, 0, 3, 176, 0, 254, 242,
-        235, 127, 252, 216, 21, 205, 115, 239, 247, 255, 210, 224, 253, 46, 15, 210, 224, 255,
-        210, 144, 0, 0,
+        82, 73, 70, 70, 60, 0, 0, 0, 87, 69, 66, 80, 86, 80, 56, 32, 48, 0, 0, 0, 208, 1, 0, 157,
+        1, 42, 2, 0, 2, 0, 1, 64, 38, 37, 160, 2, 116, 186, 1, 248, 0, 3, 176, 0, 254, 242, 235,
+        127, 252, 216, 21, 205, 115, 239, 247, 255, 210, 224, 253, 46, 15, 210, 224, 255, 210, 144,
+        0, 0,
     ];
     let img_ll = decode(WEBP_LOSSLESS).expect("decode lossless WebP");
     assert_eq!((img_ll.width, img_ll.height), (2, 2));
@@ -144,6 +147,9 @@ fn webp_decoding_lossy_and_lossless() {
     if let Ok(tuoitre_bytes) = std::fs::read("/tmp/tuoitre_sample.webp") {
         let img_tt = decode(&tuoitre_bytes).expect("decode actual Tuoi Tre WebP image");
         assert!(img_tt.width > 0 && img_tt.height > 0);
-        assert_eq!(img_tt.pixels.len(), (img_tt.width * img_tt.height * 4) as usize);
+        assert_eq!(
+            img_tt.pixels.len(),
+            (img_tt.width * img_tt.height * 4) as usize
+        );
     }
 }

@@ -16,7 +16,8 @@ fn caller(name: &'static str, has_spawn: bool, has_supervisor: bool) -> CallerLa
 }
 
 fn shell_edge(route: LaunchRoute, target: &str) -> LaunchProfile {
-    authorize(caller("cellbox", false, false), route, target).expect("cellbox launch edge must exist")
+    authorize(caller("cellbox", false, false), route, target)
+        .expect("cellbox launch edge must exist")
 }
 
 #[test]
@@ -38,7 +39,12 @@ fn pdf_engine_edge_cannot_grant_authority_or_boot_without_spawn() {
 #[test]
 fn shell_has_no_mem_launch_edge() {
     assert!(
-        authorize(caller("cellbox", false, false), LaunchRoute::Mem, "/mem/demo").is_none(),
+        authorize(
+            caller("cellbox", false, false),
+            LaunchRoute::Mem,
+            "/mem/demo"
+        )
+        .is_none(),
         "shell mem launches must fail closed"
     );
 }
@@ -59,7 +65,10 @@ fn shell_can_launch_the_hypervisor_cell_with_only_its_own_authority() {
         },
         "the shell's hypervisor edge must grant hypervisor + raw frames and nothing else"
     );
-    assert_eq!(edge.child_ceiling, boot_ceiling::boot_ceiling("/bin/hypervisor"));
+    assert_eq!(
+        edge.child_ceiling,
+        boot_ceiling::boot_ceiling("/bin/hypervisor")
+    );
 }
 
 fn net_rights(c: CapSet) -> (bool, bool, bool, bool) {
@@ -160,9 +169,20 @@ fn cellbox_ssh_edge_is_shell_only_path_only_client() {
     );
     assert_eq!(edge.child_ceiling, super::profiles::SSH_CLIENT_EDGE);
     let request = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
-    assert_eq!(net_rights(request.intersect(edge.child_ceiling)), (true, true, false, false));
-    assert_eq!(net_rights(CapSet::EMPTY.with_path_caps("/bin/cellbox")), (false, false, false, false));
-    assert!(authorize(caller("cellbox", false, false), LaunchRoute::Elf, "/bin/cellbox-ssh").is_none());
+    assert_eq!(
+        net_rights(request.intersect(edge.child_ceiling)),
+        (true, true, false, false)
+    );
+    assert_eq!(
+        net_rights(CapSet::EMPTY.with_path_caps("/bin/cellbox")),
+        (false, false, false, false)
+    );
+    assert!(authorize(
+        caller("cellbox", false, false),
+        LaunchRoute::Elf,
+        "/bin/cellbox-ssh"
+    )
+    .is_none());
     for name in ["init", "desktop", "cellbox-ssh", "terminal"] {
         for route in [LaunchRoute::Path, LaunchRoute::Elf] {
             assert!(
@@ -206,20 +226,41 @@ fn kms_ssh_admin_edge_is_shell_only_path_only_admin() {
     assert!(!ssh.kms_ssh_admin);
     assert!(!(edge.child_ceiling.kms_ssh_sign && edge.child_ceiling.kms_ssh_admin));
     assert_eq!(
-        CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh").intersect(edge.child_ceiling).kms_caller_flags(),
+        CapSet::EMPTY
+            .with_path_caps("/bin/cellbox-ssh")
+            .intersect(edge.child_ceiling)
+            .kms_caller_flags(),
         0,
         "the ssh request meets nothing on the admin ceiling"
     );
     // The caller-owned ELF route and the memory/pinned routes are refused; so is every
     // caller other than the shell, on any route.
     for route in [LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
-        assert!(authorize(caller("cellbox", true, true), route, "/bin/kms-ssh-admin").is_none(), "{route:?}");
+        assert!(
+            authorize(caller("cellbox", true, true), route, "/bin/kms-ssh-admin").is_none(),
+            "{route:?}"
+        );
     }
-    for name in ["init", "desktop", "terminal", "kms", "cellbox-ssh", "kms-ssh-admin", "hypha", "tool-spawn"] {
-        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+    for name in [
+        "init",
+        "desktop",
+        "terminal",
+        "kms",
+        "cellbox-ssh",
+        "kms-ssh-admin",
+        "hypha",
+        "tool-spawn",
+    ] {
+        for route in [
+            LaunchRoute::Path,
+            LaunchRoute::Elf,
+            LaunchRoute::Mem,
+            LaunchRoute::Pinned,
+        ] {
             for (spawn, supervisor) in [(false, false), (true, false), (true, true)] {
                 assert!(
-                    authorize(caller(name, spawn, supervisor), route, "/bin/kms-ssh-admin").is_none(),
+                    authorize(caller(name, spawn, supervisor), route, "/bin/kms-ssh-admin")
+                        .is_none(),
                     "{name} must not launch /bin/kms-ssh-admin on {route:?}"
                 );
             }
@@ -265,7 +306,12 @@ fn shell_reviewed_capability_free_edges_remain_empty() {
         );
     }
     assert!(
-        authorize(caller("cellbox", false, false), LaunchRoute::Elf, "/bin/vfs").is_none(),
+        authorize(
+            caller("cellbox", false, false),
+            LaunchRoute::Elf,
+            "/bin/vfs"
+        )
+        .is_none(),
         "shell must not launch privileged services by path forgery"
     );
 }
@@ -314,8 +360,12 @@ fn capacity_probe_path_grants_only_spawn_and_elf_is_denied() {
 
 #[test]
 fn bench_alone_may_pin_the_tier2_echo_peer() {
-    let edge = authorize(caller("bench", true, false), LaunchRoute::Pinned, "/bin/bench-peer-t2")
-        .expect("bench may pin its Tier-2 echo peer");
+    let edge = authorize(
+        caller("bench", true, false),
+        LaunchRoute::Pinned,
+        "/bin/bench-peer-t2",
+    )
+    .expect("bench may pin its Tier-2 echo peer");
     assert_eq!(edge.child_ceiling, LEGACY);
     assert!(!edge.requires_lifecycle_authority);
     // Only the pinned route, and only with bench's declared spawn authority.
@@ -325,13 +375,31 @@ fn bench_alone_may_pin_the_tier2_echo_peer() {
             "{route:?}"
         );
     }
-    assert!(authorize(caller("bench", false, false), LaunchRoute::Pinned, "/bin/bench-peer-t2").is_none());
+    assert!(authorize(
+        caller("bench", false, false),
+        LaunchRoute::Pinned,
+        "/bin/bench-peer-t2"
+    )
+    .is_none());
     // No other caller reaches it on any route.
-    for name in ["capacity-probe", "periph-demo", "cellbox", "init", "bench-probe", "bench-peer-t2"] {
-        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+    for name in [
+        "capacity-probe",
+        "periph-demo",
+        "cellbox",
+        "init",
+        "bench-probe",
+        "bench-peer-t2",
+    ] {
+        for route in [
+            LaunchRoute::Path,
+            LaunchRoute::Elf,
+            LaunchRoute::Mem,
+            LaunchRoute::Pinned,
+        ] {
             for (spawn, supervisor) in [(false, false), (true, false), (true, true)] {
                 assert!(
-                    authorize(caller(name, spawn, supervisor), route, "/bin/bench-peer-t2").is_none(),
+                    authorize(caller(name, spawn, supervisor), route, "/bin/bench-peer-t2")
+                        .is_none(),
                     "{name} {route:?}"
                 );
             }
@@ -445,7 +513,12 @@ fn shutdown_worker_edge_is_shell_path_only_and_capability_free() {
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         for name in ["tool-spawn", "supervisor", "init", "desktop", "shutdown"] {
             assert!(
-                authorize(caller(name, true, name == "supervisor"), route, "/bin/shutdown").is_none(),
+                authorize(
+                    caller(name, true, name == "supervisor"),
+                    route,
+                    "/bin/shutdown"
+                )
+                .is_none(),
                 "{name} must not inherit the /bin/shutdown edge on {route:?}"
             );
         }
@@ -506,7 +579,10 @@ fn hypha_fixed_edges_remain_exact() {
     let hypha = caller("hypha", true, false);
     let gateway = authorize(hypha, LaunchRoute::Path, "/bin/llm-gateway")
         .expect("hypha llm-gateway edge exists");
-    assert_eq!(net_rights(gateway.child_ceiling), (true, true, false, false));
+    assert_eq!(
+        net_rights(gateway.child_ceiling),
+        (true, true, false, false)
+    );
     assert!(
         authorize(hypha, LaunchRoute::Elf, "/bin/llm-gateway").is_none(),
         "caller-owned ELF must not borrow the gateway's network right"
@@ -546,8 +622,7 @@ fn backend_supervisor_edge_is_exact_and_lifecycle_gated() {
         )
         .expect("the B0 supervisor must be able to launch its worker");
         assert_eq!(
-            profile.child_ceiling,
-            LEGACY,
+            profile.child_ceiling, LEGACY,
             "the worker is capability-free on {route:?}"
         );
         assert!(
@@ -596,8 +671,7 @@ fn recovery_authority_edge_is_exact_and_lifecycle_gated() {
         )
         .expect("the state authority must be able to launch its worker");
         assert_eq!(
-            profile.child_ceiling,
-            LEGACY,
+            profile.child_ceiling, LEGACY,
             "the worker is capability-free on {route:?}"
         );
         assert!(
@@ -615,9 +689,19 @@ fn recovery_authority_edge_is_exact_and_lifecycle_gated() {
         .is_none(),
         "a task named recovery-authority without SpawnCap must not borrow the edge"
     );
-    for target in ["/bin/recovery-client", "/bin/recovery-authority", "/bin/backend-worker", "/bin/vfs"] {
+    for target in [
+        "/bin/recovery-client",
+        "/bin/recovery-authority",
+        "/bin/backend-worker",
+        "/bin/vfs",
+    ] {
         assert!(
-            authorize(caller("recovery-authority", true, false), LaunchRoute::Path, target).is_none(),
+            authorize(
+                caller("recovery-authority", true, false),
+                LaunchRoute::Path,
+                target
+            )
+            .is_none(),
             "the edge is exact: the worker path only, not {target}"
         );
     }
@@ -699,8 +783,17 @@ fn renderer_cannot_launch_privileged_or_unreviewed_children() {
             assert!(authorize(renderer, route, target).is_none());
         }
     }
-    assert!(shell_edge(LaunchRoute::Path, "/bin/c2c-render").child_ceiling.spawn);
-    assert!(authorize(caller("cellbox", false, false), LaunchRoute::Elf, "/bin/c2c-render").is_none());
+    assert!(
+        shell_edge(LaunchRoute::Path, "/bin/c2c-render")
+            .child_ceiling
+            .spawn
+    );
+    assert!(authorize(
+        caller("cellbox", false, false),
+        LaunchRoute::Elf,
+        "/bin/c2c-render"
+    )
+    .is_none());
 }
 
 #[test]
@@ -713,11 +806,18 @@ fn terminal_owns_exactly_one_capability_free_cellbox_path_edge() {
     assert!(!edge.requires_lifecycle_authority);
     // The edge does not depend on caller lifecycle capabilities.
     assert_eq!(
-        authorize(caller("terminal", true, true), LaunchRoute::Path, "/bin/cellbox"),
+        authorize(
+            caller("terminal", true, true),
+            LaunchRoute::Path,
+            "/bin/cellbox"
+        ),
         Some(edge)
     );
     for route in [LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
-        assert!(authorize(terminal, route, "/bin/cellbox").is_none(), "{route:?}");
+        assert!(
+            authorize(terminal, route, "/bin/cellbox").is_none(),
+            "{route:?}"
+        );
     }
     for target in [
         "/bin/ls",
@@ -734,7 +834,12 @@ fn terminal_owns_exactly_one_capability_free_cellbox_path_edge() {
         "/bin/cellbox2",
         "/apps/cellbox",
     ] {
-        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+        for route in [
+            LaunchRoute::Path,
+            LaunchRoute::Elf,
+            LaunchRoute::Mem,
+            LaunchRoute::Pinned,
+        ] {
             assert!(
                 authorize(terminal, route, target).is_none(),
                 "terminal must not launch {target} on {route:?}"
@@ -761,10 +866,22 @@ fn phase04_driver_rows_are_feature_gated_and_exact() {
             assert!(authorize(driver, route, "/bin/echo").is_none(), "{route:?}");
         }
         for route in [LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
-            assert!(authorize(driver, route, "/bin/cellbox").is_none(), "{route:?}");
+            assert!(
+                authorize(driver, route, "/bin/cellbox").is_none(),
+                "{route:?}"
+            );
         }
-        for target in ["/bin/ls", "/bin/cat", "/bin/vfs", "/bin/terminal", "/bin/shutdown"] {
-            assert!(authorize(driver, LaunchRoute::Path, target).is_none(), "{target}");
+        for target in [
+            "/bin/ls",
+            "/bin/cat",
+            "/bin/vfs",
+            "/bin/terminal",
+            "/bin/shutdown",
+        ] {
+            assert!(
+                authorize(driver, LaunchRoute::Path, target).is_none(),
+                "{target}"
+            );
         }
         // Init may start the driver on the path route and (as for every autoload entry)
         // the ELF route, never Mem/Pinned; the ceiling is empty either way and
@@ -774,16 +891,28 @@ fn phase04_driver_rows_are_feature_gated_and_exact() {
                 .expect("init -> driver edge must exist under the fixture feature");
             assert_eq!(boot.child_ceiling, LEGACY);
             assert!(boot.requires_lifecycle_authority);
-            assert!(authorize(caller("init", false, false), route, "/bin/phase04-terminal-driver").is_none());
+            assert!(authorize(
+                caller("init", false, false),
+                route,
+                "/bin/phase04-terminal-driver"
+            )
+            .is_none());
         }
         for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
-            assert!(authorize(init, route, "/bin/phase04-terminal-driver").is_none(), "{route:?}");
+            assert!(
+                authorize(init, route, "/bin/phase04-terminal-driver").is_none(),
+                "{route:?}"
+            );
         }
         // The driver is no one else's launch target.
         for name in ["cellbox", "terminal", "desktop"] {
             assert!(
-                authorize(caller(name, true, true), LaunchRoute::Path, "/bin/phase04-terminal-driver")
-                    .is_none(),
+                authorize(
+                    caller(name, true, true),
+                    LaunchRoute::Path,
+                    "/bin/phase04-terminal-driver"
+                )
+                .is_none(),
                 "{name}"
             );
         }
@@ -792,7 +921,12 @@ fn phase04_driver_rows_are_feature_gated_and_exact() {
     {
         assert!(authorize(driver, LaunchRoute::Path, "/bin/cellbox").is_none());
         assert!(authorize(driver, LaunchRoute::Path, "/bin/echo").is_none());
-        for route in [LaunchRoute::Path, LaunchRoute::Elf, LaunchRoute::Mem, LaunchRoute::Pinned] {
+        for route in [
+            LaunchRoute::Path,
+            LaunchRoute::Elf,
+            LaunchRoute::Mem,
+            LaunchRoute::Pinned,
+        ] {
             assert!(
                 authorize(init, route, "/bin/phase04-terminal-driver").is_none(),
                 "{route:?}"
@@ -817,8 +951,8 @@ fn with_legacy(pre: CapSet) -> CapSet {
 /// it stood before the annex; a row missing the constant fails here by name.
 #[test]
 fn every_pre_annex_target_row_keeps_observe_mutate() {
-    use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
     use super::targets::reviewed_user_target_ceiling;
+    use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
 
     let none = CapSet::EMPTY;
     let client = CapSet {
@@ -971,8 +1105,17 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
             "{path}: the pre-annex row must keep its ceiling plus X/M/W"
         );
     }
-    for path in ["/apps/demo", "/data/bin/tool", "/data/bin/s2tw-probe", "/home/user/app"] {
-        assert_eq!(reviewed_user_target_ceiling(path), Some(CapSet::EMPTY), "{path}");
+    for path in [
+        "/apps/demo",
+        "/data/bin/tool",
+        "/data/bin/s2tw-probe",
+        "/home/user/app",
+    ] {
+        assert_eq!(
+            reviewed_user_target_ceiling(path),
+            Some(CapSet::EMPTY),
+            "{path}"
+        );
     }
     assert_eq!(reviewed_user_target_ceiling("/bin/unreviewed"), None);
 }
@@ -1156,7 +1299,10 @@ fn every_pre_annex_boot_row_keeps_observe_mutate() {
         assert_eq!(boot_ceiling::lookup(path), Some(CapSet::EMPTY), "{path}");
     }
     assert_eq!(boot_ceiling::lookup("/bin/no-such-cell"), None);
-    assert!(boot_ceiling::self_test(), "boot-ceiling self-test must hold on the host");
+    assert!(
+        boot_ceiling::self_test(),
+        "boot-ceiling self-test must hold on the host"
+    );
 }
 
 /// Annex S2-T/S2-W §6/E1: the private `/bin/s2tw-probe` positive-control row
@@ -1182,7 +1328,13 @@ fn s2tw_probe_fixture_row_is_feature_gated() {
 /// were ambient before the annex), but still refuses every other right.
 #[test]
 fn elf_route_ignores_only_the_legacy_rights() {
-    for target in ["/bin/echo", "/bin/free", "/bin/ps", "/bin/vfs-test", "/bin/hotswap"] {
+    for target in [
+        "/bin/echo",
+        "/bin/free",
+        "/bin/ps",
+        "/bin/vfs-test",
+        "/bin/hotswap",
+    ] {
         assert_eq!(
             authorize(caller("cellbox", false, false), LaunchRoute::Elf, target)
                 .map(|p| p.child_ceiling),
@@ -1190,7 +1342,12 @@ fn elf_route_ignores_only_the_legacy_rights() {
             "{target}"
         );
     }
-    for target in ["/bin/curl", "/bin/httpd", "/bin/capacity-probe", "/bin/periph-demo"] {
+    for target in [
+        "/bin/curl",
+        "/bin/httpd",
+        "/bin/capacity-probe",
+        "/bin/periph-demo",
+    ] {
         assert!(
             authorize(caller("cellbox", false, false), LaunchRoute::Elf, target).is_none(),
             "{target}"
@@ -1216,12 +1373,20 @@ fn config_write_is_held_only_by_the_shell_edges() {
     assert!(request.config_write, "/bin/cellbox requests Q");
     // Boot row and terminal edge are the same ceiling.
     assert_eq!(boot_ceiling::lookup("/bin/cellbox"), Some(SHELL_EDGE_Q));
-    let terminal = authorize(caller("terminal", false, false), LaunchRoute::Path, "/bin/cellbox")
-        .expect("terminal -> /bin/cellbox edge");
+    let terminal = authorize(
+        caller("terminal", false, false),
+        LaunchRoute::Path,
+        "/bin/cellbox",
+    )
+    .expect("terminal -> /bin/cellbox edge");
     assert_eq!(terminal.child_ceiling, SHELL_EDGE_Q);
     assert!(request.intersect(terminal.child_ceiling).config_write);
-    let init = authorize(caller("init", true, false), LaunchRoute::Path, "/bin/cellbox")
-        .expect("init -> /bin/cellbox edge");
+    let init = authorize(
+        caller("init", true, false),
+        LaunchRoute::Path,
+        "/bin/cellbox",
+    )
+    .expect("init -> /bin/cellbox edge");
     assert_eq!(init.child_ceiling, SHELL_EDGE_Q);
 
     // No other path requests Q, the ssh install of the same ELF included.
@@ -1243,12 +1408,25 @@ fn config_write_is_held_only_by_the_shell_edges() {
     // The shell's own child edges never carry Q.
     let ssh = shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh");
     assert!(!ssh.child_ceiling.config_write);
-    for target in ["/bin/echo", "/bin/curl", "/bin/hotswap", "/bin/shutdown", "/bin/lua"] {
-        if let Some(profile) = authorize(caller("cellbox", false, false), LaunchRoute::Path, target) {
+    for target in [
+        "/bin/echo",
+        "/bin/curl",
+        "/bin/hotswap",
+        "/bin/shutdown",
+        "/bin/lua",
+    ] {
+        if let Some(profile) = authorize(caller("cellbox", false, false), LaunchRoute::Path, target)
+        {
             assert!(!profile.child_ceiling.config_write, "{target}");
         }
     }
-    for target in ["/bin/curl", "/bin/echo", "/bin/terminal", "/bin/python", "/apps/demo"] {
+    for target in [
+        "/bin/curl",
+        "/bin/echo",
+        "/bin/terminal",
+        "/bin/python",
+        "/apps/demo",
+    ] {
         if let Some(ceiling) = reviewed_user_target_ceiling(target) {
             assert!(!ceiling.config_write, "{target}");
         }
@@ -1313,7 +1491,8 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
     // The one grant: request ∩ edge ceiling holds the sign right, the client pair
     // and X/M/W, and nothing else (no Q, no admin).
     let ssh_request = CapSet::EMPTY.with_path_caps("/bin/cellbox-ssh");
-    let granted = ssh_request.intersect(shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh").child_ceiling);
+    let granted =
+        ssh_request.intersect(shell_edge(LaunchRoute::Path, "/bin/cellbox-ssh").child_ceiling);
     assert_eq!(
         granted,
         CapSet {
@@ -1382,7 +1561,10 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         "/data/bin/kms-ssh-admin",
         "/home/user/kms-ssh-admin",
     ]);
-    assert!(paths.len() > 100, "the sweep must cover the reviewed tables");
+    assert!(
+        paths.len() > 100,
+        "the sweep must cover the reviewed tables"
+    );
     assert!(paths.contains(&"/bin/cellbox-ssh") && paths.contains(&"/bin/curl"));
 
     let callers = [
@@ -1415,7 +1597,11 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         // Request side: exactly the two spellings, nothing nearby.
         let request = CapSet::EMPTY.with_path_caps(path);
         assert_eq!(request.kms_ssh_sign, path == "/bin/cellbox-ssh", "{path}");
-        assert_eq!(request.kms_ssh_admin, path == "/bin/kms-ssh-admin", "{path}");
+        assert_eq!(
+            request.kms_ssh_admin,
+            path == "/bin/kms-ssh-admin",
+            "{path}"
+        );
         // No boot row and no reviewed generic target carries either right.
         let boot = boot_ceiling::boot_ceiling(path);
         assert_eq!(boot.kms_caller_flags(), 0, "boot row {path}");

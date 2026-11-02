@@ -53,7 +53,12 @@ fn short(digest: &[u8; 32]) -> String {
 /// The decision table, with the store abstracted. Writes only when the store
 /// positively reports absence.
 pub(crate) fn evaluate(current: Option<MachineFactsRecord>, store: &mut impl PinStore) -> Gate {
-    let mut gate = Gate { state: PinState::FactsUnavailable, current, pinned: None, lines: Vec::new() };
+    let mut gate = Gate {
+        state: PinState::FactsUnavailable,
+        current,
+        pinned: None,
+        lines: Vec::new(),
+    };
     let Some(current) = gate.current.as_ref() else {
         gate.lines.push(String::from("facts unavailable"));
         return gate;
@@ -64,10 +69,13 @@ pub(crate) fn evaluate(current: Option<MachineFactsRecord>, store: &mut impl Pin
             if store.write(current.bytes()) {
                 gate.state = PinState::FirstBootRecorded;
                 gate.pinned = Some(digest);
-                gate.lines.push(format!("first boot — recorded {}", short(&digest)));
+                gate.lines
+                    .push(format!("first boot — recorded {}", short(&digest)));
             } else {
                 gate.state = PinState::StoreUnavailable;
-                gate.lines.push(String::from("store unavailable (first-boot write or read-back failed)"));
+                gate.lines.push(String::from(
+                    "store unavailable (first-boot write or read-back failed)",
+                ));
             }
         }
         PinRead::Present(bytes) if bytes == current.bytes() => {
@@ -84,7 +92,8 @@ pub(crate) fn evaluate(current: Option<MachineFactsRecord>, store: &mut impl Pin
                     short(&pinned.digest()),
                     short(&digest)
                 ));
-                gate.lines.extend(diff::lines(pinned.facts(), current.facts()));
+                gate.lines
+                    .extend(diff::lines(pinned.facts(), current.facts()));
             }
             Err(error) => {
                 gate.state = PinState::RecordUnreadable;
@@ -93,7 +102,8 @@ pub(crate) fn evaluate(current: Option<MachineFactsRecord>, store: &mut impl Pin
         },
         PinRead::Oversized => {
             gate.state = PinState::RecordUnreadable;
-            gate.lines.push(String::from("record unreadable (larger than any record)"));
+            gate.lines
+                .push(String::from("record unreadable (larger than any record)"));
         }
         PinRead::Unavailable(reason) => {
             gate.state = PinState::StoreUnavailable;
@@ -151,13 +161,24 @@ pub(crate) fn gate(init_tid: usize) -> Endpoint {
         // Machine facts are an x86 record (syscall 433 answers "no facts"
         // elsewhere); no endpoint is registered and nothing is withheld.
         println("Init: machine pin: not applicable on this architecture.");
-        let gate = Gate { state: PinState::FactsUnavailable, current: None, pinned: None, lines: Vec::new() };
-        return Endpoint { gate, safe_mode: false, shell: None, store: VfsPinStore::new() };
+        let gate = Gate {
+            state: PinState::FactsUnavailable,
+            current: None,
+            pinned: None,
+            lines: Vec::new(),
+        };
+        return Endpoint {
+            gate,
+            safe_mode: false,
+            shell: None,
+            store: VfsPinStore::new(),
+        };
     }
     let registered = matches!(
         ostd::syscall::sys_register_service(api::syscall::service::MACHINE_PIN, init_tid),
         ostd::syscall::SyscallResult::Ok(0)
-    ) && ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN) == Some(init_tid);
+    ) && ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN)
+        == Some(init_tid);
     let current = if registered {
         ostd::syscall::sys_query_machine_facts().ok()
     } else {
@@ -166,15 +187,26 @@ pub(crate) fn gate(init_tid: usize) -> Endpoint {
     };
     let gate = evaluate(current, &mut VfsPinStore::new());
     gate.report();
-    Endpoint { safe_mode: gate.safe_mode(), shell: None, gate, store: VfsPinStore::new() }
+    Endpoint {
+        safe_mode: gate.safe_mode(),
+        shell: None,
+        gate,
+        store: VfsPinStore::new(),
+    }
 }
 
 /// The safe set's plan indices and the enabled required entries it withholds.
 /// The shell is looked up among the autoload entries (`autoload_offset..`),
 /// the service among the configured services (`1..autoload_offset`).
-pub(crate) fn safe_set(services: &[Service], autoload_offset: usize) -> (Option<usize>, Option<usize>, Vec<String>) {
-    let enabled = |index: &usize, name: &str| services[*index].spec.enabled && services[*index].spec.name == name;
-    let service = (1..autoload_offset.min(services.len())).find(|index| enabled(index, SAFE_SERVICE));
+pub(crate) fn safe_set(
+    services: &[Service],
+    autoload_offset: usize,
+) -> (Option<usize>, Option<usize>, Vec<String>) {
+    let enabled = |index: &usize, name: &str| {
+        services[*index].spec.enabled && services[*index].spec.name == name
+    };
+    let service =
+        (1..autoload_offset.min(services.len())).find(|index| enabled(index, SAFE_SERVICE));
     let shell = (autoload_offset..services.len()).find(|index| enabled(index, SAFE_SHELL));
     let withheld = services
         .iter()
@@ -215,12 +247,18 @@ impl Endpoint {
         ));
         let (service, shell, withheld) = safe_set(services, autoload_offset);
         if !withheld.is_empty() {
-            println(&format!("Init: SAFE MODE — required services withheld: {}", withheld.join(", ")));
+            println(&format!(
+                "Init: SAFE MODE — required services withheld: {}",
+                withheld.join(", ")
+            ));
         }
         for index in [service, shell].into_iter().flatten() {
             match crate::service_table::spawn(&mut services[index]) {
                 Some(_) => println(&format!("Init: {} launched.", services[index].spec.name)),
-                None => println(&format!("Init: {} spawn/registration failed.", services[index].spec.name)),
+                None => println(&format!(
+                    "Init: {} spawn/registration failed.",
+                    services[index].spec.name
+                )),
             }
         }
         self.shell = shell;
@@ -243,7 +281,11 @@ impl Endpoint {
         let response = match request {
             MachinePinRequest::Status => MachinePinResponse::Status {
                 state: self.gate.state,
-                current: self.gate.current.as_ref().map_or([0; 32], MachineFactsRecord::digest),
+                current: self
+                    .gate
+                    .current
+                    .as_ref()
+                    .map_or([0; 32], MachineFactsRecord::digest),
                 pinned: self.gate.pinned.unwrap_or([0; 32]),
             },
             MachinePinRequest::Confirm { digest } => self.confirm(message, services, digest),
@@ -254,27 +296,49 @@ impl Endpoint {
         true
     }
 
-    fn confirm(&mut self, message: &Message, services: &[Service], digest: [u8; 32]) -> MachinePinResponse {
+    fn confirm(
+        &mut self,
+        message: &Message,
+        services: &[Service],
+        digest: [u8; 32],
+    ) -> MachinePinResponse {
         let shell_tid = self.shell.and_then(|index| services[index].tid);
         let from_shell = shell_tid == Some(message.sender)
             && message.identity.is_some_and(|identity| {
-                identity.sender_tid == message.sender as u64 && identity.cell_id != 0 && identity.generation != 0
+                identity.sender_tid == message.sender as u64
+                    && identity.cell_id != 0
+                    && identity.generation != 0
             })
             && crate::activation::task_alive(message.sender) == Some(true);
         let current = ostd::syscall::sys_query_machine_facts().ok();
-        let result = authorize_confirm(self.safe_mode, from_shell, digest, current.as_ref().map(MachineFactsRecord::digest))
-            .and_then(|()| {
-                let record = current.as_ref().ok_or(Refusal::DigestStale)?;
-                if self.store.write(record.bytes()) { Ok(record.digest()) } else { Err(Refusal::StoreWriteFailed) }
-            });
+        let result = authorize_confirm(
+            self.safe_mode,
+            from_shell,
+            digest,
+            current.as_ref().map(MachineFactsRecord::digest),
+        )
+        .and_then(|()| {
+            let record = current.as_ref().ok_or(Refusal::DigestStale)?;
+            if self.store.write(record.bytes()) {
+                Ok(record.digest())
+            } else {
+                Err(Refusal::StoreWriteFailed)
+            }
+        });
         match result {
             Ok(recorded) => {
                 self.gate.pinned = Some(recorded);
-                println(&format!("Init: machine pin: re-confirmed {}; reboot to start services", short(&recorded)));
+                println(&format!(
+                    "Init: machine pin: re-confirmed {}; reboot to start services",
+                    short(&recorded)
+                ));
                 MachinePinResponse::Recorded { digest: recorded }
             }
             Err(refusal) => {
-                println(&format!("Init: machine pin: confirm refused — {}", refusal.name()));
+                println(&format!(
+                    "Init: machine pin: confirm refused — {}",
+                    refusal.name()
+                ));
                 MachinePinResponse::Refused(refusal)
             }
         }

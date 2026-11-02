@@ -19,8 +19,10 @@
 //! `completion` record.
 
 use super::*;
-#[cfg(feature = "kssh")] pub(crate) mod kssh;
-#[cfg(feature = "guest")] pub(crate) mod guest;
+#[cfg(feature = "guest")]
+pub(crate) mod guest;
+#[cfg(feature = "kssh")]
+pub(crate) mod kssh;
 
 /// The guest build talks to OpenSSH inside nested TCG: the per-case deadline is raised from the
 /// 120 s of the Docker fixture to 300 s. T3-B measured a full SSH exchange at 1-2 s, so this is a
@@ -37,15 +39,40 @@ const DEADLINE_MS: u64 = 240_000;
 /// ones whole (`executor::SHELL_LINE_MAX`).
 const SHELL_LINE_MAX: usize = 4096;
 pub(crate) const SSH_MARKERS: [&str; 34] = [
-    "ssh-conf", "ssh-refusals", "ssh-changed-host-key", "ssh-first-trust-no", "ssh-first-trust-paste-refused",
-    "ssh-first-trust-yes", "ssh-first-trust-known-after", "ssh-wrong-password",
-    "ssh-exec-bytes", "ssh-exec-stdin-eof", "ssh-exec-signal", "ssh-pty-shell", "ssh-pty-resize",
-    "ssh-pty-escape-disconnect", "ssh-shell-alive", "shell-long-line",
-    "ssh-completion-auth", "ssh-completion-trust", "ssh-completion-exec", "ssh-completion-signal",
-    "ssh-completion-pty", "ssh-fault-before-request", "ssh-fault-may-have-run", "ssh-fault-accepted",
-    "ssh-fault-exit-before-drain", "ssh-rekey-bytes", "ssh-rekey-time", "ssh-rekey-peer",
-    "ssh-backpressure-bytes", "ssh-timeout-overall", "ssh-timeout-request", "ssh-timeout-kex",
-    "ssh-cancel-exec", "ssh-fault-restores",
+    "ssh-conf",
+    "ssh-refusals",
+    "ssh-changed-host-key",
+    "ssh-first-trust-no",
+    "ssh-first-trust-paste-refused",
+    "ssh-first-trust-yes",
+    "ssh-first-trust-known-after",
+    "ssh-wrong-password",
+    "ssh-exec-bytes",
+    "ssh-exec-stdin-eof",
+    "ssh-exec-signal",
+    "ssh-pty-shell",
+    "ssh-pty-resize",
+    "ssh-pty-escape-disconnect",
+    "ssh-shell-alive",
+    "shell-long-line",
+    "ssh-completion-auth",
+    "ssh-completion-trust",
+    "ssh-completion-exec",
+    "ssh-completion-signal",
+    "ssh-completion-pty",
+    "ssh-fault-before-request",
+    "ssh-fault-may-have-run",
+    "ssh-fault-accepted",
+    "ssh-fault-exit-before-drain",
+    "ssh-rekey-bytes",
+    "ssh-rekey-time",
+    "ssh-rekey-peer",
+    "ssh-backpressure-bytes",
+    "ssh-timeout-overall",
+    "ssh-timeout-request",
+    "ssh-timeout-kex",
+    "ssh-cancel-exec",
+    "ssh-fault-restores",
 ];
 
 struct Fixture {
@@ -81,13 +108,19 @@ fn shell_long_line(t: &mut Term) {
         t.err.clear();
         for piece in too_long.as_bytes().chunks(256) {
             let piece = core::str::from_utf8(piece).map_err(|_| String::from("ascii"))?;
-            t.host.submit_text(piece).map_err(|s| format!("submit_text {s:?}"))?;
+            t.host
+                .submit_text(piece)
+                .map_err(|s| format!("submit_text {s:?}"))?;
             t.pump();
         }
-        t.host.submit_key(ENTER, 0, 1).map_err(|s| format!("submit_key {s:?}"))?;
+        t.host
+            .submit_key(ENTER, 0, 1)
+            .map_err(|s| format!("submit_key {s:?}"))?;
         t.wait_prompt(SSH_MS)?;
         // The echoed input contains the token too; only an output line starting with it ran.
-        let ran = String::from_utf8_lossy(&t.out).split(['\n', '\r']).any(|l| l.starts_with("p09-overflow-ran"));
+        let ran = String::from_utf8_lossy(&t.out)
+            .split(['\n', '\r'])
+            .any(|l| l.starts_with("p09-overflow-ran"));
         Ok::<_, String>((t.stderr_text(), ran))
     })();
     let after = t.run("echo p09-after-long", 30_000);
@@ -97,7 +130,10 @@ fn shell_long_line(t: &mut Term) {
     check(
         "shell-long-line",
         ok,
-        &format!("long_ok={} refused={refused:?} after={after:?}", long.as_deref() == Ok(&[word][..])),
+        &format!(
+            "long_ok={} refused={refused:?} after={after:?}",
+            long.as_deref() == Ok(&[word][..])
+        ),
     );
 }
 
@@ -140,12 +176,17 @@ fn wait_remote_output(t: &mut Term) -> Result<(), String> {
 
 /// Command output: the transcript after the echoed command line.
 fn after_echo(out: &[u8]) -> &[u8] {
-    out.iter().position(|&b| b == b'\n').map_or(&[][..], |i| &out[i + 1..])
+    out.iter()
+        .position(|&b| b == b'\n')
+        .map_or(&[][..], |i| &out[i + 1..])
 }
 
 /// Start `ssh ... ARGS`, answer the password prompt, return without waiting further.
 fn login(t: &mut Term, f: &Fixture, args: &str, password: &str) -> Result<(), String> {
-    t.send(&format!("ssh --user tester --auth password -p {} {args}", f.port))?;
+    t.send(&format!(
+        "ssh --user tester --auth password -p {} {args}",
+        f.port
+    ))?;
     wait_stderr(t, "password: ")?;
     type_keys(t, password)?;
     press(t, ENTER)
@@ -178,7 +219,12 @@ fn read_conf(a: &mut Term) -> Option<Fixture> {
         None => None,
         Some(word) => Some(word.parse().ok()?),
     };
-    (fp.starts_with("SHA256:") && !password.is_empty()).then_some(Fixture { port, fp, password, rekey_port })
+    (fp.starts_with("SHA256:") && !password.is_empty()).then_some(Fixture {
+        port,
+        fp,
+        password,
+        rekey_port,
+    })
 }
 
 pub(crate) fn ssh_checks(a: &mut Term) {
@@ -208,7 +254,6 @@ pub(crate) fn ssh_checks(a: &mut Term) {
 /// scenarios). Not part of the `guest-pipe` build.
 #[cfg(not(feature = "guest-pipe"))]
 fn s93_checks(a: &mut Term, f: Fixture) {
-
     let refusals = (|| {
         let mut out = Vec::new();
         for cmd in [
@@ -219,27 +264,45 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         ] {
             let (st, err) = attempt(a, cmd)?;
             // No host key, no password prompt: refused before any connection.
-            out.push((st == "st=2" || st == "st=1") && !err.contains("SHA256:") && !err.contains("password: "));
+            out.push(
+                (st == "st=2" || st == "st=1")
+                    && !err.contains("SHA256:")
+                    && !err.contains("password: "),
+            );
         }
         Ok::<Vec<bool>, String>(out)
     })();
-    check("ssh-refusals", refusals.as_ref().is_ok_and(|v| v.iter().all(|ok| *ok)), &format!("{refusals:?}"));
+    check(
+        "ssh-refusals",
+        refusals.as_ref().is_ok_and(|v| v.iter().all(|ok| *ok)),
+        &format!("{refusals:?}"),
+    );
 
     // A changed key is refused before any credential and never prompts.
-    let r = attempt(a, &format!("ssh --user tester --auth password -p {} host", f.port));
+    let r = attempt(
+        a,
+        &format!("ssh --user tester --auth password -p {} host", f.port),
+    );
     let ok = r.as_ref().is_ok_and(|(st, err)| {
-        st == "st=255" && err.contains("HOST KEY CHANGED") && err.contains(&f.fp) && !err.contains("password")
+        st == "st=255"
+            && err.contains("HOST KEY CHANGED")
+            && err.contains(&f.fp)
+            && !err.contains("password")
     });
     check("ssh-changed-host-key", ok, &format!("{r:?}"));
 
     // First trust (S9-4): `gateway` has no store entry. The shell draws the input owner's
     // prompt with the fixture fingerprint; `no` and a pasted `yes` refuse without writing
     // anything, a typed `yes` stores it and the session continues to authentication.
-    let unknown = format!("ssh --user tester --auth password -p {} gateway --command 'echo trusted-ok'", f.port);
+    let unknown = format!(
+        "ssh --user tester --auth password -p {} gateway --command 'echo trusted-ok'",
+        f.port
+    );
     let prompt = |a: &mut Term| -> Result<bool, String> {
         a.send(&unknown)?;
         wait_stdout(a, b"Type 'yes' and Enter")?;
-        Ok(String::from_utf8_lossy(&a.out).contains(&f.fp) && !a.stderr_text().contains("password: "))
+        Ok(String::from_utf8_lossy(&a.out).contains(&f.fp)
+            && !a.stderr_text().contains("password: "))
     };
     let r = (|| {
         let shown = prompt(a)?;
@@ -249,7 +312,9 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         let err = a.stderr_text();
         Ok::<_, String>((shown, status(a)?, err))
     })();
-    let ok = r.as_ref().is_ok_and(|(shown, st, err)| *shown && st == "st=255" && err.contains("refused") && !err.contains("password: "));
+    let ok = r.as_ref().is_ok_and(|(shown, st, err)| {
+        *shown && st == "st=255" && err.contains("refused") && !err.contains("password: ")
+    });
     check("ssh-first-trust-no", ok, &format!("{r:?}"));
     let r = (|| {
         let shown = prompt(a)?;
@@ -262,7 +327,9 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         let err = a.stderr_text();
         Ok::<_, String>((shown, status(a)?, err))
     })();
-    let ok = r.as_ref().is_ok_and(|(shown, st, err)| *shown && st == "st=255" && err.contains("refused"));
+    let ok = r
+        .as_ref()
+        .is_ok_and(|(shown, st, err)| *shown && st == "st=255" && err.contains("refused"));
     check("ssh-first-trust-paste-refused", ok, &format!("{r:?}"));
     let r = (|| {
         let shown = prompt(a)?;
@@ -276,9 +343,16 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         Ok::<_, String>((shown, status(a)?, out, err))
     })();
     let ok = r.as_ref().is_ok_and(|(shown, st, out, err)| {
-        *shown && st == "st=0" && out.windows(10).any(|w| w == b"trusted-ok") && err.contains("added to the trust store")
+        *shown
+            && st == "st=0"
+            && out.windows(10).any(|w| w == b"trusted-ok")
+            && err.contains("added to the trust store")
     });
-    check("ssh-first-trust-yes", ok, &format!("{:?}", r.as_ref().map(|(s, st, _, e)| (s, st, e))));
+    check(
+        "ssh-first-trust-yes",
+        ok,
+        &format!("{:?}", r.as_ref().map(|(s, st, _, e)| (s, st, e))),
+    );
     // The stored key is now known: no prompt, straight to the password.
     let r = (|| {
         login(a, &f, "gateway --command 'echo again-ok'", &f.password)?;
@@ -287,37 +361,79 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         Ok::<_, String>((status(a)?, out))
     })();
     let ok = r.as_ref().is_ok_and(|(st, out)| {
-        st == "st=0" && out.windows(8).any(|w| w == b"again-ok") && !out.windows(5).any(|w| w == b"Type ")
+        st == "st=0"
+            && out.windows(8).any(|w| w == b"again-ok")
+            && !out.windows(5).any(|w| w == b"Type ")
     });
-    check("ssh-first-trust-known-after", ok, &format!("{:?}", r.as_ref().map(|(s, o)| (s, String::from_utf8_lossy(o).into_owned()))));
+    check(
+        "ssh-first-trust-known-after",
+        ok,
+        &format!(
+            "{:?}",
+            r.as_ref()
+                .map(|(s, o)| (s, String::from_utf8_lossy(o).into_owned()))
+        ),
+    );
 
     let r = (|| {
-        login(a, &f, "10.0.2.2 --command 'echo never'", "p09-wrong-password")?;
+        login(
+            a,
+            &f,
+            "10.0.2.2 --command 'echo never'",
+            "p09-wrong-password",
+        )?;
         a.wait_prompt(SSH_MS)?;
         let err = a.stderr_text();
         let out = after_echo(&a.out).to_vec();
         Ok::<_, String>((status(a)?, err, out))
     })();
     let ok = r.as_ref().is_ok_and(|(st, err, out)| {
-        st == "st=255" && err.contains("authentication failed") && !out.windows(5).any(|w| w == b"never")
+        st == "st=255"
+            && err.contains("authentication failed")
+            && !out.windows(5).any(|w| w == b"never")
     });
-    check("ssh-wrong-password", ok, &format!("{:?}", r.as_ref().map(|(s, e, _)| (s, e))));
+    check(
+        "ssh-wrong-password",
+        ok,
+        &format!("{:?}", r.as_ref().map(|(s, e, _)| (s, e))),
+    );
 
     // Exact remote bytes (NUL, 0xFF), stderr kept apart, exact exit status.
     let r = (|| {
-        login(a, &f, "10.0.2.2 --command 'printf \"a\\000b\\377c\"; printf E >&2; exit 7'", &f.password)?;
+        login(
+            a,
+            &f,
+            "10.0.2.2 --command 'printf \"a\\000b\\377c\"; printf E >&2; exit 7'",
+            &f.password,
+        )?;
         a.wait_prompt(SSH_MS)?;
         let (out, err) = (after_echo(&a.out).to_vec(), a.stderr_text());
         Ok::<_, String>((status(a)?, out, err))
     })();
     let ok = r.as_ref().is_ok_and(|(st, out, err)| {
-        st == "st=7" && out.windows(5).any(|w| w == b"a\0b\xffc") && !out.contains(&b'E') && err.ends_with('E')
+        st == "st=7"
+            && out.windows(5).any(|w| w == b"a\0b\xffc")
+            && !out.contains(&b'E')
+            && err.ends_with('E')
     });
-    check("ssh-exec-bytes", ok, &format!("{:?}", r.as_ref().map(|(s, o, e)| (s, String::from_utf8_lossy(o).into_owned(), e))));
+    check(
+        "ssh-exec-bytes",
+        ok,
+        &format!(
+            "{:?}",
+            r.as_ref()
+                .map(|(s, o, e)| (s, String::from_utf8_lossy(o).into_owned(), e))
+        ),
+    );
 
     // Typed stdin reaches the remote command; Ctrl-D is one EOF; the output drains after it.
     let r = (|| {
-        login(a, &f, "10.0.2.2 --command 'cat; echo done; exit 3'", &f.password)?;
+        login(
+            a,
+            &f,
+            "10.0.2.2 --command 'cat; echo done; exit 3'",
+            &f.password,
+        )?;
         wait_stderr(a, "\n")?;
         let _ = sys_set_timer(300);
         type_keys(a, "p09-typed")?;
@@ -325,13 +441,25 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         // The remote `cat` sends the typed line back (the foreground child gets the
         // text as events; nothing echoes it locally).
         wait_stdout(a, b"p09-typed\n")?;
-        a.host.submit_key('d' as u32, CTRL, 1).map_err(|s| format!("ctrl-d {s:?}"))?;
+        a.host
+            .submit_key('d' as u32, CTRL, 1)
+            .map_err(|s| format!("ctrl-d {s:?}"))?;
         a.wait_prompt(SSH_MS)?;
         let out = a.out.clone();
         Ok::<_, String>((status(a)?, out))
     })();
-    let ok = r.as_ref().is_ok_and(|(st, out)| st == "st=3" && out.windows(5).any(|w| w == b"done\n"));
-    check("ssh-exec-stdin-eof", ok, &format!("{:?}", r.as_ref().map(|(s, o)| (s, String::from_utf8_lossy(o).into_owned()))));
+    let ok = r
+        .as_ref()
+        .is_ok_and(|(st, out)| st == "st=3" && out.windows(5).any(|w| w == b"done\n"));
+    check(
+        "ssh-exec-stdin-eof",
+        ok,
+        &format!(
+            "{:?}",
+            r.as_ref()
+                .map(|(s, o)| (s, String::from_utf8_lossy(o).into_owned()))
+        ),
+    );
 
     let r = (|| {
         login(a, &f, "10.0.2.2 --command 'kill -TERM $$'", &f.password)?;
@@ -339,7 +467,9 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         let err = a.stderr_text();
         Ok::<_, String>((status(a)?, err))
     })();
-    let ok = r.as_ref().is_ok_and(|(st, err)| st == "st=255" && err.contains("signal TERM"));
+    let ok = r
+        .as_ref()
+        .is_ok_and(|(st, err)| st == "st=255" && err.contains("signal TERM"));
     check("ssh-exec-signal", ok, &format!("{r:?}"));
 
     // PTY shell: TERM and size reach the server, a resize is sent, `~.` disconnects.
@@ -352,9 +482,15 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         wait_stdout(a, b"24 80")?;
         Ok::<(), String>(())
     })();
-    check("ssh-pty-shell", pty.is_ok(), &format!("{pty:?} out={:?}", clip(&String::from_utf8_lossy(&a.out))));
+    check(
+        "ssh-pty-shell",
+        pty.is_ok(),
+        &format!("{pty:?} out={:?}", clip(&String::from_utf8_lossy(&a.out))),
+    );
     let resized = pty.clone().and_then(|()| {
-        a.host.resize(30, 100).map_err(|s| format!("resize {s:?}"))?;
+        a.host
+            .resize(30, 100)
+            .map_err(|s| format!("resize {s:?}"))?;
         let _ = sys_set_timer(500);
         type_keys(a, "stty size")?;
         press(a, ENTER)?;
@@ -369,11 +505,17 @@ fn s93_checks(a: &mut Term, f: Fixture) {
         let err = a.stderr_text();
         Ok::<_, String>((status(a)?, err))
     });
-    let ok = quit.as_ref().is_ok_and(|(st, err)| st == "st=255" && err.contains("disconnected"));
+    let ok = quit
+        .as_ref()
+        .is_ok_and(|(st, err)| st == "st=255" && err.contains("disconnected"));
     check("ssh-pty-escape-disconnect", ok, &format!("{quit:?}"));
 
     let alive = a.run("echo p09-alive", 30_000);
-    check("ssh-shell-alive", alive.as_deref() == Ok(&[String::from("p09-alive")][..]), &format!("{alive:?}"));
+    check(
+        "ssh-shell-alive",
+        alive.as_deref() == Ok(&[String::from("p09-alive")][..]),
+        &format!("{alive:?}"),
+    );
     shell_long_line(a);
 
     // The S9-6 group needs the Docker fixture's hooks and sinks; the guest build has none and
@@ -388,8 +530,17 @@ fn s93_checks(a: &mut Term, f: Fixture) {
 
 /// Field names of the shell's `completion` line, in order (C2).
 const RECORD_KEYS: [&str; 11] = [
-    "schema", "schema_version", "mode", "phase", "dispatch", "outcome", "remote_status", "remote_signal",
-    "error_code", "stdout_complete", "stderr_complete",
+    "schema",
+    "schema_version",
+    "mode",
+    "phase",
+    "dispatch",
+    "outcome",
+    "remote_status",
+    "remote_signal",
+    "error_code",
+    "stdout_complete",
+    "stderr_complete",
 ];
 
 type Record = Vec<(String, String)>;
@@ -412,7 +563,10 @@ fn completion(t: &mut Term) -> Result<Record, String> {
     println(&format!("P04 INFO p09-completion {line}"));
     let rec: Record = line
         .split(' ')
-        .map(|kv| kv.split_once('=').map(|(k, v)| (String::from(k), String::from(v))))
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (String::from(k), String::from(v)))
+        })
         .collect::<Option<_>>()
         .ok_or_else(|| format!("malformed {line}"))?;
     let shaped = rec.len() >= RECORD_KEYS.len()
@@ -440,7 +594,12 @@ fn describe(r: &Result<Run, String>) -> String {
     match r {
         Ok(run) => {
             let rec = match &run.rec {
-                Ok(rec) => rec.iter().skip(2).map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" "),
+                Ok(rec) => rec
+                    .iter()
+                    .skip(2)
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
                 Err(why) => format!("<{why}>"),
             };
             format!("{} ms={} {rec} err={}", run.st, run.ms, run.err.trim())
@@ -483,7 +642,10 @@ fn case(
     println(&format!("P04 INFO p09-case {name}"));
     // A longer line is refused whole by the shell, so fail it here with a clearer message.
     if cmd.len() > SHELL_LINE_MAX {
-        return Err(format!("command line of {} bytes exceeds the shell's {SHELL_LINE_MAX}", cmd.len()));
+        return Err(format!(
+            "command line of {} bytes exceeds the shell's {SHELL_LINE_MAX}",
+            cmd.len()
+        ));
     }
     let start = now_ms();
     t.send(cmd)?;
@@ -494,11 +656,25 @@ fn case(
     let (out, err) = (after_echo(&t.out).to_vec(), t.stderr_text());
     let st = status(t)?;
     let rec = completion(t);
-    Ok(Run { st, out, err, ms, rec })
+    Ok(Run {
+        st,
+        out,
+        err,
+        ms,
+        rec,
+    })
 }
 
-fn judge(name: &str, r: &Result<Run, String>, st: &str, want: &[(&str, &str)], extra: impl Fn(&Run) -> bool) {
-    let ok = r.as_ref().is_ok_and(|run| run.st == st && run.rec_has(want) && extra(run));
+fn judge(
+    name: &str,
+    r: &Result<Run, String>,
+    st: &str,
+    want: &[(&str, &str)],
+    extra: impl Fn(&Run) -> bool,
+) {
+    let ok = r
+        .as_ref()
+        .is_ok_and(|run| run.st == st && run.rec_has(want) && extra(run));
     check(name, ok, &describe(r));
 }
 
@@ -518,7 +694,10 @@ fn restore(t: &mut Term, f: &Fixture, after: &str) -> bool {
             println(&format!("P04 INFO p09-restored {after} attempts={attempt}"));
             return true;
         }
-        println(&format!("P04 INFO p09-restore-retry {after} {}", clip(&format!("{r:?}"))));
+        println(&format!(
+            "P04 INFO p09-restore-retry {after} {}",
+            clip(&format!("{r:?}"))
+        ));
         sleep_ms(2000);
     }
     false
@@ -526,7 +705,8 @@ fn restore(t: &mut Term, f: &Fixture, after: &str) -> bool {
 
 /// The first 64-hex-digit word of `text` (a `sha256sum` line).
 fn sha256_word(text: &str) -> Option<&str> {
-    text.split_whitespace().find(|w| w.len() == 64 && w.bytes().all(|b| b.is_ascii_hexdigit()))
+    text.split_whitespace()
+        .find(|w| w.len() == 64 && w.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
 /// S9-6: completion records, interruption at each dispatch point, rekey triggers,
@@ -536,151 +716,411 @@ fn s96_checks(a: &mut Term, f: &Fixture) {
     let none = |_: &mut Term| -> Result<(), String> { Ok(()) };
     let exec_done = |status: &'static str| {
         [
-            ("mode", "exec"), ("phase", "complete"), ("dispatch", "accepted"), ("outcome", "remote_exit"),
-            ("remote_status", status), ("remote_signal", "null"), ("error_code", "null"),
-            ("stdout_complete", "true"), ("stderr_complete", "true"),
+            ("mode", "exec"),
+            ("phase", "complete"),
+            ("dispatch", "accepted"),
+            ("outcome", "remote_exit"),
+            ("remote_status", status),
+            ("remote_signal", "null"),
+            ("error_code", "null"),
+            ("stdout_complete", "true"),
+            ("stderr_complete", "true"),
         ]
     };
     let mut restores: Vec<(&str, bool)> = Vec::new();
 
     // First S9-6 connection: the unknown user splits the sshd log (`Invalid user p09split`)
     // so the runner judges the S9-3 sessions apart from these. Refused before any channel.
-    let r = case(a, "ssh-completion-auth", &format!("ssh --user p09split --auth password -p {} 10.0.2.2 --command true", f.port),
-        "p09-wrong-password", SSH_MS, none);
-    judge("ssh-completion-auth", &r, "st=255", &[
-        ("mode", "exec"), ("phase", "auth"), ("dispatch", "not_sent"), ("outcome", "local_error"),
-        ("remote_status", "null"), ("remote_signal", "null"),
-    ], |run| run.rec.as_ref().is_ok_and(|rec| field(rec, "error_code") != Some("null")));
+    let r = case(
+        a,
+        "ssh-completion-auth",
+        &format!(
+            "ssh --user p09split --auth password -p {} 10.0.2.2 --command true",
+            f.port
+        ),
+        "p09-wrong-password",
+        SSH_MS,
+        none,
+    );
+    judge(
+        "ssh-completion-auth",
+        &r,
+        "st=255",
+        &[
+            ("mode", "exec"),
+            ("phase", "auth"),
+            ("dispatch", "not_sent"),
+            ("outcome", "local_error"),
+            ("remote_status", "null"),
+            ("remote_signal", "null"),
+        ],
+        |run| {
+            run.rec
+                .as_ref()
+                .is_ok_and(|rec| field(rec, "error_code") != Some("null"))
+        },
+    );
 
-    let r = case(a, "ssh-completion-trust",
-        &ssh_line(f.port, "host --command 'p9 completion-trust'"), pw, SSH_MS, none);
-    judge("ssh-completion-trust", &r, "st=255", &[
-        ("mode", "exec"), ("phase", "trust"), ("dispatch", "not_sent"), ("outcome", "local_error"),
-        ("remote_status", "null"), ("remote_signal", "null"),
-    ], |run| {
-        !run.err.contains("password: ") && run.rec.as_ref().is_ok_and(|rec| field(rec, "error_code") != Some("null"))
-    });
+    let r = case(
+        a,
+        "ssh-completion-trust",
+        &ssh_line(f.port, "host --command 'p9 completion-trust'"),
+        pw,
+        SSH_MS,
+        none,
+    );
+    judge(
+        "ssh-completion-trust",
+        &r,
+        "st=255",
+        &[
+            ("mode", "exec"),
+            ("phase", "trust"),
+            ("dispatch", "not_sent"),
+            ("outcome", "local_error"),
+            ("remote_status", "null"),
+            ("remote_signal", "null"),
+        ],
+        |run| {
+            !run.err.contains("password: ")
+                && run
+                    .rec
+                    .as_ref()
+                    .is_ok_and(|rec| field(rec, "error_code") != Some("null"))
+        },
+    );
 
-    let r = case(a, "ssh-completion-exec",
-        &ssh_line(f.port, "10.0.2.2 --command 'p9 completion-exec; printf p09out; printf p09err >&2; exit 4'"),
-        pw, SSH_MS, none);
+    let r = case(
+        a,
+        "ssh-completion-exec",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command 'p9 completion-exec; printf p09out; printf p09err >&2; exit 4'",
+        ),
+        pw,
+        SSH_MS,
+        none,
+    );
     judge("ssh-completion-exec", &r, "st=4", &exec_done("4"), |run| {
         run.out.windows(6).any(|w| w == b"p09out") && run.err.ends_with("p09err")
     });
 
-    let r = case(a, "ssh-completion-signal",
-        &ssh_line(f.port, "10.0.2.2 --command 'p9 completion-signal; kill -TERM $$'"), pw, SSH_MS, none);
-    judge("ssh-completion-signal", &r, "st=255", &[
-        ("mode", "exec"), ("phase", "complete"), ("dispatch", "accepted"), ("outcome", "remote_signal"),
-        ("remote_status", "null"), ("remote_signal", "TERM"), ("error_code", "null"),
-    ], |_| true);
+    let r = case(
+        a,
+        "ssh-completion-signal",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command 'p9 completion-signal; kill -TERM $$'",
+        ),
+        pw,
+        SSH_MS,
+        none,
+    );
+    judge(
+        "ssh-completion-signal",
+        &r,
+        "st=255",
+        &[
+            ("mode", "exec"),
+            ("phase", "complete"),
+            ("dispatch", "accepted"),
+            ("outcome", "remote_signal"),
+            ("remote_status", "null"),
+            ("remote_signal", "TERM"),
+            ("error_code", "null"),
+        ],
+        |_| true,
+    );
 
-    let r = case(a, "ssh-completion-pty", &ssh_line(f.port, "10.0.2.2"), pw, SSH_MS, |t| {
-        // Typed input before the client enters raw mode is dropped: wait for the remote
-        // shell's first output. The remote shell expands the arithmetic, so the echoed
-        // input never matches.
-        wait_remote_output(t)?;
-        sleep_ms(500);
-        type_keys(t, "echo p09-pty-$((40+2))")?;
-        press(t, ENTER)?;
-        wait_stdout(t, b"p09-pty-42")?;
-        type_keys(t, "exit 6")?;
-        press(t, ENTER)
-    });
-    judge("ssh-completion-pty", &r, "st=6", &[
-        ("mode", "pty"), ("phase", "complete"), ("dispatch", "accepted"), ("outcome", "remote_exit"),
-        ("remote_status", "6"), ("remote_signal", "null"), ("error_code", "null"),
-    ], |_| true);
+    let r = case(
+        a,
+        "ssh-completion-pty",
+        &ssh_line(f.port, "10.0.2.2"),
+        pw,
+        SSH_MS,
+        |t| {
+            // Typed input before the client enters raw mode is dropped: wait for the remote
+            // shell's first output. The remote shell expands the arithmetic, so the echoed
+            // input never matches.
+            wait_remote_output(t)?;
+            sleep_ms(500);
+            type_keys(t, "echo p09-pty-$((40+2))")?;
+            press(t, ENTER)?;
+            wait_stdout(t, b"p09-pty-42")?;
+            type_keys(t, "exit 6")?;
+            press(t, ENTER)
+        },
+    );
+    judge(
+        "ssh-completion-pty",
+        &r,
+        "st=6",
+        &[
+            ("mode", "pty"),
+            ("phase", "complete"),
+            ("dispatch", "accepted"),
+            ("outcome", "remote_exit"),
+            ("remote_status", "6"),
+            ("remote_signal", "null"),
+            ("error_code", "null"),
+        ],
+        |_| true,
+    );
 
     // Interruption at each dispatch point: the runner kills the live session process when
     // the client reports the point (the client holds it up to 5 s).
     let lost = [("remote_status", "null"), ("remote_signal", "null")];
     for (name, point, dispatch, outcome) in [
-        ("ssh-fault-before-request", "before-request", "not_sent", "local_error"),
-        ("ssh-fault-may-have-run", "may-have-run", "may_have_run", "unknown"),
+        (
+            "ssh-fault-before-request",
+            "before-request",
+            "not_sent",
+            "local_error",
+        ),
+        (
+            "ssh-fault-may-have-run",
+            "may-have-run",
+            "may_have_run",
+            "unknown",
+        ),
         ("ssh-fault-accepted", "accepted", "accepted", "unknown"),
     ] {
         let tag = &name["ssh-fault-".len()..];
         let cmd = format!("10.0.2.2 --command ': p09-fault {point} kill; p9 {tag}; sleep 20'");
         let r = case(a, name, &ssh_line(f.port, &cmd), pw, SSH_MS, none);
-        judge(name, &r, "st=255", &[("mode", "exec"), ("dispatch", dispatch), ("outcome", outcome), lost[0], lost[1]],
-            |_| true);
+        judge(
+            name,
+            &r,
+            "st=255",
+            &[
+                ("mode", "exec"),
+                ("dispatch", dispatch),
+                ("outcome", outcome),
+                lost[0],
+                lost[1],
+            ],
+            |_| true,
+        );
         restores.push((name, restore(a, f, name)));
     }
     // Exit status received while the output is still to come (`p9 drain` exits 3 at once;
     // a background job writes 256 KiB 2 s later): the session dies before the drain, the
     // status is still the remote one.
-    let r = case(a, "ssh-fault-exit-before-drain", &ssh_line(f.port,
-        "10.0.2.2 --command ': p09-fault exit-before-drain kill; p9 drain'"),
-        pw, SSH_MS, none);
-    judge("ssh-fault-exit-before-drain", &r, "st=3", &[
-        ("mode", "exec"), ("dispatch", "accepted"), ("outcome", "remote_exit"), ("remote_status", "3"),
-        ("remote_signal", "null"), ("stdout_complete", "false"),
-    ], |_| true);
-    restores.push(("ssh-fault-exit-before-drain", restore(a, f, "ssh-fault-exit-before-drain")));
+    let r = case(
+        a,
+        "ssh-fault-exit-before-drain",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command ': p09-fault exit-before-drain kill; p9 drain'",
+        ),
+        pw,
+        SSH_MS,
+        none,
+    );
+    judge(
+        "ssh-fault-exit-before-drain",
+        &r,
+        "st=3",
+        &[
+            ("mode", "exec"),
+            ("dispatch", "accepted"),
+            ("outcome", "remote_exit"),
+            ("remote_status", "3"),
+            ("remote_signal", "null"),
+            ("stdout_complete", "false"),
+        ],
+        |_| true,
+    );
+    restores.push((
+        "ssh-fault-exit-before-drain",
+        restore(a, f, "ssh-fault-exit-before-drain"),
+    ));
 
     // Rekeys (lane policy: 2 MiB / 20 s per direction; the second server 64 KiB). The
     // runner counts `ssh-rekeys` and checks the sink's byte count and digest.
-    let r = case(a, "ssh-rekey-bytes", &ssh_line(f.port,
-        "10.0.2.2 --command ': p09-sink; p9 rekey-bytes; head -c 4194304 /dev/zero'"),
-        pw, BULK_MS, none);
+    let r = case(
+        a,
+        "ssh-rekey-bytes",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command ': p09-sink; p9 rekey-bytes; head -c 4194304 /dev/zero'",
+        ),
+        pw,
+        BULK_MS,
+        none,
+    );
     judge("ssh-rekey-bytes", &r, "st=0", &exec_done("0"), |_| true);
-    let r = case(a, "ssh-rekey-time", &ssh_line(f.port,
-        "10.0.2.2 --command 'p9 rekey-time; sleep 25'"), pw, SSH_MS, none);
-    judge("ssh-rekey-time", &r, "st=0", &exec_done("0"), |run| run.ms >= 25_000);
+    let r = case(
+        a,
+        "ssh-rekey-time",
+        &ssh_line(f.port, "10.0.2.2 --command 'p9 rekey-time; sleep 25'"),
+        pw,
+        SSH_MS,
+        none,
+    );
+    judge("ssh-rekey-time", &r, "st=0", &exec_done("0"), |run| {
+        run.ms >= 25_000
+    });
     let r = match f.rekey_port {
-        Some(port) => case(a, "ssh-rekey-peer", &ssh_line(port,
-            "10.0.2.2 --command ': p09-sink; p9 rekey-peer; head -c 1048576 /dev/zero'"),
-            pw, BULK_MS, none),
+        Some(port) => case(
+            a,
+            "ssh-rekey-peer",
+            &ssh_line(
+                port,
+                "10.0.2.2 --command ': p09-sink; p9 rekey-peer; head -c 1048576 /dev/zero'",
+            ),
+            pw,
+            BULK_MS,
+            none,
+        ),
         None => Err(String::from("no REKEY_PORT in /p09/ssh.conf")),
     };
     judge("ssh-rekey-peer", &r, "st=0", &exec_done("0"), |_| true);
 
     // 8 MiB of random bytes through the throttled sink; the runner compares the client's
     // digest with the remote one reported here.
-    let r = case(a, "ssh-backpressure-bytes", &ssh_line(f.port,
-        "10.0.2.2 --command ': p09-sink; p9 backpressure; p9 bulk'"),
-        pw, BULK_MS, none);
-    let remote = r.as_ref().ok().and_then(|run| sha256_word(&run.err).map(String::from));
+    let r = case(
+        a,
+        "ssh-backpressure-bytes",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command ': p09-sink; p9 backpressure; p9 bulk'",
+        ),
+        pw,
+        BULK_MS,
+        none,
+    );
+    let remote = r
+        .as_ref()
+        .ok()
+        .and_then(|run| sha256_word(&run.err).map(String::from));
     if let Some(sha) = &remote {
         println(&format!("P04 INFO ssh-remote-sha256 {sha}"));
     }
-    judge("ssh-backpressure-bytes", &r, "st=0", &exec_done("0"), |_| remote.is_some());
+    judge(
+        "ssh-backpressure-bytes",
+        &r,
+        "st=0",
+        &exec_done("0"),
+        |_| remote.is_some(),
+    );
 
     // `--timeout` is absolute: 124 long before the remote `sleep 30` ends.
-    let r = case(a, "ssh-timeout-overall", &ssh_line(f.port,
-        "--timeout 5 10.0.2.2 --command 'p9 timeout-overall; sleep 30'"), pw, SSH_MS, none);
-    judge("ssh-timeout-overall", &r, "st=124", &[("mode", "exec"), ("outcome", "timeout"), lost[0], lost[1]],
-        |run| (5_000..25_000).contains(&run.ms));
+    let r = case(
+        a,
+        "ssh-timeout-overall",
+        &ssh_line(
+            f.port,
+            "--timeout 5 10.0.2.2 --command 'p9 timeout-overall; sleep 30'",
+        ),
+        pw,
+        SSH_MS,
+        none,
+    );
+    judge(
+        "ssh-timeout-overall",
+        &r,
+        "st=124",
+        &[("mode", "exec"), ("outcome", "timeout"), lost[0], lost[1]],
+        |run| (5_000..25_000).contains(&run.ms),
+    );
     // The container is paused at Authenticated: the channel is never confirmed, the
     // request phase's 30 s budget ends it without sending the command.
-    let r = case(a, "ssh-timeout-request", &ssh_line(f.port,
-        "10.0.2.2 --command ': p09-fault before-request pause; p9 timeout-request'"),
-        pw, DEADLINE_MS, none);
-    judge("ssh-timeout-request", &r, "st=124", &[
-        ("mode", "exec"), ("phase", "request"), ("dispatch", "not_sent"), ("outcome", "timeout"), lost[0], lost[1],
-    ], |run| (30_000..120_000).contains(&run.ms));
+    let r = case(
+        a,
+        "ssh-timeout-request",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command ': p09-fault before-request pause; p9 timeout-request'",
+        ),
+        pw,
+        DEADLINE_MS,
+        none,
+    );
+    judge(
+        "ssh-timeout-request",
+        &r,
+        "st=124",
+        &[
+            ("mode", "exec"),
+            ("phase", "request"),
+            ("dispatch", "not_sent"),
+            ("outcome", "timeout"),
+            lost[0],
+            lost[1],
+        ],
+        |run| (30_000..120_000).contains(&run.ms),
+    );
     restores.push(("ssh-timeout-request", restore(a, f, "ssh-timeout-request")));
     // The age rekey (20 s) starts during `sleep 60`; the paused server never answers it,
     // the KEX's 30 s budget ends the session before the sleep would.
-    let r = case(a, "ssh-timeout-kex", &ssh_line(f.port,
-        "10.0.2.2 --command ': p09-fault rekey-start pause; p9 timeout-kex; sleep 60'"),
-        pw, DEADLINE_MS, none);
-    judge("ssh-timeout-kex", &r, "st=124", &[
-        ("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "timeout"), lost[0], lost[1],
-    ], |run| (30_000..120_000).contains(&run.ms));
+    let r = case(
+        a,
+        "ssh-timeout-kex",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command ': p09-fault rekey-start pause; p9 timeout-kex; sleep 60'",
+        ),
+        pw,
+        DEADLINE_MS,
+        none,
+    );
+    judge(
+        "ssh-timeout-kex",
+        &r,
+        "st=124",
+        &[
+            ("mode", "exec"),
+            ("phase", "running"),
+            ("dispatch", "accepted"),
+            ("outcome", "timeout"),
+            lost[0],
+            lost[1],
+        ],
+        |run| (30_000..120_000).contains(&run.ms),
+    );
     restores.push(("ssh-timeout-kex", restore(a, f, "ssh-timeout-kex")));
 
-    let r = case(a, "ssh-cancel-exec", &ssh_line(f.port,
-        "10.0.2.2 --command 'echo p09-started; p9 cancel-exec; sleep 30'"), pw, SSH_MS, |t| {
-        wait_stdout(t, b"p09-started")?;
-        sleep_ms(500);
-        t.host.submit_key(0x63, CTRL, 1).map_err(|s| format!("ctrl-c {s:?}"))
-    });
-    judge("ssh-cancel-exec", &r, "st=130", &[
-        ("mode", "exec"), ("phase", "running"), ("dispatch", "accepted"), ("outcome", "cancelled"), lost[0], lost[1],
-    ], |run| run.ms < 30_000);
+    let r = case(
+        a,
+        "ssh-cancel-exec",
+        &ssh_line(
+            f.port,
+            "10.0.2.2 --command 'echo p09-started; p9 cancel-exec; sleep 30'",
+        ),
+        pw,
+        SSH_MS,
+        |t| {
+            wait_stdout(t, b"p09-started")?;
+            sleep_ms(500);
+            t.host
+                .submit_key(0x63, CTRL, 1)
+                .map_err(|s| format!("ctrl-c {s:?}"))
+        },
+    );
+    judge(
+        "ssh-cancel-exec",
+        &r,
+        "st=130",
+        &[
+            ("mode", "exec"),
+            ("phase", "running"),
+            ("dispatch", "accepted"),
+            ("outcome", "cancelled"),
+            lost[0],
+            lost[1],
+        ],
+        |run| run.ms < 30_000,
+    );
 
-    let failed: Vec<&str> = restores.iter().filter(|(_, ok)| !ok).map(|(name, _)| *name).collect();
-    check("ssh-fault-restores", restores.len() == 6 && failed.is_empty(), &format!("not restored after {failed:?}"));
+    let failed: Vec<&str> = restores
+        .iter()
+        .filter(|(_, ok)| !ok)
+        .map(|(name, _)| *name)
+        .collect();
+    check(
+        "ssh-fault-restores",
+        restores.len() == 6 && failed.is_empty(),
+        &format!("not restored after {failed:?}"),
+    );
 }

@@ -15,8 +15,10 @@ fn alloc_page() -> (usize, u64) {
     // boot probes, not the physical DMA frames later named by its leaf entries.
     let ptr = {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::DRIVER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
         (unsafe { alloc_zeroed(layout) }) as usize
     };
     assert!(ptr != 0, "[iommu_pt] OOM allocating IOMMU page");

@@ -8,19 +8,31 @@ pub(crate) enum Route<'a> {
     ApiCells,
     ApiCluster,
     ApiGatewayStats,
-    ApiC2cDispatch { body: &'a [u8] },
+    ApiC2cDispatch {
+        body: &'a [u8],
+    },
     File(&'a str),
     Files(&'a str),
     #[cfg(target_os = "none")]
-    Infer { body: &'a [u8], max_tokens: u16 },
+    Infer {
+        body: &'a [u8],
+        max_tokens: u16,
+    },
     Restart,
     NotFound,
 }
 
-pub(crate) fn classify<'a>(raw: &'a [u8], file_to_serve: Option<&'a str>) -> Result<Route<'a>, RequestReadError> {
+pub(crate) fn classify<'a>(
+    raw: &'a [u8],
+    file_to_serve: Option<&'a str>,
+) -> Result<Route<'a>, RequestReadError> {
     let len = request_complete_len(raw)?.ok_or(RequestReadError::Incomplete)?;
-    if raw.len() < len { return Err(RequestReadError::Incomplete); }
-    if let Some(file) = file_to_serve { return Ok(Route::File(file)); }
+    if raw.len() < len {
+        return Err(RequestReadError::Incomplete);
+    }
+    if let Some(file) = file_to_serve {
+        return Ok(Route::File(file));
+    }
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut req = httparse::Request::new(&mut headers);
     #[cfg_attr(not(target_os = "none"), allow(unused_variables))]
@@ -46,9 +58,13 @@ pub(crate) fn classify<'a>(raw: &'a [u8], file_to_serve: Option<&'a str>) -> Res
         ("POST", "/api/infer") => Route::Infer {
             body: &raw[header_end..len],
             max_tokens: extract_query_param(path, "max_tokens")
-                .and_then(|value| value.parse::<u16>().ok()).unwrap_or(24).clamp(1, 64),
+                .and_then(|value| value.parse::<u16>().ok())
+                .unwrap_or(24)
+                .clamp(1, 64),
         },
-        ("POST", path) if path.starts_with("/api/cells/") && path.ends_with("/restart") => Route::Restart,
+        ("POST", path) if path.starts_with("/api/cells/") && path.ends_with("/restart") => {
+            Route::Restart
+        }
         _ => Route::NotFound,
     })
 }
@@ -57,7 +73,9 @@ pub fn extract_query_param<'a>(url: &'a str, key: &str) -> Option<&'a str> {
     let query = url.split('?').nth(1)?;
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=') {
-            if k == key { return Some(v); }
+            if k == key {
+                return Some(v);
+            }
         }
     }
     None
@@ -73,7 +91,10 @@ mod tests {
         assert!(matches!(classify(req, None), Ok(Route::ApiCluster)));
 
         let req_stats = b"GET /api/gateway/stats HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
-        assert!(matches!(classify(req_stats, None), Ok(Route::ApiGatewayStats)));
+        assert!(matches!(
+            classify(req_stats, None),
+            Ok(Route::ApiGatewayStats)
+        ));
     }
 
     #[test]

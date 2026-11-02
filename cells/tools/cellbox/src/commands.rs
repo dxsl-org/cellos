@@ -400,7 +400,9 @@ pub fn cmd_cat(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                     match read {
                         Ok(mut bytes) => {
                             let len = bytes.len();
-                            emit_utf8_lossy(&mut bytes, len, true, &mut |s| crate::executor::shell_print(s));
+                            emit_utf8_lossy(&mut bytes, len, true, &mut |s| {
+                                crate::executor::shell_print(s)
+                            });
                         }
                         Err(_) => {
                             cat_failed(path, "Input/output error");
@@ -441,7 +443,9 @@ pub fn cmd_cat(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                             });
                         }
                         Ok(0) => {
-                            emit_utf8_lossy(&mut buffer, pending, true, &mut |s| crate::executor::shell_print(s));
+                            emit_utf8_lossy(&mut buffer, pending, true, &mut |s| {
+                                crate::executor::shell_print(s)
+                            });
                             break;
                         }
                         Err(_) => {
@@ -546,7 +550,12 @@ fn ps_options(args: &[String]) -> Result<(Option<u64>, bool), &'static str> {
     while let Some(arg) = words.next() {
         match arg {
             "-p" if filter_tid.is_none() => {
-                filter_tid = Some(words.next().and_then(|tid| tid.parse().ok()).ok_or(PS_USAGE)?);
+                filter_tid = Some(
+                    words
+                        .next()
+                        .and_then(|tid| tid.parse().ok())
+                        .ok_or(PS_USAGE)?,
+                );
             }
             "-s" if !sort_by_state => sort_by_state = true,
             _ => return Err(PS_USAGE),
@@ -574,7 +583,9 @@ pub fn cmd_ps(args: &[String]) -> i32 {
         }
     };
     if sort_by_state {
-        frame.sort(&text_engine::top::SortSpec::new(text_engine::top::Field::State));
+        frame.sort(&text_engine::top::SortSpec::new(
+            text_engine::top::Field::State,
+        ));
     }
     let mut text = String::new();
     text_engine::top::text::render_frame(&frame, None, &mut text);
@@ -674,14 +685,18 @@ pub const REFUSED_STATUS: i32 = 1;
 /// `kill` — refused. The suite shell holds no lifecycle authority: it neither sends the
 /// former cooperative IPC byte nor attempts `ForceExit`; no syscall is issued.
 pub fn cmd_kill() -> i32 {
-    crate::executor::shell_stderrln("kill: not available from the suite shell, requires a lifecycle owner");
+    crate::executor::shell_stderrln(
+        "kill: not available from the suite shell, requires a lifecycle owner",
+    );
     REFUSED_STATUS
 }
 
 /// `snapshot` — refused. The Supervisor no longer accepts the shell as a snapshot caller;
 /// no request is sent.
 pub fn cmd_snapshot() -> i32 {
-    crate::executor::shell_stderrln("snapshot: not available from the suite shell, requires a lifecycle owner");
+    crate::executor::shell_stderrln(
+        "snapshot: not available from the suite shell, requires a lifecycle owner",
+    );
     REFUSED_STATUS
 }
 
@@ -698,7 +713,9 @@ mod cat_tests {
         let mut pending = 0;
         for piece in bytes.chunks(chunk) {
             buffer[pending..pending + piece.len()].copy_from_slice(piece);
-            pending = emit_utf8_lossy(&mut buffer, pending + piece.len(), false, &mut |s| out.push_str(s));
+            pending = emit_utf8_lossy(&mut buffer, pending + piece.len(), false, &mut |s| {
+                out.push_str(s)
+            });
         }
         emit_utf8_lossy(&mut buffer, pending, true, &mut |s| out.push_str(s));
         out
@@ -708,7 +725,8 @@ mod cat_tests {
     fn every_byte_after_an_invalid_one_is_kept_at_any_read_size() {
         let mut bytes: Vec<u8> = b"head \x9b31m mid \x9d0;osc\x9c tail \xe2\x82\xac end\n".to_vec();
         bytes.extend_from_slice(b"\xff\xfe last");
-        let want = "head \u{FFFD}31m mid \u{FFFD}0;osc\u{FFFD} tail \u{20ac} end\n\u{FFFD}\u{FFFD} last";
+        let want =
+            "head \u{FFFD}31m mid \u{FFFD}0;osc\u{FFFD} tail \u{20ac} end\n\u{FFFD}\u{FFFD} last";
         for chunk in [1, 2, 3, 7, 64, 253] {
             assert_eq!(decode(&bytes, chunk), want, "chunk {chunk}");
         }
@@ -730,7 +748,10 @@ mod cat_tests {
         assert_eq!(decode(&bytes, 5), want);
         let mut out = String::new();
         let len = bytes.len();
-        assert_eq!(emit_utf8_lossy(&mut bytes, len, true, &mut |s| out.push_str(s)), 0);
+        assert_eq!(
+            emit_utf8_lossy(&mut bytes, len, true, &mut |s| out.push_str(s)),
+            0
+        );
         assert_eq!(out, want);
     }
 
@@ -761,7 +782,12 @@ mod ls_tests {
             false,
             Some(0),
         );
-        push_unique(&mut entries, alloc::string::String::from("input"), false, Some(0));
+        push_unique(
+            &mut entries,
+            alloc::string::String::from("input"),
+            false,
+            Some(0),
+        );
         push_unique(
             &mut entries,
             alloc::string::String::from("config"),
@@ -795,7 +821,14 @@ mod ps_top_tests {
     fn ps_accepts_its_flags_once_and_refuses_the_rest() {
         assert_eq!(ps_options(&argv(&[])), Ok((None, false)));
         assert_eq!(ps_options(&argv(&["-p", "7", "-s"])), Ok((Some(7), true)));
-        for bad in [&["-x"][..], &["-p"], &["-p", "x"], &["-p", "1", "-p", "2"], &["-s", "-s"], &["--records"]] {
+        for bad in [
+            &["-x"][..],
+            &["-p"],
+            &["-p", "x"],
+            &["-p", "1", "-p", "2"],
+            &["-s", "-s"],
+            &["--records"],
+        ] {
             assert!(ps_options(&argv(bad)).is_err(), "{:?}", bad);
         }
     }
@@ -803,10 +836,20 @@ mod ps_top_tests {
     #[test]
     fn top_options_classify_sessions_and_report_usage_as_status_2() {
         assert_eq!(classify_command(&argv(&["top"])), CmdClass::Session);
-        assert_eq!(classify_command(&argv(&["top", "--tasks", "-d", "0.5"])), CmdClass::Session);
-        assert_eq!(classify_command(&argv(&["top", "-b", "-n", "2"])), CmdClass::Builtin);
+        assert_eq!(
+            classify_command(&argv(&["top", "--tasks", "-d", "0.5"])),
+            CmdClass::Session
+        );
+        assert_eq!(
+            classify_command(&argv(&["top", "-b", "-n", "2"])),
+            CmdClass::Builtin
+        );
         // Bad options are not a session: the built-in runs and exits with the usage status.
-        for bad in [&["top", "--bogus"][..], &["top", "--tasks", "-o", "mem"], &["top", "--tasks", "--cell", "1:2"]] {
+        for bad in [
+            &["top", "--bogus"][..],
+            &["top", "--tasks", "-o", "mem"],
+            &["top", "--tasks", "--cell", "1:2"],
+        ] {
             assert_eq!(classify_command(&argv(bad)), CmdClass::Builtin, "{:?}", bad);
             let words: Vec<&str> = bad[1..].to_vec();
             assert!(text_engine::top::parse_options(&words).is_err());

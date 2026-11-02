@@ -19,8 +19,10 @@ extern crate alloc;
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use dom_arena::{BrowserEnvironment, BrowserFrame, BrowserReply, BrowserRequest, BrowserResourceKind,
-    DocumentArena, DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeData, NodeId};
+use dom_arena::{
+    BrowserEnvironment, BrowserFrame, BrowserReply, BrowserRequest, BrowserResourceKind,
+    DocumentArena, DomEvent, DomMutation, JsContext, JsEngine, JsError, NodeData, NodeId,
+};
 
 use super::ffi;
 
@@ -35,9 +37,17 @@ const MAX_STACK_BYTES: usize = 192 * 1024;
 const MAX_INTERRUPT_POLLS: usize = 100_000;
 const MAX_PENDING_JOBS: usize = 10_000;
 
-unsafe extern "C" fn interrupt_budget(_: *mut ffi::JSRuntime, opaque: *mut core::ffi::c_void) -> core::ffi::c_int {
+unsafe extern "C" fn interrupt_budget(
+    _: *mut ffi::JSRuntime,
+    opaque: *mut core::ffi::c_void,
+) -> core::ffi::c_int {
     let remaining = &mut *opaque.cast::<usize>();
-    if *remaining == 0 { 1 } else { *remaining -= 1; 0 }
+    if *remaining == 0 {
+        1
+    } else {
+        *remaining -= 1;
+        0
+    }
 }
 
 struct InterruptGuard<'a> {
@@ -47,12 +57,17 @@ struct InterruptGuard<'a> {
 impl<'a> InterruptGuard<'a> {
     unsafe fn new(rt: *mut ffi::JSRuntime, budget: &'a mut usize) -> Self {
         ffi::JS_SetInterruptHandler(rt, Some(interrupt_budget), (budget as *mut usize).cast());
-        Self { rt, _budget: core::marker::PhantomData }
+        Self {
+            rt,
+            _budget: core::marker::PhantomData,
+        }
     }
 }
 impl Drop for InterruptGuard<'_> {
     fn drop(&mut self) {
-        unsafe { ffi::JS_SetInterruptHandler(self.rt, None, core::ptr::null_mut()); }
+        unsafe {
+            ffi::JS_SetInterruptHandler(self.rt, None, core::ptr::null_mut());
+        }
     }
 }
 /// Heap ceiling for the engine's own accounting. The allocation still comes
@@ -153,7 +168,9 @@ impl QuickJsContext {
                 "[ocel-quickjs] DOM prelude failed: {}",
                 e.message
             ));
-            unsafe { ffi::JS_FreeContext(out.ctx); }
+            unsafe {
+                ffi::JS_FreeContext(out.ctx);
+            }
             out.ctx = core::ptr::null_mut();
         }
         out
@@ -193,15 +210,23 @@ impl QuickJsContext {
             );
             let exception = if ffi::vios_js_is_exception(value) != 0 {
                 Some(self.take_exception_message())
-            } else { None };
-            let repr = if exception.is_none() { self.value_to_string(value) } else { String::new() };
+            } else {
+                None
+            };
+            let repr = if exception.is_none() {
+                self.value_to_string(value)
+            } else {
+                String::new()
+            };
             let result_limited = core::mem::take(&mut self.output_limited);
             ffi::vios_js_free(self.ctx, value);
             let mut job_error = None;
             for index in 0..=MAX_PENDING_JOBS {
                 let mut job_ctx = core::ptr::null_mut();
                 let status = ffi::JS_ExecutePendingJob(self.rt, &mut job_ctx);
-                if status == 0 { break; }
+                if status == 0 {
+                    break;
+                }
                 if status < 0 {
                     job_error = Some(self.take_exception_message());
                     break;
@@ -214,7 +239,10 @@ impl QuickJsContext {
             drop(guard);
             self.collect_mutations();
             match exception.or(job_error) {
-                _ if result_limited => Err(JsError { message: String::from("JavaScript result byte limit exceeded"), line: 0 }),
+                _ if result_limited => Err(JsError {
+                    message: String::from("JavaScript result byte limit exceeded"),
+                    line: 0,
+                }),
                 Some(message) => Err(JsError { message, line: 0 }),
                 None => Ok(repr),
             }
@@ -264,7 +292,9 @@ impl QuickJsContext {
         let mut len = 0usize;
         let ptr = ffi::vios_js_to_bounded_string(self.ctx, value, limit, &mut len);
         if ptr.is_null() {
-            if len > limit { self.output_limited = true; }
+            if len > limit {
+                self.output_limited = true;
+            }
             return String::from("JavaScript output string limit exceeded or conversion failed");
         }
         // `.cast()` rather than `as *const u8`: `c_char` is `u8` on
@@ -284,18 +314,37 @@ impl QuickJsContext {
             Err(_) => self.usable = false,
         }
         self.mutations.append(&mut self.native_layout.unapplied);
-        let bytes = dom_arena::ipc::serialized_len_bounded(&self.mutations, dom_arena::OCEL_JS_MAX_MUTATION_BYTES);
-        if self.mutations.len().saturating_add(self.native_layout.mutations) > dom_arena::OCEL_JS_MAX_MUTATIONS
-            || bytes.is_err() || bytes.unwrap_or(usize::MAX).saturating_add(self.native_layout.mutation_bytes) > dom_arena::OCEL_JS_MAX_MUTATION_BYTES
-            || self.native_layout.failed {
+        let bytes = dom_arena::ipc::serialized_len_bounded(
+            &self.mutations,
+            dom_arena::OCEL_JS_MAX_MUTATION_BYTES,
+        );
+        if self
+            .mutations
+            .len()
+            .saturating_add(self.native_layout.mutations)
+            > dom_arena::OCEL_JS_MAX_MUTATIONS
+            || bytes.is_err()
+            || bytes
+                .unwrap_or(usize::MAX)
+                .saturating_add(self.native_layout.mutation_bytes)
+                > dom_arena::OCEL_JS_MAX_MUTATION_BYTES
+            || self.native_layout.failed
+        {
             self.usable = false;
         }
 
         let logged = self.eval_queue("__vios_takeLogs()");
         for line in logged.lines() {
             if !line.is_empty() {
-                if self.logs.len() >= dom_arena::OCEL_JS_MAX_LOG_LINES ||
-                    self.logs.iter().map(String::len).sum::<usize>().saturating_add(line.len()) > dom_arena::OCEL_JS_MAX_LOG_BYTES {
+                if self.logs.len() >= dom_arena::OCEL_JS_MAX_LOG_LINES
+                    || self
+                        .logs
+                        .iter()
+                        .map(String::len)
+                        .sum::<usize>()
+                        .saturating_add(line.len())
+                        > dom_arena::OCEL_JS_MAX_LOG_BYTES
+                {
                     self.usable = false;
                     break;
                 }
@@ -308,38 +357,77 @@ impl QuickJsContext {
     fn collect_browser_output(&mut self) {
         let drained = self.eval_queue("__vios_takeRequests()");
         for row in drained.lines() {
-            if self.browser_requests.len() >= dom_arena::OCEL_JS_MAX_BROWSER_REQUESTS { self.usable = false; break; }
-            let Some(fields) = row.split('\t').map(decode_field).collect::<Option<Vec<_>>>() else { self.usable = false; break; };
+            if self.browser_requests.len() >= dom_arena::OCEL_JS_MAX_BROWSER_REQUESTS {
+                self.usable = false;
+                break;
+            }
+            let Some(fields) = row
+                .split('\t')
+                .map(decode_field)
+                .collect::<Option<Vec<_>>>()
+            else {
+                self.usable = false;
+                break;
+            };
             let parsed = (|| -> Option<BrowserRequest> {
                 let id = || fields.get(1)?.parse::<u32>().ok();
                 match fields.first()?.as_str() {
                     "L" if fields.len() == 5 => Some(BrowserRequest::Load {
-                        id: id()?, node: Some(NodeId(fields[2].parse().ok()?)), url: fields[3].clone(),
+                        id: id()?,
+                        node: Some(NodeId(fields[2].parse().ok()?)),
+                        url: fields[3].clone(),
                         kind: match fields[4].as_str() {
                             "Script" => BrowserResourceKind::Script,
                             "Stylesheet" => BrowserResourceKind::Stylesheet,
-                            "Image" => BrowserResourceKind::Image, _ => return None,
+                            "Image" => BrowserResourceKind::Image,
+                            _ => return None,
                         },
                     }),
-                    "F" if fields.len() >= 6 && (fields.len() - 6) % 2 == 0 => Some(BrowserRequest::Fetch {
-                        id: id()?, url: fields[2].clone(), method: fields[3].clone(), body: fields[4].clone(),
-                        credentials: fields[5].clone(),
-                        headers: fields[6..].chunks_exact(2).map(|p| (p[0].clone(), p[1].clone())).collect(),
-                    }),
+                    "F" if fields.len() >= 6 && (fields.len() - 6) % 2 == 0 => {
+                        Some(BrowserRequest::Fetch {
+                            id: id()?,
+                            url: fields[2].clone(),
+                            method: fields[3].clone(),
+                            body: fields[4].clone(),
+                            credentials: fields[5].clone(),
+                            headers: fields[6..]
+                                .chunks_exact(2)
+                                .map(|p| (p[0].clone(), p[1].clone()))
+                                .collect(),
+                        })
+                    }
                     "A" if fields.len() == 2 => Some(BrowserRequest::Abort { id: id()? }),
-                    "K" if fields.len() == 2 => Some(BrowserRequest::SetCookie { value: fields[1].clone() }),
+                    "K" if fields.len() == 2 => Some(BrowserRequest::SetCookie {
+                        value: fields[1].clone(),
+                    }),
                     _ => None,
                 }
             })();
-            let Some(request) = parsed else { self.usable = false; break; };
+            let Some(request) = parsed else {
+                self.usable = false;
+                break;
+            };
             self.browser_requests.push(request);
         }
-        if dom_arena::ipc::serialized_len_bounded(&self.browser_requests, dom_arena::OCEL_JS_MAX_BROWSER_REQUEST_BYTES).is_err() {
+        if dom_arena::ipc::serialized_len_bounded(
+            &self.browser_requests,
+            dom_arena::OCEL_JS_MAX_BROWSER_REQUEST_BYTES,
+        )
+        .is_err()
+        {
             self.usable = false;
         }
         let wake = self.eval_queue("__vios_nextWakeup()");
-        self.browser_wakeup = if wake.is_empty() { None } else {
-            match wake.parse::<u64>() { Ok(value) if value <= 9_007_199_254_740_991 => Some(value), _ => { self.usable = false; None } }
+        self.browser_wakeup = if wake.is_empty() {
+            None
+        } else {
+            match wake.parse::<u64>() {
+                Ok(value) if value <= 9_007_199_254_740_991 => Some(value),
+                _ => {
+                    self.usable = false;
+                    None
+                }
+            }
         };
     }
 
@@ -379,7 +467,9 @@ impl QuickJsContext {
             };
             self.output_limited = false;
             let out = self.value_to_string_bounded(value, limit * 3);
-            if core::mem::take(&mut self.output_limited) { self.usable = false; }
+            if core::mem::take(&mut self.output_limited) {
+                self.usable = false;
+            }
             ffi::vios_js_free(self.ctx, value);
             out
         }
@@ -387,14 +477,21 @@ impl QuickJsContext {
 }
 
 impl JsContext for QuickJsContext {
-    fn is_usable(&self) -> bool { self.usable }
+    fn is_usable(&self) -> bool {
+        self.usable
+    }
     fn sync_document(&mut self, arena: &DocumentArena, title: &str) -> Result<(), JsError> {
         if !arena.validate() || !self.mutations.is_empty() {
-            return Err(JsError { message: String::from("Invalid snapshot or unapplied DOM mutations"), line: 0 });
+            return Err(JsError {
+                message: String::from("Invalid snapshot or unapplied DOM mutations"),
+                line: 0,
+            });
         }
         let mut source = String::from("__vios_sync([");
         for (index, node) in arena.nodes.iter().enumerate() {
-            if index != 0 { source.push(','); }
+            if index != 0 {
+                source.push(',');
+            }
             let (kind, tag, text) = match &node.data {
                 NodeData::DocumentRoot => (9, "", ""),
                 NodeData::DocumentFragment => (11, "", ""),
@@ -403,60 +500,101 @@ impl JsContext for QuickJsContext {
                 NodeData::Comment(text) => (8, "", text.as_str()),
             };
             source.push_str(&alloc::format!("[{index},{kind},"));
-            push_js_string(&mut source, tag); source.push(',');
-            push_js_string(&mut source, text); source.push_str(",[");
+            push_js_string(&mut source, tag);
+            source.push(',');
+            push_js_string(&mut source, text);
+            source.push_str(",[");
             if let NodeData::Element { attributes, .. } = &node.data {
                 for (i, (key, value)) in attributes.iter().enumerate() {
-                    if i != 0 { source.push(','); }
-                    source.push('['); push_js_string(&mut source, key); source.push(',');
-                    push_js_string(&mut source, value); source.push(']');
+                    if i != 0 {
+                        source.push(',');
+                    }
+                    source.push('[');
+                    push_js_string(&mut source, key);
+                    source.push(',');
+                    push_js_string(&mut source, value);
+                    source.push(']');
                 }
             }
             source.push(']');
             for link in [node.parent, node.first_child, node.next_sibling] {
                 source.push(',');
-                if let Some(id) = link { source.push_str(&alloc::format!("{}", id.0)); }
-                else { source.push_str("null"); }
+                if let Some(id) = link {
+                    source.push_str(&alloc::format!("{}", id.0));
+                } else {
+                    source.push_str("null");
+                }
             }
             source.push(']');
         }
-        source.push_str("],"); push_js_string(&mut source, title); source.push(')');
+        source.push_str("],");
+        push_js_string(&mut source, title);
+        source.push(')');
         let res = self.eval_raw(&source, "<ocel-document-sync>");
-        unsafe { ffi::JS_RunGC(self.rt); }
+        unsafe {
+            ffi::JS_RunGC(self.rt);
+        }
         res.map(|_| ())
     }
     fn eval_script(&mut self, script: &str, node: Option<NodeId>) -> Result<String, JsError> {
         let mut source = String::from("__vios_evalScript(");
         push_js_string(&mut source, script);
         source.push(',');
-        if let Some(node) = node { source.push_str(&alloc::format!("{}", node.0)); } else { source.push_str("null"); }
+        if let Some(node) = node {
+            source.push_str(&alloc::format!("{}", node.0));
+        } else {
+            source.push_str("null");
+        }
         source.push(')');
         let res = self.eval_raw(&source, "<document-script>");
-        unsafe { ffi::JS_RunGC(self.rt); }
+        unsafe {
+            ffi::JS_RunGC(self.rt);
+        }
         res
     }
 
     fn configure_browser(&mut self, environment: &BrowserEnvironment) -> Result<(), JsError> {
         if environment.now_ms > 9_007_199_254_740_991 {
-            return Err(JsError { message: String::from("Browser clock exceeds exact JavaScript range"), line: 0 });
+            return Err(JsError {
+                message: String::from("Browser clock exceeds exact JavaScript range"),
+                line: 0,
+            });
         }
-        let mut source = alloc::format!("__vios_configure({{width:{},height:{},now_ms:{},url:",
-            environment.width, environment.height, environment.now_ms);
-        push_js_string(&mut source, &environment.url); source.push_str(",user_agent:");
-        push_js_string(&mut source, &environment.user_agent); source.push_str(",cookie:");
-        push_js_string(&mut source, &environment.cookie); source.push_str("})");
+        let mut source = alloc::format!(
+            "__vios_configure({{width:{},height:{},now_ms:{},url:",
+            environment.width,
+            environment.height,
+            environment.now_ms
+        );
+        push_js_string(&mut source, &environment.url);
+        source.push_str(",user_agent:");
+        push_js_string(&mut source, &environment.user_agent);
+        source.push_str(",cookie:");
+        push_js_string(&mut source, &environment.cookie);
+        source.push_str("})");
         self.eval_raw(&source, "<browser-configure>").map(|_| ())
     }
 
     fn pump_browser(&mut self, frame: &BrowserFrame) -> Result<(), JsError> {
         if frame.now_ms > 9_007_199_254_740_991 {
-            return Err(JsError { message: String::from("Browser clock exceeds exact JavaScript range"), line: 0 });
+            return Err(JsError {
+                message: String::from("Browser clock exceeds exact JavaScript range"),
+                line: 0,
+            });
         }
         let mut seen = alloc::collections::BTreeSet::new();
         for item in &frame.layout {
-            if !seen.insert(item.node) || ![item.x, item.y, item.width, item.height].iter().all(|n| n.is_finite())
-                || item.width < 0.0 || item.height < 0.0 {
-                return Err(JsError { message: String::from("Invalid browser layout snapshot"), line: 0 });
+            if !seen.insert(item.node)
+                || ![item.x, item.y, item.width, item.height]
+                    .iter()
+                    .all(|n| n.is_finite())
+                || item.width < 0.0
+                || item.height < 0.0
+            {
+                return Err(JsError {
+                    message: String::from("Invalid browser layout snapshot"),
+                    line: 0,
+                });
             }
         }
         let source = alloc::format!("__vios_pump({})", frame_expression(frame));
@@ -464,17 +602,32 @@ impl JsContext for QuickJsContext {
     }
 
     fn complete_browser(&mut self, reply: &BrowserReply) -> Result<(), JsError> {
-        let mut source = alloc::format!("__vios_complete({{id:{},status:{},url:", reply.id, reply.status);
-        push_js_string(&mut source, &reply.url); source.push_str(",headers:");
-        push_js_pairs(&mut source, &reply.headers); source.push_str(",body:");
-        push_js_string(&mut source, &reply.body); source.push_str(",error:");
-        if let Some(error) = &reply.error { push_js_string(&mut source, error); } else { source.push_str("null"); }
+        let mut source = alloc::format!(
+            "__vios_complete({{id:{},status:{},url:",
+            reply.id,
+            reply.status
+        );
+        push_js_string(&mut source, &reply.url);
+        source.push_str(",headers:");
+        push_js_pairs(&mut source, &reply.headers);
+        source.push_str(",body:");
+        push_js_string(&mut source, &reply.body);
+        source.push_str(",error:");
+        if let Some(error) = &reply.error {
+            push_js_string(&mut source, error);
+        } else {
+            source.push_str("null");
+        }
         source.push_str("})");
         self.eval_raw(&source, "<browser-complete>").map(|_| ())
     }
 
-    fn take_browser_requests(&mut self) -> Vec<BrowserRequest> { core::mem::take(&mut self.browser_requests) }
-    fn next_browser_wakeup(&self) -> Option<u64> { self.browser_wakeup }
+    fn take_browser_requests(&mut self) -> Vec<BrowserRequest> {
+        core::mem::take(&mut self.browser_requests)
+    }
+    fn next_browser_wakeup(&self) -> Option<u64> {
+        self.browser_wakeup
+    }
     fn eval(&mut self, script: &str) -> Result<String, JsError> {
         self.eval_raw(script, "<script>")
     }
@@ -487,10 +640,18 @@ impl JsContext for QuickJsContext {
             dom_arena::EventKind::Submit => "submit",
             dom_arena::EventKind::Change => "change",
         };
-        let mut call = alloc::format!("__vios_dispatch({}, \"{}\", {}, {}, ",
-            event.target.0, kind, event.client_x, event.client_y);
-        if let Some(key) = event.key { push_js_string(&mut call, &key.to_string()); }
-        else { call.push_str("null"); }
+        let mut call = alloc::format!(
+            "__vios_dispatch({}, \"{}\", {}, {}, ",
+            event.target.0,
+            kind,
+            event.client_x,
+            event.client_y
+        );
+        if let Some(key) = event.key {
+            push_js_string(&mut call, &key.to_string());
+        } else {
+            call.push_str("null");
+        }
         call.push(')');
         self.eval_raw(&call, "<dispatch>").map(|_| ())
     }
@@ -512,7 +673,12 @@ impl QuickJsContext {
         core::mem::take(&mut self.logs)
     }
 
-    pub(super) fn begin_native_call(&mut self, caller: usize, context: u64, operation: Option<usize>) {
+    pub(super) fn begin_native_call(
+        &mut self,
+        caller: usize,
+        context: u64,
+        operation: Option<usize>,
+    ) {
         super::native_layout::set_reply_operation(operation);
         self.native_layout.caller = caller;
         self.native_layout.context = context;
@@ -522,7 +688,6 @@ impl QuickJsContext {
         self.native_layout.mutation_bytes = 0;
         self.native_layout.failed = false;
     }
-
 }
 
 /// Minimal `Number`-to-text for the value repr: integers print without a
@@ -551,8 +716,9 @@ fn push_js_string(out: &mut String, value: &str) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            c if c <= '\u{1f}' || c == '\u{2028}' || c == '\u{2029}' =>
-                out.push_str(&alloc::format!("\\u{:04x}", c as u32)),
+            c if c <= '\u{1f}' || c == '\u{2028}' || c == '\u{2029}' => {
+                out.push_str(&alloc::format!("\\u{:04x}", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -562,21 +728,43 @@ fn push_js_string(out: &mut String, value: &str) {
 fn push_js_pairs(out: &mut String, pairs: &[(String, String)]) {
     out.push('[');
     for (index, (key, value)) in pairs.iter().enumerate() {
-        if index != 0 { out.push(','); }
-        out.push('['); push_js_string(out, key); out.push(','); push_js_string(out, value); out.push(']');
+        if index != 0 {
+            out.push(',');
+        }
+        out.push('[');
+        push_js_string(out, key);
+        out.push(',');
+        push_js_string(out, value);
+        out.push(']');
     }
     out.push(']');
 }
 
 pub(super) fn frame_expression(frame: &BrowserFrame) -> String {
-    let mut source = alloc::format!("({{now_ms:{},width:{},height:{},scroll_y:{},parsing_complete:{},cookie:",
-        frame.now_ms, frame.width, frame.height, frame.scroll_y, frame.parsing_complete);
-    push_js_string(&mut source, &frame.cookie); source.push_str(",layout:[");
+    let mut source = alloc::format!(
+        "({{now_ms:{},width:{},height:{},scroll_y:{},parsing_complete:{},cookie:",
+        frame.now_ms,
+        frame.width,
+        frame.height,
+        frame.scroll_y,
+        frame.parsing_complete
+    );
+    push_js_string(&mut source, &frame.cookie);
+    source.push_str(",layout:[");
     for (index, item) in frame.layout.iter().enumerate() {
-        if index != 0 { source.push(','); }
-        source.push_str(&alloc::format!("{{node:{},x:{},y:{},width:{},height:{},styles:",
-            item.node.0, item.x, item.y, item.width, item.height));
-        push_js_pairs(&mut source, &item.styles); source.push('}');
+        if index != 0 {
+            source.push(',');
+        }
+        source.push_str(&alloc::format!(
+            "{{node:{},x:{},y:{},width:{},height:{},styles:",
+            item.node.0,
+            item.x,
+            item.y,
+            item.width,
+            item.height
+        ));
+        push_js_pairs(&mut source, &item.styles);
+        source.push('}');
     }
     source.push_str("]})");
     source
@@ -595,7 +783,10 @@ pub(super) fn decode_field(field: &str) -> Option<String> {
             let lo = (*bytes.get(index + 2)? as char).to_digit(16)?;
             out.push((hi * 16 + lo) as u8);
             index += 3;
-        } else { out.push(bytes[index]); index += 1; }
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
     }
     String::from_utf8(out).ok()
 }

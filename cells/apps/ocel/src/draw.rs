@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 //! Drawing primitives for Ocel Document Viewer.
 
-use ostd::typography::{FontFace, TextFonts};
 use ostd::display::ViSurface;
+use ostd::typography::{FontFace, TextFonts};
 
 pub use viui::canvas::Color;
-pub use viui::surface::{fill_rect, stroke_rect};
 pub use viui::surface::components::*;
+pub use viui::surface::{fill_rect, stroke_rect};
 
 pub mod theme {
     use super::Color;
@@ -25,6 +25,7 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 static ACTIVE_SYSTEM_PALETTE: AtomicU8 = AtomicU8::new(viui::theme::SystemPalette::Light as u8);
 
+#[cfg(test)]
 pub fn set_active_system_palette(palette: viui::theme::SystemPalette) {
     ACTIVE_SYSTEM_PALETTE.store(palette as u8, Ordering::Relaxed);
 }
@@ -52,7 +53,10 @@ impl ReaderThemeMode {
     }
 
     /// Resolve effective palette, mapping FollowSystem to the active system palette.
-    pub fn resolved_palette(self, system: viui::theme::SystemPalette) -> viui::theme::SystemPalette {
+    pub fn resolved_palette(
+        self,
+        system: viui::theme::SystemPalette,
+    ) -> viui::theme::SystemPalette {
         match self {
             Self::FollowSystem => system,
             Self::Light => viui::theme::SystemPalette::Light,
@@ -62,7 +66,10 @@ impl ReaderThemeMode {
     }
 
     /// Obtain the shared ViTheme reference for the resolved palette.
-    pub fn resolved_theme(self, system: viui::theme::SystemPalette) -> &'static dyn viui::theme::ViTheme {
+    pub fn resolved_theme(
+        self,
+        system: viui::theme::SystemPalette,
+    ) -> &'static dyn viui::theme::ViTheme {
         match self.resolved_palette(system) {
             viui::theme::SystemPalette::Light => &viui::theme::LIGHT_THEME,
             viui::theme::SystemPalette::Dark => &viui::theme::DARK_THEME,
@@ -186,21 +193,46 @@ pub fn draw_globe_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
 }
 
 /// Paint measured, grayscale-antialiased text within a caller's viewport.
+// reason: thin wrapper over `TextFonts::draw_text` with many drawing call sites; bundling the
+// position/style/clip args would only churn callers.
+#[allow(clippy::too_many_arguments)]
 pub fn text(
-    fonts: &mut TextFonts, surf: &mut ViSurface, x: f32, y: f32,
-    value: &str, face: FontFace, px: f32, color: Color,
+    fonts: &mut TextFonts,
+    surf: &mut ViSurface,
+    x: f32,
+    y: f32,
+    value: &str,
+    face: FontFace,
+    px: f32,
+    color: Color,
     clip: (i32, i32, i32, i32),
 ) -> f32 {
     let width = surf.width();
     let height = surf.height();
     let stride = surf.stride();
-    fonts.draw_text(surf.pixels_mut(), width, height, stride, x, y, value,
-        face, px, color.as_bgra_bytes(), clip)
+    fonts.draw_text(
+        surf.pixels_mut(),
+        width,
+        height,
+        stride,
+        x,
+        y,
+        value,
+        face,
+        px,
+        color.as_bgra_bytes(),
+        clip,
+    )
 }
 
 pub fn clipped_rect(
-    surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32,
-    color: Color, clip: (i32, i32, i32, i32),
+    surf: &mut ViSurface,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    color: Color,
+    clip: (i32, i32, i32, i32),
 ) {
     let x0 = x.max(clip.0);
     let y0 = y.max(clip.1);
@@ -211,6 +243,9 @@ pub fn clipped_rect(
     }
 }
 
+// reason: low-level blit helper with multiple drawing call sites; bundling geometry and source
+// args would only churn callers.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_image_clipped(
     surf: &mut ViSurface,
     x: i32,

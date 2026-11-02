@@ -113,8 +113,10 @@ pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationG
 
 fn shm_register(frame: usize, owner: crate::cell::state_stash::Incarnation) {
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::GRANT_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::GRANT_SHARED,
+    );
     SHM_HANDLES.lock().insert(frame, owner);
 }
 
@@ -154,7 +156,10 @@ fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
-    let frames = shm_take_for(crate::cell::state_stash::Incarnation { cell: cell_id, generation });
+    let frames = shm_take_for(crate::cell::state_stash::Incarnation {
+        cell: cell_id,
+        generation,
+    });
     if frames.is_empty() {
         return 0;
     }
@@ -218,20 +223,30 @@ fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, PageGrant>>> {
 /// historical heap ownership from grant-table absence.
 #[cfg(cellos_p01_trace)]
 pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
-    let page_clear = {
-        let table = grant_table_lock().lock();
-        table.as_ref().map_or(Some(true), |table| {
-            if table.len() > 128 { return None; }
-            Some(!table.values().any(|g| g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation))
-        })
-    };
-    let registered_clear = {
-        let table = reg_grant_table_lock().lock();
-        table.as_ref().map_or(Some(true), |table| {
-            if table.len() > 128 { return None; }
-            Some(!table.values().any(|g| g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation))
-        })
-    };
+    let page_clear =
+        {
+            let table = grant_table_lock().lock();
+            table.as_ref().map_or(Some(true), |table| {
+                if table.len() > 128 {
+                    return None;
+                }
+                Some(!table.values().any(|g| {
+                    g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation
+                }))
+            })
+        };
+    let registered_clear =
+        {
+            let table = reg_grant_table_lock().lock();
+            table.as_ref().map_or(Some(true), |table| {
+                if table.len() > 128 {
+                    return None;
+                }
+                Some(!table.values().any(|g| {
+                    g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation
+                }))
+            })
+        };
     if page_clear == Some(true) && registered_clear == Some(true) {
         crate::p01_resources::checked(owner, 3);
     } else {
@@ -565,8 +580,10 @@ fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
 ))]
 fn new_domain_record(space: &DomainRoot, base: usize, size: usize) -> Option<DomainRecord> {
     #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(None,
-        crate::memory::heap::p01_owner::GRANT_SHARED);
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::GRANT_SHARED,
+    );
     Some(Arc::new(super::domain_grant::DomainGrant::new(
         space, base, size,
     )))
@@ -959,11 +976,21 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 /// Lock order: FRAME_ALLOCATOR → (map_page/unmap_page → KERNEL_ROOT). Mirrors
 /// `Stack::drop`. Must NOT be called while already holding FRAME_ALLOCATOR.
 fn free_grant_pages(base: usize, n_pages: usize) {
-    free_grant_pages_inner(base, n_pages, #[cfg(cellos_p01_trace)] None);
+    free_grant_pages_inner(
+        base,
+        n_pages,
+        #[cfg(cellos_p01_trace)]
+        None,
+    );
 }
 
 fn free_released_range(range: crate::memory::pin::ReleasedRange) {
-    free_grant_pages_inner(range.base, range.pages, #[cfg(cellos_p01_trace)] Some(range));
+    free_grant_pages_inner(
+        range.base,
+        range.pages,
+        #[cfg(cellos_p01_trace)]
+        Some(range),
+    );
 }
 
 fn free_grant_pages_inner(
@@ -985,13 +1012,17 @@ fn free_grant_pages_inner(
     let mut fa = FRAME_ALLOCATOR.lock();
     if let Some(alloc) = fa.as_mut() {
         #[cfg(cellos_p01_trace)]
-        { released = true; }
+        {
+            released = true;
+        }
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
             let _ = crate::memory::paging::unmap_page(f);
             let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
             #[cfg(cellos_p01_trace)]
-            { released &= alloc.p01_allocated(f); }
+            {
+                released &= alloc.p01_allocated(f);
+            }
             alloc.deallocate_frame(f);
         }
     }
@@ -1150,8 +1181,10 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
                 }
                 table.as_mut().is_some_and(|grants| {
                     #[cfg(cellos_p01_trace)]
-                    let _semantic = crate::memory::heap::p01_owner::creation(None,
-                        crate::memory::heap::p01_owner::GRANT_SHARED);
+                    let _semantic = crate::memory::heap::p01_owner::creation(
+                        None,
+                        crate::memory::heap::p01_owner::GRANT_SHARED,
+                    );
                     grants
                         .insert(
                             base,
@@ -1209,7 +1242,12 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) -> GrantReap {
     let grants_reclaimed = reclaim_owned_grants(dead_tid);
     sweep_deferred_domain_grants();
     sweep_orphan_reg_grants();
-    GrantReap { pins_quarantined: pinned, grantee_refs_cleared, writable_borrows, grants_reclaimed }
+    GrantReap {
+        pins_quarantined: pinned,
+        grantee_refs_cleared,
+        writable_borrows,
+        grants_reclaimed,
+    }
 }
 
 /// What [`reap_grants_for_task`] did for one dead task (retirement verdict input).
@@ -1698,11 +1736,19 @@ fn encode_ipc_result(result: SyscallResult) -> usize {
 /// Syscalls whose errors use the typed sentinels of [`encode_ipc_result`]
 /// (`usize::MAX - 1..=4`) instead of the single generic error.
 fn has_typed_errors(syscall: &Syscall) -> bool {
-    matches!(syscall, Syscall::IpcSubmit { .. } | Syscall::IpcTake { .. }
-        | Syscall::IpcWait { .. } | Syscall::IpcCancel { .. }
-        | Syscall::IpcCurrent | Syscall::IpcReply { .. }
-        | Syscall::QueryRetirement { .. } | Syscall::LookupBlockRoute { .. }
-        | Syscall::QueryMachineFacts { .. } | Syscall::RegisterBlockDriver { .. })
+    matches!(
+        syscall,
+        Syscall::IpcSubmit { .. }
+            | Syscall::IpcTake { .. }
+            | Syscall::IpcWait { .. }
+            | Syscall::IpcCancel { .. }
+            | Syscall::IpcCurrent
+            | Syscall::IpcReply { .. }
+            | Syscall::QueryRetirement { .. }
+            | Syscall::LookupBlockRoute { .. }
+            | Syscall::QueryMachineFacts { .. }
+            | Syscall::RegisterBlockDriver { .. }
+    )
 }
 
 /// Encode the additive spawn-OOM result while preserving all other legacy errors.
@@ -1752,7 +1798,7 @@ fn caller_has_cap<F: Fn(&crate::task::tcb::Task) -> bool>(caller_id: usize, chec
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|t| check(t))
+        .map(check)
         .unwrap_or(false)
 }
 
@@ -2056,12 +2102,17 @@ fn authorize_launch_edge(
     Ok(profile)
 }
 
-pub(super) fn session_launch_request(caller: usize, path: &str,
-    route: crate::loader::launch_profile::LaunchRoute)
-    -> Result<crate::loader::SpawnRequest, SyscallError> {
+pub(super) fn session_launch_request(
+    caller: usize,
+    path: &str,
+    route: crate::loader::launch_profile::LaunchRoute,
+) -> Result<crate::loader::SpawnRequest, SyscallError> {
     let profile = authorize_launch_edge(caller, route, path)?;
     let guard = super::SCHEDULER.lock();
-    let task = guard.as_ref().and_then(|s| s.tasks.get(&caller)).ok_or(SyscallError::PermissionDenied)?;
+    let task = guard
+        .as_ref()
+        .and_then(|s| s.tasks.get(&caller))
+        .ok_or(SyscallError::PermissionDenied)?;
     // The CellSessionV1 transport itself carries no allowlist bit, so the
     // launch it performs must hold the same bit as the equivalent syscall:
     // SpawnFromPath for the path route, SpawnFromElf for caller-owned bytes.
@@ -2072,20 +2123,34 @@ pub(super) fn session_launch_request(caller: usize, path: &str,
     };
     if let Some(bit) = syscall.allowlist_bit() {
         if (task.syscall_allowlist >> bit) & 1 == 0 {
-            log::warn!("[kernel] session launch denied for tid {}: {:?} bit {} not allowed", caller, syscall, bit);
+            log::warn!(
+                "[kernel] session launch denied for tid {}: {:?} bit {} not allowed",
+                caller,
+                syscall,
+                bit
+            );
             return Err(SyscallError::PermissionDenied);
         }
     }
     let ceiling = super::cap::CapSet::of_task(task);
-    Ok(crate::loader::SpawnRequest::governed_caller(caller, task.cell_generation, ceiling,
-        profile.child_ceiling, api::TaskPriority::Normal as u8, None))
+    Ok(crate::loader::SpawnRequest::governed_caller(
+        caller,
+        task.cell_generation,
+        ceiling,
+        profile.child_ceiling,
+        api::TaskPriority::Normal as u8,
+        None,
+    ))
 }
 
 /// The ELF bytes of a session route-2 launch: `len` bytes of a grant the caller
 /// owns, validated exactly as `SpawnFromElf` validates them. The slice is read
 /// in place (SAS) while `prepare_gated` copies the image; it is not retained.
-pub(super) fn session_elf_bytes(caller: usize, grant_id: usize, len: usize)
-    -> Result<&'static [u8], SyscallError> {
+pub(super) fn session_elf_bytes(
+    caller: usize,
+    grant_id: usize,
+    len: usize,
+) -> Result<&'static [u8], SyscallError> {
     if len == 0 {
         return Err(SyscallError::InvalidInput);
     }
@@ -2170,12 +2235,12 @@ mod serial_port {
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub(super) fn configure_baud(index: u32, baud: u32) -> Result<(), ()> {
+    pub(super) fn configure_baud(index: u32, baud: u32) -> bool {
         crate::hal::uart_16550::configure_baud(index as usize, baud)
     }
     #[cfg(not(target_arch = "x86_64"))]
-    pub(super) fn configure_baud(_index: u32, _baud: u32) -> Result<(), ()> {
-        Err(())
+    pub(super) fn configure_baud(_index: u32, _baud: u32) -> bool {
+        false
     }
 }
 
@@ -2324,8 +2389,12 @@ fn register_block_device_route(
     }
 
     let owned = match key.kind {
-        BLOCK_DEVICE_PCI => crate::resource_registry::owner_of_bdf(key.id as u32) == Some(caller_id),
-        BLOCK_DEVICE_MMIO => crate::resource_registry::lookup_mmio_owner(key.id as usize) == Some(caller_id),
+        BLOCK_DEVICE_PCI => {
+            crate::resource_registry::owner_of_bdf(key.id as u32) == Some(caller_id)
+        }
+        BLOCK_DEVICE_MMIO => {
+            crate::resource_registry::lookup_mmio_owner(key.id as usize) == Some(caller_id)
+        }
         _ => false,
     };
     if !owned {
@@ -2336,8 +2405,10 @@ fn register_block_device_route(
     let Some((cell_id, generation)) = live_driver(&scheduler) else {
         return Err(SyscallError::PermissionDenied);
     };
-    let published =
-        crate::task::drivers::driver_cell::publish_block_route(key, (caller_id, cell_id, generation));
+    let published = crate::task::drivers::driver_cell::publish_block_route(
+        key,
+        (caller_id, cell_id, generation),
+    );
     drop(scheduler);
     published.map(|_| 0).ok_or(SyscallError::PermissionDenied)
 }
@@ -2636,35 +2707,63 @@ fn preflight_user_output(caller_id: usize, ptr: usize, len: usize) -> Result<(),
 
 /// A copied request needs no long-lived lease; the reply span must stay backed
 /// until after the owner mutation and final write, including parked stream IO.
-struct SessionOutputPin { span: Option<(usize, usize, usize)> }
+struct SessionOutputPin {
+    span: Option<(usize, usize, usize)>,
+}
 impl SessionOutputPin {
-    fn reserve(caller: usize, ptr: usize, len: usize, view: &TaskCopyView) -> Result<Self, SyscallError> {
+    fn reserve(
+        caller: usize,
+        ptr: usize,
+        len: usize,
+        view: &TaskCopyView,
+    ) -> Result<Self, SyscallError> {
         // Same gate as `preflight_user_output`: the SAS ownership lease exists
         // only in builds with a domain backend.
         #[cfg(all(
             feature = "native-domains",
-            any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
         ))]
         {
-            if !view.is_sas() { return Ok(Self { span: None }); }
+            if !view.is_sas() {
+                return Ok(Self { span: None });
+            }
             let page_grants = grant_table_lock().lock();
             let registered = reg_grant_table_lock().lock();
             let guard = super::SCHEDULER.lock();
             let sched = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
-            if !sas_caller_owned_span(sched, page_grants.as_ref(), registered.as_ref(), caller, ptr, len) {
+            if !sas_caller_owned_span(
+                sched,
+                page_grants.as_ref(),
+                registered.as_ref(),
+                caller,
+                ptr,
+                len,
+            ) {
                 return Err(SyscallError::InvalidInput);
             }
-            view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+            view.validate_writable(ptr, len)
+                .map_err(|_| SyscallError::InvalidInput)?;
             crate::memory::pin::pin(ptr, len, caller).map_err(|_| SyscallError::OutOfMemory)?;
-            Ok(Self { span: Some((ptr, len, caller)) })
+            Ok(Self {
+                span: Some((ptr, len, caller)),
+            })
         }
         #[cfg(not(all(
             feature = "native-domains",
-            any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+            any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )
         )))]
         {
             let _ = caller;
-            view.validate_writable(ptr, len).map_err(|_| SyscallError::InvalidInput)?;
+            view.validate_writable(ptr, len)
+                .map_err(|_| SyscallError::InvalidInput)?;
             Ok(Self { span: None })
         }
     }
@@ -2793,7 +2892,7 @@ fn write_getrandom_output(caller_id: usize, ptr: usize, bytes: &[u8]) -> Result<
         let lease = sched
             .tasks
             .get(&caller_id)
-            .map(|task| TaskCopyView::of(task))
+            .map(TaskCopyView::of)
             .ok_or(SyscallError::InvalidInput)?;
         #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
         let was_armed = pause_getrandom_final_write_for_revoke_race(caller_id);
@@ -2930,8 +3029,10 @@ pub(super) fn snapshot_resume(task: &super::Task, mask: usize) -> Result<ResumeS
             None => (0, 0),
         };
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(Some(crate::p01_resources::owner(task)),
-            crate::memory::heap::p01_owner::RECEIVE_SCRATCH);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            Some(crate::p01_resources::owner(task)),
+            crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
+        );
         let mut payload = alloc::vec::Vec::new();
         payload
             .try_reserve_exact(msg.payload().len())
@@ -2962,7 +3063,11 @@ fn snapshot_resume_dispatched(
         Some(task) => snapshot_resume(task, mask)?,
         None => ResumeSnapshot::Wake { sender_tid: 0 },
     };
-    if let ResumeSnapshot::Message { wire_header: Some(header), .. } = &snap {
+    if let ResumeSnapshot::Message {
+        wire_header: Some(header),
+        ..
+    } = &snap
+    {
         super::async_ipc::dispatch(sched, caller_id, *header);
     }
     Ok(snap)
@@ -3256,9 +3361,7 @@ fn finish_vfs_context_drop(caller_id: usize, dropped: Option<(usize, u64)>) {
     let Some((grant_owner, request_generation)) = dropped else {
         return;
     };
-    for range in
-        crate::memory::pin::release_vfs_lease(caller_id, grant_owner, request_generation)
-    {
+    for range in crate::memory::pin::release_vfs_lease(caller_id, grant_owner, request_generation) {
         free_released_range(range);
     }
 }
@@ -3639,7 +3742,11 @@ fn peek_owner_death_for_try_recv(task: &super::Task, mask: usize) -> Option<(u64
 /// Drop the exact queued owner-death record `token` after its delivery copy
 /// succeeded; a record already gone (or another one now at the head) is left alone.
 fn remove_owner_death(task: &mut super::Task, token: u64) {
-    if let Some(pos) = task.pending_owner_deaths.iter().position(|(queued, _, _)| *queued == token) {
+    if let Some(pos) = task
+        .pending_owner_deaths
+        .iter()
+        .position(|(queued, _, _)| *queued == token)
+    {
         task.pending_owner_deaths.remove(pos);
     }
 }
@@ -3764,12 +3871,29 @@ pub enum Syscall {
         msg_ptr: usize,
         msg_len: usize,
     },
-    IpcSubmit { target: usize, ptr: usize, len: usize },
-    IpcTake { token: usize, ptr: usize, len: usize, status_ptr: usize },
-    IpcWait { ticks: u64 },
-    IpcCancel { token: usize },
+    IpcSubmit {
+        target: usize,
+        ptr: usize,
+        len: usize,
+    },
+    IpcTake {
+        token: usize,
+        ptr: usize,
+        len: usize,
+        status_ptr: usize,
+    },
+    IpcWait {
+        ticks: u64,
+    },
+    IpcCancel {
+        token: usize,
+    },
     IpcCurrent,
-    IpcReply { token: usize, ptr: usize, len: usize },
+    IpcReply {
+        token: usize,
+        ptr: usize,
+        len: usize,
+    },
     /// 4: TrySend (Non-blocking send — drops if target not in Recv)
     TrySend {
         target: usize,
@@ -3807,9 +3931,14 @@ pub enum Syscall {
         deadline: u64,
     },
     /// 2: Reply (Unblocking Reply to Caller)
-    Reply { caller: usize, result: usize },
+    Reply {
+        caller: usize,
+        result: usize,
+    },
     /// 3: SetTimer (Wake up after ticks)
-    SetTimer { deadline: usize },
+    SetTimer {
+        deadline: usize,
+    },
     /// 4: BorrowRead (Copy from Lease to Caller)
     BorrowRead {
         lease_id: usize,
@@ -3839,7 +3968,10 @@ pub enum Syscall {
         attest_caller: bool,
     },
     /// 8: Spawn (Create new Task/Thread) - Returns Task ID
-    Spawn { entry: usize, arg: usize },
+    Spawn {
+        entry: usize,
+        arg: usize,
+    },
     /// ViSyscall 17: FutexWait — park until woken, the word changes, or the
     /// deadline elapses. `timeout_ticks == 0` blocks indefinitely.
     FutexWait {
@@ -3848,9 +3980,15 @@ pub enum Syscall {
         timeout_ticks: u64,
     },
     /// ViSyscall 18: FutexWake — wake up to `count` waiters on the caller's key.
-    FutexWake { addr: usize, count: usize },
+    FutexWake {
+        addr: usize,
+        count: usize,
+    },
     /// 11: Log (Debug Print)
-    Log { msg_ptr: usize, msg_len: usize },
+    Log {
+        msg_ptr: usize,
+        msg_len: usize,
+    },
     /// 12: Grant (Zero Copy)
     Grant {
         target: usize,
@@ -3859,18 +3997,31 @@ pub enum Syscall {
         flags: usize,
     },
     /// 13: Map (Zero Copy)
-    Map { grant_id: usize },
+    Map {
+        grant_id: usize,
+    },
     /// 14: Exit (Terminate Process)
-    Exit { code: usize },
+    Exit {
+        code: usize,
+    },
     /// 61: ForceExit — terminate another task by TID; non-blocking return to caller.
-    ForceExit { tid: usize },
+    ForceExit {
+        tid: usize,
+    },
     /// 204: NotifyOnExit — register the caller to be notified when `watched` dies.
-    NotifyOnExit { watched: usize },
+    NotifyOnExit {
+        watched: usize,
+    },
     /// 205: RegisterService — register `tid` as the current provider of `service_id`.
     /// SpawnCap owns the namespace; fixed-ID self-registration uses narrower caps.
-    RegisterService { service_id: u16, tid: usize },
+    RegisterService {
+        service_id: u16,
+        tid: usize,
+    },
     /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
-    LookupService { service_id: u16 },
+    LookupService {
+        service_id: u16,
+    },
     /// 429: LookupServiceBound — resolve `service_id` to its live provider binding
     /// `{ tid, cell_id, generation }` (open; 0 = none). The record is written whole
     /// or refused, never partially.
@@ -3881,14 +4032,24 @@ pub enum Syscall {
     },
     /// 207: Heartbeat — caller asserts liveness; (re)arm the hung-detection deadline
     /// `interval` ticks ahead (0 = disable).
-    Heartbeat { interval: usize },
+    Heartbeat {
+        interval: usize,
+    },
     /// 6: Exec (Spawn from file)
-    Exec { path_ptr: usize, path_len: usize },
+    Exec {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
-    SpawnFromMem { args_ptr: usize },
+    SpawnFromMem {
+        args_ptr: usize,
+    },
     /// 12: SpawnFromPath (Spawn cell by filesystem path)
     /// ABI: path_ptr in a0, path_len in a1.
-    SpawnFromPath { path_ptr: usize, path_len: usize },
+    SpawnFromPath {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 238: SpawnFromElf (Spawn cell from ELF bytes in a caller-owned Grant).
     /// ABI: a0=grant_id, a1=len, a2=path_hint_ptr, a3=path_hint_len.
     SpawnFromElf {
@@ -3907,7 +4068,9 @@ pub enum Syscall {
     },
     /// 240: SpawnSetDirs — name the directory handles the caller's next spawn
     /// passes to its child. ABI: a0 = ptr to `ViSpawnDirHandles` (0 clears).
-    SpawnSetDirs { carrier_ptr: usize },
+    SpawnSetDirs {
+        carrier_ptr: usize,
+    },
     /// 241: QueryDirHandles — read the kernel's record of a cell's inherited
     /// directory handles. ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len.
     QueryDirHandles {
@@ -3930,7 +4093,9 @@ pub enum Syscall {
         out_len: usize,
     },
     /// 246: idempotently cancel one VFS root-death subscription.
-    CancelCellOwnerWatch { token: u64 },
+    CancelCellOwnerWatch {
+        token: u64,
+    },
     /// 247: RV32-safe owner attestation through a fixed request record.
     ResolveCellOwnerRecord {
         request_ptr: usize,
@@ -3946,7 +4111,10 @@ pub enum Syscall {
         out_len: usize,
     },
     /// 13: OpenCap — open a file and return a CapId.
-    OpenCap { path_ptr: usize, path_len: usize },
+    OpenCap {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 14: ReadCap — read bytes from a cap-backed file.
     ReadCap {
         cap_id: usize,
@@ -3954,7 +4122,9 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 15: CloseCap — revoke a capability.
-    CloseCap { cap_id: usize },
+    CloseCap {
+        cap_id: usize,
+    },
     /// 228: SeekCap — seek a cap-backed file cursor.
     /// offset is transmitted as a raw i64 bit-pattern via usize (reinterpret_cast).
     SeekCap {
@@ -3969,41 +4139,98 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 230: StatCap — query file size via cap (cursor unchanged).
-    StatCap { cap_id: usize },
+    StatCap {
+        cap_id: usize,
+    },
     /// 231: TruncateCap — truncate file to len bytes via cap.
-    TruncateCap { cap_id: usize, len: usize },
+    TruncateCap {
+        cap_id: usize,
+        len: usize,
+    },
     /// 232: SyncCap — flush dirty pages to block device via cap.
-    SyncCap { cap_id: usize },
+    SyncCap {
+        cap_id: usize,
+    },
     /// 233: GrantDma — map PCIe DMA range into IOMMU for calling Cell.
     /// a0 = bdf: u32, a1 = phys: u64, a2 = size: usize.
-    GrantDma { bdf: u32, phys: u64, size: usize },
+    GrantDma {
+        bdf: u32,
+        phys: u64,
+        size: usize,
+    },
     /// 8: Wait (Wait for task)
-    Wait { pid: usize },
+    Wait {
+        pid: usize,
+    },
     /// 20: ShmAlloc
-    ShmAlloc { size: usize },
+    ShmAlloc {
+        size: usize,
+    },
     /// 21: ShmMap
-    ShmMap { handle: usize, target_pid: usize },
+    ShmMap {
+        handle: usize,
+        target_pid: usize,
+    },
     /// 30: GetProcs
-    GetProcs { buf_ptr: usize, buf_len: usize },
+    GetProcs {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 239: GetProcs2
-    GetProcs2 { buf_ptr: usize, buf_len: usize },
+    GetProcs2 {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 243: MemInfo
-    MemInfo { out_ptr: usize, out_len: usize },
+    MemInfo {
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 430: TelemetrySnapshot (Phase 06 S6-1)
-    TelemetrySnapshot { out_ptr: usize, out_len: usize, flags: usize, reserved: usize },
+    TelemetrySnapshot {
+        out_ptr: usize,
+        out_len: usize,
+        flags: usize,
+        reserved: usize,
+    },
     /// 431: QueryRetirement (Phase 09B K1)
-    QueryRetirement { root_tid: usize, out_ptr: usize, out_len: usize },
+    QueryRetirement {
+        root_tid: usize,
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 432: LookupBlockRoute — copy route slot `index` as a `ViBlockRouteV1`.
-    LookupBlockRoute { index: usize, out_ptr: usize, out_len: usize, reserved: usize },
+    LookupBlockRoute {
+        index: usize,
+        out_ptr: usize,
+        out_len: usize,
+        reserved: usize,
+    },
     /// 433: QueryMachineFacts — copy the current `ViMachineFactsV1`.
-    QueryMachineFacts { out_ptr: usize, out_len: usize, a2: usize, a3: usize },
-    CellSessionV1 { request_ptr: usize, request_len: usize, result_ptr: usize, result_capacity: usize },
+    QueryMachineFacts {
+        out_ptr: usize,
+        out_len: usize,
+        a2: usize,
+        a3: usize,
+    },
+    CellSessionV1 {
+        request_ptr: usize,
+        request_len: usize,
+        result_ptr: usize,
+        result_capacity: usize,
+    },
 
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
-    ServiceLookup { name_ptr: usize, name_len: usize },
+    ServiceLookup {
+        name_ptr: usize,
+        name_len: usize,
+    },
     /// 101: Open (Path -> FD)
-    Open { path_ptr: usize, path_len: usize },
+    Open {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 102: Read (FD, Buffer -> Bytes Read)
     Read {
         fd: usize,
@@ -4011,7 +4238,9 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 103: Close (FD)
-    Close { fd: usize },
+    Close {
+        fd: usize,
+    },
     /// 105: ReadDir (Read Directory Entries)
     ReadDir {
         fd: usize,
@@ -4032,9 +4261,15 @@ pub enum Syscall {
         new_len: usize,
     },
     /// 107: ChDir (Change Directory)
-    ChDir { path_ptr: usize, path_len: usize },
+    ChDir {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 108: GetCwd (Get Current Directory)
-    GetCwd { buf_ptr: usize, buf_len: usize },
+    GetCwd {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 109: Write (FD, Buffer -> Bytes Written)
     Write {
         fd: usize,
@@ -4042,10 +4277,16 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 110: MkDir (Path)
-    MkDir { path_ptr: usize, path_len: usize },
+    MkDir {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 111: Create (Path -> FD)
     /// 111: Create (Path -> FD)
-    Create { path_ptr: usize, path_len: usize },
+    Create {
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 104: Yield (Legacy)
     Yield,
     /// 106: Seek (FD, Offset, Whence)
@@ -4055,9 +4296,15 @@ pub enum Syscall {
         whence: usize,
     },
     /// 107: FileOp (Op, Arg1, Arg2)
-    FileOp { op: usize, arg1: usize, arg2: usize },
+    FileOp {
+        op: usize,
+        arg1: usize,
+        arg2: usize,
+    },
     /// 120: GetTime (Op)
-    GetTime { op: usize },
+    GetTime {
+        op: usize,
+    },
     /// 300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.
     GpuFlush {
         data_ptr: usize,
@@ -4066,9 +4313,15 @@ pub enum Syscall {
         wh: usize,
     },
     /// 218: AudioPlay — write raw PCM (S16LE/2ch/44100) to the VirtIO sound output.
-    AudioPlay { buf_ptr: usize, buf_len: usize },
+    AudioPlay {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 219: CapRevoke — strip capabilities from a live cell at runtime.
-    CapRevoke { target_tid: usize, cap_mask: u32 },
+    CapRevoke {
+        target_tid: usize,
+        cap_mask: u32,
+    },
     /// 301: GpuCursor — set sprite (op=0) or move (op=1) the VirtIO GPU hardware cursor.
     GpuCursor {
         op: usize,
@@ -4079,9 +4332,15 @@ pub enum Syscall {
     /// 302: GpuGetResolution — return current GPU scanout (width, height) packed as (w<<32)|h.
     GpuGetResolution,
     /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
-    NetTx { frame_ptr: usize, frame_len: usize },
+    NetTx {
+        frame_ptr: usize,
+        frame_len: usize,
+    },
     /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
-    NetRx { buf_ptr: usize, buf_len: usize },
+    NetRx {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 410: StateStash — save serialized cell state under `key` for hot-swap.
     StateStash {
         key: usize,
@@ -4095,9 +4354,13 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
-    StateStashClear { key: usize },
+    StateStashClear {
+        key: usize,
+    },
     /// 413: FreezeCell — freeze a running Cell. Requires SupervisorCap.
-    FreezeCell { target_tid: usize },
+    FreezeCell {
+        target_tid: usize,
+    },
     /// 414: Resume a frozen Cell or atomically commit a hot-swap cutover.
     /// Plain resume: a0=target_tid, a1..a3=0. Cutover: a0=new_tid,
     /// a1=old_tid, a2=service_id, a3=0. Requires SupervisorCap.
@@ -4108,10 +4371,17 @@ pub enum Syscall {
         reserved: usize,
     },
     /// 415: KillCell — forcibly terminate a Cell. Requires SupervisorCap.
-    KillCell { target_tid: usize, exit_code: u32 },
+    KillCell {
+        target_tid: usize,
+        exit_code: u32,
+    },
     /// 416: RegisterBlockDriver — bind the route of the block device the
     /// caller owns (`kind` 1 = PCI BDF, 2 = MMIO base; `reserved` must be 0).
-    RegisterBlockDriver { kind: usize, id: usize, reserved: (usize, usize) },
+    RegisterBlockDriver {
+        kind: usize,
+        id: usize,
+        reserved: (usize, usize),
+    },
     /// 417: RegisterNicDriver — announce caller as the active NIC driver.
     RegisterNicDriver,
     /// 423: RegisterUsbHidProducer — announce caller as the USB HID event producer.
@@ -4133,16 +4403,32 @@ pub enum Syscall {
     },
     /// 425: SerialPortInfo — report one declared serial port's identity and
     /// whether the kernel probed a 16550 register set there.
-    SerialPortInfo { index: u32, out_ptr: usize },
+    SerialPortInfo {
+        index: u32,
+        out_ptr: usize,
+    },
     /// 426: SerialWrite — write bytes to a usable serial port.
-    SerialWrite { index: u32, ptr: usize, len: usize },
+    SerialWrite {
+        index: u32,
+        ptr: usize,
+        len: usize,
+    },
     /// 427: SerialRead — poll bytes from a usable serial port.
-    SerialRead { index: u32, ptr: usize, len: usize },
+    SerialRead {
+        index: u32,
+        ptr: usize,
+        len: usize,
+    },
     /// 428: SerialConfigure — set a usable serial port's baud rate (8N1 kept).
-    SerialConfigure { index: u32, baud: u32 },
+    SerialConfigure {
+        index: u32,
+        baud: u32,
+    },
     /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
     /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
-    QueryHotswapReady { target_tid: usize },
+    QueryHotswapReady {
+        target_tid: usize,
+    },
     /// 421: SpawnReplacement — supervisor-only spawn using the frozen task's recorded cap ceiling.
     SpawnReplacement {
         old_tid: usize,
@@ -4162,9 +4448,15 @@ pub enum Syscall {
     Snapshot,
     /// 500: BlkRead — read one 512-byte sector from the VirtIO block device.
     /// Not in `ViSyscall` enum to preserve `libs/api` stability (raw dispatch).
-    BlkRead { sector: u64, buf_ptr: usize },
+    BlkRead {
+        sector: u64,
+        buf_ptr: usize,
+    },
     /// 501: BlkWrite — write one 512-byte sector to the VirtIO block device.
-    BlkWrite { sector: u64, buf_ptr: usize },
+    BlkWrite {
+        sector: u64,
+        buf_ptr: usize,
+    },
     /// 502: Shutdown — trigger SBI SRST system shutdown (S-mode → OpenSBI). No return.
     Shutdown,
     /// 503: BlkFlush — flush the VirtIO block device write cache to the backing image.
@@ -4172,9 +4464,14 @@ pub enum Syscall {
     /// 504: BenchCounters — copy the `bench-counters` record to the caller.
     /// Raw opcode, compiled only with that feature (measurement builds).
     #[cfg(feature = "bench-counters")]
-    BenchCounters { out_ptr: usize, out_len: usize },
+    BenchCounters {
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 208: GrantAlloc — allocate n pages as a zero-copy Grant region.
-    GrantAlloc { size: usize },
+    GrantAlloc {
+        size: usize,
+    },
     /// 209: GrantShare — share a Grant region with `target_cell` under `perm`.
     GrantShare {
         grant_id: usize,
@@ -4187,20 +4484,38 @@ pub enum Syscall {
         size_out_ptr: usize,
     },
     /// 211: GrantFree — unmap + deallocate a Grant region.
-    GrantFree { grant_id: usize },
+    GrantFree {
+        grant_id: usize,
+    },
     /// 212: BlkReadAsync — synchronous-but-zero-copy sector read into a Grant buffer.
-    BlkReadAsync { sector: u64, grant_id: usize },
+    BlkReadAsync {
+        sector: u64,
+        grant_id: usize,
+    },
     /// 213: RequestMmio — claim exclusive MMIO range for a peripheral Driver Cell.
-    RequestMmio { base: usize, len: usize },
+    RequestMmio {
+        base: usize,
+        len: usize,
+    },
     /// 214: GetRandom — fill a caller buffer with VirtIO-RNG entropy bytes.
-    GetRandom { buf_ptr: usize, len: usize },
+    GetRandom {
+        buf_ptr: usize,
+        len: usize,
+    },
     /// 215: GrantRegister — allocate a persistent pre-pinned Grant buffer (lifetime = cell exit).
-    GrantRegister { size: usize },
+    GrantRegister {
+        size: usize,
+    },
     /// 216: GrantUnregister — explicitly release a registered buffer.
-    GrantUnregister { reg_id: usize },
+    GrantUnregister {
+        reg_id: usize,
+    },
     /// 217: WaitForEvent — block until `mask` bits fire or `deadline` ticks pass.
     /// `deadline = None` means block indefinitely.
-    WaitForEvent { mask: u32, deadline: Option<u64> },
+    WaitForEvent {
+        mask: u32,
+        deadline: Option<u64>,
+    },
     /// 249: synchronize an owned Grant subrange before device submission.
     GrantCacheSyncBegin {
         grant_id: usize,
@@ -4208,7 +4523,9 @@ pub enum Syscall {
         len: usize,
     },
     /// 250: synchronize device output and release one exact Grant pin.
-    GrantCacheSyncComplete { token: usize },
+    GrantCacheSyncComplete {
+        token: usize,
+    },
     /// 251: validate and expose a firmware-owned display framebuffer.
     RegisterDisplayFramebuffer {
         base: usize,
@@ -4230,9 +4547,14 @@ pub enum Syscall {
 
     // === Hypervisor (220-225) — HypervisorCap ZST-gated ===
     /// 220: CreateVm — allocate guest RAM + Stage-2 table → vm_id.
-    CreateVm { guest_pages: usize },
+    CreateVm {
+        guest_pages: usize,
+    },
     /// 221: CreateVcpu — create a vCPU with `entry_pc` in `vm_id` → vcpu_id.
-    CreateVcpu { vm_id: usize, entry_pc: u64 },
+    CreateVcpu {
+        vm_id: usize,
+        entry_pc: u64,
+    },
     /// 222: MapGuestMemory — map guest IPA range in `vm_id` Stage-2 table.
     MapGuestMemory {
         vm_id: usize,
@@ -4278,11 +4600,18 @@ pub enum Syscall {
     /// 234: WaitIrq — block until hardware IRQ `irq` fires (Driver Cell).
     /// ISR sets IRQ_PENDING[irq] (atomic, no lock); scheduler sweep wakes the task.
     /// `mmio_base`: VirtIO MMIO slot base for InterruptACK write, or 0 for non-VirtIO.
-    WaitIrq { irq: u8, mmio_base: usize },
+    WaitIrq {
+        irq: u8,
+        mmio_base: usize,
+    },
     /// 235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
     /// Populates the kernel BAR allowlist used by `sys_request_mmio`.
     /// Requires singleton PlatformCap.
-    RegisterPcieBar { bdf: u32, base: usize, len: usize },
+    RegisterPcieBar {
+        bdf: u32,
+        base: usize,
+        len: usize,
+    },
     /// 236: RegisterPciDevice — Platform Cell announces a PCI device with class/BAR info.
     /// Populates kernel PCI_DEVICES so find_class() works without a kernel ECAM scan.
     /// Requires singleton PlatformCap (allowlist bit 53).
@@ -4295,14 +4624,22 @@ pub enum Syscall {
     /// 237: ReadLog — drain up to `max` bytes from the kernel user-log ring.
     /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
     /// Gated by allowlist bit 54 (ReadLog).
-    ReadLog { buf_ptr: usize, max: usize },
+    ReadLog {
+        buf_ptr: usize,
+        max: usize,
+    },
     /// ViSyscall 9: SetTlsBase — set the caller's own user thread pointer and
     /// return the previous value. Self-only (no target parameter) and always
     /// permitted: it carries no authority.
-    SetTlsBase { base: usize },
+    SetTlsBase {
+        base: usize,
+    },
     /// ViSyscall 19: PipeCreate — create a pipe and write both endpoint handles
     /// into the caller's 2-word buffer.
-    PipeCreate { capacity: usize, out_ptr: usize },
+    PipeCreate {
+        capacity: usize,
+        out_ptr: usize,
+    },
     /// ViSyscall 22: PipeRead — read up to `len` bytes, blocking (with an optional
     /// deadline) while the ring is empty and a writer end is still open.
     PipeRead {
@@ -4320,10 +4657,15 @@ pub enum Syscall {
         timeout_ticks: u64,
     },
     /// ViSyscall 24: PipeClose — close one endpoint this task owns.
-    PipeClose { handle: usize },
+    PipeClose {
+        handle: usize,
+    },
     /// ViSyscall 25: PipeShare — duplicate an endpoint into another task's table.
     /// Owner-only: a task cannot share an endpoint it does not hold.
-    PipeShare { handle: usize, target_tid: usize },
+    PipeShare {
+        handle: usize,
+        target_tid: usize,
+    },
 }
 
 /// Return the syscall allowlist only for an active caller.
@@ -4597,14 +4939,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Syscall::SpawnPinned { .. } => 3,
             _ => 0,
         };
-        if route == 0 { None } else {
-            let parent = super::SCHEDULER.lock().as_ref()
+        if route == 0 {
+            None
+        } else {
+            let parent = super::SCHEDULER
+                .lock()
+                .as_ref()
                 .and_then(|sched| sched.tasks.get(&caller_id))
                 .map(|task| crate::p01_measurement::Owner::of(task));
             parent.and_then(|owner| crate::p01_measurement::ingress(owner, route))
         }
     };
-    let result = handle_syscall_inner(caller_id, syscall, #[cfg(cellos_p01_trace)] &mut trace);
+    let result = handle_syscall_inner(
+        caller_id,
+        syscall,
+        #[cfg(cellos_p01_trace)]
+        &mut trace,
+    );
     #[cfg(cellos_p01_trace)]
     {
         crate::p01_measurement::outcome(trace, result);
@@ -4613,7 +4964,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
     result
 }
 
-fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
+fn handle_syscall_inner(
+    caller_id: usize,
+    syscall: Syscall,
     #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     let Some(allowed) = syscall_allowlist_for(caller_id) else {
@@ -4627,15 +4980,22 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         // These non-fixture routes do not have historical per-object provenance
         // in this observer. Preserve the uncertainty before any source can lose it.
         let class = match &syscall {
-            Syscall::GrantAlloc { .. } | Syscall::GrantShare { .. } |
-            Syscall::GrantSlice { .. } | Syscall::GrantFree { .. } |
-            Syscall::GrantRegister { .. } | Syscall::GrantUnregister { .. } |
-            Syscall::GrantCacheSyncBegin { .. } | Syscall::GrantCacheSyncComplete { .. } |
-            Syscall::ShmAlloc { .. } | Syscall::ShmMap { .. } | Syscall::Grant { .. } |
-            Syscall::Map { .. } => Some(3),
+            Syscall::GrantAlloc { .. }
+            | Syscall::GrantShare { .. }
+            | Syscall::GrantSlice { .. }
+            | Syscall::GrantFree { .. }
+            | Syscall::GrantRegister { .. }
+            | Syscall::GrantUnregister { .. }
+            | Syscall::GrantCacheSyncBegin { .. }
+            | Syscall::GrantCacheSyncComplete { .. }
+            | Syscall::ShmAlloc { .. }
+            | Syscall::ShmMap { .. }
+            | Syscall::Grant { .. }
+            | Syscall::Map { .. } => Some(3),
             Syscall::GrantDma { .. } => Some(5),
-            Syscall::CreateVm { .. } | Syscall::CreateVcpu { .. } |
-            Syscall::MapGuestMemory { .. } => Some(8),
+            Syscall::CreateVm { .. }
+            | Syscall::CreateVcpu { .. }
+            | Syscall::MapGuestMemory { .. } => Some(8),
             _ => None,
         };
         if let Some(class) = class {
@@ -4668,63 +5028,99 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
 
     // Every public receive form ends the prior VFS request. Masked dependency
     // receives preserve the outer grant authority and bounded reply token.
-    if let Syscall::Recv { mask, .. } | Syscall::RecvTimeout { mask, .. }
-        | Syscall::TryRecv { mask, .. } | Syscall::RecvScatter { mask, .. } = &syscall {
+    if let Syscall::Recv { mask, .. }
+    | Syscall::RecvTimeout { mask, .. }
+    | Syscall::TryRecv { mask, .. }
+    | Syscall::RecvScatter { mask, .. } = &syscall
+    {
         let dropped = {
             let mut guard = super::SCHEDULER.lock();
-            guard.as_mut().and_then(|sched| sched.tasks.get_mut(&caller_id))
+            guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
                 .and_then(|task| task.begin_receive_context(*mask))
         };
         finish_vfs_context_drop(caller_id, dropped);
     }
 
     match syscall {
-        Syscall::CellSessionV1 { request_ptr, request_len, result_ptr, result_capacity } => {
+        Syscall::CellSessionV1 {
+            request_ptr,
+            request_len,
+            result_ptr,
+            result_capacity,
+        } => {
             const MAX: usize = api::cell_session::MAX_REQUEST_LEN;
-            if request_len < api::cell_session::HEADER_LEN || request_len > MAX
-                || result_capacity < api::cell_session::HEADER_LEN {
+            if !(api::cell_session::HEADER_LEN..=MAX).contains(&request_len)
+                || result_capacity < api::cell_session::HEADER_LEN
+            {
                 return Err(SyscallError::InvalidInput);
             }
-            let request_end = request_ptr.checked_add(request_len).ok_or(SyscallError::InvalidInput)?;
-            let result_end = result_ptr.checked_add(result_capacity).ok_or(SyscallError::InvalidInput)?;
-            if request_ptr < result_end && result_ptr < request_end { return Err(SyscallError::InvalidInput); }
+            let request_end = request_ptr
+                .checked_add(request_len)
+                .ok_or(SyscallError::InvalidInput)?;
+            let result_end = result_ptr
+                .checked_add(result_capacity)
+                .ok_or(SyscallError::InvalidInput)?;
+            if request_ptr < result_end && result_ptr < request_end {
+                return Err(SyscallError::InvalidInput);
+            }
             validate_user_buf(request_ptr, request_len, MAX)?;
             validate_user_buf(result_ptr, result_capacity, MAX_USER_BUF)?;
             preflight_user_output(caller_id, result_ptr, result_capacity)?;
             let view = caller_copy_view(caller_id)?;
             let mut request = [0u8; MAX];
-            let _reply_pin = SessionOutputPin::reserve(caller_id, result_ptr, result_capacity, &view)?;
-            view.read_into(request_ptr, &mut request[..request_len]).map_err(|_| SyscallError::InvalidInput)?;
+            let _reply_pin =
+                SessionOutputPin::reserve(caller_id, result_ptr, result_capacity, &view)?;
+            view.read_into(request_ptr, &mut request[..request_len])
+                .map_err(|_| SyscallError::InvalidInput)?;
             let header = api::cell_session::RequestHeaderV1::decode(&request[..request_len]);
             let mut result = [0u8; 1536];
             if let Ok(header) = header {
-                let required = super::cell_session::required_result(header.selector,
-                    &request[api::cell_session::HEADER_LEN..request_len]);
+                let required = super::cell_session::required_result(
+                    header.selector,
+                    &request[api::cell_session::HEADER_LEN..request_len],
+                );
                 if result_capacity < required {
-                    api::cell_session::ResultHeaderV1 { selector: header.selector,
-                        status: api::cell_session::Status::BufferTooSmall, total_len: required as u32,
-                        request_id: header.request_id }.encode(&mut result).map_err(|_| SyscallError::InvalidInput)?;
-                    view.write_bytes(result_ptr, &result[..api::cell_session::HEADER_LEN]).map_err(|_| SyscallError::InvalidInput)?;
+                    api::cell_session::ResultHeaderV1 {
+                        selector: header.selector,
+                        status: api::cell_session::Status::BufferTooSmall,
+                        total_len: required as u32,
+                        request_id: header.request_id,
+                    }
+                    .encode(&mut result)
+                    .map_err(|_| SyscallError::InvalidInput)?;
+                    view.write_bytes(result_ptr, &result[..api::cell_session::HEADER_LEN])
+                        .map_err(|_| SyscallError::InvalidInput)?;
                     return Ok(0);
                 }
             }
-            let len = super::cell_session::dispatch(caller_id, &request[..request_len], &mut result);
-            view.write_bytes(result_ptr, &result[..len]).map_err(|_| SyscallError::InvalidInput)?;
+            let len =
+                super::cell_session::dispatch(caller_id, &request[..request_len], &mut result);
+            view.write_bytes(result_ptr, &result[..len])
+                .map_err(|_| SyscallError::InvalidInput)?;
             // Only a reply that reached the caller may be acknowledged.
             super::cell_session::delivered(caller_id, &request[..request_len]);
             Ok(0)
         }
         // --- Hubris ABI Implementation ---
-        Syscall::IpcSubmit { target, ptr, len } =>
-            super::async_ipc::submit(caller_id, target, ptr, len).map_err(ipc_error),
-        Syscall::IpcTake { token, ptr, len, status_ptr } =>
-            super::async_ipc::take(caller_id, token, ptr, len, status_ptr)
-                .map(|done| usize::from(done)).map_err(ipc_error),
-        Syscall::IpcWait { ticks } =>
-            super::async_ipc::wait(caller_id, ticks)
-                .map(|ready| usize::from(ready)).map_err(ipc_error),
-        Syscall::IpcCancel { token } =>
-            super::async_ipc::cancel(caller_id, token).map(|()| 0).map_err(ipc_error),
+        Syscall::IpcSubmit { target, ptr, len } => {
+            super::async_ipc::submit(caller_id, target, ptr, len).map_err(ipc_error)
+        }
+        Syscall::IpcTake {
+            token,
+            ptr,
+            len,
+            status_ptr,
+        } => super::async_ipc::take(caller_id, token, ptr, len, status_ptr)
+            .map(usize::from)
+            .map_err(ipc_error),
+        Syscall::IpcWait { ticks } => super::async_ipc::wait(caller_id, ticks)
+            .map(usize::from)
+            .map_err(ipc_error),
+        Syscall::IpcCancel { token } => super::async_ipc::cancel(caller_id, token)
+            .map(|()| 0)
+            .map_err(ipc_error),
         Syscall::IpcCurrent => Ok(super::async_ipc::current(caller_id)),
         Syscall::IpcReply { token, ptr, len } => {
             // An explicit reply is the same holder-quiescence boundary as Send.
@@ -4739,7 +5135,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 None
             };
             let out = super::async_ipc::reply(caller_id, token, ptr, len)
-                .map(|()| 0).map_err(ipc_error);
+                .map(|()| 0)
+                .map_err(ipc_error);
             if let Some(context) = vfs_release {
                 finish_vfs_send_release(caller_id, context.grant_owner, Some(context));
             }
@@ -4758,7 +5155,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 VfsGrantLookup::Active(context) => Some(context),
                 VfsGrantLookup::NotVfs | VfsGrantLookup::MissingContext => None,
             };
-            if let Some(outcome) = super::async_ipc::reply_current(caller_id, target, msg_ptr, msg_len) {
+            if let Some(outcome) =
+                super::async_ipc::reply_current(caller_id, target, msg_ptr, msg_len)
+            {
                 let out = outcome.map(|()| 0).map_err(ipc_error);
                 finish_vfs_send_release(caller_id, target, vfs_release);
                 return out;
@@ -4794,7 +5193,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // Target 0 is resolved to caller_id for self-wake without an extra tid lookup.
             let target_id = if target == 0 { caller_id } else { target };
             match super::ipc_try_send(caller_id, target_id, msg_ptr, msg_len) {
-                Ok(()) => Ok(0),           // delivered (or queued for input service / same-cell wake)
+                Ok(()) => Ok(0), // delivered (or queued for input service / same-cell wake)
                 Err(()) => Ok(usize::MAX), // dropped (target not ready or gone)
             }
         }
@@ -4889,8 +5288,13 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
                     let info = (
-                        pos, sender_tid, sender_cell_id, sender_generation,
-                        wire_header, caller_view, data,
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        caller_view,
+                        data,
                     );
                     if let Some(header) = wire_header {
                         super::async_ipc::dispatch(sched, caller_id, header);
@@ -4926,7 +5330,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         });
                         if peer_gone {
                             if buf_len >= core::mem::size_of::<u64>() {
-                                validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)?;
+                                validate_user_buf(
+                                    buf_ptr,
+                                    core::mem::size_of::<u64>(),
+                                    MAX_USER_BUF,
+                                )?;
                                 let view = caller_copy_view(caller_id)?;
                                 view.write_bytes(buf_ptr, &0u64.to_ne_bytes())
                                     .map_err(|_| SyscallError::InvalidInput)?;
@@ -4943,10 +5351,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                             // copy payload, then commit the exact record.
                             let snap = {
                                 let mut guard = super::SCHEDULER.lock();
-                                guard.as_mut().map_or(
-                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                    |sched| snapshot_resume_dispatched(sched, caller_id, mask),
-                                )
+                                guard
+                                    .as_mut()
+                                    .map_or(Ok(ResumeSnapshot::Wake { sender_tid: 0 }), |sched| {
+                                        snapshot_resume_dispatched(sched, caller_id, mask)
+                                    })
                             };
                             let snap = match snap {
                                 Err(()) => return Err(SyscallError::OutOfMemory),
@@ -5046,8 +5455,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         t.pending_msgs.remove(pos);
                     }
                     t.set_received_request_context(
-                        sender_tid, sender_cell_id, sender_generation,
-                        wire_header.map_or(0, |header| header.async_op));
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header.map_or(0, |header| header.async_op),
+                    );
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -5261,8 +5673,13 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         None => sender_cell_context_in_sched(sched, sender_tid),
                     };
                     let info = (
-                        pos, sender_tid, sender_cell_id, sender_generation,
-                        wire_header, caller_view, data,
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        caller_view,
+                        data,
                     );
                     if let Some(header) = wire_header {
                         super::async_ipc::dispatch(sched, caller_id, header);
@@ -5303,10 +5720,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                             super::yield_cpu();
                             let snap = {
                                 let mut guard = super::SCHEDULER.lock();
-                                guard.as_mut().map_or(
-                                    Ok(ResumeSnapshot::Wake { sender_tid: 0 }),
-                                    |sched| snapshot_resume_dispatched(sched, caller_id, mask),
-                                )
+                                guard
+                                    .as_mut()
+                                    .map_or(Ok(ResumeSnapshot::Wake { sender_tid: 0 }), |sched| {
+                                        snapshot_resume_dispatched(sched, caller_id, mask)
+                                    })
                             };
                             let snap = match snap {
                                 Err(()) => return Err(SyscallError::OutOfMemory),
@@ -5400,8 +5818,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         t.pending_msgs.remove(pos);
                     }
                     t.set_received_request_context(
-                        sender_tid, sender_cell_id, sender_generation,
-                        wire_header.map_or(0, |header| header.async_op));
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header.map_or(0, |header| header.async_op),
+                    );
                 }
                 if let Some(header) = wire_header {
                     super::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -5481,8 +5902,14 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     let (sender_cell_id, sender_generation) = inline_cell_context
                         .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
                     let info = (
-                        pos, sender_tid, sender_cell_id, sender_generation,
-                        wire_header, delivery_id, caller_view, data,
+                        pos,
+                        sender_tid,
+                        sender_cell_id,
+                        sender_generation,
+                        wire_header,
+                        delivery_id,
+                        caller_view,
+                        data,
                     );
                     if let Some(header) = wire_header {
                         super::async_ipc::dispatch(sched, caller_id, header);
@@ -5621,7 +6048,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 .map(|task| {
                     #[cfg(cellos_p01_trace)]
                     let _semantic = crate::memory::heap::p01_owner::creation(
-                        Some(crate::p01_resources::owner(task)), crate::memory::heap::p01_owner::TASK_FIELDS);
+                        Some(crate::p01_resources::owner(task)),
+                        crate::memory::heap::p01_owner::TASK_FIELDS,
+                    );
                     task.pipe_handles.insert(read_handle);
                     task.pipe_handles.insert(write_handle);
                 })
@@ -5818,7 +6247,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 .expect("target task remained live while holding SCHEDULER");
             #[cfg(cellos_p01_trace)]
             let _semantic = crate::memory::heap::p01_owner::creation(
-                Some(crate::p01_resources::owner(target)), crate::memory::heap::p01_owner::TASK_FIELDS);
+                Some(crate::p01_resources::owner(target)),
+                crate::memory::heap::p01_owner::TASK_FIELDS,
+            );
             target.pipe_handles.insert(handle);
             Ok(0)
         }
@@ -5827,7 +6258,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 let already_reaped = if let Some(target) = sched.tasks.get_mut(&pid) {
                     #[cfg(cellos_p01_trace)]
                     let _semantic = crate::memory::heap::p01_owner::creation(
-                        Some(crate::p01_resources::owner(target)), crate::memory::heap::p01_owner::TASK_FIELDS);
+                        Some(crate::p01_resources::owner(target)),
+                        crate::memory::heap::p01_owner::TASK_FIELDS,
+                    );
                     target.waiters.push(caller_id);
                     false
                 } else if let Some(zombie) = sched.zombies.iter_mut().find(|task| task.id == pid) {
@@ -5836,7 +6269,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     // exact selected/executing quiescence proof.
                     #[cfg(cellos_p01_trace)]
                     let _semantic = crate::memory::heap::p01_owner::creation(
-                        Some(crate::p01_resources::owner(zombie)), crate::memory::heap::p01_owner::TASK_FIELDS);
+                        Some(crate::p01_resources::owner(zombie)),
+                        crate::memory::heap::p01_owner::TASK_FIELDS,
+                    );
                     zombie.waiters.push(caller_id);
                     false
                 } else {
@@ -5890,7 +6325,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // and obtain a user-accessible mapping to kernel code, or map a
             // peer's (or a dead predecessor's) frame.
             let owns = live_cell_identity(caller_id).is_some_and(|(cell, generation)| {
-                shm_owned_by(handle, crate::cell::state_stash::Incarnation { cell, generation })
+                shm_owned_by(
+                    handle,
+                    crate::cell::state_stash::Incarnation { cell, generation },
+                )
             });
             if !owns {
                 return Err(SyscallError::PermissionDenied);
@@ -5939,7 +6377,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
                 #[cfg(cellos_p01_trace)]
                 {
-                    let owner = super::SCHEDULER.lock().as_ref()
+                    let owner = super::SCHEDULER
+                        .lock()
+                        .as_ref()
                         .and_then(|sched| sched.tasks.get(&caller_id))
                         .map(|task| {
                             let owner = crate::p01_measurement::Owner::of(task);
@@ -5947,14 +6387,19 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                             // invocation, including while a stage census reads it.
                             if let Ok(layout) = core::alloc::Layout::array::<u8>(msg.capacity()) {
                                 crate::memory::heap::p01_owner::runtime_buffer(
-                                    msg.as_ptr() as usize, layout, owner,
-                                    crate::memory::heap::p01_owner::TASK_IO);
+                                    msg.as_ptr() as usize,
+                                    layout,
+                                    owner,
+                                    crate::memory::heap::p01_owner::TASK_IO,
+                                );
                             } else {
                                 crate::p01_measurement::invalidate(crate::p01_measurement::COUNTER);
                             }
                             owner
                         });
-                    if let Some(owner) = owner { crate::p01_measurement::stage(owner, &msg); }
+                    if let Some(owner) = owner {
+                        crate::p01_measurement::stage(owner, &msg);
+                    }
                 }
                 crate::task::print_user_log(&msg, caller_id);
             }
@@ -6196,11 +6641,15 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // `register_cell_authority` and `finish_root_retirement`.
             {
                 let sched = super::SCHEDULER.lock();
-                let new_caps = sched.as_ref()
+                let new_caps = sched
+                    .as_ref()
                     .and_then(|sched| sched.tasks.get(&target_tid))
-                    .map(|t| super::cap::CapSet::from_task(t))
+                    .map(super::cap::CapSet::from_task)
                     .unwrap_or(super::cap::CapSet::EMPTY);
-                if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(target_cell.0, target_gen)) {
+                if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                    .lock()
+                    .get_mut(&(target_cell.0, target_gen))
+                {
                     auth.ceiling = auth.ceiling.intersect(new_caps);
                 }
             }
@@ -6264,7 +6713,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(0)
         }
 
-        Syscall::QueryRetirement { root_tid, out_ptr, out_len } => {
+        Syscall::QueryRetirement {
+            root_tid,
+            out_ptr,
+            out_len,
+        } => {
             // Admitted past the allowlist; the verdict table is the gate: a
             // death subscriber of that root at its retirement, or a supervisor.
             if out_len != api::retirement::RETIREMENT_RECORD_LEN {
@@ -6273,14 +6726,28 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             let supervisor = caller_has_supervisor(caller_id);
             let record = crate::cell::retirement_verdict::query(caller_id, supervisor, root_tid)
                 .map_err(|error| match error {
-                    crate::cell::retirement_verdict::QueryError::NotFound => SyscallError::FileNotFound,
-                    crate::cell::retirement_verdict::QueryError::Denied => SyscallError::PermissionDenied,
+                    crate::cell::retirement_verdict::QueryError::NotFound => {
+                        SyscallError::FileNotFound
+                    }
+                    crate::cell::retirement_verdict::QueryError::Denied => {
+                        SyscallError::PermissionDenied
+                    }
                 })?;
-            write_user_slice(caller_id, out_ptr, &record.encode(), api::retirement::RETIREMENT_RECORD_LEN)?;
+            write_user_slice(
+                caller_id,
+                out_ptr,
+                &record.encode(),
+                api::retirement::RETIREMENT_RECORD_LEN,
+            )?;
             Ok(api::retirement::RETIREMENT_RECORD_LEN)
         }
 
-        Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved } => {
+        Syscall::LookupBlockRoute {
+            index,
+            out_ptr,
+            out_len,
+            reserved,
+        } => {
             // Admitted past the allowlist; the VFS (BlockIoCap) and init
             // (SpawnCap) are the route readers.
             if !(caller_has_block_io(caller_id) || caller_has_spawn(caller_id)) {
@@ -6296,7 +6763,12 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(len)
         }
 
-        Syscall::QueryMachineFacts { out_ptr, out_len, a2, a3 } => {
+        Syscall::QueryMachineFacts {
+            out_ptr,
+            out_len,
+            a2,
+            a3,
+        } => {
             // Admitted past the allowlist; init (SpawnCap) is the reader.
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
@@ -6337,10 +6809,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     return Err(SyscallError::InvalidInput);
                 };
                 return if crate::cell::service_registry::register(
-                    service_id,
-                    caller_id,
-                    cell_id,
-                    generation,
+                    service_id, caller_id, cell_id, generation,
                 ) {
                     Ok(0)
                 } else {
@@ -6358,12 +6827,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 // path keeps working while `LookupServiceBound` correctly reports
                 // that no binding exists for it.
                 let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
-                crate::cell::service_registry::register(
-                    service_id,
-                    caller_id,
-                    cell_id,
-                    generation,
-                );
+                crate::cell::service_registry::register(service_id, caller_id, cell_id, generation);
                 return Ok(0);
             }
             // Driver Cell self-registration path: a PCIe GPU driver or the
@@ -6382,10 +6846,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                     crate::task::drivers::driver_cell::register_gpu_driver,
                     || {
                         crate::cell::service_registry::register(
-                            service_id,
-                            caller_id,
-                            cell_id,
-                            generation,
+                            service_id, caller_id, cell_id, generation,
                         )
                     },
                     crate::task::drivers::driver_cell::deregister_gpu_driver,
@@ -6529,7 +6990,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             kbuf.resize(buf_len, 0);
             let read_bytes = super::file_read(fd, &mut kbuf);
             // A committed child's endpoint failure is explicit, never a short count.
-            if read_bytes == usize::MAX { return Err(SyscallError::PermissionDenied); }
+            if read_bytes == usize::MAX {
+                return Err(SyscallError::PermissionDenied);
+            }
             if read_bytes > 0 {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..read_bytes], MAX_USER_BUF)?;
             }
@@ -6646,7 +7109,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
         } => {
             let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
             let written = super::file_write(fd, &bytes);
-            if written == usize::MAX { return Err(SyscallError::PermissionDenied); }
+            if written == usize::MAX {
+                return Err(SyscallError::PermissionDenied);
+            }
             Ok(written)
         }
         Syscall::MkDir { path_ptr, path_len } => {
@@ -6678,7 +7143,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
-                #[cfg(cellos_p01_trace)] *trace,
+                #[cfg(cellos_p01_trace)]
+                *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -6687,10 +7153,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
             };
             #[cfg(cellos_p01_trace)]
-            let request = { let mut request = request; request.trace = *trace; request };
+            let request = {
+                let mut request = request;
+                request.trace = *trace;
+                request
+            };
             let spawned = crate::loader::spawn_from_path(&path_str, request);
             #[cfg(cellos_p01_trace)]
-            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
+            if let Err(error) = spawned {
+                crate::p01_measurement::source_error(*trace, error);
+            }
             // A successful spawn consumed any staged directory-handle set inside
             // task creation. Clearing unconditionally covers the failure paths:
             // a set left staged by a spawn that never produced a child would be
@@ -6932,7 +7404,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
-                #[cfg(cellos_p01_trace)] *trace,
+                #[cfg(cellos_p01_trace)]
+                *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -6941,10 +7414,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
             };
             #[cfg(cellos_p01_trace)]
-            let request = { let mut request = request; request.trace = *trace; request };
+            let request = {
+                let mut request = request;
+                request.trace = *trace;
+                request
+            };
             let spawned = crate::loader::spawn_gated(elf_bytes, &path_str, request);
             #[cfg(cellos_p01_trace)]
-            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
+            if let Err(error) = spawned {
+                crate::p01_measurement::source_error(*trace, error);
+            }
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -6988,7 +7467,13 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 crate::loader::launch_profile::LaunchRoute::Pinned,
                 &path_str,
             )?;
-            let request = match governed_spawn_request(caller_id, profile.child_ceiling, priority, #[cfg(cellos_p01_trace)] *trace) {
+            let request = match governed_spawn_request(
+                caller_id,
+                profile.child_ceiling,
+                priority,
+                #[cfg(cellos_p01_trace)]
+                *trace,
+            ) {
                 Ok(request) => request,
                 Err(error) => {
                     crate::task::dir_inherit::clear_staged(caller_id);
@@ -6996,10 +7481,16 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
             };
             #[cfg(cellos_p01_trace)]
-            let request = { let mut request = request; request.trace = *trace; request };
+            let request = {
+                let mut request = request;
+                request.trace = *trace;
+                request
+            };
             let spawned = crate::loader::spawn_from_path(&path_str, request);
             #[cfg(cellos_p01_trace)]
-            if let Err(error) = spawned { crate::p01_measurement::source_error(*trace, error); }
+            if let Err(error) = spawned {
+                crate::p01_measurement::source_error(*trace, error);
+            }
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
@@ -7064,8 +7555,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 (types::CellId(0), 0)
             };
             let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-            let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
-            let ticket = auth.allocate_file_slot(file, api::cap::CapPerms::FILE_READ.0)
+            let auth = auths
+                .get_mut(&(cell_id.0, cell_gen))
+                .ok_or(SyscallError::PermissionDenied)?;
+            let ticket = auth
+                .allocate_file_slot(file, api::cap::CapPerms::FILE_READ.0)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             Ok(ticket as usize)
         }
@@ -7090,7 +7584,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
@@ -7099,7 +7595,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(buf_len, 0);
             let read_result = boxed_file.read(&mut kbuf);
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             match read_result {
@@ -7135,12 +7634,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
             let seek_result = boxed_file.seek(pos);
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             match seek_result {
@@ -7169,12 +7673,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
             let write_result = boxed_file.write(&bytes);
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             match write_result {
@@ -7195,12 +7704,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
             let result = boxed_file.size();
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             result
@@ -7220,12 +7734,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
             let result = boxed_file.truncate(len as u64);
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
@@ -7243,12 +7762,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             };
             let mut boxed_file = {
                 let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-                let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
+                let auth = auths
+                    .get_mut(&(cell_id.0, cell_gen))
+                    .ok_or(SyscallError::PermissionDenied)?;
                 auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
                     .map_err(|_| SyscallError::PermissionDenied)?
             };
             let result = boxed_file.sync();
-            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES.lock().get_mut(&(cell_id.0, cell_gen)) {
+            if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
+                .lock()
+                .get_mut(&(cell_id.0, cell_gen))
+            {
                 auth.unpark_file(cap_id as u64, boxed_file);
             }
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
@@ -7365,8 +7889,11 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 (types::CellId(0), 0)
             };
             let mut auths = crate::cell::cspace::CELL_AUTHORITIES.lock();
-            let auth = auths.get_mut(&(cell_id.0, cell_gen)).ok_or(SyscallError::PermissionDenied)?;
-            auth.close_ticket(cap_id as u64).map_err(|_| SyscallError::PermissionDenied)?;
+            let auth = auths
+                .get_mut(&(cell_id.0, cell_gen))
+                .ok_or(SyscallError::PermissionDenied)?;
+            auth.close_ticket(cap_id as u64)
+                .map_err(|_| SyscallError::PermissionDenied)?;
             Ok(0)
         }
 
@@ -7398,7 +7925,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 caller_id,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
-                #[cfg(cellos_p01_trace)] *trace,
+                #[cfg(cellos_p01_trace)]
+                *trace,
             ) {
                 Ok(request) => request,
                 Err(error) => {
@@ -7519,7 +8047,12 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             Ok(len)
         }
 
-        Syscall::TelemetrySnapshot { out_ptr, out_len, flags, reserved } => {
+        Syscall::TelemetrySnapshot {
+            out_ptr,
+            out_len,
+            flags,
+            reserved,
+        } => {
             use api::telemetry::request;
             // The dispatch gate already required `observe_tasks` (X). Arguments
             // are refused before anything is sampled.
@@ -7552,12 +8085,14 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             } else {
                 let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
                 match guard.as_ref() {
-                    Some(allocator) => super::telemetry::SystemMemory::Present(api::syscall::ViMemInfoV1 {
-                        total_frames: allocator.total_frames() as u64,
-                        used_frames: allocator.used_frames() as u64,
-                        free_frames: allocator.free_frames() as u64,
-                        page_size: allocator.page_size() as u64,
-                    }),
+                    Some(allocator) => {
+                        super::telemetry::SystemMemory::Present(api::syscall::ViMemInfoV1 {
+                            total_frames: allocator.total_frames() as u64,
+                            used_frames: allocator.used_frames() as u64,
+                            free_frames: allocator.free_frames() as u64,
+                            page_size: allocator.page_size() as u64,
+                        })
+                    }
                     None => super::telemetry::SystemMemory::Unavailable,
                 }
             };
@@ -7716,16 +8251,17 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if let Some((fb_base, fb_size, _fb_w, _fb_h, fb_pitch)) =
                 crate::resource_registry::display_framebuffer_info()
             {
-                let x = (xy >> 16) as usize;
-                let y = (xy & 0xffff) as usize;
-                let w = (wh >> 16) as usize;
-                let h = (wh & 0xffff) as usize;
-                let src_stride = w.checked_mul(4).unwrap_or(usize::MAX);
-                let needed_bytes = src_stride.checked_mul(h).unwrap_or(usize::MAX);
+                let x = xy >> 16;
+                let y = xy & 0xffff;
+                let w = wh >> 16;
+                let h = wh & 0xffff;
+                let src_stride = w.saturating_mul(4);
+                let needed_bytes = src_stride.saturating_mul(h);
                 if data_ptr != 0 && data_len >= needed_bytes && src_stride > 0 {
                     // SAFETY: In SAS, data_ptr is the compositor staging buffer.
                     // fb_base is the firmware linear framebuffer identity-mapped at boot.
-                    let src = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
+                    let src =
+                        unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
                     #[cfg(target_arch = "x86_64")]
                     let dst_ptr = crate::memory::frame::phys_to_virt(fb_base) as *mut u8;
                     #[cfg(not(target_arch = "x86_64"))]
@@ -7735,8 +8271,12 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                         let dst_offset = (y + row).wrapping_mul(fb_pitch).wrapping_add(x * 4);
                         let src_offset = row.wrapping_mul(src_stride);
                         let line_bytes = w * 4;
-                        if dst_offset.checked_add(line_bytes).map_or(false, |end| end <= fb_size)
-                            && src_offset.checked_add(line_bytes).map_or(false, |end| end <= data_len)
+                        if dst_offset
+                            .checked_add(line_bytes)
+                            .is_some_and(|end| end <= fb_size)
+                            && src_offset
+                                .checked_add(line_bytes)
+                                .is_some_and(|end| end <= data_len)
                         {
                             dst[dst_offset..dst_offset + line_bytes]
                                 .copy_from_slice(&src[src_offset..src_offset + line_bytes]);
@@ -7861,8 +8401,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             buf_len,
         } => {
             let raw_key = key as u64;
-            let is_shell =
-                caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "cellbox");
+            let is_shell = caller_launch_state(caller_id)
+                .is_some_and(|(name, _, _)| name.as_str() == "cellbox");
             if is_shell
                 && (raw_key != SPAWN_ARGV_KEY
                     || buf_len > crate::cell::state_stash::MAX_SPAWN_ARGV_LEN)
@@ -7923,7 +8463,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // Empty buffer: length probe only (owner, destination or supervisor).
             if buf_len == 0 {
                 let supervisor = caller_has_supervisor(caller_id);
-                return Ok(crate::cell::state_stash::status(reader, supervisor, key as u64));
+                return Ok(crate::cell::state_stash::status(
+                    reader, supervisor, key as u64,
+                ));
             }
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             let mut kbuf = alloc::vec::Vec::new();
@@ -7951,8 +8493,9 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             } else {
                 let caller = stash_incarnation(caller_id)?;
                 let supervisor = caller_has_supervisor(caller_id);
-                crate::cell::state_stash::clear(caller, supervisor, key as u64)
-                    .map_err(|()| SyscallError::PermissionDenied)?;
+                if !crate::cell::state_stash::clear(caller, supervisor, key as u64) {
+                    return Err(SyscallError::PermissionDenied);
+                }
             }
             Ok(0)
         }
@@ -8288,9 +8831,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if !serial_port::present(index) {
                 return Ok(2);
             }
-            match serial_port::configure_baud(index, baud) {
-                Ok(()) => Ok(0),
-                Err(()) => Ok(3),
+            if serial_port::configure_baud(index, baud) {
+                Ok(0)
+            } else {
+                Ok(3)
             }
         }
 
@@ -8612,8 +9156,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 *table = Some(BTreeMap::new());
             }
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::GRANT_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::GRANT_SHARED,
+            );
             table.as_mut().unwrap().insert(
                 paddr,
                 PageGrant {
@@ -8911,8 +9457,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 {
                     return Err(SyscallError::InvalidInput);
                 }
-                let width = (packed_dimensions >> 16) as usize;
-                let height = (packed_dimensions & 0xffff) as usize;
+                let width = packed_dimensions >> 16;
+                let height = packed_dimensions & 0xffff;
                 if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
                     return Err(SyscallError::InvalidInput);
                 }
@@ -9082,8 +9628,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 *table = Some(BTreeMap::new());
             }
             #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                crate::memory::heap::p01_owner::GRANT_SHARED);
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::GRANT_SHARED,
+            );
             table.as_mut().unwrap().insert(
                 paddr,
                 RegGrant {
@@ -9165,11 +9713,8 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             fn user_map(_base: usize, _len: usize) {}
 
             if caller_has_platform(caller_id) {
-                return match crate::resource_registry::request_mmio_unchecked(
-                    caller_id,
-                    base,
-                    len,
-                ) {
+                return match crate::resource_registry::request_mmio_unchecked(caller_id, base, len)
+                {
                     Ok(()) => {
                         user_map(base, len);
                         Ok(0)
@@ -9200,11 +9745,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             // USB Host path: cells with UsbDriverCap may claim the DWC2 MMIO aperture.
             if caller_has_usb_driver(caller_id) && crate::resource_registry::is_dwc2_mmio(base, len)
             {
-                return match crate::resource_registry::request_dwc2_mmio(
-                    caller_id,
-                    base,
-                    len,
-                ) {
+                return match crate::resource_registry::request_dwc2_mmio(caller_id, base, len) {
                     Ok(()) => {
                         user_map(base, len);
                         Ok(0)
@@ -9226,12 +9767,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             if allowed_devices == 0 {
                 return Err(SyscallError::PermissionDenied);
             }
-            match crate::resource_registry::request_mmio(
-                    caller_id,
-                base,
-                len,
-                allowed_devices,
-            ) {
+            match crate::resource_registry::request_mmio(caller_id, base, len, allowed_devices) {
                 Ok(()) => {
                     user_map(base, len);
                     Ok(0)
@@ -9266,10 +9802,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             let n = if written > 0 {
                 written
             } else {
-                #[cfg(all(
-                    feature = "dev-weak-rng",
-                    not(feature = "qemu-dev-https")
-                ))]
+                #[cfg(all(feature = "dev-weak-rng", not(feature = "qemu-dev-https")))]
                 {
                     static WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
                         core::sync::atomic::AtomicBool::new(false);
@@ -9292,10 +9825,7 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
                 }
                 // The QEMU HTTPS image must fail closed even when development
                 // defaults also enabled dev-weak-rng through feature unification.
-                #[cfg(any(
-                    not(feature = "dev-weak-rng"),
-                    feature = "qemu-dev-https"
-                ))]
+                #[cfg(any(not(feature = "dev-weak-rng"), feature = "qemu-dev-https"))]
                 0
             };
             if n > 0 {
@@ -9486,16 +10016,27 @@ use api::syscall::ViSyscall;
 /// arch-appropriate sentinel (usize::MAX or u32::MAX) to the return register.
 fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> Option<Syscall> {
     let sc = match ViSyscall::from(syscall_id) {
-        ViSyscall::IpcSubmit => Syscall::IpcSubmit { target: a0, ptr: a1, len: a2 },
+        ViSyscall::IpcSubmit => Syscall::IpcSubmit {
+            target: a0,
+            ptr: a1,
+            len: a2,
+        },
         ViSyscall::IpcTake => Syscall::IpcTake {
-            token: a0, ptr: a1, len: a2, status_ptr: a3,
+            token: a0,
+            ptr: a1,
+            len: a2,
+            status_ptr: a3,
         },
         ViSyscall::IpcWait => Syscall::IpcWait {
             ticks: (a0 as u64) | ((a1 as u64) << 32),
         },
         ViSyscall::IpcCancel => Syscall::IpcCancel { token: a0 },
         ViSyscall::IpcCurrent => Syscall::IpcCurrent,
-        ViSyscall::IpcReply => Syscall::IpcReply { token: a0, ptr: a1, len: a2 },
+        ViSyscall::IpcReply => Syscall::IpcReply {
+            token: a0,
+            ptr: a1,
+            len: a2,
+        },
         ViSyscall::Send => Syscall::Send {
             target: a0,
             msg_ptr: a1,
@@ -9535,7 +10076,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             deadline: (super::system_ticks() as u64).wrapping_add(a3 as u64),
         },
         ViSyscall::CellSessionV1 => Syscall::CellSessionV1 {
-            request_ptr: a0, request_len: a1, result_ptr: a2, result_capacity: a3,
+            request_ptr: a0,
+            request_len: a1,
+            result_ptr: a2,
+            result_capacity: a3,
         },
         ViSyscall::Reply => Syscall::Reply {
             caller: a0,
@@ -10200,7 +10744,7 @@ fn observe_right_held(sc: ViSyscall, caller_id: usize) -> bool {
         .lock()
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&caller_id))
-        .is_some_and(|task| held(task))
+        .is_some_and(held)
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -10280,8 +10824,11 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = if typed_errors { encode_ipc_result(result) }
-        else { encode_syscall_result(result, usize::MAX, supports_typed_oom) };
+    frame.regs[10] = if typed_errors {
+        encode_ipc_result(result)
+    } else {
+        encode_syscall_result(result, usize::MAX, supports_typed_oom)
+    };
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -10341,8 +10888,11 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = if typed_errors { encode_ipc_result(result) as u32 }
-        else { encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32 };
+    frame.regs[10] = if typed_errors {
+        encode_ipc_result(result) as u32
+    } else {
+        encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32
+    };
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -10356,10 +10906,10 @@ mod tests {
         supports_typed_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
         SyscallError,
     };
+    use crate::task::cap::CapSet;
     use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
     use api::syscall::ViSyscall;
     use types::CellId;
-    use crate::task::cap::CapSet;
 
     /// One live task holding the pre-annex rights (`LEGACY_OBSERVE_MUTATE`), so
     /// the allowlist cases below test the allowlist bit alone.
@@ -10405,7 +10955,11 @@ mod tests {
     #[test]
     fn telemetry_syscalls_need_the_observe_rights_beyond_the_allowlist_bit() {
         let declared = (1u64 << 14) | (1u64 << 55) | (1u64 << 56);
-        let tasks = [ViSyscall::GetProcs, ViSyscall::GetProcs2, ViSyscall::TelemetrySnapshot];
+        let tasks = [
+            ViSyscall::GetProcs,
+            ViSyscall::GetProcs2,
+            ViSyscall::TelemetrySnapshot,
+        ];
         for allowlist in [declared, u64::MAX] {
             with_scheduler_task_caps(allowlist, CapSet::EMPTY, |tid| {
                 for sc in tasks.into_iter().chain([ViSyscall::MemInfo]) {
@@ -10476,9 +11030,17 @@ mod tests {
             ..CapSet::EMPTY
         };
         for (allowlist, caps, want) in [
-            (declared, CapSet::LEGACY_OBSERVE_MUTATE, CALLER_FLAG_VFS_MUTATE),
+            (
+                declared,
+                CapSet::LEGACY_OBSERVE_MUTATE,
+                CALLER_FLAG_VFS_MUTATE,
+            ),
             (declared, w_only, CALLER_FLAG_VFS_MUTATE),
-            (declared, CapSet::LEGACY_OBSERVE_MUTATE.without_observe_mutate(), 0),
+            (
+                declared,
+                CapSet::LEGACY_OBSERVE_MUTATE.without_observe_mutate(),
+                0,
+            ),
             (
                 declared,
                 CapSet {
@@ -10497,12 +11059,13 @@ mod tests {
                     let task = sched.tasks.get_mut(&tid).expect("test task");
                     task.cell_generation = 1;
                     task.root_tid = tid;
-                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
-                        7, 1, tid as u64
-                    )));
+                    assert!(
+                        sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                            7, 1, tid as u64
+                        ))
+                    );
                 }
-                let identity =
-                    super::attested_identity_of(tid).expect("live task has an identity");
+                let identity = super::attested_identity_of(tid).expect("live task has an identity");
                 assert_eq!(
                     identity.flags & CALLER_FLAG_VFS_MUTATE,
                     want,
@@ -10549,13 +11112,18 @@ mod tests {
                     let task = sched.tasks.get_mut(&tid).expect("test task");
                     task.cell_generation = 1;
                     task.root_tid = tid;
-                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
-                        7, 1, tid as u64
-                    )));
+                    assert!(
+                        sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                            7, 1, tid as u64
+                        ))
+                    );
                 }
-                let identity =
-                    super::attested_identity_of(tid).expect("live task has an identity");
-                assert_eq!(identity.flags & CALLER_FLAG_CONFIG_WRITE, want, "caps {caps:?}");
+                let identity = super::attested_identity_of(tid).expect("live task has an identity");
+                assert_eq!(
+                    identity.flags & CALLER_FLAG_CONFIG_WRITE,
+                    want,
+                    "caps {caps:?}"
+                );
                 // Q never leaks into or out of the network flags.
                 assert_eq!(
                     identity.flags & CALLER_FLAG_NET_RIGHTS_MASK,
@@ -10625,9 +11193,11 @@ mod tests {
                     let task = sched.tasks.get_mut(&tid).expect("test task");
                     task.cell_generation = 1;
                     task.root_tid = tid;
-                    assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
-                        7, 1, tid as u64
-                    )));
+                    assert!(
+                        sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                            7, 1, tid as u64
+                        ))
+                    );
                     // A thread of the same Cell generation holds no CapSet of its
                     // own; it must report whatever its Cell root holds.
                     let mut thread = alloc::boxed::Box::new(Task::new(
@@ -10644,10 +11214,13 @@ mod tests {
                 let thread_identity =
                     super::attested_identity_of(tid + 1).expect("live thread has an identity");
                 assert_eq!(thread_identity.flags & kms, want, "thread of caps {caps:?}");
-                let identity =
-                    super::attested_identity_of(tid).expect("live task has an identity");
+                let identity = super::attested_identity_of(tid).expect("live task has an identity");
                 assert_eq!(identity.flags & kms, want, "caps {caps:?}");
-                assert_eq!(identity.flags & kms, caps.kms_caller_flags(), "caps {caps:?}");
+                assert_eq!(
+                    identity.flags & kms,
+                    caps.kms_caller_flags(),
+                    "caps {caps:?}"
+                );
                 // The KMS bits never leak into or out of the other attested flags.
                 assert_eq!(
                     identity.flags & CALLER_FLAG_NET_RIGHTS_MASK,
@@ -10676,7 +11249,12 @@ mod tests {
         let mut previous = SCHEDULER.lock();
         let saved = previous.take();
         let mut scheduler = Scheduler::new();
-        for (tid, name) in [(1usize, "shutdown"), (2, "cellbox"), (3, "init"), (4, "supervisor")] {
+        for (tid, name) in [
+            (1usize, "shutdown"),
+            (2, "cellbox"),
+            (3, "init"),
+            (4, "supervisor"),
+        ] {
             scheduler.tasks.insert(
                 tid,
                 alloc::boxed::Box::new(Task::new(tid, CellId(7), name, alloc::vec::Vec::new())),
@@ -10687,7 +11265,10 @@ mod tests {
 
         assert_eq!(super::authorize_raw_shutdown(1), Ok(()));
         for tid in [2usize, 3, 4, 99] {
-            assert_eq!(super::authorize_raw_shutdown(tid), Err(SyscallError::PermissionDenied));
+            assert_eq!(
+                super::authorize_raw_shutdown(tid),
+                Err(SyscallError::PermissionDenied)
+            );
         }
         // The dispatcher refuses the denied callers itself, before any platform code.
         for tid in [2usize, 3, 4] {
@@ -10755,7 +11336,12 @@ mod tests {
         let syscall = map_syscall(ViSyscall::TelemetrySnapshot as usize, 0x3000, 4096, 3, 0)
             .expect("TelemetrySnapshot must decode");
         match syscall {
-            Syscall::TelemetrySnapshot { out_ptr, out_len, flags, reserved } => {
+            Syscall::TelemetrySnapshot {
+                out_ptr,
+                out_len,
+                flags,
+                reserved,
+            } => {
                 assert_eq!((out_ptr, out_len, flags, reserved), (0x3000, 4096, 3, 0));
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
@@ -10764,7 +11350,10 @@ mod tests {
         // A transient allocation failure reaches the caller as the typed OOM code.
         assert!(supports_typed_oom(&syscall));
         assert!(request_is_valid(0x3000, HEADER_LEN, request::ALL, 0));
-        assert!(!request_is_valid(0x3000, HEADER_LEN - 1, 0, 0), "short buffer");
+        assert!(
+            !request_is_valid(0x3000, HEADER_LEN - 1, 0, 0),
+            "short buffer"
+        );
         assert!(!request_is_valid(0x3004, 4096, 0, 0), "misaligned buffer");
         assert!(!request_is_valid(0x3000, 4096, 1 << 2, 0), "unknown flag");
         assert!(!request_is_valid(0x3000, 4096, 0, 1), "nonzero a3");
@@ -10845,7 +11434,11 @@ mod tests {
         let syscall = map_syscall(ViSyscall::QueryRetirement as usize, 77, 0x5000, 96, 0)
             .expect("QueryRetirement must decode");
         match syscall {
-            Syscall::QueryRetirement { root_tid, out_ptr, out_len } => {
+            Syscall::QueryRetirement {
+                root_tid,
+                out_ptr,
+                out_len,
+            } => {
                 assert_eq!((root_tid, out_ptr, out_len), (77, 0x5000, 96));
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
@@ -10854,11 +11447,21 @@ mod tests {
         assert!(super::has_typed_errors(&syscall));
         let len = api::retirement::RETIREMENT_RECORD_LEN;
         let query = |tid, root_tid, out_ptr, out_len| {
-            super::handle_syscall(tid, Syscall::QueryRetirement { root_tid, out_ptr, out_len })
+            super::handle_syscall(
+                tid,
+                Syscall::QueryRetirement {
+                    root_tid,
+                    out_ptr,
+                    out_len,
+                },
+            )
         };
         with_scheduler_task_caps(0, CapSet::EMPTY, |tid| {
             retirement_verdict::tests::reset();
-            assert_eq!(check_allowlist(ViSyscall::QueryRetirement as usize, tid), Ok(()));
+            assert_eq!(
+                check_allowlist(ViSyscall::QueryRetirement as usize, tid),
+                Ok(())
+            );
             let watched = api::cell_owner::CellOwner::new(0x431, 3, 77);
             let foreign = api::cell_owner::CellOwner::new(0x432, 3, 78);
             assert!(retirement_verdict::open(watched, &[tid]));
@@ -10873,7 +11476,11 @@ mod tests {
             let denied = query(tid, 78, 0x5000, len);
             assert_eq!(denied, Err(SyscallError::PermissionDenied));
             assert_eq!(super::encode_ipc_result(denied), usize::MAX);
-            assert_eq!(query(tid, 77, 0, len), Err(SyscallError::InvalidInput), "gate passed");
+            assert_eq!(
+                query(tid, 77, 0, len),
+                Err(SyscallError::InvalidInput),
+                "gate passed"
+            );
             retirement_verdict::tests::reset();
         });
     }
@@ -10888,7 +11495,12 @@ mod tests {
         ));
         task.cell_generation = generation;
         caps.apply_to(&mut task);
-        SCHEDULER.lock().as_mut().expect("scheduler").tasks.insert(tid, task);
+        SCHEDULER
+            .lock()
+            .as_mut()
+            .expect("scheduler")
+            .tasks
+            .insert(tid, task);
     }
 
     fn block_routes_snapshot(
@@ -10919,23 +11531,53 @@ mod tests {
         let register = |tid, kind, id, reserved| {
             super::handle_syscall(tid, Syscall::RegisterBlockDriver { kind, id, reserved })
         };
-        let driver = CapSet { pcie_driver: true, ..CapSet::EMPTY };
+        let driver = CapSet {
+            pcie_driver: true,
+            ..CapSet::EMPTY
+        };
         with_scheduler_task_caps(u64::MAX, driver, |tid| {
             reset_block_routes();
-            SCHEDULER.lock().as_mut().expect("scheduler").tasks.get_mut(&tid)
-                .expect("caller").cell_generation = 3;
+            SCHEDULER
+                .lock()
+                .as_mut()
+                .expect("scheduler")
+                .tasks
+                .get_mut(&tid)
+                .expect("caller")
+                .cell_generation = 3;
             insert_block_route_task(2, 8, 5, driver);
             insert_block_route_task(3, 9, 1, CapSet::EMPTY);
-            insert_block_route_task(4, 10, 1, CapSet { usb_driver: true, ..CapSet::EMPTY });
+            insert_block_route_task(
+                4,
+                10,
+                1,
+                CapSet {
+                    usb_driver: true,
+                    ..CapSet::EMPTY
+                },
+            );
             insert_block_route_task(6, 11, 1, driver);
-            SCHEDULER.lock().as_mut().expect("scheduler").tasks.get_mut(&6)
-                .expect("retiring task").state = crate::task::tcb::TaskState::Retiring;
-            insert_block_route_task(5, 10, 1, CapSet { usb_driver: true, ..CapSet::EMPTY });
+            SCHEDULER
+                .lock()
+                .as_mut()
+                .expect("scheduler")
+                .tasks
+                .get_mut(&6)
+                .expect("retiring task")
+                .state = crate::task::tcb::TaskState::Retiring;
+            insert_block_route_task(
+                5,
+                10,
+                1,
+                CapSet {
+                    usb_driver: true,
+                    ..CapSet::EMPTY
+                },
+            );
             assert!(claim_bdf_owner(BDF as u32, tid));
             assert!(claim_bdf_owner(FOREIGN_BDF as u32, 2));
             // `RequestMmio` records the claiming task id as the window owner.
-            assert!(crate::resource_registry::request_mmio_unchecked(4, BASE, 0x1000)
-                .is_ok());
+            assert!(crate::resource_registry::request_mmio_unchecked(4, BASE, 0x1000).is_ok());
             let empty = block_routes_snapshot();
 
             for (kind, id, reserved) in [
@@ -10960,33 +11602,68 @@ mod tests {
             assert!(claim_bdf_owner(0x4164, 6));
             for (caller, bdf) in [(3, 0x4163), (6, 0x4164)] {
                 let denied = register(caller, 1, bdf, (0, 0));
-                assert_eq!(denied, Err(SyscallError::PermissionDenied), "no cap / retiring");
+                assert_eq!(
+                    denied,
+                    Err(SyscallError::PermissionDenied),
+                    "no cap / retiring"
+                );
                 assert_eq!(super::encode_ipc_result(denied), usize::MAX);
             }
-            assert_eq!(block_routes_snapshot(), empty, "refusals leave the table untouched");
+            assert_eq!(
+                block_routes_snapshot(),
+                empty,
+                "refusals leave the table untouched"
+            );
 
             assert_eq!(register(tid, 1, BDF, (0, 0)), Ok(0), "first bind appends");
             assert_eq!(register(tid, 1, BDF, (0, 0)), Ok(0), "repeat is idempotent");
-            assert_eq!(register(4, 2, BASE, (0, 0)), Ok(0), "second device, second slot");
+            assert_eq!(
+                register(4, 2, BASE, (0, 0)),
+                Ok(0),
+                "second device, second slot"
+            );
             let routes = block_routes_snapshot();
             let first = routes[0].expect("slot 0");
-            assert_eq!((first.kind, first.id, first.provider()), (1, BDF as u64, Some((1, 7, 3))));
+            assert_eq!(
+                (first.kind, first.id, first.provider()),
+                (1, BDF as u64, Some((1, 7, 3)))
+            );
             let second = routes[1].expect("slot 1");
-            assert_eq!((second.kind, second.id, second.provider()), (2, BASE as u64, Some((4, 10, 1))));
+            assert_eq!(
+                (second.kind, second.id, second.provider()),
+                (2, BASE as u64, Some((4, 10, 1)))
+            );
             assert!(routes[2].is_none());
 
-            assert_eq!(register(5, 2, BASE, (0, 0)), Err(SyscallError::FileNotFound),
-                "another task of the same Cell does not own the window task 4 claimed");
+            assert_eq!(
+                register(5, 2, BASE, (0, 0)),
+                Err(SyscallError::FileNotFound),
+                "another task of the same Cell does not own the window task 4 claimed"
+            );
             assert_eq!(block_routes_snapshot(), routes);
 
             deregister_all_for(tid);
             let released = block_routes_snapshot()[0].expect("key kept");
-            assert_eq!((released.kind, released.id, released.provider()), (1, BDF as u64, None));
+            assert_eq!(
+                (released.kind, released.id, released.provider()),
+                (1, BDF as u64, None)
+            );
             release_bdfs_for(tid);
             assert!(claim_bdf_owner(BDF as u32, 2));
-            assert_eq!(register(2, 1, BDF, (0, 0)), Ok(0), "new owner regains the same slot");
-            assert_eq!(block_routes_snapshot()[0].and_then(|r| r.provider()), Some((2, 8, 5)));
-            assert_eq!(block_routes_snapshot()[1], routes[1], "sibling route untouched");
+            assert_eq!(
+                register(2, 1, BDF, (0, 0)),
+                Ok(0),
+                "new owner regains the same slot"
+            );
+            assert_eq!(
+                block_routes_snapshot()[0].and_then(|r| r.provider()),
+                Some((2, 8, 5))
+            );
+            assert_eq!(
+                block_routes_snapshot()[1],
+                routes[1],
+                "sibling route untouched"
+            );
 
             for bdf in 0x4170..0x4170 + (MAX_BLOCK_ROUTES - 2) {
                 assert!(claim_bdf_owner(bdf as u32, 2));
@@ -10999,11 +11676,17 @@ mod tests {
             assert_eq!(super::encode_ipc_result(refused), usize::MAX);
             assert_eq!(block_routes_snapshot(), full);
 
-            assert_eq!(crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER), None);
             assert_eq!(
-                super::handle_syscall(tid, Syscall::LookupService {
-                    service_id: api::syscall::service::BLOCK_DRIVER
-                }),
+                crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER),
+                None
+            );
+            assert_eq!(
+                super::handle_syscall(
+                    tid,
+                    Syscall::LookupService {
+                        service_id: api::syscall::service::BLOCK_DRIVER
+                    }
+                ),
                 Ok(0)
             );
 
@@ -11023,11 +11706,18 @@ mod tests {
         use crate::task::drivers::driver_cell::{
             block_route_record, deregister_all_for, publish_block_route, reset_block_routes,
         };
-        use api::block_route::{DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN};
+        use api::block_route::{
+            DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN,
+        };
         let syscall = map_syscall(ViSyscall::LookupBlockRoute as usize, 3, 0x5000, 40, 0)
             .expect("LookupBlockRoute must decode");
         match syscall {
-            Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved } => {
+            Syscall::LookupBlockRoute {
+                index,
+                out_ptr,
+                out_len,
+                reserved,
+            } => {
                 assert_eq!((index, out_ptr, out_len, reserved), (3, 0x5000, 40, 0));
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
@@ -11036,17 +11726,34 @@ mod tests {
         assert!(super::has_typed_errors(&syscall));
         let len = BLOCK_ROUTE_RECORD_LEN;
         let lookup = |tid, index, out_ptr, out_len, reserved| {
-            super::handle_syscall(tid, Syscall::LookupBlockRoute { index, out_ptr, out_len, reserved })
+            super::handle_syscall(
+                tid,
+                Syscall::LookupBlockRoute {
+                    index,
+                    out_ptr,
+                    out_len,
+                    reserved,
+                },
+            )
         };
         let key = DeviceKey::new(BLOCK_DEVICE_PCI, 0xFA).expect("valid BDF");
 
-        let block_io = CapSet { block_io: true, ..CapSet::EMPTY };
-        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        let block_io = CapSet {
+            block_io: true,
+            ..CapSet::EMPTY
+        };
+        let spawn = CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        };
         for caps in [CapSet::EMPTY, block_io, spawn] {
             with_scheduler_task_caps(0, caps, |tid| {
                 reset_block_routes();
                 assert_eq!(publish_block_route(key, (9, 90, 2)), Some(0));
-                assert_eq!(check_allowlist(ViSyscall::LookupBlockRoute as usize, tid), Ok(()));
+                assert_eq!(
+                    check_allowlist(ViSyscall::LookupBlockRoute as usize, tid),
+                    Ok(())
+                );
                 if caps == CapSet::EMPTY {
                     let denied = lookup(tid, 0, 0x5000, len, 0);
                     assert_eq!(denied, Err(SyscallError::PermissionDenied));
@@ -11064,7 +11771,11 @@ mod tests {
                     assert_eq!(missing, Err(SyscallError::FileNotFound), "index {index}");
                     assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
                 }
-                assert_eq!(lookup(tid, 0, 0, len, 0), Err(SyscallError::InvalidInput), "gate passed");
+                assert_eq!(
+                    lookup(tid, 0, 0, len, 0),
+                    Err(SyscallError::InvalidInput),
+                    "gate passed"
+                );
 
                 let record = block_route_record(0).expect("bound slot");
                 let decoded = ViBlockRouteV1::decode(&record.encode()).expect("valid record bytes");
@@ -11072,8 +11783,12 @@ mod tests {
                 assert_eq!(decoded.provider(), Some((9, 90, 2)));
                 deregister_all_for(9);
                 let released = block_route_record(0).expect("key kept");
-                let decoded = ViBlockRouteV1::decode(&released.encode()).expect("valid record bytes");
-                assert_eq!((decoded.device(), decoded.provider(), decoded.flags), (key, None, 0));
+                let decoded =
+                    ViBlockRouteV1::decode(&released.encode()).expect("valid record bytes");
+                assert_eq!(
+                    (decoded.device(), decoded.provider(), decoded.flags),
+                    (key, None, 0)
+                );
                 reset_block_routes();
             });
         }
@@ -11083,14 +11798,23 @@ mod tests {
     /// register it.
     #[test]
     fn register_service_refuses_the_retired_block_driver_id() {
-        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        let spawn = CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        };
         with_scheduler_task_caps(0, spawn, |tid| {
-            let refused = super::handle_syscall(tid, Syscall::RegisterService {
-                service_id: api::syscall::service::BLOCK_DRIVER,
+            let refused = super::handle_syscall(
                 tid,
-            });
+                Syscall::RegisterService {
+                    service_id: api::syscall::service::BLOCK_DRIVER,
+                    tid,
+                },
+            );
             assert_eq!(refused, Err(SyscallError::PermissionDenied));
-            assert_eq!(crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER), None);
+            assert_eq!(
+                crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER),
+                None
+            );
         });
     }
 
@@ -11103,7 +11827,12 @@ mod tests {
         let syscall = map_syscall(ViSyscall::QueryMachineFacts as usize, 0x5000, CAP, 0, 0)
             .expect("QueryMachineFacts must decode");
         match syscall {
-            Syscall::QueryMachineFacts { out_ptr, out_len, a2, a3 } => {
+            Syscall::QueryMachineFacts {
+                out_ptr,
+                out_len,
+                a2,
+                a3,
+            } => {
                 assert_eq!((out_ptr, out_len, a2, a3), (0x5000, CAP, 0, 0));
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
@@ -11111,24 +11840,47 @@ mod tests {
         assert_eq!(syscall_to_vi(&syscall), None);
         assert!(super::has_typed_errors(&syscall));
         let query = |tid, out_len, a2, a3| {
-            super::handle_syscall(tid, Syscall::QueryMachineFacts { out_ptr: 0x5000, out_len, a2, a3 })
+            super::handle_syscall(
+                tid,
+                Syscall::QueryMachineFacts {
+                    out_ptr: 0x5000,
+                    out_len,
+                    a2,
+                    a3,
+                },
+            )
         };
-        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        let spawn = CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        };
         for caps in [CapSet::EMPTY, spawn] {
             with_scheduler_task_caps(0, caps, |tid| {
-                assert_eq!(check_allowlist(ViSyscall::QueryMachineFacts as usize, tid), Ok(()));
+                assert_eq!(
+                    check_allowlist(ViSyscall::QueryMachineFacts as usize, tid),
+                    Ok(())
+                );
                 if caps == CapSet::EMPTY {
                     let denied = query(tid, CAP, 0, 0);
                     assert_eq!(denied, Err(SyscallError::PermissionDenied));
                     assert_eq!(super::encode_ipc_result(denied), usize::MAX);
                     return;
                 }
-                for (out_len, a2, a3) in [(CAP - 1, 0, 0), (CAP + 1, 0, 0), (0, 0, 0), (CAP, 1, 0), (CAP, 0, 1)] {
+                for (out_len, a2, a3) in [
+                    (CAP - 1, 0, 0),
+                    (CAP + 1, 0, 0),
+                    (0, 0, 0),
+                    (CAP, 1, 0),
+                    (CAP, 0, 1),
+                ] {
                     let bad = query(tid, out_len, a2, a3);
                     assert_eq!(bad, Err(SyscallError::InvalidInput), "{out_len} {a2} {a3}");
                     assert_eq!(super::encode_ipc_result(bad), usize::MAX - 3);
                 }
-                assert!(crate::board::x86_machine_inputs().is_none(), "host tests bind no profile");
+                assert!(
+                    crate::board::x86_machine_inputs().is_none(),
+                    "host tests bind no profile"
+                );
                 let missing = query(tid, CAP, 0, 0);
                 assert_eq!(missing, Err(SyscallError::FileNotFound));
                 assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
@@ -11141,21 +11893,45 @@ mod tests {
     #[test]
     fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
         use api::syscall::service::MACHINE_PIN;
-        let spawn = CapSet { spawn: true, ..CapSet::EMPTY };
+        let spawn = CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        };
         with_scheduler_task_caps(0, spawn, |tid| {
             let register = |tid, target| {
-                super::handle_syscall(tid, Syscall::RegisterService { service_id: MACHINE_PIN, tid: target })
+                super::handle_syscall(
+                    tid,
+                    Syscall::RegisterService {
+                        service_id: MACHINE_PIN,
+                        tid: target,
+                    },
+                )
             };
             if super::TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire) != tid {
-                assert_eq!(register(tid, tid), Err(SyscallError::PermissionDenied), "not init");
+                assert_eq!(
+                    register(tid, tid),
+                    Err(SyscallError::PermissionDenied),
+                    "not init"
+                );
                 assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), None);
             }
             super::publish_trusted_init(tid);
             assert!(super::caller_is_trusted_init(tid));
-            assert_eq!(register(tid, tid + 1), Err(SyscallError::PermissionDenied), "not itself");
-            assert_eq!(register(tid, 0), Err(SyscallError::PermissionDenied), "not itself");
+            assert_eq!(
+                register(tid, tid + 1),
+                Err(SyscallError::PermissionDenied),
+                "not itself"
+            );
+            assert_eq!(
+                register(tid, 0),
+                Err(SyscallError::PermissionDenied),
+                "not itself"
+            );
             assert_eq!(register(tid, tid), Ok(0));
-            assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), Some(tid));
+            assert_eq!(
+                crate::cell::service_registry::lookup(MACHINE_PIN),
+                Some(tid)
+            );
             crate::cell::service_registry::clear_tid(tid);
         });
     }
@@ -11190,7 +11966,10 @@ mod tests {
     fn bench_counters_opcode_is_unknown_without_the_feature() {
         assert!(map_syscall(504, 0x2000, 64, 0, 0).is_none());
         with_scheduler_task(1u64 << 56, |tid| {
-            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+            assert_eq!(
+                check_allowlist(504, tid),
+                Err(SyscallError::PermissionDenied)
+            );
         });
     }
 
@@ -11210,23 +11989,38 @@ mod tests {
         assert_eq!(syscall_to_vi(&syscall), None);
         assert_eq!(ViSyscall::from(504), ViSyscall::Unknown);
         with_scheduler_task(0, |tid| {
-            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+            assert_eq!(
+                check_allowlist(504, tid),
+                Err(SyscallError::PermissionDenied)
+            );
         });
         with_scheduler_task(1u64 << 55, |tid| {
-            assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+            assert_eq!(
+                check_allowlist(504, tid),
+                Err(SyscallError::PermissionDenied)
+            );
         });
         with_scheduler_task(1u64 << 56, |tid| {
             assert_eq!(check_allowlist(504, tid), Ok(()));
             // A short buffer is refused before any user access.
             assert_eq!(
-                super::handle_syscall(tid, Syscall::BenchCounters { out_ptr: 0x2000, out_len: 63 }),
+                super::handle_syscall(
+                    tid,
+                    Syscall::BenchCounters {
+                        out_ptr: 0x2000,
+                        out_len: 63
+                    }
+                ),
                 Err(SyscallError::InvalidInput)
             );
         });
         // The bit alone is not enough: the edge must grant observe_memory.
         for allowlist in [1u64 << 56, u64::MAX] {
             with_scheduler_task_caps(allowlist, CapSet::EMPTY, |tid| {
-                assert_eq!(check_allowlist(504, tid), Err(SyscallError::PermissionDenied));
+                assert_eq!(
+                    check_allowlist(504, tid),
+                    Err(SyscallError::PermissionDenied)
+                );
             });
         }
         let m_only = CapSet {
@@ -11477,9 +12271,11 @@ mod tests {
             client.cell_generation = generation;
             client.root_tid = tid;
             sched.tasks.insert(tid, client);
-            assert!(sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
-                cell, generation, tid as u64
-            )));
+            assert!(
+                sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+                    cell, generation, tid as u64
+                ))
+            );
         }
         sched
     }
@@ -11496,7 +12292,9 @@ mod tests {
         generation: u64,
     ) -> Option<(api::cell_owner::CellOwner, u64)> {
         for &(service, tid, cell_id, gen) in registry {
-            assert!(crate::cell::service_registry::register(service, tid, cell_id, gen));
+            assert!(crate::cell::service_registry::register(
+                service, tid, cell_id, gen
+            ));
         }
         if let Some((service, tid)) = pause {
             assert!(crate::cell::service_registry::pause(service, tid));
@@ -11578,9 +12376,25 @@ mod tests {
         sched.cancel_cell_owner_watch(NET_TID, token);
         assert_eq!(sched.cell_owner_watch_count(), 0);
 
-        assert_owner_watch("baseline", true, &bound, None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch(
+            "baseline",
+            true,
+            &bound,
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
         // Unregistered: refused.
-        assert_owner_watch("unregistered", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch(
+            "unregistered",
+            false,
+            &[],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
         // Hot-swap quiesce: a Paused binding is refused.
         assert_owner_watch(
             "paused",
@@ -11639,33 +12453,76 @@ mod tests {
             &bound,
             None,
             |sched| {
-                sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_id = OTHER_CELL;
+                sched
+                    .tasks
+                    .get_mut(&NET_TID)
+                    .expect("watcher")
+                    .current_caller_cell_id = OTHER_CELL;
             },
             CLIENT_CELL,
             CLIENT_GEN,
         );
-        assert_owner_watch("asking for another cell", false, &bound, None, nothing, OTHER_CELL, OTHER_GEN);
-        assert_owner_watch("no serving context", false, &bound, None, |sched| {
-            sched.tasks.get_mut(&NET_TID).expect("watcher").clear_current_caller_context();
-        }, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch(
+            "asking for another cell",
+            false,
+            &bound,
+            None,
+            nothing,
+            OTHER_CELL,
+            OTHER_GEN,
+        );
+        assert_owner_watch(
+            "no serving context",
+            false,
+            &bound,
+            None,
+            |sched| {
+                sched
+                    .tasks
+                    .get_mut(&NET_TID)
+                    .expect("watcher")
+                    .clear_current_caller_context();
+            },
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
         // Stale client generation: asked for, or recorded, but never live.
-        assert_owner_watch("stale client generation", false, &bound, None, nothing, CLIENT_CELL, CLIENT_GEN + 1);
+        assert_owner_watch(
+            "stale client generation",
+            false,
+            &bound,
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN + 1,
+        );
         assert_owner_watch(
             "serving a dead generation",
             false,
             &bound,
             None,
             |sched| {
-                sched.tasks.get_mut(&NET_TID).expect("watcher").current_caller_cell_generation =
-                    CLIENT_GEN + 1;
+                sched
+                    .tasks
+                    .get_mut(&NET_TID)
+                    .expect("watcher")
+                    .current_caller_cell_generation = CLIENT_GEN + 1;
             },
             CLIENT_CELL,
             CLIENT_GEN + 1,
         );
         // Dead client root.
-        assert_owner_watch("dead client root", false, &bound, None, |sched| {
-            assert!(sched.tasks.remove(&CLIENT_TID).is_some());
-        }, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch(
+            "dead client root",
+            false,
+            &bound,
+            None,
+            |sched| {
+                assert!(sched.tasks.remove(&CLIENT_TID).is_some());
+            },
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
     }
 
     /// The grant is the registry-bound live provider cell of a table service
@@ -11699,7 +12556,10 @@ mod tests {
         assert_owner_watch(
             "every table service bound to another provider",
             false,
-            &[(NET, FOREIGN_TID, 47, 6), (COMPOSITOR, FOREIGN_TID + 1, 48, 7)],
+            &[
+                (NET, FOREIGN_TID, 47, 6),
+                (COMPOSITOR, FOREIGN_TID + 1, 48, 7),
+            ],
             None,
             nothing,
             CLIENT_CELL,
@@ -11708,7 +12568,10 @@ mod tests {
         assert_owner_watch(
             "NET bound to the watcher, COMPOSITOR bound elsewhere",
             true,
-            &[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, FOREIGN_TID, 47, 6)],
+            &[
+                (NET, NET_TID, NET_CELL, NET_GEN),
+                (COMPOSITOR, FOREIGN_TID, 47, 6),
+            ],
             None,
             nothing,
             CLIENT_CELL,
@@ -11717,7 +12580,10 @@ mod tests {
         assert_owner_watch(
             "COMPOSITOR bound to the watcher, NET bound elsewhere",
             true,
-            &[(COMPOSITOR, NET_TID, NET_CELL, NET_GEN), (NET, FOREIGN_TID, 47, 6)],
+            &[
+                (COMPOSITOR, NET_TID, NET_CELL, NET_GEN),
+                (NET, FOREIGN_TID, 47, 6),
+            ],
             None,
             nothing,
             CLIENT_CELL,
@@ -11726,7 +12592,10 @@ mod tests {
         assert_owner_watch(
             "both bound to the watcher, one paused",
             true,
-            &[(NET, NET_TID, NET_CELL, NET_GEN), (COMPOSITOR, NET_TID, NET_CELL, NET_GEN)],
+            &[
+                (NET, NET_TID, NET_CELL, NET_GEN),
+                (COMPOSITOR, NET_TID, NET_CELL, NET_GEN),
+            ],
             Some((NET, NET_TID)),
             nothing,
             CLIENT_CELL,
@@ -11736,10 +12605,34 @@ mod tests {
         // Regression: the registered VFS cell is granted exactly as before, with
         // no service registration, and is held to the same serving-context proof.
         crate::fast_ipc::set_vfs_handler_cell(NET_CELL as usize);
-        assert_owner_watch("vfs cell", true, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
-        assert_owner_watch("vfs cell, other principal", false, &[], None, nothing, OTHER_CELL, OTHER_GEN);
+        assert_owner_watch(
+            "vfs cell",
+            true,
+            &[],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
+        assert_owner_watch(
+            "vfs cell, other principal",
+            false,
+            &[],
+            None,
+            nothing,
+            OTHER_CELL,
+            OTHER_GEN,
+        );
         crate::fast_ipc::clear_vfs_if_cell(NET_CELL as usize);
-        assert_owner_watch("vfs cleared", false, &[], None, nothing, CLIENT_CELL, CLIENT_GEN);
+        assert_owner_watch(
+            "vfs cleared",
+            false,
+            &[],
+            None,
+            nothing,
+            CLIENT_CELL,
+            CLIENT_GEN,
+        );
     }
 
     /// Tripwire: who may hold an owner watch is an explicit owner decision.
@@ -11749,7 +12642,10 @@ mod tests {
     fn owner_watch_services_are_an_explicit_table() {
         assert_eq!(
             crate::task::scheduler::OWNER_WATCH_SERVICES,
-            [api::syscall::service::NET, api::syscall::service::COMPOSITOR]
+            [
+                api::syscall::service::NET,
+                api::syscall::service::COMPOSITOR
+            ]
         );
     }
 
@@ -11797,12 +12693,7 @@ mod tests {
         const OWNER: usize = 0x7E1A;
         const BASE: usize = 0x7E1A_0000_0000;
         let _guard = crate::TEST_STATE_LOCK.lock();
-        assert!(crate::resource_registry::request_mmio_unchecked(
-            OWNER,
-            BASE,
-            0x1000
-        )
-        .is_ok());
+        assert!(crate::resource_registry::request_mmio_unchecked(OWNER, BASE, 0x1000).is_ok());
 
         assert!(wait_irq_base_permitted(OWNER, 0));
         assert!(wait_irq_base_permitted(OWNER, BASE));
@@ -11824,12 +12715,27 @@ mod tests {
         use super::{shm_owned_by, shm_register, shm_take_for};
         use crate::cell::state_stash::Incarnation;
         const FRAME: usize = 0x5A0_0000;
-        let owner = Incarnation { cell: 0x5A1, generation: 3 };
+        let owner = Incarnation {
+            cell: 0x5A1,
+            generation: 3,
+        };
         shm_register(FRAME, owner);
 
         assert!(shm_owned_by(FRAME, owner));
-        assert!(!shm_owned_by(FRAME, Incarnation { cell: 0x5A2, generation: 3 }));
-        assert!(!shm_owned_by(FRAME, Incarnation { cell: 0x5A1, generation: 4 }));
+        assert!(!shm_owned_by(
+            FRAME,
+            Incarnation {
+                cell: 0x5A2,
+                generation: 3
+            }
+        ));
+        assert!(!shm_owned_by(
+            FRAME,
+            Incarnation {
+                cell: 0x5A1,
+                generation: 4
+            }
+        ));
         assert!(!shm_owned_by(FRAME + 0x1000, owner));
 
         assert_eq!(shm_take_for(owner), alloc::vec![FRAME]);
@@ -11842,9 +12748,18 @@ mod tests {
     fn shm_reclaim_takes_only_the_dead_incarnations_records() {
         use super::{shm_owned_by, shm_register, shm_take_for};
         use crate::cell::state_stash::Incarnation;
-        let dead = Incarnation { cell: 0x5B1, generation: 2 };
-        let successor = Incarnation { cell: 0x5B1, generation: 3 };
-        let peer = Incarnation { cell: 0x5B2, generation: 2 };
+        let dead = Incarnation {
+            cell: 0x5B1,
+            generation: 2,
+        };
+        let successor = Incarnation {
+            cell: 0x5B1,
+            generation: 3,
+        };
+        let peer = Incarnation {
+            cell: 0x5B2,
+            generation: 2,
+        };
         shm_register(0x5B0_0000, dead);
         shm_register(0x5B0_1000, successor);
         shm_register(0x5B0_2000, dead);

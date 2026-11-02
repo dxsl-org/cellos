@@ -20,8 +20,14 @@ use crate::paths::{may_alias, may_alias_within, parent_of};
 /// Runtime configuration files and the public paths whose content they supply
 /// (see `VfsManager::config_source`).
 const CONFIG_ALIASES: [(&str, &str); 2] = [
-    ("/mnt/sd/etc/cellos/services.toml", "/etc/cellos/services.toml"),
-    ("/mnt/sd/etc/cellos/autoload.toml", "/etc/cellos/autoload.toml"),
+    (
+        "/mnt/sd/etc/cellos/services.toml",
+        "/etc/cellos/services.toml",
+    ),
+    (
+        "/mnt/sd/etc/cellos/autoload.toml",
+        "/etc/cellos/autoload.toml",
+    ),
 ];
 
 impl VfsManager {
@@ -49,7 +55,10 @@ impl VfsManager {
     /// The bytes of `path` changed; `created` when the write added the entry.
     pub(super) fn mark_content(&mut self, path: &str, created: bool) {
         self.files.mark_modified(path);
-        for (_, alias) in CONFIG_ALIASES.iter().filter(|(source, _)| may_alias(source, path)) {
+        for (_, alias) in CONFIG_ALIASES
+            .iter()
+            .filter(|(source, _)| may_alias(source, path))
+        {
             self.files.mark_modified(alias);
         }
         if created {
@@ -67,7 +76,10 @@ impl VfsManager {
     /// `path` and everything below it were removed.
     pub(super) fn mark_tree(&mut self, path: &str) {
         self.files.mark_modified_within(path);
-        for (_, alias) in CONFIG_ALIASES.iter().filter(|(source, _)| may_alias_within(source, path)) {
+        for (_, alias) in CONFIG_ALIASES
+            .iter()
+            .filter(|(source, _)| may_alias_within(source, path))
+        {
             self.files.mark_modified(alias);
         }
         self.dirs.mark_changed_within(path);

@@ -11,10 +11,9 @@ mod tests {
     use core::mem::{align_of, size_of};
 
     use crate::syscall::{
-        ProcessInfo, ProcessInfoV2, SyscallSet, ViFstatV1, ViMemInfoV1, ViSyscall,
-        VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
-        VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN,
-        ipc_status, IPC_STATUS_LEN, IPC_STATUS_VERSION,
+        ipc_status, ProcessInfo, ProcessInfoV2, SyscallSet, ViFstatV1, ViMemInfoV1, ViSyscall,
+        IPC_STATUS_LEN, IPC_STATUS_VERSION, VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE,
+        VI_FSTAT_KIND_CHARACTER, VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN,
     };
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
@@ -311,7 +310,9 @@ mod tests {
         assert_eq!(ViSyscall::TelemetrySnapshot.allowlist_bit(), Some(55));
         let declared = SyscallSet::EMPTY.with(ViSyscall::GetProcs2);
         assert!(declared.permits(ViSyscall::TelemetrySnapshot));
-        assert!(!SyscallSet::EMPTY.with(ViSyscall::MemInfo).permits(ViSyscall::TelemetrySnapshot));
+        assert!(!SyscallSet::EMPTY
+            .with(ViSyscall::MemInfo)
+            .permits(ViSyscall::TelemetrySnapshot));
         assert_eq!(ViSyscall::from(430), ViSyscall::TelemetrySnapshot);
     }
 

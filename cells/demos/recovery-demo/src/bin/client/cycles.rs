@@ -24,7 +24,9 @@ pub fn restore_refusals(client: &mut Client) {
         if client.authority_call(Msg::Corrupt { kind }) != Some(Msg::Ack) {
             fail(&format!("E6 {label}: inject"));
         }
-        client.wait_status(label, |s| s.state == state::RECOVERY_FAILED && s.worker == 0);
+        client.wait_status(label, |s| {
+            s.state == state::RECOVERY_FAILED && s.worker == 0
+        });
         if common::lookup(WORKER_SERVICE).is_some() {
             fail(&format!("E6 {label}: a replacement was published"));
         }
@@ -75,16 +77,25 @@ pub fn ten_cycles(client: &mut Client) -> u32 {
             state_name(&v), v.member_threads, v.remote_hart_mask, v.grants_reclaimed, v.quarantined_pages,
             v.leaked_pages, v.shm_frames_released, status.ledger
         ));
-        if state_name(&v) != "Contained" || v.quarantined_pages != 0 || v.leaked_pages != 0 || status.ledger != ledger {
+        if state_name(&v) != "Contained"
+            || v.quarantined_pages != 0
+            || v.leaked_pages != 0
+            || status.ledger != ledger
+        {
             fail(&format!("E12 cycle {cycle}: unreconciled retirement"));
         }
         remote += u32::from(v.remote_hart_mask != 0);
         settled.push(after);
     }
     let steady = &settled[1..];
-    let (low, high) = (steady.iter().min().copied().unwrap_or(0), steady.iter().max().copied().unwrap_or(0));
+    let (low, high) = (
+        steady.iter().min().copied().unwrap_or(0),
+        steady.iter().max().copied().unwrap_or(0),
+    );
     if high != low {
-        fail(&format!("E12: settled free frames drift {low}..{high} over cycles 2-10"));
+        fail(&format!(
+            "E12: settled free frames drift {low}..{high} over cycles 2-10"
+        ));
     }
     println(&format!("[recovery-client] E12 PASS 10 cycles: all Contained, 0 quarantined, 0 leaked, settled free frames {low} constant (cycles 2-10), ledger {ledger}"));
     remote

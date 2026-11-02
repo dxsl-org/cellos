@@ -70,8 +70,8 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             block_regions: VFS_REGIONS, // delegated to /bin/vfs
             pcie_driver: true,          // delegated to the block/NIC/GPU/input drivers
             platform: false,
-            supervisor: true, // delegated to /bin/supervisor
-            usb_driver: true, // delegated to /bin/dwc2-usb
+            supervisor: true,  // delegated to /bin/supervisor
+            usb_driver: true,  // delegated to /bin/dwc2-usb
             serial_port: true, // delegated to /bin/serial
             // Network rights are not delegated through init's own CapSet: launch
             // edges bound children by their reviewed ceiling alone, and init sends
@@ -156,8 +156,8 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // PCIe driver cells: each claims a BAR/MMIO range and authorises DMA.
         // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
         // to the request before the ceiling intersection.
-        "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/igb" | "/bin/virtio-net" | "/bin/virtio-gpu"
-        | "/bin/input" | "/bin/ahci" => CapSet {
+        "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/igb" | "/bin/virtio-net"
+        | "/bin/virtio-gpu" | "/bin/input" | "/bin/ahci" => CapSet {
             pcie_driver: true,
             mmio_devices: DEV_DISPLAY,
             ..LEGACY
@@ -197,11 +197,22 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // X/M/W rights: pure IPC clients. They are listed rather than left to the
         // unknown-path fallback so a denial report can distinguish "needs
         // nothing" from "row missing".
-        "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal" => LEGACY,
-        "/bin/config" | "/bin/compositor" | "/bin/fb-console" | "/bin/kms" | "/bin/silo-test"
-        | "/bin/vfs-test" | "/bin/srv-test" | "/bin/std-smoke" | "/bin/desktop"
-        | "/bin/tier2-exploit" | "/bin/tier2-smoke" | "/bin/cpp-smoke"
-        | "/bin/tier2-rpc-provider" | "/bin/tier2-rpc-driver" => LEGACY,
+        "/bin/ocel" | "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" | "/bin/chrome"
+        | "/bin/vm-runner" | "/bin/files" | "/bin/terminal" => LEGACY,
+        "/bin/config"
+        | "/bin/compositor"
+        | "/bin/fb-console"
+        | "/bin/kms"
+        | "/bin/silo-test"
+        | "/bin/vfs-test"
+        | "/bin/srv-test"
+        | "/bin/std-smoke"
+        | "/bin/desktop"
+        | "/bin/tier2-exploit"
+        | "/bin/tier2-smoke"
+        | "/bin/cpp-smoke"
+        | "/bin/tier2-rpc-provider"
+        | "/bin/tier2-rpc-driver" => LEGACY,
         // SSH server: inbound listener only — no DNS, no outbound connect.
         "/bin/sshd" => CapSet {
             net_listen: true,
@@ -210,7 +221,10 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         _ => {
             // User-app sandbox: no authority at all, including no S2-T/S2-W
             // rights (annex D-TW1).
-            if path.starts_with("/apps/") || path.starts_with("/data/bin/") || path.starts_with("/home/") {
+            if path.starts_with("/apps/")
+                || path.starts_with("/data/bin/")
+                || path.starts_with("/home/")
+            {
                 return Some(CapSet::EMPTY);
             }
             return None;

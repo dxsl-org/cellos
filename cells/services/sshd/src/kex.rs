@@ -4,9 +4,9 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
+use ed25519_compact::{KeyPair, Seed};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey, StaticSecret};
-use ed25519_compact::{KeyPair, Seed};
 
 use crate::ssh_packet::{PacketWriter, SSH_MSG_KEXINIT, SSH_MSG_KEX_ECDH_REPLY, SSH_MSG_NEWKEYS};
 
@@ -19,8 +19,6 @@ pub struct KexState {
     pub client_kexinit: Vec<u8>,
     pub server_kexinit: Vec<u8>,
     pub host_keypair: KeyPair,
-    pub server_secret: Option<StaticSecret>,
-    pub server_public: Option<PublicKey>,
     pub session_id: Vec<u8>,
     pub shared_secret_k: Vec<u8>,
     pub exchange_hash_h: Vec<u8>,
@@ -30,11 +28,11 @@ impl KexState {
     pub fn new() -> Self {
         // Deterministic or seeded host key for Cellos
         let seed = Seed::from_slice(&[
-            0x43, 0x65, 0x6c, 0x6c, 0x6f, 0x73, 0x53, 0x53,
-            0x48, 0x44, 0x65, 0x76, 0x48, 0x6f, 0x73, 0x74,
-            0x4b, 0x65, 0x79, 0x53, 0x65, 0x65, 0x64, 0x32,
-            0x30, 0x32, 0x36, 0x31, 0x30, 0x31, 0x37, 0x01,
-        ]).unwrap();
+            0x43, 0x65, 0x6c, 0x6c, 0x6f, 0x73, 0x53, 0x53, 0x48, 0x44, 0x65, 0x76, 0x48, 0x6f,
+            0x73, 0x74, 0x4b, 0x65, 0x79, 0x53, 0x65, 0x65, 0x64, 0x32, 0x30, 0x32, 0x36, 0x31,
+            0x30, 0x31, 0x37, 0x01,
+        ])
+        .unwrap();
         let host_keypair = KeyPair::from_seed(seed);
 
         Self {
@@ -43,8 +41,6 @@ impl KexState {
             client_kexinit: Vec::new(),
             server_kexinit: Vec::new(),
             host_keypair,
-            server_secret: None,
-            server_public: None,
             session_id: Vec::new(),
             shared_secret_k: Vec::new(),
             exchange_hash_h: Vec::new(),
@@ -65,8 +61,8 @@ impl KexState {
         w.write_byte(SSH_MSG_KEXINIT);
         // 16 bytes cookie
         w.write_raw(&[
-            0x10, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-            0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x01,
+            0x10, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+            0xff, 0x01,
         ]);
         w.write_name_list(&["curve25519-sha256", "curve25519-sha256@libssh.org"]);
         w.write_name_list(&["ssh-ed25519"]);
@@ -79,7 +75,7 @@ impl KexState {
         w.write_string(b""); // languages client to server
         w.write_string(b""); // languages server to client
         w.write_bool(false); // first_kex_packet_follows
-        w.write_u32(0);      // reserved
+        w.write_u32(0); // reserved
 
         let payload = w.as_slice().to_vec();
         self.server_kexinit = payload.clone();
@@ -97,10 +93,9 @@ impl KexState {
 
         // Server ephemeral keys
         let server_secret = StaticSecret::from([
-            0x71, 0x82, 0x93, 0xa4, 0xb5, 0xc6, 0xd7, 0xe8,
-            0x09, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e, 0x6f, 0x70,
-            0x81, 0x92, 0xa3, 0xb4, 0xc5, 0xd6, 0xe7, 0xf8,
-            0x19, 0x2a, 0x3b, 0x4c, 0x5d, 0x6e, 0x7f, 0x80,
+            0x71, 0x82, 0x93, 0xa4, 0xb5, 0xc6, 0xd7, 0xe8, 0x09, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e,
+            0x6f, 0x70, 0x81, 0x92, 0xa3, 0xb4, 0xc5, 0xd6, 0xe7, 0xf8, 0x19, 0x2a, 0x3b, 0x4c,
+            0x5d, 0x6e, 0x7f, 0x80,
         ]);
         let server_pub = PublicKey::from(&server_secret);
         let shared_secret = server_secret.diffie_hellman(&client_pub);
@@ -111,25 +106,25 @@ impl KexState {
         // Calculate Exchange Hash H = SHA256(V_C || V_S || I_C || I_S || K_S || Q_C || Q_S || K)
         let mut hasher = Sha256::new();
         // V_C (string)
-        hasher.update(&(self.client_version.len() as u32).to_be_bytes());
+        hasher.update((self.client_version.len() as u32).to_be_bytes());
         hasher.update(&self.client_version);
         // V_S (string)
-        hasher.update(&(self.server_version.len() as u32).to_be_bytes());
+        hasher.update((self.server_version.len() as u32).to_be_bytes());
         hasher.update(&self.server_version);
         // I_C (string)
-        hasher.update(&(self.client_kexinit.len() as u32).to_be_bytes());
+        hasher.update((self.client_kexinit.len() as u32).to_be_bytes());
         hasher.update(&self.client_kexinit);
         // I_S (string)
-        hasher.update(&(self.server_kexinit.len() as u32).to_be_bytes());
+        hasher.update((self.server_kexinit.len() as u32).to_be_bytes());
         hasher.update(&self.server_kexinit);
         // K_S (string)
-        hasher.update(&(host_key_blob.len() as u32).to_be_bytes());
+        hasher.update((host_key_blob.len() as u32).to_be_bytes());
         hasher.update(&host_key_blob);
         // Q_C (string)
-        hasher.update(&(client_pubkey_bytes.len() as u32).to_be_bytes());
+        hasher.update((client_pubkey_bytes.len() as u32).to_be_bytes());
         hasher.update(client_pubkey_bytes);
         // Q_S (string)
-        hasher.update(&(server_pub.as_bytes().len() as u32).to_be_bytes());
+        hasher.update((server_pub.as_bytes().len() as u32).to_be_bytes());
         hasher.update(server_pub.as_bytes());
         // K (mpint)
         let mut mpint_w = PacketWriter::new();
@@ -176,7 +171,7 @@ impl KexState {
         let mut hasher = Sha256::new();
         hasher.update(mpint_w.as_slice());
         hasher.update(&self.exchange_hash_h);
-        hasher.update(&[letter]);
+        hasher.update([letter]);
         hasher.update(&self.session_id);
         let h1 = hasher.finalize();
         out.extend_from_slice(&h1);

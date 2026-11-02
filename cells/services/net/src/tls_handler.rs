@@ -1,6 +1,7 @@
 //! Raw TLS IPC dispatch for the net service cell.
 
 extern crate alloc;
+pub use crate::tls::dispatch::TlsPending;
 use crate::{
     interface::VirtioNetDevice,
     service_runtime::next_ephemeral_port,
@@ -10,7 +11,6 @@ use crate::{
     tls::socket::TlsSocketEntry,
     tls_wire::{parse_raw_tls_request, RawTlsRequest},
 };
-pub use crate::tls::dispatch::TlsPending;
 use alloc::collections::BTreeMap;
 use alloc::string::ToString;
 use ostd::io::println;
@@ -32,8 +32,7 @@ fn authenticated_time_available() -> bool {
 /// line of evidence removes that ambiguity — and gives the `tls-gate` lane
 /// something real to assert instead of an unreachable reject string.
 fn announce_tls_refusal_once() {
-    static ANNOUNCED: core::sync::atomic::AtomicBool =
-        core::sync::atomic::AtomicBool::new(false);
+    static ANNOUNCED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
     if !ANNOUNCED.swap(true, core::sync::atomic::Ordering::Relaxed) {
         println("[net/tls] TLS connect refused: authenticated time unavailable (fail-closed)");
     }
@@ -98,12 +97,28 @@ pub fn handle_tls_raw(
             let reply = ReplyTo::capture(sender);
             let code = if ok { [0x00] } else { [0xFF] };
             match reply {
-                ReplyTo::Async(token) => { let _ = ostd::ipc::reply(token, &code); }
-                ReplyTo::Legacy(sender) => { sys_send(sender, &code); }
+                ReplyTo::Async(token) => {
+                    let _ = ostd::ipc::reply(token, &code);
+                }
+                ReplyTo::Legacy(sender) => {
+                    sys_send(sender, &code);
+                }
             }
         }
-        RawTlsRequest::Connect { addr, port, hostname } => {
-            ostd::io::println(&alloc::format!("[net/tls] Connect request: host={} addr={}.{}.{}.{} port={}", hostname, addr[0], addr[1], addr[2], addr[3], port));
+        RawTlsRequest::Connect {
+            addr,
+            port,
+            hostname,
+        } => {
+            ostd::io::println(&alloc::format!(
+                "[net/tls] Connect request: host={} addr={}.{}.{}.{} port={}",
+                hostname,
+                addr[0],
+                addr[1],
+                addr[2],
+                addr[3],
+                port
+            ));
             if !cfg!(feature = "qemu-dev-https") && !authenticated_time_available() {
                 announce_tls_refusal_once();
                 send_connect_reply(sender, 0);
@@ -121,9 +136,11 @@ pub fn handle_tls_raw(
                 }
             };
             let remote = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), port);
-            if let Err(e) = sockets.get_mut::<tcp::Socket>(handle)
-                .connect(iface.context(), remote, next_ephemeral_port())
-            {
+            if let Err(e) = sockets.get_mut::<tcp::Socket>(handle).connect(
+                iface.context(),
+                remote,
+                next_ephemeral_port(),
+            ) {
                 ostd::io::println(&alloc::format!("[net/tls] socket.connect error: {:?}", e));
                 table.remove_internal(cap);
                 sockets.remove(handle);
@@ -138,16 +155,28 @@ pub fn handle_tls_raw(
                 sys_send(sender, &u32::MAX.to_le_bytes());
                 return;
             }
-            pending.enqueue(cap, owner, ReplyTo::capture(sender),
-                Request::Send(data.to_vec()), tls_table, table);
+            pending.enqueue(
+                cap,
+                owner,
+                ReplyTo::capture(sender),
+                Request::Send(data.to_vec()),
+                tls_table,
+                table,
+            );
         }
         RawTlsRequest::Recv { cap, buf_len } => {
             if !table.is_owner(cap, owner) {
                 sys_send(sender, &u16::MAX.to_le_bytes());
                 return;
             }
-            pending.enqueue(cap, owner, ReplyTo::capture(sender),
-                Request::Recv(buf_len), tls_table, table);
+            pending.enqueue(
+                cap,
+                owner,
+                ReplyTo::capture(sender),
+                Request::Recv(buf_len),
+                tls_table,
+                table,
+            );
         }
     }
 }

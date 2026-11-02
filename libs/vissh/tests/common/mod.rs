@@ -6,7 +6,9 @@ use std::io::Read;
 use vissh::sunset::{self, Runner};
 
 pub fn os_entropy(buf: &mut [u8]) -> bool {
-    std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(buf)).is_ok()
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(buf))
+        .is_ok()
 }
 
 /// Bytes in flight in one direction. A runner refuses input while its own KEX output
@@ -48,7 +50,11 @@ pub fn drain<C: sunset::CliServ>(r: &mut Runner<'_, C>) -> Vec<u8> {
 
 /// Split `bytes` after the `SSH-2.0-...\r\n` identification line.
 pub fn after_ident(bytes: &[u8]) -> (&[u8], &[u8]) {
-    let end = bytes.windows(2).position(|w| w == b"\r\n").expect("ident line") + 2;
+    let end = bytes
+        .windows(2)
+        .position(|w| w == b"\r\n")
+        .expect("ident line")
+        + 2;
     bytes.split_at(end)
 }
 
@@ -64,7 +70,11 @@ pub fn kexinit_lists(packets: &[u8]) -> Vec<Vec<String>> {
             let n = u32::from_be_bytes(payload[at..at + 4].try_into().unwrap()) as usize;
             let list = std::str::from_utf8(&payload[at + 4..at + 4 + n]).unwrap();
             at += 4 + n;
-            if list.is_empty() { Vec::new() } else { list.split(',').map(String::from).collect() }
+            if list.is_empty() {
+                Vec::new()
+            } else {
+                list.split(',').map(String::from).collect()
+            }
         })
         .collect()
 }
@@ -88,7 +98,9 @@ pub fn packet(payload: &[u8]) -> Vec<u8> {
 pub fn kexinit(kex: &str, hostkey: &str, cipher: &str, mac: &str) -> Vec<u8> {
     let mut p = vec![20u8];
     p.extend_from_slice(&[7u8; 16]);
-    for list in [kex, hostkey, cipher, cipher, mac, mac, "none", "none", "", ""] {
+    for list in [
+        kex, hostkey, cipher, cipher, mac, mac, "none", "none", "", "",
+    ] {
         p.extend_from_slice(&(list.len() as u32).to_be_bytes());
         p.extend_from_slice(list.as_bytes());
     }

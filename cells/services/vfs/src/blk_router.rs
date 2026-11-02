@@ -65,7 +65,9 @@ impl BlockSys for Syscalls {
         match sys::sys_lookup_block_route(index) {
             Ok(record) => record,
             Err(error) => {
-                self.log(&alloc::format!("[vfs] block route {index} lookup refused: {error:?}"));
+                self.log(&alloc::format!(
+                    "[vfs] block route {index} lookup refused: {error:?}"
+                ));
                 None
             }
         }
@@ -133,7 +135,9 @@ fn wait_for_vfs_registration() {
             _ => u64::MAX,
         };
         if waited >= VFS_REGISTRATION_WAIT_TICKS {
-            ostd::io::println("[vfs] not registered as VFS after 500 ticks; block devices will refuse requests");
+            ostd::io::println(
+                "[vfs] not registered as VFS after 500 ticks; block devices will refuse requests",
+            );
             return;
         }
         ostd::task::yield_now();
@@ -166,7 +170,11 @@ pub fn blk_read_sectors(dev: DeviceRef, abs_lba: u64, count: u32, buf: &mut [u8]
     if buf.len() < (count as usize) * SECTOR_SIZE {
         return false;
     }
-    for (i, chunk) in buf.chunks_exact_mut(SECTOR_SIZE).take(count as usize).enumerate() {
+    for (i, chunk) in buf
+        .chunks_exact_mut(SECTOR_SIZE)
+        .take(count as usize)
+        .enumerate()
+    {
         let sector: &mut [u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
         if !blk_read(dev, abs_lba + i as u64, sector) {
             return false;
@@ -183,7 +191,11 @@ pub fn blk_write_sectors(dev: DeviceRef, abs_lba: u64, count: u32, data: &[u8]) 
     if data.len() < (count as usize) * SECTOR_SIZE {
         return BlockOutcome::NotIssued;
     }
-    for (i, chunk) in data.chunks_exact(SECTOR_SIZE).take(count as usize).enumerate() {
+    for (i, chunk) in data
+        .chunks_exact(SECTOR_SIZE)
+        .take(count as usize)
+        .enumerate()
+    {
         let sector: &[u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
         let outcome = blk_write(dev, abs_lba + i as u64, sector);
         if !outcome.is_completed() {

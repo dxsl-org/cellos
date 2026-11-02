@@ -2,10 +2,14 @@
 //! fresh independently signed time and durably retain its floor outside the VM.
 //! This is not a protected hardware authority or a general network time client.
 
+use crate::service_runtime::sys_get_time;
 use core::sync::atomic::{AtomicU64, Ordering};
 use ostd::syscall::sys_get_random;
-use crate::service_runtime::sys_get_time;
-use smoltcp::{iface::{Interface, SocketHandle, SocketSet}, socket::tcp, wire::{IpAddress, IpEndpoint}};
+use smoltcp::{
+    iface::{Interface, SocketHandle, SocketSet},
+    socket::tcp,
+    wire::{IpAddress, IpEndpoint},
+};
 
 const SECOND: u64 = 10_000_000;
 /// A nonce exchange that completed within this long before a handshake's
@@ -24,7 +28,8 @@ static FULFILLED: AtomicU64 = AtomicU64::new(0);
 /// `(ticket, demanded_at)`. Taking the ticket when the connect is accepted lets
 /// the exchange overlap the TCP connect instead of starting after it.
 pub fn demand() -> (u64, u64) {
-    let ticket = DEMAND.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
+    let ticket = DEMAND
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
         .map_or(u64::MAX, |n| n + 1);
     (ticket, sys_get_time())
 }
@@ -41,7 +46,10 @@ pub async fn fresh_for_ticket(ticket: u64, demanded_at: u64) -> Result<(), embed
     let deadline = demanded_at.saturating_add(10 * SECOND);
     core::future::poll_fn(|_| {
         let fulfilled = FULFILLED.load(Ordering::Acquire) >= ticket;
-        let recent = RECEIVED.load(Ordering::Acquire).saturating_add(RECENT_EXCHANGE) >= demanded_at;
+        let recent = RECEIVED
+            .load(Ordering::Acquire)
+            .saturating_add(RECENT_EXCHANGE)
+            >= demanded_at;
         if (fulfilled || recent) && validity_window().is_some() {
             core::task::Poll::Ready(Ok(()))
         } else if sys_get_time() >= deadline {
@@ -49,28 +57,34 @@ pub async fn fresh_for_ticket(ticket: u64, demanded_at: u64) -> Result<(), embed
         } else {
             core::task::Poll::Pending
         }
-    }).await
+    })
+    .await
 }
 
 pub fn validity_window() -> Option<(u64, u64)> {
     let deadline = VALID_UNTIL.load(Ordering::Acquire);
-    if deadline == 0 { return None; }
+    if deadline == 0 {
+        return None;
+    }
     let now = sys_get_time();
     let received = RECEIVED.load(Ordering::Relaxed);
     if now < received || now >= deadline {
         return None;
     }
     let elapsed = now - received;
-    let lower = LOWER.load(Ordering::Relaxed).checked_add(elapsed / SECOND)?;
-    let upper = UPPER.load(Ordering::Relaxed).checked_add(elapsed.div_ceil(SECOND))?;
+    let lower = LOWER
+        .load(Ordering::Relaxed)
+        .checked_add(elapsed / SECOND)?;
+    let upper = UPPER
+        .load(Ordering::Relaxed)
+        .checked_add(elapsed.div_ceil(SECOND))?;
     Some((lower, upper))
 }
 
 pub fn observe() -> Option<u64> {
     validity_window()?;
-    UNIX.load(Ordering::Relaxed).checked_add(
-        sys_get_time().checked_sub(RECEIVED.load(Ordering::Relaxed))? / SECOND,
-    )
+    UNIX.load(Ordering::Relaxed)
+        .checked_add(sys_get_time().checked_sub(RECEIVED.load(Ordering::Relaxed))? / SECOND)
 }
 
 struct Exchange {
@@ -103,7 +117,12 @@ fn decode(response: &[u8; 72], request: &[u8; 40], previous: u64) -> Option<(u64
     let lower = u64::from_le_bytes(response[48..56].try_into().ok()?);
     let upper = u64::from_le_bytes(response[56..64].try_into().ok()?);
     let sequence = u64::from_le_bytes(response[64..72].try_into().ok()?);
-    if lower == 0 || lower > unix || unix > upper || upper.checked_sub(lower)? > 8 || sequence <= previous {
+    if lower == 0
+        || lower > unix
+        || unix > upper
+        || upper.checked_sub(lower)? > 8
+        || sequence <= previous
+    {
         return None;
     }
     Some((unix, lower, upper, sequence))
@@ -132,7 +151,9 @@ impl ClockClient {
             let mut fulfilled = false;
             if exchange.received == exchange.response.len() {
                 if !finished {
-                    if let Some((mut unix, lower, upper, sequence)) = decode(&exchange.response, &exchange.request, self.sequence) {
+                    if let Some((mut unix, lower, upper, sequence)) =
+                        decode(&exchange.response, &exchange.request, self.sequence)
+                    {
                         // The upstream observation happened after this request began.
                         // Include the entire request delay in the upper bound.
                         let delay = elapsed.unwrap().div_ceil(SECOND);
@@ -144,7 +165,8 @@ impl ClockClient {
                                 UPPER.store(upper, Ordering::Relaxed);
                                 UNIX.store(unix, Ordering::Relaxed);
                                 RECEIVED.store(now, Ordering::Relaxed);
-                                VALID_UNTIL.store(now.saturating_add(2 * SECOND), Ordering::Release);
+                                VALID_UNTIL
+                                    .store(now.saturating_add(2 * SECOND), Ordering::Release);
                                 self.sequence = sequence;
                                 FULFILLED.store(exchange.demand, Ordering::Release);
                                 fulfilled = true;
@@ -168,15 +190,28 @@ impl ClockClient {
                 // the rate to one per second; a success needs no extra gap, so the
                 // last completed exchange stays within `RECENT_EXCHANGE` of the next
                 // handshake as often as upstream latency allows. Failure backs off.
-                if !fulfilled { self.next = now.saturating_add(SECOND / 2); }
-                self.next_on_demand = if fulfilled { now } else { now.saturating_add(SECOND / 2) };
+                if !fulfilled {
+                    self.next = now.saturating_add(SECOND / 2);
+                }
+                self.next_on_demand = if fulfilled {
+                    now
+                } else {
+                    now.saturating_add(SECOND / 2)
+                };
             } else {
                 self.exchange = Some(exchange);
             }
             return;
         }
         let demanded = DEMAND.load(Ordering::Acquire) > FULFILLED.load(Ordering::Acquire);
-        if !configured || now < if demanded { self.next_on_demand } else { self.next } {
+        if !configured
+            || now
+                < if demanded {
+                    self.next_on_demand
+                } else {
+                    self.next
+                }
+        {
             return;
         }
         self.next = now.saturating_add(SECOND);
@@ -185,22 +220,44 @@ impl ClockClient {
         let mut filled = 8;
         // A short entropy read is allowed; missing entropy never produces a request.
         for _ in 0..8 {
-            if filled == request.len() { break; }
+            if filled == request.len() {
+                break;
+            }
             let count = sys_get_random(&mut request[filled..]);
-            if count == 0 || count > request.len() - filled { return; }
+            if count == 0 || count > request.len() - filled {
+                return;
+            }
             filled += count;
         }
-        if filled != request.len() { return; }
+        if filled != request.len() {
+            return;
+        }
         let handle = sockets.add(tcp::Socket::new(
             tcp::SocketBuffer::new(alloc::vec![0u8; 128]),
             tcp::SocketBuffer::new(alloc::vec![0u8; 128]),
         ));
         let remote = IpEndpoint::new(IpAddress::v4(10, 0, 2, 2), 18443);
-        if sockets.get_mut::<tcp::Socket>(handle).connect(iface.context(), remote, crate::service_runtime::next_ephemeral_port()).is_err() {
+        if sockets
+            .get_mut::<tcp::Socket>(handle)
+            .connect(
+                iface.context(),
+                remote,
+                crate::service_runtime::next_ephemeral_port(),
+            )
+            .is_err()
+        {
             sockets.remove(handle);
             return;
         }
-        self.exchange = Some(Exchange { handle, request, sent: 0, response: [0; 72], received: 0, started: now, demand: DEMAND.load(Ordering::Acquire) });
+        self.exchange = Some(Exchange {
+            handle,
+            request,
+            sent: 0,
+            response: [0; 72],
+            received: 0,
+            started: now,
+            demand: DEMAND.load(Ordering::Acquire),
+        });
     }
 }
 

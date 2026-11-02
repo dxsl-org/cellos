@@ -7,11 +7,11 @@
 extern crate alloc;
 
 mod configure;
+pub mod frame;
 mod lifecycle;
 mod pixels;
 mod state;
 mod storage;
-pub mod frame;
 
 pub use configure::StateTransition;
 pub use frame::FrameRegistry;

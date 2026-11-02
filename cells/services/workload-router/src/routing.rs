@@ -16,6 +16,12 @@ pub struct WeightedRouter {
     current_weight: u32,
 }
 
+impl Default for WeightedRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WeightedRouter {
     pub const fn new() -> Self {
         Self {

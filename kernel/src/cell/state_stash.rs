@@ -159,10 +159,20 @@ pub fn stash(caller: Incarnation, key: u64, bytes: &[u8]) -> usize {
         None => {
             let owned = map.values().filter(|e| e.owner == caller).count();
             if owned >= MAX_ENTRIES_PER_OWNER || map.len() >= MAX_ENTRIES {
-                log::warn!("[state-stash] refused new key: owner holds {owned}, table {}", map.len());
+                log::warn!(
+                    "[state-stash] refused new key: owner holds {owned}, table {}",
+                    map.len()
+                );
                 return 0;
             }
-            map.insert(key, Entry { owner: caller, phase: Phase::Open, bytes: data });
+            map.insert(
+                key,
+                Entry {
+                    owner: caller,
+                    phase: Phase::Open,
+                    bytes: data,
+                },
+            );
             n
         }
     }
@@ -206,16 +216,16 @@ pub fn status(caller: Incarnation, supervisor: bool, key: u64) -> usize {
 }
 
 /// Remove `key`: the owner while open, the destination once sealed (consume), or
-/// a supervisor (abort). Absent keys succeed; anything else is refused.
-pub fn clear(caller: Incarnation, supervisor: bool, key: u64) -> Result<(), ()> {
+/// a supervisor (abort). Absent keys succeed; anything else is refused (`false`).
+pub fn clear(caller: Incarnation, supervisor: bool, key: u64) -> bool {
     let mut map = STASH.lock();
     match map.get(&key) {
-        None => Ok(()),
+        None => true,
         Some(entry) if supervisor || entry.readable_by(caller) => {
             map.remove(&key);
-            Ok(())
+            true
         }
-        Some(_) => Err(()),
+        Some(_) => false,
     }
 }
 
@@ -247,8 +257,14 @@ pub(crate) fn snapshot() -> alloc::vec::Vec<(u64, Vec<u8>)> {
 /// afterwards so it never collides with a real cell's state.
 pub fn self_test() {
     const SCRATCH_KEY: u64 = 0xFFFF_FFFF_FFFF_FFFEu64;
-    let kernel = Incarnation { cell: u64::MAX, generation: u64::MAX };
-    let stranger = Incarnation { cell: u64::MAX - 1, generation: 1 };
+    let kernel = Incarnation {
+        cell: u64::MAX,
+        generation: u64::MAX,
+    };
+    let stranger = Incarnation {
+        cell: u64::MAX - 1,
+        generation: 1,
+    };
     let sentinel: [u8; 8] = [0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0x12, 0x34];
     stash(kernel, SCRATCH_KEY, &sentinel);
     let mut buf = [0u8; 8];
@@ -258,7 +274,12 @@ pub fn self_test() {
     if n == 8 && buf == sentinel && foreign == 0 {
         log::info!("state-stash: round-trip OK, foreign read refused");
     } else {
-        log::error!("state-stash: round-trip FAILED (n={}, foreign={}, buf={:?})", n, foreign, buf);
+        log::error!(
+            "state-stash: round-trip FAILED (n={}, foreign={}, buf={:?})",
+            n,
+            foreign,
+            buf
+        );
     }
 }
 
@@ -266,10 +287,22 @@ pub fn self_test() {
 mod tests {
     use super::*;
 
-    const A: Incarnation = Incarnation { cell: 0x7a01, generation: 3 };
-    const A_NEXT: Incarnation = Incarnation { cell: 0x7a01, generation: 4 };
-    const B: Incarnation = Incarnation { cell: 0x7b01, generation: 1 };
-    const MALLORY: Incarnation = Incarnation { cell: 0x7c01, generation: 1 };
+    const A: Incarnation = Incarnation {
+        cell: 0x7a01,
+        generation: 3,
+    };
+    const A_NEXT: Incarnation = Incarnation {
+        cell: 0x7a01,
+        generation: 4,
+    };
+    const B: Incarnation = Incarnation {
+        cell: 0x7b01,
+        generation: 1,
+    };
+    const MALLORY: Incarnation = Incarnation {
+        cell: 0x7c01,
+        generation: 1,
+    };
 
     fn guard() -> impl Drop {
         let g = crate::TEST_STATE_LOCK.lock();
@@ -295,7 +328,7 @@ mod tests {
         assert_eq!(restore(MALLORY, 0x00A3_0000_0000_0001, &mut out), 0);
         assert_eq!(status(MALLORY, false, 0x00A3_0000_0000_0001), 0);
         assert_eq!(stash(MALLORY, 0x00A3_0000_0000_0001, b"forged"), 0);
-        assert_eq!(clear(MALLORY, false, 0x00A3_0000_0000_0001), Err(()));
+        assert!(!clear(MALLORY, false, 0x00A3_0000_0000_0001));
         assert_eq!(restore(A, 0x00A3_0000_0000_0001, &mut out), 6);
         assert_eq!(&out, b"secret");
     }
@@ -305,7 +338,7 @@ mod tests {
         let _g = guard();
         stash(A, 7, b"old");
         assert_eq!(restore(A_NEXT, 7, &mut [0u8; 3]), 0);
-        assert_eq!(clear(A_NEXT, false, 7), Err(()));
+        assert!(!clear(A_NEXT, false, 7));
     }
 
     #[test]
@@ -321,7 +354,7 @@ mod tests {
         assert_eq!(restore(A_NEXT, 7, &mut out), 5);
         assert_eq!(&out, b"state");
         assert_eq!(restore(A_NEXT, 7, &mut out), 5, "repeatable until consumed");
-        assert_eq!(clear(A_NEXT, false, 7), Ok(()));
+        assert!(clear(A_NEXT, false, 7));
         assert_eq!(restore(A_NEXT, 7, &mut out), 0, "consumed");
         assert_eq!(restore(B, 8, &mut out), 5, "other owners unaffected");
     }
@@ -333,7 +366,7 @@ mod tests {
         assert_eq!(status(MALLORY, true, 9), 7);
         assert_eq!(status(MALLORY, false, 9), 0);
         assert_eq!(restore(MALLORY, 9, &mut [0u8; 7]), 0);
-        assert_eq!(clear(MALLORY, true, 9), Ok(()));
+        assert!(clear(MALLORY, true, 9));
         assert_eq!(status(A, false, 9), 0);
     }
 
@@ -345,7 +378,10 @@ mod tests {
         }
         assert_eq!(stash(A, 999, b"x"), 0);
         for i in 0..(MAX_ENTRIES - MAX_ENTRIES_PER_OWNER) as u64 {
-            let owner = Incarnation { cell: 0x9000 + i, generation: 1 };
+            let owner = Incarnation {
+                cell: 0x9000 + i,
+                generation: 1,
+            };
             assert_eq!(stash(owner, 1000 + i, b"x"), 1);
         }
         assert_eq!(stash(B, 5000, b"x"), 0, "table full");
@@ -360,7 +396,11 @@ mod tests {
         stash(A, 7, b"state");
         stash(B, 8, b"other");
         assert_eq!(seal_for_replacement(A, A_NEXT), 1);
-        assert_eq!(release_retired(A), 0, "sealed entry belongs to the destination");
+        assert_eq!(
+            release_retired(A),
+            0,
+            "sealed entry belongs to the destination"
+        );
         assert_eq!(restore(A_NEXT, 7, &mut [0u8; 5]), 5);
         assert_eq!(restore(B, 8, &mut [0u8; 5]), 5, "other owners unaffected");
     }
@@ -371,7 +411,11 @@ mod tests {
         stash(A, 7, b"state");
         stash(A_NEXT, 9, b"own");
         assert_eq!(seal_for_replacement(A, A_NEXT), 1);
-        assert_eq!(release_retired(A_NEXT), 2, "sealed inbound and own open entry");
+        assert_eq!(
+            release_retired(A_NEXT),
+            2,
+            "sealed inbound and own open entry"
+        );
         assert_eq!(status(MALLORY, true, 7), 0);
         assert_eq!(status(MALLORY, true, 9), 0);
         assert_eq!(release_retired(A_NEXT), 0, "idempotent");

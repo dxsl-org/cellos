@@ -34,7 +34,12 @@ pub struct FileItem {
 }
 
 impl FileItem {
-    pub fn new(name: impl Into<String>, path: impl Into<String>, is_dir: bool, size: Option<u64>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        path: impl Into<String>,
+        is_dir: bool,
+        size: Option<u64>,
+    ) -> Self {
         let name = name.into();
         let path = path.into();
         let icon = if is_dir {
@@ -80,11 +85,36 @@ pub struct PlacesItem {
 }
 
 pub const DEFAULT_PLACES: &[PlacesItem] = &[
-    PlacesItem { name: "Root", path: "/", icon: "(/)", is_pinned: false },
-    PlacesItem { name: "Applications", path: "/bin", icon: "[A]", is_pinned: false },
-    PlacesItem { name: "Data", path: "/data", icon: "[*]", is_pinned: true },
-    PlacesItem { name: "Storage", path: "/mnt", icon: "[S]", is_pinned: true },
-    PlacesItem { name: "Services", path: "/srv", icon: "[=]", is_pinned: false },
+    PlacesItem {
+        name: "Root",
+        path: "/",
+        icon: "(/)",
+        is_pinned: false,
+    },
+    PlacesItem {
+        name: "Applications",
+        path: "/bin",
+        icon: "[A]",
+        is_pinned: false,
+    },
+    PlacesItem {
+        name: "Data",
+        path: "/data",
+        icon: "[*]",
+        is_pinned: true,
+    },
+    PlacesItem {
+        name: "Storage",
+        path: "/mnt",
+        icon: "[S]",
+        is_pinned: true,
+    },
+    PlacesItem {
+        name: "Services",
+        path: "/srv",
+        icon: "[=]",
+        is_pinned: false,
+    },
 ];
 
 #[allow(dead_code)]
@@ -134,7 +164,10 @@ mod tests {
         assert_eq!(resolve_conflict_name("notes.md", &existing), "notes (2).md");
 
         // Existing name without (1) gets (1)
-        assert_eq!(resolve_conflict_name("document.txt", &existing), "document (1).txt");
+        assert_eq!(
+            resolve_conflict_name("document.txt", &existing),
+            "document (1).txt"
+        );
     }
 
     #[test]

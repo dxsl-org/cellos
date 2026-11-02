@@ -84,8 +84,11 @@ pub(super) unsafe fn raw_syscall(
     ret
 }
 
-
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 pub(super) unsafe fn raw_syscall(
     _id: ViSyscall,
     _a0: usize,

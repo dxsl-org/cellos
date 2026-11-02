@@ -15,13 +15,29 @@ pub const DOCUMENT_IDLE_TICKS: u64 = 6000;
 
 /// Shared lifecycle policy independent of the native renderer. No caller may
 /// renew, close or reclaim another nonexpired document.
-pub struct DocumentOwner { caller: usize, handle: u32, activity: u64 }
+pub struct DocumentOwner {
+    caller: usize,
+    handle: u32,
+    activity: u64,
+}
 impl DocumentOwner {
-    pub fn new(caller: usize, handle: u32, now: u64) -> Self { Self { caller, handle, activity: now } }
-    pub fn matches(&self, caller: usize, handle: u32) -> bool { self.caller == caller && self.handle == handle }
-    pub fn expired(&self, now: u64) -> bool { now.wrapping_sub(self.activity) >= DOCUMENT_IDLE_TICKS }
+    pub fn new(caller: usize, handle: u32, now: u64) -> Self {
+        Self {
+            caller,
+            handle,
+            activity: now,
+        }
+    }
+    pub fn matches(&self, caller: usize, handle: u32) -> bool {
+        self.caller == caller && self.handle == handle
+    }
+    pub fn expired(&self, now: u64) -> bool {
+        now.wrapping_sub(self.activity) >= DOCUMENT_IDLE_TICKS
+    }
     pub fn renew(&mut self, caller: usize, handle: u32, now: u64) -> bool {
-        if !self.matches(caller, handle) || self.expired(now) { return false; }
+        if !self.matches(caller, handle) || self.expired(now) {
+            return false;
+        }
         self.activity = now;
         true
     }
@@ -53,10 +69,23 @@ mod tests {
 /// its cached raster. Pixels are straight, opaque BGRA8888, row-major.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {
-    Open { path: String },
-    RenderPage { document: u32, page: u32, max_width: u32, max_height: u32 },
-    ReadPixels { document: u32, offset: u32, length: u16 },
-    Close { document: u32 },
+    Open {
+        path: String,
+    },
+    RenderPage {
+        document: u32,
+        page: u32,
+        max_width: u32,
+        max_height: u32,
+    },
+    ReadPixels {
+        document: u32,
+        offset: u32,
+        length: u16,
+    },
+    Close {
+        document: u32,
+    },
     /// Readiness probe; does not open a document or allocate a raster.
     Ping,
 }

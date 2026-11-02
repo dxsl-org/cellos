@@ -60,10 +60,8 @@ pub const CALLER_FLAG_NET_L2: u32 = 1 << 4;
 /// Every network-right flag. Bits outside this mask, [`CALLER_FLAG_VFS_MUTATE`],
 /// [`CALLER_FLAG_CONFIG_WRITE`], [`CALLER_FLAG_KMS_SSH_SIGN`] and
 /// [`CALLER_FLAG_KMS_SSH_ADMIN`] (8..31) are reserved and must be zero.
-pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 = CALLER_FLAG_NET_RESOLVE
-    | CALLER_FLAG_NET_CONNECT
-    | CALLER_FLAG_NET_LISTEN
-    | CALLER_FLAG_NET_L2;
+pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 =
+    CALLER_FLAG_NET_RESOLVE | CALLER_FLAG_NET_CONNECT | CALLER_FLAG_NET_LISTEN | CALLER_FLAG_NET_L2;
 
 /// The calling Cell may write the shell key namespace of service-config
 /// (`ConfigRequest::Set` / `Delete`; Phase 01 Q right, CP1 2026-10-25).
@@ -222,7 +220,11 @@ mod tests {
         }
         assert_eq!(CALLER_FLAG_NET_RIGHTS_MASK, seen & !CALLER_FLAG_VFS_MUTATE);
         assert_eq!(CALLER_FLAG_CONFIG_WRITE.count_ones(), 1);
-        assert_eq!(seen & CALLER_FLAG_CONFIG_WRITE, 0, "config flag overlaps another flag");
+        assert_eq!(
+            seen & CALLER_FLAG_CONFIG_WRITE,
+            0,
+            "config flag overlaps another flag"
+        );
         seen |= CALLER_FLAG_CONFIG_WRITE;
         for flag in [CALLER_FLAG_KMS_SSH_SIGN, CALLER_FLAG_KMS_SSH_ADMIN] {
             assert_eq!(flag.count_ones(), 1);
@@ -254,7 +256,10 @@ mod tests {
         for (flag, bytes) in [
             (CALLER_FLAG_KMS_SSH_SIGN, [0x40u8, 0, 0, 0]),
             (CALLER_FLAG_KMS_SSH_ADMIN, [0x80u8, 0, 0, 0]),
-            (CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN, [0xC0u8, 0, 0, 0]),
+            (
+                CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN,
+                [0xC0u8, 0, 0, 0],
+            ),
         ] {
             let mut sample = SAMPLE;
             sample.flags = flag;
@@ -268,11 +273,12 @@ mod tests {
             assert_eq!(CallerIdentity::from_recv_buf(&trailer), Some(sample));
         }
         // Neither flag overlaps a pre-existing right.
-        let older = CALLER_FLAG_VFS_MUTATE
-            | CALLER_FLAG_NET_RIGHTS_MASK
-            | CALLER_FLAG_CONFIG_WRITE;
+        let older = CALLER_FLAG_VFS_MUTATE | CALLER_FLAG_NET_RIGHTS_MASK | CALLER_FLAG_CONFIG_WRITE;
         assert_eq!(older, 0x3F);
-        assert_eq!(older & (CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN), 0);
+        assert_eq!(
+            older & (CALLER_FLAG_KMS_SSH_SIGN | CALLER_FLAG_KMS_SSH_ADMIN),
+            0
+        );
     }
 
     #[test]

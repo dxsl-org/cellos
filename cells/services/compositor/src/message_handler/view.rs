@@ -1,30 +1,31 @@
 //! Authenticated session view and frame IPC dispatch.
 
 use api::display::{
-    compositor_ops, CreateViewRequest, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
-    CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
+    compositor_ops, CreateViewRequest, FrameRef, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
+    ViewRef, CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
 };
 use ostd::syscall::sys_send;
 
-use crate::input_handler::InputState;
-use crate::surface_table::{FrameRegistry, SurfaceTable};
-use crate::z_order::ZOrder;
+use super::MessageContext;
 
-pub(super) fn handle(
-    buf: &[u8; 512],
-    sender: usize,
-    screen_w: u32,
-    screen_h: u32,
-    input: &mut InputState,
-    table: &mut SurfaceTable,
-    frames: &mut FrameRegistry,
-    z_order: &mut ZOrder,
-    pending_dirty: &mut Option<Rect>,
-) {
+pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>) {
+    let MessageContext {
+        screen_w,
+        screen_h,
+        input,
+        table,
+        frames,
+        z_order,
+        pending_dirty,
+    } = context;
     match buf[0] {
         compositor_ops::CREATE_VIEW => {
             if buf.len() < CREATE_VIEW_REQUEST_WIRE_SIZE {
-                send_error(sender, compositor_ops::CREATE_VIEW, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::CREATE_VIEW,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let role = SurfaceRole::from_u8(buf[1]);
@@ -68,7 +69,11 @@ pub(super) fn handle(
             let cap = match table.create(fx, fy, w, h, sender, role) {
                 Ok(c) => c,
                 Err(_) => {
-                    send_error(sender, compositor_ops::CREATE_VIEW, ViewOpResult::CapacityExhausted);
+                    send_error(
+                        sender,
+                        compositor_ops::CREATE_VIEW,
+                        ViewOpResult::CapacityExhausted,
+                    );
                     return;
                 }
             };
@@ -89,7 +94,11 @@ pub(super) fn handle(
         }
         compositor_ops::DESTROY_VIEW => {
             if buf.len() < 17 {
-                send_error(sender, compositor_ops::DESTROY_VIEW, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::DESTROY_VIEW,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
@@ -102,7 +111,12 @@ pub(super) fn handle(
                     let freed = if let Some(s) = table.get(surface_cap) {
                         crate::window_decoration::bounds(s.screen_rect())
                     } else {
-                        crate::window_decoration::bounds(Rect { x: 100, y: 100, w: 800, h: 600 })
+                        crate::window_decoration::bounds(Rect {
+                            x: 100,
+                            y: 100,
+                            w: 800,
+                            h: 600,
+                        })
                     };
                     input.remove_surface(surface_cap);
                     table.remove(surface_cap);
@@ -127,7 +141,11 @@ pub(super) fn handle(
         }
         compositor_ops::SELECT_VIEW => {
             if buf.len() < 17 {
-                send_error(sender, compositor_ops::SELECT_VIEW, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::SELECT_VIEW,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
@@ -158,7 +176,11 @@ pub(super) fn handle(
         }
         compositor_ops::GROUP_VIEW => {
             if buf.len() < 25 {
-                send_error(sender, compositor_ops::GROUP_VIEW, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::GROUP_VIEW,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let target_frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
@@ -169,12 +191,18 @@ pub(super) fn handle(
             let view_inc = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
 
             match frames.group_view(
-                target_frame_id,
-                target_frame_gen,
-                source_frame_id,
-                source_frame_gen,
-                view_id,
-                view_inc,
+                FrameRef {
+                    frame_id: target_frame_id,
+                    generation: target_frame_gen,
+                },
+                FrameRef {
+                    frame_id: source_frame_id,
+                    generation: source_frame_gen,
+                },
+                ViewRef {
+                    view_id,
+                    incarnation: view_inc,
+                },
                 sender,
             ) {
                 Ok(resp) => {
@@ -200,7 +228,11 @@ pub(super) fn handle(
         }
         compositor_ops::DETACH_VIEW => {
             if buf.len() < 25 {
-                send_error(sender, compositor_ops::DETACH_VIEW, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::DETACH_VIEW,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let source_frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
@@ -211,10 +243,14 @@ pub(super) fn handle(
             let y = i32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
 
             match frames.detach_view(
-                source_frame_id,
-                source_frame_gen,
-                view_id,
-                view_inc,
+                FrameRef {
+                    frame_id: source_frame_id,
+                    generation: source_frame_gen,
+                },
+                ViewRef {
+                    view_id,
+                    incarnation: view_inc,
+                },
                 x,
                 y,
                 sender,
@@ -240,14 +276,22 @@ pub(super) fn handle(
         }
         compositor_ops::SNAP_FRAME => {
             if buf.len() < 12 {
-                send_error(sender, compositor_ops::SNAP_FRAME, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::SNAP_FRAME,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
             let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
             let zone_byte = buf[9];
             let Some(zone) = api::display::SnapZone::from_u8(zone_byte) else {
-                send_error(sender, compositor_ops::SNAP_FRAME, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::SNAP_FRAME,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             };
 
@@ -281,7 +325,11 @@ pub(super) fn handle(
         }
         compositor_ops::TOGGLE_FULLSCREEN => {
             if buf.len() < 12 {
-                send_error(sender, compositor_ops::TOGGLE_FULLSCREEN, ViewOpResult::InvalidToken);
+                send_error(
+                    sender,
+                    compositor_ops::TOGGLE_FULLSCREEN,
+                    ViewOpResult::InvalidToken,
+                );
                 return;
             }
             let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);

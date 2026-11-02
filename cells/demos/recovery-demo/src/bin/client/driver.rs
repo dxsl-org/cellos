@@ -38,9 +38,17 @@ pub struct Client {
 
 impl Client {
     pub fn connect() -> Self {
-        let Some(authority) = common::wait_lookup(AUTHORITY_SERVICE, PUBLISH_TICKS) else { fail("no authority") };
-        let Some(worker) = common::wait_lookup(WORKER_SERVICE, PUBLISH_TICKS) else { fail("no published worker") };
-        let mut client = Self { authority, worker, incarnations: Vec::new() };
+        let Some(authority) = common::wait_lookup(AUTHORITY_SERVICE, PUBLISH_TICKS) else {
+            fail("no authority")
+        };
+        let Some(worker) = common::wait_lookup(WORKER_SERVICE, PUBLISH_TICKS) else {
+            fail("no published worker")
+        };
+        let mut client = Self {
+            authority,
+            worker,
+            incarnations: Vec::new(),
+        };
         client.note_incarnation();
         client
     }
@@ -71,22 +79,38 @@ impl Client {
     /// `(counter, revision, epoch)` from the published worker.
     pub fn get(&self) -> (u64, u64, u64) {
         match self.worker_call(Msg::Get) {
-            Some(Msg::Value { counter, revision, epoch }) => (counter, revision, epoch),
+            Some(Msg::Value {
+                counter,
+                revision,
+                epoch,
+            }) => (counter, revision, epoch),
             other => fail(&format!("get: {other:?}")),
         }
     }
 
     pub fn mutate(&self, request_id: u64, method: u8, amount: u64, fault: Fault) -> Option<Msg> {
-        self.worker_call(Msg::Mutate { request_id, method, amount, fault })
+        self.worker_call(Msg::Mutate {
+            request_id,
+            method,
+            amount,
+            fault,
+        })
     }
 
     pub fn status(&self) -> Status {
         let mut bytes = [0u8; 256];
-        if !common::send(self.authority, Msg::Report) || !common::recv_raw_from(self.authority, REPLY_TICKS, &mut bytes) {
+        if !common::send(self.authority, Msg::Report)
+            || !common::recv_raw_from(self.authority, REPLY_TICKS, &mut bytes)
+        {
             fail("authority report");
         }
-        let Some(Msg::Status { state, worker, ledger, lock_word, .. }) =
-            Msg::decode(&bytes[..FRAME_LEN])
+        let Some(Msg::Status {
+            state,
+            worker,
+            ledger,
+            lock_word,
+            ..
+        }) = Msg::decode(&bytes[..FRAME_LEN])
         else {
             fail("malformed status")
         };
@@ -94,9 +118,18 @@ impl Client {
         let verdict = if record.iter().all(|b| *b == 0) {
             None
         } else {
-            Some(ViRetirementV1::decode(record).unwrap_or_else(|e| fail(&format!("verdict record {e:?}"))))
+            Some(
+                ViRetirementV1::decode(record)
+                    .unwrap_or_else(|e| fail(&format!("verdict record {e:?}"))),
+            )
         };
-        Status { state, worker, ledger, lock_word, verdict }
+        Status {
+            state,
+            worker,
+            ledger,
+            lock_word,
+            verdict,
+        }
     }
 
     /// Wait until a worker other than `old` is published; returns the verdict

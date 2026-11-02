@@ -40,6 +40,12 @@ pub struct EndpointRegistry {
     members: Vec<WorkloadMember>,
 }
 
+impl Default for EndpointRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EndpointRegistry {
     pub fn new() -> Self {
         Self {

@@ -75,7 +75,9 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
             let state = STATE.lock();
             match stash_transfer(key, &*state) {
                 Ok(()) => println("[hotswap-demo-v2] state stashed"),
-                Err(_) => println("[hotswap-demo-v2] WARN: stash failed — replacement will refuse Ready"),
+                Err(_) => {
+                    println("[hotswap-demo-v2] WARN: stash failed — replacement will refuse Ready")
+                }
             }
         }
 
@@ -88,7 +90,9 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     state.counter = restored.counter;
                     println("[hotswap-demo-v2] state restored from v1");
                 }
-                Err(_) => recovery_failed("[hotswap-demo-v2] RecoveryFailed: no valid stashed state — no Ready"),
+                Err(_) => recovery_failed(
+                    "[hotswap-demo-v2] RecoveryFailed: no valid stashed state — no Ready",
+                ),
             }
             // A missing target makes ForceExit side-effect free while still
             // exercising the SpawnCap gate inherited through SpawnReplacement.

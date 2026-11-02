@@ -202,8 +202,10 @@ fn local_tag_flush(asid: usize) {
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         let mut tags = TEST_FLUSHED_TAGS.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
+        );
         tags.push(asid);
     }
     // Every leaf that differs between roots is non-global (`PageFlags::NON_GLOBAL`
@@ -221,7 +223,11 @@ fn local_tag_flush(asid: usize) {
 /// (the target may be in a long non-interruptible stretch), so the epoch — not
 /// the firmware's return — is what proves the remote hart stopped using the
 /// translation.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     use crate::task::smp;
     let me = crate::task::hart_local::current_hart_id();
@@ -248,7 +254,11 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
 
 /// Targets without a second hart: the local flush above is the whole contract
 /// and there is no remote to confirm.
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
     Ok(())
 }
@@ -257,7 +267,11 @@ fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
 ///
 /// It advances whether or not the caller's context takes interrupts, which is
 /// what a probe that must not wait needs.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 #[inline]
 fn counter_now() -> u64 {
     #[cfg(target_arch = "riscv64")]
@@ -269,10 +283,16 @@ fn counter_now() -> u64 {
         hal::aarch64::timer::counter_now()
     }
     #[cfg(target_arch = "x86_64")]
-    { unsafe { core::arch::x86_64::_rdtsc() } }
+    {
+        unsafe { core::arch::x86_64::_rdtsc() }
+    }
 }
 
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 fn issue_remote_tag_flushes() {
     let me = crate::task::hart_local::current_hart_id();
     for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
@@ -281,11 +301,19 @@ fn issue_remote_tag_flushes() {
 }
 
 /// No second hart: nothing can owe this hart's tag invalidation.
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 fn issue_remote_tag_flushes() {}
 
 /// The first online remote hart that still owes an invalidation, if any.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     let me = crate::task::hart_local::current_hart_id();
     crate::task::smp::online_harts()
@@ -293,7 +321,11 @@ fn remote_tag_flushes_outstanding() -> Option<usize> {
         .find(|hart| crate::task::smp::tlb_flush_pending(*hart))
 }
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     None
 }
@@ -314,9 +346,15 @@ fn tag_probe_ticks() -> u64 {
 }
 
 #[cfg(target_arch = "x86_64")]
-const fn tag_probe_ticks() -> u64 { 2_000_000_000 }
+const fn tag_probe_ticks() -> u64 {
+    2_000_000_000
+}
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 const fn tag_probe_ticks() -> u64 {
     0
 }
@@ -329,8 +367,10 @@ pub fn flush_page(vaddr: VAddr) {
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         let mut pages = TEST_FLUSHED_PAGES.lock();
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
+        );
         pages.push(page);
     }
     flush_range(page, PAGE_SIZE);
@@ -374,19 +414,26 @@ pub fn flush_range(start: VAddr, size: usize) {
         }
     }
 
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32", target_arch = "x86_64")))]
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "riscv32",
+        target_arch = "x86_64"
+    )))]
     for page in (start..end).step_by(PAGE_SIZE) {
         hal::paging::flush_tlb_page(page);
     }
     #[cfg(target_arch = "x86_64")]
     {
         let _ = end; // Overflow was checked even though invalidation covers every tag.
-        // Shared leaves may be cached under inactive PCIDs too. Invalidate all
-        // local tags/globals, then require every online peer's captured epoch
-        // before returning W^X success or permitting frame reuse.
+                     // Shared leaves may be cached under inactive PCIDs too. Invalidate all
+                     // local tags/globals, then require every online peer's captured epoch
+                     // before returning W^X success or permitting frame reuse.
         crate::memory::paging::tlb_flush_all();
         if let Err(error) = await_remote_invalidation(tag_probe_ticks()) {
-            panic!("[x86-smp] shared mapping invalidation unconfirmed: {:?}", error);
+            panic!(
+                "[x86-smp] shared mapping invalidation unconfirmed: {:?}",
+                error
+            );
         }
     }
 

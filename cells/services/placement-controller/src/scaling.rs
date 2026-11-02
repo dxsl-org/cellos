@@ -14,6 +14,12 @@ pub struct ScalingEngine {
     last_decision_ms: u64,
 }
 
+impl Default for ScalingEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScalingEngine {
     pub const fn new() -> Self {
         Self {
@@ -43,7 +49,7 @@ impl ScalingEngine {
         // ceil(demand / T)
         let t = policy.target_t as u64;
         let demand = eligible_demand as u64;
-        let raw_desired = ((demand + t - 1) / t) as usize;
+        let raw_desired = demand.div_ceil(t) as usize;
 
         // Clamp to [min_replicas, max_replicas]
         let clamped = raw_desired.clamp(policy.min_replicas, policy.max_replicas);

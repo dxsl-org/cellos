@@ -140,15 +140,19 @@ pub fn parse_feed(content: &str, base_url: Option<&str>) -> FeedData {
     while let Some(start) = content[pos..].find(&open_pattern) {
         let abs_start = pos + start;
         let rest = &content[abs_start..];
-        let Some(end) = rest.find(&close_pattern) else { break; };
+        let Some(end) = rest.find(&close_pattern) else {
+            break;
+        };
         let item_xml = &rest[..end + close_pattern.len()];
 
-        let title = extract_xml_tag(item_xml, "title").unwrap_or_else(|| String::from("Untitled Entry"));
+        let title =
+            extract_xml_tag(item_xml, "title").unwrap_or_else(|| String::from("Untitled Entry"));
         let link_raw = if is_atom {
             extract_atom_link(item_xml).or_else(|| extract_xml_tag(item_xml, "link"))
         } else {
             extract_xml_tag(item_xml, "link")
-        }.unwrap_or_default();
+        }
+        .unwrap_or_default();
 
         let link = if !link_raw.is_empty() && !base.is_empty() {
             crate::resources::resolve(base, &link_raw).unwrap_or(link_raw)
@@ -165,7 +169,8 @@ pub fn parse_feed(content: &str, base_url: Option<&str>) -> FeedData {
         let summary = if is_atom {
             extract_xml_tag(item_xml, "summary").or_else(|| extract_xml_tag(item_xml, "content"))
         } else {
-            extract_xml_tag(item_xml, "description").or_else(|| extract_xml_tag(item_xml, "content:encoded"))
+            extract_xml_tag(item_xml, "description")
+                .or_else(|| extract_xml_tag(item_xml, "content:encoded"))
         };
 
         let clean_summary = summary.map(|s| strip_html_tags(&s));

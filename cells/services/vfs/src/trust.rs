@@ -46,19 +46,45 @@ struct Entry<'a> {
 mod first;
 pub use first::Challenges;
 
-pub fn handle(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest) -> Option<VfsResponse<'static>> {
+pub fn handle(
+    vfs: &mut VfsManager,
+    caller: Caller,
+    req: &VfsRequest,
+) -> Option<VfsResponse<'static>> {
     let (host, port, algorithm, key) = match *req {
-        VfsRequest::TrustLookup { host, port, algorithm, key } => (host, port, algorithm, key),
-        VfsRequest::TrustChallenge { host, port, algorithm, key, session, epoch } =>
-            return Some(first::challenge(vfs, caller, host, port, algorithm, key, session, epoch)),
-        VfsRequest::TrustCommit { challenge } => return Some(first::commit(vfs, caller, challenge)),
+        VfsRequest::TrustLookup {
+            host,
+            port,
+            algorithm,
+            key,
+        } => (host, port, algorithm, key),
+        VfsRequest::TrustChallenge {
+            host,
+            port,
+            algorithm,
+            key,
+            session,
+            epoch,
+        } => {
+            return Some(first::challenge(
+                vfs, caller, host, port, algorithm, key, session, epoch,
+            ))
+        }
+        VfsRequest::TrustCommit { challenge } => {
+            return Some(first::commit(vfs, caller, challenge))
+        }
         _ => return None,
     };
     if caller.flags & CALLER_FLAG_NET_CONNECT == 0 {
         return Some(VfsResponse::Trust(ssh_trust::DENIED));
     }
-    if host.is_empty() || host.len() > MAX_HOST || algorithm.is_empty() || algorithm.len() > MAX_ALGORITHM
-        || key.is_empty() || key.len() > MAX_BLOB || port == 0
+    if host.is_empty()
+        || host.len() > MAX_HOST
+        || algorithm.is_empty()
+        || algorithm.len() > MAX_ALGORITHM
+        || key.is_empty()
+        || key.len() > MAX_BLOB
+        || port == 0
     {
         return Some(VfsResponse::Err(0xFF));
     }
@@ -67,7 +93,11 @@ pub fn handle(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest) -> Option<
         Some((_, true)) => ssh_trust::UNAVAILABLE,
         Some((size, false)) => {
             let bytes = vfs.read_to_vec(STORE_PATH);
-            if bytes.len() as u64 != size { ssh_trust::UNAVAILABLE } else { lookup(&bytes, host, port, algorithm, key) }
+            if bytes.len() as u64 != size {
+                ssh_trust::UNAVAILABLE
+            } else {
+                lookup(&bytes, host, port, algorithm, key)
+            }
         }
     };
     Some(VfsResponse::Trust(code))
@@ -75,7 +105,9 @@ pub fn handle(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest) -> Option<
 
 /// The answer for (`host`, `port`, `algorithm`, `key`) against store `bytes`.
 pub fn lookup(bytes: &[u8], host: &str, port: u16, algorithm: &str, key: &[u8]) -> u8 {
-    let Ok(entries) = parse(bytes) else { return ssh_trust::UNAVAILABLE };
+    let Ok(entries) = parse(bytes) else {
+        return ssh_trust::UNAVAILABLE;
+    };
     match entries.iter().find(|e| e.host == host && e.port == port) {
         None => ssh_trust::UNKNOWN,
         Some(e) if e.algorithm == algorithm && e.blob == key => ssh_trust::KNOWN_EXACT,
@@ -102,17 +134,26 @@ fn parse(bytes: &[u8]) -> Result<Vec<Entry<'_>>, ()> {
             return Err(());
         };
         let port = parse_port(port)?;
-        if !canonical_host(host) || algorithm != "ssh-ed25519" || !matches!(provenance, "preprovisioned" | "interactive") {
+        if !canonical_host(host)
+            || algorithm != "ssh-ed25519"
+            || !matches!(provenance, "preprovisioned" | "interactive")
+        {
             return Err(());
         }
         let blob = base64_decode(blob)?;
         if blob.is_empty() || blob.len() > MAX_BLOB || !blob_names(&blob, algorithm) {
             return Err(());
         }
-        if entries.len() == MAX_ENTRIES || entries.iter().any(|e| e.host == host && e.port == port) {
+        if entries.len() == MAX_ENTRIES || entries.iter().any(|e| e.host == host && e.port == port)
+        {
             return Err(());
         }
-        entries.push(Entry { host, port, algorithm, blob });
+        entries.push(Entry {
+            host,
+            port,
+            algorithm,
+            blob,
+        });
     }
     Ok(entries)
 }
@@ -130,7 +171,8 @@ fn parse_port(s: &str) -> Result<u16, ()> {
 /// Lowercase ASCII name labels or an IP literal; never empty, a wildcard or a port.
 fn canonical_host(h: &str) -> bool {
     (1..=MAX_HOST).contains(&h.len())
-        && h.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"-.:".contains(&b))
+        && h.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"-.:".contains(&b))
         && !h.ends_with('.')
 }
 
@@ -143,7 +185,7 @@ fn blob_names(blob: &[u8], algorithm: &str) -> bool {
 
 fn base64_decode(s: &str) -> Result<Vec<u8>, ()> {
     let b = s.as_bytes();
-    if b.is_empty() || b.len() % 4 != 0 {
+    if b.is_empty() || !b.len().is_multiple_of(4) {
         return Err(());
     }
     let mut out = Vec::with_capacity(b.len() / 4 * 3);
@@ -179,9 +221,16 @@ fn base64_decode(s: &str) -> Result<Vec<u8>, ()> {
 fn base64_encode(data: &[u8], padded: bool, out: &mut alloc::string::String) {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     for chunk in data.chunks(3) {
-        let n = chunk.iter().enumerate().fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
         for i in 0..4 {
-            if i <= chunk.len() { out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char); } else if padded { out.push('='); }
+            if i <= chunk.len() {
+                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else if padded {
+                out.push('=');
+            }
         }
     }
 }

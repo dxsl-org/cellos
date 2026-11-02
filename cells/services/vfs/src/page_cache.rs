@@ -60,7 +60,12 @@ impl PageCache {
     }
 
     /// Serve `sector` from cache; fall back to a raw disk read on miss.
-    pub fn read_sector(&mut self, dev: &mut impl SectorDevice, sector: u64, buf: &mut [u8; 512]) -> bool {
+    pub fn read_sector(
+        &mut self,
+        dev: &mut impl SectorDevice,
+        sector: u64,
+        buf: &mut [u8; 512],
+    ) -> bool {
         // Copy data out so we don't hold a borrow into self.entries past this point.
         let cached = self.entries.get(&sector).map(|e| e.data);
         if let Some(data) = cached {
@@ -85,7 +90,12 @@ impl PageCache {
     /// A write that did not complete drops the resident entry: the medium may
     /// hold the old, the new or a torn sector, so the next read must come from
     /// the device rather than from the pre-write image.
-    pub fn write_sector(&mut self, dev: &mut impl SectorDevice, sector: u64, data: &[u8; 512]) -> bool {
+    pub fn write_sector(
+        &mut self,
+        dev: &mut impl SectorDevice,
+        sector: u64,
+        data: &[u8; 512],
+    ) -> bool {
         if !dev.write_raw_sector(sector, data) {
             self.evict(sector);
             return false;
@@ -175,7 +185,10 @@ mod tests {
         let mut buf = [0u8; 512];
         let reads = medium.reads;
         assert!(cache.read_sector(&mut medium, 7, &mut buf));
-        assert_eq!(buf, [0xEE; 512], "read after a failed write comes from the medium");
+        assert_eq!(
+            buf, [0xEE; 512],
+            "read after a failed write comes from the medium"
+        );
         assert_eq!(medium.reads, reads + 1);
         assert!(cache.read_sector(&mut medium, 8, &mut buf));
         assert_eq!(buf, [2; 512], "other sectors stay resident");
@@ -185,7 +198,10 @@ mod tests {
     #[test]
     fn failed_write_of_absent_sector_leaves_cache_unchanged() {
         let mut cache = PageCache::new();
-        let mut medium = Medium { fail_writes: true, ..Medium::default() };
+        let mut medium = Medium {
+            fail_writes: true,
+            ..Medium::default()
+        };
         assert!(!cache.write_sector(&mut medium, 3, &[9; 512]));
         assert!(cache.entries.is_empty());
         assert!(cache.lru_order.is_empty());

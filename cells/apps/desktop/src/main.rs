@@ -159,13 +159,17 @@ fn cell_main() {
                                     need_tb_render = true;
                                 }
                                 SpotlightAction::SwitchTask(_) => {
-                                    ostd::io::println("[desktop] Spotlight: Switching focus to task");
+                                    ostd::io::println(
+                                        "[desktop] Spotlight: Switching focus to task",
+                                    );
                                     sp_state.close();
                                     sp_surf.move_to(-2000, -2000);
                                     need_tb_render = true;
                                 }
                                 SpotlightAction::CycleTheme => {
-                                    ostd::io::println("[desktop] Spotlight: Theme cycle triggered.");
+                                    ostd::io::println(
+                                        "[desktop] Spotlight: Theme cycle triggered.",
+                                    );
                                     need_tb_render = true;
                                     need_sp_render = true;
                                 }
@@ -228,7 +232,9 @@ fn cell_main() {
                         }
                     }
                 }
-                InputEvent::Key(ke) if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) => {
+                InputEvent::Key(ke)
+                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) =>
+                {
                     let is_toggle_shortcut = ke.keysym == KeySym::F1
                         || (ke.char() == Some(' ')
                             && (ke.modifiers.contains(Modifiers::ALT)

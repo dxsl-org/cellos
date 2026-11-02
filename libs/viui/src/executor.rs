@@ -37,7 +37,10 @@ pub struct CpuExecutor {
 
 impl CpuExecutor {
     pub fn new(surf: ViSurface) -> Self {
-        Self { surf, font: crate::font_context::FontContext::default() }
+        Self {
+            surf,
+            font: crate::font_context::FontContext::default(),
+        }
     }
 
     /// Unwrap the inner `ViSurface` (e.g. for IPC cleanup after app exit).
@@ -60,30 +63,57 @@ impl CommandExecutor for CpuExecutor {
 }
 
 /// CPU playback shared by the surface executor and pixel-buffer regressions.
-fn execute_commands(canvas: &mut FramebufferCanvas<'_>, font: &mut crate::font_context::FontContext, buf: &GpuCommandBuffer, damage: Option<Rect>) {
-    if let Some(rect) = damage { canvas.clip_push(rect); }
+fn execute_commands(
+    canvas: &mut FramebufferCanvas<'_>,
+    font: &mut crate::font_context::FontContext,
+    buf: &GpuCommandBuffer,
+    damage: Option<Rect>,
+) {
+    if let Some(rect) = damage {
+        canvas.clip_push(rect);
+    }
     for RecordedCmd { cmd, bounds } in buf.recorded_slice() {
         if let Some(damage_rect) = damage {
             if let Some(b) = bounds {
-                if !b.intersects(damage_rect) { continue; }
+                if !b.intersects(damage_rect) {
+                    continue;
+                }
             }
         }
         match cmd {
             GpuCmd::FillRect { rect, color } => canvas.fill_rect(*rect, *color),
             GpuCmd::DrawLine { a, b, color } => canvas.draw_line(*a, *b, *color),
-            GpuCmd::DrawText { pos, text, color, size_px } => {
+            GpuCmd::DrawText {
+                pos,
+                text,
+                color,
+                size_px,
+            } => {
                 canvas.draw_text_scaled(*pos, text, *size_px, *color, &mut font.atlas);
             }
-            GpuCmd::DrawImage { dest, pixels, src_stride } => canvas.draw_image(*dest, pixels, *src_stride),
-            GpuCmd::DrawTextShort { pos, bytes, len, color, size_px } => {
-                let text = core::str::from_utf8(&bytes[..*len as usize]).expect("recorded text is valid UTF-8");
+            GpuCmd::DrawImage {
+                dest,
+                pixels,
+                src_stride,
+            } => canvas.draw_image(*dest, pixels, *src_stride),
+            GpuCmd::DrawTextShort {
+                pos,
+                bytes,
+                len,
+                color,
+                size_px,
+            } => {
+                let text = core::str::from_utf8(&bytes[..*len as usize])
+                    .expect("recorded text is valid UTF-8");
                 canvas.draw_text_scaled(*pos, text, *size_px, *color, &mut font.atlas);
             }
             GpuCmd::ClipPush { rect } => canvas.clip_push(*rect),
             GpuCmd::ClipPop => canvas.clip_pop(),
         }
     }
-    if damage.is_some() { canvas.clip_pop(); }
+    if damage.is_some() {
+        canvas.clip_pop();
+    }
 }
 
 #[cfg(test)]
@@ -103,7 +133,13 @@ mod tests {
                 {
                     let mut recorder = GpuCanvas::new(&mut commands, 160, 50);
                     recorder.clip_push(Rect::new(3.0, 0.0, 80.0, 50.0));
-                    recorder.draw_text_scaled(Point::new(1.0, 1.0), text, px, Color::WHITE, &mut font.atlas);
+                    recorder.draw_text_scaled(
+                        Point::new(1.0, 1.0),
+                        text,
+                        px,
+                        Color::WHITE,
+                        &mut font.atlas,
+                    );
                     recorder.clip_pop();
                 }
                 let mut recorded = alloc::vec![0; 160 * 50 * 4];
@@ -112,7 +148,13 @@ mod tests {
                 execute_commands(&mut playback, &mut font, &commands, None);
                 let mut expected = FramebufferCanvas::new(&mut direct, 640, 160, 50);
                 expected.clip_push(Rect::new(3.0, 0.0, 80.0, 50.0));
-                expected.draw_text_scaled(Point::new(1.0, 1.0), text, px, Color::WHITE, &mut font.atlas);
+                expected.draw_text_scaled(
+                    Point::new(1.0, 1.0),
+                    text,
+                    px,
+                    Color::WHITE,
+                    &mut font.atlas,
+                );
                 assert_eq!(recorded, direct, "recorded playback differs at {px}px");
             }
         }

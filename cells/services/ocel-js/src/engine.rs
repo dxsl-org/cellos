@@ -73,7 +73,12 @@ impl OcelJsExecutionContext {
 
 impl JsContext for OcelJsExecutionContext {
     fn sync_document(&mut self, _: &DocumentArena, _: &str) -> Result<(), JsError> {
-        Err(JsError { message: String::from("ocel-js is a statement matcher; document-backed DOM requires ocel-quickjs"), line: 0 })
+        Err(JsError {
+            message: String::from(
+                "ocel-js is a statement matcher; document-backed DOM requires ocel-quickjs",
+            ),
+            line: 0,
+        })
     }
     fn eval(&mut self, script: &str) -> Result<String, JsError> {
         let mut last_result = String::from("undefined");

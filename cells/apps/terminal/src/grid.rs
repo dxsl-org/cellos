@@ -48,7 +48,12 @@ pub struct Pen {
 }
 
 impl Pen {
-    pub const DEFAULT: Self = Self { fg: Color::Default, bg: Color::Default, bold: false, inverse: false };
+    pub const DEFAULT: Self = Self {
+        fg: Color::Default,
+        bg: Color::Default,
+        bold: false,
+        inverse: false,
+    };
 }
 
 /// How many columns a cell's character covers.
@@ -71,7 +76,12 @@ pub struct TerminalCell {
 }
 
 impl TerminalCell {
-    pub const BLANK: Self = Self { ch: ' ', mark: None, pen: Pen::DEFAULT, width: Width::Narrow };
+    pub const BLANK: Self = Self {
+        ch: ' ',
+        mark: None,
+        pen: Pen::DEFAULT,
+        width: Width::Narrow,
+    };
 }
 
 /// Why a resize was refused; the previous screen is kept unchanged.
@@ -117,7 +127,8 @@ pub struct TerminalGrid {
 }
 
 fn checked_dims(cols: usize, rows: usize) -> Result<usize, ResizeError> {
-    if !(1..=MAX_COLS).contains(&cols) || !(1..=MAX_ROWS).contains(&rows) || cols * rows > MAX_CELLS {
+    if !(1..=MAX_COLS).contains(&cols) || !(1..=MAX_ROWS).contains(&rows) || cols * rows > MAX_CELLS
+    {
         return Err(ResizeError::OutOfBounds);
     }
     Ok(cols * rows)
@@ -125,7 +136,9 @@ fn checked_dims(cols: usize, rows: usize) -> Result<usize, ResizeError> {
 
 fn blank_screen(cells: usize) -> Result<Vec<TerminalCell>, ResizeError> {
     let mut screen = Vec::new();
-    screen.try_reserve_exact(cells).map_err(|_| ResizeError::NoMemory)?;
+    screen
+        .try_reserve_exact(cells)
+        .map_err(|_| ResizeError::NoMemory)?;
     screen.resize(cells, TerminalCell::BLANK);
     Ok(screen)
 }
@@ -146,7 +159,12 @@ fn relayout(
         row.copy_from_slice(&old[src * old_cols..src * old_cols + keep]);
         // A wide character whose trailing half was cut off is gone.
         if keep < old_cols && row[keep - 1].width == Width::Wide {
-            row[keep - 1] = TerminalCell { ch: ' ', mark: None, width: Width::Narrow, ..row[keep - 1] };
+            row[keep - 1] = TerminalCell {
+                ch: ' ',
+                mark: None,
+                width: Width::Narrow,
+                ..row[keep - 1]
+            };
         }
     }
     Ok(screen)
@@ -154,10 +172,19 @@ fn relayout(
 
 /// Append one screen line to the scrollback (trailing default blanks trimmed), dropping
 /// the oldest lines first so both the line and the byte cap hold.
-fn keep_line(scrollback: &mut VecDeque<Box<[TerminalCell]>>, total: &mut usize, row: &[TerminalCell]) {
-    let used = row.iter().rposition(|cell| *cell != TerminalCell::BLANK).map_or(0, |last| last + 1);
+fn keep_line(
+    scrollback: &mut VecDeque<Box<[TerminalCell]>>,
+    total: &mut usize,
+    row: &[TerminalCell],
+) {
+    let used = row
+        .iter()
+        .rposition(|cell| *cell != TerminalCell::BLANK)
+        .map_or(0, |last| last + 1);
     let bytes = used * core::mem::size_of::<TerminalCell>();
-    while !scrollback.is_empty() && (scrollback.len() >= MAX_SCROLLBACK_LINES || *total + bytes > MAX_SCROLLBACK_BYTES) {
+    while !scrollback.is_empty()
+        && (scrollback.len() >= MAX_SCROLLBACK_LINES || *total + bytes > MAX_SCROLLBACK_BYTES)
+    {
         if let Some(old) = scrollback.pop_front() {
             *total -= old.len() * core::mem::size_of::<TerminalCell>();
         }
@@ -261,12 +288,20 @@ impl TerminalGrid {
     }
 
     fn erase_cell(&self) -> TerminalCell {
-        TerminalCell { pen: Pen { bg: self.pen.bg, ..Pen::DEFAULT }, ..TerminalCell::BLANK }
+        TerminalCell {
+            pen: Pen {
+                bg: self.pen.bg,
+                ..Pen::DEFAULT
+            },
+            ..TerminalCell::BLANK
+        }
     }
 
     /// The cursor never rests on the trailing half of a wide character.
     fn settle(&mut self) {
-        if self.cursor_x > 0 && self.cells[self.cursor_y * self.cols + self.cursor_x].width == Width::Trail {
+        if self.cursor_x > 0
+            && self.cells[self.cursor_y * self.cols + self.cursor_x].width == Width::Trail
+        {
             self.cursor_x -= 1;
         }
     }
@@ -281,7 +316,12 @@ impl TerminalGrid {
             Width::Trail => x.saturating_sub(1),
         };
         for cell in row[lead..(lead + 2).min(cols)].iter_mut() {
-            *cell = TerminalCell { ch: ' ', mark: None, width: Width::Narrow, ..*cell };
+            *cell = TerminalCell {
+                ch: ' ',
+                mark: None,
+                width: Width::Narrow,
+                ..*cell
+            };
         }
     }
 
@@ -329,10 +369,25 @@ impl TerminalGrid {
         let pen = self.pen;
         let row = self.row_mut(y);
         if width == 2 {
-            row[x] = TerminalCell { ch, mark: None, pen, width: Width::Wide };
-            row[x + 1] = TerminalCell { ch: ' ', mark: None, pen, width: Width::Trail };
+            row[x] = TerminalCell {
+                ch,
+                mark: None,
+                pen,
+                width: Width::Wide,
+            };
+            row[x + 1] = TerminalCell {
+                ch: ' ',
+                mark: None,
+                pen,
+                width: Width::Trail,
+            };
         } else {
-            row[x] = TerminalCell { ch, mark: None, pen, width: Width::Narrow };
+            row[x] = TerminalCell {
+                ch,
+                mark: None,
+                pen,
+                width: Width::Narrow,
+            };
         }
         let next = x + width;
         if next >= self.cols {
@@ -356,7 +411,11 @@ impl TerminalGrid {
         };
         let y = self.cursor_y;
         let row = self.row_mut(y);
-        let x = if row[x].width == Width::Trail { x - 1 } else { x };
+        let x = if row[x].width == Width::Trail {
+            x - 1
+        } else {
+            x
+        };
         if row[x].mark.is_none() {
             row[x].mark = Some(mark);
         }
@@ -408,13 +467,21 @@ impl TerminalGrid {
     }
 
     pub fn cursor_up(&mut self, n: usize) {
-        let limit = if self.cursor_y >= self.top { self.top } else { 0 };
+        let limit = if self.cursor_y >= self.top {
+            self.top
+        } else {
+            0
+        };
         self.cursor_y = self.cursor_y.saturating_sub(n).max(limit);
         self.moved();
     }
 
     pub fn cursor_down(&mut self, n: usize) {
-        let limit = if self.cursor_y <= self.bottom { self.bottom } else { self.rows - 1 };
+        let limit = if self.cursor_y <= self.bottom {
+            self.bottom
+        } else {
+            self.rows - 1
+        };
         self.cursor_y = self.cursor_y.saturating_add(n).min(limit);
         self.moved();
     }
@@ -494,7 +561,11 @@ impl TerminalGrid {
     /// homes the cursor.
     pub fn set_scroll_region(&mut self, top: usize, bottom: usize) {
         let top = top.max(1);
-        let bottom = if bottom == 0 { self.rows } else { bottom.min(self.rows) };
+        let bottom = if bottom == 0 {
+            self.rows
+        } else {
+            bottom.min(self.rows)
+        };
         if top >= bottom {
             return;
         }
@@ -517,7 +588,11 @@ impl TerminalGrid {
         if self.top == 0 && !self.alternate {
             for line in 0..n {
                 let start = (self.top + line) * cols;
-                keep_line(&mut self.scrollback, &mut self.scrollback_bytes, &self.cells[start..start + cols]);
+                keep_line(
+                    &mut self.scrollback,
+                    &mut self.scrollback_bytes,
+                    &self.cells[start..start + cols],
+                );
             }
         }
         let (start, end) = (self.top * cols, (self.bottom + 1) * cols);
@@ -536,7 +611,8 @@ impl TerminalGrid {
         }
         let cols = self.cols;
         let (start, end) = (self.top * cols, (self.bottom + 1) * cols);
-        self.cells.copy_within(start..end - n * cols, start + n * cols);
+        self.cells
+            .copy_within(start..end - n * cols, start + n * cols);
         let blank = self.erase_cell();
         self.cells[start..start + n * cols].fill(blank);
         self.settle();
@@ -549,12 +625,22 @@ impl TerminalGrid {
     /// ESC 7 / CSI s: position, rendition and pending wrap of the active screen.
     pub fn save_cursor(&mut self) {
         let slot = self.screen_slot();
-        self.saved[slot] = Some(Saved { x: self.cursor_x, y: self.cursor_y, pen: self.pen, wrap_pending: self.wrap_pending });
+        self.saved[slot] = Some(Saved {
+            x: self.cursor_x,
+            y: self.cursor_y,
+            pen: self.pen,
+            wrap_pending: self.wrap_pending,
+        });
     }
 
     /// ESC 8 / CSI u. Without a saved state the cursor homes with the default rendition.
     pub fn restore_cursor(&mut self) {
-        let saved = self.saved[self.screen_slot()].unwrap_or(Saved { x: 0, y: 0, pen: Pen::DEFAULT, wrap_pending: false });
+        let saved = self.saved[self.screen_slot()].unwrap_or(Saved {
+            x: 0,
+            y: 0,
+            pen: Pen::DEFAULT,
+            wrap_pending: false,
+        });
         self.cursor_x = saved.x.min(self.cols - 1);
         self.cursor_y = saved.y.min(self.rows - 1);
         self.pen = saved.pen;
@@ -592,7 +678,9 @@ impl TerminalGrid {
             return;
         }
         self.save_cursor();
-        let Ok(screen) = blank_screen(self.cols * self.rows) else { return };
+        let Ok(screen) = blank_screen(self.cols * self.rows) else {
+            return;
+        };
         self.primary = core::mem::replace(&mut self.cells, screen);
         self.alternate = true;
         self.saved[1] = None;
@@ -647,7 +735,9 @@ impl TerminalGrid {
                 code @ 90..=97 => self.pen.fg = Color::Indexed((code - 90 + 8) as u8),
                 code @ 100..=107 => self.pen.bg = Color::Indexed((code - 100 + 8) as u8),
                 code @ (38 | 48) => {
-                    let Some((color, used)) = extended_color(&params[i + 1..]) else { return };
+                    let Some((color, used)) = extended_color(&params[i + 1..]) else {
+                        return;
+                    };
                     if code == 38 {
                         self.pen.fg = color;
                     } else {
@@ -674,12 +764,19 @@ impl TerminalGrid {
         let (primary, primary_shift) = if self.alternate {
             let y = self.saved[0].map_or(0, |saved| saved.y);
             let primary_shift = (y + 1).saturating_sub(rows);
-            (relayout(&self.primary, self.cols, cols, rows, primary_shift)?, primary_shift)
+            (
+                relayout(&self.primary, self.cols, cols, rows, primary_shift)?,
+                primary_shift,
+            )
         } else {
             (Vec::new(), shift)
         };
         // Committed from here on: no further failure.
-        let old_primary = if self.alternate { &self.primary } else { &self.cells };
+        let old_primary = if self.alternate {
+            &self.primary
+        } else {
+            &self.cells
+        };
         for line in old_primary.chunks_exact(self.cols).take(primary_shift) {
             keep_line(&mut self.scrollback, &mut self.scrollback_bytes, line);
         }
@@ -736,7 +833,12 @@ mod tests {
         assert_eq!(row(&grid, 0), "World");
         assert_eq!(row(&grid, 1), "Line3");
         assert_eq!(row(&grid, 2), "Line4");
-        let first: String = grid.scrollback_line(0).unwrap().iter().map(|c| c.ch).collect();
+        let first: String = grid
+            .scrollback_line(0)
+            .unwrap()
+            .iter()
+            .map(|c| c.ch)
+            .collect();
         assert_eq!(first, "Hello");
     }
 
@@ -766,7 +868,11 @@ mod tests {
         assert_eq!((grid.cols, grid.rows), (20, 5));
         assert_eq!(row(&grid, 0), "12345");
         for (cols, rows) in [(0, 5), (513, 5), (20, 0), (20, 257), (512, 257), (600, 200)] {
-            assert_eq!(grid.resize(cols, rows), Err(ResizeError::OutOfBounds), "{cols}x{rows}");
+            assert_eq!(
+                grid.resize(cols, rows),
+                Err(ResizeError::OutOfBounds),
+                "{cols}x{rows}"
+            );
             assert_eq!((grid.cols, grid.rows), (20, 5));
         }
         assert_eq!(grid.resize(512, 256), Ok(()));
@@ -821,7 +927,12 @@ mod tests {
         grid.set_scroll_region(2, 3);
         grid.select_graphic_rendition(&[1, 31]);
         grid.reset_modes();
-        assert!(!grid.alternate_active() && grid.cursor_visible() && grid.autowrap() && !grid.bracketed_paste());
+        assert!(
+            !grid.alternate_active()
+                && grid.cursor_visible()
+                && grid.autowrap()
+                && !grid.bracketed_paste()
+        );
         assert_eq!(grid.margins(), (0, 3));
         assert_eq!(grid.pen(), Pen::DEFAULT);
         assert_eq!(row(&grid, 0), "primary");

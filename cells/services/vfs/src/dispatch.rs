@@ -54,7 +54,10 @@ pub fn handle_request<'a>(
     // BEFORE path sealing, handle resolution, or backend work. The only exception
     // is init's machine pin store: `Write`/`Mkdir` inside `/srv/.cellos-machine`
     // from the live `MACHINE_PIN` provider (see `AccessTable::is_machine_pin_writer`).
-    if req.requires_mutation_authority() && !caller.may_mutate() && !machine_pin_write(vfs, caller, &req) {
+    if req.requires_mutation_authority()
+        && !caller.may_mutate()
+        && !machine_pin_write(vfs, caller, &req)
+    {
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     }
     // A cell that has given up path strings is refused here, before the request
@@ -89,10 +92,16 @@ pub fn handle_request<'a>(
             if !vfs.access.can_read(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
-            if !vfs.healthy(p) { return api::ipc::VfsResponse::Err(ERR_IO); }
-            if !matches!(vfs.stat(p), Some((_, true))) { return api::ipc::VfsResponse::Err(ERR_IO); }
+            if !vfs.healthy(p) {
+                return api::ipc::VfsResponse::Err(ERR_IO);
+            }
+            if !matches!(vfs.stat(p), Some((_, true))) {
+                return api::ipc::VfsResponse::Err(ERR_IO);
+            }
             let n = vfs.list_dir(p, resp_buf);
-            if !vfs.healthy(p) { return api::ipc::VfsResponse::Err(ERR_IO); }
+            if !vfs.healthy(p) {
+                return api::ipc::VfsResponse::Err(ERR_IO);
+            }
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
         api::ipc::VfsRequest::ReadAsync { path } => {
@@ -107,7 +116,9 @@ pub fn handle_request<'a>(
             if !caller.may_own_state() {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
-            if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) { return api::ipc::VfsResponse::Err(ERR_IO); }
+            if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
+                return api::ipc::VfsResponse::Err(ERR_IO);
+            }
             let lease = if path.starts_with("/srv") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
                     return api::ipc::VfsResponse::Err(ERR_DENIED);
@@ -120,7 +131,9 @@ pub fn handle_request<'a>(
                 None
             };
             let data = vfs.read_to_vec(path);
-            if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
+            if !vfs.healthy(path) {
+                return api::ipc::VfsResponse::Err(ERR_IO);
+            }
             let handle = vfs.pending.insert(caller, path, data, lease);
             api::ipc::VfsResponse::PendingHandle(handle)
         }
@@ -141,7 +154,11 @@ pub fn handle_request<'a>(
             if !readable {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
-            if !vfs.pending.owned_path(caller, handle).is_some_and(|path| vfs.healthy(path)) {
+            if !vfs
+                .pending
+                .owned_path(caller, handle)
+                .is_some_and(|path| vfs.healthy(path))
+            {
                 let _ = vfs.pending.poll(caller, handle);
                 return api::ipc::VfsResponse::Err(ERR_IO);
             }

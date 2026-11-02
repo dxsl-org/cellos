@@ -229,7 +229,7 @@ fn init_absolute_mouse() -> bool {
             return false;
         }
         vm_command(VM_MOUSE_COMMAND, 0x53424152); // REQUEST_ABSOLUTE
-        return true;
+        true
     }
     #[cfg(not(target_arch = "x86_64"))]
     false
@@ -238,8 +238,7 @@ fn init_absolute_mouse() -> bool {
 fn absolute_pixel(value: u32, extent: u16) -> i32 {
     // Both endpoints are inclusive: 0 -> 0, 65535 -> extent - 1.
     // Round to nearest pixel, avoiding a systematic one-pixel bias.
-    ((u64::from(value.min(65535)) * u64::from(extent.saturating_sub(1)) + 32767)
-        / 65535) as i32
+    ((u64::from(value.min(65535)) * u64::from(extent.saturating_sub(1)) + 32767) / 65535) as i32
 }
 
 pub fn init() {
@@ -282,12 +281,22 @@ impl Ps2State {
 
     fn key(&mut self, code: u32, released: bool) {
         let pressed = &mut self.pressed[code as usize];
-        let value = if released { 0 } else if *pressed { 2 } else { 1 };
+        let value = if released {
+            0
+        } else if *pressed {
+            2
+        } else {
+            1
+        };
         *pressed = !released;
         if code == 58 && value == 1 {
             self.caps_lock = !self.caps_lock;
         }
-        self.push(Ps2Event { opcode: 0, code, value });
+        self.push(Ps2Event {
+            opcode: 0,
+            code,
+            value,
+        });
     }
 
     fn keyboard_byte(&mut self, byte: u8) {
@@ -346,7 +355,7 @@ impl Ps2State {
         } else {
             match scan {
                 0x01..=0x53 | 0x56..=0x58 => scan as u32,
-                0x54 => 99, // SysRq
+                0x54 => 99,  // SysRq
                 _ => return, // ACK, BAT, and invalid scancodes are not keys.
             }
         };
@@ -366,19 +375,31 @@ impl Ps2State {
         let [flags, x, y] = self.mouse_buf;
         // Overflow makes that axis unreliable. Keep button transitions, but do
         // not turn overflow bytes into huge cursor jumps.
-        let dx = if flags & 0x40 != 0 { 0 } else {
+        let dx = if flags & 0x40 != 0 {
+            0
+        } else {
             x as i32 - if flags & 0x10 != 0 { 256 } else { 0 }
         };
-        let dy = if flags & 0x80 != 0 { 0 } else {
+        let dy = if flags & 0x80 != 0 {
+            0
+        } else {
             -(y as i32 - if flags & 0x20 != 0 { 256 } else { 0 })
         };
         // Move before buttons: the compositor must hit-test the packet's new
         // cursor position, not the position preceding the click.
         if dx != 0 {
-            self.push(Ps2Event { opcode: 1, code: 0, value: dx });
+            self.push(Ps2Event {
+                opcode: 1,
+                code: 0,
+                value: dx,
+            });
         }
         if dy != 0 {
-            self.push(Ps2Event { opcode: 1, code: 1, value: dy });
+            self.push(Ps2Event {
+                opcode: 1,
+                code: 1,
+                value: dy,
+            });
         }
         self.buttons(flags & 0x07);
     }
@@ -404,8 +425,7 @@ impl Ps2State {
         }
         // Use the same authoritative geometry as GpuGetResolution/compositor.
         // Until scanout is registered, leave packets in the host queue.
-        let Some((width, height)) =
-            crate::resource_registry::display_framebuffer_resolution()
+        let Some((width, height)) = crate::resource_registry::display_framebuffer_resolution()
         else {
             return;
         };
@@ -413,7 +433,7 @@ impl Ps2State {
             return;
         }
         let status = vm_command(VM_MOUSE_STATUS, 0)[0];
-        if status >> 16 != 0 || (status & 0xFFFF) % 4 != 0 {
+        if status >> 16 != 0 || !(status & 0xFFFF).is_multiple_of(4) {
             vm_command(VM_MOUSE_COMMAND, 0xF5); // DISABLE, reactivate PS/2 producer
             self.absolute_mouse = false;
             self.mouse_idx = 0;
@@ -427,20 +447,38 @@ impl Ps2State {
         // IPC backpressure therefore cannot overwrite a queued button release.
         let [flags, x, y, wheel] = vm_command(VM_MOUSE_DATA, 4);
         if flags & 0x10000 != 0 {
-            self.push(Ps2Event { opcode: 1, code: 0, value: x as i32 });
-            self.push(Ps2Event { opcode: 1, code: 1, value: y as i32 });
+            self.push(Ps2Event {
+                opcode: 1,
+                code: 0,
+                value: x as i32,
+            });
+            self.push(Ps2Event {
+                opcode: 1,
+                code: 1,
+                value: y as i32,
+            });
         } else {
-            self.push(Ps2Event { opcode: 2, code: 0, value: absolute_pixel(x, width) });
-            self.push(Ps2Event { opcode: 2, code: 1, value: absolute_pixel(y, height) });
+            self.push(Ps2Event {
+                opcode: 2,
+                code: 0,
+                value: absolute_pixel(x, width),
+            });
+            self.push(Ps2Event {
+                opcode: 2,
+                code: 1,
+                value: absolute_pixel(y, height),
+            });
         }
         // VMware Z is positive down; EV_REL/REL_WHEEL is positive up.
         if wheel != 0 {
-            self.push(Ps2Event { opcode: 1, code: 8, value: (wheel as i32).saturating_neg() });
+            self.push(Ps2Event {
+                opcode: 1,
+                code: 8,
+                value: (wheel as i32).saturating_neg(),
+            });
         }
         // Packet movement must reach hit-testing before its button transitions.
-        let buttons = ((flags & 0x20) >> 5)
-            | ((flags & 0x10) >> 3)
-            | ((flags & 0x08) >> 1);
+        let buttons = ((flags & 0x20) >> 5) | ((flags & 0x10) >> 3) | ((flags & 0x08) >> 1);
         self.buttons(buttons as u8);
     }
 
@@ -483,13 +521,27 @@ impl Ps2State {
             return None;
         }
         let sequence: &[u8] = match event.code {
-            59 => b"\x1b[11~", 60 => b"\x1b[12~", 61 => b"\x1b[13~",
-            62 => b"\x1b[14~", 63 => b"\x1b[15~", 64 => b"\x1b[17~",
-            65 => b"\x1b[18~", 66 => b"\x1b[19~", 67 => b"\x1b[20~",
-            68 => b"\x1b[21~", 87 => b"\x1b[23~", 88 => b"\x1b[24~",
-            102 => b"\x1b[H", 103 => b"\x1b[A", 104 => b"\x1b[5~",
-            105 => b"\x1b[D", 106 => b"\x1b[C", 107 => b"\x1b[F",
-            108 => b"\x1b[B", 109 => b"\x1b[6~", 110 => b"\x1b[2~",
+            59 => b"\x1b[11~",
+            60 => b"\x1b[12~",
+            61 => b"\x1b[13~",
+            62 => b"\x1b[14~",
+            63 => b"\x1b[15~",
+            64 => b"\x1b[17~",
+            65 => b"\x1b[18~",
+            66 => b"\x1b[19~",
+            67 => b"\x1b[20~",
+            68 => b"\x1b[21~",
+            87 => b"\x1b[23~",
+            88 => b"\x1b[24~",
+            102 => b"\x1b[H",
+            103 => b"\x1b[A",
+            104 => b"\x1b[5~",
+            105 => b"\x1b[D",
+            106 => b"\x1b[C",
+            107 => b"\x1b[F",
+            108 => b"\x1b[B",
+            109 => b"\x1b[6~",
+            110 => b"\x1b[2~",
             111 => b"\x1b[3~",
             _ => b"",
         };

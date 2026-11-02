@@ -9,11 +9,11 @@ mod conditional_save;
 mod disks;
 mod listing;
 mod owned_state;
-mod state_transfer;
 #[cfg(feature = "test-hooks")]
 pub(crate) mod read_path_selftest;
 #[cfg(test)]
 mod read_path_tests;
+mod state_transfer;
 #[cfg(test)]
 mod tests;
 
@@ -70,7 +70,10 @@ impl VfsManager {
         // Longest prefix wins: the disk mounts shadow the read-only root.
         mounts.mount("/", ram);
         mounts.mount("/tmp", ram);
-        disks::mount_disks(&mut mounts, disks::disk_mounts(&crate::blk_router::discover()));
+        disks::mount_disks(
+            &mut mounts,
+            disks::disk_mounts(&crate::blk_router::discover()),
+        );
 
         Self {
             mounts,
@@ -96,7 +99,9 @@ impl VfsManager {
 
     /// Consult after authorization and again after reads; never a durability claim.
     pub fn healthy(&self, path: &str) -> bool {
-        let backend = self.config_source(path).map(|(backend, _)| backend)
+        let backend = self
+            .config_source(path)
+            .map(|(backend, _)| backend)
             .or_else(|| self.mounts.backend(path));
         backend.is_some_and(|b| b.health() == crate::backend::BackendHealth::Ready)
     }
@@ -106,13 +111,17 @@ impl VfsManager {
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
-        if !self.healthy(path) { return 0; }
+        if !self.healthy(path) {
+            return 0;
+        }
         let mut pos = self
             .mounts
             .backend(path)
             .map(|b| b.list(path, out))
             .unwrap_or(0);
-        if !self.healthy(path) { return 0; }
+        if !self.healthy(path) {
+            return 0;
+        }
 
         let cap = out.len().min(480);
         for child in self.mounts.direct_mount_children(path) {
@@ -154,9 +163,10 @@ impl VfsManager {
             let Some((_, directory)) = self.stat(&full_path) else {
                 continue;
             };
-            if out[..pos].split(|&byte| byte == b'\n').any(|entry| {
-                entry.get(2..) == Some(name.as_bytes())
-            }) {
+            if out[..pos]
+                .split(|&byte| byte == b'\n')
+                .any(|entry| entry.get(2..) == Some(name.as_bytes()))
+            {
                 continue;
             }
             let needed = 2 + name.len() + 1;
@@ -174,13 +184,19 @@ impl VfsManager {
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        if !self.healthy(path) { return None; }
+        if !self.healthy(path) {
+            return None;
+        }
         if let Some((backend, source)) = self.config_source(path) {
             return backend.stat(source);
         }
         let result = self.mounts.backend(path).and_then(|b| b.stat(path));
-        if !self.healthy(path) { return None; }
-        if result.is_some() { return result; }
+        if !self.healthy(path) {
+            return None;
+        }
+        if result.is_some() {
+            return result;
+        }
         if self.mounts.is_mount_ancestor(path) {
             return Some((0, true));
         }
@@ -311,8 +327,14 @@ impl VfsManager {
     }
 
     pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
-        let (Some(old_backend), Some(new_backend)) = (self.mounts.backend(old), self.mounts.backend(new)) else { return false; };
-        if !core::ptr::eq(old_backend, new_backend) || !self.healthy(old) || !self.healthy(new) { return false; }
+        let (Some(old_backend), Some(new_backend)) =
+            (self.mounts.backend(old), self.mounts.backend(new))
+        else {
+            return false;
+        };
+        if !core::ptr::eq(old_backend, new_backend) || !self.healthy(old) || !self.healthy(new) {
+            return false;
+        }
         let ok = self
             .mounts
             .backend_mut(old)

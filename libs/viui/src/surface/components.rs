@@ -6,11 +6,11 @@
 extern crate alloc;
 use alloc::string::String;
 
-use ostd::display::ViSurface;
-use ostd::typography::{FontFace, TextFonts};
 use crate::canvas::Color;
 use crate::surface::{draw_label, draw_label_aligned, fill_rect, stroke_rect};
 use crate::theme::ViTheme;
+use ostd::display::ViSurface;
+use ostd::typography::{FontFace, TextFonts};
 
 // ─── 1. Toolbar Component ────────────────────────────────────────────────────
 
@@ -74,6 +74,8 @@ pub struct SegmentedControl;
 
 impl SegmentedControl {
     /// Render a connected segmented pill control (e.g. `[List] [Grid] [Cols]`).
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -92,7 +94,11 @@ impl SegmentedControl {
             let (bg, border, fg) = if is_selected {
                 (theme.accent(), theme.accent(), Color::WHITE)
             } else {
-                (theme.button_normal(), theme.border(), theme.text_secondary())
+                (
+                    theme.button_normal(),
+                    theme.border(),
+                    theme.text_secondary(),
+                )
             };
 
             fill_rect(surf, item_x, y, item_w, h, bg);
@@ -152,6 +158,8 @@ impl PlacesSidebar {
     pub const ROW_HEIGHT: u32 = 28;
 
     /// Render a standard navigation sidebar (Places / Bookmarks).
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -190,7 +198,8 @@ impl PlacesSidebar {
                 break;
             }
 
-            let is_active = active_path == item.path || (item.path == "/" && active_path.is_empty());
+            let is_active =
+                active_path == item.path || (item.path == "/" && active_path.is_empty());
 
             if is_active {
                 // Highlight pill background
@@ -207,7 +216,11 @@ impl PlacesSidebar {
             }
 
             // Icon
-            let icon_col = if is_active { theme.accent() } else { theme.text_secondary() };
+            let icon_col = if is_active {
+                theme.accent()
+            } else {
+                theme.text_secondary()
+            };
             draw_label(
                 surf,
                 fonts,
@@ -222,7 +235,11 @@ impl PlacesSidebar {
             );
 
             // Name
-            let name_col = if is_active { theme.text_primary() } else { theme.text_secondary() };
+            let name_col = if is_active {
+                theme.text_primary()
+            } else {
+                theme.text_secondary()
+            };
             draw_label(
                 surf,
                 fonts,
@@ -239,14 +256,14 @@ impl PlacesSidebar {
     }
 
     /// Hit-test click event against PlacesSidebar items. Returns `Some(path)` if hit.
-    pub fn hit_test<'a>(
+    pub fn hit_test(
         click_x: i32,
         click_y: i32,
         x: i32,
         y: i32,
         width: u32,
-        items: &'a [PlacesItemDef],
-    ) -> Option<&'a str> {
+        items: &[PlacesItemDef],
+    ) -> Option<&str> {
         if click_x < x || click_x >= x + width as i32 {
             return None;
         }
@@ -281,6 +298,8 @@ impl ListView {
     pub const ROW_HEIGHT: u32 = 32;
 
     /// Render a multi-column data list with header and selectable rows.
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -297,12 +316,52 @@ impl ListView {
 
         // Header row
         fill_rect(surf, x, y, width, Self::HEADER_HEIGHT, theme.surface());
-        fill_rect(surf, x, y + Self::HEADER_HEIGHT as i32 - 1, width, 1, theme.border());
+        fill_rect(
+            surf,
+            x,
+            y + Self::HEADER_HEIGHT as i32 - 1,
+            width,
+            1,
+            theme.border(),
+        );
 
         let col_name_w = width.saturating_sub(220);
-        draw_label(surf, fonts, x + 36, y + 4, col_name_w, 20, "Name", FontFace::UiSemibold, 12.0, theme.text_secondary());
-        draw_label(surf, fonts, x + width as i32 - 170, y + 4, 80, 20, "Size", FontFace::UiSemibold, 12.0, theme.text_secondary());
-        draw_label(surf, fonts, x + width as i32 - 70, y + 4, 60, 20, "Kind", FontFace::UiSemibold, 12.0, theme.text_secondary());
+        draw_label(
+            surf,
+            fonts,
+            x + 36,
+            y + 4,
+            col_name_w,
+            20,
+            "Name",
+            FontFace::UiSemibold,
+            12.0,
+            theme.text_secondary(),
+        );
+        draw_label(
+            surf,
+            fonts,
+            x + width as i32 - 170,
+            y + 4,
+            80,
+            20,
+            "Size",
+            FontFace::UiSemibold,
+            12.0,
+            theme.text_secondary(),
+        );
+        draw_label(
+            surf,
+            fonts,
+            x + width as i32 - 70,
+            y + 4,
+            60,
+            20,
+            "Kind",
+            FontFace::UiSemibold,
+            12.0,
+            theme.text_secondary(),
+        );
 
         let rows_start_y = y + Self::HEADER_HEIGHT as i32;
         let max_visible = (height.saturating_sub(Self::HEADER_HEIGHT) / Self::ROW_HEIGHT) as usize;
@@ -312,26 +371,88 @@ impl ListView {
             let is_selected = selected_idx == Some(i);
 
             if is_selected {
-                fill_rect(surf, x, row_y, width, Self::ROW_HEIGHT, theme.list_selected_bg());
+                fill_rect(
+                    surf,
+                    x,
+                    row_y,
+                    width,
+                    Self::ROW_HEIGHT,
+                    theme.list_selected_bg(),
+                );
                 fill_rect(surf, x, row_y, 3, Self::ROW_HEIGHT, theme.accent());
             }
 
             // Icon
-            let icon_col = if item.is_dir { theme.accent() } else { theme.text_primary() };
-            draw_label(surf, fonts, x + 8, row_y + 6, 24, 20, &item.icon, FontFace::UiSemibold, 14.0, icon_col);
+            let icon_col = if item.is_dir {
+                theme.accent()
+            } else {
+                theme.text_primary()
+            };
+            draw_label(
+                surf,
+                fonts,
+                x + 8,
+                row_y + 6,
+                24,
+                20,
+                &item.icon,
+                FontFace::UiSemibold,
+                14.0,
+                icon_col,
+            );
 
             // Name
-            let name_col = if is_selected { theme.text_primary() } else { theme.text_primary() };
-            draw_label(surf, fonts, x + 36, row_y + 6, col_name_w, 20, &item.name, FontFace::UiRegular, 14.0, name_col);
+            let name_col = theme.text_primary();
+            draw_label(
+                surf,
+                fonts,
+                x + 36,
+                row_y + 6,
+                col_name_w,
+                20,
+                &item.name,
+                FontFace::UiRegular,
+                14.0,
+                name_col,
+            );
 
             // Size
-            draw_label(surf, fonts, x + width as i32 - 170, row_y + 6, 80, 20, &item.size_str, FontFace::UiRegular, 13.0, theme.text_secondary());
+            draw_label(
+                surf,
+                fonts,
+                x + width as i32 - 170,
+                row_y + 6,
+                80,
+                20,
+                &item.size_str,
+                FontFace::UiRegular,
+                13.0,
+                theme.text_secondary(),
+            );
 
             // Kind
-            draw_label(surf, fonts, x + width as i32 - 70, row_y + 6, 60, 20, &item.kind_str, FontFace::UiRegular, 13.0, theme.text_secondary());
+            draw_label(
+                surf,
+                fonts,
+                x + width as i32 - 70,
+                row_y + 6,
+                60,
+                20,
+                &item.kind_str,
+                FontFace::UiRegular,
+                13.0,
+                theme.text_secondary(),
+            );
 
             // Row divider
-            fill_rect(surf, x, row_y + Self::ROW_HEIGHT as i32 - 1, width, 1, theme.divider());
+            fill_rect(
+                surf,
+                x,
+                row_y + Self::ROW_HEIGHT as i32 - 1,
+                width,
+                1,
+                theme.divider(),
+            );
         }
     }
 
@@ -377,6 +498,8 @@ impl GridView {
     pub const CARD_GAP: u32 = 12;
 
     /// Render items in a responsive grid of cards.
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -390,7 +513,8 @@ impl GridView {
     ) {
         fill_rect(surf, x, y, width, height, theme.bg());
 
-        let cols = ((width.saturating_sub(Self::CARD_GAP)) / (Self::CARD_W + Self::CARD_GAP)).max(1) as usize;
+        let cols = ((width.saturating_sub(Self::CARD_GAP)) / (Self::CARD_W + Self::CARD_GAP)).max(1)
+            as usize;
         let pad_x = x + 12;
         let pad_y = y + 12;
 
@@ -407,7 +531,14 @@ impl GridView {
             let is_selected = selected_idx == Some(i);
 
             if is_selected {
-                fill_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.list_selected_bg());
+                fill_rect(
+                    surf,
+                    cx,
+                    cy,
+                    Self::CARD_W,
+                    Self::CARD_H,
+                    theme.list_selected_bg(),
+                );
                 stroke_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.accent());
             } else {
                 fill_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.surface());
@@ -417,10 +548,25 @@ impl GridView {
             // Inner icon box
             let icon_box_y = cy + 8;
             let icon_box_h = 44;
-            let icon_box_bg = if is_selected { theme.list_selected_bg() } else { theme.bg() };
-            fill_rect(surf, cx + 12, icon_box_y, Self::CARD_W - 24, icon_box_h, icon_box_bg);
+            let icon_box_bg = if is_selected {
+                theme.list_selected_bg()
+            } else {
+                theme.bg()
+            };
+            fill_rect(
+                surf,
+                cx + 12,
+                icon_box_y,
+                Self::CARD_W - 24,
+                icon_box_h,
+                icon_box_bg,
+            );
 
-            let icon_fg = if item.is_dir { theme.accent() } else { theme.text_primary() };
+            let icon_fg = if item.is_dir {
+                theme.accent()
+            } else {
+                theme.text_primary()
+            };
             draw_label_aligned(
                 surf,
                 fonts,
@@ -462,7 +608,8 @@ impl GridView {
         width: u32,
         count: usize,
     ) -> Option<usize> {
-        let cols = ((width.saturating_sub(Self::CARD_GAP)) / (Self::CARD_W + Self::CARD_GAP)).max(1) as usize;
+        let cols = ((width.saturating_sub(Self::CARD_GAP)) / (Self::CARD_W + Self::CARD_GAP)).max(1)
+            as usize;
         let pad_x = x + 12;
         let pad_y = y + 12;
 
@@ -472,7 +619,11 @@ impl GridView {
             let cx = pad_x + col as i32 * (Self::CARD_W + Self::CARD_GAP) as i32;
             let cy = pad_y + row as i32 * (Self::CARD_H + Self::CARD_GAP) as i32;
 
-            if click_x >= cx && click_x < cx + Self::CARD_W as i32 && click_y >= cy && click_y < cy + Self::CARD_H as i32 {
+            if click_x >= cx
+                && click_x < cx + Self::CARD_W as i32
+                && click_y >= cy
+                && click_y < cy + Self::CARD_H as i32
+            {
                 return Some(i);
             }
         }
@@ -517,6 +668,8 @@ impl StatusBar {
     }
 
     /// Render a split status bar with left message and right status/zoom metrics.
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_split(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -577,6 +730,8 @@ impl ScrollBar {
     pub const DEFAULT_WIDTH: u32 = 12;
 
     /// Render a standard vertical scrollbar track and thumb.
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         theme: &dyn ViTheme,
@@ -592,14 +747,21 @@ impl ScrollBar {
         fill_rect(surf, x, y, width, height, theme.surface());
 
         if max_scroll > 0 && content_total_h > 0 {
-            let thumb_h = ((height as f32 / content_total_h as f32) * height as f32)
-                .max(20.0) as u32;
+            let thumb_h =
+                ((height as f32 / content_total_h as f32) * height as f32).max(20.0) as u32;
             let scroll_ratio = (scroll_y.max(0) as f32 / max_scroll as f32).clamp(0.0, 1.0);
             let available_track = height.saturating_sub(thumb_h);
             let thumb_y = y + (scroll_ratio * available_track as f32) as i32;
 
             // Thumb
-            fill_rect(surf, x + 2, thumb_y, width.saturating_sub(4), thumb_h, theme.accent());
+            fill_rect(
+                surf,
+                x + 2,
+                thumb_y,
+                width.saturating_sub(4),
+                thumb_h,
+                theme.accent(),
+            );
         }
     }
 }
@@ -634,6 +796,8 @@ impl AddressBar {
     pub const DEFAULT_HEIGHT: u32 = 28;
 
     /// Render an editable URL/Search address bar with theme styling.
+    // reason: public render primitive called from app crates; its parameter list is its API.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         surf: &mut ViSurface,
         fonts: &mut TextFonts,
@@ -683,7 +847,18 @@ impl NavigationButtons {
             } else {
                 (theme.surface(), theme.text_secondary())
             };
-            crate::surface::draw_button(surf, fonts, btn_x, y, 26, 28, label, bg, theme.border(), fg);
+            crate::surface::draw_button(
+                surf,
+                fonts,
+                btn_x,
+                y,
+                26,
+                28,
+                label,
+                bg,
+                theme.border(),
+                fg,
+            );
         }
     }
 }

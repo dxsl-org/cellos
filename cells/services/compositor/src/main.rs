@@ -29,7 +29,7 @@ mod z_order;
 
 use api::display::Rect;
 use framebuffer::ScreenFb;
-use input_handler::{connect_to_input, handle_input_event, InputState};
+use input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
 use ostd::io::println;
 use ostd::syscall::{
     sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_recv_attested, SyscallResult,
@@ -160,13 +160,15 @@ pub fn main() {
                                 handle_input_event(
                                     request,
                                     &mut input,
-                                    fb.width,
-                                    fb.height,
-                                    Rect {
-                                        x: 0,
-                                        y: 0,
-                                        w: fb.width,
-                                        h: fb.height.saturating_sub(36),
+                                    ScreenBounds {
+                                        width: fb.width,
+                                        height: fb.height,
+                                        maximum: Rect {
+                                            x: 0,
+                                            y: 0,
+                                            w: fb.width,
+                                            h: fb.height.saturating_sub(36),
+                                        },
                                     },
                                     &mut table,
                                     &mut z_order,

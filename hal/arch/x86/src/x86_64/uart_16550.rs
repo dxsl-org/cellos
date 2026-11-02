@@ -284,9 +284,12 @@ pub fn init_port(index: usize) -> bool {
 /// Supported rates are the exact standard divisors from a 1.8432 MHz clock:
 /// 115200, 57600, 38400, 19200, 9600. Anything else is refused rather than
 /// rounded, so a caller never gets a line speed it did not ask for.
-pub fn configure_baud(index: usize, baud: u32) -> Result<(), ()> {
+///
+/// Returns `false`, touching no register, for an unregistered port or an
+/// unsupported rate.
+pub fn configure_baud(index: usize, baud: u32) -> bool {
     let Some(port) = port_base_at(index) else {
-        return Err(());
+        return false;
     };
     let divisor: u16 = match baud {
         115_200 => 1,
@@ -294,14 +297,14 @@ pub fn configure_baud(index: usize, baud: u32) -> Result<(), ()> {
         38_400 => 3,
         19_200 => 6,
         9_600 => 12,
-        _ => return Err(()),
+        _ => return false,
     };
     let saved_lcr = inb(port + 3);
     outb(port + 3, 0x80); // DLAB
     outb(port, (divisor & 0xFF) as u8);
     outb(port + 1, (divisor >> 8) as u8);
     outb(port + 3, saved_lcr & 0x7F); // clear DLAB, keep the framing bits
-    Ok(())
+    true
 }
 
 /// Write string, converting `\n` to `\r\n`.

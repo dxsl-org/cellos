@@ -32,7 +32,15 @@ struct Spec<'a> {
 
 impl<'a> Spec<'a> {
     fn new(argv: &'a [&'a str]) -> Self {
-        Spec { argv, stdout: true, stderr: true, stdin: None, close_stdout_after: None, cancel_after_ms: None, timeout_ms: RUN_MS }
+        Spec {
+            argv,
+            stdout: true,
+            stderr: true,
+            stdin: None,
+            close_stdout_after: None,
+            cancel_after_ms: None,
+            timeout_ms: RUN_MS,
+        }
     }
 }
 
@@ -55,7 +63,13 @@ impl Ran {
     }
 
     fn summary(&self) -> String {
-        format!("exit={:?} out={} err={} ms={}", self.exit, hexs(&self.out), hexs(&self.err), self.elapsed_ms)
+        format!(
+            "exit={:?} out={} err={} ms={}",
+            self.exit,
+            hexs(&self.out),
+            hexs(&self.err),
+            self.elapsed_ms
+        )
     }
 }
 
@@ -73,7 +87,13 @@ fn hexs(bytes: &[u8]) -> String {
 /// One non-blocking QueryChild: `Some((reason, code))` once the child has ended.
 fn query_child(op: Operation, child: ChildRefV1) -> Result<Option<(u32, i32)>, Status> {
     let mut reply = [0u8; HEADER_LEN + 24];
-    let h = ostd::session::kernel_call(KernelOp::QueryChild, op.reference().raw(), false, &child.to_bytes(), &mut reply)?;
+    let h = ostd::session::kernel_call(
+        KernelOp::QueryChild,
+        op.reference().raw(),
+        false,
+        &child.to_bytes(),
+        &mut reply,
+    )?;
     if h.status != Status::Ok {
         return Err(h.status);
     }
@@ -113,7 +133,10 @@ fn launch(spec: &Spec) -> Result<Ran, Status> {
             Some(_) => Some(op.create_stream(RING)?),
             None => None,
         };
-        let placeholder = ObjectRefV1 { id: 1, generation: 1 };
+        let placeholder = ObjectRefV1 {
+            id: 1,
+            generation: 1,
+        };
         let mut wanted: Vec<(GrantSlot, Endpoint, EndpointRights)> = Vec::new();
         if spec.stdout {
             wanted.push((GrantSlot::Stdout, out_write, EndpointRights::WRITE_ONLY));
@@ -128,12 +151,18 @@ fn launch(spec: &Spec) -> Result<Ran, Status> {
             .iter()
             .map(|(slot, _, rights)| Grant::endpoint(*slot, placeholder, rights.bits() as u16))
             .collect::<Result<_, _>>()?;
-        let context_len = ChildContext::new(op.reference().raw(), spec.argv, b"", &[], &sizing)?.as_bytes().len();
+        let context_len = ChildContext::new(op.reference().raw(), spec.argv, b"", &[], &sizing)?
+            .as_bytes()
+            .len();
         let mut prepared = op.prepare_child(SHELL, context_len)?;
         let mut grants = Vec::new();
         for (slot, source, rights) in &wanted {
             let delegated = source.delegate(&prepared, *rights)?;
-            grants.push(Grant::endpoint(*slot, delegated.reference().raw(), rights.bits() as u16)?);
+            grants.push(Grant::endpoint(
+                *slot,
+                delegated.reference().raw(),
+                rights.bits() as u16,
+            )?);
         }
         let context = ChildContext::new(op.reference().raw(), spec.argv, b"", &[], &grants)?;
         prepared.write_context(&context)?;
@@ -187,7 +216,10 @@ fn launch(spec: &Spec) -> Result<Ran, Status> {
             }
             if let Some(reader) = out_open {
                 drain_now(reader, &mut out);
-                if spec.close_stdout_after.is_some_and(|after| out.len() >= after) {
+                if spec
+                    .close_stdout_after
+                    .is_some_and(|after| out.len() >= after)
+                {
                     let _ = reader.close();
                     out_open = None;
                 }
@@ -223,12 +255,22 @@ fn launch(spec: &Spec) -> Result<Ran, Status> {
         if let Some((writer, _)) = feed {
             let _ = writer.close();
         }
-        Ok(Ran { exit, out, err, elapsed_ms })
+        Ok(Ran {
+            exit,
+            out,
+            err,
+            elapsed_ms,
+        })
     })();
     let _ = op.cancel(2);
     let _ = op.close();
     // Every run, for the record (observed bytes as hex only).
-    println(&format!("P04 INFO oneshot-run argv0={} argc={} {}", spec.argv[0], spec.argv.len(), ran(&result)));
+    println(&format!(
+        "P04 INFO oneshot-run argv0={} argc={} {}",
+        spec.argv[0],
+        spec.argv.len(),
+        ran(&result)
+    ));
     result
 }
 
@@ -239,7 +281,10 @@ fn run(argv: &[&str]) -> Result<Ran, Status> {
 
 /// Launch with stdin bytes as well.
 fn run_stdin(argv: &[&str], stdin: &[u8]) -> Result<Ran, Status> {
-    launch(&Spec { stdin: Some(stdin), ..Spec::new(argv) })
+    launch(&Spec {
+        stdin: Some(stdin),
+        ..Spec::new(argv)
+    })
 }
 
 fn ran(result: &Result<Ran, Status>) -> String {
@@ -254,12 +299,19 @@ fn is(result: &Result<Ran, Status>, code: i32, out: &[u8], err: &[u8]) -> bool {
 }
 
 fn lines(bytes: &[u8]) -> Vec<&[u8]> {
-    bytes.split(|b| *b == b'\n').filter(|line| !line.is_empty()).collect()
+    bytes
+        .split(|b| *b == b'\n')
+        .filter(|line| !line.is_empty())
+        .collect()
 }
 
 fn typed_jsonl(bytes: &[u8]) -> bool {
     let rows = lines(bytes);
-    !rows.is_empty() && bytes.ends_with(b"\n") && rows.iter().all(|row| row.starts_with(b"{\"cellbox\":1,") && row.ends_with(b"}"))
+    !rows.is_empty()
+        && bytes.ends_with(b"\n")
+        && rows
+            .iter()
+            .all(|row| row.starts_with(b"{\"cellbox\":1,") && row.ends_with(b"}"))
 }
 
 fn no_esc(bytes: &[u8]) -> bool {
@@ -269,14 +321,20 @@ fn no_esc(bytes: &[u8]) -> bool {
 /// The shell's view of tasks named `name`: their tids, sorted (the shell runs `ps`
 /// in process, so the listing itself adds no task).
 fn tasks_named(a: &mut Term, name: &str) -> Result<Vec<String>, String> {
-    let lines = a.run(&format!("ps --records | where name '==' '\"{name}\"' | select tid | to jsonl"), 30_000)?;
+    let lines = a.run(
+        &format!("ps --records | where name '==' '\"{name}\"' | select tid | to jsonl"),
+        30_000,
+    )?;
     let mut tids: Vec<String> = rows_of(&lines).into_iter().cloned().collect();
     tids.sort();
     Ok(tids)
 }
 
 fn task_set(a: &mut Term) -> Result<Vec<Vec<String>>, String> {
-    ["cellbox", "echo", "ls", "hypervisor"].iter().map(|name| tasks_named(a, name)).collect()
+    ["cellbox", "echo", "ls", "hypervisor"]
+        .iter()
+        .map(|name| tasks_named(a, name))
+        .collect()
 }
 
 pub(crate) fn oneshot_checks(a: &mut Term) {
@@ -313,8 +371,22 @@ fn echo_exact() {
 }
 
 fn argv_literal() {
-    let r = run(&["echo", "p04os-argv", "$HOME", "*", "|", ";", "$(echo x)", ">", "&&"]);
-    check("oneshot-argv-literal", is(&r, 0, b"p04os-argv $HOME * | ; $(echo x) > &&\n", b""), &ran(&r));
+    let r = run(&[
+        "echo",
+        "p04os-argv",
+        "$HOME",
+        "*",
+        "|",
+        ";",
+        "$(echo x)",
+        ">",
+        "&&",
+    ]);
+    check(
+        "oneshot-argv-literal",
+        is(&r, 0, b"p04os-argv $HOME * | ; $(echo x) > &&\n", b""),
+        &ran(&r),
+    );
 }
 
 /// The one-shot lists the fixture directory exactly as the shell's `ls` does.
@@ -322,14 +394,19 @@ fn ls_fixture(a: &mut Term) {
     let shell = a.run("ls /p04-list", 30_000);
     let r = run(&["ls", "/p04-list"]);
     let expected = shell.as_ref().ok().map(|l| {
-        let mut bytes = l.iter().filter(|line| !line.is_empty()).flat_map(|line| line.bytes().chain(core::iter::once(b'\n'))).collect::<Vec<u8>>();
+        let mut bytes = l
+            .iter()
+            .filter(|line| !line.is_empty())
+            .flat_map(|line| line.bytes().chain(core::iter::once(b'\n')))
+            .collect::<Vec<u8>>();
         bytes.shrink_to_fit();
         bytes
     });
     let names = matches!(&r, Ok(ran) if lines(&ran.out).iter().any(|l| *l == b"alpha-entry") && lines(&ran.out).iter().any(|l| *l == b"beta-entry"));
     check(
         "oneshot-ls-fixture",
-        names && matches!((&r, &expected), (Ok(ran), Some(bytes)) if ran.code() == Some(0) && &ran.out == bytes && ran.quiet_err()),
+        names
+            && matches!((&r, &expected), (Ok(ran), Some(bytes)) if ran.code() == Some(0) && &ran.out == bytes && ran.quiet_err()),
         &format!("{} shell={:?}", ran(&r), shell.map(|l| l.len())),
     );
 }
@@ -355,7 +432,9 @@ fn grep_status() {
     let bad = run(&["grep", "-Z", "x"]);
     check(
         "oneshot-grep-status",
-        is(&hit, 0, b"p04os-beta\n", b"") && is(&miss, 1, b"", b"") && is(&bad, 2, b"grep: unknown flag '-Z'\n", b""),
+        is(&hit, 0, b"p04os-beta\n", b"")
+            && is(&miss, 1, b"", b"")
+            && is(&bad, 2, b"grep: unknown flag '-Z'\n", b""),
         &format!("hit {} miss {} bad {}", ran(&hit), ran(&miss), ran(&bad)),
     );
 }
@@ -383,19 +462,30 @@ fn rg_records() {
     let text = run(&["rg", "--text", "HIDTOK", RG_FX_HD]);
     let miss = run(&["rg", "p04os-none", RG_FX_HD]);
     let bad = run(&["rg", "-P", "x", RG_FX_HD]);
-    let stdin = run_stdin(&["rg", "--text", "-a", "p04os-beta", "-"], b"p04os-alpha\np04os-beta\n");
+    let stdin = run_stdin(
+        &["rg", "--text", "-a", "p04os-beta", "-"],
+        b"p04os-alpha\np04os-beta\n",
+    );
     // A typed `path` value is its bytes in lowercase hex: `["path","2f6d6e74…"]`.
     let path = b"[\"path\",\"2f6d6e742f73642f72672f68642f7669732e747874\"]";
     let rows_ok = matches!(&rows, Ok(r) if r.code() == Some(0) && typed_jsonl(&r.out) && lines(&r.out).len() == 1
         && r.out.windows(path.len()).any(|w| w == path) && r.quiet_err());
     let text_ok = is(&text, 0, b"/mnt/sd/rg/hd/vis.txt:1:HIDTOK vis\n", b"");
     let miss_ok = is(&miss, 1, b"", b"");
-    let bad_ok = matches!(&bad, Ok(r) if r.code() == Some(2) && r.out.is_empty() && !r.err.is_empty());
+    let bad_ok =
+        matches!(&bad, Ok(r) if r.code() == Some(2) && r.out.is_empty() && !r.err.is_empty());
     let stdin_ok = is(&stdin, 0, b"<stdin>:2:p04os-beta\n", b"");
     check(
         "oneshot-rg-records",
         rows_ok && text_ok && miss_ok && bad_ok && stdin_ok,
-        &format!("rows {} text {} miss {} bad {} stdin {}", ran(&rows), ran(&text), ran(&miss), ran(&bad), ran(&stdin)),
+        &format!(
+            "rows {} text {} miss {} bad {} stdin {}",
+            ran(&rows),
+            ran(&text),
+            ran(&miss),
+            ran(&bad),
+            ran(&stdin)
+        ),
     );
 }
 
@@ -414,16 +504,28 @@ fn tui_refused() {
     let edit = run(&["edit", "/tmp/p04os-edit"]);
     check(
         "oneshot-tui-refused",
-        is(&top, 2, b"", b"top: no interactive terminal here; use top -b for text frames\n")
-            && is(&edit, 1, b"", b"edit: no interactive terminal here\n"),
+        is(
+            &top,
+            2,
+            b"",
+            b"top: no interactive terminal here; use top -b for text frames\n",
+        ) && is(&edit, 1, b"", b"edit: no interactive terminal here\n"),
         &format!("top {} edit {}", ran(&top), ran(&edit)),
     );
 }
 
 fn state_refused() {
     let mut bad = Vec::new();
-    for argv in [&["cd", "/"][..], &["export", "P04OS=1"], &["exit", "3"], &["alias", "p04os=x"]] {
-        let expected = format!("cellbox: {} changes or reads shell state; run it inside 'cellbox sh'\n", argv[0]);
+    for argv in [
+        &["cd", "/"][..],
+        &["export", "P04OS=1"],
+        &["exit", "3"],
+        &["alias", "p04os=x"],
+    ] {
+        let expected = format!(
+            "cellbox: {} changes or reads shell state; run it inside 'cellbox sh'\n",
+            argv[0]
+        );
         let r = run(argv);
         if !is(&r, 2, b"", expected.as_bytes()) {
             bad.push(format!("{}: {}", argv[0], ran(&r)));
@@ -439,16 +541,38 @@ fn launch_refused(a: &mut Term) {
     let after = task_set(a);
     check(
         "oneshot-launch-refused",
-        is(&exec, 2, b"", b"cellbox: exec launches a Cell; run it inside 'cellbox sh'\n")
-            && is(&hv, 2, b"", b"cellbox: hv launches a Cell; run it inside 'cellbox sh'\n")
-            && before.is_ok() && before == after,
-        &format!("exec {} hv {} tasks {before:?} -> {after:?}", ran(&exec), ran(&hv)),
+        is(
+            &exec,
+            2,
+            b"",
+            b"cellbox: exec launches a Cell; run it inside 'cellbox sh'\n",
+        ) && is(
+            &hv,
+            2,
+            b"",
+            b"cellbox: hv launches a Cell; run it inside 'cellbox sh'\n",
+        ) && before.is_ok()
+            && before == after,
+        &format!(
+            "exec {} hv {} tasks {before:?} -> {after:?}",
+            ran(&exec),
+            ran(&hv)
+        ),
     );
 }
 
 fn stage_refused() {
     let r = run(&["select", "tid"]);
-    check("oneshot-stage-refused", is(&r, 2, b"", b"cellbox: select is a pipeline stage; use 'cellbox sh'\n"), &ran(&r));
+    check(
+        "oneshot-stage-refused",
+        is(
+            &r,
+            2,
+            b"",
+            b"cellbox: select is a pipeline stage; use 'cellbox sh'\n",
+        ),
+        &ran(&r),
+    );
 }
 
 fn unknown_127(a: &mut Term) {
@@ -460,8 +584,13 @@ fn unknown_127(a: &mut Term) {
         "oneshot-unknown-127",
         is(&nope, 127, b"", b"cellbox: nope: unknown command\n")
             && is(&ls, 127, b"", b"cellbox: /bin/ls: unknown command\n")
-            && before.is_ok() && before == after,
-        &format!("nope {} ls {} tasks {before:?} -> {after:?}", ran(&nope), ran(&ls)),
+            && before.is_ok()
+            && before == after,
+        &format!(
+            "nope {} ls {} tasks {before:?} -> {after:?}",
+            ran(&nope),
+            ran(&ls)
+        ),
     );
 }
 
@@ -477,11 +606,22 @@ fn mutate_effect(a: &mut Term) {
     let has = |r: &Result<Ran, Status>| matches!(r, Ok(r) if lines(&r.out).iter().any(|l| *l == b"p04os-file"));
     check(
         "oneshot-mutate-effect",
-        matches!(&mkdir, Ok(r) if r.code() == Some(0)) && matches!(&touch, Ok(r) if r.code() == Some(0))
-            && has(&listed) && matches!(&shell, Ok(l) if l.iter().any(|l| l == "p04os-file"))
-            && matches!(&rm, Ok(r) if r.code() == Some(0)) && matches!(&gone, Ok(r) if r.code() == Some(0)) && !has(&gone),
-        &format!("mkdir {} touch {} ls {} shell={} rm {} after {}", ran(&mkdir), ran(&touch), ran(&listed),
-            shell.is_ok(), ran(&rm), ran(&gone)),
+        matches!(&mkdir, Ok(r) if r.code() == Some(0))
+            && matches!(&touch, Ok(r) if r.code() == Some(0))
+            && has(&listed)
+            && matches!(&shell, Ok(l) if l.iter().any(|l| l == "p04os-file"))
+            && matches!(&rm, Ok(r) if r.code() == Some(0))
+            && matches!(&gone, Ok(r) if r.code() == Some(0))
+            && !has(&gone),
+        &format!(
+            "mkdir {} touch {} ls {} shell={} rm {} after {}",
+            ran(&mkdir),
+            ran(&touch),
+            ran(&listed),
+            shell.is_ok(),
+            ran(&rm),
+            ran(&gone)
+        ),
     );
 }
 
@@ -514,9 +654,15 @@ fn denials_same_as_shell(a: &mut Term) {
             (Ok(l), Ok(shell_lines), Ok(r)) => {
                 let text = String::from_utf8_lossy(&r.out);
                 let ours: Vec<&str> = text.lines().filter(|line| !line.is_empty()).collect();
-                let theirs: Vec<&str> = shell_lines.iter().map(String::as_str).filter(|line| !line.is_empty()).collect();
+                let theirs: Vec<&str> = shell_lines
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|line| !line.is_empty())
+                    .collect();
                 l.len() == 1
-                    && r.code().is_some_and(|code| l[0] == format!("sos={code}") && (code != 0 || argv[0] == "vwrite"))
+                    && r.code().is_some_and(|code| {
+                        l[0] == format!("sos={code}") && (code != 0 || argv[0] == "vwrite")
+                    })
                     && ours == theirs
                     && r.err == shell_err.as_bytes()
                     && !(r.out.is_empty() && r.err.is_empty())
@@ -525,13 +671,22 @@ fn denials_same_as_shell(a: &mut Term) {
         };
         let leaked = matches!(&r, Ok(r) if r.out.windows(token.len()).any(|w| w == token) || r.err.windows(token.len()).any(|w| w == token));
         if !same || leaked {
-            bad.push(format!("{cmd}: shell={shell_status:?} shell_err={} {} leaked={leaked}", hexs(shell_err.as_bytes()), ran(&r)));
+            bad.push(format!(
+                "{cmd}: shell={shell_status:?} shell_err={} {} leaked={leaked}",
+                hexs(shell_err.as_bytes()),
+                ran(&r)
+            ));
         }
     }
     let leak = run(&["cat", "/tmp/p04-osleak"]);
     let probe = run(&["/data/bin/s2tw-probe", "sb"]);
     let clean = matches!(&leak, Ok(r) if r.code() != Some(0) && !r.out.windows(token.len()).any(|w| w == token))
-        && is(&probe, 127, b"", b"cellbox: /data/bin/s2tw-probe: unknown command\n");
+        && is(
+            &probe,
+            127,
+            b"",
+            b"cellbox: /data/bin/s2tw-probe: unknown command\n",
+        );
     check(
         "oneshot-denials-same-as-shell",
         bad.is_empty() && clean,
@@ -545,14 +700,30 @@ fn stderr_separate() {
         evidence("oneshot-stderr.stdout", &ran.out);
         evidence("oneshot-stderr.stderr", &ran.err);
     }
-    check("oneshot-stderr-separate", is(&r, 1, b"", b"cat: /p04os-missing: No such file or directory\n"), &ran(&r));
+    check(
+        "oneshot-stderr-separate",
+        is(
+            &r,
+            1,
+            b"",
+            b"cat: /p04os-missing: No such file or directory\n",
+        ),
+        &ran(&r),
+    );
 }
 
 /// Without a Stdout grant nothing is written anywhere: not stderr, not the UART (the
 /// runner checks the `p04os-` token).
 fn missing_stdout() {
-    let r = launch(&Spec { stdout: false, ..Spec::new(&["echo", "p04os-missing-stdout"]) });
-    let both = launch(&Spec { stdout: false, stderr: false, ..Spec::new(&["nope", "p04os-missing-both"]) });
+    let r = launch(&Spec {
+        stdout: false,
+        ..Spec::new(&["echo", "p04os-missing-stdout"])
+    });
+    let both = launch(&Spec {
+        stdout: false,
+        stderr: false,
+        ..Spec::new(&["nope", "p04os-missing-both"])
+    });
     check(
         "oneshot-missing-stdout",
         matches!(&r, Ok(r) if r.code().is_some_and(|c| c != 0) && r.out.is_empty() && r.err.is_empty())
@@ -573,16 +744,26 @@ fn consumer_close() {
         n += 1;
     }
     let path = "/tmp/p04os-big.txt";
-    let tee = launch(&Spec { stdin: Some(&big), ..Spec::new(&["tee", path]) });
+    let tee = launch(&Spec {
+        stdin: Some(&big),
+        ..Spec::new(&["tee", path])
+    });
     let tee_ok = matches!(&tee, Ok(r) if r.code() == Some(0) && r.out == big && r.quiet_err());
-    let r = launch(&Spec { close_stdout_after: Some(1), timeout_ms: 60_000, ..Spec::new(&["rg", "needle", path]) });
+    let r = launch(&Spec {
+        close_stdout_after: Some(1),
+        timeout_ms: 60_000,
+        ..Spec::new(&["rg", "needle", path])
+    });
     let reported = match &r {
         Ok(Ran { exit: Err(3), .. }) => Some(141),
         Ok(Ran { exit: Err(_), .. }) => Some(130),
         Ok(Ran { exit: Ok(code), .. }) => Some(*code),
         Err(_) => None,
     };
-    println(&format!("P04 INFO oneshot-consumer-close lines={n} reported={reported:?} {}", ran(&r)));
+    println(&format!(
+        "P04 INFO oneshot-consumer-close lines={n} reported={reported:?} {}",
+        ran(&r)
+    ));
     check(
         "oneshot-consumer-close",
         tee_ok
@@ -596,7 +777,11 @@ fn consumer_close() {
 /// cancellation record (reported as 130), and no `cellbox` task is left behind.
 fn cancel(a: &mut Term) {
     let before = tasks_named(a, "cellbox");
-    let r = launch(&Spec { cancel_after_ms: Some(1500), timeout_ms: 25_000, ..Spec::new(&["sleep", "30"]) });
+    let r = launch(&Spec {
+        cancel_after_ms: Some(1500),
+        timeout_ms: 25_000,
+        ..Spec::new(&["sleep", "30"])
+    });
     sleep_ms(2000);
     let after = tasks_named(a, "cellbox");
     let reported = match &r {
@@ -604,21 +789,31 @@ fn cancel(a: &mut Term) {
         Ok(Ran { exit: Ok(code), .. }) => Some(*code),
         Err(_) => None,
     };
-    println(&format!("P04 INFO oneshot-cancel {} reported={reported:?}", ran(&r)));
+    println(&format!(
+        "P04 INFO oneshot-cancel {} reported={reported:?}",
+        ran(&r)
+    ));
     check(
         "oneshot-cancel",
-        matches!(&r, Ok(r) if r.exit.is_err() && r.elapsed_ms < PROMPT_EXIT_MS) && reported == Some(130)
-            && before.is_ok() && before == after,
+        matches!(&r, Ok(r) if r.exit.is_err() && r.elapsed_ms < PROMPT_EXIT_MS)
+            && reported == Some(130)
+            && before.is_ok()
+            && before == after,
         &format!("{} cellbox {before:?} -> {after:?}", ran(&r)),
     );
 }
 
+/// Exit code, stdout and stderr bytes of one refused frontend launch.
+type FrontendExit = (Option<i32>, Vec<u8>, Vec<u8>);
+
 /// A terminal frontend runs only `sh`: any other argv exits 2 with one line on the
 /// holder's stderr writer and never attaches.
 fn frontend_argv_refused() {
-    let result = (|| -> Result<(Option<i32>, Vec<u8>, Vec<u8>), String> {
+    let result = (|| -> Result<FrontendExit, String> {
         let mut t = Term::open(24, 80).map_err(|s| format!("open {s:?}"))?;
-        t.host.launch(SHELL, &["ls", "/p04-list"], &[]).map_err(|s| format!("launch {s:?}"))?;
+        t.host
+            .launch(SHELL, &["ls", "/p04-list"], &[])
+            .map_err(|s| format!("launch {s:?}"))?;
         let exited = wait_exit(&mut t, 60_000);
         let code = t.host.exit_code();
         let (out, err) = (core::mem::take(&mut t.out), core::mem::take(&mut t.err));
@@ -649,20 +844,30 @@ fn shell_explicit_prefix(a: &mut Term) {
     let cd_err = a.stderr_text();
     let st_cd = a.run("echo stexcd=$?", 30_000);
     let pwd_after = a.run("pwd", 30_000);
-    let typed = a.run("cellbox ps --records | select tid | take 1 | to jsonl", 30_000);
+    let typed = a.run(
+        "cellbox ps --records | select tid | take 1 | to jsonl",
+        30_000,
+    );
     let st_typed = a.run("echo stexty=$?", 30_000);
     let ok = matches!((&short, &long), (Ok(s), Ok(l)) if s == l && s == &[String::from("p04os-hi")])
         && matches!((&ls_short, &ls_long), (Ok(s), Ok(l)) if s == l && s.iter().any(|x| x == "alpha-entry"))
         && matches!(&st_ls, Ok(l) if l == &[String::from("stexl=0")])
-        && cd.is_ok() && cd_err.contains("cellbox: cd changes or reads shell state")
+        && cd.is_ok()
+        && cd_err.contains("cellbox: cd changes or reads shell state")
         && matches!(&st_cd, Ok(l) if l == &[String::from("stexcd=2")])
-        && pwd_before.is_ok() && pwd_before == pwd_after
+        && pwd_before.is_ok()
+        && pwd_before == pwd_after
         && matches!(&typed, Ok(l) if rows_of(l).len() == 1)
         && matches!(&st_typed, Ok(l) if l == &[String::from("stexty=0")]);
     check(
         "shell-explicit-prefix",
         ok,
-        &format!("echo={} ls={} st_ls={st_ls:?} cd_st={st_cd:?} pwd={} typed={:?} st_typed={st_typed:?}",
-            short == long, ls_short == ls_long, pwd_before == pwd_after, typed.map(|l| rows_of(&l).len())),
+        &format!(
+            "echo={} ls={} st_ls={st_ls:?} cd_st={st_cd:?} pwd={} typed={:?} st_typed={st_typed:?}",
+            short == long,
+            ls_short == ls_long,
+            pwd_before == pwd_after,
+            typed.map(|l| rows_of(&l).len())
+        ),
     );
 }

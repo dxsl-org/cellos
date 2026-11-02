@@ -43,7 +43,9 @@ pub fn max_asid() -> u32 {
     if max_ext < 0x8000_000A {
         return 0;
     }
-    core::arch::x86_64::__cpuid(0x8000_000A).ebx.saturating_sub(1)
+    core::arch::x86_64::__cpuid(0x8000_000A)
+        .ebx
+        .saturating_sub(1)
 }
 
 /// Returns `true` if firmware locked SVM off (`VM_CR.SVMDIS` set).

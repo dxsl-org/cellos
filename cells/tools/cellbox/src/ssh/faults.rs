@@ -127,11 +127,20 @@ impl<K: KeyService> KeyService for Faulted<'_, K> {
         self.inner.stage_secret(public_key, secret)
     }
 
-    fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError> {
+    fn sign(
+        &self,
+        public_key: &[u8; 32],
+        session_id: &[u8; 32],
+        username: &str,
+    ) -> Result<SshSignResponsePayload, KmsClientError> {
         match self.mode {
             None => self.inner.sign(public_key, session_id, username),
-            Some(Mode::Session) => self.inner.sign(public_key, &flip_session(session_id), username),
-            Some(Mode::User) => self.inner.sign(public_key, session_id, &change_user(username)),
+            Some(Mode::Session) => self
+                .inner
+                .sign(public_key, &flip_session(session_id), username),
+            Some(Mode::User) => self
+                .inner
+                .sign(public_key, session_id, &change_user(username)),
             Some(Mode::Signature) => {
                 let mut signed = self.inner.sign(public_key, session_id, username)?;
                 signed.signature = flip_signature(&signed.signature);
@@ -191,9 +200,18 @@ mod tests {
     #[test]
     fn the_p09_lane_prefixes_do_not_hide_or_get_hidden_by_the_kssh_prefix() {
         // The p09 prefix stays first (its parser reads the start of the command only).
-        assert_eq!(mode(": p09-sink; : kssh-fault signature; true"), Some(Mode::Signature));
-        assert_eq!(mode(": p09-fault accepted hold; : kssh-fault user; true"), Some(Mode::User));
-        assert_eq!(mode(": p09-sink; : p09-fault accepted hold; : kssh-fault session;true"), Some(Mode::Session));
+        assert_eq!(
+            mode(": p09-sink; : kssh-fault signature; true"),
+            Some(Mode::Signature)
+        );
+        assert_eq!(
+            mode(": p09-fault accepted hold; : kssh-fault user; true"),
+            Some(Mode::User)
+        );
+        assert_eq!(
+            mode(": p09-sink; : p09-fault accepted hold; : kssh-fault session;true"),
+            Some(Mode::Session)
+        );
         // Only a p09 prefix, or a p09 prefix that is not closed: no kssh fault.
         assert_eq!(mode(": p09-sink; true"), None);
         assert_eq!(mode(": p09-fault accepted hold; true"), None);
@@ -218,21 +236,50 @@ mod tests {
     fn the_signature_flip_changes_exactly_one_byte_of_the_signature() {
         let signature: [u8; 64] = core::array::from_fn(|i| (i as u8) ^ 0x5a);
         let flipped = flip_signature(&signature);
-        assert_eq!(signature.iter().zip(&flipped).filter(|(a, b)| a != b).count(), 1);
+        assert_eq!(
+            signature
+                .iter()
+                .zip(&flipped)
+                .filter(|(a, b)| a != b)
+                .count(),
+            1
+        );
         assert_eq!(flip_signature(&flipped), signature);
     }
 
     #[test]
     fn the_user_change_keeps_length_and_class_and_changes_the_name() {
         assert_eq!(change_user("tester"), "testes");
-        for name in ["tester", "a", "z", "Z", "9", "x9", "a.b", "a-", "a_", "az", "ZZ", "0", "user.name-1_x"] {
+        for name in [
+            "tester",
+            "a",
+            "z",
+            "Z",
+            "9",
+            "x9",
+            "a.b",
+            "a-",
+            "a_",
+            "az",
+            "ZZ",
+            "0",
+            "user.name-1_x",
+        ] {
             let changed = change_user(name);
             assert_eq!(changed.len(), name.len(), "{name}");
             assert_ne!(changed, name, "{name}");
-            assert!(changed.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')), "{changed}");
+            assert!(
+                changed
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')),
+                "{changed}"
+            );
             // Only the last byte moves.
             assert_eq!(changed[..name.len() - 1], name[..name.len() - 1]);
-            assert!(ostd::clients::kms::validate_ssh_username(changed.as_bytes()), "{changed}");
+            assert!(
+                ostd::clients::kms::validate_ssh_username(changed.as_bytes()),
+                "{changed}"
+            );
         }
     }
 
@@ -250,19 +297,36 @@ mod tests {
         fn new() -> Self {
             let key = SigningKey::from_bytes(&[0x42; 32]);
             let public = key.verifying_key().to_bytes();
-            Service { key, public, asked: RefCell::default(), staged: RefCell::default() }
+            Service {
+                key,
+                public,
+                asked: RefCell::default(),
+                staged: RefCell::default(),
+            }
         }
     }
 
     impl KeyService for Service {
-        fn stage_secret(&self, _public_key: &[u8; 32], _secret: &[u8]) -> Result<(), KmsClientError> {
+        fn stage_secret(
+            &self,
+            _public_key: &[u8; 32],
+            _secret: &[u8],
+        ) -> Result<(), KmsClientError> {
             *self.staged.borrow_mut() += 1;
             Ok(())
         }
-        fn sign(&self, public_key: &[u8; 32], session_id: &[u8; 32], username: &str) -> Result<SshSignResponsePayload, KmsClientError> {
+        fn sign(
+            &self,
+            public_key: &[u8; 32],
+            session_id: &[u8; 32],
+            username: &str,
+        ) -> Result<SshSignResponsePayload, KmsClientError> {
             assert_eq!(public_key, &self.public);
-            self.asked.borrow_mut().push((*session_id, String::from(username)));
-            let input = userauth::signing_input(session_id, username, public_key).expect("an accepted user name");
+            self.asked
+                .borrow_mut()
+                .push((*session_id, String::from(username)));
+            let input = userauth::signing_input(session_id, username, public_key)
+                .expect("an accepted user name");
             Ok(SshSignResponsePayload {
                 request_id: 1,
                 signature: self.key.sign(&input).to_bytes(),
@@ -277,13 +341,22 @@ mod tests {
     /// What the client built for the server: the input the key service has to sign.
     fn request(public: &[u8; 32]) -> (SignRequest<'static>, Vec<u8>) {
         let input = userauth::signing_input(&SESSION, USER, public).unwrap();
-        let request = SignRequest { session_id: SESSION, username: USER, message_sha256: userauth::digest(&input) };
+        let request = SignRequest {
+            session_id: SESSION,
+            username: USER,
+            message_sha256: userauth::digest(&input),
+        };
         (request, input.to_vec())
     }
 
     /// The two checks of the session on a key-service reply (`vissh` `answer_sign`):
     /// the digest must be that of the expected input, then the signature must verify.
-    fn client_verdict(public: &[u8; 32], request: &SignRequest<'_>, input: &[u8], signed: &Signed) -> Option<Credential> {
+    fn client_verdict(
+        public: &[u8; 32],
+        request: &SignRequest<'_>,
+        input: &[u8],
+        signed: &Signed,
+    ) -> Option<Credential> {
         if signed.message_sha256 != request.message_sha256 {
             return Some(Credential::InputMismatch);
         }
@@ -297,7 +370,10 @@ mod tests {
         let service = Service::new();
         let (request, input) = request(&service.public);
         let faulted = Faulted::new(&service, fault);
-        let signed = kms_sign(&faulted, &service.public, custody, &request, || Ok(String::from("correct horse"))).unwrap();
+        let signed = kms_sign(&faulted, &service.public, custody, &request, || {
+            Ok(String::from("correct horse"))
+        })
+        .unwrap();
         let verdict = client_verdict(&service.public, &request, &input, &signed);
         (verdict, service)
     }
@@ -340,10 +416,34 @@ mod tests {
         assert_eq!(*service.asked.borrow(), [(SESSION, String::from(USER))]);
         let (request, input) = request(&service.public);
         let honest = service.sign(&service.public, &SESSION, USER).unwrap();
-        assert_eq!(client_verdict(&service.public, &request, &input, &Signed { signature: honest.signature, message_sha256: honest.message_sha256 }), None);
-        let faulted = Faulted::new(&service, Some(Mode::Signature)).sign(&service.public, &SESSION, USER).unwrap();
-        assert_eq!(honest.signature.iter().zip(&faulted.signature).filter(|(a, b)| a != b).count(), 1);
-        assert_eq!((honest.message_sha256, honest.request_id), (faulted.message_sha256, faulted.request_id));
+        assert_eq!(
+            client_verdict(
+                &service.public,
+                &request,
+                &input,
+                &Signed {
+                    signature: honest.signature,
+                    message_sha256: honest.message_sha256
+                }
+            ),
+            None
+        );
+        let faulted = Faulted::new(&service, Some(Mode::Signature))
+            .sign(&service.public, &SESSION, USER)
+            .unwrap();
+        assert_eq!(
+            honest
+                .signature
+                .iter()
+                .zip(&faulted.signature)
+                .filter(|(a, b)| a != b)
+                .count(),
+            1
+        );
+        assert_eq!(
+            (honest.message_sha256, honest.request_id),
+            (faulted.message_sha256, faulted.request_id)
+        );
     }
 
     #[test]
@@ -364,11 +464,21 @@ mod tests {
             fn stage_secret(&self, _: &[u8; 32], _: &[u8]) -> Result<(), KmsClientError> {
                 Ok(())
             }
-            fn sign(&self, _: &[u8; 32], _: &[u8; 32], _: &str) -> Result<SshSignResponsePayload, KmsClientError> {
+            fn sign(
+                &self,
+                _: &[u8; 32],
+                _: &[u8; 32],
+                _: &str,
+            ) -> Result<SshSignResponsePayload, KmsClientError> {
                 Err(KmsClientError::Timeout)
             }
         }
-        for fault in [None, Some(Mode::Session), Some(Mode::User), Some(Mode::Signature)] {
+        for fault in [
+            None,
+            Some(Mode::Session),
+            Some(Mode::User),
+            Some(Mode::Signature),
+        ] {
             let result = Faulted::new(&Failing, fault).sign(&[0; 32], &[0; 32], USER);
             assert_eq!(result.err(), Some(KmsClientError::Timeout), "{fault:?}");
         }

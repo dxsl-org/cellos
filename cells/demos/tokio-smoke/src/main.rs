@@ -22,7 +22,17 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![Send, Recv, TrySend, TryRecv, RecvTimeout, Log, LookupService, StateRestore, GetTime];
+api::declare_syscalls![
+    Send,
+    Recv,
+    TrySend,
+    TryRecv,
+    RecvTimeout,
+    Log,
+    LookupService,
+    StateRestore,
+    GetTime
+];
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(2 * 1024 * 1024);
@@ -59,7 +69,9 @@ fn cell_main() {
     println("[tokio-smoke] Waker bound with Token(2). Testing wake() invocation...");
     if waker.wake().is_ok() {
         let mut events = Events::with_capacity(8);
-        selector.select(&mut events, Some(Duration::from_millis(500))).ok();
+        selector
+            .select(&mut events, Some(Duration::from_millis(500)))
+            .ok();
 
         let woken = events.iter().any(|e| e.token == WAKER_TOKEN);
         if woken {
@@ -71,7 +83,10 @@ fn cell_main() {
 
     // Connect to network service if online
     if let Some(net_tid) = sys_lookup_service(api::syscall::service::NET) {
-        println(&alloc::format!("[tokio-smoke] Network service available at tid: {}", net_tid));
+        println(&alloc::format!(
+            "[tokio-smoke] Network service available at tid: {}",
+            net_tid
+        ));
 
         let req = api::ipc::NetRequest::TcpListen { port: HTTP_PORT };
         let mut req_buf = [0u8; 128];
@@ -81,9 +96,18 @@ fn cell_main() {
             let _ = ostd::syscall::sys_send(net_tid, encoded);
             let _ = ostd::syscall::sys_recv(net_tid, &mut resp_buf);
 
-            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) = api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf) {
-                println(&alloc::format!("[tokio-smoke] Listening on :{} with cap_id={}", HTTP_PORT, listener_cap));
-                if selector.register(listener_cap, SERVER_TOKEN, Interest::READABLE).is_ok() {
+            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
+                api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf)
+            {
+                println(&alloc::format!(
+                    "[tokio-smoke] Listening on :{} with cap_id={}",
+                    HTTP_PORT,
+                    listener_cap
+                ));
+                if selector
+                    .register(listener_cap, SERVER_TOKEN, Interest::READABLE)
+                    .is_ok()
+                {
                     println("[tokio-smoke] Registered listener socket with Selector.");
                 }
             }
@@ -102,8 +126,12 @@ fn cell_main() {
         match selector.select(&mut events, Some(Duration::from_millis(50))) {
             Ok(()) => {
                 for event in events.iter() {
-                    println(&alloc::format!("[tokio-smoke] Dispatched Event: token={:?} readable={} writable={}",
-                        event.token, event.readable, event.writable));
+                    println(&alloc::format!(
+                        "[tokio-smoke] Dispatched Event: token={:?} readable={} writable={}",
+                        event.token,
+                        event.readable,
+                        event.writable
+                    ));
                 }
             }
             Err(_) => {

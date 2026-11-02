@@ -235,19 +235,31 @@ impl MarkdownView {
 
             // Headings
             if let Some(rest) = trimmed.strip_prefix("# ") {
-                blocks.push(MarkdownBlock::Heading { level: 1, text: rest.trim().to_string() });
+                blocks.push(MarkdownBlock::Heading {
+                    level: 1,
+                    text: rest.trim().to_string(),
+                });
                 continue;
             }
             if let Some(rest) = trimmed.strip_prefix("## ") {
-                blocks.push(MarkdownBlock::Heading { level: 2, text: rest.trim().to_string() });
+                blocks.push(MarkdownBlock::Heading {
+                    level: 2,
+                    text: rest.trim().to_string(),
+                });
                 continue;
             }
             if let Some(rest) = trimmed.strip_prefix("### ") {
-                blocks.push(MarkdownBlock::Heading { level: 3, text: rest.trim().to_string() });
+                blocks.push(MarkdownBlock::Heading {
+                    level: 3,
+                    text: rest.trim().to_string(),
+                });
                 continue;
             }
             if let Some(rest) = trimmed.strip_prefix("#### ") {
-                blocks.push(MarkdownBlock::Heading { level: 4, text: rest.trim().to_string() });
+                blocks.push(MarkdownBlock::Heading {
+                    level: 4,
+                    text: rest.trim().to_string(),
+                });
                 continue;
             }
 
@@ -296,7 +308,11 @@ impl MarkdownView {
 }
 
 impl ViWidget for MarkdownView {
-    fn layout(&self, constraints: Constraints, font: &mut crate::font_context::FontContext) -> LayoutNode {
+    fn layout(
+        &self,
+        constraints: Constraints,
+        font: &mut crate::font_context::FontContext,
+    ) -> LayoutNode {
         let mut laid_out = self.layout_cache.borrow_mut();
         laid_out.clear();
 
@@ -319,7 +335,12 @@ impl ViWidget for MarkdownView {
                     let w = font.atlas.measure(text, h_size);
 
                     cur_y += 6.0; // Top margin for heading
-                    let rect = Rect::new(constraints.origin.x, constraints.origin.y + cur_y, w, line_h);
+                    let rect = Rect::new(
+                        constraints.origin.x,
+                        constraints.origin.y + cur_y,
+                        w,
+                        line_h,
+                    );
 
                     laid_out.push(LaidOutItem::Heading {
                         rect,
@@ -387,7 +408,11 @@ impl ViWidget for MarkdownView {
                         max_w = constraints.max.w;
                     }
                 }
-                MarkdownBlock::ListItem { indent, bullet, spans } => {
+                MarkdownBlock::ListItem {
+                    indent,
+                    bullet,
+                    spans,
+                } => {
                     let indent_px = *indent as f32 * 16.0 + 16.0;
                     let bullet_pos = Point::new(
                         constraints.origin.x + indent_px - 10.0,
@@ -482,14 +507,24 @@ impl ViWidget for MarkdownView {
         let items = self.layout_cache.borrow();
         for item in items.iter() {
             match item {
-                LaidOutItem::Heading { rect, text, size_px, color } => {
+                LaidOutItem::Heading {
+                    rect,
+                    text,
+                    size_px,
+                    color,
+                } => {
                     let screen_pos = rect.origin().offset(cx.origin.x, cx.origin.y);
                     cx.draw_text(screen_pos, text, *color, *size_px);
                 }
                 LaidOutItem::ParagraphWords(words) => {
                     Self::paint_words(words, cx);
                 }
-                LaidOutItem::CodeBlock { rect, lines, font_size, .. } => {
+                LaidOutItem::CodeBlock {
+                    rect,
+                    lines,
+                    font_size,
+                    ..
+                } => {
                     let screen_rect = cx.screen_rect(*rect);
                     // Dark code container background
                     let bg_color = Color::bgra(24, 20, 16, 255);
@@ -498,8 +533,16 @@ impl ViWidget for MarkdownView {
 
                     // Border outline
                     let r = screen_rect;
-                    cx.canvas.draw_line(Point::new(r.x, r.y), Point::new(r.x + r.w, r.y), border_color);
-                    cx.canvas.draw_line(Point::new(r.x, r.y + r.h), Point::new(r.x + r.w, r.y + r.h), border_color);
+                    cx.canvas.draw_line(
+                        Point::new(r.x, r.y),
+                        Point::new(r.x + r.w, r.y),
+                        border_color,
+                    );
+                    cx.canvas.draw_line(
+                        Point::new(r.x, r.y + r.h),
+                        Point::new(r.x + r.w, r.y + r.h),
+                        border_color,
+                    );
 
                     // Draw each code line
                     let code_text_color = Color::bgra(180, 230, 240, 255); // Monospace cyan/white
@@ -508,7 +551,12 @@ impl ViWidget for MarkdownView {
                         cx.draw_text(screen_pos, line_str, code_text_color, *font_size);
                     }
                 }
-                LaidOutItem::ListItem { bullet_pos, bullet, bullet_color, words } => {
+                LaidOutItem::ListItem {
+                    bullet_pos,
+                    bullet,
+                    bullet_color,
+                    words,
+                } => {
                     let screen_bullet_pos = bullet_pos.offset(cx.origin.x, cx.origin.y);
                     let mut b_str = String::new();
                     b_str.push(*bullet);
@@ -576,7 +624,9 @@ mod tests {
         assert!(spans.iter().any(|s| s.text == "bold" && s.bold));
         assert!(spans.iter().any(|s| s.text == "italic" && s.italic));
         assert!(spans.iter().any(|s| s.text == "code" && s.code));
-        assert!(spans.iter().any(|s| s.text == "link" && s.link.as_deref() == Some("https://cellos.org")));
+        assert!(spans
+            .iter()
+            .any(|s| s.text == "link" && s.link.as_deref() == Some("https://cellos.org")));
     }
 
     #[test]
@@ -584,11 +634,19 @@ mod tests {
         let md = "# Title\n\n## Subtitle\n\nParagraph text\n\n```rust\nfn main() {}\n```\n\n- Item 1\n- Item 2\n\n> Quoted note\n\n---";
         let blocks = MarkdownView::parse(md);
 
-        assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::Heading { level: 1, text } if text == "Title")));
-        assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::Heading { level: 2, text } if text == "Subtitle")));
+        assert!(blocks
+            .iter()
+            .any(|b| matches!(b, MarkdownBlock::Heading { level: 1, text } if text == "Title")));
+        assert!(blocks
+            .iter()
+            .any(|b| matches!(b, MarkdownBlock::Heading { level: 2, text } if text == "Subtitle")));
         assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::CodeBlock { lang, lines } if lang == "rust" && lines[0] == "fn main() {}")));
-        assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::ListItem { bullet: '*', .. })));
-        assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::Blockquote { .. })));
+        assert!(blocks
+            .iter()
+            .any(|b| matches!(b, MarkdownBlock::ListItem { bullet: '*', .. })));
+        assert!(blocks
+            .iter()
+            .any(|b| matches!(b, MarkdownBlock::Blockquote { .. })));
         assert!(blocks.iter().any(|b| matches!(b, MarkdownBlock::Rule)));
     }
 

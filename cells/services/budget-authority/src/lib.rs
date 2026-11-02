@@ -14,5 +14,5 @@ pub use bootstrap::BootstrapGrant;
 pub use claim::{claim_reservation, mark_closing, release_closed, ClaimError};
 pub use fence::EnforcementFence;
 pub use ledger::{ApplicationLedger, LedgerError, ResourceVector, VECTOR_DIMENSIONS};
-pub use recovery::{recover_ledger, RecoveryStatus};
+pub use recovery::{recover_ledger, RecoveryStatus, StoredLedgerState};
 pub use reservations::{ReservationEntry, ReservationState, ReservationTable};

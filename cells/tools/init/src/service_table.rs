@@ -56,23 +56,27 @@ impl Service {
     }
 
     pub(crate) fn available(&self) -> bool {
-        self.spec.enabled && self.ready && self.tid.is_some_and(|tid| {
-            crate::activation::task_alive(tid) == Some(true)
-                && match self.readiness {
-                    Readiness::Spec => self
-                        .spec
-                        .service_id
-                        .is_none_or(|id| syscall::sys_lookup_service(id) == Some(tid)),
-                    Readiness::BlockRoute => routes_name(&block_routes(), tid),
-                }
-        })
+        self.spec.enabled
+            && self.ready
+            && self.tid.is_some_and(|tid| {
+                crate::activation::task_alive(tid) == Some(true)
+                    && match self.readiness {
+                        Readiness::Spec => self
+                            .spec
+                            .service_id
+                            .is_none_or(|id| syscall::sys_lookup_service(id) == Some(tid)),
+                        Readiness::BlockRoute => routes_name(&block_routes(), tid),
+                    }
+            })
     }
 }
 
 /// Check the live incarnation, not merely whether a dependency once launched.
 pub(crate) fn dependencies_available(services: &[Service], index: usize) -> bool {
     services[index].spec.after.iter().all(|name| {
-        services.iter().find(|candidate| candidate.spec.name == *name)
+        services
+            .iter()
+            .find(|candidate| candidate.spec.name == *name)
             .is_some_and(Service::available)
     })
 }
@@ -112,8 +116,14 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
     service.tid = Some(tid);
     // Observe death from the first generation, including one that fails readiness.
     let watched = matches!(syscall::sys_notify_on_exit(tid), SyscallResult::Ok(0));
-    let registered = match (service.readiness, service.spec.registration, service.spec.service_id) {
-        (Readiness::BlockRoute, _, _) => wait_for_block_route(tid, service.spec.ready_timeout_ticks),
+    let registered = match (
+        service.readiness,
+        service.spec.registration,
+        service.spec.service_id,
+    ) {
+        (Readiness::BlockRoute, _, _) => {
+            wait_for_block_route(tid, service.spec.ready_timeout_ticks)
+        }
         (Readiness::Spec, Registration::Init, Some(id)) => {
             matches!(syscall::sys_register_service(id, tid), SyscallResult::Ok(0))
                 && syscall::sys_lookup_service(id) == Some(tid)
@@ -124,7 +134,9 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
         (Readiness::Spec, Registration::Init, None) => true,
         (Readiness::Spec, Registration::SelfReady, None) => false,
     };
-    service.ready = watched && registered && crate::activation::task_alive(tid) == Some(true)
+    service.ready = watched
+        && registered
+        && crate::activation::task_alive(tid) == Some(true)
         && (service.spec.path != "/bin/vfs"
             || crate::configuration::wait_for_vfs(tid, service.spec.ready_timeout_ticks));
     // A one-shot application may complete before this check. Successful admission
@@ -149,7 +161,10 @@ pub(crate) fn wait_for_exact_registration(id: u16, expected_tid: usize, timeout:
         match syscall::sys_lookup_service(id) {
             Some(tid) => return tid == expected_tid,
             None if now_ticks().wrapping_sub(started) >= timeout
-                || crate::activation::task_alive(expected_tid) == Some(false) => return false,
+                || crate::activation::task_alive(expected_tid) == Some(false) =>
+            {
+                return false
+            }
             None => ostd::task::yield_now(),
         }
     }
@@ -166,7 +181,11 @@ pub(crate) fn block_routes() -> Vec<ViBlockRouteV1> {
 
 /// Does a route name `tid` as its live provider?
 pub(crate) fn routes_name(routes: &[ViBlockRouteV1], tid: usize) -> bool {
-    routes.iter().any(|route| route.provider().is_some_and(|(provider, _, _)| provider == tid as u64))
+    routes.iter().any(|route| {
+        route
+            .provider()
+            .is_some_and(|(provider, _, _)| provider == tid as u64)
+    })
 }
 
 /// Bounded wait (scheduler ticks, yield between polls) for a block route that
@@ -191,13 +210,19 @@ fn wait_for_block_route(tid: usize, timeout: u64) -> bool {
 #[cfg(test)]
 mod route_readiness_tests {
     use super::routes_name;
-    use api::block_route::{ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION, FLAG_PROVIDER_LIVE};
+    use api::block_route::{
+        ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION, FLAG_PROVIDER_LIVE,
+    };
 
     fn route(id: u64, provider: Option<u64>) -> ViBlockRouteV1 {
         ViBlockRouteV1 {
             version: BLOCK_ROUTE_VERSION,
             kind: BLOCK_DEVICE_PCI,
-            flags: if provider.is_some() { FLAG_PROVIDER_LIVE } else { 0 },
+            flags: if provider.is_some() {
+                FLAG_PROVIDER_LIVE
+            } else {
+                0
+            },
             id,
             provider_tid: provider.unwrap_or(0),
             cell_id: provider.map_or(0, |_| 7),

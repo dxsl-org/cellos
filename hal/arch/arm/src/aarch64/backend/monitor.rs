@@ -2,7 +2,7 @@
 //! Only the boot CPU that actually entered EL2 may use this private HVC gateway.
 
 use core::arch::{asm, global_asm};
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 
 use super::GuestRunProbe;
 use crate::aarch64::{
@@ -73,8 +73,7 @@ fn identity_leaf(root: u64, va: u64) -> Option<u64> {
     let l2 = unsafe { core::ptr::read_volatile(l2.add(((va >> 21) & 0x1ff) as usize)) };
     let l3 = next_table(l2)?;
     let leaf = unsafe { core::ptr::read_volatile(l3.add(((va >> 12) & 0x1ff) as usize)) };
-    ((leaf & (3 | (1 << 10)) == (3 | (1 << 10)))
-        && (leaf & 0x0000_ffff_ffff_f000 == va & !0xfff))
+    ((leaf & (3 | (1 << 10)) == (3 | (1 << 10))) && (leaf & 0x0000_ffff_ffff_f000 == va & !0xfff))
         .then_some(leaf)
 }
 
@@ -100,7 +99,10 @@ fn monitor_root_valid(root: u64) -> bool {
     }
     if !normal(root, false)
         || !normal(pi_monitor_dispatch as *const () as u64, true)
-        || !normal(crate::aarch64::el2::pi_monitor_mmu_init as *const () as u64, true)
+        || !normal(
+            crate::aarch64::el2::pi_monitor_mmu_init as *const () as u64,
+            true,
+        )
         || !normal(vector, true)
         || !normal(vector + 2047, true)
     {
@@ -122,10 +124,9 @@ fn monitor_root_valid(root: u64) -> bool {
     }
     // BCM2837 peripheral window (including the mini UART) and local IRQ
     // controller must not turn into speculative/cached RAM under EL2.
-    [0x3f21_5000, 0x4000_0000].into_iter().all(|va| {
-        identity_leaf(root, va)
-            .is_some_and(|leaf| leaf & ((7 << 2) | (3 << 8)) == 0)
-    })
+    [0x3f21_5000, 0x4000_0000]
+        .into_iter()
+        .all(|va| identity_leaf(root, va).is_some_and(|leaf| leaf & ((7 << 2) | (3 << 8)) == 0))
 }
 
 /// Read by the guest-entry assembly; set on the monitor CPU before each ERET.
@@ -263,8 +264,14 @@ pub unsafe fn run_probed(
     }
     assert_eq!(status, 0, "Pi EL2 guest run probe failed");
     GuestRunProbe {
-        entry_pc, stage2_l1, stage2_l2, stage2_l3, instruction,
-        exit_esr, exit_elr, exit_is_irq,
+        entry_pc,
+        stage2_l1,
+        stage2_l2,
+        stage2_l3,
+        instruction,
+        exit_esr,
+        exit_elr,
+        exit_is_irq,
     }
 }
 
@@ -349,8 +356,7 @@ extern "C" fn pi_monitor_dispatch(frame: *mut u64) {
                 let vcpu = &mut *(regs[1] as *mut AArch64Vcpu);
                 let probe = if op == 6 {
                     let entry = core::ptr::read_volatile(&vcpu.g_elr_el2);
-                    let (l1, l2, l3, instruction) =
-                        probe_stage2(regs[3], regs[5], regs[6], entry);
+                    let (l1, l2, l3, instruction) = probe_stage2(regs[3], regs[5], regs[6], entry);
                     Some((entry, l1, l2, l3, instruction))
                 } else {
                     None

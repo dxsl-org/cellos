@@ -6,10 +6,10 @@
 //! The bounded bitmap cache is keyed by `(glyph_id, px_bits)`; unsupported
 //! scalars share one missing-glyph entry. Cached paints do not allocate.
 
+use crate::typography::normalized_chars;
+use ab_glyph::{point, Font, FontArc, FontRef, FontVec};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use ab_glyph::{point, Font, FontArc, FontRef, FontVec};
-use crate::typography::normalized_chars;
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -52,7 +52,10 @@ pub fn supported_size(px: f32) -> bool {
 }
 
 fn require_supported_size(px: f32) {
-    assert!(supported_size(px), "font size must be finite and in (0, 128] pixels");
+    assert!(
+        supported_size(px),
+        "font size must be finite and in (0, 128] pixels"
+    );
 }
 
 /// Scalable outline rasterizer with an application-owned glyph bitmap cache.
@@ -81,19 +84,26 @@ impl GlyphAtlas {
     /// Load an owned copy of arbitrary TrueType/OpenType data.
     /// Bundled static assets should use `from_static` to avoid copying.
     pub fn new(font_bytes: &[u8]) -> Option<Self> {
-        FontVec::try_from_vec(font_bytes.to_vec()).ok()
+        FontVec::try_from_vec(font_bytes.to_vec())
+            .ok()
             .and_then(|font| Self::from_font(FontArc::new(font)))
     }
 
     /// Borrow embedded static data; no duplicate TTF buffer or eager outlines.
     pub fn from_static(font_bytes: &'static [u8]) -> Option<Self> {
-        FontRef::try_from_slice(font_bytes).ok()
+        FontRef::try_from_slice(font_bytes)
+            .ok()
             .and_then(|font| Self::from_font(FontArc::new(font)))
     }
 
     fn from_font(font: FontArc) -> Option<Self> {
         let units_per_em = font.units_per_em()?;
-        Some(Self { font, units_per_em, cache: BTreeMap::new(), cache_bytes: 0 })
+        Some(Self {
+            font,
+            units_per_em,
+            cache: BTreeMap::new(),
+            cache_bytes: 0,
+        })
     }
 
     fn scale(&self, px: f32) -> f32 {
@@ -124,17 +134,25 @@ impl GlyphAtlas {
             let id = font.glyph_id(c);
             let advance_width = font.h_advance_unscaled(id) * px / units_per_em;
             let mut metrics = GlyphMetrics {
-                xmin: 0, ymin: 0, width: 0, height: 0, advance_width,
+                xmin: 0,
+                ymin: 0,
+                width: 0,
+                height: 0,
+                advance_width,
             };
             let mut bitmap = Vec::new();
             if px > 0.0 {
-                if let Some(outlined) = font.outline_glyph(id.with_scale_and_position(scale, point(0.0, 0.0))) {
+                if let Some(outlined) =
+                    font.outline_glyph(id.with_scale_and_position(scale, point(0.0, 0.0)))
+                {
                     let bounds = outlined.px_bounds();
                     metrics.xmin = bounds.min.x as i32;
                     metrics.ymin = -(bounds.max.y as i32);
                     metrics.width = bounds.width() as usize;
                     metrics.height = bounds.height() as usize;
-                    let pixel_count = metrics.width.checked_mul(metrics.height)
+                    let pixel_count = metrics
+                        .width
+                        .checked_mul(metrics.height)
                         .filter(|&count| count <= 64 * 1024)
                         .expect("glyph exceeds the 64KiB rasterization budget");
                     bitmap.resize(pixel_count, 0);
@@ -149,7 +167,6 @@ impl GlyphAtlas {
         });
         (g.metrics, &g.bitmap)
     }
-
 
     /// Distance from baseline to the ascender line in screen pixels (positive, y-down).
     ///
@@ -174,7 +191,10 @@ impl GlyphAtlas {
     /// Pair adjustment in pixels; identical in measuring and painting.
     pub fn kerning(&self, left: char, right: char, px: f32) -> f32 {
         require_supported_size(px);
-        self.font.kern_unscaled(self.font.glyph_id(left), self.font.glyph_id(right)) * px / self.units_per_em
+        self.font
+            .kern_unscaled(self.font.glyph_id(left), self.font.glyph_id(right))
+            * px
+            / self.units_per_em
     }
 
     /// Advance of one NFC-normalized line, including pair kerning.
@@ -212,10 +232,14 @@ impl GlyphAtlas {
             return self.measure(text, px);
         }
         let surface_w = (width as usize).min(stride / 4).min(i32::MAX as usize) as i32;
-        let surface_h = (height as usize).min(pixels.len() / stride).min(i32::MAX as usize) as i32;
+        let surface_h = (height as usize)
+            .min(pixels.len() / stride)
+            .min(i32::MAX as usize) as i32;
         let clip = (
-            clip.0.max(0), clip.1.max(0),
-            clip.2.min(surface_w), clip.3.min(surface_h),
+            clip.0.max(0),
+            clip.1.max(0),
+            clip.2.min(surface_w),
+            clip.3.min(surface_h),
         );
         if clip.0 >= clip.2 || clip.1 >= clip.3 {
             return self.measure(text, px);
@@ -232,8 +256,12 @@ impl GlyphAtlas {
             let gy = round_pixel(baseline - (metrics.ymin as f32 + metrics.height as f32));
             let x0 = gx.max(clip.0);
             let y0 = gy.max(clip.1);
-            let x1 = gx.saturating_add(metrics.width.min(i32::MAX as usize) as i32).min(clip.2);
-            let y1 = gy.saturating_add(metrics.height.min(i32::MAX as usize) as i32).min(clip.3);
+            let x1 = gx
+                .saturating_add(metrics.width.min(i32::MAX as usize) as i32)
+                .min(clip.2);
+            let y1 = gy
+                .saturating_add(metrics.height.min(i32::MAX as usize) as i32)
+                .min(clip.3);
             for screen_y in y0..y1 {
                 let source_row = (screen_y - gy) as usize * metrics.width;
                 let destination_row = screen_y as usize * stride;
@@ -255,7 +283,11 @@ impl GlyphAtlas {
 }
 
 fn round_pixel(value: f32) -> i32 {
-    if value >= 0.0 { (value + 0.5) as i32 } else { (value - 0.5) as i32 }
+    if value >= 0.0 {
+        (value + 0.5) as i32
+    } else {
+        (value - 0.5) as i32
+    }
 }
 
 fn blend_coverage(destination: &mut [u8], color: [u8; 4], alpha: u32) {
@@ -267,8 +299,9 @@ fn blend_coverage(destination: &mut [u8], color: [u8; 4], alpha: u32) {
     let destination_alpha = destination[3] as u32;
     if destination_alpha == 255 {
         for channel in 0..3 {
-            destination[channel] = ((color[channel] as u32 * alpha
-                + destination[channel] as u32 * inverse + 127) / 255) as u8;
+            destination[channel] =
+                ((color[channel] as u32 * alpha + destination[channel] as u32 * inverse + 127)
+                    / 255) as u8;
         }
         return;
     }
@@ -276,7 +309,8 @@ fn blend_coverage(destination: &mut [u8], color: [u8; 4], alpha: u32) {
     for channel in 0..3 {
         destination[channel] = ((color[channel] as u32 * alpha * 255
             + destination[channel] as u32 * destination_alpha * inverse
-            + alpha_numerator / 2) / alpha_numerator) as u8;
+            + alpha_numerator / 2)
+            / alpha_numerator) as u8;
     }
     destination[3] = ((alpha_numerator + 127) / 255) as u8;
 }
@@ -294,8 +328,12 @@ mod tests {
     #[test]
     fn bundled_faces_cover_vietnamese_and_keep_terminal_fixed_pitch() {
         for face in [
-            FontFace::UiRegular, FontFace::UiSemibold, FontFace::UiItalic,
-            FontFace::UiSemiboldItalic, FontFace::MonoRegular, FontFace::MonoBold,
+            FontFace::UiRegular,
+            FontFace::UiSemibold,
+            FontFace::UiItalic,
+            FontFace::UiSemiboldItalic,
+            FontFace::MonoRegular,
+            FontFace::MonoBold,
         ] {
             let atlas = GlyphAtlas::from_static(face.bytes()).unwrap();
             for c in VIETNAMESE.chars() {
@@ -318,7 +356,10 @@ mod tests {
         let text = "Tiếng Việt: ắ ậ ễ ỡ ự Đ";
         let decomposed: String = text.nfd().collect();
         let face = FontFace::UiRegular;
-        assert_eq!(fonts.measure(face, text, 18.0), fonts.measure(face, &decomposed, 18.0));
+        assert_eq!(
+            fonts.measure(face, text, 18.0),
+            fonts.measure(face, &decomposed, 18.0)
+        );
         let mut composed_pixels = vec![255; 420 * 48 * 4];
         let mut decomposed_pixels = composed_pixels.clone();
         let measured = fonts.measure(face, text, 18.0);
@@ -327,13 +368,24 @@ mod tests {
             (&mut decomposed_pixels, decomposed.as_str()),
         ] {
             let advance = fonts.draw_text(
-                pixels, 420, 48, 420 * 4, 4.0, 4.0, input, face, 18.0,
-                [30, 60, 90, 255], (0, 0, 420, 48),
+                pixels,
+                420,
+                48,
+                420 * 4,
+                4.0,
+                4.0,
+                input,
+                face,
+                18.0,
+                [30, 60, 90, 255],
+                (0, 0, 420, 48),
             );
             assert!((advance - measured).abs() < 0.001);
         }
         assert_eq!(composed_pixels, decomposed_pixels);
-        assert!(composed_pixels.chunks_exact(4).any(|p| p[0] > 30 && p[0] < 255));
+        assert!(composed_pixels
+            .chunks_exact(4)
+            .any(|p| p[0] > 30 && p[0] < 255));
         assert!(composed_pixels.chunks_exact(4).all(|p| p[3] == 255));
     }
 
@@ -346,8 +398,16 @@ mod tests {
         let mut pixels = vec![37; stride * height];
         let before = pixels.clone();
         atlas.draw_text(
-            &mut pixels, width as u32, height as u32, stride, -9.0, -3.0,
-            "Tiếng Việt", 24.0, [20, 100, 220, 180], (5, 6, 35, 25),
+            &mut pixels,
+            width as u32,
+            height as u32,
+            stride,
+            -9.0,
+            -3.0,
+            "Tiếng Việt",
+            24.0,
+            [20, 100, 220, 180],
+            (5, 6, 35, 25),
         );
         for y in 0..height {
             for x in 0..width {
@@ -356,11 +416,15 @@ mod tests {
                     assert_eq!(&pixels[offset..offset + 4], &before[offset..offset + 4]);
                 }
             }
-            assert_eq!(&pixels[y * stride + width * 4..(y + 1) * stride],
-                &before[y * stride + width * 4..(y + 1) * stride]);
+            assert_eq!(
+                &pixels[y * stride + width * 4..(y + 1) * stride],
+                &before[y * stride + width * 4..(y + 1) * stride]
+            );
         }
-        assert!(pixels[6 * stride + 5 * 4..25 * stride].iter()
-            .zip(&before[6 * stride + 5 * 4..25 * stride]).any(|(a, b)| a != b));
+        assert!(pixels[6 * stride + 5 * 4..25 * stride]
+            .iter()
+            .zip(&before[6 * stride + 5 * 4..25 * stride])
+            .any(|(a, b)| a != b));
     }
 
     #[test]
@@ -400,7 +464,9 @@ mod cache_tests {
         assert_eq!(atlas.cache.len(), 1);
         let (metrics, bitmap) = atlas.rasterize('ế', 16.0);
         assert!(metrics.width > 0 && metrics.height > 0);
-        assert!(bitmap.iter().any(|&coverage| coverage > 0 && coverage < 255));
+        assert!(bitmap
+            .iter()
+            .any(|&coverage| coverage > 0 && coverage < 255));
     }
 }
 
@@ -415,7 +481,8 @@ mod size_tests {
             let mut atlas = GlyphAtlas::from_static(INTER_REGULAR).unwrap();
             assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 atlas.rasterize('A', px);
-            })).is_err());
+            }))
+            .is_err());
             assert!(atlas.cache.is_empty());
         }
         let mut atlas = GlyphAtlas::from_static(INTER_REGULAR).unwrap();

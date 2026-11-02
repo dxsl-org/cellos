@@ -60,7 +60,9 @@ fn collect_reserved<T>(iter: impl ExactSizeIterator<Item = T>) -> Result<Vec<T>,
 struct PreparationVa(usize);
 impl Drop for PreparationVa {
     fn drop(&mut self) {
-        if self.0 != 0 { crate::loader::va_alloc::free_cell_va(self.0); }
+        if self.0 != 0 {
+            crate::loader::va_alloc::free_cell_va(self.0);
+        }
     }
 }
 
@@ -71,7 +73,9 @@ impl Drop for PreparationMappings<'_> {
     fn drop(&mut self) {
         if let Some(pages) = self.0.take() {
             let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            let allocator = frames.as_mut().expect("loaded ELF lost its frame allocator");
+            let allocator = frames
+                .as_mut()
+                .expect("loaded ELF lost its frame allocator");
             crate::loader::ElfLoader::unwind(pages, allocator);
         }
     }
@@ -113,25 +117,27 @@ pub fn prepare_elf_task(
     let final_flags = crate::loader::atomic_checkpoint("AP-RF")
         .map_err(|_| ViError::OutOfMemory)
         .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.final_flags))))
-        .map_err(|error| {
+        .inspect_err(|_| {
             #[cfg(cellos_p01_trace)]
             p01_post_load_failure(&seg_pages, load_base, 2);
-            error
         })?;
     let mapped_pages = crate::loader::atomic_checkpoint("AP-RM")
         .map_err(|_| ViError::OutOfMemory)
         .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.frame))))
-        .map_err(|error| {
+        .inspect_err(|_| {
             #[cfg(cellos_p01_trace)]
             p01_post_load_failure(&seg_pages, load_base, 3);
-            error
         })?;
     // The filtered set has at most one entry per page, so the page count is an
     // upper bound: reserving it means no growth, hence no infallible reallocation.
     let mut writable_pages = Vec::new();
     crate::loader::atomic_checkpoint("AP-RW")
         .map_err(|_| ViError::OutOfMemory)
-        .and_then(|_| writable_pages.try_reserve_exact(seg_pages.len()).map_err(|_| ViError::OutOfMemory))
+        .and_then(|_| {
+            writable_pages
+                .try_reserve_exact(seg_pages.len())
+                .map_err(|_| ViError::OutOfMemory)
+        })
         .map_err(|_| {
             #[cfg(cellos_p01_trace)]
             p01_post_load_failure(&seg_pages, load_base, 4);
@@ -149,11 +155,8 @@ pub fn prepare_elf_task(
         crate::memory::heap::p01_owner::adopt_vec(&mapped_pages);
         crate::memory::heap::p01_owner::adopt_vec(&writable_pages);
     }
-    let segments = super::stack::CellSegments::with_writable_pages(
-        mapped_pages,
-        writable_pages,
-        load_base,
-    );
+    let segments =
+        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, load_base);
     // Constructor is infallible: the segment owner now exclusively owns both
     // frame reclamation and PIE release, including every later failure edge.
     mapping_rollback.0 = None;

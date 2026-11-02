@@ -69,7 +69,11 @@ impl SocketTable {
     pub fn can_insert(&self, owner: SocketOwner) -> bool {
         self.entries.len() < MAX_SOCKETS
             && self.next_cap <= u32::MAX as u64
-            && self.owners.values().filter(|candidate| **candidate == owner).count()
+            && self
+                .owners
+                .values()
+                .filter(|candidate| **candidate == owner)
+                .count()
                 < HTTP_OWNER_BUDGET
     }
 
@@ -212,15 +216,17 @@ impl SocketTable {
     }
 
     pub fn graceful_closes(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
-        self.graceful_closes.iter().map(|(&cap, &deadline)| (cap, deadline))
+        self.graceful_closes
+            .iter()
+            .map(|(&cap, &deadline)| (cap, deadline))
     }
 
     /// First cap of `owner` (test inspection: owner reclaim no longer restarts a search).
     #[cfg(test)]
     pub fn owned_cap(&self, owner: SocketOwner) -> Option<u64> {
-        self.owners.iter().find_map(|(&cap, &candidate)| {
-            (candidate == owner).then_some(cap)
-        })
+        self.owners
+            .iter()
+            .find_map(|(&cap, &candidate)| (candidate == owner).then_some(cap))
     }
 
     /// Owner death: abort every TCP socket of the exact owner generation and

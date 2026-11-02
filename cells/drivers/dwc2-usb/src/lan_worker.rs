@@ -32,16 +32,17 @@ fn cell_main() {
     loop {
         sys_heartbeat(HEARTBEAT_TICKS);
         match sys_recv_timeout(0, &mut buf, POLL_TICKS) {
-            SyscallResult::Ok(sender) if sender == host_tid => {
+            SyscallResult::Ok(sender)
+                if sender == host_tid
                 // The host is the registered NIC endpoint. It forwards each
                 // client request through this capability-free front-end; send
                 // the bounded envelope back for USB transport dispatch. Replies
                 // go from the host to the client directly: a reply relayed here
                 // would arrive from this cell's tid, and a client waiting on the
                 // host's tid never receives it.
-                if lan_ipc::decode_request(&buf).is_some() {
-                    let _ = sys_send(host_tid, &buf);
-                }
+                && lan_ipc::decode_request(&buf).is_some() =>
+            {
+                let _ = sys_send(host_tid, &buf);
             }
             _ => {}
         }

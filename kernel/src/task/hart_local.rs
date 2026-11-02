@@ -92,7 +92,9 @@ fn owned_slot_index() -> usize {
     }
     // Hosted unit fixtures do not install a privileged kernel GS base.
     #[cfg(all(target_arch = "x86_64", test, not(target_os = "none")))]
-    { 0 }
+    {
+        0
+    }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         0
@@ -223,12 +225,10 @@ pub struct ViHartLocal {
 // The leading word-sized fields keep their documented offsets (0/8/16/24 on
 // 64-bit targets): the `usize` → `AtomicUsize` change must not move them.
 const _: () = assert!(core::mem::offset_of!(ViHartLocal, hart_id) == 0);
-const _: () = assert!(
-    core::mem::offset_of!(ViHartLocal, current_cell_id) == core::mem::size_of::<usize>()
-);
-const _: () = assert!(
-    core::mem::offset_of!(ViHartLocal, kernel_gp) == 2 * core::mem::size_of::<usize>()
-);
+const _: () =
+    assert!(core::mem::offset_of!(ViHartLocal, current_cell_id) == core::mem::size_of::<usize>());
+const _: () =
+    assert!(core::mem::offset_of!(ViHartLocal, kernel_gp) == 2 * core::mem::size_of::<usize>());
 const _: () = assert!(
     core::mem::offset_of!(ViHartLocal, kernel_tp_for_cells) == 3 * core::mem::size_of::<usize>()
 );
@@ -415,7 +415,11 @@ pub fn current_hart_id() -> usize {
         if tp == 0 {
             return 0;
         }
-        unsafe { (*(tp as *const ViHartLocal)).hart_id.load(Ordering::Relaxed) }
+        unsafe {
+            (*(tp as *const ViHartLocal))
+                .hart_id
+                .load(Ordering::Relaxed)
+        }
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
@@ -933,7 +937,9 @@ pub fn set_current_cell_id(id: usize) {
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
-        HART_LOCALS[owned_slot_index()].current_cell_id.store(id, Ordering::Relaxed);
+        HART_LOCALS[owned_slot_index()]
+            .current_cell_id
+            .store(id, Ordering::Relaxed);
     }
 }
 

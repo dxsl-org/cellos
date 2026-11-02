@@ -29,7 +29,12 @@ extern "C" {
 /// eventually overwrite whatever mapped memory lies below. No frame exists;
 /// `sepc` and `stval` are those of the failed save, `sp` the overflowed one.
 #[no_mangle]
-pub extern "C" fn vi_kernel_stack_overflow(sepc: usize, stval: usize, sp: usize, interrupted_satp: usize) -> ! {
+pub extern "C" fn vi_kernel_stack_overflow(
+    sepc: usize,
+    stval: usize,
+    sp: usize,
+    interrupted_satp: usize,
+) -> ! {
     panic!(
         "Cellos: kernel stack overflow: trap entry could not save a frame (sp={:#x} guard stval={:#x} sepc={:#x} interrupted_satp={:#x})",
         sp, stval, sepc, interrupted_satp

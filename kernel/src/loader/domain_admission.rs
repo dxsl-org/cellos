@@ -257,7 +257,10 @@ pub(crate) fn evaluate_for_launch(
 ///
 /// The audit record is what makes a refusal observable after the fact: a cell
 /// that never appears because admission refused it leaves no task to inspect.
-pub(crate) fn admit_for_launch(path: &str, granted: CapSet) -> Result<DomainAdmissionLease, ViError> {
+pub(crate) fn admit_for_launch(
+    path: &str,
+    granted: CapSet,
+) -> Result<DomainAdmissionLease, ViError> {
     evaluate_for_launch(path, granted).map_err(|denial| {
         crate::audit::log_event(
             crate::audit::AuditEvent::CellSpawnDenied,
@@ -387,8 +390,7 @@ pub(crate) fn enable_for_boot() -> bool {
     // would be a claim about a mechanism this boot does not have — the same
     // refusal, for the same reason, as the EL2 branch above.
     #[cfg(target_arch = "x86_64")]
-    if crate::hal::domain::kernel_cr3() == 0
-        || !crate::task::smp::x86_substrate_qualified() {
+    if crate::hal::domain::kernel_cr3() == 0 || !crate::task::smp::x86_substrate_qualified() {
         return false;
     }
     POLICY
@@ -665,15 +667,25 @@ mod browser_profile_tests {
     fn browser_profile_admits_only_the_exact_capability_free_quickjs_path() {
         let covered = cfg!(target_arch = "x86_64");
         let profile = cfg!(feature = "browser-engine-profile");
-        assert_eq!(artifact_eligible("/bin/ocel-quickjs", CapSet::EMPTY), !profile || covered);
+        assert_eq!(
+            artifact_eligible("/bin/ocel-quickjs", CapSet::EMPTY),
+            !profile || covered
+        );
         // The engine's reviewed row keeps the pre-annex S2-T/S2-W rights; they
         // are not authority this gate counts.
         assert_eq!(
             artifact_eligible("/bin/ocel-quickjs", CapSet::LEGACY_OBSERVE_MUTATE),
             !profile || covered
         );
-        for path in ["", "/bin/ocel-js", "/bin/ocel-pdf", "/bin/tier2-smoke",
-            "/bin/tier2-exploit", "/bin/OCEL-QUICKJS", "/mem/ocel-quickjs"] {
+        for path in [
+            "",
+            "/bin/ocel-js",
+            "/bin/ocel-pdf",
+            "/bin/tier2-smoke",
+            "/bin/tier2-exploit",
+            "/bin/OCEL-QUICKJS",
+            "/mem/ocel-quickjs",
+        ] {
             assert_eq!(artifact_eligible(path, CapSet::EMPTY), !profile, "{path}");
         }
         let mut caps = CapSet::EMPTY;

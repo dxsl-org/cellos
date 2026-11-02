@@ -35,7 +35,10 @@ impl VfsManager {
             let page = if matches!(backend.stat(path), Some((_, true))) {
                 backend.list_page(path, cursor, out)?
             } else if cursor == 0 && self.is_synthetic_dir(path) {
-                ListPage { written: 0, next: None }
+                ListPage {
+                    written: 0,
+                    next: None,
+                }
             } else {
                 return None;
             };
@@ -64,7 +67,10 @@ impl VfsManager {
                 Err(_) => return None,
             }
         }
-        Some(ListPage { written, next: None })
+        Some(ListPage {
+            written,
+            next: None,
+        })
     }
 
     /// A directory the mount table supplies although no backend stores it.
@@ -79,8 +85,16 @@ impl VfsManager {
         let mut extras: Vec<Extra> = Vec::new();
         for name in self.mounts.direct_mount_children(path) {
             let child = join_component(path, name);
-            let kind = if self.mounts.is_mount_point(&child) { EntryKind::Mount } else { EntryKind::Dir };
-            extras.push(Extra { name, kind, in_backend: backend.stat(&child).is_some() });
+            let kind = if self.mounts.is_mount_point(&child) {
+                EntryKind::Mount
+            } else {
+                EntryKind::Dir
+            };
+            extras.push(Extra {
+                name,
+                kind,
+                in_backend: backend.stat(&child).is_some(),
+            });
         }
         let configured: &[&'static str] = match path {
             "/" => &["etc"],
@@ -96,8 +110,16 @@ impl VfsManager {
             let Some((_, directory)) = self.stat(&child) else {
                 continue;
             };
-            let kind = if directory { EntryKind::Dir } else { EntryKind::File };
-            extras.push(Extra { name, kind, in_backend: backend.stat(&child).is_some() });
+            let kind = if directory {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
+            extras.push(Extra {
+                name,
+                kind,
+                in_backend: backend.stat(&child).is_some(),
+            });
         }
         extras
     }
@@ -112,7 +134,10 @@ fn mark_mount_kinds(page: &mut [u8], extras: &[Extra<'_>]) {
         let Some(name) = page.get(pos + ENTRY_HEADER_LEN..end) else {
             return;
         };
-        if let Some(extra) = extras.iter().find(|extra| extra.in_backend && extra.name.as_bytes() == name) {
+        if let Some(extra) = extras
+            .iter()
+            .find(|extra| extra.in_backend && extra.name.as_bytes() == name)
+        {
             page[pos] = extra.kind.wire();
         }
         pos = end;

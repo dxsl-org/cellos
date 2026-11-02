@@ -77,12 +77,21 @@ impl FsBackend for BinOverlay {
             start & !STORE_PHASE
         };
         if !store_dir {
-            return (store_start == 0).then_some(ListPage { written, next: None });
+            return (store_start == 0).then_some(ListPage {
+                written,
+                next: None,
+            });
         }
-        let shadowed = if boot_dir { self.boot.names(path)? } else { Vec::new() };
-        let page = self.store.list_page_filtered(path, store_start, &mut out[written..], &|name| {
-            shadowed.iter().any(|boot| boot.as_ref() == name)
-        })?;
+        let shadowed = if boot_dir {
+            self.boot.names(path)?
+        } else {
+            Vec::new()
+        };
+        let page =
+            self.store
+                .list_page_filtered(path, store_start, &mut out[written..], &|name| {
+                    shadowed.iter().any(|boot| boot.as_ref() == name)
+                })?;
         Some(ListPage {
             written: written + page.written,
             next: page.next.map(|next| next | STORE_PHASE),

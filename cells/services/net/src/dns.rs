@@ -14,7 +14,6 @@
 //! Wire queries retain a bounded smoltcp DNS slot and are polled by the net
 //! reactor alongside TCP; a slow resolver never parks other clients.
 
-use alloc::vec;
 use smoltcp::iface::{Interface, SocketHandle, SocketSet};
 use smoltcp::socket::dns;
 use smoltcp::wire::{DnsQueryType, IpAddress};
@@ -26,7 +25,6 @@ pub const SLIRP_DNS_SERVER: [u8; 4] = [10, 0, 2, 3];
 /// SLIRP's alias for the host loopback: guest traffic to it lands on the host's
 /// 127.0.0.1, which is how the integration tests reach host mocks.
 const SLIRP_HOST: [u8; 4] = [10, 0, 2, 2];
-
 
 /// Resolve without the wire: IPv4 literals and the SLIRP names.
 ///
@@ -121,7 +119,10 @@ impl Resolver {
         query: dns::QueryHandle,
         sockets: &mut SocketSet<'_>,
     ) -> Option<Option<[u8; 4]>> {
-        match sockets.get_mut::<dns::Socket>(self.handle).get_query_result(query) {
+        match sockets
+            .get_mut::<dns::Socket>(self.handle)
+            .get_query_result(query)
+        {
             Ok(addresses) => Some(first_ipv4(&addresses)),
             Err(dns::GetQueryResultError::Failed) => Some(None),
             Err(dns::GetQueryResultError::Pending) => None,
@@ -129,9 +130,10 @@ impl Resolver {
     }
 
     pub fn cancel(&self, query: dns::QueryHandle, sockets: &mut SocketSet<'_>) {
-        sockets.get_mut::<dns::Socket>(self.handle).cancel_query(query);
+        sockets
+            .get_mut::<dns::Socket>(self.handle)
+            .cancel_query(query);
     }
-
 }
 
 fn first_ipv4(addresses: &[IpAddress]) -> Option<[u8; 4]> {
@@ -145,7 +147,6 @@ fn first_ipv4(addresses: &[IpAddress]) -> Option<[u8; 4]> {
 fn ip_address(ip: [u8; 4]) -> IpAddress {
     IpAddress::v4(ip[0], ip[1], ip[2], ip[3])
 }
-
 
 #[cfg(test)]
 mod tests;

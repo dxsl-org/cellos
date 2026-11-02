@@ -49,10 +49,15 @@ pub fn verify(expected: u32) {
     };
     match read_counter(tid, b"v2:") {
         Some(value) if value == expected => {
-            println(&alloc::format!("[hotswap-verify] PASS (v2 counter={value})"));
+            println(&alloc::format!(
+                "[hotswap-verify] PASS (v2 counter={value})"
+            ));
             ostd::syscall::sys_exit(0);
         }
-        Some(value) => fail("verify", &alloc::format!("v2 counter={value}, expected {expected}")),
+        Some(value) => fail(
+            "verify",
+            &alloc::format!("v2 counter={value}, expected {expected}"),
+        ),
         None => fail("verify", "registered provider is not v2"),
     }
 }

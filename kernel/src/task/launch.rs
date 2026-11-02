@@ -197,7 +197,10 @@ pub fn publish_prepared(
     }
     if state.is_domain {
         // ADR-0019 §2.1: the one admission policy (see `admit_and_bind_domain`).
-        let path = state.measurement.as_ref().map_or("", |measurement| measurement.path.as_str());
+        let path = state
+            .measurement
+            .as_ref()
+            .map_or("", |measurement| measurement.path.as_str());
         admit_and_bind_domain(&mut task, path, state.granted)?;
         log_domain_admitted(&task.name);
     }
@@ -211,7 +214,10 @@ pub fn publish_prepared(
         if measurement.path == "/bin/bench" {
             let attempt = state.trace.ok_or(ViError::PermissionDenied)?;
             let caller = state.caller.as_ref().ok_or(ViError::PermissionDenied)?;
-            let publisher = sched.tasks.get(&caller.tid).ok_or(ViError::PermissionDenied)?;
+            let publisher = sched
+                .tasks
+                .get(&caller.tid)
+                .ok_or(ViError::PermissionDenied)?;
             if !attempt.selected()
                 || attempt.parent != crate::p01_measurement::Owner::of(publisher)
                 || caller.generation != publisher.cell_generation
@@ -219,7 +225,10 @@ pub fn publish_prepared(
                 || !matches!(attempt.route, 1 | 2)
                 || measurement.digest.as_slice() != &crate::p01_measurement::MANIFEST[32..64]
                 || crate::p01_measurement::selected_owner(
-                    publisher.cell_id.0, publisher.cell_generation).is_some()
+                    publisher.cell_id.0,
+                    publisher.cell_generation,
+                )
+                .is_some()
             {
                 return Err(ViError::PermissionDenied);
             }
@@ -233,8 +242,10 @@ pub fn publish_prepared(
     let _heap_bookkeeping = crate::memory::heap::p01_owner::bookkeeping();
     {
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         sched.tasks.insert(tid, task);
     }
     assert!(
@@ -252,7 +263,11 @@ pub fn publish_prepared(
             if state.bootstrap_init {
                 crate::p01_measurement::arm(diagnostic_owner, measurement.digest);
             } else {
-                crate::p01_measurement::publication(diagnostic_owner, state.trace, measurement.digest);
+                crate::p01_measurement::publication(
+                    diagnostic_owner,
+                    state.trace,
+                    measurement.digest,
+                );
             }
         }
         crate::memory::heap::p01_owner::bind(state.trace, diagnostic_owner);
@@ -283,11 +298,18 @@ struct PublicationClaim {
 }
 impl PublicationClaim {
     fn charge(cell: usize, retained: usize, transient: usize) -> Result<Self, ViError> {
-        let total = retained.checked_add(transient).ok_or(ViError::OutOfMemory)?;
+        let total = retained
+            .checked_add(transient)
+            .ok_or(ViError::OutOfMemory)?;
         if !crate::memory::cell_quota::charge(cell, total) {
             return Err(ViError::OutOfMemory);
         }
-        Ok(Self { cell, retained, transient, armed: true })
+        Ok(Self {
+            cell,
+            retained,
+            transient,
+            armed: true,
+        })
     }
     /// Commit: the queue slot is consumed by the runnable task, so only that
     /// transient part is refunded; the retained log history stays attributed.
@@ -370,7 +392,11 @@ pub(crate) fn audit_domain_drain_refusal() {
 /// the returned lease immediately before the task becomes runnable.
 #[cfg(all(
     feature = "native-domains",
-    any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 ))]
 fn admit_and_bind_domain(
     task: &mut super::Task,
@@ -386,9 +412,14 @@ fn admit_and_bind_domain(
         );
         return Err(ViError::InvalidInput);
     };
-    let domain = crate::memory::address_space::create_cell_domain(ks, us, seg,
-        #[cfg(cellos_p01_trace)] crate::p01_resources::owner(task))
-        .map_err(|_| ViError::OutOfMemory)?;
+    let domain = crate::memory::address_space::create_cell_domain(
+        ks,
+        us,
+        seg,
+        #[cfg(cellos_p01_trace)]
+        crate::p01_resources::owner(task),
+    )
+    .map_err(|_| ViError::OutOfMemory)?;
     if !lease.remains_enabled() {
         return Err(crate::loader::domain_admission::drain_refusal());
     }
@@ -398,7 +429,11 @@ fn admit_and_bind_domain(
 
 #[cfg(not(all(
     feature = "native-domains",
-    any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
 )))]
 fn admit_and_bind_domain(
     task: &mut super::Task,
@@ -419,9 +454,17 @@ fn log_domain_admitted(name: &str) {
     let arch_tag = "TTBR0";
     #[cfg(target_arch = "x86_64")]
     let arch_tag = "CR3";
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )))]
     let arch_tag = "none";
-    log::warn!("[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)", name, arch_tag);
+    log::warn!(
+        "[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)",
+        name,
+        arch_tag
+    );
 }
 
 /// The task, quota, CSpace, measurement-log and ready-queue slots remain
@@ -447,25 +490,38 @@ pub(crate) struct SessionPublication {
 impl SessionPublication {
     /// Every fallible allocation, quota, owner-slot, log and ready-queue claim
     /// happens here; `publish` allocates nothing and cannot fail.
-    pub(crate) fn reserve(sched: &mut super::scheduler::Scheduler,
-        prepared: super::PreparedElfTask, state: TaskLaunchState,
-        route: crate::loader::launch_profile::LaunchRoute) -> Result<Self, ViError> {
-        let Some(caller) = state.caller.as_ref() else { return Err(ViError::PermissionDenied); };
+    pub(crate) fn reserve(
+        sched: &mut super::scheduler::Scheduler,
+        prepared: super::PreparedElfTask,
+        state: TaskLaunchState,
+        route: crate::loader::launch_profile::LaunchRoute,
+    ) -> Result<Self, ViError> {
+        let Some(caller) = state.caller.as_ref() else {
+            return Err(ViError::PermissionDenied);
+        };
         if !authority_is_current(sched, caller) {
             return Err(ViError::PermissionDenied);
         }
-        let (creator, creator_generation) = sched.tasks.get(&caller.tid)
+        let (creator, creator_generation) = sched
+            .tasks
+            .get(&caller.tid)
             .map(|t| (t.cell_id.0 as usize, t.cell_generation))
             .ok_or(ViError::PermissionDenied)?;
         // A session child is an ordinary governed path launch: never a boot
         // singleton, hotswap replacement, or service route publisher. A domain
         // child goes through the same ADR-0019 policy as `publish_prepared`.
-        if prepared.requested_cell_id() != CellId(0) || state.platform.is_some()
-            || state.replacement.is_some() || state.routes.block_io || state.routes.input {
+        if prepared.requested_cell_id() != CellId(0)
+            || state.platform.is_some()
+            || state.replacement.is_some()
+            || state.routes.block_io
+            || state.routes.input
+        {
             return Err(ViError::PermissionDenied);
         }
         #[cfg(feature = "test-hooks")]
-        if state.routes.development_silo { return Err(ViError::PermissionDenied); }
+        if state.routes.development_silo {
+            return Err(ViError::PermissionDenied);
+        }
         // Heap bookkeeping for the unpublished task is kernel memory, exactly as
         // in `publish_prepared`; per-principal accounting is the explicit claim.
         let _kernel_alloc = super::scheduler::KernelAllocationContext::enter();
@@ -490,39 +546,85 @@ impl SessionPublication {
             None
         };
         #[cfg(feature = "test-hooks")]
-        { task.development_silo_registration_cap = state.routes.development_silo
-            .then(super::cap::DevelopmentSiloRegistrationCap::new); }
+        {
+            task.development_silo_registration_cap = state
+                .routes
+                .development_silo
+                .then(super::cap::DevelopmentSiloRegistrationCap::new);
+        }
         let owner = api::cell_owner::CellOwner::new(cell.0, task.cell_generation, tid as u64);
-        let authority = crate::cell::cspace::AuthorityReservation::reserve(cell, owner.generation, state.granted)?;
+        let authority = crate::cell::cspace::AuthorityReservation::reserve(
+            cell,
+            owner.generation,
+            state.granted,
+        )?;
         let path_len = state.measurement.as_ref().map_or(0, |m| m.path.len());
-        let claim = PublicationClaim::charge(creator,
+        let claim = PublicationClaim::charge(
+            creator,
             crate::measurement_log::PublicationReservation::ENTRY_BYTES + path_len,
-            super::hart_local::ready::PublicationReservation::SLOT_BYTES)?;
-        let measurement = crate::measurement_log::PublicationReservation::reserve(
-            (creator as u64, creator_generation))?;
+            super::hart_local::ready::PublicationReservation::SLOT_BYTES,
+        )?;
+        let measurement = crate::measurement_log::PublicationReservation::reserve((
+            creator as u64,
+            creator_generation,
+        ))?;
         let ready = super::hart_local::ready::PublicationReservation::reserve(state.priority)?;
         sched.reserve_session_owner(owner)?;
         sched.next_task_id = next;
-        Ok(Self { task, owner, state, quota, authority, measurement, ready, claim, domain_lease, route })
+        Ok(Self {
+            task,
+            owner,
+            state,
+            quota,
+            authority,
+            measurement,
+            ready,
+            claim,
+            domain_lease,
+            route,
+        })
     }
     /// ADR-0019 commit decision for this child, given the live-grant preflight
     /// `dispatch` took before SCHEDULER. Call under SCHEDULER, right before
     /// `publish`, after `current()`.
     pub(crate) fn domain_commit(&self, grant_live: bool) -> DomainCommit {
-        domain_commit_gate(self.domain_lease.map(|lease| lease.remains_enabled()), grant_live)
+        domain_commit_gate(
+            self.domain_lease.map(|lease| lease.remains_enabled()),
+            grant_live,
+        )
     }
     pub(crate) fn current(&self, sched: &super::scheduler::Scheduler) -> bool {
         if !sched.session_owner_reserved(self.owner)
-            || self.state.caller.as_ref().is_none_or(|a| !authority_is_current(sched, a)) {
+            || self
+                .state
+                .caller
+                .as_ref()
+                .is_none_or(|a| !authority_is_current(sched, a))
+        {
             return false;
         }
-        let Some(caller) = self.state.caller.as_ref().and_then(|a| sched.tasks.get(&a.tid)) else { return false; };
-        let Some(measurement) = self.state.measurement.as_ref() else { return false; };
-        let state = crate::loader::launch_profile::CallerLaunchState { name: &caller.name,
-            has_spawn: caller.spawn_cap.is_some(), has_supervisor: caller.supervisor_cap.is_some() };
-        crate::loader::launch_profile::authorize(state, self.route,
-            &measurement.path).is_some_and(|profile| self.state.granted.intersect(profile.child_ceiling)
-                == self.state.granted && (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some()))
+        let Some(caller) = self
+            .state
+            .caller
+            .as_ref()
+            .and_then(|a| sched.tasks.get(&a.tid))
+        else {
+            return false;
+        };
+        let Some(measurement) = self.state.measurement.as_ref() else {
+            return false;
+        };
+        let state = crate::loader::launch_profile::CallerLaunchState {
+            name: &caller.name,
+            has_spawn: caller.spawn_cap.is_some(),
+            has_supervisor: caller.supervisor_cap.is_some(),
+        };
+        crate::loader::launch_profile::authorize(state, self.route, &measurement.path).is_some_and(
+            |profile| {
+                self.state.granted.intersect(profile.child_ceiling) == self.state.granted
+                    && (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some())
+            },
+        )
     }
     /// Final publication. Called with every owner check already passed, under
     /// SCHEDULER, and performs no allocation: capacity for the task row, CSpace
@@ -550,14 +652,19 @@ impl SessionPublication {
                 if self.state.bootstrap_init {
                     crate::p01_measurement::arm(diagnostic_owner, measurement.digest);
                 } else {
-                    crate::p01_measurement::publication(diagnostic_owner, self.state.trace, measurement.digest);
+                    crate::p01_measurement::publication(
+                        diagnostic_owner,
+                        self.state.trace,
+                        measurement.digest,
+                    );
                 }
             }
             crate::memory::heap::p01_owner::bind(self.state.trace, diagnostic_owner);
             crate::p01_resources::published(task);
         }
         if let Some(measurement) = self.state.measurement.take() {
-            self.measurement.commit(tid, measurement.path, measurement.digest);
+            self.measurement
+                .commit(tid, measurement.path, measurement.digest);
         }
         crate::audit::log_event(
             crate::audit::AuditEvent::CellSpawn,
@@ -586,8 +693,14 @@ mod domain_commit_tests {
     #[test]
     fn domain_child_is_refused_by_drain_or_live_grant() {
         assert_eq!(domain_commit_gate(Some(true), false), DomainCommit::Admit);
-        assert_eq!(domain_commit_gate(Some(true), true), DomainCommit::LiveGrant);
-        assert_eq!(domain_commit_gate(Some(false), false), DomainCommit::Drained);
+        assert_eq!(
+            domain_commit_gate(Some(true), true),
+            DomainCommit::LiveGrant
+        );
+        assert_eq!(
+            domain_commit_gate(Some(false), false),
+            DomainCommit::Drained
+        );
     }
 
     #[test]

@@ -515,7 +515,8 @@ fn cell_main() {
         match sys_recv_timeout(0, &mut in_buf, NIC_RECV_TICKS) {
             SyscallResult::Ok(sender_tid) if sender_tid > 0 => {
                 if sender_tid == lan_worker_tid {
-                    if let Some((client_tid, operation, request)) = lan_ipc::decode_request(&in_buf) {
+                    if let Some((client_tid, operation, request)) = lan_ipc::decode_request(&in_buf)
+                    {
                         // Reply straight to the client. The request still only
                         // reaches `handle` after the front-end has decoded it,
                         // so the envelope check is intact, and a reply routed
@@ -537,7 +538,11 @@ fn cell_main() {
                                 // (the chip had nothing — the ordinary idle poll).
                                 #[cfg(feature = "loop-trace")]
                                 {
-                                    let counter = if len > 0 { &NIC_RX_FRAMES } else { &NIC_RX_EMPTY };
+                                    let counter = if len > 0 {
+                                        &NIC_RX_FRAMES
+                                    } else {
+                                        &NIC_RX_EMPTY
+                                    };
                                     counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                                 }
                                 reply_nic(client_tid, operation, &buf[..2 + len]);
@@ -649,7 +654,11 @@ fn cell_main() {
         }
 
         #[cfg(feature = "loop-trace")]
-        trace_turn(ostd::syscall::sys_get_time_ms().unwrap_or(turn_start).saturating_sub(turn_start));
+        trace_turn(
+            ostd::syscall::sys_get_time_ms()
+                .unwrap_or(turn_start)
+                .saturating_sub(turn_start),
+        );
 
         sys_yield();
     }
@@ -785,9 +794,7 @@ impl DeferredLan {
     }
 
     fn clear(&mut self) {
-        if let Some((_, Some(operation), _)) =
-            lan_ipc::decode_request(&self.bytes[..self.len])
-        {
+        if let Some((_, Some(operation), _)) = lan_ipc::decode_request(&self.bytes[..self.len]) {
             let _ = ostd::ipc::reply(operation, &[STATUS_NOT_READY]);
         }
         self.len = 0;
@@ -837,8 +844,6 @@ fn print_usize(v: usize) {
         print(s);
     }
 }
-
-
 
 fn print_hex_u32(val: u32) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";

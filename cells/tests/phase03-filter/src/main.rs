@@ -9,36 +9,36 @@
 //! - `noread`     exit 0 at once without touching any endpoint
 //! - `exit N`     exit with status `N` (any `i32`) without touching any endpoint
 //! - `gen`        write the fixed 6 bytes `00 ff 41 fe 80 7a` (NUL, non-UTF-8, no
-//!                trailing newline) to stdout, exit 0
+//!   trailing newline) to stdout, exit 0
 //! - `hex`        read stdin to end of stream and print
-//!                `p03-hex len=<total> hex=<first 64 bytes as lowercase hex>\n`
+//!   `p03-hex len=<total> hex=<first 64 bytes as lowercase hex>\n`
 //! - `endless`    write 512-byte blocks until the consumer closes (exit 141) or
-//!                the operation is cancelled (exit 130)
+//!   the operation is cancelled (exit 130)
 //! - `rows`       write the fixed plain JSONL `{"a":1}\n{"a":2}\n` (an external
-//!                head for `from jsonl`), exit 0
+//!   head for `from jsonl`), exit 0
 //! - `typed`      write the fixed typed JSONL records `pid` 7 and `pid` 9 in the
-//!                `cellbox` encoding (an external head for `from jsonl --typed`)
+//!   `cellbox` encoding (an external head for `from jsonl --typed`)
 //! - `net-probe`  send each rights-gated `NetRequest` (Resolve, TcpConnect,
-//!                UdpCreate, UdpBind, TcpListen, MulticastJoin, L2Send) once to the
-//!                live net service and print one `NETPROBE <op> <result>` line per
-//!                request, then `NETPROBE DONE`; `<result>` is `denied` for
-//!                `Err(NET_ERR_DENIED)` and `other:<detail>` for anything else.
-//!                This Cell holds no network right (its launch edge has an empty
-//!                ceiling), so every line is expected to read `denied`.
+//!   UdpCreate, UdpBind, TcpListen, MulticastJoin, L2Send) once to the
+//!   live net service and print one `NETPROBE <op> <result>` line per
+//!   request, then `NETPROBE DONE`; `<result>` is `denied` for
+//!   `Err(NET_ERR_DENIED)` and `other:<detail>` for anything else.
+//!   This Cell holds no network right (its launch edge has an empty
+//!   ceiling), so every line is expected to read `denied`.
 //! - `config-probe get KEY` / `config-probe set KEY VALUE` /
 //!   `config-probe delete KEY`
-//!                send one `ConfigRequest` to the live config service and print
-//!                `CFGPROBE <op> <KEY> <result>`; `<result>` is `ok`, `denied`
-//!                (`Err(CONFIG_ERR_DENIED)`), `value:<v>`, `notfound` or
-//!                `other:<detail>`. This Cell holds no Q right (its edge ceiling
-//!                lacks `config_write`), so `set`/`delete` are expected to read
-//!                `denied`; `get` is ungated (Phase 01 CP1).
+//!   send one `ConfigRequest` to the live config service and print
+//!   `CFGPROBE <op> <KEY> <result>`; `<result>` is `ok`, `denied`
+//!   (`Err(CONFIG_ERR_DENIED)`), `value:<v>`, `notfound` or
+//!   `other:<detail>`. This Cell holds no Q right (its edge ceiling
+//!   lacks `config_write`), so `set`/`delete` are expected to read
+//!   `denied`; `get` is ungated (Phase 01 CP1).
 //! - `tui-abandon` simulate a killed TUI: write the `vitui` enter bytes
-//!                `ESC[?1049h ESC[?25l ESC[?2004h` followed by `p03-tui-abandon\n` to
-//!                stdout and exit 0 WITHOUT restoring anything. As the serial session's
-//!                foreground reader it first takes the raw-mode lease (best effort) and
-//!                keeps it to exit; as a pipeline stage it is no reader (no session
-//!                binding, stdin end of file) and the bytes alone are the observable.
+//!   `ESC[?1049h ESC[?25l ESC[?2004h` followed by `p03-tui-abandon\n` to
+//!   stdout and exit 0 WITHOUT restoring anything. As the serial session's
+//!   foreground reader it first takes the raw-mode lease (best effort) and
+//!   keeps it to exit; as a pipeline stage it is no reader (no session
+//!   binding, stdin end of file) and the bytes alone are the observable.
 //!
 //! Exit statuses: 0 ok; 2 missing grant / bad argument / unknown mode; 3 other
 //! stream failure; 141 stdout `BrokenPipe`; 130 `Cancelled`.
@@ -114,7 +114,10 @@ const TUI_ABANDON: &[u8] = b"\x1b[?1049h\x1b[?25l\x1b[?2004hp03-tui-abandon\n";
 fn granted(context: &ChildContext, slot: GrantSlot) -> Option<Endpoint> {
     let operation = OperationRef::from_raw(context.operation()).ok()?;
     let grant = context.grants().find(|g| g.slot == slot && g.kind == 1)?;
-    Some(Endpoint::new(EndpointRef::from_raw(grant.object).ok()?, operation))
+    Some(Endpoint::new(
+        EndpointRef::from_raw(grant.object).ok()?,
+        operation,
+    ))
 }
 
 fn read_failure(status: Status) -> i32 {
@@ -306,12 +309,29 @@ fn net_probe(context: &ChildContext) -> i32 {
         return USAGE;
     };
     let requests: [(&str, NetRequest); 7] = [
-        ("resolve", NetRequest::Resolve { hostname: "10.0.2.2" }),
-        ("tcp-connect", NetRequest::TcpConnect { addr: [10, 0, 2, 2], port: 9 }),
+        (
+            "resolve",
+            NetRequest::Resolve {
+                hostname: "10.0.2.2",
+            },
+        ),
+        (
+            "tcp-connect",
+            NetRequest::TcpConnect {
+                addr: [10, 0, 2, 2],
+                port: 9,
+            },
+        ),
         ("udp-create", NetRequest::UdpCreate),
         ("udp-bind", NetRequest::UdpBind { cap_id: 0, port: 0 }),
         ("tcp-listen", NetRequest::TcpListen { port: 9 }),
-        ("multicast-join", NetRequest::MulticastJoin { cap_id: 0, group: [239, 255, 0, 1] }),
+        (
+            "multicast-join",
+            NetRequest::MulticastJoin {
+                cap_id: 0,
+                group: [239, 255, 0, 1],
+            },
+        ),
         ("l2-send", NetRequest::L2Send { data: &PROBE_FRAME }),
     ];
     let mut net = NetRef::new();
@@ -344,7 +364,8 @@ fn config_probe(context: &ChildContext) -> i32 {
         _ => return USAGE,
     };
     let mut reply = [0u8; IPC_BUF_SIZE];
-    let result = match ConfigRef::new().call::<ConfigRequest, ConfigResponse>(&request, &mut reply) {
+    let result = match ConfigRef::new().call::<ConfigRequest, ConfigResponse>(&request, &mut reply)
+    {
         Ok(ConfigResponse::Ok) => String::from("ok"),
         Ok(ConfigResponse::Err(CONFIG_ERR_DENIED)) => String::from("denied"),
         Ok(ConfigResponse::Value(v)) => format!("value:{v}"),

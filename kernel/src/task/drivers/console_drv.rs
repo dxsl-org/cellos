@@ -81,8 +81,10 @@ impl viConsole {
                     Route::Buffer(c) => {
                         if self.buffer.len() < Self::MAX_BUFFERED {
                             #[cfg(cellos_p01_trace)]
-                            let _semantic = crate::memory::heap::p01_owner::creation(None,
-                                crate::memory::heap::p01_owner::DRIVER_SHARED);
+                            let _semantic = crate::memory::heap::p01_owner::creation(
+                                None,
+                                crate::memory::heap::p01_owner::DRIVER_SHARED,
+                            );
                             self.buffer.push_back(c);
                         }
                     }
@@ -266,7 +268,6 @@ fn relay_evdev_to_input(input_tid: usize, opcode: u8, code: u32, value: i32) -> 
     msg[5..9].copy_from_slice(&(value as u32).to_le_bytes());
     crate::task::ipc_post_nonblock(KERNEL_SENDER, input_tid, &msg[..9]).is_ok()
 }
-
 
 pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {
     buffer: VecDeque::new(),

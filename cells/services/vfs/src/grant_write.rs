@@ -69,7 +69,9 @@ pub(crate) fn write<'a>(
     }
 
     let old = vfs.read_to_vec(&path);
-    if !vfs.healthy(&path) { return VfsResponse::Err(ERR_IO); }
+    if !vfs.healthy(&path) {
+        return VfsResponse::Err(ERR_IO);
+    }
     if old.len() != file_len {
         return VfsResponse::Err(ERR_IO);
     }

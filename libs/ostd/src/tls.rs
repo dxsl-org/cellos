@@ -76,7 +76,11 @@ pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
         Ok(_) => {
             let count = u32::from_le_bytes(reply) as usize;
             // The service reserves u32::MAX for errors, never byte progress.
-            if count <= payload_len { count } else { 0 }
+            if count <= payload_len {
+                count
+            } else {
+                0
+            }
         }
         _ => 0,
     }
@@ -87,17 +91,25 @@ pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
 /// Returns `Ok(0)` only for clean EOF. Service errors and malformed frames
 /// remain errors; unavailable transport data stays pending in the NET service.
 pub(crate) fn parse_tls_read_reply(reply: &[u8], buf: &mut [u8]) -> crate::ViResult<usize> {
-    if reply.len() < 2 { return Err(crate::ViError::IO); }
+    if reply.len() < 2 {
+        return Err(crate::ViError::IO);
+    }
     let declared_len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
-    if declared_len == u16::MAX as usize { return Err(crate::ViError::IO); }
+    if declared_len == u16::MAX as usize {
+        return Err(crate::ViError::IO);
+    }
     let available = reply.len() - 2;
-    if declared_len > buf.len() || declared_len > available { return Err(crate::ViError::IO); }
+    if declared_len > buf.len() || declared_len > available {
+        return Err(crate::ViError::IO);
+    }
     buf[..declared_len].copy_from_slice(&reply[2..2 + declared_len]);
     Ok(declared_len)
 }
 
 pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> crate::ViResult<usize> {
-    if buf.is_empty() { return Ok(0); }
+    if buf.is_empty() {
+        return Ok(0);
+    }
     // Wire format: [0x32][cap:8 LE][buf_len:4 LE]
     let mut msg = [0u8; 13];
     msg[0] = TLS_RECV;

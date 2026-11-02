@@ -14,8 +14,7 @@ ostd::cell_main!(cell_main);
 ///
 /// Never returns if the host accepts the shutdown request.
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| ostd::syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| ostd::syscall::sys_exit(1));
     let deadline = match ostd::session::monotonic_ns()
         .ok()
         .and_then(|now| now.checked_add(30_000_000_000))
@@ -44,4 +43,3 @@ fn cell_main() {
 
 /// How long the shutdown message gets to reach the console before power-off.
 const RELAY_WINDOW_NS: u64 = 300_000_000;
-

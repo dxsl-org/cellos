@@ -128,7 +128,8 @@ pub fn handle_request(
                 send_typed(sender, NetResponse::Err(0xFF));
                 return;
             }
-            if table.is_owner(cap, owner) && tls_table.contains_key(&cap)
+            if table.is_owner(cap, owner)
+                && tls_table.contains_key(&cap)
                 && !matches!(req, NetRequest::TcpClose { .. })
             {
                 send_typed(sender, NetResponse::Err(0xFF));
@@ -146,7 +147,17 @@ pub fn handle_request(
         }
         Err(_) if buf.first().copied().unwrap_or(0) >= TLS_CLOSE_OP => {
             iface.poll(now_instant(), device, sockets);
-            handle_tls_raw(buf, sender, owner, iface, device, sockets, table, tls_table, tls_pending);
+            handle_tls_raw(
+                buf,
+                sender,
+                owner,
+                iface,
+                device,
+                sockets,
+                table,
+                tls_table,
+                tls_pending,
+            );
             iface.poll(now_instant(), device, sockets);
         }
         _ => {}

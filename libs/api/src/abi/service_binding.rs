@@ -96,7 +96,10 @@ mod tests {
     fn record_is_fixed_and_rejects_invalid_values() {
         let binding = ServiceBinding::new(9, 3, 41);
         assert_eq!(core::mem::size_of::<ServiceBinding>(), SERVICE_BINDING_LEN);
-        assert_eq!(ServiceBinding::from_bytes(&binding.to_bytes()), Some(binding));
+        assert_eq!(
+            ServiceBinding::from_bytes(&binding.to_bytes()),
+            Some(binding)
+        );
         assert!(ServiceBinding::from_bytes(&[0; SERVICE_BINDING_LEN]).is_none());
     }
 

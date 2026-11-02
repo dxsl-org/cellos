@@ -374,9 +374,7 @@ pub fn parse_report_descriptor(data: &[u8]) -> HidReportMap {
 
 /// Classify the innermost recognised collection in the open stack.
 fn classify_collection(open: &[(u32, u32)]) -> HidCollection {
-    use crate::keymap::{
-        GD_KEYBOARD, GD_MOUSE, GD_POINTER, PAGE_CONSUMER, PAGE_GENERIC_DESKTOP,
-    };
+    use crate::keymap::{GD_KEYBOARD, GD_MOUSE, GD_POINTER, PAGE_CONSUMER, PAGE_GENERIC_DESKTOP};
     for (page, usage) in open.iter().rev() {
         match (*page, *usage) {
             (PAGE_GENERIC_DESKTOP, GD_KEYBOARD) => return HidCollection::Keyboard,

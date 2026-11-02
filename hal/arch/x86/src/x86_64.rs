@@ -111,12 +111,17 @@ fn cpu_feature_policy() -> usize {
     let cet = cet::detect();
     let pku = pku::detect();
     let protect = protect::detect();
-    1 | ((leaf1.edx & ((1 << 24) | (1 << 25) | (1 << 26)) == ((1 << 24) | (1 << 25) | (1 << 26))) as usize) << 1
-        | (cet.ibt as usize) << 2 | (cet.shstk as usize) << 3
-        | (pku.pku as usize) << 4 | (pku.pks as usize) << 5
+    1 | ((leaf1.edx & ((1 << 24) | (1 << 25) | (1 << 26)) == ((1 << 24) | (1 << 25) | (1 << 26)))
+        as usize)
+        << 1
+        | (cet.ibt as usize) << 2
+        | (cet.shstk as usize) << 3
+        | (pku.pku as usize) << 4
+        | (pku.pks as usize) << 5
         | (domain::pcid_supported() as usize) << 6
         | (domain::invpcid_supported() as usize) << 7
-        | (protect.smep as usize) << 8 | (protect.smap as usize) << 9
+        | (protect.smep as usize) << 8
+        | (protect.smap as usize) << 9
         | (protect.umip as usize) << 10
 }
 
@@ -246,20 +251,30 @@ pub fn publish_boot_cpu_policy() {
 #[cfg(target_arch = "x86_64")]
 pub unsafe fn init_secondary_cpu(logical: usize, lapic_id: u32, kernel_cr3: usize) -> bool {
     core::arch::asm!("cli", options(nomem, nostack));
-    if logical == 0 || logical >= syscall::MAX_CPUS || kernel_cr3 == 0
-        || kernel_cr3 & 0xfff != 0 || domain::kernel_cr3() != kernel_cr3
-        || apic::check_x2apic() {
+    if logical == 0
+        || logical >= syscall::MAX_CPUS
+        || kernel_cr3 == 0
+        || kernel_cr3 & 0xfff != 0
+        || domain::kernel_cr3() != kernel_cr3
+        || apic::check_x2apic()
+    {
         return false;
     }
     // No per-task SSP migration substrate exists: never share the BSP SSP.
-    if cfg!(feature = "cet-shadow-stack") { return false; }
+    if cfg!(feature = "cet-shadow-stack") {
+        return false;
+    }
     let policy = CPU_FEATURE_POLICY.load(Ordering::Acquire);
-    if policy == 0 || policy & 2 == 0 || policy != cpu_feature_policy() { return false; }
+    if policy == 0 || policy & 2 == 0 || policy != cpu_feature_policy() {
+        return false;
+    }
     core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack));
     syscall::install_cpu(logical);
     init_sse();
     gdt::init();
-    if !idt::load_current_cpu() { return false; }
+    if !idt::load_current_cpu() {
+        return false;
+    }
     cet::init_kernel_cet();
     if !pku::init_secondary() || !domain::init_secondary_pcid() || !protect::init_cpu() {
         return false;
@@ -424,7 +439,10 @@ impl Arch for X86_64Arch {
         cet::init_kernel_cet(); // LAYER2-CET-INIT — must follow idt (registers #CP vector 21)
         pku::init(); // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
-        assert!(protect::init_cpu(), "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU");
+        assert!(
+            protect::init_cpu(),
+            "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU"
+        );
         apic::init_lapic();
         publish_boot_cpu_policy();
     }

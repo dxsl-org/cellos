@@ -207,7 +207,11 @@ impl FsBackend for RamFsBackend {
     fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
         let node = self.find_node(path).filter(|node| node.is_dir)?;
         let entries = node.children.iter().map(|(name, child)| {
-            let kind = if child.is_dir { EntryKind::Dir } else { EntryKind::File };
+            let kind = if child.is_dir {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
             Ok((kind, name.as_bytes()))
         });
         fill_page(entries, start, out)

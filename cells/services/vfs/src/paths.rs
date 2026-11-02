@@ -80,9 +80,13 @@ pub(crate) fn write_file<'a>(
     } else {
         None
     };
-    if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
+    if !vfs.healthy(path) {
+        return api::ipc::VfsResponse::Err(ERR_IO);
+    }
     let old_size = vfs.file_size(path);
-    if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
+    if !vfs.healthy(path) {
+        return api::ipc::VfsResponse::Err(ERR_IO);
+    }
     let new_size = content.len() as u64;
     let refunded_to_caller = if vfs.quota.writer_of(path) == Some(caller.cell) {
         old_size
@@ -136,9 +140,13 @@ pub(crate) fn unlink_file<'a>(
     } else {
         None
     };
-    if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
+    if !vfs.healthy(path) {
+        return api::ipc::VfsResponse::Err(ERR_IO);
+    }
     let file_size = vfs.file_size(path);
-    if !vfs.healthy(path) { return api::ipc::VfsResponse::Err(ERR_IO); }
+    if !vfs.healthy(path) {
+        return api::ipc::VfsResponse::Err(ERR_IO);
+    }
     if vfs.unlink(path) {
         vfs.quota.release_path(path, file_size);
         api::ipc::VfsResponse::Ok

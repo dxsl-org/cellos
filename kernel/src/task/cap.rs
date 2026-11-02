@@ -521,8 +521,14 @@ impl CapSet {
     /// not P-TRUST.
     fn with_path_net_rights(mut self, path: &str) -> CapSet {
         let (resolve, connect, listen, l2) = match path {
-            "/bin/curl" | "/bin/wget" | "/bin/mqtt" | "/bin/ocel" | "/bin/llm-gateway"
-            | "/bin/https-demo" | "/bin/robot-demo" | "/bin/cellbox-ssh"
+            "/bin/curl"
+            | "/bin/wget"
+            | "/bin/mqtt"
+            | "/bin/ocel"
+            | "/bin/llm-gateway"
+            | "/bin/https-demo"
+            | "/bin/robot-demo"
+            | "/bin/cellbox-ssh"
             | "/bin/posix-shim-test" => (true, true, false, false),
             "/bin/nc" | "/bin/net-broker" => (true, true, true, false),
             "/bin/httpd" | "/bin/sshd" => (false, false, true, false),
@@ -1218,7 +1224,11 @@ mod tests {
         // The request is still bounded: an EMPTY ceiling (the sandbox arm) or a
         // ceiling without them drops all three.
         assert_eq!(
-            observe_mutate(CapSet::EMPTY.with_path_caps("/bin/x").intersect(CapSet::EMPTY)),
+            observe_mutate(
+                CapSet::EMPTY
+                    .with_path_caps("/bin/x")
+                    .intersect(CapSet::EMPTY)
+            ),
             (false, false, false)
         );
     }
@@ -1312,7 +1322,11 @@ mod tests {
             assert!(!CapSet::EMPTY.with_path_caps(path).config_write, "{path}");
         }
         let request = CapSet::EMPTY.with_path_caps("/bin/cellbox");
-        assert!(!request.intersect(CapSet::LEGACY_OBSERVE_MUTATE).config_write);
+        assert!(
+            !request
+                .intersect(CapSet::LEGACY_OBSERVE_MUTATE)
+                .config_write
+        );
         assert!(request.intersect(CapSet::ALL).config_write);
         assert!(!CapSet::path_mints_ptrust("/bin/cellbox"));
         assert!(request.without_ptrust().config_write);

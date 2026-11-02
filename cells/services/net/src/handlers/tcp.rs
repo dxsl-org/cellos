@@ -1,5 +1,7 @@
 use alloc::collections::BTreeMap;
-use api::ipc::{net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX};
+use api::ipc::{
+    net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
+};
 use smoltcp::{
     iface::{Interface, SocketSet},
     socket::tcp,
@@ -49,11 +51,15 @@ pub(crate) fn handle_tcp_request(
             // client never received. Legacy callers still get their reply.
             let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
             let delivered = api::ipc::encode(&R::CapId(cap as u32), &mut response)
-                .ok().is_some_and(|bytes| {
+                .ok()
+                .is_some_and(|bytes| {
                     if let Some(token) = ostd::ipc::current() {
                         ostd::ipc::reply(token, bytes).is_ok()
                     } else {
-                        matches!(ostd::syscall::sys_send(sender, bytes), ostd::syscall::SyscallResult::Ok(_))
+                        matches!(
+                            ostd::syscall::sys_send(sender, bytes),
+                            ostd::syscall::SyscallResult::Ok(_)
+                        )
                     }
                 });
             if !delivered {
@@ -206,7 +212,14 @@ pub(crate) fn handle_tcp_request(
                     let limit = (*buf_len as usize).min(NET_TCP_INLINE_DATA_MAX);
                     let _ = s.recv(|data| {
                         let n = data.len().min(limit);
-                        send_typed(sender, if n > 0 { R::Data(&data[..n]) } else { R::NotReady });
+                        send_typed(
+                            sender,
+                            if n > 0 {
+                                R::Data(&data[..n])
+                            } else {
+                                R::NotReady
+                            },
+                        );
                         (n, ())
                     });
                 } else if !s.may_recv() {
@@ -231,11 +244,14 @@ pub(crate) fn handle_tcp_request(
                     send_typed(sender, R::NotReady);
                 } else {
                     let n = s.send_slice(data).unwrap_or(0);
-                    send_typed(sender, if n == 0 && !data.is_empty() {
-                        R::NotReady
-                    } else {
-                        R::WriteProgress(n as u32)
-                    });
+                    send_typed(
+                        sender,
+                        if n == 0 && !data.is_empty() {
+                            R::NotReady
+                        } else {
+                            R::WriteProgress(n as u32)
+                        },
+                    );
                 }
             } else {
                 send_typed(sender, R::Err(0xFF));
@@ -260,7 +276,11 @@ pub(crate) fn handle_tcp_request(
             }
             true
         }
-        NetRequest::TcpReady { interests, cursor, wait } => {
+        NetRequest::TcpReady {
+            interests,
+            cursor,
+            wait,
+        } => {
             if *wait {
                 // The runtime owns deferred waits; a direct dispatch cannot
                 // retain the receive token and must refuse rather than poll.
@@ -270,7 +290,13 @@ pub(crate) fn handle_tcp_request(
                     Ok((events, next_cursor)) => {
                         let mut packed = [0u8; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES];
                         let bytes = pack_events(&events, &mut packed);
-                        send_typed(sender, R::TcpReady { events: bytes, next_cursor });
+                        send_typed(
+                            sender,
+                            R::TcpReady {
+                                events: bytes,
+                                next_cursor,
+                            },
+                        );
                     }
                     Err(()) => send_typed(sender, R::Err(0xFF)),
                 }
@@ -309,8 +335,11 @@ pub(crate) fn readiness(
     sockets: &mut SocketSet<'_>,
     table: &SocketTable,
 ) -> Result<(ReadyEvents, u16), ()> {
-    if interests.is_empty() || interests.len() > MAX_INTERESTS * api::ipc::NET_READY_RECORD_BYTES
-        || interests.len() % api::ipc::NET_READY_RECORD_BYTES != 0
+    if interests.is_empty()
+        || interests.len() > MAX_INTERESTS * api::ipc::NET_READY_RECORD_BYTES
+        || !interests
+            .len()
+            .is_multiple_of(api::ipc::NET_READY_RECORD_BYTES)
     {
         return Err(());
     }
@@ -318,7 +347,13 @@ pub(crate) fn readiness(
     for raw in interests.chunks_exact(api::ipc::NET_READY_RECORD_BYTES) {
         let interest = TcpInterest::decode(raw).ok_or(())?;
         if interest.mask == 0
-            || interest.mask & !(net_ready::ACCEPT | net_ready::READ | net_ready::WRITE | net_ready::EOF | net_ready::ERROR) != 0
+            || interest.mask
+                & !(net_ready::ACCEPT
+                    | net_ready::READ
+                    | net_ready::WRITE
+                    | net_ready::EOF
+                    | net_ready::ERROR)
+                != 0
             || table.is_udp(interest.cap_id as u64, owner)
             || table.get(interest.cap_id as u64, owner).is_none()
         {
@@ -329,7 +364,11 @@ pub(crate) fn readiness(
     let start = cursor as usize % count;
     let mut next = start;
     for _ in 0..count {
-        let interest = TcpInterest::decode(&interests[next * api::ipc::NET_READY_RECORD_BYTES..(next + 1) * api::ipc::NET_READY_RECORD_BYTES]).ok_or(())?;
+        let interest = TcpInterest::decode(
+            &interests[next * api::ipc::NET_READY_RECORD_BYTES
+                ..(next + 1) * api::ipc::NET_READY_RECORD_BYTES],
+        )
+        .ok_or(())?;
         let cap = interest.cap_id as u64;
         let handle = table.get(cap, owner).ok_or(())?;
         let socket = sockets.get_mut::<tcp::Socket>(handle);
@@ -361,7 +400,12 @@ pub(crate) fn readiness(
             }
         }
         if ready != 0 {
-            events.push(TcpReadyEvent { cap_id: interest.cap_id, ready }).map_err(|_| ())?;
+            events
+                .push(TcpReadyEvent {
+                    cap_id: interest.cap_id,
+                    ready,
+                })
+                .map_err(|_| ())?;
         }
         next = (next + 1) % count;
         if events.len() == READY_PAGE {
@@ -376,7 +420,10 @@ pub(crate) fn pack_events<'a>(
     out: &'a mut [u8; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES],
 ) -> &'a [u8] {
     let len = events.len() * api::ipc::NET_READY_RECORD_BYTES;
-    for (event, chunk) in events.iter().zip(out[..len].chunks_exact_mut(api::ipc::NET_READY_RECORD_BYTES)) {
+    for (event, chunk) in events
+        .iter()
+        .zip(out[..len].chunks_exact_mut(api::ipc::NET_READY_RECORD_BYTES))
+    {
         chunk[..4].copy_from_slice(&event.cap_id.to_le_bytes());
         chunk[4] = event.ready;
     }

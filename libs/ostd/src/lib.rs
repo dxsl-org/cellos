@@ -42,6 +42,8 @@ pub mod args;
 pub use args::args;
 pub use args::check_help;
 pub use args::set_spawn_argv;
+/// Canonical immutable child invocation context.
+pub mod child_context;
 /// `cell_main!` — the `#[no_mangle]` entry point, F1-compatible.
 pub mod entry;
 pub mod fast_ipc;
@@ -52,13 +54,11 @@ pub mod ipc;
 pub mod mmio;
 /// Zero-trap fastpath SPSC ring channel for SAS inter-cell communication.
 pub mod ring_channel;
+/// Authenticated generation-bound streams and prepared child publication.
+pub mod session;
 pub mod startup;
 pub mod sync;
 pub mod syscall;
-/// Authenticated generation-bound streams and prepared child publication.
-pub mod session;
-/// Canonical immutable child invocation context.
-pub mod child_context;
 
 /// Allocator hooks (to be implemented).
 pub mod heap;

@@ -216,8 +216,14 @@ mod tests {
         assert_eq!(release_waiters_for(901), 1);
         assert!(!has_waiter(60));
         assert_eq!(get_mmio_base(60), 0);
-        assert!(!take_pending(60), "a replacement must not inherit the dead owner's wake");
-        assert!(register_waiter(60, 903, 0x3000), "released line is claimable again");
+        assert!(
+            !take_pending(60),
+            "a replacement must not inherit the dead owner's wake"
+        );
+        assert!(
+            register_waiter(60, 903, 0x3000),
+            "released line is claimable again"
+        );
 
         assert!(has_waiter(61));
         assert_eq!(get_mmio_base(61), 0x2000);

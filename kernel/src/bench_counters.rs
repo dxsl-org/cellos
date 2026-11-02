@@ -99,7 +99,9 @@ static LAST_EXIT_NS: AtomicU64 = AtomicU64::new(0);
 /// The calling task entered the Exit syscall. Atomics only: no log, lock or
 /// allocation on the victim-attributed path.
 pub(crate) fn note_exit(tid: usize) {
-    let Some(ns) = crate::task::telemetry::monotonic_ns() else { return };
+    let Some(ns) = crate::task::telemetry::monotonic_ns() else {
+        return;
+    };
     LAST_EXIT_TID.store(NO_TID, Ordering::Release);
     LAST_EXIT_NS.store(ns, Ordering::Release);
     LAST_EXIT_TID.store(tid as u64, Ordering::Release);
@@ -120,10 +122,23 @@ fn exit_ns(tid: usize) -> Option<u64> {
 /// `exit_ns` is the tid's own Exit-syscall time when still recorded, so a
 /// retirement span is computed from one guest clock; live tasks print unknown.
 pub(crate) fn milestone(event: &str, tid: usize) {
-    let Some(now) = crate::task::telemetry::monotonic_ns() else { return };
+    let Some(now) = crate::task::telemetry::monotonic_ns() else {
+        return;
+    };
     match exit_ns(tid) {
-        Some(exit) => log::warn!("[bench-ts] {} tid={} ns={} exit_ns={}", event, tid, now, exit),
-        None => log::warn!("[bench-ts] {} tid={} ns={} exit_ns=unknown", event, tid, now),
+        Some(exit) => log::warn!(
+            "[bench-ts] {} tid={} ns={} exit_ns={}",
+            event,
+            tid,
+            now,
+            exit
+        ),
+        None => log::warn!(
+            "[bench-ts] {} tid={} ns={} exit_ns=unknown",
+            event,
+            tid,
+            now
+        ),
     }
 }
 

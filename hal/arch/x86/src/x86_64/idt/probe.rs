@@ -136,7 +136,12 @@ pub(super) fn handle_entry(frame: &mut EntryFrame) -> bool {
             true
         }
         ARMED_GP => {
-            validate_entry(frame, 13, 0xfffc, core::ptr::addr_of!(X86_IDT_GP_CALLER_RSP));
+            validate_entry(
+                frame,
+                13,
+                0xfffc,
+                core::ptr::addr_of!(X86_IDT_GP_CALLER_RSP),
+            );
             frame.rip = RECOVERY_RIP.load(Ordering::Acquire);
             transition(ARMED_GP, SAW_GP);
             true

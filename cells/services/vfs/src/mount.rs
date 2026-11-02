@@ -43,7 +43,10 @@ impl MountTable {
     /// `dispatch`; structure ("is this backend writable at all") is the backend
     /// itself — e.g. `BinOverlay` returns `false` from every mutating method.
     pub fn mount(&mut self, prefix: &str, backend: usize) {
-        self.entries.push(MountEntry { prefix: prefix.into(), backend });
+        self.entries.push(MountEntry {
+            prefix: prefix.into(),
+            backend,
+        });
     }
 
     /// Boundary-aware prefix match: the next char after the prefix must be `/`
@@ -138,7 +141,10 @@ mod tests {
     #[test]
     fn runtime_named_secondary_mounts_resolve_and_list_under_mnt() {
         let mut table = MountTable::new();
-        for (index, prefix) in ["/", "/mnt/sd", "/mnt/disk/pci-00-1f-2"].into_iter().enumerate() {
+        for (index, prefix) in ["/", "/mnt/sd", "/mnt/disk/pci-00-1f-2"]
+            .into_iter()
+            .enumerate()
+        {
             table.mount(&alloc::format!("{prefix}"), index);
         }
         assert_eq!(table.resolve_idx("/mnt/disk/pci-00-1f-2/f"), Some(2));

@@ -39,13 +39,18 @@ pub fn producer_category(argv: &[String]) -> Category {
 /// (no `--records` flag or another command); `Some(Err(2))` reports bad arguments after the
 /// usage line has been written to stderr. `rg` and `top` poll the job's interrupt `latch` while
 /// they work (`rg` while it walks, `top` while it waits between frames); `ps`/`ls` ignore it.
-pub fn row_producer(argv: &[String], latch: &Rc<InterruptLatch>) -> Option<Result<Box<dyn RowSource>, i32>> {
+pub fn row_producer(
+    argv: &[String],
+    latch: &Rc<InterruptLatch>,
+) -> Option<Result<Box<dyn RowSource>, i32>> {
     let command = argv.first()?.as_str();
     if command == "rg" {
         return Some(match crate::rg::args::parse(argv) {
             Ok(args) if !args.stdin => crate::rg::producer(&args, latch),
             Ok(_) => {
-                crate::executor::shell_stderrln("rg: `-` needs byte input: pipe bytes into it or redirect `< FILE`");
+                crate::executor::shell_stderrln(
+                    "rg: `-` needs byte input: pipe bytes into it or redirect `< FILE`",
+                );
                 Err(2)
             }
             Err(usage) => {
@@ -120,7 +125,11 @@ impl PsSource {
             }
             index += 1;
         }
-        Ok(Box::new(PsSource { filter_tid, rows: None, done: false }))
+        Ok(Box::new(PsSource {
+            filter_tid,
+            rows: None,
+            done: false,
+        }))
     }
 }
 
@@ -128,7 +137,8 @@ impl RowSource for PsSource {
     fn next_item(&mut self) -> Result<Option<Item>, PipelineError> {
         if !self.done {
             self.done = true;
-            let frame = crate::top::capture_tasks(self.filter_tid).map_err(|error| telemetry_error("ps", error))?;
+            let frame = crate::top::capture_tasks(self.filter_tid)
+                .map_err(|error| telemetry_error("ps", error))?;
             self.rows = Some(task_rows(frame));
         }
         Ok(self.rows.as_mut().and_then(Iterator::next).map(Item::Row))
@@ -173,7 +183,11 @@ impl LsSource {
     fn fill(&mut self) -> Result<(), PipelineError> {
         self.done = true;
         let Some(entries) = crate::commands::ls_collect(&self.path, true, self.all) else {
-            let shown = if self.path.is_empty() { "/" } else { self.path.as_str() };
+            let shown = if self.path.is_empty() {
+                "/"
+            } else {
+                self.path.as_str()
+            };
             return Err(PipelineError::Source(alloc::format!(
                 "ls: cannot access '{shown}': No such file or directory"
             )));
@@ -222,7 +236,10 @@ struct TopSource {
 }
 
 impl TopSource {
-    fn from_args(args: &[&str], latch: &Rc<InterruptLatch>) -> Result<Box<dyn RowSource>, &'static str> {
+    fn from_args(
+        args: &[&str],
+        latch: &Rc<InterruptLatch>,
+    ) -> Result<Box<dyn RowSource>, &'static str> {
         let mut frames: Option<usize> = None;
         let mut rest: Vec<&str> = Vec::new();
         let mut index = 0;
@@ -267,7 +284,9 @@ impl TopSource {
         }
         let view = self.options.view;
         let seed = self.capture.is_none();
-        let (reader, sampler) = self.capture.get_or_insert_with(|| (TelemetryReader::new(view), Sampler::new()));
+        let (reader, sampler) = self
+            .capture
+            .get_or_insert_with(|| (TelemetryReader::new(view), Sampler::new()));
         if seed {
             reader.capture(sampler, view)?;
         }

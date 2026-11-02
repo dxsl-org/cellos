@@ -5,8 +5,8 @@
 
 use cellos_fs::format::{INODES_PER_BLOCK, INODE_PAYLOAD_SIZE};
 use cellos_fs::{
-    BlockDevice, CellosFs, DirEntryRecord, Extent, FsError, InodeRecord, Superblock,
-    BLOCK_SIZE, INODE_MODE_DIR, INODE_SIZE,
+    BlockDevice, CellosFs, DirEntryRecord, Extent, FsError, InodeRecord, Superblock, BLOCK_SIZE,
+    INODE_MODE_DIR, INODE_SIZE,
 };
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -26,8 +26,16 @@ enum Persistence {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Edge {
-    Sector { write: usize, block: u64, sector: usize, after: bool },
-    Flush { barrier: usize, after: bool },
+    Sector {
+        write: usize,
+        block: u64,
+        sector: usize,
+        after: bool,
+    },
+    Flush {
+        barrier: usize,
+        after: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -62,9 +70,15 @@ impl SectorDisk {
     fn from_image(image: Image, persistence: Persistence) -> Self {
         assert!((16..=MAX_IMAGE_BLOCKS).contains(&image.len()));
         Self(Rc::new(RefCell::new(Medium {
-            volatile: image.clone(), durable: image, persistence,
-            calls: Calls::default(), trace: Vec::new(), cut: None,
-            fired: false, stopped: false, unreadable: None,
+            volatile: image.clone(),
+            durable: image,
+            persistence,
+            calls: Calls::default(),
+            trace: Vec::new(),
+            cut: None,
+            fired: false,
+            stopped: false,
+            unreadable: None,
         })))
     }
 
@@ -77,9 +91,15 @@ impl SectorDisk {
         m.stopped = false;
     }
 
-    fn image(&self) -> Image { self.0.borrow().durable.clone() }
-    fn calls(&self) -> Calls { self.0.borrow().calls }
-    fn trace(&self) -> Vec<Edge> { self.0.borrow().trace.clone() }
+    fn image(&self) -> Image {
+        self.0.borrow().durable.clone()
+    }
+    fn calls(&self) -> Calls {
+        self.0.borrow().calls
+    }
+    fn trace(&self) -> Vec<Edge> {
+        self.0.borrow().trace.clone()
+    }
 
     fn crash(&self) {
         let mut m = self.0.borrow_mut();
@@ -107,8 +127,13 @@ impl BlockDevice for SectorDisk {
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> Result<(), FsError> {
         let mut m = self.0.borrow_mut();
         m.calls.reads += 1;
-        if m.stopped || m.unreadable == Some(block) { return Err(FsError::IoError); }
-        let source = m.volatile.get(block as usize).ok_or(FsError::PartitionOverflow)?;
+        if m.stopped || m.unreadable == Some(block) {
+            return Err(FsError::IoError);
+        }
+        let source = m
+            .volatile
+            .get(block as usize)
+            .ok_or(FsError::PartitionOverflow)?;
         buf.copy_from_slice(source);
         Ok(())
     }
@@ -116,18 +141,32 @@ impl BlockDevice for SectorDisk {
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> Result<(), FsError> {
         let mut m = self.0.borrow_mut();
         m.calls.writes += 1;
-        if m.stopped { return Err(FsError::IoError); }
-        if block >= m.volatile.len() as u64 { return Err(FsError::PartitionOverflow); }
+        if m.stopped {
+            return Err(FsError::IoError);
+        }
+        if block >= m.volatile.len() as u64 {
+            return Err(FsError::PartitionOverflow);
+        }
         let write = m.calls.writes;
         for sector in 0..SECTORS {
-            m.edge(Edge::Sector { write, block, sector, after: false })?;
+            m.edge(Edge::Sector {
+                write,
+                block,
+                sector,
+                after: false,
+            })?;
             let range = sector * SECTOR..(sector + 1) * SECTOR;
             m.volatile[block as usize][range.clone()].copy_from_slice(&buf[range.clone()]);
             if m.persistence == Persistence::WriteThrough {
                 m.durable[block as usize][range.clone()].copy_from_slice(&buf[range]);
             }
             m.calls.sectors += 1;
-            m.edge(Edge::Sector { write, block, sector, after: true })?;
+            m.edge(Edge::Sector {
+                write,
+                block,
+                sector,
+                after: true,
+            })?;
         }
         Ok(())
     }
@@ -135,15 +174,25 @@ impl BlockDevice for SectorDisk {
     fn flush(&mut self) -> Result<(), FsError> {
         let mut m = self.0.borrow_mut();
         m.calls.flushes += 1;
-        if m.stopped { return Err(FsError::IoError); }
+        if m.stopped {
+            return Err(FsError::IoError);
+        }
         let barrier = m.calls.flushes;
-        m.edge(Edge::Flush { barrier, after: false })?;
+        m.edge(Edge::Flush {
+            barrier,
+            after: false,
+        })?;
         m.durable = m.volatile.clone();
-        m.edge(Edge::Flush { barrier, after: true })?;
+        m.edge(Edge::Flush {
+            barrier,
+            after: true,
+        })?;
         Ok(())
     }
 
-    fn total_blocks(&self) -> u64 { self.0.borrow().volatile.len() as u64 }
+    fn total_blocks(&self) -> u64 {
+        self.0.borrow().volatile.len() as u64
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -170,31 +219,49 @@ fn observe(fs: &mut Fs) -> Graph {
             let mut eof = [0xA5; 1];
             assert_eq!(fs.read_file(&path, inode.size, &mut eof).unwrap(), 0);
         }
-        nodes.push(Node { path: path.clone(), inode: inode.to_bytes(), bytes });
+        nodes.push(Node {
+            path: path.clone(),
+            inode: inode.to_bytes(),
+            bytes,
+        });
         if inode.is_dir() {
             let mut children = fs.list_dir(&path).expect("complete namespace enumeration");
             children.sort_by(|a, b| a.0.cmp(&b.0));
             for (name, _, _) in children {
-                let child = if path == "/" { format!("/{name}") } else { format!("{path}/{name}") };
+                let child = if path == "/" {
+                    format!("/{name}")
+                } else {
+                    format!("{path}/{name}")
+                };
                 visit(fs, child, nodes);
             }
         }
     }
     let mut nodes = Vec::new();
     visit(fs, "/".into(), &mut nodes);
-    Graph { sequence: fs.superblock().sequence, next_inode: fs.superblock().next_inode_num, nodes }
+    Graph {
+        sequence: fs.superblock().sequence,
+        next_inode: fs.superblock().next_inode_num,
+        nodes,
+    }
 }
 
 fn roots(image: &Image) -> Vec<(usize, Superblock)> {
-    (0..2).filter_map(|slot| Superblock::from_bytes(&image[slot]).map(|sb| (slot, sb))).collect()
+    (0..2)
+        .filter_map(|slot| Superblock::from_bytes(&image[slot]).map(|sb| (slot, sb)))
+        .collect()
 }
 
 fn inode_from(image: &Image, sb: &Superblock, num: u64) -> InodeRecord {
     let slot = (num as usize - 1) / INODES_PER_BLOCK;
     let index = (num as usize - 1) % INODES_PER_BLOCK;
     let block = &image[sb.inode_blocks[slot] as usize];
-    InodeRecord::from_bytes(block[index * INODE_SIZE..(index + 1) * INODE_SIZE].try_into().unwrap())
-        .expect("fixture inode checksum")
+    InodeRecord::from_bytes(
+        block[index * INODE_SIZE..(index + 1) * INODE_SIZE]
+            .try_into()
+            .unwrap(),
+    )
+    .expect("fixture inode checksum")
 }
 
 fn put_inode(image: &mut Image, sb: &Superblock, mut inode: InodeRecord) {
@@ -211,16 +278,33 @@ fn put_root(image: &mut Image, slot: usize, mut sb: Superblock) {
 }
 
 fn reachable(image: &Image, sb: &Superblock) -> BTreeSet<u64> {
-    fn visit(image: &Image, sb: &Superblock, num: u64, seen: &mut BTreeSet<u64>, blocks: &mut BTreeSet<u64>) {
-        assert!(seen.insert(num), "fixture contains directory alias or cycle");
+    fn visit(
+        image: &Image,
+        sb: &Superblock,
+        num: u64,
+        seen: &mut BTreeSet<u64>,
+        blocks: &mut BTreeSet<u64>,
+    ) {
+        assert!(
+            seen.insert(num),
+            "fixture contains directory alias or cycle"
+        );
         let inode = inode_from(image, sb, num);
         if inode.is_dir() {
-            for entry in inode.payload.chunks_exact(DirEntryRecord::SIZE).take(inode.extent_count as usize) {
+            for entry in inode
+                .payload
+                .chunks_exact(DirEntryRecord::SIZE)
+                .take(inode.extent_count as usize)
+            {
                 let entry = DirEntryRecord::from_bytes(entry.try_into().unwrap()).unwrap();
                 visit(image, sb, entry.inode_num, seen, blocks);
             }
         } else if !inode.is_inline() {
-            for extent in inode.payload.chunks_exact(Extent::SIZE).take(inode.extent_count as usize) {
+            for extent in inode
+                .payload
+                .chunks_exact(Extent::SIZE)
+                .take(inode.extent_count as usize)
+            {
                 let e = Extent::from_bytes(extent.try_into().unwrap());
                 blocks.extend(e.physical_block..e.physical_block + e.block_count as u64);
             }
@@ -233,33 +317,59 @@ fn reachable(image: &Image, sb: &Superblock) -> BTreeSet<u64> {
 
 fn union(image: &Image) -> BTreeSet<u64> {
     let mut blocks = BTreeSet::from([0, 1, 2]);
-    for (_, sb) in roots(image) { blocks.extend(reachable(image, &sb)); }
+    for (_, sb) in roots(image) {
+        blocks.extend(reachable(image, &sb));
+    }
     blocks
 }
 
 fn protected_bytes(image: &Image) -> BTreeMap<u64, [u8; BLOCK_SIZE]> {
-    union(image).into_iter().filter(|b| *b >= 3).map(|b| (b, image[b as usize])).collect()
+    union(image)
+        .into_iter()
+        .filter(|b| *b >= 3)
+        .map(|b| (b, image[b as usize]))
+        .collect()
 }
 
 fn assert_protected(before: &BTreeMap<u64, [u8; BLOCK_SIZE]>, after: &Image, label: &str) {
-    for (&block, bytes) in before { assert_eq!(&after[block as usize], bytes, "{label}: protected block {block}"); }
+    for (&block, bytes) in before {
+        assert_eq!(
+            &after[block as usize], bytes,
+            "{label}: protected block {block}"
+        );
+    }
 }
 
 fn assert_poisoned(fs: &mut Fs, disk: &SectorDisk) {
     let calls = disk.calls();
     assert_eq!(fs.create_file("/denied").err(), Some(FsError::Corrupted));
     assert_eq!(fs.create_dir("/denied").err(), Some(FsError::Corrupted));
-    assert_eq!(fs.write_file("/file", 0, b"denied"), Err(FsError::Corrupted));
+    assert_eq!(
+        fs.write_file("/file", 0, b"denied"),
+        Err(FsError::Corrupted)
+    );
     assert_eq!(fs.replace_file("/file", b"denied"), Err(FsError::Corrupted));
     assert_eq!(fs.unlink("/file"), Err(FsError::Corrupted));
     assert_eq!(fs.rmdir("/empty"), Err(FsError::Corrupted));
     assert_eq!(fs.rename("/file", "/denied"), Err(FsError::Corrupted));
     assert_eq!(fs.sync(), Err(FsError::Corrupted));
-    assert_eq!(disk.calls(), calls, "poison must reject before even a device read");
+    assert_eq!(
+        disk.calls(),
+        calls,
+        "poison must reject before even a device read"
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Scenario { FirstPublication, InlineToExtent, ExtentReplacement, ExtentToInline, Positional, Namespace, TableBoundary }
+enum Scenario {
+    FirstPublication,
+    InlineToExtent,
+    ExtentReplacement,
+    ExtentToInline,
+    Positional,
+    Namespace,
+    TableBoundary,
+}
 
 fn pattern(length: usize, salt: usize) -> Vec<u8> {
     (0..length).map(|i| ((i * 17 + salt) % 251) as u8).collect()
@@ -270,25 +380,33 @@ fn prepare(scenario: Scenario, persistence: Persistence) -> (Fs, SectorDisk) {
     let mut fs = CellosFs::format(disk.clone(), 128).unwrap();
     if !matches!(scenario, Scenario::FirstPublication) {
         fs.create_file("/file").unwrap();
-        fs.replace_file("/file", b"previous-inline-acknowledged").unwrap();
+        fs.replace_file("/file", b"previous-inline-acknowledged")
+            .unwrap();
         fs.create_file("/keep").unwrap();
         fs.replace_file("/keep", b"untouched-acknowledged").unwrap();
         fs.create_dir("/dir").unwrap();
         fs.create_file("/dir/old").unwrap();
-        fs.replace_file("/dir/old", b"namespace-acknowledged").unwrap();
+        fs.replace_file("/dir/old", b"namespace-acknowledged")
+            .unwrap();
         fs.create_dir("/empty").unwrap();
         if matches!(scenario, Scenario::TableBoundary) {
             for index in 0..3 {
                 fs.create_file(&format!("/dir/extra{index}")).unwrap();
-                fs.replace_file(&format!("/dir/extra{index}"), b"second-table-prior").unwrap();
+                fs.replace_file(&format!("/dir/extra{index}"), b"second-table-prior")
+                    .unwrap();
             }
             assert_eq!(fs.lookup("/dir/extra2").unwrap().inode_num, 9);
         }
         fs.sync().unwrap();
-        if matches!(scenario, Scenario::ExtentReplacement | Scenario::ExtentToInline | Scenario::Positional) {
-            fs.replace_file("/file", &pattern(2 * BLOCK_SIZE + 731, 11)).unwrap();
+        if matches!(
+            scenario,
+            Scenario::ExtentReplacement | Scenario::ExtentToInline | Scenario::Positional
+        ) {
+            fs.replace_file("/file", &pattern(2 * BLOCK_SIZE + 731, 11))
+                .unwrap();
         } else {
-            fs.replace_file("/keep", b"second-root-acknowledged").unwrap();
+            fs.replace_file("/keep", b"second-root-acknowledged")
+                .unwrap();
         }
         fs.sync().unwrap();
         assert_eq!(roots(&disk.image()).len(), 2);
@@ -304,10 +422,22 @@ fn transaction(fs: &mut Fs, scenario: Scenario) -> Result<(), FsError> {
             fs.create_file("/file")?;
             fs.replace_file("/file", b"first-durable-content")?;
         }
-        Scenario::InlineToExtent => { fs.replace_file("/file", &pattern(2 * BLOCK_SIZE + 319, 29))?; }
-        Scenario::ExtentReplacement => { fs.replace_file("/file", &pattern(3 * BLOCK_SIZE + 113, 71))?; }
-        Scenario::ExtentToInline => { fs.replace_file("/file", b"replacement-inline-exact")?; }
-        Scenario::Positional => { fs.write_file("/file", (BLOCK_SIZE - 37) as u64, &pattern(BLOCK_SIZE + 79, 101))?; }
+        Scenario::InlineToExtent => {
+            fs.replace_file("/file", &pattern(2 * BLOCK_SIZE + 319, 29))?;
+        }
+        Scenario::ExtentReplacement => {
+            fs.replace_file("/file", &pattern(3 * BLOCK_SIZE + 113, 71))?;
+        }
+        Scenario::ExtentToInline => {
+            fs.replace_file("/file", b"replacement-inline-exact")?;
+        }
+        Scenario::Positional => {
+            fs.write_file(
+                "/file",
+                (BLOCK_SIZE - 37) as u64,
+                &pattern(BLOCK_SIZE + 79, 101),
+            )?;
+        }
         Scenario::TableBoundary => {
             fs.replace_file("/file", &pattern(BLOCK_SIZE + 107, 67))?;
             fs.replace_file("/dir/extra2", b"second-table-successor")?;
@@ -331,11 +461,24 @@ fn validate_golden(trace: &[Edge], calls: Calls, bootstrap: bool) {
     let mut barrier = 0;
     while cursor < trace.len() {
         match trace[cursor] {
-            Edge::Sector { block, sector: 0, after: false, .. } => {
+            Edge::Sector {
+                block,
+                sector: 0,
+                after: false,
+                ..
+            } => {
                 write += 1;
                 for sector in 0..SECTORS {
                     for after in [false, true] {
-                        assert_eq!(trace[cursor], Edge::Sector { write, block, sector, after });
+                        assert_eq!(
+                            trace[cursor],
+                            Edge::Sector {
+                                write,
+                                block,
+                                sector,
+                                after
+                            }
+                        );
                         cursor += 1;
                     }
                 }
@@ -349,8 +492,20 @@ fn validate_golden(trace: &[Edge], calls: Calls, bootstrap: bool) {
             }
             Edge::Flush { after: false, .. } => {
                 barrier += 1;
-                assert_eq!(trace[cursor], Edge::Flush { barrier, after: false });
-                assert_eq!(trace[cursor + 1], Edge::Flush { barrier, after: true });
+                assert_eq!(
+                    trace[cursor],
+                    Edge::Flush {
+                        barrier,
+                        after: false
+                    }
+                );
+                assert_eq!(
+                    trace[cursor + 1],
+                    Edge::Flush {
+                        barrier,
+                        after: true
+                    }
+                );
                 cursor += 2;
             }
             edge => panic!("invalid golden edge {edge:?}"),
@@ -360,13 +515,25 @@ fn validate_golden(trace: &[Edge], calls: Calls, bootstrap: bool) {
     assert_eq!(write, calls.writes);
     assert_eq!(calls.sectors, write * SECTORS);
     assert_eq!(trace.len(), write * SECTORS * 2 + 4);
-    assert!(trace.iter().any(|e| matches!(e, Edge::Sector { block: 2, .. })), "advisory bitmap exercised");
+    assert!(
+        trace
+            .iter()
+            .any(|e| matches!(e, Edge::Sector { block: 2, .. })),
+        "advisory bitmap exercised"
+    );
 }
 
 #[test]
 fn every_sector_and_barrier_edge_preserves_exact_acknowledgement_or_refuses() {
-    let scenarios = [Scenario::FirstPublication, Scenario::InlineToExtent, Scenario::ExtentReplacement,
-        Scenario::ExtentToInline, Scenario::Positional, Scenario::Namespace, Scenario::TableBoundary];
+    let scenarios = [
+        Scenario::FirstPublication,
+        Scenario::InlineToExtent,
+        Scenario::ExtentReplacement,
+        Scenario::ExtentToInline,
+        Scenario::Positional,
+        Scenario::Namespace,
+        Scenario::TableBoundary,
+    ];
     let mut cuts = 0;
     let mut prior_observations = 0;
     let mut successor_observations = 0;
@@ -381,15 +548,33 @@ fn every_sector_and_barrier_edge_preserves_exact_acknowledgement_or_refuses() {
             let trace = disk.trace();
             let calls = disk.calls();
             validate_golden(&trace, calls, false);
-            let candidate_writes: Vec<_> = trace.iter().filter_map(|edge| match edge {
-                Edge::Sector { block, sector: 0, after: false, .. } if *block >= 3 => Some(*block),
-                _ => None,
-            }).collect();
-            assert_eq!(candidate_writes.iter().copied().collect::<BTreeSet<_>>().len(), candidate_writes.len(),
-                "no duplicate assignment of candidate data/table blocks");
+            let candidate_writes: Vec<_> = trace
+                .iter()
+                .filter_map(|edge| match edge {
+                    Edge::Sector {
+                        block,
+                        sector: 0,
+                        after: false,
+                        ..
+                    } if *block >= 3 => Some(*block),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                candidate_writes
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>()
+                    .len(),
+                candidate_writes.len(),
+                "no duplicate assignment of candidate data/table blocks"
+            );
             for edge in &trace {
                 if let Edge::Sector { block, .. } = edge {
-                    assert!(*block <= 2 || !protected.contains_key(block), "candidate allocated protected block {block}");
+                    assert!(
+                        *block <= 2 || !protected.contains_key(block),
+                        "candidate allocated protected block {block}"
+                    );
                 }
             }
             let successor = observe(&mut golden);
@@ -401,7 +586,11 @@ fn every_sector_and_barrier_edge_preserves_exact_acknowledgement_or_refuses() {
                 let (mut fs, fault) = prepare(scenario, persistence);
                 assert_eq!(observe(&mut fs), prior, "deterministic preparation {label}");
                 fault.arm(Some(cut));
-                assert_eq!(transaction(&mut fs, scenario), Err(FsError::IoError), "{label}");
+                assert_eq!(
+                    transaction(&mut fs, scenario),
+                    Err(FsError::IoError),
+                    "{label}"
+                );
                 assert!(fault.0.borrow().fired, "fault edge not reached: {label}");
                 assert_eq!(fault.trace(), trace[..=cut], "golden prefix: {label}");
                 assert_poisoned(&mut fs, &fault);
@@ -409,16 +598,26 @@ fn every_sector_and_barrier_edge_preserves_exact_acknowledgement_or_refuses() {
                 drop(fs);
                 fault.crash();
                 let durable = fault.image();
-                let newest = roots(&durable).into_iter().map(|(_, sb)| sb.sequence).max().unwrap();
+                let newest = roots(&durable)
+                    .into_iter()
+                    .map(|(_, sb)| sb.sequence)
+                    .max()
+                    .unwrap();
                 let before_open = fault.calls();
                 match CellosFs::open(fault.clone()) {
                     Ok(mut recovered) => {
                         let observed = observe(&mut recovered);
                         if newest == successor.sequence {
-                            assert_eq!(observed, successor, "newest valid successor/lost acknowledgement: {label}");
+                            assert_eq!(
+                                observed, successor,
+                                "newest valid successor/lost acknowledgement: {label}"
+                            );
                             successor_observations += 1;
                         } else {
-                            assert_eq!(newest, prior.sequence, "never an arbitrary older graph: {label}");
+                            assert_eq!(
+                                newest, prior.sequence,
+                                "never an arbitrary older graph: {label}"
+                            );
                             assert_eq!(observed, prior, "exact last acknowledged graph: {label}");
                             prior_observations += 1;
                         }
@@ -426,12 +625,23 @@ fn every_sector_and_barrier_edge_preserves_exact_acknowledgement_or_refuses() {
                     }
                     Err(error) => {
                         assert_eq!(error, FsError::Corrupted, "explicit refusal: {label}");
-                        assert_ne!(newest, successor.sequence, "valid durable successor cannot be ignored: {label}");
+                        assert_ne!(
+                            newest, successor.sequence,
+                            "valid durable successor cannot be ignored: {label}"
+                        );
                         refusals += 1;
                     }
                 }
-                assert_eq!(fault.calls().writes, before_open.writes, "reopen writes: {label}");
-                assert_eq!(fault.calls().flushes, before_open.flushes, "reopen flushes: {label}");
+                assert_eq!(
+                    fault.calls().writes,
+                    before_open.writes,
+                    "reopen writes: {label}"
+                );
+                assert_eq!(
+                    fault.calls().flushes,
+                    before_open.flushes,
+                    "reopen flushes: {label}"
+                );
                 cuts += 1;
             }
             println!("cow-fault golden scenario={scenario:?} persistence={persistence:?} writes={} sectors={} barriers={} cut_edges={}",
@@ -457,20 +667,34 @@ fn bootstrap_cuts_have_no_invented_graph_and_lost_fs2_ack_recovers_genesis() {
         for (cut, edge) in trace.iter().enumerate() {
             let disk = SectorDisk::blank(64, persistence);
             disk.arm(Some(cut));
-            assert_eq!(CellosFs::format(disk.clone(), 64).err(), Some(FsError::IoError), "bootstrap {persistence:?} {edge:?}");
+            assert_eq!(
+                CellosFs::format(disk.clone(), 64).err(),
+                Some(FsError::IoError),
+                "bootstrap {persistence:?} {edge:?}"
+            );
             assert!(disk.0.borrow().fired);
             assert_eq!(disk.trace(), trace[..=cut]);
             disk.crash();
             let valid = !roots(&disk.image()).is_empty();
             let calls = disk.calls();
             match CellosFs::open(disk.clone()) {
-                Ok(mut fs) => { assert!(valid); assert_eq!(observe(&mut fs), expected); }
-                Err(error) => { assert_eq!(error, FsError::Corrupted); assert!(!valid, "durable valid genesis must recover"); }
+                Ok(mut fs) => {
+                    assert!(valid);
+                    assert_eq!(observe(&mut fs), expected);
+                }
+                Err(error) => {
+                    assert_eq!(error, FsError::Corrupted);
+                    assert!(!valid, "durable valid genesis must recover");
+                }
             }
             assert_eq!(disk.calls().writes, calls.writes);
             assert_eq!(disk.calls().flushes, calls.flushes);
         }
-        println!("cow-bootstrap persistence={persistence:?} sectors={} cut_edges={}", golden_disk.calls().sectors, trace.len());
+        println!(
+            "cow-bootstrap persistence={persistence:?} sectors={} cut_edges={}",
+            golden_disk.calls().sectors,
+            trace.len()
+        );
     }
 }
 
@@ -485,15 +709,21 @@ fn direct_engine_smoke_executes_namespace_extent_and_root_rotation() {
     let payload = pattern(3 * BLOCK_SIZE + 37, 211);
     fs.replace_file("/tx/payload", &payload).unwrap();
     fs.create_file("/tx/commit").unwrap();
-    fs.replace_file("/tx/commit", b"commit-binds-exact-payload").unwrap();
+    fs.replace_file("/tx/commit", b"commit-binds-exact-payload")
+        .unwrap();
     fs.sync().unwrap();
-    fs.write_file("/tx/payload", 23, b"positional-copy-on-write").unwrap();
+    fs.write_file("/tx/payload", 23, b"positional-copy-on-write")
+        .unwrap();
     let mut expected = payload;
-    expected[23..23 + b"positional-copy-on-write".len()].copy_from_slice(b"positional-copy-on-write");
+    expected[23..23 + b"positional-copy-on-write".len()]
+        .copy_from_slice(b"positional-copy-on-write");
     fs.rename("/tx/commit", "/commit").unwrap();
     fs.sync().unwrap();
     let mut read = vec![0; expected.len()];
-    assert_eq!(fs.read_file("/tx/payload", 0, &mut read).unwrap(), expected.len());
+    assert_eq!(
+        fs.read_file("/tx/payload", 0, &mut read).unwrap(),
+        expected.len()
+    );
     assert_eq!(read, expected);
     fs.replace_file("/tx/payload", b"inline-again").unwrap();
     fs.unlink("/commit").unwrap();
@@ -502,8 +732,17 @@ fn direct_engine_smoke_executes_namespace_extent_and_root_rotation() {
     assert_eq!(expected_graph.sequence, 5);
     assert!(fs.lookup("/tx/payload").unwrap().is_inline());
     assert_eq!(fs.list_dir("/").unwrap(), vec![("tx".into(), true, 0)]);
-    assert_eq!(fs.list_dir("/tx").unwrap(), vec![("payload".into(), false, 12)]);
-    assert_eq!(roots(&disk.image()).iter().map(|(_, sb)| sb.sequence).collect::<BTreeSet<_>>(), BTreeSet::from([4, 5]));
+    assert_eq!(
+        fs.list_dir("/tx").unwrap(),
+        vec![("payload".into(), false, 12)]
+    );
+    assert_eq!(
+        roots(&disk.image())
+            .iter()
+            .map(|(_, sb)| sb.sequence)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([4, 5])
+    );
     drop(fs);
     disk.crash();
     let calls = disk.calls();
@@ -511,8 +750,13 @@ fn direct_engine_smoke_executes_namespace_extent_and_root_rotation() {
     assert_eq!(observe(&mut recovered), expected_graph);
     assert_eq!(disk.calls().writes, calls.writes);
     assert_eq!(disk.calls().flushes, calls.flushes);
-    println!("cow-direct-smoke sequence=5 root_slots=2 exact_nodes={} writes={} sectors={} flushes={}",
-        expected_graph.nodes.len(), calls.writes, calls.sectors, calls.flushes);
+    println!(
+        "cow-direct-smoke sequence=5 root_slots=2 exact_nodes={} writes={} sectors={} flushes={}",
+        expected_graph.nodes.len(),
+        calls.writes,
+        calls.sectors,
+        calls.flushes
+    );
 }
 
 fn corruption_fixture() -> (Image, Superblock, u64, u64) {
@@ -533,15 +777,31 @@ fn assert_open_refuses(image: Image, error: FsError, label: &str) {
     assert_eq!(CellosFs::open(disk.clone()).err(), Some(error), "{label}");
     assert_eq!(disk.calls().writes, 0, "refusal must not repair: {label}");
     assert_eq!(disk.calls().flushes, 0, "refusal must not flush: {label}");
-    assert_eq!(disk.image(), image, "refusal altered durable bytes: {label}");
+    assert_eq!(
+        disk.image(),
+        image,
+        "refusal altered durable bytes: {label}"
+    );
 }
 
 #[test]
 fn checksum_valid_malformed_alias_cycle_and_overlap_roots_refuse_without_repair() {
     let (base, sb, a, b) = corruption_fixture();
-    let cases = ["inactive-root", "inode-identity", "unsupported-mode", "duplicate-table", "namespace-alias",
-        "namespace-cycle", "dangling-target", "duplicate-name", "metadata-data-overlap", "reserved-data-overlap",
-        "extent-alias", "cross-file-alias", "cross-root-incompatible"];
+    let cases = [
+        "inactive-root",
+        "inode-identity",
+        "unsupported-mode",
+        "duplicate-table",
+        "namespace-alias",
+        "namespace-cycle",
+        "dangling-target",
+        "duplicate-name",
+        "metadata-data-overlap",
+        "reserved-data-overlap",
+        "extent-alias",
+        "cross-file-alias",
+        "cross-root-incompatible",
+    ];
     for case in cases {
         let mut image = base.clone();
         let mut root = inode_from(&image, &sb, 1);
@@ -557,10 +817,18 @@ fn checksum_valid_malformed_alias_cycle_and_overlap_roots_refuse_without_repair(
                 file.inode_num = 99;
                 file.update_checksum();
                 let offset = ((a as usize - 1) % INODES_PER_BLOCK) * INODE_SIZE;
-                image[sb.inode_blocks[0] as usize][offset..offset + INODE_SIZE].copy_from_slice(&file.to_bytes());
+                image[sb.inode_blocks[0] as usize][offset..offset + INODE_SIZE]
+                    .copy_from_slice(&file.to_bytes());
             }
-            "unsupported-mode" => { file.mode = 99; put_inode(&mut image, &sb, file); }
-            "duplicate-table" => { let mut malformed = sb; malformed.inode_blocks[1] = sb.inode_blocks[0]; put_root(&mut image, 1, malformed); }
+            "unsupported-mode" => {
+                file.mode = 99;
+                put_inode(&mut image, &sb, file);
+            }
+            "duplicate-table" => {
+                let mut malformed = sb;
+                malformed.inode_blocks[1] = sb.inode_blocks[0];
+                put_root(&mut image, 1, malformed);
+            }
             "namespace-alias" => {
                 let e = DirEntryRecord::new(a, 1, "alias").unwrap();
                 let offset = root.extent_count as usize * DirEntryRecord::SIZE;
@@ -580,20 +848,43 @@ fn checksum_valid_malformed_alias_cycle_and_overlap_roots_refuse_without_repair(
             }
             "duplicate-name" => {
                 let e = DirEntryRecord::new(b, 1, "a").unwrap();
-                root.payload[DirEntryRecord::SIZE..2 * DirEntryRecord::SIZE].copy_from_slice(&e.to_bytes());
+                root.payload[DirEntryRecord::SIZE..2 * DirEntryRecord::SIZE]
+                    .copy_from_slice(&e.to_bytes());
                 put_inode(&mut image, &sb, root);
             }
             "metadata-data-overlap" | "reserved-data-overlap" => {
-                let e = Extent { logical_block: 0, block_count: 2,
-                    physical_block: if case == "metadata-data-overlap" { sb.inode_blocks[0] } else { 1 } };
+                let e = Extent {
+                    logical_block: 0,
+                    block_count: 2,
+                    physical_block: if case == "metadata-data-overlap" {
+                        sb.inode_blocks[0]
+                    } else {
+                        1
+                    },
+                };
                 file.payload[..Extent::SIZE].copy_from_slice(&e.to_bytes());
                 file.extent_count = 1;
                 put_inode(&mut image, &sb, file);
             }
             "extent-alias" => {
-                let physical = Extent::from_bytes(file.payload[..Extent::SIZE].try_into().unwrap()).physical_block;
-                file.payload[..Extent::SIZE].copy_from_slice(&Extent { logical_block: 0, block_count: 1, physical_block: physical }.to_bytes());
-                file.payload[Extent::SIZE..2 * Extent::SIZE].copy_from_slice(&Extent { logical_block: 1, block_count: 1, physical_block: physical }.to_bytes());
+                let physical = Extent::from_bytes(file.payload[..Extent::SIZE].try_into().unwrap())
+                    .physical_block;
+                file.payload[..Extent::SIZE].copy_from_slice(
+                    &Extent {
+                        logical_block: 0,
+                        block_count: 1,
+                        physical_block: physical,
+                    }
+                    .to_bytes(),
+                );
+                file.payload[Extent::SIZE..2 * Extent::SIZE].copy_from_slice(
+                    &Extent {
+                        logical_block: 1,
+                        block_count: 1,
+                        physical_block: physical,
+                    }
+                    .to_bytes(),
+                );
                 file.extent_count = 2;
                 put_inode(&mut image, &sb, file);
             }
@@ -607,7 +898,8 @@ fn checksum_valid_malformed_alias_cycle_and_overlap_roots_refuse_without_repair(
                 put_inode(&mut image, &sb, other);
             }
             "cross-root-incompatible" => {
-                let physical = Extent::from_bytes(file.payload[..Extent::SIZE].try_into().unwrap()).physical_block;
+                let physical = Extent::from_bytes(file.payload[..Extent::SIZE].try_into().unwrap())
+                    .physical_block;
                 let mut older = Superblock::from_bytes(&image[0]).unwrap();
                 older.root_inode_block = physical;
                 older.inode_blocks[0] = physical;
@@ -661,7 +953,8 @@ fn torn_bitmap_is_advisory_and_shared_immutable_roots_are_accepted_read_only() {
         image[2][..sectors * SECTOR].fill(0);
         image[2][sectors * SECTOR..].fill(0xA5);
         let disk = SectorDisk::from_image(image.clone(), Persistence::Cached);
-        let mut fs = CellosFs::open(disk.clone()).expect("torn advisory bitmap cannot erase root reachability");
+        let mut fs = CellosFs::open(disk.clone())
+            .expect("torn advisory bitmap cannot erase root reachability");
         assert_eq!(fs.free_blocks(), expected_free);
         assert_eq!(observe(&mut fs), expected);
         assert_eq!(disk.image(), image);
@@ -673,9 +966,13 @@ fn torn_bitmap_is_advisory_and_shared_immutable_roots_are_accepted_read_only() {
     older.sequence -= 1;
     put_root(&mut shared, 0, older);
     let disk = SectorDisk::from_image(shared.clone(), Persistence::Cached);
-    let mut fs = CellosFs::open(disk.clone()).expect("two roots may share immutable table and data");
+    let mut fs =
+        CellosFs::open(disk.clone()).expect("two roots may share immutable table and data");
     assert_eq!(observe(&mut fs), expected);
-    assert_eq!(fs.free_blocks(), shared.len() as u64 - union(&shared).len() as u64);
+    assert_eq!(
+        fs.free_blocks(),
+        shared.len() as u64 - union(&shared).len() as u64
+    );
     assert_eq!(disk.calls().writes, 0);
     assert_eq!(disk.calls().flushes, 0);
     println!("cow-recovery advisory_bitmap_variants={} shared_roots=2 reconstructed_free={expected_free}", SECTORS + 1);
@@ -702,7 +999,11 @@ fn sequence_inode_and_space_exhaustion_refuse_before_effect_and_poison() {
             6 => fs.rename("/a", "/new"),
             _ => fs.sync(),
         };
-        assert_eq!(result, Err(FsError::NoSpace), "sequence operation={operation}");
+        assert_eq!(
+            result,
+            Err(FsError::NoSpace),
+            "sequence operation={operation}"
+        );
         assert_eq!(disk.calls().writes, 0);
         assert_eq!(disk.calls().flushes, 0);
         assert_eq!(disk.image(), image);
@@ -730,7 +1031,11 @@ fn sequence_inode_and_space_exhaustion_refuse_before_effect_and_poison() {
     // The exact free union complement cannot also pay for the required CoW table.
     let bytes = pattern(fs.free_blocks() as usize * BLOCK_SIZE, 113);
     assert_eq!(fs.replace_file("/file", &bytes), Err(FsError::NoSpace));
-    assert_eq!(disk.calls().writes, 0, "reserve complete data+table cost before dispatch");
+    assert_eq!(
+        disk.calls().writes,
+        0,
+        "reserve complete data+table cost before dispatch"
+    );
     assert_eq!(disk.calls().flushes, 0);
     assert_eq!(disk.image(), image);
     assert_poisoned(&mut fs, &disk);
@@ -747,29 +1052,61 @@ fn unpublished_reservations_are_disjoint_and_reuse_waits_for_durable_displacemen
     let mut fs = CellosFs::format(disk.clone(), 32).unwrap();
     fs.create_file("/file").unwrap();
     fs.create_file("/other").unwrap();
-    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 3)).unwrap();
+    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 3))
+        .unwrap();
     fs.sync().unwrap();
     let old = disk.image();
-    let old_blocks: BTreeSet<_> = reachable(&old, fs.superblock()).into_iter()
-        .filter(|b| !fs.superblock().inode_blocks.contains(b)).collect();
+    let old_blocks: BTreeSet<_> = reachable(&old, fs.superblock())
+        .into_iter()
+        .filter(|b| !fs.superblock().inode_blocks.contains(b))
+        .collect();
     let protected = protected_bytes(&old);
     let free_before = fs.free_blocks();
     disk.arm(None);
-    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 19)).unwrap();
+    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 19))
+        .unwrap();
     let after_first = disk.calls().writes;
-    fs.replace_file("/other", &pattern(3 * BLOCK_SIZE, 41)).unwrap();
+    fs.replace_file("/other", &pattern(3 * BLOCK_SIZE, 41))
+        .unwrap();
     let staged = disk.trace();
-    let first: BTreeSet<_> = staged.iter().filter_map(|edge| match edge {
-        Edge::Sector { write, block, sector: 0, after: false } if *write <= after_first => Some(*block), _ => None,
-    }).collect();
-    let second: BTreeSet<_> = staged.iter().filter_map(|edge| match edge {
-        Edge::Sector { write, block, sector: 0, after: false } if *write > after_first => Some(*block), _ => None,
-    }).collect();
+    let first: BTreeSet<_> = staged
+        .iter()
+        .filter_map(|edge| match edge {
+            Edge::Sector {
+                write,
+                block,
+                sector: 0,
+                after: false,
+            } if *write <= after_first => Some(*block),
+            _ => None,
+        })
+        .collect();
+    let second: BTreeSet<_> = staged
+        .iter()
+        .filter_map(|edge| match edge {
+            Edge::Sector {
+                write,
+                block,
+                sector: 0,
+                after: false,
+            } if *write > after_first => Some(*block),
+            _ => None,
+        })
+        .collect();
     assert_eq!(first.len(), 5);
     assert_eq!(second.len(), 3);
-    assert!(first.is_disjoint(&second), "second candidate must exclude unpublished first reservations");
-    assert!(first.iter().chain(second.iter()).all(|b| !protected.contains_key(b)));
-    assert!(fs.free_blocks() <= free_before - 8, "outstanding reservations charged");
+    assert!(
+        first.is_disjoint(&second),
+        "second candidate must exclude unpublished first reservations"
+    );
+    assert!(first
+        .iter()
+        .chain(second.iter())
+        .all(|b| !protected.contains_key(b)));
+    assert!(
+        fs.free_blocks() <= free_before - 8,
+        "outstanding reservations charged"
+    );
     fs.sync().unwrap(); // Sequence 3 retains sequence 2's five old data blocks.
     let retained = disk.image();
     assert_protected(&protected, &retained, "first replacement durable");
@@ -788,12 +1125,26 @@ fn unpublished_reservations_are_disjoint_and_reuse_waits_for_durable_displacemen
     // Consume all but one free block: retired data cannot all be avoided by allocation.
     let consume = fs.free_blocks() as usize - 1;
     assert!(consume <= INODE_PAYLOAD_SIZE / Extent::SIZE);
-    fs.replace_file("/file", &pattern(consume * BLOCK_SIZE, 139)).unwrap();
-    let allocated: BTreeSet<_> = disk.trace().iter().filter_map(|edge| match edge {
-        Edge::Sector { block, sector: 0, after: false, .. } => Some(*block), _ => None,
-    }).collect();
+    fs.replace_file("/file", &pattern(consume * BLOCK_SIZE, 139))
+        .unwrap();
+    let allocated: BTreeSet<_> = disk
+        .trace()
+        .iter()
+        .filter_map(|edge| match edge {
+            Edge::Sector {
+                block,
+                sector: 0,
+                after: false,
+                ..
+            } => Some(*block),
+            _ => None,
+        })
+        .collect();
     assert_eq!(allocated.len(), consume);
-    assert!(!allocated.is_disjoint(&old_blocks), "retired blocks become usable after durable displacement");
+    assert!(
+        !allocated.is_disjoint(&old_blocks),
+        "retired blocks become usable after durable displacement"
+    );
     assert!(allocated.is_disjoint(&live));
     fs.sync().unwrap();
     println!("cow-allocation unpublished_first={} unpublished_second={} retired={} reused={} durable_sequence={}",
@@ -804,12 +1155,16 @@ fn prepare_displacement(persistence: Persistence) -> (Fs, SectorDisk, BTreeSet<u
     let disk = SectorDisk::blank(32, persistence);
     let mut fs = CellosFs::format(disk.clone(), 32).unwrap();
     fs.create_file("/file").unwrap();
-    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 17)).unwrap();
+    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 17))
+        .unwrap();
     fs.sync().unwrap();
     let image = disk.image();
-    let retired: BTreeSet<_> = reachable(&image, fs.superblock()).into_iter()
-        .filter(|b| !fs.superblock().inode_blocks.contains(b)).collect();
-    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 53)).unwrap();
+    let retired: BTreeSet<_> = reachable(&image, fs.superblock())
+        .into_iter()
+        .filter(|b| !fs.superblock().inode_blocks.contains(b))
+        .collect();
+    fs.replace_file("/file", &pattern(5 * BLOCK_SIZE, 53))
+        .unwrap();
     fs.sync().unwrap();
     assert!(retired.is_subset(&union(&disk.image())));
     (fs, disk, retired)
@@ -820,14 +1175,19 @@ fn failed_displacement_retains_instance_reservations_even_after_persisted_lost_a
     for persistence in [Persistence::Cached, Persistence::WriteThrough] {
         let (mut golden, control, _) = prepare_displacement(persistence);
         let previous = observe(&mut golden);
-        golden.replace_file("/file", b"inline-displacement").unwrap();
+        golden
+            .replace_file("/file", b"inline-displacement")
+            .unwrap();
         control.arm(None);
         golden.sync().unwrap();
         let trace = control.trace();
         validate_golden(&trace, control.calls(), false);
         let successor = observe(&mut golden);
         for after in [false, true] {
-            let cut = trace.iter().position(|edge| *edge == Edge::Flush { barrier: 2, after }).unwrap();
+            let cut = trace
+                .iter()
+                .position(|edge| *edge == Edge::Flush { barrier: 2, after })
+                .unwrap();
             let (mut fs, disk, retired) = prepare_displacement(persistence);
             let protected = protected_bytes(&disk.image());
             let before = fs.free_blocks();
@@ -836,20 +1196,35 @@ fn failed_displacement_retains_instance_reservations_even_after_persisted_lost_a
             assert_eq!(fs.sync(), Err(FsError::IoError));
             assert!(disk.0.borrow().fired);
             assert_eq!(disk.trace(), trace[..=cut]);
-            assert!(fs.free_blocks() <= before, "ambiguous FS2 cannot release prior union or candidate reservations");
+            assert!(
+                fs.free_blocks() <= before,
+                "ambiguous FS2 cannot release prior union or candidate reservations"
+            );
             assert_protected(&protected, &disk.image(), "failed displacement");
             if persistence == Persistence::Cached && !after {
-                assert!(retired.is_subset(&union(&disk.image())), "pre-effect FS2 retains old durable root");
+                assert!(
+                    retired.is_subset(&union(&disk.image())),
+                    "pre-effect FS2 retains old durable root"
+                );
             } else {
-                assert!(retired.is_disjoint(&union(&disk.image())), "durable displaced root no longer references retired data");
+                assert!(
+                    retired.is_disjoint(&union(&disk.image())),
+                    "durable displaced root no longer references retired data"
+                );
             }
             assert_poisoned(&mut fs, &disk);
             drop(fs);
             disk.crash();
             let calls = disk.calls();
             let mut recovered = CellosFs::open(disk.clone()).unwrap();
-            assert_eq!(&observe(&mut recovered),
-                if persistence == Persistence::Cached && !after { &previous } else { &successor });
+            assert_eq!(
+                &observe(&mut recovered),
+                if persistence == Persistence::Cached && !after {
+                    &previous
+                } else {
+                    &successor
+                }
+            );
             assert_eq!(disk.calls().writes, calls.writes);
             assert_eq!(disk.calls().flushes, calls.flushes);
             drop(recovered); // No allocation/retry on recovered fault media.

@@ -30,8 +30,7 @@ const MALFORMED_REPLY: &str = "hotswap: protocol error: malformed supervisor rep
 /// The reply timeout spans the supervisor's bounded snapshot/freeze/spawn/
 /// restore/publish sequence rather than a single IPC hop.
 fn cell_main() {
-    let output = ostd::io::ProcessOutput::read_own()
-        .unwrap_or_else(|_| syscall::sys_exit(1));
+    let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| syscall::sys_exit(1));
     let argv = ostd::args();
     let [service_name, new_path] = argv.as_slice() else {
         exit_with_message(output.stderr(), USAGE);
@@ -49,7 +48,10 @@ fn cell_main() {
     };
 
     if !send_request(supervisor_tid, &request) {
-        exit_with_message(output.stderr(), "hotswap: cannot send request to supervisor");
+        exit_with_message(
+            output.stderr(),
+            "hotswap: cannot send request to supervisor",
+        );
     }
 
     match recv_status(supervisor_tid) {

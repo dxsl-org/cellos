@@ -66,7 +66,11 @@ pub struct FrontendLaunch {
 #[cfg(not(feature = "shell_test"))]
 pub fn open(context: &ChildContext) -> Result<FrontendLaunch, Status> {
     let (session, output) = TerminalSession::create_for_frontend(context)?;
-    Ok(FrontendLaunch { session, output, merged: streams_merged(context.environment()) })
+    Ok(FrontendLaunch {
+        session,
+        output,
+        merged: streams_merged(context.environment()),
+    })
 }
 
 /// Launch-context environment key a holder sets to ask for one merged output stream.
@@ -194,7 +198,10 @@ mod tests {
     fn merged_for(environment: &[(&str, &str)]) -> bool {
         use api::cell_session::ObjectRefV1;
         use terminal_sdk::context::ChildContext;
-        let operation = ObjectRefV1 { id: 5, generation: 2 };
+        let operation = ObjectRefV1 {
+            id: 5,
+            generation: 2,
+        };
         let built = ChildContext::new(operation, &["/bin/cellbox"], b"", environment, &[])
             .expect("valid context");
         // Read it back from its canonical bytes, as `read_own` does.

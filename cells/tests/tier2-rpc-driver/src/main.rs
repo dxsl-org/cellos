@@ -133,17 +133,16 @@ fn cell_main() {
     // ── Leg 4b: an invalid user buffer on the syscall copy path ───────────────
     // Passes an unmapped raw pointer to sys_send. The kernel's TaskCopyView must
     // refuse it before delivery; the provider must not receive it.
-    let invalid_slice = unsafe {
-        core::slice::from_raw_parts(0xDEAD_0000usize as *const u8, 64)
-    };
+    let invalid_slice = unsafe { core::slice::from_raw_parts(0xDEAD_0000usize as *const u8, 64) };
     match sys_send(binding.tid as usize, invalid_slice) {
         SyscallResult::Err(_) => println("[tier2-rpc] INVALID-BUFFER=REFUSED"),
         SyscallResult::Ok(bytes) => {
-            println(&format!("[tier2-rpc] INVALID-BUFFER=ACCEPTED bytes={bytes}"));
+            println(&format!(
+                "[tier2-rpc] INVALID-BUFFER=ACCEPTED bytes={bytes}"
+            ));
             fail("the kernel accepted an invalid user buffer across tiers")
         }
     }
-
 
     // ── Leg 5: a method the provider does not authorize ──────────────────────
     let denied = EchoRequest {

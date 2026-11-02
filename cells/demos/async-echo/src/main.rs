@@ -24,7 +24,17 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![Send, Recv, TrySend, TryRecv, RecvTimeout, Log, LookupService, StateRestore, GetTime];
+api::declare_syscalls![
+    Send,
+    Recv,
+    TrySend,
+    TryRecv,
+    RecvTimeout,
+    Log,
+    LookupService,
+    StateRestore,
+    GetTime
+];
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(2 * 1024 * 1024);
@@ -55,7 +65,9 @@ fn cell_main() {
         // Wait should be interrupted immediately by the notify wakeup message
         let res = poller.wait(&mut events, Some(Duration::from_millis(500)));
         match res {
-            Ok(0) => println("[async-echo] Reactor notify() self-wakeup PASS (unparked with 0 events)."),
+            Ok(0) => {
+                println("[async-echo] Reactor notify() self-wakeup PASS (unparked with 0 events).")
+            }
             _ => println("[async-echo] Unexpected wait result after notify"),
         }
     } else {
@@ -65,11 +77,16 @@ fn cell_main() {
     // Resolve network service
     let net_tid = match sys_lookup_service(api::syscall::service::NET) {
         Some(tid) => {
-            println(&alloc::format!("[async-echo] Network service discovered at tid: {}", tid));
+            println(&alloc::format!(
+                "[async-echo] Network service discovered at tid: {}",
+                tid
+            ));
             tid
         }
         None => {
-            println("[async-echo] Network service not running; entering standalone async poll loop.");
+            println(
+                "[async-echo] Network service not running; entering standalone async poll loop.",
+            );
             0
         }
     };
@@ -84,11 +101,20 @@ fn cell_main() {
             let _ = ostd::syscall::sys_send(net_tid, encoded);
             let _ = ostd::syscall::sys_recv(net_tid, &mut resp_buf);
 
-            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) = api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf) {
-                println(&alloc::format!("[async-echo] TCP listener established, cap_id={}, listening on :{}", listener_cap, ECHO_PORT));
+            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
+                api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf)
+            {
+                println(&alloc::format!(
+                    "[async-echo] TCP listener established, cap_id={}, listening on :{}",
+                    listener_cap,
+                    ECHO_PORT
+                ));
 
                 // Register listener socket with poller
-                if poller.add(listener_cap, Event::readable(SERVER_TOKEN)).is_ok() {
+                if poller
+                    .add(listener_cap, Event::readable(SERVER_TOKEN))
+                    .is_ok()
+                {
                     println("[async-echo] Listener socket registered with Poller.");
                 }
             }
@@ -106,9 +132,17 @@ fn cell_main() {
         match poller.wait(&mut events, Some(Duration::from_millis(100))) {
             Ok(count) => {
                 if count > 0 {
-                    println(&alloc::format!("[async-echo] Poller returned {} ready events.", count));
+                    println(&alloc::format!(
+                        "[async-echo] Poller returned {} ready events.",
+                        count
+                    ));
                     for ev in events.iter() {
-                        println(&alloc::format!("[async-echo]   Event token={} readable={} writable={}", ev.key, ev.readable, ev.writable));
+                        println(&alloc::format!(
+                            "[async-echo]   Event token={} readable={} writable={}",
+                            ev.key,
+                            ev.readable,
+                            ev.writable
+                        ));
                     }
                 }
             }

@@ -15,11 +15,16 @@ pub struct BitmapAllocator {
 
 impl BitmapAllocator {
     pub fn new(start_block: u64, bitmap_blocks: u32, total_blocks: u64) -> Result<Self, FsError> {
-        let byte_len = usize::try_from(bitmap_blocks).ok()
-            .and_then(|n| n.checked_mul(BLOCK_SIZE)).ok_or(FsError::NoSpace)?;
-        let reserved_blocks = start_block.checked_add(bitmap_blocks as u64)
+        let byte_len = usize::try_from(bitmap_blocks)
+            .ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE))
+            .ok_or(FsError::NoSpace)?;
+        let reserved_blocks = start_block
+            .checked_add(bitmap_blocks as u64)
             .ok_or(FsError::PartitionOverflow)?;
-        if bitmap_blocks == 0 || start_block < 2 || reserved_blocks >= total_blocks
+        if bitmap_blocks == 0
+            || start_block < 2
+            || reserved_blocks >= total_blocks
             || bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8 < total_blocks
         {
             return Err(FsError::PartitionOverflow);
@@ -62,11 +67,16 @@ impl BitmapAllocator {
         bitmap_blocks: u32,
         total_blocks: u64,
     ) -> Result<Self, FsError> {
-        let byte_len = usize::try_from(bitmap_blocks).ok()
-            .and_then(|n| n.checked_mul(BLOCK_SIZE)).ok_or(FsError::Corrupted)?;
-        let reserved_end = start_block.checked_add(bitmap_blocks as u64)
+        let byte_len = usize::try_from(bitmap_blocks)
+            .ok()
+            .and_then(|n| n.checked_mul(BLOCK_SIZE))
             .ok_or(FsError::Corrupted)?;
-        if bitmap_blocks == 0 || start_block < 2 || reserved_end >= total_blocks
+        let reserved_end = start_block
+            .checked_add(bitmap_blocks as u64)
+            .ok_or(FsError::Corrupted)?;
+        if bitmap_blocks == 0
+            || start_block < 2
+            || reserved_end >= total_blocks
             || total_blocks != disk.total_blocks()
             || bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8 < total_blocks
         {

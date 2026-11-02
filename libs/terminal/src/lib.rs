@@ -11,28 +11,31 @@
 extern crate alloc;
 
 pub mod codec;
+pub mod context;
 pub mod controls;
 pub mod error;
-pub mod mode;
-pub mod session;
-pub mod pipe_child;
-pub mod stream;
-pub mod input;
-pub mod raw_input;
-pub mod context;
 pub mod host;
+pub mod input;
+pub mod mode;
+pub mod pipe_child;
+pub mod raw_input;
+pub mod session;
+pub mod stream;
 
-pub use codec::{
-    encode_key_action, Decoder, KeyAction, KeyState, KeySymbol, Modifiers,
-};
+pub use api::cell_session::Status;
+pub use codec::{encode_key_action, Decoder, KeyAction, KeyState, KeySymbol, Modifiers};
 pub use controls::{Color, ScreenControls, TextAttributes, ViewportSize};
 pub use error::{StreamError, TerminalError};
-pub use mode::{ModeGuard, SessionModeGuard, TerminalMode};
-pub use session::{SessionRef, TerminalSession, ForegroundChild, Capabilities, FrontendOutput, completion_writer};
 pub use host::{ChildPoll, FrontendHost, FrontendState};
-pub use pipe_child::{PipeSpec, PipeChild, Pipeline};
-pub use stream::{Endpoint, EndpointDirection, EndpointRef, EndpointRights, Operation, OperationRef, PreparedChild, PreparedRef, ChildRef, ReceiptRef, PrincipalRef};
-pub use api::cell_session::Status;
+pub use mode::{ModeGuard, SessionModeGuard, TerminalMode};
+pub use pipe_child::{PipeChild, PipeSpec, Pipeline};
+pub use session::{
+    completion_writer, Capabilities, ForegroundChild, FrontendOutput, SessionRef, TerminalSession,
+};
+pub use stream::{
+    ChildRef, Endpoint, EndpointDirection, EndpointRef, EndpointRights, Operation, OperationRef,
+    PreparedChild, PreparedRef, PrincipalRef, ReceiptRef,
+};
 
 #[cfg(test)]
 mod tests;

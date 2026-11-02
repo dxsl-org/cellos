@@ -57,17 +57,17 @@ api::declare_syscalls![
     GetProcs,
 ];
 
-mod boot;
 mod activation;
 mod activation_state;
+mod boot;
 mod configuration;
 mod machine_pin;
 mod service_table;
 mod supervisor;
 
-use ostd::io::println;
 use alloc::vec::Vec;
 use cellos_boot_config::{ordered_indices, CellConfig};
+use ostd::io::println;
 
 ostd::cell_main!(extern "C" cell_main);
 
@@ -117,8 +117,18 @@ fn start_services() {
         }
     };
     let autoload_offset = 1 + service_config.cells.len();
-    services.extend(service_config.cells.into_iter().map(service_table::Service::new));
-    services.extend(autoload_config.cells.into_iter().map(service_table::Service::new));
+    services.extend(
+        service_config
+            .cells
+            .into_iter()
+            .map(service_table::Service::new),
+    );
+    services.extend(
+        autoload_config
+            .cells
+            .into_iter()
+            .map(service_table::Service::new),
+    );
     services.append(&mut block_drivers);
 
     // ADR-0029 §3: the machine pin gates every configured service. The VFS and
@@ -178,30 +188,46 @@ fn own_tid() -> usize {
 }
 
 fn required_services_available(services: &[service_table::Service]) -> bool {
-    services.iter().all(|service| {
-        !service.spec.enabled || !service.spec.required || service.available()
-    })
+    services
+        .iter()
+        .all(|service| !service.spec.enabled || !service.spec.required || service.available())
 }
 
 fn launch_order(services: &mut [service_table::Service], order: &[usize], offset: usize) -> bool {
     for &entry in order {
         if services.iter().any(|service| {
-            service.spec.enabled && service.spec.required && service.tid.is_some() && !service.available()
+            service.spec.enabled
+                && service.spec.required
+                && service.tid.is_some()
+                && !service.available()
         }) {
             println("Init: required service lost during launch — remaining cells blocked.");
             return false;
         }
         let index = offset + entry;
         if !service_table::dependencies_available(services, index) {
-            println(&alloc::format!("Init: {} blocked — dependency unavailable.", services[index].spec.name));
-            if services[index].spec.required { return false; }
+            println(&alloc::format!(
+                "Init: {} blocked — dependency unavailable.",
+                services[index].spec.name
+            ));
+            if services[index].spec.required {
+                return false;
+            }
             continue;
         }
         if service_table::spawn(&mut services[index]).is_none() {
-            println(&alloc::format!("Init: {} spawn/registration failed.", services[index].spec.name));
-            if services[index].spec.required { return false; }
+            println(&alloc::format!(
+                "Init: {} spawn/registration failed.",
+                services[index].spec.name
+            ));
+            if services[index].spec.required {
+                return false;
+            }
         } else {
-            println(&alloc::format!("Init: {} launched.", services[index].spec.name));
+            println(&alloc::format!(
+                "Init: {} launched.",
+                services[index].spec.name
+            ));
         }
         ostd::task::yield_now();
     }

@@ -11,9 +11,7 @@
 use api::services::cluster::{CellNetId, ClusterId};
 use types::c2c::ServerEpoch;
 
-use crate::c2c_dedup::{
-    C2cStatus, CachedReply, DedupCache, DedupDecision, DedupError, DedupKey,
-};
+use crate::c2c_dedup::{C2cStatus, CachedReply, DedupCache, DedupDecision, DedupError, DedupKey};
 use crate::c2c_envelope::{
     self, C2cEnvelope, EnvelopeError, EnvelopeKind, RetryClass, MAX_C2C_FRAME,
 };
@@ -71,7 +69,10 @@ pub struct ProvisionedPeerPolicy {
 
 impl ProvisionedPeerPolicy {
     #[cfg(test)]
-    pub const fn synthetic(peer_node: CellNetId, allowed: [Option<ProvisionedMethod>; MAX_POLICY_METHODS]) -> Self {
+    pub const fn synthetic(
+        peer_node: CellNetId,
+        allowed: [Option<ProvisionedMethod>; MAX_POLICY_METHODS],
+    ) -> Self {
         Self { peer_node, allowed }
     }
 
@@ -204,6 +205,9 @@ impl IngressDecisionCore {
     }
 
     /// Evaluate an incoming frame through all policy, authority, and capacity gates.
+    // reason: each argument is an independent gate proof the caller must supply explicitly;
+    // bundling them would only hide which proofs a call site provides.
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_frame<'a, 'b>(
         &'b mut self,
         frame: &'a [u8],
@@ -270,7 +274,10 @@ impl IngressDecisionCore {
         };
 
         if let Some(slot) = self.dedup.has_completed_replay(dedup_key, now_ms) {
-            let reply = self.dedup.replay(slot, dedup_key, now_ms).expect("verified");
+            let reply = self
+                .dedup
+                .replay(slot, dedup_key, now_ms)
+                .expect("verified");
             return Ok(IngressAdmission::Replay(reply));
         }
 
@@ -354,7 +361,11 @@ impl IngressDecisionCore {
     }
 
     fn find_or_alloc_peer_slot(&mut self, peer_node: CellNetId) -> Result<usize, IngressRejection> {
-        if let Some(index) = self.peers.iter().position(|p| p.is_some_and(|p| p.node == peer_node)) {
+        if let Some(index) = self
+            .peers
+            .iter()
+            .position(|p| p.is_some_and(|p| p.node == peer_node))
+        {
             return Ok(index);
         }
         if let Some(index) = self.peers.iter().position(Option::is_none) {
@@ -398,9 +409,9 @@ impl IngressDecisionCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c2c_envelope::MAX_C2C_PAYLOAD;
     use api::services::cluster::{CellNetId, ClusterId};
     use types::c2c::RelativeDeadline;
-    use crate::c2c_envelope::MAX_C2C_PAYLOAD;
 
     fn node(id: u8) -> CellNetId {
         let mut b = [0u8; 32];
@@ -461,7 +472,13 @@ export_0_scope=remote\n";
                     version: 1,
                     retry_class: RetryClass::Idempotent,
                 }),
-                None, None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ],
         );
         let exports = make_exports();
@@ -489,7 +506,8 @@ export_0_scope=remote\n";
                 assert_eq!(core.peer_inflight(remote), 1);
 
                 // Complete request
-                core.release_completion(token, C2cStatus::Success, b"pong").unwrap();
+                core.release_completion(token, C2cStatus::Success, b"pong")
+                    .unwrap();
                 assert_eq!(core.global_inflight(), 0);
                 assert_eq!(core.peer_inflight(remote), 0);
             }
@@ -627,7 +645,13 @@ export_0_scope=remote\n";
                     version: 1,
                     retry_class: RetryClass::Idempotent,
                 }),
-                None, None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ],
         );
         let exports = make_exports();
@@ -670,7 +694,13 @@ export_0_scope=remote\n";
                     version: 1,
                     retry_class: RetryClass::Idempotent,
                 }),
-                None, None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ],
         );
         let exports = make_exports();
@@ -713,8 +743,14 @@ export_0_scope=remote\n";
             version: 1,
             retry_class: RetryClass::Idempotent,
         });
-        let policy_a = ProvisionedPeerPolicy::synthetic(peer_a, [method, None, None, None, None, None, None, None]);
-        let policy_b = ProvisionedPeerPolicy::synthetic(peer_b, [method, None, None, None, None, None, None, None]);
+        let policy_a = ProvisionedPeerPolicy::synthetic(
+            peer_a,
+            [method, None, None, None, None, None, None, None],
+        );
+        let policy_b = ProvisionedPeerPolicy::synthetic(
+            peer_b,
+            [method, None, None, None, None, None, None, None],
+        );
         let exports = make_exports();
         let live_dst = LiveDestinationProof::synthetic(8, ServerEpoch::new(10).unwrap());
         let epoch_a = ProtectedEpochProof::synthetic(peer_a, 100);
@@ -725,7 +761,15 @@ export_0_scope=remote\n";
             let env = sample_envelope(peer_a, local, (i + 1) as u64, 100, 10);
             let mut buf = [0u8; 256];
             let len = env.encode(&mut buf).unwrap();
-            match core.evaluate_frame(&buf[..len], &auth_a, &policy_a, &exports, &live_dst, &epoch_a, 1000) {
+            match core.evaluate_frame(
+                &buf[..len],
+                &auth_a,
+                &policy_a,
+                &exports,
+                &live_dst,
+                &epoch_a,
+                1000,
+            ) {
                 Ok(IngressAdmission::Dispatch(token, _)) => tokens_a[i] = Some(token),
                 _other => panic!("expected dispatch for req {i}"),
             }
@@ -737,7 +781,15 @@ export_0_scope=remote\n";
         let mut buf_a5 = [0u8; 256];
         let len_a5 = env_a5.encode(&mut buf_a5).unwrap();
         let err = core
-            .evaluate_frame(&buf_a5[..len_a5], &auth_a, &policy_a, &exports, &live_dst, &epoch_a, 1000)
+            .evaluate_frame(
+                &buf_a5[..len_a5],
+                &auth_a,
+                &policy_a,
+                &exports,
+                &live_dst,
+                &epoch_a,
+                1000,
+            )
             .unwrap_err();
         assert_eq!(err, IngressRejection::PeerWorkQuotaExceeded);
 
@@ -745,14 +797,31 @@ export_0_scope=remote\n";
         let env_b1 = sample_envelope(peer_b, local, 1, 100, 10);
         let mut buf_b1 = [0u8; 256];
         let len_b1 = env_b1.encode(&mut buf_b1).unwrap();
-        let res_b = core.evaluate_frame(&buf_b1[..len_b1], &auth_b, &policy_b, &exports, &live_dst, &epoch_b, 1000);
+        let res_b = core.evaluate_frame(
+            &buf_b1[..len_b1],
+            &auth_b,
+            &policy_b,
+            &exports,
+            &live_dst,
+            &epoch_b,
+            1000,
+        );
         assert!(matches!(res_b, Ok(IngressAdmission::Dispatch(_, _))));
 
         // Release one token for peer A -> peer A can now dispatch again
-        core.release_completion(tokens_a[0].unwrap(), C2cStatus::Success, b"ok").unwrap();
+        core.release_completion(tokens_a[0].unwrap(), C2cStatus::Success, b"ok")
+            .unwrap();
         assert_eq!(core.peer_inflight(peer_a), 3);
 
-        let res_a5_retry = core.evaluate_frame(&buf_a5[..len_a5], &auth_a, &policy_a, &exports, &live_dst, &epoch_a, 1000);
+        let res_a5_retry = core.evaluate_frame(
+            &buf_a5[..len_a5],
+            &auth_a,
+            &policy_a,
+            &exports,
+            &live_dst,
+            &epoch_a,
+            1000,
+        );
         assert!(matches!(res_a5_retry, Ok(IngressAdmission::Dispatch(_, _))));
     }
 
@@ -772,7 +841,13 @@ export_0_scope=remote\n";
                     version: 1,
                     retry_class: RetryClass::Idempotent,
                 }),
-                None, None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             ],
         );
         let exports = make_exports();
@@ -786,7 +861,15 @@ export_0_scope=remote\n";
         let mut buf1 = [0u8; MAX_C2C_FRAME + 32];
         let len1 = env1.encode(&mut buf1).unwrap();
 
-        let res1 = core.evaluate_frame(&buf1[..len1], &peer, &policy, &exports, &live_dst, &epoch_proof, 1000);
+        let res1 = core.evaluate_frame(
+            &buf1[..len1],
+            &peer,
+            &policy,
+            &exports,
+            &live_dst,
+            &epoch_proof,
+            1000,
+        );
         assert!(matches!(res1, Ok(IngressAdmission::Dispatch(_, _))));
 
         // Frame 2: another large frame (fits within 2 * MAX_C2C_FRAME)
@@ -795,7 +878,15 @@ export_0_scope=remote\n";
         let mut buf2 = [0u8; MAX_C2C_FRAME + 32];
         let len2 = env2.encode(&mut buf2).unwrap();
 
-        let res2 = core.evaluate_frame(&buf2[..len2], &peer, &policy, &exports, &live_dst, &epoch_proof, 1000);
+        let res2 = core.evaluate_frame(
+            &buf2[..len2],
+            &peer,
+            &policy,
+            &exports,
+            &live_dst,
+            &epoch_proof,
+            1000,
+        );
         assert!(matches!(res2, Ok(IngressAdmission::Dispatch(_, _))));
 
         // Frame 3: even a tiny 1-byte frame now exceeds MAX_PER_PEER_BYTES
@@ -803,7 +894,17 @@ export_0_scope=remote\n";
         let mut buf3 = [0u8; 256];
         let len3 = env3.encode(&mut buf3).unwrap();
 
-        let err3 = core.evaluate_frame(&buf3[..len3], &peer, &policy, &exports, &live_dst, &epoch_proof, 1000).unwrap_err();
+        let err3 = core
+            .evaluate_frame(
+                &buf3[..len3],
+                &peer,
+                &policy,
+                &exports,
+                &live_dst,
+                &epoch_proof,
+                1000,
+            )
+            .unwrap_err();
         assert_eq!(err3, IngressRejection::PeerByteQuotaExceeded);
     }
 
@@ -825,14 +926,25 @@ export_0_scope=remote\n";
         for p in 2..=5 {
             let peer_node = node(p);
             let auth = AuthenticatedPeer::synthetic(peer_node, cluster(100));
-            let policy = ProvisionedPeerPolicy::synthetic(peer_node, [method, None, None, None, None, None, None, None]);
+            let policy = ProvisionedPeerPolicy::synthetic(
+                peer_node,
+                [method, None, None, None, None, None, None, None],
+            );
             let epoch_proof = ProtectedEpochProof::synthetic(peer_node, 100);
 
             for r in 1..=4 {
                 let env = sample_envelope(peer_node, local, r, 100, 10);
                 let mut buf = [0u8; 256];
                 let len = env.encode(&mut buf).unwrap();
-                let res = core.evaluate_frame(&buf[..len], &auth, &policy, &exports, &live_dst, &epoch_proof, 1000);
+                let res = core.evaluate_frame(
+                    &buf[..len],
+                    &auth,
+                    &policy,
+                    &exports,
+                    &live_dst,
+                    &epoch_proof,
+                    1000,
+                );
                 assert!(matches!(res, Ok(IngressAdmission::Dispatch(_, _))));
             }
         }
@@ -841,14 +953,27 @@ export_0_scope=remote\n";
         // 17th request from a 5th peer (or any peer) hits global capacity
         let peer_6 = node(6);
         let auth_6 = AuthenticatedPeer::synthetic(peer_6, cluster(100));
-        let policy_6 = ProvisionedPeerPolicy::synthetic(peer_6, [method, None, None, None, None, None, None, None]);
+        let policy_6 = ProvisionedPeerPolicy::synthetic(
+            peer_6,
+            [method, None, None, None, None, None, None, None],
+        );
         let epoch_6 = ProtectedEpochProof::synthetic(peer_6, 100);
 
         let env_overflow = sample_envelope(peer_6, local, 1, 100, 10);
         let mut buf_overflow = [0u8; 256];
         let len_overflow = env_overflow.encode(&mut buf_overflow).unwrap();
 
-        let err = core.evaluate_frame(&buf_overflow[..len_overflow], &auth_6, &policy_6, &exports, &live_dst, &epoch_6, 1000).unwrap_err();
+        let err = core
+            .evaluate_frame(
+                &buf_overflow[..len_overflow],
+                &auth_6,
+                &policy_6,
+                &exports,
+                &live_dst,
+                &epoch_6,
+                1000,
+            )
+            .unwrap_err();
         assert_eq!(err, IngressRejection::GlobalCapacityExceeded);
     }
 }

@@ -16,13 +16,13 @@
 use super::{KmsClient, KmsClientError, Wiped};
 use crate::session::{sha256, zeroize};
 use types::kms::{
-    KMS_SSH_CHUNK_LEN, KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN,
-    KMS_SSH_SECRET_MAX, KMS_SSH_SESSION_ID_LEN, KMS_SSH_USERNAME_MAX, KmsOpcode,
-    SshAbortRequestPayload, SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
+    ssh_chunk_len, validate_ssh_key_name, validate_ssh_username, KmsOpcode, SshAbortRequestPayload,
+    SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
     SshImportBeginRequestPayload, SshImportCommitRequestPayload, SshKeyStatusPayload,
     SshSignRequestPayload, SshSignResponsePayload, SshStatusRequestPayload,
-    SshTransferBeginResponsePayload, SshUnlockBeginRequestPayload, ssh_chunk_len,
-    validate_ssh_key_name, validate_ssh_username,
+    SshTransferBeginResponsePayload, SshUnlockBeginRequestPayload, KMS_SSH_CHUNK_LEN,
+    KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX,
+    KMS_SSH_SESSION_ID_LEN, KMS_SSH_USERNAME_MAX,
 };
 
 /// Receive bound of the cheap SSH opcodes (15-20, 22-24): 500 ticks = 5 s. A placeholder
@@ -346,8 +346,8 @@ mod tests {
     use alloc::vec::Vec;
     use core::cell::{Cell, RefCell};
     use types::kms::{
-        KMS_MESSAGE_LEN, KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KmsKeyAlgorithm,
-        KmsProviderKind, KmsRequestV1, KmsResponseV1, KmsSshKeyCustody, KmsWireError,
+        KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KmsKeyAlgorithm, KmsProviderKind,
+        KmsRequestV1, KmsResponseV1, KmsSshKeyCustody, KmsWireError, KMS_MESSAGE_LEN,
     };
 
     type Frame = [u8; KMS_MESSAGE_LEN];
@@ -912,11 +912,9 @@ mod tests {
         let kms = client(|frame| Some(ok(frame, &ack_reply(0x77, 1))));
         kms.call_bounded(&mut request, SSH_FRAME_TICKS).unwrap();
         assert!(request.payload.iter().all(|b| *b == 0));
-        assert!(
-            payload_of(&kms.sent_frames()[0].0)
-                .iter()
-                .all(|b| *b == 0xAA)
-        );
+        assert!(payload_of(&kms.sent_frames()[0].0)
+            .iter()
+            .all(|b| *b == 0xAA));
         // `Wiped` zeroes its array on drop.
         let mut wiped = core::mem::ManuallyDrop::new(Wiped([0x5Au8; 128]));
         // SAFETY: dropped exactly once and not used as a `Wiped` afterwards; only its

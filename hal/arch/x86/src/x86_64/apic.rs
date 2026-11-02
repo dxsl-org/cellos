@@ -26,9 +26,13 @@ pub fn register_cpu(logical: usize, lapic_id: u32) -> bool {
     let other_shift = (1 - logical) * 32;
     let mut ids = CPU_APIC_IDS.load(Ordering::Acquire);
     for _ in 0..64 {
-        if (ids >> other_shift) as u32 == lapic_id { return false; }
+        if (ids >> other_shift) as u32 == lapic_id {
+            return false;
+        }
         let previous = (ids >> shift) as u32;
-        if previous != UNREGISTERED { return previous == lapic_id; }
+        if previous != UNREGISTERED {
+            return previous == lapic_id;
+        }
         let updated = (ids & !((u32::MAX as u64) << shift)) | ((lapic_id as u64) << shift);
         match CPU_APIC_IDS.compare_exchange(ids, updated, Ordering::AcqRel, Ordering::Acquire) {
             Ok(_) => return true,
@@ -39,7 +43,9 @@ pub fn register_cpu(logical: usize, lapic_id: u32) -> bool {
 }
 
 pub fn cpu_apic_id(logical: usize) -> Option<u32> {
-    if logical >= super::syscall::MAX_CPUS { return None; }
+    if logical >= super::syscall::MAX_CPUS {
+        return None;
+    }
     let id = (CPU_APIC_IDS.load(Ordering::Acquire) >> (logical * 32)) as u32;
     (id != UNREGISTERED).then_some(id)
 }
@@ -50,7 +56,9 @@ fn lr(reg: usize) -> u32 {
 
 fn wait_icr_idle() -> bool {
     for _ in 0..100_000 {
-        if lr(0x300) & (1 << 12) == 0 { return true; }
+        if lr(0x300) & (1 << 12) == 0 {
+            return true;
+        }
         core::hint::spin_loop();
     }
     false
@@ -58,8 +66,12 @@ fn wait_icr_idle() -> bool {
 
 /// Send a directed fixed IPI. Delivery status is not an invalidate acknowledgement.
 pub fn send_ipi(logical: usize) -> bool {
-    let Some(id) = cpu_apic_id(logical) else { return false; };
-    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 { return false; }
+    let Some(id) = cpu_apic_id(logical) else {
+        return false;
+    };
+    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 {
+        return false;
+    }
     let flags = super::context::save_and_disable_interrupts();
     let sent = if wait_icr_idle() {
         lw(0x280, 0);
@@ -78,12 +90,13 @@ pub fn send_ipi(logical: usize) -> bool {
 
 /// Configure only this AP's LAPIC using the BSP's calibrated periodic count.
 pub fn init_secondary(lapic_id: u32) -> bool {
-    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0
-        || lr(0x20) >> 24 != lapic_id {
+    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 || lr(0x20) >> 24 != lapic_id {
         return false;
     }
     let count = TIMER_COUNT.load(Ordering::Acquire);
-    if count == 0 { return false; }
+    if count == 0 {
+        return false;
+    }
     lw(0x0f0, 0x1ff);
     lw(0x3e0, 0x3);
     lw(0x320, 0x20 | (1 << 17));
@@ -271,7 +284,8 @@ pub fn ioapic_redirect(isa_irq: u8, vec: u8) {
         .unwrap_or(isa_irq as u32);
     let gsi_base = IOAPIC_GSI_BASE.load(Ordering::Relaxed);
     let pin = gsi.saturating_sub(gsi_base) as u8;
-    let destination = cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
+    let destination =
+        cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
     iow(0x10 + pin * 2 + 1, destination << 24);
     iow(0x10 + pin * 2, vec as u32); // vector, unmasked
 }

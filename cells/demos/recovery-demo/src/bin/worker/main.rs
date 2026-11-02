@@ -25,8 +25,20 @@ use recovery_demo::{AUTHORITY_SERVICE, EXIT_RECOVERY_FAILED};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
 api::declare_syscalls![
-    Log, Exit, Send, Recv, RecvTimeout, SetTimer, LookupService, StateRestore, Spawn,
-    GrantAlloc, GrantShare, GrantSlice, ShmAlloc, ShmMap
+    Log,
+    Exit,
+    Send,
+    Recv,
+    RecvTimeout,
+    SetTimer,
+    LookupService,
+    StateRestore,
+    Spawn,
+    GrantAlloc,
+    GrantShare,
+    GrantSlice,
+    ShmAlloc,
+    ShmMap
 ];
 
 ostd::cell_main!(cell_main);
@@ -43,7 +55,9 @@ fn staged_nonce() -> Option<u64> {
 }
 
 fn cell_main() {
-    let Some(nonce) = staged_nonce() else { recovery_failed("no attach nonce") };
+    let Some(nonce) = staged_nonce() else {
+        recovery_failed("no attach nonce")
+    };
     let Some(authority) = common::wait_lookup(AUTHORITY_SERVICE, 500) else {
         recovery_failed("authority unavailable")
     };
@@ -51,7 +65,12 @@ fn cell_main() {
         recovery_failed("authority unreachable");
     }
     let (epoch, revision, counter) = match common::recv_from(authority, 500) {
-        Some(Msg::Attached { epoch, revision, schema, counter }) => {
+        Some(Msg::Attached {
+            epoch,
+            revision,
+            schema,
+            counter,
+        }) => {
             if schema != SCHEMA {
                 common::send(authority, Msg::RestoreFailed { epoch });
                 recovery_failed(&format!("schema {schema} is not {SCHEMA}"));
@@ -62,6 +81,13 @@ fn cell_main() {
         _ => recovery_failed("no attach reply"),
     };
     common::send(authority, Msg::Restored { epoch, revision });
-    println(&format!("[recovery-worker] restored epoch={epoch} revision={revision} counter={counter}"));
-    serve::run(serve::Worker { authority, epoch, revision, counter });
+    println(&format!(
+        "[recovery-worker] restored epoch={epoch} revision={revision} counter={counter}"
+    ));
+    serve::run(serve::Worker {
+        authority,
+        epoch,
+        revision,
+        counter,
+    });
 }

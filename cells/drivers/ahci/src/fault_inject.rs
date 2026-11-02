@@ -33,7 +33,9 @@ pub enum Inject {
     RefuseBeforeIssue,
     SuppressCompletion,
     /// Exit (70) right after the `PxCI` write of the write to `lba`.
-    ExitAfterIssue { lba: u64 },
+    ExitAfterIssue {
+        lba: u64,
+    },
 }
 
 const INDETERMINATE_MARKER: &[u8] = b"F08A-IND";
@@ -52,7 +54,10 @@ fn carries(payload: &[u8], marker: &[u8]) -> bool {
 /// Arm the controller for a write of `payload` to `lba`.
 pub fn before_write(ctrl: &mut AhciController, lba: u64, payload: &[u8]) {
     if carries(payload, DIE_MARKER) {
-        let _ = print_fmt(format_args!("[ahci] fault-inject: driver exiting at lba={}\n", lba));
+        let _ = print_fmt(format_args!(
+            "[ahci] fault-inject: driver exiting at lba={}\n",
+            lba
+        ));
         ostd::syscall::sys_exit(70);
     }
     if carries(payload, DIE_SHM_MARKER) {
@@ -96,7 +101,10 @@ fn exit_holding_shm(lba: u64) {
         SyscallResult::Err(_) => false,
     };
     if !mapped {
-        let _ = print_fmt(format_args!("[ahci] fault-inject: SHM refused at lba={}\n", lba));
+        let _ = print_fmt(format_args!(
+            "[ahci] fault-inject: SHM refused at lba={}\n",
+            lba
+        ));
         return;
     }
     let _ = print_fmt(format_args!(

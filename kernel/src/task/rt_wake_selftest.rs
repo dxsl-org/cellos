@@ -78,8 +78,10 @@ pub(crate) fn self_test() -> bool {
         #[cfg(cellos_p01_trace)]
         crate::memory::heap::p01_owner::task_backing(&task);
         #[cfg(cellos_p01_trace)]
-        let _semantic = crate::memory::heap::p01_owner::creation(None,
-            crate::memory::heap::p01_owner::SCHEDULER_SHARED);
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+        );
         sched.tasks.insert(tid, task);
     }
     if let Some(sender) = sched.tasks.get_mut(&SENDER_TID) {

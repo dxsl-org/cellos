@@ -15,6 +15,8 @@ Manifest:   Cargo.toml was rewritten: workspace dependency entries are inlined a
             Only the alloc, openssh-key and larger features remain. The cfg names of
             the dropped features are declared so their blocks compile out without
             warnings.
+Formatting: rustfmt.toml is Cellos-added: it disables rustfmt in this tree so the
+            workspace `cargo fmt --all` keeps the vendored sources byte-exact.
 
 PATCHES/upstream-files.sha256 lists the SHA-256 of every kept upstream file.
 PATCHES/cellos.diff is the complete source difference from upstream:

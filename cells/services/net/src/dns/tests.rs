@@ -55,9 +55,14 @@ fn resolver_install_allocates_query_slots_and_admits_wire_query() {
     let mut sockets = SocketSet::new(&mut storage[..]);
     let resolver = Resolver::install(&mut sockets);
     let mut device = crate::interface::VirtioNetDevice::new();
-    let config = smoltcp::iface::Config::new(smoltcp::wire::HardwareAddress::Ethernet(smoltcp::wire::EthernetAddress([0x02, 0, 0, 0, 0, 1])));
+    let config = smoltcp::iface::Config::new(smoltcp::wire::HardwareAddress::Ethernet(
+        smoltcp::wire::EthernetAddress([0x02, 0, 0, 0, 0, 1]),
+    ));
     let mut iface = Interface::new(config, &mut device, smoltcp::time::Instant::from_micros(0));
     let handle = resolver.start("tuoitre.vn", &mut iface, &mut sockets);
-    assert!(handle.is_some(), "resolver must have free query slots to start query");
+    assert!(
+        handle.is_some(),
+        "resolver must have free query slots to start query"
+    );
     resolver.cancel(handle.unwrap(), &mut sockets);
 }

@@ -18,11 +18,16 @@ use core::ffi::c_int;
 /// `ptr` points to `len` readable bytes for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn lua_console_write(ptr: *const core::ffi::c_char, len: usize) {
-    if ptr.is_null() || len == 0 { return; }
+    if ptr.is_null() || len == 0 {
+        return;
+    }
     let mut bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
     while !bytes.is_empty() {
         match core::str::from_utf8(bytes) {
-            Ok(text) => { ostd::io::print(text); break; }
+            Ok(text) => {
+                ostd::io::print(text);
+                break;
+            }
             Err(err) => {
                 let good = err.valid_up_to();
                 if good != 0 {

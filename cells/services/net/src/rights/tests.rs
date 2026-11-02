@@ -7,34 +7,118 @@ use crate::tls_wire::{TLS_CONNECT_OP, TLS_RECV_OP, TLS_SEND_OP};
 /// Every `NetRequest` variant with its wire discriminant and required right.
 fn census() -> [(NetRequest<'static>, u8, Option<Right>); 21] {
     [
-        (NetRequest::TcpConnect { addr: [10, 0, 2, 2], port: 80 }, 0, Some(Right::Connect)),
-        (NetRequest::TcpSend { cap_id: 1, data: b"x" }, 1, None),
-        (NetRequest::TcpRecv { cap_id: 1, buf_len: 8 }, 2, None),
+        (
+            NetRequest::TcpConnect {
+                addr: [10, 0, 2, 2],
+                port: 80,
+            },
+            0,
+            Some(Right::Connect),
+        ),
+        (
+            NetRequest::TcpSend {
+                cap_id: 1,
+                data: b"x",
+            },
+            1,
+            None,
+        ),
+        (
+            NetRequest::TcpRecv {
+                cap_id: 1,
+                buf_len: 8,
+            },
+            2,
+            None,
+        ),
         (NetRequest::TcpClose { cap_id: 1 }, 3, None),
         (NetRequest::TcpListen { port: 80 }, 4, Some(Right::Listen)),
         (NetRequest::TcpAccept { cap_id: 1 }, 5, None),
         (NetRequest::UdpCreate, 6, Some(Right::Connect)),
         (
-            NetRequest::UdpSend { cap_id: 1, addr: [10, 0, 2, 2], port: 9, data: b"x" },
+            NetRequest::UdpSend {
+                cap_id: 1,
+                addr: [10, 0, 2, 2],
+                port: 9,
+                data: b"x",
+            },
             7,
             Some(Right::Connect),
         ),
-        (NetRequest::UdpRecv { cap_id: 1, buf_len: 8 }, 8, None),
-        (NetRequest::Resolve { hostname: "example.com" }, 9, Some(Right::Resolve)),
+        (
+            NetRequest::UdpRecv {
+                cap_id: 1,
+                buf_len: 8,
+            },
+            8,
+            None,
+        ),
+        (
+            NetRequest::Resolve {
+                hostname: "example.com",
+            },
+            9,
+            Some(Right::Resolve),
+        ),
         (NetRequest::SocketState { cap_id: 1 }, 10, None),
-        (NetRequest::UdpBind { cap_id: 1, port: 5000 }, 11, Some(Right::Listen)),
+        (
+            NetRequest::UdpBind {
+                cap_id: 1,
+                port: 5000,
+            },
+            11,
+            Some(Right::Listen),
+        ),
         (NetRequest::GetLocalIp, 12, None),
         (
-            NetRequest::MulticastJoin { cap_id: 0, group: [239, 0, 0, 1] },
+            NetRequest::MulticastJoin {
+                cap_id: 0,
+                group: [239, 0, 0, 1],
+            },
             13,
             Some(Right::Listen),
         ),
-        (NetRequest::MulticastLeave { cap_id: 0, group: [239, 0, 0, 1] }, 14, None),
+        (
+            NetRequest::MulticastLeave {
+                cap_id: 0,
+                group: [239, 0, 0, 1],
+            },
+            14,
+            None,
+        ),
         (NetRequest::L2Send { data: &[0u8; 60] }, 15, Some(Right::L2)),
-        (NetRequest::L2Recv { guest_mac: [0x52, 0x54, 0, 0, 0, 1] }, 16, Some(Right::L2)),
-        (NetRequest::TcpReady { interests: &[], cursor: 0, wait: false }, 17, None),
-        (NetRequest::TcpRecvReady { cap_id: 1, buf_len: 8 }, 18, None),
-        (NetRequest::TcpSendReady { cap_id: 1, data: b"x" }, 19, None),
+        (
+            NetRequest::L2Recv {
+                guest_mac: [0x52, 0x54, 0, 0, 0, 1],
+            },
+            16,
+            Some(Right::L2),
+        ),
+        (
+            NetRequest::TcpReady {
+                interests: &[],
+                cursor: 0,
+                wait: false,
+            },
+            17,
+            None,
+        ),
+        (
+            NetRequest::TcpRecvReady {
+                cap_id: 1,
+                buf_len: 8,
+            },
+            18,
+            None,
+        ),
+        (
+            NetRequest::TcpSendReady {
+                cap_id: 1,
+                data: b"x",
+            },
+            19,
+            None,
+        ),
         (NetRequest::TcpCloseGraceful { cap_id: 1 }, 20, None),
     ]
 }
@@ -78,7 +162,11 @@ fn admission_needs_exactly_the_request_right() {
                 // Every other right, and every reserved bit, is not this one.
                 assert_eq!(admit(&bytes, !flag), Err(Denial::Typed), "{request:?}");
                 assert_eq!(admit(&bytes, flag), Ok(()), "{request:?}");
-                assert_eq!(admit(&bytes, CALLER_FLAG_NET_RIGHTS_MASK), Ok(()), "{request:?}");
+                assert_eq!(
+                    admit(&bytes, CALLER_FLAG_NET_RIGHTS_MASK),
+                    Ok(()),
+                    "{request:?}"
+                );
             }
         }
     }
@@ -110,7 +198,10 @@ fn raw_tls_connect_is_egress_and_owned_cap_ops_are_not() {
     let connect = raw_tls_connect();
     assert_eq!(admit(&connect, 0), Err(Denial::RawTlsConnect));
     assert_eq!(
-        admit(&connect, CALLER_FLAG_NET_RIGHTS_MASK & !CALLER_FLAG_NET_CONNECT),
+        admit(
+            &connect,
+            CALLER_FLAG_NET_RIGHTS_MASK & !CALLER_FLAG_NET_CONNECT
+        ),
         Err(Denial::RawTlsConnect)
     );
     assert_eq!(admit(&connect, CALLER_FLAG_NET_CONNECT), Ok(()));

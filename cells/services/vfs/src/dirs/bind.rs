@@ -69,7 +69,11 @@ impl DirTable {
         // Nothing is inserted until the whole set has checked out.
         let mut resolved: Vec<(u64, String)> = Vec::with_capacity(named.len());
         for &raw in named {
-            match self.entries.get(&raw).filter(|e| e.owner == spawner && e.published) {
+            match self
+                .entries
+                .get(&raw)
+                .filter(|e| e.owner == spawner && e.published)
+            {
                 Some(entry) => resolved.push((raw, entry.path.clone())),
                 None => return BindOutcome::Refused,
             }
@@ -106,19 +110,28 @@ impl DirTable {
         source: api::dir_handles::ViDirHandle,
         revoked: &mut Vec<u64>,
     ) -> Result<api::dir_handles::ViDirHandle, super::DirError> {
-        let path = self.owned(parent, source)
-            .ok_or(super::DirError::UnknownHandle)?.path.clone();
+        let path = self
+            .owned(parent, source)
+            .ok_or(super::DirError::UnknownHandle)?
+            .path
+            .clone();
         if self.state(child).is_some() {
             return Err(super::DirError::UnknownHandle);
         }
-        if let super::lifecycle::Contact::NeedsAttestation { revoked_dir_ids, .. } = self.on_contact(child) {
+        if let super::lifecycle::Contact::NeedsAttestation {
+            revoked_dir_ids, ..
+        } = self.on_contact(child)
+        {
             revoked.extend(revoked_dir_ids);
         }
         self.seal(child);
         self.mark_attested(child);
         match self.insert(child, path, Some(source.0)) {
             Ok(handle) => {
-                self.entries.get_mut(&handle.0).expect("just reserved").published = false;
+                self.entries
+                    .get_mut(&handle.0)
+                    .expect("just reserved")
+                    .published = false;
                 Ok(handle)
             }
             Err(error) => {

@@ -10,10 +10,9 @@
 extern crate alloc;
 extern crate ostd;
 
+mod cluster;
 mod dto;
 mod tools;
-mod cluster;
-
 
 use alloc::format;
 use alloc::string::String;
@@ -23,9 +22,9 @@ use ostd::io::println;
 use ostd::syscall::{sys_exit, sys_lookup_service, sys_spawn_from_path, SyscallResult};
 use vimio::{Events, Selector};
 
+use cluster::{HailyClusterCoordinator, HailyNode, NodeRole, NodeState, TaskKind};
 use dto::{HailyRequest, HailyResponse};
 use tools::ToolRouter;
-use cluster::{HailyClusterCoordinator, HailyNode, NodeRole, NodeState, TaskKind};
 
 api::declare_manifest!(block_io = false, network = true, spawn = true);
 api::declare_syscalls![
@@ -64,17 +63,26 @@ fn cell_main() {
         router.fs_cell = tid;
     }
     if let SyscallResult::Ok(tid) = sys_spawn_from_path(TOOL_SYS_PATH) {
-        println(&format!("[haily-agent] Bound SYS tool cell at tid: {}", tid));
+        println(&format!(
+            "[haily-agent] Bound SYS tool cell at tid: {}",
+            tid
+        ));
         router.sys_cell = tid;
     }
     if let SyscallResult::Ok(tid) = sys_spawn_from_path(TOOL_SPAWN_PATH) {
-        println(&format!("[haily-agent] Bound SPAWN tool cell at tid: {}", tid));
+        println(&format!(
+            "[haily-agent] Bound SPAWN tool cell at tid: {}",
+            tid
+        ));
         router.spawn_cell = tid;
     }
 
     // 2. Discover C2C Network Broker & HTTP Gateway
     if let Some(broker_tid) = sys_lookup_service(api::syscall::service::NET_BROKER) {
-        println(&format!("[haily-agent] C2C Net Broker discovered at tid: {}", broker_tid));
+        println(&format!(
+            "[haily-agent] C2C Net Broker discovered at tid: {}",
+            broker_tid
+        ));
     } else {
         println("[haily-agent] Net Broker offline; running in single-node autonomous mode.");
     }
@@ -115,37 +123,59 @@ fn cell_main() {
         user_ref: Some(String::from("user-dmin")),
     };
 
-    println(&format!("[haily-agent] Processing task session: {} msg: '{}'",
-        sample_request.session_id, sample_request.message));
+    println(&format!(
+        "[haily-agent] Processing task session: {} msg: '{}'",
+        sample_request.session_id, sample_request.message
+    ));
 
     let response = process_haily_task(&router, &sample_request);
 
-    println(&format!("[haily-agent] Task completed! status='{}' reply='{}' tool_calls={}",
-        response.status, response.reply, response.tool_invocations));
-
+    println(&format!(
+        "[haily-agent] Task completed! status='{}' reply='{}' tool_calls={}",
+        response.status, response.reply, response.tool_invocations
+    ));
 
     // 4b. Exercise Stage H2: Distributed task dispatch across cluster nodes
     println("[haily-agent] Exercising Stage H2 distributed workload placement...");
-    let (task1, status1) = cluster.dispatch_task("sess-research-01", TaskKind::ResearchSynthesis, "synthesize papers on SAS concurrency");
-    println(&format!("[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
-        task1.task_id, status1, task1.assigned_node));
+    let (task1, status1) = cluster.dispatch_task(
+        "sess-research-01",
+        TaskKind::ResearchSynthesis,
+        "synthesize papers on SAS concurrency",
+    );
+    println(&format!(
+        "[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
+        task1.task_id, status1, task1.assigned_node
+    ));
 
-    let (task2, status2) = cluster.dispatch_task("sess-code-02", TaskKind::CodeAnalysis, "parallel compile check for worker slices");
-    println(&format!("[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
-        task2.task_id, status2, task2.assigned_node));
+    let (task2, status2) = cluster.dispatch_task(
+        "sess-code-02",
+        TaskKind::CodeAnalysis,
+        "parallel compile check for worker slices",
+    );
+    println(&format!(
+        "[haily-agent] Dispatched Task {}: {:?} -> assigned_node={:?}",
+        task2.task_id, status2, task2.assigned_node
+    ));
 
     // Exercise Stage H2 fault reconciliation: simulate Node-02 disconnect
-    println("[haily-agent] Exercising Stage H2 node failure reconciliation (Node 2002 disconnect)...");
+    println(
+        "[haily-agent] Exercising Stage H2 node failure reconciliation (Node 2002 disconnect)...",
+    );
     let mut active_cluster_tasks = alloc::vec![task1, task2];
     let reconciled = cluster.reconcile_disconnection(2002, &mut active_cluster_tasks);
     println(&format!("[haily-agent] Reconciled {} unacknowledged tasks -> transitioned to Indeterminate (zero double-execution).", reconciled));
     for t in &active_cluster_tasks {
-        println(&format!("[haily-agent]   Task {} state={:?}", t.task_id, t.outcome));
+        println(&format!(
+            "[haily-agent]   Task {} state={:?}",
+            t.task_id, t.outcome
+        ));
     }
 
     // 5. Short event loop listener turn
     let mut events = Events::with_capacity(8);
-    selector.select(&mut events, Some(Duration::from_millis(50))).ok();
+    selector
+        .select(&mut events, Some(Duration::from_millis(50)))
+        .ok();
 
     println("[haily-agent] PASS: Haily Personal Assistant Stage H1/H2 verification succeeded!");
     sys_exit(0);
@@ -167,7 +197,9 @@ pub fn process_haily_task(tools: &ToolRouter, req: &HailyRequest) -> HailyRespon
                 Err(e) => reply_parts.push(format!("Sys tool error: {}", e)),
             }
         } else {
-            reply_parts.push(String::from("Cluster nodes: Node-01 (Intel x86_64 SAS) active."));
+            reply_parts.push(String::from(
+                "Cluster nodes: Node-01 (Intel x86_64 SAS) active.",
+            ));
         }
     }
 
@@ -180,12 +212,17 @@ pub fn process_haily_task(tools: &ToolRouter, req: &HailyRequest) -> HailyRespon
                 Err(e) => reply_parts.push(format!("FS tool error: {}", e)),
             }
         } else {
-            reply_parts.push(String::from("Directory /data contains persistent application state."));
+            reply_parts.push(String::from(
+                "Directory /data contains persistent application state.",
+            ));
         }
     }
 
     if reply_parts.is_empty() {
-        reply_parts.push(format!("Acknowledged task: '{}'. Haily agent standing by on CellOS.", req.message));
+        reply_parts.push(format!(
+            "Acknowledged task: '{}'. Haily agent standing by on CellOS.",
+            req.message
+        ));
     }
 
     HailyResponse {

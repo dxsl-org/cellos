@@ -34,11 +34,13 @@ pub struct RenderCtx<'a> {
 impl<'a> RenderCtx<'a> {
     /// Draw using the same font and size as layout.
     pub fn draw_text(&mut self, pos: Point, text: &str, color: Color) {
-        self.canvas.draw_text_scaled(pos, text, self.font.size_px, color, &mut self.font.atlas);
+        self.canvas
+            .draw_text_scaled(pos, text, self.font.size_px, color, &mut self.font.atlas);
     }
 
     pub fn draw_text_at_size(&mut self, pos: Point, text: &str, color: Color, size_px: f32) {
-        self.canvas.draw_text_scaled(pos, text, size_px, color, &mut self.font.atlas);
+        self.canvas
+            .draw_text_scaled(pos, text, size_px, color, &mut self.font.atlas);
     }
 
     pub fn measure(&mut self, text: &str) -> f32 {

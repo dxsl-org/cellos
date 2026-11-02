@@ -42,7 +42,11 @@ fn words(bytes: usize) -> usize {
 }
 
 fn snapshot_bytes(flags: usize, cells: usize, tasks: usize) -> usize {
-    let tasks = if flags & request::TASKS != 0 { tasks } else { 0 };
+    let tasks = if flags & request::TASKS != 0 {
+        tasks
+    } else {
+        0
+    };
     cells
         .saturating_mul(CELL_LEN)
         .saturating_add(tasks.saturating_mul(TASK_LEN))
@@ -76,10 +80,15 @@ impl TelemetryReader {
     pub fn capture(&mut self, sampler: &mut Sampler, view: View) -> Result<Frame, TopError> {
         let mut grown = false;
         loop {
-            let written = syscall::sys_telemetry_snapshot(&mut self.buf, self.flags).map_err(capture_error)?;
+            let written = syscall::sys_telemetry_snapshot(&mut self.buf, self.flags)
+                .map_err(capture_error)?;
             let snapshot = TelemetrySnapshot::parse(syscall::telemetry_bytes(&self.buf, written))?;
             let header = snapshot.header();
-            let wanted = words(snapshot_bytes(self.flags, header.total_cells as usize, header.total_tasks as usize));
+            let wanted = words(snapshot_bytes(
+                self.flags,
+                header.total_cells as usize,
+                header.total_tasks as usize,
+            ));
             if grown || header.has(header_flags::COMPLETE) || wanted <= self.buf.len() {
                 return Ok(sampler.observe(&snapshot, view));
             }
@@ -115,7 +124,12 @@ pub enum Waited {
 /// `sleep` are not billed for waiting. `interrupted` is polled before every park
 /// (S10-3b): the first `true` ends the wait as [`Waited::Interrupted`].
 pub fn wait_until(delay_ns: u64, interrupted: &mut dyn FnMut() -> bool) -> Waited {
-    wait_core(delay_ns, &mut || ostd::session::monotonic_ns().ok(), &mut park_one_tick, interrupted)
+    wait_core(
+        delay_ns,
+        &mut || ostd::session::monotonic_ns().ok(),
+        &mut park_one_tick,
+        interrupted,
+    )
 }
 
 fn park_one_tick() {

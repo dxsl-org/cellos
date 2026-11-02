@@ -83,10 +83,7 @@ fn write_line(index: u32, text: &str) -> usize {
         }
         buf.push(byte);
     }
-    match sys_serial_write(index, &buf) {
-        Ok(written) => written,
-        Err(_) => 0,
-    }
+    sys_serial_write(index, &buf).unwrap_or_default()
 }
 
 /// Enumerate, transmit a marker, poll for input, then report.

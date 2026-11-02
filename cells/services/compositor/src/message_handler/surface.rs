@@ -67,7 +67,9 @@ pub(super) fn handle(
             }
         }
         compositor_ops::MOVE_SURFACE => move_surface(buf, sender, table, pending_dirty),
-        compositor_ops::RAISE_SURFACE => raise_surface(buf, sender, input, table, z_order, pending_dirty),
+        compositor_ops::RAISE_SURFACE => {
+            raise_surface(buf, sender, input, table, z_order, pending_dirty)
+        }
         compositor_ops::DESTROY_SURFACE => {
             destroy_surface(buf, sender, input, table, z_order, pending_dirty)
         }
@@ -122,10 +124,9 @@ fn raise_surface(
         return;
     }
     let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap());
-    if !table
-        .get(cap)
-        .is_some_and(|s| s.owner == sender && (s.role == SurfaceRole::Interactive || s.role == SurfaceRole::Panel))
-    {
+    if !table.get(cap).is_some_and(|s| {
+        s.owner == sender && (s.role == SurfaceRole::Interactive || s.role == SurfaceRole::Panel)
+    }) {
         return;
     }
     z_order.raise(cap);

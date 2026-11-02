@@ -97,9 +97,13 @@ fn downsample(data: &[f32], target_len: usize) -> Vec<f32> {
 }
 
 impl ViNode for LineChart {
-    fn layout(&mut self, constraints: Constraints, _font: &mut crate::font_context::FontContext) -> Size {
-    self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
-    constraints.max
+    fn layout(
+        &mut self,
+        constraints: Constraints,
+        _font: &mut crate::font_context::FontContext,
+    ) -> Size {
+        self.bounds = Rect::from_origin_size(constraints.origin, constraints.max);
+        constraints.max
     }
 
     fn bounds(&self) -> Rect {

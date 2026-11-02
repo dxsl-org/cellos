@@ -191,7 +191,11 @@ impl Field {
             ("pid", RowKind::Tasks) => Field::Tid,
             ("mem" | "heap", RowKind::Cells) => Field::QuotaBytes,
             ("mem" | "heap", RowKind::Tasks) => return Err(USAGE_TASK_MEMORY),
-            _ => *kind.fields().iter().find(|field| field.name() == token).ok_or(USAGE)?,
+            _ => *kind
+                .fields()
+                .iter()
+                .find(|field| field.name() == token)
+                .ok_or(USAGE)?,
         };
         Ok(field)
     }
@@ -209,7 +213,10 @@ pub struct SortSpec {
 impl SortSpec {
     /// Sort by `field` in its natural direction ([`Field::sorts_descending`]).
     pub fn new(field: Field) -> SortSpec {
-        SortSpec { field, descending: field.sorts_descending() }
+        SortSpec {
+            field,
+            descending: field.sorts_descending(),
+        }
     }
 
     /// Busiest rows first; both row kinds share the default.
@@ -250,7 +257,10 @@ pub fn parse_options(args: &[&str]) -> Result<TopOptions, &'static str> {
             "-b" => set_once(&mut batch, Some(()))?,
             "-n" => set_once(
                 &mut count,
-                words.next().and_then(parse_decimal).and_then(|n| usize::try_from(n).ok()),
+                words
+                    .next()
+                    .and_then(parse_decimal)
+                    .and_then(|n| usize::try_from(n).ok()),
             )?,
             "-d" => set_once(&mut delay_ns, words.next().and_then(parse_delay_ns))?,
             "-o" => set_once(&mut sort, words.next())?,
@@ -266,7 +276,9 @@ pub fn parse_options(args: &[&str]) -> Result<TopOptions, &'static str> {
         Some(token) => SortSpec::new(Field::resolve(token, kind)?),
         None => SortSpec::default_for(view),
     };
-    let fields = fields.map(|list| parse_field_list(list, kind)).transpose()?;
+    let fields = fields
+        .map(|list| parse_field_list(list, kind))
+        .transpose()?;
     Ok(TopOptions {
         batch: batch.is_some(),
         count,
@@ -326,7 +338,10 @@ fn parse_delay_ns(text: &str) -> Option<u64> {
 fn parse_cell(text: &str) -> Option<View> {
     let (cell_id, generation) = text.split_once(':')?;
     let generation = parse_decimal(generation).filter(|&generation| generation != 0)?;
-    Some(View::Cell { cell_id: parse_decimal(cell_id)?, generation })
+    Some(View::Cell {
+        cell_id: parse_decimal(cell_id)?,
+        generation,
+    })
 }
 
 fn parse_field_list(list: &str, kind: RowKind) -> Result<Vec<Field>, &'static str> {

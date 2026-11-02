@@ -16,7 +16,12 @@ const CELLOS_PARTITION_TYPE: u8 = 0x7F;
 pub fn device_name(key: DeviceKey) -> String {
     if key.kind == BLOCK_DEVICE_PCI {
         let bdf = key.id;
-        format!("pci-{:02x}-{:02x}-{:x}", (bdf >> 8) & 0xff, (bdf >> 3) & 0x1f, bdf & 7)
+        format!(
+            "pci-{:02x}-{:02x}-{:x}",
+            (bdf >> 8) & 0xff,
+            (bdf >> 3) & 0x1f,
+            bdf & 7
+        )
     } else {
         format!("mmio-{:x}", key.id)
     }
@@ -48,11 +53,18 @@ impl PrimaryReason {
 /// Index of the primary disk among `(key, carries a Cellos MBR)` entries: the
 /// unique Cellos-MBR device, else the lowest `(kind, id)`. `None` when empty.
 pub fn choose_primary(devices: &[(DeviceKey, bool)]) -> Option<(usize, PrimaryReason)> {
-    let mut marked = devices.iter().enumerate().filter(|(_, (_, cellos))| *cellos);
+    let mut marked = devices
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, cellos))| *cellos);
     if let (Some((i, _)), None) = (marked.next(), marked.next()) {
         return Some((i, PrimaryReason::CellosMbr));
     }
-    let lowest = devices.iter().enumerate().min_by_key(|(_, (key, _))| *key)?.0;
+    let lowest = devices
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, (key, _))| *key)?
+        .0;
     Some((lowest, PrimaryReason::LowestKey))
 }
 
@@ -67,10 +79,15 @@ pub struct Discovery {
 pub fn discover(router: &mut Router, sys: &mut impl BlockSys) -> Discovery {
     *router = Router::new();
     for index in 0..MAX_BLOCK_ROUTES as u32 {
-        let Some(record) = sys.lookup_route(index) else { break };
+        let Some(record) = sys.lookup_route(index) else {
+            break;
+        };
         let dev = router.add(index, &record);
         let tid = record.provider().map_or(0, |(tid, _, _)| tid);
-        sys.log(&format!("[vfs] block route {index} {} tid={tid}", router.name(dev)));
+        sys.log(&format!(
+            "[vfs] block route {index} {} tid={tid}",
+            router.name(dev)
+        ));
     }
     let marks: Vec<(DeviceKey, bool)> = (0..router.devices().len())
         .map(|i| {
@@ -82,16 +99,26 @@ pub fn discover(router: &mut Router, sys: &mut impl BlockSys) -> Discovery {
         .collect();
     let Some((primary, reason)) = choose_primary(&marks) else {
         sys.log("[vfs] primary disk kernel (no block routes)");
-        return Discovery { primary: DeviceRef::Kernel, secondaries: Vec::new() };
+        return Discovery {
+            primary: DeviceRef::Kernel,
+            secondaries: Vec::new(),
+        };
     };
     let primary = DeviceRef::Device(primary as u8);
-    sys.log(&format!("[vfs] primary disk {} ({})", router.name(primary), reason.label()));
+    sys.log(&format!(
+        "[vfs] primary disk {} ({})",
+        router.name(primary),
+        reason.label()
+    ));
     let secondaries = (0..router.devices().len())
         .map(|i| DeviceRef::Device(i as u8))
         .filter(|dev| *dev != primary)
         .map(|dev| (dev, String::from(router.name(dev))))
         .collect();
-    Discovery { primary, secondaries }
+    Discovery {
+        primary,
+        secondaries,
+    }
 }
 
 #[cfg(test)]
@@ -103,10 +130,34 @@ mod tests {
 
     #[test]
     fn names_follow_pci_location_and_mmio_base() {
-        assert_eq!(device_name(DeviceKey { kind: BLOCK_DEVICE_PCI, id: AHCI }), "pci-00-1f-2");
-        assert_eq!(device_name(DeviceKey { kind: BLOCK_DEVICE_PCI, id: NVME }), "pci-03-00-0");
-        assert_eq!(device_name(DeviceKey { kind: BLOCK_DEVICE_PCI, id: 0xFFFF }), "pci-ff-1f-7");
-        assert_eq!(device_name(DeviceKey { kind: BLOCK_DEVICE_MMIO, id: 0x1000_1000 }), "mmio-10001000");
+        assert_eq!(
+            device_name(DeviceKey {
+                kind: BLOCK_DEVICE_PCI,
+                id: AHCI
+            }),
+            "pci-00-1f-2"
+        );
+        assert_eq!(
+            device_name(DeviceKey {
+                kind: BLOCK_DEVICE_PCI,
+                id: NVME
+            }),
+            "pci-03-00-0"
+        );
+        assert_eq!(
+            device_name(DeviceKey {
+                kind: BLOCK_DEVICE_PCI,
+                id: 0xFFFF
+            }),
+            "pci-ff-1f-7"
+        );
+        assert_eq!(
+            device_name(DeviceKey {
+                kind: BLOCK_DEVICE_MMIO,
+                id: 0x1000_1000
+            }),
+            "mmio-10001000"
+        );
     }
 
     #[test]
@@ -124,11 +175,26 @@ mod tests {
 
     #[test]
     fn primary_is_the_unique_cellos_disk_else_the_lowest_key() {
-        let pci = |id| DeviceKey { kind: BLOCK_DEVICE_PCI, id };
-        let mmio = DeviceKey { kind: BLOCK_DEVICE_MMIO, id: 0x1000 };
-        assert_eq!(choose_primary(&[(pci(NVME), false), (mmio, true)]), Some((1, PrimaryReason::CellosMbr)));
-        assert_eq!(choose_primary(&[(mmio, false), (pci(NVME), false), (pci(AHCI), false)]), Some((2, PrimaryReason::LowestKey)));
-        assert_eq!(choose_primary(&[(pci(NVME), true), (mmio, false), (pci(AHCI), true)]), Some((2, PrimaryReason::LowestKey)));
+        let pci = |id| DeviceKey {
+            kind: BLOCK_DEVICE_PCI,
+            id,
+        };
+        let mmio = DeviceKey {
+            kind: BLOCK_DEVICE_MMIO,
+            id: 0x1000,
+        };
+        assert_eq!(
+            choose_primary(&[(pci(NVME), false), (mmio, true)]),
+            Some((1, PrimaryReason::CellosMbr))
+        );
+        assert_eq!(
+            choose_primary(&[(mmio, false), (pci(NVME), false), (pci(AHCI), false)]),
+            Some((2, PrimaryReason::LowestKey))
+        );
+        assert_eq!(
+            choose_primary(&[(pci(NVME), true), (mmio, false), (pci(AHCI), true)]),
+            Some((2, PrimaryReason::LowestKey))
+        );
         assert_eq!(choose_primary(&[]), None);
     }
 }

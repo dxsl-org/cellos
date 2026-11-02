@@ -46,7 +46,12 @@ pub(crate) fn fill_page<N: AsRef<[u8]>>(
         if index >= start {
             match push_entry(out, written, kind, name.as_ref()) {
                 Ok(Some(end)) => written = end,
-                Ok(None) => return Some(ListPage { written, next: Some(index) }),
+                Ok(None) => {
+                    return Some(ListPage {
+                        written,
+                        next: Some(index),
+                    })
+                }
                 Err(_) => return None,
             }
         }
@@ -55,7 +60,10 @@ pub(crate) fn fill_page<N: AsRef<[u8]>>(
             return None;
         }
     }
-    (index >= start).then_some(ListPage { written, next: None })
+    (index >= start).then_some(ListPage {
+        written,
+        next: None,
+    })
 }
 
 /// Operational state only: healthy does not certify a durability barrier.
@@ -171,9 +179,13 @@ pub trait FsBackend: Send {
 
     /// Atomically check that `stage` is still `sealed` and `dst` still matches
     /// `expect`, then publish `stage` at `dst` and sync.
-    fn publish_if(&mut self, stage: &str, sealed: (u64, u64), dst: &str,
-        expect: api::ipc::SaveExpect) -> api::ipc::SaveOutcome
-    {
+    fn publish_if(
+        &mut self,
+        stage: &str,
+        sealed: (u64, u64),
+        dst: &str,
+        expect: api::ipc::SaveExpect,
+    ) -> api::ipc::SaveOutcome {
         let _ = (stage, sealed, dst, expect);
         api::ipc::SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED)
     }

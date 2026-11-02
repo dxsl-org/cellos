@@ -41,11 +41,17 @@ pub struct Outcome {
 
 impl Outcome {
     fn status(status: i32) -> Self {
-        Self { status, diagnostic: None }
+        Self {
+            status,
+            diagnostic: None,
+        }
     }
 
     fn failed(status: i32, diagnostic: String) -> Self {
-        Self { status, diagnostic: Some(diagnostic) }
+        Self {
+            status,
+            diagnostic: Some(diagnostic),
+        }
     }
 
     fn telemetry(error: TopError) -> Self {
@@ -75,16 +81,27 @@ impl Source for Live {
 /// no screen bytes) below the delay floor or without an interactive terminal.
 pub fn run(options: &TopOptions) -> Outcome {
     if options.delay_ns < MIN_DELAY_NS {
-        return Outcome::failed(USAGE_STATUS, String::from("top: interactive delay is at least 0.1 s; use top -b for faster frames"));
+        return Outcome::failed(
+            USAGE_STATUS,
+            String::from("top: interactive delay is at least 0.1 s; use top -b for faster frames"),
+        );
     }
     if !crate::executor::interactive_terminal() {
-        return Outcome::failed(USAGE_STATUS, String::from("top: no interactive terminal here; use top -b for text frames"));
+        return Outcome::failed(
+            USAGE_STATUS,
+            String::from("top: no interactive terminal here; use top -b for text frames"),
+        );
     }
-    let mut source = Live { reader: TelemetryReader::new(options.view), sampler: Sampler::new() };
+    let mut source = Live {
+        reader: TelemetryReader::new(options.view),
+        sampler: Sampler::new(),
+    };
     run_with(options, &mut source, |source, view| {
         crate::executor::flush_repl_capture();
         crate::executor::with_tui(|session, sink| interact(session, sink, source, view, options))
-            .unwrap_or_else(|status| Outcome::failed(1, format!("top: terminal unavailable: {status:?}")))
+            .unwrap_or_else(|status| {
+                Outcome::failed(1, format!("top: terminal unavailable: {status:?}"))
+            })
     })
 }
 
@@ -115,7 +132,10 @@ pub fn color_mode(frontend: u8) -> ColorMode {
 
 /// Consume typed input queued before the TUI: `q`/EOF end the run (0), Ctrl-C ends it
 /// (130); every other key is discarded (and wiped).
-fn drain_type_ahead(keys: &mut TerminalKeys, session: &mut TerminalSession) -> Result<Option<i32>, Status> {
+fn drain_type_ahead(
+    keys: &mut TerminalKeys,
+    session: &mut TerminalSession,
+) -> Result<Option<i32>, Status> {
     loop {
         match keys.read_from(session, 0)? {
             None => return Ok(None),
@@ -149,7 +169,9 @@ fn interact(
         match drain_type_ahead(&mut keys, session) {
             Ok(None) => {}
             Ok(Some(status)) => return Outcome::status(status),
-            Err(status) => return Outcome::failed(1, format!("top: terminal input failed: {status:?}")),
+            Err(status) => {
+                return Outcome::failed(1, format!("top: terminal input failed: {status:?}"))
+            }
         }
         match TuiSession::enter_bounded(&mut *session, sink, MAX_VIEW) {
             Ok(tui) => break tui,
@@ -212,7 +234,9 @@ fn run_loop<W: vitui::backend::ByteSink>(
     options: &TopOptions,
     theme: &Theme,
 ) -> Outcome {
-    let clock_failed = |status: Status| Outcome::failed(1, format!("top: monotonic clock unavailable: {status:?}"));
+    let clock_failed = |status: Status| {
+        Outcome::failed(1, format!("top: monotonic clock unavailable: {status:?}"))
+    };
     let mut remaining = options.count;
     let mut frame = match refresh(tui, source, view, theme) {
         Ok(frame) => frame,

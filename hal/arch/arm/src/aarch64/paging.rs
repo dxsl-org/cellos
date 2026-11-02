@@ -313,7 +313,6 @@ impl PageTableTrait for PageTable {
             return;
         }
 
-
         // ── EL1 path (unchanged) ─────────────────────────────────────────────
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
                                                // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)

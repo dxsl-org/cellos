@@ -1,9 +1,9 @@
 use alloc::string::String;
 use api::retirement::{reason, RetirementState, ViRetirementV1};
 use api::syscall::service;
+use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
 use ostd::syscall::{sys_lookup_service, sys_query_retirement, sys_send, SyscallError};
-use cellos_boot_config::RestartPolicy;
 
 use crate::service_table::{self, now_ticks, Service};
 
@@ -61,7 +61,9 @@ fn decision_line(name: &str, decision: &Decision) -> String {
             record.leaked_pages,
         ),
         Decision::DeviceUnavailable => {
-            alloc::format!("Init: {name} device unavailable: DMA teardown unacknowledged (BDF retained)")
+            alloc::format!(
+                "Init: {name} device unavailable: DMA teardown unacknowledged (BDF retained)"
+            )
         }
         Decision::NodeRecoveryRequired => {
             alloc::format!("Init: {name} node recovery required: containment unproven, no restart")
@@ -94,7 +96,10 @@ pub(crate) fn await_verdict(dead: usize) -> Result<ViRetirementV1, SyscallError>
 
 /// Supervise `services` forever. `pin` is the machine pin endpoint once the
 /// gate has run; its frames are answered before any other handler sees them.
-pub(crate) fn run(services: &mut [Service], mut pin: Option<&mut crate::machine_pin::Endpoint>) -> ! {
+pub(crate) fn run(
+    services: &mut [Service],
+    mut pin: Option<&mut crate::machine_pin::Endpoint>,
+) -> ! {
     let mut activator = crate::activation::Activator::new();
     loop {
         restart_pending(services);
@@ -122,7 +127,10 @@ pub(crate) fn run(services: &mut [Service], mut pin: Option<&mut crate::machine_
         // Exit reasons retain their existing clean/crash restart semantics.
         let reason = message.reason();
 
-        let Some(index) = services.iter().position(|service| service.tid == Some(dead)) else {
+        let Some(index) = services
+            .iter()
+            .position(|service| service.tid == Some(dead))
+        else {
             continue;
         };
         if services[index].spec.path == "/bin/hypervisor" {
@@ -197,8 +205,7 @@ fn restart_pending(services: &mut [Service]) {
     // provider is unavailable until its exact new instance is ready, so this
     // yields a stable dependency order even for forward TOML references.
     while let Some(index) = (0..services.len()).find(|&index| {
-        services[index].restart_pending
-            && service_table::dependencies_available(services, index)
+        services[index].restart_pending && service_table::dependencies_available(services, index)
     }) {
         let service = &mut services[index];
         // Consume before attempting: a real spawn/registration failure must
@@ -256,7 +263,10 @@ mod restart_decision_tests {
     #[test]
     fn contained_restarts() {
         let contained = record(RetirementState::Contained, 0);
-        assert_eq!(restart_decision(Ok(contained)), Decision::Restart(contained));
+        assert_eq!(
+            restart_decision(Ok(contained)),
+            Decision::Restart(contained)
+        );
         let borrowed = record(RetirementState::Contained, reason::WRITABLE_BORROW);
         assert_eq!(restart_decision(Ok(borrowed)), Decision::Restart(borrowed));
     }
@@ -268,13 +278,19 @@ mod restart_decision_tests {
             reason::TRACKED_QUARANTINE | reason::WRITABLE_BORROW,
         ] {
             let quarantined = record(RetirementState::Quarantined, reasons);
-            assert_eq!(restart_decision(Ok(quarantined)), Decision::Restart(quarantined));
+            assert_eq!(
+                restart_decision(Ok(quarantined)),
+                Decision::Restart(quarantined)
+            );
         }
     }
 
     #[test]
     fn quarantined_with_deferred_dma_leaves_the_device_unavailable() {
-        for reasons in [reason::DMA_DEFERRED, reason::DMA_DEFERRED | reason::TRACKED_QUARANTINE] {
+        for reasons in [
+            reason::DMA_DEFERRED,
+            reason::DMA_DEFERRED | reason::TRACKED_QUARANTINE,
+        ] {
             let retained = record(RetirementState::Quarantined, reasons);
             assert_eq!(restart_decision(Ok(retained)), Decision::DeviceUnavailable);
         }
@@ -283,10 +299,16 @@ mod restart_decision_tests {
     #[test]
     fn unproven_pending_and_every_error_require_node_recovery() {
         let unproven = record(RetirementState::Unproven, reason::SHM_UNTRACKED);
-        assert_eq!(restart_decision(Ok(unproven)), Decision::NodeRecoveryRequired);
+        assert_eq!(
+            restart_decision(Ok(unproven)),
+            Decision::NodeRecoveryRequired
+        );
         // A record still pending once the wait bound ran out.
         let pending = record(RetirementState::Pending, 0);
-        assert_eq!(restart_decision(Ok(pending)), Decision::NodeRecoveryRequired);
+        assert_eq!(
+            restart_decision(Ok(pending)),
+            Decision::NodeRecoveryRequired
+        );
         for error in [
             SyscallError::FileNotFound,
             SyscallError::PermissionDenied,

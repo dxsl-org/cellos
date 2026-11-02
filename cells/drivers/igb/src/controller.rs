@@ -346,7 +346,8 @@ impl IgbController {
                         }
                     }
                     InitialDmaProgram::RxRingBase(iova) => {
-                        let _ = ctrl.wr32(SRRCTL0, SRRCTL_DESCTYPE_ADV_ONEBUF | SRRCTL_BSIZEPKT_2048);
+                        let _ =
+                            ctrl.wr32(SRRCTL0, SRRCTL_DESCTYPE_ADV_ONEBUF | SRRCTL_BSIZEPKT_2048);
                         let _ = ctrl.wr32(RDBAL0, iova as u32);
                         let _ = ctrl.wr32(RDBAH0, (iova >> 32) as u32);
                         let _ = ctrl.wr32(RDLEN0, (N_RX * 16) as u32);
@@ -361,8 +362,8 @@ impl IgbController {
                         // model (`e1000x_rx_ready` requires STATUS.LU).
                         let link = ctrl.wait_link_up().unwrap_or(false);
                         ctrl.link_up = link;
-                        let _ = ctrl
-                            .wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC);
+                        let _ =
+                            ctrl.wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC);
                     }
                 });
 
@@ -420,7 +421,9 @@ impl IgbController {
         for _ in 0..TX_POLLS {
             // SAFETY: tx_ring[slot] is valid DMA memory.
             let status = unsafe {
-                core::ptr::read_volatile(&(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status)
+                core::ptr::read_volatile(
+                    &(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status,
+                )
             };
             if status & TXD_STAT_DD != 0 {
                 return Ok(());

@@ -66,7 +66,12 @@ fn hidden(c: char) -> bool {
 }
 
 fn hex(byte: u8, out: &mut Vec<u8>) {
-    out.extend_from_slice(&[b'\\', b'x', HEX[usize::from(byte >> 4)], HEX[usize::from(byte & 0xF)]]);
+    out.extend_from_slice(&[
+        b'\\',
+        b'x',
+        HEX[usize::from(byte >> 4)],
+        HEX[usize::from(byte & 0xF)],
+    ]);
 }
 
 fn decimal(mut n: u64, out: &mut Vec<u8>) {

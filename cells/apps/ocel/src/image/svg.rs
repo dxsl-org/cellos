@@ -2,8 +2,8 @@
 //! Super-compact flat-path manual SVG rasterizer for Ocel (desktop profile only).
 
 extern crate alloc;
-use alloc::vec::Vec;
 use super::bmp::DecodedImage;
+use alloc::vec::Vec;
 
 const MAX_SVG_DIMENSION: usize = 2048;
 const MAX_EDGES_PER_SHAPE: usize = 8192;
@@ -29,8 +29,18 @@ struct Color {
 }
 
 impl Color {
-    const TRANSPARENT: Self = Self { b: 0, g: 0, r: 0, a: 0 };
-    const BLACK: Self = Self { b: 0, g: 0, r: 0, a: 255 };
+    const TRANSPARENT: Self = Self {
+        b: 0,
+        g: 0,
+        r: 0,
+        a: 0,
+    };
+    const BLACK: Self = Self {
+        b: 0,
+        g: 0,
+        r: 0,
+        a: 255,
+    };
 
     fn parse(val: &str) -> Option<Self> {
         let val = val.trim();
@@ -50,11 +60,41 @@ impl Color {
                 return Some(Self { b, g, r, a: 255 });
             }
         }
-        if val.eq_ignore_ascii_case("black") { return Some(Self::BLACK); }
-        if val.eq_ignore_ascii_case("white") { return Some(Self { b: 255, g: 255, r: 255, a: 255 }); }
-        if val.eq_ignore_ascii_case("red") { return Some(Self { b: 0, g: 0, r: 255, a: 255 }); }
-        if val.eq_ignore_ascii_case("green") { return Some(Self { b: 0, g: 128, r: 0, a: 255 }); }
-        if val.eq_ignore_ascii_case("blue") { return Some(Self { b: 255, g: 0, r: 0, a: 255 }); }
+        if val.eq_ignore_ascii_case("black") {
+            return Some(Self::BLACK);
+        }
+        if val.eq_ignore_ascii_case("white") {
+            return Some(Self {
+                b: 255,
+                g: 255,
+                r: 255,
+                a: 255,
+            });
+        }
+        if val.eq_ignore_ascii_case("red") {
+            return Some(Self {
+                b: 0,
+                g: 0,
+                r: 255,
+                a: 255,
+            });
+        }
+        if val.eq_ignore_ascii_case("green") {
+            return Some(Self {
+                b: 0,
+                g: 128,
+                r: 0,
+                a: 255,
+            });
+        }
+        if val.eq_ignore_ascii_case("blue") {
+            return Some(Self {
+                b: 255,
+                g: 0,
+                r: 0,
+                a: 255,
+            });
+        }
         None
     }
 }
@@ -63,7 +103,10 @@ pub fn svg_dimensions(data: &[u8]) -> Option<(usize, usize)> {
     let header_len = data.len().min(2048);
     let header = core::str::from_utf8(&data[..header_len]).ok()?;
     let svg_idx = header.find("<svg")?;
-    let tag_end = header[svg_idx..].find('>').map(|i| svg_idx + i).unwrap_or(header_len);
+    let tag_end = header[svg_idx..]
+        .find('>')
+        .map(|i| svg_idx + i)
+        .unwrap_or(header_len);
     let tag = &header[svg_idx..tag_end];
 
     let w_val = extract_attribute(tag, "width").and_then(parse_number);
@@ -90,10 +133,15 @@ pub fn decode_svg(data: &[u8]) -> Option<DecodedImage> {
     let tag_end = content[svg_idx..].find('>').map(|i| svg_idx + i)?;
     let svg_tag = &content[svg_idx..tag_end];
 
-    let vb = extract_attribute(svg_tag, "viewBox").and_then(parse_viewbox)
+    let vb = extract_attribute(svg_tag, "viewBox")
+        .and_then(parse_viewbox)
         .unwrap_or((0.0, 0.0, width as f32, height as f32));
     let scale_x = if vb.2 > 0.0 { width as f32 / vb.2 } else { 1.0 };
-    let scale_y = if vb.3 > 0.0 { height as f32 / vb.3 } else { 1.0 };
+    let scale_y = if vb.3 > 0.0 {
+        height as f32 / vb.3
+    } else {
+        1.0
+    };
 
     let mut pixels = alloc::vec![0u8; width * height * 4];
     let body = &content[tag_end + 1..];
@@ -105,11 +153,17 @@ pub fn decode_svg(data: &[u8]) -> Option<DecodedImage> {
         if rest.starts_with('/') || rest.starts_with('!') || rest.starts_with('?') {
             continue;
         }
-        let Some(close) = rest.find('>') else { break; };
+        let Some(close) = rest.find('>') else {
+            break;
+        };
         let tag = &rest[..close];
         rest = &rest[close + 1..];
 
-        let tag_name = tag.split_whitespace().next().unwrap_or("").trim_end_matches('/');
+        let tag_name = tag
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .trim_end_matches('/');
         let fill = extract_attribute(tag, "fill")
             .and_then(Color::parse)
             .unwrap_or(Color::BLACK);
@@ -123,21 +177,44 @@ pub fn decode_svg(data: &[u8]) -> Option<DecodedImage> {
                 parse_path(&d, vb.0, vb.1, scale_x, scale_y, &mut edges);
             }
         } else if tag_name.eq_ignore_ascii_case("rect") {
-            let rx = extract_attribute(tag, "x").and_then(parse_number).unwrap_or(0.0);
-            let ry = extract_attribute(tag, "y").and_then(parse_number).unwrap_or(0.0);
-            if let (Some(rw), Some(rh)) = (extract_attribute(tag, "width").and_then(parse_number), extract_attribute(tag, "height").and_then(parse_number)) {
+            let rx = extract_attribute(tag, "x")
+                .and_then(parse_number)
+                .unwrap_or(0.0);
+            let ry = extract_attribute(tag, "y")
+                .and_then(parse_number)
+                .unwrap_or(0.0);
+            if let (Some(rw), Some(rh)) = (
+                extract_attribute(tag, "width").and_then(parse_number),
+                extract_attribute(tag, "height").and_then(parse_number),
+            ) {
                 let x0 = (rx - vb.0) * scale_x;
                 let y0 = (ry - vb.1) * scale_y;
                 let x1 = x0 + rw * scale_x;
                 let y1 = y0 + rh * scale_y;
-                edges.push(Edge { p1: Point { x: x0, y: y0 }, p2: Point { x: x1, y: y0 } });
-                edges.push(Edge { p1: Point { x: x1, y: y0 }, p2: Point { x: x1, y: y1 } });
-                edges.push(Edge { p1: Point { x: x1, y: y1 }, p2: Point { x: x0, y: y1 } });
-                edges.push(Edge { p1: Point { x: x0, y: y1 }, p2: Point { x: x0, y: y0 } });
+                edges.push(Edge {
+                    p1: Point { x: x0, y: y0 },
+                    p2: Point { x: x1, y: y0 },
+                });
+                edges.push(Edge {
+                    p1: Point { x: x1, y: y0 },
+                    p2: Point { x: x1, y: y1 },
+                });
+                edges.push(Edge {
+                    p1: Point { x: x1, y: y1 },
+                    p2: Point { x: x0, y: y1 },
+                });
+                edges.push(Edge {
+                    p1: Point { x: x0, y: y1 },
+                    p2: Point { x: x0, y: y0 },
+                });
             }
         } else if tag_name.eq_ignore_ascii_case("circle") {
-            let cx = extract_attribute(tag, "cx").and_then(parse_number).unwrap_or(0.0);
-            let cy = extract_attribute(tag, "cy").and_then(parse_number).unwrap_or(0.0);
+            let cx = extract_attribute(tag, "cx")
+                .and_then(parse_number)
+                .unwrap_or(0.0);
+            let cy = extract_attribute(tag, "cy")
+                .and_then(parse_number)
+                .unwrap_or(0.0);
             if let Some(r) = extract_attribute(tag, "r").and_then(parse_number) {
                 // Approximate circle with 16 segments
                 let mut prev = Point {
@@ -157,7 +234,10 @@ pub fn decode_svg(data: &[u8]) -> Option<DecodedImage> {
                     edges.push(Edge { p1: prev, p2: pt });
                     prev = pt;
                 }
-                edges.push(Edge { p1: prev, p2: first });
+                edges.push(Edge {
+                    p1: prev,
+                    p2: first,
+                });
             }
         }
 
@@ -174,7 +254,9 @@ pub fn decode_svg(data: &[u8]) -> Option<DecodedImage> {
 }
 
 fn rasterize_edges(edges: &[Edge], width: usize, height: usize, color: Color, pixels: &mut [u8]) {
-    if edges.is_empty() { return; }
+    if edges.is_empty() {
+        return;
+    }
     let mut min_y = height as f32;
     let mut max_y = 0.0f32;
     for e in edges {
@@ -213,9 +295,12 @@ fn rasterize_edges(edges: &[Edge], width: usize, height: usize, color: Color, pi
                         } else {
                             let a = color.a as u32;
                             let inv = 255 - a;
-                            pixels[p_idx] = ((color.b as u32 * a + pixels[p_idx] as u32 * inv) / 255) as u8;
-                            pixels[p_idx + 1] = ((color.g as u32 * a + pixels[p_idx + 1] as u32 * inv) / 255) as u8;
-                            pixels[p_idx + 2] = ((color.r as u32 * a + pixels[p_idx + 2] as u32 * inv) / 255) as u8;
+                            pixels[p_idx] =
+                                ((color.b as u32 * a + pixels[p_idx] as u32 * inv) / 255) as u8;
+                            pixels[p_idx + 1] =
+                                ((color.g as u32 * a + pixels[p_idx + 1] as u32 * inv) / 255) as u8;
+                            pixels[p_idx + 2] =
+                                ((color.r as u32 * a + pixels[p_idx + 2] as u32 * inv) / 255) as u8;
                             pixels[p_idx + 3] = 255;
                         }
                     }
@@ -238,7 +323,10 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                 cmd = c;
                 if matches!(cmd, 'Z' | 'z') {
                     if (curr.x - start.x).abs() > 0.01 || (curr.y - start.y).abs() > 0.01 {
-                        edges.push(Edge { p1: curr, p2: start });
+                        edges.push(Edge {
+                            p1: curr,
+                            p2: start,
+                        });
                         curr = start;
                     }
                     continue;
@@ -251,8 +339,12 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                         let rel = cmd == 'm';
                         let ox = if rel { curr.x } else { 0.0 };
                         let oy = if rel { curr.y } else { 0.0 };
-                        let Some(x) = tokens.next_num() else { break; };
-                        let Some(y) = tokens.next_num() else { break; };
+                        let Some(x) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(y) = tokens.next_num() else {
+                            break;
+                        };
                         curr = Point {
                             x: (ox + x - vb_x) * sx,
                             y: (oy + y - vb_y) * sy,
@@ -264,8 +356,12 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                         let rel = cmd == 'l';
                         let ox = if rel { curr.x } else { 0.0 };
                         let oy = if rel { curr.y } else { 0.0 };
-                        let Some(x) = tokens.next_num() else { break; };
-                        let Some(y) = tokens.next_num() else { break; };
+                        let Some(x) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(y) = tokens.next_num() else {
+                            break;
+                        };
                         let next = Point {
                             x: (ox + x - vb_x) * sx,
                             y: (oy + y - vb_y) * sy,
@@ -278,7 +374,9 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                     'H' | 'h' => {
                         let rel = cmd == 'h';
                         let ox = if rel { curr.x } else { 0.0 };
-                        let Some(x) = tokens.next_num() else { break; };
+                        let Some(x) = tokens.next_num() else {
+                            break;
+                        };
                         let next = Point {
                             x: (ox + x - vb_x) * sx,
                             y: curr.y,
@@ -291,7 +389,9 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                     'V' | 'v' => {
                         let rel = cmd == 'v';
                         let oy = if rel { curr.y } else { 0.0 };
-                        let Some(y) = tokens.next_num() else { break; };
+                        let Some(y) = tokens.next_num() else {
+                            break;
+                        };
                         let next = Point {
                             x: curr.x,
                             y: (oy + y - vb_y) * sy,
@@ -305,16 +405,37 @@ fn parse_path(d: &str, vb_x: f32, vb_y: f32, sx: f32, sy: f32, edges: &mut Vec<E
                         let rel = cmd == 'c';
                         let ox = if rel { curr.x } else { 0.0 };
                         let oy = if rel { curr.y } else { 0.0 };
-                        let Some(x1) = tokens.next_num() else { break; };
-                        let Some(y1) = tokens.next_num() else { break; };
-                        let Some(x2) = tokens.next_num() else { break; };
-                        let Some(y2) = tokens.next_num() else { break; };
-                        let Some(x3) = tokens.next_num() else { break; };
-                        let Some(y3) = tokens.next_num() else { break; };
+                        let Some(x1) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(y1) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(x2) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(y2) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(x3) = tokens.next_num() else {
+                            break;
+                        };
+                        let Some(y3) = tokens.next_num() else {
+                            break;
+                        };
                         let p0 = curr;
-                        let p1 = Point { x: (ox + x1 - vb_x) * sx, y: (oy + y1 - vb_y) * sy };
-                        let p2 = Point { x: (ox + x2 - vb_x) * sx, y: (oy + y2 - vb_y) * sy };
-                        let p3 = Point { x: (ox + x3 - vb_x) * sx, y: (oy + y3 - vb_y) * sy };
+                        let p1 = Point {
+                            x: (ox + x1 - vb_x) * sx,
+                            y: (oy + y1 - vb_y) * sy,
+                        };
+                        let p2 = Point {
+                            x: (ox + x2 - vb_x) * sx,
+                            y: (oy + y2 - vb_y) * sy,
+                        };
+                        let p3 = Point {
+                            x: (ox + x3 - vb_x) * sx,
+                            y: (oy + y3 - vb_y) * sy,
+                        };
 
                         // Flatten cubic bezier into 4 line segments
                         let mut prev = p0;
@@ -359,7 +480,10 @@ struct PathTokenizer<'a> {
 
 impl<'a> PathTokenizer<'a> {
     fn new(s: &'a str) -> Self {
-        Self { chars: s.chars(), putback: None }
+        Self {
+            chars: s.chars(),
+            putback: None,
+        }
     }
 
     fn put_back(&mut self, num: f32) {
@@ -376,7 +500,28 @@ impl<'a> PathTokenizer<'a> {
                 self.chars.next();
                 continue;
             }
-            if matches!(c, 'M'|'m'|'L'|'l'|'H'|'h'|'V'|'v'|'C'|'c'|'S'|'s'|'Q'|'q'|'T'|'t'|'A'|'a'|'Z'|'z') {
+            if matches!(
+                c,
+                'M' | 'm'
+                    | 'L'
+                    | 'l'
+                    | 'H'
+                    | 'h'
+                    | 'V'
+                    | 'v'
+                    | 'C'
+                    | 'c'
+                    | 'S'
+                    | 's'
+                    | 'Q'
+                    | 'q'
+                    | 'T'
+                    | 't'
+                    | 'A'
+                    | 'a'
+                    | 'Z'
+                    | 'z'
+            ) {
                 self.chars.next();
                 return Some(Token::Cmd(c));
             }
@@ -402,8 +547,12 @@ impl<'a> PathTokenizer<'a> {
         let mut len = 0;
         let mut has_digit = false;
         while let Some(c) = self.chars.clone().next() {
-            if (c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E') && len < buf.len() {
-                if c.is_ascii_digit() { has_digit = true; }
+            if (c.is_ascii_digit() || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E')
+                && len < buf.len()
+            {
+                if c.is_ascii_digit() {
+                    has_digit = true;
+                }
                 buf[len] = c as u8;
                 len += 1;
                 self.chars.next();
@@ -412,7 +561,9 @@ impl<'a> PathTokenizer<'a> {
             }
         }
         if has_digit {
-            core::str::from_utf8(&buf[..len]).ok().and_then(parse_number)
+            core::str::from_utf8(&buf[..len])
+                .ok()
+                .and_then(parse_number)
         } else {
             None
         }
@@ -426,7 +577,9 @@ fn extract_attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
         search = pos + name.len();
         let before = tag[..pos].chars().last();
         if let Some(c) = before {
-            if !c.is_ascii_whitespace() { continue; }
+            if !c.is_ascii_whitespace() {
+                continue;
+            }
         }
         let rest = tag[pos + name.len()..].trim_start();
         if let Some(stripped) = rest.strip_prefix('=') {
@@ -447,8 +600,12 @@ fn parse_number(s: &str) -> Option<f32> {
     let mut num = 0.0f32;
     let mut sign = 1.0f32;
     let mut chars = s.chars().peekable();
-    if let Some(&'-') = chars.peek() { sign = -1.0; chars.next(); }
-    else if let Some(&'+') = chars.peek() { chars.next(); }
+    if let Some(&'-') = chars.peek() {
+        sign = -1.0;
+        chars.next();
+    } else if let Some(&'+') = chars.peek() {
+        chars.next();
+    }
 
     let mut fractional = false;
     let mut div = 1.0f32;
@@ -471,11 +628,16 @@ fn parse_number(s: &str) -> Option<f32> {
             break;
         }
     }
-    if has_digits { Some(sign * num) } else { None }
+    if has_digits {
+        Some(sign * num)
+    } else {
+        None
+    }
 }
 
 fn parse_viewbox(s: &str) -> Option<(f32, f32, f32, f32)> {
-    let parts: Vec<f32> = s.split(|c: char| c.is_ascii_whitespace() || c == ',')
+    let parts: Vec<f32> = s
+        .split(|c: char| c.is_ascii_whitespace() || c == ',')
         .filter(|part| !part.is_empty())
         .filter_map(parse_number)
         .collect();
@@ -486,16 +648,32 @@ fn parse_viewbox(s: &str) -> Option<(f32, f32, f32, f32)> {
     }
 }
 
-fn min_f32(a: f32, b: f32) -> f32 { if a < b { a } else { b } }
-fn max_f32(a: f32, b: f32) -> f32 { if a > b { a } else { b } }
+fn min_f32(a: f32, b: f32) -> f32 {
+    if a < b {
+        a
+    } else {
+        b
+    }
+}
+fn max_f32(a: f32, b: f32) -> f32 {
+    if a > b {
+        a
+    } else {
+        b
+    }
+}
 
 // Simple approximation for circle sin/cos without libm
 fn cos_approx(rad: f32) -> f32 {
     let pi = core::f32::consts::PI;
     let tau = core::f32::consts::TAU;
     let mut x = rad % tau;
-    if x < 0.0 { x += tau; }
-    if x > pi { return -cos_approx(x - pi); }
+    if x < 0.0 {
+        x += tau;
+    }
+    if x > pi {
+        return -cos_approx(x - pi);
+    }
     // Taylor approximation around pi/2: 1 - x^2/2 + x^4/24
     let x2 = x * x;
     1.0 - (x2 / 2.0) + (x2 * x2 / 24.0)
@@ -532,5 +710,4 @@ mod tests {
         let idx = (50 * 100 + 50) * 4;
         assert_eq!(&img.pixels[idx..idx + 4], &[0, 128, 0, 255]);
     }
-
 }

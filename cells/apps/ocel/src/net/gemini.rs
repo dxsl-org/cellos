@@ -2,9 +2,9 @@
 //! Gemini documents use the cooperative transport in `http`; this module only
 //! translates bounded Gemtext into native nodes.
 extern crate alloc;
-use alloc::{format, string::String, vec::Vec};
 use crate::doc::{DocNode, StyledSpan};
 use crate::draw::theme;
+use alloc::{format, string::String, vec::Vec};
 
 /// Parse Gemtext (text/gemini) into native CellOS DocNodes.
 pub fn parse_gemtext(input: &str, base_url: &str) -> Vec<DocNode> {
@@ -43,15 +43,24 @@ pub fn parse_gemtext(input: &str, base_url: &str) -> Vec<DocNode> {
 
         // 3. Headings: #, ##, ###
         if let Some(rest) = trimmed.strip_prefix("### ") {
-            nodes.push(DocNode::Heading { level: 3, text: rest.trim().into() });
+            nodes.push(DocNode::Heading {
+                level: 3,
+                text: rest.trim().into(),
+            });
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("## ") {
-            nodes.push(DocNode::Heading { level: 2, text: rest.trim().into() });
+            nodes.push(DocNode::Heading {
+                level: 2,
+                text: rest.trim().into(),
+            });
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("# ") {
-            nodes.push(DocNode::Heading { level: 1, text: rest.trim().into() });
+            nodes.push(DocNode::Heading {
+                level: 1,
+                text: rest.trim().into(),
+            });
             continue;
         }
 
@@ -65,13 +74,16 @@ pub fn parse_gemtext(input: &str, base_url: &str) -> Vec<DocNode> {
                 let target_url = if raw_url.contains("://") {
                     String::from(raw_url)
                 } else {
-                    crate::resources::resolve(base_url, raw_url).unwrap_or_else(|_| String::from(raw_url))
+                    crate::resources::resolve(base_url, raw_url)
+                        .unwrap_or_else(|_| String::from(raw_url))
                 };
                 let mut span = StyledSpan::plain(&format!("🚀 {}", display_label));
                 span.link = Some(target_url);
                 span.color = Some(theme::ACCENT_CYAN);
                 span.bold = true;
-                nodes.push(DocNode::Paragraph { spans: alloc::vec![span] });
+                nodes.push(DocNode::Paragraph {
+                    spans: alloc::vec![span],
+                });
             }
             continue;
         }
@@ -116,12 +128,23 @@ mod tests {
 
     #[test]
     fn test_parse_gemini_url() {
-        let url = super::super::http::Url::parse("gemini://geminispace.info/search?q=1#title").unwrap();
+        let url =
+            super::super::http::Url::parse("gemini://geminispace.info/search?q=1#title").unwrap();
         assert_eq!(url.host, "geminispace.info");
         assert_eq!(url.port, 1965);
         assert_eq!(url.path, "/search?q=1");
-        assert_eq!(super::super::http::Url::parse("gemini://example.com:1966/page").unwrap().port, 1966);
-        assert_eq!(super::super::http::Url::parse("gemini://rawtext.club").unwrap().path, "/");
+        assert_eq!(
+            super::super::http::Url::parse("gemini://example.com:1966/page")
+                .unwrap()
+                .port,
+            1966
+        );
+        assert_eq!(
+            super::super::http::Url::parse("gemini://rawtext.club")
+                .unwrap()
+                .path,
+            "/"
+        );
     }
 
     #[test]
@@ -137,11 +160,15 @@ mod tests {
             _ => false,
         }));
         assert!(nodes.iter().any(|n| match n {
-            DocNode::Blockquote { lines } => lines.iter().any(|l| l == "This is a quote from Geminispace"),
+            DocNode::Blockquote { lines } => lines
+                .iter()
+                .any(|l| l == "This is a quote from Geminispace"),
             _ => false,
         }));
         assert!(nodes.iter().any(|n| match n {
-            DocNode::Paragraph { spans } => spans.iter().any(|s| s.link == Some(String::from("https://cellos.org"))),
+            DocNode::Paragraph { spans } => spans
+                .iter()
+                .any(|s| s.link == Some(String::from("https://cellos.org"))),
             _ => false,
         }));
         assert!(nodes.iter().any(|n| match n {

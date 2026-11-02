@@ -48,7 +48,10 @@ struct Screen {
 
 impl Screen {
     fn new(cols: u16, rows: u16) -> Self {
-        Self { grid: TerminalGrid::new(cols.into(), rows.into()), sink: ByteSink::new() }
+        Self {
+            grid: TerminalGrid::new(cols.into(), rows.into()),
+            sink: ByteSink::new(),
+        }
     }
 
     /// Feed in uneven chunks so sequences are split like stream frames split them.
@@ -88,14 +91,21 @@ fn grid_color(color: Color) -> GridColor {
 /// are trailing cells on the screen.
 fn assert_screen_matches(screen: &Screen, buffer: &Buffer) {
     let area = buffer.area;
-    assert_eq!((screen.grid.cols, screen.grid.rows), (usize::from(area.width), usize::from(area.height)));
+    assert_eq!(
+        (screen.grid.cols, screen.grid.rows),
+        (usize::from(area.width), usize::from(area.height))
+    );
     for y in 0..area.height {
         let mut skip = 0;
         for x in 0..area.width {
             let cell = screen.grid.cell_at(x.into(), y.into()).unwrap();
             if skip > 0 {
                 skip -= 1;
-                assert_eq!(cell.width, Width::Trail, "({x},{y}) should be a trailing half");
+                assert_eq!(
+                    cell.width,
+                    Width::Trail,
+                    "({x},{y}) should be a trailing half"
+                );
                 continue;
             }
             let expected = &buffer[(x, y)];
@@ -104,10 +114,26 @@ fn assert_screen_matches(screen: &Screen, buffer: &Buffer) {
             assert_eq!(symbol, expected.symbol(), "symbol at {at:?}");
             assert_eq!(cell.pen.fg, grid_color(expected.fg), "fg at {at:?}");
             assert_eq!(cell.pen.bg, grid_color(expected.bg), "bg at {at:?}");
-            assert_eq!(cell.pen.bold, expected.modifier.contains(Modifier::BOLD), "bold at {at:?}");
-            assert_eq!(cell.pen.inverse, expected.modifier.contains(Modifier::REVERSED), "inverse at {at:?}");
+            assert_eq!(
+                cell.pen.bold,
+                expected.modifier.contains(Modifier::BOLD),
+                "bold at {at:?}"
+            );
+            assert_eq!(
+                cell.pen.inverse,
+                expected.modifier.contains(Modifier::REVERSED),
+                "inverse at {at:?}"
+            );
             let width = expected.symbol().width();
-            assert_eq!(cell.width, if width == 2 { Width::Wide } else { Width::Narrow }, "width at {at:?}");
+            assert_eq!(
+                cell.width,
+                if width == 2 {
+                    Width::Wide
+                } else {
+                    Width::Narrow
+                },
+                "width at {at:?}"
+            );
             skip = width.saturating_sub(1);
         }
     }
@@ -144,18 +170,60 @@ fn first_frame(frame: &mut Frame) {
         buf.set_string(x, 0, "fg", Style::new().fg(*color));
         buf.set_string(x, 1, "bg", Style::new().bg(*color).fg(NAMED[16 - i]));
     }
-    buf.set_string(0, 2, "idx", Style::new().fg(Color::Indexed(200)).bg(Color::Indexed(17)));
-    buf.set_string(4, 2, "rgb", Style::new().fg(Color::Rgb(1, 2, 3)).bg(Color::Rgb(250, 128, 0)));
+    buf.set_string(
+        0,
+        2,
+        "idx",
+        Style::new().fg(Color::Indexed(200)).bg(Color::Indexed(17)),
+    );
+    buf.set_string(
+        4,
+        2,
+        "rgb",
+        Style::new()
+            .fg(Color::Rgb(1, 2, 3))
+            .bg(Color::Rgb(250, 128, 0)),
+    );
     buf.set_string(8, 2, "B", Style::new().add_modifier(Modifier::BOLD));
-    buf.set_string(9, 2, "R", Style::new().add_modifier(Modifier::REVERSED).fg(Color::Green));
-    buf.set_string(10, 2, "DIU", Style::new().add_modifier(Modifier::DIM | Modifier::ITALIC | Modifier::UNDERLINED));
-    buf.set_string(14, 2, "all", Style::new().red().on_blue().add_modifier(Modifier::BOLD | Modifier::REVERSED | Modifier::DIM));
-    buf.set_string(0, 3, "wide 世界 and e\u{301}t\u{e9} ok", Style::new().yellow());
+    buf.set_string(
+        9,
+        2,
+        "R",
+        Style::new()
+            .add_modifier(Modifier::REVERSED)
+            .fg(Color::Green),
+    );
+    buf.set_string(
+        10,
+        2,
+        "DIU",
+        Style::new().add_modifier(Modifier::DIM | Modifier::ITALIC | Modifier::UNDERLINED),
+    );
+    buf.set_string(
+        14,
+        2,
+        "all",
+        Style::new()
+            .red()
+            .on_blue()
+            .add_modifier(Modifier::BOLD | Modifier::REVERSED | Modifier::DIM),
+    );
+    buf.set_string(
+        0,
+        3,
+        "wide 世界 and e\u{301}t\u{e9} ok",
+        Style::new().yellow(),
+    );
     // A wide symbol whose trailing half is the last column.
     buf.set_string(area.width - 2, 4, "界", Style::new().cyan().bold());
     buf.set_string(0, 5, "erase me later", Style::new().on_magenta());
     // Bottom-right cell: written with a pending wrap and nothing scrolls.
-    buf.set_string(area.width - 3, area.height - 1, "end", Style::new().white().on_red());
+    buf.set_string(
+        area.width - 3,
+        area.height - 1,
+        "end",
+        Style::new().white().on_red(),
+    );
 }
 
 /// A diff frame: wide replaced by narrow and the reverse, text cleared, styles changed,
@@ -165,13 +233,30 @@ fn second_frame(frame: &mut Frame) {
     let buf = frame.buffer_mut();
     for (i, color) in NAMED.iter().enumerate() {
         let x = i as u16 * 3;
-        buf.set_string(x, 0, "FG", Style::new().fg(NAMED[(i + 5) % 17]).add_modifier(Modifier::BOLD));
+        buf.set_string(
+            x,
+            0,
+            "FG",
+            Style::new()
+                .fg(NAMED[(i + 5) % 17])
+                .add_modifier(Modifier::BOLD),
+        );
         buf.set_string(x, 1, "bg", Style::new().bg(*color).fg(NAMED[16 - i]));
     }
-    buf.set_string(0, 3, "wide ab界d and e\u{301}t\u{e9} ok", Style::new().yellow());
+    buf.set_string(
+        0,
+        3,
+        "wide ab界d and e\u{301}t\u{e9} ok",
+        Style::new().yellow(),
+    );
     buf.set_string(area.width - 2, 4, "xy", Style::new());
     buf.set_string(0, 4, "世", Style::new().on_green());
-    buf.set_string(area.width - 3, area.height - 1, "END", Style::new().white().on_red().reversed());
+    buf.set_string(
+        area.width - 3,
+        area.height - 1,
+        "END",
+        Style::new().white().on_red().reversed(),
+    );
     frame.set_cursor_position(Position::new(5, 6));
 }
 
@@ -179,7 +264,8 @@ fn second_frame(frame: &mut Frame) {
 fn backend_frames_round_trip_through_the_emulator_cell_for_cell() {
     let (cols, rows) = (60, 8);
     let wire = Wire::default();
-    let mut terminal = Terminal::new(CellosBackend::new(wire.clone(), cols, rows).unwrap()).unwrap();
+    let mut terminal =
+        Terminal::new(CellosBackend::new(wire.clone(), cols, rows).unwrap()).unwrap();
     let mut screen = Screen::new(cols, rows);
 
     let expected = terminal.draw(first_frame).unwrap().buffer.clone();
@@ -223,7 +309,9 @@ fn the_tui_screen_mode_enters_and_leaves_the_alternate_screen_around_the_frames(
     let (cols, rows) = (50, 7);
     let mut screen = Screen::new(cols, rows);
     screen.feed(b"Cellos > tui-demo\r\n");
-    let prompt: Vec<String> = (0..usize::from(rows)).map(|r| row_text(&screen.grid, r)).collect();
+    let prompt: Vec<String> = (0..usize::from(rows))
+        .map(|r| row_text(&screen.grid, r))
+        .collect();
     let cursor = (screen.grid.cursor_x, screen.grid.cursor_y);
 
     let wire = Wire::default();
@@ -241,13 +329,21 @@ fn the_tui_screen_mode_enters_and_leaves_the_alternate_screen_around_the_frames(
         // Dropping the terminal drops the backend, which restores the baseline mode.
     }
     screen.feed(&wire.take());
-    assert!(!screen.grid.alternate_active() && screen.grid.cursor_visible() && !screen.grid.bracketed_paste());
-    let after: Vec<String> = (0..usize::from(rows)).map(|r| row_text(&screen.grid, r)).collect();
+    assert!(
+        !screen.grid.alternate_active()
+            && screen.grid.cursor_visible()
+            && !screen.grid.bracketed_paste()
+    );
+    let after: Vec<String> = (0..usize::from(rows))
+        .map(|r| row_text(&screen.grid, r))
+        .collect();
     assert_eq!(after, prompt);
     assert_eq!((screen.grid.cursor_x, screen.grid.cursor_y), cursor);
 }
 
 fn row_text(grid: &TerminalGrid, r: usize) -> String {
-    let text: String = (0..grid.cols).map(|c| grid.cell_at(c, r).unwrap().ch).collect();
+    let text: String = (0..grid.cols)
+        .map(|c| grid.cell_at(c, r).unwrap().ch)
+        .collect();
     text.trim_end().into()
 }

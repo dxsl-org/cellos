@@ -37,17 +37,30 @@ use super::smp::MAX_HARTS;
 /// Monotonic nanoseconds on the same clock `GetTime(0)` exposes to cells.
 pub(crate) fn monotonic_ns() -> Option<u64> {
     #[cfg(target_arch = "x86_64")]
-    { Some(hal::hpet::now_ns()) }
+    {
+        Some(hal::hpet::now_ns())
+    }
     #[cfg(target_arch = "riscv64")]
-    { hal::common::timer::read_mtime().checked_mul(100) }
+    {
+        hal::common::timer::read_mtime().checked_mul(100)
+    }
     #[cfg(target_arch = "aarch64")]
     {
         let freq = hal::timer::read_freq();
-        if freq == 0 { return None; }
-        u64::try_from(u128::from(hal::timer::read_ticks()) * 1_000_000_000u128 / u128::from(freq)).ok()
+        if freq == 0 {
+            return None;
+        }
+        u64::try_from(u128::from(hal::timer::read_ticks()) * 1_000_000_000u128 / u128::from(freq))
+            .ok()
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64", target_arch = "aarch64")))]
-    { None }
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "riscv64",
+        target_arch = "aarch64"
+    )))]
+    {
+        None
+    }
 }
 
 /// The exited CPU retained for one CellId slot's current generation.
@@ -80,10 +93,18 @@ impl CpuLedger {
     /// Nothing is charged for the first stamp, for an unavailable (zero) clock,
     /// or for a clock that reads earlier than the previous stamp.
     pub(crate) fn pass(&mut self, hart: usize, now: Option<u64>) -> u64 {
-        let Some(now) = now.filter(|&now| now != 0) else { return 0 };
-        let Some(stamp) = self.dispatch_ns.get_mut(hart) else { return 0 };
+        let Some(now) = now.filter(|&now| now != 0) else {
+            return 0;
+        };
+        let Some(stamp) = self.dispatch_ns.get_mut(hart) else {
+            return 0;
+        };
         let previous = core::mem::replace(stamp, now);
-        if previous == 0 { 0 } else { now.saturating_sub(previous) }
+        if previous == 0 {
+            0
+        } else {
+            now.saturating_sub(previous)
+        }
     }
 
     /// The still-uncharged interval of `hart`'s current task at `now`.
@@ -99,7 +120,10 @@ impl CpuLedger {
     /// A newer generation takes the slot over from zero; a record for an older
     /// generation than the slot holds is stale and is dropped.
     pub(crate) fn retain_exited(&mut self, cell_id: u64, generation: u64, ns: u64) {
-        let Some(slot) = usize::try_from(cell_id).ok().and_then(|id| self.exited.get_mut(id)) else {
+        let Some(slot) = usize::try_from(cell_id)
+            .ok()
+            .and_then(|id| self.exited.get_mut(id))
+        else {
             return;
         };
         if generation == 0 || generation < slot.generation {
@@ -154,24 +178,42 @@ fn draw_epoch() -> u64 {
         }
     }
     let boot = rtc_epoch_ns().saturating_sub(monotonic_ns().unwrap_or(0));
-    if boot != 0 { boot } else { 1 }
+    if boot != 0 {
+        boot
+    } else {
+        1
+    }
 }
 
 fn rtc_epoch_ns() -> u64 {
     // Hosted unit tests cannot touch CMOS ports or firmware RTCs.
     #[cfg(all(test, not(target_os = "none")))]
-    { 0 }
+    {
+        0
+    }
     #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "x86_64"))]
-    { hal::rtc::now_epoch_ns() }
+    {
+        hal::rtc::now_epoch_ns()
+    }
     #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "aarch64"))]
-    { hal::rtc::now_epoch_ns() }
+    {
+        hal::rtc::now_epoch_ns()
+    }
     #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "riscv64"))]
-    { hal::common::rtc::now_epoch_ns() }
+    {
+        hal::common::rtc::now_epoch_ns()
+    }
     #[cfg(all(
         not(all(test, not(target_os = "none"))),
-        not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64"))
+        not(any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64"
+        ))
     ))]
-    { 0 }
+    {
+        0
+    }
 }
 
 /// The system-memory block the caller asked for and may see.
@@ -197,9 +239,14 @@ fn count(value: usize) -> u32 {
 
 /// The `TelemetrySnapshot` argument rule: room for at least a header, an
 /// 8-byte-aligned buffer, only defined request bits, and `a3 == 0`.
-pub(crate) fn request_is_valid(out_ptr: usize, out_len: usize, flags: usize, reserved: usize) -> bool {
+pub(crate) fn request_is_valid(
+    out_ptr: usize,
+    out_len: usize,
+    flags: usize,
+    reserved: usize,
+) -> bool {
     out_len >= HEADER_LEN
-        && out_ptr % api::telemetry::BUFFER_ALIGN == 0
+        && out_ptr.is_multiple_of(api::telemetry::BUFFER_ALIGN)
         && flags & !api::telemetry::request::ALL == 0
         && reserved == 0
 }
@@ -232,7 +279,10 @@ pub(crate) fn capture(
     let mut running = [(0usize, 0u64); MAX_HARTS];
     if let Some(now) = clock {
         for (hart, slot) in running.iter_mut().enumerate() {
-            *slot = (rl::current_task_id_for(hart), sched.cpu_telemetry.in_flight(hart, now));
+            *slot = (
+                rl::current_task_id_for(hart),
+                sched.cpu_telemetry.in_flight(hart, now),
+            );
         }
     }
     let in_flight = |tid: usize| {
@@ -246,13 +296,17 @@ pub(crate) fn capture(
     // Cells in CellId (slot) order, so tasks can find their row by search.
     let owners = sched.telemetry_cell_owners().count();
     let mut cells: Vec<TelemetryCellV1> = Vec::new();
-    cells.try_reserve_exact(owners).map_err(|_| ViError::OutOfMemory)?;
+    cells
+        .try_reserve_exact(owners)
+        .map_err(|_| ViError::OutOfMemory)?;
     for (owner, retiring) in sched.telemetry_cell_owners() {
-        let root = sched
-            .tasks
-            .get(&(owner.root_tid as usize))
-            .map(|task| &**task)
-            .or_else(|| sched.zombies.iter().find(|task| task.id as u64 == owner.root_tid).map(|task| &**task));
+        let root = sched.tasks.get(&(owner.root_tid as usize)).or_else(|| {
+            sched
+                .zombies
+                .iter()
+                .find(|task| task.id as u64 == owner.root_tid)
+                .map(|task| &**task)
+        });
         let (name, truncated) = encode_name(root.map_or("", |task| task.name.as_str()));
         let limit = crate::memory::cell_quota::limit(owner.cell_id as usize);
         let mut flags = cpu_flag(cell_flags::CPU_AVAILABLE) | cell_flags::QUOTA_AVAILABLE;
@@ -270,7 +324,11 @@ pub(crate) fn capture(
             quota_charged_bytes: crate::memory::cell_quota::in_use(CellId(owner.cell_id)) as u64,
             quota_limit_bytes: limit.unwrap_or(0) as u64,
             task_count: 0,
-            state: if retiring { cell_state::RETIRING } else { cell_state::LIVE },
+            state: if retiring {
+                cell_state::RETIRING
+            } else {
+                cell_state::LIVE
+            },
             flags,
             reserved: 0,
             name,
@@ -279,7 +337,9 @@ pub(crate) fn capture(
     let total_tasks = sched.tasks.len();
     let mut tasks: Vec<TelemetryTaskV1> = Vec::new();
     if want_tasks {
-        tasks.try_reserve_exact(total_tasks).map_err(|_| ViError::OutOfMemory)?;
+        tasks
+            .try_reserve_exact(total_tasks)
+            .map_err(|_| ViError::OutOfMemory)?;
     }
     for task in sched.tasks.values() {
         let cpu_ns = task.cpu_ns.saturating_add(in_flight(task.id));
@@ -304,8 +364,14 @@ pub(crate) fn capture(
             cell_id: task.cell_id.0,
             generation: task.cell_generation,
             cpu_ns,
-            user_stack_bytes: task.user_stack.as_ref().map_or(0, |stack| stack.usable_bytes() as u64),
-            segment_bytes: task.segment_mem.as_ref().map_or(0, |segments| segments.allocated_bytes() as u64),
+            user_stack_bytes: task
+                .user_stack
+                .as_ref()
+                .map_or(0, |stack| stack.usable_bytes() as u64),
+            segment_bytes: task
+                .segment_mem
+                .as_ref()
+                .map_or(0, |segments| segments.allocated_bytes() as u64),
             state: super::syscall::encode_task_state(&task.state),
             flags,
             name,
@@ -335,7 +401,9 @@ pub(crate) fn capture(
 
     let len = HEADER_LEN + emitted_cells * CELL_LEN + emitted_tasks * TASK_LEN;
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(len).map_err(|_| ViError::OutOfMemory)?;
+    bytes
+        .try_reserve_exact(len)
+        .map_err(|_| ViError::OutOfMemory)?;
     bytes.resize(HEADER_LEN, 0);
     for cell in &cells[..emitted_cells] {
         bytes.extend_from_slice(&cell.to_bytes());
@@ -395,9 +463,7 @@ mod tests {
     use crate::task::tcb::{Task, TaskState};
     use alloc::boxed::Box;
     use api::cell_owner::CellOwner;
-    use api::telemetry::{
-        name_bytes, TelemetryDecodeError, TelemetrySnapshot, NAME_LEN,
-    };
+    use api::telemetry::{name_bytes, TelemetryDecodeError, TelemetrySnapshot, NAME_LEN};
 
     const EPOCH: u64 = 77;
     const CELL_A: u64 = 57;
@@ -457,11 +523,15 @@ mod tests {
     fn two_cells() -> Scheduler {
         let mut sched = Scheduler::new();
         sched.tasks.insert(1, task(1, 0, 0, 1, "kernel-idle"));
-        sched.tasks.insert(100, task(100, CELL_A, GEN_A, 100, "a-root"));
+        sched
+            .tasks
+            .insert(100, task(100, CELL_A, GEN_A, 100, "a-root"));
         let mut worker = task(103, CELL_A, GEN_A, 100, "a-worker");
         worker.stack_quota_charge = 4096;
         sched.tasks.insert(103, worker);
-        sched.tasks.insert(101, task(101, CELL_B, GEN_B, 101, "b-root"));
+        sched
+            .tasks
+            .insert(101, task(101, CELL_B, GEN_B, 101, "b-root"));
         live(&mut sched, CELL_A, GEN_A, 100);
         live(&mut sched, CELL_B, GEN_B, 101);
         run(&mut sched, 100, 1_000); // first stamp charges nothing
@@ -478,10 +548,18 @@ mod tests {
         assert_eq!(ledger.pass(0, Some(800)), 300);
         assert_eq!(ledger.pass(0, None), 0);
         assert_eq!(ledger.pass(0, Some(0)), 0, "HPET absent reads 0");
-        assert_eq!(ledger.pass(0, Some(700)), 0, "a backwards clock charges nothing");
+        assert_eq!(
+            ledger.pass(0, Some(700)),
+            0,
+            "a backwards clock charges nothing"
+        );
         assert_eq!(ledger.pass(0, Some(1_000)), 300);
         assert_eq!(ledger.pass(MAX_HARTS, Some(2_000)), 0, "no such hart");
-        assert_eq!(ledger.pass(1, Some(9_000)), 0, "harts are stamped independently");
+        assert_eq!(
+            ledger.pass(1, Some(9_000)),
+            0,
+            "harts are stamped independently"
+        );
     }
 
     #[test]
@@ -496,35 +574,66 @@ mod tests {
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("kernel bytes decode");
         let header = snapshot.header();
         assert_eq!((header.provider_epoch, header.sample_id), (EPOCH, 1));
-        assert_eq!((header.capture_start_ns, header.capture_end_ns), (2_600, 2_600));
+        assert_eq!(
+            (header.capture_start_ns, header.capture_end_ns),
+            (2_600, 2_600)
+        );
         assert_eq!((header.total_cells, header.emitted_cells), (2, 2));
         assert_eq!((header.total_tasks, header.emitted_tasks), (4, 4));
         assert!(header.has(header_flags::COMPLETE) && header.has(header_flags::CPU_AVAILABLE));
-        assert!(!header.has(header_flags::SYSMEM_PRESENT) && !header.has(header_flags::SYSMEM_DENIED));
+        assert!(
+            !header.has(header_flags::SYSMEM_PRESENT) && !header.has(header_flags::SYSMEM_DENIED)
+        );
 
         let cells: Vec<_> = snapshot.cells().collect();
-        let ids: Vec<_> = cells.iter().map(|c| (c.cell_id, c.generation, c.cpu_ns, c.task_count)).collect();
+        let ids: Vec<_> = cells
+            .iter()
+            .map(|c| (c.cell_id, c.generation, c.cpu_ns, c.task_count))
+            .collect();
         // Generation order, not CellId order; exactly the member CPU, no clamp.
         assert_eq!(ids, [(CELL_A, GEN_A, 1_000, 2), (CELL_B, GEN_B, 600, 1)]);
         assert_eq!(name_bytes(&cells[0].name), b"a-root");
         assert_eq!(cells[0].root_tid, 100);
         assert!(cells[0].has(cell_flags::LIMIT_AVAILABLE) && cells[0].quota_limit_bytes == 1 << 20);
         assert!(!cells[1].has(cell_flags::LIMIT_AVAILABLE) && cells[1].quota_limit_bytes == 0);
-        assert!(cells.iter().all(|c| c.state == cell_state::LIVE && c.has(cell_flags::CPU_AVAILABLE)));
+        assert!(cells
+            .iter()
+            .all(|c| c.state == cell_state::LIVE && c.has(cell_flags::CPU_AVAILABLE)));
 
-        let tasks: Vec<_> = snapshot.tasks().map(|t| (t.generation, t.tid, t.cpu_ns)).collect();
-        assert_eq!(tasks, [(0, 1, 0), (GEN_A, 100, 600), (GEN_A, 103, 400), (GEN_B, 101, 600)]);
+        let tasks: Vec<_> = snapshot
+            .tasks()
+            .map(|t| (t.generation, t.tid, t.cpu_ns))
+            .collect();
+        assert_eq!(
+            tasks,
+            [
+                (0, 1, 0),
+                (GEN_A, 100, 600),
+                (GEN_A, 103, 400),
+                (GEN_B, 101, 600)
+            ]
+        );
         let worker = snapshot.tasks().find(|t| t.tid == 103).expect("worker row");
         assert!(worker.has(task_flags::STACK_IN_QUOTA));
-        assert!(!snapshot.tasks().find(|t| t.tid == 100).expect("root row").has(task_flags::STACK_IN_QUOTA));
+        assert!(!snapshot
+            .tasks()
+            .find(|t| t.tid == 100)
+            .expect("root row")
+            .has(task_flags::STACK_IN_QUOTA));
         // The in-flight interval is reported, never written back.
         assert_eq!(sched.tasks.get(&101).map(|t| t.cpu_ns), Some(500));
 
         let again = take(&mut sched, Some(2_700), 1 << 16, false);
         let again = TelemetrySnapshot::parse(&again).expect("cells only");
         assert_eq!(again.header().sample_id, 2);
-        assert_eq!((again.header().total_tasks, again.header().emitted_tasks), (4, 0));
-        assert!(again.header().has(header_flags::COMPLETE), "tasks were not requested");
+        assert_eq!(
+            (again.header().total_tasks, again.header().emitted_tasks),
+            (4, 0)
+        );
+        assert!(
+            again.header().has(header_flags::COMPLETE),
+            "tasks were not requested"
+        );
     }
 
     #[test]
@@ -546,7 +655,13 @@ mod tests {
 
         let bytes = take(&mut sched, Some(2_600), HEADER_LEN, true);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("header only");
-        assert_eq!((snapshot.header().emitted_cells, snapshot.header().emitted_tasks), (0, 0));
+        assert_eq!(
+            (
+                snapshot.header().emitted_cells,
+                snapshot.header().emitted_tasks
+            ),
+            (0, 0)
+        );
         assert!(!snapshot.header().has(header_flags::COMPLETE));
     }
 
@@ -562,10 +677,16 @@ mod tests {
         run(&mut sched, 103, 3_000);
         let bytes = take(&mut sched, Some(3_050), 1 << 16, true);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("decode");
-        let a = snapshot.cells().find(|c| c.cell_id == CELL_A).expect("cell A");
+        let a = snapshot
+            .cells()
+            .find(|c| c.cell_id == CELL_A)
+            .expect("cell A");
         // 600 (root) + 400 + 300 + 200 (exited worker) + 50 in flight on the zombie.
         assert_eq!((a.cpu_ns, a.task_count), (1_550, 1));
-        assert!(snapshot.tasks().all(|t| t.tid != 103), "an exited task has no row");
+        assert!(
+            snapshot.tasks().all(|t| t.tid != 103),
+            "an exited task has no row"
+        );
         assert_eq!(sched.cpu_telemetry.exited(CELL_A, GEN_A), 900);
     }
 
@@ -576,13 +697,18 @@ mod tests {
         let mut sched = Scheduler::new();
         sched.cpu_telemetry.retain_exited(CELL_A, GEN_A, 1_000);
         let next = GEN_A + 5;
-        sched.tasks.insert(200, task(200, CELL_A, next, 200, "a-again"));
+        sched
+            .tasks
+            .insert(200, task(200, CELL_A, next, 200, "a-again"));
         sched.tasks.get_mut(&200).expect("root").cpu_ns = 50;
         live(&mut sched, CELL_A, next, 200);
         let bytes = take(&mut sched, Some(5_000), 1 << 16, true);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("decode");
         let cell = snapshot.cells().next().expect("one cell");
-        assert_eq!((cell.cell_id, cell.generation, cell.cpu_ns), (CELL_A, next, 50));
+        assert_eq!(
+            (cell.cell_id, cell.generation, cell.cpu_ns),
+            (CELL_A, next, 50)
+        );
 
         sched.cpu_telemetry.retain_exited(CELL_A, next, 7);
         sched.cpu_telemetry.retain_exited(CELL_A, GEN_A, 999); // stale: dropped
@@ -616,13 +742,24 @@ mod tests {
         assert_eq!(denied.header().mem_total_frames, 0);
         assert_eq!(denied.header().capture_end_ns, 12);
 
-        let info = ViMemInfoV1 { total_frames: 9, used_frames: 4, free_frames: 5, page_size: 4096 };
+        let info = ViMemInfoV1 {
+            total_frames: 9,
+            used_frames: 4,
+            free_frames: 5,
+            page_size: 4096,
+        };
         let present = capture(&mut sched, EPOCH, Some(10), HEADER_LEN, false)
             .expect("capture")
             .finish(SystemMemory::Present(info), Some(11));
         let present = TelemetrySnapshot::parse(&present).expect("decode");
         assert!(present.header().has(header_flags::SYSMEM_PRESENT));
-        assert_eq!((present.header().mem_used_frames, present.header().mem_page_size), (4, 4096));
+        assert_eq!(
+            (
+                present.header().mem_used_frames,
+                present.header().mem_page_size
+            ),
+            (4, 4096)
+        );
     }
 
     #[test]
@@ -631,12 +768,17 @@ mod tests {
         let _harts = Harts::save();
         let mut sched = Scheduler::new();
         let long = "n".repeat(NAME_LEN + 3);
-        sched.tasks.insert(300, task(300, CELL_B, GEN_B, 300, &long));
+        sched
+            .tasks
+            .insert(300, task(300, CELL_B, GEN_B, 300, &long));
         live(&mut sched, CELL_B, GEN_B, 300);
         let bytes = take(&mut sched, Some(1), 1 << 16, true);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("decode");
         assert!(snapshot.cells().all(|c| c.has(cell_flags::NAME_TRUNCATED)));
         assert!(snapshot.tasks().all(|t| t.has(task_flags::NAME_TRUNCATED)));
-        assert_eq!(TelemetrySnapshot::parse(&bytes[..bytes.len() - 1]).err(), Some(TelemetryDecodeError::Length));
+        assert_eq!(
+            TelemetrySnapshot::parse(&bytes[..bytes.len() - 1]).err(),
+            Some(TelemetryDecodeError::Length)
+        );
     }
 }

@@ -22,15 +22,7 @@ use ostd::io::println;
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = true, network = true, spawn = true);
-api::declare_syscalls![
-    Log,
-    Send,
-    Recv,
-    LookupService,
-    Spawn,
-    Yield,
-    Exit
-];
+api::declare_syscalls![Log, Send, Recv, LookupService, Spawn, Yield, Exit];
 
 ostd::cell_main!(cell_main);
 
@@ -66,7 +58,7 @@ fn extract_app_name(arg: &str) -> String {
         let name = name.strip_suffix(".lua").unwrap_or(name);
         String::from(name)
     } else {
-        let name = trimmed.split('/').last().unwrap_or(trimmed);
+        let name = trimmed.split('/').next_back().unwrap_or(trimmed);
         let name = name.strip_suffix(".toml").unwrap_or(name);
         let name = name.strip_suffix(".lua").unwrap_or(name);
         String::from(name)
@@ -91,18 +83,24 @@ fn cell_main() {
     println(&format!("[vm-runner] Resolving app: '{}'", app_name));
     println(&format!("[vm-runner] Convention Config: {}", config_path));
     println(&format!("[vm-runner] Convention Script: {}", lua_path));
-    println(&format!("[vm-runner] Convention Disk:   {}", config.app_image));
+    println(&format!(
+        "[vm-runner] Convention Disk:   {}",
+        config.app_image
+    ));
 
     // Check if dynamic Lua hook exists
     let has_lua = match ostd::syscall::sys_open_cap(&lua_path) {
         Ok(cap) => {
-            let _ = ostd::syscall::sys_close_cap(cap);
+            ostd::syscall::sys_close_cap(cap);
             true
         }
         Err(_) => false,
     };
     if has_lua {
-        println(&format!("[vm-runner] Dynamic Lua hook active: {}", lua_path));
+        println(&format!(
+            "[vm-runner] Dynamic Lua hook active: {}",
+            lua_path
+        ));
     }
 
     // Connect to Hypervisor service (service ID 14)
@@ -112,7 +110,10 @@ fn cell_main() {
         sys_exit(1);
     }
 
-    println(&format!("[vm-runner] Connected to Hypervisor Service (tid={})", hv_tid));
+    println(&format!(
+        "[vm-runner] Connected to Hypervisor Service (tid={})",
+        hv_tid
+    ));
     println(&format!(
         "[vm-runner] Spawning MicroVM on Intel VT-x: base='{}' app='{}' mode={} ram={}M",
         config.base_image, config.app_image, config.mode, config.ram_mb
