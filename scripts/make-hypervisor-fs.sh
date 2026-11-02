@@ -8,7 +8,8 @@
 #   3. Creates kernel/src/embedded-hv/kernel_fs.img with:
 #        - Regular boot cells (init, cellbox, vfs, config) from existing embedded img
 #        - /vmlinuz   (Alpine vmlinuz-virt)
-#        - /initrd.gz (Alpine initramfs-virt, renamed from initramfs-virt)
+#        - /initrd.gz (Alpine initramfs-virt plus the guest profile's rdinit,
+#          /bin/pi-guest-init, and the ext4 modules it loads from modloop-virt)
 #   4. Prints the EMBEDDED_OVERRIDE instruction for the kernel build.
 #
 # After running this script, rebuild the kernel with:
@@ -137,12 +138,40 @@ else
     exit 1
 fi
 
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    else
+        PYTHON_BIN=python
+    fi
+fi
+
 # Alpine kernel and initrd (FAT16 paths are uppercased by the kernel; store as-is).
 VMLINUZ="$ALPINE_CACHE/vmlinuz-virt"
-INITRD="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
 if [[ "$GPU_TEST" -eq 1 ]]; then
     bash scripts/prepare-tier3b-gpu-initramfs.sh "$ALPINE_CACHE"
     INITRD="$ALPINE_CACHE/initramfs-tier3b-gpu"
+elif [[ -n "${INITRD_OVERRIDE:-}" ]]; then
+    INITRD="$INITRD_OVERRIDE"
+else
+    # The guest profile (boot_arm_profile.rs RDINIT) boots `rdinit=/bin/pi-guest-init`,
+    # which the stock initramfs-virt lacks: the guest would panic with "Unable to
+    # mount root fs". Pack the same init and ext4 modules the RPi3 persistent
+    # profile uses; the repack is deterministic (fixed inode order, gzip mtime 0).
+    [[ -s "$ALPINE_CACHE/modloop-virt" ]] || {
+        echo "ERROR: guest init needs Alpine modloop-virt for ext4: $ALPINE_CACHE/modloop-virt" >&2
+        echo "  Run: bash scripts/fetch-alpine-artifacts.sh" >&2
+        exit 1
+    }
+    command -v unsquashfs >/dev/null || {
+        echo "ERROR: packing the guest init needs unsquashfs (squashfs-tools)" >&2
+        exit 1
+    }
+    INITRD="$STAGING/initrd-hv-guest.gz"
+    "$PYTHON_BIN" tools/prepare-rpi3-guest-initramfs.py \
+        "$ALPINE_CACHE/initramfs-virt" "$ALPINE_CACHE/modloop-virt" \
+        scripts/rpi3-guest-init "$INITRD"
 fi
 
 # Alpine ≥3.20 ships vmlinuz-virt as an EFI zboot wrapper ("MZ" + "zimg" +
@@ -171,15 +200,6 @@ MKFAT_ARGS+=("$VMLINUZ" "vmlinuz")
 echo "  /initrd.gz <- $INITRD ($(du -sh "$INITRD" | cut -f1))"
 MKFAT_ARGS+=("$INITRD" "initrd.gz")
 
-PYTHON_BIN="${PYTHON_BIN:-}"
-if [[ -z "$PYTHON_BIN" ]]; then
-    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
-        PYTHON_BIN=python3
-    else
-        PYTHON_BIN=python
-    fi
-fi
-
 # Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
 # which is dev-permissive: the whole policy layer runs and changes nothing. Destination
 # has no leading slash, matching the bin/<cell> entries above — Git Bash rewrites a
@@ -187,7 +207,7 @@ fi
 # shellcheck source=scripts/lib-bake-policy.sh
 source scripts/lib-bake-policy.sh
 POLICY_TMP=$(mktemp -d "target/hv-policy-tmp.XXXXXX")
-trap 'rm -rf "$POLICY_TMP"' EXIT
+trap 'rm -rf "$STAGING" "$POLICY_TMP"' EXIT
 bake_policy "$POLICY_TMP/POLICY.BIN"
 echo "  /POLICY.BIN <- signed operator policy"
 MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "POLICY.BIN")

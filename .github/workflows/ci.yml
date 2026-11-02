@@ -713,9 +713,11 @@ jobs:
           cache-on-failure: true
           key: hypervisor-smoke
 
-      - name: Install QEMU and aarch64 sysroot
+      # squashfs-tools: make-hypervisor-fs.sh pulls the ext4 modules for the
+      # guest's /bin/pi-guest-init out of modloop-virt with unsquashfs.
+      - name: Install QEMU, squashfs-tools and aarch64 sysroot
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
         uses: actions/cache@v4
@@ -821,9 +823,9 @@ jobs:
           cache-on-failure: true
           key: hypervisor-boot-kvm
 
-      - name: Install QEMU and aarch64 sysroot
+      - name: Install QEMU, squashfs-tools and aarch64 sysroot
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
         uses: actions/cache@v4

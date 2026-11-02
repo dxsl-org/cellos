@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Fixed
+- **The aarch64 hypervisor-machinery lane passes again.** Since `7e4491296` the virt guest boots `rdinit=/bin/pi-guest-init`, but `make-hypervisor-fs.sh` still packed the stock Alpine `initramfs-virt`, which lacks it. The guest therefore panicked with `VFS: Unable to mount root fs`, in CI as well as locally. The script now packs the init and its ext4 modules with `tools/prepare-rpi3-guest-initramfs.py` (deterministic cpio newc), and stops with an error if `modloop-virt` or `unsquashfs` is missing. Both hypervisor CI jobs install `squashfs-tools`.
 - **`rm -r /data/...` works again.** Phase 09C moved `/data` to CellosFS, whose `rmdir_recursive` was a stub returning `false`. It is now a bounded walk (32 levels, 4096 entries) that collects the tree first, then deletes child-first, syncing after each entry. `RmdirRecursive` under `/srv` is refused, because a subtree has no namespace reservation.
 - **Refused session launches are logged.** When the loader refuses a `PrepareChild` launch (Cellbox's foreground route), the kernel logs `[loader] PrepareChild refused: caller=… path=… error=…`. Before, only the shell's mapped status was visible.
 - **AArch64 boot suite passes 11/11.**
