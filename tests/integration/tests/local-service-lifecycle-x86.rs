@@ -134,14 +134,25 @@ fn x86_dead_provider_terminates_sync_and_async_calls() {
         "[local-lifecycle] EVENT-COEXISTENCE=OK raw_event=received rpc_pending=true reply=correlated raw_reply_absent=true",
         "[local-lifecycle] CONCURRENT-INPUT=OK rpc_calls=8 input_events=32 rpc_settled=false rpc_drained=8 input_drained=32 misplaced=0",
         "[local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0",
-        "[local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0",
-        "[local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0",
+        // Phase 03e: admission headroom. One Cell queues at most 56 of the 64
+        // peer-mailbox slots; an independent caller is admitted at once and is
+        // never refused while that Cell keeps its share full.
+        "[local-lifecycle] PRESSURE-PROVIDER=OK b=64 duplicate=0 extra_delivery=0",
+        "[local-lifecycle] PRESSURE-FILL a_fill=56 a_headroom_busy=true b_first_admitted=true",
+        "[local-lifecycle] PEER-PRESSURE=OK a_fill=56 a_headroom_busy=true b_first_admitted=true b_fresh_refused=0 b_done=64 duplicate=0 wrong_correlation=0",
+        // Phase 03e: an unbounded synchronous call held past the real expiry.
+        "[local-lifecycle] SYNC-EXPIRY=OK unbounded=Indeterminate elapsed_ticks>=3000 late_reply=refused fresh=Reply",
     ] {
         assert!(
             output.contains(anchor),
             "missing lifecycle anchor {anchor:?}\n--- output ---\n{output}"
         );
     }
+    // New probe legs must stay inside the bench allowlists.
+    assert!(
+        !output.contains("denied for tid"),
+        "a syscall was denied during the local lifecycle\n--- output ---\n{output}"
+    );
 
     // Leg S: the shipped SDK — not just the raw opcode — resolves the provider through
     // the binding, and a typed call through that handle still works. Without this the
@@ -376,6 +387,34 @@ fn assert_async_lifecycle(mut qemu: QemuRunner, topology: &str) {
                 "other_records=0",
                 "quiet_after=true",
             ][..],
+        ),
+        // Phase 03e: dispatched cancellation is never "not executed" (masked
+        // provider), the sync caller budget, and dropped interest.
+        (
+            "[async-lifecycle] CANCEL-RACE ",
+            &[
+                "total=256",
+                "other=0",
+                "cancelled_but_received=0",
+                "received_but_definite=0",
+                "delivered_twice=0",
+                "unterminal=0",
+            ][..],
+        ),
+        (
+            "[async-lifecycle] SYNC-TIMEOUT-LATE ",
+            &[
+                "queued=Some(PreDispatchTimeout)",
+                "queued_delivered=false",
+                "first=Some(Indeterminate)",
+                "late_explicit_refused=true",
+                "late_send_raw_absent=true",
+                "next_reply=true",
+            ][..],
+        ),
+        (
+            "[async-lifecycle] DROP-RECLAIM ",
+            &["dropped=192", "fresh_accepted=64", "late_accepted=0"][..],
         ),
     ] {
         let line = output

@@ -246,7 +246,8 @@ fn park_for_terminal(timeout_ticks: u64) -> Result<Park, IpcError> {
 
 /// Abandon one exact operation. A pre-dispatch request becomes Cancelled;
 /// an already-dispatched request becomes Indeterminate (not rolled back).
-/// Call `take` afterwards to release the retained terminal slot.
+/// Call `take` afterwards to release the retained terminal slot; dropping an
+/// unsettled [`PendingCall`] does both.
 pub fn cancel(op: IpcOpId) -> Result<(), IpcError> {
     match crate::syscall::sys_ipc_cancel(op) {
         0 => Ok(()),
@@ -286,10 +287,34 @@ pub fn reply(op: IpcOpId, bytes: &[u8]) -> Result<(), IpcError> {
 /// [`try_take`][PendingCall::try_take]. Synchronous [`service_call`] uses this same
 /// lifecycle. No accepted request is retried automatically.
 ///
-/// Dropping the handle does not release its slot or roll back execution. Take the
-/// result, or cancel and then take it. Post-dispatch cancellation is indeterminate.
+/// Dropping a handle whose result was not taken stops waiting and releases its
+/// kernel slot: it cancels the operation and discards the retained terminal. A
+/// queued request is then never delivered; a dispatched one may still execute
+/// (post-dispatch cancellation is indeterminate). To keep the slot for a later
+/// [`take`] by id, read [`operation`][PendingCall::operation] and
+/// `core::mem::forget` the handle.
 pub struct PendingCall {
     operation: IpcOpId,
+    /// Set once a `take` released the kernel slot, or found none to release.
+    settled: core::cell::Cell<bool>,
+}
+
+impl Drop for PendingCall {
+    fn drop(&mut self) {
+        if !self.settled.get() {
+            discard_call(self);
+        }
+    }
+}
+
+/// Whether a `take` outcome means the kernel holds no slot for the operation
+/// any more: a terminal was consumed (even one whose status failed to decode)
+/// or the token is unknown. `Pending` and an undersized buffer keep it.
+const fn take_settles(result: &Result<IpcTakeResult, IpcError>) -> bool {
+    matches!(
+        result,
+        Ok(IpcTakeResult::Terminal { .. }) | Err(IpcError::Decode | IpcError::InvalidOperation)
+    )
 }
 
 /// A settled operation: what happened, and how many reply bytes the kernel wrote into
@@ -332,7 +357,10 @@ impl PendingCall {
     /// on it), [`IpcSubmitError::PeerGone`] when the peer is already gone, and
     /// [`IpcSubmitError::InvalidRequest`] for a malformed or oversized request.
     pub fn submit(peer_tid: usize, request: &[u8]) -> Result<Self, IpcSubmitError> {
-        submit(peer_tid, request).map(|operation| Self { operation })
+        submit(peer_tid, request).map(|operation| Self {
+            operation,
+            settled: core::cell::Cell::new(false),
+        })
     }
 
     /// The exact operation id, for correlating a terminal with the request it belongs to.
@@ -343,7 +371,11 @@ impl PendingCall {
     /// Take the terminal result if it has arrived; `Ok(None)` while it is still
     /// outstanding. An undersized `reply` never consumes the result.
     pub fn try_take(&self, reply: &mut [u8]) -> Result<Option<Completion>, IpcError> {
-        match take(self.operation, reply)? {
+        let result = take(self.operation, reply);
+        if take_settles(&result) {
+            self.settled.set(true);
+        }
+        match result? {
             IpcTakeResult::Pending => Ok(None),
             IpcTakeResult::Terminal { status, len } => Ok(Some(Completion {
                 terminal: status,
@@ -557,8 +589,27 @@ pub fn service_call<'r, Req: Serialize>(
 
 #[cfg(test)]
 mod tests {
-    use super::{completion_len, reply_sender, Completion, IpcError, IpcTerminal};
+    use super::{
+        completion_len, reply_sender, take_settles, Completion, IpcError, IpcTakeResult,
+        IpcTerminal,
+    };
     use crate::syscall::{SyscallError, SyscallResult};
+
+    /// Phase 03e: a handle is settled (its drop issues no syscall) exactly when
+    /// the kernel no longer holds a slot for it.
+    #[test]
+    fn only_a_consumed_or_unknown_operation_settles_its_handle() {
+        let terminal = IpcTakeResult::Terminal {
+            status: IpcTerminal::Indeterminate,
+            len: 0,
+        };
+        assert!(take_settles(&Ok(terminal)));
+        assert!(take_settles(&Err(IpcError::InvalidOperation)));
+        // The kernel consumed the slot before the status failed to decode.
+        assert!(take_settles(&Err(IpcError::Decode)));
+        assert!(!take_settles(&Ok(IpcTakeResult::Pending)));
+        assert!(!take_settles(&Err(IpcError::BufferTooSmall)));
+    }
 
     #[test]
     fn masked_receive_rejects_unrelated_death_instead_of_decoding_reason() {

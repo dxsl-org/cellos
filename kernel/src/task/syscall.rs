@@ -5449,11 +5449,11 @@ fn handle_syscall_inner(
             }
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if pos < t.pending_msgs.len()
-                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
-                    {
-                        t.pending_msgs.remove(pos);
-                    }
+                    let _ = t.pending_msgs.remove_delivered(
+                        pos,
+                        sender_tid,
+                        wire_header.map(|header| header.delivery_id),
+                    );
                     t.set_received_request_context(
                         sender_tid,
                         sender_cell_id,
@@ -5606,11 +5606,11 @@ fn handle_syscall_inner(
             crate::bench_counters::ipc_bytes(copy_total);
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if pos < t.pending_msgs.len()
-                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
-                    {
-                        t.pending_msgs.remove(pos);
-                    }
+                    let _ = t.pending_msgs.remove_delivered(
+                        pos,
+                        sender_tid,
+                        wire_header.map(|header| header.delivery_id),
+                    );
                     if let Some(header) = wire_header {
                         // Commit caller context together with removal so a
                         // reply after scatter carries the delivered sender's
@@ -5812,11 +5812,11 @@ fn handle_syscall_inner(
             }
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if pos < t.pending_msgs.len()
-                        && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
-                    {
-                        t.pending_msgs.remove(pos);
-                    }
+                    let _ = t.pending_msgs.remove_delivered(
+                        pos,
+                        sender_tid,
+                        wire_header.map(|header| header.delivery_id),
+                    );
                     t.set_received_request_context(
                         sender_tid,
                         sender_cell_id,
@@ -5946,20 +5946,9 @@ fn handle_syscall_inner(
                 }
                 if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                        // Commit by delivery_id (wire) or position+sender_tid (inline).
-                        if let Some(did) = delivery_id {
-                            if let Some(p) = t
-                                .pending_msgs
-                                .iter()
-                                .position(|m| m.wire_header().is_some_and(|h| h.delivery_id == did))
-                            {
-                                t.pending_msgs.remove(p);
-                            }
-                        } else if pos < t.pending_msgs.len()
-                            && t.pending_msgs.as_slice()[pos].sender_tid == sender_tid
-                        {
-                            t.pending_msgs.remove(pos);
-                        }
+                        let _ = t
+                            .pending_msgs
+                            .remove_delivered(pos, sender_tid, delivery_id);
                         t.set_received_request_context(
                             sender_tid,
                             sender_cell_id,

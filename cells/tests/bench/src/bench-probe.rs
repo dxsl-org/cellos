@@ -63,6 +63,9 @@ fn cell_main() {
     if role.starts_with("c2c-pressure-caller:") {
         scenarios::local_service_lifecycle::run_pressure_caller(role);
     }
+    if role.starts_with("c2c-sync-expiry-caller:") {
+        scenarios::local_service_lifecycle::run_sync_expiry_caller(role);
+    }
     if role.starts_with("c2c-echo-reverse:") {
         scenarios::async_lifecycle::run_echo_reverse(role);
     }
@@ -76,6 +79,10 @@ fn cell_main() {
         "c2c-msw-slow" => scenarios::async_lifecycle::run_msw_slow(),
         "c2c-msw-hold" => scenarios::async_lifecycle::run_msw_hold(),
         "c2c-msw-raw" => scenarios::async_lifecycle::run_msw_raw(),
+        "c2c-race-provider" => scenarios::async_lifecycle::run_race_provider(),
+        "c2c-sync-hold" => scenarios::async_lifecycle::run_sync_hold(),
+        "c2c-drop-provider" => scenarios::async_lifecycle::run_drop_provider(),
+        "c2c-sync-expiry-holder" => scenarios::local_service_lifecycle::run_sync_expiry_holder(),
         "c2c-nested-reply" => scenarios::local_service_lifecycle::run_nested_provider(),
         "c2c-reply-loop" => scenarios::local_service_lifecycle::run_reply_loop(),
         "c2c-cancel-reply" => scenarios::local_service_lifecycle::run_cancel_provider(),

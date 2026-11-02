@@ -18,6 +18,32 @@ pub const MAX_OPERATIONS: usize = 64;
 pub const OPERATION_TIMEOUT_TICKS: u64 = 3_000;
 static NEXT_OPERATION: AtomicUsize = AtomicUsize::new(1);
 
+/// Phase 03e admission headroom: the last `PEER_QUEUE_HEADROOM` slots of a
+/// receiver's mailbox admit an operation only from a Cell incarnation that
+/// holds no queued operation wire there (all its threads count as one holder).
+/// One Cell can then hold at most `HOTSWAP_MSG_QUEUE_DEPTH - PEER_QUEUE_HEADROOM`
+/// queued wires and, while no raw or kernel-inserted records are queued at the
+/// receiver, a Cell holding none is refused for capacity only when at least
+/// `PEER_QUEUE_HEADROOM + 1` other Cells each hold one (Spec 20 §2.6).
+const PEER_QUEUE_HEADROOM: usize = 8;
+
+/// Whether `receiver`'s mailbox admits one more operation wire from the Cell
+/// incarnation `sender`. Identity is the kernel-written wire header; the scan
+/// is bounded by the mailbox depth and allocates nothing.
+fn peer_queue_admits(receiver: &Task, sender: (u64, u64), headroom: usize) -> bool {
+    let depth = super::tcb::HOTSWAP_MSG_QUEUE_DEPTH;
+    let len = receiver.pending_msgs.len();
+    if len >= depth {
+        return false;
+    }
+    len < depth - headroom
+        || !receiver.pending_msgs.iter().any(|message| {
+            message.wire_header().is_some_and(|header| {
+                header.async_op != 0 && (header.sender_cell_id, header.sender_generation) == sender
+            })
+        })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Failure {
     Busy,
@@ -288,6 +314,16 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
             .get(&peer)
             .filter(|task| live(task))
             .ok_or(Failure::PeerGone)?;
+        // Refuse a full or headroom-reserved queue before the request copy and
+        // the 4 KiB reply buffer are allocated. The authoritative check repeats
+        // in the commit hold below, where the push happens.
+        if !peer_queue_admits(
+            target,
+            (task.cell_id.0, task.cell_generation),
+            PEER_QUEUE_HEADROOM,
+        ) {
+            return Err(Failure::Busy);
+        }
         #[cfg(cellos_p01_trace)]
         {
             heap_owner = crate::p01_resources::owner(task);
@@ -348,7 +384,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     if super::paused_target_rejects(sched, owner, peer) {
         return Err(Failure::Busy);
     }
-    if receiver.pending_msgs.len() >= super::tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+    if !peer_queue_admits(receiver, binding, PEER_QUEUE_HEADROOM) {
         return Err(Failure::Busy);
     }
     #[cfg(cellos_p01_trace)]
@@ -1310,27 +1346,41 @@ mod tests {
         sched
     }
 
+    fn operation(
+        sched: &Scheduler,
+        owner: usize,
+        peer: usize,
+        id: usize,
+        phase: Phase,
+    ) -> Operation {
+        let provider = &sched.tasks[&peer];
+        let task = &sched.tasks[&owner];
+        Operation {
+            id,
+            owner_cell: task.cell_id.0,
+            owner_generation: task.cell_generation,
+            owner_tid: owner,
+            consumer_tid: owner,
+            peer_tid: peer,
+            peer_cell: provider.cell_id.0,
+            peer_generation: provider.cell_generation,
+            deadline: 10,
+            phase,
+            notified: false,
+            reply: test_reply(),
+            #[cfg(cellos_p01_trace)]
+            _p01_obligation: ObservedOperation(None),
+        }
+    }
+
     fn add_operation(sched: &mut Scheduler, owner: usize, peer: usize, id: usize, phase: Phase) {
-        let provider = sched.tasks.get(&peer).unwrap();
-        let (peer_cell, peer_generation) = (provider.cell_id.0, provider.cell_generation);
-        let task = sched.tasks.get_mut(&owner).unwrap();
-        task.async_operations
-            .push(Operation {
-                id,
-                owner_cell: task.cell_id.0,
-                owner_generation: task.cell_generation,
-                owner_tid: owner,
-                consumer_tid: owner,
-                peer_tid: peer,
-                peer_cell,
-                peer_generation,
-                deadline: 10,
-                phase,
-                notified: false,
-                reply: test_reply(),
-                #[cfg(cellos_p01_trace)]
-                _p01_obligation: ObservedOperation(None),
-            })
+        let op = operation(sched, owner, peer, id, phase);
+        sched
+            .tasks
+            .get_mut(&owner)
+            .unwrap()
+            .async_operations
+            .push(op)
             .unwrap();
     }
 
@@ -1657,6 +1707,545 @@ mod tests {
         assert!(sched.tasks[&PROVIDER].pending_msgs.is_empty());
     }
 
+    fn queue_op_wire(sched: &mut Scheduler, owner: usize, peer: usize, token: usize) {
+        let task = &sched.tasks[&owner];
+        let header = ipc_wire::IpcWireHeader {
+            sender_tid: owner,
+            sender_cell_id: task.cell_id.0,
+            sender_generation: task.cell_generation,
+            delivery_id: token as u64,
+            async_op: token,
+        };
+        super::super::queue_wire_msg(
+            sched.tasks.get_mut(&peer).unwrap(),
+            ipc_wire::IpcWireMessage::try_new(header, b"op").unwrap(),
+            super::super::tcb::HOTSWAP_MSG_QUEUE_DEPTH,
+        )
+        .unwrap();
+    }
+
+    /// Phase 03e G1. A masked receive snapshots the first record from its
+    /// mask, dispatches it, copies out without `SCHEDULER`, then commits the
+    /// removal. Another caller's queued request *ahead* of it may be cancelled
+    /// in between; the commit must still remove exactly the delivered record.
+    #[test]
+    fn masked_receive_commit_removes_the_delivered_record_after_a_concurrent_cancel() {
+        let mut sched = fixture();
+        add_operation(&mut sched, FOREIGN_CELL, PROVIDER, 21, Phase::Queued);
+        queue_op_wire(&mut sched, FOREIGN_CELL, PROVIDER, 21);
+        for token in [11, 12] {
+            add_operation(&mut sched, OWNER, PROVIDER, token, Phase::Queued);
+            queue_op_wire(&mut sched, OWNER, PROVIDER, token);
+        }
+
+        // Snapshot hold: `Recv { mask: OWNER }` picks the first OWNER record.
+        let mailbox = &sched.tasks[&PROVIDER].pending_msgs;
+        let pos = mailbox.iter().position(|m| m.sender_tid == OWNER).unwrap();
+        let header = mailbox.as_slice()[pos].wire_header().unwrap();
+        assert_eq!((pos, header.async_op), (1, 11));
+        dispatch(&mut sched, PROVIDER, header);
+
+        // Between the holds, the foreign caller cancels its queued request.
+        cancel_in_sched(&mut sched, FOREIGN_CELL, 21).unwrap();
+
+        // Commit hold.
+        let removed = sched
+            .tasks
+            .get_mut(&PROVIDER)
+            .unwrap()
+            .pending_msgs
+            .remove_delivered(pos, OWNER, Some(header.delivery_id))
+            .and_then(|m| m.wire_header())
+            .map(|h| h.async_op);
+        assert_eq!(
+            removed,
+            Some(11),
+            "the commit removed a record it never delivered"
+        );
+
+        // The next masked receive must deliver 12, never 11 a second time.
+        let next = sched.tasks[&PROVIDER]
+            .pending_msgs
+            .iter()
+            .find(|m| m.sender_tid == OWNER)
+            .and_then(|m| m.wire_header())
+            .map(|h| h.async_op);
+        assert_eq!(next, Some(12), "operation 11 would be delivered twice");
+        assert!(matches!(
+            sched.tasks[&OWNER].async_operations.find(12).unwrap().phase,
+            Phase::Queued
+        ));
+    }
+
+    /// Records without a wire (interrupt-produced inline data) keep the
+    /// position rule; a wire whose delivery id is gone is never guessed at.
+    #[test]
+    fn remove_delivered_keeps_the_inline_rule_and_never_guesses_a_wire() {
+        let mut sched = fixture();
+        let task = sched.tasks.get_mut(&PROVIDER).unwrap();
+        super::super::queue_pending_msg(task, OWNER, b"inline", 64).unwrap();
+        assert!(task
+            .pending_msgs
+            .remove_delivered(0, WORKER, None)
+            .is_none());
+        assert!(task.pending_msgs.remove_delivered(0, OWNER, None).is_some());
+        assert!(task.pending_msgs.is_empty());
+
+        queue_op_wire(&mut sched, OWNER, PROVIDER, 31);
+        queue_op_wire(&mut sched, OWNER, PROVIDER, 32);
+        let mailbox = &mut sched.tasks.get_mut(&PROVIDER).unwrap().pending_msgs;
+        // Delivery id 30 was removed elsewhere (e.g. its owner died): no removal.
+        assert!(mailbox.remove_delivered(0, OWNER, Some(30)).is_none());
+        assert_eq!(mailbox.len(), 2);
+        let removed = mailbox.remove_delivered(0, OWNER, Some(32)).unwrap();
+        assert_eq!(removed.wire_header().unwrap().async_op, 32);
+        assert_eq!(mailbox.as_slice()[0].wire_header().unwrap().async_op, 31);
+    }
+
+    /// Phase 03e guard: a receive arm that passed `None` for a delivered wire
+    /// would leave it queued for a second delivery; debug builds stop there.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "a wire was committed without its delivery id")]
+    fn a_wire_committed_without_its_delivery_id_is_caught() {
+        let mut sched = fixture();
+        queue_op_wire(&mut sched, OWNER, PROVIDER, 41);
+        let mailbox = &mut sched.tasks.get_mut(&PROVIDER).unwrap().pending_msgs;
+        let _ = mailbox.remove_delivered(0, OWNER, None);
+    }
+
+    fn terminal_kind(sched: &Scheduler, owner: usize, token: usize) -> Option<u32> {
+        match sched.tasks[&owner].async_operations.find(token)?.phase {
+            Phase::Terminal { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    fn wire_queued(sched: &Scheduler, peer: usize, token: usize) -> bool {
+        sched.tasks[&peer]
+            .pending_msgs
+            .iter()
+            .any(|m| m.wire_header().is_some_and(|h| h.async_op == token))
+    }
+
+    /// Phase 03e A2. Every terminal producer, applied before and after the
+    /// receive snapshot (`dispatch`). A definite "not executed" outcome exists
+    /// only for a request no receive ever snapshotted, and its wire is gone,
+    /// so no later receive can deliver it.
+    #[test]
+    fn definite_not_executed_outcomes_only_for_never_snapshotted_requests() {
+        use api::syscall::ipc_status::{CANCELLED, INDETERMINATE, PEER_GONE, PRE_DISPATCH_TIMEOUT};
+        #[derive(Clone, Copy, Debug)]
+        enum Producer {
+            Cancel,
+            Expire,
+            OwnerExit,
+            PeerDied,
+            Cutover,
+        }
+        for producer in [
+            Producer::Cancel,
+            Producer::Expire,
+            Producer::OwnerExit,
+            Producer::PeerDied,
+            Producer::Cutover,
+        ] {
+            for snapshotted in [false, true] {
+                let mut sched = fixture();
+                add_operation(&mut sched, OWNER, PROVIDER, 51, Phase::Queued);
+                queue_op_wire(&mut sched, OWNER, PROVIDER, 51);
+                if snapshotted {
+                    let header = sched.tasks[&PROVIDER].pending_msgs.as_slice()[0]
+                        .wire_header()
+                        .unwrap();
+                    dispatch(&mut sched, PROVIDER, header);
+                }
+                match producer {
+                    Producer::Cancel => cancel_in_sched(&mut sched, OWNER, 51).unwrap(),
+                    Producer::Expire => expire(&mut sched, 10),
+                    Producer::OwnerExit => on_owner_exits(&mut sched, OWNER),
+                    Producer::PeerDied => peer_died(&mut sched, PROVIDER, 1_003, 7),
+                    Producer::Cutover => cutover_peer(&mut sched, PROVIDER, 1_003, 7),
+                }
+                let kind = terminal_kind(&sched, OWNER, 51);
+                let expected = match (producer, snapshotted) {
+                    (Producer::Cancel | Producer::OwnerExit, false) => Some(CANCELLED),
+                    (Producer::Expire, false) => Some(PRE_DISPATCH_TIMEOUT),
+                    (Producer::Cancel | Producer::Expire | Producer::OwnerExit, true) => {
+                        Some(INDETERMINATE)
+                    }
+                    (Producer::PeerDied, _) | (Producer::Cutover, false) => Some(PEER_GONE),
+                    // Stays dispatched until the old provider exits (`peer_died`).
+                    (Producer::Cutover, true) => None,
+                };
+                assert_eq!(kind, expected, "{producer:?} snapshotted={snapshotted}");
+                if matches!(kind, Some(CANCELLED | PRE_DISPATCH_TIMEOUT)) {
+                    assert!(!snapshotted);
+                    assert!(
+                        !wire_queued(&sched, PROVIDER, 51),
+                        "{producer:?}: a definite outcome left a deliverable wire"
+                    );
+                }
+                // A later snapshot of anything still queued never revives a terminal.
+                if let Some(header) = sched.tasks[&PROVIDER]
+                    .pending_msgs
+                    .iter()
+                    .find_map(|m| m.wire_header())
+                {
+                    dispatch(&mut sched, PROVIDER, header);
+                    assert_eq!(terminal_kind(&sched, OWNER, 51), kind);
+                }
+            }
+        }
+    }
+
+    /// Phase 03e A4. Hot-swap cutover ends queued work at once, keeps a
+    /// dispatched request until the old provider exits, and the replacement
+    /// incarnation can settle neither; its own new operation completes.
+    #[test]
+    fn hotswap_cutover_ends_queued_work_and_the_replacement_cannot_settle_old_tokens() {
+        use api::syscall::ipc_status::{PEER_GONE, REPLY};
+        let mut sched = fixture();
+        add_operation(&mut sched, OWNER, PROVIDER, 61, Phase::Queued);
+        queue_op_wire(&mut sched, OWNER, PROVIDER, 61);
+        add_operation(&mut sched, OWNER, PROVIDER, 62, Phase::Dispatched);
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        cutover_peer(&mut sched, PROVIDER, 1_003, 7);
+        assert_eq!(terminal_kind(&sched, OWNER, 61), Some(PEER_GONE));
+        assert_eq!(terminal_kind(&sched, OWNER, 62), None);
+        assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
+        for token in [61, 62] {
+            assert_eq!(
+                reply_in_sched(&mut sched, FOREIGN_GENERATION, token, 0, 0),
+                Err(Failure::Invalid)
+            );
+        }
+        peer_died(&mut sched, PROVIDER, 1_003, 7);
+        peer_died(&mut sched, PROVIDER, 1_003, 7);
+        assert_eq!(terminal_kind(&sched, OWNER, 62), Some(PEER_GONE));
+        add_operation(&mut sched, OWNER, FOREIGN_GENERATION, 63, Phase::Dispatched);
+        assert_eq!(
+            reply_in_sched(&mut sched, FOREIGN_GENERATION, 63, 0, 0),
+            Ok(())
+        );
+        assert_eq!(terminal_kind(&sched, OWNER, 63), Some(REPLY));
+        assert_eq!(terminal_kind(&sched, OWNER, 61), Some(PEER_GONE));
+    }
+
+    /// Phase 03e A6. Retained terminals stay charged to the owner's operation
+    /// quota until taken or until the owner is reaped, no terminal transition
+    /// allocates, and the fixed reply storage (one `IPC_BUF_SIZE` buffer per
+    /// operation, allocated at acceptance as `submit` does) is freed by take
+    /// and by reaping the exited owner.
+    #[test]
+    fn retained_terminals_stay_charged_and_terminal_transitions_do_not_allocate() {
+        use api::syscall::ipc_status::CANCELLED;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        assert_eq!(ipc_wire::MAX_IPC_WIRE_PAYLOAD, api::ipc::IPC_BUF_SIZE);
+        let full_reply = || {
+            ipc_wire::IpcWireMessage::try_new(
+                ipc_wire::IpcWireHeader {
+                    sender_tid: PROVIDER,
+                    sender_cell_id: 1_003,
+                    sender_generation: 7,
+                    delivery_id: 0,
+                    async_op: 1,
+                },
+                &[0; ipc_wire::MAX_IPC_WIRE_PAYLOAD],
+            )
+            .unwrap()
+        };
+        let charged = |sched: &Scheduler| sched.tasks[&OWNER].async_operations.len();
+        let mut sched = fixture();
+        let ids = 1_000..1_000 + MAX_OPERATIONS;
+        for id in ids.clone() {
+            let mut op = operation(&sched, OWNER, PROVIDER, id, Phase::Dispatched);
+            op.reply = full_reply();
+            op.deadline = if id % 4 == 2 { 0 } else { 10 };
+            let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
+            assert_eq!(ops.push(op), Ok(()));
+        }
+        assert_eq!(charged(&sched), MAX_OPERATIONS);
+
+        let before = alloc_probe::allocations();
+        for id in ids.clone() {
+            match id % 4 {
+                0 => settle(&mut sched, PROVIDER, id),
+                1 => cancel_in_sched(&mut sched, OWNER, id).unwrap(),
+                _ => {}
+            }
+        }
+        expire(&mut sched, 5);
+        peer_died(&mut sched, PROVIDER, 1_003, 7);
+        assert_eq!(
+            alloc_probe::allocations(),
+            before,
+            "a terminal transition allocated"
+        );
+        assert!(ids
+            .clone()
+            .all(|id| terminal_kind(&sched, OWNER, id).is_some()));
+        assert_eq!(charged(&sched), MAX_OPERATIONS, "terminals stay charged");
+
+        let refused = operation(&sched, OWNER, PROVIDER, 2_000, Phase::Queued);
+        let mut admitted = operation(&sched, OWNER, PROVIDER, 2_001, Phase::Queued);
+        admitted.reply = full_reply();
+        let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
+        assert_eq!(
+            ops.push(refused),
+            Err(Failure::Busy),
+            "a full set of retained terminals admitted more"
+        );
+        let freed = alloc_probe::freed_bytes();
+        assert!(ops.remove(1_000).is_some(), "take releases one slot");
+        assert!(alloc_probe::freed_bytes() - freed >= ipc_wire::MAX_IPC_WIRE_PAYLOAD);
+        assert_eq!(charged(&sched), MAX_OPERATIONS - 1);
+        let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
+        assert_eq!(ops.push(admitted), Ok(()));
+        assert_eq!(charged(&sched), MAX_OPERATIONS);
+
+        // Owner exit terminalises what is left but keeps it charged until the
+        // task is reaped; reaping frees every retained reply buffer.
+        on_owner_exits(&mut sched, OWNER);
+        assert_eq!(charged(&sched), MAX_OPERATIONS);
+        assert_eq!(terminal_kind(&sched, OWNER, 2_001), Some(CANCELLED));
+        let freed = alloc_probe::freed_bytes();
+        drop(sched.tasks.remove(&OWNER));
+        assert!(
+            alloc_probe::freed_bytes() - freed >= MAX_OPERATIONS * ipc_wire::MAX_IPC_WIRE_PAYLOAD,
+            "reaping the owner did not free its retained reply storage"
+        );
+    }
+
+    struct AdmissionModel {
+        max_held: usize,
+        /// Provider receives from a wire's admission until (and including) the
+        /// receive that dispatches it, read back from the dequeued record (B3).
+        max_receives_to_dispatch: usize,
+        fresh_refused: usize,
+        /// Fewest other Cells holding a queued wire at any fresh refusal.
+        min_others_at_refusal: Option<usize>,
+        /// A Cell holding no queued wire refused while at most
+        /// `PEER_QUEUE_HEADROOM` other Cells held one (CP1 §5 B2).
+        b2_violations: usize,
+        received: usize,
+    }
+
+    /// Sustained competition at one receiver. Cell 1 floods (`flood_percent`
+    /// of all attempts, any number outstanding); every other Cell behaves like
+    /// a synchronous caller and submits only while it holds no queued wire.
+    /// One step in `receive_one_in` is a provider receive; the rest submit.
+    fn admission_model(
+        cells: u64,
+        headroom: usize,
+        flood_percent: u64,
+        receive_one_in: u64,
+        steps: usize,
+    ) -> AdmissionModel {
+        use super::super::tcb::HOTSWAP_MSG_QUEUE_DEPTH as DEPTH;
+        let mut sched = fixture();
+        let receiver = sched.tasks.get_mut(&PROVIDER).unwrap();
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut model = AdmissionModel {
+            max_held: 0,
+            max_receives_to_dispatch: 0,
+            fresh_refused: 0,
+            min_others_at_refusal: None,
+            b2_violations: 0,
+            received: 0,
+        };
+        let held = |receiver: &Task, cell: u64| {
+            receiver
+                .pending_msgs
+                .iter()
+                .filter(|m| m.wire_header().is_some_and(|h| h.sender_cell_id == cell))
+                .count()
+        };
+        for step in 0..steps {
+            let roll = next();
+            if roll % receive_one_in == 0 {
+                if receiver.pending_msgs.is_empty() {
+                    continue;
+                }
+                // A mask-0 receive takes the head; the record carries the
+                // receive count at its admission in `delivery_id`.
+                let admitted_at = receiver
+                    .pending_msgs
+                    .remove(0)
+                    .wire_header()
+                    .unwrap()
+                    .delivery_id;
+                model.received += 1;
+                model.max_receives_to_dispatch = model
+                    .max_receives_to_dispatch
+                    .max(model.received - admitted_at as usize);
+                continue;
+            }
+            let cell = if (roll >> 8) % 100 < flood_percent {
+                1
+            } else {
+                1 + (roll >> 16) % cells
+            };
+            let sender = (5_000 + cell, 1);
+            if cell != 1 && held(receiver, sender.0) > 0 {
+                continue;
+            }
+            if peer_queue_admits(receiver, sender, headroom) {
+                let header = ipc_wire::IpcWireHeader {
+                    sender_tid: cell as usize,
+                    sender_cell_id: sender.0,
+                    sender_generation: sender.1,
+                    delivery_id: model.received as u64,
+                    async_op: step + 1,
+                };
+                super::super::queue_wire_msg(
+                    receiver,
+                    ipc_wire::IpcWireMessage::try_new(header, &[]).unwrap(),
+                    DEPTH,
+                )
+                .unwrap();
+                model.max_held = model.max_held.max(held(receiver, sender.0));
+            } else if held(receiver, sender.0) == 0 {
+                model.fresh_refused += 1;
+                let others = (1..=cells)
+                    .filter(|other| held(receiver, 5_000 + other) > 0)
+                    .count();
+                model.min_others_at_refusal = Some(
+                    model
+                        .min_others_at_refusal
+                        .map_or(others, |min| min.min(others)),
+                );
+                if others <= PEER_QUEUE_HEADROOM {
+                    model.b2_violations += 1;
+                }
+            }
+        }
+        model
+    }
+
+    impl core::fmt::Display for AdmissionModel {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(
+                f,
+                "max_held={} max_receives_to_dispatch={} fresh_refused={} \
+                 min_others_at_refusal={:?} b2_violations={} received={}",
+                self.max_held,
+                self.max_receives_to_dispatch,
+                self.fresh_refused,
+                self.min_others_at_refusal,
+                self.b2_violations,
+                self.received
+            )
+        }
+    }
+
+    /// Phase 03e A7: CP1 §5 bounds B1-B3 under sustained competition, with a
+    /// crowded run that exercises fresh refusals at the B2 limit, and the
+    /// depth-only rule (headroom 0, the pre-03e behaviour) violating B2.
+    #[test]
+    fn peer_queue_headroom_bounds_monopolization() {
+        use super::super::tcb::HOTSWAP_MSG_QUEUE_DEPTH as DEPTH;
+        let check = |model: &AdmissionModel, label: &str| {
+            assert!(model.received > 10_000, "{label}: the model did not run");
+            assert!(
+                model.max_held <= DEPTH - PEER_QUEUE_HEADROOM,
+                "B1 {label}: one Cell held {} wires",
+                model.max_held
+            );
+            assert_eq!(model.b2_violations, 0, "B2 {label}");
+            assert!(
+                model.max_receives_to_dispatch <= DEPTH,
+                "B3 {label}: a wire waited {} receives",
+                model.max_receives_to_dispatch
+            );
+        };
+        for cells in [2, 9, 10] {
+            let model = admission_model(cells, PEER_QUEUE_HEADROOM, 70, 3, 100_000);
+            std::println!("A7 cells={cells} headroom={PEER_QUEUE_HEADROOM} {model}");
+            check(&model, &std::format!("{cells} Cells"));
+            if cells <= PEER_QUEUE_HEADROOM as u64 + 1 {
+                assert_eq!(model.fresh_refused, 0, "{cells} Cells");
+            }
+        }
+        // A crowd of 39 synchronous Cells against a slower provider fills the
+        // queue: fresh Cells are refused, each time behind more than
+        // `PEER_QUEUE_HEADROOM` other Cells. The exact limit is pinned by
+        // `peer_queue_headroom_refuses_a_fresh_cell_only_behind_nine_others`.
+        let crowd = admission_model(40, PEER_QUEUE_HEADROOM, 70, 6, 400_000);
+        std::println!("A7 crowd cells=40 headroom={PEER_QUEUE_HEADROOM} {crowd}");
+        check(&crowd, "crowd");
+        assert!(
+            crowd.fresh_refused > 0,
+            "the crowd run never filled the queue"
+        );
+        assert!(crowd.min_others_at_refusal > Some(PEER_QUEUE_HEADROOM));
+        let depth_only = admission_model(2, 0, 70, 3, 100_000);
+        std::println!("A7 cells=2 headroom=0 {depth_only}");
+        assert!(depth_only.max_held > DEPTH - PEER_QUEUE_HEADROOM);
+        assert!(
+            depth_only.b2_violations > 0,
+            "the model must detect monopolization under the depth-only rule"
+        );
+    }
+
+    /// Phase 03e A7 boundary (CP1 §5 B1/B2 at the limit): one Cell fills its
+    /// 56-wire share, 8 distinct fresh Cells take the headroom (each then
+    /// refused a second wire), and only then, behind exactly 9 other Cells,
+    /// is a fresh Cell refused; one receive admits it again.
+    #[test]
+    fn peer_queue_headroom_refuses_a_fresh_cell_only_behind_nine_others() {
+        use super::super::tcb::HOTSWAP_MSG_QUEUE_DEPTH as DEPTH;
+        let mut sched = fixture();
+        let receiver = sched.tasks.get_mut(&PROVIDER).unwrap();
+        let mut token = 0usize;
+        let mut push = |receiver: &mut Task, sender: (u64, u64)| {
+            token += 1;
+            let header = ipc_wire::IpcWireHeader {
+                sender_tid: sender.0 as usize,
+                sender_cell_id: sender.0,
+                sender_generation: sender.1,
+                delivery_id: token as u64,
+                async_op: token,
+            };
+            super::super::queue_wire_msg(
+                receiver,
+                ipc_wire::IpcWireMessage::try_new(header, &[]).unwrap(),
+                DEPTH,
+            )
+            .unwrap();
+        };
+        let flooder = (5_001, 1);
+        let mut share = 0;
+        while peer_queue_admits(receiver, flooder, PEER_QUEUE_HEADROOM) {
+            push(receiver, flooder);
+            share += 1;
+        }
+        assert_eq!(share, DEPTH - PEER_QUEUE_HEADROOM, "B1");
+        // A different incarnation of the same Cell is a different holder.
+        assert!(peer_queue_admits(receiver, (5_001, 2), PEER_QUEUE_HEADROOM));
+        for index in 0..PEER_QUEUE_HEADROOM as u64 {
+            let fresh = (6_000 + index, 1);
+            assert!(peer_queue_admits(receiver, fresh, PEER_QUEUE_HEADROOM));
+            push(receiver, fresh);
+            assert!(!peer_queue_admits(receiver, fresh, PEER_QUEUE_HEADROOM));
+        }
+        assert_eq!(receiver.pending_msgs.len(), DEPTH);
+        let ninth = (7_000, 1);
+        assert!(
+            !peer_queue_admits(receiver, ninth, PEER_QUEUE_HEADROOM),
+            "a full queue with 9 other holders refuses a fresh Cell"
+        );
+        drop(receiver.pending_msgs.remove(0));
+        assert!(peer_queue_admits(receiver, ninth, PEER_QUEUE_HEADROOM));
+        assert!(!peer_queue_admits(receiver, flooder, PEER_QUEUE_HEADROOM));
+    }
+
     #[test]
     fn caller_death_removes_only_exact_queued_identity_and_preserves_dispatch_context() {
         let mut sched = fixture();
@@ -1970,6 +2559,7 @@ mod tests {
 
         std::thread_local! {
             static COUNT: Cell<usize> = const { Cell::new(0) };
+            static FREED: Cell<usize> = const { Cell::new(0) };
         }
 
         pub struct Counting;
@@ -1994,6 +2584,7 @@ mod tests {
                 unsafe { System.realloc(ptr, layout, new_size) }
             }
             unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                let _ = FREED.try_with(|freed| freed.set(freed.get() + layout.size()));
                 unsafe { System.dealloc(ptr, layout) }
             }
         }
@@ -2003,6 +2594,11 @@ mod tests {
 
         pub fn allocations() -> usize {
             COUNT.with(|count| count.get())
+        }
+
+        /// Bytes this thread returned to the allocator so far.
+        pub fn freed_bytes() -> usize {
+            FREED.with(|freed| freed.get())
         }
     }
 

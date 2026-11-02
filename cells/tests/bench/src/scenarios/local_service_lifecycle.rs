@@ -464,8 +464,96 @@ pub fn run_deadline_provider() -> ! {
     sys_exit(0)
 }
 
+/// Phase 03e: an unbounded synchronous `service_call_typed` held by its
+/// provider past the real kernel expiry returns `Indeterminate`; the late
+/// reply is refused and the caller's next call returns its own reply.
+#[allow(dead_code)]
+pub fn run_sync_expiry_holder() -> ! {
+    let mut bytes = [0u8; 32];
+    let coordinator = bounded_recv(0, &mut bytes);
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("sync expiry holder setup");
+    }
+    let caller = match sys_recv(0, &mut bytes) {
+        SyscallResult::Ok(sender) if sender != coordinator && bytes[0] == REQ_TAG => sender,
+        _ => fail("sync expiry held request"),
+    };
+    let held = ostd::ipc::current().unwrap_or_else(|| fail("sync expiry held token"));
+    // Not the served caller: a raw, queued Send (the coordinator is waiting
+    // on its own operations, not receiving).
+    let _ = sys_send(coordinator, &[CONTROL_TAG, 1]);
+    match sys_recv(coordinator, &mut bytes) {
+        SyscallResult::Ok(_) if bytes[..2] == [CONTROL_TAG, 2] => {}
+        _ => fail("sync expiry holder gate"),
+    }
+    let late_refused = ostd::ipc::reply(held, &[REQ_TAG]).is_err();
+    let _ = sys_send(coordinator, &[CONTROL_TAG, 2, late_refused as u8]);
+    if bounded_recv(0, &mut bytes) != caller || bytes[0] != 8 {
+        fail("sync expiry fresh request");
+    }
+    let fresh = ostd::ipc::current().unwrap_or_else(|| fail("sync expiry fresh token"));
+    if fresh == held || ostd::ipc::reply(fresh, &[8]).is_err() {
+        fail("sync expiry fresh reply");
+    }
+    let _ = sys_send(coordinator, &[CONTROL_TAG, 3]);
+    sys_exit(0)
+}
+
+#[allow(dead_code)]
+pub fn run_sync_expiry_caller(role: &str) -> ! {
+    let holder = role
+        .strip_prefix("c2c-sync-expiry-caller:")
+        .and_then(|tid| tid.parse::<usize>().ok())
+        .unwrap_or_else(|| fail("sync expiry caller argument"));
+    let mut bytes = [0u8; 32];
+    let coordinator = bounded_recv(0, &mut bytes);
+    if bytes[..2] != [CONTROL_TAG, 0] {
+        fail("sync expiry caller setup");
+    }
+    let (mut send, mut recv) = ([0u8; 32], [0u8; 32]);
+    let started = scheduler_ticks();
+    let first =
+        ostd::ipc::service_call_typed::<(u8,), (u8,)>(holder, &(REQ_TAG,), &mut send, &mut recv);
+    let expired = first == Err(ostd::ipc::IpcError::Indeterminate)
+        && scheduler_ticks().saturating_sub(started) >= DEADLINE_TICKS;
+    let _ = sys_send(coordinator, &[CONTROL_TAG, 1, expired as u8]);
+    control_recv(coordinator, 2);
+    let fresh = ostd::ipc::service_call_typed::<(u8,), (u8,)>(holder, &(8,), &mut send, &mut recv);
+    let _ = sys_send(coordinator, &[CONTROL_TAG, 3, (fresh == Ok((8,))) as u8]);
+    sys_exit(0)
+}
+
+fn start_sync_expiry() -> (usize, usize) {
+    let holder =
+        spawn_probe("c2c-sync-expiry-holder").unwrap_or_else(|_| fail("sync expiry holder spawn"));
+    let caller = spawn_probe(&format!("c2c-sync-expiry-caller:{holder}"))
+        .unwrap_or_else(|_| fail("sync expiry caller spawn"));
+    raw_send(holder, &[CONTROL_TAG, 0]);
+    raw_send(caller, &[CONTROL_TAG, 0]);
+    expect_from(holder, 1);
+    (holder, caller)
+}
+
+fn finish_sync_expiry(holder: usize, caller: usize) {
+    let expired = expect_from(caller, 1)[2] == 1;
+    raw_send(holder, &[CONTROL_TAG, 2]);
+    let late_refused = expect_from(holder, 2)[2] == 1;
+    raw_send(caller, &[CONTROL_TAG, 2]);
+    let fresh = expect_from(caller, 3)[2] == 1;
+    expect_from(holder, 3);
+    if !(expired && late_refused && fresh) {
+        println(&format!(
+            "[local-lifecycle] SYNC-EXPIRY expired={expired} late_refused={late_refused} fresh={fresh}"
+        ));
+        fail("unbounded synchronous expiry");
+    }
+    println("[local-lifecycle] SYNC-EXPIRY=OK unbounded=Indeterminate elapsed_ticks>=3000 late_reply=refused fresh=Reply");
+}
+
 fn deadline_leg() {
     let provider = spawn_probe("c2c-deadline").unwrap_or_else(|_| fail("deadline provider spawn"));
+    // Runs inside the same real-expiry window: no added wall time.
+    let (sync_holder, sync_caller) = start_sync_expiry();
     let dispatched_at = scheduler_ticks();
     let dispatched = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1])
         .unwrap_or_else(|_| fail("deadline dispatched submit"));
@@ -525,6 +613,7 @@ fn deadline_leg() {
     if !dispatched_done || !queued_done {
         fail("real deadline watchdog");
     }
+    finish_sync_expiry(sync_holder, sync_caller);
     raw_send(provider, &[CONTROL_TAG, 2]);
     control_recv(provider, 2);
     let fresh = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 3])
@@ -994,69 +1083,110 @@ fn multi_caller_leg() {
     println("[local-lifecycle] MULTI-CALLER=OK a_held=64 a_busy=2 a_drained=64 b_replies=2 wrong_correlation=0 busy_delivered=0");
 }
 
-type PressureSlots = [Option<(ostd::ipc::PendingCall, u8)>; QUOTA];
+/// Phase 03e admission headroom (`async_ipc::PEER_QUEUE_HEADROOM = 8` of the
+/// 64-deep peer mailbox): one Cell queues at most 56 operation wires at a
+/// receiver, and a Cell holding none is admitted while ≤ 8 others compete.
+const PEER_QUEUE_CAP: usize = 56;
+const PRESSURE_B_CALLS: u16 = 64;
+const PRESSURE_WATCHDOG_TICKS: u64 = 3_000;
 
-fn pump_pressure(
-    provider: usize,
-    producer: u8,
-    total: u8,
-    mut next: u8,
-    mut slots: PressureSlots,
-) -> (usize, u64) {
-    let started = scheduler_ticks();
-    let mut done = 0u8;
-    let mut busy = 0usize;
-    let mut last_progress = started;
-    let mut max_gap = 0u64;
+type PressureSlots = Vec<Option<(ostd::ipc::PendingCall, u16)>>;
+
+/// `[REQ_TAG, producer, seq_lo, seq_hi]`; the provider echoes it as the reply.
+fn pressure_request(producer: u8, sequence: u16) -> [u8; 4] {
+    let [lo, hi] = sequence.to_le_bytes();
+    [REQ_TAG, producer, lo, hi]
+}
+
+fn check_pressure_reply(completion: ostd::ipc::Completion, bytes: &[u8], expected: [u8; 4]) {
+    if completion.terminal != IpcTerminal::Reply || completion.len != 4 || bytes[..4] != expected {
+        fail("pressure completion identity");
+    }
+}
+
+/// The next frame from `peer` that is `[CONTROL_TAG, step, ..]`, skipping a
+/// queued death record of another task that a masked receive may return first.
+fn expect_from(peer: usize, step: u8) -> [u8; 32] {
     let mut bytes = [0u8; 32];
-    while done < total {
+    for _ in 0..8 {
+        if bounded_recv(peer, &mut bytes) == peer {
+            if bytes[..2] != [CONTROL_TAG, step] {
+                fail("raw control handshake");
+            }
+            return bytes;
+        }
+    }
+    fail("raw control handshake")
+}
+
+/// A keeps every freed slot refilled (its queued share stays at the cap)
+/// until B reports its last call, then drains. Returns A's submissions, A's
+/// `Busy` refusals and B's reported refusals.
+fn pump_until_b_done(
+    provider: usize,
+    caller_b: usize,
+    mut slots: PressureSlots,
+    mut next: u16,
+) -> (u16, usize, u8) {
+    let started = scheduler_ticks();
+    let mut bytes = [0u8; 32];
+    let mut a_busy = 0usize;
+    let mut b_refused = None;
+    loop {
         for slot in &mut slots {
             if let Some((call, sequence)) = slot.as_ref() {
                 if let Some(completion) = call
                     .try_take(&mut bytes)
                     .unwrap_or_else(|_| fail("pressure take"))
                 {
-                    if completion.terminal != IpcTerminal::Reply
-                        || completion.len != 3
-                        || bytes[..3] != [REQ_TAG, producer, *sequence]
-                        || call.try_take(&mut bytes) != Err(ostd::ipc::IpcError::InvalidOperation)
-                    {
-                        fail("pressure completion identity or duplicate");
-                    }
-                    let now = scheduler_ticks();
-                    max_gap = max_gap.max(now.saturating_sub(last_progress));
-                    last_progress = now;
-                    done += 1;
+                    check_pressure_reply(completion, &bytes, pressure_request(0, *sequence));
                     *slot = None;
                 }
             }
         }
-        for slot in &mut slots {
-            if slot.is_some() || next == total {
-                continue;
-            }
-            match ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, producer, next]) {
-                Ok(call) => {
-                    *slot = Some((call, next));
-                    next += 1;
+        if b_refused.is_none() {
+            for slot in &mut slots {
+                if slot.is_some() {
+                    continue;
                 }
-                Err(ostd::ipc::IpcSubmitError::Busy) => {
-                    busy += 1;
-                    break;
+                if next == u16::MAX {
+                    fail("pressure sequence space");
                 }
-                Err(_) => fail("pressure admission"),
+                match ostd::ipc::PendingCall::submit(provider, &pressure_request(0, next)) {
+                    Ok(call) => {
+                        *slot = Some((call, next));
+                        next += 1;
+                    }
+                    Err(ostd::ipc::IpcSubmitError::Busy) => {
+                        a_busy += 1;
+                        break;
+                    }
+                    Err(_) => fail("pressure admission"),
+                }
             }
+            match ostd::syscall::sys_try_recv(caller_b, &mut bytes) {
+                SyscallResult::Ok(sender) if sender == caller_b => {
+                    if bytes[..2] != [CONTROL_TAG, 2] {
+                        fail("pressure B report");
+                    }
+                    b_refused = Some(bytes[2]);
+                }
+                SyscallResult::Ok(_) => {}
+                SyscallResult::Err(_) => fail("pressure B poll"),
+            }
+        } else if slots.iter().all(Option::is_none) {
+            break;
         }
-        if scheduler_ticks().saturating_sub(started) >= 1_000 {
+        if scheduler_ticks().saturating_sub(started) >= PRESSURE_WATCHDOG_TICKS {
             fail("pressure producer progress watchdog");
         }
-        if done < total {
-            yield_now();
-        }
+        yield_now();
     }
-    (busy, max_gap)
+    (next, a_busy, b_refused.unwrap_or(u8::MAX))
 }
 
+/// Serves every request in mailbox (FIFO) order and records, for each B
+/// request, how many A requests it received since B's previous one.
 #[allow(dead_code)]
 pub fn run_pressure_provider() -> ! {
     let mut bytes = [0u8; 32];
@@ -1065,46 +1195,65 @@ pub fn run_pressure_provider() -> ! {
         fail("pressure provider setup");
     }
     raw_send(coordinator, &[CONTROL_TAG, 0]);
-    // A fills the queue and B proves refusal before this real timer expires.
+    // A fills its share and B proves admission before this real timer expires.
     if !matches!(ostd::syscall::sys_set_timer(100), SyscallResult::Ok(0)) {
         fail("pressure provider hold");
     }
-    let mut seen = [[false; 128]; 2];
-    let mut counts = [0usize; 2];
-    let mut caller_b = None;
-    for _ in 0..192 {
-        let sender = bounded_recv(0, &mut bytes);
-        let producer = bytes[1] as usize;
-        let sequence = bytes[2] as usize;
-        if bytes[0] != REQ_TAG
-            || producer > 1
-            || sequence >= if producer == 0 { 128 } else { 64 }
-            || seen[producer][sequence]
-            || (producer == 0 && sender != coordinator)
-            || (producer == 1
-                && (sender == coordinator || caller_b.is_some_and(|tid| tid != sender)))
-        {
+    let mut seen_a = alloc::vec![0u8; 1 << 13];
+    let mut seen_b = [false; PRESSURE_B_CALLS as usize];
+    let (mut a, mut b, mut caller_b) = (0usize, 0usize, None);
+    let (mut a_since_b, mut max_a_between_b) = (0usize, 0usize);
+    loop {
+        let sender = match sys_recv(0, &mut bytes) {
+            SyscallResult::Ok(sender) => sender,
+            SyscallResult::Err(_) => fail("pressure provider recv"),
+        };
+        if sender == coordinator && bytes[..2] == [CONTROL_TAG, 1] {
+            break;
+        }
+        let producer = bytes[1];
+        let sequence = usize::from(u16::from_le_bytes([bytes[2], bytes[3]]));
+        let duplicate = match producer {
+            0 if sender == coordinator => {
+                let seen = seen_a[sequence / 8] & (1 << (sequence % 8)) != 0;
+                seen_a[sequence / 8] |= 1 << (sequence % 8);
+                a += 1;
+                a_since_b += 1;
+                seen
+            }
+            1 if sender != coordinator
+                && caller_b.is_none_or(|tid| tid == sender)
+                && sequence < seen_b.len() =>
+            {
+                caller_b = Some(sender);
+                b += 1;
+                max_a_between_b = max_a_between_b.max(a_since_b);
+                a_since_b = 0;
+                core::mem::replace(&mut seen_b[sequence], true)
+            }
+            _ => true,
+        };
+        if bytes[0] != REQ_TAG || duplicate {
             fail("pressure request identity or duplicate delivery");
         }
-        if producer == 1 {
-            caller_b = Some(sender);
-        }
-        seen[producer][sequence] = true;
-        counts[producer] += 1;
         let operation = ostd::ipc::current().unwrap_or_else(|| fail("pressure dispatch token"));
-        if ostd::ipc::reply(operation, &bytes[..3]).is_err() {
+        if ostd::ipc::reply(operation, &bytes[..4]).is_err() {
             fail("pressure exact reply");
         }
     }
-    if counts != [128, 64] {
+    if b != usize::from(PRESSURE_B_CALLS) {
         fail("pressure missing producer work");
     }
     mailbox_empty();
-    println("[local-lifecycle] PRESSURE-PROVIDER=OK a=128 b=64 duplicate=0 extra_delivery=0");
+    println(&format!(
+        "[local-lifecycle] PRESSURE-PROVIDER=OK b={b} duplicate=0 extra_delivery=0 a={a} max_a_between_b={max_a_between_b}"
+    ));
     raw_send(coordinator, &[CONTROL_TAG, 3]);
     sys_exit(0)
 }
 
+/// Independent caller B: one call at a time, so it never holds a queued wire
+/// when it submits. With only A competing it must never be refused.
 #[allow(dead_code)]
 pub fn run_pressure_caller(role: &str) -> ! {
     let provider = role
@@ -1116,21 +1265,50 @@ pub fn run_pressure_caller(role: &str) -> ! {
     if bytes[..2] != [CONTROL_TAG, 0] {
         fail("pressure caller setup");
     }
-    if !matches!(
-        ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 1, 0]),
-        Err(ostd::ipc::IpcSubmitError::Busy)
-    ) {
-        fail("full peer mailbox did not refuse independent caller");
-    }
-    raw_send(coordinator, &[CONTROL_TAG, 0]);
+    // A holds its full share and the provider sleeps: B is still admitted.
+    let first = ostd::ipc::PendingCall::submit(provider, &pressure_request(1, 0));
+    raw_send(coordinator, &[CONTROL_TAG, 0, first.is_ok() as u8]);
+    let first =
+        first.unwrap_or_else(|_| fail("fresh caller refused at a peer queue held by one Cell"));
     control_recv(coordinator, 1);
-    let (busy, max_gap) = pump_pressure(provider, 1, 64, 0, core::array::from_fn(|_| None));
+    let take = |call: &ostd::ipc::PendingCall, sequence: u16, bytes: &mut [u8; 32]| {
+        let completion = call
+            .wait_and_take(bytes, ASYNC_WAIT_TICKS, ASYNC_WAIT_ROUNDS)
+            .unwrap_or_else(|_| fail("pressure B take"))
+            .unwrap_or_else(|| fail("pressure B reply watchdog"));
+        check_pressure_reply(completion, &bytes[..], pressure_request(1, sequence));
+    };
+    take(&first, 0, &mut bytes);
+    drop(first);
+    let (mut refused, mut max_call_ticks) = (0usize, 0u64);
+    for sequence in 1..PRESSURE_B_CALLS {
+        let started = scheduler_ticks();
+        let call = loop {
+            match ostd::ipc::PendingCall::submit(provider, &pressure_request(1, sequence)) {
+                Ok(call) => break call,
+                Err(ostd::ipc::IpcSubmitError::Busy) => {
+                    refused += 1;
+                    if scheduler_ticks().saturating_sub(started) >= PRESSURE_WATCHDOG_TICKS {
+                        fail("pressure B admission watchdog");
+                    }
+                    yield_now();
+                }
+                Err(_) => fail("pressure B admission"),
+            }
+        };
+        take(&call, sequence, &mut bytes);
+        max_call_ticks = max_call_ticks.max(scheduler_ticks().saturating_sub(started));
+    }
     println(&format!(
-        "[local-lifecycle] PRESSURE-CALLER b_completed=64 busy={} max_gap_ticks={}",
-        busy + 1,
-        max_gap
+        "[local-lifecycle] PRESSURE-CALLER b_completed={PRESSURE_B_CALLS} b_fresh_refused={refused} b_max_call_ticks={max_call_ticks}"
     ));
-    raw_send(coordinator, &[CONTROL_TAG, 2]);
+    // The coordinator is pumping, not receiving: a queued Send, not TrySend.
+    if !matches!(
+        sys_send(coordinator, &[CONTROL_TAG, 2, refused.min(255) as u8]),
+        SyscallResult::Ok(_)
+    ) {
+        fail("pressure B report");
+    }
     sys_exit(0)
 }
 
@@ -1140,27 +1318,49 @@ fn peer_pressure_leg() {
     let started = scheduler_ticks();
     raw_send(provider, &[CONTROL_TAG, 0]);
     control_recv(provider, 0);
-    let mut slots: PressureSlots = core::array::from_fn(|_| None);
-    for (sequence, slot) in slots.iter_mut().enumerate() {
-        let call = ostd::ipc::PendingCall::submit(provider, &[REQ_TAG, 0, sequence as u8])
-            .unwrap_or_else(|_| fail("pressure initial queue fill"));
-        *slot = Some((call, sequence as u8));
+    // A alone while the provider sleeps: admitted up to its share, then Busy.
+    let mut slots: PressureSlots = (0..QUOTA).map(|_| None).collect();
+    let mut a_fill = 0u16;
+    let mut a_headroom_busy = false;
+    for slot in slots.iter_mut() {
+        match ostd::ipc::PendingCall::submit(provider, &pressure_request(0, a_fill)) {
+            Ok(call) => {
+                *slot = Some((call, a_fill));
+                a_fill += 1;
+            }
+            Err(ostd::ipc::IpcSubmitError::Busy) => {
+                a_headroom_busy = true;
+                break;
+            }
+            Err(_) => fail("pressure initial queue fill"),
+        }
     }
     let caller_b = spawn_probe(&format!("c2c-pressure-caller:{provider}"))
         .unwrap_or_else(|_| fail("pressure B spawn"));
     raw_send(caller_b, &[CONTROL_TAG, 0]);
-    control_recv(caller_b, 0);
+    let b_first_admitted = expect_from(caller_b, 0)[2] == 1;
     if scheduler_ticks().saturating_sub(started) >= 50 {
         fail("pressure setup exceeded timer margin");
     }
+    println(&format!(
+        "[local-lifecycle] PRESSURE-FILL a_fill={a_fill} a_headroom_busy={a_headroom_busy} b_first_admitted={b_first_admitted}"
+    ));
+    if usize::from(a_fill) != PEER_QUEUE_CAP || !a_headroom_busy || !b_first_admitted {
+        fail("peer queue headroom");
+    }
     raw_send(caller_b, &[CONTROL_TAG, 1]);
-    let (busy, max_gap) = pump_pressure(provider, 0, 128, 64, slots);
-    control_recv(caller_b, 2);
+    let (a_total, a_busy, b_refused) = pump_until_b_done(provider, caller_b, slots, a_fill);
+    raw_send(provider, &[CONTROL_TAG, 1]);
     control_recv(provider, 3);
     println(&format!(
-        "[local-lifecycle] PRESSURE-CALLER a_completed=128 busy={busy} max_gap_ticks={max_gap}"
+        "[local-lifecycle] PRESSURE-CALLER a_submitted={a_total} a_busy={a_busy}"
     ));
-    println("[local-lifecycle] PEER-PRESSURE=OK a=128 b=64 completions=192 initial_peer_busy=true duplicate=0 wrong_correlation=0");
+    if b_refused != 0 || a_busy == 0 {
+        fail("sustained pressure: B refused or A never at its cap");
+    }
+    println(&format!(
+        "[local-lifecycle] PEER-PRESSURE=OK a_fill={PEER_QUEUE_CAP} a_headroom_busy=true b_first_admitted=true b_fresh_refused=0 b_done={PRESSURE_B_CALLS} duplicate=0 wrong_correlation=0 a_submitted={a_total} a_busy={a_busy}"
+    ));
 }
 
 // ── orchestrator role (bench) ─────────────────────────────────────────────────

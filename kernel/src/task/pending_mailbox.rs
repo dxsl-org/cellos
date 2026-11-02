@@ -184,6 +184,46 @@ impl PendingMailbox {
         self.messages.remove(index)
     }
 
+    /// Remove the record a receive snapshot delivered at `pos`, once its
+    /// copy-out succeeded. Returns the removed record.
+    ///
+    /// The snapshot and this commit are separate `SCHEDULER` holds, and another
+    /// path (cancel, expiry, owner death) may remove a record ahead of `pos`
+    /// in between. A wire is therefore found by its unique `delivery_id`;
+    /// only an inline record without a wire falls back to `pos + sender_tid`.
+    /// A wire that is no longer queued is never guessed at.
+    pub fn remove_delivered(
+        &mut self,
+        pos: usize,
+        sender_tid: usize,
+        delivery_id: Option<u64>,
+    ) -> Option<PendingMsg> {
+        let index = match delivery_id {
+            Some(id) => self.messages.iter().position(|message| {
+                message.sender_tid == sender_tid
+                    && message
+                        .wire
+                        .as_ref()
+                        .is_some_and(|wire| wire.header.delivery_id == id)
+            })?,
+            None => {
+                let record = self
+                    .messages
+                    .get(pos)
+                    .filter(|message| message.sender_tid == sender_tid)?;
+                // A receive arm that dropped a wire's delivery id would leave
+                // the wire queued for a second delivery. Only inline records
+                // legitimately have none.
+                debug_assert!(
+                    record.wire.is_none(),
+                    "a wire was committed without its delivery id"
+                );
+                record.wire.is_none().then_some(pos)?
+            }
+        };
+        Some(self.messages.remove(index))
+    }
+
     /// Push without charging mailbox-container growth to an arbitrary cell.
     pub fn try_push(&mut self, message: PendingMsg) -> Result<(), ()> {
         if self.messages.len() == self.messages.capacity() {

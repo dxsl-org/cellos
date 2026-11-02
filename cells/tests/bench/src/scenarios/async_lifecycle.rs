@@ -392,6 +392,9 @@ pub fn run() -> ! {
     try_send_leg();
     mid_flight_death_leg();
     multi_source_leg();
+    cancel_race_leg();
+    sync_timeout_late_leg();
+    drop_reclaim_leg();
     println("[async-lifecycle] PASS");
     sys_exit(0)
 }
@@ -980,4 +983,340 @@ fn multi_source_leg() {
         }
         _ => fail("multi-source caller did not report success"),
     }
+}
+
+// ── Phase 03e: dispatched cancellation, sync timeout, dropped interest ───────
+//
+// The orchestrator (`bench`) drives these through the SDK's `IpcWait` path.
+
+const RACE_ROLE: &str = "c2c-race-provider";
+const SYNC_HOLD_ROLE: &str = "c2c-sync-hold";
+const DROP_ROLE: &str = "c2c-drop-provider";
+/// Raw control steps between the orchestrator and the 03e providers.
+const STEP_START: u8 = 0;
+const STEP_DONE: u8 = 2;
+const STEP_REPORT: u8 = 3;
+const STEP_AWAKE: u8 = 4;
+const STEP_LATE: u8 = 5;
+/// Submit-then-cancel iterations of the cancellation race.
+const RACE_CALLS: usize = 256;
+/// The sync-hold provider sleeps through the first (queued) bounded call, then
+/// holds the second (dispatched) one past its budget.
+const SYNC_QUEUED_HOLD_TICKS: usize = 40;
+const SYNC_DISPATCHED_HOLD_TICKS: usize = 60;
+const SYNC_SHORT_BUDGET: u64 = 10;
+const SYNC_BUDGET: u64 = 20;
+/// Dropped-interest rounds; each round drops a full owner quota of handles.
+const DROP_ROUNDS: usize = 3;
+const DROP_BATCH: usize = 64;
+/// Yields one admission may spend on `Busy` before the leg calls it a leak.
+const ADMISSION_YIELDS: usize = 4_000;
+
+fn start_provider(role: &str) -> usize {
+    let provider = spawn(role);
+    settle();
+    if !matches!(
+        sys_send(provider, &[CTRL_TAG, STEP_START]),
+        SyscallResult::Ok(_)
+    ) {
+        fail("03e provider start");
+    }
+    provider
+}
+
+/// The orchestrator's tid, from the provider's raw start frame.
+fn await_start(buf: &mut [u8]) -> usize {
+    match sys_recv(0, buf) {
+        SyscallResult::Ok(sender) if buf[..2] == [CTRL_TAG, STEP_START] => sender,
+        _ => fail("03e provider start frame"),
+    }
+}
+
+/// Masked provider for CANCEL-RACE: receives only from the orchestrator,
+/// records every request it was handed and never replies, so a delivered
+/// request can only end `Indeterminate`.
+#[allow(dead_code)] // Shared module: dispatched by the bench-probe binary only.
+pub fn run_race_provider() -> ! {
+    let mut buf = [0u8; IPC_BUF_SIZE];
+    let caller = await_start(&mut buf);
+    let mut seen = [0u8; RACE_CALLS / 8];
+    let mut twice = 0u8;
+    loop {
+        match sys_recv(caller, &mut buf) {
+            SyscallResult::Ok(_) if buf[..2] == [CTRL_TAG, STEP_DONE] => break,
+            SyscallResult::Ok(_) if buf[0] == REQ_TAG => {
+                let seq = usize::from(u16::from_le_bytes([buf[1], buf[2]]));
+                if seq >= RACE_CALLS {
+                    fail("race provider sequence");
+                }
+                if seen[seq / 8] & (1 << (seq % 8)) != 0 {
+                    twice = twice.saturating_add(1);
+                }
+                seen[seq / 8] |= 1 << (seq % 8);
+            }
+            SyscallResult::Ok(_) => {}
+            SyscallResult::Err(_) => fail("race provider recv"),
+        }
+    }
+    // The DONE frame is raw, so this Send is raw too (no served operation).
+    let mut report = [0u8; 3 + RACE_CALLS / 8];
+    report[..3].copy_from_slice(&[CTRL_TAG, STEP_REPORT, twice]);
+    report[3..].copy_from_slice(&seen);
+    let _ = sys_send(caller, &report);
+    sys_exit(0)
+}
+
+/// Dispatched cancellation is never reported as "not executed": a request the
+/// provider received ends `Indeterminate`; `Cancelled` only for one it never saw.
+fn cancel_race_leg() {
+    use ostd::ipc::IpcTerminal;
+    let provider = start_provider(RACE_ROLE);
+    let mut outcome: Vec<Option<IpcTerminal>> = alloc::vec![None; RACE_CALLS];
+    let mut reply_buf = [0u8; IPC_BUF_SIZE];
+    for (seq, slot) in outcome.iter_mut().enumerate() {
+        let [lo, hi] = (seq as u16).to_le_bytes();
+        let call = admit(provider, &[REQ_TAG, lo, hi]);
+        // Vary how far the provider gets before the cancel lands.
+        for _ in 0..seq % 4 {
+            yield_now();
+        }
+        if call.cancel().is_err() {
+            fail("cancel race cancel");
+        }
+        match call.try_take(&mut reply_buf) {
+            Ok(Some(completion)) => *slot = Some(completion.terminal),
+            _ => fail("cancel race take"),
+        }
+    }
+    if !matches!(
+        sys_send(provider, &[CTRL_TAG, STEP_DONE]),
+        SyscallResult::Ok(_)
+    ) {
+        fail("cancel race release");
+    }
+    let mut report = [0u8; 3 + RACE_CALLS / 8];
+    if !recv_frame_from(provider, &mut report, STEP_REPORT) {
+        fail("cancel race report");
+    }
+    let received = |seq: usize| report[3 + seq / 8] & (1 << (seq % 8)) != 0;
+    let (mut cancelled, mut indeterminate, mut other, mut unterminal) = (0, 0, 0, 0);
+    let (mut cancelled_but_received, mut received_but_definite) = (0, 0);
+    for (seq, terminal) in outcome.iter().enumerate() {
+        match terminal {
+            Some(IpcTerminal::Cancelled) => cancelled += 1,
+            Some(IpcTerminal::Indeterminate) => indeterminate += 1,
+            Some(_) => other += 1,
+            None => unterminal += 1,
+        }
+        let definite = matches!(
+            terminal,
+            Some(IpcTerminal::Cancelled | IpcTerminal::PreDispatchTimeout | IpcTerminal::Reply)
+        );
+        if received(seq) && definite {
+            received_but_definite += 1;
+        }
+        if received(seq) && *terminal == Some(IpcTerminal::Cancelled) {
+            cancelled_but_received += 1;
+        }
+    }
+    let twice = report[2];
+    println(&format!(
+        "[async-lifecycle] CANCEL-RACE total={RACE_CALLS} cancelled={cancelled} \
+         indeterminate={indeterminate} other={other} cancelled_but_received={cancelled_but_received} \
+         received_but_definite={received_but_definite} delivered_twice={twice} unterminal={unterminal}"
+    ));
+    if cancelled + indeterminate != RACE_CALLS
+        || cancelled_but_received != 0
+        || received_but_definite != 0
+        || twice != 0
+        || unterminal != 0
+    {
+        fail("dispatched cancellation reported a delivered request as not executed");
+    }
+}
+
+/// Submit, retrying only `Busy` (nothing was accepted) under a yield watchdog.
+fn admit(provider: usize, request: &[u8]) -> PendingCall {
+    for _ in 0..ADMISSION_YIELDS {
+        match PendingCall::submit(provider, request) {
+            Ok(call) => return call,
+            Err(ostd::ipc::IpcSubmitError::Busy) => yield_now(),
+            Err(_) => fail("03e admission"),
+        }
+    }
+    fail("admission stayed Busy: a released slot was never returned")
+}
+
+/// Sync-timeout provider: sleep through the caller's queued call, then hold its
+/// dispatched call past the budget and try both late replies.
+#[allow(dead_code)] // Shared module: dispatched by the bench-probe binary only.
+pub fn run_sync_hold() -> ! {
+    let mut buf = [0u8; IPC_BUF_SIZE];
+    let caller = await_start(&mut buf);
+    let _ = ostd::syscall::sys_set_timer(SYNC_QUEUED_HOLD_TICKS);
+    let _ = sys_send(caller, &[CTRL_TAG, STEP_AWAKE]);
+    let first_seq = match sys_recv(caller, &mut buf) {
+        SyscallResult::Ok(_) if buf[0] == REQ_TAG => buf[1],
+        _ => fail("sync hold first request"),
+    };
+    let held = current().unwrap_or_else(|| fail("sync hold token"));
+    let _ = ostd::syscall::sys_set_timer(SYNC_DISPATCHED_HOLD_TICKS);
+    // Late implicit reply: Send to the still-served caller is the operation's
+    // reply bridge. It must be quarantined, never reach the raw mailbox.
+    let _ = sys_send(caller, &[REPLY_TAG, first_seq]);
+    let explicit_refused = reply(held, &[REPLY_TAG, first_seq]).is_err();
+    let _ = sys_send(
+        caller,
+        &[CTRL_TAG, STEP_LATE, first_seq, explicit_refused as u8],
+    );
+    loop {
+        match sys_recv(caller, &mut buf) {
+            SyscallResult::Ok(_) if buf[..2] == [CTRL_TAG, STEP_DONE] => sys_exit(0),
+            SyscallResult::Ok(_) if buf[0] == REQ_TAG => {
+                let operation = current().unwrap_or_else(|| fail("sync hold fresh token"));
+                if reply(operation, &[REPLY_TAG, buf[1]]).is_err() {
+                    fail("sync hold fresh reply");
+                }
+            }
+            SyscallResult::Ok(_) => {}
+            SyscallResult::Err(_) => fail("sync hold recv"),
+        }
+    }
+}
+
+/// The synchronous SDK's caller budget: a queued expiry is `PreDispatchTimeout`
+/// and is never delivered; a dispatched expiry is `Indeterminate`; both late
+/// replies are refused; the next call returns only its own reply.
+fn sync_timeout_late_leg() {
+    use ostd::ipc::{service_call_bounded, IpcError};
+    let provider = start_provider(SYNC_HOLD_ROLE);
+    let (mut send, mut recv) = ([0u8; 32], [0u8; 32]);
+    let queued = service_call_bounded(
+        provider,
+        &(REQ_TAG, 0u8),
+        &mut send,
+        &mut recv,
+        SYNC_SHORT_BUDGET,
+    )
+    .err();
+    let mut frame = [0u8; 8];
+    if !recv_frame_from(provider, &mut frame, STEP_AWAKE) {
+        fail("sync hold awake");
+    }
+    let dispatched =
+        service_call_bounded(provider, &(REQ_TAG, 1u8), &mut send, &mut recv, SYNC_BUDGET).err();
+    // The first frame from the provider after expiry must be its report: the
+    // quarantined bridge reply never lands in the raw mailbox.
+    let late_send_raw_absent = recv_frame_from(provider, &mut frame, STEP_LATE);
+    let queued_delivered = late_send_raw_absent && frame[2] != 1;
+    let late_explicit_refused = late_send_raw_absent && frame[3] == 1;
+    let next = service_call_bounded(provider, &(REQ_TAG, 2u8), &mut send, &mut recv, 200)
+        .map(|bytes| bytes == [REPLY_TAG, 2])
+        .unwrap_or(false);
+    let _ = sys_send(provider, &[CTRL_TAG, STEP_DONE]);
+    println(&format!(
+        "[async-lifecycle] SYNC-TIMEOUT-LATE queued={queued:?} queued_delivered={queued_delivered} \
+         first={dispatched:?} late_explicit_refused={late_explicit_refused} \
+         late_send_raw_absent={late_send_raw_absent} next_reply={next}"
+    ));
+    if queued != Some(IpcError::PreDispatchTimeout)
+        || queued_delivered
+        || dispatched != Some(IpcError::Indeterminate)
+        || !late_explicit_refused
+        || !late_send_raw_absent
+        || !next
+    {
+        fail("sync timeout leg");
+    }
+}
+
+/// Dropped-interest provider: replies at once to even sequences and holds odd
+/// ones; on DONE tries a late reply to every held token.
+#[allow(dead_code)] // Shared module: dispatched by the bench-probe binary only.
+pub fn run_drop_provider() -> ! {
+    let mut buf = [0u8; IPC_BUF_SIZE];
+    let caller = await_start(&mut buf);
+    let mut held: Vec<usize> = Vec::new();
+    loop {
+        match sys_recv(caller, &mut buf) {
+            SyscallResult::Ok(_) if buf[..2] == [CTRL_TAG, STEP_DONE] => break,
+            SyscallResult::Ok(_) if buf[0] == REQ_TAG => {
+                let operation = current().unwrap_or_else(|| fail("drop provider token"));
+                if buf[1] % 2 == 0 {
+                    // The caller may already have dropped it; a refusal is fine.
+                    let _ = reply(operation, &[REPLY_TAG, buf[1]]);
+                } else {
+                    held.push(operation);
+                }
+            }
+            SyscallResult::Ok(_) => {}
+            SyscallResult::Err(_) => fail("drop provider recv"),
+        }
+    }
+    let late_accepted = held
+        .iter()
+        .filter(|operation| reply(**operation, &[REPLY_TAG, 0xEE]).is_ok())
+        .count();
+    let _ = sys_send(
+        caller,
+        &[
+            CTRL_TAG,
+            STEP_REPORT,
+            late_accepted.min(255) as u8,
+            held.len().min(255) as u8,
+        ],
+    );
+    sys_exit(0)
+}
+
+/// Dropping an unsettled `PendingCall` releases its kernel slot: three full
+/// owner quotas of dropped handles, then a fourth quota is admitted.
+fn drop_reclaim_leg() {
+    let provider = start_provider(DROP_ROLE);
+    let mut dropped = 0usize;
+    for round in 0..=DROP_ROUNDS {
+        let calls: Vec<PendingCall> = (0..DROP_BATCH)
+            .map(|index| admit(provider, &[REQ_TAG, (round * DROP_BATCH + index) as u8]))
+            .collect();
+        // Let the provider answer some and hold others before the handles go.
+        settle();
+        if round < DROP_ROUNDS {
+            dropped += calls.len();
+        }
+        drop(calls);
+    }
+    if !matches!(
+        sys_send(provider, &[CTRL_TAG, STEP_DONE]),
+        SyscallResult::Ok(_)
+    ) {
+        fail("drop provider release");
+    }
+    let mut report = [0u8; 8];
+    if !recv_frame_from(provider, &mut report, STEP_REPORT) {
+        fail("drop provider report");
+    }
+    let (late_accepted, held) = (report[2], report[3]);
+    println(&format!(
+        "[async-lifecycle] DROP-RECLAIM dropped={dropped} fresh_accepted={DROP_BATCH} \
+         held_by_provider={held} late_accepted={late_accepted}"
+    ));
+    if dropped != DROP_ROUNDS * DROP_BATCH || late_accepted != 0 {
+        fail("dropped interest left a reply slot or accepted a late reply");
+    }
+}
+
+/// The next frame from `provider` is `[CTRL_TAG, step, ..]`. A masked `Recv`
+/// may first return an unrelated queued death record (the MSW caller's exit
+/// watch); those are skipped, anything else from `provider` is a mismatch.
+fn recv_frame_from(provider: usize, frame: &mut [u8], step: u8) -> bool {
+    for _ in 0..8 {
+        match sys_recv(provider, frame) {
+            SyscallResult::Ok(sender) if sender == provider => {
+                return frame[..2] == [CTRL_TAG, step];
+            }
+            SyscallResult::Ok(_) => {}
+            SyscallResult::Err(_) => return false,
+        }
+    }
+    false
 }
