@@ -13,12 +13,17 @@
 
 use api::ipc::{self, input_source, InputRequest};
 use driver_hid::{EvdevEvent, HidDeviceId, DEVICE_EVENT_LEN};
-use ostd::syscall::{sys_send, sys_try_send, SyscallResult};
+use ostd::syscall::{sys_send, SyscallResult};
 
 /// Register this cell as a raw event producer with the input service.
 ///
-/// `TrySend` reports a refused non-blocking delivery as `Ok(usize::MAX)`, so
-/// only `Ok(0)` means the service received or queued the registration.
+/// This must be a queued `Send`, the same delivery class as the events it
+/// gates. The input service is a polling owner loop (nonblocking receive plus a
+/// one-tick sleep) that never parks in `Recv`, and the kernel delivers a
+/// `TrySend` only to a target parked in `Recv` (or from the input service and
+/// compositor themselves), so a `TrySend` registration is refused every time
+/// and no decoded key ever reaches the input service. `Send` queues the request
+/// in the service's mailbox and returns once the service has taken it.
 pub fn register_as_source(tid: usize) -> bool {
     if tid == 0 {
         return false;
@@ -30,7 +35,7 @@ pub fn register_as_source(tid: usize) -> bool {
         },
         &mut buf,
     ) {
-        Ok(encoded) => matches!(sys_try_send(tid, encoded), SyscallResult::Ok(0)),
+        Ok(encoded) => matches!(sys_send(tid, encoded), SyscallResult::Ok(_)),
         Err(_) => false,
     }
 }

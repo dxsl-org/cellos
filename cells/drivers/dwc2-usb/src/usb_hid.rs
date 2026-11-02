@@ -966,12 +966,13 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
         &api::ipc::InputRequest::RegisterEventSource { kind },
         &mut buf,
     ) {
-        // TrySend reports a refused non-blocking delivery as Ok(usize::MAX),
-        // not Err. Only Ok(0) means the input service received or queued the
-        // registration; otherwise the serving loop must retry it.
+        // A queued Send, like the events it gates: the input service polls with a
+        // nonblocking receive and never parks in Recv, and the kernel delivers a
+        // TrySend only to a target parked in Recv, so a TrySend registration is
+        // refused every time. Send queues it and returns once the service took it.
         Ok(encoded) => matches!(
-            ostd::syscall::sys_try_send(tid, encoded),
-            SyscallResult::Ok(0)
+            ostd::syscall::sys_send(tid, encoded),
+            SyscallResult::Ok(_)
         ),
         Err(_) => false,
     }

@@ -267,8 +267,6 @@ api::declare_syscalls![
     RequestMmio,
     // Kernel-verified USB HID producer role.
     RegisterUsbHidProducer,
-    // Producer registration uses a non-blocking send.
-    TrySend,
     // Clean shutdown returns through the exit path.
     Exit,
     // DMA: `DmaBuf::alloc` -> GrantAlloc, `DmaBuf::authorize` -> GrantDma.

@@ -15,7 +15,7 @@
 //!   `[xhci] enumerated device vid=0x0627 pid=0x0001`
 //!   `[xhci] USB HID keyboard ready`
 //!   `[xhci] key down` (after a QMP-injected keystroke)
-//!   the character echoed by the shell
+//!   the typed command line executed by the Cellbox shell
 //! and the no-keyboard boot still reaches `Cellos >`.
 //!
 //! Tests skip gracefully when the ISO or `qemu-system-x86_64` is absent.
@@ -142,8 +142,9 @@ fn xhci_driver_cell_enumerates_usb_keyboard_x86() {
 /// path: interrupt-IN transfer → Transfer Event → shared HID boot-protocol
 /// decode in the cell → input service producer gate → shell. Phase 03 stopped at
 /// "decoded in cell"; phase 03b completes it, so this test asserts the typed
-/// character is *received and executed by the shell* (`shell: command not found:
-/// q`), not merely logged by the cell.
+/// characters are *received and executed by the shell*, not merely logged by
+/// the cell: the two `q` presses and `ret` make Cellbox run the command `qq`,
+/// which it resolves to `/bin/qq` and asks the loader to launch.
 ///
 /// It also pins the whole point of the sub-phase: `/bin/xhci` publishes
 /// `service::USB_HID_PRODUCER` and must **never** publish `service::NIC_DRIVER`.
@@ -206,23 +207,35 @@ fn xhci_injected_key_decodes_in_cell_x86() {
             )
         });
 
-    // The decoded key must have reached the shell through the input service, not
-    // just the cell's log. Executing the (unknown) command `q` proves the
-    // character survived the full producer → input-service → shell path.
+    // The decoded keys must have reached the shell through the input service,
+    // not just the cell's log. Executing the (unknown) command `qq` proves both
+    // characters survived the full producer → input-service → shell path:
+    // Cellbox resolves the bare name to `/bin/qq`, and the loader refuses that
+    // unreviewed launch edge before any file lookup, so the shell reports the
+    // refusal (`foreground preparation failed: Denied`) rather than "command not
+    // found". The loader line names the exact target, so a dropped or extra key
+    // cannot satisfy it.
     thread::sleep(Duration::from_millis(500));
     qemu.send_qemu_key("ret");
-    qemu.wait_for_after("shell: command not found: q", checkpoint, KEY_TIMEOUT)
-        .unwrap_or_else(|e| {
-            panic!(
-                "injected keystroke never reached the shell within {KEY_TIMEOUT}s: {e}\n\
-                 Chain: xHCI decode → USB_HID_HOST frame → input service producer gate \
-                 (service::USB_HID_PRODUCER) → shell line editor.\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
+    for marker in [
+        "name=cellbox route=Path target=/bin/qq ",
+        "shell: foreground preparation failed: Denied",
+    ] {
+        qemu.wait_for_after(marker, checkpoint, KEY_TIMEOUT)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "injected keystrokes never reached the shell as the command `qq` \
+                     within {KEY_TIMEOUT}s: {e}\n\
+                     Chain: xHCI decode → USB_HID_HOST frame → input service producer gate \
+                     (service::USB_HID_PRODUCER) → shell line editor → loader launch edge.\n\
+                     --- serial output ---\n{}",
+                    qemu.dump()
+                )
+            });
+    }
     eprintln!(
-        "[test] shell receipt confirmed: injected 'q' + 'ret' → \"shell: command not found: q\""
+        "[test] shell receipt confirmed: injected 'q' 'q' + 'ret' → Cellbox ran `qq` \
+         (loader target=/bin/qq, launch edge denied)"
     );
 
     // The sub-phase contract: `/bin/xhci` never takes the singleton NIC role.

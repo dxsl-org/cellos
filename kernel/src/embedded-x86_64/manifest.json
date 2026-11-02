@@ -156,7 +156,7 @@
       "signed": true
     },
     "/bin/xhci": {
-      "sha256": "076e6cf57accd2457c2d9c4de5ab242af07f8a84f6d33ee521508e7456341275",
+      "sha256": "11ab8541f0ef1575e73dcf69af832ae140319761ed02b9ac79384b5c30468e59",
       "size": 53080,
       "package": "driver-xhci",
       "binary": "driver-xhci",
@@ -176,7 +176,7 @@
     }
   },
   "kernel_fs_img": {
-    "sha256": "7cef95d3dec2fc43eb3f7d5016df64c65f72be318df66391fbd140f870ec94ee",
+    "sha256": "490d07cd8aa7b702bdb01f2ee51a07f72b7fec4e9d2d64f1c4691687348ddb4d",
     "size": 12582912
   },
   "init": {
@@ -185,18 +185,18 @@
     "package": "app-init"
   },
   "source": {
-    "git_head": "4b39e87a6091ac72b32b366cdda03ffb7ca9456c",
-    "dirty_files": 78,
-    "dirty_digest_sha256": "33757082b6c8bfeeeaf4567b7f2c5f2600126137cdd61892f31f3ca6cf0678eb",
+    "git_head": "62e641d20ccb99db1ee4beca2e0d45242c91d6da",
+    "dirty_files": 29,
+    "dirty_digest_sha256": "bb82f4360e3248b003f974a3a789754152e2debd0ff9af4b94253bdfaf2ef1c8",
     "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
     "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
     "rustflags": "-C relocation-model=pic",
     "toolchain_env": {
-      "CC_x86_64_unknown_none": "cc",
-      "CFLAGS_x86_64_unknown_none": "-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I/home/dmin/cellos/third_party/freestanding-include",
-      "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": "--target=x86_64-linux-gnu"
+      "CC_x86_64_unknown_none": null,
+      "CFLAGS_x86_64_unknown_none": null,
+      "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": null
     }
   },
-  "build_started_utc": "2026-11-01T23:18:40+00:00",
-  "build_finished_utc": "2026-11-01T23:19:56+00:00"
+  "build_started_utc": "2026-11-02T00:28:22+00:00",
+  "build_finished_utc": "2026-11-02T00:29:39+00:00"
 }
