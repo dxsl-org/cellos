@@ -144,11 +144,11 @@ pub type HandlePageFault =
 
 extern "Rust" {
     pub fn vi_timer_tick();
-    /// AArch64 cross-hart IPI service. Distinct from the timer tick on purpose:
-    /// an SGI carries an invalidation or a retirement request, never a
-    /// preemption, and the hart that takes it may be a parked WFI loop with no
-    /// boot context to switch to.
-    #[cfg(target_arch = "aarch64")]
+    /// AArch64/x86_64 cross-hart IPI service. Distinct from the timer tick on
+    /// purpose: an IPI carries an invalidation or a retirement request (and on
+    /// x86_64 a directed preemption), never a tick, and the hart that takes it
+    /// may be a parked WFI loop with no boot context to switch to.
+    #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     pub fn vi_ipi_service();
     pub fn vi_terminate_on_user_trap_fault(cause: usize, pc: usize, fault_addr: usize);
     pub fn vi_current_cell_id() -> usize;

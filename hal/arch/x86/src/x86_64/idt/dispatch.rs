@@ -4,12 +4,10 @@ use super::{
     policy::{classify, Eoi, Origin, Route},
 };
 use hal_arch_trait::{
-    vi_handle_page_fault, vi_handle_uart_irq, vi_terminate_on_user_trap_fault, vi_timer_tick,
+    vi_handle_page_fault, vi_handle_uart_irq, vi_ipi_service, vi_terminate_on_user_trap_fault,
+    vi_timer_tick,
 };
 
-unsafe extern "Rust" {
-    fn vi_ipi_service();
-}
 #[no_mangle]
 pub(super) extern "C" fn x86_64_idt_dispatch(frame: &mut EntryFrame) {
     #[cfg(feature = "x86-idt-cpl3-test")]
