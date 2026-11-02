@@ -1,6 +1,6 @@
 # Plan — aarch64 core/backend split (ADR-0029 §6)
 
-**Status:** admitted 2026-11-02 ([handoff](lock-handoff-approval.md)); phases 01–04 in progress.
+**Status:** admitted 2026-11-02 ([handoff](lock-handoff-approval.md)). Phases 01–03 committed (`91f1e0f42`, `c2f7b46b5`, `1dce7b3cb`). Phase 04 implemented and uncommitted. Its gate rows pass; the hypervisor lane fails identically at the pre-plan baseline because the guest initramfs lacks `/bin/pi-guest-init`. Awaiting the checkpoint approval that closes the plan ([reports/phase-04-gate.md](reports/phase-04-gate.md)). End state: the `board-rpi*` cfgs remain only in `backend/mod.rs` and in the `main.rs` board-conflict `compile_error!`.
 **Authority:** [ADR-0022 amendment 2026-10-31](../../docs/decisions/0022-intel-x86-64-c2c-only-direction.md); [ADR-0029](../../docs/decisions/0029-platform-image-families-and-runtime-detection.md) §5–6
 **Scope rule:** behaviour-preserving only. No new backend, driver, peripheral or bring-up. It yields file ownership to any active Intel C2C slice.
 **Evidence ceiling:** QEMU `virt` (CI) + QEMU `raspi3b` (manual `run-rpi3.ps1`) + RPi4 compile-only. No physical evidence is claimed.
@@ -19,10 +19,10 @@ Group 1 boards keep compile-time selection, but of a backend type, not of scatte
 
 | # | Phase | Status | Depends | Checkpoint |
 |---|---|---|---|---|
-| 01 | [Backend trait and console/diagnostics](phase-01-backend-trait-console.md) | pending | — | no |
-| 02 | [IRQ, timer, trap, SMP](phase-02-irq-timer-trap-smp.md) | pending | 01 | **yes** |
-| 03 | [Platform map, resources, driver selectors](phase-03-platform-map-resources.md) | pending | 01 | no |
-| 04 | [Boot/DTB, board selection, EL2/vCPU monitor](phase-04-boot-el2-vcpu.md) | pending | 02, 03 | **yes** |
+| 01 | [Backend trait and console/diagnostics](phase-01-backend-trait-console.md) | done (`91f1e0f42`) | — | no |
+| 02 | [IRQ, timer, trap, SMP](phase-02-irq-timer-trap-smp.md) | done (`c2f7b46b5`), checkpoint approved | 01 | **yes** |
+| 03 | [Platform map, resources, driver selectors](phase-03-platform-map-resources.md) | done (`1dce7b3cb`) | 01 | no |
+| 04 | [Boot/DTB, board selection, EL2/vCPU monitor](phase-04-boot-el2-vcpu.md) | gate rows PASS (hypervisor lane: same failure as baseline), awaiting checkpoint approval | 02, 03 | **yes** |
 
 ## Key design decisions
 

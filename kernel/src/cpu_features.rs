@@ -141,11 +141,13 @@ pub(crate) fn has_x86_virt() -> bool {
 /// with an HVC/WFI/MMIO/virtual IRQ guest. Firmware that starts Pi at EL1 fails
 /// closed even if the CPU advertises EL2 in its ID registers.
 pub(crate) fn has_el2() -> bool {
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
     {
-        return hal::aarch64::monitor::is_verified();
+        use hal::aarch64::backend::{ArmEl2Monitor, El2Monitor};
+        if El2Monitor::PRESENT {
+            return El2Monitor::is_verified();
+        }
     }
-    #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
     HAS_EL2.load(Ordering::Relaxed)
 }
 

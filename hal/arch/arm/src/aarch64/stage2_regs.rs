@@ -32,6 +32,9 @@
 #[cfg(target_arch = "aarch64")]
 const VTCR_VALUE: u64 = 0x8002_3558;
 
+#[cfg(target_arch = "aarch64")]
+use super::backend::{ArmEl2Monitor, El2Monitor};
+
 /// Arm Stage-2 translation for the given `vmid` and root page-table at `root_pa`.
 ///
 /// Programs VTCR_EL2 and VTTBR_EL2 and issues a full Stage-2 TLB invalidation.
@@ -159,14 +162,13 @@ pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
 /// and flushed to RAM, and no vCPU may be running (VTTBR race).
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
-    #[cfg(feature = "board-rpi3")]
-    {
-        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
-        assert_eq!(super::monitor::gateway(1, vmid as u64, root_pa, 0, 0), 0);
-    }
-    #[cfg(not(feature = "board-rpi3"))]
-    unsafe {
-        monitor_enable_stage2(vmid, root_pa);
+    if El2Monitor::PRESENT {
+        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(El2Monitor::gateway(1, vmid as u64, root_pa, 0, 0), 0);
+    } else {
+        unsafe {
+            monitor_enable_stage2(vmid, root_pa);
+        }
     }
 }
 
@@ -178,14 +180,13 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
 /// guest would drop its translation).
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn disable_stage2() {
-    #[cfg(feature = "board-rpi3")]
-    {
-        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
-        assert_eq!(super::monitor::gateway(2, 0, 0, 0, 0), 0);
-    }
-    #[cfg(not(feature = "board-rpi3"))]
-    unsafe {
-        monitor_disable_stage2();
+    if El2Monitor::PRESENT {
+        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(El2Monitor::gateway(2, 0, 0, 0, 0), 0);
+    } else {
+        unsafe {
+            monitor_disable_stage2();
+        }
     }
 }
 
@@ -197,14 +198,13 @@ pub unsafe fn disable_stage2() {
 /// initialized.
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_all() {
-    #[cfg(feature = "board-rpi3")]
-    {
-        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
-        assert_eq!(super::monitor::gateway(3, 0, 0, 0, 0), 0);
-    }
-    #[cfg(not(feature = "board-rpi3"))]
-    unsafe {
-        monitor_s2_tlb_flush_all();
+    if El2Monitor::PRESENT {
+        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(El2Monitor::gateway(3, 0, 0, 0, 0), 0);
+    } else {
+        unsafe {
+            monitor_s2_tlb_flush_all();
+        }
     }
 }
 
@@ -216,14 +216,13 @@ pub unsafe fn s2_tlb_flush_all() {
 /// initialized, after updating the Stage-2 descriptor for `ipa`.
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
-    #[cfg(feature = "board-rpi3")]
-    {
-        assert!(super::monitor::is_ready(), "EL2 monitor unavailable");
-        assert_eq!(super::monitor::gateway(4, ipa, 0, 0, 0), 0);
-    }
-    #[cfg(not(feature = "board-rpi3"))]
-    unsafe {
-        monitor_s2_tlb_flush_ipa(ipa);
+    if El2Monitor::PRESENT {
+        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(El2Monitor::gateway(4, ipa, 0, 0, 0), 0);
+    } else {
+        unsafe {
+            monitor_s2_tlb_flush_ipa(ipa);
+        }
     }
 }
 

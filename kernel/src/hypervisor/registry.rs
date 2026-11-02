@@ -27,15 +27,23 @@ use crate::memory::stage2::Stage2Table;
 #[cfg(target_arch = "aarch64")]
 use api::hypervisor::ViVmExit as ApiVmExit;
 #[cfg(target_arch = "aarch64")]
+use hal::aarch64::backend::{ArmEl2Monitor, El2Monitor};
+#[cfg(target_arch = "aarch64")]
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
     stage2_regs::{disable_stage2, enable_stage2},
     vcpu::AArch64Vcpu,
 };
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[cfg(target_arch = "aarch64")]
 use hal::aarch64::{vcpu::run_vcpu_impl, vgic};
 #[cfg(target_arch = "aarch64")]
 use hal::ViVmExit as HalVmExit;
+
+/// The host reaches EL2 through the board's EL2 monitor (the Pi: guest IRQs
+/// via `HCR_EL2.VI`, no GICV) instead of running at EL2 itself (guest IRQs via
+/// the GICH list registers, GICV passed through).
+#[cfg(target_arch = "aarch64")]
+const PI_MONITOR: bool = El2Monitor::PRESENT;
 
 // ── VM entry ──────────────────────────────────────────────────────────────────
 
@@ -95,14 +103,13 @@ fn next_vm_id_for(owner: usize) -> usize {
 pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
-        #[cfg(feature = "board-rpi3")]
-        if !hal::aarch64::monitor::is_verified() {
+        if PI_MONITOR && !El2Monitor::is_verified() {
             // The cell can only print one sentence for every failure, so the
             // reason has to be here: a refused boot monitor and a failed carve
             // are different bugs with the same symptom on the console.
             log::warn!(
                 "[hv] create_vm refused: EL2 monitor not verified (ready={})",
-                hal::aarch64::monitor::is_ready()
+                El2Monitor::is_ready()
             );
             return Err(ViError::NotSupported);
         }
@@ -147,22 +154,24 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
             })?;
         // Only QEMU virt supplies GICV/GICH. Pi GICC/GICD are software-MMIO
         // devices and must remain unmapped Stage-2 holes.
-        #[cfg(not(feature = "board-rpi3"))]
-        table
-            .map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
-            .map_err(|error| {
-                log::error!("[hv] create_vm: GICV stage-2 map failed: {:?}", error);
-                ViError::OutOfMemory
-            })?;
+        if !PI_MONITOR {
+            table
+                .map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
+                .map_err(|error| {
+                    log::error!("[hv] create_vm: GICV stage-2 map failed: {:?}", error);
+                    ViError::OutOfMemory
+                })?;
+        }
 
         let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         // SAFETY: table built and flushed; vmid ≥ 1; not yet active (enable later).
         unsafe {
             enable_stage2(vmid, table.root_pa());
         }
-        #[cfg(not(feature = "board-rpi3"))]
-        unsafe {
-            vgic::enable();
+        if !PI_MONITOR {
+            unsafe {
+                vgic::enable();
+            }
         }
 
         let vm_id = {
@@ -301,25 +310,25 @@ pub unsafe fn run_vcpu(
             // Pi's software GICC requests at most one edge per entry. Consume
             // one request now, assert HCR_EL2.VI only during this guest run and
             // clear VI in the EL2 exit trampoline before the host resumes.
-            #[cfg(feature = "board-rpi3")]
-            let mut virtual_irq = vm
-                .vcpu_irqs
-                .get_mut(vcpu_idx)
-                .and_then(PendingIrqs::take_lowest)
-                .is_some();
-            #[cfg(not(feature = "board-rpi3"))]
+            let mut virtual_irq = PI_MONITOR
+                && vm
+                    .vcpu_irqs
+                    .get_mut(vcpu_idx)
+                    .and_then(PendingIrqs::take_lowest)
+                    .is_some();
             let mut num_loaded = 0usize;
-            #[cfg(not(feature = "board-rpi3"))]
-            if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                while num_loaded < vgic::MAX_LRS {
-                    let Some(intid) = q.take_lowest() else {
-                        break;
-                    };
-                    // SAFETY: EL2; GICH MMIO at 0x0803_0000; num_loaded < MAX_LRS.
-                    unsafe {
-                        vgic::load_lr(num_loaded, intid);
+            if !PI_MONITOR {
+                if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
+                    while num_loaded < vgic::MAX_LRS {
+                        let Some(intid) = q.take_lowest() else {
+                            break;
+                        };
+                        // SAFETY: EL2; GICH MMIO at 0x0803_0000; num_loaded < MAX_LRS.
+                        unsafe {
+                            vgic::load_lr(num_loaded, intid);
+                        }
+                        num_loaded += 1;
                     }
-                    num_loaded += 1;
                 }
             }
 
@@ -354,16 +363,15 @@ pub unsafe fn run_vcpu(
                 const MAX_ID_REG_RESOLVES: u32 = 64;
                 let mut resolved = 0u32;
                 let exit = loop {
-                    #[cfg(feature = "board-rpi3")]
-                    let exit = {
+                    let exit = if PI_MONITOR {
                         let vi = core::mem::replace(&mut virtual_irq, false);
                         unsafe {
-                            hal::aarch64::monitor::run(vcpu, vm.vmid, vm.stage2.root_pa(), vi);
+                            El2Monitor::run(vcpu, vm.vmid, vm.stage2.root_pa(), vi);
                         }
                         vcpu.decode_exit()
+                    } else {
+                        unsafe { run_vcpu_impl(vcpu) }
                     };
-                    #[cfg(not(feature = "board-rpi3"))]
-                    let exit = unsafe { run_vcpu_impl(vcpu) };
                     if let HalVmExit::SysReg {
                         op0,
                         op1,
@@ -417,8 +425,7 @@ pub unsafe fn run_vcpu(
             // ── Phase 09: drain GICH LRs after exit ─────────────────────────────
             // Re-mark pending any LRs still in Active state (guest was preempted
             // mid-handling). SAFETY: no vCPU running; EL2; GICH MMIO accessible.
-            #[cfg(not(feature = "board-rpi3"))]
-            if num_loaded > 0 {
+            if !PI_MONITOR && num_loaded > 0 {
                 let elrsr = unsafe { vgic::read_elrsr() };
                 for n in 0..num_loaded {
                     if (elrsr >> n) & 1 == 0 {
@@ -555,8 +562,9 @@ pub fn vcpu_regs(
                 }
                 buf[31] = vcpu.g_elr_el2;
             }
-            #[cfg(feature = "board-rpi3")]
-            2 => {
+            2 if <hal::aarch64::vcpu::VcpuExt as hal::aarch64::backend::ArmVcpuExt>::REGS_MAX_MODE
+                >= 2 =>
+            {
                 buf.fill(0);
                 buf[0] = vcpu.g_cntv_ctl;
                 buf[1] = vcpu.g_cntv_cval;
@@ -763,18 +771,18 @@ pub fn reap_vms_for_task(dead_tid: usize) {
 
 /// Pi's EL1-host capability gate: an actual monitor round-trip must run guest
 /// HVC, WFI, MMIO and software-injected virtual IRQ before any VM is admitted.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+/// Called only when the board has an EL2 monitor (`El2Monitor::PRESENT`).
+#[cfg(target_arch = "aarch64")]
 pub fn pi_monitor_smoke() {
     use crate::memory::frame::phys_to_virt;
-    use hal::aarch64::{
-        cache::{clean_data_cache_range, invalidate_instruction_cache_all, sync_instruction_cache},
-        monitor,
+    use hal::aarch64::cache::{
+        clean_data_cache_range, invalidate_instruction_cache_all, sync_instruction_cache,
     };
 
-    if !monitor::is_ready() {
+    if !El2Monitor::is_ready() {
         log::warn!(
             "[pi-monitor] entry EL={} HVC init unavailable; HypervisorCap closed",
-            monitor::entry_el()
+            El2Monitor::entry_el()
         );
         return;
     }
@@ -829,14 +837,14 @@ pub fn pi_monitor_smoke() {
     // for a bounded 100 ms guest smoke window. Otherwise their pre-boot
     // pending IRQs can turn a conditional WFI into a NOP. Production vCPU
     // runs retain the regular 10 ms host-tick preemption.
-    let prepare = hal::aarch64::backend::bcm2837::timer::prepare_monitor_smoke_window;
+    let prepare = El2Monitor::prepare_smoke_window;
     // A physical tick can still race guest entry. Retry only genuine
     // preemptions, bounded: a permanently asserted unrelated IRQ fails closed.
     let run_step = |cpu: &mut AArch64Vcpu, vi: bool| {
         for _ in 0..16 {
             prepare();
             unsafe {
-                monitor::run(cpu, VMID, table.root_pa(), vi);
+                El2Monitor::run(cpu, VMID, table.root_pa(), vi);
             }
             if !matches!(cpu.decode_exit(), HalVmExit::Preempted) {
                 return;
@@ -852,8 +860,9 @@ pub fn pi_monitor_smoke() {
             vcpu.exit_elr
         );
         prepare();
-        let first =
-            unsafe { monitor::run_probed(&mut vcpu, VMID, table.root_pa(), false, IPA, guest_pa) };
+        let first = unsafe {
+            El2Monitor::run_probed(&mut vcpu, VMID, table.root_pa(), false, IPA, guest_pa)
+        };
         log::info!(
             "[pi-monitor] first-run root={:#x} page={:#x} EL2 entry={:#x} s2=[{:#x},{:#x},{:#x}] insn={:#x} exit=[{:#x},{:#x},irq={}] EL1 exit=[{:#x},{:#x},irq={}]",
             table.root_pa(), guest_pa, first.entry_pc, first.stage2_l1,
@@ -1006,9 +1015,9 @@ pub fn pi_monitor_smoke() {
                     // host tick; otherwise a runaway guest owns the CPU.
                     let mut spin_cpu = AArch64Vcpu::new(IPA);
                     spin_cpu.g_elr_el2 = IPA + 0x300;
-                    hal::aarch64::backend::bcm2837::timer::arm_monitor_smoke_preemption();
+                    El2Monitor::arm_smoke_preemption();
                     unsafe {
-                        monitor::run(&mut spin_cpu, VMID, table.root_pa(), false);
+                        El2Monitor::run(&mut spin_cpu, VMID, table.root_pa(), false);
                     }
                     let preempted = matches!(spin_cpu.decode_exit(), HalVmExit::Preempted);
                     if !preempted {
@@ -1029,10 +1038,9 @@ pub fn pi_monitor_smoke() {
         disable_stage2();
     }
     // Restore the ordinary host tick cadence before Cells can run.
-    hal::aarch64::backend::bcm2837::bcm2835_systimer::init();
-    hal::aarch64::timer::reset();
+    El2Monitor::restore_host_tick();
     if passed {
-        monitor::mark_verified();
+        El2Monitor::mark_verified();
         log::info!("[pi-monitor] HVC/MMIO/VI/PREEMPT smoke PASS; HypervisorCap open");
     } else {
         log::warn!("[pi-monitor] HVC/MMIO/VI/PREEMPT smoke FAILED; HypervisorCap closed");

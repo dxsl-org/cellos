@@ -9403,9 +9403,10 @@ fn handle_syscall_inner(caller_id: usize, syscall: Syscall,
             }
             // All modes access the full 32-word (256-byte) user buffer.
             // Mode 2 is Pi-only, read-only, and clears unused words.
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            let max_mode = 2;
-            #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+            #[cfg(target_arch = "aarch64")]
+            let max_mode =
+                <hal::aarch64::vcpu::VcpuExt as hal::aarch64::backend::ArmVcpuExt>::REGS_MAX_MODE;
+            #[cfg(not(target_arch = "aarch64"))]
             let max_mode = 1;
             if mode > max_mode {
                 return Err(SyscallError::InvalidInput);

@@ -6,7 +6,16 @@
 
 use core::arch::global_asm;
 
-const BOARD_BCM: usize = cfg!(any(feature = "board-rpi3", feature = "board-rpi4")) as usize;
+use super::backend::{ArmPlatform, Board, SecondaryStart};
+
+/// Boot through the Pi EL2 monitor install (`.el2_init`, BSS-clear epilogue).
+const BOARD_BCM: usize = <Board as ArmPlatform>::PI_MONITOR_BOOT as usize;
+
+/// Assemble the `PSCI_CPU_ON` secondary entry only where secondaries start that way.
+const SECONDARY_PSCI: usize = matches!(
+    <Board as ArmPlatform>::SECONDARY_START,
+    SecondaryStart::Psci
+) as usize;
 
 /// Boot state a secondary core needs, published by the boot core before
 /// `PSCI_CPU_ON` and read by `_secondary_entry` with the MMU **still off**.
@@ -305,7 +314,7 @@ _secondary_entry:
     .endif
     "#,
     board_bcm = const BOARD_BCM,
-    secondary_psci = const (!cfg!(feature = "board-rpi3") as usize),
+    secondary_psci = const SECONDARY_PSCI,
     ctx_hart = const CTX_HART_ID,
     ctx_stack = const CTX_STACK_TOP,
     ctx_mair = const CTX_MAIR,

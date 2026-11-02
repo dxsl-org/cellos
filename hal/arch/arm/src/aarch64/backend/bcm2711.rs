@@ -4,8 +4,9 @@
 use hal_soc_bcm27xx::BCM2711;
 
 use super::{
-    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
-    MmioWindow, NoIommu, PlatformFacts, SdhciFacts, SecondaryStart,
+    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    SecondaryStart,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
@@ -20,6 +21,13 @@ impl ArmPlatform for Bcm2711 {
     const PL011_BASE: usize = BCM2711.mmio.uart_base;
     const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;
+    /// Boot installs the Pi EL2 monitor, but this backend never initialises
+    /// or uses it ([`NoEl2Monitor`]).
+    const PI_MONITOR_BOOT: bool = true;
+    const DTB_POLICY: DtbPolicy = DtbPolicy::Required;
+    const IDLE_PROBES: usize = 0;
+    type VcpuExt = NoVcpuExt;
+    type El2Monitor = NoEl2Monitor;
 
     #[inline(always)]
     fn console_init() {
@@ -51,6 +59,9 @@ impl ArmPlatform for Bcm2711 {
 
     #[inline(always)]
     fn diag_probe(_byte: u8) {}
+
+    #[inline(always)]
+    fn irq_snapshot_probe() {}
 
     #[inline(always)]
     fn probe_uncategorized_trap(_frame: &TrapFrame, _vector_kind: u8) {}
@@ -172,4 +183,5 @@ impl ArmResources for Bcm2711 {
         pinmux_gpio_base: Some(BCM2711.mmio.gpio_base),
     });
     const BOARD_PINMUX_GPIO_BASE: Option<usize> = None;
+    const SUPERVISOR_DEVICE_MMIO: &'static [MmioSpan] = &[];
 }

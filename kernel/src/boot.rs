@@ -1,25 +1,14 @@
 //! Boot protocol interfaces.
 
 use crate::*;
-#[cfg(any(
-    target_arch = "riscv64",
-    all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    )
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 use cellos_boards::MemoryRangeKind;
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 use core::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(target_arch = "aarch64")]
+use hal::aarch64::backend::{ArmPlatform, Board, DtbPolicy};
 
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 mod dtb_memory;
 
 pub mod limine;
@@ -270,13 +259,7 @@ impl BootInfo for SimpleBootInfo {
 #[cfg(target_arch = "riscv64")]
 const SELECTED_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
     crate::board::selected_riscv64_board();
-#[cfg(any(
-    target_arch = "riscv64",
-    all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    )
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
     match kind {
         MemoryRangeKind::Bootloader => MemoryType::Bootloader,
@@ -285,13 +268,7 @@ const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
         MemoryRangeKind::Reserved => MemoryType::Reserved,
     }
 }
-#[cfg(any(
-    target_arch = "riscv64",
-    all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    )
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 const fn fallback_memory_entry(
     board: &cellos_boards::BoardDescriptor,
     index: usize,
@@ -316,19 +293,13 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 static mut DTB_MEMORY_MAP: [MemoryMapEntry; MAX_MEMORY_MAP_ENTRIES] = [MemoryMapEntry {
     base: 0,
     length: 0,
     ty: MemoryType::Reserved,
 }; MAX_MEMORY_MAP_ENTRIES];
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 static mut DTB_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &[],
     kernel_phys_base: 0,
@@ -362,51 +333,36 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
-// AArch64 RPi 3 (BCM2837): kernel at 0x80000, RAM below 0x3F000000 MMIO.
-// VideoCore firmware loads kernel8.img at 0x80000 and owns the current GPU
-// split above the firmware DTB's ARM-visible memory range.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-const DEFAULT_RPI3_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_rpi3_board();
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+// AArch64: the board backend's descriptor (`board::default_aarch64_board`).
+#[cfg(target_arch = "aarch64")]
+const AARCH64_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_aarch64_board();
+
+// Raspberry Pi (`DtbPolicy::Conservative` / `Required`): kernel at 0x80000,
+// RAM below the peripheral aperture. VideoCore firmware loads kernel8.img at
+// 0x80000 and owns the current GPU split above the firmware DTB's ARM-visible
+// memory range. The static map is the board descriptor's two fallback spans.
+#[cfg(target_arch = "aarch64")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
-    fallback_memory_entry(DEFAULT_RPI3_BOARD, 0),
-    fallback_memory_entry(DEFAULT_RPI3_BOARD, 1),
+    fallback_memory_entry(AARCH64_BOARD, 0),
+    fallback_memory_entry(AARCH64_BOARD, 1),
 ];
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+#[cfg(target_arch = "aarch64")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: DEFAULT_RPI3_BOARD.fallback_memory[0].base,
+    kernel_phys_base: AARCH64_BOARD.boot.kernel_load_base,
     hhdm_offset: 0x0,
 };
+// The RPi3 map used to take its kernel base from the first fallback span; the
+// descriptors keep both at the firmware load address.
+#[cfg(target_arch = "aarch64")]
+const _: () = assert!(
+    AARCH64_BOARD.fallback_memory[0].base == AARCH64_BOARD.boot.kernel_load_base
+        || matches!(<Board as ArmPlatform>::DTB_POLICY, DtbPolicy::Optional)
+);
 
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-const DEFAULT_RPI4_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_rpi4_board();
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
-    fallback_memory_entry(DEFAULT_RPI4_BOARD, 0),
-    fallback_memory_entry(DEFAULT_RPI4_BOARD, 1),
-];
-#[cfg(all(
-    target_arch = "aarch64",
-    feature = "board-rpi4",
-    not(feature = "board-rpi3")
-))]
-pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
-    memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: DEFAULT_RPI4_BOARD.boot.kernel_load_base,
-    hhdm_offset: 0x0,
-};
-
-// AArch64 QEMU virt (256MB at 0x4000_0000, kernel loaded at 0x4008_0000):
-// MMIO below 0x4000_0000 is mapped by init_kernel_paging; RAM regions only here.
+// QEMU ARM virt (`DtbPolicy::Optional`; 256MB at 0x4000_0000, kernel loaded at
+// 0x4008_0000): MMIO below 0x4000_0000 is mapped by init_kernel_paging; RAM
+// regions only here.
 //
 // The kernel span is measured at RUNTIME from the linker's `__stack_top`, not
 // hardcoded: EMBEDDED_OVERRIDE images make the binary size unbounded (the
@@ -415,58 +371,32 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 // the kernel then overwrote the tail of its own embedded VIFS1 image and died
 // in a recursive same-EL sync-abort storm (PC pinned at vt_sync_spx) the
 // moment the corrupted FAT was walked.
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-const QEMU_ARM_VIRT_BOARD: &cellos_boards::BoardDescriptor =
-    crate::board::default_qemu_arm_virt_board();
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-static mut FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
+#[cfg(target_arch = "aarch64")]
+static mut RUNTIME_MEMORY_MAP: [MemoryMapEntry; 2] = [
     MemoryMapEntry {
-        base: cellos_boards::qemu_virt_aarch64::FALLBACK_KERNEL.base as usize,
-        length: 0, // patched by fallback_boot_info()
+        base: AARCH64_BOARD.fallback_memory[0].base as usize,
+        length: 0, // patched by optional_dtb_boot_info()
         ty: MemoryType::Kernel,
     },
     MemoryMapEntry {
         base: 0,
-        length: 0, // patched by fallback_boot_info()
+        length: 0, // patched by optional_dtb_boot_info()
         ty: MemoryType::Usable,
     },
 ];
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 static mut FALLBACK_BOOT_INFO_RUNTIME: SimpleBootInfo = SimpleBootInfo {
     memory_map: &[],
-    kernel_phys_base: QEMU_ARM_VIRT_BOARD.boot.kernel_load_base,
+    kernel_phys_base: AARCH64_BOARD.boot.kernel_load_base,
     hhdm_offset: 0x0,
 };
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 static FALLBACK_DTB_RAM_START: AtomicUsize = AtomicUsize::new(0);
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+#[cfg(target_arch = "aarch64")]
 static FALLBACK_DTB_RAM_END: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+/// RAM range of the firmware DTB's first memory region (`DtbPolicy::Optional`).
+#[cfg(target_arch = "aarch64")]
 pub fn fallback_dtb_ram_range() -> (usize, usize) {
     (
         FALLBACK_DTB_RAM_START.load(Ordering::Relaxed),
@@ -537,24 +467,31 @@ pub mod firmware_smp {
     }
 }
 
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
+/// AArch64 boot memory map, by the board backend's [`DtbPolicy`].
+#[cfg(target_arch = "aarch64")]
 pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+    match <Board as ArmPlatform>::DTB_POLICY {
+        DtbPolicy::Optional => optional_dtb_boot_info(dtb),
+        DtbPolicy::Conservative => conservative_dtb_boot_info(dtb),
+        DtbPolicy::Required => required_dtb_boot_info(dtb),
+    }
+}
+
+/// `DtbPolicy::Optional` (QEMU virt): the descriptor's spans, bounded by the
+/// DTB's first memory region, with the kernel region sized at runtime.
+#[cfg(target_arch = "aarch64")]
+fn optional_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     use core::ptr::{addr_of, addr_of_mut};
     extern "C" {
         /// Highest kernel address (end of .bss.stack) — linker-aarch64.ld.
         static __stack_top: u8;
     }
-    const RAM_BASE: usize = cellos_boards::qemu_virt_aarch64::FALLBACK_KERNEL.base as usize;
+    const RAM_BASE: usize = AARCH64_BOARD.fallback_memory[0].base as usize;
     #[cfg(feature = "qemu-virt-1g")]
     const FALLBACK_RAM_END: usize = 0x8000_0000;
     #[cfg(not(feature = "qemu-virt-1g"))]
-    const FALLBACK_RAM_END: usize = (cellos_boards::qemu_virt_aarch64::FALLBACK_USABLE.base
-        + cellos_boards::qemu_virt_aarch64::FALLBACK_USABLE.size)
-        as usize;
+    const FALLBACK_RAM_END: usize =
+        (AARCH64_BOARD.fallback_memory[1].base + AARCH64_BOARD.fallback_memory[1].size) as usize;
     const ALIGN_2M: usize = 0x20_0000;
     let dtb_ram = if dtb != 0 {
         // SAFETY: QEMU/firmware passes a valid FDT pointer in x0; Fdt validates
@@ -593,7 +530,7 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
         } else {
             0x200_0000
         };
-        *addr_of_mut!(FALLBACK_MEMORY_MAP) = [
+        *addr_of_mut!(RUNTIME_MEMORY_MAP) = [
             MemoryMapEntry {
                 base: RAM_BASE,
                 length: kernel_len,
@@ -606,7 +543,7 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
             },
         ];
         (*addr_of_mut!(FALLBACK_BOOT_INFO_RUNTIME)).memory_map =
-            core::slice::from_raw_parts(addr_of!(FALLBACK_MEMORY_MAP) as *const MemoryMapEntry, 2);
+            core::slice::from_raw_parts(addr_of!(RUNTIME_MEMORY_MAP) as *const MemoryMapEntry, 2);
         &*addr_of!(FALLBACK_BOOT_INFO_RUNTIME)
     }
 }
@@ -658,13 +595,14 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO
 }
 
-/// Build the RPi3 allocator map from the firmware-adjusted DTB memory node.
+/// `DtbPolicy::Conservative` (RPi3): build the allocator map from the
+/// firmware-adjusted DTB memory node.
 ///
 /// VideoCore owns RAM above the ARM-visible range and allocates framebuffers
 /// there. The static board map remains a conservative recovery fallback only;
 /// a valid firmware DTB is authoritative for the current GPU memory split.
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+#[cfg(target_arch = "aarch64")]
+fn conservative_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     use core::ptr::{addr_of, addr_of_mut};
     extern "C" {
         static __stack_top: u8;
@@ -714,7 +652,7 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     {
         const ALIGN_2M: usize = 0x20_0000;
         let ram_base = FALLBACK_BOOT_INFO.kernel_phys_base as usize;
-        let descriptor_usable = DEFAULT_RPI3_BOARD.fallback_memory[1];
+        let descriptor_usable = AARCH64_BOARD.fallback_memory[1];
         let ram_end = (descriptor_usable.base + descriptor_usable.size) as usize;
         // SAFETY: single-hart early boot; the statics are written once here, before any other
         // reader exists, then only shared immutably.
@@ -744,22 +682,15 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     }
 }
 
-#[cfg(not(any(
-    target_arch = "riscv64",
-    all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ),
-    all(target_arch = "aarch64", feature = "board-rpi4"),
-    all(target_arch = "aarch64", feature = "board-rpi3")
-)))]
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 pub fn fallback_boot_info(_dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO
 }
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
-pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+/// `DtbPolicy::Required` (RPi4): a valid firmware DTB must be present; the
+/// memory map is the descriptor's static fallback.
+#[cfg(target_arch = "aarch64")]
+fn required_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     if dtb == 0 {
         panic!("[boot] Raspberry Pi 4 requires a firmware DTB");
     }

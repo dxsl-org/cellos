@@ -355,8 +355,7 @@ impl PageTableTrait for PageTable {
         // EL2 regime through HVC before either side exchanges READY or guest
         // state; the identity root is passed explicitly because TTBR0_EL1 can
         // later hold a private Cell root.
-        #[cfg(feature = "board-rpi3")]
-        super::monitor::init(ttbr0);
+        <super::backend::El2Monitor as super::backend::ArmEl2Monitor>::init(ttbr0);
     }
 }
 

@@ -1,5 +1,7 @@
 # Phase 04 — Boot/DTB, board selection, EL2/vCPU monitor  (checkpoint)
 
+**Status:** implemented 2026-11-02, uncommitted. Gate rows PASS; the hypervisor lane fails identically at the pre-plan baseline, a guest-initramfs artefact ([reports/phase-04-gate.md](reports/phase-04-gate.md) §3.1). Awaiting checkpoint approval.
+
 ## Context Links
 [plan](plan.md) · [scout](scout-report.md) · ADR-0029 §6
 
@@ -31,11 +33,13 @@ Static dispatch through `Board` (see the plan's key design decisions). Only `bac
 5. Final rg audit, docs and changelog
 
 ## Todo List
-- [ ] Move descriptor and DTB policy
-- [ ] Move boot asm secondary mode
-- [ ] Introduce VcpuExt with layout assertions
-- [ ] Move EL2 monitor and stage-2 routing
-- [ ] Final rg audit, docs and changelog
+- [x] Move descriptor and DTB policy (`board.rs` via `SOC`; `DtbPolicy` Optional/Conservative/Required)
+- [x] Move boot asm secondary mode (`PI_MONITOR_BOOT`, `SECONDARY_START` consts)
+- [x] Introduce VcpuExt with layout assertions (`ArmVcpuExt`; `AArch64Vcpu` 536/536 and 544/1632 asserted per build; `VcpuRegs` mode via `REGS_MAX_MODE`, Q1)
+- [x] Move EL2 monitor and stage-2 routing (`monitor.rs` → `backend/monitor.rs`; `ArmEl2Monitor`)
+- [x] Final rg audit, docs and changelog (`rg` hits only `backend/mod.rs` and the `main.rs:13` conflict `compile_error!`; `docs/system-architecture.md` updated; CHANGELOG bullet proposed, not applied)
+
+Deviations are in the gate report §5.
 
 ## Success Criteria
 Checkpoint:

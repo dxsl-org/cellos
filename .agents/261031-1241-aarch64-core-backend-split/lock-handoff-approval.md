@@ -216,3 +216,6 @@ The handoff is effective for phases 01–04. The Phase 02 and Phase 04 checkpoin
 
 ## Phase 02 checkpoint
 2026-11-02: the user replied "duyệt CP2 + commit". Deviations 1–4 are approved, as are the path-only amendments (main.rs:792,1688-1733; hypervisor/registry.rs:832,1009,1032).
+
+## Phase 04 checkpoint
+2026-11-02: the user replied "duyệt CP2 + commit". Deviations 1–7 are approved. The hypervisor lane fails identically at baseline 6d5cdeb0c (the guest initramfs lacks /bin/pi-guest-init) and is recorded as pre-existing. The plan is closed.

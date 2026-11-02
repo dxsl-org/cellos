@@ -42,6 +42,8 @@
 use core::arch::global_asm;
 use hal_hypervisor::ViVmExit;
 
+use super::backend::{ArmPlatform, ArmVcpuExt, Board};
+
 // ── AArch64Vcpu ──────────────────────────────────────────────────────────────
 
 /// AArch64 vCPU register bank.
@@ -117,26 +119,13 @@ pub struct AArch64Vcpu {
     /// Guest SP_EL0 is banked across EL2 but shared with the host's EL0 Cells.
     /// Appended to preserve the assembly ABI offsets above.
     pub g_sp_el0: u64,
-    // Pi-only FP bank, appended after every legacy assembly offset.
-    #[cfg(feature = "board-rpi3")]
-    pub g_fp_regs: [u128; 32],
-    #[cfg(feature = "board-rpi3")]
-    pub g_fpcr: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub g_fpsr: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub h_fp_regs: [u128; 32],
-    #[cfg(feature = "board-rpi3")]
-    pub h_fpcr: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub h_fpsr: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub g_cpacr_el1: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub g_cntkctl_el1: u64,
-    #[cfg(feature = "board-rpi3")]
-    pub g_tpidrro_el0: u64,
+    /// Board-specific state (`Board::VcpuExt`), appended after every legacy
+    /// assembly offset. The Pi backend's eager FP bank and EL1 sysregs live here.
+    pub ext: VcpuExt,
 }
+
+/// The selected board's vCPU extension.
+pub type VcpuExt = <Board as ArmPlatform>::VcpuExt;
 
 // Verify critical struct offsets match the asm constants at compile time.
 // SAFETY: these are purely compile-time size/offset checks.
@@ -154,14 +143,12 @@ const _: () = {
     assert!(core::mem::offset_of!(AArch64Vcpu, h_sp) == 512);
     assert!(core::mem::offset_of!(AArch64Vcpu, exit_is_irq) == 520);
     assert!(core::mem::offset_of!(AArch64Vcpu, g_sp_el0) == 528);
-    #[cfg(feature = "board-rpi3")]
-    assert!(core::mem::offset_of!(AArch64Vcpu, g_fp_regs) == 544);
-    #[cfg(feature = "board-rpi3")]
-    assert!(core::mem::offset_of!(AArch64Vcpu, g_fpcr) == 1056);
-    #[cfg(feature = "board-rpi3")]
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_fp_regs) == 1072);
-    #[cfg(feature = "board-rpi3")]
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_fpcr) == 1584);
+    // Per-build ABI pin: the extension's offset and the whole struct's size are
+    // the values each board had before the extension became a backend type
+    // (QEMU virt / RPi4: 536 / 536; RPi3: 544 / 1632). The Pi backend pins its
+    // own field offsets (FP bank at 544, FPCR 1056, host bank 1072, 1584).
+    assert!(core::mem::offset_of!(AArch64Vcpu, ext) == <VcpuExt as ArmVcpuExt>::VCPU_EXT_OFFSET);
+    assert!(core::mem::size_of::<AArch64Vcpu>() == <VcpuExt as ArmVcpuExt>::VCPU_SIZE);
 };
 
 // SAFETY: AArch64Vcpu is only accessed from single-CPU kernel context in Phase 03.
@@ -225,12 +212,8 @@ struct HostEl1Bank {
     elr_el1: u64,
     sp_el1: u64,
     sp_el0: u64,
-    #[cfg(feature = "board-rpi3")]
-    cpacr_el1: u64,
-    #[cfg(feature = "board-rpi3")]
-    cntkctl_el1: u64,
-    #[cfg(feature = "board-rpi3")]
-    tpidrro_el0: u64,
+    /// Board-specific host sysregs (`VcpuExt::HostBank`).
+    ext: <VcpuExt as ArmVcpuExt>::HostBank,
 }
 
 // ── run_vcpu_impl ─────────────────────────────────────────────────────────────
@@ -277,18 +260,7 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     unsafe {
         core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) h.sp_el0, options(nomem, nostack));
     }
-    #[cfg(feature = "board-rpi3")]
-    unsafe {
-        core::arch::asm!(
-            "mrs {cpacr}, cpacr_el1",
-            "mrs {cntkctl}, cntkctl_el1",
-            "mrs {tpidrro}, tpidrro_el0",
-            cpacr = out(reg) h.cpacr_el1,
-            cntkctl = out(reg) h.cntkctl_el1,
-            tpidrro = out(reg) h.tpidrro_el0,
-            options(nomem, nostack),
-        );
-    }
+    <VcpuExt as ArmVcpuExt>::save_host(&mut h.ext);
 
     // ── 2a. Configure virtual-timer access for guest ─────────────────────────
     // CNTVOFF_EL2 = 0: virtual timer offset from physical counter = 0.
@@ -363,17 +335,8 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             options(nomem, nostack),
         );
         core::arch::asm!("msr sp_el0, {sp}", sp = in(reg) vcpu.g_sp_el0, options(nomem, nostack));
-        #[cfg(feature = "board-rpi3")]
-        core::arch::asm!(
-            "msr cpacr_el1, {cpacr}",
-            "msr cntkctl_el1, {cntkctl}",
-            "msr tpidrro_el0, {tpidrro}",
-            cpacr = in(reg) vcpu.g_cpacr_el1,
-            cntkctl = in(reg) vcpu.g_cntkctl_el1,
-            tpidrro = in(reg) vcpu.g_tpidrro_el0,
-            options(nomem, nostack),
-        );
     }
+    vcpu.ext.restore_guest();
 
     // ── 3. Enter guest + wait for trap ───────────────────────────────────────
     // `vcpu_enter_guest` saves host callee-saved regs + SP to vcpu.h_*, stores
@@ -421,17 +384,8 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             options(nomem, nostack),
         );
         core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) vcpu.g_sp_el0, options(nomem, nostack));
-        #[cfg(feature = "board-rpi3")]
-        core::arch::asm!(
-            "mrs {cpacr}, cpacr_el1",
-            "mrs {cntkctl}, cntkctl_el1",
-            "mrs {tpidrro}, tpidrro_el0",
-            cpacr = out(reg) vcpu.g_cpacr_el1,
-            cntkctl = out(reg) vcpu.g_cntkctl_el1,
-            tpidrro = out(reg) vcpu.g_tpidrro_el0,
-            options(nomem, nostack),
-        );
     }
+    vcpu.ext.save_guest();
 
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
     // SAFETY: restoring our own host state; EL1 sysregs safe to write from EL2.
@@ -457,17 +411,8 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             options(nomem, nostack),
         );
         core::arch::asm!("msr sp_el0, {sp}", sp = in(reg) h.sp_el0, options(nomem, nostack));
-        #[cfg(feature = "board-rpi3")]
-        core::arch::asm!(
-            "msr cpacr_el1, {cpacr}",
-            "msr cntkctl_el1, {cntkctl}",
-            "msr tpidrro_el0, {tpidrro}",
-            cpacr = in(reg) h.cpacr_el1,
-            cntkctl = in(reg) h.cntkctl_el1,
-            tpidrro = in(reg) h.tpidrro_el0,
-            options(nomem, nostack),
-        );
     }
+    <VcpuExt as ArmVcpuExt>::restore_host(&h.ext);
 
     // ── 5. Decode VM exit ────────────────────────────────────────────────────
     let exit = vcpu.decode_exit();
@@ -792,5 +737,5 @@ vt_vcpu_trap:
 
     ret     // returns to run_vcpu_impl via restored h_x30
 "#,
-    pi = const (cfg!(feature = "board-rpi3") as usize),
+    pi = const (<VcpuExt as ArmVcpuExt>::PI_WORLD_SWITCH as usize),
 );

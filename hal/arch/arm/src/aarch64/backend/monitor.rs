@@ -4,7 +4,8 @@
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
-use super::{
+use super::GuestRunProbe;
+use crate::aarch64::{
     stage2_regs,
     vcpu::{run_vcpu_impl, AArch64Vcpu},
 };
@@ -18,21 +19,6 @@ static ENTRY_EL: AtomicU8 = AtomicU8::new(1);
 // relies on an uncached EL2 witness becoming visible.
 static INIT_GATEWAY_RESULT: AtomicU64 = AtomicU64::new(u64::MAX);
 static INIT_OP0_DISPATCHED: AtomicBool = AtomicBool::new(false);
-
-/// EL2's Normal-WB view of one explicitly probed guest run. Values return in
-/// HVC registers independently of the EL1 vCPU buffer; a broken writeback
-/// path therefore cannot conceal itself behind that buffer's exit sentinels.
-#[derive(Clone, Copy, Debug)]
-pub struct GuestRunProbe {
-    pub entry_pc: u64,
-    pub stage2_l1: u64,
-    pub stage2_l2: u64,
-    pub stage2_l3: u64,
-    pub instruction: u64,
-    pub exit_esr: u64,
-    pub exit_elr: u64,
-    pub exit_is_irq: u64,
-}
 
 // Follow table pointers only inside Pi RAM; an invalid descriptor is evidence,
 // not permission to dereference a potentially bogus or MMIO physical address.
@@ -114,7 +100,7 @@ fn monitor_root_valid(root: u64) -> bool {
     }
     if !normal(root, false)
         || !normal(pi_monitor_dispatch as *const () as u64, true)
-        || !normal(super::el2::pi_monitor_mmu_init as *const () as u64, true)
+        || !normal(crate::aarch64::el2::pi_monitor_mmu_init as *const () as u64, true)
         || !normal(vector, true)
         || !normal(vector + 2047, true)
     {
@@ -315,7 +301,7 @@ extern "C" fn pi_monitor_dispatch(frame: *mut u64) {
                 // caching. HVC masks interrupts; the frame/stack are EL2-
                 // private during the transient mixed-attribute interval.
                 unsafe {
-                    super::el2::pi_monitor_mmu_init(regs[1]);
+                    crate::aarch64::el2::pi_monitor_mmu_init(regs[1]);
                     asm!("msr tpidr_el2, xzr", "mov {hcr}, #(1 << 31)",
                          "msr hcr_el2, {hcr}", "isb", hcr = out(reg) _,
                          options(nomem, nostack));

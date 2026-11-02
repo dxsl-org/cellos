@@ -743,29 +743,31 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init(); // registers log backend on all arches
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[cfg(target_arch = "aarch64")]
     {
-        let current_el: u64;
-        unsafe {
-            core::arch::asm!("mrs {el}, CurrentEL", el = out(reg) current_el,
-                             options(nomem, nostack));
+        use hal::backend::{ArmEl2Monitor, El2Monitor};
+        if El2Monitor::PRESENT {
+            let current_el: u64;
+            unsafe {
+                core::arch::asm!("mrs {el}, CurrentEL", el = out(reg) current_el,
+                                 options(nomem, nostack));
+            }
+            log::info!(
+                "[pi-monitor] entry EL={} host EL={} HVC ready={}",
+                El2Monitor::entry_el(),
+                current_el >> 2,
+                El2Monitor::is_ready()
+            );
+            let (booted_el2, hvc_result, op0_seen) = El2Monitor::probe_status();
+            log::info!(
+                "[pi-monitor] probe booted_el2={} hvc_result=0x{:x} op0_seen={}",
+                booted_el2,
+                hvc_result,
+                op0_seen
+            );
+            crate::hypervisor::registry::pi_monitor_smoke();
         }
-        log::info!(
-            "[pi-monitor] entry EL={} host EL={} HVC ready={}",
-            crate::hal::aarch64::monitor::entry_el(),
-            current_el >> 2,
-            crate::hal::aarch64::monitor::is_ready()
-        );
-        let (booted_el2, hvc_result, op0_seen) = crate::hal::aarch64::monitor::probe_status();
-        log::info!(
-            "[pi-monitor] probe booted_el2={} hvc_result=0x{:x} op0_seen={}",
-            booted_el2,
-            hvc_result,
-            op0_seen
-        );
     }
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    crate::hypervisor::registry::pi_monitor_smoke();
 
     // Phase 07: reserve the warm-snapshot capture's scratch workspace from the
     // frame allocator — the capture stages its own stack and buffers there, so
@@ -774,19 +776,18 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // A no-op unless the build is `snapshot-qualified`; a build without a
     // workspace refuses every capture.
     boot::reserve_snapshot_scratch();
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    {
+    #[cfg(target_arch = "aarch64")]
+    if matches!(
+        <hal::backend::Board as hal::backend::ArmPlatform>::DTB_POLICY,
+        hal::backend::DtbPolicy::Optional
+    ) {
         let (start, end) = boot::fallback_dtb_ram_range();
         log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);
     }
     #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init_input();
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    {
+    #[cfg(target_arch = "aarch64")]
+    if crate::hal::backend::Board::CONSOLE_RX_IRQ {
         // IRQ delivery must start only after the heap-backed queue exists.
         task::drivers::uart::init_input();
         crate::hal::backend::Board::console_enable_rx_irq();
@@ -1146,50 +1147,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         )
         .expect("frame allocator bitmap and early paging registration must succeed");
     }
-    #[cfg(all(
-        feature = "native-domains",
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
-    {
-        let arm_virt = hal_soc_arm_virt::QEMU_ARM_VIRT;
+    #[cfg(all(feature = "native-domains", target_arch = "aarch64"))]
+    for span in <hal::backend::Board as hal::backend::ArmResources>::SUPERVISOR_DEVICE_MMIO {
         let _ = memory::domain_supervisor_registry::register(
-            arm_virt.gic_map.base,
-            arm_virt.gic_map.end(),
+            span.base,
+            span.end,
             memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         );
-        let _ = memory::domain_supervisor_registry::register(
-            arm_virt.peripheral_map.base,
-            arm_virt.peripheral_map.end(),
-            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-        );
-    }
-    #[cfg(all(
-        feature = "native-domains",
-        target_arch = "aarch64",
-        feature = "board-rpi3"
-    ))]
-    {
-        let mmio = hal_soc_bcm27xx::BCM2837.mmio;
-        if let (Some(peripheral_end), Some(local_controller_end)) =
-            (mmio.peripheral_end(), mmio.local_controller_end())
-        {
-            let _ = memory::domain_supervisor_registry::register(
-                mmio.peripheral_base,
-                peripheral_end,
-                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-            );
-            let _ = memory::domain_supervisor_registry::register(
-                mmio.local_controller_base,
-                local_controller_end,
-                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-            );
-        }
     }
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
     {
@@ -1684,59 +1649,30 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.
     // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).
     // Q absent → IRQ fired immediately after daifclr (expected); check if H/G appear.
-    #[cfg(feature = "board-rpi3")]
+    #[cfg(target_arch = "aarch64")]
     crate::hal::backend::Board::diag_probe(b'Q');
 
-    // board-rpi3: Print IRQ state snapshot immediately after enabling IRQs.
-    // Format: "K<src_bit8><pend_bit1><src_nibble>" where src = CORE0_IRQ_SOURCE,
-    // pend = IRQ_PENDING1 bit 1 (BCM2835 systimer C1 pending).
-    // If G never fires but K shows pend=1 and src=0: QEMU does not route BCM2835→BCM2836.
-    #[cfg(feature = "board-rpi3")]
-    {
-        let soc = hal_soc_bcm27xx::BCM2837;
-        // SAFETY: both BCM controller apertures are identity-mapped before IRQs are enabled.
-        let src_raw = unsafe {
-            core::ptr::read_volatile((soc.mmio.local_controller_base + 0x60) as *const u32)
-        };
-        let pend =
-            unsafe { core::ptr::read_volatile((soc.mmio.legacy_irq_base + 0x04) as *const u32) };
-        let hex = |n: u32| -> u8 {
-            if n < 10 {
-                b'0' + n as u8
-            } else {
-                b'a' + n as u8 - 10
-            }
-        };
-        crate::hal::backend::Board::diag_probe(b'K');
-        crate::hal::backend::Board::diag_probe(if src_raw & soc.irq.local_gpu_mask != 0 {
-            b'1'
-        } else {
-            b'0'
-        });
-        crate::hal::backend::Board::diag_probe(if pend & (1 << soc.irq.system_timer_c1) != 0 {
-            b'1'
-        } else {
-            b'0'
-        });
-        crate::hal::backend::Board::diag_probe(hex(src_raw & 0xF));
-    }
+    // Board IRQ-state snapshot immediately after enabling IRQs (RPi3: the
+    // "K<src_bit8><pend_bit1><src_nibble>" probe; a no-op elsewhere).
+    #[cfg(target_arch = "aarch64")]
+    crate::hal::backend::Board::irq_snapshot_probe();
 
-    // Probe 'L': fires once per idle loop iteration (only first 3 on board-rpi3 to avoid flood).
+    // Probe 'L': fires once per idle loop iteration, for the board's first
+    // `IDLE_PROBES` iterations only (RPi3: 4) to avoid flood.
     // If 'L' never appears after 'K', the code never reaches the idle loop.
-    #[cfg(feature = "board-rpi3")]
-    {
+    #[cfg(target_arch = "aarch64")]
+    if <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES > 0 {
         static IDLE_COUNT: core::sync::atomic::AtomicUsize =
             core::sync::atomic::AtomicUsize::new(0);
         loop {
             let n = IDLE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            if n < 4 {
+            if n < <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES {
                 crate::hal::backend::Board::diag_probe(b'L');
             }
             crate::task::yield_cpu();
             crate::hal::ARCH.wait_for_interrupt();
         }
     }
-    #[cfg(not(feature = "board-rpi3"))]
     loop {
         crate::task::yield_cpu();
         crate::hal::ARCH.wait_for_interrupt();

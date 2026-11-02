@@ -87,8 +87,7 @@ const EL2_TCR: u64 = 25
 /// table frames, and all RAM/MMIO the monitor may access. The Pi handshake
 /// checks live code, vector, stack and MMIO leaves and rejects firmware WXN=1
 /// because the current kernel-image leaves are writable.
-#[cfg(any(feature = "board-rpi3", feature = "board-rpi4"))]
-pub(super) unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
+pub unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
     unsafe {
         core::arch::asm!(
             "msr mair_el2, {mair}",

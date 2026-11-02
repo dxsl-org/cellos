@@ -5,8 +5,9 @@ use hal_arch_trait::vi_handle_virtio_irq;
 use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
 
 use super::{
-    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
-    MmioWindow, NoIommu, PlatformFacts, SdhciFacts, SecondaryStart,
+    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    SecondaryStart,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
@@ -21,6 +22,12 @@ impl ArmPlatform for QemuVirt {
     const PL011_BASE: usize = QEMU_ARM_VIRT.uart.mmio.base;
     const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;
+    /// The host keeps EL2 when firmware enters there (`virtualization=on`).
+    const PI_MONITOR_BOOT: bool = false;
+    const DTB_POLICY: DtbPolicy = DtbPolicy::Optional;
+    const IDLE_PROBES: usize = 0;
+    type VcpuExt = NoVcpuExt;
+    type El2Monitor = NoEl2Monitor;
 
     #[inline(always)]
     fn console_init() {
@@ -52,6 +59,9 @@ impl ArmPlatform for QemuVirt {
 
     #[inline(always)]
     fn diag_probe(_byte: u8) {}
+
+    #[inline(always)]
+    fn irq_snapshot_probe() {}
 
     #[inline(always)]
     fn probe_uncategorized_trap(_frame: &TrapFrame, _vector_kind: u8) {}
@@ -180,4 +190,15 @@ impl ArmResources for QemuVirt {
     const DISPLAY: Option<DisplayFirmware> = None;
     const SDHCI: Option<SdhciFacts> = None;
     const BOARD_PINMUX_GPIO_BASE: Option<usize> = None;
+    /// GIC map and the peripheral window (PL011, PL031, PL061).
+    const SUPERVISOR_DEVICE_MMIO: &'static [MmioSpan] = &[
+        MmioSpan {
+            base: QEMU_ARM_VIRT.gic_map.base,
+            end: QEMU_ARM_VIRT.gic_map.end(),
+        },
+        MmioSpan {
+            base: QEMU_ARM_VIRT.peripheral_map.base,
+            end: QEMU_ARM_VIRT.peripheral_map.end(),
+        },
+    ];
 }

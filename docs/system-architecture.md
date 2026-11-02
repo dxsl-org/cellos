@@ -156,6 +156,30 @@ Use the [getting-started guide](getting-started.md) and the owning
 image and runner selection. A historical seven-Cell boot list is not a universal
 boot contract, and a generic workspace build does not qualify the architecture.
 
+### AArch64 board backends
+
+The shared AArch64 core (`hal/arch/arm`, arch-generic `kernel/src`) reaches
+board behaviour only through one statically dispatched type,
+`hal::aarch64::backend::Board` ([ADR-0029](decisions/0029-platform-image-families-and-runtime-detection.md) §6).
+The `board-rpi*` features are read only in `hal/arch/arm/src/aarch64/backend/mod.rs`,
+which selects `QemuVirt`, `Bcm2837` (Raspberry Pi 3) or `Bcm2711` (Raspberry Pi 4); Group 1
+boards keep compile-time selection, now of a backend type rather than of
+scattered branches. The backend is zero-sized and reads the existing `hal/soc`
+profiles. Its traits cover:
+
+- console and early diagnostics (`ArmPlatform`);
+- interrupt controller, host tick, IRQ dispatch, cross-hart IPI and secondary
+  start (`ArmIrqController`, `ArmTimer`, `SecondaryStart`);
+- platform facts, kernel MMIO maps and driver selectors (`ArmResources`);
+- boot-time device-tree policy (`DtbPolicy`), the Pi EL2 monitor
+  (`ArmEl2Monitor`) and per-board vCPU state (`ArmVcpuExt`).
+
+The MMIO authority tables stay kernel-side, selected by `ArmResources::SOC`
+and pinned by compile-time equality assertions; the AArch64 board descriptor is
+selected the same way. The `AArch64Vcpu` size and extension offset are asserted
+per build. Group 2/3 boards would add a backend against these traits; the IOMMU
+trait is a shape-only hook with no implementation.
+
 ## 5. Capability authority: selected model and current gaps
 
 The target is **typed object capabilities in one kernel-protected shared CSpace

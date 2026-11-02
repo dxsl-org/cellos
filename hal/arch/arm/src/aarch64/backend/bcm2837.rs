@@ -9,14 +9,19 @@ pub mod bcm2836_irq;
 pub mod timer;
 mod trap;
 pub mod uart_bcm_mini;
+mod vcpu_ext;
 
 use hal_soc_bcm27xx::BCM2837;
 
 use super::{
-    ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, MmioMap,
-    MmioWindow, NoIommu, PlatformAnnounce, PlatformFacts, SdhciFacts, SecondaryStart,
+    ArmEl2Monitor, ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware,
+    DtbPolicy, GuestRunProbe, MmioMap, MmioSpan, MmioWindow, NoIommu, PlatformAnnounce,
+    PlatformFacts, SdhciFacts, SecondaryStart,
 };
 use crate::aarch64::trap::TrapFrame;
+use crate::aarch64::vcpu::AArch64Vcpu;
+
+pub use vcpu_ext::PiVcpuExt;
 
 /// Raspberry Pi 3 (BCM2837).
 pub struct Bcm2837;
@@ -32,6 +37,14 @@ impl ArmPlatform for Bcm2837 {
     const SECONDARY_START: SecondaryStart =
         SecondaryStart::None("BCM2836 has no SGI path in this kernel — keeping Cellos single-hart");
     const CONSOLE_RX_IRQ: bool = true;
+    const PI_MONITOR_BOOT: bool = true;
+    /// VideoCore firmware owns the GPU memory split, so a valid firmware DTB
+    /// memory map is authoritative.
+    const DTB_POLICY: DtbPolicy = DtbPolicy::Conservative;
+    /// Four idle-loop `L` probes, then silence.
+    const IDLE_PROBES: usize = 4;
+    type VcpuExt = PiVcpuExt;
+    type El2Monitor = PiEl2Monitor;
 
     #[inline(always)]
     fn console_init() {
@@ -77,6 +90,40 @@ impl ArmPlatform for Bcm2837 {
     #[inline(always)]
     fn diag_probe(byte: u8) {
         uart_bcm_mini::probe_put(byte);
+    }
+
+    /// `K<src_bit8><pend_bit1><src_nibble>`: CORE0_IRQ_SOURCE GPU bit, BCM2835
+    /// systimer C1 pending (IRQ_PENDING1 bit 1), CORE0_IRQ_SOURCE low nibble.
+    /// If G never fires but K shows pend=1 and src=0: QEMU does not route
+    /// BCM2835→BCM2836.
+    #[inline(always)]
+    fn irq_snapshot_probe() {
+        let soc = BCM2837;
+        // SAFETY: both BCM controller apertures are identity-mapped before IRQs are enabled.
+        let src_raw = unsafe {
+            core::ptr::read_volatile((soc.mmio.local_controller_base + 0x60) as *const u32)
+        };
+        let pend =
+            unsafe { core::ptr::read_volatile((soc.mmio.legacy_irq_base + 0x04) as *const u32) };
+        let hex = |n: u32| -> u8 {
+            if n < 10 {
+                b'0' + n as u8
+            } else {
+                b'a' + n as u8 - 10
+            }
+        };
+        uart_bcm_mini::probe_put(b'K');
+        uart_bcm_mini::probe_put(if src_raw & soc.irq.local_gpu_mask != 0 {
+            b'1'
+        } else {
+            b'0'
+        });
+        uart_bcm_mini::probe_put(if pend & (1 << soc.irq.system_timer_c1) != 0 {
+            b'1'
+        } else {
+            b'0'
+        });
+        uart_bcm_mini::probe_put(hex(src_raw & 0xF));
     }
 
     #[inline(always)]
@@ -193,4 +240,99 @@ impl ArmResources for Bcm2837 {
         pinmux_gpio_base: Some(BCM2837.mmio.gpio_base),
     });
     const BOARD_PINMUX_GPIO_BASE: Option<usize> = Some(BCM2837.mmio.gpio_base);
+    /// Peripheral aperture and BCM2836 local controller.
+    const SUPERVISOR_DEVICE_MMIO: &'static [MmioSpan] = &[
+        MmioSpan {
+            base: BCM2837.mmio.peripheral_base,
+            end: match BCM2837.mmio.peripheral_end() {
+                Some(end) => end,
+                None => panic!("BCM2837 peripheral span must not overflow"),
+            },
+        },
+        MmioSpan {
+            base: BCM2837.mmio.local_controller_base,
+            end: match BCM2837.mmio.local_controller_end() {
+                Some(end) => end,
+                None => panic!("BCM2837 local-controller span must not overflow"),
+            },
+        },
+    ];
+}
+
+/// The Pi non-VHE EL2 monitor ([`super::monitor`]): the host and its Cells
+/// stay at EL1/EL0, and Stage-2 and guest runs go through its HVC gateway.
+pub struct PiEl2Monitor;
+
+impl ArmEl2Monitor for PiEl2Monitor {
+    const PRESENT: bool = true;
+
+    #[inline(always)]
+    fn init(root_pa: u64) {
+        super::monitor::init(root_pa);
+    }
+
+    #[inline(always)]
+    fn is_ready() -> bool {
+        super::monitor::is_ready()
+    }
+
+    #[inline(always)]
+    fn is_verified() -> bool {
+        super::monitor::is_verified()
+    }
+
+    #[inline(always)]
+    fn mark_verified() {
+        super::monitor::mark_verified();
+    }
+
+    #[inline(always)]
+    fn entry_el() -> u8 {
+        super::monitor::entry_el()
+    }
+
+    #[inline(always)]
+    fn probe_status() -> (bool, u64, bool) {
+        super::monitor::probe_status()
+    }
+
+    #[inline(always)]
+    fn gateway(op: u64, a: u64, b: u64, c: u64, d: u64) -> u64 {
+        super::monitor::gateway(op, a, b, c, d)
+    }
+
+    #[inline(always)]
+    unsafe fn run(vcpu: &mut AArch64Vcpu, vmid: u16, root_pa: u64, vi: bool) {
+        // SAFETY: forwarded caller contract.
+        unsafe { super::monitor::run(vcpu, vmid, root_pa, vi) }
+    }
+
+    #[inline(always)]
+    unsafe fn run_probed(
+        vcpu: &mut AArch64Vcpu,
+        vmid: u16,
+        root_pa: u64,
+        vi: bool,
+        guest_ipa: u64,
+        guest_pa: u64,
+    ) -> GuestRunProbe {
+        // SAFETY: forwarded caller contract.
+        unsafe { super::monitor::run_probed(vcpu, vmid, root_pa, vi, guest_ipa, guest_pa) }
+    }
+
+    #[inline(always)]
+    fn prepare_smoke_window() {
+        timer::prepare_monitor_smoke_window();
+    }
+
+    #[inline(always)]
+    fn arm_smoke_preemption() {
+        timer::arm_monitor_smoke_preemption();
+    }
+
+    #[inline(always)]
+    fn restore_host_tick() {
+        bcm2835_systimer::init();
+        crate::aarch64::timer::reset();
+    }
 }
