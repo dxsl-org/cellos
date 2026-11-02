@@ -17,6 +17,12 @@ lockScope: "All unfinished local, async, fastpath, LAN, relay and tier-adapter e
 
 > **CELL-CONTRACT-0024 — execution locked (2026-10-11).** The [Cell contract plan](../261011-1200-cell-contract-authority/plan.md) replaces this plan as sole contract-cutover owner within ADR-0022. All unfinished local, async, fastpath, LAN, relay and tier-adapter execution is blocked pending explicit per-slice rebase and file-owner handoff. Completed slices, frozen ABI approvals and evidence below are retained, not reset or broadened. Documentation completion does not unlock execution or activate remote/production paths. See the [lock inventory](../cell-contract-0024-locks.md).
 
+> **Phase 03 slice d, multi-source `WaitCompletion` — DONE 2026-11-02 (Law-1 FROZEN).**
+>
+> The user approved the [CP1](phase-03d-multi-source-wait-cp1.md) and its [lock handoff](phase-03d-multi-source-wait-cp1-approval.md) (Law-1 confirmation 1, controlling P04, P03 for the two-hart rows), then Law-1 confirmation 2 and closure amendments A1–A5 ([CP2 approval](phase-03d-multi-source-wait-cp2-approval.md)). The only kernel-repair lines touched are `kernel/src/task.rs:346` and `kernel/src/task/scheduler.rs:2308`, as granted.
+>
+> The broker cutover remains a separate optional slice. No other Phase 03 scope, and nothing in Phases 04-10, is unlocked.
+
 ## Decision and scope
 
 **Strategic decision (2026-10-08):**

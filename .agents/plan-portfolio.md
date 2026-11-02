@@ -178,6 +178,17 @@ Admission blockers, per the promotion rule:
 - Single-WIP rule: x86 is admitted first. aarch64 only after x86 closes or with an explicit owner exception.
 - The x86 phase 03 kernel→init fingerprint hand-off needs a Law-1 CP1 if it changes ABI. Otherwise the plan stops at that point.
 
+## Done — C2C Phase 03 slice d, multi-source `WaitCompletion` (admitted and closed 2026-11-02)
+
+The user approved the [CP1 and lock handoff](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md) ([text](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1.md)), then Law-1 confirmation 2 and closure amendments A1–A5 ([CP2 approval](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md); [CP2 package](260927-1100-c2c-anywhere-tier-aware/reports/phase-03d-cp2-package.md)). Controlling P04, with P03 for the two-hart rows. The slice no longer holds the WIP lane.
+
+- **Delivered:** `source::IPC = 1 << 2` on `WaitCompletion = 242` with mixed masks, the kernel multi-source wait, and the SDK switch-over chosen from the Cell's compiled allowlist. FROZEN; pinned by `scripts/check-multi-source-wait-law1-digests.sh`; Spec 17 §9, Spec 20 v3.4 and Spec 03b amended.
+- **Sequence run:** P0 baseline → P1 kernel-private prototype → P2 GO → P3 public ABI → independent review (FAIL, fixed) → CP2 confirmed.
+- **Evidence ceiling:** host tests plus x86 QEMU/TCG.
+  - NET_RX on x86 is proven by host tests only (there is no x86 producer).
+  - The `-smp 2` lane is unforced; the deterministic host model is the interleaving proof.
+- **Still not admitted:** the broker cutover (separate optional slice), an x86 NET_RX producer, remote/relay/pipelining. All 38 lock relations stay. `qemu-lua-vnet` is blocked by pre-existing, slice-independent faults (CP2 package §4).
+
 ## Parked research — VFS, storage and agent search
 
 **Recorded 2026-10-19:** [VFS/storage/search research plan](261019-1534-vfs-storage-search-research/plan.md)

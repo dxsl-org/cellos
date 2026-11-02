@@ -344,3 +344,33 @@ The replacement witness exposed premature round exhaustion in the SDK helper.
 This proof slice therefore includes the narrowly reproduced `wait_and_take`
 fix; the new witness failed before and passed after it. No kernel or ABI work
 was added, and no unrelated terminal is drained to make the scenario pass.
+
+## Slice d — multi-source `WaitCompletion` (adopted 2026-11-02; DONE 2026-11-02, Law-1 FROZEN)
+
+The user approved [CP1](phase-03d-multi-source-wait-cp1.md) (Law-1 confirmation 1) and its [lock handoff](phase-03d-multi-source-wait-cp1-approval.md). The design adds `source::IPC = 1 << 2` on `WaitCompletion = 242`, with one-shot latched notification per operation and the record's `result` set to the token.
+
+P0–P2 are recorded in [reports/phase-03d-prototype.md](reports/phase-03d-prototype.md).
+- **P1 is a kernel-private prototype.** The syscall still refuses the IPC bit, and `libs/api`, `libs/ostd` and `CHANGELOG.md` are untouched.
+- **Kernel host tests:** 377 → 385, with 8 new tests (one-shot, ordering, rotation, A8 fairness, stale/late, two-hart rows R1-R8, E3, allocation).
+- **Lane:** both `local-service-lifecycle-x86` tests pass before and after.
+- **x86 boot self-test:** `IPC-PENDING: PASS` on `-smp 1` and `-smp 2`.
+- **P2 verdict: GO.**
+  - Scan ≤ 64; 0 wait-path allocations; `Operation` grew +8 bytes.
+  - A8 model: `max_returns=105` (bound 192), `max_overtakes=34` (bound 63).
+  - M5 latency is carried to P3/CP2 because no userspace path exists before P3.
+
+At the end of P2, the userspace multi-source wait, an SMP lane witness, the SDK cutover and Law-1 confirmation 2 were still open; P3 below closes all of them except confirmation 2.
+
+**P3 (2026-11-02).** The [CP2 package](reports/phase-03d-cp2-package.md) records the work and the evidence.
+- **ABI:** `api::completion::source::IPC = 1 << 2` and `is_wait_mask_supported` are appended. `WaitCompletion = 242` accepts mixed masks; the record layout is unchanged.
+- **Kernel:** `wait_multi` is wired in. A lone NET_RX or TIMER wait keeps its original path.
+- **SDK:** `wait`, `wait_and_take` and `exchange` use the completion source when the Cell's compiled allowlist (`__vicell_syscall_allowlist`) holds bit 42, and `IpcWait` otherwise. No syscall is probed (review HIGH fixed).
+- **Host tests (after review fixes):** api 184 + 2, ostd 86 + 7 + 19, kernel 392.
+- **Lanes:** lifecycle 3/3 and `igb-x86` 2/2 (rebuilt-cell private image), 0 `denied for tid`. `qemu-lua-vnet` is blocked by pre-existing, slice-independent faults (disk table full; RV64 init's `/bin/shell` launch refused).
+- **Lane:** `local-service-lifecycle-x86` passes 3/3, including the new `-smp 2` test. The `MSW-*` reply, mixed, peer-death, starvation, deadline and stale legs pass on both topologies.
+- **M5:** p99 `WaitCompletion` is 451–471 µs against `IpcWait` 320–346 µs, within the +1-tick threshold; p50 is equal at about 23–24 µs.
+- **Evidence:** [c2c-multi-source-wait-x86](../../docs/evidence/c2c-multi-source-wait-x86.txt).
+
+**Closed 2026-11-02.** The owner answered YES to Law-1 confirmation 2 and ratified closure amendments A1–A5 ([CP2 approval](phase-03d-multi-source-wait-cp2-approval.md)); deviations D9–D17 are recorded in the CP2 package. The surface is FROZEN and pinned by `scripts/check-multi-source-wait-law1-digests.sh`. Spec 17 §9 (2026-11-02 entry), Spec 20 v3.4 and Spec 03b are amended. `CHANGELOG.md` is not edited in this slice (owner instruction).
+
+Still open in Phase 03, outside slice d: cancelling a dispatched operation, retained-reply lifetime, sustained full-peer-queue fairness, the broker `NetworkPoller` cutover (separate optional slice, D-5), a hardware NET_RX producer on x86, and physical Intel qualification.

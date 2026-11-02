@@ -1,0 +1,63 @@
+C2C Phase 03 slice d — multi-source WaitCompletion (NET_RX | TIMER | IPC), x86_64 QEMU/TCG evidence
+Refreshed 2026-11-02 after the independent review (SliceDReview). Source HEAD
+0effc2250688cc351d64dd2733fcef66f9941939 plus the uncommitted slice-d delta. CP2 package:
+.agents/260927-1100-c2c-anywhere-tier-aware/reports/phase-03d-cp2-package.md
+
+Image: build/vicell-x86-c2c-lifecycle.iso sha256 c08e1321a8dd3445… (scripts/build-x86_64-c2c-lifecycle-ci.sh,
+production-feature kernel, no test-hooks; init, cellbox, vfs, config, input, platform, nvme, e1000,
+sys-tools and the bench cells are rebuilt from the slice-d tree).
+Raw serial: c2c-multi-source-wait-x86.log (one independent serial session per topology, command
+`bench async-lifecycle`, qemu-system-x86_64 -machine q35 -cpu qemu64,+pdpe1gb -m 256M -smp {1,2}).
+"denied for tid" occurrences in that log: 0.
+
+Evidence labels (owner decision D-8):
+- NET_RX: x86 has no NET_RX producer. The lane exercises only the NET_RX raw-mailbox interruption rule;
+  `netrx_records` is a counted value (0 observed). NET_RX record settlement against the real
+  reservation and level flag is proven by kernel host tests (completion_wait::tests), not by hardware.
+- Two CPUs: the -smp 2 run shows "[x86-smp] topology online=2"; interleavings are not forced and the
+  hart that ran each task is not attributed. The deterministic host model is the race proof.
+
+Markers, -smp 1 (every counter is computed by the scenario):
+  MSW-REPLY records=8 dup=0 foreign=0 timer_returns=0 rereport=0 wrong_seq=0
+  MSW-M5 rounds=200 wc_p50=22860 wc_p99=450970 ipcwait_p50=23430 ipcwait_p99=346200 tick=10000000 pass=true
+  MSW-MIXED timer=true interrupted_by_raw=true ipc_after_raw=true raw_ignored_without_netrx=true ipc_second=true netrx_records=0 netrx_producer=absent-x86
+  MSW-DEATH outstanding=4 records=4 peer_gone=4 dup=0 unterminal=0
+  MSW-STARVATION a_done=4830 b_done=8 b_during_flood=8 records=4838 max_b_overtakes=0 bound=63 lost=0 dup=0 foreign=0
+  MSW-DEADLINE timer=true timer_ticks=20 op_expiry=true op_expiry_ticks=3000 terminal=Indeterminate
+  MSW-STALE late_reply_refused=true fresh_reply=true stale_records=0 other_records=0 quiet_after=true
+  MSW PASS / [async-lifecycle] PASS
+
+Markers, -smp 2:
+  MSW-REPLY records=8 dup=0 foreign=0 timer_returns=0 rereport=0 wrong_seq=0
+  MSW-M5 rounds=200 wc_p50=23980 wc_p99=470600 ipcwait_p50=24550 ipcwait_p99=320300 tick=10000000 pass=true
+  MSW-MIXED (all true, netrx_records=0)
+  MSW-DEATH outstanding=4 records=4 peer_gone=4 dup=0 unterminal=0
+  MSW-STARVATION a_done=600 b_done=8 b_during_flood=8 records=608 max_b_overtakes=11 bound=63 lost=0 dup=0 foreign=0
+  MSW-DEADLINE timer=true timer_ticks=20 op_expiry=true op_expiry_ticks=3000 terminal=Indeterminate
+  MSW-STALE late_reply_refused=true fresh_reply=true stale_records=0 other_records=0 quiet_after=true
+
+Times are timer ticks at freq_hz=1000000000 (nanoseconds); tick=10000000 is one 10 ms scheduler tick.
+M5 criterion: wc_p99 <= ipcwait_p99 + 1 tick. Met in both runs; WaitCompletion p99 is 0.10-0.15 ms
+above IpcWait p99, p50 is equal within 1 µs.
+
+Both boots: completion-queue self-test PASS and [selftest] IPC-PENDING: PASS (the multi-source
+selection self-test now keeps NET_RX readiness local and never touches the global NET_RX flag).
+`bench` has no WaitCompletion authority (bit 42): its SDK waits are chosen from its compiled allowlist
+(`__vicell_syscall_allowlist`) and use IpcWait without any denied probe (BOUNDED completed=8 lost=0,
+DEATH unterminal=0, zero "denied for tid").
+
+Integration lanes:
+- tests/integration/tests/local-service-lifecycle-x86.rs: 3 passed in 105.09 s, including the new
+  `-smp 2` test; the async scenario also asserts that no "denied for tid" line appears.
+- tests/integration/tests/igb-x86.rs on a private headless image with every cell rebuilt from the
+  slice-d tree (/tmp/p03d-x86/vicell-x86-p03d.iso sha256 d1136900199b61b5…, built outside the repo with
+  scripts/assemble-x86-image.py --out-dir outside the repository): 2 passed (igb_x86_dhcp,
+  igb_x86_vtd_dhcp), including its own "no denied for tid" assertion.
+- scripts/qemu-lua-vnet.py (RV64): blocked by pre-existing, slice-independent faults: the shared
+  disk_v3.img already holds 63 cell entries, so the runner's two additions overflow the 64-entry
+  table; with a trimmed private copy the RV64 init's `/bin/shell` launch is refused
+  ("DENY launch edge ... target=/bin/shell"), so no shell prompt appears and Lua never runs. Its
+  "no denied syscall" check therefore passed vacuously; it is not counted as evidence.
+- bash scripts/check-multi-source-wait-law1-digests.sh: PASS (after Law-1 confirmation 2, 2026-11-02).
+
+Ceiling: software-only x86 QEMU/TCG. No physical Intel, no production, no NET_RX hardware producer.

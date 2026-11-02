@@ -19,9 +19,11 @@ be answered first, because each is expensive to change afterwards:
 4. **Appending a completion takes only the queue's own lock**, and waking the
    waiter is a separate step.
 
-The Phase 04 contract is narrower than a generic reactor. `WaitCompletion` only
-covers `NET_RX` and finite `TIMER` waits, while `WaitForEvent` and the `Recv*`
-family keep their existing wake and delivery rules.
+The Phase 04 contract is narrower than a generic reactor. `WaitCompletion`
+covers `NET_RX`, finite `TIMER` waits and (since C2C Phase 03 slice d, Law-1
+2× confirmed 2026-11-02) the `IPC` source of owned exact-operation terminals,
+alone or combined in one wait. `WaitForEvent` and the `Recv*` family keep their
+existing wake and delivery rules.
 
 The shipped executor implements that contract with an `Arc`-backed `RawWaker`
 state, a one-tick `TIMER` park for pending polls, and a `SleepFuture` that turns
@@ -83,11 +85,15 @@ cell, and cannot be forged into a reference to anything else. Revocation becomes
 simple, because revoking is releasing the slot.
 
 The v1 wire record is fixed at 24 bytes. Its source word sits in bytes 12..16,
-between the slot and result fields. `WaitCompletion` submits exactly one source
-bit: `NET_RX` or `TIMER`. Zero, multi-bit, and unknown submission masks are
-rejected up front. When decoding a record written by the original v1 kernel,
-source `0` is accepted as legacy `UNSPECIFIED`; that compatibility rule does not
-make `0` a valid new submission.
+between the slot and result fields. `WaitCompletion` submits a non-empty set of
+source bits from `NET_RX | TIMER | IPC` (`source::is_wait_mask_supported`);
+`TIMER` needs a finite deadline. Zero and unknown submission masks are rejected
+up front. Every record still carries exactly one source; ready sources rotate
+`NET_RX → IPC → TIMER`. An `IPC` record's `result` is the operation token of one
+owned terminal, reported at most once; its outcome stays behind `IpcTake`. When
+decoding a record written by the original v1 kernel, source `0` is accepted as
+legacy `UNSPECIFIED`; that compatibility rule does not make `0` a valid new
+submission.
 
 ## Point 2 — Reserve at submission so completion cannot fail
 
@@ -170,9 +176,10 @@ outside `SCHEDULER`; dead-task cleanup never frees a slot inline.
   `TaskState::Recv` shape. The runtime `NET_RX` witness checks both
   `completion.source == NET_RX` and `completion.result == NET_RX as i64`, so the
   proof validates the source tag and the payload result separately.
-- Peer-dependent completion sources stay deferred. Any future source that waits on
-  another task must bind that target's generation at submission, because a bare tid
-  is reusable and is not a stable completion identity.
+- Peer-dependent completion sources bind the target's generation at submission,
+  because a bare tid is reusable and is not a stable completion identity. The
+  `IPC` source meets this: its records name an exact-operation token that binds
+  owner and peer `(cell, generation)` (Spec 17 §9, 2026-11-02 entry).
 - Every block of unsafe code justified by "the caller is blocked" must be audited
   before the executor changes, not after. That justification stops being true the
   moment a future can be cancelled.

@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Assert the FROZEN Law-1 surface of C2C Phase 03 slice d (multi-source WaitCompletion),
+# confirmed in
+#   .agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md
+#   .agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md
+# and recorded in docs/specs/17-ipc-wire-contract.md §9 (2026-11-02 entry).
+#
+# WHY this exists: once both confirmations are recorded the surface is FROZEN, and
+# from then on any removal, rename, layout/value change or addition needs the ABI
+# process again. A record whose claims nobody re-reads is not a gate, so this check
+# asserts every item that is expressible as code text and fails with a per-item
+# message.
+#
+# The whole-file sha256 values in the CP2 record are provenance for *which revision*
+# was confirmed, not the gate: an unrelated edit elsewhere in one of those files must
+# not require a fresh confirmation, while a change to a confirmed item must. After a
+# *confirmed* ABI change, update the records, their digests and this check in the
+# same commit as the change.
+#
+# Usage: bash scripts/check-multi-source-wait-law1-digests.sh
+# Bash only; no build required.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+COMPLETION="libs/api/src/abi/completion.rs"
+SYSCALL="libs/api/src/abi/syscall.rs"
+OSTD_IPC="libs/ostd/src/ipc.rs"
+OSTD_RUNTIME="libs/ostd/src/runtime.rs"
+OSTD_LIB="libs/ostd/src/lib.rs"
+K_WAIT="kernel/src/task/completion_wait.rs"
+K_ASYNC="kernel/src/task/async_ipc.rs"
+K_TASK="kernel/src/task.rs"
+K_SCHED="kernel/src/task/scheduler.rs"
+
+failures=0
+
+# require_in <file> <literal> <item description>
+require_in() {
+    local file="$1" needle="$2" item="$3"
+    if [[ ! -f "$file" ]]; then
+        echo "FAIL: $item — missing file $file" >&2
+        failures=$((failures + 1))
+        return 0
+    fi
+    # -F: the needles are literals, and several contain regex metacharacters.
+    if ! grep -Fq -- "$needle" "$file"; then
+        echo "FAIL: $item — $file no longer contains:" >&2
+        printf '        %s\n' "$needle" >&2
+        failures=$((failures + 1))
+    fi
+}
+
+# require_count <file> <literal> <count> <item description>
+require_count() {
+    local file="$1" needle="$2" want="$3" item="$4" have
+    have="$(grep -Fc -- "$needle" "$file" 2>/dev/null || true)"
+    if [[ "$have" != "$want" ]]; then
+        echo "FAIL: $item — $file contains $have (want $want) of:" >&2
+        printf '        %s\n' "$needle" >&2
+        failures=$((failures + 1))
+    fi
+}
+
+# forbid_in <file> <literal> <item description>
+forbid_in() {
+    local file="$1" needle="$2" item="$3"
+    if [[ -f "$file" ]] && grep -Fq -- "$needle" "$file"; then
+        echo "FAIL: $item — $file must not contain:" >&2
+        printf '        %s\n' "$needle" >&2
+        failures=$((failures + 1))
+    fi
+}
+
+# ── libs/api: the record and the source vocabulary (Spec 17 §9) ──────────────
+require_in "$COMPLETION" "pub const COMPLETION_LEN: usize = 24;" "record length 24"
+require_in "$COMPLETION" "pub const COMPLETION_VERSION: u32 = 1;" "record version 1"
+require_in "$COMPLETION" "pub const COMPLETION_MAGIC: u32 = 0x5649_4351;" "record magic VICQ"
+require_in "$COMPLETION" "out[8..12].copy_from_slice(&self.slot.to_le_bytes());" "slot at bytes 8..12"
+require_in "$COMPLETION" "out[12..16].copy_from_slice(&self.source.to_le_bytes());" \
+    "source word at bytes 12..16"
+require_in "$COMPLETION" "out[16..24].copy_from_slice(&self.result.to_le_bytes());" \
+    "result (token for IPC) at bytes 16..24"
+require_in "$COMPLETION" "pub const UNSPECIFIED: u32 = 0;" "UNSPECIFIED = 0 kept"
+require_in "$COMPLETION" "pub const NET_RX: u32 = 1 << 0;" "NET_RX = 1 kept"
+require_in "$COMPLETION" "pub const TIMER: u32 = 1 << 1;" "TIMER = 2 kept"
+require_in "$COMPLETION" "pub const IPC: u32 = 1 << 2;" "IPC = 4 appended"
+require_in "$COMPLETION" "const ALL: u32 = NET_RX | TIMER | IPC;" "known source set"
+require_in "$COMPLETION" "matches!(mask, NET_RX | TIMER | IPC)" \
+    "a record carries exactly one known source"
+require_in "$COMPLETION" "pub const fn is_wait_mask_supported(mask: u32) -> bool {" \
+    "wait-mask predicate present"
+require_in "$COMPLETION" "mask != 0 && mask & !ALL == 0" "wait mask is a non-empty known subset"
+require_in "$COMPLETION" "fn ipc_record_bytes_carry_the_token_without_moving_any_field()" \
+    "IPC record byte test present"
+
+# ── libs/api: opcode, allowlist and the exported allowlist symbol ─────────────
+require_in "$SYSCALL" "WaitCompletion = 242," "opcode 242 kept"
+require_in "$SYSCALL" "242 => ViSyscall::WaitCompletion," "242 decodes to the variant"
+require_in "$SYSCALL" "Self::WaitCompletion => Some(42)," "allowlist bit 42 kept (shared)"
+require_in "$SYSCALL" '#[export_name = "__vicell_syscall_allowlist"]' \
+    "declare_syscalls! exports the allowlist symbol"
+require_count "$OSTD_RUNTIME" '#[export_name = "__vicell_syscall_allowlist"]' 4 \
+    "app_entry!/service_entry! export the allowlist symbol"
+
+# ── libs/ostd: the SDK path choice (no probing) ───────────────────────────────
+require_in "$OSTD_LIB" "#![feature(linkage)]" "weak linkage enabled for the default"
+require_in "$OSTD_IPC" "pub static __vicell_syscall_allowlist: u64 = u64::MAX;" \
+    "weak permit-all default mirrors the loader"
+require_in "$OSTD_IPC" '#[linkage = "weak"]' "the SDK default is weak"
+require_in "$OSTD_IPC" "fn allowlist_permits_completion_wait(allowlist: u64) -> bool {" \
+    "path chosen from the compiled allowlist"
+forbid_in "$OSTD_IPC" "completion_wait_refused" "no denied-syscall probe"
+require_in "$OSTD_IPC" "pub fn wait_any(sources: u32, timeout_ticks: u64) -> Result<Wake, IpcError> {" \
+    "wait_any API present"
+
+# ── kernel: mask rule, one-shot IPC source and the granted predicate lines ────
+require_in "$K_WAIT" "api::completion::source::is_wait_mask_supported(mask)" \
+    "syscall validates with the public mask rule"
+require_in "$K_WAIT" "if mask != api::completion::source::NET_RX && mask != api::completion::source::TIMER {" \
+    "lone NET_RX/TIMER keep the original path"
+require_in "$K_WAIT" "fn wait_multi(" "multi-source wait present"
+require_in "$K_WAIT" "pub(super) const SELECTION_ORDER: [u32; 3] = [" "rotation order present"
+forbid_in "$K_WAIT" "PROTO_IPC" "no kernel-private prototype bit remains"
+require_in "$K_ASYNC" "source & api::completion::source::IPC != 0" \
+    "IPC terminals wake an IPC-mask completion waiter"
+require_in "$K_ASYNC" ".min_by_key(|op| op.id)?;" "oldest submission is reported first"
+require_in "$K_ASYNC" "pub(crate) fn restore_notification(task: &mut Task, token: usize) -> bool {" \
+    "a failed copy-out re-arms the notification"
+require_in "$K_TASK" "if source & api::completion::source::NET_RX != 0" \
+    "raw mailbox interrupts only masks naming NET_RX"
+require_in "$K_SCHED" "timed_out = *source & api::completion::source::TIMER == 0;" \
+    "deadline sweep keys on the TIMER bit"
+
+if [[ "$failures" -ne 0 ]]; then
+    echo "FAIL: $failures multi-source WaitCompletion Law-1 item(s) drifted." >&2
+    echo "      A confirmed item changed; the ABI process (two fresh confirmations)" >&2
+    echo "      is required before this check may pass again. See" >&2
+    echo "      .agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md" >&2
+    exit 1
+fi
+
+echo "PASS: multi-source WaitCompletion Law-1 items intact (sources, record, mask rule, allowlist symbol, wiring)"

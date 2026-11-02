@@ -72,7 +72,7 @@ The proposed operation state is `NotSubmitted → Submitted → {AuthenticatedCo
 | Authenticated response matches live caller/request/peer/server epoch | Typed method response | Exact source/epoch/correlation and local return owner agree. |
 | Target incarnation differs (boot-local epoch mismatch, peer or caller restart) | Reject stale delivery; use existing `Indeterminate` if an old submitted request may have executed | First bounded remote API adds **no `Respawned` variant**; do not report definite `NoService` merely because an old epoch vanished. A never-submitted, independently authenticated rejection may instead use a truthful definite existing result. |
 
-`RemoteCallError` currently declares `NoService | Unreachable | Timeout | Busy | Indeterminate | AuthFailed | ProtocolError | NotSupported` but runtime returns only `NotSupported`. This table does not change that enum or claim that all outcomes are implemented. Generic async submit/await in Phase 03 is independent of first deadline-bounded synchronous remote call; `WaitCompletion` v1 accepts only `NET_RX` and `TIMER`. A `Future` that wraps blocking `sys_send` is not nonblocking IPC. Dropping an awaiter abandons waiting, not necessarily the underlying remote effect.
+`RemoteCallError` currently declares `NoService | Unreachable | Timeout | Busy | Indeterminate | AuthFailed | ProtocolError | NotSupported` but runtime returns only `NotSupported`. This table does not change that enum or claim that all outcomes are implemented. Generic async submit/await in Phase 03 is independent of first deadline-bounded synchronous remote call; `WaitCompletion` accepts `NET_RX`, `TIMER` and the local `IPC` source (owned exact-operation terminals, §2.6), which says nothing about remote completion. A `Future` that wraps blocking `sys_send` is not nonblocking IPC. Dropping an awaiter abandons waiting, not necessarily the underlying remote effect.
 
 ### 2.6 Local RPC lifecycle — synchronous and nonblocking callers share one operation
 
@@ -98,7 +98,7 @@ Reply | PeerGone | PreDispatchTimeout | Indeterminate | Cancelled }`.
 | Terminal kinds | `Reply`, `PeerGone`, `PreDispatchTimeout`, `Indeterminate`, `Cancelled` | Peer death terminates waiting, but does not prove no prior side effect or no delegated sibling work; never blind-retry accepted work |
 | Reply retention | The kernel owns the reply until `take`; an undersized `take` buffer does **not** consume the result; taking a terminal releases the slot | No silent truncation, no double execution through re-taking |
 | Capacity | Bounded operations per owner and a bounded receiver queue; a full owner set or queue returns `Busy` with nothing delivered | Congestion is a refusal, never a silent drop |
-| Waiting | `wait(ticks)` is a timer-bounded park; `WaitCompletion` v1 has only `NET_RX`/`TIMER` sources | A caller polls on a timer granularity; the measured drain needed one round, not a busy loop |
+| Waiting | `WaitCompletion` with `IPC` (optionally plus `TIMER` and `NET_RX`) parks until one owned operation reaches its terminal or another named source fires; each terminal is reported once, by token, and taken with `IpcTake`. The SDK uses it when the Cell's compiled allowlist holds bit 42 and `IpcWait` otherwise (Spec 17 §9, 2026-11-02) | One wait covers NET_RX, IPC replies and a deadline; a retained result never re-wakes the caller on the completion path |
 
 **Reply identity is per-operation, not per-sender.** SDK `service_call` and its
 typed/bounded variants now submit, wait and take the same kernel-owned operation
@@ -168,9 +168,10 @@ with exact sender and sequence, and the mailbox is empty at exit. This proves
 bounded progress and refusal backpressure in a finite workload, not
 starvation freedom under unbounded competing monopolization.
 
-**Separate proof obligations:** multi-source completion waiting, deterministic
-two-hart publication/wake proof and the full fairness/restart matrix remain open.
-This cutover does not expand `WaitCompletion` sources or claim remote RPC readiness.
+**Separate proof obligations:** the full fairness/restart matrix remains open. Multi-source completion
+waiting landed in C2C Phase 03 slice d (Spec 17 §9, 2026-11-02; evidence
+`docs/evidence/c2c-multi-source-wait-x86.{txt,log}`), including the deterministic two-hart host model
+for the IPC source; the x86 two-CPU lane is unforced. Neither claims remote RPC readiness.
 
 ### 2.5 Liveness and safety boundaries
 
@@ -183,7 +184,7 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 - Existing **local benchmark** state has `LOCAL_REQUEST_QUEUE_CAP = 16`, `LOCAL_REPLY_QUEUE_CAP = 16`, `IN_FLIGHT_CAP = 32` and `PER_CALLER_WINDOW = 4` (`local_queue/state/types.rs:4-8`). These are caller-Cell/TID quotas, **not** a remote peer quota. First authenticated remote ingress needs separate bounded per-NodeId charging and a measured fairness/bytes budget; do not let a peer spend unlimited capacity in a local exported service.
 - `UdpRecv`'s 512-byte packet limit and encrypted LAN beacon do not define a working UDP remote-call transport. First remote RPC is relay-only under the protected authority; direct TCP is an optimization after the isolated relay oracle. No STUN/ICE or multicast identity promotion in baseline scope.
 - Local sender attestation reserves 32 bytes in its 4 KiB recv buffer. The V1 envelope max 3,712 bytes already accounts for the conservative inline TCP and Noise-tag bounds; a reply must be checked against its own local response framing too. No operation may silently truncate, drop a completion or exceed the fixed dedup/source capacity.
-- Async IPC is a separate capability. `TrySend` succeeds only for a receiver already ready in matching `Recv`; `WaitCompletion` source bits are currently `NET_RX` and `TIMER`. A general IPC completion source or new syscall must not be assumed implemented or borrowed from a private kernel helper.
+- Async IPC is a separate capability. `TrySend` succeeds only for a receiver already ready in matching `Recv`. `WaitCompletion` sources are `NET_RX`, `TIMER` and `IPC` (local owned operations only, Spec 17 §9 2026-11-02); no private kernel helper is an ambient completion source.
 
 ## 4. ABI and caller inventory (proposal, no additions)
 
@@ -192,7 +193,7 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 | `ViSyscall::{Send=0, Recv=1, TrySend=4, RegisterService=205, LookupService=206}`; `ostd::ipc::service_call_typed` | Spec-17 masked request/reply, per-receiver byte-0 namespace and existing live-provider TID lookup. `Recv` flag `RECV_ATTEST_CALLER` is already ratified; `RecvTimeout` is not attested. | ADR-0023 adds **one** opcode (`LookupServiceBound = 429`) returning a `{tid, cell_id, generation}` record, keeps 206 byte-compatible, and adds no send opcode. **Implemented and Law-1 FROZEN 2026-10-08**, verified end-to-end on x86_64 QEMU (`docs/evidence/local-service-lifecycle-x86-qemu.{txt,log}`); drift is caught by `scripts/check-lookupservicebound-law1-digests.sh`. `LocalEndpoint::call` still uses the synchronous path (Phase 03). |
 | `ostd::cluster_endpoint::{CellMethod, LocalEndpoint, RemoteEndpoint, CellEndpoint, RemoteCallError}` | Local direct copied call and remote explicit `NotSupported`. Only `libs/ostd/tests/cluster-endpoint.rs` currently exercises remote endpoint construction/call; no native app uses it for real remote delivery. | Authentication-bound remote descriptors, definite/uncertain result mapping and any proposed `Respawned` variant must be reviewed against exported SDK consumers; no silent alias or new enum variant now. |
 | `types::c2c::{RetryClass, ServerEpoch, RelativeDeadline}` and `api::services::cluster::{CellNetId, ClusterId, PeerTicket}` | V1 RetryClass wire IDs 1/2/3, nonzero volatile ServerEpoch, nonzero relative milliseconds; peer ticket lists IPv4/relay hints. | Do not change wire values or assume ticket implies authority. Tie remote descriptor to the authenticated session and incarnation before enabling. |
-| `ViSyscall::WaitCompletion=242`; `api::abi::completion::{source::NET_RX, source::TIMER}` | These two event sources only; no generic RPC completion. | Phase 03 must prototype bounded ownership/wakeup before asking for a new public ABI and two Law-1 confirmations. Bounded synchronous remote call may precede it. |
+| `ViSyscall::WaitCompletion=242`; `api::abi::completion::source::{NET_RX, TIMER, IPC}`, `is_wait_mask_supported`; exported `__vicell_syscall_allowlist` | Mixed source masks; one source per v1 record; `IPC` reports each owned local operation terminal once by token. **Law-1 FROZEN 2026-11-02** (C2C Phase 03 slice d); drift is caught by `scripts/check-multi-source-wait-law1-digests.sh`. | Any further source, record field or remote completion needs the ABI process again. |
 | Spec-17 §3 byte-0 registry and §9 amendments | Receiver-disambiguated postcard protocol; the legacy broker oracle's first eight request bytes are unrestricted, so **no byte-0 value is collision-free while its parser shares a receiver with RPC**. | Prefer one protocol per broker image profile on existing `service::NET_BROKER = 8`, then remove the legacy-only parser and callers at cutover. Prove mutually exclusive packaging and no decode fallback. If simultaneous protocols are required, review a second registered receiver/service ID through Law-1; remote `(service_id, export_id)` are **not** byte-0 values. |
 | `Grant*`, Tier-2 admission, SAS ring and Tier-3 virtio | Spec 22 containment denies private-root grants; kernel repair owns its root/revoke work. Ring copies words, guest device I/O is not C2C RPC. | C2C Phase 02 consumes proved copied IPC, not grant cutover. Phase 08/09 need separate issuer/revocation and VM-guest identity gates; no change to these kernel paths during Phase-01 preparation. |
 
@@ -206,7 +207,7 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 | Wrong peer, mismatched NodeId/cluster, unregistered or disallowed export, config-only `scope=remote` without peer policy/live target, replay, boot/server restart | Phase-05 authenticated broker-state tests, then Phase-06 relay-only isolated two-node negative oracle; reject before dedup/local dispatch. |
 | Correlated destination absence vs ambiguous relay write, two concurrent outstanding requests, stale correlation | ADR-0009 host codec tests are **server-only** evidence; authority AC-012 and Phase-06 client+broker oracle must prove live end-to-end correlation. |
 | Cache full, duplicate in-flight, completed replay, expired non-idempotent request | Existing `c2c_dedup` host tests cover bounded local state, not remote delivery; Phase-06 exercises actual application execution and post-retention ambiguity. |
-| Direct path, Tier-1 shared bulk, guest bridge, async completion | Separate Phase-07/08/09/03 witnesses respectively; none is implied by relay-only pass or by this contract proposal. |
+| Direct path, Tier-1 shared bulk, guest bridge, async completion | Separate Phase-07/08/09/03 witnesses respectively; none is implied by relay-only pass or by this contract proposal. Local async completion (multi-source `WaitCompletion`) is witnessed by Phase 03 slice d: kernel host model plus `docs/evidence/c2c-multi-source-wait-x86.{txt,log}` (x86 QEMU/TCG, NET_RX by host test only, unforced two-CPU lane). |
 
 ## 6. Open gates and ratification checklist
 
@@ -225,6 +226,12 @@ Local death may be confirmed against kernel-owned live generation. A remote beac
 
 ## 7. Revision record
 
+- **v3.4 (2026-11-02, local implementation amendment; remote draft unchanged):**
+  §2.4, §2.6 (Waiting row, proof obligations), §3, §4 and §5 record C2C Phase 03 slice d,
+  Law-1 2× confirmed: `WaitCompletion = 242` accepts a non-empty `NET_RX | TIMER | IPC` mask, and
+  the `IPC` source reports each owned local operation terminal once by token (Spec 17 §9,
+  2026-11-02). The SDK chooses it from the Cell's compiled allowlist. No remote completion,
+  ratification or fairness-matrix closure is claimed.
 - **v3.3 (2026-10-09, local implementation amendment; remote draft unchanged):**
   §2.6 records the owner-approved stranding cutover and Spec 17 §9 amendment.
   Synchronous SDK RPC now uses bounded operation state. The immediate Send bridge

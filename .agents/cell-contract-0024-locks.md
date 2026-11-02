@@ -133,6 +133,15 @@ For every row: prior status/progress is retained; current scheduling is **BLOCKE
 - No Law-1 delta. `dma_isolation` semantics unchanged. Phase 03 (fingerprint hand-off) is excluded and needs its own handoff.
 - All 38 relations keep their whole-plan scope.
 
+**Bounded adopted slice — C2C Phase 03 slice d, multi-source `WaitCompletion` (2026-11-02):** the accountable owner (the user) approved the CP1 (Law-1 confirmation 1) and its lock handoff ([approval](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md); text [phase-03d-multi-source-wait-cp1.md](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1.md) sections 5-8 and 12). Serves the **Intel C2C** Phase 03 multi-source-wait item. Controlling P04 (P03 for the two-hart rows); the user is the P04/P03 owner, and the current C2C session is the single integrating owner.
+- File-bounded exception for exactly the 23 entries of CP1 §7.1, in the order P0 baseline → P1 kernel-private prototype → P2 measurement report (go/no-go) → P3 public ABI edit, which is permitted only after a recorded P2 go.
+- Planned delta: one appended `api::completion::source::IPC = 1 << 2` on `WaitCompletion = 242`, with no new opcode or allowlist bit. Kernel rows `kernel/src/task.rs:343-347` and `kernel/src/task/scheduler.rs:2303-2309` are granted over kernel-repair Phase 07 for those lines only.
+- Pinned byte-identical: `kernel/src/task/syscall.rs`, `completion.rs`, `smp.rs`, `libs/ostd/src/executor.rs`, `cells/services/net/**`, `cells/services/net-broker/**`, `Cargo.lock`.
+- Not covered: the broker cutover (separate optional slice), an x86 NET_RX producer, remote/relay/pipelining, Law-1 confirmation 2.
+- Row `260927-1100-c2c-anywhere-tier-aware` is narrowed for slice d only. The Check rows `261006-0934`, `260727-2101`, `260801-parallel-midori-closure` and `260615-1325` are ruled compatible.
+- **Closed 2026-11-02:** the owner gave Law-1 confirmation 2 and ratified closure amendments A1–A5 ([CP2 approval](260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md)). The amendments added `kernel/src/task/completion_selftest.rs` (A1), `libs/ostd/src/{lib,runtime}.rs` (A4) and `kernel/src/task/completion.rs` (A5) to the exception, and widened row 13 to the bench-probe test allowlist (A2). The surface is FROZEN (`scripts/check-multi-source-wait-law1-digests.sh`). The file-bounded exception ends with the slice, and no slice-d path stays open for further edits under it. The broker cutover still needs its own CP1.
+- All 38 relations keep their whole-plan scope.
+
 | Existing plan | Prior status / progress (preserved) | Blocked scope | Replacement area / rebase gate |
 |---|---|---|---|
 | [260528-2016-vicell-full-implementation](260528-2016-vicell-full-implementation/plan.md) | pending | Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices of the legacy umbrella; unrelated historic product scope stays parked. | P01 then P02/P03/P05/P06; explicit per-slice handoff |

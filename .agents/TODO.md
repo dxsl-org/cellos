@@ -23,8 +23,9 @@ core/backend split xong 2026-11-02 ([x86](261031-1241-x86-runtime-board-selectio
 AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell).
 
 **Ứng viên kế tiếp** (chưa admit; chọn trong portfolio theo promotion rule):
-- [ ] **C2C tier-aware Phase 01** — contract inventory/review và chuẩn bị evidence không kích hoạt
-  ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [phase-01](260927-1100-c2c-anywhere-tier-aware/phase-01-contract.md)).
+- [ ] **C2C Phase 03 slice tiếp theo** — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
+  bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice
+  ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).
 - [ ] **VFS/storage/search research** — parked; chỉ tiếp tục khi owner yêu cầu
   ([plan](261019-1534-vfs-storage-search-research/plan.md)).
 - [ ] **Cellbox physical/production gates** — blocked (Intel vật lý, production). Deferred trong
@@ -35,10 +36,10 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
 
 **C2C program (mở, có gate):**
-- [ ] **Phase 03 remaining proof obligations:** multi-source waiting (`WaitCompletion` v1 chỉ
-  `NET_RX`/`TIMER`), huỷ operation đã dispatch, retained-reply lifetime, sustained admission
-  competition / full-peer-queue fairness (unbounded monopolization). Two-hart wake race: TODO cũ ghi
-  "verified in kernel boundary regressions" nhưng phase file vẫn liệt kê là open **(verify)**.
+- [ ] **Phase 03 remaining proof obligations:** huỷ operation đã dispatch, retained-reply lifetime,
+  sustained admission competition / full-peer-queue fairness (unbounded monopolization). Two-hart
+  wake race đã xong:
+  `async_ipc::tests::deterministic_two_hart_publication_and_wake_races` pass (2026-11-02).
   Witness đã có và phạm vi của chúng:
   [phase-03](260927-1100-c2c-anywhere-tier-aware/phase-03-async-ipc.md);
   contract [Spec 20 §2.6](../docs/specs/20-unified-ipc-contract.md).

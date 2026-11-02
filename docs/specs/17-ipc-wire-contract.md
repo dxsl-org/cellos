@@ -324,6 +324,35 @@ the reason the value is safe against existing owners.
   `scripts/check-lookupservicebound-law1-digests.sh`. Recorded here because §9 is the
   amendment log for a ratified IPC surface and this surface changed — not as a wire
   amendment.
+- 2026-11-02 — **Recorded for a changed syscall surface; no ratified wire rule moved (Law-1 2×
+  confirmed: `.agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md`
+  and `…-cp2-approval.md`).**
+  - **New source:** `api::completion::source::IPC = 1 << 2` (bytes `04 00 00 00`) is appended.
+  - **Mask rule:** `WaitCompletion = 242` takes a non-empty subset of `NET_RX | TIMER | IPC`
+    (`source::is_wait_mask_supported`); `TIMER` still needs a finite timeout. Arguments, the return
+    convention and allowlist bit 42 are unchanged.
+  - **Record:** each successful return writes one v1 24-byte record with exactly one source.
+  - **IPC records:** each terminal operation the caller owns produces at most one IPC record,
+    scoped to `(cell, generation)` and the owner/consumer thread. The record's `result` is the
+    operation token; the terminal kind and bytes remain behind `IpcTake`. A result already reported,
+    or already taken, is never reported again. A record the kernel fails to copy out is re-armed and
+    reported by the next wait.
+  - **Rotation:** ready sources rotate `NET_RX → IPC → TIMER`.
+  - **Mailbox interruption:** a queued raw message interrupts only a mask that names `NET_RX`.
+  - **Reply exception:** a `Send` from the provider currently serving one of the waiter's
+    operations, addressed to that waiter, is not a raw message. It is that operation's reply (the
+    Spec 20 §2.6 immediate-reply bridge), so it produces at most that operation's IPC record and no
+    mailbox interruption.
+  - **Unchanged:** a lone `NET_RX` or `TIMER` wait behaves exactly as before, and
+    `IpcSubmit`…`IpcReply`, `IPC_STATUS`, `WaitForEvent` and `events` are unchanged.
+  - **Allowlist symbol:** `declare_syscalls!` (and `ostd::app_entry!`/`service_entry!`) export the
+    Cell's allowlist static as `__vicell_syscall_allowlist`; the `__ViCell_syscalls` bytes are
+    unchanged. The SDK reads it to use `IpcWait` when the Cell lacks bit 42, so it never issues a
+    denied syscall.
+  - No frame, byte-0 value, envelope, attested tail, buffer size or reply discipline changes.
+  - **Evidence:** `docs/evidence/c2c-multi-source-wait-x86.{txt,log}` at the x86 QEMU/TCG ceiling
+    (NET_RX by host test only; two-CPU lane unforced). The frozen items are pinned by
+    `scripts/check-multi-source-wait-law1-digests.sh`.
 
 ---
 
