@@ -74,15 +74,101 @@ impl Drop for WaiterRegistration<'_> {
 }
 
 /// Validate the source/deadline pair before a queue slot is reserved.
+///
+/// The mask is a non-empty subset of the public sources; `TIMER` needs a
+/// finite deadline to complete against.
 pub(super) fn source_is_valid(mask: u32, deadline: Option<u64>) -> bool {
-    api::completion::source::is_single_supported(mask)
-        && (mask != api::completion::source::TIMER || deadline.is_some())
+    api::completion::source::is_wait_mask_supported(mask)
+        && (mask & api::completion::source::TIMER == 0 || deadline.is_some())
+}
+
+/// Rotation order across completion sources (CP1 §5.5).
+pub(super) const SELECTION_ORDER: [u32; 3] = [
+    api::completion::source::NET_RX,
+    api::completion::source::IPC,
+    api::completion::source::TIMER,
+];
+
+/// A fresh task's rotor names TIMER as last delivered, so the first
+/// multi-source selection starts at NET_RX.
+pub(super) const INITIAL_ROTOR: u8 = 2;
+
+/// The ready source that follows `rotor` in [`SELECTION_ORDER`], with its index.
+///
+/// A source stays eligible until it is delivered, and each delivery moves the
+/// rotor past it, so every ready source is chosen within three selections.
+pub(super) fn select_source(rotor: u8, ready: u32) -> Option<(u32, u8)> {
+    (1..=SELECTION_ORDER.len()).find_map(|step| {
+        let index = (rotor as usize + step) % SELECTION_ORDER.len();
+        let source = SELECTION_ORDER[index];
+        (ready & source != 0).then_some((source, index as u8))
+    })
+}
+
+/// One record chosen for a multi-source completion wait.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct Selection {
+    /// The single source bit this record reports.
+    pub source: u32,
+    /// `NET_RX` mask for NET_RX, the operation token for IPC, 0 for TIMER.
+    pub result: isize,
+    /// A ready NET_RX observation lost the selection and must be returned to
+    /// the level flag ([`super::waker::relevel_net_rx`]) before the wait returns.
+    pub relevel_net_rx: bool,
+    /// Operation records examined for the IPC candidate (0 when IPC not chosen).
+    pub scanned: usize,
+}
+
+/// Choose the one record a multi-source wait returns (CP1 §5.3-5.5).
+///
+/// The caller resolves NET_RX ownership and deadline expiry *outside*
+/// `SCHEDULER` (NET_RX's leaf lock is never taken under it) and passes the
+/// results in; this function runs under `SCHEDULER`, where every IPC terminal
+/// transition is also serialized. A chosen IPC record consumes exactly one
+/// operation's one-shot notification; a ready IPC source that loses stays
+/// latched; TIMER is this call's deadline and is not carried over.
+pub(super) fn select_locked(
+    task: &mut Task,
+    mask: u32,
+    net_rx_ready: bool,
+    timer_expired: bool,
+) -> Option<Selection> {
+    let mut ready = 0;
+    if net_rx_ready && mask & api::completion::source::NET_RX != 0 {
+        ready |= api::completion::source::NET_RX;
+    }
+    if mask & api::completion::source::IPC != 0 && super::async_ipc::has_pending_notification(task)
+    {
+        ready |= api::completion::source::IPC;
+    }
+    if timer_expired && mask & api::completion::source::TIMER != 0 {
+        ready |= api::completion::source::TIMER;
+    }
+    let (source, index) = select_source(task.completion_rotor, ready)?;
+    let (result, scanned) = if source == api::completion::source::IPC {
+        let notification = super::async_ipc::take_notification(task)?;
+        (notification.token as isize, notification.scanned)
+    } else if source == api::completion::source::NET_RX {
+        (api::completion::source::NET_RX as isize, 0)
+    } else {
+        (0, 0)
+    };
+    task.completion_rotor = index;
+    Some(Selection {
+        source,
+        result,
+        relevel_net_rx: ready & api::completion::source::NET_RX != 0
+            && source != api::completion::source::NET_RX,
+        scanned,
+    })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum CompletionParkDecision {
     Parked,
     MailboxPending,
+    /// An owned IPC terminal still owes its one-shot notification.
+    IpcPending,
 }
 
 /// Publish a completion wait only if no already-published IPC must interrupt it.
@@ -90,15 +176,23 @@ pub(super) enum CompletionParkDecision {
 /// The caller holds `SCHEDULER`; keeping the mailbox predicate, outgoing
 /// context handoff, and state write in this one critical section closes both
 /// enqueue-before-park orderings and the state-before-yield SMP window. TIMER
-/// is deliberately deadline-only and therefore ignores the mailbox.
+/// is deliberately deadline-only and therefore ignores the mailbox. The IPC
+/// source checks its pending notification in the same hold: every terminal
+/// transition takes `SCHEDULER` too, so a terminal published before this check
+/// is seen here and one published after it finds the parked state and wakes it.
 pub(super) fn publish_wait_state_locked(
     task: &mut Task,
     tid: usize,
     source: u32,
     deadline: Option<u64>,
 ) -> CompletionParkDecision {
-    if source == api::completion::source::NET_RX && !task.pending_msgs.is_empty() {
+    if source & api::completion::source::NET_RX != 0 && !task.pending_msgs.is_empty() {
         return CompletionParkDecision::MailboxPending;
+    }
+    if source & api::completion::source::IPC != 0
+        && super::async_ipc::has_pending_notification(task)
+    {
+        return CompletionParkDecision::IpcPending;
     }
     super::arm_ipc_block_handoff(tid);
     task.state = TaskState::WaitCompletion { source, deadline };
@@ -146,17 +240,19 @@ pub(super) fn finish_net_rx_wait(
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
 /// and write the result to `out_ptr`.
 ///
-/// `mask` names exactly one source. `deadline` is an absolute tick count;
-/// `None` is valid only for an indefinite `NET_RX` wait because `TIMER` needs a
-/// finite instant to complete against.
+/// `mask` is a non-empty subset of `NET_RX | TIMER | IPC`. `deadline` is an
+/// absolute tick count; `None` is invalid when the mask names `TIMER`, which
+/// needs a finite instant to complete against. A lone `NET_RX` or `TIMER`
+/// keeps its original single-source path; every other mask goes through
+/// [`wait_multi`], which returns exactly one source per call.
 ///
 /// # Returns
 /// `1` when a completion was written to `out_ptr`, `0` when the wait ended with
 /// nothing to report.
 ///
 /// # Errors
-/// - `InvalidInput` — `mask` does not name exactly one source this kernel
-///   serves, or `out_ptr` is null.
+/// - `InvalidInput` — `mask` is empty or names a source this kernel does not
+///   serve, `TIMER` lacks a deadline, or `out_ptr` is null.
 /// - `BufferTooSmall` — `out_ptr` cannot hold a whole record.
 /// - `TryAgain` — the caller's queue has no free slot. This is backpressure, and
 ///   it is reported here, to the cell that caused it, rather than to the
@@ -171,8 +267,8 @@ pub fn wait_completion(
     deadline: Option<u64>,
     out_ptr: usize,
 ) -> Result<usize, SyscallError> {
-    // One known bit only: a submission is made against one source, and a mask
-    // naming two would leave the second one with no reservation of its own.
+    // Every source in the mask shares the one reservation made below; a wait
+    // returns at most one record, so one landing place is always enough.
     if !source_is_valid(mask, deadline) {
         return Err(SyscallError::InvalidInput);
     }
@@ -184,13 +280,24 @@ pub fn wait_completion(
         completion::queue_for(sched, caller_id).ok_or(SyscallError::Unknown)?
     };
     let slot = queue.reserve().ok_or(SyscallError::TryAgain)?;
-    let _waiter = match WaiterRegistration::new(&queue, caller_id, slot, mask) {
+    // Exit cleanup keys on who owns the slot: a NET_RX reservation is owned by
+    // the waker (displaced later as abandoned); otherwise only this waiter holds
+    // it and task exit must release it, exactly as for a lone TIMER wait.
+    let slot_owner = if mask & api::completion::source::NET_RX != 0 {
+        api::completion::source::NET_RX
+    } else {
+        api::completion::source::TIMER
+    };
+    let _waiter = match WaiterRegistration::new(&queue, caller_id, slot, slot_owner) {
         Some(waiter) => waiter,
         None => {
             let _ = queue.release(slot);
             return Err(SyscallError::Unknown);
         }
     };
+    if mask != api::completion::source::NET_RX && mask != api::completion::source::TIMER {
+        return wait_multi(caller_id, mask, deadline, out_ptr, &queue, slot);
+    }
     let is_net_rx = mask == api::completion::source::NET_RX;
     if is_net_rx {
         waker::arm_net_rx(queue.clone(), slot);
@@ -246,6 +353,15 @@ pub fn wait_completion(
             Some(CompletionParkDecision::MailboxPending) => {
                 return finish_net_rx_wait(caller_id, out_ptr, &queue);
             }
+            // A lone NET_RX or TIMER mask never names IPC, so this gate cannot
+            // fire here; it resolves ownership like a record-less interruption.
+            Some(CompletionParkDecision::IpcPending) => {
+                if is_net_rx {
+                    return finish_net_rx_wait(caller_id, out_ptr, &queue);
+                }
+                let _ = queue.release(slot);
+                return Ok(0);
+            }
             Some(CompletionParkDecision::Parked) => {}
             None => {
                 if is_net_rx {
@@ -294,6 +410,366 @@ pub fn wait_completion(
         // ownership resolution. A concurrent source publication wins over the
         // raw-zero path and is drained as a genuine NET_RX record.
         return finish_net_rx_wait(caller_id, out_ptr, &queue);
+    }
+}
+
+/// The multi-source wait: any mask other than a lone `NET_RX` or `TIMER`.
+///
+/// One reservation (`slot`) serves every source. Each round resolves NET_RX
+/// readiness outside `SCHEDULER` (its leaf lock is never taken under it),
+/// then selects under `SCHEDULER` with [`select_locked`], where every IPC
+/// terminal transition is serialized too. Nothing ready parks through
+/// [`publish_wait_state_locked`], which re-checks the mailbox and pending IPC
+/// notifications in the same hold that publishes the state. Exactly one
+/// source is reported; a NET_RX observation that is not reported goes back to
+/// the level flag, and an IPC notification that is not reported stays latched.
+fn wait_multi(
+    caller_id: usize,
+    mask: u32,
+    deadline: Option<u64>,
+    out_ptr: usize,
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+) -> Result<usize, SyscallError> {
+    let has_net_rx = mask & api::completion::source::NET_RX != 0;
+    if has_net_rx {
+        waker::arm_net_rx(queue.clone(), slot);
+    }
+    loop {
+        // Consuming the level flag only after the arm keeps the lost-wakeup
+        // argument of the single-source path: a frame either completed the
+        // reservation (drainable) or left the flag set.
+        let net_rx_ready = has_net_rx
+            && (waker::consume_pending(api::completion::source::NET_RX) != 0
+                || queue.drainable() != 0);
+        let timer_expired = deadline.is_some_and(|at| super::system_ticks() as u64 >= at);
+        let chosen = {
+            let mut guard = super::SCHEDULER.lock();
+            guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .map(|task| select_locked(task, mask, net_rx_ready, timer_expired))
+        };
+        match chosen {
+            None => return abandon_multi(queue, slot, has_net_rx, net_rx_ready),
+            Some(Some(selection)) => {
+                return finish_multi(caller_id, out_ptr, queue, slot, has_net_rx, selection);
+            }
+            Some(None) => {}
+        }
+        // Nothing is ready. A deadline without TIMER ends the wait with no
+        // record, exactly like a lone NET_RX deadline.
+        if timer_expired {
+            return finish_multi_empty(caller_id, out_ptr, queue, slot, has_net_rx);
+        }
+        let park = {
+            let mut guard = super::SCHEDULER.lock();
+            guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                .map(|task| publish_wait_state_locked(task, caller_id, mask, deadline))
+        };
+        match park {
+            None => return abandon_multi(queue, slot, has_net_rx, false),
+            Some(CompletionParkDecision::MailboxPending) => {
+                return finish_multi_empty(caller_id, out_ptr, queue, slot, has_net_rx);
+            }
+            Some(CompletionParkDecision::IpcPending) => continue,
+            Some(CompletionParkDecision::Parked) => super::yield_cpu(),
+        }
+    }
+}
+
+/// Report `selection` and settle every other source's ownership.
+///
+/// A record that cannot be copied out is not lost: an IPC notification is
+/// re-armed for the next wait, and a NET_RX observation goes back to the level
+/// flag. TIMER is this call's deadline and has nothing to restore.
+fn finish_multi(
+    caller_id: usize,
+    out_ptr: usize,
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+    has_net_rx: bool,
+    selection: Selection,
+) -> Result<usize, SyscallError> {
+    let reported = settle_multi(queue, slot, has_net_rx, selection);
+    let written = write_completion(caller_id, out_ptr, reported);
+    if written.is_err() {
+        if reported.source == api::completion::source::IPC {
+            let mut guard = super::SCHEDULER.lock();
+            if let Some(task) = guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&caller_id))
+            {
+                let _ = super::async_ipc::restore_notification(task, reported.result as usize);
+            }
+        } else if reported.source == api::completion::source::NET_RX {
+            waker::relevel_net_rx();
+        }
+    }
+    written
+}
+
+/// Settle every source's ownership for `selection` and build its record.
+///
+/// Runs outside `SCHEDULER`: it takes only the NET_RX leaf lock and the
+/// queue's own lock. On return the reservation is released, any NET_RX
+/// evidence not reported is back in the level flag, and no reservation is
+/// left armed for this waiter.
+pub(super) fn settle_multi(
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+    has_net_rx: bool,
+    selection: Selection,
+) -> Completion {
+    if selection.source == api::completion::source::NET_RX {
+        // The reservation either completed (its record is reported) or the
+        // level flag was the evidence (the released slot carries the record).
+        return loop {
+            match net_rx_cleanup_step(queue) {
+                NetRxCleanupStep::Record(done) => break done,
+                NetRxCleanupStep::NoRecord => {
+                    break Completion {
+                        slot,
+                        source: api::completion::source::NET_RX,
+                        result: selection.result,
+                    }
+                }
+                NetRxCleanupStep::RetryCompleting => core::hint::spin_loop(),
+            }
+        };
+    }
+    let mut relevel = selection.relevel_net_rx;
+    if has_net_rx {
+        relevel |= settle_unreported_net_rx(queue);
+    } else {
+        // Only this waiter holds the slot; no source can complete it.
+        let _ = queue.release(slot);
+    }
+    if relevel {
+        waker::relevel_net_rx();
+    }
+    Completion {
+        slot,
+        source: selection.source,
+        result: selection.result,
+    }
+}
+
+/// Disarm this waiter's NET_RX reservation; `true` when a frame completed it
+/// meanwhile (that record is drained here and must go back to the level flag).
+fn settle_unreported_net_rx(queue: &alloc::sync::Arc<CompletionQueue>) -> bool {
+    loop {
+        match net_rx_cleanup_step(queue) {
+            NetRxCleanupStep::NoRecord => return false,
+            NetRxCleanupStep::Record(_) => return true,
+            NetRxCleanupStep::RetryCompleting => core::hint::spin_loop(),
+        }
+    }
+}
+
+/// End a multi-source wait that has nothing to report (deadline without TIMER,
+/// or a raw message interrupting a mask that names NET_RX). A NET_RX record
+/// that landed meanwhile is still reported, as on the single-source path.
+fn finish_multi_empty(
+    caller_id: usize,
+    out_ptr: usize,
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+    has_net_rx: bool,
+) -> Result<usize, SyscallError> {
+    if has_net_rx {
+        return finish_net_rx_wait(caller_id, out_ptr, queue);
+    }
+    let _ = queue.release(slot);
+    Ok(0)
+}
+
+/// The caller vanished mid-wait: release the reservation and return any NET_RX
+/// evidence to the level flag for the next waiter.
+fn abandon_multi(
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+    has_net_rx: bool,
+    net_rx_seen: bool,
+) -> Result<usize, SyscallError> {
+    let mut relevel = net_rx_seen;
+    if has_net_rx {
+        relevel |= settle_unreported_net_rx(queue);
+    } else {
+        let _ = queue.release(slot);
+    }
+    if relevel {
+        waker::relevel_net_rx();
+    }
+    Err(SyscallError::Unknown)
+}
+
+#[cfg(test)]
+mod tests {
+    //! NET_RX ownership settlement of the multi-source wait, against the real
+    //! global reservation and level flag (serialized by `TEST_STATE_LOCK`).
+
+    use super::*;
+    use crate::task::scheduler::Scheduler;
+    use alloc::boxed::Box;
+    use alloc::sync::Arc;
+    use types::CellId;
+
+    const NET_RX: u32 = api::completion::source::NET_RX;
+    const IPC: u32 = api::completion::source::IPC;
+    const TID: usize = 72_201;
+
+    fn queue() -> Arc<CompletionQueue> {
+        let mut sched = Scheduler::new();
+        sched.tasks.insert(
+            TID,
+            Box::new(Task::new(
+                TID,
+                CellId(72),
+                "msw-settle",
+                alloc::vec::Vec::new(),
+            )),
+        );
+        let queue = completion::queue_for(&mut sched, TID).expect("queue");
+        // Leave no level-flag residue from another test.
+        let _ = waker::consume_pending(NET_RX);
+        queue
+    }
+
+    fn ipc_selection(token: isize) -> Selection {
+        Selection {
+            source: IPC,
+            result: token,
+            relevel_net_rx: false,
+            scanned: 1,
+        }
+    }
+
+    fn settled(queue: &CompletionQueue) -> bool {
+        queue.reserved() == 0 && queue.drainable() == 0
+    }
+
+    #[test]
+    fn ipc_wins_over_a_completed_net_rx_reservation_and_relevels_it() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        waker::arm_net_rx(queue.clone(), slot);
+        let pending = waker::begin_signal_net_rx_for_test().expect("armed reservation");
+        waker::finish_signal_net_rx_for_test(pending);
+        assert_eq!(queue.drainable(), 1, "the frame completed the reservation");
+
+        let record = settle_multi(&queue, slot, true, ipc_selection(77));
+        assert_eq!(
+            record,
+            Completion {
+                slot,
+                source: IPC,
+                result: 77
+            }
+        );
+        assert!(settled(&queue), "reservation drained and released");
+        assert_ne!(
+            waker::consume_pending(NET_RX),
+            0,
+            "the unreported frame is back in the level flag"
+        );
+    }
+
+    #[test]
+    fn ipc_win_waits_out_an_in_flight_net_rx_completion() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        waker::arm_net_rx(queue.clone(), slot);
+        let pending = waker::begin_signal_net_rx_for_test().expect("armed reservation");
+        assert_eq!(
+            net_rx_cleanup_step(&queue),
+            NetRxCleanupStep::RetryCompleting,
+            "the signal owns the reservation mid-publication"
+        );
+        let signaller = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            waker::finish_signal_net_rx_for_test(pending);
+        });
+        let record = settle_multi(&queue, slot, true, ipc_selection(78));
+        signaller.join().unwrap();
+        assert_eq!(record.source, IPC);
+        assert_eq!(record.result, 78);
+        assert!(settled(&queue));
+        assert_ne!(waker::consume_pending(NET_RX), 0);
+    }
+
+    #[test]
+    fn ipc_win_with_an_untouched_reservation_releases_without_relevel() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        waker::arm_net_rx(queue.clone(), slot);
+        let record = settle_multi(&queue, slot, true, ipc_selection(79));
+        assert_eq!(record.result, 79);
+        assert!(settled(&queue));
+        assert_eq!(waker::consume_pending(NET_RX), 0, "no frame, no flag");
+    }
+
+    #[test]
+    fn net_rx_selected_from_the_level_flag_reports_through_the_released_slot() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        waker::arm_net_rx(queue.clone(), slot);
+        let selection = Selection {
+            source: NET_RX,
+            result: NET_RX as isize,
+            relevel_net_rx: false,
+            scanned: 0,
+        };
+        let record = settle_multi(&queue, slot, true, selection);
+        assert_eq!(
+            record,
+            Completion {
+                slot,
+                source: NET_RX,
+                result: NET_RX as isize
+            }
+        );
+        assert!(settled(&queue));
+    }
+
+    #[test]
+    fn abandon_settles_a_completed_reservation_and_a_private_slot() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        waker::arm_net_rx(queue.clone(), slot);
+        let pending = waker::begin_signal_net_rx_for_test().expect("armed reservation");
+        waker::finish_signal_net_rx_for_test(pending);
+        assert_eq!(
+            abandon_multi(&queue, slot, true, false),
+            Err(SyscallError::Unknown)
+        );
+        assert!(settled(&queue));
+        assert_ne!(waker::consume_pending(NET_RX), 0);
+
+        let private = queue.reserve().unwrap();
+        assert_eq!(
+            abandon_multi(&queue, private, false, false),
+            Err(SyscallError::Unknown)
+        );
+        assert!(settled(&queue));
+        assert_eq!(waker::consume_pending(NET_RX), 0);
+    }
+
+    #[test]
+    fn the_waiter_table_is_preallocated_so_registration_never_grows_it() {
+        let queue = queue();
+        for tid in 0..completion::MAX_WAITERS {
+            queue.register_waiter(1_000 + tid);
+        }
+        assert!(queue.waiter_capacity() >= completion::MAX_WAITERS);
+        assert_eq!(queue.waiter_capacity(), completion::MAX_WAITERS);
     }
 }
 

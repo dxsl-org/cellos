@@ -8,7 +8,11 @@
 
 #![allow(unsafe_code)]
 
-use crate::syscall::{sys_get_scheduler_ticks, sys_recv, sys_try_recv, sys_yield, SyscallResult};
+use crate::syscall::{
+    sys_get_scheduler_ticks, sys_recv, sys_try_recv, sys_wait_completion_detailed, sys_yield,
+    SyscallResult, WaitCompletionResult,
+};
+use api::completion::source;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -113,12 +117,131 @@ pub fn take(op: IpcOpId, reply: &mut [u8]) -> Result<IpcTakeResult, IpcError> {
     }
 }
 
-/// Sleep until any result is terminal, or a finite scheduler-tick timeout
-/// expires (one tick is 10 ms). Zero waits without a caller deadline; accepted
-/// operations still have their separate kernel-enforced expiry. The kernel
-/// rechecks results atomically with parking.
+/// Sleep until an owned operation reports a terminal, or a finite
+/// scheduler-tick timeout expires (one tick is 10 ms). Zero waits without a
+/// caller deadline; accepted operations still have their separate
+/// kernel-enforced expiry. The kernel rechecks results atomically with parking.
+///
+/// Where the cell holds `WaitCompletion` authority this parks on its `IPC`
+/// source, which reports each terminal **once**: a result that was already
+/// reported and is still retained does not wake the caller again, so `take`
+/// what you were told about before waiting. Cells without that authority use
+/// `IpcWait`, which wakes while any terminal is retained. Returns `false` on
+/// timeout and on a wait error; use [`wait_any`] to tell them apart.
 pub fn wait(timeout_ticks: u64) -> bool {
-    crate::syscall::sys_ipc_wait(timeout_ticks) == 1
+    matches!(
+        park_for_terminal(timeout_ticks),
+        Ok(Park::Notified(_) | Park::AnyTerminal)
+    )
+}
+
+/// What ended one [`wait_any`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wake {
+    /// A NIC receive frame is ready to drain (the net cell's source).
+    NetRx,
+    /// This exact owned operation reached its terminal; [`take`] it.
+    Ipc(IpcOpId),
+    /// The finite deadline elapsed (`TIMER` was requested).
+    Timer,
+    /// Nothing to report: a deadline elapsed without `TIMER` requested, a raw
+    /// message interrupted a wait naming `NET_RX`, or a NET_RX reservation was
+    /// displaced by a newer waiter.
+    Interrupted,
+}
+
+/// Park on several completion sources at once and report the one that fired.
+///
+/// `sources` is a non-empty set of `api::completion::source::{NET_RX, TIMER,
+/// IPC}`; `TIMER` needs a nonzero `timeout_ticks`, and zero otherwise waits
+/// without a deadline. Ready sources rotate, so none starves another; each IPC
+/// terminal is reported once, and its outcome stays behind [`take`].
+///
+/// # Errors
+/// [`IpcError::Recv`] when the kernel refuses the wait (no `WaitCompletion`
+/// authority, an invalid source set, or a full completion queue), and
+/// [`IpcError::Decode`] for a record whose source this SDK does not know.
+pub fn wait_any(sources: u32, timeout_ticks: u64) -> Result<Wake, IpcError> {
+    decode_wake(sys_wait_completion_detailed(sources, timeout_ticks))
+}
+
+fn decode_wake(result: WaitCompletionResult) -> Result<Wake, IpcError> {
+    match result {
+        WaitCompletionResult::NoRecord => Ok(Wake::Interrupted),
+        WaitCompletionResult::Completion(record) => match record.source {
+            source::IPC if record.result > 0 => Ok(Wake::Ipc(record.result as usize)),
+            source::NET_RX if record.result >= 0 => Ok(Wake::NetRx),
+            source::NET_RX => Ok(Wake::Interrupted),
+            source::TIMER => Ok(Wake::Timer),
+            _ => Err(IpcError::Decode),
+        },
+        WaitCompletionResult::ErrorOrInvalid(_) => Err(IpcError::Recv),
+    }
+}
+
+/// One park of the SDK's operation waits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Park {
+    /// `WaitCompletion(IPC)` reported this operation's terminal, once.
+    Notified(IpcOpId),
+    /// `IpcWait` (no `WaitCompletion` authority): some owned terminal exists.
+    AnyTerminal,
+    /// The caller's tick budget elapsed.
+    Timeout,
+}
+
+/// This Cell's compiled syscall allowlist: the exact value the loader reads
+/// from `__ViCell_syscalls` at spawn, which every thread of the Cell inherits.
+///
+/// `declare_syscalls!`, `app_entry!` and `service_entry!` export their
+/// allowlist static under this symbol; that strong definition overrides this
+/// weak default. A Cell that declares no allowlist is permit-all, which the
+/// default (`u64::MAX`) mirrors exactly as the loader does.
+#[linkage = "weak"]
+#[no_mangle]
+#[allow(non_upper_case_globals)]
+pub static __vicell_syscall_allowlist: u64 = u64::MAX;
+
+/// Whether this Cell may call `WaitCompletion`, decided from its own compiled
+/// allowlist so the SDK never issues a syscall it would be denied.
+fn completion_wait_permitted() -> bool {
+    // SAFETY: the symbol is a plain `u64` defined either here (weak default) or
+    // by the Cell's allowlist macro; it is never written after load. A
+    // volatile read keeps the weak value from being folded at compile time.
+    let allowlist =
+        unsafe { core::ptr::read_volatile(core::ptr::addr_of!(__vicell_syscall_allowlist)) };
+    allowlist_permits_completion_wait(allowlist)
+}
+
+const fn allowlist_permits_completion_wait(allowlist: u64) -> bool {
+    match api::syscall::ViSyscall::WaitCompletion.allowlist_bit() {
+        Some(bit) => allowlist & (1u64 << bit) != 0,
+        None => true,
+    }
+}
+
+/// Park for an owned operation's terminal on the syscall this Cell may use:
+/// the `WaitCompletion` IPC source with bit-42 authority, `IpcWait` without
+/// it. Every failure of the chosen syscall is returned to the caller.
+fn park_for_terminal(timeout_ticks: u64) -> Result<Park, IpcError> {
+    if !completion_wait_permitted() {
+        return match crate::syscall::sys_ipc_wait(timeout_ticks) {
+            1 => Ok(Park::AnyTerminal),
+            0 => Ok(Park::Timeout),
+            _ => Err(IpcError::Recv),
+        };
+    }
+    let sources = if timeout_ticks == 0 {
+        source::IPC
+    } else {
+        source::IPC | source::TIMER
+    };
+    match decode_wake(sys_wait_completion_detailed(sources, timeout_ticks))? {
+        Wake::Ipc(operation) => Ok(Park::Notified(operation)),
+        Wake::Timer => Ok(Park::Timeout),
+        // Neither can end an `IPC`/`IPC|TIMER` wait.
+        Wake::NetRx | Wake::Interrupted => Err(IpcError::Recv),
+    }
 }
 
 /// Abandon one exact operation. A pre-dispatch request becomes Cancelled;
@@ -234,8 +357,10 @@ impl PendingCall {
     /// `Ok(None)` means the budget ran out with the operation still outstanding — it is
     /// neither lost nor failed, so do not read it as an outcome; keep waiting, or decide
     /// per the contract that the caller's own deadline has passed.
-    /// Each timed round is measured in scheduler ticks. A retained terminal for
-    /// another call is left untouched and yields CPU rather than consuming a round.
+    /// Each timed round is measured in scheduler ticks. A terminal reported for
+    /// another call is left retained for that call's own `take`; with
+    /// `WaitCompletion` authority it is reported once and never re-wakes this
+    /// wait, and under `IpcWait` the caller yields rather than spinning on it.
     pub fn wait_and_take(
         &self,
         reply: &mut [u8],
@@ -257,18 +382,19 @@ impl PendingCall {
                     }
                     ticks
                 };
-                match crate::syscall::sys_ipc_wait(ticks) {
-                    0 => break,
+                match park_for_terminal(ticks)? {
+                    Park::Timeout => break,
+                    // This call's own terminal, or another one: retry `take`.
+                    Park::Notified(_) => {}
                     // IpcWait sees every owned terminal, including results the
                     // caller deliberately retains. Do not spend a timed round
                     // on an unrelated terminal or starve this call's provider.
-                    1 => {
+                    Park::AnyTerminal => {
                         if let Some(completion) = self.try_take(reply)? {
                             return Ok(Some(completion));
                         }
                         sys_yield();
                     }
-                    _ => return Err(IpcError::Recv),
                 }
             }
         }
@@ -383,12 +509,12 @@ fn exchange(
             other_terminal = false;
             continue;
         }
-        match crate::syscall::sys_ipc_wait(ticks) {
-            0 => {}
-            1 => other_terminal = true,
-            _ => {
+        match park_for_terminal(ticks) {
+            Ok(Park::Timeout | Park::Notified(_)) => {}
+            Ok(Park::AnyTerminal) => other_terminal = true,
+            Err(error) => {
                 discard_call(&call);
-                return Err(IpcError::Recv);
+                return Err(error);
             }
         }
     }
@@ -485,6 +611,58 @@ mod tests {
             "pre-dispatch cancellation prevents execution"
         );
         assert!(!cancelled.is_uncertain());
+    }
+
+    #[test]
+    fn wait_path_follows_the_compiled_allowlist_without_probing() {
+        use super::{allowlist_permits_completion_wait, completion_wait_permitted};
+        use api::syscall::ViSyscall;
+        let bit = ViSyscall::WaitCompletion.allowlist_bit().unwrap();
+        assert_eq!(ViSyscall::WaitForEvent.allowlist_bit(), Some(bit));
+        assert!(allowlist_permits_completion_wait(u64::MAX));
+        assert!(allowlist_permits_completion_wait(1 << bit));
+        assert!(!allowlist_permits_completion_wait(!(1u64 << bit)));
+        assert!(!allowlist_permits_completion_wait(0));
+        // This host test binary declares no allowlist: the weak default is the
+        // loader's permit-all reading of an absent section.
+        assert!(completion_wait_permitted());
+    }
+
+    #[test]
+    fn completion_records_decode_to_exactly_one_wake_source() {
+        use super::{decode_wake, Wake};
+        use crate::syscall::WaitCompletionResult;
+        use api::completion::{source, ViCompletion, RESULT_ABANDONED};
+        let record = |src, result| {
+            WaitCompletionResult::Completion(ViCompletion {
+                slot: 3,
+                source: src,
+                result,
+            })
+        };
+        assert_eq!(decode_wake(record(source::IPC, 4242)), Ok(Wake::Ipc(4242)));
+        assert_eq!(decode_wake(record(source::TIMER, 0)), Ok(Wake::Timer));
+        assert_eq!(
+            decode_wake(record(source::NET_RX, source::NET_RX as i64)),
+            Ok(Wake::NetRx)
+        );
+        assert_eq!(
+            decode_wake(record(source::NET_RX, RESULT_ABANDONED)),
+            Ok(Wake::Interrupted)
+        );
+        assert_eq!(decode_wake(record(source::IPC, 0)), Err(IpcError::Decode));
+        assert_eq!(
+            decode_wake(record(source::UNSPECIFIED, 1)),
+            Err(IpcError::Decode)
+        );
+        assert_eq!(
+            decode_wake(WaitCompletionResult::NoRecord),
+            Ok(Wake::Interrupted)
+        );
+        assert_eq!(
+            decode_wake(WaitCompletionResult::ErrorOrInvalid(-1)),
+            Err(IpcError::Recv)
+        );
     }
 }
 

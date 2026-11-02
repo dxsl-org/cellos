@@ -2392,16 +2392,19 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
     ret as u32
 }
 
-/// Submit a wait against one kernel event source and block for its result.
+/// Submit a wait against a set of kernel completion sources and block until one
+/// of them reports.
 ///
 /// The call reserves a slot on this cell's completion queue before it parks, so
-/// the source always has somewhere to put the result. Deadline behavior depends
-/// on the source: `NET_RX` accepts zero for an indefinite wait and returns
-/// [`WaitCompletionResult::NoRecord`] when a finite timeout expires; `TIMER`
-/// requires a nonzero duration and returns a completion with `result = 0` when
-/// that duration expires.
+/// a source always has somewhere to put the result. Deadline behavior depends
+/// on the sources: without `TIMER`, zero waits indefinitely and an expired
+/// finite timeout returns [`WaitCompletionResult::NoRecord`]; with `TIMER`, a
+/// nonzero duration is required and expiry returns a `TIMER` completion with
+/// `result = 0`. An `IPC` completion's `result` is the token of one owned
+/// operation that reached its terminal; each terminal is reported once.
 ///
-/// `mask` names exactly one source — see `api::completion::source`.
+/// `mask` is a non-empty set of `api::completion::source` bits; the record
+/// names exactly one of them.
 ///
 /// # Errors
 /// [`WaitCompletionResult::ErrorOrInvalid`] preserves a rejected syscall return

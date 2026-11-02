@@ -100,8 +100,11 @@ pub enum TaskState {
         mask: u32,
         deadline: Option<u64>,
     },
-    /// Blocked in `WaitCompletion`. Source completions wake through the queue;
-    /// a finite TIMER wakes when `deadline` elapses.
+    /// Blocked in `WaitCompletion`. `source` is the wait's source mask (any
+    /// non-empty subset of `NET_RX | TIMER | IPC`). NET_RX completions wake
+    /// through the queue, IPC terminals through `async_ipc::wake`, a queued raw
+    /// message only when the mask names NET_RX, and a finite deadline through
+    /// the timer sweep.
     WaitCompletion {
         source: u32,
         deadline: Option<u64>,
@@ -572,10 +575,18 @@ pub struct Task {
     /// to `Ready` before the syscall has released its reservation. Task exit
     /// takes this field and defers TIMER release outside the scheduler lock.
     pub completion_wait: Option<CompletionWait>,
+    /// Last source a multi-source completion wait delivered, as an index into
+    /// `completion_wait::SELECTION_ORDER`; rotation starts after it so one ready
+    /// source cannot starve another. One byte, no allocation.
+    pub completion_rotor: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CompletionWait {
+    /// Who owns `slot`, as a source class: `NET_RX` when the NET_RX waker holds
+    /// the reservation (it is displaced later as abandoned), otherwise `TIMER`,
+    /// meaning only this waiter holds it and task exit must release it. A
+    /// multi-source mask without NET_RX is recorded as `TIMER` for that reason.
     pub source: u32,
     pub slot: crate::task::completion::SlotId,
 }
@@ -710,6 +721,7 @@ impl Task {
             staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
             completion: None,
             completion_wait: None,
+            completion_rotor: super::completion_wait::INITIAL_ROTOR,
         }
     }
 

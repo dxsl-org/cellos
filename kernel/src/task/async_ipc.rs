@@ -45,6 +45,10 @@ pub struct Operation {
     peer_generation: u64,
     deadline: u64,
     phase: Phase,
+    /// Phase 03d one-shot completion notification: set once a multi-source
+    /// `WaitCompletion` has reported this terminal. Never consulted by
+    /// `IpcWait`/`IpcTake`, which keep their level/consume semantics.
+    notified: bool,
     reply: ipc_wire::IpcWireMessage,
     #[cfg(cellos_p01_trace)]
     _p01_obligation: ObservedOperation,
@@ -141,6 +145,89 @@ impl Operations {
             .iter()
             .any(|op| matches!(op.phase, Phase::Terminal { .. }))
     }
+    fn notifiable(op: &Operation, waiter: Waiter) -> bool {
+        !op.notified
+            && matches!(op.phase, Phase::Terminal { .. })
+            && (op.owner_cell, op.owner_generation) == (waiter.cell, waiter.generation)
+            && (op.consumer_tid == waiter.tid || op.owner_tid == waiter.tid)
+    }
+}
+
+/// Identity a notification is scoped to: always read from the waiting task's
+/// own scheduler record, never from caller input.
+#[derive(Clone, Copy)]
+struct Waiter {
+    tid: usize,
+    cell: u64,
+    generation: u64,
+}
+
+impl Waiter {
+    fn of(task: &Task) -> Self {
+        Self {
+            tid: task.id,
+            cell: task.cell_id.0,
+            generation: task.cell_generation,
+        }
+    }
+}
+
+/// One consumed IPC completion notification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct IpcNotification {
+    /// Exact operation token; the terminal kind/bytes stay behind `IpcTake`.
+    pub token: usize,
+    /// Operation records examined to choose it (bounded by `MAX_OPERATIONS`).
+    pub scanned: usize,
+}
+
+/// Whether `task` owns a terminal operation that still owes its one-shot
+/// notification. Caller holds `SCHEDULER`, the lock every terminal
+/// transition also holds, so this check and a park decision are atomic.
+pub(crate) fn has_pending_notification(task: &Task) -> bool {
+    let waiter = Waiter::of(task);
+    task.async_operations
+        .0
+        .iter()
+        .any(|op| Operations::notifiable(op, waiter))
+}
+
+/// Consume the notification of the oldest submission (lowest token) among
+/// `task`'s un-notified terminal operations. The operation itself stays
+/// retained and charged until `take`. No allocation; one pass over at most
+/// `MAX_OPERATIONS` records. Caller holds `SCHEDULER`.
+pub(crate) fn take_notification(task: &mut Task) -> Option<IpcNotification> {
+    let waiter = Waiter::of(task);
+    let ops = &mut task.async_operations.0;
+    let scanned = ops.len();
+    let op = ops
+        .iter_mut()
+        .filter(|op| Operations::notifiable(op, waiter))
+        .min_by_key(|op| op.id)?;
+    op.notified = true;
+    Some(IpcNotification {
+        token: op.id,
+        scanned,
+    })
+}
+
+/// Re-arm a consumed notification whose record could not be copied out, so the
+/// next wait reports it again. Only the waiter's own retained terminal can be
+/// re-armed; a token taken meanwhile, or another incarnation's, is left alone.
+/// Caller holds `SCHEDULER`.
+pub(crate) fn restore_notification(task: &mut Task, token: usize) -> bool {
+    let waiter = Waiter::of(task);
+    let Some(op) = task.async_operations.find_mut(token) else {
+        return false;
+    };
+    let restorable = op.notified
+        && matches!(op.phase, Phase::Terminal { .. })
+        && (op.owner_cell, op.owner_generation) == (waiter.cell, waiter.generation)
+        && (op.consumer_tid == waiter.tid || op.owner_tid == waiter.tid);
+    if restorable {
+        op.notified = false;
+    }
+    restorable
 }
 
 impl Drop for Operations {
@@ -157,9 +244,16 @@ fn live(task: &Task) -> bool {
     !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
 }
 
+/// Make the owner runnable after one of its operations turned terminal: an
+/// `IpcWait` park, or a completion wait whose mask names the IPC source.
 fn wake(sched: &mut Scheduler, owner: usize) {
     if let Some(task) = sched.tasks.get_mut(&owner) {
-        if matches!(task.state, TaskState::WaitIpc { .. }) {
+        let waiting = match task.state {
+            TaskState::WaitIpc { .. } => true,
+            TaskState::WaitCompletion { source, .. } => source & api::completion::source::IPC != 0,
+            _ => false,
+        };
+        if waiting {
             task.state = TaskState::Ready;
             let priority = sched.push_ready(owner);
             sched.pend_preempt_if_needed(priority);
@@ -282,6 +376,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
             peer_generation: peer_binding.1,
             deadline: (super::system_ticks() as u64).saturating_add(OPERATION_TIMEOUT_TICKS),
             phase: Phase::Queued,
+            notified: false,
             reply,
             #[cfg(cellos_p01_trace)]
             _p01_obligation: p01_obligation,
@@ -866,6 +961,58 @@ pub fn expire(sched: &mut Scheduler, now: u64) {
         }
     }
 }
+
+/// Boot self-test seam for the multi-source wait: record one accepted,
+/// already-dispatched operation from `owner` to `peer` without a user copy.
+///
+/// Synthetic self-test tasks have no address space, so they cannot go through
+/// [`submit`]. Identity is still read from the scheduler records exactly as
+/// `submit` reads it, and the token comes from the same global counter, so the
+/// operation is indistinguishable from a real one to every terminal path.
+/// Caller holds `SCHEDULER`.
+pub(super) fn selftest_accept_dispatched(
+    sched: &mut Scheduler,
+    owner: usize,
+    peer: usize,
+) -> Option<usize> {
+    let (peer_cell, peer_generation) = sched
+        .tasks
+        .get(&peer)
+        .map(|task| (task.cell_id.0, task.cell_generation))?;
+    let token = new_token().ok()?;
+    let reply = ipc_wire::IpcWireMessage::try_new(
+        ipc_wire::IpcWireHeader {
+            sender_tid: peer,
+            sender_cell_id: peer_cell,
+            sender_generation: peer_generation,
+            delivery_id: 0,
+            async_op: token,
+        },
+        &[],
+    )
+    .ok()?;
+    let task = sched.tasks.get_mut(&owner)?;
+    let (owner_cell, owner_generation) = (task.cell_id.0, task.cell_generation);
+    task.async_operations
+        .push(Operation {
+            id: token,
+            owner_cell,
+            owner_generation,
+            owner_tid: owner,
+            consumer_tid: owner,
+            peer_tid: peer,
+            peer_cell,
+            peer_generation,
+            deadline: u64::MAX,
+            phase: Phase::Dispatched,
+            notified: false,
+            reply,
+            #[cfg(cellos_p01_trace)]
+            _p01_obligation: ObservedOperation(None),
+        })
+        .ok()?;
+    Some(token)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -899,6 +1046,7 @@ mod tests {
             peer_generation: 7,
             deadline: 10,
             phase: Phase::Queued,
+            notified: false,
             reply: test_reply(),
             #[cfg(cellos_p01_trace)]
             _p01_obligation: ObservedOperation(None),
@@ -1178,6 +1326,7 @@ mod tests {
                 peer_generation,
                 deadline: 10,
                 phase,
+                notified: false,
                 reply: test_reply(),
                 #[cfg(cellos_p01_trace)]
                 _p01_obligation: ObservedOperation(None),
@@ -1803,6 +1952,601 @@ mod tests {
                 kind: api::syscall::ipc_status::INDETERMINATE,
                 ..
             }
+        ));
+    }
+
+    // ---- Multi-source completion wait: IPC source (Phase 03d CP1 §5, §9) ----
+
+    use super::super::completion_wait::{select_locked, select_source, Selection};
+    const IPC: u32 = api::completion::source::IPC;
+    const NET_RX: u32 = api::completion::source::NET_RX;
+    const TIMER: u32 = api::completion::source::TIMER;
+    const ALL_SOURCES: u32 = NET_RX | IPC | TIMER;
+
+    /// Thread-local allocation counter for the wait-path measurement (M2).
+    mod alloc_probe {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::cell::Cell;
+
+        std::thread_local! {
+            static COUNT: Cell<usize> = const { Cell::new(0) };
+        }
+
+        pub struct Counting;
+
+        fn bump() {
+            let _ = COUNT.try_with(|count| count.set(count.get() + 1));
+        }
+
+        // SAFETY: every call forwards unchanged to `System`; the counter is a
+        // const-initialised thread-local `Cell` that never allocates.
+        unsafe impl GlobalAlloc for Counting {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                bump();
+                unsafe { System.alloc(layout) }
+            }
+            unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+                bump();
+                unsafe { System.alloc_zeroed(layout) }
+            }
+            unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+                bump();
+                unsafe { System.realloc(ptr, layout, new_size) }
+            }
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                unsafe { System.dealloc(ptr, layout) }
+            }
+        }
+
+        #[global_allocator]
+        static GLOBAL: Counting = Counting;
+
+        pub fn allocations() -> usize {
+            COUNT.with(|count| count.get())
+        }
+    }
+
+    fn settle(sched: &mut Scheduler, peer: usize, token: usize) {
+        assert_eq!(reply_in_sched(sched, peer, token, 0, 0), Ok(()));
+    }
+
+    fn notify(sched: &mut Scheduler) -> Option<usize> {
+        take_notification(sched.tasks.get_mut(&OWNER).unwrap()).map(|n| n.token)
+    }
+
+    fn select(sched: &mut Scheduler, mask: u32, net_rx: bool, timer: bool) -> Option<Selection> {
+        select_locked(sched.tasks.get_mut(&OWNER).unwrap(), mask, net_rx, timer)
+    }
+
+    fn park(sched: &mut Scheduler, mask: u32) {
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitCompletion {
+            source: mask,
+            deadline: None,
+        };
+    }
+
+    fn kind(sched: &Scheduler, token: usize) -> Option<u32> {
+        match sched.tasks[&OWNER].async_operations.find(token)?.phase {
+            Phase::Terminal { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn ipc_notification_is_one_shot_retained_and_cleared_by_take() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        add_operation(&mut sched, OWNER, PROVIDER, 21, Phase::Dispatched);
+        add_operation(&mut sched, OWNER, PROVIDER, 22, Phase::Dispatched);
+        assert!(!has_pending_notification(&sched.tasks[&OWNER]));
+        assert_eq!(notify(&mut sched), None);
+
+        settle(&mut sched, PROVIDER, 22);
+        assert!(has_pending_notification(&sched.tasks[&OWNER]));
+        assert_eq!(notify(&mut sched), Some(22));
+        assert_eq!(notify(&mut sched), None, "a terminal is reported once");
+        assert!(
+            sched.tasks[&OWNER].async_operations.has_terminal(),
+            "IpcWait keeps its level view of the retained result"
+        );
+        assert_eq!(kind(&sched, 22), Some(api::syscall::ipc_status::REPLY));
+        assert_eq!(
+            reply_in_sched(&mut sched, PROVIDER, 22, 0, 0),
+            Err(Failure::Invalid),
+            "a duplicate reply cannot re-arm the notification"
+        );
+        assert_eq!(notify(&mut sched), None);
+
+        settle(&mut sched, PROVIDER, 21);
+        sched
+            .tasks
+            .get_mut(&OWNER)
+            .unwrap()
+            .async_operations
+            .remove(21);
+        assert_eq!(
+            notify(&mut sched),
+            None,
+            "take before the wait leaves no record"
+        );
+    }
+
+    #[test]
+    fn ipc_notifications_follow_submission_order_with_a_bounded_scan() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        let first = 30;
+        for token in first..first + MAX_OPERATIONS {
+            add_operation(&mut sched, OWNER, PROVIDER, token, Phase::Dispatched);
+        }
+        for token in (first..first + MAX_OPERATIONS).rev() {
+            settle(&mut sched, PROVIDER, token);
+        }
+        let mut max_scanned = 0;
+        for expected in first..first + MAX_OPERATIONS {
+            let n = take_notification(sched.tasks.get_mut(&OWNER).unwrap()).unwrap();
+            assert_eq!(n.token, expected, "oldest submission first");
+            max_scanned = max_scanned.max(n.scanned);
+        }
+        assert_eq!(notify(&mut sched), None);
+        assert!(max_scanned <= MAX_OPERATIONS);
+        std::println!("P03D-M1 max_scanned={max_scanned} bound={MAX_OPERATIONS}");
+    }
+
+    #[test]
+    fn source_rotation_reaches_every_ready_source_within_three_selections() {
+        let order = [NET_RX, IPC, TIMER];
+        assert_eq!(select_source(0, 0), None);
+        for rotor in 0..3u8 {
+            for ready in 1..8u32 {
+                let ready_bits = (0..3)
+                    .filter(|i| ready & (1 << i) != 0)
+                    .fold(0, |acc, i| acc | order[i]);
+                let expected = (1..=3)
+                    .map(|step| (rotor as usize + step) % 3)
+                    .find(|&i| ready_bits & order[i] != 0)
+                    .unwrap();
+                assert_eq!(
+                    select_source(rotor, ready_bits),
+                    Some((order[expected], expected as u8))
+                );
+            }
+        }
+        let mut rotor = 2;
+        let mut last = [0usize; 3];
+        let mut counts = [0usize; 3];
+        for round in 1..=300 {
+            let (_, index) = select_source(rotor, NET_RX | IPC | TIMER).unwrap();
+            let index = index as usize;
+            assert!(
+                round - last[index] <= 3,
+                "a ready source waits at most three selections"
+            );
+            last[index] = round;
+            counts[index] += 1;
+            rotor = index as u8;
+        }
+        assert_eq!(counts, [100, 100, 100]);
+    }
+
+    #[test]
+    fn sustained_multi_producer_selection_meets_the_stated_bound() {
+        use alloc::collections::BTreeMap;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        // Peer A (PROVIDER) answers constantly, newest first, to try to overtake;
+        // peer B (WORKER) answers rarely, oldest first. NET_RX and TIMER are
+        // ready on every call, the adversarial case for the IPC source.
+        let mut next = 10_000usize;
+        for i in 0..MAX_OPERATIONS {
+            let peer = if i % 2 == 0 { PROVIDER } else { WORKER };
+            add_operation(&mut sched, OWNER, peer, next, Phase::Dispatched);
+            next += 1;
+        }
+        let dispatched = |sched: &Scheduler, peer: usize| -> Vec<usize> {
+            sched.tasks[&OWNER]
+                .async_operations
+                .0
+                .iter()
+                .filter(|op| op.peer_tid == peer && matches!(op.phase, Phase::Dispatched))
+                .map(|op| op.id)
+                .collect()
+        };
+        let mut armed: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+        let (mut returns, mut ipc_records) = (0usize, 0usize);
+        let (mut max_returns, mut max_overtakes, mut max_scanned) = (0usize, 0usize, 0usize);
+        let (mut last_net, mut last_timer, mut max_net_gap, mut max_timer_gap) = (0, 0, 0, 0);
+        while returns < 10_000 {
+            for token in dispatched(&sched, PROVIDER).into_iter().rev().take(2) {
+                settle(&mut sched, PROVIDER, token);
+                armed.insert(token, (returns, ipc_records));
+            }
+            if returns % 37 == 0 {
+                if let Some(&token) = dispatched(&sched, WORKER).first() {
+                    settle(&mut sched, WORKER, token);
+                    armed.insert(token, (returns, ipc_records));
+                }
+            }
+            let chosen = select(&mut sched, ALL_SOURCES, true, true).unwrap();
+            returns += 1;
+            if chosen.source == IPC {
+                let token = chosen.result as usize;
+                let (armed_at, records_at) = armed.remove(&token).expect("only armed tokens");
+                max_returns = max_returns.max(returns - armed_at);
+                max_overtakes = max_overtakes.max(ipc_records - records_at);
+                max_scanned = max_scanned.max(chosen.scanned);
+                ipc_records += 1;
+                let peer = sched.tasks[&OWNER]
+                    .async_operations
+                    .find(token)
+                    .unwrap()
+                    .peer_tid;
+                sched
+                    .tasks
+                    .get_mut(&OWNER)
+                    .unwrap()
+                    .async_operations
+                    .remove(token);
+                add_operation(&mut sched, OWNER, peer, next, Phase::Dispatched);
+                next += 1;
+            } else if chosen.source == NET_RX {
+                max_net_gap = max_net_gap.max(returns - last_net);
+                last_net = returns;
+            } else {
+                max_timer_gap = max_timer_gap.max(returns - last_timer);
+                last_timer = returns;
+            }
+        }
+        while let Some(chosen) = select(&mut sched, IPC, false, false) {
+            assert!(armed.remove(&(chosen.result as usize)).is_some());
+        }
+        assert!(armed.is_empty(), "every armed terminal was reported");
+        assert!(
+            max_returns <= 3 * MAX_OPERATIONS,
+            "max_returns={max_returns}"
+        );
+        assert!(
+            max_overtakes < MAX_OPERATIONS,
+            "max_overtakes={max_overtakes}"
+        );
+        assert!(max_net_gap <= 3 && max_timer_gap <= 3);
+        assert!(max_scanned <= MAX_OPERATIONS);
+        std::println!(
+            "P03D-A8 returns={returns} ipc_records={ipc_records} max_returns={max_returns} \
+             bound={} max_overtakes={max_overtakes} max_net_gap={max_net_gap} \
+             max_timer_gap={max_timer_gap} max_scanned={max_scanned}",
+            3 * MAX_OPERATIONS
+        );
+    }
+
+    #[test]
+    fn stale_and_late_replies_never_satisfy_another_operation_or_generation() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+
+        // Expired dispatched work is notified once; the late reply is refused.
+        add_operation(&mut sched, OWNER, PROVIDER, 41, Phase::Dispatched);
+        expire(&mut sched, u64::MAX);
+        assert_eq!(notify(&mut sched), Some(41));
+        assert_eq!(
+            reply_in_sched(&mut sched, PROVIDER, 41, 0, 0),
+            Err(Failure::Invalid)
+        );
+        assert_eq!(notify(&mut sched), None);
+        assert_eq!(
+            kind(&sched, 41),
+            Some(api::syscall::ipc_status::INDETERMINATE)
+        );
+
+        // A replacement provider generation cannot settle or arm the old token.
+        add_operation(&mut sched, OWNER, PROVIDER, 42, Phase::Dispatched);
+        assert_eq!(
+            reply_in_sched(&mut sched, FOREIGN_GENERATION, 42, 0, 0),
+            Err(Failure::Invalid)
+        );
+        assert_eq!(
+            reply_in_sched(&mut sched, FOREIGN_CELL, 42, 0, 0),
+            Err(Failure::Invalid)
+        );
+        assert_eq!(notify(&mut sched), None);
+        settle(&mut sched, PROVIDER, 42);
+        assert_eq!(notify(&mut sched), Some(42));
+        assert_eq!(notify(&mut sched), None);
+
+        // A terminal owned by an older incarnation is never reported to a newer one.
+        add_operation(&mut sched, OWNER, PROVIDER, 43, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 43);
+        sched.tasks.get_mut(&OWNER).unwrap().cell_generation += 1;
+        assert!(!has_pending_notification(&sched.tasks[&OWNER]));
+        assert_eq!(notify(&mut sched), None);
+        sched.tasks.get_mut(&OWNER).unwrap().cell_generation -= 1;
+
+        // Another Cell's waiter never sees this owner's token, even if a record
+        // naming it were misplaced into that waiter's own list.
+        let misplaced = sched
+            .tasks
+            .get_mut(&OWNER)
+            .unwrap()
+            .async_operations
+            .remove(43)
+            .unwrap();
+        let foreign = sched.tasks.get_mut(&FOREIGN_CELL).unwrap();
+        foreign.async_operations.push(misplaced).unwrap();
+        assert!(!has_pending_notification(foreign));
+        assert_eq!(take_notification(foreign), None);
+    }
+
+    #[test]
+    fn two_hart_model_rows_for_the_ipc_source() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        let ready = |sched: &Scheduler| matches!(sched.tasks[&OWNER].state, TaskState::Ready);
+
+        // R1 pre-park publication: the terminal lands before the waiter publishes.
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        add_operation(&mut sched, OWNER, PROVIDER, 51, Phase::Dispatched);
+        serve(&mut sched, PROVIDER, OWNER, 51);
+        assert_eq!(
+            reply_current_in_sched(&mut sched, PROVIDER, OWNER, 0, 0),
+            Some(Ok(()))
+        );
+        let task = sched.tasks.get_mut(&OWNER).unwrap();
+        assert_eq!(
+            super::super::completion_wait::publish_wait_state_locked(
+                task,
+                OWNER,
+                IPC | TIMER,
+                Some(1)
+            ),
+            super::super::completion_wait::CompletionParkDecision::IpcPending
+        );
+        assert!(ready(&sched), "the waiter does not park");
+        assert_eq!(
+            select(&mut sched, IPC | TIMER, false, false)
+                .unwrap()
+                .result,
+            51
+        );
+
+        // R2 parked wake, and the unchanged NET_RX-only behaviour.
+        add_operation(&mut sched, OWNER, PROVIDER, 52, Phase::Dispatched);
+        park(&mut sched, NET_RX);
+        settle(&mut sched, PROVIDER, 52);
+        assert!(
+            !ready(&sched),
+            "a NET_RX-only wait is not woken by an IPC terminal"
+        );
+        assert_eq!(notify(&mut sched), Some(52));
+        add_operation(&mut sched, OWNER, PROVIDER, 53, Phase::Dispatched);
+        park(&mut sched, IPC | TIMER);
+        settle(&mut sched, PROVIDER, 53);
+        assert!(
+            ready(&sched),
+            "the IPC source wakes the parked waiter in the same hold"
+        );
+        super::super::hart_local::ready::remove_from_all(OWNER);
+        assert_eq!(select(&mut sched, IPC, false, false).unwrap().result, 53);
+
+        // R3 peer death against a parked waiter.
+        add_operation(&mut sched, OWNER, PROVIDER, 54, Phase::Dispatched);
+        park(&mut sched, IPC);
+        peer_died(&mut sched, PROVIDER, 1_003, 7);
+        assert!(ready(&sched));
+        super::super::hart_local::ready::remove_from_all(OWNER);
+        assert_eq!(select(&mut sched, IPC, false, false).unwrap().result, 54);
+        assert_eq!(kind(&sched, 54), Some(api::syscall::ipc_status::PEER_GONE));
+
+        // R4 expire versus reply, both orders: one terminal, one notification.
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        add_operation(&mut sched, OWNER, WORKER, 55, Phase::Dispatched);
+        settle(&mut sched, WORKER, 55);
+        expire(&mut sched, u64::MAX);
+        assert_eq!(kind(&sched, 55), Some(api::syscall::ipc_status::REPLY));
+        add_operation(&mut sched, OWNER, WORKER, 56, Phase::Dispatched);
+        expire(&mut sched, u64::MAX);
+        assert_eq!(
+            reply_in_sched(&mut sched, WORKER, 56, 0, 0),
+            Err(Failure::Invalid)
+        );
+        assert_eq!(
+            kind(&sched, 56),
+            Some(api::syscall::ipc_status::INDETERMINATE)
+        );
+        assert_eq!(notify(&mut sched), Some(55));
+        assert_eq!(notify(&mut sched), Some(56));
+        assert_eq!(notify(&mut sched), None);
+
+        // R5 take wins over notification.
+        add_operation(&mut sched, OWNER, PROVIDER, 57, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 57);
+        sched
+            .tasks
+            .get_mut(&OWNER)
+            .unwrap()
+            .async_operations
+            .remove(57);
+        assert_eq!(select(&mut sched, IPC, false, false), None);
+
+        // R6 NET_RX and IPC at the same instant: one record now, the other kept.
+        add_operation(&mut sched, OWNER, PROVIDER, 58, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 58);
+        sched.tasks.get_mut(&OWNER).unwrap().completion_rotor = 2;
+        let first = select(&mut sched, ALL_SOURCES, true, false).unwrap();
+        assert_eq!((first.source, first.relevel_net_rx), (NET_RX, false));
+        assert_eq!(
+            select(&mut sched, ALL_SOURCES, false, false)
+                .unwrap()
+                .result,
+            58
+        );
+        add_operation(&mut sched, OWNER, PROVIDER, 59, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 59);
+        sched.tasks.get_mut(&OWNER).unwrap().completion_rotor = 0;
+        let ipc_first = select(&mut sched, ALL_SOURCES, true, false).unwrap();
+        assert_eq!(ipc_first.result, 59);
+        assert!(
+            ipc_first.relevel_net_rx,
+            "the losing NET_RX observation is re-levelled"
+        );
+
+        // R7 deadline and IPC together: TIMER is this call's deadline only.
+        add_operation(&mut sched, OWNER, PROVIDER, 60, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 60);
+        sched.tasks.get_mut(&OWNER).unwrap().completion_rotor = 0;
+        assert_eq!(
+            select(&mut sched, IPC | TIMER, false, true).unwrap().result,
+            60
+        );
+        assert_eq!(select(&mut sched, IPC | TIMER, false, false), None);
+
+        // R8 a raw mailbox message interrupts only a mask that names NET_RX and
+        // never consumes a pending IPC notification.
+        add_operation(&mut sched, OWNER, PROVIDER, 61, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 61);
+        park(&mut sched, NET_RX | IPC);
+        let cause =
+            super::super::wake_after_ipc_publish(sched.tasks.get_mut(&OWNER).unwrap(), false);
+        assert!(cause == super::super::IpcWakeCause::NetRxCompletionWait);
+        park(&mut sched, IPC);
+        let cause =
+            super::super::wake_after_ipc_publish(sched.tasks.get_mut(&OWNER).unwrap(), false);
+        assert!(cause == super::super::IpcWakeCause::None);
+        assert_eq!(notify(&mut sched), Some(61));
+        super::super::hart_local::ready::remove_from_all(OWNER);
+    }
+
+    #[test]
+    fn retained_terminals_rewake_ipc_wait_but_not_a_one_shot_waiter() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        for token in 71..79 {
+            add_operation(&mut sched, OWNER, PROVIDER, token, Phase::Dispatched);
+            settle(&mut sched, PROVIDER, token);
+            assert_eq!(notify(&mut sched), Some(token));
+        }
+        add_operation(&mut sched, OWNER, PROVIDER, 79, Phase::Dispatched);
+        // E3: IpcWait's gate is `has_terminal`; the one-shot gate is the
+        // pending notification. Same 1000 park attempts, retained results kept.
+        let task = &sched.tasks[&OWNER];
+        let ipc_wait_spurious = (0..1000)
+            .filter(|_| task.async_operations.has_terminal())
+            .count();
+        let one_shot_spurious = (0..1000).filter(|_| has_pending_notification(task)).count();
+        assert_eq!((ipc_wait_spurious, one_shot_spurious), (1000, 0));
+        std::println!(
+            "P03D-E3 retained=8 ipcwait_spurious={ipc_wait_spurious}/1000 \
+             oneshot_spurious={one_shot_spurious}/1000"
+        );
+    }
+
+    #[test]
+    fn wait_path_selection_does_not_allocate() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        for token in 100..100 + MAX_OPERATIONS {
+            add_operation(&mut sched, OWNER, PROVIDER, token, Phase::Dispatched);
+            settle(&mut sched, PROVIDER, token);
+        }
+        // A Cell's queue is created once, charged to the kernel; count after it.
+        let created = alloc_probe::allocations();
+        let queue = super::super::completion::queue_for(&mut sched, OWNER).expect("queue");
+        let creation_allocations = alloc_probe::allocations() - created;
+        let before = alloc_probe::allocations();
+        let mut records = 0;
+        {
+            let again = super::super::completion::queue_for(&mut sched, OWNER).expect("queue");
+            let slot = again.reserve().expect("slot");
+            for tid in 0..super::super::completion::MAX_WAITERS {
+                again.register_waiter(5_000 + tid);
+            }
+            for tid in 0..super::super::completion::MAX_WAITERS {
+                let _ = again.clear_waiter(5_000 + tid);
+            }
+            assert!(again.release(slot));
+            let task = sched.tasks.get_mut(&OWNER).unwrap();
+            let _ = super::super::completion_wait::publish_wait_state_locked(
+                task,
+                OWNER,
+                ALL_SOURCES,
+                Some(1),
+            );
+            while select_locked(task, ALL_SOURCES, true, true).is_some()
+                && records < 3 * MAX_OPERATIONS
+            {
+                records += 1;
+                let _ = has_pending_notification(task);
+            }
+        }
+        drop(queue);
+        let allocated = alloc_probe::allocations() - before;
+        assert_eq!(
+            allocated, 0,
+            "wait-side selection allocated {allocated} times"
+        );
+        // Every pre-03d field is a word, `Phase` or `IpcWireMessage`, so the
+        // pre-03d size is their sum; the one-shot flag may cost one alignment unit.
+        let pre_03d = 9 * core::mem::size_of::<u64>()
+            + core::mem::size_of::<Phase>()
+            + core::mem::size_of::<ipc_wire::IpcWireMessage>();
+        let op_size = core::mem::size_of::<Operation>();
+        #[cfg(not(cellos_p01_trace))]
+        assert!(
+            op_size <= pre_03d + 8,
+            "Operation grew from {pre_03d} to {op_size}"
+        );
+        std::println!(
+            "P03D-M2 records={records} wait_path_allocations={allocated} \
+             queue_creation_allocations={creation_allocations} \
+             operation_bytes_pre={pre_03d} operation_bytes_now={op_size} task_rotor_bytes={}",
+            core::mem::size_of::<u8>()
+        );
+    }
+
+    #[test]
+    fn a_notification_whose_record_was_not_delivered_is_re_armed_once() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = fixture();
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
+        add_operation(&mut sched, OWNER, PROVIDER, 91, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 91);
+        assert_eq!(notify(&mut sched), Some(91));
+        let owner = sched.tasks.get_mut(&OWNER).unwrap();
+        assert!(restore_notification(owner, 91));
+        assert!(
+            !restore_notification(owner, 91),
+            "only a consumed notification re-arms"
+        );
+        assert_eq!(
+            notify(&mut sched),
+            Some(91),
+            "reported again after the failed copy"
+        );
+        assert_eq!(notify(&mut sched), None);
+        // A taken operation cannot be re-armed.
+        sched
+            .tasks
+            .get_mut(&OWNER)
+            .unwrap()
+            .async_operations
+            .remove(91);
+        assert!(!restore_notification(
+            sched.tasks.get_mut(&OWNER).unwrap(),
+            91
+        ));
+        // Another incarnation cannot re-arm this owner's token.
+        add_operation(&mut sched, OWNER, PROVIDER, 92, Phase::Dispatched);
+        settle(&mut sched, PROVIDER, 92);
+        assert_eq!(notify(&mut sched), Some(92));
+        sched.tasks.get_mut(&OWNER).unwrap().cell_generation += 1;
+        assert!(!restore_notification(
+            sched.tasks.get_mut(&OWNER).unwrap(),
+            92
         ));
     }
 }

@@ -10,6 +10,9 @@
 // keep `no_std`.
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(target_os = "none", feature(alloc_error_handler))]
+// The SDK's weak default for the Cell's exported syscall allowlist
+// (`ipc::__vicell_syscall_allowlist`); a Cell's own declaration overrides it.
+#![feature(linkage)]
 
 extern crate alloc;
 

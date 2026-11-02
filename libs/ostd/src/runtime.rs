@@ -251,6 +251,7 @@ macro_rules! app_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
+        #[export_name = "__vicell_syscall_allowlist"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         // The attribute belongs to the bare-metal target only: a hosted test
@@ -272,6 +273,7 @@ macro_rules! app_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
+        #[export_name = "__vicell_syscall_allowlist"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         // The attribute belongs to the bare-metal target only: a hosted test
@@ -303,6 +305,7 @@ macro_rules! app_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
+        #[export_name = "__vicell_syscall_allowlist"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         // The attribute belongs to the bare-metal target only: a hosted test
@@ -419,6 +422,7 @@ macro_rules! service_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
+        #[export_name = "__vicell_syscall_allowlist"]
         pub static VICELL_SYSCALLS: u64 = $crate::runtime::service_syscall_set($bio, $net, $spawn);
 
         // The attribute belongs to the bare-metal target only: a hosted test

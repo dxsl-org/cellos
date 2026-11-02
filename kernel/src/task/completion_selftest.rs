@@ -116,8 +116,13 @@ fn source_validation_is_fail_closed() -> bool {
     if super::completion_wait::source_is_valid(0, Some(1)) {
         return fail("the zero source mask was accepted");
     }
-    if super::completion_wait::source_is_valid(net_rx | timer, Some(1)) {
-        return fail("a multi-source submission was accepted");
+    // Phase 03d (closure amendment A1): a mixed mask is a valid submission,
+    // but a mixed mask naming TIMER still needs a finite deadline.
+    if !super::completion_wait::source_is_valid(net_rx | timer, Some(1)) {
+        return fail("a finite multi-source submission was rejected");
+    }
+    if super::completion_wait::source_is_valid(net_rx | timer, None) {
+        return fail("an indefinite multi-source TIMER wait was accepted");
     }
     if super::completion_wait::source_is_valid(1 << 31, Some(1)) {
         return fail("an unknown source bit was accepted");

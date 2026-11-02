@@ -18,6 +18,9 @@ const BOOT_TIMEOUT: u64 = 45;
 const SCENARIO_TIMEOUT: u64 = 90;
 /// Only the local witness adds the real 3000-tick (~30 s) expiry window.
 const LOCAL_SCENARIO_TIMEOUT: u64 = SCENARIO_TIMEOUT + 45;
+/// Phase 03d adds the real 3000-tick (~30 s) operation expiry plus the M5 and
+/// sustained-load legs to `bench async-lifecycle`.
+const MSW_SCENARIO_TIMEOUT: u64 = SCENARIO_TIMEOUT + 120;
 
 const START: &str = "[local-lifecycle] START";
 /// Leg 0: the additive `LookupServiceBound = 429` resolved a real service.
@@ -217,34 +220,63 @@ fn x86_dead_provider_terminates_sync_and_async_calls() {
 /// operation when that peer dies mid-flight. The measurements (latency, wait rounds)
 /// are printed by the scenario and recorded in
 /// `docs/evidence/c2c-async-lifecycle-x86.{txt,log}`; this test pins the contract.
+/// Phase 03d adds the multi-source `WaitCompletion` legs (`MSW-*`).
 #[test]
 fn x86_bounded_calls_complete_exactly_once_and_terminalise_on_peer_death() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot_x86_bios(&lifecycle_iso_path());
+    let qemu = QemuRunner::boot_x86_bios(&lifecycle_iso_path());
+    assert_async_lifecycle(qemu, "-smp 1");
+}
+
+/// Phase 03d A6 lane: the same scenario on a qualified two-CPU topology. The
+/// interleaving is not forced; the deterministic host model is the race proof.
+#[test]
+fn x86_multi_source_wait_holds_on_two_cpus() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_x86_bios_smp(&lifecycle_iso_path(), 2);
+    assert_async_lifecycle(qemu, "-smp 2");
+}
+
+fn assert_async_lifecycle(mut qemu: QemuRunner, topology: &str) {
     qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!(
-            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            "x86_64 shell prompt not reached ({topology}): {e}\n--- output ---\n{}",
             qemu.dump()
         )
     });
 
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("bench async-lifecycle");
-    qemu.wait_for("[async-lifecycle] PASS", SCENARIO_TIMEOUT).unwrap_or_else(|e| {
-        panic!(
-            "async lifecycle scenario did not complete: {e}\n--- output ---\n{}",
-            qemu.dump()
-        )
-    });
+    qemu.wait_for("[async-lifecycle] PASS", MSW_SCENARIO_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "async lifecycle scenario did not complete ({topology}): {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
     let output = qemu.dump();
+    if topology == "-smp 2" {
+        assert!(
+            output.contains("[x86-smp] topology online=2"),
+            "two-CPU lane did not bring the second CPU online\n--- output ---\n{output}"
+        );
+    }
 
     // The scenario's own failure marker must be absent: every leg asserts itself, so
     // reaching PASS is not enough evidence on its own.
     assert!(
         !output.contains("[async-lifecycle] FAIL"),
         "the async lifecycle scenario reported a failure\n--- output ---\n{output}"
+    );
+    // Phase 03d: the SDK chooses its wait from the Cell's own allowlist, so a
+    // Cell without WaitCompletion authority (bench) must never be denied one.
+    assert!(
+        !output.contains("denied for tid"),
+        "a syscall was denied during the scenario ({topology})\n--- output ---\n{output}"
     );
 
     // Leg 1: eight outstanding calls, eight completions, none lost, none mis-correlated
@@ -299,5 +331,62 @@ fn x86_bounded_calls_complete_exactly_once_and_terminalise_on_peer_death() {
             death_line.contains(expected),
             "mid-flight-death leg is missing {expected}: {death_line}"
         );
+    }
+
+    // Phase 03d: the multi-source caller (completion path, bit 42) and its legs.
+    assert!(
+        output.contains("[async-lifecycle] MSW PASS"),
+        "multi-source caller did not report success\n--- output ---\n{output}"
+    );
+    for (marker, expected) in [
+        (
+            "[async-lifecycle] MSW-REPLY ",
+            &["records=8", "dup=0", "foreign=0", "rereport=0", "wrong_seq=0"][..],
+        ),
+        ("[async-lifecycle] MSW-M5 ", &["pass=true"][..]),
+        (
+            "[async-lifecycle] MSW-MIXED ",
+            &[
+                "timer=true",
+                "interrupted_by_raw=true",
+                "ipc_after_raw=true",
+                "raw_ignored_without_netrx=true",
+                "ipc_second=true",
+                "netrx_records=0",
+            ][..],
+        ),
+        (
+            "[async-lifecycle] MSW-DEATH ",
+            &["records=4", "peer_gone=4", "dup=0", "unterminal=0"][..],
+        ),
+        (
+            "[async-lifecycle] MSW-STARVATION ",
+            &["b_done=8", "b_during_flood=8", "lost=0", "dup=0", "foreign=0"][..],
+        ),
+        (
+            "[async-lifecycle] MSW-DEADLINE ",
+            &["timer=true", "op_expiry=true", "terminal=Indeterminate"][..],
+        ),
+        (
+            "[async-lifecycle] MSW-STALE ",
+            &[
+                "late_reply_refused=true",
+                "fresh_reply=true",
+                "stale_records=0",
+                "other_records=0",
+                "quiet_after=true",
+            ][..],
+        ),
+    ] {
+        let line = output
+            .lines()
+            .find(|line| line.contains(marker))
+            .unwrap_or_else(|| panic!("{marker} line missing ({topology})\n{output}"));
+        for needle in expected {
+            assert!(
+                line.contains(needle),
+                "{marker} is missing {needle} ({topology}): {line}"
+            );
+        }
     }
 }

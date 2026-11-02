@@ -122,8 +122,19 @@ pub struct CompletionQueue {
 }
 
 impl CompletionQueue {
-    fn new(cell: CellId) -> Self {
-        Self {
+    /// Capacity of the pre-sized waiter table (test observation only).
+    #[cfg(test)]
+    pub(crate) fn waiter_capacity(&self) -> usize {
+        self.waiters.lock().capacity()
+    }
+
+    /// A queue whose waiter table already holds [`MAX_WAITERS`] entries, so
+    /// [`register_waiter`](Self::register_waiter) never allocates on the wait
+    /// path. `None` when the table cannot be reserved.
+    fn new(cell: CellId) -> Option<Self> {
+        let mut waiters = Vec::new();
+        waiters.try_reserve_exact(MAX_WAITERS).ok()?;
+        Some(Self {
             cell,
             ring: Spinlock::new(Ring {
                 slots: [Slot::Free; QUEUE_CAPACITY],
@@ -133,12 +144,12 @@ impl CompletionQueue {
                 #[cfg(cellos_p01_trace)]
                 p01_obligations: [None; QUEUE_CAPACITY],
             }),
-            waiters: Spinlock::new(Vec::new()),
+            waiters: Spinlock::new(waiters),
             waiter: AtomicUsize::new(0),
             wake_requested: AtomicBool::new(false),
             #[cfg(cellos_p01_trace)]
             p01_tid: AtomicUsize::new(0),
-        }
+        })
     }
 
     #[cfg(cellos_p01_trace)]
@@ -425,8 +436,12 @@ impl Drop for CompletionQueue {
 /// The queue serving `tid`'s cell, created on first use.
 ///
 /// Threads of one cell share one queue, so the handle is looked up across the
-/// cell before a new one is allocated. Returns `None` only when `tid` names no
-/// live task.
+/// cell before a new one is allocated. Returns `None` when `tid` names no live task
+/// or the queue cannot be allocated.
+///
+/// The queue and its fixed waiter table are kernel bookkeeping, charged to the
+/// kernel (cell 0) as `async_ipc::Operations::push` charges its storage. They
+/// are allocated once per Cell here, so later waits allocate nothing.
 ///
 /// Call from a submitting context with `SCHEDULER` held. The append path never
 /// comes here — it uses the handle it was given, which is the reason it needs no
@@ -436,19 +451,26 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
     if let Some(existing) = sched.tasks.get(&tid).and_then(|t| t.completion.clone()) {
         return Some(existing);
     }
-    let queue = sched
+    let queue = match sched
         .tasks
         .values()
         .filter(|t| t.cell_id == cell)
         .find_map(|t| t.completion.clone())
-        .unwrap_or_else(|| {
+    {
+        Some(shared) => shared,
+        None => {
             #[cfg(cellos_p01_trace)]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::COMPLETION_SHARED,
             );
-            Arc::new(CompletionQueue::new(cell))
-        });
+            let previous = super::hart_local::current_cell_id();
+            super::hart_local::set_current_cell_id(0);
+            let created = CompletionQueue::new(cell).map(Arc::new);
+            super::hart_local::set_current_cell_id(previous);
+            created?
+        }
+    };
     #[cfg(cellos_p01_trace)]
     if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
         queue.p01_bind(owner);

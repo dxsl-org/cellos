@@ -736,11 +736,19 @@ pub enum ViSyscall {
     /// free slot refuses here, where the caller can act on it, rather than in
     /// the interrupt handler that is trying to report a result.
     ///
-    /// Source-specific deadline semantics are deliberate:
+    /// `mask` is a non-empty subset of `NET_RX | TIMER | IPC`
+    /// ([`crate::completion::source::is_wait_mask_supported`]); one return
+    /// reports exactly one source. Source-specific semantics are deliberate:
     /// - `NET_RX`: zero waits indefinitely; a finite deadline that expires
-    ///   releases the reservation and reports 0 with no record.
+    ///   releases the reservation and reports 0 with no record. A queued raw
+    ///   IPC message interrupts a wait whose mask names `NET_RX` with 0.
     /// - `TIMER`: a finite deadline is required, and expiry writes a completion
     ///   whose source is `TIMER` and whose result is 0.
+    /// - `IPC`: one record per terminal operation the caller owns (exact
+    ///   `(cell, generation)` and owner/consumer thread); `result` is the
+    ///   operation token. The terminal kind and bytes stay behind `IpcTake`.
+    ///   A result already reported, or already taken, is never reported again.
+    /// - Several ready sources rotate (`NET_RX → IPC → TIMER`), so none starves.
     ///
     /// Distinct from [`Self::WaitForEvent`], which reports only *that* an event
     /// bit fired. This reports *which submission* finished and with what result,
@@ -1002,11 +1010,15 @@ pub const VFS_MUTATE_DECLARATION_BIT: u8 = 63;
 /// Allowlist bitmask declaring authority to mutate VFS state.
 pub const VFS_MUTATE_DECLARATION_MASK: u64 = 1u64 << VFS_MUTATE_DECLARATION_BIT;
 
+/// The static is also exported as `__vicell_syscall_allowlist`, so the SDK can
+/// read the Cell's own allowlist (exactly the value the loader reads from the
+/// section) and pick a syscall without probing one it may be denied.
 #[macro_export]
 macro_rules! declare_syscalls {
     ($($syscall:ident),* $(,)?) => {
         #[used]
         #[link_section = "__ViCell_syscalls"]
+        #[export_name = "__vicell_syscall_allowlist"]
         pub static VICELL_SYSCALLS: u64 = const {
             let mut mask: u64 = 0u64;
             $(
@@ -1416,10 +1428,11 @@ impl From<usize> for ViSyscall {
 
 /// Kernel event bit masks for `WaitForEvent` / `signal_event`.
 ///
-/// The same bits name a source for `WaitCompletion`, where one bit selects the
-/// source a submission is made against. `WaitForEvent` accepts any combination;
-/// `WaitCompletion` accepts exactly one bit, because a submission is made
-/// against one source.
+/// The same bits name sources for `WaitCompletion`, which also accepts
+/// [`crate::completion::source::IPC`]; that source is not an event bit and
+/// `WaitForEvent` never fires it. `WaitForEvent` accepts any combination;
+/// `WaitCompletion` accepts any non-empty combination of its sources and
+/// reports exactly one per return.
 pub mod events {
     /// A NIC RX frame is available for the net cell to drain.
     pub const NET_RX: u32 = crate::completion::source::NET_RX;

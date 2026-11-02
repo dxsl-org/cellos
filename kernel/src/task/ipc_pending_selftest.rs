@@ -888,6 +888,78 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
         || fail("try_recv did not preserve Rename/VfsMutate/vfs_mutate gate separation")
 }
 
+/// Multi-source selection: one parked waiter sees NET_RX, an IPC terminal and
+/// its deadline exactly once each within three selections.
+///
+/// This runs on production boots, so it never touches the global NET_RX
+/// reservation or level flag: NET_RX readiness is a local value handed to the
+/// selector, exactly where the wait loop passes its own observation. The IPC
+/// terminal is a real peer-death transition on a seeded dispatched operation.
+/// The syscall validator must accept the mixed mask only with a finite
+/// deadline, and reject unknown bits next to IPC. The real reservation and
+/// level-flag settlement is covered by the host tests in `completion_wait`.
+fn multi_source_wait_reports_each_source_once() -> bool {
+    use super::completion_wait as cw;
+    const NET_RX: u32 = api::completion::source::NET_RX;
+    const TIMER: u32 = api::completion::source::TIMER;
+    const IPC: u32 = api::completion::source::IPC;
+    let mask = NET_RX | IPC | TIMER;
+
+    let syscall_rule = cw::source_is_valid(IPC, None)
+        && cw::source_is_valid(mask, Some(1))
+        && !cw::source_is_valid(mask, None)
+        && !cw::source_is_valid(IPC | (1 << 3), Some(1));
+
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    // A NET_RX observation, held locally: the selector consumes it once.
+    let mut net_rx_level = true;
+
+    let mut token = None;
+    let mut woke = false;
+    let mut gate = None;
+    let mut records = [(0u32, 0isize); 4];
+    let mut releveled = false;
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        token = super::async_ipc::selftest_accept_dispatched(sched, RECEIVER, SENDER);
+        if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
+            task.state = TaskState::WaitCompletion {
+                source: mask,
+                deadline: None,
+            };
+        }
+        super::async_ipc::peer_died(sched, SENDER, TEST_CELL, 1);
+        if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
+            woke = task.state == TaskState::Ready;
+            gate = Some(cw::publish_wait_state_locked(task, RECEIVER, mask, Some(1)));
+            for record in &mut records {
+                if let Some(chosen) = cw::select_locked(task, mask, net_rx_level, true) {
+                    *record = (chosen.source, chosen.result);
+                    if chosen.source == NET_RX {
+                        net_rx_level = false;
+                    }
+                    releveled |= chosen.relevel_net_rx;
+                }
+            }
+        }
+    }
+    // The NET_RX observation was reported first, so nothing had to be re-levelled.
+    let not_relevelled = !releveled;
+    reset();
+
+    let ipc_record = token.map(|token| (IPC, token as isize));
+    let ok = syscall_rule
+        && not_relevelled
+        && token.is_some()
+        && woke
+        && gate == Some(cw::CompletionParkDecision::IpcPending)
+        && records[0] == (NET_RX, NET_RX as isize)
+        && Some(records[1]) == ipc_record
+        && records[2] == (TIMER, 0)
+        && records[3] == (TIMER, 0);
+    ok || fail("multi-source wait did not deliver NET_RX, IPC and TIMER once each")
+}
+
 /// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
@@ -904,7 +976,8 @@ pub fn self_test() -> bool {
         & heap_payload_refunds_receiver_quota()
         & death_wake_precedes_later_message()
         & pending_drain_keeps_sender_context_without_relocking()
-        & try_recv_attestation_writes_identity_trailer();
+        & try_recv_attestation_writes_identity_trailer()
+        & multi_source_wait_reports_each_source_once();
     if ok {
         log::info!("[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)");
     }

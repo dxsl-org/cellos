@@ -21,6 +21,9 @@ api::declare_syscalls![
     LookupService,
     ResolveCellOwner,
     SetTimer,
+    // Phase 03d multi-source caller (`c2c-msw-caller`): test-cell authority for
+    // the completion source; bit 42 is shared with WaitForEvent.
+    WaitCompletion,
     StateRestore,
     Exit,
     Yield
@@ -68,6 +71,11 @@ fn cell_main() {
         "c2c-client" => scenarios::c2c_broker_oracle::run_client(),
         "c2c-provider" => scenarios::local_service_lifecycle::run_provider(),
         "c2c-slow-parked" => scenarios::async_lifecycle::run_slow_parked(),
+        "c2c-msw-caller" => scenarios::async_lifecycle::run_msw_caller(),
+        "c2c-msw-echo" => scenarios::async_lifecycle::run_msw_echo(),
+        "c2c-msw-slow" => scenarios::async_lifecycle::run_msw_slow(),
+        "c2c-msw-hold" => scenarios::async_lifecycle::run_msw_hold(),
+        "c2c-msw-raw" => scenarios::async_lifecycle::run_msw_raw(),
         "c2c-nested-reply" => scenarios::local_service_lifecycle::run_nested_provider(),
         "c2c-reply-loop" => scenarios::local_service_lifecycle::run_reply_loop(),
         "c2c-cancel-reply" => scenarios::local_service_lifecycle::run_cancel_provider(),

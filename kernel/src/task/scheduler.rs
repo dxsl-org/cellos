@@ -2305,7 +2305,7 @@ impl Scheduler {
                     } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
-                        timed_out = *source != api::completion::source::TIMER;
+                        timed_out = *source & api::completion::source::TIMER == 0;
                     }
                     // WaitIrq: IRQ-only wake — no deadline, no timeout.
                     // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).

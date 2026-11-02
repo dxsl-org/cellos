@@ -877,6 +877,12 @@ impl QemuRunner {
         }
     }
 
+    /// [`Self::boot_x86_bios`] with `cpus` vCPUs (`-smp`) and no extra devices,
+    /// for lanes that need the qualified two-CPU topology on the plain ISO.
+    pub fn boot_x86_bios_smp(iso: &str, cpus: usize) -> Self {
+        Self::boot_x86_q35(iso, cpus, &[])
+    }
+
     /// Boot x86_64 q35 with Limine BIOS, explicit accelerator ("tcg" or "kvm"),
     /// virtio keyboard/tablet, and active QMP monitor for screendump and input injection.
     pub fn boot_x86_bios_with_accel(iso: &str, accel: &str) -> Self {

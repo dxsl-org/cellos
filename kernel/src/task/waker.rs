@@ -45,6 +45,17 @@ pub fn has_any_pending() -> bool {
     NET_RX_PENDING.load(Ordering::Relaxed)
 }
 
+/// Return a NET_RX observation that a multi-source wait did not deliver to the
+/// level flag, so the next NET_RX waiter still sees it.
+///
+/// The NET_RX source is a "drain the ring" hint: restoring the flag costs at
+/// worst one spurious wake, while dropping it would strand a frame. A lone
+/// atomic store, so it is safe with or without `SCHEDULER` held and never
+/// touches the leaf `NET_RX_WAIT` lock.
+pub fn relevel_net_rx() {
+    NET_RX_PENDING.store(true, Ordering::Release);
+}
+
 /// Record `slot` on `queue` as the landing place for the next RX frame.
 ///
 /// Call from the submitting cell's own context, never from an interrupt: a

@@ -343,7 +343,7 @@ fn wake_after_ipc_publish(target: &mut Task, recv_eligible: bool) -> IpcWakeCaus
     } else if matches!(
         target.state,
         TaskState::WaitCompletion { source, .. }
-            if source == api::completion::source::NET_RX
+            if source & api::completion::source::NET_RX != 0
     ) {
         IpcWakeCause::NetRxCompletionWait
     } else {
