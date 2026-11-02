@@ -433,13 +433,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         };
 
         let info = crate::acpi::parse(rsdp, &mut map_physical);
-        log::info!(
-            "[acpi] gates: madt={} hpet={} mcfg={} dmar={}",
-            info.lapic_base != 0 && info.ioapic_base != 0,
-            info.hpet_base != 0,
-            info.ecam_base != 0,
-            info.dmar_base != 0
-        );
+        // The logger is installed after the heap, so `log` would drop this.
+        crate::early_uart::text("[acpi] gates: madt=");
+        crate::early_uart::flag(info.lapic_base != 0 && info.ioapic_base != 0);
+        crate::early_uart::text(" hpet=");
+        crate::early_uart::flag(info.hpet_base != 0);
+        crate::early_uart::text(" mcfg=");
+        crate::early_uart::flag(info.ecam_base != 0);
+        crate::early_uart::text(" dmar=");
+        crate::early_uart::flag(info.dmar_base != 0);
+        crate::early_uart::text("\n");
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
         let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();
@@ -640,7 +643,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
             log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
         } else {
-            log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
+            // Fail-closed decision; `log` is not live yet and would drop it.
+            crate::early_uart::text("[x86-gate] timer CLOSED: validated MADT + HPET required\n");
             #[cfg(cellos_g1_cpu)]
             panic!("G1 private measurement requires validated MADT and HPET");
         }
