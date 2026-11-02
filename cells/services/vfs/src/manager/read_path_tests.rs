@@ -670,3 +670,23 @@ fn marks_follow_fat_name_matching_and_component_boundaries() {
     assert!(may_alias_within("/tmp/é/x", "/"));
     assert!(!may_alias_within("/tmp/é", "/tmp/e"));
 }
+
+#[test]
+fn recursive_removal_clears_a_native_data_tree_but_never_srv() {
+    let mut vfs = manager();
+    let data = vfs.mounts.add_backend(Box::new(cellosfs("/data")));
+    vfs.mounts.mount("/data", data);
+    let srv = vfs.mounts.add_backend(Box::new(cellosfs("/srv")));
+    vfs.mounts.mount("/srv", srv);
+    for root in ["/data/t", "/srv/t"] {
+        ok(&mut vfs, WRITER, &VfsRequest::Mkdir(root));
+        ok(&mut vfs, WRITER, &VfsRequest::Mkdir(&format!("{root}/sub")));
+        ok(&mut vfs, WRITER, &VfsRequest::Write { path: &format!("{root}/sub/f"), content: b"f" });
+    }
+    ok(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/data/t"));
+    assert_eq!(vfs.stat("/data/t"), None);
+    assert_eq!(vfs.stat("/data/t/sub/f"), None);
+    // `/srv` keys are removed one at a time under their namespace reservation.
+    assert_eq!(call(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/srv/t")), Reply::Err(ERR_DENIED));
+    assert_eq!(vfs.stat("/srv/t/sub/f"), Some((1, false)));
+}

@@ -118,8 +118,13 @@ pub(crate) fn handle_path_request(
         VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
 
         VfsRequest::RmdirRecursive(p) => {
+            // `/srv` Rmdir/Unlink each hold an exclusive namespace reservation
+            // on their key; a whole subtree has no such reservation, so `/srv`
+            // entries are removed one at a time instead.
             if !vfs.access.can_remove_tree(caller, p)
                 || *p == *"/"
+                || p == "/srv"
+                || p.starts_with("/srv/")
                 || vfs.is_mount_point(p)
                 || vfs.is_mount_ancestor(p)
             {

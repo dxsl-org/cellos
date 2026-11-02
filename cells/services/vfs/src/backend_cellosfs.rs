@@ -69,6 +69,29 @@ pub(crate) fn clear_staging<D: cellos_fs::disk::BlockDevice>(fs: &mut CellosFs<D
     }
     Ok(())
 }
+/// Directory levels below the root of one recursive removal.
+const RECURSIVE_MAX_DEPTH: usize = 32;
+/// Entries, the root included, that one recursive removal may delete.
+const RECURSIVE_MAX_ENTRIES: usize = 4096;
+
+/// Append `dir`'s subtree to `out` children-first, ending with `dir` itself.
+/// Returns `Ok(false)` when the tree exceeds a bound; `out` is then discarded.
+fn collect_tree<D: cellos_fs::disk::BlockDevice>(
+    fs: &mut CellosFs<D>, dir: &str, depth: usize, out: &mut Vec<(String, bool)>,
+) -> Result<bool, FsError> {
+    for (name, directory, _) in fs.list_dir(dir)? {
+        let child = format!("{dir}/{name}");
+        if directory {
+            if depth == 0 || !collect_tree(fs, &child, depth - 1, out)? { return Ok(false); }
+        } else {
+            out.push((child, false));
+        }
+        if out.len() >= RECURSIVE_MAX_ENTRIES { return Ok(false); }
+    }
+    out.push((String::from(dir), true));
+    Ok(true)
+}
+
 impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
     fn rel_path<'a>(&self, path: &'a str) -> Option<&'a str> {
         let rel = path.strip_prefix(self.prefix)?;
@@ -232,7 +255,32 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
         }
         self.mutate(Operation::Unlink, path, |fs| fs.unlink(rel))
     }
-    fn rmdir_recursive(&mut self, _: &str) -> bool { false }
+    /// Collect the whole tree read-only, then remove it child-first through the
+    /// same per-entry `unlink`/`rmdir` mutations, each synced. A tree over the
+    /// depth or entry bound is refused before anything is removed. If a removal
+    /// fails, the entries removed before it stay removed, the entries after it
+    /// (always including the root) remain, the failing entry is left as its
+    /// failed mutation left it, and the instance is poisoned like any other
+    /// failed mutation.
+    fn rmdir_recursive(&mut self, path: &str) -> bool {
+        let Some(rel) = self.rel_path(path) else { return false };
+        if rel.trim_matches('/').is_empty() { return false; }
+        let Some(Some(entries)) = self.read(Operation::Rmdir, path, |fs| {
+            if !fs.lookup(rel)?.is_dir() { return Ok(None); }
+            let mut entries = Vec::new();
+            Ok(collect_tree(fs, rel.trim_end_matches('/'), RECURSIVE_MAX_DEPTH, &mut entries)?.then_some(entries))
+        }) else { return false };
+        for (child, directory) in entries {
+            let full = format!("{}{child}", self.prefix);
+            let removed = if directory {
+                self.mutate(Operation::Rmdir, &full, |fs| fs.rmdir(&child))
+            } else {
+                self.mutate(Operation::Unlink, &full, |fs| fs.unlink(&child))
+            };
+            if !removed { return false; }
+        }
+        true
+    }
     fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
         let (Some(old), Some(new)) = (self.rel_path(old), self.rel_path(new)) else { return false };
         // Unsupported/type/duplicate checks are read-only before mutation entry.
@@ -360,12 +408,13 @@ mod tests {
             if medium.fail_flush == Some(medium.flushes) { Err(FsError::IoError) } else { Ok(()) }
         }
     }
-    fn ready() -> (CellosFsBackend<Disk>, Disk) {
+    fn ready() -> (CellosFsBackend<Disk>, Disk) { ready_sized(128) }
+    fn ready_sized(blocks: usize) -> (CellosFsBackend<Disk>, Disk) {
         let disk = Disk(Arc::new(HostMutex::new(Medium {
-            blocks: alloc::vec![[0; BLOCK_SIZE]; 128], reads: 0, writes: 0, flushes: 0,
+            blocks: alloc::vec![[0; BLOCK_SIZE]; blocks], reads: 0, writes: 0, flushes: 0,
             fail_read: false, fail_flush: None,
         })));
-        let fs = CellosFs::format(disk.clone(), 128).unwrap();
+        let fs = CellosFs::format(disk.clone(), blocks as u64).unwrap();
         (CellosFsBackend { prefix: "/srv", fs: Mutex::new(NativeState::Ready(fs)) }, disk)
     }
     #[test]
@@ -453,6 +502,90 @@ mod tests {
         assert_eq!(backend.read_to_vec("/srv/d/child"), b"child");
         assert!(backend.unlink("/srv/d/child"));
         assert!(backend.rmdir("/srv/d"));
+    }
+    #[test]
+    fn recursive_removal_deletes_nested_tree_and_keeps_siblings() {
+        let (mut backend, _) = ready();
+        assert!(backend.mkdir("/srv/d"));
+        assert!(backend.mkdir("/srv/d/e"));
+        assert!(backend.mkdir("/srv/d/e/empty"));
+        assert!(backend.write("/srv/d/a", b"a"));
+        assert!(backend.write("/srv/d/e/b", b"b"));
+        assert!(backend.write("/srv/keep", b"kept"));
+        assert!(backend.rmdir_recursive("/srv/d"));
+        assert_eq!(backend.health(), BackendHealth::Ready);
+        for gone in ["/srv/d", "/srv/d/a", "/srv/d/e", "/srv/d/e/b", "/srv/d/e/empty"] {
+            assert_eq!(backend.stat(gone), None, "{gone}");
+        }
+        assert_eq!(backend.read_to_vec("/srv/keep"), b"kept");
+        assert!(backend.mkdir("/srv/d"));
+        assert!(backend.rmdir_recursive("/srv/d/"));
+        assert_eq!(backend.stat("/srv/d"), None);
+    }
+    #[test]
+    fn recursive_removal_refusals_leave_ready_and_contents_unchanged() {
+        let (mut backend, disk) = ready();
+        assert!(backend.write("/srv/file", b"file"));
+        assert!(backend.mkdir("/srv/d"));
+        assert!(backend.write("/srv/d/child", b"child"));
+        let counters = { let m = disk.0.lock().unwrap(); (m.writes, m.flushes) };
+        for refused in ["/srv", "/srv/", "/srv/file", "/srv/missing", "/srv/d/../file", "/srvx/d", "/other/d"] {
+            assert!(!backend.rmdir_recursive(refused), "{refused}");
+        }
+        assert_eq!(backend.health(), BackendHealth::Ready);
+        let m = disk.0.lock().unwrap();
+        assert_eq!((m.writes, m.flushes), counters);
+        drop(m);
+        assert_eq!(backend.read_to_vec("/srv/file"), b"file");
+        assert_eq!(backend.read_to_vec("/srv/d/child"), b"child");
+    }
+    #[test]
+    fn recursive_removal_over_depth_bound_removes_nothing() {
+        let (mut backend, disk) = ready_sized(512);
+        let mut path = String::from("/srv/deep");
+        assert!(backend.mkdir(&path));
+        for _ in 0..=RECURSIVE_MAX_DEPTH {
+            path.push_str("/n");
+            assert!(backend.mkdir(&path), "{path}");
+        }
+        assert!(backend.write(&format!("{path}/leaf"), b"leaf"));
+        let counters = { let m = disk.0.lock().unwrap(); (m.writes, m.flushes) };
+        assert!(!backend.rmdir_recursive("/srv/deep"));
+        assert_eq!(backend.health(), BackendHealth::Ready);
+        let m = disk.0.lock().unwrap();
+        assert_eq!((m.writes, m.flushes), counters);
+        drop(m);
+        assert_eq!(backend.read_to_vec(&format!("{path}/leaf")), b"leaf");
+        // One level shallower fits the bound and is removed whole.
+        assert!(backend.rmdir_recursive("/srv/deep/n"));
+        assert_eq!(backend.stat("/srv/deep/n"), None);
+        assert!(backend.rmdir("/srv/deep"));
+    }
+    #[test]
+    fn recursive_removal_failure_keeps_unattempted_entries_and_poisons() {
+        let (mut backend, disk) = ready();
+        assert!(backend.mkdir("/srv/d"));
+        assert!(backend.write("/srv/d/a", b"a"));
+        assert!(backend.write("/srv/d/b", b"b"));
+        let order = {
+            let mut state = backend.fs.lock();
+            let NativeState::Ready(fs) = &mut *state else { panic!("not ready") };
+            let mut order = Vec::new();
+            assert!(collect_tree(fs, "/d", RECURSIVE_MAX_DEPTH, &mut order).unwrap());
+            order
+        };
+        assert_eq!(order.len(), 3);
+        assert_eq!(order[2], (String::from("/d"), true));
+        // Each per-entry removal syncs with two barriers; fail the second
+        // removal's second barrier so the volume stays openable afterwards.
+        let start = { let mut m = disk.0.lock().unwrap(); m.fail_flush = Some(m.flushes + 4); m.flushes };
+        assert!(!backend.rmdir_recursive("/srv/d"));
+        assert_eq!(backend.health(), BackendHealth::Poisoned);
+        // The root removal is never attempted after the failure.
+        assert_eq!(disk.0.lock().unwrap().flushes, start + 4);
+        let mut reopened = CellosFs::open(disk.clone()).unwrap();
+        assert_eq!(reopened.lookup(&order[0].0).err(), Some(FsError::NotFound));
+        assert!(reopened.lookup("/d").unwrap().is_dir());
     }
 }
 
