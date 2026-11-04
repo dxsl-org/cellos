@@ -523,8 +523,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         )
         .expect("validated ACPI MCFG range has a bounded ECAM window")
     };
+    // The timer gate opens only after `init_timers` finds a clocksource
+    // (phase 02 of plan 261103-2218); HPET is one candidate, not a requirement.
     #[cfg(target_arch = "x86_64")]
-    let x86_timer_ready = x86_lapic_base != 0 && x86_ioapic_base != 0 && x86_hpet_base != 0;
+    let x86_interrupts_ready = x86_lapic_base != 0 && x86_ioapic_base != 0;
+    #[cfg(target_arch = "x86_64")]
+    #[cfg_attr(cellos_g1_cpu, allow(unused_assignments))] // G1 assigns or panics on every path
+    let mut x86_timer_ready = false;
 
     // 3. Paging (Virtual Memory) Setup
     // x86_64 bring-up: Limine's PML4 already maps RAM via HHDM and the kernel
@@ -608,16 +613,37 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Immediate configured port-I/O probe after activate_paging. If 'Q'
         // appears, the CR3 switch returned to kmain with the UART mechanism live.
         crate::hal::uart_16550::putchar(b'Q');
-        if x86_timer_ready {
+        // The G1 private lane keeps its HPET-only contract.
+        #[cfg(cellos_g1_cpu)]
+        let x86_timer_candidates = x86_interrupts_ready && x86_hpet_base != 0;
+        #[cfg(not(cellos_g1_cpu))]
+        let x86_timer_candidates = x86_interrupts_ready;
+        if x86_timer_candidates {
             crate::hal::apic::set_lapic_phys(x86_lapic_base);
-            crate::hal::apic::set_ioapic_phys(x86_ioapic_base);
             crate::hal::apic::set_irq_overrides(
                 &acpi_info.irq_overrides,
-                acpi_info.ioapic_gsi_base,
+                &acpi_info.irq_override_flags,
             );
+            register_x86_ioapics();
             crate::hal::set_hpet_base(x86_hpet_base as usize);
             #[cfg(not(cellos_g1_cpu))]
-            crate::hal::init_timers();
+            {
+                offer_x86_clock_candidates(&acpi_info);
+                match crate::hal::init_timers() {
+                    Some(setup) => {
+                        x86_timer_ready = true;
+                        log::info!(
+                            "[x86-gate] timer: clock={} clockevent={:?} apic={}",
+                            setup.source.name(),
+                            setup.clockevent,
+                            if setup.x2apic { "x2apic" } else { "xapic" }
+                        );
+                    }
+                    None => log::error!(
+                        "[x86-gate] timer CLOSED: no clocksource (TSC, kvmclock, HPET or PM timer)"
+                    ),
+                }
+            }
             #[cfg(cellos_g1_cpu)]
             {
                 let vendor = core::arch::x86_64::__cpuid(0);
@@ -661,11 +687,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     clock.configuration, calibration.ticks_per_ms,
                     calibration.initial_count, calibration.lvt,
                 )).expect("G1 boot receipt formatting");
+                x86_timer_ready = true;
+                log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
             }
-            log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
         } else {
             // Fail-closed decision: it must reach the console.
-            log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
+            log::error!("[x86-gate] timer CLOSED: validated MADT required");
             #[cfg(cellos_g1_cpu)]
             panic!("G1 private measurement requires validated MADT and HPET");
         }
@@ -830,12 +857,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         task::drivers::ramdisk::init_driver();
         task::drivers::ps2_keyboard::init();
-        // COM1 TX remains available without ACPI. RX IRQ requires the validated
-        // MADT/HPET gate because it is routed through IOAPIC/LAPIC.
-        if x86_timer_ready {
-            crate::hal::uart_16550::init_input_irq();
-        } else {
+        // COM1 TX remains available without ACPI. RX IRQ requires the timer
+        // gate (validated MADT plus a clocksource) and an I/O APIC that serves
+        // the UART's GSI, because it is routed through IOAPIC/LAPIC.
+        if !x86_timer_ready {
             log::warn!("[x86-gate] configured UART IRQ CLOSED: interrupt/timer unavailable");
+        } else if !crate::hal::uart_16550::init_input_irq() {
+            log::warn!("[x86-gate] configured UART IRQ CLOSED: no I/O APIC serves its GSI");
         }
         // Initialise the RX buffer that vi_handle_uart_irq() writes into.
         task::drivers::uart::init_input();
@@ -1855,6 +1883,69 @@ fn panic(info: &PanicInfo) -> ! {
     loop {
         unsafe {
             core::arch::asm!("wfi", options(nomem, nostack));
+        }
+    }
+}
+
+/// Map and register every MADT I/O APIC with the HAL routing table.
+///
+/// Runs after the kernel PML4 is active: `init_kernel_paging_x86` identity-maps
+/// the legacy (last-entry) unit, and every other unit is mapped here. APIC
+/// MMIO therefore switches to identity addressing (`set_hhdm_base(0)`).
+#[cfg(target_arch = "x86_64")]
+fn register_x86_ioapics() {
+    crate::hal::apic::set_hhdm_base(0);
+    let (declared, registered) = crate::acpi::with_topology(|topo| {
+        let mut registered = 0;
+        for unit in topo.ioapics.as_slice() {
+            memory::paging::map_mmio_x86(unit.address as usize, 0x1000);
+            if crate::hal::ioapic::add_unit(unit.address, unit.gsi_base) {
+                registered += 1;
+            }
+        }
+        (topo.ioapics.len(), registered)
+    });
+    log::info!(
+        "[x86-gate] ioapics registered={} declared={}",
+        registered,
+        declared
+    );
+}
+
+/// Hand the HAL the clocksource candidates `init_timers` may choose besides
+/// HPET and the TSC:
+/// - the FADT PM timer, when it is a port-I/O block on a non-hardware-reduced
+///   platform;
+/// - one zeroed frame for kvmclock, when KVM advertises it.
+///
+/// The frame is never freed: once registered, the host writes into it until
+/// reset.
+#[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
+fn offer_x86_clock_candidates(acpi_info: &crate::acpi::AcpiInfo) {
+    if let Some(fadt) = acpi_info.fadt.filter(|fadt| !fadt.hw_reduced()) {
+        let timer = fadt.pm_timer;
+        match u16::try_from(timer.address) {
+            Ok(port) if timer.space_id == crate::acpi::Gas::SYSTEM_IO && port != 0 => {
+                crate::hal::set_pm_timer(port, if fadt.pm_timer_32bit() { 32 } else { 24 });
+            }
+            _ if timer.is_present() => log::warn!(
+                "[x86-gate] PM timer at space {} address {:#x} not used (port I/O only)",
+                timer.space_id,
+                timer.address
+            ),
+            _ => {}
+        }
+    }
+    if crate::hal::clock::kvmclock::available() {
+        let frame = memory::frame::FRAME_ALLOCATOR
+            .lock()
+            .as_mut()
+            .and_then(|frames| frames.allocate_frame());
+        if let Some(phys) = frame {
+            let virt = memory::frame::phys_to_virt(phys);
+            // SAFETY: a freshly allocated, HHDM-mapped frame owned by this call.
+            unsafe { core::ptr::write_bytes(virt as *mut u8, 0, 4096) };
+            crate::hal::clock::set_pvclock_area(virt, phys as u64);
         }
     }
 }

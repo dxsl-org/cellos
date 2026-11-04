@@ -139,6 +139,36 @@ pub fn qemu_binary_aarch64() -> String {
     "qemu-system-aarch64".to_string()
 }
 
+/// QEMU machine/CPU/accelerator for the plain x86 constructors
+/// (`boot_x86_bios`, `boot_x86_q35`, `boot_x86_bios_with_serial_ports`).
+///
+/// Defaults to TCG `qemu64,+pdpe1gb` on q35 with HPET. `CELLOS_X86_ACCEL=kvm`
+/// switches to `-accel kvm -cpu host`; `CELLOS_X86_HPET=off` removes HPET, so
+/// the same suites run in the plan 261103-2218 phase 02 lane variants.
+pub struct X86Lane {
+    pub accel: Vec<String>,
+    pub machine: String,
+    pub cpu: String,
+}
+
+pub fn x86_lane() -> X86Lane {
+    let kvm = std::env::var("CELLOS_X86_ACCEL").as_deref() == Ok("kvm");
+    let hpet = if std::env::var("CELLOS_X86_HPET").as_deref() == Ok("off") {
+        "off"
+    } else {
+        "on"
+    };
+    X86Lane {
+        accel: if kvm {
+            vec!["-accel".into(), "kvm".into()]
+        } else {
+            Vec::new()
+        },
+        machine: format!("q35,hpet={hpet}"),
+        cpu: if kvm { "host" } else { "qemu64,+pdpe1gb" }.into(),
+    }
+}
+
 /// Resolve the qemu-system-x86_64 binary.
 ///
 /// Order: `$ViCell_QEMU_X86` env override → bare name on PATH → Windows default.
@@ -823,16 +853,18 @@ impl QemuRunner {
     pub fn boot_x86_bios(iso: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
+        let lane = x86_lane();
 
         let mut child = Command::new(qemu_binary_x86())
+            .args(&lane.accel)
             .args([
                 "-machine",
-                "q35",
+                &lane.machine,
                 // pdpe1gb: Limine 8.x uses 1 GiB pages for the HHDM and
                 // panics if the CPU CPUID doesn't advertise PDPE1GB.
                 // The qemu64 model omits it by default; enable explicitly.
                 "-cpu",
-                "qemu64,+pdpe1gb",
+                &lane.cpu,
                 "-m",
                 "256M",
                 "-nographic",
@@ -1063,13 +1095,15 @@ impl QemuRunner {
         let port = listener.local_addr().unwrap().port();
         let cpus = cpus.to_string();
         let serial = format!("tcp:127.0.0.1:{port}");
+        let lane = x86_lane();
 
         let mut child = Command::new(qemu_binary_x86())
+            .args(&lane.accel)
             .args([
                 "-machine",
-                "q35",
+                &lane.machine,
                 "-cpu",
-                "qemu64,+pdpe1gb",
+                &lane.cpu,
                 "-m",
                 "256M",
                 "-smp",
@@ -1313,12 +1347,14 @@ impl QemuRunner {
     ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
+        let lane = x86_lane();
 
-        let mut args: Vec<String> = vec![
+        let mut args: Vec<String> = lane.accel.clone();
+        args.extend([
             "-machine".into(),
-            "q35".into(),
+            lane.machine.clone(),
             "-cpu".into(),
-            "qemu64,+pdpe1gb".into(),
+            lane.cpu.clone(),
             "-m".into(),
             "256M".into(),
             "-nographic".into(),
@@ -1333,7 +1369,7 @@ impl QemuRunner {
             format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
             "-device".into(),
             "nvme,drive=nvme0,serial=deadbeef01".into(),
-        ];
+        ]);
         for (index, path) in extra_sockets {
             args.push("-chardev".into());
             args.push(format!("socket,id=c{index},path={path},server=on,wait=off"));

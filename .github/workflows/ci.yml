@@ -969,6 +969,14 @@ jobs:
           chmod +x scripts/qemu-x86_64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
 
+      # Plan 261103-2218 phase 02: HPET is optional. With HPET removed from q35,
+      # TCG has no invariant TSC or kvmclock, so the kernel must select the
+      # FADT PM timer, open the timer gate and reach the shell.
+      - name: Boot test (x86_64, HPET off → PM timer)
+        run: |
+          X86_HPET=off X86_EXPECT_CLOCK=pmtimer BOOT_WINDOW=90 \
+            bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
+
       # Phase 02a: the AHCI storage cell's bring-up lane, with a raw SATA image
       # attached to q35's ICH9 controller (`-device ide-hd`). Same QEMU shape as
       # `QemuRunner::boot_x86_bios_with_sata`. `VICELL_AHCI_ISO` pins the ISO the

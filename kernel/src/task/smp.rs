@@ -824,7 +824,7 @@ pub(crate) fn x86_idt_fixture_uniprocessor_ready() {
 #[cfg(target_arch = "x86_64")]
 pub fn start_secondaries() {
     use crate::boot::limine;
-    let bsp_id = core::arch::x86_64::__cpuid(1).ebx >> 24;
+    let bsp_id = hal::x86_64::apic::current_id();
     HART_ONLINE[0].store(true, Ordering::Release);
     #[cfg(feature = "test-hooks")]
     x86_handoff_fixture();
@@ -845,7 +845,10 @@ pub fn start_secondaries() {
         return;
     };
     let count = response.cpu_count as usize;
-    if response.flags != 0
+    // Response flag bit 0 = Limine enabled x2APIC; it must match this CPU.
+    let x2apic_flag = response.flags & 1 != 0;
+    if response.flags & !1 != 0
+        || x2apic_flag != hal::x86_64::apic::x2apic_active()
         || response.bsp_lapic_id != bsp_id
         || count == 0
         || count > 256
@@ -867,8 +870,15 @@ pub fn start_secondaries() {
         }
         let cpu = unsafe { &*info };
         let id = cpu.lapic_id as usize;
-        if id > 255
-            || ids[id]
+        if id > 255 {
+            // Needs interrupt remapping for IOAPIC/MSI destinations (phase 12).
+            log::warn!(
+                "[x86-smp] cpu apic_id={} offline: needs interrupt remapping",
+                cpu.lapic_id
+            );
+            continue;
+        }
+        if ids[id]
             || processors[..index].contains(&cpu.processor_id)
             || (cpu.lapic_id != bsp_id && cpu.goto_address.load(Ordering::Acquire) != 0)
         {

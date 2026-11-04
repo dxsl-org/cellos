@@ -64,6 +64,11 @@ pub unsafe fn init(virt_base: usize) {
     write64(GEN_CONF, conf | 1);
 }
 
+/// `init` ran on a block reporting a non-zero tick period.
+pub fn present() -> bool {
+    HPET_PERIOD_FS.load(Ordering::Relaxed) != 0
+}
+
 /// Returns the current time in nanoseconds since HPET was enabled.
 /// Returns 0 without accessing MMIO when HPET has not been initialised.
 pub fn now_ns() -> u64 {

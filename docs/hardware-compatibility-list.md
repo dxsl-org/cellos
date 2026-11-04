@@ -69,7 +69,7 @@ capture, not by the datasheet. A machine that fails any of them is recorded in
 | # | Requirement | Why | Verified how |
 |---|---|---|---|
 | R1 | A 16550-compatible UART at COM1 `0x3F8`, IRQ 4 — a DB9 port, a mainboard COM header, an add-in card mapped there, or BMC serial-over-LAN | The only working x86 log **and** input path today: `kmain` (`kernel/src/main.rs`) opens COM1 from `hal_soc_x86::X86_EARLY_FACTS.com1` before ACPI, and `viConsole::poll` (`kernel/src/task/drivers/console_drv.rs`, step 1d) reads x86 input only from the IRQ-filled `uart::RX_BUFFER`. TX and the one-shot boot RX probe (`[x86-gate] COM1 polled RX observed`) work with the IRQ closed; runtime input needs `uart_16550::init_input_irq`, which `kmain` calls only when `x86_timer_ready`. No UART means a silent boot | An **exact-resource** report for that machine — e.g. `setserial -g /dev/ttyS0` or the `ttyS0` sysfs/ACPI device record — showing base `0x3F8` **and** IRQ 4, **plus** a Cellos-side exercised-RX marker with the IRQ gate open. Reaching `Cellos >` alone is insufficient: it exercises TX, and the boot RX probe runs with the IRQ gate closed, so neither proves IRQ 4 |
-| R2 | ACPI **HPET** exposed | `x86_timer_ready` in `kmain` (`kernel/src/main.rs`) requires `x86_lapic_base != 0 && x86_ioapic_base != 0 && x86_hpet_base != 0`; there is no LPIT/TSC-deadline fallback. Without HPET the boot prints `[x86-gate] timer CLOSED: validated MADT + HPET required` and the UART RX IRQ stays closed | ACPI tables (live OS) or the Cellos ACPI gate line `[acpi] gates: madt=… hpet=… mcfg=…` |
+| R2 | A **reliable clocksource**: invariant TSC, kvmclock (guests), ACPI **HPET**, or the FADT ACPI PM timer in port I/O space | `init_timers` (`hal/arch/x86/src/x86_64.rs`) picks the first available of TSC (invariant or hypervisor-published frequency), kvmclock (stable host TSC), HPET, PM timer (`hal/arch/x86/src/x86_64/clock/mod.rs`, plan 261103-2218 phase 02). The tick uses TSC-deadline when the CPU supports it, otherwise the LAPIC periodic timer calibrated against that source. Without any source the boot prints `[x86-gate] timer CLOSED: no clocksource (TSC, kvmclock, HPET or PM timer)` and the UART RX IRQ stays closed. The G1 private lane still requires HPET | The `[x86-gate] timer: clock=… clockevent=…` boot line, plus ACPI tables (live OS) or the Cellos lines `[acpi] gates: … hpet=… fadt=…` and `[acpi] FADT: … pm_timer=…` |
 | R3 | **Secure Boot can be disabled** (or ships off) | There is no signed or measured x86 boot path; code-signing/secure-boot is a separate Security-track item. A board that locks Secure Boot on **cannot be made compatible** — there is no exemption path. The machine pin (`/srv/.cellos-machine/pin`, ADR-0029 §3) is change detection only, **not** a boot-integrity control: the profile is selected by `cellos.profile=` in `limine.conf`, which nothing measures or verifies today, and a raw-disk or offline writer can delete or replace the pin. It becomes meaningful against a capable attacker only once Secure Boot (signed Limine EFI + `limine enroll-config`) or a measured boot covers `limine.conf` and the kernel | Firmware setup screen; record the menu path and BIOS version |
 | R4 | Storage controller in **AHCI mode** (or an NVMe device), with **Intel VMD disabled**; a hardware RAID controller (PERC/MegaRAID, HPE Smart Array) only in HBA/pass-through mode that exposes NVMe or AHCI | NVMe ships and AHCI phases 02a/02b completed at QEMU only; physical persistence still needs capture. RST/RAID-only firmware mode fails closed. Cellos has no VMD, MegaRAID, mpt3sas or smartpqi driver: with VMD on, NVMe devices are hidden behind the VMD endpoint and are not found ([ADR-0031](decisions/0031-x86-platform-breadth-kvm-vmware-intel.md) §3) | Firmware SATA/VMD/RAID mode plus Cellos mount → write → reboot → read capture |
 | R5 | Firmware boot of the Cellos ISO: legacy BIOS **or** UEFI (Limine) | Both images are produced (`build/make-iso.sh`, "fresh BIOS shell boot" + OVMF lanes exist) | Boot the ISO and capture the UART log |
@@ -92,7 +92,7 @@ approval may it add a second Intel node. Matching the first configuration is
 preferred to reduce bring-up work, not mandatory; every unit needs its own
 capture, and a different model must meet the same applicable gates. No Intel/AMD pair is planned.
 
-| Machine / serial | Chipset / CPU | BIOS (version, date) | R1 COM1/SOL | R2 HPET | R4 storage | R5 ISO boot | R6 NIC / PCI ID | R9 Intel VT-x / EPT | R8 VT-d / DMAR | R3 Secure Boot off | Profile / pin digest | Level | Captured | Log | Notes |
+| Machine / serial | Chipset / CPU | BIOS (version, date) | R1 COM1/SOL | R2 clocksource | R4 storage | R5 ISO boot | R6 NIC / PCI ID | R9 Intel VT-x / EPT | R8 VT-d / DMAR | R3 Secure Boot off | Profile / pin digest | Level | Captured | Log | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | _(none)_ | | | | | | | | | | | | | | | |
 
@@ -112,7 +112,8 @@ is a stop, not a caveat.
 1. COM1 present and **enabled in firmware**, standard address `0x3F8`, IRQ 4
    (header or DB9 — both fine). Ask which Super-I/O chip exposes it if the
    vendor knows.
-2. ACPI **HPET** advertised (some newer chipsets disable it).
+2. A reliable clocksource (R2): invariant TSC (nearly every current Intel CPU),
+   or ACPI HPET, or a port-I/O PM timer. Record which one Cellos selects.
 3. SATA mode selectable to **AHCI** (not "RST only" / "RAID only"), or the
    device is NVMe.
 4. **Secure Boot can be disabled**; record the menu path.

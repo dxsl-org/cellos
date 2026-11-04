@@ -12,6 +12,8 @@ pub mod boot;
 #[cfg(target_arch = "x86_64")]
 pub mod cet;
 #[cfg(target_arch = "x86_64")]
+pub mod clock;
+#[cfg(target_arch = "x86_64")]
 pub mod context;
 #[cfg(target_arch = "x86_64")]
 pub mod domain;
@@ -22,7 +24,11 @@ pub mod hpet;
 #[cfg(target_arch = "x86_64")]
 pub mod idt;
 #[cfg(target_arch = "x86_64")]
+pub mod ioapic;
+#[cfg(target_arch = "x86_64")]
 pub mod ist;
+#[cfg(target_arch = "x86_64")]
+pub mod msr;
 #[cfg(target_arch = "x86_64")]
 pub mod paging;
 #[cfg(target_arch = "x86_64")]
@@ -94,7 +100,8 @@ pub mod arch {
 #[cfg(target_arch = "x86_64")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-/// Runtime HPET MMIO base parsed from ACPI; 0 keeps the timer gate closed.
+/// Runtime HPET MMIO base parsed from ACPI; 0 means no HPET. HPET is one
+/// clocksource candidate (`clock::select`); the G1 private lane requires it.
 ///
 /// Set by `set_hpet_base` (called from kmain after ACPI parse) before
 /// `init_timers` is invoked.
@@ -236,7 +243,7 @@ pub mod protect {
 /// Publish the BSP feature policy after its local initialization completes.
 #[cfg(target_arch = "x86_64")]
 pub fn publish_boot_cpu_policy() {
-    let bsp_id = (core::arch::x86_64::__cpuid(1).ebx >> 24) as u32;
+    let bsp_id = apic::current_id();
     apic::register_cpu(0, bsp_id);
     let policy = cpu_feature_policy();
     assert!(policy & 2 != 0, "x86 requires FXSAVE, SSE and SSE2");
@@ -256,7 +263,6 @@ pub unsafe fn init_secondary_cpu(logical: usize, lapic_id: u32, kernel_cr3: usiz
         || kernel_cr3 == 0
         || kernel_cr3 & 0xfff != 0
         || domain::kernel_cr3() != kernel_cr3
-        || apic::check_x2apic()
     {
         return false;
     }
@@ -280,28 +286,69 @@ pub unsafe fn init_secondary_cpu(logical: usize, lapic_id: u32, kernel_cr3: usiz
         return false;
     }
     syscall::init();
-    apic::register_cpu(logical, lapic_id) && apic::init_secondary(lapic_id)
+    apic::register_cpu(logical, lapic_id) && clock::start_secondary(lapic_id)
 }
 
 /// Store the HPET MMIO base address from ACPI for use by `init_timers`.
 ///
-/// Must be called with a validated non-zero base before `init_timers()`.
+/// Zero (the default) means no HPET; call with a validated base before
+/// `init_timers()`.
 #[cfg(target_arch = "x86_64")]
 pub fn set_hpet_base(base: usize) {
     HPET_MMIO_BASE.store(base, Ordering::Relaxed);
 }
 
-/// Post-paging timer init: LAPIC enable + HPET/PIT calibration.
+/// Install the FADT PM timer (port I/O block, 24 or 32 bits) as a
+/// clocksource candidate. Call before `init_timers()`.
+#[cfg(target_arch = "x86_64")]
+pub fn set_pm_timer(port: u16, bits: u8) {
+    clock::pmtimer::init(port, bits);
+}
+
+/// The clocksource and tick chosen by [`init_timers`].
+#[cfg(target_arch = "x86_64")]
+#[derive(Clone, Copy, Debug)]
+pub struct TimerSetup {
+    pub source: clock::ClockSource,
+    pub clockevent: clock::Clockevent,
+    /// LAPIC registers are accessed through x2APIC MSRs.
+    pub x2apic: bool,
+}
+
+/// Post-paging timer init for every non-G1 boot: choose the clocksource
+/// (`clock::select`), then enable the LAPIC and start the tick
+/// (`clock::start_clockevent`). `None` means no clocksource exists and the
+/// LAPIC was left untouched, so the caller keeps the timer gate closed.
 ///
 /// Must be called AFTER init_kernel_paging_x86, which identity-maps IOAPIC,
-/// HPET, and LAPIC at addresses parsed from validated ACPI tables.
-///
-/// Resets the APIC HHDM_BASE to 0 so lapic_base() == physical LAPIC address
-/// (identity-mapped by init_kernel_paging_x86). Limine does not include MMIO
-/// in its HHDM, so the HHDM-offset address would fault after the CR3 switch.
+/// HPET, and LAPIC at addresses parsed from validated ACPI tables. Resets the
+/// APIC HHDM_BASE to 0 so lapic_base() == physical LAPIC address.
 #[cfg(target_arch = "x86_64")]
-pub fn init_timers() {
-    let _ = init_timers_inner(false);
+pub fn init_timers() -> Option<TimerSetup> {
+    let hpet_base = HPET_MMIO_BASE.load(Ordering::Relaxed);
+    if hpet_base != 0 {
+        // SAFETY: hpet_base is identity-mapped by init_kernel_paging_x86.
+        unsafe { hpet::init(hpet_base) };
+    }
+    let hpet_ready = hpet_base != 0 && hpet::present();
+    let source = clock::select(hpet_ready);
+    if source == clock::ClockSource::None {
+        return None;
+    }
+    apic::set_hhdm_base(0);
+    let x2apic = apic::init_mode();
+    apic::init_lapic();
+    let clockevent = clock::start_clockevent();
+    // Verify the timer fires from ring-0 before entering user mode.
+    // SAFETY: sti/hlt/cli are Ring-0 instructions; no memory side effects.
+    for _ in 0..2u8 {
+        unsafe { core::arch::asm!("sti", "hlt", "cli", options(nomem, nostack)) };
+    }
+    Some(TimerSetup {
+        source,
+        clockevent,
+        x2apic,
+    })
 }
 
 /// Actual BSP calibration outcome, without a second calibration or fallback claim.
@@ -328,6 +375,7 @@ fn init_timers_inner(observe: bool) -> Option<TimerCalibration> {
 
     // Switch LAPIC/IOAPIC accesses to the identity-mapped PAs we set up in our PML4.
     apic::set_hhdm_base(0);
+    apic::init_mode();
 
     // Enable LAPIC (SVR) and set an initial periodic timer config.
     apic::init_lapic();
@@ -379,9 +427,8 @@ fn init_timers_inner(observe: bool) -> Option<TimerCalibration> {
         _ => b'b',
     });
 
-    // Check IA32_APIC_BASE MSR for x2APIC mode.
-    // 'x' = xAPIC (MMIO works) / 'X' = x2APIC active (MMIO is DISABLED — all lw() calls lost).
-    uart_16550::putchar(if apic::check_x2apic() { b'X' } else { b'x' });
+    // 'x' = xAPIC (MMIO) / 'X' = x2APIC (MSR) register access.
+    uart_16550::putchar(if apic::x2apic_active() { b'X' } else { b'x' });
 
     // Verify the timer fires from ring-0 before entering user mode.
     // Enable interrupts + halt twice.  'V' probes from x86_64_timer_handler appear

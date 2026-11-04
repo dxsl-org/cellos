@@ -38,7 +38,7 @@ use super::smp::MAX_HARTS;
 pub(crate) fn monotonic_ns() -> Option<u64> {
     #[cfg(target_arch = "x86_64")]
     {
-        Some(hal::hpet::now_ns())
+        Some(hal::clock::now_ns())
     }
     #[cfg(target_arch = "riscv64")]
     {

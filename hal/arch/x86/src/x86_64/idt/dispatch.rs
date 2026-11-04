@@ -54,6 +54,8 @@ pub(super) extern "C" fn x86_64_idt_dispatch(frame: &mut EntryFrame) {
         Route::Timer => {
             debug_assert_eq!(selected.eoi, Eoi::Before);
             super::super::apic::eoi();
+            // Before the tick callback: it may switch away and not return here.
+            super::super::clock::on_tick();
             #[cfg(feature = "x86-idt-cpl3-test")]
             super::probe::timer_after_eoi();
             unsafe { vi_timer_tick() };

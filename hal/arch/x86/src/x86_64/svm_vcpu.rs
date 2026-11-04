@@ -121,9 +121,10 @@ impl SvmVcpu {
     }
 
     /// Rate-limit PAUSE-path tick delivery to one per [`PAUSE_TICK_NS`] of real
-    /// (HPET) time, falling back to an exit-count pace when HPET reads 0.
+    /// (clocksource) time, falling back to an exit-count pace before a
+    /// clocksource is selected.
     fn pause_tick_due(&mut self) -> bool {
-        let now = super::hpet::now_ns();
+        let now = super::clock::now_ns();
         if now == 0 {
             self.pause_backlog += 1;
             if self.pause_backlog >= PAUSE_TICK_FALLBACK {

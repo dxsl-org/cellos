@@ -1,15 +1,24 @@
-//! Local APIC and I/O APIC MMIO drivers.
+//! Local APIC driver (xAPIC MMIO or x2APIC MSR) and ISA IRQ routing.
+//!
+//! Mode: the boot loader requests x2APIC (Limine MP flag), so a CPU that
+//! supports it arrives in x2APIC mode. [`init_mode`] latches that, enabling
+//! x2APIC itself when the CPU supports it but firmware left xAPIC. Every
+//! register access then goes through MSRs `0x800 + reg/16`; otherwise through
+//! the MMIO page at the MADT LAPIC base.
 //!
 //! Limine does NOT identity-map MMIO regions; it only maps physical RAM via the
-//! HHDM.  All LAPIC/IOAPIC accesses use `HHDM_BASE + PHYS_ADDR`.
-//! `HHDM_BASE` is reset to 0 after `init_kernel_paging_x86` identity-maps MMIO.
-//! Physical bases remain zero until validated ACPI MADT data is installed via
-//! `set_lapic_phys` / `set_ioapic_phys` before `init_timers()`.
-use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+//! HHDM. MMIO accesses use `HHDM_BASE + PHYS_ADDR`, and `HHDM_BASE` is reset to
+//! 0 after `init_kernel_paging_x86` identity-maps MMIO. Physical bases remain
+//! zero until validated ACPI MADT data is installed via `set_lapic_phys`.
+//!
+//! APIC IDs above 255 need interrupt remapping for IOAPIC/MSI destinations
+//! (plan 261103-2218 phase 12); until then such CPUs are refused.
+use super::msr;
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 static HHDM_BASE: AtomicU64 = AtomicU64::new(0);
 static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
-static IOAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
+static X2APIC: AtomicBool = AtomicBool::new(false);
 pub const IPI_VECTOR: u8 = 0xf0;
 const UNREGISTERED: u32 = u32::MAX;
 // One atomic publication prevents duplicate physical IDs even if startup races.
@@ -17,9 +26,53 @@ static CPU_APIC_IDS: AtomicU64 = AtomicU64::new(u64::MAX);
 const _: () = assert!(super::syscall::MAX_CPUS == 2);
 static TIMER_COUNT: AtomicU32 = AtomicU32::new(0);
 
-/// Publish a unique legacy physical LAPIC destination before CPU admission.
+const IA32_APIC_BASE: u32 = 0x1B;
+const APIC_BASE_EXTD: u64 = 1 << 10;
+const APIC_BASE_EN: u64 = 1 << 11;
+const X2APIC_MSR_BASE: u32 = 0x800;
+
+/// CPUID.1:ECX[21].
+pub fn x2apic_supported() -> bool {
+    core::arch::x86_64::__cpuid(1).ecx & (1 << 21) != 0
+}
+
+/// Latch this CPU's LAPIC mode, enabling x2APIC when supported. Must run on
+/// every CPU before its first LAPIC register access. `true` = x2APIC.
+pub fn init_mode() -> bool {
+    if !x2apic_supported() {
+        X2APIC.store(false, Ordering::Release);
+        return false;
+    }
+    // SAFETY: ring 0; IA32_APIC_BASE exists, and setting EXTD with EN on a
+    // CPU that enumerates x2APIC is the architectural enable sequence.
+    unsafe {
+        let base = msr::read(IA32_APIC_BASE);
+        if base & APIC_BASE_EXTD == 0 {
+            msr::write(IA32_APIC_BASE, base | APIC_BASE_EN | APIC_BASE_EXTD);
+        }
+    }
+    X2APIC.store(true, Ordering::Release);
+    true
+}
+
+pub fn x2apic_active() -> bool {
+    X2APIC.load(Ordering::Acquire)
+}
+
+/// This CPU's APIC ID (32-bit in x2APIC mode).
+pub fn current_id() -> u32 {
+    // SAFETY: ring 0; IA32_APIC_BASE is architectural.
+    if unsafe { msr::read(IA32_APIC_BASE) } & APIC_BASE_EXTD != 0 {
+        // SAFETY: x2APIC is enabled, so the ID MSR exists.
+        unsafe { msr::read(X2APIC_MSR_BASE + 2) as u32 }
+    } else {
+        core::arch::x86_64::__cpuid(1).ebx >> 24
+    }
+}
+
+/// Publish a unique physical LAPIC destination before CPU admission.
 pub fn register_cpu(logical: usize, lapic_id: u32) -> bool {
-    if logical >= super::syscall::MAX_CPUS || lapic_id > 255 || check_x2apic() {
+    if logical >= super::syscall::MAX_CPUS || lapic_id > 255 {
         return false;
     }
     let shift = logical * 32;
@@ -50,11 +103,42 @@ pub fn cpu_apic_id(logical: usize) -> Option<u32> {
     (id != UNREGISTERED).then_some(id)
 }
 
+/// Virtual address of an identity-mapped (after `set_hhdm_base(0)`) MMIO page.
+pub(super) fn mmio_virt(phys: usize) -> usize {
+    (HHDM_BASE.load(Ordering::Relaxed) as usize) + phys
+}
+
+#[inline]
+fn lapic_base() -> usize {
+    let phys = LAPIC_PHYS.load(Ordering::Relaxed);
+    assert!(phys != 0, "LAPIC used before validated MADT setup");
+    mmio_virt(phys)
+}
+
 fn lr(reg: usize) -> u32 {
-    unsafe { core::ptr::read_volatile((lapic_base() + reg) as *const u32) }
+    if x2apic_active() {
+        // SAFETY: x2APIC mode is enabled; `reg` is an architectural register.
+        unsafe { msr::read(X2APIC_MSR_BASE + (reg >> 4) as u32) as u32 }
+    } else {
+        // SAFETY: LAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
+        unsafe { core::ptr::read_volatile((lapic_base() + reg) as *const u32) }
+    }
+}
+
+fn lw(reg: usize, v: u32) {
+    if x2apic_active() {
+        // SAFETY: x2APIC mode is enabled; `reg` is a writable register.
+        unsafe { msr::write(X2APIC_MSR_BASE + (reg >> 4) as u32, v as u64) }
+    } else {
+        // SAFETY: LAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
+        unsafe { core::ptr::write_volatile((lapic_base() + reg) as *mut u32, v) }
+    }
 }
 
 fn wait_icr_idle() -> bool {
+    if x2apic_active() {
+        return true; // x2APIC ICR writes have no delivery-status bit
+    }
     for _ in 0..100_000 {
         if lr(0x300) & (1 << 12) == 0 {
             return true;
@@ -64,20 +148,37 @@ fn wait_icr_idle() -> bool {
     false
 }
 
+/// ICR value for a fixed IPI: `(high, low)` in xAPIC, one 64-bit MSR value in
+/// x2APIC (destination in bits 63:32).
+pub(super) fn icr_fixed(x2apic: bool, destination: u32, vector: u8) -> (u32, u32, u64) {
+    if x2apic {
+        (0, 0, (destination as u64) << 32 | vector as u64)
+    } else {
+        (destination << 24, vector as u32, 0)
+    }
+}
+
 /// Send a directed fixed IPI. Delivery status is not an invalidate acknowledgement.
 pub fn send_ipi(logical: usize) -> bool {
     let Some(id) = cpu_apic_id(logical) else {
         return false;
     };
-    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 {
+    if LAPIC_PHYS.load(Ordering::Acquire) == 0 {
         return false;
     }
+    let x2 = x2apic_active();
+    let (high, low, wide) = icr_fixed(x2, id, IPI_VECTOR);
     let flags = super::context::save_and_disable_interrupts();
     let sent = if wait_icr_idle() {
         lw(0x280, 0);
         let _ = lr(0x280);
-        lw(0x310, id << 24);
-        lw(0x300, IPI_VECTOR as u32);
+        if x2 {
+            // SAFETY: x2APIC mode; the ICR MSR takes the whole 64-bit value.
+            unsafe { msr::write(X2APIC_MSR_BASE + 0x30, wide) };
+        } else {
+            lw(0x310, high);
+            lw(0x300, low);
+        }
         let idle = wait_icr_idle();
         lw(0x280, 0);
         idle && lr(0x280) == 0
@@ -88,44 +189,48 @@ pub fn send_ipi(logical: usize) -> bool {
     sent
 }
 
-/// Configure only this AP's LAPIC using the BSP's calibrated periodic count.
-pub fn init_secondary(lapic_id: u32) -> bool {
-    if check_x2apic() || LAPIC_PHYS.load(Ordering::Acquire) == 0 || lr(0x20) >> 24 != lapic_id {
-        return false;
-    }
-    let count = TIMER_COUNT.load(Ordering::Acquire);
-    if count == 0 {
+/// Enable only this AP's LAPIC (mode latch, software enable), with no timer
+/// programmed. `false` when the LAPIC is unusable or not `lapic_id`.
+pub fn init_secondary_lapic(lapic_id: u32) -> bool {
+    init_mode();
+    if LAPIC_PHYS.load(Ordering::Acquire) == 0 || current_id() != lapic_id {
         return false;
     }
     lw(0x0f0, 0x1ff);
+    true
+}
+
+/// Configure only this AP's LAPIC using the BSP's calibrated periodic count.
+pub fn init_secondary(lapic_id: u32) -> bool {
+    let count = TIMER_COUNT.load(Ordering::Acquire);
+    if count == 0 || !init_secondary_lapic(lapic_id) {
+        return false;
+    }
     lw(0x3e0, 0x3);
     lw(0x320, 0x20 | (1 << 17));
     lw(0x380, count);
     true
 }
 
+/// Put this CPU's LVT timer in TSC-deadline mode, vector 0x20, unmasked. The
+/// caller arms it by writing IA32_TSC_DEADLINE.
+pub fn set_tsc_deadline_mode() {
+    lw(0x320, 0x20 | (0b10 << 17));
+}
+
 /// ISA IRQ → GSI override table from ACPI MADT type-2 entries.
 /// Index = ISA IRQ (0–15); value = GSI. Identity-mapped by default.
-static IRQ_OVERRIDES: [AtomicU32; 16] = [
-    AtomicU32::new(0),
-    AtomicU32::new(1),
-    AtomicU32::new(2),
-    AtomicU32::new(3),
-    AtomicU32::new(4),
-    AtomicU32::new(5),
-    AtomicU32::new(6),
-    AtomicU32::new(7),
-    AtomicU32::new(8),
-    AtomicU32::new(9),
-    AtomicU32::new(10),
-    AtomicU32::new(11),
-    AtomicU32::new(12),
-    AtomicU32::new(13),
-    AtomicU32::new(14),
-    AtomicU32::new(15),
-];
-/// GSI base of the first I/O APIC (MADT type-1 gsi_base field). Usually 0.
-static IOAPIC_GSI_BASE: AtomicU32 = AtomicU32::new(0);
+static IRQ_OVERRIDES: [AtomicU32; 16] = {
+    let mut table = [const { AtomicU32::new(0) }; 16];
+    let mut irq = 0;
+    while irq < 16 {
+        table[irq] = AtomicU32::new(irq as u32);
+        irq += 1;
+    }
+    table
+};
+/// MPS INTI flags of each override (polarity bits 0-1, trigger bits 2-3).
+static IRQ_OVERRIDE_FLAGS: [AtomicU16; 16] = [const { AtomicU16::new(0) }; 16];
 
 /// Store the HHDM base address so all LAPIC/IOAPIC helpers can use it.
 /// Must be called before any other function in this module.
@@ -139,48 +244,12 @@ pub fn set_lapic_phys(base: u64) {
     LAPIC_PHYS.store(base as usize, Ordering::Relaxed);
 }
 
-/// Install the I/O APIC physical base from validated ACPI MADT data.
-/// Call before `init_timers()`.
-pub fn set_ioapic_phys(base: u64) {
-    IOAPIC_PHYS.store(base as usize, Ordering::Relaxed);
-}
-
-/// Store MADT type-2 IRQ source overrides and the IOAPIC GSI base.
-///
-/// `overrides[n]` = GSI for ISA IRQ n; `gsi_base` = first GSI owned by this
-/// IOAPIC (MADT type-1 field). Call before `init_input_irq()`.
-pub fn set_irq_overrides(overrides: &[u32; 16], gsi_base: u32) {
-    IOAPIC_GSI_BASE.store(gsi_base, Ordering::Relaxed);
-    for (i, &gsi) in overrides.iter().enumerate() {
+/// Store MADT type-2 IRQ source overrides and their INTI flags. Call before
+/// `init_input_irq()`.
+pub fn set_irq_overrides(overrides: &[u32; 16], flags: &[u16; 16]) {
+    for (i, (&gsi, &flag)) in overrides.iter().zip(flags).enumerate() {
         IRQ_OVERRIDES[i].store(gsi, Ordering::Relaxed);
-    }
-}
-
-#[inline]
-fn lapic_base() -> usize {
-    let phys = LAPIC_PHYS.load(Ordering::Relaxed);
-    assert!(phys != 0, "LAPIC used before validated MADT setup");
-    (HHDM_BASE.load(Ordering::Relaxed) as usize) + phys
-}
-#[inline]
-fn ioapic_base() -> usize {
-    let phys = IOAPIC_PHYS.load(Ordering::Relaxed);
-    assert!(phys != 0, "IOAPIC used before validated MADT setup");
-    (HHDM_BASE.load(Ordering::Relaxed) as usize) + phys
-}
-
-fn lw(reg: usize, v: u32) {
-    // SAFETY: LAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
-    unsafe {
-        core::ptr::write_volatile((lapic_base() + reg) as *mut u32, v);
-    }
-}
-fn iow(idx: u8, v: u32) {
-    // SAFETY: IOAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
-    let base = ioapic_base();
-    unsafe {
-        core::ptr::write_volatile(base as *mut u32, idx as u32);
-        core::ptr::write_volatile((base + 0x10) as *mut u32, v);
+        IRQ_OVERRIDE_FLAGS[i].store(flag, Ordering::Relaxed);
     }
 }
 
@@ -197,7 +266,7 @@ pub fn eoi() {
     lw(0x0B0, 0);
 }
 
-/// Start LAPIC one-shot timer at `count` for calibration (called by HPET driver).
+/// Start LAPIC one-shot timer at `count` for calibration.
 ///
 /// # Safety
 /// LAPIC must be identity-mapped and enabled.
@@ -208,40 +277,19 @@ pub unsafe fn start_oneshot(count: u32) {
     lw(0x380, count); // Initial count
 }
 
-/// Read the current LAPIC timer count (used by HPET calibration).
+/// Read the current LAPIC timer count (used by calibration).
 pub fn read_current_count() -> u32 {
-    // SAFETY: LAPIC is identity-mapped at LAPIC_PHYS after init_kernel_paging_x86.
-    unsafe { core::ptr::read_volatile((lapic_base() + 0x390) as *const u32) }
+    lr(0x390)
 }
 
 /// Read the LVT Timer register (for debug/diagnostic only).
 pub fn read_lvt_timer() -> u32 {
-    // SAFETY: LAPIC is identity-mapped at LAPIC_PHYS after init_kernel_paging_x86.
-    unsafe { core::ptr::read_volatile((lapic_base() + 0x320) as *const u32) }
+    lr(0x320)
 }
 
 /// Read the LAPIC initial count register (0x380).
 pub fn read_initial_count() -> u32 {
-    // SAFETY: LAPIC is identity-mapped at LAPIC_PHYS after init_kernel_paging_x86.
-    unsafe { core::ptr::read_volatile((lapic_base() + 0x380) as *const u32) }
-}
-
-/// Check if x2APIC mode is active (IA32_APIC_BASE MSR bit 10).
-///
-/// When x2APIC is enabled the MMIO interface at 0xFEE0_0000 is DISABLED.
-/// All `lw()` writes are silently lost; the LAPIC is unreachable via MMIO.
-pub fn check_x2apic() -> bool {
-    let lo: u32;
-    // SAFETY: rdmsr from Ring 0; IA32_APIC_BASE (0x1B) is always readable.
-    unsafe {
-        core::arch::asm!(
-            "rdmsr",
-            in("ecx") 0x1Bu32,
-            out("eax") lo,
-            out("edx") _,
-        );
-    }
-    lo & (1 << 10) != 0 // bit 10 = x2APIC enable
+    lr(0x380)
 }
 
 /// Re-initialise LAPIC timer with a calibrated ticks-per-ms value (~100 Hz).
@@ -272,20 +320,26 @@ pub fn init_lapic_calibrated(ticks_per_ms: u64) {
     TIMER_COUNT.store(safe_count, Ordering::Release);
 }
 
-/// Redirect an ISA IRQ to an IDT vector on CPU 0 (edge-triggered, active-high).
-///
-/// Translates `isa_irq` through the MADT type-2 override table to the correct
-/// GSI, then subtracts the IOAPIC's GSI base to get the physical pin index.
-/// On QEMU q35 the override table is identity-mapped (no change in behaviour).
-pub fn ioapic_redirect(isa_irq: u8, vec: u8) {
-    let gsi = IRQ_OVERRIDES
-        .get(isa_irq as usize)
-        .map(|a| a.load(Ordering::Relaxed))
-        .unwrap_or(isa_irq as u32);
-    let gsi_base = IOAPIC_GSI_BASE.load(Ordering::Relaxed);
-    let pin = gsi.saturating_sub(gsi_base) as u8;
+/// Route an ISA IRQ to an IDT vector on CPU 0, through the MADT override
+/// table (GSI and polarity/trigger) and the owning I/O APIC.
+pub fn ioapic_redirect(isa_irq: u8, vec: u8) -> bool {
+    let index = isa_irq as usize;
+    let (gsi, flags) = match (IRQ_OVERRIDES.get(index), IRQ_OVERRIDE_FLAGS.get(index)) {
+        (Some(gsi), Some(flags)) => (gsi.load(Ordering::Relaxed), flags.load(Ordering::Relaxed)),
+        _ => (isa_irq as u32, 0),
+    };
     let destination =
         cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
-    iow(0x10 + pin * 2 + 1, destination << 24);
-    iow(0x10 + pin * 2, vec as u32); // vector, unmasked
+    super::ioapic::route_gsi(gsi, vec, destination, flags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::icr_fixed;
+
+    #[test]
+    fn icr_encoding_follows_the_apic_mode() {
+        assert_eq!(icr_fixed(false, 3, 0xF0), (3 << 24, 0xF0, 0));
+        assert_eq!(icr_fixed(true, 300, 0xF0), (0, 0, 300u64 << 32 | 0xF0));
+    }
 }

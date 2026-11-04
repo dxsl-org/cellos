@@ -8117,7 +8117,7 @@ fn handle_syscall_inner(
                     #[cfg(target_arch = "aarch64")]
                     let t = hal::timer::read_ticks() as usize;
                     #[cfg(target_arch = "x86_64")]
-                    let t = hal::hpet::now_ns() as usize;
+                    let t = hal::clock::now_ns() as usize;
                     #[cfg(not(any(
                         target_arch = "riscv64",
                         target_arch = "aarch64",
@@ -8138,9 +8138,9 @@ fn handle_syscall_inner(
                         let ticks_per_ms = if freq > 0 { freq / 1000 } else { 62_500 };
                         (hal::timer::read_ticks() / ticks_per_ms) as usize
                     };
-                    // HPET already returns nanoseconds; ÷ 1_000_000 → ms
+                    // The x86 clocksource already returns nanoseconds; ÷ 1_000_000 → ms
                     #[cfg(target_arch = "x86_64")]
-                    let ms = (hal::hpet::now_ns() / 1_000_000) as usize;
+                    let ms = (hal::clock::now_ns() / 1_000_000) as usize;
                     #[cfg(not(any(
                         target_arch = "riscv64",
                         target_arch = "aarch64",

@@ -226,7 +226,9 @@ static mut MP_REQUEST: LimineMpRequest = LimineMpRequest {
     ],
     revision: 0,
     response: core::ptr::null(),
-    flags: 0, // legacy physical xAPIC, never request x2APIC
+    // Bit 0: enable x2APIC where the CPU supports it (plan 261103-2218
+    // phase 03). The kernel latches the mode per CPU (`apic::init_mode`).
+    flags: 1,
 };
 
 #[cfg(target_arch = "x86_64")]

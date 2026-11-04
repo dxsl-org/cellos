@@ -220,15 +220,16 @@ pub fn poll_input() -> Option<u8> {
 ///
 /// After this call, each received byte fires vector 0x24, which calls
 /// `vi_handle_uart_irq()` → pushes the byte into the kernel RX buffer →
-/// the shell's `sys_recv` on the input service drains it.
-pub fn init_input_irq() {
-    let port = port_base();
-    // 1. Enable UART RX-ready interrupt (IER bit 0).
-    outb(port + 1, 0x01);
-
-    // 2. Wire the configured IOAPIC ISA IRQ to the UART vector on CPU 0.
-    //    ioapic_redirect(irq, vec) sets: destination=CPU 0, edge-triggered, active-high.
-    super::apic::ioapic_redirect(isa_irq(), UART_VECTOR);
+/// the shell's `sys_recv` on the input service drains it. `false` when no
+/// registered I/O APIC serves the IRQ's GSI (the IER bit stays off).
+pub fn init_input_irq() -> bool {
+    // Route first: an enabled RX interrupt without a route would be lost.
+    if !super::apic::ioapic_redirect(isa_irq(), UART_VECTOR) {
+        return false;
+    }
+    // Enable UART RX-ready interrupt (IER bit 0).
+    outb(port_base() + 1, 0x01);
+    true
 }
 
 /// Write one byte, blocking on TX hold register empty.

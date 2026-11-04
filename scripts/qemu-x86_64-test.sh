@@ -25,6 +25,21 @@ X86_EXPECT_PCID="${X86_EXPECT_PCID:-}"
 # TCG cannot emulate PCID (QEMU clears the feature with a warning), so the
 # PCID-on path needs hardware acceleration: X86_ACCEL=kvm X86_CPU_MODEL=host.
 X86_ACCEL="${X86_ACCEL:-}"
+# Phase 02 (plan 261103-2218): HPET is optional. X86_HPET=off removes it from
+# the q35 machine (and its ACPI table); X86_EXPECT_CLOCK / X86_EXPECT_TICK
+# assert the kernel's clocksource and clockevent choice from its
+# `[x86-gate] timer:` line.
+X86_HPET="${X86_HPET:-on}"
+X86_EXPECT_CLOCK="${X86_EXPECT_CLOCK:-}"
+X86_EXPECT_TICK="${X86_EXPECT_TICK:-}"
+
+case "$X86_HPET" in
+    on|off) ;;
+    *)
+        echo "FAIL: X86_HPET must be on or off" >&2
+        exit 1
+        ;;
+esac
 
 case "$X86_ACCEL" in
     ""|tcg|kvm) ;;
@@ -84,7 +99,7 @@ if [[ -n "$X86_ACCEL" ]]; then
 fi
 
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
-    -machine q35 \
+    -machine "q35,hpet=$X86_HPET" \
     "${ACCEL_ARGS[@]}" \
     -cpu "$X86_CPU_MODEL" \
     -m 256M \
@@ -182,6 +197,19 @@ if [[ "$X86_EXPECT_PCID" == "0" ]] \
     && ! grep -q "x86_64 paging: PCID disabled" qemu-x86_64.log; then
     echo "FAIL: expected PCID to be disabled on cpu '$X86_CPU_MODEL'" >&2
     grep -ai "paging:" qemu-x86_64.log | head -3
+    exit 1
+fi
+
+if [[ -n "$X86_EXPECT_CLOCK" ]] \
+    && ! grep -qa "\[x86-gate\] timer: clock=$X86_EXPECT_CLOCK " qemu-x86_64.log; then
+    echo "FAIL: expected clocksource '$X86_EXPECT_CLOCK'" >&2
+    grep -ai "x86-gate\] timer" qemu-x86_64.log | head -3
+    exit 1
+fi
+if [[ -n "$X86_EXPECT_TICK" ]] \
+    && ! grep -qa "\[x86-gate\] timer: clock=[a-z]* clockevent=$X86_EXPECT_TICK" qemu-x86_64.log; then
+    echo "FAIL: expected clockevent '$X86_EXPECT_TICK'" >&2
+    grep -ai "x86-gate\] timer" qemu-x86_64.log | head -3
     exit 1
 fi
 
