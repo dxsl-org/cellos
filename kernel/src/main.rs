@@ -434,12 +434,27 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
         let info = crate::acpi::parse(rsdp, &mut map_physical);
         log::info!(
-            "[acpi] gates: madt={} hpet={} mcfg={} dmar={}",
+            "[acpi] gates: madt={} hpet={} mcfg={} dmar={} fadt={} spcr={}",
             info.lapic_base != 0 && info.ioapic_base != 0,
             info.hpet_base != 0,
             info.ecam_base != 0,
-            info.dmar_base != 0
+            info.dmar_base != 0,
+            info.fadt.is_some(),
+            info.spcr.is_some()
         );
+        crate::acpi::with_topology(|topo| {
+            log::info!(
+                "[acpi] topology: cpus={} ioapics={} nmis={} mcfg={} drhd={} rmrr={} ir={} x2apic_opt_out={}",
+                topo.cpus.len(),
+                topo.ioapics.len(),
+                topo.lapic_nmis.len(),
+                topo.mcfg.len(),
+                topo.drhds.len(),
+                topo.rmrrs.len(),
+                topo.dmar_intr_remap(),
+                topo.dmar_x2apic_opt_out()
+            )
+        });
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
         let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();
