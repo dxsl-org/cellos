@@ -186,7 +186,7 @@ Admission blockers, per the promotion rule:
 |---|---|---|---|---|
 | 3 (admitted 2026-11-04; **closed 2026-11-04**, checkpoint 05 signed) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
 
-Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) was deferred by the owner and is being re-planned. It needs a new CP1, because `WaitIrq` has no timeout. Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
+Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) is re-planned. Its [option B CP1](261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md) was approved 2026-11-04, and the work waits for the owner to schedule it. Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
 
 ## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
 

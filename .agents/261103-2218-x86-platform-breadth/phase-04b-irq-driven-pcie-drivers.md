@@ -1,7 +1,7 @@
 ---
 phase: 4b
 title: "IRQ-driven PCIe driver cells"
-status: deferred
+status: re-planned (CP1 approved, not scheduled)
 priority: P1
 effort: "3d"
 dependencies: ["4a"]
@@ -89,3 +89,10 @@ Phase 05 builds virtio-pci on the same helper.
   - `WaitIrq` (234) has no timeout: a `WaitIrq` task wakes only on its pending flag (`kernel/src/task/syscall.rs` WaitIrq arm, `scheduler.rs` sweep). Replacing the drivers' poll+`Deadline` loops with `WaitIrq` would drop the timeouts the Key Insights require, so one lost interrupt would hang the driver and its block route.
   - Idle driver cells already block in `sys_recv` (`ostd::app`); they poll only while a command is outstanding. NIC receive is request-driven (net service → `sys_recv_timeout`), so "idle CPU drops" has little to measure, and IRQ-driven RX also needs a push path to the net service.
   - Options given to the owner: (A) add a timeout to `WaitIrq` (CP1 plus a `scheduler.rs` lock extension); (B) add an IRQ source to `WaitCompletion` (larger CP1); (C) defer. **Owner chose C on 2026-11-04.** Phase 05 proceeds with polled virtio-pci drivers. 04b will be re-planned with A or B before any driver conversion.
+- **2026-11-04 Re-plan → owner decision.** The owner chose option B. The [CP1](cp1-04b-waitcompletion-irq.md) was approved on 2026-11-04 (D-B-1…D-B-10):
+  - an `IRQ` source for `WaitCompletion` that covers the calling task's 435 lines, with deadlines through `TIMER`;
+  - an x86 MSI wake hint, because the sweep otherwise runs only on tick advance (`scheduler.rs:2223-2226`);
+  - scope reduced to nvme, ahci and xhci;
+  - NIC RX left to a separate `MAILBOX`-source CP.
+  
+  Option A ([draft](cp1-04b-waitirq-timeout.md)) is superseded. Implementation waits for the owner to schedule it. That package's §7 and §9 replace this file's Requirements and Success Criteria for the re-scoped phase.
