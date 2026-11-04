@@ -572,14 +572,16 @@ if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/b
 if (Test-Path $hypha_core_bin)        { $kfs_args += @($hypha_core_bin,  "/bin/hypha") }
 if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/bin/tool-spawn") }
 # Shell foreground launches resolve only through the kernel loader (VIFS1/P2),
-# so a disk-only program fails with "foreground preparation failed: Io". Keep in
-# sync with scripts/gen-disk-ci.sh.
+# so a disk-only program fails with "foreground preparation failed: Io". httpd's
+# edge carries NET_LISTENER, so the ELF-route fallback refuses it and VIFS1 is its
+# only source. Keep in sync with scripts/gen-disk-ci.sh.
 if (Test-Path $shutdown_bin)        { $kfs_args += @($shutdown_bin,        "/bin/shutdown") }
 if (Test-Path $posix_shim_test_bin) { $kfs_args += @($posix_shim_test_bin, "/bin/posix-shim-test") }
 if (Test-Path $nc_bin)              { $kfs_args += @($nc_bin,              "/bin/nc") }
 if (Test-Path $curl_bin)            { $kfs_args += @($curl_bin,            "/bin/curl") }
 if (Test-Path $wget_bin)            { $kfs_args += @($wget_bin,            "/bin/wget") }
 if (Test-Path $mqtt_bin)            { $kfs_args += @($mqtt_bin,            "/bin/mqtt") }
+if (Test-Path $httpd_bin)           { $kfs_args += @($httpd_bin,           "/bin/httpd") }
 if (Test-Path $tier2_smoke_bin)     { $kfs_args += @($tier2_smoke_bin,     "/bin/tier2-smoke") }
 if (Test-Path $tier2_exploit_bin)   { $kfs_args += @($tier2_exploit_bin,   "/bin/tier2-exploit") }
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
@@ -673,9 +675,14 @@ if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
 if (Test-Path $shutdown_bin) { $table_args += "/bin/shutdown=$shutdown_bin" }
 if (Test-Path $free_bin) { $table_args += "/bin/free=$free_bin" }
 if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
-# `cellbox sh` opens an authenticated serial session owned by the input service;
-# without `input` in the autoload plan the shell exits (NotFound) and no prompt appears.
-$init_features = if ($env:CELLOS_INIT_FEATURES) { $env:CELLOS_INIT_FEATURES } else { 'input' }
+# Boot plan for the full RV64 image the boot suite and its sibling lanes run on:
+# - input: the input service, which delivers every keystroke to the shell and apps.
+# - ui: virtio-gpu + compositor (+ kms, fb-console, desktop). The GPU, compositor,
+#   window-policy and ViUI lanes need them, and with a compositor registered
+#   cellbox runs its graphical-image shell, where `cmd &` launches in the background.
+# - ai: /bin/config + /bin/ai, used by ai-test and the http-infer/hypha-local-ai lanes and
+#   supervised by init_gives_up_after_a_crash_storm.
+$init_features = if ($env:CELLOS_INIT_FEATURES) { $env:CELLOS_INIT_FEATURES } else { 'input,ui,ai' }
 $configArgs = @('--config-features', $init_features, '--config-output-dir', "$embedded/boot-config")
 foreach ($entry in $table_args) {
     if ($entry -match '=') { $configArgs += @('--config-artifact', $entry) }

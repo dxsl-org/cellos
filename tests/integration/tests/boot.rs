@@ -1868,7 +1868,10 @@ fn console_long_line_with_backspace_no_stall() {
 
     qemu.send_bytes(b"echo HELLX");
     std::thread::sleep(Duration::from_millis(150));
-    qemu.send_bytes(b"\x08"); // backspace — erases the typo'd X
+    // The serial Backspace key is DEL (0x7f). The session grammar decodes BS (0x08) as
+    // Control+h, which the shell's line editor does not treat as an erase
+    // (.agents/261020-1750-cellbox-cli/spec.md, serial input profile).
+    qemu.send_bytes(b"\x7f"); // erases the typo'd X
     std::thread::sleep(Duration::from_millis(150));
     qemu.send_bytes(b"O && echo WROTE$?\n");
 

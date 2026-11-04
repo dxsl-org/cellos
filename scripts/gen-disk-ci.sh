@@ -374,13 +374,16 @@ add_kfs "$REL/hypha-tool-spawn"     "/bin/tool-spawn"
 # read on QEMU (no kernel block device). A disk-only program therefore fails with
 # "foreground preparation failed: Io". `shutdown` is the persistence lanes' power
 # step, `posix-shim-test` is the POSIX ledger's behavioural witness, and the
-# network tools are the shell's own network commands.
+# network tools are the shell's own network commands. httpd's edge carries
+# NET_LISTENER, so the caller-owned ELF-route fallback refuses it
+# (`launch_profile::authorize`) and VIFS1 is its only source.
 add_kfs "$REL/shutdown"             "/bin/shutdown"
 add_kfs "$REL/posix-shim-test"      "/bin/posix-shim-test"
 add_kfs "$REL/nc"                   "/bin/nc"
 add_kfs "$REL/curl"                 "/bin/curl"
 add_kfs "$REL/wget"                 "/bin/wget"
 add_kfs "$REL/mqtt"                 "/bin/mqtt"
+add_kfs "$REL/service-httpd"        "/bin/httpd"
 # Tier-2 witnesses (tests/integration/tests/tier2_fault_isolation.rs), launched
 # from the shell as session domain children (ADR-0019 §2.1 amendment).
 add_kfs "$REL/tier2-smoke"          "/bin/tier2-smoke"
