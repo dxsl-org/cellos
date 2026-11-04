@@ -4,13 +4,14 @@ use crate::{
 };
 
 const COMPATIBLES: [&str; 2] = ["cellos,qemu-q35-x86_64", "qemu,q35"];
-const DRIVERS: [DriverId; 6] = [
+const DRIVERS: [DriverId; 7] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
     DriverId::PcieEcam,
     DriverId::NvmePci,
     DriverId::EthernetE1000,
+    DriverId::VirtioPci,
 ];
 
 /// QEMU q35 x86_64 integration contract.

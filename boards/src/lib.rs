@@ -31,6 +31,10 @@ pub mod qemu_q35_x86_64;
 #[path = "../pc/x86_64-pc/board.rs"]
 pub mod pc_x86_64;
 
+/// Generic x86_64 virtual machine descriptor (ADR-0031 D-VM).
+#[path = "../vm/x86_64-vm/board.rs"]
+pub mod vm_x86_64;
+
 pub use descriptor::*;
 
 pub fn qemu_virt_riscv64() -> &'static BoardDescriptor {
@@ -72,8 +76,11 @@ pub fn pc_x86_64() -> &'static BoardDescriptor {
 /// Membership is the whole approval: a slug absent here cannot be bound, and
 /// nothing detected at boot adds an entry. The order carries no selection
 /// meaning beyond documentation; which entry applies is decided by the caller.
-static X86_CATALOG: [&BoardDescriptor; 2] =
-    [&pc_x86_64::X86_64_PC, &qemu_q35_x86_64::QEMU_Q35_X86_64];
+static X86_CATALOG: [&BoardDescriptor; 3] = [
+    &pc_x86_64::X86_64_PC,
+    &qemu_q35_x86_64::QEMU_Q35_X86_64,
+    &vm_x86_64::X86_64_VM,
+];
 
 /// Returns the compiled x86_64 catalog.
 pub fn x86_catalog() -> &'static [&'static BoardDescriptor] {

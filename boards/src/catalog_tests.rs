@@ -117,8 +117,8 @@ fn soc_and_driver_selection_is_typed() {
 #[test]
 fn x86_catalog_holds_exactly_the_bindable_x86_profiles() {
     let catalog = crate::x86_catalog();
-    let slugs: [&str; 2] = [catalog[0].slug, catalog[1].slug];
-    assert_eq!(slugs, ["x86_64-pc", "qemu-q35-x86_64"]);
+    let slugs: [&str; 3] = [catalog[0].slug, catalog[1].slug, catalog[2].slug];
+    assert_eq!(slugs, ["x86_64-pc", "qemu-q35-x86_64", "x86_64-vm"]);
     for (index, board) in catalog.iter().enumerate() {
         assert_eq!(
             board.validate_for(Architecture::X86_64),
@@ -134,10 +134,12 @@ fn x86_catalog_holds_exactly_the_bindable_x86_profiles() {
             board.slug
         );
     }
-    // The first entry is the strict profile; the weaker one is only reachable
-    // by naming it.
+    // The first entry is the strict profile; the weaker ones are only reachable
+    // by naming them under a hypervisor.
     assert_eq!(catalog[0].dma_isolation, DmaIsolation::Required);
     assert_eq!(catalog[1].dma_isolation, DmaIsolation::Optional);
+    assert_eq!(catalog[2].dma_isolation, DmaIsolation::Optional);
+    assert!(catalog[2].has_driver(DriverId::VirtioPci));
 }
 
 #[test]
@@ -150,6 +152,10 @@ fn find_by_slug_is_exact_and_confined_to_the_named_catalog() {
     assert_eq!(
         crate::find_by_slug(catalog, "qemu-q35-x86_64").map(|board| board.soc),
         Some(SocId::QemuX86Q35)
+    );
+    assert_eq!(
+        crate::find_by_slug(catalog, "x86_64-vm").map(|board| board.soc),
+        Some(SocId::GenericX86Vm)
     );
     for rejected in [
         "",

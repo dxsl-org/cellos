@@ -270,8 +270,29 @@ pub const X86_EARLY_FACTS: X86EarlyFacts = X86EarlyFacts {
     },
 };
 
+/// Generic x86_64 virtual machine (KVM, VMware and other hypervisors that
+/// emulate a PC): the same pre-ACPI facts as [`GENERIC_X86_PC`]. Bound only by
+/// an explicit `cellos.profile=x86_64-vm` under a hypervisor (ADR-0031 D-VM).
+pub const GENERIC_X86_VM: X86PlatformProfile = X86PlatformProfile {
+    slug: "x86_64-vm",
+    com1: PortIoDevice {
+        base: 0x03F8,
+        irq: 4,
+    },
+    serial_ports: &STANDARD_COM_PORTS,
+    rs485: &[],
+    legacy_bios_window: AddressRange {
+        base: 0x0008_0000,
+        size: 0x0008_0000,
+    },
+    legacy_rsdp_window: AddressRange {
+        base: 0,
+        size: 0x0010_0000,
+    },
+};
+
 /// Every x86 platform profile this image can bind at boot.
-pub const X86_PROFILES: [&X86PlatformProfile; 2] = [&QEMU_Q35, &GENERIC_X86_PC];
+pub const X86_PROFILES: [&X86PlatformProfile; 3] = [&QEMU_Q35, &GENERIC_X86_PC, &GENERIC_X86_VM];
 
 impl X86PlatformProfile {
     /// Reports whether this profile's pre-ACPI facts equal `facts` exactly.

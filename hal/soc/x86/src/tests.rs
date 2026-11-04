@@ -33,8 +33,8 @@ fn firmware_windows_reject_overflow_and_out_of_range_access() {
 }
 
 #[test]
-fn both_profiles_declare_the_console_as_the_first_of_their_ports() {
-    for profile in [QEMU_Q35, GENERIC_X86_PC] {
+fn every_profile_declares_the_console_as_the_first_of_its_ports() {
+    for profile in [QEMU_Q35, GENERIC_X86_PC, GENERIC_X86_VM] {
         assert_eq!(profile.validate(), Ok(()));
         assert_eq!(profile.serial_ports.len(), 4);
         assert_eq!(profile.serial_ports[0], profile.com1);
@@ -176,6 +176,7 @@ fn every_catalog_profile_shares_the_early_facts() {
     }
     assert!(slugs.contains(&QEMU_Q35.slug));
     assert!(slugs.contains(&GENERIC_X86_PC.slug));
+    assert!(slugs.contains(&GENERIC_X86_VM.slug));
 }
 
 #[test]

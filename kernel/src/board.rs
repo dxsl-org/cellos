@@ -155,6 +155,7 @@ fn x86_soc_profile(board: &BoardDescriptor) -> &'static hal_soc_x86::X86Platform
     let profile = match board.soc {
         SocId::QemuX86Q35 => &hal_soc_x86::QEMU_Q35,
         SocId::GenericX86Pc => &hal_soc_x86::GENERIC_X86_PC,
+        SocId::GenericX86Vm => &hal_soc_x86::GENERIC_X86_VM,
         _ => panic!("[board] x86 descriptor has incompatible SoC identity"),
     };
     match profile.validate() {
@@ -317,6 +318,11 @@ pub(crate) fn bind_x86_profile(board: &'static BoardDescriptor, facts: X86BootFa
         },
         board.dma_isolation
     );
+    // A weaker-than-Required profile is only reachable by naming it under a
+    // hypervisor (`choose_x86_profile`); say so on the console in operator terms.
+    if board.dma_isolation != cellos_boards::DmaIsolation::Required {
+        log::warn!("[x86-gate] dma isolation optional (operator-selected VM profile)");
+    }
 }
 
 /// Machine identity facts detected at boot on x86_64.
@@ -578,6 +584,14 @@ mod tests {
             choose_x86_profile(b"cellos.profile=qemu-q35-x86_64", &facts(false)),
             Err(BindError::NeedsHypervisor("qemu-q35-x86_64"))
         );
+        // ADR-0031 D-VM: the generic VM profile follows the same rule.
+        let (board, _) = choose_x86_profile(b"cellos.profile=x86_64-vm", &facts(true)).unwrap();
+        assert_eq!(board.slug, "x86_64-vm");
+        assert_eq!(board.dma_isolation, DmaIsolation::Optional);
+        assert_eq!(
+            choose_x86_profile(b"cellos.profile=x86_64-vm", &facts(false)),
+            Err(BindError::NeedsHypervisor("x86_64-vm"))
+        );
         // Naming the strict profile needs no detected fact.
         let (board, source) =
             choose_x86_profile(b"cellos.profile=x86_64-pc", &facts(false)).unwrap();
@@ -598,7 +612,7 @@ mod tests {
     fn bind_errors_name_the_refusal() {
         assert_eq!(
             format!("{}", BindError::UnknownProfile("pc")),
-            "unknown cellos.profile=pc; this image binds only: x86_64-pc qemu-q35-x86_64"
+            "unknown cellos.profile=pc; this image binds only: x86_64-pc qemu-q35-x86_64 x86_64-vm"
         );
         assert!(format!("{}", BindError::NeedsHypervisor("qemu-q35-x86_64"))
             .contains("admitted only under a hypervisor"));

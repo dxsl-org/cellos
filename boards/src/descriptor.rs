@@ -15,6 +15,9 @@ pub enum SocId {
     /// Generic x86_64 PC/server: the COM1-required compatibility baseline
     /// (HCL R1–R7), not a claim that every PC exposes that wiring.
     GenericX86Pc,
+    /// Generic x86_64 virtual machine: PC wiring under a hypervisor, DMA
+    /// isolation optional and operator-selected (ADR-0031 D-VM).
+    GenericX86Vm,
     Bcm2837,
     Bcm2711,
 }
@@ -60,6 +63,9 @@ pub enum DriverId {
     EthernetIgb,
     /// Additional 16550 ports beyond the COM1 console (phase 06).
     Uart16550Multi,
+    /// virtio over PCI (net, block, SCSI) through the 434 capability record
+    /// (ADR-0031 phase 05).
+    VirtioPci,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
