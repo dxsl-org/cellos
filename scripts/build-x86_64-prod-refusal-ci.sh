@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build the x86_64 *production-feature* domain-class refusal witness image (phase 02).
+# Build the x86_64 *fleet-profile* domain-class refusal witness image (phase 02).
 #
 # Produces:
 #   target/x86-prod-refusal/x86_64-unknown-none/release/cellos-kernel
-#   target/x86-prod-refusal-embedded/{init,kernel_fs.img}
+#   target/x86-prod-refusal-embedded/{init,kernel_fs.img,POLICY.BIN,boot-config/}
 #   build/vicell-x86-prod-refusal.iso
 # Boot it with: bash scripts/qemu-x86_64-test.sh build/vicell-x86-prod-refusal.iso
 #
@@ -14,10 +14,14 @@
 #   "shell: command not found" for a refusal *and* for a file that is not there,
 #   so "no `[domain] admitted cell` in the log" held for the wrong reason.
 #
-#   This script builds the missing input: a kernel with the *production* feature
-#   set (no `test-hooks`, so `switch_ordering_qualified()` is false and the
-#   on-path admission control is the only thing that could admit a domain) whose
-#   embedded VIFS1 carries two domain-class cells:
+#   This script builds the missing input: a kernel with the fleet profile — the
+#   shipping x86 feature set, default features plus `policy-required`, and no
+#   `test-hooks` — and the signed operator policy that profile is shipped with.
+#   x86_64 switch ordering is production-qualified (`switch_ordering_qualified()`
+#   is true for every x86_64 build), so a development-profile kernel boots with
+#   Tier 2 admission ENABLED; the fleet profile is what keeps it closed
+#   (`main.rs`: "Tier 2 admission: DISABLED (fleet profile)", the loader's
+#   `PolicyDisabled` denial). Its embedded VIFS1 carries two domain-class cells:
 #
 #     /bin/tier2-smoke    signed, `PROTECTION_CLASS_UNTRUSTED` manifest
 #     /bin/tier2-exploit  unsigned (no `__ViCell_sig`), UNTRUSTED manifest
@@ -62,14 +66,14 @@ export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none="${BINDGEN_EXTRA_CLANG_ARGS_
 mkdir -p "$TH_DIR"
 # Invalidate every final/staged output before invoking Cargo: a failed rebuild
 # must never leave a bootable kernel embedding the previous run's cells.
-rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$KERNEL" "$ISO_OUT"
+rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$TH_DIR/POLICY.BIN" "$KERNEL" "$ISO_OUT"
 
-echo "==> Building production cells (init without tier2-entry, shell, vfs, config, platform, drivers, sys tools)..."
+echo "==> Building production cells (init without tier2-entry, shell, vfs, config, input, platform, drivers, sys tools)..."
 # `tier2-entry` is deliberately absent: it exists only in the test-hooks image and
 # would make init launch the domain fixtures at boot.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-platform
+    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -80,6 +84,7 @@ CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
+    "$REL/service-input"
     "$REL/platform"
     "$REL/driver-nvme"
     "$REL/driver-e1000"
@@ -94,6 +99,7 @@ CELL_IMAGE_PATHS=(
     /bin/cellbox
     /bin/vfs
     /bin/config
+    /bin/input
     /bin/platform
     /bin/nvme
     /bin/e1000
@@ -106,7 +112,7 @@ CELL_IMAGE_PATHS=(
 )
 # Entries before this index are the Tier 1 base cells (the ones that must be
 # admitted for the shell to run at all); the rest are the domain-class witnesses.
-BASE_CELL_COUNT=10
+BASE_CELL_COUNT=11
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."
 FAT_CELL_ARGS=()
@@ -169,10 +175,26 @@ if ! has_section "$REL/cellbox" sig; then
 fi
 echo "    tier2-smoke: signed + untrusted   tier2-exploit: unsigned + untrusted   cellbox: signed + legacy"
 
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+# The fleet profile ships with the signed operator policy: under `policy-required`
+# an absent /POLICY.BIN is fail-closed for every cell, so the witness would refuse
+# the base cells' grantable caps instead of exercising domain admission alone.
+bake_policy "$TH_DIR/POLICY.BIN"
+
 echo "==> Assembling kernel_fs.img (VIFS1 ramdisk)..."
-"$PYTHON_BIN" tools/mkfat32.py "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
+# `input` selects /bin/input in services.toml. cellbox's serial session is created
+# through the INPUT service, so an image that never starts it boots to
+# "shell: authenticated serial session failed: NotFound" instead of a prompt.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input \
+    --config-output-dir "$TH_DIR/boot-config" \
+    "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}" "$TH_DIR/POLICY.BIN" /POLICY.BIN
 if [[ ! -s "$TH_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
+    exit 1
+fi
+if ! grep -Fxq 'path = "/bin/input"' "$TH_DIR/boot-config/services.toml"; then
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
     exit 1
 fi
 
@@ -197,24 +219,27 @@ for image_path in "${CELL_IMAGE_PATHS[@]}"; do
         exit 1
     fi
 done
+assert_policy_in_image "$TMPDIR_KFS/fat-layout.txt"
 echo "    kernel_fs.img: $(du -sh "$TH_DIR/kernel_fs.img" | cut -f1)"
 
 # INIT_ELF is embedded separately from kernel_fs.img.
 cp "$REL/app-init" "$TH_DIR/init"
 echo "    init: $(du -sh "$TH_DIR/init" | cut -f1)"
 
-echo "==> Building the production-feature kernel (no test-hooks)..."
-# No `--features test-hooks`: that feature is what reopens
-# `switch_ordering_qualified()` on x86_64 for the domain-test image, and it is also
-# what `kernel/src/loader/domain_admission.rs` const-asserts this build cannot
-# qualify with. RUSTFLAGS carries the kernel profile (the target-config default is
-# not applied to this package when RUSTFLAGS is set, so the two must agree).
+echo "==> Building the fleet-profile kernel (default features + policy-required, no test-hooks)..."
+# `policy-required` is the shipping x86 feature (`CANONICAL_KERNEL_FEATURES` in
+# scripts/assemble-x86-image.py) and the one that keeps Tier 2 admission closed on
+# x86_64. No `test-hooks`: that feature builds the admission fixtures the
+# domain-test image runs. RUSTFLAGS carries the kernel profile (the target-config
+# default is not applied to this package when RUSTFLAGS is set, so the two must
+# agree).
 EMBEDDED_OVERRIDE="$TH_DIR" \
 RUSTFLAGS="-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static" \
 cargo build --release \
     -p cellos-kernel \
     --target "$TARGET" \
-    -Z build-std=core,alloc
+    -Z build-std=core,alloc \
+    --features policy-required
 
 if [[ ! -s "$KERNEL" ]]; then
     echo "FAIL: kernel not produced at $KERNEL" >&2
@@ -223,13 +248,20 @@ fi
 
 # The feature set is the whole point of the witness: assert it structurally rather
 # than by reading the command line. `S22-X86-DOMAIN-LIVE` exists only in the
-# test-hooks build of the admission fixtures.
+# test-hooks build of the admission fixtures. Both posture lines below are
+# compiled under mutually exclusive cfgs in `kernel/src/main.rs`: the fleet line
+# only with `policy-required`/`production-relay-image`, every ENABLED line only
+# without them, so their presence and absence identify the profile.
 if grep -qa "S22-X86-DOMAIN-LIVE" "$KERNEL"; then
     echo "FAIL: $KERNEL carries test-hooks fixtures — it is not a production image" >&2
     exit 1
 fi
-if ! grep -qa "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate)" "$KERNEL"; then
-    echo "FAIL: $KERNEL does not carry the phase-02 disabled-posture message" >&2
+if ! grep -qaF "Tier 2 admission: DISABLED (fleet profile)" "$KERNEL"; then
+    echo "FAIL: $KERNEL is not a fleet-profile kernel (no fleet Tier 2 posture line)" >&2
+    exit 1
+fi
+if grep -qaF "Tier 2 admission: ENABLED" "$KERNEL"; then
+    echo "FAIL: $KERNEL can boot with Tier 2 admission ENABLED — it is not a fleet-profile kernel" >&2
     exit 1
 fi
 
