@@ -24,7 +24,7 @@ created: 2026-11-03
 | 01 | [ACPI table coverage (FADT, SPCR, multi MADT/MCFG/DMAR)](phase-01-acpi-table-coverage.md) — completed 2026-11-04 ([evidence](reports/phase-01-evidence.md)) | S1 KVM | 00 | |
 | 02 | [Timekeeping without HPET (TSC, kvmclock, PM timer)](phase-02-timekeeping-without-hpet.md) — completed 2026-11-04 ([evidence](reports/phase-02-evidence.md)) | S1 | 01 | |
 | 03 | [x2APIC and multi-IOAPIC](phase-03-x2apic-and-multi-ioapic.md) — completed 2026-11-04 ([evidence](reports/phase-03-evidence.md)) | S1 | 01 | |
-| 04a | [PCIe function ABI and MSI/MSI-X](phase-04a-pcie-function-abi-and-msix.md) | S1 | 03 | |
+| 04a | [PCIe function ABI and MSI/MSI-X](phase-04a-pcie-function-abi-and-msix.md) — completed 2026-11-04 ([evidence](reports/phase-04a-evidence.md)); CP2 approved ([package](cp2-04a-pcie-function-abi.md)) | S1 | 03 | |
 | 04b | [IRQ-driven PCIe driver cells](phase-04b-irq-driven-pcie-drivers.md) | S1 | 04a | |
 | 05 | [virtio-pci cells and x86_64-vm profile](phase-05-virtio-pci-cells.md) | S1 | 02, 04b | ✓ |
 | 06 | [ACPI reset, poweroff, power button](phase-06-acpi-power-and-reset.md) | S2 ops | 01, 03 | |

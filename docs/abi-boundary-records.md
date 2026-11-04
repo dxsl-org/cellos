@@ -182,14 +182,28 @@ physical-Intel evidence. Existing host coverage of the same decoder:
 RV64 test-hooks continuity guard
 `tests/integration/tests/manifest-qemu-continuity.rs`.
 
-## 6. Proposed records (not implemented)
+## 6. Records from ADR-0031 (x86 platform breadth)
 
-Listed so a reviewer sees them before code exists. Each one needs Law-1 CP1
-before implementation and CP2 after it. None of these bytes exists yet.
+Each needs Law-1 CP1 before implementation and CP2 after it.
+
+### 6.1 Implemented in phase 04a (CP2 approved 2026-11-04)
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | Code |
+|---|---|---|---|---|---|---|---|
+| `ViPcieFunctionV1` (syscall 434 `QueryPcieFunction`) | K | syscall 434 envelope + exact 584 bytes | u16 version, set {1} | `out_len != 584` → `InvalidInput` | flag bits beyond 0-2, BAR kinds above 3, BAR flag bits beyond 0-1, `reserved*`, cap entries past `cap_count` and cap bytes past `len` all zero (`ViPcieFunctionV1::decode` refuses otherwise); `a3` zero | caller holds `PcieDriverCap` and owns the BDF; the record is assembled before the copy-out | `libs/api/src/abi/pcie_function.rs`; `kernel/src/task/drivers/pcie_msi/record.rs` |
+| `AllocPcieIrq` result (syscall 435) | K | register envelope; return `first_irq \| count<<8 \| kind<<16` | none (register form) | n/a | `want` outside 1..=32, empty mode or mode bits beyond 0-1 refused; `a3` zero | ownership, capability presence, carve rule and FADT MSI flag checked before any config write | `kernel/src/task/drivers/pcie_msi.rs` |
+| 418/424 lookup semantics | K | unchanged 48-byte `PcieDeviceInfo` | unchanged | unchanged | unchanged | skip devices owned by another live task (semantic change only) | `kernel/src/task/drivers/pcie_ecam.rs` (`find_class_where`, `find_vendor_device`) |
+
+Error sentinels for 434/435 (`api::pcie_function::ERR_*`): `usize::MAX`
+permission denied, `MAX - 2` no function, `MAX - 3` invalid input,
+`MAX - 5` not supported, `MAX - 6` vectors exhausted. Cells reach them through
+`ostd::syscall::{sys_query_pcie_function, sys_alloc_pcie_irq}`.
+
+Envelope: the cell syscall stub carries four arguments, so "`a3..a5` zero" in
+CP1 is enforced as `a3` zero; `a4`/`a5` never reach the kernel.
+
+### 6.2 Proposed (not implemented)
 
 | Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP1 |
 |---|---|---|---|---|---|---|---|
-| `ViPcieFunctionV1` (syscall 434 `QueryPcieFunction`) | K | syscall 434 envelope + exact 584 bytes | u16 version, set {1} | `out_len != 584` → `InvalidInput` | flag bits beyond 0-2 zero, `reserved*` zero, `a3..a5` zero | caller holds `PcieDriverCap` and owns the BDF; the record is assembled before the copy-out | [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §3 |
-| `AllocPcieIrq` result (syscall 435) | K | register envelope; return `first_irq \| count<<8 \| kind<<16` | none (register form) | n/a | mode bits beyond 0-1 refused; `a3..a5` zero | ownership + capability presence + FADT MSI flag checked before any config write | §4 |
-| `SystemPower` (syscall 436) | K | register envelope, `a0` ∈ {1, 2} | none | n/a | `a1..a5` zero | `SupervisorCap` checked before any register write | §5 |
-| 418/424 lookup semantics | K | unchanged 48-byte `PcieDeviceInfo` | unchanged | unchanged | unchanged | skip devices owned by another live task (semantic change only) | §6 |
+| `SystemPower` (syscall 436) | K | register envelope, `a0` ∈ {1, 2} | none | n/a | `a1..a5` zero | `SupervisorCap` checked before any register write | [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §5 |

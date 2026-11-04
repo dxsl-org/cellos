@@ -1942,6 +1942,10 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
             }
         }
     }
+    // Every owned function is quiescent (MSI off, MSI-X masked), so none can
+    // fire into a vector handed to the next owner.
+    #[cfg(target_arch = "x86_64")]
+    crate::task::drivers::pcie_msi::release_for(tid);
     if !crate::task::drivers::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }

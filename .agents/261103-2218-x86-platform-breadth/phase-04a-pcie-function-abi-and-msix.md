@@ -1,7 +1,7 @@
 ---
 phase: 4a
 title: "PCIe function ABI and MSI/MSI-X delivery"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: [3]
@@ -90,17 +90,17 @@ Kernel modules: `kernel/src/task/drivers/pcie_msi.rs` (programming, carve-out ma
 
 ## Todo List
 
-- [ ] Vector allocator + ISR
-- [ ] Scanner retains BARs/caps
-- [ ] Syscalls 434/435 + ostd
-- [ ] MMIO carve-out
-- [ ] Death path + tests
+- [x] Vector allocator + ISR
+- [x] Scanner retains BARs/caps (deviation: capability bytes read at query time)
+- [x] Syscalls 434/435 + ostd
+- [x] MMIO carve-out
+- [x] Death path + tests
 
 ## Success Criteria
 
-- [ ] Unit tests listed in step 6 pass (`cargo test -p cellos-kernel pcie_msi`).
-- [ ] All existing x86 suites pass unchanged (drivers not converted yet).
-- [ ] A throwaway smoke cell, not committed, allocates 2 MSI-X vectors on QEMU nvme and observes one admin-command completion interrupt.
+- [x] Unit tests listed in step 6 pass (`pcie_msi::{vectors,layout,program}`, skip-owned and gate tests in `syscall::tests`; the capability-bounded read test does not apply after CP1 D-1).
+- [x] All existing x86 suites pass unchanged under tcg and kvm, apart from the failures that were already there: `x86_64-boot` prod-refusal 2/9 and the `CANCEL-RACE` flake ([evidence](reports/phase-04a-evidence.md)).
+- [x] A throwaway smoke cell, not committed, allocated 2 MSI-X vectors on QEMU nvme and took every admin completion by MSI-X (tcg and kvm). A replacement after a driver death got the freed vectors back.
 
 ## Risk Assessment
 
@@ -119,4 +119,14 @@ Phase 04b converts the drivers; phase 05 uses 434 for virtio capabilities.
 
 ## Deviation Log
 
-None.
+- **2026-11-04 Decision — record shape follows CP1, not this file's draft.** CP1 D-1 (approved) replaced `PcieFunctionInfo` + `ReadPcieCapability`/`sys_read_pcie_cap` with one 584-byte `ViPcieFunctionV1` that inlines 20 bytes per capability. No capability-read call exists; `ViPcieFunctionV1::decode` is strict (version, flags, BAR kinds, reserved bytes, entries past `cap_count`).
+- **2026-11-04 Deviation — capability bytes read at query time.** 434 reads revision, subsystem IDs, BAR flags and capability bytes from config space when called (read-only, no state change); BAR bases/sizes come from the kernel scan. Same bytes as a scan-time copy, without growing `PciDevice`. Limit found: the kernel scan covers the first admitted bus only; functions known only through the Platform Cell's `RegisterPciDevice` carry BAR0 alone, so their 434 record lists only BAR0. Fine for QEMU q35 (bus 0); physical machines with devices behind root ports need the Platform registration (or a kernel multi-bus scan) to carry every BAR — tracked for S4 (phases 13–20).
+- **2026-11-04 Deviation — module placement.** The vector bitmap lives in `kernel/src/task/drivers/pcie_msi/vectors.rs`; HAL gets `hal/arch/x86/src/x86_64/msi.rs` (vector range, message encoding, handler registration) instead of `vectors.rs`. The handler is a registered `fn(u8)` rather than a `hal_arch_trait` extern, so `hal/traits/**` (outside the S1 lock set) stays untouched. Range is `0x30..=0xDF` minus `0x80`; `0xE0..=0xEF` stay free.
+- **2026-11-04 Decision — logical IRQ = vector.** CP1 §4.1's "count contiguous logical IRQ numbers, each bound to one vector" is implemented as identity: the vector block is contiguous (MSI blocks aligned to their size), so `first_irq` is the first vector.
+- **2026-11-04 Decision — x86 `WaitIrq` gated on MSI ownership.** On x86 `WaitIrq(irq)` now requires an allocation the caller holds; otherwise a cell could park on, and drain, another driver's vector. No x86 cell called `WaitIrq` before (only virtio-mmio cells on riscv/aarch64). CP2 delta item.
+- **2026-11-04 Decision — typed sentinels.** 434/435 return `usize::MAX` (denied), `MAX-2` (no function), `MAX-3` (invalid), `MAX-5` (not supported), `MAX-6` (vectors exhausted), exported as `api::pcie_function::ERR_*`. The cell stub carries `a0..a3`, so CP1's "`a3..a5` zero" is enforced as `a3` zero. CP2 delta items.
+- **2026-11-04 Decision — carve rule.** The PCIe base spec forbids other CSRs in a 4 KiB range holding the MSI-X table or PBA, so the checkable rule is "every page touched starts with an MSI-X structure" and "both lie inside their BAR". A layout that fails is neither carved nor offered MSI-X (the driver keeps its whole BAR and polls or uses MSI). QEMU nvme (table 0x2000, PBA 0x3000 of BAR0) passes and the NVMe cell still runs with the pages carved.
+- **2026-11-04 Surprise — TLB shootdown under a spinlock.** Mapping the MSI-X table may issue a TLB shootdown; doing it under the allocation lock could deadlock against a CPU spinning on that lock with interrupts off. The table is mapped kernel-only before the lock is taken.
+- **2026-11-04 Limit — wake latency.** The MSI ISR only sets the pending flag; the waiting task becomes Ready at the scheduler's next sweep (timer tick), as for every `WaitIrq` today. A directed wake belongs to 04b if driver throughput needs it.
+- **2026-11-04 Recheck (CP1 §10) — one instance per driver.** `cells/tools/init/src/boot.rs` spawns `/bin/nvme` and `/bin/ahci` once; `services.toml` lists `/bin/e1000`, `/bin/igb`, `/bin/xhci` once; no driver cell uses hotswap `SpawnReplacement`. The skip-owned change therefore cannot make a running image drive a second device by accident.
+- **2026-11-04 Note — smoke artifacts.** `kernel/src/embedded-x86_64/` is tracked; the smoke rebuilt it with the throwaway NVMe hook and it was restored with `git checkout` afterwards. The smoke hook was reverted.

@@ -73,6 +73,11 @@ pub(super) extern "C" fn x86_64_idt_dispatch(frame: &mut EntryFrame) {
             unsafe { vi_handle_uart_irq() };
             super::super::apic::eoi();
         }
+        Route::Msi => {
+            debug_assert_eq!(selected.eoi, Eoi::After);
+            super::super::msi::deliver(vector);
+            super::super::apic::eoi();
+        }
         Route::LegacyInt80 | Route::LapicSpurious => {
             debug_assert_eq!(selected.eoi, Eoi::None);
         }

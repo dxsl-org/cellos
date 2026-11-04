@@ -670,6 +670,32 @@ pub enum ViSyscall {
     /// Allowlist: none (the `u64` allowlist is full); always permitted past the
     /// allowlist like [`Self::LookupBlockRoute`], gated at dispatch.
     QueryMachineFacts = 433,
+    /// 434: Read the owned PCIe function's record ([`crate::pcie_function`], ADR-0031).
+    ///
+    /// ABI: a0 = bdf (`bus<<8 | dev<<3 | fn`), a1 = out_ptr, a2 = out_len (must
+    /// equal [`crate::pcie_function::PCIE_FUNCTION_RECORD_LEN`]), a3 = 0 → 0 with
+    /// one [`crate::pcie_function::ViPcieFunctionV1`] written. No device or kernel
+    /// state changes. Errors: `InvalidInput` (wrong length, non-zero a3, BDF above
+    /// 16 bits, unwritable buffer), `PermissionDenied` (no `PcieDriverCap`, or the
+    /// caller does not own the BDF through 418/424), `FileNotFound` (no function).
+    ///
+    /// Allowlist: shares the DriverRegistration bit (50) with 418/424; the
+    /// `PcieDriverCap` and ownership checks at dispatch are the authority gate.
+    QueryPcieFunction = 434,
+    /// 435: Allocate MSI-X or MSI interrupts for the owned PCIe function.
+    ///
+    /// ABI: a0 = bdf, a1 = want (1..=32), a2 = mode
+    /// ([`crate::pcie_function::IRQ_MODE_ALLOW_MSIX`] /
+    /// [`crate::pcie_function::IRQ_MODE_ALLOW_MSI`], at least one), a3 = 0 →
+    /// [`crate::pcie_function::PcieIrqAlloc`] packed. The cell then waits with
+    /// `WaitIrq(first_irq + i, 0)`. A repeat call by the owner returns the
+    /// existing allocation; it lives until the owner dies (no free call).
+    /// Errors: `InvalidInput`, `PermissionDenied` (as 434), `NotSupported` (no
+    /// allowed capability, firmware forbids MSI, or not x86), `OutOfMemory`
+    /// (vectors exhausted).
+    ///
+    /// Allowlist: DriverRegistration bit (50), as 434.
+    AllocPcieIrq = 435,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1186,6 +1212,8 @@ impl ViSyscall {
             | Self::RegisterUsbHidProducer
             | Self::FindPcieDevice
             | Self::FindPcieDeviceByVendor
+            | Self::QueryPcieFunction
+            | Self::AllocPcieIrq
             | Self::SerialPortInfo
             | Self::SerialWrite
             | Self::SerialRead
@@ -1421,6 +1449,8 @@ impl From<usize> for ViSyscall {
             431 => ViSyscall::QueryRetirement,
             432 => ViSyscall::LookupBlockRoute,
             433 => ViSyscall::QueryMachineFacts,
+            434 => ViSyscall::QueryPcieFunction,
+            435 => ViSyscall::AllocPcieIrq,
             _ => ViSyscall::Unknown,
         }
     }

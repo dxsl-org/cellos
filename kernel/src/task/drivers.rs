@@ -37,6 +37,8 @@ mod iommu_riscv_cmd;
 pub mod iommu_x86; // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod nic;
 pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
+#[cfg(target_arch = "x86_64")]
+pub mod pcie_msi; // PCIe function record (434) and MSI/MSI-X allocation (435)
 pub mod virtio_rng; // NIC selector (VirtIO; PCIe NICs are Driver Cells)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.

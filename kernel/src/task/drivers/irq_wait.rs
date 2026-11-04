@@ -19,11 +19,12 @@
 
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-/// Maximum IRQ line index supported.
+/// Number of IRQ lines; every `u8` IRQ number has a slot.
 ///
 /// Covers VirtIO MMIO slots 1-8 (IRQs 1-8), the e1000 NIC (IRQ 33 on QEMU ARM/RV),
-/// the NVMe SSD (IRQ 34), and GPIOs (< 64). 64 entries costs 64+64+64 = 192 bytes.
-pub const MAX_IRQ: usize = 64;
+/// the NVMe SSD (IRQ 34), GPIOs (< 64) and, on x86_64, the MSI/MSI-X vectors
+/// 0x30..=0xDF that `AllocPcieIrq` hands out as IRQ numbers (ADR-0031 CP1 §4.1).
+pub const MAX_IRQ: usize = 256;
 
 /// Sentinel: no task is waiting on this IRQ.
 const NO_WAITER: usize = 0;

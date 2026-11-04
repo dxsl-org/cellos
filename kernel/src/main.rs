@@ -919,6 +919,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 vtd_include_pci_all: acpi_info.dmar_include_pci_all,
             });
             task::drivers::iommu::activate_isolation();
+            // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.
+            task::drivers::pcie_msi::init(
+                acpi_info
+                    .fadt
+                    .as_ref()
+                    .is_some_and(|fadt| fadt.iapc_boot_arch & (1 << 3) != 0),
+            );
         } else {
             log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
         }

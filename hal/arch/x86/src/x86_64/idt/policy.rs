@@ -24,6 +24,7 @@ pub enum Route {
     Uart,
     LegacyInt80,
     LapicSpurious,
+    Msi,
     FatalUnknown,
 }
 
@@ -55,6 +56,7 @@ pub fn classify(vector: u8, origin: Origin) -> Policy {
         0x24 => policy(Route::Uart, Eoi::After),
         0x80 => policy(Route::LegacyInt80, Eoi::None),
         0xff => policy(Route::LapicSpurious, Eoi::None),
+        v if crate::x86_64::msi::is_msi_vector(v) => policy(Route::Msi, Eoi::After),
         _ => policy(Route::FatalUnknown, Eoi::None),
     }
 }
@@ -96,6 +98,9 @@ mod tests {
         expect(0x80, Origin::User, Route::LegacyInt80, Eoi::None);
         expect(0xff, Origin::Kernel, Route::LapicSpurious, Eoi::None);
         expect(0x21, Origin::Kernel, Route::FatalUnknown, Eoi::None);
+        expect(0x30, Origin::Kernel, Route::Msi, Eoi::After);
+        expect(0xdf, Origin::User, Route::Msi, Eoi::After);
+        expect(0xe0, Origin::Kernel, Route::FatalUnknown, Eoi::None);
         expect(0xfe, Origin::Kernel, Route::FatalUnknown, Eoi::None);
     }
 

@@ -2973,6 +2973,71 @@ pub fn sys_find_pcie_device_by_vendor(
     }
 }
 
+/// Why `QueryPcieFunction` (434) or `AllocPcieIrq` (435) refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PcieFunctionError {
+    /// No `PcieDriverCap`, or the caller does not own the BDF (418/424).
+    PermissionDenied,
+    /// 434: no such function.
+    NotFound,
+    InvalidInput,
+    /// 435: no allowed capability, firmware forbids MSI, or not x86. Keep polling.
+    NotSupported,
+    /// 435: vector space exhausted. Keep polling.
+    NoVectors,
+    /// The kernel wrote a record this v1 decoder refuses.
+    Malformed,
+}
+
+fn pcie_function_error(ret: usize) -> PcieFunctionError {
+    use api::pcie_function as pf;
+    match ret {
+        pf::ERR_NOT_FOUND => PcieFunctionError::NotFound,
+        pf::ERR_INVALID_INPUT => PcieFunctionError::InvalidInput,
+        pf::ERR_NOT_SUPPORTED => PcieFunctionError::NotSupported,
+        pf::ERR_NO_VECTORS => PcieFunctionError::NoVectors,
+        _ => PcieFunctionError::PermissionDenied,
+    }
+}
+
+/// 434: read the record of the PCIe function at `bdf`, which the caller must
+/// own through `sys_find_pcie_device*`. The record carries every BAR, the
+/// MSI/MSI-X summary and up to 16 standard capabilities with their bytes.
+pub fn sys_query_pcie_function(
+    bdf: u32,
+) -> Result<api::pcie_function::ViPcieFunctionV1, PcieFunctionError> {
+    use api::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_RECORD_LEN};
+    let mut buf = [0u8; PCIE_FUNCTION_RECORD_LEN];
+    // SAFETY: `buf` is a live, writable buffer of exactly the length passed.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::QueryPcieFunction,
+            bdf as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    } as usize;
+    if ret != 0 {
+        return Err(pcie_function_error(ret));
+    }
+    ViPcieFunctionV1::decode(&buf).ok_or(PcieFunctionError::Malformed)
+}
+
+/// 435: allocate up to `want` (1..=32) MSI-X or MSI interrupts for the owned
+/// function at `bdf`; `mode` holds `api::pcie_function::IRQ_MODE_*` bits.
+/// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`.
+/// A repeat call returns the same allocation; it lives until the caller dies.
+pub fn sys_alloc_pcie_irq(
+    bdf: u32,
+    want: usize,
+    mode: usize,
+) -> Result<api::pcie_function::PcieIrqAlloc, PcieFunctionError> {
+    // SAFETY: scalar arguments only.
+    let ret = unsafe { syscall(ViSyscall::AllocPcieIrq, bdf as usize, want, mode, 0) } as usize;
+    api::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
+}
+
 /// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
 ///
 /// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,

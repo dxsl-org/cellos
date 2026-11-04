@@ -28,6 +28,8 @@ pub mod ioapic;
 #[cfg(target_arch = "x86_64")]
 pub mod ist;
 #[cfg(target_arch = "x86_64")]
+pub mod msi;
+#[cfg(target_arch = "x86_64")]
 pub mod msr;
 #[cfg(target_arch = "x86_64")]
 pub mod paging;

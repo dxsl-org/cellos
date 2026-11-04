@@ -79,6 +79,8 @@ mod tests {
         (431, ViSyscall::QueryRetirement),
         (432, ViSyscall::LookupBlockRoute),
         (433, ViSyscall::QueryMachineFacts),
+        (434, ViSyscall::QueryPcieFunction),
+        (435, ViSyscall::AllocPcieIrq),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -336,15 +338,24 @@ mod tests {
     }
 
     /// ADR-0029 §3: `QueryMachineFacts` is 433, dispatch-gated (SpawnCap) like
-    /// 432; 434 stays unmapped, and `MACHINE_PIN` takes service id 20.
+    /// 432, and `MACHINE_PIN` takes service id 20.
     #[test]
     fn query_machine_facts_is_dispatch_gated_without_allowlist_bit() {
         assert_eq!(ViSyscall::QueryMachineFacts as usize, 433);
         assert_eq!(ViSyscall::from(433), ViSyscall::QueryMachineFacts);
         assert_eq!(ViSyscall::QueryMachineFacts.allowlist_bit(), None);
         assert!(SyscallSet::EMPTY.permits(ViSyscall::QueryMachineFacts));
-        assert_eq!(ViSyscall::from(434), ViSyscall::Unknown);
         assert_eq!(crate::syscall::service::MACHINE_PIN, 20);
+    }
+
+    /// ADR-0031 CP1 D-3: 434/435 share bit 50 with 418/424; `PcieDriverCap` at
+    /// dispatch is the gate, so a cell without bit 50 cannot reach them.
+    #[test]
+    fn pcie_function_syscalls_share_driver_registration_bit() {
+        for call in [ViSyscall::QueryPcieFunction, ViSyscall::AllocPcieIrq] {
+            assert_eq!(call.allowlist_bit(), Some(50));
+            assert!(!SyscallSet::EMPTY.permits(call));
+        }
     }
 
     #[test]

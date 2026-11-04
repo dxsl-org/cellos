@@ -230,6 +230,13 @@ pub struct PciDevice {
     pub pm: Option<PmCap>,
 }
 
+impl PciDevice {
+    /// Wire BDF: `bus[15:8] | dev[7:3] | fun[2:0]`.
+    pub fn canonical_bdf(&self) -> u32 {
+        (self.bdf.0 as u32) << 8 | (self.bdf.1 as u32) << 3 | self.bdf.2 as u32
+    }
+}
+
 // ── Global device list ────────────────────────────────────────────────────────
 
 static PCI_DEVICES: Spinlock<Vec<PciDevice>> = Spinlock::new(Vec::new());
@@ -1164,10 +1171,24 @@ unsafe fn fingerprint_in_window(
 /// [`ETHERNET_LEGACY_CLASS_IDS`]); a NIC cell whose controller shares the triple
 /// uses [`find_vendor_device`] instead.
 pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
-    PCI_DEVICES
+    find_class_where(class, subclass, prog_if, |_| true)
+}
+
+/// [`find_class`], skipping every match whose canonical BDF fails `usable`.
+///
+/// Syscall 418 passes "unowned or owned by the caller" (ADR-0031 CP1 §6), so a
+/// second instance of one driver reaches the next identical function. `usable`
+/// runs after the device list lock is released.
+pub fn find_class_where(
+    class: u8,
+    subclass: u8,
+    prog_if: u8,
+    usable: impl Fn(u32) -> bool,
+) -> Option<PciDevice> {
+    let matches: Vec<PciDevice> = PCI_DEVICES
         .lock()
         .iter()
-        .find(|d| {
+        .filter(|d| {
             if d.class != class || d.subclass != subclass || d.prog_if != prog_if {
                 return false;
             }
@@ -1185,20 +1206,28 @@ pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
             true
         })
         .cloned()
+        .collect();
+    matches.into_iter().find(|d| usable(d.canonical_bdf()))
 }
 
-/// Find the first device with an exact `(vendor_id, device_id)`.
+/// Find the first device with an exact `(vendor_id, device_id)` whose canonical
+/// BDF passes `usable` (syscall 424 passes "unowned or owned by the caller",
+/// ADR-0031 CP1 §6; `usable` runs after the device list lock is released).
 ///
 /// This is how a Driver Cell whose controller family shares a class triple with
 /// another cell (the two Ethernet cells on `02:00:00`) claims *its* device: the
 /// match names the device, so no sibling has to decline and release it first.
 /// The Ethernet family gate still applies, so an Ethernet ID with no Driver Cell
 /// is never offered even when its vendor:device pair is queried verbatim.
-pub fn find_vendor_device(vendor_id: u16, device_id: u16) -> Option<PciDevice> {
-    PCI_DEVICES
+pub fn find_vendor_device(
+    vendor_id: u16,
+    device_id: u16,
+    usable: impl Fn(u32) -> bool,
+) -> Option<PciDevice> {
+    let matches: Vec<PciDevice> = PCI_DEVICES
         .lock()
         .iter()
-        .find(|d| {
+        .filter(|d| {
             if d.vendor_id != vendor_id || d.device_id != device_id {
                 return false;
             }
@@ -1209,6 +1238,55 @@ pub fn find_vendor_device(vendor_id: u16, device_id: u16) -> Option<PciDevice> {
             true
         })
         .cloned()
+        .collect();
+    matches.into_iter().find(|d| usable(d.canonical_bdf()))
+}
+
+/// The scanned function at canonical `bdf`, if any.
+pub fn device(bdf: u32) -> Option<PciDevice> {
+    PCI_DEVICES
+        .lock()
+        .iter()
+        .find(|d| d.canonical_bdf() == bdf)
+        .cloned()
+}
+
+/// The scanned function with a memory BAR at `base`, and that BAR's index.
+pub fn device_with_bar(base: u64) -> Option<(PciDevice, u8)> {
+    PCI_DEVICES.lock().iter().find_map(|d| {
+        d.bars
+            .iter()
+            .position(|bar| base != 0 && bar.base_addr() == base)
+            .map(|index| (d.clone(), index as u8))
+    })
+}
+
+/// Range-checked pointer to config byte `off` of canonical `bdf` inside the
+/// admitted ECAM window; `None` outside it. The window is identity-mapped for
+/// the kernel's lifetime, so the pointer stays valid; accesses must be volatile.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn config_ptr(bdf: u32, off: usize) -> Option<*mut u8> {
+    if bdf > 0xFFFF {
+        return None;
+    }
+    let (ecam_base, bus_start, bus_end) = ecam_window();
+    if ecam_base == 0 {
+        return None;
+    }
+    let (bus, dev, fun) = split_bdf(bdf);
+    config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, off)
+}
+
+/// Test seam: add scanned functions to the global list.
+#[cfg(test)]
+pub(crate) fn test_insert_devices(devices: &[PciDevice]) {
+    PCI_DEVICES.lock().extend_from_slice(devices);
+}
+
+/// Test seam: drop every function of `vendor_id` from the global list.
+#[cfg(test)]
+pub(crate) fn test_remove_devices(vendor_id: u16) {
+    PCI_DEVICES.lock().retain(|d| d.vendor_id != vendor_id);
 }
 
 #[cfg(test)]
