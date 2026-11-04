@@ -9,7 +9,8 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
+use api::dir_handles::ViDirHandle;
+use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::recv_from;
@@ -246,36 +247,103 @@ fn cell_main() {
         return;
     }
 
-    // Typed postcard IPC — VFS dropped the raw OP_* byte protocol in Phase 27;
-    // the old OP_WRITE frame decoded as garbage and every write failed.
     // Content cap mirrors the 512-byte IPC frame minus path + envelope.
     let cl = body.len().min(440usize.saturating_sub(vfs_path.len()));
-    let mut vfs_req = [0u8; 512];
-    let req = api::ipc::VfsRequest::Write {
-        path: vfs_path,
-        content: &body[..cl],
+    match save(vfs_ep, vfs_path, &body[..cl]) {
+        Ok(()) => {
+            ostd::io::print("wget: saved ");
+            ostd::io::print_usize(cl);
+            ostd::io::print(" bytes to ");
+            println(vfs_path);
+        }
+        Err(why) => {
+            print("wget: ");
+            println(why);
+        }
+    }
+}
+
+const VFS_WRITE_FAILED: &str = "VFS write failed";
+
+/// Write `content` to `vfs_path`.
+///
+/// A Cell launched with a cwd grant (every shell-launched foreground child) is
+/// sealed by the VFS: path-string requests are refused, and the grant is the
+/// only directory it may reach. The file is therefore written by handle,
+/// `OpenDir` down from the granted cwd and `WriteAt` the leaf, so `vfs_path`
+/// must lie at or below the cwd. A Cell launched without that grant still names
+/// the path.
+fn save(vfs_ep: usize, vfs_path: &str, content: &[u8]) -> Result<(), &'static str> {
+    let context = ostd::child_context::ChildContext::read_own().ok();
+    let granted = context
+        .as_ref()
+        .and_then(|c| Some((c.cwd_grant()?, core::str::from_utf8(c.cwd()).ok()?)));
+    let Some((grant, cwd)) = granted else {
+        let req = VfsRequest::Write {
+            path: vfs_path,
+            content,
+        };
+        return match vfs_call(vfs_ep, &req, &mut [0u8; IPC_BUF_SIZE]) {
+            Some(VfsResponse::Ok) => Ok(()),
+            _ => Err(VFS_WRITE_FAILED),
+        };
     };
-    let n = match api::ipc::encode(&req, &mut vfs_req) {
-        Ok(s) => s.len(),
-        Err(_) => {
-            println("wget: request too large");
-            return;
+    let relative = below(cwd, vfs_path).ok_or("output path is outside the working directory")?;
+    let mut parts = relative
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != ".")
+        .peekable();
+    let mut dir = ViDirHandle(grant.id);
+    // First handle derived from the grant; closing it revokes every later one.
+    let mut derived = None;
+    let result = loop {
+        let Some(name) = parts.next() else {
+            break Err("output path names no file");
+        };
+        if parts.peek().is_none() {
+            let req = VfsRequest::WriteAt { dir, name, content };
+            break match vfs_call(vfs_ep, &req, &mut [0u8; IPC_BUF_SIZE]) {
+                Some(VfsResponse::Ok) => Ok(()),
+                _ => Err(VFS_WRITE_FAILED),
+            };
+        }
+        let req = VfsRequest::OpenDir { dir, name };
+        match vfs_call(vfs_ep, &req, &mut [0u8; IPC_BUF_SIZE]) {
+            Some(VfsResponse::DirHandle(sub)) => {
+                derived.get_or_insert(sub);
+                dir = sub;
+            }
+            _ => break Err(VFS_WRITE_FAILED),
         }
     };
-    sys_send(vfs_ep, &vfs_req[..n]);
-    let mut r = [0u8; 64];
-    match recv_from(vfs_ep, &mut r) {
-        Ok(_) => match api::ipc::decode::<api::ipc::VfsResponse>(&r) {
-            Ok(api::ipc::VfsResponse::Ok) => {
-                ostd::io::print("wget: saved ");
-                ostd::io::print_usize(cl);
-                ostd::io::print(" bytes to ");
-                println(vfs_path);
-            }
-            _ => println("wget: VFS write failed"),
-        },
-        _ => println("wget: VFS write failed"),
+    if let Some(first) = derived {
+        let req = VfsRequest::CloseDir { dir: first };
+        let _ = vfs_call(vfs_ep, &req, &mut [0u8; IPC_BUF_SIZE]);
     }
+    result
+}
+
+/// `target` relative to the directory `cwd`, or `None` when an absolute
+/// `target` lies outside it. A relative `target` is already relative to it.
+fn below<'a>(cwd: &str, target: &'a str) -> Option<&'a str> {
+    if !target.starts_with('/') {
+        return Some(target);
+    }
+    let rest = target.strip_prefix(cwd.trim_end_matches('/'))?;
+    (rest.is_empty() || rest.starts_with('/')).then_some(rest)
+}
+
+/// One typed VFS request/reply; `None` when it cannot be encoded, sent or decoded.
+fn vfs_call<'b>(
+    vfs_ep: usize,
+    req: &VfsRequest<'_>,
+    resp: &'b mut [u8; IPC_BUF_SIZE],
+) -> Option<VfsResponse<'b>> {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let n = api::ipc::encode(req, &mut req_buf).ok()?.len();
+    sys_send(vfs_ep, &req_buf[..n]);
+    recv_from(vfs_ep, resp).ok()?;
+    api::ipc::decode::<VfsResponse>(resp).ok()
 }
 
 /// Has the download exceeded its wall-clock budget?

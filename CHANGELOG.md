@@ -23,6 +23,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `FindPcieDevice`/`FindPcieDeviceByVendor` skip a function owned by another live driver, so a second instance of a driver reaches the next identical device.
 
 ### Fixed
+- **`wget` saves its download again when the shell launched it.**
+  - **Cause:** the serial shell starts every foreground child with a cwd grant (`PreparedChildV1`), and the VFS seals such a child: path-string requests are refused (`ERR_DENIED`). `wget` still sent a path-string `VfsRequest::Write`, so every shell-launched download fetched the body and then printed `wget: VFS write failed`.
+  - **Fix:** `wget` reads its own context and, when it holds a cwd grant, reaches the output file by handle: `OpenDir` down from the grant, `WriteAt` the leaf, then `CloseDir`. The output path must lie at or below the working directory; a Cell launched without a cwd grant still sends the path-string `Write`.
 - **A masked receive can no longer deliver one RPC request twice** (C2C Phase 03 slice e).
   - **Cause:** `Recv`, `RecvScatter` and `RecvTimeout` remove the delivered message by queue position in a second scheduler hold after the copy-out. If another caller's queued request ahead of it was cancelled, expired or dropped by owner death in between, the position named the delivered sender's *next* message. That message was removed instead, and the delivered request stayed queued to be delivered again.
   - **Fix:** the four syscall receive arms (`Recv`, `RecvScatter`, `RecvTimeout`, `TryRecv`) commit through `PendingMailbox::remove_delivered`, which finds a wire by its delivery id; the `ipc_recv` paths and the blocking-resume commit already did. Inline (non-wire) records keep a sender/position rule. A failing-before host test reproduces the case; a debug assertion catches an arm that commits a wire without its delivery id.

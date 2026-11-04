@@ -195,7 +195,7 @@ disk.img
 | unset VAR | Remove variable | Phase S |
 | test / [ | Condition testing (-f, -z, -n, =, !=) | Phase U |
 | read | Read user input (Phase X-2) | Phase X-2 |
-| wget URL path | Download URL body to VFS | Phase U |
+| wget URL path | Download URL body to a VFS path at or below the working directory | Phase U |
 | httpd port path | HTTP/1.0 file server | Phase M |
 
 ## Shell Advanced Features
