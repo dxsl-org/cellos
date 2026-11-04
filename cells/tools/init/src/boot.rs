@@ -513,7 +513,7 @@ fn supervised_block_driver(name: &str, path: &str, tid: usize) -> crate::service
 
 /// Spawn the block Driver Cells and wait until each has bound its route or
 /// exited. Returns the drivers init supervises from here on (NVMe and, on x86,
-/// AHCI); the VirtIO block driver is waited for but not supervised.
+/// AHCI and virtio-scsi); the VirtIO block driver is waited for but not supervised.
 pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Service> {
     let mut supervised = alloc::vec::Vec::new();
     let mut spawned = alloc::vec::Vec::new();
@@ -532,6 +532,17 @@ pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Ser
     if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/ahci") {
         spawned.push(tid);
         supervised.push(supervised_block_driver("ahci", "/bin/ahci", tid));
+    }
+    // ADR-0031 phase 05: the virtio-scsi cell is a block driver too, so it must
+    // bind its route before VFS mounts; it exits cleanly without a controller.
+    #[cfg(target_arch = "x86_64")]
+    if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/virtio-scsi") {
+        spawned.push(tid);
+        supervised.push(supervised_block_driver(
+            "virtio-scsi",
+            "/bin/virtio-scsi",
+            tid,
+        ));
     }
     let started = ostd::syscall::sys_get_time_ms();
     let mut yields = 0;

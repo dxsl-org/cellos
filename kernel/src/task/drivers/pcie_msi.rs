@@ -11,6 +11,9 @@ mod layout;
 mod program;
 mod record;
 mod vectors;
+mod virtio_gate;
+
+pub use virtio_gate::dma_bypasses_iommu;
 
 use crate::sync::Spinlock;
 use crate::task::drivers::{irq_wait, pcie_ecam};

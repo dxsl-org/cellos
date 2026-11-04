@@ -1,13 +1,15 @@
 //! VirtIO-blk Driver Cell — Tier-1 Privileged Driver Cell.
 //!
-//! Probes VirtIO MMIO slots for a Block device (type 2), claims exclusive MMIO
-//! via `sys_request_mmio`, initialises the virtqueue via `virtio-drivers`,
-//! publishes the block route of the claimed slot via
-//! `sys_register_block_device(BlockDevice::Mmio { base })`, then serves the
-//! `DrvRequest` sector-I/O protocol (identical wire format to the NVMe Driver
-//! Cell — VFS speaks ONE block protocol) to the registered VFS only. Replaces
-//! the kernel's `virtio_blk.rs` driver per the Kernel Boundary Law (G2 loader
-//! redesign).
+//! riscv64 / aarch64: probes VirtIO MMIO slots for a Block device (type 2),
+//! claims exclusive MMIO via `sys_request_mmio` and publishes
+//! `BlockDevice::Mmio { base }`. x86_64: claims a virtio-blk PCI function by
+//! vendor:device (`1af4:1042`, then `1af4:1001`), drives it through
+//! `virtio-pci-transport` with polled queues and publishes
+//! `BlockDevice::Pci { bdf }`. Either way the virtqueue is initialised via
+//! `virtio-drivers` and the cell serves the `DrvRequest` sector-I/O protocol
+//! (identical wire format to the NVMe Driver Cell — VFS speaks ONE block
+//! protocol) to the registered VFS only. Replaces the kernel's `virtio_blk.rs`
+//! driver per the Kernel Boundary Law (G2 loader redesign).
 //!
 //! # Coexistence during migration (phase 02)
 //! The single QEMU virtio-blk device is still owned by the kernel (boot + VFS)
@@ -17,16 +19,29 @@
 //! Once the kernel relinquishes the device (phase 06), the same probe claims it.
 //!
 //! # Law 4 exception
-//! `src/device.rs` uses `unsafe` for the `virtio_drivers::Hal` impl and the MMIO
-//! probe reads. Every other module is `#![forbid(unsafe_code)]`.
+//! `src/mmio.rs`, `src/hal_x86.rs` and `src/io_x86.rs` use `unsafe` for the
+//! `virtio_drivers::Hal` impls, DMA bounce copies, the non-blocking request
+//! calls and the MMIO probe reads. No other module does.
 
 #![no_std]
 #![no_main]
 
 extern crate alloc;
 
+#[cfg(target_arch = "x86_64")]
+mod bars_x86;
 mod device;
 mod dispatch;
+#[cfg(target_arch = "x86_64")]
+mod hal_x86;
+#[cfg(target_arch = "x86_64")]
+mod io_x86;
+#[cfg(not(target_arch = "x86_64"))]
+mod mmio;
+#[cfg(target_arch = "x86_64")]
+mod pci_x86;
+#[cfg(target_arch = "x86_64")]
+mod wait;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use device::BlkDevice;
@@ -59,20 +74,25 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let Some(dev) = device::find_and_init_blk() else {
                 // No free VirtIO-blk device: the kernel owns the boot disk until
                 // phases 05/06 remove the in-kernel driver, or no device exists on
-                // this platform (e.g. x86 uses the NVMe cell). Exit cleanly — the
-                // kernel block path stays authoritative.
+                // this platform. Exit cleanly — the kernel block path stays
+                // authoritative. On x86_64 the PCI probe already logged why.
+                #[cfg(not(target_arch = "x86_64"))]
                 ostd::io::println("[virtio-blk] no free device (kernel-owned) — exiting");
                 ostd::syscall::sys_exit(0);
             };
 
             // Publish state before registration because VFS may route a request
             // immediately after successful publication.
-            let base = dev.base();
+            let route = dev.route();
             *STATE.lock() = Some(dev);
-            if let Err(error) = sys_register_block_device(BlockDevice::Mmio { base }) {
+            if let Err(error) = sys_register_block_device(route) {
                 *STATE.lock() = None;
+                let device = match route {
+                    BlockDevice::Mmio { base } => alloc::format!("base={base:#x}"),
+                    BlockDevice::Pci { bdf } => alloc::format!("bdf={bdf:#06x}"),
+                };
                 ostd::io::println(&alloc::format!(
-                    "[virtio-blk] block driver registration failed: {error:?} (base={base:#x})"
+                    "[virtio-blk] block driver registration failed: {error:?} ({device})"
                 ));
                 ostd::syscall::sys_exit(1);
             }

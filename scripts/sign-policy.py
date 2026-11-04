@@ -157,6 +157,8 @@ DEV_POLICY = [
     ("/bin/xhci",        0, 0, 0, 0, 0, 0,     1, 0, 0, 1),
     ("/bin/input",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
+    # virtio-scsi host (x86 virtio-pci, ADR-0031 phase 05): same shape as /bin/block.
+    ("/bin/virtio-scsi", 0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     # igb NIC family (i210/i211): same pcie_driver-only shape as /bin/e1000.
     ("/bin/igb",         0, 0, 0, 0, 0, 0,     1, 0, 0),

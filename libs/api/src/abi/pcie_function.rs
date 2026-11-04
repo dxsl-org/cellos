@@ -35,8 +35,16 @@ pub const FLAG_MSIX_PRESENT: u32 = 1 << 0;
 pub const FLAG_MSI_PRESENT: u32 = 1 << 1;
 /// `flags` bit: FADT IAPC_BOOT_ARCH bit 3 says MSI must not be used.
 pub const FLAG_MSI_FORBIDDEN_BY_FIRMWARE: u32 = 1 << 2;
+/// `flags` bit: the kernel's VT-d DMA translation is active. A virtio device
+/// that does not negotiate `VIRTIO_F_ACCESS_PLATFORM` bypasses translation, so
+/// a virtio driver must refuse such a device when this bit is set (CP2-04a
+/// amendment, 2026-11-04). It is not proof that this function is confined: on
+/// a host with several DMA remapping units it can be set for a function under
+/// a unit the kernel has not programmed yet (ADR-0031 phase 12).
+pub const FLAG_DMA_REMAPPED: u32 = 1 << 3;
 /// Every `flags` bit v1 defines.
-pub const FLAGS_KNOWN: u32 = FLAG_MSIX_PRESENT | FLAG_MSI_PRESENT | FLAG_MSI_FORBIDDEN_BY_FIRMWARE;
+pub const FLAGS_KNOWN: u32 =
+    FLAG_MSIX_PRESENT | FLAG_MSI_PRESENT | FLAG_MSI_FORBIDDEN_BY_FIRMWARE | FLAG_DMA_REMAPPED;
 
 /// BAR `kind`: absent, or the upper half of a 64-bit BAR.
 pub const BAR_KIND_ABSENT: u32 = 0;

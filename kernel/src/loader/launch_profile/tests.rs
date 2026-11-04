@@ -1258,6 +1258,7 @@ fn every_pre_annex_boot_row_keeps_observe_mutate() {
         "/bin/virtio-gpu",
         "/bin/input",
         "/bin/ahci",
+        "/bin/virtio-scsi",
     ] {
         rows.push((path, pcie));
     }

@@ -33,10 +33,12 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// The table bounds what the *kernel* offers; the cell repeats the identity
 /// check before programming a register model, so neither can bind a foreign
 /// family by accident.
-pub const ETHERNET_DRIVER_IDS: [(u16, u16); 3] = [
+pub const ETHERNET_DRIVER_IDS: [(u16, u16); 5] = [
     (0x8086, 0x100E), // 82540EM — /bin/e1000
     (0x8086, 0x10C9), // 82576 — QEMU's igb model, /bin/igb
     (0x8086, 0x1533), // i210 copper with external flash — /bin/igb
+    (0x1AF4, 0x1041), // virtio-net (modern) — /bin/virtio-net (ADR-0031 phase 05)
+    (0x1AF4, 0x1000), // virtio-net (transitional, modern caps required) — /bin/virtio-net
 ];
 
 // Deliberately refused until the cell implements their prerequisites: flashless
@@ -1335,7 +1337,9 @@ mod tests {
         assert!(!ethernet_id_has_driver(0x8086, 0x1539)); // i211 — needs iNVM
         assert!(!ethernet_id_has_driver(0x8086, 0x157B)); // i210 flashless — needs iNVM
         assert!(!ethernet_id_has_driver(0x8086, 0x1536)); // i210 fibre — needs media setup
-        assert!(!ethernet_id_has_driver(0x1AF4, 0x1000)); // virtio
+        assert!(ethernet_id_has_driver(0x1AF4, 0x1000)); // virtio-net, transitional
+        assert!(ethernet_id_has_driver(0x1AF4, 0x1041)); // virtio-net, modern
+        assert!(!ethernet_id_has_driver(0x1AF4, 0x1042)); // virtio-blk is not Ethernet
         assert!(!ethernet_id_has_driver(0x8086, 0x0));
     }
 

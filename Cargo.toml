@@ -54,6 +54,8 @@ members = [
     "libs/vimio",
     "libs/vigrep",
     "libs/vissh",
+    "libs/virtio-pci-transport",
+    "libs/scsi-block",
     # HAL
     "hal/core",
     "hal/soc/bcm27xx",
@@ -98,6 +100,7 @@ members = [
     "cells/drivers/can-loopback",
     "cells/drivers/virtio-net",
     "cells/drivers/virtio-blk",
+    "cells/drivers/virtio-scsi",
     "cells/drivers/virtio-gpu",
     "cells/drivers/gpio-sifive",
     "cells/drivers/serial",

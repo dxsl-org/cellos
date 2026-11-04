@@ -14,5 +14,8 @@ api            = { path = "../../../libs/api", version = "0.1.0" }
 ostd           = { path = "../../../libs/ostd", version = "0.2.0" }
 virtio-drivers = "0.7"
 
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+virtio-pci-transport = { path = "../../../libs/virtio-pci-transport", version = "0.1.0" }
+
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

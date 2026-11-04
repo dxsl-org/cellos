@@ -1733,6 +1733,26 @@ fn encode_ipc_result(result: SyscallResult) -> usize {
     }
 }
 
+/// 434/435 results: the typed sentinels of [`encode_ipc_result`] plus
+/// `NotSupported` and `OutOfMemory` (vectors exhausted), which a driver must
+/// tell apart to fall back to polling (`api::pcie_function::ERR_*`).
+#[cfg(not(target_arch = "riscv32"))]
+fn encode_pcie_function_result(result: SyscallResult) -> usize {
+    match result {
+        Err(SyscallError::NotSupported) => api::pcie_function::ERR_NOT_SUPPORTED,
+        Err(SyscallError::OutOfMemory) => api::pcie_function::ERR_NO_VECTORS,
+        other => encode_ipc_result(other),
+    }
+}
+
+#[cfg(not(target_arch = "riscv32"))]
+fn is_pcie_function_call(syscall: &Syscall) -> bool {
+    matches!(
+        syscall,
+        Syscall::QueryPcieFunction { .. } | Syscall::AllocPcieIrq { .. }
+    )
+}
+
 /// Syscalls whose errors use the typed sentinels of [`encode_ipc_result`]
 /// (`usize::MAX - 1..=4`) instead of the single generic error.
 fn has_typed_errors(syscall: &Syscall) -> bool {
@@ -2417,6 +2437,61 @@ fn caller_has_platform(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.platform_cap.is_some())
 }
 
+/// ADR-0031 CP1 §6: 418/424 offer a function that is unowned or already the
+/// caller's, and skip one a live task owns, so a second instance of one driver
+/// reaches the next identical function.
+fn pcie_usable_by(caller_id: usize, bdf: u32) -> bool {
+    crate::resource_registry::owner_of_bdf(bdf).is_none_or(|owner| owner == caller_id)
+}
+
+#[cfg(target_arch = "x86_64")]
+fn pcie_function_error(error: crate::task::drivers::pcie_msi::PcieFunctionError) -> SyscallError {
+    use crate::task::drivers::pcie_msi::PcieFunctionError as E;
+    match error {
+        E::InvalidInput => SyscallError::InvalidInput,
+        E::PermissionDenied => SyscallError::PermissionDenied,
+        E::NotFound => SyscallError::FileNotFound,
+        E::NotSupported => SyscallError::NotSupported,
+        E::NoVectors => SyscallError::OutOfMemory,
+    }
+}
+
+/// 434 record bytes for an owned BDF.
+#[cfg(target_arch = "x86_64")]
+fn query_pcie_function(
+    caller_id: usize,
+    bdf: usize,
+) -> Result<[u8; api::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
+    let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
+    crate::task::drivers::pcie_msi::query(caller_id, bdf)
+        .map(|record| record.encode())
+        .map_err(pcie_function_error)
+}
+
+/// 434 has no producer off x86: no function is reported.
+#[cfg(not(target_arch = "x86_64"))]
+fn query_pcie_function(
+    _caller_id: usize,
+    _bdf: usize,
+) -> Result<[u8; api::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
+    Err(SyscallError::FileNotFound)
+}
+
+/// 435 packed result for an owned BDF.
+#[cfg(target_arch = "x86_64")]
+fn alloc_pcie_irq(caller_id: usize, bdf: usize, want: usize, mode: usize) -> SyscallResult {
+    let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
+    crate::task::drivers::pcie_msi::allocate(caller_id, bdf, want, mode)
+        .map(|irq| irq.pack())
+        .map_err(pcie_function_error)
+}
+
+/// MSI is x86-only (CP1 §1).
+#[cfg(not(target_arch = "x86_64"))]
+fn alloc_pcie_irq(_caller_id: usize, _bdf: usize, _want: usize, _mode: usize) -> SyscallResult {
+    Err(SyscallError::NotSupported)
+}
+
 /// Serialize a matched PCIe device into the 48-byte `PcieDeviceInfo` wire record
 /// (padded from the 44 meaningful bytes by `vendor_id`/`device_id` alignment) and
 /// write it to the caller's `out_ptr`.
@@ -2430,7 +2505,7 @@ fn offer_pcie_device(
     out_ptr: usize,
     dev: crate::task::drivers::pcie_ecam::PciDevice,
 ) -> Result<usize, SyscallError> {
-    let bdf: u32 = (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
+    let bdf = dev.canonical_bdf();
     let bar0_base = dev.bars[0].base_addr();
     let bar0_len: u64 = match dev.bars[0] {
         crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
@@ -2461,6 +2536,16 @@ fn offer_pcie_device(
         })
         .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
         .unwrap_or((bar0_base, bar0_len));
+    // Under VT-d, a virtio function without ACCESS_PLATFORM would DMA around
+    // the translation; no cell may own it (ADR-0031 phase 05, review HIGH).
+    // Judged only before the first claim: the probe remaps the common-config
+    // page kernel-only, which must not happen under a live owner's mapping.
+    #[cfg(target_arch = "x86_64")]
+    if crate::resource_registry::owner_of_bdf(bdf).is_none()
+        && crate::task::drivers::pcie_msi::dma_bypasses_iommu(&dev)
+    {
+        return Ok(0);
+    }
     // Claim without displacing a live Driver Cell. A competing instance observes
     // "not found" and may retry after reap.
     if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
@@ -4213,6 +4298,20 @@ pub enum Syscall {
         a2: usize,
         a3: usize,
     },
+    /// 434: QueryPcieFunction — copy the owned function's `ViPcieFunctionV1`.
+    QueryPcieFunction {
+        bdf: usize,
+        out_ptr: usize,
+        out_len: usize,
+        reserved: usize,
+    },
+    /// 435: AllocPcieIrq — MSI-X/MSI vectors for the owned function.
+    AllocPcieIrq {
+        bdf: usize,
+        want: usize,
+        mode: usize,
+        reserved: usize,
+    },
     CellSessionV1 {
         request_ptr: usize,
         request_len: usize,
@@ -4776,6 +4875,8 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
         Syscall::FindPcieDeviceByVendor { .. } => V::FindPcieDeviceByVendor,
+        Syscall::QueryPcieFunction { .. } => V::QueryPcieFunction,
+        Syscall::AllocPcieIrq { .. } => V::AllocPcieIrq,
         Syscall::SerialPortInfo { .. } => V::SerialPortInfo,
         Syscall::SerialWrite { .. } => V::SerialWrite,
         Syscall::SerialRead { .. } => V::SerialRead,
@@ -8719,7 +8820,10 @@ fn handle_syscall_inner(
             if !caller_has_pcie_driver(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            match crate::task::drivers::pcie_ecam::find_class(class, subclass, prog_if) {
+            let usable = |bdf| pcie_usable_by(caller_id, bdf);
+            match crate::task::drivers::pcie_ecam::find_class_where(
+                class, subclass, prog_if, usable,
+            ) {
                 None => Ok(0), // device not present → VirtIO fallback
                 Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
             }
@@ -8738,10 +8842,46 @@ fn handle_syscall_inner(
             if !caller_has_pcie_driver(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            match crate::task::drivers::pcie_ecam::find_vendor_device(vendor_id, device_id) {
+            let usable = |bdf| pcie_usable_by(caller_id, bdf);
+            match crate::task::drivers::pcie_ecam::find_vendor_device(vendor_id, device_id, usable)
+            {
                 None => Ok(0),
                 Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
             }
+        }
+
+        // 434/435 (ADR-0031 CP1 §3–§4): the owned function's record, and its
+        // MSI-X/MSI vectors. PcieDriverCap plus BDF ownership (418/424) gate both.
+        Syscall::QueryPcieFunction {
+            bdf,
+            out_ptr,
+            out_len,
+            reserved,
+        } => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if out_len != api::pcie_function::PCIE_FUNCTION_RECORD_LEN || reserved != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            let record = query_pcie_function(caller_id, bdf)?;
+            write_user_slice(caller_id, out_ptr, &record, record.len())
+                .map_err(|_| SyscallError::InvalidInput)?;
+            Ok(0)
+        }
+        Syscall::AllocPcieIrq {
+            bdf,
+            want,
+            mode,
+            reserved,
+        } => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if reserved != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            alloc_pcie_irq(caller_id, bdf, want, mode)
         }
 
         // 425-428: the serial-port surface. The kernel owns the 16550 mechanism
@@ -8851,6 +8991,12 @@ fn handle_syscall_inner(
             // The ISR dereferences a stored nonzero base (VirtIO InterruptACK),
             // so only an MMIO window the caller was granted is accepted.
             if !wait_irq_base_permitted(caller_id, mmio_base) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // x86 IRQ numbers are MSI vectors from 435; a cell waits only on its
+            // own, so it can neither steal nor drain another driver's interrupts.
+            #[cfg(target_arch = "x86_64")]
+            if !crate::task::drivers::pcie_msi::irq_owned_by(irq, caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
             // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
@@ -9700,6 +9846,19 @@ fn handle_syscall_inner(
                 target_arch = "x86_64"
             )))]
             fn user_map(_base: usize, _len: usize) {}
+            // x86: a PCIe BAR is user-mapped without its MSI-X table/PBA pages
+            // (ADR-0031 CP1 §4.3), so a cell cannot retarget its device's
+            // interrupts by rewriting table entries.
+            #[cfg(target_arch = "x86_64")]
+            fn user_map_pcie_bar(base: usize, len: usize) {
+                for (start, size) in crate::task::drivers::pcie_msi::user_ranges(base, len) {
+                    crate::memory::paging::map_mmio_user_x86(start, size);
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            fn user_map_pcie_bar(base: usize, len: usize) {
+                user_map(base, len);
+            }
 
             if caller_has_platform(caller_id) {
                 return match crate::resource_registry::request_mmio_unchecked(caller_id, base, len)
@@ -9723,7 +9882,7 @@ fn handle_syscall_inner(
                     crate::resource_registry::DEV_PCIE,
                 ) {
                     Ok(()) => {
-                        user_map(base, len);
+                        user_map_pcie_bar(base, len);
                         Ok(0)
                     }
                     Err(types::ViError::PermissionDenied) => Ok(1),
@@ -10255,6 +10414,18 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_len: a1,
             a2,
             a3,
+        },
+        ViSyscall::QueryPcieFunction => Syscall::QueryPcieFunction {
+            bdf: a0,
+            out_ptr: a1,
+            out_len: a2,
+            reserved: a3,
+        },
+        ViSyscall::AllocPcieIrq => Syscall::AllocPcieIrq {
+            bdf: a0,
+            want: a1,
+            mode: a2,
+            reserved: a3,
         },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
@@ -10806,6 +10977,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
 
     let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_errors = has_typed_errors(&syscall);
+    let pcie_function = is_pcie_function_call(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -10813,7 +10985,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    frame.regs[10] = if typed_errors {
+    frame.regs[10] = if pcie_function {
+        encode_pcie_function_result(result)
+    } else if typed_errors {
         encode_ipc_result(result)
     } else {
         encode_syscall_result(result, usize::MAX, supports_typed_oom)
@@ -11875,6 +12049,82 @@ mod tests {
                 assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
             });
         }
+    }
+
+    /// ADR-0031 CP1 §6: with two functions of one vendor:device, the first
+    /// driver claims A, a second driver gets B, a third gets nothing, and an
+    /// owner's re-query still reaches its own function.
+    #[test]
+    fn vendor_lookup_skips_functions_owned_by_another_driver() {
+        use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
+        use crate::task::drivers::pcie_ecam::{self, Bar, PciDevice};
+        const VENDOR: u16 = 0x1b36;
+        const DEVICE: u16 = 0xfa04;
+        let function = |fun| PciDevice {
+            bdf: (0xee, 3, fun),
+            vendor_id: VENDOR,
+            device_id: DEVICE,
+            class: 0xff,
+            subclass: 0,
+            prog_if: 0,
+            bars: [Bar::None; 6],
+            msix: None,
+            pm: None,
+        };
+        pcie_ecam::test_insert_devices(&[function(0), function(1)]);
+        let (first, second, third) = (0x9001, 0x9002, 0x9003);
+        let find = |tid| {
+            pcie_ecam::find_vendor_device(VENDOR, DEVICE, |bdf| super::pcie_usable_by(tid, bdf))
+                .map(|d| d.canonical_bdf())
+        };
+        let a = find(first).expect("function A offered");
+        assert!(claim_bdf_owner(a, first));
+        let b = find(second).expect("function B offered to a second driver");
+        assert_ne!(a, b);
+        assert!(claim_bdf_owner(b, second));
+        assert_eq!(find(third), None);
+        assert_eq!(find(second), Some(b));
+        release_bdfs_for(first);
+        assert_eq!(
+            find(third),
+            Some(a),
+            "a reaped owner's function is offered again"
+        );
+        release_bdfs_for(second);
+        pcie_ecam::test_remove_devices(VENDOR);
+    }
+
+    /// 434/435 refuse a caller without PcieDriverCap, and their sentinels stay
+    /// distinct so a driver can tell "keep polling" from "not yours".
+    #[test]
+    fn pcie_function_calls_are_gated_and_typed() {
+        use api::pcie_function as pf;
+        let query = Syscall::QueryPcieFunction {
+            bdf: 0x18,
+            out_ptr: 0x5000,
+            out_len: pf::PCIE_FUNCTION_RECORD_LEN,
+            reserved: 0,
+        };
+        let alloc = Syscall::AllocPcieIrq {
+            bdf: 0x18,
+            want: 1,
+            mode: pf::IRQ_MODE_ALLOW_MSIX,
+            reserved: 0,
+        };
+        assert!(super::is_pcie_function_call(&query) && super::is_pcie_function_call(&alloc));
+        for call in [query, alloc] {
+            let result = super::handle_syscall(0x9abc, call);
+            assert!(matches!(result, Err(SyscallError::PermissionDenied)));
+            assert_eq!(
+                super::encode_pcie_function_result(result),
+                pf::ERR_PERMISSION_DENIED
+            );
+        }
+        let encode = |e| super::encode_pcie_function_result(Err(e));
+        assert_eq!(encode(SyscallError::NotSupported), pf::ERR_NOT_SUPPORTED);
+        assert_eq!(encode(SyscallError::OutOfMemory), pf::ERR_NO_VECTORS);
+        assert_eq!(encode(SyscallError::FileNotFound), pf::ERR_NOT_FOUND);
+        assert_eq!(encode(SyscallError::InvalidInput), pf::ERR_INVALID_INPUT);
     }
 
     /// ADR-0029 §3 (CP1 Q9): only trusted init, naming itself, may register

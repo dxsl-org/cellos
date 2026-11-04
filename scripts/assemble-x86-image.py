@@ -115,6 +115,10 @@ HEADLESS_CELLS = (
     Cell("driver-igb", "driver-igb", ("/bin/igb",)),
     Cell("driver-ahci", "driver-ahci", ("/bin/ahci",)),
     Cell("driver-xhci", "driver-xhci", ("/bin/xhci",)),
+    # virtio over PCI (ADR-0031 phase 05): each exits cleanly without its device.
+    Cell("driver-virtio-blk", "driver-virtio-blk", ("/bin/block",)),
+    Cell("driver-virtio-net", "driver-virtio-net", ("/bin/virtio-net",)),
+    Cell("driver-virtio-scsi", "driver-virtio-scsi", ("/bin/virtio-scsi",)),
     Cell("driver-serial-x86", "driver-serial-x86", ("/bin/serial",)),
     *(Cell("app-sys-tools", worker, ("/bin/" + worker,)) for worker in WORKERS),
     # Tier-2 fixtures stay unsigned: they exercise the untrusted-cell wall.

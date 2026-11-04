@@ -1,18 +1,26 @@
 //! VirtIO NIC Driver Cell — Tier-1 Privileged Driver Cell.
 //!
-//! Probes VirtIO MMIO slots for a Network device (device type 1), claims exclusive
-//! MMIO via `sys_request_mmio`, initialises the virtqueues via `virtio-drivers`,
+//! Finds a virtio Network device, initialises the virtqueues via `virtio-drivers`,
 //! registers as the system NIC via `sys_register_nic_driver`, then serves Tx/Rx/GetMac
 //! IPC from the net service.  This cell replaces the kernel's `virtio_net.rs` driver
 //! per the Kernel Boundary Law (2026-06-23).
 //!
+//! # Transports
+//! - riscv64 / aarch64 (`mmio`): probes the QEMU virt VirtIO MMIO slots and claims
+//!   the slot via `sys_request_mmio`.
+//! - x86_64 (`pci_x86`): claims a `1af4:1041` (modern) or `1af4:1000` (transitional)
+//!   PCI function, drives it through `virtio-pci-transport` with DMA authorised for
+//!   its BDF, and polls (no interrupts until phase 04b).
+//!
 //! # Fallback
-//! If no VirtIO MMIO NIC is found (x86_64, real hardware with PCIe-only NIC) the cell
-//! exits cleanly (code 0).  The kernel's fallback path and the e1000 Driver Cell remain.
+//! If no VirtIO NIC is found, or the PCI function is refused (logged by name), the
+//! cell exits cleanly (code 0).  The e1000/igb Driver Cells remain.
 //!
 //! # Law 4 exception
-//! `src/device.rs` uses `unsafe` for the `virtio_drivers::Hal` impl and MMIO probe reads.
-//! All other modules forbid unsafe code.
+//! `src/mmio.rs` and `src/pci_x86/hal.rs` use `unsafe` for the `virtio_drivers::Hal`
+//! impls, DMA bounce copies and MMIO probe reads; `src/pci_x86/raw_net.rs` for the
+//! raw queue calls that borrow buffers across the device's ownership window. All
+//! other modules are safe code.
 
 #![no_std]
 #![no_main]
@@ -21,6 +29,10 @@ extern crate alloc;
 
 mod device;
 mod dispatch;
+#[cfg(not(target_arch = "x86_64"))]
+mod mmio;
+#[cfg(target_arch = "x86_64")]
+mod pci_x86;
 
 use device::NetDevice;
 use dispatch::{handle, NicReply, REPLY_BUF};
@@ -33,10 +45,10 @@ static STATE: Mutex<Option<NetDevice>> = Mutex::new(None);
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            // Probe VirtIO MMIO slots for a Network device.
+            // Find and initialise the platform's virtio Network device.
             let Some(dev) = device::find_and_init_net() else {
-                // No VirtIO MMIO NIC on this platform — exit gracefully.
-                // The e1000 Driver Cell handles PCIe platforms.
+                // No usable virtio NIC on this platform — exit gracefully.
+                // The e1000/igb Driver Cells handle the other PCIe NICs.
                 ostd::syscall::sys_exit(0);
             };
 

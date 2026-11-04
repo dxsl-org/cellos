@@ -8,8 +8,9 @@ use super::layout::MsixLayout;
 use crate::task::drivers::pcie_ecam::{Bar, PciDevice};
 use api::pcie_function::{
     PcieBar, PcieCap, ViPcieFunctionV1, BAR_FLAG_MSIX_CARVED, BAR_FLAG_PREFETCHABLE,
-    BAR_KIND_ABSENT, BAR_KIND_IO, BAR_KIND_MEM32, BAR_KIND_MEM64, FLAG_MSIX_PRESENT,
-    FLAG_MSI_FORBIDDEN_BY_FIRMWARE, FLAG_MSI_PRESENT, PCIE_CAP_BYTES, PCIE_FUNCTION_CAPS_MAX,
+    BAR_KIND_ABSENT, BAR_KIND_IO, BAR_KIND_MEM32, BAR_KIND_MEM64, FLAG_DMA_REMAPPED,
+    FLAG_MSIX_PRESENT, FLAG_MSI_FORBIDDEN_BY_FIRMWARE, FLAG_MSI_PRESENT, PCIE_CAP_BYTES,
+    PCIE_FUNCTION_CAPS_MAX,
 };
 
 /// Vendor-specific capability; its own length byte bounds the copy.
@@ -110,6 +111,12 @@ pub fn build(dev: &PciDevice, firmware_forbids_msi: bool) -> Option<ViPcieFuncti
     }
     if firmware_forbids_msi {
         rec.flags |= FLAG_MSI_FORBIDDEN_BY_FIRMWARE;
+    }
+    // Set while the kernel's VT-d translation is active. Until phase 12 programs
+    // every DRHD, a function under an unprogrammed unit also gets the bit: that
+    // errs toward requiring ACCESS_PLATFORM and is not proof of confinement.
+    if crate::task::drivers::iommu::is_active() {
+        rec.flags |= FLAG_DMA_REMAPPED;
     }
     if let Some((_, layout)) = msix_layout(&cfg) {
         rec.flags |= FLAG_MSIX_PRESENT;

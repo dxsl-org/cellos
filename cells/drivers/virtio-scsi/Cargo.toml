@@ -1,0 +1,23 @@
+[package]
+name    = "driver-virtio-scsi"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "driver-virtio-scsi"
+path = "src/main.rs"
+
+[dependencies]
+types                = { path = "../../../libs/types", version = "0.1.0" }
+api                  = { path = "../../../libs/api", version = "0.1.0" }
+ostd                 = { path = "../../../libs/ostd", version = "0.2.0" }
+virtio-drivers       = "0.7"
+virtio-pci-transport = { path = "../../../libs/virtio-pci-transport", version = "0.1.0" }
+scsi-block           = { path = "../../../libs/scsi-block", version = "0.1.0" }
+# `Transport::begin_init` takes a `bitflags::Flags` feature set; same major
+# line as the virtio-drivers fork.
+bitflags             = "2.6"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

@@ -1,0 +1,15 @@
+[package]
+name = "virtio-pci-transport"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Cell-side virtio-over-PCI transport built from the QueryPcieFunction (434) record"
+
+[dependencies]
+api = { path = "../api", version = "0.1.0" }
+virtio-drivers = "0.7"
+
+[dev-dependencies]
+# Host tests drive the generic `Transport::begin_init`, which takes a
+# `bitflags::Flags` feature set; same major line as the virtio-drivers fork.
+bitflags = "2.6"

@@ -1,0 +1,8 @@
+[package]
+name = "scsi-block"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "SCSI block command layer shared by virtio-scsi and PVSCSI driver cells"
+
+[dependencies]

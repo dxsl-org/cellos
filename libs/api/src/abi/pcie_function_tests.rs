@@ -109,7 +109,7 @@ fn decode_refuses_malformed_records() {
     assert!(ViPcieFunctionV1::decode(&good[..583]).is_none());
     assert!(corrupt(0, 2).is_none(), "version");
     assert!(corrupt(2, 17).is_none(), "cap_count");
-    assert!(corrupt(4, 0x08).is_none(), "unknown flag");
+    assert!(corrupt(4, 0x10).is_none(), "unknown flag");
     assert!(corrupt(10, 1).is_none(), "bdf above 16 bits");
     assert!(corrupt(24, 1).is_none(), "reserved0");
     assert!(corrupt(32 + 16, 4).is_none(), "bar kind");

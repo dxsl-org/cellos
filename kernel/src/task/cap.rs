@@ -472,6 +472,7 @@ impl CapSet {
                 | "/bin/input"
                 | "/bin/virtio-gpu"
                 | "/bin/ahci"
+                | "/bin/virtio-scsi"
         ) {
             self.pcie_driver = true;
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
