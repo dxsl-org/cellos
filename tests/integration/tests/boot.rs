@@ -122,7 +122,12 @@ fn boots_to_shell_prompt() {
         qemu.output_contains("VFS Service"),
         "VFS service did not spawn"
     );
-    assert!(qemu.output_contains("Shell Started"), "shell did not spawn");
+    // Cellbox is the only shell init may launch; an init that still targets
+    // `/bin/shell` is refused at the launch edge and Cellbox never prints this.
+    assert!(
+        qemu.output_contains("shell: starting"),
+        "init did not launch the Cellbox shell"
+    );
 }
 
 /// Phase 04/13: the embedded FAT16 image must mount (regression guard for the

@@ -673,7 +673,10 @@ if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
 if (Test-Path $shutdown_bin) { $table_args += "/bin/shutdown=$shutdown_bin" }
 if (Test-Path $free_bin) { $table_args += "/bin/free=$free_bin" }
 if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
-$configArgs = @('--config-output-dir', "$embedded/boot-config")
+# `cellbox sh` opens an authenticated serial session owned by the input service;
+# without `input` in the autoload plan the shell exits (NotFound) and no prompt appears.
+$init_features = if ($env:CELLOS_INIT_FEATURES) { $env:CELLOS_INIT_FEATURES } else { 'input' }
+$configArgs = @('--config-features', $init_features, '--config-output-dir', "$embedded/boot-config")
 foreach ($entry in $table_args) {
     if ($entry -match '=') { $configArgs += @('--config-artifact', $entry) }
 }
