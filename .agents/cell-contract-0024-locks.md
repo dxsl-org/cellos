@@ -151,6 +151,13 @@ For every row: prior status/progress is retained; current scheduling is **BLOCKE
 - **Closed 2026-11-02:** the owner approved CP2 ([record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md); [package](260927-1100-c2c-anywhere-tier-aware/reports/phase-03e-cp2-package.md)), with review resolutions and deviations E1–E12. **C2C Phase 03 is done** at the x86 QEMU/TCG ceiling. The file-bounded exception ends with the slice; no slice-e path, and no `syscall.rs` line, stays open for further edits under it.
 - All 38 relations keep their whole-plan scope.
 
+**Bounded adopted slice — x86 platform breadth, slice S1 (phases 01–05) (2026-11-04):** the accountable owner (the user) accepted [ADR-0031](../docs/decisions/0031-x86-platform-breadth-kvm-vmware-intel.md). The owner also approved the [CP1](261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) (Law-1 confirmation 1, D-1…D-7) and its §7 lock handoff ([approval](261103-2218-x86-platform-breadth/cp1-approval.md)). The slice serves **Intel C2C** with repeatable KVM-guest nodes. The integrating owner is the current x86-breadth session.
+- File-bounded exception for exactly the CP1 §7 paths.
+- Planned Law-1 delta: `QueryPcieFunction = 434` with `ViPcieFunctionV1` (584 bytes), `AllocPcieIrq = 435`, and the 418/424 skip-owned semantics, all in phase 04a. Allowlist bit 50 is shared. CP2 is required after phase 04a.
+- `SystemPower = 436` is approved at design level only; its implementation (phase 06, slice S2) needs its own handoff.
+- The G1 private lane (`cellos_g1_cpu`) is untouched. `x86_64-pc` stays `Required`.
+- All 38 relations keep their whole-plan scope.
+
 | Existing plan | Prior status / progress (preserved) | Blocked scope | Replacement area / rebase gate |
 |---|---|---|---|
 | [260528-2016-vicell-full-implementation](260528-2016-vicell-full-implementation/plan.md) | pending | Only unfinished kernel, Cell, authority, runtime and lifecycle contract slices of the legacy umbrella; unrelated historic product scope stays parked. | P01 then P02/P03/P05/P06; explicit per-slice handoff |

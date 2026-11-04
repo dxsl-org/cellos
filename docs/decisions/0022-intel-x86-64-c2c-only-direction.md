@@ -186,6 +186,17 @@ behind interrupt-controller, IOMMU and platform-discovery traits.
   ADR as an x86 build/qualification simplification. It selects a profile at boot
   and does not broaden device support.
 
+### Amendment 2026-11-04 — x86 platform breadth
+
+Owner decision recorded in [ADR-0031](0031-x86-platform-breadth-kvm-vmware-intel.md)
+(accepted 2026-11-04). It amends §Hardware item 2 ("keep one NIC/storage path; do
+not broaden device support") so that KVM and VMware guests and the common Intel
+PC/server device families are admitted, each by exact device ID, through the plan
+`.agents/261103-2218-x86-platform-breadth/`. The sole Intel C2C direction, the
+task-admission rule and the single-WIP rule do not change. AMD stays parked. No
+hardware purchase is implied. Each slice still needs its own handoff, and CP1/CP2
+where it changes ABI.
+
 ## Related operational tooling decision
 
 [ADR-0028](0028-cellbox-cli-first-structured-pipelines-and-tui.md) records the

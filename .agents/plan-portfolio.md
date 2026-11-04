@@ -178,6 +178,16 @@ Admission blockers, per the promotion rule:
 - Single-WIP rule: x86 is admitted first. aarch64 only after x86 closes or with an explicit owner exception.
 - The x86 phase 03 kernel→init fingerprint hand-off needs a Law-1 CP1 if it changes ABI. Otherwise the plan stops at that point.
 
+## Admitted — x86 platform breadth (ADR-0031, accepted 2026-11-04); slice S1 holds the WIP lane
+
+**Recorded 2026-11-04.** [Plan](261103-2218-x86-platform-breadth/plan.md). The owner accepted [ADR-0031](../docs/decisions/0031-x86-platform-breadth-kvm-vmware-intel.md), approved Law-1 CP1 confirmation 1 for [cp1-pcie-irq-power-abi.md](261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) (D-1…D-7), and approved its §7 lock handoff for slice S1 ([record](261103-2218-x86-platform-breadth/cp1-approval.md); [lock inventory](cell-contract-0024-locks.md)).
+
+| Order | Plan slice | C2C link (ADR-0022) | Acceptance scenario | Evidence ceiling |
+|---|---|---|---|---|
+| 3 (admitted 2026-11-04, WIP) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
+
+Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
+
 ## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
 
 The user answered YES to E-1..E-8 of the [CP1](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp1.md) and its [lock handoff](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp1-approval.md), then approved CP2 ([record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md); [package](260927-1100-c2c-anywhere-tier-aware/reports/phase-03e-cp2-package.md)). Controlling P04 (P03 for the receive-commit rows). The slice no longer holds the WIP lane. **C2C Phase 03 is done at the x86 QEMU/TCG ceiling.**

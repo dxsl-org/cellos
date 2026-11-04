@@ -181,3 +181,15 @@ physical-Intel evidence. Existing host coverage of the same decoder:
 `libs/api/src/abi/manifest_compat_tests.rs` and `manifest_tests.rs`, plus the
 RV64 test-hooks continuity guard
 `tests/integration/tests/manifest-qemu-continuity.rs`.
+
+## 6. Proposed records (not implemented)
+
+Listed so a reviewer sees them before code exists. Each one needs Law-1 CP1
+before implementation and CP2 after it. None of these bytes exists yet.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP1 |
+|---|---|---|---|---|---|---|---|
+| `ViPcieFunctionV1` (syscall 434 `QueryPcieFunction`) | K | syscall 434 envelope + exact 584 bytes | u16 version, set {1} | `out_len != 584` → `InvalidInput` | flag bits beyond 0-2 zero, `reserved*` zero, `a3..a5` zero | caller holds `PcieDriverCap` and owns the BDF; the record is assembled before the copy-out | [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §3 |
+| `AllocPcieIrq` result (syscall 435) | K | register envelope; return `first_irq \| count<<8 \| kind<<16` | none (register form) | n/a | mode bits beyond 0-1 refused; `a3..a5` zero | ownership + capability presence + FADT MSI flag checked before any config write | §4 |
+| `SystemPower` (syscall 436) | K | register envelope, `a0` ∈ {1, 2} | none | n/a | `a1..a5` zero | `SupervisorCap` checked before any register write | §5 |
+| 418/424 lookup semantics | K | unchanged 48-byte `PcieDeviceInfo` | unchanged | unchanged | unchanged | skip devices owned by another live task (semantic change only) | §6 |
