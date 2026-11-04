@@ -156,6 +156,9 @@ For every row: prior status/progress is retained; current scheduling is **BLOCKE
 - Planned Law-1 delta: `QueryPcieFunction = 434` with `ViPcieFunctionV1` (584 bytes), `AllocPcieIrq = 435`, and the 418/424 skip-owned semantics, all in phase 04a. Allowlist bit 50 is shared. CP2 is required after phase 04a.
 - `SystemPower = 436` is approved at design level only; its implementation (phase 06, slice S2) needs its own handoff.
 - The G1 private lane (`cellos_g1_cpu`) is untouched. `x86_64-pc` stays `Required`.
+- Extension (owner, 2026-11-04, phase 05): the exception also covers `kernel/src/loader/boot_ceiling.rs` and its selftest, `kernel/src/task/cap.rs`, `kernel/src/loader/launch_profile/{profiles,tests}.rs`, `scripts/sign-policy.py`, `config/services.toml` and `scripts/assemble-x86-image.py`, together with the table its edit requires: `scripts/cellos_sign/signing.py` (assembler hash and signed-binary set) and `scripts/test_assemble_x86_image.py`. Purpose: admit `/bin/virtio-scsi` as a PCIe driver path and package the virtio-pci cells into the x86 image. CP2-04a amendment: `ViPcieFunctionV1` flags bit 3 `DMA_REMAPPED`.
+- Extension 2 (owner, 2026-11-04, phase 05): `cells/tools/init/src/boot.rs`, scoped to spawning `/bin/virtio-scsi` with the block drivers on x86, so its route exists before VFS mounts. The interim `config/services.toml` entry was removed again.
+- Phase 04b (IRQ-driven drivers) is deferred by the owner (2026-11-04): `WaitIrq` has no timeout and is re-planned before any driver conversion.
 - All 38 relations keep their whole-plan scope.
 
 | Existing plan | Prior status / progress (preserved) | Blocked scope | Replacement area / rebase gate |

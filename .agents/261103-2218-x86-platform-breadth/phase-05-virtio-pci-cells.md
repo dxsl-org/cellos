@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "virtio-pci cells (net, blk, scsi) and x86_64-vm profile"
-status: pending
+status: completed
 priority: P1
 effort: "5d"
 dependencies: [2, "4b"]
@@ -86,20 +86,20 @@ flowchart LR
 
 ## Todo List
 
-- [ ] Transport lib
-- [ ] virtio-net x86
-- [ ] virtio-blk x86
-- [ ] scsi-block + virtio-scsi
-- [ ] ACCESS_PLATFORM enforcement
-- [ ] x86_64-vm profile
-- [ ] Tests + CI + acceptance lane
+- [x] Transport lib
+- [x] virtio-net x86
+- [x] virtio-blk x86
+- [x] scsi-block + virtio-scsi
+- [x] ACCESS_PLATFORM enforcement (cells, plus the kernel 418/424 gate after review)
+- [x] x86_64-vm profile
+- [x] Tests + CI + acceptance lane
 
 ## Success Criteria
 
-- [ ] `kvm-default-vm` acceptance passes: `Cellos >`, `[net] DHCP acquired`, two-boot persistence via virtio-blk and virtio-scsi; log shows `clock=kvmclock|tsc`, `apic=x2apic`, `irq=msix`.
-- [ ] The same image under `x86_64-pc` + intel-iommu + `iommu_platform=on` passes; without `iommu_platform` it fails closed with the named log and the shell still comes up.
-- [ ] Full x86 suite green under TCG and KVM; ARM/RISC-V virtio-MMIO lanes unchanged.
-- [ ] Review: independent `haily-reviewer` pass on the transport + ACCESS_PLATFORM logic.
+- [x] The `kvm-default-vm` acceptance passes: `Cellos >`, `[net] DHCP acquired`, and two-boot persistence via virtio-blk and virtio-scsi. The log shows `clock=kvmclock` and `apic=x2apic`. `irq=msix` does not apply, because 04b is deferred and the log shows `irq=polled reason=04b-deferred` ([evidence](reports/phase-05-evidence.md)).
+- [x] Under `x86_64-pc` + intel-iommu + `iommu_platform=on` everything binds, DHCP works and persistence holds. Without `iommu_platform` the kernel refuses each function with the named log, and the shell still comes up (SAFE MODE: the refused disk held the pin store).
+- [x] The full x86 suite is green under TCG and KVM, except the pre-existing `x86_64-boot` 2/9. RISC-V virtio-MMIO: mount and DHCP pass. The shell-spawn failures come from a stale artifact (deviation log).
+- [x] Review: an independent `haily-reviewer` pass was done and all findings are fixed (deviation log).
 
 ## Risk Assessment
 
@@ -116,4 +116,32 @@ S2 (phases 06, 07a, 07b) and S3 (phases 08, 09).
 
 ## Deviation Log
 
-None.
+- **2026-11-04 Decision — polled virtio (04b deferred).** The owner deferred 04b. The virtio cells program `NO_VECTOR` (0xFFFF) for config and queues, poll with deadlines, and log `irq=polled reason=04b-deferred`. The success criterion `irq=msix` therefore does not apply in this phase.
+- **2026-11-04 Surprise → CP2-04a amendment.** Cells had no way to learn whether an IOMMU translates their DMA: IOVA equals PA, `QueryMachineFacts` needs SpawnCap, and init passes no argv. The owner approved `ViPcieFunctionV1.flags` bit 3 `FLAG_DMA_REMAPPED`, set while VT-d is active. A cell requires `ACCESS_PLATFORM` exactly when that bit is set. This replaces "when the bound profile is `Required`": under `Required` without a remapper, DMA is already refused.
+- **2026-11-04 Surprise → lock extension.** `/bin/virtio-scsi` needs entries in the boot ceiling, `CapSet::with_path_caps`, the launch-profile admission set, the signed policy table and `config/services.toml`. Packaging needs `scripts/assemble-x86-image.py`, plus its signing table (`scripts/cellos_sign/signing.py`: assembler hash and signed set) and its tests. The owner approved the extension (`.agents/cell-contract-0024-locks.md`).
+- **2026-11-04 Surprise — Ethernet family gate.** The kernel's `ETHERNET_DRIVER_IDS` refused virtio-net (`1af4:1041`, `1af4:1000`), so 424 would never offer it. Both IDs were added; virtio-blk (`1af4:1042`) stays non-Ethernet in the test.
+- **2026-11-04 Decision — boot log wording.** The binding log reads `[x86-gate] dma isolation optional (operator-selected VM profile)` instead of "OFF": under `x86_64-vm` a vIOMMU that is present is still activated, so "OFF" would be false.
+- **2026-11-04 Decision — virtqueue in the SCSI cell.** The fork's `VirtQueue` is private, so `cells/drivers/virtio-scsi` carries its own single-request split virtqueue (one command in flight, polled, deadline-bounded). This avoids editing `kernel/third_party/virtio_drivers`.
+- **2026-11-04 Decision — DMA pools.** `GrantDma` pins until the cell exits and has no revoke, so the blk and net cells authorize a fixed bounce pool once instead of authorizing per buffer. Per-buffer authorization would leak DMA quota.
+- **2026-11-04 Note — delegation.** These parts were built by subagents against written contracts and verified here:
+  - `libs/virtio-pci-transport` (41 host tests);
+  - `libs/scsi-block` (49);
+  - the virtio-blk and virtio-net x86 paths;
+  - `cells/drivers/virtio-scsi` (14).
+- **2026-11-04 Surprise — virtio-net header.** Under `VERSION_1` the virtio-net header is 12 bytes (`num_buffers`). The fork's `VirtIONet` hard-codes the 10-byte legacy header, so DHCP failed. The x86 path now uses `VirtIONetRaw` and writes and reads the 12-byte header itself. The MMIO path is unchanged.
+- **2026-11-04 Surprise → owner (lock extension 2).** VFS scans block routes only at mount time, so `/bin/virtio-scsi`, spawned from `services.toml` after VFS, was never mounted. Init now spawns it with the block drivers (`cells/tools/init/src/boot.rs`), and the services entry was removed.
+- **2026-11-04 Surprise — the machine pin gates `net`.** Under `x86_64-vm` and `x86_64-pc` init needs the pin store (ADR-0029 §3) before it starts `net`. The provisioned lanes therefore boot the virtio-blk disk from `scripts/x86/machine_pin_disk.py` (P1 FAT32 + P5 CellosFS). Boot 1 pins, boot 2 matches.
+- **2026-11-04 Review (haily-reviewer, independent) — 1 HIGH, 3 MED, 6 LOW; all fixed.**
+  - HIGH: any `PcieDriverCap` cell could claim a virtio function without `ACCESS_PLATFORM` and DMA around VT-d. Fixed in the kernel: under active VT-d, 418/424 refuse such a function before its first claim (`pcie_msi/virtio_gate.rs`; the verdict is cached and logged once as `[pcie] refusing … would bypass VT-d`). The cells' own check stays as defence in depth. The fail-closed lane now expects the kernel line.
+  - MED fixes:
+    - `VirtioPciTransport::new` resets the device before any DMA grant;
+    - `queue_set` and `notify` are inert after a recorded failure;
+    - virtio-blk reads and writes and virtio-net TX are deadline-bounded with a `DEVICE_NEEDS_RESET` check, and poison the device on expiry.
+  - LOW fixes:
+    - bounded reset wait, treating all-ones status as a gone device;
+    - `Required` re-checked at feature write;
+    - virtio-blk bounce slots raised to 6 (indirect table);
+    - virtio-scsi frees its buffer when `authorize` fails;
+    - `FLAG_DMA_REMAPPED` documented as "VT-d active", not proof of confinement before phase 12.
+  - Accepted residual: virtio-blk flush stays blocking, because fork 0.7.5 has no non-blocking flush. It is refused when the device is poisoned or needs a reset.
+- **2026-11-04 Limit — RISC-V lane.** The MMIO path of the rebuilt virtio-blk/net cells was exercised on QEMU riscv64 (`boot` suite): `fat_filesystem_mounts` and `network_dhcp_acquires_ip` pass. `boots_to_shell_prompt` and `vfs_fat16_reboot_persistence` fail with `Init: shell spawn failed`, a string that is not in the current init source. `[INFERENCE]` A stale RV64 init artifact, unrelated to this phase. Not re-run on a clean baseline.

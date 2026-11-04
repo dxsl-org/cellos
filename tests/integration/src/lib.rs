@@ -169,6 +169,36 @@ pub fn x86_lane() -> X86Lane {
     }
 }
 
+/// QEMU arguments for the phase 05 virtio-pci functions (net on a restricted
+/// user netdev, blk on `blk_disk`, one `scsi-hd` on `scsi_disk`). `vtd` puts
+/// `intel-iommu` first so QEMU wires it before the endpoints; `iommu_platform`
+/// makes every virtio device offer `VIRTIO_F_ACCESS_PLATFORM` (modern only).
+/// `-nic none` drops q35's default NIC so virtio-net is the only Ethernet.
+pub fn virtio_pci_devices(blk_disk: &str, scsi_disk: &str, vtd: bool, iommu_platform: bool) -> Vec<String> {
+    let opts = if iommu_platform { ",iommu_platform=on,disable-legacy=on" } else { "" };
+    let mut args: Vec<String> = vec!["-nic".into(), "none".into()];
+    if vtd {
+        args.extend(["-device".into(), "intel-iommu".into()]);
+    }
+    args.extend([
+        "-netdev".into(),
+        "user,id=vnet0,restrict=on".into(),
+        "-device".into(),
+        format!("virtio-net-pci,netdev=vnet0{opts}"),
+        "-drive".into(),
+        format!("file={blk_disk},format=raw,if=none,id=vblk0"),
+        "-device".into(),
+        format!("virtio-blk-pci,drive=vblk0{opts}"),
+        "-device".into(),
+        format!("virtio-scsi-pci,id=vscsi0{opts}"),
+        "-drive".into(),
+        format!("file={scsi_disk},format=raw,if=none,id=vsd0"),
+        "-device".into(),
+        "scsi-hd,drive=vsd0,bus=vscsi0.0".into(),
+    ]);
+    args
+}
+
 /// Resolve the qemu-system-x86_64 binary.
 ///
 /// Order: `$ViCell_QEMU_X86` env override → bare name on PATH → Windows default.
@@ -1091,11 +1121,22 @@ impl QemuRunner {
     /// order (QEMU wires devices in command-line order, which the VT-d lane
     /// relies on).
     fn boot_x86_q35(iso: &str, cpus: usize, devices: &[String]) -> Self {
+        Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", cpus, devices)
+    }
+
+    /// [`Self::boot_x86_q35`] with an explicit accelerator/machine/CPU lane and
+    /// guest memory size.
+    fn boot_x86_q35_lane(
+        iso: &str,
+        lane: &X86Lane,
+        memory: &str,
+        cpus: usize,
+        devices: &[String],
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
         let cpus = cpus.to_string();
         let serial = format!("tcp:127.0.0.1:{port}");
-        let lane = x86_lane();
 
         let mut child = Command::new(qemu_binary_x86())
             .args(&lane.accel)
@@ -1105,7 +1146,7 @@ impl QemuRunner {
                 "-cpu",
                 &lane.cpu,
                 "-m",
-                "256M",
+                memory,
                 "-smp",
                 &cpus,
                 "-nographic",
@@ -1623,74 +1664,35 @@ impl QemuRunner {
         }
     }
 
-    /// Boot x86_64 q35 from a Limine ISO with a VirtIO BLK PCI device attached.
-    ///
-    /// Same boot path as `boot_x86_bios` (SeaBIOS + ISO) but adds a
-    /// `virtio-blk-pci` device backed by `virtio_disk`. This exercises the
-    /// VirtIO PCI discovery path in `kernel/src/task/drivers/virtio_pci.rs`
-    /// which scans the ECAM bus for vendor 0x1AF4 and initialises the block
-    /// device from BAR MMIO.
-    ///
-    /// Prerequisites: ISO at `iso`, a raw disk image at `virtio_disk`, and
-    /// `qemu-system-x86_64` ≥ 6.0 on PATH (older versions lack `virtio-blk-pci`
-    /// on q35 without additional machine opts).
-    pub fn boot_x86_virtio_blk(iso: &str, virtio_disk: &str) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
-        let port = listener.local_addr().unwrap().port();
+    /// Boot q35 (the env-selected [`x86_lane`]) with the three virtio-pci
+    /// functions the phase 05 cells drive: `virtio-net-pci` on a restricted
+    /// user netdev, `virtio-blk-pci` on `blk_disk` and `virtio-scsi-pci` with one
+    /// `scsi-hd` on `scsi_disk`. With `vtd`, `-device intel-iommu` precedes the
+    /// endpoints; `iommu_platform` adds `iommu_platform=on,disable-legacy=on` to
+    /// every virtio device so they offer `VIRTIO_F_ACCESS_PLATFORM`.
+    pub fn boot_x86_virtio_pci(
+        iso: &str,
+        blk_disk: &str,
+        scsi_disk: &str,
+        vtd: bool,
+        iommu_platform: bool,
+    ) -> Self {
+        let devices = virtio_pci_devices(blk_disk, scsi_disk, vtd, iommu_platform);
+        Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", 1, &devices)
+    }
 
-        let mut child = Command::new(qemu_binary_x86())
-            .args([
-                "-machine",
-                "q35",
-                "-cpu",
-                "qemu64,+pdpe1gb",
-                "-m",
-                "256M",
-                "-nographic",
-                "-cdrom",
-                iso,
-                "-boot",
-                "d",
-                "-no-reboot",
-                "-monitor",
-                "none",
-                // VirtIO BLK PCI device — kernel should log "VirtIO Block: initialized".
-                "-drive",
-                &format!("file={virtio_disk},format=raw,if=none,id=hd0"),
-                "-device",
-                "virtio-blk-pci,drive=hd0",
-                "-serial",
-                &format!("tcp:127.0.0.1:{port}"),
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("qemu-system-x86_64 must be on PATH");
-
-        let stream = accept_qemu_serial(&listener, &mut child);
-        let writer = stream.try_clone().expect("clone serial stream");
-
-        let output = Arc::new(Mutex::new(String::new()));
-        let buf = Arc::clone(&output);
-        thread::spawn(move || {
-            let mut reader = BufReader::new(stream);
-            let mut byte = [0u8; 1];
-            loop {
-                match reader.read(&mut byte) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
-                }
-            }
-        });
-
-        Self {
-            child,
-            writer: Some(writer),
-            output,
-            temp_disk: None,
-            monitor: None,
-        }
+    /// The ADR-0031 `kvm-default-vm` acceptance lane: a default KVM guest
+    /// (`-accel kvm -cpu host -machine q35,hpet=off -smp 2 -m 1G`) with only
+    /// virtio-pci devices and no vIOMMU. `iso` must name `cellos.profile=x86_64-vm`
+    /// (`scripts/x86/limine-vm.conf`).
+    pub fn boot_x86_kvm_default_vm(iso: &str, blk_disk: &str, scsi_disk: &str) -> Self {
+        let lane = X86Lane {
+            accel: vec!["-accel".into(), "kvm".into()],
+            machine: "q35,hpet=off".into(),
+            cpu: "host".into(),
+        };
+        let devices = virtio_pci_devices(blk_disk, scsi_disk, false, false);
+        Self::boot_x86_q35_lane(iso, &lane, "1G", 2, &devices)
     }
 
     /// Boot QEMU with a RISC-V 32-bit kernel (Phase-31 Nano, no disk, no VirtIO).

@@ -64,3 +64,14 @@ before physical qualification (slice S4).
 2026-11-04, owner, in session: CP2-04a-1 accepted, CP2-04a-2 accepted (all four
 additions in §2), CP2-04a-3 accepted (proceed to phase 04b). Commit authority was
 granted for the phase 04a change set after approval.
+
+## 7. Amendment 2026-11-04 — `FLAG_DMA_REMAPPED`
+
+Found while preparing phase 05: a virtio cell must refuse a device that does
+not negotiate `VIRTIO_F_ACCESS_PLATFORM` whenever an IOMMU translates DMA (such
+a device bypasses the vIOMMU), but no cell-visible signal said whether
+translation is active (IOVA equals the physical address, `QueryMachineFacts` is
+SpawnCap-only, init passes no argv). The owner approved adding `flags` bit 3
+`FLAG_DMA_REMAPPED` to `ViPcieFunctionV1` v1 (set when VT-d is active), before
+any consumer of v1 exists outside tests. `FLAGS_KNOWN` now covers bits 0–3;
+the strict decoder still refuses bits 4–31.

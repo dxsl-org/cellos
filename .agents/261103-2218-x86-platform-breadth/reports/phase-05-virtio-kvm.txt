@@ -1,0 +1,95 @@
+P05 x86_64-pc + vIOMMU + iommu_platform boot 1:
+[ INFO] [x86-gate] board=x86_64-pc soc-profile=x86_64-pc source=default dma_isolation=Required
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21119997 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1042 capacity=1127680
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1048 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1041 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured
+P05 kvm-default-vm boot 1:
+[ INFO] [x86-gate] board=x86_64-vm soc-profile=x86_64-vm source=cmdline dma_isolation=Optional
+[ WARN] [x86-gate] dma isolation optional (operator-selected VM profile)
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21119997 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1001 capacity=1127680
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1004 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1000 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured
+P05 x86_64-pc + vIOMMU + iommu_platform boot 2:
+[ INFO] [x86-gate] board=x86_64-pc soc-profile=x86_64-pc source=default dma_isolation=Required
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21119999 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1042 capacity=1127680
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1048 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1041 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured
+P05 kvm-default-vm boot 2:
+[ INFO] [x86-gate] board=x86_64-vm soc-profile=x86_64-vm source=cmdline dma_isolation=Optional
+[ WARN] [x86-gate] dma isolation optional (operator-selected VM profile)
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21119998 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1001 capacity=1127680
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1004 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1000 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured
+P05 fail-closed:
+[ INFO] [x86-gate] board=x86_64-pc soc-profile=x86_64-pc source=default dma_isolation=Required
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21120002 } apic=x2apic
+[ WARN] [pcie] refusing 00:03.0 1af4:1001: virtio without VIRTIO_F_ACCESS_PLATFORM would bypass VT-d
+[ WARN] [pcie] refusing 00:04.0 1af4:1004: virtio without VIRTIO_F_ACCESS_PLATFORM would bypass VT-d
+[virtio-blk] no virtio-blk PCI function present â exiting
+[virtio-scsi] no controller - exiting
+P05 first boot:
+[ INFO] [x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64 source=cmdline dma_isolation=Optional
+[ WARN] [x86-gate] dma isolation optional (operator-selected VM profile)
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21120002 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1001 capacity=528384
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1004 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1000 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured
+P05 second boot:
+[ INFO] [x86-gate] board=qemu-q35-x86_64 soc-profile=qemu-q35-x86_64 source=cmdline dma_isolation=Optional
+[ WARN] [x86-gate] dma isolation optional (operator-selected VM profile)
+[ INFO] [x86-gate] timer: clock=kvmclock clockevent=TscDeadline { period_ticks: 21120001 } apic=x2apic
+[virtio-blk] bdf=00:03.0 irq=polled reason=04b-deferred
+[virtio-blk] pci 00:03.0 1af4:1001 capacity=528384
+[virtio-blk] ready
+[virtio-scsi] pci 00:04.0 1af4:1004 target=0 lun=0 blocks=528384 irq=polled reason=04b-deferred
+[virtio-scsi] ready
+[vfs] FAT32 /mnt/sd volume mounted
+[vfs] FAT32 /mnt/disk/pci-00-04-0 volume mounted
+[virtio-net] bdf=00:02.0 irq=polled reason=04b-deferred
+[virtio-net] pci 00:02.0 1af4:1000 mac=52:54:00:12:34:56
+[virtio-net] ready
+[net] DHCP acquired â IP configured

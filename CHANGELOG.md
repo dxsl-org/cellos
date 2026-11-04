@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ---
 
 ## [Unreleased]
+### Added
+- **Cellos boots as a default KVM guest** (ADR-0031, x86 platform breadth slice S1). Verified on QEMU/KVM with the `kvm-default-vm` lane. Real VMware hosts and physical Intel machines are not yet qualified.
+  - **Profile:** new `x86_64-vm` profile, bound only by `cellos.profile=x86_64-vm` under a hypervisor (D-VM). DMA isolation is optional under it, and the boot log says so.
+  - **Timekeeping:** the kernel no longer needs HPET. It picks invariant TSC, kvmclock, HPET or the ACPI PM timer, and drives the tick with TSC-deadline when the CPU has it.
+  - **Interrupt controllers:** the LAPIC runs in x2APIC mode when the CPU supports it, and IOAPIC routing covers every MADT unit.
+  - **ACPI:** FADT and SPCR are parsed; the full MADT, MCFG and DMAR topology is recorded.
+  - **virtio:** virtio-net, virtio-blk and virtio-scsi work over PCI on x86. New crates `libs/virtio-pci-transport` and `libs/scsi-block`, new cell `/bin/virtio-scsi`. Completions are polled; interrupt delivery to drivers (phase 04b) is deferred.
+- **PCIe function ABI.** `QueryPcieFunction` (434) returns a 584-byte `ViPcieFunctionV1` record:
+  - every BAR;
+  - the MSI/MSI-X summary;
+  - up to 16 capabilities with their bytes;
+  - `DMA_REMAPPED` when VT-d translates.
+
+  `AllocPcieIrq` (435) programs MSI-X or MSI. The MSI-X table pages are left out of a cell's BAR mapping. On x86, `WaitIrq` accepts only the caller's own vectors.
+- `FindPcieDevice`/`FindPcieDeviceByVendor` skip a function owned by another live driver, so a second instance of a driver reaches the next identical device.
+
 ### Fixed
 - **A masked receive can no longer deliver one RPC request twice** (C2C Phase 03 slice e).
   - **Cause:** `Recv`, `RecvScatter` and `RecvTimeout` remove the delivered message by queue position in a second scheduler hold after the copy-out. If another caller's queued request ahead of it was cancelled, expired or dropped by owner death in between, the position named the delivered sender's *next* message. That message was removed instead, and the delivered request stayed queued to be delivered again.

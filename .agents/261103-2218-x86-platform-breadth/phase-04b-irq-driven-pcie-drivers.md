@@ -1,7 +1,7 @@
 ---
 phase: 4b
 title: "IRQ-driven PCIe driver cells"
-status: pending
+status: deferred
 priority: P1
 effort: "3d"
 dependencies: ["4a"]
@@ -85,4 +85,7 @@ Phase 05 builds virtio-pci on the same helper.
 
 ## Deviation Log
 
-None.
+- **2026-11-04 Surprise → owner decision: deferred.** Recon before any edit found two facts that break this file's premises:
+  - `WaitIrq` (234) has no timeout: a `WaitIrq` task wakes only on its pending flag (`kernel/src/task/syscall.rs` WaitIrq arm, `scheduler.rs` sweep). Replacing the drivers' poll+`Deadline` loops with `WaitIrq` would drop the timeouts the Key Insights require, so one lost interrupt would hang the driver and its block route.
+  - Idle driver cells already block in `sys_recv` (`ostd::app`); they poll only while a command is outstanding. NIC receive is request-driven (net service → `sys_recv_timeout`), so "idle CPU drops" has little to measure, and IRQ-driven RX also needs a push path to the net service.
+  - Options given to the owner: (A) add a timeout to `WaitIrq` (CP1 plus a `scheduler.rs` lock extension); (B) add an IRQ source to `WaitCompletion` (larger CP1); (C) defer. **Owner chose C on 2026-11-04.** Phase 05 proceeds with polled virtio-pci drivers. 04b will be re-planned with A or B before any driver conversion.

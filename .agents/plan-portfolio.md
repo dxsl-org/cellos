@@ -178,15 +178,15 @@ Admission blockers, per the promotion rule:
 - Single-WIP rule: x86 is admitted first. aarch64 only after x86 closes or with an explicit owner exception.
 - The x86 phase 03 kernel→init fingerprint hand-off needs a Law-1 CP1 if it changes ABI. Otherwise the plan stops at that point.
 
-## Admitted — x86 platform breadth (ADR-0031, accepted 2026-11-04); slice S1 holds the WIP lane
+## Admitted — x86 platform breadth (ADR-0031, accepted 2026-11-04); slice S1 closed 2026-11-04
 
 **Recorded 2026-11-04.** [Plan](261103-2218-x86-platform-breadth/plan.md). The owner accepted [ADR-0031](../docs/decisions/0031-x86-platform-breadth-kvm-vmware-intel.md), approved Law-1 CP1 confirmation 1 for [cp1-pcie-irq-power-abi.md](261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) (D-1…D-7), and approved its §7 lock handoff for slice S1 ([record](261103-2218-x86-platform-breadth/cp1-approval.md); [lock inventory](cell-contract-0024-locks.md)).
 
 | Order | Plan slice | C2C link (ADR-0022) | Acceptance scenario | Evidence ceiling |
 |---|---|---|---|---|
-| 3 (admitted 2026-11-04, WIP) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
+| 3 (admitted 2026-11-04; **closed 2026-11-04**, checkpoint 05 signed) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
 
-Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
+Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) was deferred by the owner and is being re-planned. It needs a new CP1, because `WaitIrq` has no timeout. Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
 
 ## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
 
