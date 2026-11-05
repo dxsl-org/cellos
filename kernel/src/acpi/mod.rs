@@ -19,6 +19,14 @@ mod madt;
 mod mcfg;
 mod records;
 mod sdt;
+// The G1 private lane does not call `sci::init` (its x86 contract is pinned),
+// so the discovery half of these modules is unused there.
+#[cfg(target_arch = "x86_64")]
+#[cfg_attr(cellos_g1_cpu, allow(dead_code))]
+pub mod power;
+#[cfg(target_arch = "x86_64")]
+#[cfg_attr(cellos_g1_cpu, allow(dead_code))]
+pub mod sci;
 mod spcr;
 #[cfg(test)]
 mod tests;
@@ -169,6 +177,112 @@ fn parse_into(
                 kept,
                 dropped
             );
+        }
+    }
+}
+
+/// Upper bound on one table, as in the SDT walk.
+#[cfg(target_arch = "x86_64")]
+const MAX_TABLE_LEN: usize = 0x10_0000;
+
+/// `(virt, len)` of the table at `phys` once the mapper admitted its header and
+/// then its whole length, the length is plausible and the checksum is zero.
+/// No byte is read before the mapper admitted it.
+#[cfg(target_arch = "x86_64")]
+fn checked_table(
+    phys: u64,
+    map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
+) -> Option<(usize, usize)> {
+    let phys = usize::try_from(phys).ok().filter(|&phys| phys != 0)?;
+    let header = map_physical(phys, 36)?;
+    // SAFETY: the mapper admitted `[header, header + 36)`; the length is at 4.
+    let len = unsafe { sdt::read_unaligned::<u32>(header + 4) } as usize;
+    if !(36..=MAX_TABLE_LEN).contains(&len) {
+        return None;
+    }
+    let virt = map_physical(phys, len)?;
+    // SAFETY: the mapper admitted `[virt, virt + len)`.
+    (unsafe { sdt::table_checksum(virt, len) } == 0).then_some((virt, len))
+}
+
+/// Run `visit` over the checksummed table at `phys`, header included; `None`
+/// when the mapper refuses it or its length or checksum is invalid.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn with_table<R>(
+    phys: u64,
+    map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
+    visit: impl FnOnce(&[u8]) -> R,
+) -> Option<R> {
+    let (virt, len) = checked_table(phys, map_physical)?;
+    // SAFETY: `checked_table` had the mapper admit `[virt, virt + len)`, and an
+    // admitted range stays mapped for at least this call.
+    Some(visit(unsafe {
+        core::slice::from_raw_parts(virt as *const u8, len)
+    }))
+}
+
+/// Root table `(physical address, entry width)` named by a valid RSDP: the
+/// XSDT for revision 2 and later, otherwise the RSDT.
+#[cfg(target_arch = "x86_64")]
+fn root_table(
+    rsdp_phys: usize,
+    map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
+) -> Option<(u64, usize)> {
+    if rsdp_phys == 0 {
+        return None;
+    }
+    let virt = map_physical(rsdp_phys, core::mem::size_of::<sdt::RsdpV2>())?;
+    // SAFETY: the mapper admitted the 36-byte v2 layout.
+    let rsdp: [u8; 36] = unsafe { sdt::read_unaligned(virt) };
+    let v1_sum = rsdp[..20].iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    if &rsdp[..8] != b"RSD PTR " || v1_sum != 0 {
+        return None;
+    }
+    let field = |range: core::ops::Range<usize>| {
+        rsdp[range]
+            .iter()
+            .rev()
+            .fold(0u64, |value, byte| value << 8 | *byte as u64)
+    };
+    if rsdp[15] < 2 {
+        return Some((field(16..20), 4));
+    }
+    let length = field(20..24) as usize;
+    if !(36..=4096).contains(&length) {
+        return None;
+    }
+    let full = map_physical(rsdp_phys, length)?;
+    // SAFETY: the mapper admitted the published RSDP length.
+    (unsafe { sdt::table_checksum(full, length) } == 0).then_some((field(24..32), 8))
+}
+
+/// Run `visit` over every checksummed table the root table lists, in list
+/// order, until it returns `false`. A child that fails its checks is skipped;
+/// an RSDP or root table that fails visits nothing.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn for_each_listed_table(
+    rsdp_phys: usize,
+    map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
+    mut visit: impl FnMut(&[u8]) -> bool,
+) {
+    let Some((root, entry_len)) = root_table(rsdp_phys, map_physical) else {
+        return;
+    };
+    let Some((virt, len)) = checked_table(root, map_physical) else {
+        return;
+    };
+    for index in 0..(len - 36) / entry_len {
+        let at = virt + 36 + index * entry_len;
+        // SAFETY: the entry lies inside the admitted, checksummed root table.
+        let child = unsafe {
+            if entry_len == 8 {
+                sdt::read_unaligned::<u64>(at)
+            } else {
+                sdt::read_unaligned::<u32>(at) as u64
+            }
+        };
+        if child != 0 && with_table(child, map_physical, &mut visit) == Some(false) {
+            return;
         }
     }
 }

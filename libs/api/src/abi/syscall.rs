@@ -696,6 +696,24 @@ pub enum ViSyscall {
     ///
     /// Allowlist: DriverRegistration bit (50), as 434.
     AllocPcieIrq = 435,
+    /// 436: Reboot or power off the machine ([`system_power`]).
+    ///
+    /// ABI: a0 = action ([`system_power::ACTION_REBOOT`] = 1,
+    /// [`system_power::ACTION_POWEROFF`] = 2), a1..a5 = 0. No return on
+    /// success. Reboot tries, in order, the FADT reset register, port `0xCF9`,
+    /// the 8042 reset pulse and a triple fault. Poweroff writes `SLP_TYP |
+    /// SLP_EN` to the PM1 control blocks (`SLEEP_CONTROL_REG` on
+    /// hardware-reduced ACPI) from a static `\_S5_` package. The kernel reads
+    /// a0..a3 only; a4/a5 never reach syscall dispatch. Errors:
+    /// [`system_power::ERR_INVALID_INPUT`] unknown action or non-zero a1..a3;
+    /// [`system_power::ERR_PERMISSION_DENIED`] no `SupervisorCap`;
+    /// [`system_power::ERR_NOT_SUPPORTED`] not x86_64, poweroff without a
+    /// static `\_S5_` or a usable PM1 control block, or the machine still runs
+    /// after the sleep write.
+    ///
+    /// Allowlist: SupervisorOp bit (49), shared with 413-415/419/422; the
+    /// `SupervisorCap` check at dispatch is the authority gate.
+    SystemPower = 436,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1212,7 +1230,8 @@ impl ViSyscall {
             | Self::ResumeCell
             | Self::KillCell
             | Self::QueryHotswapReady
-            | Self::PauseService => Some(49),
+            | Self::PauseService
+            | Self::SystemPower => Some(49),
             // DriverRegistration (bit 50): announce as the active block/NIC driver,
             // discover PCIe device BARs, and announce the separate USB HID event
             // producer role. RegisterUsbHidProducer shares this bit deliberately:
@@ -1463,9 +1482,25 @@ impl From<usize> for ViSyscall {
             433 => ViSyscall::QueryMachineFacts,
             434 => ViSyscall::QueryPcieFunction,
             435 => ViSyscall::AllocPcieIrq,
+            436 => ViSyscall::SystemPower,
             _ => ViSyscall::Unknown,
         }
     }
+}
+
+/// `SystemPower` (436) actions and error sentinels.
+pub mod system_power {
+    /// a0: reset the machine.
+    pub const ACTION_REBOOT: usize = 1;
+    /// a0: enter ACPI S5 (soft off).
+    pub const ACTION_POWEROFF: usize = 2;
+    /// No `SupervisorCap`, or the allowlist omits bit 49.
+    pub const ERR_PERMISSION_DENIED: usize = usize::MAX;
+    /// Unknown action, or a non-zero a1..a3.
+    pub const ERR_INVALID_INPUT: usize = usize::MAX - 3;
+    /// Not x86_64; poweroff without a static `\_S5_` or a usable PM1 control
+    /// block; or the machine still runs after the sleep write.
+    pub const ERR_NOT_SUPPORTED: usize = usize::MAX - 5;
 }
 
 /// Kernel event bit masks for `WaitForEvent` / `signal_event`.

@@ -259,3 +259,158 @@ fn a_root_table_failing_its_checksum_yields_no_oem() {
     memory[0x100 + 16] ^= 0x20;
     assert_eq!(parse_image(&memory).0.root_oem, None);
 }
+
+// ── Phase 06: static `\_S5_` scan and power-fact discovery ─────────────────
+
+use super::power::{discover, scan_definition_block, GpeBlock, S5};
+
+/// The q35 DSDT QEMU 8.2.2 builds for `-machine q35,hpet=on -m 256M`
+/// (captured with QMP `pmemsave`; OEM `BOCHS `/`BXPC`, 8390 bytes).
+const Q35_DSDT: &[u8] = include_bytes!("../../../tests/fixtures/acpi/q35-dsdt.aml");
+/// `Name (\_S5_, ..)` only inside `Method (_PTS)`; source beside the fixture.
+const S5_IN_METHOD_DSDT: &[u8] =
+    include_bytes!("../../../tests/fixtures/acpi/s5-in-method-dsdt.aml");
+
+fn definition_block(signature: &[u8; 4], body: &[u8]) -> Vec<u8> {
+    let mut table = vec![0u8; 36];
+    table[8] = 2;
+    table.extend_from_slice(body);
+    seal_sdt(table, signature, b"CELLOS")
+}
+
+/// `Name (<name>, Package (4) { a, b, 0, 0 })` with byte-prefixed constants.
+fn name_package(name: &[u8], a: u8, b: u8) -> Vec<u8> {
+    let mut term = vec![0x08];
+    term.extend_from_slice(name);
+    term.extend_from_slice(&[0x12, 0x08, 0x04, 0x0A, a, 0x0A, b, 0x00, 0x00]);
+    term
+}
+
+/// `op PkgLength <head> <body>` with a one-byte PkgLength.
+fn package_term(op: &[u8], head: &[u8], body: &[u8]) -> Vec<u8> {
+    let len = 1 + head.len() + body.len();
+    assert!(len < 64);
+    let mut term = op.to_vec();
+    term.push(len as u8);
+    term.extend_from_slice(head);
+    term.extend_from_slice(body);
+    term
+}
+
+#[test]
+fn s5_scan_reads_the_q35_dsdt() {
+    assert_eq!(&Q35_DSDT[..4], b"DSDT");
+    assert_eq!(
+        Q35_DSDT.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+        0
+    );
+    assert_eq!(
+        scan_definition_block(Q35_DSDT),
+        S5::Static {
+            slp_typ_a: 0,
+            slp_typ_b: 0
+        }
+    );
+}
+
+#[test]
+fn s5_scan_refuses_a_name_created_inside_a_method() {
+    let pattern = [0x08, b'\\', b'_', b'S', b'5', b'_', 0x12];
+    assert!(S5_IN_METHOD_DSDT.windows(pattern.len()).any(|w| w == pattern));
+    assert_eq!(scan_definition_block(S5_IN_METHOD_DSDT), S5::NotStatic);
+}
+
+#[test]
+fn s5_scan_accepts_only_a_root_name_with_constant_slp_types() {
+    let scan = |body: &[u8]| scan_definition_block(&definition_block(b"DSDT", body));
+    let s5 = name_package(b"_S5_", 5, 7);
+    let expected = S5::Static {
+        slp_typ_a: 5,
+        slp_typ_b: 7,
+    };
+    assert_eq!(scan(&s5), expected);
+    assert_eq!(scan(&package_term(&[0x10], b"\\\0", &s5)), expected);
+    // `^_S5_` from `\_SB_` names the root object.
+    let parent = name_package(b"^_S5_", 5, 7);
+    assert_eq!(scan(&package_term(&[0x10], b"_SB_", &parent)), expected);
+    // `\_SB_.DEV0._S5_` is not the sleep object.
+    let device = package_term(&[0x5B, 0x82], b"\\._SB_DEV0", &s5);
+    assert_eq!(scan(&device), S5::Absent);
+    // A method named `\_S5_` is computed.
+    let method = package_term(&[0x14], b"\\_S5_\0", &[0xA4, 0x00]);
+    assert_eq!(scan(&method), S5::NotStatic);
+    // Conditional creation is not static.
+    assert_eq!(scan(&package_term(&[0xA0], &[0x01], &s5)), S5::NotStatic);
+    // SLP_TYP must be a constant of at most three bits.
+    assert_eq!(scan(&name_package(b"_S5_", 8, 0)), S5::NotStatic);
+    let reference = [
+        0x08, b'_', b'S', b'5', b'_', 0x12, 0x07, 0x02, b'A', b'B', b'C', b'D', 0x00,
+    ];
+    assert_eq!(scan(&reference), S5::NotStatic);
+    // An undecoded namespace-level opcode stops the scan before `\_S5_`.
+    let mut store_first = vec![0x70, 0x00, 0x60];
+    store_first.extend_from_slice(&s5);
+    assert_eq!(
+        scan(&store_first),
+        S5::Unparsed {
+            offset: 36,
+            opcode: 0x70
+        }
+    );
+    assert_eq!(scan(&[]), S5::Absent);
+}
+
+/// DSDT without `\_S5_`, an SSDT with it, and FADT GPE0 at 0x620 (16 bytes).
+fn power_image() -> Vec<u8> {
+    const DSDT_AT: usize = 0x3000;
+    let mut fadt = vec![0u8; 244];
+    fadt[8] = 3;
+    fadt[40..44].copy_from_slice(&(DSDT_AT as u32).to_le_bytes());
+    fadt[64..68].copy_from_slice(&0x604u32.to_le_bytes());
+    fadt[80..84].copy_from_slice(&0x620u32.to_le_bytes());
+    fadt[89] = 2;
+    fadt[92] = 16;
+    let fadt = seal_sdt(fadt, b"FACP", b"BOCHS ");
+    let ssdt = definition_block(b"SSDT", &name_package(b"\\_S5_", 0, 0));
+    let dsdt = definition_block(b"DSDT", &name_package(b"_S3_", 1, 1));
+    let mut memory = firmware_image(2, b"BOCHS ", &[fadt, ssdt]);
+    memory[DSDT_AT..DSDT_AT + dsdt.len()].copy_from_slice(&dsdt);
+    memory
+}
+
+#[test]
+fn discovery_scans_the_dsdt_then_listed_ssdts_and_reads_gpe_blocks() {
+    let memory = power_image();
+    let fadt = parse_image(&memory).0.fadt.expect("fadt parsed");
+    let base = memory.as_ptr() as usize;
+    let mut mapper =
+        |phys: usize, len: usize| (phys.checked_add(len)? <= memory.len()).then_some(base + phys);
+    let facts = discover(&fadt, 0x10, &mut mapper);
+    assert_eq!(
+        facts.s5,
+        S5::Static {
+            slp_typ_a: 0,
+            slp_typ_b: 0
+        }
+    );
+    assert_eq!(
+        facts.gpe,
+        [
+            GpeBlock {
+                port: 0x620,
+                len: 16
+            },
+            GpeBlock::default()
+        ]
+    );
+    assert_eq!((facts.reset_virt, facts.sleep_control_virt), (None, None));
+
+    // A corrupt SSDT is skipped, leaving no `\_S5_`.
+    let mut corrupt = power_image();
+    let ssdt_at = 0x400 + 244usize.next_multiple_of(16);
+    corrupt[ssdt_at + 40] ^= 0xFF;
+    let base = corrupt.as_ptr() as usize;
+    let mut mapper =
+        |phys: usize, len: usize| (phys.checked_add(len)? <= corrupt.len()).then_some(base + phys);
+    assert_eq!(discover(&fadt, 0x10, &mut mapper).s5, S5::Absent);
+}

@@ -1753,6 +1753,19 @@ fn is_pcie_function_call(syscall: &Syscall) -> bool {
     )
 }
 
+/// 436 results: each refusal keeps its own `api::syscall::system_power`
+/// sentinel. Success never returns to the caller.
+#[cfg(not(target_arch = "riscv32"))]
+fn encode_system_power_result(result: SyscallResult) -> usize {
+    use api::syscall::system_power as sp;
+    match result {
+        Ok(value) => value,
+        Err(SyscallError::InvalidInput) => sp::ERR_INVALID_INPUT,
+        Err(SyscallError::NotSupported) => sp::ERR_NOT_SUPPORTED,
+        Err(_) => sp::ERR_PERMISSION_DENIED,
+    }
+}
+
 /// Syscalls whose errors use the typed sentinels of [`encode_ipc_result`]
 /// (`usize::MAX - 1..=4`) instead of the single generic error.
 fn has_typed_errors(syscall: &Syscall) -> bool {
@@ -2490,6 +2503,38 @@ fn alloc_pcie_irq(caller_id: usize, bdf: usize, want: usize, mode: usize) -> Sys
 #[cfg(not(target_arch = "x86_64"))]
 fn alloc_pcie_irq(_caller_id: usize, _bdf: usize, _want: usize, _mode: usize) -> SyscallResult {
     Err(SyscallError::NotSupported)
+}
+
+/// 436 after the `SupervisorCap` and reserved-argument gates. Reboot does not
+/// return; poweroff returns only when the machine is still running.
+#[cfg(target_arch = "x86_64")]
+fn system_power(caller_id: usize, action: usize) -> SyscallResult {
+    use api::syscall::system_power as sp;
+    match action {
+        sp::ACTION_REBOOT => {
+            log::warn!("[kernel] SystemPower: reboot requested by tid {}", caller_id);
+            crate::acpi::power::reboot()
+        }
+        sp::ACTION_POWEROFF => {
+            log::warn!(
+                "[kernel] SystemPower: poweroff requested by tid {}",
+                caller_id
+            );
+            crate::acpi::power::poweroff();
+            Err(SyscallError::NotSupported)
+        }
+        _ => Err(SyscallError::InvalidInput),
+    }
+}
+
+/// Reset and S5 come from ACPI, which only x86_64 parses (CP1 §5).
+#[cfg(not(target_arch = "x86_64"))]
+fn system_power(_caller_id: usize, action: usize) -> SyscallResult {
+    use api::syscall::system_power as sp;
+    match action {
+        sp::ACTION_REBOOT | sp::ACTION_POWEROFF => Err(SyscallError::NotSupported),
+        _ => Err(SyscallError::InvalidInput),
+    }
 }
 
 /// Serialize a matched PCIe device into the 48-byte `PcieDeviceInfo` wire record
@@ -4312,6 +4357,13 @@ pub enum Syscall {
         mode: usize,
         reserved: usize,
     },
+    /// 436: SystemPower — reboot (a0 = 1) or poweroff (a0 = 2); SupervisorCap.
+    SystemPower {
+        action: usize,
+        a1: usize,
+        a2: usize,
+        a3: usize,
+    },
     CellSessionV1 {
         request_ptr: usize,
         request_len: usize,
@@ -4877,6 +4929,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::FindPcieDeviceByVendor { .. } => V::FindPcieDeviceByVendor,
         Syscall::QueryPcieFunction { .. } => V::QueryPcieFunction,
         Syscall::AllocPcieIrq { .. } => V::AllocPcieIrq,
+        Syscall::SystemPower { .. } => V::SystemPower,
         Syscall::SerialPortInfo { .. } => V::SerialPortInfo,
         Syscall::SerialWrite { .. } => V::SerialWrite,
         Syscall::SerialRead { .. } => V::SerialRead,
@@ -8883,6 +8936,20 @@ fn handle_syscall_inner(
             }
             alloc_pcie_irq(caller_id, bdf, want, mode)
         }
+        Syscall::SystemPower {
+            action,
+            a1,
+            a2,
+            a3,
+        } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if a1 != 0 || a2 != 0 || a3 != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            system_power(caller_id, action)
+        }
 
         // 425-428: the serial-port surface. The kernel owns the 16550 mechanism
         // (it probed and programmed every port at boot); a cell holding the
@@ -10427,6 +10494,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             mode: a2,
             reserved: a3,
         },
+        ViSyscall::SystemPower => Syscall::SystemPower {
+            action: a0,
+            a1,
+            a2,
+            a3,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -10981,6 +11054,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_errors = has_typed_errors(&syscall);
     let pcie_function = is_pcie_function_call(&syscall);
+    let power_call = matches!(syscall, Syscall::SystemPower { .. });
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -10990,6 +11064,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
 
     frame.regs[10] = if pcie_function {
         encode_pcie_function_result(result)
+    } else if power_call {
+        encode_system_power_result(result)
     } else if typed_errors {
         encode_ipc_result(result)
     } else {
@@ -12152,6 +12228,87 @@ mod tests {
         assert_eq!(encode(SyscallError::OutOfMemory), pf::ERR_NO_VECTORS);
         assert_eq!(encode(SyscallError::FileNotFound), pf::ERR_NOT_FOUND);
         assert_eq!(encode(SyscallError::InvalidInput), pf::ERR_INVALID_INPUT);
+    }
+
+    /// CP1 §5 (D-4): 436 decodes to `SystemPower` with bit 49 and is refused
+    /// with `PermissionDenied` to any caller without `SupervisorCap`, before
+    /// the action is looked at, including holders of other authority.
+    #[test]
+    fn system_power_is_refused_without_supervisor_cap() {
+        use api::syscall::system_power as sp;
+        let decoded = super::map_syscall(436, sp::ACTION_POWEROFF, 0, 0, 0);
+        assert!(matches!(
+            decoded,
+            Some(Syscall::SystemPower {
+                action: sp::ACTION_POWEROFF,
+                a1: 0,
+                a2: 0,
+                a3: 0
+            })
+        ));
+        assert_eq!(
+            decoded.as_ref().and_then(super::syscall_to_vi),
+            Some(api::syscall::ViSyscall::SystemPower)
+        );
+        let call = |action| Syscall::SystemPower {
+            action,
+            a1: 0,
+            a2: 0,
+            a3: 0,
+        };
+        for action in [sp::ACTION_REBOOT, sp::ACTION_POWEROFF] {
+            let result = super::handle_syscall(0x9abc, call(action));
+            assert!(matches!(result, Err(SyscallError::PermissionDenied)));
+            assert_eq!(
+                super::encode_system_power_result(result),
+                sp::ERR_PERMISSION_DENIED
+            );
+        }
+        let other_authority = CapSet {
+            spawn: true,
+            pcie_driver: true,
+            block_io: true,
+            ..CapSet::EMPTY
+        };
+        with_scheduler_task_caps(u64::MAX, other_authority, |tid| {
+            for action in [sp::ACTION_REBOOT, sp::ACTION_POWEROFF] {
+                assert!(matches!(
+                    super::handle_syscall(tid, call(action)),
+                    Err(SyscallError::PermissionDenied)
+                ));
+            }
+        });
+    }
+
+    /// With `SupervisorCap`, an unknown action or a non-zero a1..a3 is
+    /// `InvalidInput`, and a poweroff with no recorded ACPI facts (no
+    /// `\_S5_`) is `NotSupported`; each keeps its own sentinel.
+    #[test]
+    fn system_power_checks_action_and_arguments_behind_the_gate() {
+        use api::syscall::system_power as sp;
+        let supervisor = CapSet {
+            supervisor: true,
+            ..CapSet::EMPTY
+        };
+        with_scheduler_task_caps(u64::MAX, supervisor, |tid| {
+            let run = |action, a1, a2, a3| {
+                super::encode_system_power_result(super::handle_syscall(
+                    tid,
+                    Syscall::SystemPower {
+                        action,
+                        a1,
+                        a2,
+                        a3,
+                    },
+                ))
+            };
+            for action in [0, 3, usize::MAX] {
+                assert_eq!(run(action, 0, 0, 0), sp::ERR_INVALID_INPUT);
+            }
+            assert_eq!(run(sp::ACTION_POWEROFF, 1, 0, 0), sp::ERR_INVALID_INPUT);
+            assert_eq!(run(sp::ACTION_REBOOT, 0, 0, 1), sp::ERR_INVALID_INPUT);
+            assert_eq!(run(sp::ACTION_POWEROFF, 0, 0, 0), sp::ERR_NOT_SUPPORTED);
+        });
     }
 
     /// ADR-0029 §3 (CP1 Q9): only trusted init, naming itself, may register

@@ -141,6 +141,10 @@ pub type UsbSignalIrq = unsafe extern "Rust" fn();
 /// x86_64 page-fault callback supplied by the kernel memory layer.
 pub type HandlePageFault =
     unsafe extern "Rust" fn(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64);
+#[cfg(target_arch = "x86_64")]
+/// x86_64 ACPI SCI callback supplied by the kernel ACPI layer. It runs before
+/// the EOI and may only acknowledge PM1 status and set atomics.
+pub type HandleSci = unsafe extern "Rust" fn();
 
 extern "Rust" {
     pub fn vi_timer_tick();
@@ -226,6 +230,7 @@ const _: UsbSignalIrq = vi_signal_usb_irq;
 #[cfg(target_arch = "x86_64")]
 extern "Rust" {
     pub fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64);
+    pub fn vi_handle_sci();
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -237,3 +242,5 @@ unsafe extern "Rust" {
 
 #[cfg(target_arch = "x86_64")]
 const _: HandlePageFault = vi_handle_page_fault;
+#[cfg(target_arch = "x86_64")]
+const _: HandleSci = vi_handle_sci;

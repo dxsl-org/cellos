@@ -22,6 +22,7 @@ pub enum Route {
     Timer,
     Ipi,
     Uart,
+    Sci,
     LegacyInt80,
     LapicSpurious,
     Msi,
@@ -45,6 +46,11 @@ const fn policy(route: Route, eoi: Eoi) -> Policy {
     Policy { route, eoi }
 }
 
+/// ACPI SCI: ISA IRQ 9's legacy slot (`0x20 + 9`), outside the MSI range
+/// `0x30..=0xDF`. The kernel acknowledges PM1 status before the EOI, so the
+/// level-triggered line is already low when the EOI reaches the I/O APIC.
+pub const SCI_VECTOR: u8 = 0x29;
+
 pub fn classify(vector: u8, origin: Origin) -> Policy {
     match vector {
         14 => policy(Route::PageFault, Eoi::None),
@@ -54,6 +60,7 @@ pub fn classify(vector: u8, origin: Origin) -> Policy {
         0x20 => policy(Route::Timer, Eoi::Before),
         0xf0 => policy(Route::Ipi, Eoi::Before),
         0x24 => policy(Route::Uart, Eoi::After),
+        SCI_VECTOR => policy(Route::Sci, Eoi::After),
         0x80 => policy(Route::LegacyInt80, Eoi::None),
         0xff => policy(Route::LapicSpurious, Eoi::None),
         v if crate::x86_64::msi::is_msi_vector(v) => policy(Route::Msi, Eoi::After),
@@ -93,6 +100,9 @@ mod tests {
     fn assigns_explicit_irq_and_software_routes() {
         expect(0x20, Origin::Kernel, Route::Timer, Eoi::Before);
         expect(0x24, Origin::Kernel, Route::Uart, Eoi::After);
+        expect(0x29, Origin::Kernel, Route::Sci, Eoi::After);
+        expect(0x29, Origin::User, Route::Sci, Eoi::After);
+        assert!(!crate::x86_64::msi::is_msi_vector(SCI_VECTOR));
         expect(0xf0, Origin::Kernel, Route::Ipi, Eoi::Before);
         expect(0xf0, Origin::User, Route::Ipi, Eoi::Before);
         expect(0x80, Origin::User, Route::LegacyInt80, Eoi::None);
