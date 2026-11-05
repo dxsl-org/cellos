@@ -27,15 +27,29 @@ pub const OP_PORT_STRIDE: usize = 0x10;
 
 pub const USBCMD_RS: u32 = 1 << 0;
 pub const USBCMD_HCRST: u32 = 1 << 1;
+/// Interrupter Enable: lets interrupters with `IMAN.IE` signal MSI/MSI-X.
+pub const USBCMD_INTE: u32 = 1 << 2;
 pub const USBSTS_HCH: u32 = 1 << 0;
+/// Event Interrupt (RW1C): an interrupter's IP went 0 -> 1.
+pub const USBSTS_EINT: u32 = 1 << 3;
 pub const USBSTS_CNR: u32 = 1 << 11;
 
 // ── Interrupter 0 registers (offsets from BAR + RTSOFF) ──────────────────────
 
 pub const RT_IMAN: usize = 0x20;
+pub const RT_IMOD: usize = 0x24;
 pub const RT_ERSTSZ: usize = 0x28;
 pub const RT_ERSTBA: usize = 0x30;
 pub const RT_ERDP: usize = 0x38;
+
+/// IMAN Interrupt Pending (RW1C) and Interrupt Enable.
+pub const IMAN_IP: u32 = 1 << 0;
+pub const IMAN_IE: u32 = 1 << 1;
+/// IMOD interval in 250 ns units: 4000 = 1 ms between interrupts at most.
+pub const IMOD_INTERVAL: u32 = 4000;
+/// ERDP Event Handler Busy (RW1C). The controller sets it when it signals an
+/// interrupt and sends no further interrupt until software clears it.
+pub const ERDP_EHB: u64 = 1 << 3;
 
 // ── PORTSC bits ──────────────────────────────────────────────────────────────
 

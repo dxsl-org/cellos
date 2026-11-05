@@ -12,6 +12,12 @@
 //!      decodes it with the shared `driver-hid` crate, and delivers the key to
 //!      the input service through the same producer path `/bin/dwc2-usb` uses.
 //!
+//! Phase 04b: an MSI-X (or MSI) vector from `AllocPcieIrq` lets bring-up's
+//! command and control-transfer waits park between event-ring reads instead of
+//! spinning; without one they poll as before. The steady-state keyboard poll
+//! stays on the IPC receive timeout below, because an IRQ wait is not woken by
+//! incoming IPC (shutdown, input-service frames).
+//!
 //! Every DMA structure goes through `DmaBuf` + `authorize` so phase-05's IOMMU
 //! path applies without rework. A machine with no xHCI device leaves the cell
 //! idle; an unsupported revision, missing interrupters or non-HID device fails
@@ -27,6 +33,7 @@ extern crate alloc;
 mod controller;
 mod dma;
 mod input;
+mod irq;
 mod regs;
 
 use alloc::vec::Vec;
@@ -253,7 +260,8 @@ api::declare_manifest!(
 // hand-rolls `main()` with `AppContext::run_with_timeout` instead of `run_app!`,
 // so nothing declared an allowlist for it. List exactly what the cell calls:
 // the AppContext base set, the PCIe device path, the HID-producer role, IPC, the
-// exit path, and the DMA grant calls behind `DmaBuf::alloc`/`authorize`.
+// exit path, the DMA grant calls behind `DmaBuf::alloc`/`authorize`, and the
+// MSI-X vector + event-ring wait of `irq.rs`.
 // `Exit`/`ForceExit`/`Yield` carry no allowlist bit and are always permitted, but
 // naming them keeps the intent explicit (the macro skips bit-less names).
 api::declare_syscalls![
@@ -270,6 +278,9 @@ api::declare_syscalls![
     // PCIe device path.
     FindPcieDevice,
     RequestMmio,
+    // MSI-X/MSI vector for interrupter 0 and the bounded IRQ park (irq.rs).
+    AllocPcieIrq,
+    WaitCompletion,
     // Kernel-verified USB HID producer role.
     RegisterUsbHidProducer,
     // Clean shutdown returns through the exit path.
