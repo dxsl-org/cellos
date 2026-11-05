@@ -148,11 +148,14 @@ fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
 /// frame, the USER mapping is removed; where the kernel reaches RAM through the
 /// identity VA (`phys_to_virt` is the identity), the boot kernel mapping is
 /// restored as in [`free_grant_pages`], since every Usable frame must stay
-/// identity-mapped there. The page is flushed on every hart before the frame
-/// returns to the allocator.
+/// identity-mapped there. That restore runs only after
+/// `unpublish_user_frames` has unmapped the page, flushed every hart and
+/// drained in-flight Sas copies, so a copy that probed the USER page cannot
+/// land in the frame through the fault-free kernel mapping after it is freed.
 /// Returns the number of frames released: each was mapped USER in the shared
 /// root with no borrower record, which the retirement verdict reports.
-/// Lock order: SHM_HANDLES (released) → FRAME_ALLOCATOR → KERNEL_ROOT.
+/// Lock order: SHM_HANDLES (released); KERNEL_ROOT alone (unpublish); then
+/// FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
@@ -166,18 +169,19 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     let kernel_rwx = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
-    if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
-        for &frame in &frames {
-            if crate::memory::paging::virt_to_phys(frame) == Some(frame) {
-                let _ = crate::memory::paging::unmap_page(frame);
-                if crate::memory::frame::phys_to_virt(frame) == frame {
-                    let _ = crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx);
-                }
+    for &frame in &frames {
+        if crate::memory::paging::virt_to_phys(frame) != Some(frame) {
+            // The identity VA no longer maps this frame; only stale TLB
+            // entries for it can remain.
+            crate::memory::tlb_shootdown::flush_page(frame);
+            continue;
+        }
+        super::stack::unpublish_user_frames(frame, 1);
+        if crate::memory::frame::phys_to_virt(frame) == frame {
+            if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
+                let _ = crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx);
             }
         }
-    }
-    for &frame in &frames {
-        crate::memory::tlb_shootdown::flush_page(frame);
     }
     if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
         for &frame in &frames {
@@ -931,6 +935,9 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         // Partial map: restore the kernel identity mapping for the pages we
         // re-mapped USER (NOT a bare unmap — every Usable frame must stay
         // identity-mapped for the loader's identity-address zeroing), then free.
+        // Those pages were briefly USER, so a Sas copy may have probed them:
+        // unpublish (unmap, flush, drain copies) before the kernel restore.
+        super::stack::unpublish_user_frames(paddr, mapped);
         let kernel_rwx = Flags::VALID
             | Flags::READ
             | Flags::WRITE
@@ -941,7 +948,6 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         if let Some(a) = fa.as_mut() {
             for i in 0..mapped {
                 let f = paddr + i * PAGE_SIZE;
-                let _ = crate::memory::paging::unmap_page(f);
                 let _ = crate::memory::paging::map_page(a, f, f, Flags::from_bits(kernel_rwx));
             }
             for k in 0..n_pages {
@@ -973,8 +979,14 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 /// a later cell load store-faulted while zeroing BSS (and read wrong pages).
 /// Dropping the USER bit also prevents a stale cell from touching a reused frame.
 ///
-/// Lock order: FRAME_ALLOCATOR → (map_page/unmap_page → KERNEL_ROOT). Mirrors
-/// `Stack::drop`. Must NOT be called while already holding FRAME_ALLOCATOR.
+/// The kernel-RWX restore happens only after `unpublish_user_frames` has left
+/// the frames unmapped on every hart and drained in-flight Sas copies: a copy
+/// that probed the grant earlier would otherwise write the reused frame
+/// through the fault-free kernel mapping.
+///
+/// Lock order: KERNEL_ROOT alone (unpublish), then FRAME_ALLOCATOR →
+/// (map_page → KERNEL_ROOT). Mirrors `Stack::drop`. Must NOT be called while
+/// already holding FRAME_ALLOCATOR.
 fn free_grant_pages(base: usize, n_pages: usize) {
     free_grant_pages_inner(
         base,
@@ -1005,6 +1017,7 @@ fn free_grant_pages_inner(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
 
+    super::stack::unpublish_user_frames(base, n_pages);
     #[cfg(cellos_p01_trace)]
     let _range_write = crate::p01_retained::release_write();
     #[cfg(cellos_p01_trace)]
@@ -1017,7 +1030,6 @@ fn free_grant_pages_inner(
         }
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
-            let _ = crate::memory::paging::unmap_page(f);
             let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
             #[cfg(cellos_p01_trace)]
             {
@@ -7003,12 +7015,19 @@ fn handle_syscall_inner(
                 );
                 return Ok(0);
             }
-            // Privileged: only SpawnCap holders (the supervisor) own the service
-            // namespace — same authority gate as NotifyOnExit/ForceExit. Prevents a
-            // cell from hijacking a well-known endpoint (e.g. the VFS service).
+            // Privileged: SpawnCap is necessary but not sufficient. Well-known ids
+            // belong to trusted init and SupervisorCap holders; a spawn-only cell
+            // (e.g. a USB host driver with a protocol child) may publish only a
+            // private id it owns, so it cannot hijack VFS/NET/KMS/SUPERVISOR.
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
+            let registrar = if caller_is_trusted_init(caller_id) || caller_has_supervisor(caller_id)
+            {
+                crate::cell::service_registry::Registrar::Namespace
+            } else {
+                crate::cell::service_registry::Registrar::Spawner(caller_id)
+            };
             // The liveness check and the identity capture share one scheduler lock,
             // so a provider cannot be recorded with a binding that was already stale
             // when it was written.
@@ -7021,10 +7040,16 @@ fn handle_syscall_inner(
             let Some((cell_id, generation)) = provider else {
                 return Err(SyscallError::InvalidInput);
             };
-            if crate::cell::service_registry::register(service_id, tid, cell_id, generation) {
-                Ok(0)
-            } else {
-                Err(SyscallError::InvalidInput)
+            match crate::cell::service_registry::register_as(
+                registrar, service_id, tid, cell_id, generation,
+            ) {
+                Ok(()) => Ok(0),
+                Err(crate::cell::service_registry::Refusal::NotOwner) => {
+                    Err(SyscallError::PermissionDenied)
+                }
+                Err(crate::cell::service_registry::Refusal::Rejected) => {
+                    Err(SyscallError::InvalidInput)
+                }
             }
         }
         Syscall::LookupService { service_id } => {
@@ -8356,130 +8381,21 @@ fn handle_syscall_inner(
             log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
             Err(SyscallError::Unknown)
         }
+        // Compositor-only; the source range is validated through the caller's
+        // copy view before the GPU Cell reads it, and the framebuffer fallback
+        // stages it through the view (H-26).
         Syscall::GpuFlush {
             data_ptr,
             data_len,
             xy,
             wh,
-        } => {
-            // If a GPU Driver Cell is registered, forward the flush via fire-and-forget IPC.
-            // The Cell owns the VirtIO GPU hardware; we copy nothing — the Cell reads
-            // data_ptr directly from the SAS (single address space).
-            {
-                use crate::task::drivers::driver_cell::GPU_DRIVER_CELL;
-                use core::sync::atomic::Ordering;
-                let gpu_cell = GPU_DRIVER_CELL.load(Ordering::Acquire);
-                if gpu_cell != 0 {
-                    // AppContext message envelope [0xAC, 0x00] followed by GPU payload.
-                    let mut msg = [0u8; 23];
-                    msg[0] = 0xAC;
-                    msg[1] = 0x00;
-                    msg[2] = 0x10; // OP_FLUSH
-                    msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
-                    msg[7..11].copy_from_slice(&(wh as u32).to_le_bytes());
-                    msg[11..19].copy_from_slice(&(data_ptr as u64).to_le_bytes());
-                    msg[19..23].copy_from_slice(&(data_len as u32).to_le_bytes());
-                    let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
-                    return Ok(0);
-                }
-            }
-            if let Some((fb_base, fb_size, _fb_w, _fb_h, fb_pitch)) =
-                crate::resource_registry::display_framebuffer_info()
-            {
-                let x = xy >> 16;
-                let y = xy & 0xffff;
-                let w = wh >> 16;
-                let h = wh & 0xffff;
-                let src_stride = w.saturating_mul(4);
-                let needed_bytes = src_stride.saturating_mul(h);
-                if data_ptr != 0 && data_len >= needed_bytes && src_stride > 0 {
-                    // SAFETY: In SAS, data_ptr is the compositor staging buffer.
-                    // fb_base is the firmware linear framebuffer identity-mapped at boot.
-                    let src =
-                        unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
-                    #[cfg(target_arch = "x86_64")]
-                    let dst_ptr = crate::memory::frame::phys_to_virt(fb_base) as *mut u8;
-                    #[cfg(not(target_arch = "x86_64"))]
-                    let dst_ptr = fb_base as *mut u8;
-                    let dst = unsafe { core::slice::from_raw_parts_mut(dst_ptr, fb_size) };
-                    for row in 0..h {
-                        let dst_offset = (y + row).wrapping_mul(fb_pitch).wrapping_add(x * 4);
-                        let src_offset = row.wrapping_mul(src_stride);
-                        let line_bytes = w * 4;
-                        if dst_offset
-                            .checked_add(line_bytes)
-                            .is_some_and(|end| end <= fb_size)
-                            && src_offset
-                                .checked_add(line_bytes)
-                                .is_some_and(|end| end <= data_len)
-                        {
-                            dst[dst_offset..dst_offset + line_bytes]
-                                .copy_from_slice(&src[src_offset..src_offset + line_bytes]);
-                        }
-                    }
-                    return Ok(0);
-                }
-            }
-            // Warn only once — compositor calls this every frame tick.
-            {
-                use core::sync::atomic::{AtomicBool, Ordering};
-                static WARNED: AtomicBool = AtomicBool::new(false);
-                if !WARNED.swap(true, Ordering::Relaxed) {
-                    log::warn!(
-                        "[gpu_flush] GPU Driver Cell not registered — software fallback active"
-                    );
-                }
-            }
-            Err(SyscallError::Unknown)
-        }
+        } => super::gpu_scanout::flush(caller_id, data_ptr, data_len, xy, wh),
         Syscall::GpuCursor {
             op,
             data_ptr,
             xy,
             hot,
-        } => {
-            // If a GPU Driver Cell is registered, forward the cursor op via fire-and-forget IPC.
-            {
-                use crate::task::drivers::driver_cell::GPU_DRIVER_CELL;
-                use core::sync::atomic::Ordering;
-                let gpu_cell = GPU_DRIVER_CELL.load(Ordering::Acquire);
-                if gpu_cell != 0 {
-                    match op {
-                        0 => {
-                            // AppContext envelope + OP_CUR_SET payload.
-                            let mut msg = [0u8; 19];
-                            msg[0] = 0xAC;
-                            msg[1] = 0x00;
-                            msg[2] = 0x11;
-                            msg[3..11].copy_from_slice(&(data_ptr as u64).to_le_bytes());
-                            msg[11..15].copy_from_slice(&(xy as u32).to_le_bytes());
-                            msg[15..19].copy_from_slice(&(hot as u32).to_le_bytes());
-                            let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
-                        }
-                        1 => {
-                            // AppContext envelope + OP_CUR_MOVE payload.
-                            let mut msg = [0u8; 7];
-                            msg[0] = 0xAC;
-                            msg[1] = 0x00;
-                            msg[2] = 0x12;
-                            msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
-                            let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
-                        }
-                        _ => return Err(SyscallError::InvalidInput),
-                    }
-                    return Ok(0);
-                }
-            }
-            // Warn only once.
-            {
-                use core::sync::atomic::{AtomicBool, Ordering};
-                static WARNED: AtomicBool = AtomicBool::new(false);
-                if !WARNED.swap(true, Ordering::Relaxed) {
-                    log::warn!("[gpu_cursor] GPU Driver Cell not registered");
-                }
-            }
-            Err(SyscallError::Unknown)
-        }
+        } => super::gpu_scanout::cursor(caller_id, op, data_ptr, xy, hot),
         Syscall::GpuGetResolution => {
             // Firmware scanout registration is authoritative when present;
             // generic VirtIO retains the legacy fallback before its driver
@@ -9879,9 +9795,9 @@ fn handle_syscall_inner(
         } => super::completion_wait::wait_completion(caller_id, mask, deadline, out_ptr),
 
         Syscall::RequestMmio { base, len } => {
-            // PlatformCap bypass: Platform Cell may claim any MMIO range
-            // (including the ECAM config-space window, which is not in PCIE_BARS).
-            // Overlap check still applies — no two cells may share a byte.
+            // PlatformCap bypass: the Platform Cell may claim only the kernel-admitted
+            // ECAM config-space window (not in PCIE_BARS), never managed RAM — the
+            // claim is user-mapped. Overlap check still applies.
             // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
             // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
             // it. BAR windows may not be mapped at all yet — this also creates
@@ -9920,12 +9836,12 @@ fn handle_syscall_inner(
             }
 
             if caller_has_platform(caller_id) {
-                return match crate::resource_registry::request_mmio_unchecked(caller_id, base, len)
-                {
+                return match crate::resource_registry::request_ecam_mmio(caller_id, base, len) {
                     Ok(()) => {
                         user_map(base, len);
                         Ok(0)
                     }
+                    Err(types::ViError::PermissionDenied) => Ok(1),
                     Err(types::ViError::AlreadyExists) => Ok(2),
                     Err(_) => Ok(3),
                 };
@@ -12441,6 +12357,64 @@ mod tests {
                 Some(tid)
             );
             crate::cell::service_registry::clear_tid(tid);
+        });
+    }
+
+    /// H-11: SpawnCap alone cannot rebind a well-known id (the USB host driver
+    /// holds spawn for its LAN child); a SupervisorCap holder still rebinds it,
+    /// and the spawn-only cell keeps publishing its own private id.
+    #[test]
+    fn register_service_refuses_well_known_hijack_by_a_spawn_only_cell() {
+        use api::syscall::service::VFS;
+        const HIJACKER: usize = 0x5_1D01;
+        const SUPERVISOR: usize = 0x5_1D02;
+        const PRIVATE_ID: u16 = 0x7A5E;
+        with_scheduler_task_caps(0, CapSet::EMPTY, |_| {
+            for (tid, caps) in [
+                (
+                    HIJACKER,
+                    CapSet {
+                        spawn: true,
+                        usb_driver: true,
+                        ..CapSet::EMPTY
+                    },
+                ),
+                (
+                    SUPERVISOR,
+                    CapSet {
+                        spawn: true,
+                        supervisor: true,
+                        ..CapSet::EMPTY
+                    },
+                ),
+            ] {
+                let mut task = alloc::boxed::Box::new(Task::new(
+                    tid,
+                    CellId(tid as u64),
+                    "register-service-test",
+                    alloc::vec::Vec::new(),
+                ));
+                caps.apply_to(&mut task);
+                SCHEDULER
+                    .lock()
+                    .as_mut()
+                    .expect("test scheduler")
+                    .tasks
+                    .insert(tid, task);
+            }
+            let register = |caller, service_id, tid| {
+                super::handle_syscall(caller, Syscall::RegisterService { service_id, tid })
+            };
+            assert_eq!(
+                register(HIJACKER, VFS, HIJACKER),
+                Err(SyscallError::PermissionDenied)
+            );
+            assert_ne!(crate::cell::service_registry::lookup(VFS), Some(HIJACKER));
+            assert_eq!(register(SUPERVISOR, VFS, SUPERVISOR), Ok(0));
+            assert_eq!(crate::cell::service_registry::lookup(VFS), Some(SUPERVISOR));
+            assert_eq!(register(HIJACKER, PRIVATE_ID, HIJACKER), Ok(0));
+            crate::cell::service_registry::clear_tid(HIJACKER);
+            crate::cell::service_registry::clear_tid(SUPERVISOR);
         });
     }
 

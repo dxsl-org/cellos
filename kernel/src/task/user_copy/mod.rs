@@ -16,8 +16,12 @@
 //!    readers BEFORE tearing down any PTE, an in-window fault is unreachable
 //!    through the public API and remains a recoverable `CopyError` (never a
 //!    panic). For `CopyView::Sas` the commit copies through user VAs under the
-//!    active shared root, retaining today's SUM-based shared-space semantics;
-//!    the guard converts a racing revocation into the same recoverable error.
+//!    active shared root, retaining today's SUM-based shared-space semantics.
+//!    The guard alone does NOT make that recoverable: a retired Sas page is
+//!    re-mapped kernel-RWX, which the kernel writes without faulting. The Sas
+//!    commit therefore runs under the `sas_lease` window, and every path that
+//!    retires a Sas user frame first unmaps it, flushes every hart, and calls
+//!    [`wait_sas_copies_quiescent`] (`task::stack::unpublish_user_frames`).
 //!
 //! The guard itself lives in `hart_local` (`user_copy_guard_*`). The RV64 trap
 //! handler routes guard-owned page faults to the helper's error label by
@@ -35,12 +39,15 @@
 mod copy;
 mod guard;
 mod range;
+#[path = "sas-lease.rs"]
+mod sas_lease;
 mod scatter;
 mod sv39_probe;
 
 pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 #[allow(unused_imports)]
 pub(crate) use guard::clear_guard_for_context_switch;
+pub(crate) use sas_lease::wait_sas_copies_quiescent;
 // These three exist for the RV64 fault-injection fixtures (`task::user_copy_tests`),
 // so they carry that fixture's cfg: importing them elsewhere would fail on
 // AArch64/x86_64, where the fixtures do not exist.

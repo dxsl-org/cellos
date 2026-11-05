@@ -107,6 +107,8 @@ pub mod drivers;
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 #[path = "task/getrandom-sas-tests.rs"]
 pub(crate) mod getrandom_sas_tests;
+#[path = "task/gpu-scanout.rs"]
+mod gpu_scanout;
 pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
 pub mod ipc_test;

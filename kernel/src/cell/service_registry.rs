@@ -20,9 +20,12 @@
 //! `generation == 0`) is **not bindable** and is reported as "no live provider",
 //! so the kernel never states a binding it cannot stand behind.
 //!
-//! Only `SpawnCap` holders may `register` (enforced at the syscall dispatch),
-//! so a cell cannot hijack, e.g., the VFS endpoint — the trusted supervisor owns
-//! the namespace. `lookup` is open to all cells.
+//! Publishing is owner-bound ([`register_as`]): the well-known ids below
+//! [`PRIVATE_ID_BASE`] belong to the namespace owners (trusted init and
+//! `SupervisorCap` holders), so a cell that merely holds `SpawnCap` — e.g. a USB
+//! host driver that spawns its protocol child — cannot rebind VFS, NET, KMS or
+//! SUPERVISOR. A spawn-only cell may publish a private id, and the first such
+//! registrar owns it until it exits. `lookup` is open to all cells.
 
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
@@ -77,18 +80,86 @@ impl ServiceEntry {
 
 static REGISTRY: Spinlock<BTreeMap<u16, ServiceEntry>> = Spinlock::new(BTreeMap::new());
 
-/// Force-release this module's lock during fault teardown.
+/// Private id → tid of the spawn-only registrar that owns it. Lock order:
+/// `OWNERS → REGISTRY`; nothing takes `OWNERS` while holding `REGISTRY`.
+static OWNERS: Spinlock<BTreeMap<u16, usize>> = Spinlock::new(BTreeMap::new());
+
+/// Ids below this are the well-known namespace of [`api::syscall::service`];
+/// ids at or above it are private ids a lifecycle parent publishes for its own
+/// children (the demo and test fixtures use `0x7Axx`).
+pub const PRIVATE_ID_BASE: u16 = 0x100;
+
+/// Who asks to publish a service id, as established by the syscall dispatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Registrar {
+    /// Trusted init or a `SupervisorCap` holder: owns the whole namespace and
+    /// rebinds any id (respawn, hot-swap rollback).
+    Namespace,
+    /// A `SpawnCap`-only task, by tid: private ids only, first registrar owns.
+    Spawner(usize),
+}
+
+/// Why [`register_as`] refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    /// The id is well-known or owned by another live registrar.
+    NotOwner,
+    /// Zero tid, or the registry/owner table is full.
+    Rejected,
+}
+
+/// Force-release this module's locks during fault teardown.
 ///
 /// # Safety
 /// Single-hart; called only from the fault/panic path with interrupts disabled.
 pub unsafe fn force_unlock_locks() {
+    OWNERS.force_unlock();
     REGISTRY.force_unlock();
+}
+
+/// Publish `tid` as the provider of `service_id` on behalf of `registrar`.
+///
+/// A [`Registrar::Spawner`] may publish only a private id, and only one that no
+/// other live spawner owns; its first successful publish makes it the owner
+/// until it exits ([`clear_tid`]), so it can rebind its own restarted child.
+pub fn register_as(
+    registrar: Registrar,
+    service_id: u16,
+    tid: usize,
+    cell_id: u64,
+    generation: u64,
+) -> Result<(), Refusal> {
+    let Registrar::Spawner(spawner) = registrar else {
+        return register(service_id, tid, cell_id, generation)
+            .then_some(())
+            .ok_or(Refusal::Rejected);
+    };
+    if service_id < PRIVATE_ID_BASE {
+        return Err(Refusal::NotOwner);
+    }
+    let mut owners = OWNERS.lock();
+    match owners.get(&service_id) {
+        Some(&owner) if owner != spawner => return Err(Refusal::NotOwner),
+        None if owners.len() >= MAX_SERVICES => return Err(Refusal::Rejected),
+        _ => {}
+    }
+    if !register(service_id, tid, cell_id, generation) {
+        return Err(Refusal::Rejected);
+    }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::SERVICE_SHARED,
+    );
+    owners.insert(service_id, spawner);
+    Ok(())
 }
 
 /// Register `tid` as the current provider of `service_id`, replacing any prior
 /// entry. Returns `false` (rejected) if the registry is full and `service_id` is
-/// new, or if `tid` is 0 (the reserved "none" sentinel). The SpawnCap authority
-/// check is performed by the caller (syscall dispatch), not here.
+/// new, or if `tid` is 0 (the reserved "none" sentinel). No authority check: the
+/// generic `RegisterService` path uses [`register_as`]; the kernel-defined
+/// self-registration paths (GPU driver, Silo, demo) check their own authority.
 ///
 /// `cell_id`/`generation` are the provider's live identity, read from the
 /// scheduler by the caller. They are recorded, never invented here.
@@ -246,17 +317,21 @@ pub fn is_registered_tid(tid: usize) -> bool {
 
 /// Remove every registration that points at `tid`. Called from `exit_task` when a
 /// task dies so a client never resolves a service to a dead provider; the
-/// supervisor re-registers the replacement's tid on respawn.
+/// supervisor re-registers the replacement's tid on respawn. A dead registrar
+/// also gives up its private ids, so its restarted successor can claim them.
 pub fn clear_tid(tid: usize) {
-    let mut map = REGISTRY.lock();
-    let before = map.len();
-    map.retain(|_, entry| entry.tid() != tid);
-    if map.len() != before {
-        log::info!(
-            "[service-registry] cleared stale entries for dead tid {}",
-            tid
-        );
+    {
+        let mut map = REGISTRY.lock();
+        let before = map.len();
+        map.retain(|_, entry| entry.tid() != tid);
+        if map.len() != before {
+            log::info!(
+                "[service-registry] cleared stale entries for dead tid {}",
+                tid
+            );
+        }
     }
+    OWNERS.lock().retain(|_, owner| *owner != tid);
 }
 
 #[cfg(feature = "test-hooks")]
@@ -387,5 +462,66 @@ mod tests {
         assert_eq!(lookup_bound(ACTIVE), None);
         assert_eq!(lookup_bound(PAUSED), None);
         assert!(!is_paused_tid(82));
+    }
+
+    /// H-11: a spawn-only cell cannot bind a well-known id (here SUPERVISOR and
+    /// KMS), while the namespace owner rebinds it freely.
+    #[test]
+    fn spawner_cannot_bind_well_known_ids() {
+        use api::syscall::service::{KMS, SUPERVISOR};
+        const HIJACKER: usize = 0x5_11A0;
+        for id in [SUPERVISOR, KMS] {
+            assert_eq!(
+                register_as(Registrar::Spawner(HIJACKER), id, HIJACKER, CELL, GEN),
+                Err(Refusal::NotOwner)
+            );
+            assert_ne!(lookup(id), Some(HIJACKER));
+        }
+        assert_eq!(
+            register_as(Registrar::Namespace, KMS, 0x5_11A1, CELL, GEN),
+            Ok(())
+        );
+        assert_eq!(lookup(KMS), Some(0x5_11A1));
+        clear_tid(0x5_11A1);
+    }
+
+    /// A private id belongs to its first spawn-only registrar: it rebinds its
+    /// restarted child, another spawner is refused, and the owner's exit frees
+    /// the id for its own restarted successor.
+    #[test]
+    fn private_id_is_owned_by_its_first_registrar_until_it_exits() {
+        const ID: u16 = 0x7A0B;
+        const OWNER: usize = 0x5_11B0;
+        const OTHER: usize = 0x5_11B1;
+        const SUCCESSOR: usize = 0x5_11B2;
+        let spawner = Registrar::Spawner;
+
+        assert_eq!(register_as(spawner(OWNER), ID, 0x5_11C0, CELL, GEN), Ok(()));
+        assert_eq!(
+            register_as(spawner(OWNER), ID, 0x5_11C1, CELL, GEN + 1),
+            Ok(())
+        );
+        assert_eq!(lookup(ID), Some(0x5_11C1));
+        assert_eq!(
+            register_as(spawner(OTHER), ID, OTHER, CELL, GEN),
+            Err(Refusal::NotOwner)
+        );
+        assert_eq!(lookup(ID), Some(0x5_11C1));
+        assert_eq!(
+            register_as(spawner(OWNER), ID, 0, CELL, GEN),
+            Err(Refusal::Rejected)
+        );
+
+        clear_tid(OWNER);
+        assert_eq!(
+            register_as(spawner(SUCCESSOR), ID, 0x5_11C2, CELL, GEN),
+            Ok(())
+        );
+        assert_eq!(
+            register_as(spawner(OWNER), ID, 0x5_11C3, CELL, GEN),
+            Err(Refusal::NotOwner)
+        );
+        clear_tid(SUCCESSOR);
+        clear_tid(0x5_11C2);
     }
 }

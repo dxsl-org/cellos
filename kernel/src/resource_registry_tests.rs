@@ -1,6 +1,7 @@
 use super::{
-    checked_mmio_end, claim_bdf_owner, owner_of_bdf, release_bdfs_for, static_range_class,
-    valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
+    checked_mmio_end, claim_bdf_owner, ecam_claim_admitted, owner_of_bdf, owns_exact_mmio,
+    release_bdfs_for, request_ecam_mmio, static_range_class, valid_pcie_bar_window, DEV_GPIO,
+    DEV_I2C, DEV_SPI,
 };
 use types::ViError;
 
@@ -99,4 +100,61 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
     assert!(!claim_bdf_owner(BDF, REPLACEMENT_TID));
 
     release_bdfs_for(DEAD_TID);
+}
+
+/// H-3: the PlatformCap bypass may claim only inside the admitted ECAM window
+/// and never over managed RAM, even when firmware places the window on RAM.
+#[test]
+fn ecam_claim_is_confined_to_the_window_and_refuses_ram() {
+    const WINDOW: Option<(usize, usize)> = Some((0xB000_0000, 0x1000_0000));
+    let no_ram = || core::iter::empty::<(usize, usize)>();
+    let ram = || [(0x0010_0000, 0x8000_0000), (0x1_0000_0000, 0x2_0000_0000)].into_iter();
+
+    assert!(ecam_claim_admitted(0xB000_0000, 0xC000_0000, WINDOW, ram()));
+    assert!(ecam_claim_admitted(0xB010_0000, 0xB020_0000, WINDOW, ram()));
+    // Kernel RAM / image, a straddle of the window end, and no window at all.
+    assert!(!ecam_claim_admitted(
+        0x0020_0000,
+        0x0030_0000,
+        WINDOW,
+        ram()
+    ));
+    assert!(!ecam_claim_admitted(
+        0xBFFF_F000,
+        0xC000_1000,
+        WINDOW,
+        no_ram()
+    ));
+    assert!(!ecam_claim_admitted(
+        0xB000_0000,
+        0xB010_0000,
+        None,
+        no_ram()
+    ));
+    // A firmware window placed over RAM still refuses the overlapping bytes.
+    let ram_window = Some((0x7000_0000, 0x2000_0000));
+    assert!(!ecam_claim_admitted(
+        0x7FF0_0000,
+        0x8010_0000,
+        ram_window,
+        ram()
+    ));
+    assert!(ecam_claim_admitted(
+        0x8000_0000,
+        0x8010_0000,
+        ram_window,
+        ram()
+    ));
+}
+
+/// Without an admitted window (host build: no MCFG) every claim is refused and
+/// nothing is recorded.
+#[test]
+fn ecam_request_without_a_window_records_nothing() {
+    const TID: usize = 0x5_0EC0;
+    assert_eq!(
+        request_ecam_mmio(TID, 0x20_0000, 0x1000),
+        Err(ViError::PermissionDenied)
+    );
+    assert!(!owns_exact_mmio(TID, 0x20_0000, 0x1000));
 }

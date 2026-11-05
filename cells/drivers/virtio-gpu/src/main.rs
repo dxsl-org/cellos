@@ -22,9 +22,13 @@
 //! [0]      = 0x10  (OP_FLUSH)
 //! [1..5]   = xy    (u32 LE: x<<16 | y)
 //! [5..9]   = wh    (u32 LE: w<<16 | h)
-//! [9..17]  = data_ptr (u64 LE: SAS pointer to compositor pixel buffer)
-//! [17..21] = data_len (u32 LE: byte count, must be >= w*h*4)
+//! [9..17]  = data_ptr (u64 LE: compositor pixel buffer, kernel-probed readable)
+//! [17..21] = data_len (u32 LE: byte count, exactly w*h*4 from the kernel)
 //! ```
+//!
+//! Only the registered compositor may issue `GpuFlush`/`GpuCursor`; the kernel
+//! checks the source range through the compositor's copy view first. The cell
+//! still refuses a null, wrapping or non-user pointer instead of faulting.
 //!
 //! # IPC message format (from kernel GpuCursor forward)
 //! ```text

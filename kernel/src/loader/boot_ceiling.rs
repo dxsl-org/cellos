@@ -186,7 +186,8 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             ..LEGACY
         },
         // The host owns the only DWC2 MMIO/DMA authority. Its sole child is the
-        // capability-free LAN9514 protocol front-end.
+        // capability-free LAN9514 protocol front-end. `spawn` without `supervisor`
+        // publishes no well-known service id (`service_registry::register_as`).
         "/bin/dwc2-usb" => CapSet {
             spawn: true,
             usb_driver: true,

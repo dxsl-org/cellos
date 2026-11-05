@@ -86,6 +86,40 @@ fn release_frames(allocator: &mut FrameAllocator, base: VAddr, total_pages: usiz
     paging::tlb_flush_all();
 }
 
+/// Retire `pages` identity-mapped frames at `base` from the shared root before
+/// they return to the allocator.
+///
+/// A Sas user copy that probed one of these pages earlier must not land after
+/// the frame is re-mapped kernel-RWX: the kernel writes that mapping without
+/// faulting, so the copy would hit whatever the frame becomes next (page
+/// table, another cell). Clear every PTE, invalidate every hart, then wait out
+/// any Sas commit window still open (see `user_copy::sas_lease`). The frames
+/// stay UNMAPPED on return; the caller restores kernel-RWX and frees them.
+///
+/// Lock order: KERNEL_ROOT (leaf) per page, nothing held across the flush or
+/// the wait. Must NOT be called holding FRAME_ALLOCATOR: the x86 flush waits
+/// for every peer's acknowledgement, and a peer may spin on that lock with
+/// interrupts masked.
+pub(crate) fn unpublish_user_frames(base: VAddr, pages: usize) {
+    // Before paging is live no translation (and no user copy) can exist.
+    if pages == 0 || paging::KERNEL_ROOT.lock().is_none() {
+        return;
+    }
+    for i in 0..pages {
+        let _ = paging::unmap_page(base + i * PAGE_SIZE);
+    }
+    crate::memory::tlb_shootdown::flush_range(base, pages * PAGE_SIZE);
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
+    crate::task::user_copy::wait_sas_copies_quiescent();
+}
+
 /// Represents an allocated Stack.
 /// Implements Drop to automatically free pages.
 #[derive(Debug)]
@@ -404,6 +438,8 @@ impl Drop for Stack {
 
         let total_pages = self.pages + self.guard_pages;
 
+        // A sibling thread's Sas copy may still target this user stack.
+        unpublish_user_frames(self.base, total_pages);
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
             release_frames(allocator, self.base, total_pages);

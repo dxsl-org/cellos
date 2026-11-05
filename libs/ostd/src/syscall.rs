@@ -907,8 +907,10 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
 /// Register `tid` as the current provider of a well-known `service_id`
 /// (see [`api::syscall::service`]).
 ///
-/// SpawnCap owns general registration. A kernel-defined narrow capability may
-/// instead authorize one fixed service ID with `tid=0` self-registration.
+/// Well-known ids need trusted init or SupervisorCap; a SpawnCap-only caller may
+/// publish only a private id (`>= 0x100`) that no other live registrar owns. A
+/// kernel-defined narrow capability may instead authorize one fixed service ID
+/// with `tid=0` self-registration.
 /// Returns `Ok(0)` on success and `Err` when authority is absent, the target is
 /// invalid, or the registry is full.
 pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
@@ -1731,7 +1733,8 @@ pub fn sys_hotswap_ready() {
 /// `pixels` must be `w * h * 4` bytes in BGRA8888 format.
 ///
 /// # Errors
-/// Returns `Err` if the GPU driver is not initialised in the running kernel.
+/// Returns `Err` if the caller is not the registered compositor, `pixels` is
+/// not readable caller memory, or no GPU driver/framebuffer is active.
 pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<(), SyscallError> {
     // Pack geometry: a2 = xy (x<<16 | y), a3 = wh (w<<16 | h).
     let xy = (((x as usize) & 0xFFFF) << 16) | ((y as usize) & 0xFFFF);
@@ -1780,8 +1783,8 @@ pub fn sys_audio_play(pcm: &[u8]) -> usize {
 /// pointer and hotspot values are ignored; pass a zero-length slice and `(0,0)`.
 ///
 /// # Errors
-/// Returns `Err` when the GPU cursor hardware is unavailable or the sprite size
-/// is wrong.
+/// Returns `Err` when the caller is not the registered compositor, the GPU
+/// cursor hardware is unavailable, or the sprite is not readable caller memory.
 pub fn sys_gpu_cursor(
     op: usize,
     sprite: *const u8,

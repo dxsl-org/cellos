@@ -1,8 +1,9 @@
 //! Two-pass transaction orchestration: entry points, the shared `execute`
-//! body, the pinned Domain commit, and the Sas direct-VA commit.
+//! body, and the pinned Domain commit. The Sas commit lives in `sas_lease`.
 
 use super::guard::commit_guarded;
 use super::range::{CopyError, CopyView, Direction, UserReadSlice, UserWriteSlice};
+use super::sas_lease::commit_sas;
 use super::sv39_probe::{
     probe_sas, stage_domain, sv39_leaf, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE,
 };
@@ -163,22 +164,4 @@ impl PinnedCopy<'_> {
         }
         result
     }
-}
-
-/// Sas commit: direct VA byte copy under the active shared root, inside the
-/// recoverable guard window. A racing revocation of a validated page surfaces
-/// as `CopyError::InvalidAddress` — retained legacy Sas mapping exposure,
-/// documented in the phase plan.
-pub(super) fn commit_sas(
-    direction: Direction,
-    user_ptr: usize,
-    other: *mut u8,
-    len: usize,
-) -> Result<(), CopyError> {
-    let (src, dst) = if direction == Direction::FromUser {
-        (user_ptr as *const u8, other)
-    } else {
-        (other as *const u8, user_ptr as *mut u8)
-    };
-    commit_guarded(src, dst, len, user_ptr, user_ptr + len)
 }

@@ -31,6 +31,22 @@ const VIRTIO_DEV_GPU: u32 = 16;
 /// VirtIO MMIO register area size per slot.
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
+/// Exclusive top of the user half the kernel's copy view admits.
+const USER_LIMIT: usize = 1 << 38;
+
+/// The `len` source bytes at `ptr`, or `None` for a null, wrapping or non-user
+/// range. The kernel forwards only ranges it probed readable in the
+/// compositor's mappings; this keeps a malformed message from faulting the cell.
+pub(crate) fn source_bytes<'a>(ptr: usize, len: usize) -> Option<&'a [u8]> {
+    let end = ptr.checked_add(len)?;
+    if ptr == 0 || len == 0 || end > USER_LIMIT {
+        return None;
+    }
+    // SAFETY: non-null, non-wrapping user range the kernel verified readable for
+    // the compositor (`GpuFlush`/`GpuCursor`) in the shared address space.
+    Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
+}
+
 // ─── CellHal ─────────────────────────────────────────────────────────────────
 
 /// VirtIO DMA HAL backed by `sys_grant_alloc` / `sys_grant_free`.
@@ -119,8 +135,8 @@ impl GpuDevice {
     /// the VirtIO framebuffer and flush the dirty rect to the display.
     ///
     /// `xy` packs `(x << 16) | y`; `wh` packs `(w << 16) | h`.
-    /// `data_len` is the compositor's byte count; if it's smaller than `w*h*4`
-    /// the call is silently ignored to prevent out-of-bounds reads.
+    /// `data_len` is the compositor's byte count; if it's smaller than `w*h*4`,
+    /// or the source range is null or outside the user half, the call is ignored.
     pub fn flush_rect(&mut self, src_ptr: usize, data_len: usize, xy: u32, wh: u32) {
         let x = (xy >> 16) & 0xFFFF;
         let y = xy & 0xFFFF;
@@ -129,10 +145,14 @@ impl GpuDevice {
         if w == 0 || h == 0 {
             return;
         }
-        let expected = (w as usize) * (h as usize) * 4;
+        let src_stride = w as usize * 4;
+        let expected = src_stride * h as usize;
         if data_len < expected {
             return;
         }
+        let Some(src) = source_bytes(src_ptr, expected) else {
+            return;
+        };
         let x = x.min(self.width);
         let y = y.min(self.height);
         let w = w.min(self.width.saturating_sub(x));
@@ -141,13 +161,10 @@ impl GpuDevice {
             return;
         }
         let stride = self.width as usize * 4;
-        // SAFETY: src_ptr is a compositor user-space pointer valid in SAS (same address space);
-        // data_len was validated above against w*h*4.
-        let src = unsafe { core::slice::from_raw_parts(src_ptr as *const u8, data_len) };
         let fb = self.framebuffer();
         for row in 0..h as usize {
             let fb_off = (y as usize + row) * stride + x as usize * 4;
-            let src_off = row * w as usize * 4;
+            let src_off = row * src_stride;
             let row_bytes = w as usize * 4;
             if fb_off + row_bytes <= fb.len() && src_off + row_bytes <= src.len() {
                 fb[fb_off..fb_off + row_bytes].copy_from_slice(&src[src_off..src_off + row_bytes]);

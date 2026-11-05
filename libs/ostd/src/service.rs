@@ -34,8 +34,9 @@ pub fn lookup(service_id: u16) -> Option<usize> {
 
 /// Register the calling cell as the live provider of `service_id`.
 ///
-/// Requires `SpawnCap` except for kernel-defined, operation-specific self-registration
-/// capabilities. The development/test-hooks Silo route is one such exception and can
+/// Well-known ids require trusted init or `SupervisorCap`; a `SpawnCap`-only cell may
+/// publish only a private id it owns. Kernel-defined, operation-specific self-registration
+/// capabilities are separate exceptions: the development/test-hooks Silo route is one and can
 /// publish only `service::SILO` with `tid=0`; it cannot register any other endpoint.
 ///
 /// # Errors

@@ -206,31 +206,45 @@ pub(super) fn stage_domain<'a>(
 /// Probe `[ptr, ptr+len)` against the currently resident root.
 ///
 /// Sas RETAINS today's shared-address-space semantics: cells and the kernel
-/// share one map and the kernel dereferences through SUM=1, so any live
-/// mapping with the required R/W right qualifies — the U bit is deliberately
-/// NOT required here. Kernel-image rejection for Sas therefore reduces to the
-/// canonical bound plus whatever the walk refuses; private-root views enforce
-/// the strict U + R/W ledger contract above.
+/// share one map, so any live USER mapping with the required R/W right
+/// qualifies — ownership is not checked. Private-root views enforce the strict
+/// ledger contract above.
 ///
 /// Documented retained legacy exposure: Sas identity-maps RAM, so a wild
-/// pointer inside the identity-mapped RAM range passes this probe by design —
-/// only VAs with no live Sv39 leaf (true holes between mapped regions) are
-/// rejected before any byte moves. Concurrent-unmap residual is legacy Sas
-/// semantics, converted to a recoverable error by the guard.
+/// pointer at another cell's USER page passes this probe by design. This probe
+/// is NOT the authority for the commit: a page may be retired between probe
+/// and commit, and a retired page is re-mapped kernel-RWX — writable by the
+/// kernel without any fault — before its frame is reused. The commit therefore
+/// re-validates every page inside its leased window (`sas_lease`), which is
+/// what keeps a racing release from receiving bytes after the frame is freed.
 pub(super) fn probe_sas(ptr: usize, len: usize, direction: Direction) -> Result<(), CopyError> {
-    let end = ptr.checked_add(len).ok_or(CopyError::InvalidAddress)?;
     let Some(root_pa) = current_satp_root() else {
         return Err(CopyError::InvalidAddress);
     };
+    sas_span_live(ptr, len, direction, |page| {
+        sv39_leaf(root_pa, page).map(|(bits, _)| bits)
+    })
+}
+
+/// Require every page of `[ptr, ptr+len)` to resolve VALID | USER plus the
+/// direction's R/W right. `leaf` returns the PTE bits for one page VA. A
+/// retired page (unmapped, or re-mapped kernel-only) fails here.
+pub(super) fn sas_span_live(
+    ptr: usize,
+    len: usize,
+    direction: Direction,
+    leaf: impl Fn(usize) -> Option<usize>,
+) -> Result<(), CopyError> {
+    let end = ptr.checked_add(len).ok_or(CopyError::InvalidAddress)?;
     let need = if direction == Direction::ToUser {
-        SV39_WRITE | SV39_USER
+        SV39_VALID | SV39_WRITE | SV39_USER
     } else {
-        SV39_READ | SV39_USER
+        SV39_VALID | SV39_READ | SV39_USER
     };
     let mut page = ptr & !(PAGE_SIZE - 1);
     while page < end {
-        let (bits, _) = sv39_leaf(root_pa, page).ok_or(CopyError::InvalidAddress)?;
-        if bits & (SV39_VALID | need) != SV39_VALID | need {
+        let bits = leaf(page).ok_or(CopyError::InvalidAddress)?;
+        if bits & need != need {
             return Err(CopyError::InvalidAddress);
         }
         page += PAGE_SIZE;

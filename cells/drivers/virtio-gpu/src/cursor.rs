@@ -3,11 +3,7 @@
 //! These functions are called from `main::dispatch` when the kernel forwards a
 //! `GpuCursor` syscall to this cell.  Both operate on the owned `GpuDevice`.
 
-// Inherits the `#![allow(unsafe_code)]` exemption from display.rs for the
-// slice-from-raw-parts pointer (compositor cursor sprite buffer in SAS).
-#![allow(unsafe_code)]
-
-use crate::display::GpuDevice;
+use crate::display::{source_bytes, GpuDevice};
 use ostd::io::println;
 
 /// Byte length required by `VirtIOGpu::setup_cursor` (64×64 BGRA8888).
@@ -17,15 +13,17 @@ const SPRITE_LEN: usize = 64 * 64 * 4;
 ///
 /// `xy` packs `(x << 16) | y` (initial screen position).
 /// `hot` packs `(hot_x << 16) | hot_y` (hotspot within sprite).
-/// `data_ptr` points to the sprite bytes in the compositor's SAS address space.
+/// `data_ptr` points to the sprite bytes in the compositor's SAS address space;
+/// a null or non-user pointer is ignored rather than dereferenced.
 pub fn set_sprite(dev: &mut GpuDevice, data_ptr: usize, xy: u32, hot: u32) {
     let x = (xy >> 16) & 0xFFFF;
     let y = xy & 0xFFFF;
     let hot_x = (hot >> 16) & 0xFFFF;
     let hot_y = hot & 0xFFFF;
-    // SAFETY: data_ptr is a compositor user-space pointer valid in SAS;
-    // SPRITE_LEN is constant and bounds-checked by the VirtIO cursor spec.
-    let image = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, SPRITE_LEN) };
+    let Some(image) = source_bytes(data_ptr, SPRITE_LEN) else {
+        println("[virtio-gpu] cursor sprite pointer refused");
+        return;
+    };
     if dev.gpu.setup_cursor(image, x, y, hot_x, hot_y).is_err() {
         println("[virtio-gpu] cursor setup_cursor failed");
     }

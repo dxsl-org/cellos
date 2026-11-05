@@ -318,13 +318,6 @@ approver = "owner (x86 breadth phase 05, 2026-11-04)"
 date = "2026-11-04"
 
 [[file]]
-path = "cells/drivers/virtio-gpu/src/cursor.rs"
-class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
-approver = "cellos-maintainers"
-date = "2026-07-14"
-
-[[file]]
 path = "cells/drivers/virtio-gpu/src/display.rs"
 class = "driver-mmio"
 reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."

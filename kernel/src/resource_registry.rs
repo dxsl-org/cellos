@@ -59,7 +59,7 @@ pub const DEV_DISPLAY: u8 = 1 << 7;
 /// granted sub-window is contained in — not equal to — the window it came from.
 pub type MmioClass = u16;
 
-/// The Platform Cell's ECAM config-space window (`request_mmio_unchecked`).
+/// The Platform Cell's ECAM config-space window (`request_ecam_mmio`).
 pub const CLASS_ECAM: MmioClass = 1 << 8;
 /// The DWC2 USB host aperture (`request_dwc2_mmio`).
 pub const CLASS_DWC2: MmioClass = 1 << 9;
@@ -384,12 +384,10 @@ fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
     base.checked_add(len).ok_or(ViError::InvalidInput)
 }
 
-/// Request exclusive MMIO ownership without allowlist validation (Platform Cell only).
+/// Record an ECAM claim with only the overlap check (no window policy).
 ///
-/// Bypasses the per-arch ALLOWED list and the PCIE_BARS table. The overlap check
-/// still runs — two cells cannot share a byte. Used by the PlatformCap bypass path
-/// in `sys_request_mmio` so the Platform Cell can claim the ECAM config-space window
-/// (which is not a device BAR and therefore not in either allowlist).
+/// The `RequestMmio` syscall must go through [`request_ecam_mmio`]; this raw
+/// form exists for kernel-internal fixtures that register a window directly.
 pub fn request_mmio_unchecked(tid: usize, base: usize, len: usize) -> ViResult<()> {
     let end = checked_mmio_end(base, len)?;
     let mut reg = REGISTRY.lock();
@@ -408,6 +406,58 @@ pub fn request_mmio_unchecked(tid: usize, base: usize, len: usize) -> ViResult<(
         },
     );
     Ok(())
+}
+
+/// Platform Cell (`PlatformCap`) claim: only inside the kernel-admitted ECAM
+/// window, and never over a managed RAM frame.
+///
+/// The claim is user-mapped by the caller, so a range reaching kernel RAM, page
+/// tables or the kernel image would hand the cell the kernel. The RAM test is
+/// kept even inside the window: the window comes from firmware (ACPI MCFG).
+pub fn request_ecam_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
+    let end = checked_mmio_end(base, len)?;
+    let window = crate::task::drivers::pcie_ecam::admitted_ecam_range();
+    let admitted = {
+        let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+        // No allocator means managed RAM is unknown: refuse rather than guess.
+        guard.as_ref().is_some_and(|allocator| {
+            ecam_claim_admitted(
+                base,
+                end,
+                window,
+                allocator
+                    .managed_ranges()
+                    .map(|range| (range.start, range.start + range.frames * 4096)),
+            )
+        })
+    };
+    if !admitted {
+        log::warn!(
+            "[mmio] platform claim {:#x}+{:#x} outside the ECAM window or over RAM",
+            base,
+            len
+        );
+        return Err(ViError::PermissionDenied);
+    }
+    request_mmio_unchecked(tid, base, len)
+}
+
+/// `[base, end)` lies inside `window` (`(base, len)`) and overlaps none of
+/// `ram` (`(start, end)` ranges).
+fn ecam_claim_admitted(
+    base: usize,
+    end: usize,
+    window: Option<(usize, usize)>,
+    mut ram: impl Iterator<Item = (usize, usize)>,
+) -> bool {
+    let Some((window_base, window_len)) = window else {
+        return false;
+    };
+    let inside = base >= window_base
+        && window_base
+            .checked_add(window_len)
+            .is_some_and(|window_end| end <= window_end);
+    inside && !ram.any(|(start, ram_end)| base < ram_end && start < end)
 }
 
 /// Check if `[base, base + len)` falls inside the platform's DWC2 host controller MMIO window.

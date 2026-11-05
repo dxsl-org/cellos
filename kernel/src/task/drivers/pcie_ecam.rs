@@ -725,6 +725,18 @@ pub fn config_space_admitted() -> bool {
     ecam_window().0 != 0
 }
 
+/// The admitted ECAM window as a byte range `(base, len)`, or `None` when the
+/// kernel has none. This is the only physical range the Platform Cell's
+/// `RequestMmio` bypass may claim.
+pub fn admitted_ecam_range() -> Option<(usize, usize)> {
+    let (base, bus_start, bus_end) = ecam_window();
+    if base == 0 {
+        return None;
+    }
+    let len = ecam_window_size(bus_start, bus_end)?;
+    base.checked_add(len).map(|_| (base, len))
+}
+
 fn split_bdf(bdf: u32) -> (u8, u8, u8) {
     (
         ((bdf >> 8) & 0xFF) as u8,
