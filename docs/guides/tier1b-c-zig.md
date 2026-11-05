@@ -320,15 +320,77 @@ construction, `new`/`delete` — are all available.
 
 **Not available:** exceptions, RTTI, thread-safe statics, and the STL runtime (`std::string`,
 `std::vector`, iostreams, locale). Do not link libstdc++/libc++ silently — the runner asserts
-`__cxa_throw`/`_Unwind_*`/`_ZSt*` are absent from the linked cell.
+`__cxa_throw`/`_Unwind_*`/`_ZSt*` are absent from the linked cell. Use `cpp-hosted` (below) when you
+need them.
 
-**Architectures:** RV64 and AArch64 only, because the profile's runtime layer is the POSIX shim
-(`#![cfg(any(riscv64, aarch64, wasm32, doc))]`). The build script fails with that reason on other
-targets.
+**Architectures:** RV64, AArch64 and x86_64. The profile's runtime layer is the POSIX shim, which is
+compiled for these three targets and wasm32 (`libs/api/src/services/posix.rs:13-22`), and the cell's
+build script selects a compiler for each (`cells/tests/cpp-smoke/build.rs:62-152`). On any other
+target the build script fails and states this reason.
 
 **Launch edge:** a new `/bin/<cell>` path needs a reviewed row in
 `kernel/src/loader/launch_profile/targets.rs` before the shell or desktop may launch it —
 `c-ffi` cells take a `CapSet::EMPTY` ceiling there unless the cell genuinely needs authority.
+
+---
+
+## Hosted C++17 — `cpp-hosted`
+
+Full C++17 with the standard library, exceptions, RTTI, threads and iostreams
+([ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)). The runtime is static LLVM
+libc++, libc++abi and libunwind (`llvmorg-19.1.7`) over mlibc `posix` (Tier B). It is for
+**x86_64 Tier-2 cells only**. The profile contract lives in
+[third_party/llvm-runtimes/README.md](../../third_party/llvm-runtimes/README.md).
+
+Reference cell: [cells/tests/cpp-hosted-smoke](../../cells/tests/cpp-hosted-smoke/). Image:
+`scripts/build-x86_64-cpp-hosted-ci.sh`. Runner: `scripts/x86/qemu-cpp-hosted-smoke.sh`, which
+waits for the `/bin/cpp-hosted-smoke` launch row.
+
+**Build the runtime** after mlibc:
+
+```sh
+bash scripts/build-mlibc.sh
+bash scripts/build-llvm-runtimes.sh x86_64      # or `all`: host dry run, cross build, size table
+```
+
+**Cell setup.** Use the same crate dependencies as an mlibc cell: `api` with `features = ["mlibc"]`
+plus `mlibc-shim`. `build.rs` compiles with `clang++` and these flags:
+
+```text
+--target=x86_64-unknown-none-elf -std=c++17 -msse2 -mfpmath=sse -mno-red-zone -mcmodel=small
+-fPIC -fno-stack-protector -D_GNU_SOURCE -nostdinc++ -nostdlibinc
+-isystem target/llvm-runtimes/x86_64/include/c++/v1
+-isystem third_party/mlibc/build-x86_64/sysroot/include
+-ffunction-sections -fdata-sections
+```
+
+Then it links `static=c++`, `static=c++abi` and `static=unwind` from `target/llvm-runtimes/x86_64/lib`,
+with `.cpp_link_stdlib(None)` and `--build-id=sha1`.
+
+**Exceptions per translation unit.** Use `-fexceptions -frtti`, the llama.cpp choice, or
+`-fno-exceptions -fno-rtti`, the Mesa choice. All units link the same runtime. One cell links
+exactly one C++ runtime: never combine `cpp-hosted` with `cpp-freestanding`.
+
+**Boundary.**
+- Every function Rust calls is `extern "C"` and `noexcept`. An exception that reaches it calls
+  `std::terminate`, so libc++abi logs the exception type and `abort()` ends the cell. Exceptions
+  never cross a Rust frame (`panic = abort`).
+- No float or vector type crosses the boundary (rule H1; see "x86_64 C and the float boundary" below).
+
+**Limits until R3b (anonymous memory):**
+- every `std::thread` runs on the kernel's 64 KiB Spawn stack;
+- all allocation comes from mlibc's 16 MiB static arena, which never returns memory.
+
+**Refused:**
+- `dlopen`;
+- locales other than `C`/`POSIX`.
+
+**Not yet backed by sysdeps:**
+- `std::random_device` needs a `/dev/urandom` the cell can open;
+- most `<filesystem>` operations fail with `ENOSYS`-class errors.
+
+**Size.** The runtime adds about 482 KiB to the witness cell and about 162 KiB to a Mesa-shaped
+`-fno-exceptions` link (table in ADR-0034).
 
 ---
 

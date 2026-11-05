@@ -330,6 +330,27 @@ anchor type. The QEMU witness `cells/tests/drm-lite-x86` (runner
 `cells/tests/drm-lite-x86/run-qemu-x86.sh`) waits for its `/bin/drm-lite-x86`
 launch row.
 
+### Tier B: C++ runtime for `cpp-hosted`
+
+A `cpp-hosted` Cell (ADR-0034) links LLVM libc++, libc++abi and libunwind
+(`llvmorg-19.1.7`, `scripts/build-llvm-runtimes.sh`) beside mlibc. The C++ ABI
+symbols come from those archives, not from Cellos code. The Tier-A C++ ABI layer
+is compiled out under `mlibc`. The rows below record the provider and how it
+reaches mlibc. They are not sysdep rows, and `scripts/check-posix-ledger.py`
+does not parse them. All are `unverified`: the witness
+`cells/tests/cpp-hosted-smoke` links (no unresolved symbol) but waits for its
+`/bin/cpp-hosted-smoke` launch row.
+
+| symbol group | provider | backing in mlibc | semantic_subset | unsupported_result | status |
+|---|---|---|---|---|---|
+| `__cxa_throw`, `__cxa_begin_catch`, `__cxa_end_catch`, `__cxa_rethrow`, `__cxa_allocate_exception`, `__gxx_personality_v0`, `std::exception_ptr` | libc++abi | `malloc`; per-thread globals in static TLS | exceptions within C++ frames | an exception reaching a `noexcept` Rust→C++ entry or the end of the stack calls `std::terminate` | unverified |
+| `_Unwind_RaiseException`, `_Unwind_Resume`, `_Unwind_*` | libunwind | `dl_iterate_phdr` finds `PT_GNU_EH_FRAME`; `pthread_rwlock_*` | DWARF CFI of the Cell's own image | no frame info for a Rust frame (`panic=abort`) ends the search: terminate | unverified |
+| `__cxa_guard_acquire`, `__cxa_guard_release`, `__cxa_guard_abort` | libc++abi | `pthread_mutex_*`, `pthread_cond_*` | thread-safe function-local statics under contention | n/a | unverified |
+| `__cxa_atexit` (static destructors) | mlibc | mlibc's exit-handler list | handlers run when C code calls `exit` | not run when the Cell ends through Rust's `Exit` (ostd `_start`) or `abort`; libc++abi provides no `__cxa_thread_atexit` for this target | unverified |
+| `operator new`/`delete` (all forms, aligned and nothrow) | libc++abi | `malloc`, `aligned_alloc`, `free` (16 MiB arena until R3b) | throws `std::bad_alloc` on failure | arena exhaustion is `std::bad_alloc`; memory is never returned to the kernel | unverified |
+| `std::terminate`, `abort` | libc++abi, mlibc | `fprintf(stderr)`, then `abort()` | prints `libc++abi: terminating due to uncaught exception of type …` | mlibc has no `Sigaction` sysdep: logs `mlibc: sigaction failed in abort`, `mlibc PANIC`, exit status 1 | unverified |
+| `strtoll_l`, `strtoull_l`, `strxfrm_l`, `wcscoll_l`, `wcsxfrm_l` | mlibc pin patch `third_party/mlibc/patches/0002-posix-locale-l-functions.patch` | the unsuffixed function | C/POSIX locale only; collation is code-point order | other locales are not distinguished | unverified |
+
 ## Consumers
 
 | consumer | adapter | note |
@@ -337,6 +358,7 @@ launch row.
 | `cells/tests/posix-shim-test` | Tier A or Tier B, whichever the build selects | Declares the C ABI directly (`cells/tests/posix-shim-test/src/main.rs:56-75`). Witness for the rows that cite it. |
 | `cells/tests/mlibc-smoke`, `cells/tests/mlibc-posix-x86` | Tier B | Runtime witnesses on x86_64 QEMU (`docs/evidence/mlibc-runtime-x86.txt`). |
 | `cells/tests/drm-lite-x86`, `libs/drm-cellos` | Tier B | libdrm-lite (`third_party/libdrm`) and the fd provider route against the test-only fake provider; QEMU witness pending its launch row. |
+| `cells/tests/cpp-hosted-smoke` | Tier B plus the `cpp-hosted` C++ runtime | x86_64 link proof (`scripts/build-x86_64-cpp-hosted-ci.sh --link-only`); QEMU witness pending its launch row. |
 | `cells/demos/tetris-c` | Tier A | Class-A reference C port. |
 | `cells/runtimes/lua`, `cells/demos/doom`, `cells/demos/tetris-lua` | Tier A, plus toolchain picolibc on RV64 | The picolibc overlap is outside this ledger (see Scope). |
 | `cells/services/ocel-quickjs`, `cells/services/ocel-pdf` | Tier A | Use the allocation, string, stdio and math rows. |
