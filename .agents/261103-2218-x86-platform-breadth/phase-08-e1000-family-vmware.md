@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "e1000 82545EM and new e1000e cell (82574L)"
-status: pending
+status: completed (QEMU TCG + local KVM ceiling; VMware rows in phase 09)
 priority: P2
 effort: "3d"
 dependencies: ["4b"]
@@ -61,15 +61,15 @@ These are the NICs VMware guests get by default: "e1000" = 82545EM `8086:100F` a
 
 ## Todo List
 
-- [ ] 82545EM
-- [ ] e1000e link
-- [ ] e1000e data path + MSI-X
-- [ ] Exact-ID gate + CI
+- [x] 82545EM
+- [x] e1000e link
+- [x] e1000e data path + MSI-X
+- [x] Exact-ID gate + CI
 
 ## Success Criteria
 
-- [ ] `nic-x86` passes with `e1000`, `e1000-82545em` and `e1000e`, each with and without VT-d.
-- [ ] `pcie_ecam` unit tests: `100F` → e1000 cell, `10D3` → e1000e cell, `10C9` → igb; an unknown Intel ID is refused by name.
+- [x] `nic-x86` passes with `e1000`, `e1000-82545em` and `e1000e`, each with and without VT-d (TCG and KVM, [evidence](reports/phase-08-evidence.md)).
+- [x] `pcie_ecam` unit tests: `100F` → e1000 cell, `10D3` → e1000e cell, `10C9` → igb; an unknown Intel ID is refused by name.
 
 ## Risk Assessment
 
@@ -85,4 +85,10 @@ Phase 09 VMware matrix; phase 13 extends the cell to I219.
 
 ## Deviation Log
 
-None.
+- **D1 Decision (gate table owner column).** `ETHERNET_DRIVER_IDS` became `(vendor, device, cell)` with `ethernet_driver_cell()`, so the tests assert "100F → /bin/e1000" literally; `ethernet_id_has_driver` semantics and `ETHERNET_LEGACY_CLASS_IDS = [100E]` unchanged. Reversible: drop the column.
+- **D2 Deviation (file split).** `cells/drivers/e1000e/src/` also has `reset.rs` (quiesce/reset/station address) and the test-only `fake.rs` (device-shaped `EERD`/`MDIC`/`CTRL` register file), inside the `cells/drivers/e1000e/**` (C) row, to keep every file < 200 lines. `MacKind::PchLan(PchGen)` uses a generation enum; I219 `Target` IDs come from the PCI ID repository and must be re-checked against the I219 datasheet in phase 13.
+- **D3 Surprise (EIAC auto-mask).** First run: `irq_wakes` absent, link reached by park expiries only. With `EIAC` set and `CTRL_EXT.IAME` clear, sending the MSI-X message also clears the cause in `IMS` (QEMU `e1000e_msix_notify_one`, read as reference only). Fix: `EIAC = 0`; each park first clears `ICR` and re-arms `IMS`, then re-checks. Result: `irq_wakes=1` (TCG `park_expiries=3`, KVM `park_expiries=0`).
+- **D4 Surprise (platform cell gate).** `cells/services/platform/src/scan.rs:222-228` prints `[platform] unsupported Ethernet identity — registration skipped` for every Ethernet ID except `8086:100E` (pre-existing; igb lanes print it too). Binding is unaffected (the kernel ECAM scan publishes BARs). Out of the §2 set, not edited; the script and `nic-x86` match the kernel/cell refusal text `driver gate closed` instead of `unsupported Ethernet`.
+- **D5 Decision (runners).** `lib.rs` NIC bodies are parameterized (`boot_x86_bios_with_nic_model`); no `-nic none` there because the `-netdev` already suppresses q35's default NIC (request §1.4). `qemu-x86_64-test.sh` explicit models get `-nic none` + restricted netdev. `/bin/e1000` exits silently when absent so `igb-x86`'s `!contains("[e1000]")` stays valid.
+- **D6 Deviation (xHCI lane `-nic none`).** H-S3-7 (a) made `/bin/e1000e` bind q35's default NIC in the xHCI lane, whose oracle is "no NIC device, so no cell holds the NIC role" (`xhci-x86.rs:243-248`). Smallest reversible fix: `-nic none` in `boot_x86_xhci_inner` (`tests/integration/src/lib.rs`, in the §2 file set but outside its row text) — the H-S3-7 (b) lever for this lane only.
+- **D7 Not done (out of set).** CI host step `cargo test -p driver-e1000e` (proposed for the unit-test job); stale comments naming `/bin/e1000` as the 418 user at `kernel/src/task/syscall.rs:8834-8835` and `libs/api/src/abi/syscall.rs:529-534` (pinned files); `boards/qemu/q35-x86_64/board.rs` not listing `EthernetE1000e` (`DriverId` has no kernel consumer).

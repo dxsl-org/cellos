@@ -988,6 +988,8 @@ jobs:
       - name: Build Limine ISO
         run: bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
 
+      # With no X86_NIC_MODEL the script also asserts that `/bin/e1000e` binds
+      # q35's default NIC (an 82574L, plan 261103-2218 phase 08, H-S3-7).
       - name: Boot test (x86_64)
         run: |
           chmod +x scripts/qemu-x86_64-test.sh
@@ -1057,6 +1059,22 @@ jobs:
           --test igb-x86
           --target x86_64-unknown-linux-gnu
           -- --nocapture
+
+      # Plan 261103-2218 phase 08: the Intel NIC DHCP lanes. Six boots: QEMU
+      # `e1000` (82540EM) and `e1000-82545em` (82545EM) on `/bin/e1000`, and
+      # `e1000e` (82574L) on `/bin/e1000e`, each with and without VT-d. Every
+      # lane asserts the SKU bind line, registration → TX → RX → DHCP order and
+      # that exactly one NIC Driver Cell bound. `VICELL_NIC_ISO` pins the ISO;
+      # two lanes at a time keep six TCG guests inside the marker windows.
+      - name: Intel NIC integration test (x86_64, e1000 / 82545EM / e1000e)
+        env:
+          VICELL_NIC_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test nic-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture --test-threads=2
 
       # ADR-0031 phase 05: virtio-net/blk/scsi over PCI. Default q35 lane (DHCP +
       # two-boot persistence), vIOMMU fail-closed without iommu_platform, and

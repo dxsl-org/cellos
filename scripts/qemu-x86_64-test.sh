@@ -6,7 +6,10 @@
 #
 # Usage: BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh [iso]
 #   iso   default: build/vicell-x86.iso
-# Optional: X86_NIC_MODEL=e1000e runs the fail-closed NIC identity check.
+# Optional: X86_NIC_MODEL=e1000|e1000-82545em|e1000e|igb attaches exactly that
+# NIC (q35's default NIC dropped) and asserts its Driver Cell binds it and
+# carries DHCP. With no model, q35's default NIC (an 82574L) must be bound by
+# /bin/e1000e (plan 261103-2218 phase 08, H-S3-7).
 
 set -euo pipefail
 
@@ -57,15 +60,18 @@ case "$X86_EXPECT_PCID" in
         ;;
 esac
 
+# Every explicit model gets `-nic none` (no q35 default 82574L next to it, so
+# exactly one NIC Driver Cell can bind) and a restricted SLIRP netdev, so the
+# gate can assert the DHCP data plane really moves through the cell — a bare
+# `-device` has no link and no DHCP to observe. `restrict=on` keeps SLIRP
+# isolated.
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
-    e1000|e1000e) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
-    # Phase 04b: the igb case also attaches SLIRP, so the gate can assert the
-    # DHCP data plane really moves through the igb cell — a bare `-device` has
-    # no link and no DHCP to observe. `restrict=on` keeps SLIRP isolated.
-    igb) NIC_ARGS=(-netdev user,id=net0,restrict=on -device "igb,netdev=net0") ;;
+    e1000|e1000-82545em|e1000e|igb)
+        NIC_ARGS=(-nic none -netdev user,id=net0,restrict=on -device "$X86_NIC_MODEL,netdev=net0")
+        ;;
     *)
-        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000e, or igb" >&2
+        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000-82545em, e1000e, or igb" >&2
         exit 1
         ;;
 esac
@@ -120,34 +126,44 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-x86_64.log; then
     exit 1
 fi
 
-if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
-    && ! grep -q "\[e1000\] unsupported Ethernet 8086:10d3; driver gate closed" qemu-x86_64.log; then
-    echo "FAIL: e1000e endpoint was not rejected by vendor/device ID" >&2
+# Phase 08: each Intel model must reach exactly its own Driver Cell, named by
+# vendor:device and SKU, and no other NIC cell may bind. With no model, q35's
+# default NIC is an 82574L and `/bin/e1000e` must bind it (H-S3-7) — the check
+# that used to require the `8086:10d3` refusal is now positive.
+case "$X86_NIC_MODEL" in
+    ""|e1000e) EXPECT_BIND="\[e1000e\] controller bound 8086:10d3 82574L" ;;
+    e1000) EXPECT_BIND="\[e1000\] controller bound 8086:100e 82540EM" ;;
+    e1000-82545em) EXPECT_BIND="\[e1000\] controller bound 8086:100f 82545EM" ;;
+    igb) EXPECT_BIND="\[igb\] controller bound 8086:10c9" ;;
+esac
+if ! grep -qa "$EXPECT_BIND" qemu-x86_64.log; then
+    echo "FAIL: expected NIC bind line '$EXPECT_BIND'" >&2
+    grep -ai "controller bound\|unsupported Ethernet\|e1000" qemu-x86_64.log | head -5
+    exit 1
+fi
+NIC_CELLS_BOUND="$(grep -caE '\[(e1000|e1000e|igb)\] controller bound|\[virtio-net\] ready' qemu-x86_64.log || true)"
+if [[ "$NIC_CELLS_BOUND" != "1" ]]; then
+    echo "FAIL: $NIC_CELLS_BOUND NIC Driver Cells bound; exactly one expected" >&2
+    grep -aiE "controller bound|virtio-net\] ready" qemu-x86_64.log | head -5
+    exit 1
+fi
+# The kernel and cell gates refuse as "unsupported Ethernet vvvv:dddd; driver
+# gate closed". (The platform cell's own BAR-registration skip for non-82540EM
+# Ethernet is a separate, pre-existing line and does not gate binding.)
+if grep -qa "driver gate closed" qemu-x86_64.log; then
+    echo "FAIL: an attached NIC was refused by the driver gate" >&2
+    grep -a "driver gate closed" qemu-x86_64.log | head -3
+    exit 1
+fi
+if [[ -n "$X86_NIC_MODEL" ]] && ! grep -qa "\[net\] IP address: 10.0.2.15" qemu-x86_64.log; then
+    echo "FAIL: the $X86_NIC_MODEL attachment did not carry DHCP to a configured address" >&2
+    grep -ai "\[net\]\|DHCP" qemu-x86_64.log | head -5
     exit 1
 fi
 
 # Phase 04a/04b: the igb model (`8086:10c9`) must reach the igb Driver Cell, not
 # the fail-closed gate the pre-change kernel printed for every non-82540EM
-# Ethernet ID — and the attachment must carry the net service's DHCP exchange,
-# because the bind line alone does not prove the data plane moves frames. Both
-# directions are asserted, so a silent regression to the old gate is a failure
-# rather than a missing marker.
-if [[ "$X86_NIC_MODEL" == "igb" ]]; then
-    if ! grep -qa "\[igb\] controller bound 8086:10c9" qemu-x86_64.log; then
-        echo "FAIL: igb Driver Cell did not bind the igb model controller" >&2
-        grep -ai "igb\|unsupported Ethernet" qemu-x86_64.log | head -5
-        exit 1
-    fi
-    if grep -qa "\[e1000\] unsupported Ethernet 8086:10c9" qemu-x86_64.log; then
-        echo "FAIL: igb model ID is still refused by the driver gate" >&2
-        exit 1
-    fi
-    if ! grep -qa "\[net\] IP address: 10.0.2.15" qemu-x86_64.log; then
-        echo "FAIL: the igb attachment did not carry DHCP to a configured address" >&2
-        grep -ai "\[net\]\|DHCP" qemu-x86_64.log | head -5
-        exit 1
-    fi
-fi
+# Ethernet ID (the bind, single-cell, refusal and DHCP checks above cover it).
 
 # Phase 02a: with a SATA image attached, the AHCI Driver Cell must bind the ICH9
 # controller, bring a port up, and complete IDENTIFY DEVICE before the shell.

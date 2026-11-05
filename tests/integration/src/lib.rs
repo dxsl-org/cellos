@@ -1325,6 +1325,11 @@ impl QemuRunner {
             "-boot",
             "d",
             "-no-reboot",
+            // The lane's oracle is "no NIC device, so no cell holds the NIC
+            // role": drop q35's default 82574L, which `/bin/e1000e` binds since
+            // plan 261103-2218 phase 08 (H-S3-7 lever b, this lane only).
+            "-nic",
+            "none",
             "-device",
             "qemu-xhci,id=xhci",
         ]);
@@ -1437,6 +1442,24 @@ impl QemuRunner {
 
     /// [`Self::boot_x86_bios_with_nic`] with `cpus` vCPUs (`-smp`).
     pub fn boot_x86_bios_with_nic_smp(iso: &str, nvme_disk: &str, cpus: usize) -> Self {
+        Self::boot_x86_bios_with_plain_nic(iso, nvme_disk, "e1000", cpus)
+    }
+
+    /// Boot x86_64 q35 from a Limine ISO with NVMe plus one QEMU NIC `model`
+    /// (`e1000`, `e1000-82545em`, `e1000e`, `igb`, …) on a restricted user
+    /// netdev, behind Intel VT-d when `vtd` is set. The `-netdev` suppresses
+    /// q35's default 82574L, so `model` is the only Ethernet function and
+    /// exactly one NIC Driver Cell can bind (plan 261103-2218 phase 08).
+    pub fn boot_x86_bios_with_nic_model(iso: &str, nvme_disk: &str, model: &str, vtd: bool) -> Self {
+        if vtd {
+            Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, model, 1)
+        } else {
+            Self::boot_x86_bios_with_plain_nic(iso, nvme_disk, model, 1)
+        }
+    }
+
+    /// Shared body of the plain (no VT-d) NIC lanes; `nic` is the QEMU model.
+    fn boot_x86_bios_with_plain_nic(iso: &str, nvme_disk: &str, nic: &str, cpus: usize) -> Self {
         Self::boot_x86_q35(
             iso,
             cpus,
@@ -1448,7 +1471,7 @@ impl QemuRunner {
                 "-netdev".into(),
                 "user,id=net0,restrict=on".into(),
                 "-device".into(),
-                "e1000,netdev=net0".into(),
+                format!("{nic},netdev=net0"),
             ],
         )
     }
