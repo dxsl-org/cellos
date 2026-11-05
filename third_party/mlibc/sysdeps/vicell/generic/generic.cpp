@@ -19,6 +19,7 @@
 #include <abi-bits/fcntl.h>
 #include <mlibc/all-sysdeps.hpp>
 #include <mlibc/tcb.hpp>
+#include <vicell/fd_provider_core.h>
 #include <vicell/syscall.h>
 
 // ─── Local helpers (avoid circular dependency on libc itself) ────────────
@@ -62,12 +63,35 @@ void Sysdeps<Exit>::operator()(int status) {
     __builtin_unreachable();
 }
 
-int Sysdeps<Open>::operator()(const char *pathname, int flags, mode_t mode, int *fd) {
+// Kernel VFS route; every kernel failure reads as ENOENT.
+static int vi_kernel_open(const char *pathname, int flags, mode_t mode, int *fd) {
     long ret = vicell_syscall(VI_SYS_OPEN, (long)pathname, (long)vi_strlen(pathname),
                               (long)flags, (long)(unsigned)mode);
     if (ret == VI_SYSCALL_ERR) return ENOENT;
     *fd = (int)ret;
     return 0;
+}
+
+static int vi_kernel_close(int fd) {
+    if (vicell_syscall(VI_SYS_CLOSE, (long)fd, 0, 0, 0) == VI_SYSCALL_ERR) return EBADF;
+    return 0;
+}
+
+static int vi_kernel_fstat(int fd, struct stat *st);
+
+static void vi_yield() {
+    sysdep<Yield>();
+}
+
+// fd providers (vicell/fd_provider.h): paths under a registered prefix and
+// fds in the reserved range go to the provider, everything else to the kernel.
+static const cellos_fd_kernel vi_kernel_route = {
+    vi_kernel_open, vi_kernel_close, vi_kernel_fstat, vi_yield,
+};
+static cellos_fd_registry vi_fd_registry = {&vi_kernel_route, 0, 0, {}, {}};
+
+int Sysdeps<Open>::operator()(const char *pathname, int flags, mode_t mode, int *fd) {
+    return cellos_fd_core_open(&vi_fd_registry, pathname, flags, mode, fd);
 }
 
 int Sysdeps<Read>::operator()(int fd, void *buf, size_t count, ssize_t *bytes_read) {
@@ -85,8 +109,12 @@ int Sysdeps<Write>::operator()(int fd, const void *buf, size_t count, ssize_t *b
 }
 
 int Sysdeps<Close>::operator()(int fd) {
-    if (vicell_syscall(VI_SYS_CLOSE, (long)fd, 0, 0, 0) == VI_SYSCALL_ERR) return EBADF;
-    return 0;
+    return cellos_fd_core_close(&vi_fd_registry, fd);
+}
+
+// The Cellos kernel has no ioctl: kernel fds answer ENOTTY.
+int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *result) {
+    return cellos_fd_core_ioctl(&vi_fd_registry, fd, request, arg, result);
 }
 
 int Sysdeps<Seek>::operator()(int fd, off_t offset, int whence, off_t *new_offset) {
@@ -173,7 +201,7 @@ struct vi_fstat_v1 {
     uint64_t reserved[2];
 };
 
-static int vi_fstat(int fd, struct stat *st) {
+static int vi_kernel_fstat(int fd, struct stat *st) {
     struct vi_fstat_v1 wire = {0, 0, 0, {0, 0}};
     long ret = vicell_syscall(VI_SYS_FSTAT, (long)fd, (long)&wire, sizeof(wire), 0);
     if (ret != (long)sizeof(wire)) return EBADF;
@@ -188,18 +216,24 @@ static int vi_fstat(int fd, struct stat *st) {
     return 0;
 }
 
-// fstat (fd), stat (path, or AT_FDCWD + path). Only st_mode and st_size are set.
+// fstat (fd), stat (path, or AT_FDCWD + path). Kernel files set only st_mode
+// and st_size; provider fds report what the provider fills in.
 int Sysdeps<Stat>::operator()(fsfd_target target, int fd, const char *path, int, struct stat *st) {
     if (!st) return EINVAL;
-    if (target == fsfd_target::fd) return vi_fstat(fd, st);
+    if (target == fsfd_target::fd) return cellos_fd_core_fstat(&vi_fd_registry, fd, st);
     bool by_path = target == fsfd_target::path
                    || (target == fsfd_target::fd_path && fd == AT_FDCWD);
     if (!by_path || !path) return EINVAL;
     int opened = -1;
     if (int err = sysdep<Open>(path, 0, (mode_t)0, &opened)) return err;
-    int ret = vi_fstat(opened, st);
+    int ret = cellos_fd_core_fstat(&vi_fd_registry, opened, st);
     sysdep<Close>(opened);
     return ret;
 }
 
 } // namespace mlibc
+
+extern "C" int cellos_fd_provider_register(const char *prefix,
+                                           const struct cellos_fd_provider_ops *ops, void *ctx) {
+    return cellos_fd_core_register(&mlibc::vi_fd_registry, prefix, ops, ctx);
+}
