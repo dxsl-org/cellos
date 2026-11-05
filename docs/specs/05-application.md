@@ -214,7 +214,7 @@ Exceptions, RTTI, thread-safe statics, and the STL runtime (`std::string`, `std:
 iostreams) are not part of this profile; `cpp-hosted` provides them. Reference cell:
 `cells/tests/cpp-smoke`; runner: `scripts/qemu-cpp-smoke.sh`.
 
-#### `cpp-hosted` ([ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)) — built and linked, not yet run
+#### `cpp-hosted` ([ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)) — witnessed on QEMU TCG 2026-11-05
 
 Hosted C++17 for **x86_64 Tier-2 cells**: static LLVM libc++, libc++abi and libunwind
 (`llvmorg-19.1.7`), built once with exceptions and RTTI, over mlibc with the `posix` option
@@ -240,6 +240,13 @@ ends only the cell. The runtime adds 493,155 bytes of kept input sections to the
 Until the R3b memory work lands, every `std::thread` runs on the 64 KiB Spawn stack and every
 allocation comes from mlibc's 16 MiB static arena. `dlopen` is refused. Locales other than
 `C`/`POSIX` are refused unless measured.
+
+The witness first ran on QEMU TCG on 2026-11-05, with five runs per boot:
+- all 11 markers;
+- the libc++abi terminate line;
+- the shell survived each run, and every Tier-2 domain was released.
+
+The first boot overflowed the root stack before `main`. libc++abi's pthread-backed `__cxa_guard_acquire` re-entered mlibc's guarded `globalConfig()` through the pthread scope trace. mlibc pin patch `0003-guard-free-global-config.patch` fixes it. KVM has not run yet.
 
 ### 3.3 Porting lanes for existing Linux applications
 

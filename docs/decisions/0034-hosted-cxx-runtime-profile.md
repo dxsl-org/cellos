@@ -108,7 +108,7 @@ A `cpp-hosted` Cell does not ship in an image before that number is recorded (Sp
 
 The evidence ceiling is QEMU TCG and QEMU/KVM.
 
-**Size measurement (R4, 2026-11-05; host build, not run).** Bytes the three runtime archives add,
+**Size measurement (R4, 2026-11-05; measured on the host build).** Bytes the three runtime archives add,
 as input sections that `--gc-sections` keeps, attributed from the lld link map by
 `bash scripts/build-llvm-runtimes.sh size`. The build is pinned at `llvmorg-19.1.7`, uses
 `-O2`/`Release` with `-ffunction-sections -fdata-sections`, and links over mlibc `posix` x86_64.

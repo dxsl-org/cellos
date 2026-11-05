@@ -340,8 +340,9 @@ symbols come from those archives, not from Cellos code. The Tier-A C++ ABI layer
 is compiled out under `mlibc`. The rows below record the provider and how it
 reaches mlibc. They are not sysdep rows, and `scripts/check-posix-ledger.py`
 does not parse them. All are `unverified`: the witness
-`cells/tests/cpp-hosted-smoke` links (no unresolved symbol) but waits for its
-`/bin/cpp-hosted-smoke` launch row.
+`cells/tests/cpp-hosted-smoke` passes on QEMU TCG (2026-11-05, five runs per boot;
+log in `.agents/261104-0802-x86-tier2-gpu-runtime/reports/r4-evidence/`, which is not
+a `docs/evidence/` anchor, so the rows stay `unverified`). KVM is not yet run.
 
 | symbol group | provider | backing in mlibc | semantic_subset | unsupported_result | status |
 |---|---|---|---|---|---|
@@ -350,7 +351,7 @@ does not parse them. All are `unverified`: the witness
 | `__cxa_guard_acquire`, `__cxa_guard_release`, `__cxa_guard_abort` | libc++abi | `pthread_mutex_*`, `pthread_cond_*` | thread-safe function-local statics under contention | n/a | unverified |
 | `__cxa_atexit` (static destructors) | mlibc | mlibc's exit-handler list | handlers run when C code calls `exit` | not run when the Cell ends through Rust's `Exit` (ostd `_start`) or `abort`; libc++abi provides no `__cxa_thread_atexit` for this target | unverified |
 | `operator new`/`delete` (all forms, aligned and nothrow) | libc++abi | `malloc`, `aligned_alloc`, `free` (16 MiB arena until R3b) | throws `std::bad_alloc` on failure | arena exhaustion is `std::bad_alloc`; memory is never returned to the kernel | unverified |
-| `std::terminate`, `abort` | libc++abi, mlibc | `fprintf(stderr)`, then `abort()` | prints `libc++abi: terminating due to uncaught exception of type …` | mlibc has no `Sigaction` sysdep: logs `mlibc: sigaction failed in abort`, `mlibc PANIC`, exit status 1 | unverified |
+| `std::terminate`, `abort` | libc++abi, mlibc | `fprintf(stderr)`, then `abort()` | prints `libc++abi: terminating due to uncaught exception of type …` | mlibc has no `Kill`/`Sigaction` sysdeps: logs the missing-sysdep `__ensure`, `mlibc: sigaction failed in abort`, `mlibc PANIC`, exit status 1 (seen on QEMU TCG) | unverified |
 | `strtoll_l`, `strtoull_l`, `strxfrm_l`, `wcscoll_l`, `wcsxfrm_l` | mlibc pin patch `third_party/mlibc/patches/0002-posix-locale-l-functions.patch` | the unsuffixed function | C/POSIX locale only; collation is code-point order | other locales are not distinguished | unverified |
 
 ## Consumers
@@ -360,7 +361,7 @@ does not parse them. All are `unverified`: the witness
 | `cells/tests/posix-shim-test` | Tier A or Tier B, whichever the build selects | Declares the C ABI directly (`cells/tests/posix-shim-test/src/main.rs:56-75`). Witness for the rows that cite it. |
 | `cells/tests/mlibc-smoke`, `cells/tests/mlibc-posix-x86` | Tier B | Runtime witnesses on x86_64 QEMU (`docs/evidence/mlibc-runtime-x86.txt`). |
 | `cells/tests/drm-lite-x86`, `libs/drm-cellos` | Tier B | libdrm-lite (`third_party/libdrm`) and the fd provider route against the test-only fake provider; QEMU witness pending its launch row. |
-| `cells/tests/cpp-hosted-smoke` | Tier B plus the `cpp-hosted` C++ runtime | x86_64 link proof (`scripts/build-x86_64-cpp-hosted-ci.sh --link-only`); QEMU witness pending its launch row. |
+| `cells/tests/cpp-hosted-smoke` | Tier B plus the `cpp-hosted` C++ runtime | x86_64 witness, passing on QEMU TCG (`scripts/x86/qemu-cpp-hosted-smoke.sh`); KVM not yet run. |
 | `cells/demos/tetris-c` | Tier A | Class-A reference C port. |
 | `cells/runtimes/lua`, `cells/demos/doom`, `cells/demos/tetris-lua` | Tier A, plus toolchain picolibc on RV64 | The picolibc overlap is outside this ledger (see Scope). |
 | `cells/services/ocel-quickjs`, `cells/services/ocel-pdf` | Tier A | Use the allocation, string, stdio and math rows. |

@@ -344,7 +344,7 @@ libc++, libc++abi and libunwind (`llvmorg-19.1.7`) over mlibc `posix` (Tier B). 
 
 Reference cell: [cells/tests/cpp-hosted-smoke](../../cells/tests/cpp-hosted-smoke/). Image:
 `scripts/build-x86_64-cpp-hosted-ci.sh`. Runner: `scripts/x86/qemu-cpp-hosted-smoke.sh`, which
-waits for the `/bin/cpp-hosted-smoke` launch row.
+passes on QEMU TCG (2026-11-05; KVM not yet run).
 
 **Build the runtime** after mlibc:
 

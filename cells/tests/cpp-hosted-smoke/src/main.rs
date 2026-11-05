@@ -7,8 +7,6 @@
 //! status 1. A run therefore always exits non-zero; the markers, the
 //! terminate line and the kernel staying up are the verdict
 //! (`scripts/x86/qemu-cpp-hosted-smoke.sh`).
-//!
-//! Running it needs a launch row (H-1). Until then this crate is a link proof.
 
 #![no_std]
 #![no_main]

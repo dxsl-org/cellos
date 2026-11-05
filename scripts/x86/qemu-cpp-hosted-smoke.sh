@@ -17,8 +17,7 @@
 # Usage: bash scripts/x86/qemu-cpp-hosted-smoke.sh [kernel-elf] [iso-out]
 # Env: BOOT_WINDOW (default 180), X86_ACCEL (kvm|tcg), X86_CPU_MODEL, LOG_DIR,
 #      CPP_HOSTED_RUNS (default 1)
-# Requires the image from scripts/build-x86_64-cpp-hosted-ci.sh and the
-# /bin/cpp-hosted-smoke launch rows (owner H-1).
+# Requires the image from scripts/build-x86_64-cpp-hosted-ci.sh.
 
 set -euo pipefail
 
