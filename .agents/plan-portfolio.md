@@ -188,7 +188,7 @@ Admission blockers, per the promotion rule:
 |---|---|---|---|---|
 | 3 (admitted 2026-11-04; **closed 2026-11-04**, checkpoint 05 signed) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
 
-Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) is re-planned. Its [option B CP1](261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md) was approved 2026-11-04, and the work waits for the owner to schedule it. Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
+Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) is re-planned. Its [option B CP1](261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md) was approved 2026-11-04. **2026-11-05: the owner chose order (a) — 04b holds the Intel WIP lane now, then S2** ([record](261103-2218-x86-platform-breadth/lane-04b-schedule-approval.md)); S2 still needs H-S2-2…H-S2-11. Later slices (S3-S6: VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
 
 ## Registered — native Intel iGPU compute (ADR-0033, owner decision 2026-11-04); not yet in the WIP lane
 
@@ -205,7 +205,7 @@ Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidenc
 
 Admission blockers: owner machine selection and procurement (G0); per-slice lock handoff; Law-1 CP1 (G1) and CP2 (G3). The owner orders GPU slices against the remaining x86 breadth slices.
 
-## Admitted — Apple Silicon secondary lane (ADR-0032, owner decision 2026-11-04); no slice in progress
+## Admitted — Apple Silicon secondary lane (ADR-0032, owner decision 2026-11-04); slice A1 in progress since 2026-11-05
 
 **Recorded 2026-11-04.** [Plan](261104-0711-apple-silicon-group/plan.md); [Asahi reference analysis](261104-0711-apple-silicon-group/research/asahi-linux-reference.md). The owner made Apple Silicon (ADR-0029 group 3) an active lane with lower priority than Intel. Lane rules (ADR-0032 §2–§3):
 
@@ -216,12 +216,12 @@ Admission blockers: owner machine selection and procurement (G0); per-slice lock
 
 | Order | Plan slice | Milestone / consumer | Acceptance scenario | Evidence ceiling |
 |---|---|---|---|---|
-| A1 (next, needs handoff) | Phase 02a: arm64 Image entry + VHE host | AS-2, shared-core prerequisite for both Apple tracks | `virt-vhe` lane reaches the shell with EL0 Cells, `QEMU_SMP=2`, hypervisor lane unchanged; `-kernel Image` boots; group-1 `.text` ±1% | QEMU `virt` |
+| A1 (**in progress 2026-11-05**, [checkpoint](261104-0711-apple-silicon-group/phase-00-checkpoint-approval.md)) | Phase 02a: arm64 Image entry + VHE host | AS-2, shared-core prerequisite for both Apple tracks | `virt-vhe` lane reaches the shell with EL0 Cells, `QEMU_SMP=2`, hypervisor lane unchanged; `-kernel Image` boots; group-1 `.text` ±1% | QEMU `virt` |
 | A2 | Phases 02b, 02c | AS-2 | High-MMIO (>2^39) map; GICv3 FIQ timer; `-smp 4` | QEMU `virt` |
 | A3 | Phase 03 hosted guest | AS-3, Haily node on a Mac without replacing macOS | Shell, DHCP over virtio-net, two-boot persistence on an Apple host; refuses untranslated DMA without `cellos.profile=aarch64-vm` | `S1-hvf` |
 | A4 (`blocked: hardware`) | Phases 01, 04–07 bare metal | AS-1, AS-4…AS-7 | Per phase files; HCL §7 row | `S2-hv`, then `S2` |
 
-Admission blockers: phase 00 owner checkpoint (lane rules + 02a handoff). The lock inventory has no `hal/arch/arm` relation today (checked 2026-11-04), so the 02a handoff records its file set against active Intel slices only. x86 breadth phase 07a (per-CPU N harts) and phase 17 (`bcm57xx`) stay Intel-owned; Apple extends them afterwards. No Mac purchase is approved.
+Phase 00 owner checkpoint approved 2026-11-05 (lane rules + 02a handoff). The lock inventory has no `hal/arch/arm` relation today (checked 2026-11-04), so the 02a handoff records its file set against active Intel slices only. x86 breadth phase 07a (per-CPU N harts) and phase 17 (`bcm57xx`) stay Intel-owned; Apple extends them afterwards. No Mac purchase is approved.
 
 ## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
 

@@ -1,7 +1,7 @@
 ---
 phase: 0
 title: "Governance and provenance"
-status: in-progress
+status: completed
 priority: P2
 effort: "0.5d + owner review"
 dependencies: []
@@ -59,12 +59,12 @@ Docs-only. Order: ADR → amendments → portfolio/HCL/roadmap → handoff reque
 - [x] Portfolio, HCL §7, roadmap, changelog
 - [x] Provenance ledger
 - [x] Lock inventory check for the 02a file set (2026-11-04: no `hal/arch/arm`, aarch64 linker or `qemu-aarch64` relation in `cell-contract-0024-locks.md`; the inventory is plan-based, so the handoff checks against active Intel slices)
-- [ ] Owner checkpoint (lane rules + 02a handoff)
+- [x] Owner checkpoint (lane rules + 02a handoff) — approved 2026-11-05 ([record](phase-00-checkpoint-approval.md))
 
 ## Success Criteria
 
-- [ ] The owner confirms the lane rules or records amendments in ADR-0032.
-- [ ] The 02a handoff names its exact file set and activation condition (no Intel slice holds those files).
+- [x] The owner confirms the lane rules or records amendments in ADR-0032.
+- [x] The 02a handoff names its exact file set and activation condition (no Intel slice holds those files).
 - [x] `grep -rn "m1n1 (MIT)\|m1n1\` (MIT)" docs/decisions` shows only the corrected wording with its version qualifier.
 
 ## Risk Assessment
