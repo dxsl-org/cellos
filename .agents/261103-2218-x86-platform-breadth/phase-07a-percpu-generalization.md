@@ -1,7 +1,7 @@
 ---
 phase: 7a
 title: "Per-CPU structures for N CPUs (behaviour-preserving at 2)"
-status: completed (pending S2 close)
+status: completed (2026-11-05; S2 closed, record s2-close-approval.md)
 priority: P1
 effort: "3d"
 dependencies: [3]

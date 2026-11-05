@@ -1,7 +1,7 @@
 ---
 phase: 7b
 title: "N-CPU scheduling on x86"
-status: implemented (S2 checkpoint: review PASS-with-fixes; owner decision pending)
+status: completed (2026-11-05; reviews PASS-with-fixes and PASS for R1; S2 closed, record s2-close-approval.md)
 priority: P1
 effort: "5d"
 dependencies: ["7a", 2]
