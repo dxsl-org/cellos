@@ -2176,32 +2176,39 @@ pub(super) fn session_launch_request(
     ))
 }
 
-/// The ELF bytes of a session route-2 launch: `len` bytes of a grant the caller
-/// owns, validated exactly as `SpawnFromElf` validates them. The slice is read
-/// in place (SAS) while `prepare_gated` copies the image; it is not retained.
-pub(super) fn session_elf_bytes(
+/// Copy `len` bytes of a grant the caller owns into a kernel-owned ELF snapshot
+/// (`SpawnFromElf` and session route 2). Admission must never read the grant
+/// itself: the caller's other threads and grant peers can rewrite it between
+/// signature verification and segment load.
+pub(super) fn snapshot_grant_elf(
     caller: usize,
     grant_id: usize,
     len: usize,
-) -> Result<&'static [u8], SyscallError> {
+) -> Result<crate::loader::aligned_elf::ElfSnapshot, SyscallError> {
     if len == 0 {
         return Err(SyscallError::InvalidInput);
     }
-    let base = {
-        let guard = grant_table_lock().lock();
-        let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
-        let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
-        if g.owner != caller {
-            return Err(SyscallError::PermissionDenied);
-        }
-        if len > g.size {
-            return Err(SyscallError::InvalidInput);
-        }
-        g.base
-    };
-    // SAFETY: the grant is owned by the caller and at least `len` bytes long;
-    // the same in-place read `SpawnFromElf` performs.
-    Ok(unsafe { core::slice::from_raw_parts(base as *const u8, len) })
+    // Resolved before the table lock so SCHEDULER is not held across the copy.
+    let view = caller_copy_view(caller)?;
+    // The table lock is held across the copy because GrantFree and owner
+    // reclaim remove the row under it before returning frames: the source
+    // cannot be freed mid-copy. The copy is charged to the caller's cell, as
+    // SpawnFromMem's is.
+    let guard = grant_table_lock().lock();
+    let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
+    let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
+    if g.owner != caller {
+        return Err(SyscallError::PermissionDenied);
+    }
+    if len > g.size {
+        return Err(SyscallError::InvalidInput);
+    }
+    validate_user_buf(g.base, len, MAX_USER_BUF)?;
+    let mut snapshot = crate::loader::aligned_elf::ElfSnapshot::zeroed(len)
+        .map_err(|_| SyscallError::OutOfMemory)?;
+    view.read_into(g.base, snapshot.bytes_mut())
+        .map_err(|_| SyscallError::InvalidInput)?;
+    Ok(snapshot)
 }
 
 fn caller_has_supervisor(caller_id: usize) -> bool {
@@ -7506,21 +7513,7 @@ fn handle_syscall_inner(
             path_ptr,
             path_len,
         } => {
-            if len == 0 {
-                return Err(SyscallError::InvalidInput);
-            }
-            let base = {
-                let guard = grant_table_lock().lock();
-                let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
-                let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
-                if g.owner != caller_id {
-                    return Err(SyscallError::PermissionDenied);
-                }
-                if len > g.size {
-                    return Err(SyscallError::InvalidInput);
-                }
-                g.base
-            };
+            let elf = snapshot_grant_elf(caller_id, grant_id, len)?;
             let path_str = read_user_string(
                 caller_id,
                 path_ptr,
@@ -7542,7 +7535,6 @@ fn handle_syscall_inner(
                 path_str,
                 len
             );
-            let elf_bytes = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
             let request = match governed_spawn_request(
                 caller_id,
                 profile.child_ceiling,
@@ -7562,7 +7554,7 @@ fn handle_syscall_inner(
                 request.trace = *trace;
                 request
             };
-            let spawned = crate::loader::spawn_gated(elf_bytes, &path_str, request);
+            let spawned = crate::loader::spawn_gated(elf.bytes(), &path_str, request);
             #[cfg(cellos_p01_trace)]
             if let Err(error) = spawned {
                 crate::p01_measurement::source_error(*trace, error);

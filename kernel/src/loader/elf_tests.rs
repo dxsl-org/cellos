@@ -786,7 +786,7 @@ fn test_signing_required_flag_on_for_tier1() {
 
 /// Build a 408-byte minimal RISC-V ELF64 with one PT_LOAD segment and a
 /// `__ViCell_sig` section carrying `sig` as its data. Used only by tests.
-fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
+pub(crate) fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
     // String table: \0__ViCell_sig\0.shstrtab\0 (24 bytes)
     //   strtab[1]  = "__ViCell_sig\0"  → sh_name for section 1
     //   strtab[14] = ".shstrtab\0"     → sh_name for section 2 (itself)
@@ -864,7 +864,7 @@ fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
 /// Precomputed Ed25519 dev signature over the 344-byte canonical payload of `build_minimal_signed_elf`.
 /// Generated offline via `sign-cell.py` using `DEV_SEED = [0x43; 32]`.
 #[cfg(feature = "dev-signing-key")]
-const MINIMAL_ELF_DEV_SIG: [u8; 64] = [
+pub(crate) const MINIMAL_ELF_DEV_SIG: [u8; 64] = [
     0x48, 0x26, 0x58, 0xf3, 0x2f, 0x69, 0xc6, 0xcc, 0x24, 0xa3, 0x61, 0x17, 0x15, 0x72, 0xa8, 0xf4,
     0x1a, 0x7e, 0xd5, 0xca, 0x3a, 0xf4, 0x63, 0xe1, 0x2c, 0xbd, 0x94, 0x1a, 0x5c, 0xde, 0x3e, 0x95,
     0x43, 0xa5, 0xd4, 0x24, 0x2c, 0xf7, 0x4f, 0x13, 0x10, 0xb1, 0x92, 0x7c, 0xe8, 0x31, 0x0e, 0xb2,

@@ -3096,9 +3096,14 @@ fn prepare_child(
     let (prepared, state) = match elf {
         None => request.prepare_session_path(path),
         Some((grant_id, elf_len)) => {
-            let bytes = super::syscall::session_elf_bytes(caller, grant_id, elf_len)
-                .map_err(|_| Status::Malformed)?;
-            request.prepare_session_elf(bytes, path)
+            let elf =
+                super::syscall::snapshot_grant_elf(caller, grant_id, elf_len).map_err(|error| {
+                    match error {
+                        super::syscall::SyscallError::OutOfMemory => Status::QuotaExceeded,
+                        _ => Status::Malformed,
+                    }
+                })?;
+            request.prepare_session_elf(elf.bytes(), path)
         }
     }
     .map_err(|error| refused(caller, path, error))?;
