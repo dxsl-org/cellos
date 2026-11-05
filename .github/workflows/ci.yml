@@ -1017,6 +1017,21 @@ jobs:
           chmod +x scripts/qemu-x86_64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
 
+      # Plan 261103-2218 phase 07b: the `-smp 4` lane. Every Limine MP CPU comes
+      # online (`[x86-smp] topology online=4`), every AP acknowledges one
+      # broadcast invalidation, and the shell answers on the 4-CPU machine.
+      # `VICELL_X86_ISO` pins the ISO the job just built.
+      - name: Boot test (x86_64, -smp 4)
+        env:
+          VICELL_X86_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+          CELLOS_X86_SMP: "4"
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test x86_64-boot
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture x86_smp_brings_every_cpu_online
+
       # Plan 261103-2218 phase 02: HPET is optional. With HPET removed from q35,
       # TCG has no invariant TSC or kvmclock, so the kernel must select the
       # FADT PM timer, open the timer gate and reach the shell.

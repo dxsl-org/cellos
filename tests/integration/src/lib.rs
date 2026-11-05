@@ -169,6 +169,24 @@ pub fn x86_lane() -> X86Lane {
     }
 }
 
+/// vCPU count for the x86 multi-CPU lanes (plan 261103-2218 phase 07b):
+/// `CELLOS_X86_SMP` when set to a number in `2..=64` (the x86 `MAX_HARTS`),
+/// else `default`. CI runs 4 on TCG; a KVM host runs 8.
+pub fn x86_smp_cpus(default: usize) -> usize {
+    std::env::var("CELLOS_X86_SMP")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|cpus| (2..=64).contains(cpus))
+        .unwrap_or(default)
+}
+
+/// The kernel's topology line for a machine whose `cpus` CPUs all came online
+/// (`kernel/src/task/smp.rs:start_secondaries`). The `online=N` gate: a boot
+/// that brought up fewer CPUs prints a different count and never matches.
+pub fn x86_topology_online_marker(cpus: usize) -> String {
+    format!("[x86-smp] topology online={cpus} processor_ids=")
+}
+
 /// QEMU arguments for the phase 05 virtio-pci functions (net on a restricted
 /// user netdev, blk on `blk_disk`, one `scsi-hd` on `scsi_disk`). `vtd` puts
 /// `intel-iommu` first so QEMU wires it before the endpoints; `iommu_platform`
@@ -940,7 +958,8 @@ impl QemuRunner {
     }
 
     /// [`Self::boot_x86_bios`] with `cpus` vCPUs (`-smp`) and no extra devices,
-    /// for lanes that need the qualified two-CPU topology on the plain ISO.
+    /// for lanes that need a qualified multi-CPU topology on the plain ISO
+    /// (see [`x86_smp_cpus`] and [`x86_topology_online_marker`]).
     pub fn boot_x86_bios_smp(iso: &str, cpus: usize) -> Self {
         Self::boot_x86_q35(iso, cpus, &[])
     }

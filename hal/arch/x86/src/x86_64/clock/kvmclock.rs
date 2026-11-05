@@ -1,9 +1,11 @@
 //! KVM paravirtual clock (pvclock, MSR_KVM_SYSTEM_TIME_NEW).
 //!
-//! Only the boot CPU's time-info structure is registered and read. That is
-//! valid only while the host sets `PVCLOCK_TSC_STABLE_BIT`, which says every
-//! vCPU computes the same time from it (the same rule the Linux vDSO uses).
-//! [`init`] refuses the source otherwise.
+//! The MSR is per vCPU, so every CPU registers its own time-info structure
+//! ([`init`] on the boot CPU, [`register`] on each AP) and must see
+//! `PVCLOCK_TSC_STABLE_BIT` in it. Reads use the boot CPU's structure: that is
+//! valid only while the host sets the stable bit, which says every vCPU
+//! computes the same time from it (the same rule the Linux vDSO uses). A CPU
+//! whose own structure lacks the bit refuses the registration.
 
 use core::arch::x86_64::__cpuid;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
@@ -12,6 +14,10 @@ const MSR_KVM_SYSTEM_TIME_NEW: u32 = 0x4b56_4d01;
 const KVM_FEATURE_CLOCKSOURCE2: u32 = 1 << 3;
 const KVM_FEATURE_CLOCKSOURCE_STABLE_BIT: u32 = 1 << 24;
 const PVCLOCK_TSC_STABLE_BIT: u8 = 1 << 0;
+
+/// Bytes of one CPU's time-info area.
+pub const AREA_BYTES: usize = core::mem::size_of::<TimeInfo>();
+const _: () = assert!(AREA_BYTES == 32);
 
 /// `struct pvclock_vcpu_time_info` (32 bytes, host-written).
 #[repr(C)]
@@ -41,14 +47,31 @@ pub fn available() -> bool {
     kvm && sig.eax >= 0x4000_0001 && __cpuid(0x4000_0001).eax & KVM_FEATURE_CLOCKSOURCE2 != 0
 }
 
-/// Register a 32-byte time-info area at `virt`/`phys` (zeroed, 4-byte
-/// aligned, never reused). Returns `false` when the host does not declare a
-/// stable TSC.
+/// Register this CPU's 32-byte time-info area at `virt`/`phys` (zeroed,
+/// 4-byte aligned, never reused) and make it the area [`now_ns`] reads.
+/// Returns `false` when the host does not declare a stable TSC.
+///
+/// # Safety
+/// As for [`register`].
+pub unsafe fn init(virt: usize, phys: u64) -> bool {
+    // SAFETY: forwarded caller contract.
+    if !unsafe { register(virt, phys) } {
+        return false;
+    }
+    INFO.store(virt, Ordering::Release);
+    true
+}
+
+/// Register a 32-byte time-info area at `virt`/`phys` for the calling CPU only
+/// (the MSR is per vCPU). Returns `false`, leaving the registration disabled,
+/// when KVM is absent, the area is unusable, or the host does not declare a
+/// stable TSC in this CPU's own area.
 ///
 /// # Safety
 /// `virt` must map `phys` writable for at least 32 bytes for the rest of the
-/// boot, and nothing else may use that memory.
-pub unsafe fn init(virt: usize, phys: u64) -> bool {
+/// boot, and nothing else (no other CPU's registration either) may use that
+/// memory.
+pub unsafe fn register(virt: usize, phys: u64) -> bool {
     if !available() || virt == 0 || phys & 3 != 0 {
         return false;
     }
@@ -62,8 +85,27 @@ pub unsafe fn init(virt: usize, phys: u64) -> bool {
         unsafe { super::super::msr::write(MSR_KVM_SYSTEM_TIME_NEW, 0) };
         return false;
     }
-    INFO.store(virt, Ordering::Release);
     true
+}
+
+/// Physical address this CPU has registered with the host, if any (read back
+/// from the per-vCPU MSR; `None` without KVM or when disabled).
+pub fn registered_area() -> Option<u64> {
+    if !available() {
+        return None;
+    }
+    // SAFETY: the MSR exists whenever CLOCKSOURCE2 is advertised.
+    let value = unsafe { super::super::msr::read(MSR_KVM_SYSTEM_TIME_NEW) };
+    (value & 1 != 0).then_some(value & !1)
+}
+
+/// Stop reading kvmclock: [`now_ns`] returns 0 from now on, which every
+/// fallback check treats as "kvmclock unusable". Called once a CPU's own
+/// registration lacks the stable bit, so the boot CPU's area no longer speaks
+/// for every vCPU. The host keeps updating the registered areas; nothing reads
+/// them, and the memory stays dedicated for the rest of the boot.
+pub fn retire() {
+    INFO.store(0, Ordering::Release);
 }
 
 /// Host system time in nanoseconds; 0 when not active.

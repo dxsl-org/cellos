@@ -1,7 +1,8 @@
 //! Per-hart ready-queue helpers for the Phase 03 work-stealing scheduler.
 //!
 //! Lock order: SCHEDULER (global, coarse) → per-hart ready lock (leaf).
-//! `steal_from_busiest` holds only leaf locks — never SCHEDULER.
+//! `steal_from_busiest` never takes SCHEDULER; it holds at most two leaf locks,
+//! the thief's and the victim's, always acquired in ascending hart id.
 //!
 //! RT tasks (priority ≥ RealTime) are never stolen; Phase 04 will hart-pin them.
 
@@ -711,8 +712,9 @@ pub fn any_hart_running(task_id: usize) -> bool {
 /// Move up to `ceil(stealable/2)` Normal/Background tasks from the busiest other
 /// hart's queue into `thief`'s queue.  Never steals RT tasks.
 ///
-/// Always locks hart 0 then hart 1 (ABBA-safe). Until phase 07b brings up more
-/// than two harts, only harts 0 and 1 take part, whatever `MAX_HARTS` is.
+/// Victim selection (phase 07b) is a bounded scan over the hart slots (see
+/// [`pick_victim`]); the move itself holds exactly the thief's and the
+/// victim's leaf locks, taken in hart-id order (ABBA-safe).
 pub fn steal_from_busiest(thief: usize) {
     steal_from_busiest_with(
         thief,
@@ -721,31 +723,64 @@ pub fn steal_from_busiest(thief: usize) {
     );
 }
 
+/// Is `hart`'s queue visited by the victim scan?
+///
+/// Harts 0 and 1 always are, which is the two-hart steal pair of every
+/// architecture: RV64 does not mark its boot hart in `HART_ONLINE`, and the
+/// single-hart steal probes queue work on an offline hart 1 on purpose. A hart
+/// above 1 exists only on x86 and only receives work once it is online (wakes
+/// and enqueues target the running hart or the online RT hart), so the scan
+/// skips the offline tail of the `MAX_HARTS` slots without taking its locks.
+fn steal_candidate(hart: usize) -> bool {
+    hart < 2
+        || crate::task::smp::HART_ONLINE
+            .get(hart)
+            .is_some_and(|online| online.load(PromiseOrdering::Acquire))
+}
+
+/// Entries of one ready map a thief may take: below RealTime priority (RT is
+/// never stolen) and admitted by `permits`.
+fn stealable_in(ready: &BTreeMap<u8, VecDeque<usize>>, permits: &impl Fn(usize) -> bool) -> usize {
+    ready
+        .iter()
+        .filter(|(&p, _)| p < RT_PRIO)
+        .map(|(_, q)| q.iter().filter(|&&id| permits(id)).count())
+        .sum()
+}
+
+/// The victim for `thief` among `slots` harts: the candidate with the most
+/// stealable entries, or `None` when no candidate has any.
+///
+/// `stealable(hart)` returns `None` for a hart that is not a candidate. The
+/// scan visits each other slot exactly once, starting at `thief + 1` and
+/// wrapping (a round-robin start per thief), and a tie keeps the first hart
+/// found, so idle thieves spread over equally busy victims instead of all
+/// draining the lowest-numbered one. The thief itself is never a candidate.
+fn pick_victim(
+    thief: usize,
+    slots: usize,
+    mut stealable: impl FnMut(usize) -> Option<usize>,
+) -> Option<usize> {
+    let mut busiest: Option<(usize, usize)> = None;
+    for step in 1..slots {
+        let hart = (thief + step) % slots;
+        let Some(count) = stealable(hart) else {
+            continue;
+        };
+        if count > busiest.map_or(0, |(_, most)| most) {
+            busiest = Some((hart, count));
+        }
+    }
+    busiest.map(|(hart, _)| hart)
+}
+
 pub(crate) fn steal_from_busiest_with(
     thief: usize,
     #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
 ) {
-    // Two-hart steal: the victim is always the other one. `MAX_HARTS` may be
-    // larger (x86_64: 64), but phase 07a still brings at most harts 0 and 1
-    // online; any other thief does not steal rather than underflow below.
-    if thief > 1 || MAX_HARTS < 2 {
+    if thief >= MAX_HARTS || MAX_HARTS < 2 {
         return;
     }
-    let victim = 1 - thief;
-
-    // Acquire in hart-id order to prevent ABBA deadlock.
-    let mut g0 = HART_LOCALS[0].ready.lock();
-    let mut g1 = HART_LOCALS[1].ready.lock();
-    #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(
-        None,
-        crate::memory::heap::p01_owner::SCHEDULER_SHARED,
-    );
-    let (victim_map, thief_map) = if victim == 0 {
-        (&mut *g0, &mut *g1)
-    } else {
-        (&mut *g1, &mut *g0)
-    };
 
     // Count only tasks whose Context is not owned by another hart and which
     // are not reserved by test-only controlled dispatch setup. The ownership
@@ -764,11 +799,32 @@ pub(crate) fn steal_from_busiest_with(
             }
         }
     };
-    let stealable: usize = victim_map
-        .iter()
-        .filter(|(&p, _)| p < RT_PRIO)
-        .map(|(_, q)| q.iter().filter(|&&id| permits(id)).count())
-        .sum();
+
+    // Scan: one leaf lock at a time, never two, so the scan has no lock order.
+    // The counts are a hint; the move below recounts under both locks.
+    let Some(victim) = pick_victim(thief, MAX_HARTS, |hart| {
+        steal_candidate(hart).then(|| stealable_in(&HART_LOCALS[hart].ready.lock(), &permits))
+    }) else {
+        return;
+    };
+
+    // Move: acquire the pair in hart-id order to prevent ABBA deadlock with a
+    // concurrent thief that picked the opposite pair.
+    let (low, high) = (thief.min(victim), thief.max(victim));
+    let mut g_low = HART_LOCALS[low].ready.lock();
+    let mut g_high = HART_LOCALS[high].ready.lock();
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::SCHEDULER_SHARED,
+    );
+    let (victim_map, thief_map) = if victim == low {
+        (&mut *g_low, &mut *g_high)
+    } else {
+        (&mut *g_high, &mut *g_low)
+    };
+
+    let stealable = stealable_in(victim_map, &permits);
     if stealable == 0 {
         return;
     }
@@ -856,7 +912,9 @@ pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
     if hart >= MAX_HARTS || MAX_HARTS < 2 {
         return true;
     }
-    let victim = 1 - hart;
+    // The other member of the always-scanned pair {0, 1} (`steal_candidate`);
+    // every other queue is empty here, so it is the busiest victim.
+    let victim = usize::from(hart == 0);
     let priority = api::TaskPriority::Normal as u8;
     let tids: [usize; 6] = core::array::from_fn(|n| base + n);
     for tid in tids {
@@ -892,4 +950,71 @@ pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
         && order == [tids[2], tids[3], tids[4], tids[5]]
         && test_shape(victim, priority).3 == 0
         && total_ready_count() == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn map(entries: &[(u8, &[usize])]) -> BTreeMap<u8, VecDeque<usize>> {
+        entries
+            .iter()
+            .map(|(priority, ids)| (*priority, ids.iter().copied().collect()))
+            .collect()
+    }
+
+    /// Four simulated harts: the busiest other candidate wins, the thief is
+    /// never its own victim, and empty or non-candidate harts are skipped.
+    #[test]
+    fn victim_is_the_busiest_other_candidate_over_four_harts() {
+        let stealable = [3, 1, 5, 2];
+        let all = |hart: usize| Some(stealable[hart]);
+        assert_eq!(pick_victim(0, 4, all), Some(2));
+        assert_eq!(pick_victim(1, 4, all), Some(2));
+        assert_eq!(pick_victim(3, 4, all), Some(2));
+        // The busiest hart steals from the next busiest.
+        assert_eq!(pick_victim(2, 4, all), Some(0));
+        // Hart 2 offline (not a candidate): the scan skips it entirely.
+        let without_two = |hart: usize| (hart != 2).then_some(stealable[hart]);
+        assert_eq!(pick_victim(1, 4, without_two), Some(0));
+        // Nothing stealable anywhere else: no victim.
+        let idle = |hart: usize| Some(usize::from(hart == 3) * 9);
+        assert_eq!(pick_victim(3, 4, idle), None);
+        assert_eq!(pick_victim(0, 4, |_| None), None);
+    }
+
+    /// Ties go to the first hart after the thief (round-robin start), so two
+    /// idle thieves facing two equally busy victims pick different ones.
+    #[test]
+    fn victim_ties_rotate_with_the_thief() {
+        let stealable = [0, 0, 4, 4];
+        let count = |hart: usize| Some(stealable[hart]);
+        assert_eq!(pick_victim(0, 4, count), Some(2));
+        assert_eq!(pick_victim(2, 4, count), Some(3));
+        assert_eq!(pick_victim(3, 4, count), Some(2));
+        // The scan visits each other slot exactly once.
+        let mut visited = alloc::vec::Vec::new();
+        let _ = pick_victim(1, 4, |hart| {
+            visited.push(hart);
+            Some(0)
+        });
+        assert_eq!(visited, [2, 3, 0]);
+    }
+
+    /// RT tasks are never counted as stealable, and `permits` filters the rest.
+    #[test]
+    fn stealable_count_excludes_rt_and_unpermitted_tasks() {
+        let normal = api::TaskPriority::Normal as u8;
+        let ready = map(&[(RT_PRIO, &[1, 2, 3]), (normal, &[4, 5, 6]), (0, &[7])]);
+        assert_eq!(stealable_in(&ready, &|_| true), 4);
+        assert_eq!(stealable_in(&ready, &|id| id != 5), 3);
+        let rt_only = map(&[(RT_PRIO, &[1]), (u8::MAX, &[2])]);
+        assert_eq!(stealable_in(&rt_only, &|_| true), 0);
+        // An RT-only hart is never the victim, however long its queue.
+        let maps = [map(&[]), rt_only, map(&[(normal, &[9])]), map(&[])];
+        assert_eq!(
+            pick_victim(0, 4, |hart| Some(stealable_in(&maps[hart], &|_| true))),
+            Some(2)
+        );
+    }
 }

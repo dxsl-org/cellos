@@ -7,8 +7,12 @@ extern crate alloc;
 #[cfg(test)]
 use alloc::string::ToString;
 use alloc::{format, string::String, vec, vec::Vec};
+use api::dir_handles::ViDirHandle;
+use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::vfs_file_handles::ViVfsFileHandle;
 use app_c2c_render::{percentile, pixel_hash, Clock};
 use ostd::grant::GrantHandle;
+use ostd::ipc::IpcError;
 use ostd::syscall::{
     sys_exit, sys_force_exit, sys_set_spawn_args, sys_spawn_from_path, sys_wait, sys_yield,
     SyscallResult,
@@ -459,10 +463,23 @@ impl Drop for Pool {
     }
 }
 
-/// Distinct hardware endpoint observations, bounded by the native MAX_HARTS=2.
-#[derive(Clone, Copy, Default)]
+/// Largest number of distinct processor ids one render can observe: the x86
+/// kernel bound `MAX_HARTS` (= the HAL's `MAX_CPUS`, 64). Narrower native
+/// targets observe fewer and stay within it.
+const MAX_PROCESSOR_IDS: usize = 64;
+
+/// Distinct hardware endpoint observations, bounded by [`MAX_PROCESSOR_IDS`].
+#[derive(Clone, Copy)]
 struct ProcessorIds {
-    ids: [Option<u32>; 2],
+    ids: [Option<u32>; MAX_PROCESSOR_IDS],
+}
+
+impl Default for ProcessorIds {
+    fn default() -> Self {
+        Self {
+            ids: [None; MAX_PROCESSOR_IDS],
+        }
+    }
 }
 
 impl ProcessorIds {
@@ -477,7 +494,12 @@ impl ProcessorIds {
             .ids
             .iter_mut()
             .find(|slot| slot.is_none())
-            .ok_or_else(|| String::from("processor observations exceed native two-CPU bound"))?;
+            .ok_or_else(|| {
+                format!(
+                    "processor observations exceed the {}-CPU kernel bound",
+                    MAX_PROCESSOR_IDS
+                )
+            })?;
         *empty = Some(id);
         self.ids.sort_unstable();
         Ok(())
@@ -855,45 +877,43 @@ fn report(
     }
 }
 
-fn save_ppm(path: &str, config: RenderConfig, pixels: &[u8]) -> Result<(), String> {
-    use api::ipc::{VfsRequest, VfsResponse};
-    let vfs = ostd::service::lookup(ostd::service::service::VFS)
-        .ok_or_else(|| String::from("VFS service unavailable; image not saved"))?;
-    let mut send = [0u8; api::ipc::IPC_BUF_SIZE];
-    let mut receive = [0u8; api::ipc::IPC_BUF_SIZE];
-    let header = format!("P6\n{} {}\n255\n", config.width, config.height);
-    let mut write = |request: &VfsRequest<'_>| -> Result<(), String> {
-        match ostd::ipc::service_call_typed::<_, VfsResponse>(vfs, request, &mut send, &mut receive)
-        {
-            Ok(VfsResponse::Ok) => Ok(()),
-            Ok(response) => Err(format!(
-                "VFS write {} failed: {:?}; partial image may remain",
-                path, response
-            )),
-            Err(error) => Err(format!(
-                "VFS write {} operation failed: {:?}; completion not proven",
-                path, error
-            )),
-        }
-    };
-    write(&VfsRequest::Write {
-        path,
-        content: header.as_bytes(),
-    })?;
-    for chunk in pixels.chunks(3072) {
-        write(&VfsRequest::Append {
-            path,
-            content: chunk,
-        })?;
+/// One VFS endpoint and the buffers its request/reply exchanges reuse.
+struct Vfs {
+    tid: usize,
+    send: [u8; IPC_BUF_SIZE],
+    receive: [u8; IPC_BUF_SIZE],
+}
+
+impl Vfs {
+    fn call(&mut self, request: &VfsRequest<'_>) -> Result<VfsResponse<'_>, IpcError> {
+        ostd::ipc::service_call_typed(self.tid, request, &mut self.send, &mut self.receive)
     }
-    // Check the completed file size, not just a successful submission.
-    let expected = (header.len() + pixels.len()) as u64;
-    match ostd::ipc::service_call_typed::<_, VfsResponse>(
-        vfs,
-        &VfsRequest::Stat(path),
-        &mut send,
-        &mut receive,
-    ) {
+
+    /// One step of writing `path` that the VFS must answer `Ok`.
+    fn write(&mut self, path: &str, request: &VfsRequest<'_>) -> Result<(), String> {
+        match self.call(request) {
+            Ok(VfsResponse::Ok) => Ok(()),
+            result => Err(write_failure(path, result)),
+        }
+    }
+}
+
+fn write_failure(path: &str, result: Result<VfsResponse<'_>, IpcError>) -> String {
+    match result {
+        Ok(response) => format!(
+            "VFS write {} failed: {:?}; partial image may remain",
+            path, response
+        ),
+        Err(error) => format!(
+            "VFS write {} operation failed: {:?}; completion not proven",
+            path, error
+        ),
+    }
+}
+
+/// Check the completed file size, not just a successful submission.
+fn verify_size(expected: u64, result: Result<VfsResponse<'_>, IpcError>) -> Result<(), String> {
+    match result {
         Ok(VfsResponse::Stat {
             size,
             is_dir: false,
@@ -903,6 +923,192 @@ fn save_ppm(path: &str, config: RenderConfig, pixels: &[u8]) -> Result<(), Strin
             expected, result
         )),
     }
+}
+
+/// Save `pixels` as a binary PPM at `path`, then check the stored size.
+///
+/// A Cell launched with a cwd grant (every shell-launched foreground child) is
+/// sealed by the VFS: every path-string request is refused with `ERR_DENIED`,
+/// and the grant is the only directory it may reach. The image is then saved
+/// by handle: `OpenDir` down from the granted cwd and [`save_ppm_at`] the leaf,
+/// so `path` must lie at or below the cwd. A Cell launched without that grant
+/// still names the path.
+fn save_ppm(path: &str, config: RenderConfig, pixels: &[u8]) -> Result<(), String> {
+    let tid = ostd::service::lookup(ostd::service::service::VFS)
+        .ok_or_else(|| String::from("VFS service unavailable; image not saved"))?;
+    let mut vfs = Vfs {
+        tid,
+        send: [0; IPC_BUF_SIZE],
+        receive: [0; IPC_BUF_SIZE],
+    };
+    let header = format!("P6\n{} {}\n255\n", config.width, config.height);
+    let expected = (header.len() + pixels.len()) as u64;
+    let context = ostd::child_context::ChildContext::read_own().ok();
+    let granted = context
+        .as_ref()
+        .and_then(|c| Some((c.cwd_grant()?, core::str::from_utf8(c.cwd()).ok()?)));
+    let Some((grant, cwd)) = granted else {
+        vfs.write(
+            path,
+            &VfsRequest::Write {
+                path,
+                content: header.as_bytes(),
+            },
+        )?;
+        for chunk in pixels.chunks(3072) {
+            vfs.write(
+                path,
+                &VfsRequest::Append {
+                    path,
+                    content: chunk,
+                },
+            )?;
+        }
+        return verify_size(expected, vfs.call(&VfsRequest::Stat(path)));
+    };
+    let relative = below(cwd, path).ok_or_else(|| {
+        format!(
+            "output {} is outside the working directory {}; image not saved",
+            path, cwd
+        )
+    })?;
+    let mut names = relative
+        .split('/')
+        .filter(|name| !name.is_empty() && *name != ".");
+    let name = names
+        .next_back()
+        .ok_or_else(|| format!("output {} names no file; image not saved", path))?;
+    let mut dir = ViDirHandle(grant.id);
+    // First handle derived from the grant; closing it revokes every later one
+    // and every file handle opened through them.
+    let mut derived = None;
+    let mut opened = Ok(());
+    for component in names {
+        match vfs.call(&VfsRequest::OpenDir {
+            dir,
+            name: component,
+        }) {
+            Ok(VfsResponse::DirHandle(sub)) => {
+                derived.get_or_insert(sub);
+                dir = sub;
+            }
+            result => {
+                opened = Err(format!(
+                    "VFS open directory {} of {} failed: {:?}; image not saved",
+                    component, path, result
+                ));
+                break;
+            }
+        }
+    }
+    let result = opened.and_then(|()| {
+        save_ppm_at(
+            &mut vfs,
+            dir,
+            name,
+            path,
+            header.as_bytes(),
+            pixels,
+            expected,
+        )
+    });
+    if let Some(first) = derived {
+        let _ = vfs.call(&VfsRequest::CloseDir { dir: first });
+    }
+    result
+}
+
+/// Largest `WriteGrant` payload the VFS accepts (`MAX_GRANT_WRITE` in
+/// `cells/services/vfs/src/grant_write.rs`).
+const VFS_GRANT_WRITE_MAX: usize = 4096;
+
+/// Write `header` then `pixels` as `name` inside `dir`, and check the stored size.
+///
+/// The VFS has no handle-addressed append. `WriteAt` creates or truncates the
+/// file with the header; the pixels then go through a file handle
+/// (`OpenFileAt`) as `WriteGrant` writes at explicit offsets, each starting at
+/// the size the previous one left. `WriteGrant` is used rather than the 64 KiB
+/// `WriteHandleGrant` because it rewrites the whole file through the backend, so
+/// it also serves `/tmp`: the RAM backend has no positional write and answers
+/// `WriteHandleGrant` with `ERR_IO`.
+fn save_ppm_at(
+    vfs: &mut Vfs,
+    dir: ViDirHandle,
+    name: &str,
+    path: &str,
+    header: &[u8],
+    pixels: &[u8],
+    expected: u64,
+) -> Result<(), String> {
+    vfs.write(
+        path,
+        &VfsRequest::WriteAt {
+            dir,
+            name,
+            content: header,
+        },
+    )?;
+    if !pixels.is_empty() {
+        let file = match vfs.call(&VfsRequest::OpenFileAt { dir, name }) {
+            Ok(VfsResponse::FileHandle(file)) => file,
+            result => return Err(write_failure(path, result)),
+        };
+        let written = write_pixels(vfs, file, path, header.len() as u64, pixels);
+        let _ = vfs.call(&VfsRequest::CloseFile { file });
+        written?;
+    }
+    verify_size(expected, vfs.call(&VfsRequest::StatAt { dir, name }))
+}
+
+/// Write `pixels` to `file` from byte `offset` through one grant shared
+/// read-only with the VFS, at most [`VFS_GRANT_WRITE_MAX`] bytes per request.
+fn write_pixels(
+    vfs: &mut Vfs,
+    file: ViVfsFileHandle,
+    path: &str,
+    mut offset: u64,
+    pixels: &[u8],
+) -> Result<(), String> {
+    let chunk_max = pixels.len().min(VFS_GRANT_WRITE_MAX);
+    let mut grant = GrantHandle::<u8>::alloc(chunk_max).ok_or_else(|| {
+        format!(
+            "VFS write {} grant allocation failed; partial image may remain",
+            path
+        )
+    })?;
+    if !ostd::syscall::sys_grant_share(grant.id(), vfs.tid, 0) {
+        return Err(format!(
+            "VFS write {} grant share failed; partial image may remain",
+            path
+        ));
+    }
+    for chunk in pixels.chunks(chunk_max) {
+        // The VFS reads the grant only while serving the request below, and
+        // this task is blocked in that call, so refilling never races a read.
+        grant.with_bytes_mut(|bytes| bytes[..chunk.len()].copy_from_slice(chunk));
+        let request = VfsRequest::WriteGrant {
+            cap: file.0,
+            offset,
+            grant: grant.id(),
+            bytes: chunk.len(),
+        };
+        match vfs.call(&request) {
+            Ok(VfsResponse::GrantDone { bytes }) if bytes == chunk.len() => {}
+            result => return Err(write_failure(path, result)),
+        }
+        offset += chunk.len() as u64;
+    }
+    Ok(())
+}
+
+/// `target` relative to the directory `cwd`, or `None` when an absolute
+/// `target` lies outside it. A relative `target` is already relative to it.
+fn below<'a>(cwd: &str, target: &'a str) -> Option<&'a str> {
+    if !target.starts_with('/') {
+        return Some(target);
+    }
+    let rest = target.strip_prefix(cwd.trim_end_matches('/'))?;
+    (rest.is_empty() || rest.starts_with('/')).then_some(rest)
 }
 
 fn run(args: &[String]) -> Result<(), String> {
@@ -1124,9 +1330,33 @@ mod tests {
         ids.observe(None).unwrap();
         ids.observe(Some(0)).unwrap();
         assert_eq!(ids.to_string(), "0;4294967295");
-        assert!(ids.observe(Some(1)).is_err());
-        assert_eq!(ids.to_string(), "0;4294967295");
+        // Fill to the kernel bound out of order; the display stays sorted.
+        for id in (1..MAX_PROCESSOR_IDS as u32 - 1).rev() {
+            ids.observe(Some(id)).unwrap();
+        }
+        let full: Vec<String> = (0..MAX_PROCESSOR_IDS as u32 - 1)
+            .chain([u32::MAX])
+            .map(|id| id.to_string())
+            .collect();
+        let full = full.join(";");
+        assert_eq!(ids.to_string(), full);
+        let overflow = ids.observe(Some(MAX_PROCESSOR_IDS as u32 - 1)).unwrap_err();
+        assert!(overflow.contains("64-CPU"), "{overflow}");
+        assert_eq!(ids.to_string(), full);
         ids.observe(Some(0)).unwrap();
+        ids.observe(Some(u32::MAX)).unwrap();
+        ids.observe(None).unwrap();
+        assert_eq!(ids.to_string(), full);
+    }
+
+    #[test]
+    fn saved_output_must_lie_at_or_below_the_working_directory() {
+        assert_eq!(below("/", "/tmp/a.ppm"), Some("/tmp/a.ppm"));
+        assert_eq!(below("/tmp", "/tmp/a.ppm"), Some("/a.ppm"));
+        assert_eq!(below("/tmp/", "/tmp/a.ppm"), Some("/a.ppm"));
+        assert_eq!(below("/tmp", "a.ppm"), Some("a.ppm"));
+        assert_eq!(below("/tmp", "/tmpx/a.ppm"), None);
+        assert_eq!(below("/data", "/tmp/a.ppm"), None);
     }
 
     #[test]
