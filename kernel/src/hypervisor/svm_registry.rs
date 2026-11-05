@@ -613,9 +613,7 @@ pub fn x86_smoke() {
     let mut got_port = false;
     let mut got_hlt = false;
     for _ in 0..10 {
-        unsafe {
-            let _ = super::registry::run_vcpu(OWNER, vm_id, 1, 0, &mut e as *mut ApiVmExit);
-        }
+        run_smoke_until_exit(OWNER, vm_id, &mut e);
         match e {
             ApiVmExit::PortOut {
                 port: 0x3F8, val, ..
@@ -625,9 +623,6 @@ pub fn x86_smoke() {
             ApiVmExit::Hlt => {
                 got_hlt = true;
                 break;
-            }
-            ApiVmExit::Preempted => {
-                continue;
             }
             _ => break,
         }
@@ -689,7 +684,7 @@ pub fn x86_mmio_smoke() {
     let mut read = ApiVmExit::Unknown { ec: 0, iss: 0 };
     let mut port = ApiVmExit::Unknown { ec: 0, iss: 0 };
     let mut hlt = ApiVmExit::Unknown { ec: 0, iss: 0 };
-    run_mmio_smoke_until_exit(OWNER, vm_id, &mut read);
+    run_smoke_until_exit(OWNER, vm_id, &mut read);
     let read_ok = match read {
         ApiVmExit::MmioRead {
             ipa: 0xd000_0000,
@@ -705,8 +700,8 @@ pub fn x86_mmio_smoke() {
         _ => false,
     };
     if read_ok {
-        run_mmio_smoke_until_exit(OWNER, vm_id, &mut port);
-        run_mmio_smoke_until_exit(OWNER, vm_id, &mut hlt);
+        run_smoke_until_exit(OWNER, vm_id, &mut port);
+        run_smoke_until_exit(OWNER, vm_id, &mut hlt);
     }
 
     let port_ok = matches!(
@@ -730,8 +725,11 @@ pub fn x86_mmio_smoke() {
     reap_vms_for_task(OWNER);
 }
 
-#[cfg(feature = "x86-mmio-smoke")]
-fn run_mmio_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervisor::ViVmExit) {
+/// Run the smoke vCPU until a non-`Preempted` exit. An external-interrupt exit
+/// leaves the host IRQ pending, so each `Preempted` opens a one-instruction IF
+/// window to service it; without that the next entry exits on it again.
+#[cfg(any(feature = "test-hooks", feature = "x86-mmio-smoke"))]
+fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervisor::ViVmExit) {
     let interrupts_were_enabled = interrupts_enabled();
     for _ in 0..1024 {
         // SAFETY: the local exit slot is valid; `owner` owns this single-vCPU VM.

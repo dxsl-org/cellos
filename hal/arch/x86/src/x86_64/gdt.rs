@@ -116,6 +116,16 @@ pub fn ist_entry(ist: u8) -> u64 {
     }
 }
 
+/// Linear address of this CPU's TSS (the base `ltr` loaded into TR).
+pub fn tss_base() -> u64 {
+    unsafe {
+        let tables = core::ptr::addr_of!(TABLES)
+            .cast::<CpuTables>()
+            .add(super::syscall::current_cpu_id());
+        core::ptr::addr_of!((*tables).tss) as u64
+    }
+}
+
 /// Build this CPU's private GDT and TSS after installing kernel GS.
 ///
 /// The TSS carries this CPU's own NMI/#DF/#MC IST stacks before `ltr`, so

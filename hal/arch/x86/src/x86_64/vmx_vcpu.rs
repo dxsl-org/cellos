@@ -142,21 +142,25 @@ impl VmxVcpu {
 
         vmwrite(HOST_GDTR_BASE, gdtr.base)?;
         vmwrite(HOST_IDTR_BASE, idtr.base)?;
+        // VM exit loads TR.base from here; left 0, #DF/NMI/#MC IST lookups read
+        // the TSS at linear 0 and triple-fault.
+        vmwrite(HOST_TR_BASE, super::gdt::tss_base())?;
         vmwrite(HOST_FS_BASE, 0)?;
         vmwrite(HOST_IA32_SYSENTER_CS, 0)?;
         vmwrite(HOST_SYSENTER_ESP, 0)?;
         vmwrite(HOST_SYSENTER_EIP, 0)?;
 
-        // Host GS base from MSR
-        let host_gs_base: u64;
+        // Host GS base from MSR: EDX:EAX, both halves (the kernel GS base is a
+        // higher-half address).
+        let (gs_lo, gs_hi): (u32, u32);
         core::arch::asm!(
             "rdmsr",
             in("ecx") 0xC000_0101u32, // MSR_GS_BASE
-            out("eax") host_gs_base,
-            out("edx") _,
+            out("eax") gs_lo,
+            out("edx") gs_hi,
             options(nomem, nostack),
         );
-        vmwrite(HOST_GS_BASE, host_gs_base)?;
+        vmwrite(HOST_GS_BASE, (u64::from(gs_hi) << 32) | u64::from(gs_lo))?;
 
         // ── 2. Control Fields Setup ──────────────────────────────────────────
         let use_true = has_true_ctls();
@@ -196,10 +200,11 @@ impl VmxVcpu {
         );
         vmwrite(SECONDARY_VM_EXEC_CONTROL, sec_ctls as u64)?;
 
-        let exit_ctls = adjust_vmx_ctrl(
-            EXIT_HOST_ADDR_SPACE_SIZE | EXIT_ACKNOWLEDGE_INTERRUPT,
-            exit_msr,
-        );
+        // No EXIT_ACKNOWLEDGE_INTERRUPT: an external-interrupt exit leaves the
+        // vector pending in the LAPIC IRR, so the host IDT takes it (and EOIs it)
+        // once IF is re-enabled. Acking on exit would park it in the ISR with no
+        // handler and no EOI, masking every lower-priority vector.
+        let exit_ctls = adjust_vmx_ctrl(EXIT_HOST_ADDR_SPACE_SIZE, exit_msr);
         vmwrite(VM_EXIT_CONTROLS, exit_ctls as u64)?;
 
         // VM entry: 32-bit guest (IA-32e mode guest bit = 0)
