@@ -2,21 +2,19 @@ use api::display::{PixelFormat, Rect};
 
 use super::{state::PixelSource, SurfaceState};
 
+/// Largest compositor-owned buffer a legacy `WRITE_PIXELS` client may cause the
+/// compositor to allocate. The compositor heap is 10 MiB and also holds the
+/// scanout staging buffer, so a client-sized allocation must stay well below it.
+const MAX_OWNED_PIXEL_BYTES: usize = 1024 * 1024;
+
 impl SurfaceState {
     /// Attach a Grant buffer from the app cell.
     ///
     /// A legacy attachment activates immediately. When a configure is pending, only
     /// a Grant matching its proposed dimensions is staged; the active source remains
     /// untouched until the owner acknowledges that proposal.
-    pub fn attach_grant(
-        &mut self,
-        ptr: *const u8,
-        reg_id: usize,
-        w: u32,
-        h: u32,
-        fmt: PixelFormat,
-    ) -> bool {
-        let source = PixelSource::Grant { ptr, reg_id };
+    pub fn attach_grant(&mut self, reg_id: usize, w: u32, h: u32, fmt: PixelFormat) -> bool {
+        let source = PixelSource::Grant { reg_id };
         if let Some(pending) = &mut self.pending_configure {
             if pending.rect.w != w || pending.rect.h != h {
                 return false;
@@ -57,12 +55,12 @@ impl SurfaceState {
     /// retired replacement mappings.
     pub fn grant_ids(&self) -> [Option<usize>; 3] {
         let active = match &self.source {
-            PixelSource::Grant { reg_id, .. } => Some(*reg_id),
+            PixelSource::Grant { reg_id } => Some(*reg_id),
             PixelSource::Owned(_) => None,
         };
         let staged = self.pending_configure.as_ref().and_then(|pending| {
             match pending.staged_source.as_ref() {
-                Some(PixelSource::Grant { reg_id, .. }) => Some(*reg_id),
+                Some(PixelSource::Grant { reg_id }) => Some(*reg_id),
                 _ => None,
             }
         });
@@ -80,43 +78,100 @@ impl SurfaceState {
         }
     }
 
-    /// Read access to pixel data — either from the Grant or the Owned buffer.
-    pub fn pixels(&self) -> &[u8] {
-        match &self.source {
-            PixelSource::Grant { ptr, .. } => {
-                let len = (self.w * self.h * self.fmt.bpp()) as usize;
-                // SAFETY: ownership and detach protocol keep the grant live while active.
-                unsafe { core::slice::from_raw_parts(*ptr, len) }
+    /// Bytes the active presentation needs, or `None` when the geometry cannot be
+    /// represented (never true for geometry admitted by the table).
+    fn content_len(&self) -> Option<usize> {
+        (self.w as usize)
+            .checked_mul(self.h as usize)?
+            .checked_mul(self.fmt.bpp() as usize)
+    }
+
+    /// Pixel data for one blit.
+    ///
+    /// A Grant is resolved through `resolve` (the `GrantSlice` syscall in
+    /// production) on every call and the pointer is used only for this blit. A
+    /// Grant the owner has released, or that now resolves smaller than the surface
+    /// needs, is detached: the surface paints nothing until the owner attaches a
+    /// live buffer again.
+    ///
+    /// Residual: the owner can still free the Grant between this resolution and
+    /// the copy, because a non-VFS `GrantSlice` installs no pin in the kernel.
+    pub fn resolve_pixels(
+        &mut self,
+        resolve: impl FnOnce(usize) -> Option<(*mut u8, usize)>,
+    ) -> &[u8] {
+        if let PixelSource::Grant { reg_id } = self.source {
+            let live = self.content_len().and_then(|needed| {
+                resolve(reg_id)
+                    .filter(|&(ptr, len)| !ptr.is_null() && len >= needed)
+                    .map(|(ptr, _)| (ptr, needed))
+            });
+            match live {
+                // SAFETY: the kernel just resolved `reg_id` for this task to a
+                // mapping of at least `needed` bytes; the slice is consumed by
+                // the caller's blit before the next IPC is served.
+                Some((ptr, needed)) => {
+                    return unsafe { core::slice::from_raw_parts(ptr.cast_const(), needed) }
+                }
+                None => self.source = PixelSource::Owned(alloc::vec::Vec::new().into_boxed_slice()),
             }
+        }
+        match &self.source {
             PixelSource::Owned(buf) => buf,
+            PixelSource::Grant { .. } => &[],
         }
     }
 
     /// Write pixel data into an Owned surface (legacy `WRITE_PIXELS` path).
+    ///
+    /// The rectangle must lie inside the surface and the payload must hold all of
+    /// it; anything else is dropped, so a client cannot drive slice arithmetic
+    /// out of bounds or make the compositor allocate past its owned-buffer cap.
     pub fn write_pixels(&mut self, px: i32, py: i32, pw: u32, ph: u32, data: &[u8]) {
-        let needed = (self.w * self.h * 4) as usize;
+        let (Ok(x), Ok(y)) = (u32::try_from(px), u32::try_from(py)) else {
+            return;
+        };
+        let fits = |start: u32, len: u32, bound: u32| {
+            start.checked_add(len).is_some_and(|end| end <= bound)
+        };
+        if !fits(x, pw, self.w) || !fits(y, ph, self.h) {
+            return;
+        }
+        let row_bytes = pw as usize * 4;
+        if row_bytes
+            .checked_mul(ph as usize)
+            .is_none_or(|expected| data.len() < expected)
+        {
+            return;
+        }
+        let Some(needed) = (self.w as usize)
+            .checked_mul(self.h as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .filter(|&needed| needed <= MAX_OWNED_PIXEL_BYTES)
+        else {
+            return;
+        };
         if let PixelSource::Owned(b) = &self.source {
             if b.len() < needed {
-                self.source = PixelSource::Owned(alloc::vec![0u8; needed].into_boxed_slice());
+                let mut fresh = alloc::vec::Vec::new();
+                if fresh.try_reserve_exact(needed).is_err() {
+                    return;
+                }
+                fresh.resize(needed, 0);
+                self.source = PixelSource::Owned(fresh.into_boxed_slice());
             }
         }
+        let stride = self.w as usize * 4;
         let buf = match &mut self.source {
             PixelSource::Owned(b) => b,
             PixelSource::Grant { .. } => return,
         };
-        let expected = (pw * ph * 4) as usize;
-        if data.len() < expected {
-            return;
-        }
-        let stride = self.w as usize * 4;
+        // In bounds: x + pw <= w and y + ph <= h, so every row ends at or before
+        // `needed`, and `data` holds `row_bytes * ph` bytes.
         for row in 0..ph as usize {
-            let dst_off = (py as usize + row) * stride + px as usize * 4;
-            let src_off = row * pw as usize * 4;
-            let row_bytes = pw as usize * 4;
-            if dst_off + row_bytes <= buf.len() {
-                buf[dst_off..dst_off + row_bytes]
-                    .copy_from_slice(&data[src_off..src_off + row_bytes]);
-            }
+            let dst = (y as usize + row) * stride + x as usize * 4;
+            let src = row * row_bytes;
+            buf[dst..dst + row_bytes].copy_from_slice(&data[src..src + row_bytes]);
         }
         let new_dmg = Rect {
             x: px,
@@ -130,3 +185,7 @@ impl SurfaceState {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "pixels_tests.rs"]
+mod tests;

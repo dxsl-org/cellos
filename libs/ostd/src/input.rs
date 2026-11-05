@@ -38,6 +38,11 @@ use api::{
 /// kernel-verified IPC sender TID — the `cell_tid` field is ignored, preventing
 /// TID impersonation.
 ///
+/// While a compositor is (or has been) running, this claims only the serial
+/// console: physical keyboard focus belongs to the compositor, which forwards
+/// keys to the window the user selected. Windowed apps receive those keys from
+/// the compositor through [`poll_events`].
+///
 /// SetFocus is fire-and-forget: focus is granted atomically when the input service
 /// receives the message. No reply is sent or awaited — a blocking reply caused a
 /// scheduling race where input service ran before the caller entered sys_recv,

@@ -20,3 +20,7 @@ pub use storage::SurfaceTable;
 
 /// Maximum number of simultaneous surfaces.
 pub const MAX_SURFACES: usize = 32;
+
+/// Largest width or height a client may request. Keeps `w * h * bpp` and
+/// `x + w` arithmetic far from `u32`/`i32` overflow on every target.
+pub const MAX_SURFACE_DIM: u32 = 8192;

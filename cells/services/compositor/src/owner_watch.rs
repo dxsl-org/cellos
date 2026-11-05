@@ -582,7 +582,7 @@ mod tests {
         let (a_root, a_root_view) = world.window(1000, 0);
         let (a_worker, a_worker_view) = world.window(1001, 200);
         let (b_cap, b_view) = world.window(2000, 400);
-        world.input.set_focus(1000, Some(a_root));
+        assert!(world.input.request_focus(1000, a_root));
         assert_eq!(world.input.selected_cap(), Some(a_root));
         let a_bounds: Vec<Rect> = [a_root, a_worker]
             .iter()
@@ -642,7 +642,7 @@ mod tests {
         let mut world = World::new();
         let (_a, _) = world.window(1000, 0);
         let (b_cap, _) = world.window(2000, 400);
-        world.input.set_focus(2000, Some(b_cap));
+        assert!(world.input.request_focus(2000, b_cap));
         let dead = Released {
             cell_id: 1,
             generation: 1,

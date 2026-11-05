@@ -60,6 +60,9 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
                 _reserved: 0,
             };
 
+            // `recipient_incarnation`, `file_grant_id` and `launch_token` are
+            // carried for clients but confer no authority: only the frame's
+            // owner may add a view to an existing frame (`FrameRegistry`).
             // Allocate backing surface in SurfaceTable
             let (fx, fy) = if frame_id != 0 {
                 frames.frame_position(frame_id).unwrap_or((100, 100))
@@ -81,8 +84,12 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             match frames.create_view(&req, sender, cap) {
                 Ok(resp) => {
                     z_order.push(cap);
-                    if role == SurfaceRole::Interactive {
-                        input.set_focus(sender, Some(cap));
+                    // The table may have downgraded a refused Panel request.
+                    if table
+                        .get(cap)
+                        .is_some_and(|surface| surface.role == SurfaceRole::Interactive)
+                    {
+                        input.focus_new_window(sender, cap);
                     }
                     send_response(sender, &resp);
                 }
@@ -123,8 +130,7 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
                     z_order.remove(surface_cap);
                     if let Some(next_v) = frames.selected_view_for_frame(frame_id) {
                         if let Some(next_cap) = frames.surface_for_view(next_v.view_id) {
-                            let owner = table.get(next_cap).map_or(sender, |s| s.owner);
-                            input.set_focus(owner, Some(next_cap));
+                            input.request_focus(sender, next_cap);
                             z_order.raise(next_cap);
                         }
                     }
@@ -153,12 +159,11 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             let view_id = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let view_inc = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
 
-            match frames.select_view(frame_id, frame_gen, view_id, view_inc) {
+            match frames.select_view(frame_id, frame_gen, view_id, view_inc, sender) {
                 Ok(resp) => {
                     if let Some(cap) = frames.surface_for_view(view_id) {
                         z_order.raise(cap);
-                        let owner = table.get(cap).map_or(sender, |s| s.owner);
-                        input.set_focus(owner, Some(cap));
+                        input.request_focus(sender, cap);
                         if let Some(s) = table.get(cap) {
                             let rect = crate::window_decoration::bounds(s.screen_rect());
                             *pending_dirty = Some(match pending_dirty.take() {
@@ -303,7 +308,7 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
                 h: screen_h.saturating_sub(36),
             };
 
-            match frames.snap_frame(frame_id, frame_gen, zone, work_area) {
+            match frames.snap_frame(frame_id, frame_gen, zone, work_area, sender) {
                 Ok((resp, rect)) => {
                     if let Some(v) = frames.selected_view_for_frame(frame_id) {
                         if let Some(cap) = frames.surface_for_view(v.view_id) {
@@ -336,7 +341,8 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
             let enable = buf[9] != 0;
 
-            match frames.toggle_fullscreen(frame_id, frame_gen, enable, screen_w, screen_h) {
+            match frames.toggle_fullscreen(frame_id, frame_gen, enable, screen_w, screen_h, sender)
+            {
                 Ok((resp, rect)) => {
                     if let Some(v) = frames.selected_view_for_frame(frame_id) {
                         if let Some(cap) = frames.surface_for_view(v.view_id) {

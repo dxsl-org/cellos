@@ -4,15 +4,13 @@ use super::{configure::PendingConfigure, lifecycle::PendingClose};
 
 /// Pixel data source for a surface.
 pub(super) enum PixelSource {
-    /// App Cell's Grant buffer — compositor reads directly via a read-only pointer.
-    Grant { ptr: *const u8, reg_id: usize },
+    /// App Cell's Grant buffer, named only by its registration id. No pointer is
+    /// cached: the owner may `GrantUnregister` at any time and the compositor
+    /// holds no pin, so the mapping is re-resolved for every blit.
+    Grant { reg_id: usize },
     /// Compositor-owned fallback buffer (legacy `WRITE_PIXELS` path).
     Owned(alloc::boxed::Box<[u8]>),
 }
-
-// SAFETY: compositor runs as a single cooperative task; no other task touches
-// PixelSource concurrently. The Grant pointer is stable until its owner detaches it.
-unsafe impl Send for PixelSource {}
 
 /// State for one live surface.
 pub struct SurfaceState {

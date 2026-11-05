@@ -2247,10 +2247,13 @@ fn input_keyboard_e2e() {
 /// and receives a key event through `ostd::input` + `AppContext::Input`.
 ///
 /// Flow:
-///   1. Boot → `Cellos >` (full userspace running).
-///   2. input-test starts (optional spawn in init), retries `request_input_focus()`
-///      until it steals focus from robot-dashboard.
-///   3. Inject "a" via QMP → VirtIO keyboard → input service → input-test.
+///   1. Boot → `Cellos >` (full userspace running, compositor included).
+///   2. input-test starts and claims focus with `request_focus()`. With a
+///      compositor registered that claims the serial console only: physical
+///      keyboard focus belongs to the compositor (H-29), so a windowless cell
+///      must never receive VirtIO keystrokes.
+///   3. Send "a" on the serial console → kernel UART relay → input service →
+///      input-test.
 ///   4. input-test logs `[input-test] key received`.
 ///
 /// Prerequisites: kernel + `disk_v3.img` (must include `/bin/input-test`).
@@ -2266,8 +2269,7 @@ fn input_bare_cell() {
     // Spawn input-test manually from shell
     qemu.send_line("input-test &");
 
-    // Wait for input-test to acquire focus (it retries until it steals from
-    // robot-dashboard, which gets it first).
+    // Wait for input-test to send its focus claim.
     qemu.wait_for("[input-test] focus granted", 20)
         .unwrap_or_else(|e| {
             panic!(
@@ -2279,8 +2281,8 @@ fn input_bare_cell() {
     // Settle: let the AppContext event loop enter sys_recv before we inject.
     std::thread::sleep(std::time::Duration::from_millis(300));
 
-    // Inject "a" key via QMP (press + release pair).
-    qemu.send_qemu_key("a");
+    // Type "a" on the serial console (no newline, so the shell runs nothing).
+    qemu.send_bytes(b"a");
 
     // Verify the bare cell received the key with no viui dependency.
     qemu.wait_for("[input-test] key received", 15)

@@ -36,6 +36,11 @@ pub struct InputState {
     /// startup.  When true, MouseMove issues `GpuCursor(move)` instead of
     /// triggering a full software repaint via `pending_dirty`.
     pub hw_cursor: bool,
+    /// Set by a left press on a `Panel` (the single-owner desktop shell, e.g.
+    /// a taskbar launcher) and cleared by the next pointer press or key: until
+    /// then one newly created window may take focus from the panel, so an app
+    /// the user just launched from the shell gets the keyboard.
+    launch_armed: bool,
 }
 
 impl InputState {
@@ -47,6 +52,7 @@ impl InputState {
             mouse_y: 0,
             pointer: PointerRouter::new(),
             hw_cursor: false,
+            launch_armed: false,
         }
     }
 
@@ -62,8 +68,49 @@ impl InputState {
     pub fn deactivate_surface(&mut self, cap: u64) {
         self.pointer.disable(cap);
     }
-    pub fn set_focus(&mut self, owner: usize, cap: Option<u64>) {
-        self.pointer.set_focus(owner, cap);
+    /// Give keyboard focus to a client's own surface on a client request
+    /// (raise, view selection). A client may never take focus from another
+    /// client: only a pointer press, which the compositor routes itself, moves
+    /// focus between owners. Nobody focused means keys reach the console shell,
+    /// so a surface may still take focus then; it is on top and the user sees
+    /// where keys go.
+    pub fn request_focus(&mut self, owner: usize, cap: u64) -> bool {
+        let holder = self.pointer.focused_owner();
+        if holder != 0 && holder != owner {
+            return false;
+        }
+        self.pointer.set_focus(owner, Some(cap));
+        true
+    }
+
+    /// Focus rule for a newly created window: [`Self::request_focus`], plus one
+    /// window right after the user pressed on the desktop shell's panel (the
+    /// launch gesture). The first new window after that press spends the grant.
+    pub fn focus_new_window(&mut self, owner: usize, cap: u64) -> bool {
+        let armed = core::mem::take(&mut self.launch_armed);
+        if self.request_focus(owner, cap) {
+            return true;
+        }
+        if !armed {
+            return false;
+        }
+        self.pointer.set_focus(owner, Some(cap));
+        true
+    }
+
+    /// Arm or clear the launch grant after a pointer press at the cursor.
+    fn note_press(&mut self, left: bool, table: &SurfaceTable) {
+        let (x, y) = (self.mouse_x, self.mouse_y);
+        self.launch_armed = left
+            && self
+                .pointer
+                .selected_cap()
+                .and_then(|cap| table.get(cap))
+                .is_some_and(|surface| {
+                    surface.role == api::display::SurfaceRole::Panel
+                        && surface.owner == self.pointer.focused_owner()
+                        && surface.screen_rect().contains_point(x, y)
+                });
     }
 }
 
@@ -142,7 +189,7 @@ pub fn handle_input_event(
         return;
     };
     match event {
-        InputEvent::Key(_) => forward_key(buf, state),
+        InputEvent::Key(_) => forward_key(buf, state, table, screen_w, screen_h),
         InputEvent::MouseMove { x, y, dx, dy } => {
             // Mouse pointer can move across the ENTIRE physical screen (0..width-1, 0..height-1),
             // including into the bottom taskbar panel.
@@ -191,6 +238,13 @@ fn route_pointer(
             set_input_focus(input_tid, compositor_tid);
         }),
     );
+    if let InputEvent::MouseButton {
+        button,
+        state: api::input::KeyState::Pressed,
+    } = event
+    {
+        state.note_press(button == api::input::MouseButton::Left, table);
+    }
 }
 
 fn find_shell_tid() -> usize {
@@ -206,10 +260,98 @@ fn find_shell_tid() -> usize {
 }
 
 /// Re-send the key-event frame to the focused surface owner, or fallback to shell.
-fn forward_key(buf: &[u8; 512], state: &InputState) {
+///
+/// Keys follow the selected surface only while it still accepts input and is at
+/// least partly on screen; otherwise focus is dropped, so a client cannot hold
+/// the keyboard with a window moved out of sight.
+fn forward_key(
+    buf: &[u8; 512],
+    state: &mut InputState,
+    table: &SurfaceTable,
+    screen_w: u32,
+    screen_h: u32,
+) {
+    state.launch_armed = false;
     let owner = state.pointer.focused_owner();
+    if owner != 0 {
+        let visible = state
+            .pointer
+            .selected_cap()
+            .and_then(|cap| table.get(cap))
+            .is_some_and(|surface| {
+                surface.owner == owner
+                    && surface.accepts_input()
+                    && on_screen(surface.screen_rect(), screen_w, screen_h)
+            });
+        if !visible {
+            state.pointer.set_focus(0, None);
+            return;
+        }
+    }
     let target = if owner != 0 { owner } else { find_shell_tid() };
     if target != 0 {
         let _ = sys_try_send(target, &buf[..INPUT_FRAME_LEN]);
+    }
+}
+
+/// Whether any pixel of `rect` lies on the screen. Widened so client-chosen
+/// positions near `i32::MAX` cannot overflow.
+fn on_screen(rect: Rect, screen_w: u32, screen_h: u32) -> bool {
+    let (x, y) = (i64::from(rect.x), i64::from(rect.y));
+    x < i64::from(screen_w)
+        && y < i64::from(screen_h)
+        && x + i64::from(rect.w) > 0
+        && y + i64::from(rect.h) > 0
+}
+
+#[cfg(test)]
+mod tests {
+    use api::display::SurfaceRole;
+
+    use super::*;
+
+    #[test]
+    fn a_client_cannot_take_focus_from_another_client() {
+        let mut input = InputState::new();
+        assert!(input.request_focus(10, 1));
+        assert!(!input.request_focus(20, 2));
+        assert_eq!(input.selected_cap(), Some(1));
+        // The holder may move focus among its own surfaces.
+        assert!(input.request_focus(10, 3));
+        assert_eq!(input.selected_cap(), Some(3));
+    }
+
+    #[test]
+    fn only_one_new_window_after_a_panel_press_takes_focus() {
+        let mut table = SurfaceTable::new();
+        let panel = table
+            .create(0, 0, 64, 16, 10, SurfaceRole::Panel)
+            .expect("panel");
+        let mut input = InputState::new();
+        assert!(input.request_focus(10, panel));
+        // Without a launch gesture a new window cannot take the panel's focus.
+        assert!(!input.focus_new_window(20, 2));
+        (input.mouse_x, input.mouse_y) = (4, 4);
+        input.note_press(true, &table);
+        assert!(input.focus_new_window(20, 2));
+        assert_eq!(input.selected_cap(), Some(2));
+        assert!(!input.focus_new_window(30, 3));
+        assert_eq!(input.selected_cap(), Some(2));
+    }
+
+    #[test]
+    fn keys_never_follow_a_focused_surface_moved_off_screen() {
+        let mut table = SurfaceTable::new();
+        let cap = table
+            .create(0, 0, 8, 8, 10, SurfaceRole::Interactive)
+            .expect("surface");
+        let mut input = InputState::new();
+        assert!(input.request_focus(10, cap));
+        table.get_mut(cap).unwrap().move_to(i32::MAX, -20);
+
+        forward_key(&[0; 512], &mut input, &table, 64, 64);
+
+        assert_eq!(input.selected_cap(), None);
+        assert_eq!(input.pointer.focused_owner(), 0);
     }
 }

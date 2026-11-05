@@ -1,14 +1,15 @@
 //! Focus-based input event dispatcher.
 //!
-//! Maintains a "focused cell" ID and routes translated `InputEvent`s to it
-//! via IPC Send.  Focus changes clear transient modifiers to avoid stuck keys.
+//! Routes translated `InputEvent`s to the target chosen by
+//! [`FocusRoutes`](crate::focus_routes::FocusRoutes) via IPC Send. Focus changes
+//! clear transient modifiers to avoid stuck keys.
 //!
 //! ## Focus default
 //!
-//! `focused` starts at 0 (no focus).  The first cell to call `SetFocus` owns
-//! the keyboard.  Events before any focus claim are silently dropped — this is
-//! preferable to the previous TID-3 shell fallback which consumed events without
-//! the shell ever reading them (shell uses sys_read(0), not the input service).
+//! Both routes start at 0 (no focus) and events before any focus claim are
+//! silently dropped — this is preferable to the previous TID-3 shell fallback
+//! which consumed events without the shell ever reading them (shell uses
+//! sys_read(0), not the input service).
 //!
 //! ## Send-failure handling
 //!
@@ -21,6 +22,8 @@ use api::syscall::service;
 use ostd::session::{zeroize, Scrub};
 use ostd::syscall::{sys_lookup_service, sys_try_send};
 
+use crate::focus_routes::{FocusRoutes, Requester};
+
 /// Report every Nth dropped keyboard event, so a stalled consumer is visible
 /// without one log line per keystroke.
 const DROP_REPORT_EVERY: u64 = 64;
@@ -30,8 +33,8 @@ pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 
 /// Routes translated events to the currently focused cell.
 pub struct Dispatcher {
-    /// Task ID of the currently focused cell (0 = no focus, events dropped).
-    focused: usize,
+    /// Physical-keyboard and serial-console targets (0 = no focus, events dropped).
+    routes: FocusRoutes,
     /// Keyboard events dropped because the focused cell was not draining. The
     /// first drop and every `DROP_REPORT_EVERY`-th after it are logged.
     dropped: u64,
@@ -57,7 +60,7 @@ impl Dispatcher {
     /// Create a dispatcher with no initial focus (events dropped until SetFocus).
     pub fn new() -> Self {
         Self {
-            focused: 0,
+            routes: FocusRoutes::new(),
             dropped: 0,
             fallback_tid: 0,
             compositor_tid: 0,
@@ -69,21 +72,27 @@ impl Dispatcher {
         }
     }
 
-    /// Change which cell receives input events.
+    /// Apply a `SetFocus` from `sender`, already classified against the live
+    /// compositor binding.
     ///
-    /// Also resets transient modifiers on the modifier-state tracker so that
-    /// Shift/Ctrl/Alt do not appear "stuck" after a focus change.
-    pub fn set_focus(&mut self, cell_endpoint: usize) {
-        if self.focused != cell_endpoint {
+    /// Clears key repeat when the physical-keyboard target changes, so a held
+    /// key does not keep firing into the new target.
+    pub fn set_focus(&mut self, sender: usize, requester: Requester) {
+        if self.routes.set(sender, requester) {
             self.repeat.clear();
         }
-        self.focused = cell_endpoint;
     }
 
-    /// Return the currently focused endpoint.
-    #[allow(dead_code)]
+    /// Apply a `ClearFocus` from `sender`; only the sender's own routes clear.
+    pub fn clear_focus(&mut self, sender: usize) {
+        if self.routes.clear(sender) {
+            self.repeat.clear();
+        }
+    }
+
+    /// Return the current physical-keyboard target.
     pub fn focus(&self) -> usize {
-        self.focused
+        self.routes.keyboard()
     }
 
     /// SessionV1 owns physical keyboard input exclusively while attached, but never while a
@@ -93,7 +102,19 @@ impl Dispatcher {
         self.sessions.serial_byte(byte)
     }
 
-    /// Send a translated `InputEvent` to the focused cell.
+    /// Send a physical-keyboard `InputEvent` to the keyboard target.
+    pub fn dispatch(&mut self, event: &InputEvent) -> bool {
+        let target = self.routes.keyboard();
+        self.dispatch_to(target, event)
+    }
+
+    /// Send a serial-console key to the console claimant (else the keyboard target).
+    pub fn dispatch_console(&mut self, event: &InputEvent) -> bool {
+        let target = self.routes.console();
+        self.dispatch_to(target, event)
+    }
+
+    /// Send a translated `InputEvent` to `target`.
     ///
     /// **Non-blocking, and that is the fix for a board failure, not a
     /// preference.** Delivery used to block until the focused cell received the
@@ -113,16 +134,16 @@ impl Dispatcher {
     /// byte[0]   = INPUT_EVENT_OPCODE (0x10)
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
-    pub fn dispatch(&mut self, event: &InputEvent) -> bool {
+    fn dispatch_to(&mut self, target: usize, event: &InputEvent) -> bool {
         if let InputEvent::Key(key) = event {
             if self.sessions.keyboard(key) {
                 return true;
             }
         }
-        if self.focused == 0 {
+        if target == 0 {
             return true; // no focus — drop silently
         }
-        if Self::try_send_event(self.focused, event).is_ok() {
+        if Self::try_send_event(target, event).is_ok() {
             return true;
         }
         // The focused cell's queue is full: it is not draining. Drop this event

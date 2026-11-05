@@ -23,7 +23,7 @@ fn pixel_at(fb: &ScreenFb, x: usize, y: usize) -> [u8; 4] {
 fn clipped_blit_copies_the_matching_source_pixels() {
     let mut fb = ScreenFb::new(5, 4);
     fb.pixels.fill(0x5a);
-    let surface = surface(
+    let mut surface = surface(
         1,
         1,
         3,
@@ -35,7 +35,7 @@ fn clipped_blit_copies_the_matching_source_pixels() {
     );
 
     fb.blit_surface_clipped(
-        &surface,
+        &mut surface,
         Rect {
             x: 2,
             y: 1,
@@ -52,10 +52,10 @@ fn clipped_blit_copies_the_matching_source_pixels() {
 fn clipped_blit_preserves_pixels_outside_damage() {
     let mut fb = ScreenFb::new(4, 3);
     fb.pixels.fill(0x5a);
-    let surface = surface(0, 0, 4, 3, &vec![0xab; 4 * 3 * 4]);
+    let mut surface = surface(0, 0, 4, 3, &vec![0xab; 4 * 3 * 4]);
 
     fb.blit_surface_clipped(
-        &surface,
+        &mut surface,
         Rect {
             x: 1,
             y: 1,
@@ -80,7 +80,7 @@ fn clipped_blit_preserves_pixels_outside_damage() {
 fn clipped_blit_translates_negative_surface_coordinates_at_screen_edge() {
     let mut fb = ScreenFb::new(3, 3);
     fb.pixels.fill(0x5a);
-    let surface = surface(
+    let mut surface = surface(
         -1,
         -1,
         3,
@@ -92,7 +92,7 @@ fn clipped_blit_translates_negative_surface_coordinates_at_screen_edge() {
     );
 
     fb.blit_surface_clipped(
-        &surface,
+        &mut surface,
         Rect {
             x: -1,
             y: -1,

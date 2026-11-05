@@ -31,6 +31,7 @@
 extern crate alloc;
 
 mod dispatcher;
+mod focus_routes;
 mod key_repeat;
 mod layout_us_qwerty;
 mod modifier_state;
@@ -43,6 +44,7 @@ use api::input::{InputEvent, KeyEvent, KeyState, KeySym};
 use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE, OP_HID_DEVICE_REMOVED};
 use api::syscall::service;
 use dispatcher::Dispatcher;
+use focus_routes::Requester;
 use layout_us_qwerty::{key_state_from_evdev, modifier_for_scancode, translate};
 use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
@@ -590,7 +592,7 @@ fn handle_kernel_event(
                 0x09 => (KeySym::Tab, code),
                 _ => (KeySym::Printable, code),
             };
-            if !dispatcher.dispatch(&InputEvent::Key(KeyEvent {
+            if !dispatcher.dispatch_console(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),
                 scancode: 0,
                 keysym,
@@ -631,8 +633,9 @@ fn handle_typed_request(
             }
             modifiers.reset_transient();
             // Use kernel-verified sender TID instead of the cell_tid field to
-            // prevent a cell from redirecting focus to an arbitrary TID.
-            dispatcher.set_focus(sender);
+            // prevent a cell from redirecting focus to an arbitrary TID. Only the
+            // live compositor moves the physical keyboard; see `focus_routes`.
+            dispatcher.set_focus(sender, focus_requester(buf, sender));
             // Fire-and-forget: no reply. Focus is set atomically on receipt.
             // A blocking reply would deadlock when the focused cell is not yet
             // in sys_recv (startup race — G18 deadlock fix).
@@ -649,10 +652,8 @@ fn handle_typed_request(
         }
         Ok(InputRequest::ClearFocus { cell_tid: _ }) => {
             // Use kernel-verified sender TID (same as SetFocus) — prevents a cell
-            // from clearing another cell's focus. When sender == focused, drop focus.
-            if dispatcher.focus() == sender {
-                dispatcher.set_focus(0);
-            }
+            // from clearing another cell's focus.
+            dispatcher.clear_focus(sender);
             // Fire-and-forget: no reply. Same rationale as SetFocus.
         }
         Ok(InputRequest::RegisterEventSource { kind }) => {
@@ -668,6 +669,29 @@ fn handle_typed_request(
             }
         }
         Err(_) => {} // unknown message — drop silently
+    }
+}
+
+/// Classify a focus request against the kernel's live `COMPOSITOR` binding.
+///
+/// The tid alone is not proof: the attested caller cell and generation must
+/// equal the incarnation the kernel binds to the well-known id, which only
+/// trusted init or the supervisor can register.
+fn focus_requester(buf: &[u8; IPC_BUF_SIZE], sender: usize) -> Requester {
+    let mut record = [0u8; api::service_binding::SERVICE_BINDING_LEN];
+    let Some(binding) = ostd::syscall::sys_lookup_service_bound(service::COMPOSITOR, &mut record)
+    else {
+        return Requester::ClientHeadless;
+    };
+    let caller = api::caller_identity::CallerIdentity::from_recv_buf(buf);
+    let is_compositor = binding.tid == sender as u64
+        && caller.is_some_and(|caller| {
+            caller.cell_id == binding.cell_id && caller.generation == binding.generation
+        });
+    if is_compositor {
+        Requester::Compositor
+    } else {
+        Requester::ClientWithCompositor
     }
 }
 

@@ -45,19 +45,18 @@ pub fn render_frame(
     let dirty = dirty?;
     fb.clear_rect(dirty);
     for cap in z_order.iter_bottom_to_top() {
-        let Some(surface) = table.get(cap) else {
+        let Some(surface) = table.get_mut(cap) else {
             continue;
         };
         if !surface.is_visible_for_paint() {
             continue;
         }
-        if surface.screen_rect().intersects(&dirty) {
+        let rect = surface.screen_rect();
+        if rect.intersects(&dirty) {
             fb.blit_surface_clipped(surface, dirty);
         }
-        if surface.is_window_managed()
-            && window_decoration::bounds(surface.screen_rect()).intersects(&dirty)
-        {
-            fb.paint_window_decoration(surface.screen_rect(), dirty, Some(cap) == selected_cap);
+        if surface.is_window_managed() && window_decoration::bounds(rect).intersects(&dirty) {
+            fb.paint_window_decoration(rect, dirty, Some(cap) == selected_cap);
         }
     }
     for cap in z_order.iter_bottom_to_top() {

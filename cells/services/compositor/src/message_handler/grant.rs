@@ -2,7 +2,7 @@ use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGran
 use ostd::syscall::{sys_grant_slice_with_len, sys_send};
 
 use crate::framebuffer;
-use crate::surface_table::SurfaceTable;
+use crate::surface_table::{SurfaceTable, MAX_SURFACE_DIM};
 
 pub(super) fn handle(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     match buf[0] {
@@ -15,45 +15,42 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     }
 }
 
+/// Bind a Grant to the sender's surface.
+///
+/// The kernel resolves any Grant shared to the compositor, but reports neither
+/// who registered it nor lets the compositor ask, so `reg_id` (a guessable
+/// physical base) is not proof that the sender owns it. Two rules bound that:
+/// a Grant another owner's surface already presents, stages or is retiring is
+/// refused, and every refusal gets the same `\x00` reply as an id that does not
+/// resolve, so probing ids reveals nothing. A Grant shared to the compositor
+/// but not yet attached by its owner remains attachable by anyone; closing that
+/// needs a kernel answer for the Grant owner.
 fn attach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
-    if buf.len() < 24 {
-        return;
-    }
     let Ok(frame) = <&[u8; 24]>::try_from(&buf[..24]) else {
         return;
     };
     let grant = AttachGrant::decode(frame);
-    let cap = grant.cap as u64;
-    let Some(surface) = table.get_mut(cap) else {
-        sys_send(sender, b"\x00");
-        return;
-    };
-    if surface.owner != sender {
-        sys_send(sender, b"\x00");
-        return;
-    }
-    match sys_grant_slice_with_len(grant.reg_id as usize) {
-        Some((ptr, grant_len))
-            if (grant.width as usize)
+    let reg_id = grant.reg_id as usize;
+    let fmt = PixelFormat::from_u8(grant.fmt);
+    let held_by_other = table
+        .grant_holder(reg_id)
+        .is_some_and(|holder| holder != sender);
+    let geometry_ok = grant.width <= MAX_SURFACE_DIM && grant.height <= MAX_SURFACE_DIM;
+    let attached = !held_by_other
+        && geometry_ok
+        && table
+            .get(grant.cap as u64)
+            .is_some_and(|surface| surface.owner == sender)
+        && sys_grant_slice_with_len(reg_id).is_some_and(|(_, grant_len)| {
+            (grant.width as usize)
                 .checked_mul(grant.height as usize)
-                .and_then(|pixels| {
-                    pixels.checked_mul(PixelFormat::from_u8(grant.fmt).bpp() as usize)
-                })
+                .and_then(|pixels| pixels.checked_mul(fmt.bpp() as usize))
                 .is_some_and(|required| required <= grant_len)
-                && surface.attach_grant(
-                    ptr as *const u8,
-                    grant.reg_id as usize,
-                    grant.width,
-                    grant.height,
-                    PixelFormat::from_u8(grant.fmt),
-                ) =>
-        {
-            sys_send(sender, b"\x01");
-        }
-        _ => {
-            sys_send(sender, b"\x00");
-        }
-    }
+        })
+        && table
+            .get_mut(grant.cap as u64)
+            .is_some_and(|surface| surface.attach_grant(reg_id, grant.width, grant.height, fmt));
+    sys_send(sender, if attached { b"\x01" } else { b"\x00" });
 }
 
 fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {

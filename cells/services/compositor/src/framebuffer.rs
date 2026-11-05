@@ -34,7 +34,8 @@ impl ScreenFb {
     ///
     /// Coordinates are intersected in screen space before deriving the matching
     /// source offset, so clipped and negatively-positioned surfaces stay aligned.
-    pub(crate) fn blit_surface_clipped(&mut self, s: &SurfaceState, dirty: Rect) {
+    /// A Grant-backed surface is re-resolved here, once per blit.
+    pub(crate) fn blit_surface_clipped(&mut self, s: &mut SurfaceState, dirty: Rect) {
         let surface_left = i64::from(s.x);
         let surface_top = i64::from(s.y);
         let left = surface_left.max(i64::from(dirty.x)).max(0);
@@ -57,7 +58,7 @@ impl ScreenFb {
         let h = (bottom - top) as usize;
         let screen_stride = self.width as usize * 4;
         let surf_stride = s.w as usize * 4;
-        let src_pixels = s.pixels();
+        let src_pixels = s.resolve_pixels(ostd::syscall::sys_grant_slice_with_len);
         for row in 0..h {
             let dst = (dst_y + row) * screen_stride + dst_x * 4;
             let src = (src_y + row) * surf_stride + src_x * 4;
