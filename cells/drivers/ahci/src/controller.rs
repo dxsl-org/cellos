@@ -1,7 +1,7 @@
 //! AHCI 1.3.1 — HBA reset, port bring-up, IDENTIFY DEVICE, data path.
 //!
 //! PCI binding is done by the caller; this module resets the HBA, starts one
-//! SATA port with a device attached, completes a single polled IDENTIFY DEVICE,
+//! SATA port with a device attached, completes a single IDENTIFY DEVICE,
 //! and then serves 512-byte sector transfers over the command list built here:
 //! READ DMA EXT (0x25) / WRITE DMA EXT (0x35) with a 48-bit LBA, and FLUSH CACHE
 //! EXT (0xEA). Every transfer is one PRDT entry over a caller-supplied authorized
@@ -14,8 +14,14 @@
 //! Law 4 exception: Driver Cells may use `unsafe` for DMA memory access. MMIO
 //! goes through the bounds-checked `ostd::mmio::MmioRegion`; every `unsafe`
 //! block carries a `// SAFETY:` comment.
+//!
+//! Command completion is MSI-driven when `AllocPcieIrq` grants a line
+//! (`crate::irq`): the HBA is armed (`GHC.IE`, `PxIE`) only then, and the
+//! wait loops park between `PxCI` re-reads. Otherwise nothing is armed and the
+//! loops poll exactly as before.
 
 use crate::dma::AuthorizedDma;
+use crate::irq::CompletionIrq;
 use alloc::string::String;
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
@@ -28,10 +34,12 @@ use types::{ViError, ViResult};
 
 const REG_CAP: usize = 0x00;
 const REG_GHC: usize = 0x04;
+const REG_IS: usize = 0x08;
 const REG_PI: usize = 0x0C;
 const REG_VS: usize = 0x10;
 
 const GHC_HR: u32 = 1 << 0;
+const GHC_IE: u32 = 1 << 1;
 const GHC_AE: u32 = 1 << 31;
 
 // ── Port register block (base 0x100, stride 0x80) ─────────────────────────────
@@ -83,6 +91,16 @@ const IS_IFS: u32 = 1 << 27;
 const IS_OFS: u32 = 1 << 24;
 /// Every latched condition that makes a completed command untrustworthy.
 const IS_FATAL: u32 = IS_TFES | IS_HBFS | IS_HBDS | IS_IFS | IS_OFS;
+/// FIS-received conditions that can end a command: D2H Register (0), PIO Setup
+/// (1), DMA Setup (2) and Set Device Bits (3).
+const IS_DHRS: u32 = 1 << 0;
+const IS_PSS: u32 = 1 << 1;
+const IS_DSS: u32 = 1 << 2;
+const IS_SDBS: u32 = 1 << 3;
+/// `PxIE` in interrupt mode (enable bits share `PxIS` positions): every FIS that
+/// can end a command plus every fatal condition, so neither a completion nor a
+/// failure waits out a full park.
+const PX_IE_COMPLETION: u32 = IS_DHRS | IS_PSS | IS_DSS | IS_SDBS | IS_FATAL;
 
 /// AHCI port signature for an ATA (LBA) disk — the only signature IDENTIFY
 /// DEVICE is valid for.
@@ -129,6 +147,9 @@ const POLL_LIMIT: u64 = 2_000_000;
 const LINK_POLL_LIMIT: u64 = 200_000;
 /// Yield every this many polls so a long wait does not starve the system.
 const POLL_YIELD_EVERY: u64 = 8192;
+/// `PxCI` re-reads before the first park of a command wait, so a completion
+/// that lands within microseconds is not delayed by up to a tick on a busy BSP.
+const SPIN_BEFORE_PARK: u64 = 32;
 
 pub struct AhciController {
     mmio: MmioRegion,
@@ -149,6 +170,8 @@ pub struct AhciController {
     _fis: AuthorizedDma<DmaBuf>,
     cmd_table: AuthorizedDma<DmaBuf>,
     identify: AuthorizedDma<DmaBuf>,
+    /// MSI completion line; inactive means polled with the HBA unarmed.
+    irq: CompletionIrq,
     /// Fault-injection builds only: what to do to the next issued command.
     #[cfg(feature = "fault-inject")]
     inject_next: crate::fault_inject::Inject,
@@ -236,6 +259,9 @@ impl AhciController {
 
         // 3. Reset is done; start a port with a device and keep it running.
         let port = Self::start_port(&mmio, n_ports, pi, &cmd_list, &fis)?;
+        // Only after HBA reset (which clears GHC.IE) and port bring-up, so no
+        // interrupt is armed while the port is still being probed.
+        let irq = CompletionIrq::setup(bdf);
 
         let mut ctrl = AhciController {
             mmio,
@@ -245,9 +271,13 @@ impl AhciController {
             _fis: fis,
             cmd_table,
             identify,
+            irq,
             #[cfg(feature = "fault-inject")]
             inject_next: crate::fault_inject::Inject::None,
         };
+        if ctrl.irq.active() {
+            ctrl.arm_interrupts(ctrl.port_offset())?;
+        }
         ctrl.identify()?;
         // Word 0 is the ATA general-configuration word: 0x0040 means a fixed,
         // non-removable ATA device, which proves the 512-byte DMA landed (a
@@ -343,15 +373,19 @@ impl AhciController {
         wr(&self.mmio, p + PX_CI, 1)?;
 
         let mut spins = 0u64;
+        let mut seen = 0u32;
         loop {
             if rd(&self.mmio, p + PX_CI)? & 1 == 0 {
                 break;
             }
-            spins = poll_tick(spins, POLL_LIMIT, "[ahci] IDENTIFY never completed")?;
+            spins = self.completion_tick(p, spins, &mut seen, "[ahci] IDENTIFY never completed")?;
         }
 
-        let is = rd(&self.mmio, p + PX_IS)?;
+        let is = rd(&self.mmio, p + PX_IS)? | seen;
         let tfd = rd(&self.mmio, p + PX_TFD)?;
+        if self.irq.active() {
+            self.ack_interrupts(p)?;
+        }
         if tfd & TFD_ERR != 0 || is & IS_FATAL != 0 {
             let _ = print_fmt(format_args!(
                 "[ahci] IDENTIFY failed: PxIS=0x{:08x} PxTFD=0x{:08x}\n",
@@ -520,11 +554,12 @@ impl AhciController {
 
         let indeterminate = |_| BlockOutcome::Indeterminate;
         let mut spins = 0u64;
+        let mut seen = 0u32;
         loop {
             if rd(&self.mmio, p + PX_CI).map_err(indeterminate)? & bit == 0 {
                 break;
             }
-            match poll_tick(spins, POLL_LIMIT, "") {
+            match self.completion_tick(p, spins, &mut seen, "") {
                 Ok(next) => spins = next,
                 Err(_) => {
                     let _ = print_fmt(format_args!(
@@ -551,8 +586,11 @@ impl AhciController {
             return Err(BlockOutcome::Indeterminate);
         }
 
-        let is = rd(&self.mmio, p + PX_IS).map_err(indeterminate)?;
+        let is = rd(&self.mmio, p + PX_IS).map_err(indeterminate)? | seen;
         let tfd = rd(&self.mmio, p + PX_TFD).map_err(indeterminate)?;
+        if self.irq.active() {
+            self.ack_interrupts(p).map_err(indeterminate)?;
+        }
         if tfd & TFD_ERR != 0 || is & IS_FATAL != 0 {
             let _ = print_fmt(format_args!(
                 "[ahci] port={} tag={} {} device fault: PxIS=0x{:08x} PxTFD=0x{:08x}\n",
@@ -563,6 +601,76 @@ impl AhciController {
         }
         fence(Ordering::Acquire);
         Ok(())
+    }
+
+    /// One step of a command-completion wait.
+    ///
+    /// Polled: exactly `poll_tick` against `POLL_LIMIT`. Interrupt mode, after
+    /// `SPIN_BEFORE_PARK` re-reads: park on the MSI, then acknowledge so the
+    /// next event raises a fresh message. Acknowledged `PxIS` bits accumulate in
+    /// `seen`, which the caller ORs into its post-completion `PxIS` read so a
+    /// fatal condition cleared here is still reported.
+    ///
+    /// A park stands in for one `poll_tick` yield window and spends that whole
+    /// window of `POLL_LIMIT`: the number of yield points before a timeout is
+    /// unchanged, so a lost interrupt ends in the same timeout, never a hang.
+    fn completion_tick(
+        &mut self,
+        p: usize,
+        spins: u64,
+        seen: &mut u32,
+        what: &str,
+    ) -> ViResult<u64> {
+        if spins >= SPIN_BEFORE_PARK && self.irq.active() {
+            if self.irq.park() {
+                *seen |= self.ack_interrupts(p)?;
+                let spins = spins + POLL_YIELD_EVERY;
+                if spins >= POLL_LIMIT {
+                    if !what.is_empty() {
+                        let _ = print_fmt(format_args!(
+                            "[ahci] timeout: {} ({} polls)\n",
+                            what, POLL_LIMIT
+                        ));
+                    }
+                    return Err(ViError::IO);
+                }
+                fence(Ordering::Acquire);
+                return Ok(spins);
+            }
+            // `WaitCompletion` refused the wait: nothing will hear the line.
+            self.disarm_interrupts(p);
+        }
+        poll_tick(spins, POLL_LIMIT, what)
+    }
+
+    /// Arm MSI delivery for port `p`: clear stale status (port, then HBA),
+    /// enable the completion and fatal conditions in `PxIE`, then set `GHC.IE`.
+    /// Called only while `self.irq` holds a line.
+    fn arm_interrupts(&self, p: usize) -> ViResult<()> {
+        wr(&self.mmio, p + PX_IS, 0xFFFF_FFFF)?;
+        wr(&self.mmio, REG_IS, 1u32 << self.port)?;
+        wr(&self.mmio, p + PX_IE, PX_IE_COMPLETION)?;
+        let ghc = rd(&self.mmio, REG_GHC)?;
+        wr(&self.mmio, REG_GHC, ghc | GHC_IE)
+    }
+
+    /// Back to the polled configuration (`GHC.IE` and `PxIE` clear) after the
+    /// kernel refused an `IRQ` wait. Best effort: the poll loop needs neither.
+    fn disarm_interrupts(&self, p: usize) {
+        if let Ok(ghc) = rd(&self.mmio, REG_GHC) {
+            let _ = wr(&self.mmio, REG_GHC, ghc & !GHC_IE);
+        }
+        let _ = wr(&self.mmio, p + PX_IE, 0);
+    }
+
+    /// Acknowledge port `p`: W1C the `PxIS` bits read, then this port's `IS`
+    /// bit — port first, so `IS` does not re-latch from a still-set `PxIS`.
+    /// Returns the acknowledged `PxIS` bits.
+    fn ack_interrupts(&self, p: usize) -> ViResult<u32> {
+        let is = rd(&self.mmio, p + PX_IS)?;
+        wr(&self.mmio, p + PX_IS, is)?;
+        wr(&self.mmio, REG_IS, 1u32 << self.port)?;
+        Ok(is)
     }
 
     /// Refuse a request on a controller that could not be recovered.
@@ -605,6 +713,10 @@ impl AhciController {
                 "[ahci] port={} controller poisoned after an unrecoverable fault\n",
                 self.port
             ));
+        } else if self.irq.active() {
+            // `start_command_engine` left PxIE at 0; re-arm so the next command
+            // is interrupt-driven again. A failure only costs park latency.
+            let _ = self.arm_interrupts(p);
         }
     }
 
@@ -757,7 +869,8 @@ impl AhciController {
             spins = poll_tick(spins, POLL_LIMIT, "[ahci] command list never started")?;
         }
 
-        // Polled completion path only: no interrupts.
+        // Leave the port unarmed; `arm_interrupts` enables PxIE only when an
+        // MSI line is held.
         wr(mmio, p + PX_IE, 0)?;
         Ok(())
     }
