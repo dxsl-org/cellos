@@ -18,7 +18,12 @@ Ceilings: host tests, QEMU 8.2.2 TCG (`qemu64,+pdpe1gb`), local KVM (`-cpu host`
   - At most two leaf locks are held, taken in ascending hart id.
 - `clock/{kvmclock,mod}.rs`: each AP registers its own 32-byte slot of the BSP's 4 KiB pvclock page. An AP slot without the stable bit demotes a kvmclock source. The TSC skew check and the LAPIC/TSC-deadline tick were already per AP (D9).
 - `paging.rs` (owner grant, D5): `map_mmio_x86_flags` writes every leaf, then issues one `flush_range` for the whole window.
-- `denials.rs` (grant 1, D1): the `1 - hart` victim index is removed. `c2c-render` (grant 2, D3): the image is saved through the cwd grant, and `ProcessorIds` holds 64 entries.
+- `kernel/src/loader/atomic_publication_tests/denials.rs:310` (grant 1, D1): the `1 - hart` victim index is removed. `c2c-render` (grant 2, D3): the image is saved through the cwd grant, and `ProcessorIds` holds 64 entries.
+- Review fixes (second commit, PASS-with-fixes review):
+  - D13: the shootdown wait services the CPU it is running on (`current_hart_id()` re-read each pass, IF masked around read + service), so a migrated waiter cannot forge an acknowledgement.
+  - D14: after `HART_ONLINE[logical]` the BSP issues one more acknowledged flush to that AP; an AP that never answers a released step panics the boot (fail-closed).
+  - D15: a failed AP pvclock registration retires kvmclock system-wide (`kvmclock::retire`) after demoting an active kvmclock source.
+  - D12 (integrator grant): `tier2-rpc-driver` stale-descriptor leg waits on a 5 s wall-clock bound instead of 2000 yields.
 - Lanes:
   - `qemu-domain-test.sh` accepts `X86_CPUS` 1..64. With 2 or more CPUs it requires `topology online=N`, `broadcast targets=N-1` and `harts=N` on both shootdown markers, and it fails on any `invalidation unconfirmed` line.
   - `x86_64-boot` adds `x86_smp_brings_every_cpu_online` (`CELLOS_X86_SMP`, default 4), and CI job `qemu-x86_64-boot` adds a step that runs it at `-smp 4`.
@@ -26,6 +31,15 @@ Ceilings: host tests, QEMU 8.2.2 TCG (`qemu64,+pdpe1gb`), local KVM (`-cpu host`
 - Records: `docs/specs/04-hardware.md` §5, `scripts/mutable-globals.toml` with the regenerated md (D4), and this phase's file.
 
 ## Host
+
+Re-run after the review fixes, on the second commit:
+- cellos-kernel host tests: `ok. 451 passed`; hal-x86: `ok. 26 passed`.
+- clippy `-D warnings` for x86_64, riscv64 and aarch64 kernels, hal-x86 and `tier2-rpc-driver` (x86_64-unknown-none): each `Finished`.
+- `cellos-sign --check --strict`: `OK: F5`, `OK: F1 … 77 allowlisted files`.
+- Law-1 digests: all three OK/PASS.
+- mutable-globals: `635 declarations, 252 need review, 37 problems`, unchanged; no new static (D15 reuses `kvmclock::INFO`).
+
+Lines below are from the first commit:
 
 - `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu`: `test result: ok. 451 passed; 0 failed`. New tests, all `ok`:
   - `task::smp::tests::{epoch_set_broadcasts_before_waiting_and_completes_over_four_harts, epoch_set_ignores_stale_completions_and_out_of_range_targets, tlb_flush_set_over_four_simulated_harts, retirement_switch_set_over_four_simulated_harts}`
@@ -77,21 +91,38 @@ The platform Cell's 256 MiB ECAM `RequestMmio` paid one global shootdown per pag
 | c2c-render smoke `--cpus 4 --workers 4` KVM | PASS | `saved … save_ns=598597`, `C2C_RENDER_SMOKE=PASS (… CPUs=4 processor_ids=0;1;2;3 …)` |
 | c2c-render `--cpus 2` TCG/KVM (helper, base kernel + D3) | PASS | `saved /tmp/c2c-render.ppm bytes=2304`, `COMPARE OK baseline=copy=shared`; the unmodified save reproduced `Err(3)` |
 
-## Stress (10 × [canonical TCG `-smp 4` boot + domain lane `X86_CPUS=4` KVM])
+## Stress
 
-- Canonical boots: 10/10 PASS. Prompt times: 4.4, 5.0, 14.4, 7.2, 24.8, 21.8, 23.7, 21.1, 23.7, 19.9 s.
-- `invalidation unconfirmed` lines: **0** in all 20 logs.
-- Domain lane: **7/10 PASS, 3/10 FAIL** (runs 1, 3, 10). Each failure is the same fixture line, with every kernel marker present and no panic:
+### Final run (after the review fixes and D12; images rebuilt from the second commit)
 
-  ```
-  USER: [tier2-rpc] provider-exiting
-  USER: [tier2-rpc] FAIL — the fixture's registry entry stayed live after the provider exited
-  [ INFO] Syscall::Exit: task 10 exited with code 0
-  [ INFO] [service-registry] cleared stale entries for dead tid 10
-  ```
+10 × [canonical headless ISO, KVM `-smp 4`, prompt + `ps` answered] + [domain lane `X86_CPUS=4 X86_ACCEL=kvm`]:
 
-  `tier2-rpc-driver` (`cells/tests/tier2-rpc-driver/src/main.rs:173-183`, outside the set) polls the registry `STALE_POLLS = 2000` times with `yield_now()`. That is a yield count, not a time bound, and it ran out before the provider's exit syscall. Once the exit landed, the registry was cleared. [INFERENCE] With four harts the driver can sit alone on an idle hart, where each yield returns at once, while the provider's Tier-2 exit runs elsewhere. The stress acceptance (10/10) is **not met** by the domain lane. See open risk R2.
-- Control at two CPUs on the same `c0fe65fce` domain-test kernel: `X86_CPUS=2 X86_ACCEL=kvm`, 4/4 `PASS … (x86-domain-test-kvm-cpu2) — every marker present`, 0 `[tier2-rpc] FAIL`. So the fixture race shows up only at four CPUs. It is not proven to be fixture-only: the kernel exit path at N harts was not traced.
+- Canonical boots: **10/10 PASS**. Prompt times: 60.1, 16.5, 3.6, 67.6, 75.6, 49.7, 8.9, 48.8, 48.8, 41.4 s. The spread comes from the per-page ELF/W^X shootdowns (open risk R1) on this nested host.
+- Domain lane: **10/10** `PASS: x86_64 Tier-2 domain-entry lane (x86-domain-test-kvm-cpu4) — every marker present`. `[tier2-rpc] FAIL` appears 0 times.
+- `invalidation unconfirmed` lines: **0** in all 20 logs (`STRESS domain pass=10 fail=0 unconfirmed_total=0`).
+- Decisive lines, run 1: `S22-X86-REMOTE-SHOOTDOWN: PASS harts=4 …`, `[x86-smp] transport IPI-invalidate broadcast targets=3 ack_ns=60456`, `[x86-smp] topology online=4 processor_ids=0;1;2;3 qualified=yes`, `[tier2-rpc] PROVIDER-GONE=none`, `[tier2-rpc] DRIVER-DONE`.
+- `x86_64-boot`, once each, with `CELLOS_X86_SMP=4`: TCG `test result: ok. 10 passed`, KVM `test result: ok. 10 passed`.
+
+### First run (`c0fe65fce`, before D12) and root cause
+
+Setup: 10 × [canonical TCG `-smp 4` boot + domain lane `X86_CPUS=4` KVM].
+- Boots: 10/10.
+- `invalidation unconfirmed` lines: 0.
+- Domain lane: 7/10. Each of the 3 failures was `[tier2-rpc] FAIL — the fixture's registry entry stayed live after the provider exited`, followed by `Syscall::Exit: task 10 …` and `[service-registry] cleared stale entries for dead tid 10`.
+- A 2-CPU control on the same kernel passed 4/4.
+
+The integrator's debugger proved the cause is fixture timing, not the kernel:
+- **What happened.** The driver's stale-descriptor leg counted 2000 `yield_now()` calls. On an otherwise idle hart these took 1.3–1.8 ms in total (about 667 ns per poll). Meanwhile the provider was still `Running` on its own hart, with all ready queues empty, inside its last two serial `Log` syscalls (about 1.5–2 ms each under nested KVM).
+- **Exit path.** `clear_tid` runs synchronously inside the provider's own `Exit` funnel. The registry entry was gone within about 11 µs of the Exit syscall entry.
+- **Why the other configurations passed.** On TCG one poll costs about 35 µs, so the budget is about 69 ms. At 2 CPUs the driver resumed only after the provider had already exited.
+
+| Debugger run | FAIL |
+|---|---|
+| Baseline | 21/100 |
+| Silent kernel probe, `-smp 4` KVM | 10/40 |
+| Silent kernel probe, `-smp 2` KVM | 0/20 |
+| Silent kernel probe, `-smp 4` TCG | 0/12 |
+| With the D12 wall-clock bound | 0/80 |
 
 ## Regression (helper worktree at `c0fe65fce`)
 

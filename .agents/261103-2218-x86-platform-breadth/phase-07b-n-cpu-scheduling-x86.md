@@ -1,7 +1,7 @@
 ---
 phase: 7b
 title: "N-CPU scheduling on x86"
-status: implemented (S2 checkpoint pending: independent race review)
+status: implemented (S2 checkpoint: review PASS-with-fixes; owner decision pending)
 priority: P1
 effort: "5d"
 dependencies: ["7a", 2]
@@ -67,14 +67,14 @@ The scheduler's per-hart queues stay as they are; stealing becomes `steal_from(v
 - [x] Set-based shootdown/retirement (`RemoteEpochs`: broadcast, then wait over the set; retirement waits were already per-hart over all slots in pinned `scheduler.rs`, D7)
 - [x] N-way stealing (bounded victim scan, RT tasks excluded, pair locked in hart-id order; signature kept)
 - [x] All APs online + per-AP clock (sequential handshake; per-AP pvclock slot, TSC skew check and LAPIC/TSC-deadline tick)
-- [x] Lanes + stress (see `reports/phase-07b-evidence.md`; stress domain lane 7/10, open risk R2)
+- [x] Lanes + stress (see `reports/phase-07b-evidence.md`)
 
 ## Success Criteria
 
 - [x] KVM `-smp 8`: `online=8`; TCG `-smp 4` green (lanes and limits in evidence).
-- [ ] Stress loop: 10/10 passes, zero `invalidation unconfirmed` lines. Result: zero unconfirmed lines in 20 logs; canonical `-smp 4` boots 10/10; domain lane 7/10 (3 × `tier2-rpc` yield-count poll expired before the provider's exit; fixture outside the set).
+- [x] Stress loop: 10/10 passes, zero `invalidation unconfirmed` lines. Final run after the review fixes and D12: 10 × (KVM `-smp 4` boot + domain lane `X86_CPUS=4` KVM), 10/10 + 10/10, 0 unconfirmed lines in 20 logs. The first run's 3/10 domain failures were fixture timing (D12).
 - [x] riscv64/aarch64 lanes unchanged (still 2 harts).
-- [ ] Review: independent `haily-reviewer` pass focused on races in shootdown and stealing (run by the integrator at the S2 checkpoint).
+- [x] Review: independent race review of shootdown and stealing — PASS-with-fixes, no Critical; Minor fixes D13–D15 applied. Batching ELF-load/W^X flushes (reviewer R1) is left to the owner.
 
 ## Risk Assessment
 
@@ -117,7 +117,7 @@ Line cites are as of the S2 request base `28dee8b3d`; the code was re-located by
   Impact: none at two harts. Revert: n/a.
 - **D7 Decision (retirement / preempt waits):** no code change was needed for these waits. `scheduler.rs:2002-2036` (pinned) already arms and checks one retirement epoch per hart over `0..MAX_HARTS`; `request_preemption` is a per-hart mailbox + IPI with no wait. The set shape (`smp::RemoteEpochs`) is shared by the shootdown and the boot broadcast and is unit-tested on the real retirement epochs over four simulated harts.
   Revert: n/a.
-- **D8 Decision (bring-up shape):** APs start one at a time in Limine MP order; each handshake word is the logical id of the AP in flight; the first AP that cannot be started or refuses root operation stops bring-up. The online set is always `0..online`, so the RT hart is online whenever any AP is.
+- **D8 Decision (bring-up shape):** APs start one at a time in Limine MP order; each handshake word is the logical id of the AP in flight; the first AP that cannot be started or refuses root operation stops bring-up. The online set is always `0..online`, so the RT hart is online whenever any AP is. An AP that was released but never answers a step within its bounded budget panics the boot (`x86_bounded_wait`): fail-closed, never a silently missing CPU. After step 3 the BSP issues one catch-up flush (D14).
   Revert: n/a.
 - **D9 Decision (pvclock):** the BSP's 4 KiB kvmclock page (allocated in `main.rs`, unchanged) is split into one 32-byte slot per logical CPU; each AP registers its own slot (the MSR is per vCPU) only while the BSP's registration is active, and a slot without the stable bit demotes a kvmclock clocksource. Reads keep using the BSP slot (stable-bit rule).
   Revert: drop `register_secondary_pvclock`.
@@ -128,3 +128,10 @@ Line cites are as of the S2 request base `28dee8b3d`; the code was re-located by
 - **S1 Surprise:** boot-to-prompt time grew with the CPU count (KVM 1/2/4/8: 3.5 / 7.3 / 89.7 / >180 s). Proven with `info registers -a` + `addr2line` during the stall: CPU1 in `tlb_shootdown::flush_range`, the BSP spinning on `FRAME_ALLOCATOR` in `prepare_elf_task`, CPUs 2-7 halted. Cause: the platform Cell's 256 MiB ECAM `RequestMmio` mapped 65,536 pages with one global shootdown each. Fixed under D5 (owner grant).
 - **S2 Surprise:** `x86_64-boot` was not run by CI at all (the `qemu-x86_64-boot` job runs `scripts/qemu-x86_64-test.sh`); the new `-smp 4` step runs only the new test. `run-c2c-concurrent-input-smoke.py` passed no `-smp`; it now takes `--cpus` (default 4) and checks `online=N`.
 - **S3 Surprise:** an early relative-path edit landed in `/home/dmin/cellos` (`smp.rs`, `tlb_shootdown.rs`; and the c2c helper's first `main.rs` hunk). Each was moved into the worktree and reverted there within minutes; `git status` of `/home/dmin/cellos` shows no tracked change.
+- **D12 Deviation (integrator grant, after review):** `cells/tests/tier2-rpc-driver/src/main.rs` — the stale-descriptor leg waits on a wall-clock bound (`STALE_DEADLINE_MS = 5000` via `sys_get_time_ms`, `GetTime` added to `declare_syscalls!`, explicit fail without a clock) instead of 2000 yields; failure text: "the provider did not retire its registry entry within the 5 s bound".
+  Why: stress root cause (integrator's debugger, proven): fixture timing, not kernel. At `-smp 4` KVM the driver burns 2000 yields in 1.3–1.8 ms on an idle hart while the provider is still Running in its last two serial `Log` syscalls (~1.5–2 ms each); the registry is cleared inside the provider's own `Exit` funnel within ~11 µs of the syscall. Base: 21/100 FAIL; with the fix 0/80.
+  Impact: only the x86 domain-test image builds and runs this driver (`build-x86_64-domain-test-ci.sh`, init feature `tier2-rpc-entry`); no rv64/aarch64 lane uses it.
+  Revert: restore the poll loop.
+- **D13 Decision (review minor a):** the x86 self-service in `await_remote_invalidation` re-reads `current_hart_id()` each pass, with IF masked around the read and `service_tlb_flush`, rather than a `debug_assert!` that IF is clear: callers run with IF set as well as clear, and with IF set the waiter may resume on another CPU, where servicing the stale id would forge an acknowledgement for a hart this CPU never flushed.
+- **D14 Decision (review minor b):** after the BSP observes `HART_ONLINE[logical]`, it issues one more `request_tlb_flush(logical)` and waits for it: until then every shootdown excluded the AP. The AP's boot-complete wait budget grows to `5 × MAX_HARTS`.
+- **D15 Decision (review minor c):** a failed AP pvclock registration makes kvmclock unusable system-wide (`kvmclock::retire` clears the read pointer, so `fallback_source` and later APs see `now_ns() == 0`), after demoting an active kvmclock source; an active kvmclock with no fallback stays (retiring it would stall time). No new static.
