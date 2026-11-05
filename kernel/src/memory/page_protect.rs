@@ -2,7 +2,14 @@
 //!
 //! Distinct from `paging::map_page`, which installs (or replaces) a translation:
 //! these entry points keep the existing VA→PA binding and rewrite only the
-//! access-rights bits, then invalidate the stale TLB entry for that one VA.
+//! access-rights bits, then invalidate the stale TLB entries.
+//!
+//! - `protect_page`: one page, one invalidation of that VA.
+//! - `protect_range`: `protect_page` per page of a contiguous range.
+//! - `protect_pages` (the W^X lowering pass): on x86_64 every leaf of the list
+//!   is written first under `KERNEL_ROOT`, then one acknowledged invalidation
+//!   covers each contiguous run of written pages before it returns, on the error
+//!   path too; the other arches keep `protect_page` per page.
 //!
 //! Contract shared by every arch leg:
 //! - An unmapped VA is an error (`InvalidAddress`), never a silent map.
@@ -25,8 +32,8 @@
 //! - Bare-physical arches return `NotSupported` instead of pretending W^X
 //!   exists.
 //!
-//! Re-exported as `memory::paging::{protect_page, protect_range}` — it lives in
-//! its own file only to keep `paging.rs` from growing further.
+//! Re-exported as `memory::paging::{protect_page, protect_pages, protect_range}`
+//! — it lives in its own file only to keep `paging.rs` from growing further.
 
 use crate::memory::paging::{Flags, PagingResult, PAGE_SIZE};
 #[allow(unused_imports)] // used by the paged arches only
@@ -332,11 +339,14 @@ mod tests {
             runs(&[page(1), page(0)]),
             [(page(1), PAGE_SIZE), (page(0), PAGE_SIZE)]
         );
-        // The last page of the address space ends its run without overflowing.
+        // A run may end exactly at the last page boundary below 2^64. A run
+        // that contained the last page would end at 2^64, which `flush_range`
+        // refuses as a wrapping range; Cell pages lie far below it (the
+        // coalescer's `checked_add` alone would not wrap there either).
         let top = usize::MAX & !(PAGE_SIZE - 1);
         assert_eq!(
-            runs(&[top - PAGE_SIZE, top]),
-            [(top - PAGE_SIZE, 2 * PAGE_SIZE)]
+            runs(&[top - 2 * PAGE_SIZE, top - PAGE_SIZE]),
+            [(top - 2 * PAGE_SIZE, 2 * PAGE_SIZE)]
         );
     }
 

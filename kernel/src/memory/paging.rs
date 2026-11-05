@@ -1037,8 +1037,14 @@ pub fn map_page(
 ///   it recycles detached tables, as in `map_page_x86`.
 /// - riscv64/aarch64: exactly [`map_page`], which issues no invalidation for a
 ///   new leaf on those arches, so batching changes nothing there.
+///
+/// Precondition: the leaf is new (absent before this call) or only gains
+/// rights over what it already maps. Never use this to re-point a present leaf
+/// to another frame or to remove a right, and never free a frame a leaf mapped
+/// this way referred to before [`flush_deferred_maps`] has covered it — until
+/// then another CPU may still hold the old translation.
 #[cfg(target_arch = "x86_64")]
-pub fn map_page_deferred(
+pub(crate) fn map_page_deferred(
     allocator: &mut FrameAllocator,
     vaddr: VAddr,
     paddr: PhysAddr,
@@ -1050,7 +1056,7 @@ pub fn map_page_deferred(
 
 /// See the x86_64 [`map_page_deferred`].
 #[cfg(not(target_arch = "x86_64"))]
-pub fn map_page_deferred(
+pub(crate) fn map_page_deferred(
     allocator: &mut FrameAllocator,
     vaddr: VAddr,
     paddr: PhysAddr,
@@ -1065,7 +1071,7 @@ pub fn map_page_deferred(
 /// online CPU acknowledged (an unconfirmed CPU is its fail-stop panic,
 /// unchanged). Other arches: nothing, as `map_page_deferred` deferred nothing.
 #[cfg(target_arch = "x86_64")]
-pub fn flush_deferred_maps(start: VAddr, end: VAddr) {
+pub(crate) fn flush_deferred_maps(start: VAddr, end: VAddr) {
     if end > start {
         crate::memory::tlb_shootdown::flush_range(start, end - start);
     }
@@ -1073,7 +1079,7 @@ pub fn flush_deferred_maps(start: VAddr, end: VAddr) {
 
 /// See the x86_64 [`flush_deferred_maps`].
 #[cfg(not(target_arch = "x86_64"))]
-pub fn flush_deferred_maps(_start: VAddr, _end: VAddr) {}
+pub(crate) fn flush_deferred_maps(_start: VAddr, _end: VAddr) {}
 
 /// Unmap a page: generic entry point.
 ///

@@ -22,14 +22,18 @@
 //! likely into guaranteed. Registration pushes the task onto a ready queue, from
 //! where another hart's work-stealing can start it on its next tick. RV64 pairs
 //! a changed PTE with ordered local `sfence.vma` and synchronous SBI RFENCE;
-//! x86_64 remains local `invlpg` only. The loader keeps the stricter load ->
-//! relocate -> lower -> register ordering on every arch, even though AArch64
-//! emits broadcast stage-1 TLBI today.
+//! x86_64 invalidates every PCID and global entry locally, then waits until
+//! every online CPU acknowledges its own local invalidation
+//! (`tlb_shootdown::flush_range`, one per contiguous run of lowered pages), and
+//! a CPU that never acknowledges is a fail-stop panic. The loader keeps the
+//! stricter load -> relocate -> lower -> register ordering on every arch, even
+//! though AArch64 emits broadcast stage-1 TLBI today.
 //!
 //! # What is NOT guaranteed
 //! Remote stale-translation closure is arch-specific. RV64 requires a firmware
 //! RFENCE probe before secondary startup and still lacks its two-hart runtime
-//! witness; x86_64 lacks SMP IPI shootdown; AArch64 already emits
+//! witness; x86_64 closes it with the acknowledged shootdown above, witnessed
+//! on QEMU/KVM only; AArch64 already emits
 //! `tlbi vaae1is` (plus `vae2is` when EL2 is active) with the required
 //! shareable barriers but still lacks a checked two-PE runtime witness. See
 //! [`crate::memory::page_protect`] for the current contract.
