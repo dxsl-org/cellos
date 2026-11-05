@@ -24,7 +24,9 @@ extern crate alloc;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate];
+// `Rename` is the raw path-addressed syscall S6 commits through: this cell is
+// spawned without a cwd grant, so unlike a shell-launched child it is unsealed.
+api::declare_syscalls![Send, Recv, Log, LookupService, Rename, VfsMutate];
 
 fn vfs_tid() -> usize {
     use api::syscall::service;
@@ -338,8 +340,25 @@ fn test_s6_rename() {
     }
     let _ = vfs_req(&api::ipc::VfsRequest::Rmdir("/srv/rndir"));
 
+    // The published raw Rename ABI: the kernel relays it to VFS under this
+    // cell's identity and returns only after the rename committed.
+    if ostd::syscall::sys_rename("/srv/rn2.txt", "/srv/rn3.txt").is_err() {
+        fail("S6 rename", "raw syscall rename failed");
+        return;
+    }
+    if !matches!(
+        vfs_req(&api::ipc::VfsRequest::Stat("/srv/rn2.txt")),
+        api::ipc::VfsResponse::Err(_)
+    ) || !matches!(
+        vfs_req(&api::ipc::VfsRequest::Stat("/srv/rn3.txt")),
+        api::ipc::VfsResponse::Stat { is_dir: false, .. }
+    ) {
+        fail("S6 rename", "raw syscall rename not committed");
+        return;
+    }
+
     // Cleanup
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/srv/rn2.txt"));
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/srv/rn3.txt"));
     pass("S6 rename");
 }
 // ── Persistence marker ───────────────────────────────────────────────────────

@@ -274,6 +274,30 @@ pub enum VfsRequest<'a> {
     /// writer stored a different key first); `REFUSED`, `EXPIRED`, `DENIED` or
     /// `UNAVAILABLE` otherwise. Any final answer ends the challenge.
     TrustCommit { challenge: ObjectRefV1 },
+
+    // ── Handle-addressed directory lifecycle. Appended; never reorder. ────────
+    //
+    // A sealed cell (every shell-launched foreground child) cannot send the
+    // path-string `Mkdir`/`Rmdir`/`Rename`. These name one entry inside a
+    // directory the caller holds, exactly like `WriteAt`/`UnlinkAt`, so the
+    // same backend, access, quota and namespace rules apply to the resolved path.
+    /// Create the directory `name` inside `dir`.
+    MkdirAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Remove the empty directory `name` inside `dir`.
+    RmdirAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Atomically rename `old` inside `old_dir` to `new` inside `new_dir`.
+    RenameAt {
+        old_dir: crate::dir_handles::ViDirHandle,
+        old: &'a str,
+        new_dir: crate::dir_handles::ViDirHandle,
+        new: &'a str,
+    },
 }
 
 /// Largest `SaveChunk` payload.
@@ -430,7 +454,10 @@ impl VfsRequest<'_> {
             | Self::SyncHandle { .. }
             | Self::PreparedChildV1(_)
             | Self::ListAtPage { .. }
-            | Self::FileHandleState { .. } => false,
+            | Self::FileHandleState { .. }
+            | Self::MkdirAt { .. }
+            | Self::RmdirAt { .. }
+            | Self::RenameAt { .. } => false,
             // A save names its destination once, at `SaveBegin`; the rest carry
             // the service-issued transaction id.
             Self::Observe { .. } | Self::SaveBegin { .. } => true,
@@ -467,7 +494,10 @@ impl VfsRequest<'_> {
             | Self::SaveChunk { .. }
             | Self::SaveSeal { .. }
             | Self::SaveCommit { .. }
-            | Self::SaveAbort { .. } => true,
+            | Self::SaveAbort { .. }
+            | Self::MkdirAt { .. }
+            | Self::RmdirAt { .. }
+            | Self::RenameAt { .. } => true,
 
             Self::GetFile(_)
             | Self::ListDir(_)
@@ -1206,6 +1236,36 @@ mod session_wire_tests {
         // Host-addressed, and the caller's mutation authority is never what writes the store.
         for req in [challenge, commit] {
             assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
+        }
+    }
+
+    #[test]
+    fn handle_addressed_dir_lifecycle_appends_after_trust_commit() {
+        use crate::dir_handles::ViDirHandle;
+        let mut out = [0; 32];
+        let mkdir = VfsRequest::MkdirAt {
+            dir: ViDirHandle(5),
+            name: "a",
+        };
+        assert_eq!(encode(&mkdir, &mut out).unwrap(), b"\x2b\x05\x01a");
+        let rmdir = VfsRequest::RmdirAt {
+            dir: ViDirHandle(5),
+            name: "a",
+        };
+        assert_eq!(encode(&rmdir, &mut out).unwrap(), b"\x2c\x05\x01a");
+        let rename = VfsRequest::RenameAt {
+            old_dir: ViDirHandle(5),
+            old: "a",
+            new_dir: ViDirHandle(300),
+            new: "b",
+        };
+        assert_eq!(
+            encode(&rename, &mut out).unwrap(),
+            b"\x2d\x05\x01a\xac\x02\x01b"
+        );
+        // Reachable by a sealed cell, and each one mutates.
+        for req in [mkdir, rmdir, rename] {
+            assert!(req.requires_mutation_authority() && !req.is_path_addressed());
         }
     }
 

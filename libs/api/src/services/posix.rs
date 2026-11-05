@@ -44,6 +44,8 @@ pub mod stdio_fmt;
 pub mod strings;
 #[cfg(not(feature = "mlibc"))]
 pub mod sysio;
+#[cfg(not(feature = "mlibc"))]
+pub mod vfs_at;
 
 // Re-export the public API that was previously in the monolithic posix.rs,
 // so existing callers (api::posix::getentropy, api::posix::socket, etc.) still compile.
@@ -58,3 +60,5 @@ pub use sysio::{
     _fstat, _lseek, _mkdir, _open, _putchar, _read, _rename, _rmdir, _stat, _unlink, _write, fstat,
     lseek, mkdir, open, read, rename, rmdir, stat, unlink, write,
 };
+#[cfg(not(feature = "mlibc"))]
+pub use vfs_at::{install_working_dir, working_dir};

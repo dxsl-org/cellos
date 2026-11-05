@@ -209,6 +209,9 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::SyncHandle { .. }
         | api::ipc::VfsRequest::WriteAt { .. }
         | api::ipc::VfsRequest::UnlinkAt { .. }
+        | api::ipc::VfsRequest::MkdirAt { .. }
+        | api::ipc::VfsRequest::RmdirAt { .. }
+        | api::ipc::VfsRequest::RenameAt { .. }
             if !caller.may_mutate() =>
         {
             api::ipc::VfsResponse::Err(ERR_DENIED)
@@ -230,7 +233,10 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::CloseFile { .. }
         | api::ipc::VfsRequest::ReadHandleGrant { .. }
         | api::ipc::VfsRequest::WriteHandleGrant { .. }
-        | api::ipc::VfsRequest::SyncHandle { .. } => {
+        | api::ipc::VfsRequest::SyncHandle { .. }
+        | api::ipc::VfsRequest::MkdirAt { .. }
+        | api::ipc::VfsRequest::RmdirAt { .. }
+        | api::ipc::VfsRequest::RenameAt { .. } => {
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
         _ => api::ipc::VfsResponse::Err(0xFF),

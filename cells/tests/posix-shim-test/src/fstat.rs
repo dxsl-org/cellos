@@ -166,11 +166,7 @@ pub(super) fn test_unlink() {
     const SMOKE_PATH: &str = "/tmp/posix_unlink_smoke.txt";
     const SMOKE_CSTR: &[u8] = b"/tmp/posix_unlink_smoke.txt\0";
 
-    let mut vfs = ostd::clients::VfsClient::new();
-    if vfs
-        .write_file(SMOKE_PATH, b"posix unlink smoke data\n")
-        .is_err()
-    {
+    if !super::fixture::create(SMOKE_PATH, b"posix unlink smoke data\n") {
         println("[posix-shim] POSIX-UNLINK: FAIL create file");
         return;
     }
@@ -232,11 +228,7 @@ pub(super) fn test_mkdir_rmdir() {
     }
     const FILE_PATH: &str = "/srv/posix_mkdir_rmdir_regular_file";
     const FILE_CSTR: &[u8] = b"/srv/posix_mkdir_rmdir_regular_file\0";
-    let mut vfs = ostd::clients::VfsClient::new();
-    if vfs
-        .write_file(FILE_PATH, b"rmdir must not delete this file\n")
-        .is_err()
-    {
+    if !super::fixture::create(FILE_PATH, b"rmdir must not delete this file\n") {
         println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL create regular file");
         return;
     }
@@ -262,13 +254,10 @@ pub(super) fn test_mkdir_rmdir() {
         println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL mkdir non-empty directory");
         return;
     }
-    if vfs
-        .write_file(
-            NONEMPTY_CHILD_PATH,
-            b"rmdir must not remove non-empty directories\n",
-        )
-        .is_err()
-    {
+    if !super::fixture::create(
+        NONEMPTY_CHILD_PATH,
+        b"rmdir must not remove non-empty directories\n",
+    ) {
         println("[posix-shim] POSIX-MKDIR-RMDIR: FAIL create non-empty directory child");
         return;
     }
@@ -360,11 +349,7 @@ pub(super) fn test_rename() {
     const RN_SRC_CSTR: &[u8] = b"/srv/posix_rename_src.txt\0";
     const RN_DST_CSTR: &[u8] = b"/srv/posix_rename_dst.txt\0";
 
-    let mut vfs = ostd::clients::VfsClient::new();
-    if vfs
-        .write_file(RN_SRC_PATH, b"posix rename smoke data\n")
-        .is_err()
-    {
+    if !super::fixture::create(RN_SRC_PATH, b"posix rename smoke data\n") {
         println("[posix-shim] POSIX-RENAME: FAIL create src file");
         return;
     }
@@ -417,14 +402,19 @@ pub(super) fn test_rename() {
     println("[posix-shim] POSIX-RENAME: OK");
 }
 
-/// Exercise the published raw Rename ABI. Its kernel RPC must retain this
-/// cell's attested VfsMutate identity; a queue acknowledgement is insufficient.
-pub(super) fn test_raw_rename() {
+/// Exercise the published raw Rename ABI. Its kernel RPC must carry this
+/// cell's attested identity; a queue acknowledgement is insufficient.
+///
+/// The ABI names paths. A sealed cell (launched with a cwd grant) must
+/// therefore be refused even though the kernel relays the request: if the relay
+/// substituted its own identity, VFS would not see the seal and would rename.
+/// An unsealed cell must see the rename committed.
+pub(super) fn test_raw_rename(sealed: bool) {
     const SRC_PATH: &str = "/srv/raw_rename_src.txt";
     const SRC_CSTR: &[u8] = b"/srv/raw_rename_src.txt\0";
+    const DST_PATH: &str = "/srv/raw_rename_dst.txt";
     const DST_CSTR: &[u8] = b"/srv/raw_rename_dst.txt\0";
 
-    let mut vfs = ostd::clients::VfsClient::new();
     if ostd::syscall::sys_rename(
         "/srv/raw_rename_missing.txt",
         "/srv/raw_rename_missing_dst.txt",
@@ -435,29 +425,35 @@ pub(super) fn test_raw_rename() {
         return;
     }
 
-    if vfs
-        .write_file(SRC_PATH, b"raw rename smoke data\n")
-        .is_err()
-    {
+    if !super::fixture::create(SRC_PATH, b"raw rename smoke data\n") {
         println("[posix-shim] RAW-RENAME: FAIL create src file");
         return;
     }
-    if ostd::syscall::sys_rename(SRC_PATH, "/srv/raw_rename_dst.txt").is_err() {
-        println("[posix-shim] RAW-RENAME: FAIL syscall");
+    let renamed = ostd::syscall::sys_rename(SRC_PATH, DST_PATH).is_ok();
+    if renamed == sealed {
+        println(&format!(
+            "[posix-shim] RAW-RENAME: FAIL syscall renamed={renamed} sealed={sealed}"
+        ));
         return;
     }
+    // The name that must exist now, and the one that must not.
+    let (present, absent) = if sealed {
+        (SRC_CSTR, DST_CSTR)
+    } else {
+        (DST_CSTR, SRC_CSTR)
+    };
 
     let mut old = filled_stat(0xAA);
-    if unsafe { stat(SRC_CSTR.as_ptr() as *const c_char, old.as_mut_ptr()) } != -1 {
-        println("[posix-shim] RAW-RENAME: FAIL src file still exists");
+    if unsafe { stat(absent.as_ptr() as *const c_char, old.as_mut_ptr()) } != -1 {
+        println("[posix-shim] RAW-RENAME: FAIL unexpected file exists");
         return;
     }
     let mut new = filled_stat(0x55);
-    if unsafe { stat(DST_CSTR.as_ptr() as *const c_char, new.as_mut_ptr()) } != 0 {
-        println("[posix-shim] RAW-RENAME: FAIL dst file missing");
+    if unsafe { stat(present.as_ptr() as *const c_char, new.as_mut_ptr()) } != 0 {
+        println("[posix-shim] RAW-RENAME: FAIL expected file missing");
         return;
     }
-    if unsafe { unlink(DST_CSTR.as_ptr() as *const c_char) } != 0 {
+    if unsafe { unlink(present.as_ptr() as *const c_char) } != 0 {
         println("[posix-shim] RAW-RENAME: FAIL cleanup");
         return;
     }

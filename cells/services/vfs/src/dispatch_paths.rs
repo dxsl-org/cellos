@@ -66,54 +66,9 @@ pub(crate) fn handle_path_request(
             }
         }
 
-        VfsRequest::Mkdir(p) => {
-            if !vfs.access.can_write(caller, p) {
-                VfsResponse::Err(ERR_DENIED)
-            } else {
-                let _res = if p == "/srv" || p.starts_with("/srv/") {
-                    let Ok(k) = crate::namespace::NamespaceKey::parse(p) else {
-                        return Some(VfsResponse::Err(ERR_DENIED));
-                    };
-                    let Ok(r) = vfs.ledger.reserve_one(&k) else {
-                        return Some(VfsResponse::Err(ERR_DENIED));
-                    };
-                    Some(r)
-                } else {
-                    None
-                };
-                if vfs.mkdir(p) {
-                    VfsResponse::Ok
-                } else {
-                    VfsResponse::Err(ERR_IO)
-                }
-            }
-        }
+        VfsRequest::Mkdir(p) => crate::dir_ops::mkdir(vfs, caller, p),
 
-        VfsRequest::Rmdir(p) => {
-            if !vfs.access.can_remove_dir(caller, p)
-                || *p == *"/"
-                || vfs.is_mount_point(p)
-                || vfs.is_mount_ancestor(p)
-            {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            }
-            let _res = if p == "/srv" || p.starts_with("/srv/") {
-                let Ok(k) = crate::namespace::NamespaceKey::parse(p) else {
-                    return Some(VfsResponse::Err(ERR_DENIED));
-                };
-                let Ok(r) = vfs.ledger.reserve_one(&k) else {
-                    return Some(VfsResponse::Err(ERR_DENIED));
-                };
-                Some(r)
-            } else {
-                None
-            };
-            if vfs.rmdir(p) {
-                VfsResponse::Ok
-            } else {
-                VfsResponse::Err(ERR_IO)
-            }
-        }
+        VfsRequest::Rmdir(p) => crate::dir_ops::rmdir(vfs, caller, p),
 
         VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
 
@@ -141,46 +96,7 @@ pub(crate) fn handle_path_request(
             }
         }
 
-        VfsRequest::Rename { old, new } => {
-            if !caller.may_mutate() {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            }
-            if !old.starts_with("/srv/") || !new.starts_with("/srv/") {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            }
-            if !vfs.access.can_write(caller, old) || !vfs.access.can_write(caller, new) {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            }
-            let Ok(old_key) = crate::namespace::NamespaceKey::parse(old) else {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            };
-            let Ok(new_key) = crate::namespace::NamespaceKey::parse(new) else {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            };
-            if !vfs.healthy(old) || !vfs.healthy(new) {
-                return Some(VfsResponse::Err(ERR_IO));
-            }
-            if old_key == new_key {
-                return match vfs.stat(old) {
-                    Some((_, false)) => Some(VfsResponse::Ok),
-                    _ => Some(VfsResponse::Err(ERR_IO)),
-                };
-            }
-            let Ok(reservation) = vfs.ledger.reserve_two(&old_key, &new_key) else {
-                return Some(VfsResponse::Err(ERR_DENIED));
-            };
-            let ok = vfs.rename_no_replace(old, new);
-            drop(reservation);
-            if ok {
-                if let Some(w) = vfs.quota.writer_of(old) {
-                    vfs.quota.release_path(old, 0);
-                    vfs.quota.set_writer(new, w);
-                }
-                VfsResponse::Ok
-            } else {
-                VfsResponse::Err(ERR_IO)
-            }
-        }
+        VfsRequest::Rename { old, new } => crate::dir_ops::rename(vfs, caller, old, new),
 
         _ => return None,
     };

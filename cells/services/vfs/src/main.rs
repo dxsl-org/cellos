@@ -22,6 +22,9 @@ mod blk_router;
 mod block_stream;
 mod caller;
 mod dir_admission;
+mod dir_ops;
+#[cfg(test)]
+mod dir_ops_tests;
 mod dirs;
 mod disk_cellosfs;
 mod dispatch;

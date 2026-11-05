@@ -77,6 +77,28 @@ pub fn handle<'a>(
             Ok(path) => unlink_file(vfs, caller, &path),
             Err(code) => VfsResponse::Err(code),
         },
+        VfsRequest::MkdirAt { dir, name } => match resolve(vfs, caller, dir, name) {
+            Ok(path) => crate::dir_ops::mkdir(vfs, caller, &path),
+            Err(code) => VfsResponse::Err(code),
+        },
+        VfsRequest::RmdirAt { dir, name } => match resolve(vfs, caller, dir, name) {
+            Ok(path) => crate::dir_ops::rmdir(vfs, caller, &path),
+            Err(code) => VfsResponse::Err(code),
+        },
+        // Both ends resolve before anything moves, so a bad name or a foreign
+        // handle on either side refuses the whole rename.
+        VfsRequest::RenameAt {
+            old_dir,
+            old,
+            new_dir,
+            new,
+        } => match (
+            resolve(vfs, caller, old_dir, old),
+            resolve(vfs, caller, new_dir, new),
+        ) {
+            (Ok(old), Ok(new)) => crate::dir_ops::rename(vfs, caller, &old, &new),
+            (Err(code), _) | (_, Err(code)) => VfsResponse::Err(code),
+        },
         VfsRequest::CloseDir { dir } => match vfs.dirs.revoke(caller, dir) {
             Ok(outcome) => {
                 let _ = vfs.files.revoke_by_parent_dirs(&outcome.revoked_ids);

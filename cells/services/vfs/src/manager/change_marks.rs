@@ -3,8 +3,9 @@
 //!
 //! Every mutating delegate of [`VfsManager`] reports here, so no request path
 //! can reach a backend without marking: the dispatchers for `Write`, `WriteAt`,
-//! `Append`, `WriteGrant`, `WriteHandleGrant`, `Unlink`/`UnlinkAt`, `Rename`,
-//! `Mkdir`, `Rmdir` and `RmdirRecursive` all end in these delegates.
+//! `Append`, `WriteGrant`, `WriteHandleGrant`, `Unlink`/`UnlinkAt`,
+//! `Rename`/`RenameAt`, `Mkdir`/`MkdirAt`, `Rmdir`/`RmdirAt` and `RmdirRecursive`
+//! all end in these delegates.
 //!
 //! A mutation that reached the backend marks even when the backend reported
 //! failure: FAT can fail after writing part of a file and CellosFS reports a

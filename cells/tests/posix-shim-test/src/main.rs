@@ -12,12 +12,17 @@
 //! Spawn with: `posix-shim-test` from the shell. Integration tests require the
 //! dedicated `POSIX-FSTAT-*`, `POSIX-STAT`, `POSIX-UNLINK`, `POSIX-MKDIR-RMDIR`,
 //! `POSIX-RENAME`, `POSIX-ENTROPY`, `POSIX-NET`, and `POSIX-DNS` markers.
+//!
+//! The shell's cwd grant seals this cell in VFS, so the path smokes run through
+//! the shim's handle route (`api::posix::install_working_dir`), relative to
+//! the granted working directory.
 
 #![no_std]
 #![no_main]
 extern crate alloc;
 extern crate ostd;
 
+mod fixture;
 mod fstat;
 
 use alloc::format;
@@ -96,11 +101,12 @@ pub extern "C" fn cellos_time_ms() -> u64 {
 
 #[no_mangle]
 pub fn main() {
+    let sealed = fixture::install_working_dir();
     fstat::test_fstat();
     fstat::test_stat();
     fstat::test_unlink();
     fstat::test_mkdir_rmdir();
-    fstat::test_raw_rename();
+    fstat::test_raw_rename(sealed);
     fstat::test_rename();
     test_getentropy();
     test_net();

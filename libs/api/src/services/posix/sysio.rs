@@ -274,16 +274,19 @@ fn vfs_tid() -> usize {
     }
 }
 
-unsafe fn vfs_mutate(req: crate::ipc::VfsRequest<'_>) -> c_int {
+/// One typed VFS request/reply. `None` on any transport failure, after which the
+/// cached VFS tid is dropped so the next call re-resolves a restarted service.
+pub(super) unsafe fn vfs_call<'b>(
+    req: &crate::ipc::VfsRequest<'_>,
+    recv_buf: &'b mut [u8; crate::ipc::IPC_BUF_SIZE],
+) -> Option<crate::ipc::VfsResponse<'b>> {
     let vfs = vfs_tid();
     if vfs == 0 {
-        return -1;
+        return None;
     }
 
     let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
-        return -1;
-    };
+    let encoded = crate::ipc::encode(req, &mut send_buf).ok()?;
 
     let sent = raw_syscall(
         ViSyscall::Send,
@@ -294,10 +297,9 @@ unsafe fn vfs_mutate(req: crate::ipc::VfsRequest<'_>) -> c_int {
     );
     if sent < 0 {
         VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
-        return -1;
+        return None;
     }
 
-    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
     let sender = raw_syscall(
         ViSyscall::Recv,
         vfs,
@@ -307,29 +309,50 @@ unsafe fn vfs_mutate(req: crate::ipc::VfsRequest<'_>) -> c_int {
     );
     if sender <= 0 || sender as usize != vfs {
         VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
-        return -1;
+        return None;
     }
+    crate::ipc::decode::<crate::ipc::VfsResponse>(recv_buf).ok()
+}
 
-    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf) {
-        Ok(crate::ipc::VfsResponse::Ok) => 0,
+/// `0` when VFS answered `Ok`, `-1` for any refusal or transport failure.
+pub(super) unsafe fn vfs_mutate(req: &crate::ipc::VfsRequest<'_>) -> c_int {
+    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    match vfs_call(req, &mut recv_buf) {
+        Some(crate::ipc::VfsResponse::Ok) => 0,
         _ => -1,
     }
 }
 
+// Each path shim takes the handle route once the cell installed a working
+// directory (`super::vfs_at`): such a cell is sealed, so the path-string request
+// below could only be refused.
+
 pub(super) unsafe fn vfs_unlink(path: &str) -> c_int {
-    vfs_mutate(crate::ipc::VfsRequest::Unlink(path))
+    match super::vfs_at::unlink(path) {
+        Some(ret) => ret,
+        None => vfs_mutate(&crate::ipc::VfsRequest::Unlink(path)),
+    }
 }
 
 pub(super) unsafe fn vfs_mkdir(path: &str) -> c_int {
-    vfs_mutate(crate::ipc::VfsRequest::Mkdir(path))
+    match super::vfs_at::mkdir(path) {
+        Some(ret) => ret,
+        None => vfs_mutate(&crate::ipc::VfsRequest::Mkdir(path)),
+    }
 }
 
 pub(super) unsafe fn vfs_rmdir(path: &str) -> c_int {
-    vfs_mutate(crate::ipc::VfsRequest::Rmdir(path))
+    match super::vfs_at::rmdir(path) {
+        Some(ret) => ret,
+        None => vfs_mutate(&crate::ipc::VfsRequest::Rmdir(path)),
+    }
 }
 
 pub(super) unsafe fn vfs_rename(old: &str, new: &str) -> c_int {
-    vfs_mutate(crate::ipc::VfsRequest::Rename { old, new })
+    match super::vfs_at::rename(old, new) {
+        Some(ret) => ret,
+        None => vfs_mutate(&crate::ipc::VfsRequest::Rename { old, new }),
+    }
 }
 
 /// # Safety
@@ -407,61 +430,37 @@ pub unsafe extern "C" fn rmdir(name: *const c_char) -> c_int {
     _rmdir(name)
 }
 pub(super) unsafe fn vfs_stat(path: &str, st: *mut stat) -> c_int {
-    let vfs = vfs_tid();
-    if vfs == 0 {
-        return -1;
+    if let Some(ret) = super::vfs_at::stat_at(path, st) {
+        return ret;
     }
+    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
+    let reply = vfs_call(&crate::ipc::VfsRequest::Stat(path), &mut recv_buf);
+    write_vfs_stat(reply, st)
+}
 
-    let req = crate::ipc::VfsRequest::Stat(path);
-    let mut send_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let Ok(encoded) = crate::ipc::encode(&req, &mut send_buf) else {
+/// Translate a VFS `Stat` reply into `*st`. Any other reply, or a size `stat`
+/// cannot hold, returns `-1` and leaves the caller's bytes untouched.
+pub(super) unsafe fn write_vfs_stat(
+    reply: Option<crate::ipc::VfsResponse<'_>>,
+    st: *mut stat,
+) -> c_int {
+    let Some(crate::ipc::VfsResponse::Stat { size, is_dir }) = reply else {
         return -1;
     };
-
-    let sent = raw_syscall(
-        ViSyscall::Send,
-        vfs,
-        encoded.as_ptr() as usize,
-        encoded.len(),
-        0,
-    );
-    if sent < 0 {
-        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
+    let Ok(c_size) = c_long::try_from(size) else {
         return -1;
-    }
-
-    let mut recv_buf = [0u8; crate::ipc::IPC_BUF_SIZE];
-    let sender = raw_syscall(
-        ViSyscall::Recv,
-        vfs,
-        recv_buf.as_mut_ptr() as usize,
-        recv_buf.len(),
-        0,
+    };
+    let mode = if is_dir { 0o040000 } else { 0o100000 };
+    let mut translated = core::mem::MaybeUninit::<stat>::zeroed();
+    let translated_ptr = translated.as_mut_ptr();
+    core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
+    core::ptr::addr_of_mut!((*translated_ptr).st_size).write(c_size);
+    core::ptr::copy_nonoverlapping(
+        translated_ptr.cast::<u8>(),
+        st.cast::<u8>(),
+        core::mem::size_of::<stat>(),
     );
-    if sender <= 0 || sender as usize != vfs {
-        VFS_TID_CACHE.store(0, core::sync::atomic::Ordering::Relaxed);
-        return -1;
-    }
-
-    match crate::ipc::decode::<crate::ipc::VfsResponse>(&recv_buf) {
-        Ok(crate::ipc::VfsResponse::Stat { size, is_dir }) => {
-            let Ok(c_size) = c_long::try_from(size) else {
-                return -1;
-            };
-            let mode = if is_dir { 0o040000 } else { 0o100000 };
-            let mut translated = core::mem::MaybeUninit::<stat>::zeroed();
-            let translated_ptr = translated.as_mut_ptr();
-            core::ptr::addr_of_mut!((*translated_ptr).st_mode).write(mode);
-            core::ptr::addr_of_mut!((*translated_ptr).st_size).write(c_size);
-            core::ptr::copy_nonoverlapping(
-                translated_ptr.cast::<u8>(),
-                st.cast::<u8>(),
-                core::mem::size_of::<stat>(),
-            );
-            0
-        }
-        _ => -1,
-    }
+    0
 }
 
 /// # Safety
