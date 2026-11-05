@@ -66,8 +66,9 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 
 [features]
 # G1 DEV posture: trust the dev fleet key so the dev-signed /POLICY.BIN baked into
-# VIFS1 verifies + loads. ⚠️ PRODUCTION must drop `dev-policy-key` from default and
-# provision the real fleet root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
+# VIFS1 verifies + loads. Dev/test only (every dev lane depends on it): releases build
+# `--no-default-features --features release-posture`, and a fleet must still provision
+# the real policy root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
 default = ["dev-policy-key", "dev-signing-key", "dev-weak-rng", "signing-required", "native-domains"]
 # Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
 # only, NEVER a release build. Without it the prod placeholder key is used.
@@ -87,18 +88,24 @@ qemu-dev-https = []
 # Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
 # grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
 policy-required = []
-# Records the signing posture. Spawn behaviour does not depend on it: in every
-# posture a signature that fails verification is denied, and an UNSIGNED cell is
-# placed in Tier 2 except under `release-signing-key`, which denies it.
+# Records the signing posture and requires a real trust anchor: signing.rs fails the
+# build unless `dev-signing-key`, `release-signing-key` or `phase02-terminal-profile`
+# is also enabled (a zero anchor would refuse every signed cell yet still admit
+# unsigned ones). Spawn behaviour itself: a signature that fails verification is
+# always denied; an UNSIGNED cell is denied only under `release-signing-key` (so
+# `release-posture` and `production-relay-image`) and placed in Tier 2 otherwise.
 signing-required = []
 # Release cell trust anchor: the 32-byte public key at CELLOS_RELEASE_CELL_PUBLIC_KEY
 # (private key = CI secret). Mutually exclusive with dev-signing-key (build.rs) and
 # denies unsigned cells: every release cell is signed; its manifest class picks the tier.
 release-signing-key = []
-# Named release kernel posture. Build with `--no-default-features --features release-posture`.
-release-posture = ["release-signing-key", "signing-required"]
+# Named release kernel posture: release anchor, unsigned cells denied, absent or
+# unlisted policy fail-closed. Build with `--no-default-features --features release-posture`.
+release-posture = ["release-signing-key", "signing-required", "policy-required"]
 # Named fail-closed kernel posture selected by the production relay image owner.
-production-relay-image = ["policy-required", "signing-required"]
+# Carries the release anchor so it never boots with a zero anchor; build with
+# `--no-default-features` and CELLOS_RELEASE_CELL_PUBLIC_KEY.
+production-relay-image = ["policy-required", "signing-required", "release-signing-key"]
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []

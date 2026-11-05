@@ -4,8 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
 import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_NET_ROOT = REPO_ROOT / "cells" / "services" / "net" / "roots" / "private.der"
+# The "Cellos Dev CA" whose private key was committed as
+# tools/hypha-mock-llm/ca-key.pem: anyone with git history can mint a server
+# certificate it accepts. Same value as LEAKED_DEV_CA_SHA256 in
+# cells/services/net/build.rs. The length narrows the artifact scan to DER
+# SEQUENCE headers of exactly that size (30 82 01 57).
+LEAKED_DEV_CA_SHA256 = "36335e7653f318be9a4024afa553dd81e828ae8a9745de839b57c1f9775925d1"
+LEAKED_DEV_CA_LEN = 347
 
 PROVIDERS = {
     "hardware-relay-provider",
@@ -20,6 +31,9 @@ KMS_FORBIDDEN = {
     "k1-fallback",
 }
 NET_FORBIDDEN = {"tls-insecure", "raw-relay", "k1-fallback"}
+# production-relay-image already implies release-signing-key in kernel/Cargo.toml;
+# requiring both by name keeps the zero-anchor posture from passing review.
+KERNEL_REQUIRED = {"production-relay-image", "release-signing-key"}
 KERNEL_FORBIDDEN = {
     "dev-policy-key",
     "dev-signing-key",
@@ -83,8 +97,8 @@ def require_exact_posture(arguments: argparse.Namespace) -> list[str]:
         errors.append("net must select exactly one trusted CA feature")
     if forbidden := net & NET_FORBIDDEN:
         errors.append(f"net forbidden features: {','.join(sorted(forbidden))}")
-    if "production-relay-image" not in kernel:
-        errors.append("kernel must select production-relay-image")
+    if missing := KERNEL_REQUIRED - kernel:
+        errors.append(f"kernel must select {','.join(sorted(missing))}")
     if forbidden := kernel & KERNEL_FORBIDDEN:
         errors.append(f"kernel forbidden features: {','.join(sorted(forbidden))}")
     for label, selected in (("KMS", kms), ("net", net), ("kernel", kernel)):
@@ -113,7 +127,35 @@ def scan_artifact(path: Path) -> list[str]:
         f"{path} contains forbidden DEV marker: {marker.decode('ascii')}"
         for marker in sorted(found & set(DEV_MARKERS))
     )
+    if embeds_leaked_dev_ca(path.read_bytes()):
+        errors.append(f"{path} embeds the leaked Cellos Dev CA ({LEAKED_DEV_CA_SHA256})")
     return errors
+
+
+def is_leaked_dev_ca(der: bytes) -> bool:
+    return hashlib.sha256(der).hexdigest() == LEAKED_DEV_CA_SHA256
+
+
+def embeds_leaked_dev_ca(data: bytes) -> bool:
+    """Hash every DER SEQUENCE whose header announces the leaked certificate's size."""
+    header = b"\x30\x82" + (LEAKED_DEV_CA_LEN - 4).to_bytes(2, "big")
+    start = data.find(header)
+    while start != -1:
+        if is_leaked_dev_ca(data[start : start + LEAKED_DEV_CA_LEN]):
+            return True
+        start = data.find(header, start + 1)
+    return False
+
+
+def net_root_errors(net_root: Path, net_features: str) -> list[str]:
+    """The private-CA selector embeds net_root verbatim (service-net roots.rs)."""
+    if "tls-ca-private" not in feature_set(net_features):
+        return []
+    if not net_root.is_file():
+        return [f"missing net trust root: {net_root}"]
+    if is_leaked_dev_ca(net_root.read_bytes()):
+        return [f"{net_root} is the leaked Cellos Dev CA ({LEAKED_DEV_CA_SHA256})"]
+    return []
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,12 +166,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kms-artifact", required=True, type=Path)
     parser.add_argument("--net-artifact", required=True, type=Path)
     parser.add_argument("--kernel-artifact", required=True, type=Path)
+    parser.add_argument("--net-root", type=Path, default=DEFAULT_NET_ROOT)
     return parser.parse_args()
 
 
 def main() -> int:
     arguments = parse_args()
     errors = require_exact_posture(arguments)
+    errors.extend(net_root_errors(arguments.net_root, arguments.net_features))
     artifacts = {
         arguments.kms_artifact,
         arguments.net_artifact,

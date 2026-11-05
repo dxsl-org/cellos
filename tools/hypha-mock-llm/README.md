@@ -50,4 +50,8 @@ QEMU user-net routing + the gateway's hand-rolled HTTP/JSON against this server.
 ## Files
 
 - `mock_proxy.py` — the server.
-- `cert.pem` / `key.pem` — auto-generated self-signed cert (gitignored; regenerated if missing).
+- `gen-dev-ca.py` — makes a per-machine dev CA (`ca.pem`, `ca-key.pem`), the server cert
+  (`cert.pem`, `key.pem`) it signs, and writes the CA to `cells/services/net/roots/private.der`.
+  All four PEM files are gitignored and the keys are written mode 0600: the CA key must never be
+  committed, since any holder can impersonate servers to images that embed `private.der`. A fresh
+  clone has no CA, so the first run mints a new one — rebuild service-net afterwards.

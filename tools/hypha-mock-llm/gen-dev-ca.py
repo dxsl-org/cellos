@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Generate the Cellos dev CA and mock-LLM server certificate.
 
-Outputs (all in the same directory as this script):
-  ca.pem      — CA certificate (PEM, commit to repo)
-  ca-key.pem  — CA private key (PEM, commit for dev/test use only)
-  cert.pem    — server cert signed by the CA (PEM, for mock_proxy.py, gitignored)
-  key.pem     — server private key (PEM, for mock_proxy.py, gitignored)
+Outputs (all in the same directory as this script, all gitignored):
+  ca.pem      — CA certificate (PEM)
+  ca-key.pem  — CA private key (PEM, mode 0600; NEVER commit it)
+  cert.pem    — server cert signed by the CA (PEM, for mock_proxy.py)
+  key.pem     — server private key (PEM, mode 0600, for mock_proxy.py)
 
 Also writes the CA cert in DER format to:
   ../../cells/services/net/roots/private.der
 
-Idempotent CA: if ca.pem + ca-key.pem already exist the CA is REUSED and only
-the server cert is regenerated.  This means anyone can run this script after
-`git clone` to get a fresh cert.pem/key.pem that is signed by the same CA
-already embedded in the net service binary (private.der).
+The CA key exists only on the machine that generated it: whoever holds it can
+mint a server certificate every image embedding that private.der trusts. A
+fresh clone therefore has no ca-key.pem, and the first run creates a NEW dev CA
+and overwrites private.der (rebuild service-net afterwards).
+
+Idempotent CA: if ca.pem + ca-key.pem already exist locally the CA is REUSED
+and only the server cert is regenerated.
 
 Run with --force-ca to generate a completely new CA (then also rebuild
 service-net and gen_disk.ps1):
@@ -46,6 +49,16 @@ ca_key_path = os.path.join(HERE, "ca-key.pem")
 der_path = os.path.join(ROOTS, "private.der")
 cert_path = os.path.join(HERE, "cert.pem")
 key_path = os.path.join(HERE, "key.pem")
+
+
+def write_private(path: str, data: bytes) -> None:
+    """Write key material owner-only; fchmod also narrows a pre-existing file."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        if hasattr(os, "fchmod"):
+            os.fchmod(f.fileno(), 0o600)
+        f.write(data)
+
 
 force_ca = "--force-ca" in sys.argv
 now = datetime.datetime.now(datetime.timezone.utc)
@@ -92,12 +105,11 @@ else:
         f.write(ca_cert.public_bytes(serialization.Encoding.PEM))
     print(f"  wrote {ca_pem_path}")
 
-    with open(ca_key_path, "wb") as f:
-        f.write(ca_key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        ))
+    write_private(ca_key_path, ca_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ))
     print(f"  wrote {ca_key_path}")
 
     with open(der_path, "wb") as f:
@@ -140,12 +152,11 @@ with open(cert_path, "wb") as f:
     f.write(server_cert.public_bytes(serialization.Encoding.PEM))
 print(f"  wrote {cert_path}")
 
-with open(key_path, "wb") as f:
-    f.write(server_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    ))
+write_private(key_path, server_key.private_bytes(
+    serialization.Encoding.PEM,
+    serialization.PrivateFormat.PKCS8,
+    serialization.NoEncryption(),
+))
 print(f"  wrote {key_path}")
 
 print()

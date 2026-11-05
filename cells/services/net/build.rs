@@ -1,7 +1,44 @@
+// Reuse the audited std-free SHA-256 rather than adding a build-dependency.
+#[path = "../../../libs/attestation/src/sha256.rs"]
+mod sha256;
+
+/// SHA-256 of the "Cellos Dev CA" certificate whose private key was committed as
+/// `tools/hypha-mock-llm/ca-key.pem` (untracked 2026-11-05, still in git history).
+/// Anyone with that history can mint a server certificate this root accepts, so it
+/// must never be embedded again. Same value as `LEAKED_DEV_CA_SHA256` in
+/// `scripts/check-production-relay-image.py`.
+const LEAKED_DEV_CA_SHA256: &str =
+    "36335e7653f318be9a4024afa553dd81e828ae8a9745de839b57c1f9775925d1";
+
 fn main() {
     cell_build::emit_linker_script();
     emit_min_unix();
     emit_feature_guards();
+    refuse_leaked_dev_ca();
+}
+
+/// Fail the build when `tls-ca-private` would embed the leaked dev CA.
+fn refuse_leaked_dev_ca() {
+    println!("cargo:rerun-if-changed=roots/private.der");
+    if std::env::var_os("CARGO_FEATURE_TLS_CA_PRIVATE").is_none() {
+        return;
+    }
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+    let path = std::path::Path::new(&manifest_dir).join("roots/private.der");
+    let der = std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("service-net: read {}: {error}", path.display()));
+    let digest: String = sha256::sha256(&der)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if digest == LEAKED_DEV_CA_SHA256 {
+        panic!(
+            "service-net: roots/private.der is the leaked Cellos Dev CA (sha256 {digest}); \
+             its private key is public in git history. Generate a fresh CA with \
+             `python3 tools/hypha-mock-llm/gen-dev-ca.py --force-ca` (dev) or install \
+             the fleet CA (see roots/README.md)."
+        );
+    }
 }
 
 /// Emit `VICELL_MIN_UNIX` — a build-time floor for the TLS clock clamp.

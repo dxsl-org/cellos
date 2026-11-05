@@ -12,6 +12,12 @@ mkdir -p "$LOG_DIR"
 PRODUCTION_TARGET="$TARGET_BASE/production-relay"
 
 build_production_tuple() {
+    # production-relay-image now requires the release cell anchor. This build only
+    # checks the GetRandom posture compiles, so a throwaway public key suffices.
+    local anchor
+    anchor="$(mktemp)"
+    head -c 32 /dev/urandom >"$anchor"
+    CELLOS_RELEASE_CELL_PUBLIC_KEY="$anchor" \
     CARGO_TARGET_DIR="$PRODUCTION_TARGET" \
     RUSTFLAGS="-C relocation-model=pic" \
     cargo build --release \
@@ -20,6 +26,7 @@ build_production_tuple() {
         --no-default-features \
         --features production-relay-image \
         -p cellos-kernel
+    rm -f "$anchor"
     echo "PASS: GetRandom production tuple built without default features"
 }
 

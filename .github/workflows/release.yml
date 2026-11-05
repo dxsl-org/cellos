@@ -4,13 +4,73 @@ on:
   push:
     tags: ['v*']
 
+# Every job reads only; the publishing job alone widens to contents: write.
+permissions:
+  contents: read
+
 env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # Mirrors ci.yml / .cargo/config.toml (gitignored): the riscv64 kernel
+  # self-relocates through the GOT and must be built pic.
+  CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS: "-C relocation-model=pic"
 
 jobs:
+  build-kernel:
+    name: Build release kernel (RV64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: riscv64gc-unknown-none-elf
+      - uses: Swatinem/rust-cache@v2
+        with: { cache-on-failure: true }
+      # The release kernel's only cell trust anchor. The secret holds the 32-byte
+      # Ed25519 public key as 64 hex characters; kernel/build.rs reads the raw
+      # bytes from the file named by CELLOS_RELEASE_CELL_PUBLIC_KEY and refuses a
+      # missing, short, zero or dev key, so never fall back to a default.
+      - name: Provision release cell public key
+        env:
+          RELEASE_CELL_PUBLIC_KEY_HEX: ${{ secrets.CELLOS_RELEASE_CELL_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_CELL_PUBLIC_KEY_HEX" ]; then
+            echo "::error::secret CELLOS_RELEASE_CELL_PUBLIC_KEY is empty; a release kernel needs its trust anchor"
+            exit 1
+          fi
+          key_file="$RUNNER_TEMP/release-cell-signing.pub"
+          printf '%s' "$RELEASE_CELL_PUBLIC_KEY_HEX" | python3 -c '
+          import sys
+          key = bytes.fromhex(sys.stdin.read().strip())
+          if len(key) != 32:
+              sys.exit("CELLOS_RELEASE_CELL_PUBLIC_KEY must be 64 hex characters (32 bytes)")
+          open(sys.argv[1], "wb").write(key)
+          ' "$key_file"
+          echo "CELLOS_RELEASE_CELL_PUBLIC_KEY=$key_file" >> "$GITHUB_ENV"
+      # release-posture = release-signing-key + signing-required + policy-required.
+      # --no-default-features drops dev-policy-key, dev-signing-key and dev-weak-rng.
+      - name: Build kernel (RV64, release posture)
+        run: >
+          cargo build --release
+          -p cellos-kernel
+          --target riscv64gc-unknown-none-elf
+          -Z build-std=core,alloc
+          --no-default-features
+          --features release-posture
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cellos-kernel-riscv64
+          path: target/riscv64gc-unknown-none-elf/release/cellos-kernel
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
+    needs: build-kernel
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -21,11 +81,8 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-05-01
-          components: rust-src
-      - uses: Swatinem/rust-cache@v2
-        with: { cache-on-failure: true }
       - name: Install git-cliff
-        run: cargo install --locked git-cliff
+        run: cargo install --locked git-cliff --version 2.14.2
       - name: Generate CHANGELOG for this tag
         run: git-cliff --current > RELEASE_NOTES.md
       - name: Update full CHANGELOG.md
@@ -35,13 +92,12 @@ jobs:
           git config user.email "ci@vios"
           git add CHANGELOG.md
           git commit -m "chore(release): update CHANGELOG" || true
-      - name: Build kernel (RV64)
-        run: >
-          cargo build --release
-          --target riscv64gc-unknown-none-elf
-          -Z build-std=core,alloc
+      - uses: actions/download-artifact@v4
+        with:
+          name: cellos-kernel-riscv64
+          path: dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: RELEASE_NOTES.md
-          files: target/riscv64gc-unknown-none-elf/release/vios-kernel
+          files: dist/cellos-kernel

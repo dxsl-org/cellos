@@ -32,6 +32,22 @@ static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> = crate::sync::Spinlock::
 #[cfg(all(feature = "dev-signing-key", feature = "release-signing-key"))]
 compile_error!("dev-signing-key and release-signing-key are mutually exclusive");
 
+// `signing-required` without an anchor would compile the zero placeholder below:
+// every signed cell fails verification while unsigned cells still reach Tier 2,
+// the inverse of what the posture names. Refuse that build outright.
+#[cfg(all(
+    feature = "signing-required",
+    not(any(
+        feature = "dev-signing-key",
+        feature = "release-signing-key",
+        feature = "phase02-terminal-profile"
+    ))
+))]
+compile_error!(
+    "signing-required needs a cell trust anchor: enable release-signing-key \
+     (e.g. --features release-posture), dev-signing-key, or phase02-terminal-profile"
+);
+
 #[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
     0x22, 0xfc, 0x29, 0x77, 0x92, 0xf0, 0xb6, 0xff, 0xc0, 0xbf, 0xcf, 0xdb, 0x7e, 0xdb, 0x0c, 0x0a,
@@ -42,7 +58,8 @@ const DEV_CELL_SIGNER_PUBKEY: [u8; 32] = [
 /// - `dev-signing-key` → the reproducible dev (test) key above; test images only.
 /// - `release-signing-key` → the provisioned release key (build.rs copies the file named by
 ///   `CELLOS_RELEASE_CELL_PUBLIC_KEY`; the private key is a CI secret).
-/// - neither → a zero placeholder that fails every verify (fail closed).
+/// - neither → a zero placeholder that fails every verify; only reachable without
+///   `signing-required` (the build refuses that combination above).
 #[cfg(all(feature = "dev-signing-key", not(feature = "phase02-terminal-profile")))]
 const CELL_SIGNER_PUBKEY: [u8; 32] = DEV_CELL_SIGNER_PUBKEY;
 
@@ -69,8 +86,9 @@ pub const fn signing_required() -> bool {
     cfg!(feature = "signing-required")
 }
 
-/// Whether an UNSIGNED cell may be admitted (to Tier 2). False in the release
-/// posture: every release cell is signed and its manifest class picks the tier.
+/// Whether an UNSIGNED cell may be admitted (to Tier 2). False whenever the release
+/// anchor is compiled in (`release-posture`, `production-relay-image`): every release
+/// cell is signed and its manifest class picks the tier. Dev/test anchors keep Tier 2.
 pub const fn unsigned_admitted() -> bool {
     !cfg!(feature = "release-signing-key")
 }
