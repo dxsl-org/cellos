@@ -1,0 +1,21 @@
+[package]
+name = "app-cpp-hosted-smoke"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "x86_64 Tier-2 witness for the cpp-hosted profile: libc++, libc++abi and libunwind over mlibc posix (ADR-0034, runtime plan R4)"
+
+[[bin]]
+name = "cpp-hosted-smoke"
+path = "src/main.rs"
+
+[dependencies]
+# `mlibc` suppresses the Tier-A posix exports, including its single-threaded
+# C++ ABI layer, so libc++abi and mlibc's libc.a can link.
+api        = { path = "../../../libs/api", version = "0.1.0", features = ["mlibc"] }
+ostd       = { path = "../../../libs/ostd", version = "0.2.0" }
+mlibc-shim = { path = "../../../libs/mlibc-shim", version = "0.1.0" }
+
+[build-dependencies]
+cc = "1.0"
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
