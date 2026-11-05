@@ -36,6 +36,7 @@ release; they are not a current all-tier or production security PASS.
 | Cell forges another Cell's CellId in IPC | Kernel verifies sender ID from TCB on every message; user cannot inject arbitrary sender values | ✅ Mitigated |
 | Cell guesses a service-local socket CapId | The net service currently allocates predictable CapIds without binding lookup to the caller, so another network-capable Cell may address a live socket owned by a peer | ❌ Open — see [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Malformed ELF binary spawns as a different Cell | ELF header validated before execution; Cell registry assigns IDs monotonically | ✅ Mitigated |
+| Network peer logs in to `/bin/sshd` without a key, or impersonates its host key | `publickey` (`ssh-ed25519`) only, verified over the RFC 4252 §7 input against `/srv/sshd/authorized_keys`; phases enforced per message (anything out of phase disconnects); 5 failures disconnect; 60 s login grace. Host key: a seed persisted at `/srv/sshd/host_ed25519.seed`, generated from kernel entropy on first start; x25519 scalar and KEXINIT cookie fresh per connection; no entropy → no start / no handshake; non-contributory DH refused | 🔶 Partial — `/srv/` is world-readable and writable by every `VfsMutate` Cell, so another Cell can read the host seed or add a key (see Known Limitations) |
 
 ### Tampering
 | Threat | Mitigation | Status |
@@ -107,6 +108,8 @@ formalizes Cellos as a **Dual-Mode Hybrid Operating System**:
 
 3. **Tier 3 (Hardware Virtual Machine Guest)**:
    - Full hardware virtualization via Stage-2 paging running unmodified Linux guests.
+   - **x86 world-switch boundary**: the guest never reaches host-owned CPU state. SVM intercepts every SVM instruction (CLGI/STGI, VMLOAD/VMSAVE, SKINIT, VMMCALL → guest #UD), XSETBV, MONITOR/MWAIT, INVLPGA and SHUTDOWN; VMX exits on CR8 access and emulates a virtual TPR (a VMCS without external-interrupt, unconditional-I/O, CR8 or EPT exiting is refused). Host PKRU and XCR0 — on VMX also CR8 and `KERNEL_GS_BASE` — are restored right after every exit. VMX host state (CR3, GS/FS/TR/GDTR/IDTR bases) is rewritten from the running CPU on each run and the VMCS is `VMCLEAR`ed between calls, so a vCPU may run on any hart. Guest CPUID hides XSAVE/AVX, MONITOR, VMX/SVM and x2APIC.
+   - **Guest-memory boundary**: Stage-2/EPT/NPT maps compute their span with checked arithmetic, refuse ranges larger than the guest carve, and build every table before writing a leaf, so a failed map leaves no partial mapping; `MapGuestMemory` also refuses `size == 0` and sizes above the guest RAM. `RunVcpu`, `VcpuRegs`, `Read/WriteGuestMemory` move bytes only through the caller's copy view into kernel staging buffers (≤ 256 KiB chunks), so a cell-supplied address is never dereferenced by the kernel. EPT changes are made visible with `INVEPT` (single-context, else all-context; an EPT guest is refused on a CPU without it): after every map/unmap, before freeing the tables and guest RAM, and on the entering CPU before every VMX entry, which covers translations cached on other harts. NPT relies on the per-VMRUN ASID flush.
 
 #### Cell Admission Matrix (ADR-0015)
 
@@ -242,12 +245,28 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 - **Per-Cell SHA-256 measurement (2026-06-21)** — every ELF is hashed at `spawn_from_path()` and extended
   into an append-only kernel measurement log (Linux IMA model) *before* the Cell is scheduled
   (`kernel/src/sha256.rs`, `kernel/src/measurement_log.rs`; emitted as a `CellMeasure` audit event).
-- **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31)** — the loader extracts the
-  `__ViCell_sig` section and verifies it against the kernel's single trust anchor. Test kernels
-  (`dev-signing-key`) trust only the public dev seed and admit unsigned cells to Tier 2; release kernels
-  (`release-posture` = `release-signing-key` + `signing-required`) trust only the provisioned release key
-  (`CELLOS_RELEASE_CELL_PUBLIC_KEY`, private key a CI secret) and deny unsigned cells. The two features
-  cannot be combined (build error), so a dev-signed artifact is refused by a release kernel.
+- **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31; postures 2026-11-05)** —
+  the loader extracts the `__ViCell_sig` section and verifies it against the kernel's single trust anchor.
+
+  | Posture (kernel features) | Cell trust anchor | Unsigned cell | Bad signature | Absent policy |
+  |---|---|---|---|---|
+  | `default` (dev/test: `dev-signing-key`, `dev-policy-key`, `dev-weak-rng`) | public dev seed `0x43*32` | Tier 2 | denied | dev-permissive |
+  | `release-posture` = `release-signing-key` + `signing-required` + `policy-required` | `CELLOS_RELEASE_CELL_PUBLIC_KEY` (private key a CI secret) | **denied** | denied | fail-closed |
+  | `production-relay-image` = `release-signing-key` + `signing-required` + `policy-required` | same release key | **denied** | denied | fail-closed |
+
+  `release-signing-key` cannot be combined with `dev-signing-key` (build error), so a dev-signed artifact
+  is refused by a release kernel; both release postures build with `--no-default-features`.
+  `signing-required` without any anchor feature (`dev-signing-key`, `release-signing-key`,
+  `phase02-terminal-profile`) is a build error: the zero placeholder anchor would refuse every signed
+  cell while still admitting unsigned ones. `.github/workflows/release.yml` builds `release-posture` and
+  fails when the release-key secret is empty; `scripts/check-production-relay-image.py` requires
+  `release-signing-key` for relay candidates.
+- **TLS trust anchor (service-net `tls-ca-private`, 2026-11-05)** — `cells/services/net/roots/private.der`
+  is a dev CA whose key exists only on the machine that generated it (`tools/hypha-mock-llm/gen-dev-ca.py`,
+  key written 0600 and gitignored); fleet builds must replace it. The previous dev CA's key was committed
+  and remains in git history, so its certificate (sha256 `36335e76…775925d1`) is refused by
+  `cells/services/net/build.rs` and by `scripts/check-production-relay-image.py` (root file and any
+  artifact that embeds it).
 - **What the normal signing workflow means (2026-07-30, phase 11)** — `scripts/cellos-sign` checks the
   repository's F1/F5 policy before its normal signing call: it verifies that every Cell crate root carries
   `#![forbid(unsafe_code)]`, that no tracked `.rs` file under `cells/` contains `unsafe` outside
@@ -365,6 +384,12 @@ Bước 4: Kernel unsafe blocks
 
 4. **Audit log:** *Shipped (Phase 26).* Cell actions are recorded in the kernel
    audit ring buffer (`kernel/src/audit.rs`).
+
+5. **sshd key files:** `/srv/sshd/host_ed25519.seed` and `/srv/sshd/authorized_keys`
+   sit under the generic `/srv/` VFS rule (read: every Cell; write: every Cell with
+   `VfsMutate`). Path rules cannot name a Cell until the kernel vouches for program
+   identity (`cells/services/vfs/src/access/rules.rs`), so a hostile installed Cell can
+   read the host key or authorize its own key. `/bin/sshd` is excluded from x86 images.
 
 ## Defense in Depth
 

@@ -1,0 +1,92 @@
+## Slice: KernelIpcSched-2 — files read: 23 — unsafe blocks reviewed: 16
+
+### Findings
+
+#### [S-1] aarch64 SMP: blocked task's Context becomes stealable before the raw switch has saved it — Severity: High — STRIDE: T — OWASP: A04
+- Where: kernel/src/task/hart_local/ready.rs:350-366 (`HAS_INCOMING_SWITCH_COMPLETION_HOOK` false, `CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH` true on aarch64/riscv32), ready.rs:650-695 (outgoing-save guard is a no-op on non-RV64/x86), ready.rs:417-426 (`owned_by_another_hart`), kernel/src/task/scheduler.rs:55-62, 2726, 2742-2746, 2771-2773, 2793-2795, kernel/src/task.rs:1665-1682 (SCHEDULER dropped before the switch at 1791-1793), kernel/src/task/smp.rs:490-494, 1303-1316 (aarch64 secondaries are real).
+- What: On aarch64 the scheduler publishes `current_task_id = next` (or 0 for task→boot) while still holding `SCHEDULER`, drops the lock, and only then runs `Context::switch_with_root`, which saves the outgoing task's registers/SP. `owned_by_another_hart` on this target only consults `current_task_id` (executing/selected/outgoing guards are no-ops), so between lock release and the save a woken outgoing task (state `Ready`, already on the peer hart's queue via `push_ready`) is eligible on the peer. The peer dispatches the task's *stale* saved Context while the origin hart still executes on the same kernel stack. RV64/x86 close this with `begin_outgoing_context_save`/`vi_context_switch_complete`; the aarch64 comments at scheduler.rs:2789-2792 acknowledge the g…
+- Exploit: Two colluding threads on a 2-core aarch64 build: A blocks in `Recv`/`IpcWait`; B on the other core sends to A at the moment A's hart is between `pick_next` and the switch. Repeated attempts hit the window (tens of instructions); result is two harts on one kernel stack — kernel memory corruption. [INFERENCE] on the exact window length; the ordering itself is observed.
+- Fix: Give aarch64 the same incoming-completion hook (`vi_context_switch_complete` after the register save in the switch asm) and arm `begin_outgoing_context_save` before releasing `SCHEDULER`; until then keep `current_task_id` pointing at the outgoing task across the switch and publish the new id from the incoming side.
+
+#### [S-2] `smp::online_harts()` never includes hart 0 on riscv64/aarch64 → remote TLB invalidation of hart 0 skipped — Severity: High — STRIDE: T/E — OWASP: A04
+- Where: kernel/src/task/smp.rs:166-168 (iterator over `HART_ONLINE`), 850 (only the x86 path stores `HART_ONLINE[0]`), 1315, 1416 (riscv/aarch64 secondaries store only their own slot), 109-114 (`tlb_flush_completed(_, 0)` is vacuously true); consumers kernel/src/memory/deferred_release.rs:305-311, 297-299 and kernel/src/memory/tlb_shootdown.rs:233-240, 297-300, 318-322; kernel/src/task/quiesce.rs:682-685 works around it by inserting the requester explicitly.
+- What: When a tag/ASID release or shared-mapping shootdown runs on hart 1 (the RT hart, or a stolen task), `online_harts().filter(!= me)` yields nothing, so no flush epoch is requested from hart 0 and `tag_epochs_confirmed` reports complete immediately. Hart 0 keeps stale translations for the retired ASID/frames while they are recycled. x86 unaffected; aarch64 TLBI is broadcast so only the witness is wrong there; RV64 `sfence.vma` is hart-local so the hole is real. (Found by sub-scout; lines re-verified. Notified KernelMemoryLoader-2.)
+- Exploit: RT-priority or stolen Cell on hart 1 triggers domain teardown; a later Cell on hart 0 gets the recycled ASID/frames while hart 0's TLB still maps the old ones → cross-cell stale access. [INFERENCE] on how often hart 0 incidentally executes a full `sfence.vma`.
+- Fix: Store `HART_ONLINE[0]` on the boot hart in `task::init`/`kmain` for every arch (as x86 does), or make `online_harts()` always yield 0 like `online_hart_count()`; then drop the quiesce.rs special case.
+
+#### [S-3] `Reply` syscall forces the recorded caller `Ready` regardless of its state (spurious wake, double ready-queue entry, attacker-chosen `reply_value`) — Severity: Medium — STRIDE: T/D — OWASP: A04
+- Where: kernel/src/task.rs:3172-3189 (`ipc_reply`), kernel/src/task/syscall.rs:7072-7074, libs/ostd/src/runtime.rs:52 (`Reply` in the default allowlist); contrast the guarded wake at task.rs:2922-2948 and futex.rs:219-222; scheduler.rs:2679-2681 sets `Running` unconditionally on pick; tcb.rs:119-121 (`Frozen` must never be queued).
+- What: `ipc_reply` reads `current_caller` (set by any receive, including of `TrySend`/`IpcSubmit` messages whose sender never blocks) and does `state = Ready; reply_value = Some(result); push_ready(tid)` with no check that the target is blocked on this reply. If the target is `Running` on another hart it gets a duplicate ready entry that is dispatched later while it is parked in an unrelated state (`Recv`, `Sleeping`, `FutexWait`, `WaitCompletion`, `Frozen`), returning from that syscall spuriously; a `FutexWait` victim stays in the futex `WAITERS` queue and consumes a later real wake (lost wakeup for a sibling); a `Frozen` hot-swap target is queued in violation of its invariant.
+- Exploit: Any service Cell: receive a message from victim V (V used `TrySend`/`IpcSubmit` and continues running), then call `Reply(result)` at a chosen moment. No capability needed.
+- Fix: Wake only if `matches!(t.state, TaskState::Sending{..} | TaskState::Recv{..})` for the matching caller (mirror `wake_sender_token`), otherwise return an error; never `push_ready` a task that is not transitioning from a blocked state.
+
+#### [S-4] Async IPC reply/request storage is kernel-charged and retained until `IpcTake`; one Cell can pin ~16 MiB of the 32 MiB kernel heap — Severity: Medium — STRIDE: D — OWASP: A04
+- Where: kernel/src/task/async_ipc.rs:14 (`MAX_OPERATIONS = 64` per *task*), 136-149 (ops Vec reserved under cell 0), 364-366 (4 KiB reply via `try_new`), 952-999 (`expire` only marks Terminal, never frees), 701-757 (storage freed only by `take`); kernel/src/task/ipc_wire.rs:45-60, 74-82 (`set_current_cell_id(0)` around every wire allocation); kernel/src/task/scheduler.rs:22 (32 threads/cell); kernel/src/main.rs:757-758 (32 MiB heap); syscall.rs:5261-5263 (no capability gate).
+- What: Every `IpcSubmit` allocates a 4 KiB reply buffer plus the request wire with attribution switched to cell 0, so none of it counts against the Cell's quota. Terminal operations (timeout, cancel, peer gone, reply) stay in `async_operations` until the owner calls `IpcTake`; nothing reclaims them while the thread lives. 32 threads × 64 ops × 4 KiB = 8 MiB of replies, plus up to 64 queued 4 KiB request wires per sibling-thread mailbox (`peer_queue_admits` headroom bounds only cross-cell pressure, not self-sends).
+- Exploit: Cell spawns 32 threads; each submits 64 requests (to a sibling thread that never receives, or to any service) and never takes. Two such Cells exhaust the kernel heap; infallible kernel allocations elsewhere then abort.
+- Fix: Charge reply/request wires and the `Operations` Vec to the owner Cell (`allocation_cell = owner`), and/or free terminal operations on expiry after a grace period / cap terminal-retained bytes per Cell.
+
+#### [S-5] NET_RX completion lost-wakeup: `deliver_pending_wakes` discards the request while the waiter is still `Running` — Severity: Medium — STRIDE: D — OWASP: A04
+- Where: kernel/src/task/completion.rs:404-418 (`drain_wake_requests` clears `wake_requested` unconditionally), 508-539 (non-parked tids dropped), 492-501 (`is_parked`); kernel/src/task/completion_wait.rs:412-417 (ring checked), 424-430 + 242-264 (`publish_wait_state_locked` never re-checks the ring before `state = WaitCompletion`), kernel/src/task.rs:1643-1647 (delivery runs from every hart's `yield_cpu`).
+- What: Between the waiter's `queue.drain()` (None) and its `state = WaitCompletion` write, an RX completion on another hart sets `wake_requested`; that hart's `yield_cpu` drains it, finds the waiter `Running`, and drops it. The waiter then parks with a drainable record and no outstanding wake; subsequent frames only set the level flag (reservation now Idle) which the sweep never turns into a `WaitCompletion` wake. IPC/IRQ sources re-poll; NET_RX does not. (Sub-scout finding; lines re-verified.)
+- Exploit: Timing race on SMP under ordinary RX traffic, or a hostile Cell injecting completions via [S-6]; NIC driver RX thread stalls (indefinitely with `deadline=None`).
+- Fix: Re-check `queue.drainable()` inside `publish_wait_state_locked` (ring lock is a leaf), or in `deliver_pending_wakes` re-raise `wake_requested`/`WAKES_PENDING` for tids found not parked.
+
+#### [S-6] Any Cell can seize the global NET_RX reservation and level flag — Severity: Medium — STRIDE: D — OWASP: A01
+- Where: kernel/src/task/completion_wait.rs:331-378 (`wait_completion`: only `source_is_valid` + buffer check for NET_RX; IRQ is ownership-gated at 344-349 but NET_RX is not), kernel/src/task/waker/net_rx_reservation.rs:35-83 (`arm` displaces whoever holds it, completes it `RESULT_ABANDONED`, `log::warn!` per displacement), kernel/src/task/waker.rs:39-46, 118-135 (single global `NET_RX_PENDING`, consume-on-read).
+- What: `RESERVATION`/`NET_RX_PENDING` are system-wide singletons with no owner check. A Cell with no NIC role looping `WaitCompletion(NET_RX, timeout=0)` displaces the NIC driver's reservation each time, receives the frames' completions itself, and eats the level flag; each call also emits a warn line (log flood).
+- Exploit: Untrusted Cell: `WaitCompletion{mask=NET_RX}` in a loop (second thread keeps one armed). Networking stalls for all Cells.
+- Fix: Gate NET_RX in `wait_completion` (and `WaitForEvent`) on the registered NIC driver Cell (cell_id+generation); only displace reservations of dead cells; rate-limit the warn.
+
+#### [S-7] cell_session: any operation member (incl. a committed child) can exhaust the parent operation's holder/staging budgets — Severity: Medium — STRIDE: D — OWASP: A01
+- Where: kernel/src/task/cell_session.rs:292-310 (`op_member`/`op_active`), 438-444 (`create_stream` gated only by `op_active`); per sub-scout: 391-402 (64 holders/op), 3054, 3120 (`prepare_child` gated by `op_active`), 1278 (only CreateOperation requires `DELEGATE`).
+- What: `op_member` accepts any live endpoint holder of the operation; a committed child holds stdio endpoints there and so passes `op_active`. CreateStream/PrepareChild by the child consume the parent's per-operation caps and staging slot, making the parent's own CreateStream/Delegate/Bootstrap fail with `QuotaExceeded`. [INFERENCE] for the child's endpoint state (1353/2380) and caps, read by the sub-scout.
+- Exploit: Child cell issues ~31 × CreateStream on the operation Ref from its own context.
+- Fix: Require owner or a `DELEGATE`-bearing holder for selectors 2 and 10, or make caps per-(operation, actor).
+
+#### [S-8] cell_session: terminal bootstraps orphaned by CloseOperation accumulate to the global 256 cap — Severity: Medium — STRIDE: D — OWASP: A04
+- Where: kernel/src/task/cell_session.rs:992-999 (`remove_operation` drops endpoints/ledgers/prepared, not `bootstraps`), 2407-2428 (bootstrap caps: 256 total, 64 live, 8 live/controller; no per-controller total cap; `owner` is a caller-supplied binding compared only to the INPUT service binding); per sub-scout 1578-1593, 2688-2734, 963-965.
+- What: After create → resolve(close) → CloseOperation, a state-3 `Bootstrap` is never reclaimed while the controller lives; 256 iterations make `bootstrap()` fail for every Cell including the legitimate controller.
+- Exploit: Any Cell that owns operations and knows the INPUT binding (discoverable) loops selectors 1→21→22(action 2)→20.
+- Fix: `remove_operation` should `bootstraps.retain(|b| b.operation != reference)`; add a per-controller total cap.
+
+#### [S-9] `transfer_consumption` target can never be woken: terminal wakes and `WaitIpc`/`WaitCompletion(IPC)` checks only look at the owner's record — Severity: Low — STRIDE: - — OWASP: -
+- Where: kernel/src/task/async_ipc.rs:275-288 (`wake(sched, owner)` always targets `owner_tid`), 846-868 (`wait` checks the caller's own `async_operations`), 213-219, 225-238 (notifications scan the waiter's own ops), 759-791 (`transfer_consumption` only moves `consumer_tid`).
+- What: Operations live in the owner's task record; after consumption is transferred to thread T, T's `IpcWait` parks until deadline (or forever) and `WaitCompletion(IPC)` never reports it. Only `IpcTake` honours the consumer. Correctness only.
+- Fix: Document owner-must-wait, or route `wake` to both `owner_tid` and `consumer_tid` and make `has_terminal`/`notifiable` scan same-cell owners' ops for the consumer.
+
+#### [S-10] cpu_accounting (dev-lane only, `cellos_g1_cpu`): first `bind` racing a peer hart's in-flight switch seals the store → `fatal()` halt on next scheduler pass — Severity: Medium (test-hooks/P01 builds only) — STRIDE: D — OWASP: -
+- Where (per sub-scout, not re-read by me): kernel/src/task/cpu_accounting.rs:693-702, 795-812, 833-838, 614-616; kernel/build.rs:42-52 gate.
+- What: `enable` returns `Busy` while any hart has `selected_task_id`/outgoing guard set; `mutate` seals on any `Err`; every later `require` → `fatal` (`cli; hlt` holding `SCHEDULER`). Not compiled in default/production builds. [INFERENCE]
+- Fix: Treat `Busy` from `enable` as a non-sealing refusal.
+
+#### [S-11] Hygiene — Severity: Info/Low — STRIDE: - 
+- kernel/src/task/async_ipc.rs:621-624 and 717-722: `IpcReply`/`IpcTake` scan every task's operation list under `SCHEDULER` with interrupts masked (O(tasks×ops) per syscall) — latency amplifier; index tokens → owner tid.
+- kernel/src/task/smp.rs:1329-1331: `is_rt_hart_online` uses `Relaxed` where the other readers use `Acquire`.
+- kernel/src/task/tcb.rs:609-616: `next_cell_generation` panics on u64 exhaustion (unreachable in practice).
+- kernel/src/fast_ipc.rs:55-61: `register_vfs` is `#[no_mangle] pub extern "Rust"` with no owner check, separate from `set_vfs_handler_cell`; no production linker bridge exists today (cells use their private `ostd` copy, cells/services/vfs/src/main.rs:149), so inert — but if the bridge ships, registration must be tied to the owning Cell.
+- Per sub-scouts (not re-read): completion.rs:383-389 dead NET_RX waiters never pruned (32-entry list fills, older waiters miss wakes); syscall.rs:10696-10701 `wrapping_add` on WaitCompletion deadline; cell_session.rs `Charge` refunds by CellId not incarnation (60-78); smp.rs:823-834 x86 AP handshake timeout panics instead of degrading.
+
+### Verified-safe areas
+- Sender identity is never caller-supplied: wire headers are built from scheduler records (`sender_context`, task.rs:371-379, 2554-2566, 2667-2674, 3135-3142; async_ipc.rs:304-344). `reply`/`terminal` authority re-derived from scheduler identity (async_ipc.rs:498-511); cross-cell reply/take/cancel/transfer refused (async_ipc.rs:504, 662, 720-724, 776-778). Token guessing is harmless (global monotonic, but cell-bound).
+- Payload length bounded everywhere (`MAX_IPC_WIRE_PAYLOAD` at ipc_wire.rs:46,71; async_ipc.rs:299,520; task.rs:2539,2655); wire buffers are exact-size `Box<[u8]>` with fallible reserve; receive copy-out truncates to `buf_len` (task.rs:2757).
+- Mailbox depth enforced by `queue_wire_msg` (task.rs:306-308) with per-sender headroom for async ops (async_ipc.rs:33-45, re-checked under the commit lock at 387).
+- Blocked-sender wake requires identity + delivery token match (task.rs:2922-2948); receive commits by `delivery_id` (task.rs:2765-2777; pending_mailbox.rs:195-225).
+- `IpcWait` lost-wakeup: check-then-park and all terminal transitions are under one `SCHEDULER` hold (async_ipc.rs:849-861; `wake` 275-288); RV64/x86 outgoing-save guard covers the pre-switch window (task.rs:434-440; ready.rs:650-661).
+- Scheduler pick only requeues a `Running` current task (scheduler.rs:2543-2565), so a remote wake cannot double-queue it; `pick_local_eligible`/steal skip tasks owned by another hart (ready.rs:486-499, 755-766) — correct on RV64/x86.
+- Root retirement waits for selected/current/executing/outgoing on every hart plus a fresh retirement-switch epoch and DMA quiescence before moving records/zombies and releasing the owner slot (scheduler.rs:1992-2081); zombie reap checks `any_hart_running` (1916-1940); retiring members stay dispatch-visible as `Retiring` (1629-1637).
+- Spinlock disables interrupts before acquire and restores on drop; `try_lock` restores on failure (sync.rs:26-62, 75-100); x86 `service_tlb_flush` inside `lock()` takes no lock and publishes with `fetch_max` (smp.rs:118-148).
+- Copy boundary: with default `native-domains`, IPC copies go through `user_copy` with validated slices (copy_glue/mod.rs:206-231, 253-283); `TaskCopyView::of` honours the task's own address space.
+- `fast_ipc::call_vfs` derives caller identity from the running task, not arguments; SIE restored by RAII guard (fast_ipc.rs:178-201, 113-147); owner-conditional clear serialized by `VFS_HANDLER_WRITE` (72-81).
+- Completion slots never user-indexed; cross-cell slot release impossible (per sub-scout: completion.rs:179-200, 230-291, 457-490).
+- Quiesce protocol single-flight CAS, monotone epochs, bounded waits (per sub-scout: quiesce.rs:218-233, 261-275, 434-472).
+
+### Not covered
+- kernel/src/task/async_ipc.rs:1052-3157, cell_session.rs:3400-4215, cpu_accounting.rs tests, quiesce.rs:698-1463, smp.rs test-hooks fixtures (1063-1293) — cfg(test)/test-hooks only.
+- kernel/src/task/scheduler.rs: `spawn*`/`spawn_thread` (915-1343), `retire_deferred_fault/exit` (1345-1470), cell-owner watch APIs (749-810), `pick_next_local` `cellos_g1_cpu` branch details.
+- kernel/src/task/hart_local.rs: execution-pin/safe-root helpers (641-825), `install` (321-365).
+- kernel/src/task.rs beyond the IPC/yield paths cited; syscall dispatch argument validation (KernelSyscall slice).
+- Nested-guard drop-order audit (outer `SpinlockGuard` dropped before inner would re-enable interrupts while a lock is held) — not systematically checked.
+- cpu_accounting.rs and most of completion.rs/completion_wait.rs/cell_session.rs/quiesce.rs bodies were read by sub-scouts; I re-read only the lines cited in S-2, S-5, S-6, S-7, S-8.
+
+[Some lines truncated to 768 chars. Use agent://KernelIpcSched-2:raw:7-7 to read line 7 whole]
