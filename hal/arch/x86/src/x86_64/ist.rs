@@ -15,6 +15,13 @@
 //! alignment and the 528-byte FXSAVE area) plus the fatal dispatch and serial
 //! writer, about 1 KiB. 8 KiB leaves an 8x margin; the IDT fixture reports the
 //! measured high-water mark (`ist-hw=`).
+//!
+//! Count: one slot per logical CPU up to `syscall::MAX_CPUS` (64), 40 KiB
+//! each, so the region is 2.5 MiB of `.bss` whether or not a CPU comes online.
+//! It stays static (plan 261103-2218 phase 07a): a guard needs a 4 KiB leaf,
+//! which the kernel image mapping provides, while a frame-allocator page is
+//! reached through the HHDM, which Limine maps with 1 GiB leaves that
+//! [`install_guards`] refuses to split.
 
 use super::syscall::MAX_CPUS;
 use core::sync::atomic::{AtomicUsize, Ordering};

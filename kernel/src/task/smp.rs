@@ -10,10 +10,26 @@
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Maximum number of harts this kernel tracks.  2 covers QEMU virt `-smp 2`
-/// (G2 entry target).  Constant so secondary stacks and HART_ONLINE are
-/// statically sized — no heap allocation during the boot critical path.
+mod topology;
+pub use topology::{CpuTopology, CPU_TOPOLOGY};
+
+/// Maximum number of logical harts this kernel tracks. Every per-hart static
+/// is sized by it, so no heap allocation happens on the boot critical path.
+/// This is capacity, not the number of CPUs brought online.
+///
+/// - x86_64: the HAL's per-CPU table bound, `hal::x86_64::syscall::MAX_CPUS`
+///   (64). 64 keeps every `u64` hart mask exact, including the published
+///   `ViRetirementV1.remote_hart_mask` (plan 261103-2218 H-S2-5).
+/// - x86_64 G1 private lane (`cellos_g1_cpu`): 2, which
+///   `task::cpu_accounting` asserts equal to its own hart count.
+/// - riscv64 / aarch64 / 32-bit targets: 2 (QEMU virt `-smp 2`, G2 entry).
+#[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
+pub const MAX_HARTS: usize = hal::x86_64::syscall::MAX_CPUS;
+#[cfg(not(all(target_arch = "x86_64", not(cellos_g1_cpu))))]
 pub const MAX_HARTS: usize = 2;
+// The HAL owns one GS record, GDT/TSS and IST set per logical CPU.
+#[cfg(target_arch = "x86_64")]
+const _: () = assert!(MAX_HARTS <= hal::x86_64::syscall::MAX_CPUS);
 
 /// Hart dedicated to RealTime-priority cells.  RT tasks are enqueued here by
 /// `push_ready` and never stolen (Phase 03 steal filter excludes RT).
@@ -21,7 +37,7 @@ pub const HART_RT: usize = 1;
 
 /// Set to `true` by each secondary hart once its trap vector and timer are ready.
 /// Hart 0's bounded wait reads this via `Acquire` to observe all preceding stores.
-pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), AtomicBool::new(false)];
+pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [const { AtomicBool::new(false) }; MAX_HARTS];
 
 /// Monotonic switch-completion epochs for root-retirement quiescence. A retiring
 /// generation cannot release its CellId slot until every requested hart has
@@ -31,8 +47,8 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), Atomi
 /// completion. Only then may the requester recycle a tag or release frames — a
 /// firmware call returning is not evidence that another hart stopped using the
 /// translation (phase 02 slice 3).
-static TLB_FLUSH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
-static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static TLB_FLUSH_REQUEST: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
+static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
 
 /// Deliver the kernel's cross-hart IPI to `hart_id`.
 ///
@@ -151,9 +167,9 @@ pub fn online_harts() -> impl Iterator<Item = usize> {
     (0..MAX_HARTS).filter(|hart| HART_ONLINE[*hart].load(Ordering::Acquire))
 }
 
-static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
 static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
-    [AtomicUsize::new(0), AtomicUsize::new(0)];
+    [const { AtomicUsize::new(0) }; MAX_HARTS];
 
 #[cfg(target_arch = "x86_64")]
 static RETIRE_SWITCH_INFLIGHT: [AtomicUsize; MAX_HARTS] =
@@ -182,7 +198,7 @@ pub fn complete_captured_retirement_boundary(hart: usize) {
 /// hart, that a stale delivery token pends none, and that the decision follows the
 /// target hart's running priority rather than the waking hart's.
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-static PREEMPT_PENDS: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static PREEMPT_PENDS: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
 
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 #[inline]
@@ -260,44 +276,41 @@ pub fn retirement_switch_completed(hart_id: usize, epoch: usize) -> bool {
             .is_some_and(|complete| complete.load(Ordering::Acquire) >= epoch)
 }
 
-#[cfg(target_arch = "riscv64")]
-static BOOT_PHYSICAL_HART: AtomicUsize = AtomicUsize::new(usize::MAX);
-
+/// Publish the RV64 boot hart's numbering into [`CPU_TOPOLOGY`]: the boot hart
+/// is logical 0 and the hart it displaced takes its number
+/// ([`topology::boot_swapped_physical`]). Called once by `kmain` on the boot
+/// hart, before any secondary is started.
 #[cfg(target_arch = "riscv64")]
 pub fn set_boot_physical_hart(physical_hart: usize) {
     assert!(
         physical_hart < MAX_HARTS,
         "unsupported RV64 boot hart {physical_hart}"
     );
-    BOOT_PHYSICAL_HART.store(physical_hart, Ordering::Release);
+    for logical in 0..MAX_HARTS {
+        assert!(
+            CPU_TOPOLOGY.publish(
+                logical,
+                topology::boot_swapped_physical(physical_hart, logical)
+            ),
+            "RV64 boot hart {physical_hart} conflicts with the published topology"
+        );
+    }
 }
 
 #[cfg(target_arch = "riscv64")]
 pub fn boot_physical_hart() -> Option<usize> {
-    let physical = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
-    (physical < MAX_HARTS).then_some(physical)
+    logical_to_physical(0)
 }
 
-#[cfg(target_arch = "riscv64")]
+/// Physical id (RV64 hart id, x86 LAPIC ID, AArch64 CPU index) of
+/// `logical_hart`, if [`CPU_TOPOLOGY`] maps it.
 pub fn logical_to_physical(logical_hart: usize) -> Option<usize> {
-    let boot = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
-    match logical_hart {
-        0 if boot < MAX_HARTS => Some(boot),
-        HART_RT if boot < MAX_HARTS => Some(boot ^ 1),
-        _ => None,
-    }
+    CPU_TOPOLOGY.physical(logical_hart)
 }
 
-#[cfg(target_arch = "riscv64")]
+/// Logical hart that owns `physical_hart`, if [`CPU_TOPOLOGY`] maps it.
 pub fn physical_to_logical(physical_hart: usize) -> Option<usize> {
-    let boot = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
-    if physical_hart == boot {
-        Some(0)
-    } else if physical_hart < MAX_HARTS && physical_hart == (boot ^ 1) {
-        Some(HART_RT)
-    } else {
-        None
-    }
+    CPU_TOPOLOGY.logical(physical_hart)
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -305,12 +318,15 @@ pub fn logical_sbi_target(logical_hart: usize) -> Option<(usize, usize)> {
     logical_to_physical(logical_hart).map(|physical| (1, physical))
 }
 
-/// Return every online RV64 hart except the one executing this call.
+/// Return the one remote RV64 hart this boot can have, if it is online.
 ///
 /// Hart 0 is running whenever this kernel reaches normal execution but is not
 /// represented by `HART_ONLINE`; secondary harts publish readiness with Release.
+/// RV64 runs at most two harts (`MAX_HARTS = 2`), so the remote hart is the RT
+/// hart for hart 0 and hart 0 for everyone else.
 #[cfg(target_arch = "riscv64")]
 pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
+    const _: () = assert!(MAX_HARTS == 2);
     let current = crate::task::hart_local::current_hart_id();
     let remote = if current == 0 { HART_RT } else { 0 };
     let online = remote == 0 || HART_ONLINE[remote].load(Ordering::Acquire);
@@ -591,7 +607,13 @@ fn start_psci_secondaries() {
 
     for hart_id in 1..attempt {
         // The core is still off: this mapping has to exist before it reads it.
-        crate::task::hart_local::publish_physical_cpu(hart_id, hart_id);
+        if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
+            log::warn!(
+                "[smp] hart {} conflicts with the published topology — not started",
+                hart_id
+            );
+            continue;
+        }
         let stack = match Stack::new_kernel(STACK_PAGES) {
             Ok(stack) => stack,
             Err(error) => {
@@ -835,7 +857,11 @@ pub fn start_secondaries() {
             bsp_id
         );
     };
-    if !hal::x86_64::apic::register_cpu(0, bsp_id) {
+    // Logical 0 is the BSP. `CPU_TOPOLOGY` is the kernel's logical -> LAPIC map;
+    // the HAL keeps its own write-once copy (`apic::register_cpu`) because its
+    // IPI path cannot read kernel state. Both refuse a LAPIC ID above 255 and a
+    // conflicting pair, so either refusal keeps the system uniprocessor.
+    if !CPU_TOPOLOGY.publish(0, bsp_id as usize) || !hal::x86_64::apic::register_cpu(0, bsp_id) {
         // UP does not use APIC-directed remote invalidations.
         finish_up();
         return;
@@ -899,7 +925,15 @@ pub fn start_secondaries() {
         return;
     }
     let ap_id = unsafe { (*secondary).lapic_id };
-    if !hal::x86_64::apic::register_cpu(1, ap_id) {
+    // Phase 07a still activates exactly one AP, the first non-BSP MP record in
+    // Limine order. It takes the next free logical index (1, the RT hart); the
+    // pair is published before the AP is released, so the AP's own check in
+    // `x86_secondary_main` reads a complete mapping.
+    let logical = CPU_TOPOLOGY.count();
+    if logical >= MAX_HARTS
+        || !CPU_TOPOLOGY.publish(logical, ap_id as usize)
+        || !hal::x86_64::apic::register_cpu(logical, ap_id)
+    {
         finish_up();
         return;
     }
@@ -921,7 +955,7 @@ pub fn start_secondaries() {
         X86_SECONDARY = X86SecondaryContext {
             stack_top,
             kernel_cr3,
-            logical: 1,
+            logical,
             lapic_id: ap_id as usize,
         };
         (*secondary).extra_argument = (&raw const X86_SECONDARY) as u64;
@@ -952,10 +986,10 @@ pub fn start_secondaries() {
         }
         return;
     }
-    let epoch = request_tlb_flush(1);
-    x86_bounded_wait(|| tlb_flush_completed(1, epoch));
+    let epoch = request_tlb_flush(logical);
+    x86_bounded_wait(|| tlb_flush_completed(logical, epoch));
     X86_QUALIFIED.store(true, Ordering::Release);
-    x86_bounded_wait(|| HART_ONLINE[1].load(Ordering::Acquire));
+    x86_bounded_wait(|| HART_ONLINE[logical].load(Ordering::Acquire));
     #[cfg(feature = "test-hooks")]
     x86_shootdown_fixture_primary();
     X86_BOOT_COMPLETE.store(true, Ordering::Release);
@@ -974,7 +1008,14 @@ pub fn start_secondaries() {
 
 #[cfg(target_arch = "x86_64")]
 extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: usize) -> ! {
-    assert!(logical == 1);
+    // Any AP slot below MAX_HARTS is admissible, but only on the CPU whose LAPIC
+    // ID the BSP published for it before releasing this one.
+    assert!(
+        logical != 0 && logical < MAX_HARTS && logical_to_physical(logical) == Some(lapic_id),
+        "[x86-smp] AP logical {} lapic {} is not the published topology",
+        logical,
+        lapic_id
+    );
     if !unsafe { hal::x86_64::init_secondary_cpu(logical, lapic_id as u32, kernel_cr3) } {
         panic!("[x86-smp] active AP feature/isolation initialization failed");
     }

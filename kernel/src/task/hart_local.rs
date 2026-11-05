@@ -13,10 +13,11 @@
 //! AArch64 has no `tp` register to spare — `TPIDR_EL1` carries the kernel stack
 //! top the trap path needs — so the calling CPU is derived from
 //! `MPIDR_EL1.Aff0` (the CPU index on every platform this kernel supports:
-//! QEMU `virt` and the BCM2711/BCM2837 clusters) through a table published
-//! before a secondary is started.  A hart therefore only ever reads a mapping
-//! that already exists, and an unpublished CPU resolves to slot 0 — the same
-//! answer as "before `install()`" on RISC-V.
+//! QEMU `virt` and the BCM2711/BCM2837 clusters) through
+//! [`smp::CPU_TOPOLOGY`](crate::task::smp::CPU_TOPOLOGY), published before a
+//! secondary is started.  A hart therefore only ever reads a mapping that
+//! already exists, and an unpublished CPU resolves to slot 0 — the same answer
+//! as "before `install()`" on RISC-V.
 
 pub mod ready;
 
@@ -28,19 +29,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
-/// `CPU_TO_LOGICAL` entry meaning "this CPU index has no logical hart yet".
 #[cfg(target_arch = "aarch64")]
-const CPU_UNPUBLISHED: usize = usize::MAX;
-
-/// AArch64 CPU index (`MPIDR_EL1.Aff0`) → logical hart.
-///
-/// Written once per secondary by `publish_physical_cpu()` before the core is
-/// started, and once for the boot CPU by `install()`. Readers are the harts
-/// themselves, so a plain relaxed load is enough: the value is either the
-/// mapping this hart was started with or "not mine".
-#[cfg(target_arch = "aarch64")]
-static CPU_TO_LOGICAL: [AtomicUsize; MAX_HARTS] =
-    [const { AtomicUsize::new(CPU_UNPUBLISHED) }; MAX_HARTS];
+use crate::task::smp::CPU_TOPOLOGY;
 
 /// The physical CPU index this hart is running on (`MPIDR_EL1.Aff0`).
 #[cfg(target_arch = "aarch64")]
@@ -55,17 +45,19 @@ pub fn physical_cpu_index() -> usize {
 }
 
 /// Publish `cpu_index -> logical_hart` before `cpu_index` starts executing.
+///
+/// `false` when the pair conflicts with one already published (or an index is
+/// out of range); the map is then unchanged. Re-publishing the same pair, as a
+/// started hart's `install()` does, is accepted.
 #[cfg(target_arch = "aarch64")]
-pub fn publish_physical_cpu(cpu_index: usize, logical_hart: usize) {
-    if let Some(slot) = CPU_TO_LOGICAL.get(cpu_index) {
-        slot.store(logical_hart, Ordering::Relaxed);
-    }
+pub fn publish_physical_cpu(cpu_index: usize, logical_hart: usize) -> bool {
+    CPU_TOPOLOGY.publish(logical_hart, cpu_index)
 }
 
 /// The CPU index a logical hart runs on, if it was published.
 #[cfg(target_arch = "aarch64")]
 pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
-    (0..MAX_HARTS).find(|cpu| CPU_TO_LOGICAL[*cpu].load(Ordering::Relaxed) == logical_hart)
+    CPU_TOPOLOGY.physical(logical_hart)
 }
 
 /// Slot owned by the calling CPU on targets without a `tp` register.
@@ -74,17 +66,7 @@ pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
 fn owned_slot_index() -> usize {
     #[cfg(target_arch = "aarch64")]
     {
-        match CPU_TO_LOGICAL.get(physical_cpu_index()) {
-            Some(slot) => {
-                let logical = slot.load(Ordering::Relaxed);
-                if logical == CPU_UNPUBLISHED {
-                    0
-                } else {
-                    logical
-                }
-            }
-            None => 0,
-        }
+        CPU_TOPOLOGY.logical(physical_cpu_index()).unwrap_or(0)
     }
     #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
     {
@@ -329,7 +311,7 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
 /// array gives the correct result.
 #[no_mangle]
 pub static HART_LOCAL_TP_ADDRS: [AtomicUsize; MAX_HARTS] =
-    [AtomicUsize::new(0), AtomicUsize::new(0)];
+    [const { AtomicUsize::new(0) }; MAX_HARTS];
 
 /// Initialize the calling hart's `ViHartLocal` and write `tp` to point at it.
 ///
@@ -373,8 +355,10 @@ pub fn install(hart_id: usize) {
     // cells receive `kernel_tp_for_cells` (not this pointer) on context switch.
     unsafe { write_tp(hl_addr) };
 
+    // A refused pair leaves this CPU resolving to slot 0, as an unpublished one
+    // always did; the boot path that started it already reported the conflict.
     #[cfg(target_arch = "aarch64")]
-    publish_physical_cpu(physical_cpu_index(), hart_id);
+    let _ = publish_physical_cpu(physical_cpu_index(), hart_id);
 
     #[cfg(target_arch = "riscv64")]
     crate::hal::trap::init_for_hart(hart_id);

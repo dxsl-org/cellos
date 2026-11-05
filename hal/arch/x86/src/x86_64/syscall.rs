@@ -55,7 +55,13 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 ///   gs:24 = user CR3 saved on IDT entry from user mode (Tier 2 domain isolation)
 ///
 /// Kernel GS selects the current CPU's stable record; SWAPGS selects user GS=0.
-pub const MAX_CPUS: usize = 2;
+///
+/// Logical CPUs the HAL has per-CPU state for: this GS record, a GDT/TSS
+/// (`gdt.rs`) and an IST stack set (`ist.rs`). The kernel's x86_64
+/// `task::smp::MAX_HARTS` is defined from it. 64 keeps every `u64` hart mask
+/// exact (plan 261103-2218 H-S2-5); how many CPUs actually come online is the
+/// kernel's bring-up decision, not this bound.
+pub const MAX_CPUS: usize = 64;
 #[repr(C, align(64))]
 struct CpuLocal {
     kernel_rsp: u64,   // offset 0  — gs:0

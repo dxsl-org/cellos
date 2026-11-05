@@ -21,9 +21,14 @@ static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
 static X2APIC: AtomicBool = AtomicBool::new(false);
 pub const IPI_VECTOR: u8 = 0xf0;
 const UNREGISTERED: u32 = u32::MAX;
-// One atomic publication prevents duplicate physical IDs even if startup races.
-static CPU_APIC_IDS: AtomicU64 = AtomicU64::new(u64::MAX);
-const _: () = assert!(super::syscall::MAX_CPUS == 2);
+/// Set on a slot while its registrant checks the other slots for the same ID.
+/// Readers treat it as unregistered; IDs are at most 255, so it never collides
+/// with a real ID or with `UNREGISTERED`.
+const PENDING: u32 = 1 << 31;
+/// Logical CPU -> LAPIC ID. Every slot is written once and never cleared after
+/// a successful [`register_cpu`]; no two slots publish the same ID.
+static CPU_APIC_IDS: [AtomicU32; super::syscall::MAX_CPUS] =
+    [const { AtomicU32::new(UNREGISTERED) }; super::syscall::MAX_CPUS];
 static TIMER_COUNT: AtomicU32 = AtomicU32::new(0);
 
 const IA32_APIC_BASE: u32 = 0x1B;
@@ -70,37 +75,48 @@ pub fn current_id() -> u32 {
     }
 }
 
-/// Publish a unique physical LAPIC destination before CPU admission.
+/// Publish a unique physical LAPIC destination for `logical` before CPU admission.
+///
+/// `true` when the slot now holds `lapic_id` (also when it already did).
+/// `false` when `logical` is out of range, the ID exceeds 255, the slot holds
+/// another ID or is mid-registration, or another slot holds or is registering
+/// the same ID. A refused call leaves no trace.
+///
+/// Uniqueness without a lock: a registrant marks its slot `PENDING | id`, then
+/// scans every other slot. All of it is `SeqCst`, so of two registrants racing
+/// with the same ID at least one sees the other's mark; it withdraws, and
+/// possibly both do (fail closed). Only after a clean scan is the bare ID
+/// stored, so [`cpu_apic_id`] never reports a duplicate, even transiently.
 pub fn register_cpu(logical: usize, lapic_id: u32) -> bool {
-    if logical >= super::syscall::MAX_CPUS || lapic_id > 255 {
+    let Some(slot) = CPU_APIC_IDS.get(logical) else {
+        return false;
+    };
+    if lapic_id > 255 {
         return false;
     }
-    let shift = logical * 32;
-    let other_shift = (1 - logical) * 32;
-    let mut ids = CPU_APIC_IDS.load(Ordering::Acquire);
-    for _ in 0..64 {
-        if (ids >> other_shift) as u32 == lapic_id {
-            return false;
-        }
-        let previous = (ids >> shift) as u32;
-        if previous != UNREGISTERED {
-            return previous == lapic_id;
-        }
-        let updated = (ids & !((u32::MAX as u64) << shift)) | ((lapic_id as u64) << shift);
-        match CPU_APIC_IDS.compare_exchange(ids, updated, Ordering::AcqRel, Ordering::Acquire) {
-            Ok(_) => return true,
-            Err(current) => ids = current,
-        }
+    if let Err(current) = slot.compare_exchange(
+        UNREGISTERED,
+        PENDING | lapic_id,
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+    ) {
+        return current == lapic_id;
     }
-    false
+    let duplicate = CPU_APIC_IDS
+        .iter()
+        .enumerate()
+        .any(|(other, id)| other != logical && id.load(Ordering::SeqCst) & !PENDING == lapic_id);
+    if duplicate {
+        slot.store(UNREGISTERED, Ordering::SeqCst);
+        return false;
+    }
+    slot.store(lapic_id, Ordering::SeqCst);
+    true
 }
 
 pub fn cpu_apic_id(logical: usize) -> Option<u32> {
-    if logical >= super::syscall::MAX_CPUS {
-        return None;
-    }
-    let id = (CPU_APIC_IDS.load(Ordering::Acquire) >> (logical * 32)) as u32;
-    (id != UNREGISTERED).then_some(id)
+    let id = CPU_APIC_IDS.get(logical)?.load(Ordering::Acquire);
+    (id <= 255).then_some(id)
 }
 
 /// Virtual address of an identity-mapped (after `set_hhdm_base(0)`) MMIO page.
@@ -335,11 +351,42 @@ pub fn ioapic_redirect(isa_irq: u8, vec: u8) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::icr_fixed;
+    use super::{cpu_apic_id, icr_fixed, register_cpu};
+    use crate::x86_64::syscall::MAX_CPUS;
 
     #[test]
     fn icr_encoding_follows_the_apic_mode() {
         assert_eq!(icr_fixed(false, 3, 0xF0), (3 << 24, 0xF0, 0));
         assert_eq!(icr_fixed(true, 300, 0xF0), (0, 0, 300u64 << 32 | 0xF0));
+    }
+
+    /// One test owns the global table, so parallel test threads cannot race it.
+    #[test]
+    fn cpu_registration_is_write_once_and_unique() {
+        assert!(register_cpu(0, 7));
+        assert!(
+            register_cpu(0, 7),
+            "re-registering the same pair is accepted"
+        );
+        assert!(!register_cpu(0, 8), "a registered slot does not move");
+        assert!(!register_cpu(1, 7), "an ID cannot have two slots");
+        assert_eq!(
+            cpu_apic_id(1),
+            None,
+            "a refused registration leaves no trace"
+        );
+        assert!(
+            register_cpu(MAX_CPUS - 1, 255),
+            "the last slot and the largest ID"
+        );
+        assert!(!register_cpu(MAX_CPUS, 9), "slot out of range");
+        assert!(
+            !register_cpu(2, 256),
+            "IDs above 255 need interrupt remapping"
+        );
+        assert_eq!(cpu_apic_id(0), Some(7));
+        assert_eq!(cpu_apic_id(MAX_CPUS - 1), Some(255));
+        assert_eq!(cpu_apic_id(MAX_CPUS), None);
+        assert_eq!(cpu_apic_id(2), None);
     }
 }

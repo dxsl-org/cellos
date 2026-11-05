@@ -396,7 +396,7 @@ owner = "hal-x86 critical_section impl (feature critical-section-impl, enabled b
 contexts = ["none"]
 seal = "no storage: critical-section 1.2.0 set_impl! emits only #[no_mangle] _critical_section_1_0_acquire/_release functions"
 retirement = "no storage: emitted items are code"
-rationale = "The macro (critical-section-1.2.0 src/lib.rs:297-307) defines two functions and no static. The impl is pushfq/cli/popfq, i.e. local-CPU masking only: with MAX_CPUS = 2 any dependency relying on critical_section::with for cross-CPU exclusion is unprotected, as the file header states."
+rationale = "The macro (critical-section-1.2.0 src/lib.rs:297-307) defines two functions and no static. The impl is pushfq/cli/popfq, i.e. local-CPU masking only: with more than one CPU online any dependency relying on critical_section::with for cross-CPU exclusion is unprotected, as the file header states."
 review = "hal/arch/x86/src/critical_section.rs:22; hal/arch/x86/src/critical_section.rs:12-15; kernel/Cargo.toml:49"
 
 [[global]]
@@ -755,12 +755,12 @@ review = "hal/arch/x86/src/x86_64/apic.rs:set_ioapic_phys; hal/arch/x86/src/x86_
 key = "hal-x86::x86_64::apic::CPU_APIC_IDS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "hal-x86 apic::register_cpu (publish_boot_cpu_policy and start_secondaries on the BSP, init_secondary_cpu on the AP) CAS-publishes; cpu_apic_id readers send_ipi and ioapic_redirect"
+owner = "hal-x86 apic::register_cpu (publish_boot_cpu_policy and start_secondaries on the BSP, init_secondary_cpu on the AP) publishes one slot per logical CPU (MAX_CPUS = 64); cpu_apic_id readers send_ipi, ioapic_redirect and msi::bsp_message"
 contexts = ["boot", "ap", "normal"]
-seal = "BSP slot set at kmain:254, AP slot set by start_secondaries before goto_address release; the AP's own register_cpu only re-confirms the same ID"
+seal = "BSP slot set at kmain, AP slot set by start_secondaries before goto_address release; the AP's own register_cpu only re-confirms the same ID; a slot is never cleared after a successful registration"
 retirement = "never: lives for the whole run"
-rationale = "Both 32-bit IDs share one AtomicU64 updated by an AcqRel compare_exchange loop, so a duplicate physical ID cannot be published even under a race; slots are never cleared and readers Acquire-load."
-review = "hal/arch/x86/src/x86_64/apic.rs:register_cpu; hal/arch/x86/src/x86_64/apic.rs:cpu_apic_id; kernel/src/task/smp.rs:801; kernel/src/task/smp.rs:836"
+rationale = "Each slot is claimed by a SeqCst compare_exchange from UNREGISTERED to PENDING|id, then every other slot is SeqCst-scanned for the same id; on a match the claim is withdrawn, otherwise the bare id is stored. Of two racing registrants with one id at least one sees the other, so a duplicate physical ID is never published; readers Acquire-load and treat PENDING as unregistered, so no transient duplicate is visible."
+review = "hal/arch/x86/src/x86_64/apic.rs:register_cpu; hal/arch/x86/src/x86_64/apic.rs:cpu_apic_id; kernel/src/task/smp.rs:start_secondaries; hal/arch/x86/src/x86_64.rs:init_secondary_cpu"
 
 [[global]]
 key = "hal-x86::x86_64::apic::TIMER_COUNT @cfg(target_arch = \"x86_64\")"
@@ -1533,6 +1533,17 @@ seal = "each slot set true once during boot/AP bring-up; never cleared"
 retirement = "never: no CPU offline path"
 rationale = "Release store / Acquire load publishes AP readiness. Readers include TLB shootdown, the RT destination in push_ready and pend_preempt under SCHEDULER (timer ISR via yield_cpu). is_rt_hart_online uses Relaxed, which is acceptable only because it gates RT routing and the ready queues it routes into are themselves Spinlock-protected statics."
 review = "kernel/src/task/smp.rs:start_secondaries; kernel/src/task/smp.rs:x86_secondary_main; kernel/src/task/smp.rs:is_rt_hart_online; kernel/src/task/hart_local/ready.rs:destination_hart"
+
+[[global]]
+key = "kernel::task::smp::topology::CPU_TOPOLOGY"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::task::smp::topology::CpuTopology::publish: on x86_64 only start_secondaries (BSP) publishes logical 0 = BSP and logical 1 = the started AP; RV64 set_boot_physical_hart and AArch64 start_psci_secondaries / hart_local::install publish on those targets. Readers: logical_to_physical / physical_to_logical (x86: the AP's own check in x86_secondary_main)"
+contexts = ["boot", "ap"]
+seal = "each slot written at most once (compare_exchange from UNMAPPED) before the CPU it names is started; never cleared; a refused publish withdraws only the reverse claim it made itself"
+retirement = "never: no CPU offline path"
+rationale = "Logical->physical and physical->logical slots are AcqRel compare_exchange-claimed (reverse first), so racing publishers cannot give one physical id two logical harts or move a logical hart; a reverse entry is reported only when its forward slot confirms it. The x86 AP reads its own pair after the BSP's Release store to goto_address. No timer-IRQ access on x86_64."
+review = "kernel/src/task/smp/topology.rs:publish; kernel/src/task/smp/topology.rs:logical; kernel/src/task/smp.rs:start_secondaries; kernel/src/task/smp.rs:x86_secondary_main"
 
 [[global]]
 key = "kernel::task::smp::TLB_FLUSH_REQUEST"
