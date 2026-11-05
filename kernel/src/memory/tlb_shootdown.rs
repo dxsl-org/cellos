@@ -126,7 +126,11 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             Ok(())
         }
     };
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    // The stress gate (phase 07b) counts these lines on x86 as well.
+    #[cfg(all(
+        feature = "test-hooks",
+        any(target_arch = "riscv64", target_arch = "x86_64")
+    ))]
     if let Err(error) = &result {
         log::warn!(
             "[tlb] tag {} invalidation unconfirmed: hart {} silent through the {} tick probe",
@@ -223,6 +227,13 @@ fn local_tag_flush(asid: usize) {
 /// (the target may be in a long non-interruptible stretch), so the epoch — not
 /// the firmware's return — is what proves the remote hart stopped using the
 /// translation.
+///
+/// Broadcast, then wait over the set (phase 07b): every remote request is
+/// published and its IPI sent before the first wait, and one deadline covers
+/// the whole set. The targets are the online harts at the broadcast; the error
+/// names the lowest-numbered hart still silent at the deadline. Callers keep
+/// their fail-stop on that error (`flush_range` panics, tag releases defer
+/// their frames) — nothing here continues past an unconfirmed hart.
 #[cfg(any(
     target_arch = "riscv64",
     target_arch = "aarch64",
@@ -231,23 +242,24 @@ fn local_tag_flush(asid: usize) {
 fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     use crate::task::smp;
     let me = crate::task::hart_local::current_hart_id();
-    for hart in smp::online_harts().filter(|hart| *hart != me) {
-        let epoch = smp::request_tlb_flush(hart);
-        let deadline = counter_now() + ticks;
-        while !smp::tlb_flush_completed(hart, epoch) {
-            if counter_now() > deadline {
-                return Err(FlushAckError::Timeout { hart, epoch });
-            }
-            // Spin, and only spin: this runs in whatever context the release
-            // happens to be in, where widening the interrupt window can admit a
-            // timer ISR into the middle of a teardown (observed as a hang in
-            // the admission fixture). A remote hart makes progress anyway —
-            // the emulator interleaves vCPUs — so the wait needs a budget, not
-            // a yield.
-            core::hint::spin_loop();
-            #[cfg(target_arch = "x86_64")]
-            smp::service_tlb_flush(me);
+    let requested = smp::request_tlb_flush_set(smp::online_harts().filter(|hart| *hart != me));
+    let deadline = counter_now() + ticks;
+    while let Some((hart, epoch)) = smp::tlb_flush_set_outstanding(&requested) {
+        if counter_now() > deadline {
+            return Err(FlushAckError::Timeout { hart, epoch });
         }
+        // Spin, and only spin: this runs in whatever context the release
+        // happens to be in, where widening the interrupt window can admit a
+        // timer ISR into the middle of a teardown (observed as a hang in
+        // the admission fixture). A remote hart makes progress anyway —
+        // the emulator interleaves vCPUs — so the wait needs a budget, not
+        // a yield.
+        core::hint::spin_loop();
+        // Two or more harts can shoot each other down at once, each with IF
+        // possibly clear: answering our own requests here is what keeps a
+        // cycle of waiters from deadlocking.
+        #[cfg(target_arch = "x86_64")]
+        smp::service_tlb_flush(me);
     }
     Ok(())
 }

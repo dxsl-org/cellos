@@ -18,7 +18,9 @@
 //! identical to the AArch64 suite.
 
 use std::path::PathBuf;
-use vicell_integration_tests::{qemu_binary_x86, x86_iso_path, QemuRunner};
+use vicell_integration_tests::{
+    qemu_binary_x86, x86_iso_path, x86_smp_cpus, x86_topology_online_marker, QemuRunner,
+};
 
 const BOOT_TIMEOUT: u64 = 45;
 const CMD_TIMEOUT: u64 = 10;
@@ -259,6 +261,60 @@ fn x86_ps_command() {
             qemu.dump()
         )
     });
+}
+
+/// Plan 261103-2218 phase 07b: every CPU the firmware reports comes online.
+///
+/// Boots the canonical ISO with `-smp N` (`CELLOS_X86_SMP`, default 4; the
+/// accelerator follows `CELLOS_X86_ACCEL`) and requires the kernel's
+/// `topology online=N` line, the broadcast invalidation that every AP
+/// acknowledged, the shell, and a command answered on the N-CPU machine. Every
+/// shootdown is fail-stop, so a silent AP shows up as a panic or as an
+/// `invalidation unconfirmed` line; both fail the lane.
+#[test]
+fn x86_smp_brings_every_cpu_online() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let cpus = x86_smp_cpus(4);
+    let mut qemu = QemuRunner::boot_x86_bios_smp(&iso_path(), cpus);
+    let topology = x86_topology_online_marker(cpus);
+    qemu.wait_for(&topology, BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 -smp {cpus}: `{topology}` not seen: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    let broadcast = format!(
+        "[x86-smp] transport IPI-invalidate broadcast targets={}",
+        cpus - 1
+    );
+    assert!(
+        qemu.dump().contains(&broadcast),
+        "x86_64 -smp {cpus}: `{broadcast}` missing\n--- output ---\n{}",
+        qemu.dump()
+    );
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 -smp {cpus}: shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("ps");
+    qemu.wait_for("init", CMD_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 -smp {cpus}: ps did not respond: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    let output = qemu.dump();
+    for forbidden in ["invalidation unconfirmed", "panicked", "KERNEL PANIC"] {
+        assert!(
+            !output.contains(forbidden),
+            "x86_64 -smp {cpus}: `{forbidden}` in the boot log\n--- output ---\n{output}"
+        );
+    }
 }
 
 /// Fleet-profile containment: x86_64 switch ordering is production-qualified

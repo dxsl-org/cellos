@@ -34,8 +34,25 @@ Trong SAS, việc hai driver cùng ghi vào một địa chỉ phần cứng là
 * **Exclusive Access**: Driver phải gọi `kernel.request_mmio(base, size)`. Nếu vùng nhớ đã bị chiếm, Kernel sẽ từ chối cấp phát.
 
 ## 5. SMP & Real-Time Affinity
-* **Work Stealing**: RV64 two-hart scheduler steals Normal/Background work between
-  per-hart queues; RealTime tasks are excluded and remain affinity-controlled.
+* **Harts**: logical hart 0 is the boot hart and logical hart 1 the RealTime hart on
+  every architecture. riscv64 and aarch64 run at most two harts (`MAX_HARTS = 2`).
+  x86_64 brings every firmware-reported CPU online up to `MAX_HARTS = 64`; logical
+  2..N are additional normal harts. A CPU beyond 64 is logged `cpu N ignored:
+  MAX_HARTS`; a LAPIC ID above 255 stays offline until interrupt remapping exists.
+  APs come up one at a time, and the first AP that cannot be started ends bring-up,
+  so the online set is always `0..online`.
+* **Work Stealing**: an idle hart steals Normal/Background work from the busiest other
+  hart's queue, at most half of the stealable entries. Victim selection is a bounded
+  scan (each other hart slot once, starting after the thief, ties to the first found;
+  harts above 1 only while online). The move holds exactly two per-hart ready locks,
+  taken in ascending hart id. RealTime tasks are never stolen and remain
+  affinity-controlled; the RT hart steals and is stolen from only for Normal/Background
+  work, as on two harts.
+* **Cross-hart invalidation**: a TLB shootdown publishes a fresh epoch for, and sends an
+  IPI to, every other online hart first, then waits over that set under one deadline.
+  An unconfirmed hart is fail-stop: a shared-mapping flush panics and a tag release
+  defers its frames; nothing proceeds as if it had been acknowledged. Retirement-switch
+  waits are per-hart epochs over all hart slots.
 * **Affinity**: RT routing is policy over scheduler mechanisms; it does not grant
   exclusive ownership of a core unless an explicit isolation policy proves that property.
 

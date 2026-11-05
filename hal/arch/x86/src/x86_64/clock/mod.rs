@@ -84,8 +84,15 @@ static TSC_DEMOTIONS: AtomicU64 = AtomicU64::new(0);
 
 const IA32_TSC_DEADLINE: u32 = 0x6E0;
 
-/// Offer a zeroed, dedicated 32-byte area (HHDM `virt`, physical `phys`) for
-/// kvmclock. Call before [`select`]; ignored when KVM is absent.
+/// Bytes of the kvmclock page handed over by [`set_pvclock_area`]: one
+/// [`kvmclock::AREA_BYTES`] slot per logical CPU.
+const PVCLOCK_PAGE_BYTES: usize = 4096;
+const _: () = assert!(super::syscall::MAX_CPUS * kvmclock::AREA_BYTES <= PVCLOCK_PAGE_BYTES);
+
+/// Offer a zeroed, dedicated 4 KiB page (HHDM `virt`, physical `phys`) for
+/// kvmclock. Call before [`select`]; ignored when KVM is absent. Logical CPU
+/// `n` owns bytes `n * 32 .. n * 32 + 32` of it: the boot CPU registers slot 0
+/// in [`select`], each AP its own slot in [`start_secondary`].
 pub fn set_pvclock_area(virt: usize, phys: u64) {
     PVCLOCK_VIRT.store(virt, Ordering::Relaxed);
     PVCLOCK_PHYS.store(phys, Ordering::Relaxed);
@@ -207,8 +214,10 @@ pub fn on_tick() {
 }
 
 /// Start this AP's tick the same way as the BSP's. Returns `false` when the
-/// BSP has no clockevent to copy.
+/// BSP has no clockevent to copy. Runs on the AP after `syscall::install_cpu`
+/// (its logical id is readable through GS).
 pub fn start_secondary(lapic_id: u32) -> bool {
+    register_secondary_pvclock();
     check_secondary_tsc();
     let period = DEADLINE_PERIOD.load(Ordering::Acquire);
     if period != 0 {
@@ -221,6 +230,46 @@ pub fn start_secondary(lapic_id: u32) -> bool {
     apic::init_secondary(lapic_id)
 }
 
+/// Register this AP's own pvclock slot when the boot CPU's kvmclock
+/// registration is active (otherwise kvmclock is unused on every CPU).
+///
+/// The boot CPU's area is what [`now_ns`] reads, which is valid only while the
+/// host declares the TSC stable on every vCPU. An AP whose own area lacks that
+/// declaration therefore demotes a kvmclock clocksource, as a skewed TSC does.
+fn register_secondary_pvclock() {
+    if kvmclock::now_ns() == 0 {
+        return;
+    }
+    let logical = super::syscall::current_cpu_id();
+    let offset = logical * kvmclock::AREA_BYTES;
+    let virt = PVCLOCK_VIRT.load(Ordering::Relaxed);
+    if logical == 0 || virt == 0 || offset + kvmclock::AREA_BYTES > PVCLOCK_PAGE_BYTES {
+        return;
+    }
+    let phys = PVCLOCK_PHYS.load(Ordering::Relaxed) + offset as u64;
+    // SAFETY: `set_pvclock_area` handed over a dedicated zeroed page; this
+    // logical CPU owns its slot and registers it once, on itself.
+    if !unsafe { kvmclock::register(virt + offset, phys) } && source() == ClockSource::Kvmclock {
+        if let Some(next) = fallback_source(false) {
+            install(next);
+        }
+    }
+}
+
+/// The source a demotion falls back to, best first; `None` when nothing better
+/// exists (the `fetch_max` guard then keeps time monotonic).
+fn fallback_source(kvmclock_usable: bool) -> Option<ClockSource> {
+    if kvmclock_usable && kvmclock::now_ns() != 0 {
+        Some(ClockSource::Kvmclock)
+    } else if hpet::present() {
+        Some(ClockSource::Hpet)
+    } else if pmtimer::present() {
+        Some(ClockSource::PmTimer)
+    } else {
+        None
+    }
+}
+
 /// Demote the TSC when this CPU's TSC is behind the published clock: a
 /// skewed TSC would make `now_ns` stall on this CPU.
 fn check_secondary_tsc() {
@@ -231,16 +280,9 @@ fn check_secondary_tsc() {
     let published = LAST_NS.load(Ordering::Acquire) as i64;
     if mine + (TSC_SKEW_LIMIT_NS as i64) < published {
         TSC_DEMOTIONS.fetch_add(1, Ordering::Relaxed);
-        let next = if kvmclock::now_ns() != 0 {
-            ClockSource::Kvmclock
-        } else if hpet::present() {
-            ClockSource::Hpet
-        } else if pmtimer::present() {
-            ClockSource::PmTimer
-        } else {
-            return; // nothing better; the fetch_max guard keeps time monotonic
-        };
-        install(next);
+        if let Some(next) = fallback_source(true) {
+            install(next);
+        }
     }
 }
 

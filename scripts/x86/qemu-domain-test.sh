@@ -59,10 +59,11 @@ case "$X86_EXPECT_PCID" in
     0|1) ;;
     *) echo "FAIL: X86_EXPECT_PCID must be 0 or 1" >&2; exit 1 ;;
 esac
-case "$X86_CPUS" in
-    1|2) ;;
-    *) echo "FAIL: X86_CPUS must be 1 or 2" >&2; exit 1 ;;
-esac
+# 1..64 (the x86 MAX_HARTS). Two or more CPUs require the `online=N` topology
+# and the SMP fixtures below (plan 261103-2218 phase 07b).
+if ! [[ "$X86_CPUS" =~ ^[1-9][0-9]*$ ]] || (( X86_CPUS > 64 )); then
+    echo "FAIL: X86_CPUS must be a number from 1 to 64" >&2; exit 1
+fi
 
 if [[ ! -f "$KERNEL" ]]; then
     echo "FAIL: domain-test kernel not found: $KERNEL" >&2
@@ -272,13 +273,24 @@ REQUIRED_MARKERS=(
     "domain teardown:::S22-X86-DOMAIN-TEARDOWN: PASS releases="
     "interactive shell:::Cellos > "
 )
-if [[ "$X86_CPUS" == "2" ]]; then
+if (( X86_CPUS >= 2 )); then
     REQUIRED_MARKERS+=(
-        "qualified two-CPU topology:::[x86-smp] topology online=2 processor_ids="
+        "qualified $X86_CPUS-CPU topology:::[x86-smp] topology online=$X86_CPUS processor_ids="
+        "broadcast invalidation acknowledged by every AP:::[x86-smp] transport IPI-invalidate broadcast targets=$((X86_CPUS - 1)) "
         "raw-context ownership and retirement:::S22-X86-CONTEXT-HANDOFF: PASS"
-        "actual remote translation invalidation:::S22-X86-REMOTE-SHOOTDOWN: PASS"
-        "invalidation answered under a masked uncontended lock:::S22-X86-MASKED-SHOOTDOWN: PASS"
+        "actual remote translation invalidation:::S22-X86-REMOTE-SHOOTDOWN: PASS harts=$X86_CPUS "
+        "invalidation answered under a masked uncontended lock:::S22-X86-MASKED-SHOOTDOWN: PASS harts=$X86_CPUS "
     )
+fi
+
+# --- Shootdown fail-stop -----------------------------------------------------
+# Every unconfirmed tag or shared-mapping invalidation is logged (`[tlb] tag …
+# invalidation unconfirmed`, test-hooks) or panics (`[x86-smp] shared mapping
+# invalidation unconfirmed`); either is a lane failure, never a retry.
+if grep -qa "invalidation unconfirmed" "$LOG"; then
+    echo "FAIL: an invalidation went unconfirmed:" >&2
+    grep -a "invalidation unconfirmed" "$LOG" >&2
+    exit 1
 fi
 
 bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"

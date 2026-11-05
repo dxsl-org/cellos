@@ -162,6 +162,68 @@ pub fn tlb_flush_pending(hart_id: usize) -> bool {
             > TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire)
 }
 
+/// Epochs one requester asked a set of remote harts for: one slot per logical
+/// hart, 0 = not asked (epoch 0 is never a real request).
+///
+/// Broadcast-then-wait contract (plan 261103-2218 phase 07b): every request of
+/// the set is published and its IPI sent before the requester waits on any
+/// answer, so the targets work concurrently and the set completes in about one
+/// round trip, not one per hart. The set is fixed when it is built: a hart that
+/// comes online later was not asked and is not waited for (it joins only after
+/// its own bring-up flush handshake). Completion is per hart and monotone
+/// (`publish_completion` never lowers an epoch), so a hart found complete
+/// stays complete; the set is complete when no slot is outstanding.
+#[derive(Clone, Copy)]
+pub struct RemoteEpochs {
+    epochs: [usize; MAX_HARTS],
+}
+
+impl RemoteEpochs {
+    /// Ask each of `targets` once through `request` (which publishes the epoch
+    /// and delivers the IPI) and record the epoch it must confirm. Ids at or
+    /// above `MAX_HARTS` are ignored.
+    pub fn broadcast(
+        targets: impl IntoIterator<Item = usize>,
+        mut request: impl FnMut(usize) -> usize,
+    ) -> Self {
+        let mut epochs = [0; MAX_HARTS];
+        for hart in targets {
+            if let Some(slot) = epochs.get_mut(hart) {
+                *slot = request(hart);
+            }
+        }
+        Self { epochs }
+    }
+
+    /// The lowest-numbered asked hart whose epoch `completed` does not confirm
+    /// yet, with that epoch; `None` once the whole set has confirmed.
+    pub fn first_outstanding(
+        &self,
+        mut completed: impl FnMut(usize, usize) -> bool,
+    ) -> Option<(usize, usize)> {
+        self.epochs
+            .iter()
+            .enumerate()
+            .find(|&(hart, &epoch)| epoch != 0 && !completed(hart, epoch))
+            .map(|(hart, &epoch)| (hart, epoch))
+    }
+
+    /// How many harts were asked.
+    pub fn asked(&self) -> usize {
+        self.epochs.iter().filter(|epoch| **epoch != 0).count()
+    }
+}
+
+/// Broadcast a TLB invalidation request to `targets` (see [`RemoteEpochs`]).
+pub fn request_tlb_flush_set(targets: impl IntoIterator<Item = usize>) -> RemoteEpochs {
+    RemoteEpochs::broadcast(targets, request_tlb_flush)
+}
+
+/// The first hart of `set` that has not confirmed its invalidation epoch.
+pub fn tlb_flush_set_outstanding(set: &RemoteEpochs) -> Option<(usize, usize)> {
+    set.first_outstanding(tlb_flush_completed)
+}
+
 /// The logical harts that completed kernel bring-up.
 pub fn online_harts() -> impl Iterator<Item = usize> {
     (0..MAX_HARTS).filter(|hart| HART_ONLINE[*hart].load(Ordering::Acquire))
@@ -740,23 +802,46 @@ pub fn run_ipi_selftest() {
 )))]
 pub fn start_secondaries() {}
 
+// x86 AP bring-up handshake (phase 07b: every MP CPU up to `MAX_HARTS`).
+//
+// The BSP starts APs one at a time, in Limine MP order, each through the same
+// four-step exchange; the next AP is released only after the previous one is
+// online, so each handshake word below names at most one AP in flight and is
+// a logical id (0 = none yet), never a flag that a later AP could confuse with
+// an earlier one's:
+//   1. AP: own flush proof on the BSP (request_tlb_flush(0) acknowledged), then
+//      `X86_READY = logical` (or `X86_AP_ROOT_REFUSED = logical` and park).
+//   2. BSP: flush proof on the AP (request_tlb_flush(logical) acknowledged),
+//      then `X86_QUALIFIED = logical`.
+//   3. AP: `HART_ONLINE[logical] = true`.
+//   4. BSP: proceeds to the next AP.
+// The first refusal or failure ends bring-up, so the online set is always the
+// contiguous range 0..online and the RT hart (1) is online whenever any AP is.
 #[cfg(target_arch = "x86_64")]
-static X86_READY: AtomicBool = AtomicBool::new(false);
+static X86_READY: AtomicUsize = AtomicUsize::new(0);
+/// Highest logical AP the BSP has qualified (step 2); monotone, because APs
+/// are qualified in increasing logical order.
 #[cfg(target_arch = "x86_64")]
-static X86_QUALIFIED: AtomicBool = AtomicBool::new(false);
+static X86_QUALIFIED: AtomicUsize = AtomicUsize::new(0);
 #[cfg(target_arch = "x86_64")]
 static X86_BOOT_COMPLETE: AtomicBool = AtomicBool::new(false);
-/// Set by the AP instead of `X86_READY` when it cannot enter the x86 root
-/// operation the BSP latched; that AP parks and never goes online.
+/// Logical id of the AP that answered step 1 with a refusal instead of
+/// `X86_READY`: it cannot enter the x86 root operation the BSP latched, so it
+/// parks and never goes online.
 #[cfg(target_arch = "x86_64")]
-static X86_AP_ROOT_REFUSED: AtomicBool = AtomicBool::new(false);
+static X86_AP_ROOT_REFUSED: AtomicUsize = AtomicUsize::new(0);
 #[cfg(target_arch = "x86_64")]
 static X86_PREEMPT: [AtomicBool; MAX_HARTS] = [const { AtomicBool::new(false) }; MAX_HARTS];
 
+/// Budget of one bounded handshake wait (`x86_bounded_wait`).
+#[cfg(target_arch = "x86_64")]
+const X86_WAIT_STEPS: usize = 100_000_000;
+
 #[cfg(target_arch = "x86_64")]
 pub fn x86_substrate_qualified() -> bool {
+    // Every online AP passed step 2 before it published `HART_ONLINE`.
     X86_BOOT_COMPLETE.load(Ordering::Acquire)
-        && (online_harts().count() == 1 || X86_QUALIFIED.load(Ordering::Acquire))
+        && (online_harts().count() == 1 || X86_QUALIFIED.load(Ordering::Acquire) != 0)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -777,22 +862,30 @@ pub fn take_preemption(hart: usize) -> bool {
     hart < MAX_HARTS && X86_PREEMPT[hart].swap(false, Ordering::AcqRel)
 }
 
+/// What the BSP hands one AP through `LimineMpInfo.extra_argument`; read only
+/// by `vi_x86_secondary_entry` (field offsets 0/8/16/24 are its contract).
+/// `AtomicUsize` has the layout of `usize`, so the asm reads plain words.
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]
 struct X86SecondaryContext {
-    stack_top: usize,
-    kernel_cr3: usize,
-    logical: usize,
-    lapic_id: usize,
+    stack_top: AtomicUsize,
+    kernel_cr3: AtomicUsize,
+    logical: AtomicUsize,
+    lapic_id: AtomicUsize,
 }
 
+/// One context per logical AP slot, so no AP's handoff is ever rewritten for
+/// another. Each slot is written once by the BSP before the Release store to
+/// that AP's Limine `goto_address`.
 #[cfg(target_arch = "x86_64")]
-static mut X86_SECONDARY: X86SecondaryContext = X86SecondaryContext {
-    stack_top: 0,
-    kernel_cr3: 0,
-    logical: 1,
-    lapic_id: 0,
-};
+static X86_SECONDARY: [X86SecondaryContext; MAX_HARTS] = [const {
+    X86SecondaryContext {
+        stack_top: AtomicUsize::new(0),
+        kernel_cr3: AtomicUsize::new(0),
+        logical: AtomicUsize::new(0),
+        lapic_id: AtomicUsize::new(0),
+    }
+}; MAX_HARTS];
 
 // Limine enters with IF clear on its own permanent bootloader stack. Read all
 // handoff fields before the root change, adopt our dedicated stack before Rust
@@ -821,10 +914,15 @@ core::arch::global_asm!(
 );
 
 #[cfg(target_arch = "x86_64")]
-fn x86_bounded_wait(mut done: impl FnMut() -> bool) {
+fn x86_bounded_wait(done: impl FnMut() -> bool) {
+    x86_bounded_wait_steps(X86_WAIT_STEPS, done);
+}
+
+#[cfg(target_arch = "x86_64")]
+fn x86_bounded_wait_steps(steps: usize, mut done: impl FnMut() -> bool) {
     // A bounded instruction budget does not depend on timer interrupts being
     // delivered to the waiting CPU. Fail closed once a callback was released.
-    for _ in 0..100_000_000usize {
+    for _ in 0..steps {
         if done() {
             return;
         }
@@ -843,6 +941,39 @@ pub(crate) fn x86_idt_fixture_uniprocessor_ready() {
     X86_BOOT_COMPLETE.store(true, Ordering::Release);
 }
 
+/// `processor_ids=` of the topology line: the BSP's LAPIC ID, then each online
+/// AP's, in logical order.
+#[cfg(target_arch = "x86_64")]
+struct X86OnlineApicIds {
+    bsp_id: u32,
+}
+
+#[cfg(target_arch = "x86_64")]
+impl core::fmt::Display for X86OnlineApicIds {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.bsp_id)?;
+        for hart in online_harts().filter(|hart| *hart != 0) {
+            if let Some(id) = logical_to_physical(hart) {
+                write!(f, ";{}", id)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Bring every Limine MP CPU online, up to `MAX_HARTS` logical harts.
+///
+/// Logical 0 is the BSP; APs take logical 1, 2, … in Limine MP order (1 is
+/// the RT hart, the rest are normal harts). APs are started one at a time
+/// through the handshake documented at `X86_READY`; a CPU beyond `MAX_HARTS`
+/// is logged `cpu N ignored: MAX_HARTS` and left in Limine's park loop, a
+/// LAPIC ID above 255 stays offline (no interrupt remapping, phase 12), and
+/// the first AP that refuses root operation or cannot be started ends
+/// bring-up with the harts already online.
+///
+/// `task::quiesce` fails closed above 8 online harts; on x86 it already refuses
+/// every multi-hart set (no park hook), so bring-up does not cap below
+/// `MAX_HARTS` for it (phase 07b decision D2).
 #[cfg(target_arch = "x86_64")]
 pub fn start_secondaries() {
     use crate::boot::limine;
@@ -884,10 +1015,13 @@ pub fn start_secondaries() {
         finish_up();
         return;
     }
+    // Validate every record before any AP is released: one bad record keeps
+    // the whole machine uniprocessor, as before.
     let mut ids = [false; 256];
     let mut processors = [0u32; 256];
     let mut bsp_seen = false;
-    let mut secondary: *mut limine::LimineMpInfo = core::ptr::null_mut();
+    let mut secondaries: [*mut limine::LimineMpInfo; 256] = [core::ptr::null_mut(); 256];
+    let mut secondary_count = 0;
     for index in 0..count {
         let info = unsafe { *response.cpus.add(index) };
         if !limine::mp_record_valid(info, 1) {
@@ -916,94 +1050,148 @@ pub fn start_secondaries() {
         processors[index] = cpu.processor_id;
         if cpu.lapic_id == bsp_id {
             bsp_seen = true;
-        } else if secondary.is_null() {
-            secondary = info;
+        } else {
+            secondaries[secondary_count] = info;
+            secondary_count += 1;
         }
     }
-    if !bsp_seen || secondary.is_null() {
+    if !bsp_seen || secondary_count == 0 {
         finish_up();
         return;
     }
-    let ap_id = unsafe { (*secondary).lapic_id };
-    // Phase 07a still activates exactly one AP, the first non-BSP MP record in
-    // Limine order. It takes the next free logical index (1, the RT hart); the
-    // pair is published before the AP is released, so the AP's own check in
-    // `x86_secondary_main` reads a complete mapping.
-    let logical = CPU_TOPOLOGY.count();
-    if logical >= MAX_HARTS
-        || !CPU_TOPOLOGY.publish(logical, ap_id as usize)
-        || !hal::x86_64::apic::register_cpu(logical, ap_id)
-    {
-        finish_up();
-        return;
-    }
-    let stack = match crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES) {
-        Ok(stack) => stack,
-        Err(_) => {
-            finish_up();
-            return;
-        }
-    };
     let kernel_cr3 = hal::domain::kernel_cr3();
     assert!(kernel_cr3 != 0, "AP requires permanent shared kernel root");
-    let stack_top = stack.top;
-    core::mem::forget(stack);
-    extern "C" {
-        fn vi_x86_secondary_entry();
-    }
-    unsafe {
-        X86_SECONDARY = X86SecondaryContext {
-            stack_top,
-            kernel_cr3,
-            logical,
-            lapic_id: ap_id as usize,
-        };
-        (*secondary).extra_argument = (&raw const X86_SECONDARY) as u64;
-        (*secondary).goto_address.store(
-            vi_x86_secondary_entry as *const () as usize,
-            Ordering::Release,
-        );
-    }
-    // The BSP must receive the AP's reciprocal proof even if boot entered this
+    // The BSP must receive each AP's reciprocal proof even if boot entered this
     // routine with interrupts masked. Restore its original state afterwards.
     let flags: usize;
     unsafe {
         core::arch::asm!("pushfq", "pop {}", "sti", out(reg) flags);
     }
-    x86_bounded_wait(|| {
-        X86_READY.load(Ordering::Acquire) || X86_AP_ROOT_REFUSED.load(Ordering::Acquire)
-    });
-    if X86_AP_ROOT_REFUSED.load(Ordering::Acquire) {
-        log::warn!(
-            "[x86-smp] AP {} refused x86 root operation; it stays offline",
-            ap_id
-        );
-        finish_up();
-        if flags & (1 << 9) == 0 {
-            unsafe {
-                core::arch::asm!("cli", options(nomem, nostack));
-            }
+    for &info in &secondaries[..secondary_count] {
+        let (ap_id, processor_id) = unsafe { ((*info).lapic_id, (*info).processor_id) };
+        // The next free logical index; the pair is published before the AP is
+        // released, so the AP's own check in `x86_secondary_main` reads a
+        // complete mapping.
+        let logical = CPU_TOPOLOGY.count();
+        if logical >= MAX_HARTS {
+            log::warn!(
+                "[x86-smp] cpu {} ignored: MAX_HARTS (apic_id={})",
+                processor_id,
+                ap_id
+            );
+            continue;
         }
-        return;
+        if !x86_start_ap(info, logical, ap_id, kernel_cr3) {
+            break;
+        }
     }
-    let epoch = request_tlb_flush(logical);
-    x86_bounded_wait(|| tlb_flush_completed(logical, epoch));
-    X86_QUALIFIED.store(true, Ordering::Release);
-    x86_bounded_wait(|| HART_ONLINE[logical].load(Ordering::Acquire));
+    let online = online_hart_count();
+    let broadcast_ns = (online > 1).then(x86_broadcast_flush_proof);
     #[cfg(feature = "test-hooks")]
-    x86_shootdown_fixture_primary();
+    if online > 1 {
+        x86_shootdown_fixture_primary();
+    }
     X86_BOOT_COMPLETE.store(true, Ordering::Release);
-    log::info!("[x86-smp] transport IPI-invalidate bidirectional=pass");
+    if let Some(ack_ns) = broadcast_ns {
+        log::info!("[x86-smp] transport IPI-invalidate bidirectional=pass");
+        log::info!(
+            "[x86-smp] transport IPI-invalidate broadcast targets={} ack_ns={}",
+            online - 1,
+            ack_ns
+        );
+    }
     log::info!(
-        "[x86-smp] topology online=2 processor_ids={};{} qualified=yes",
-        bsp_id,
-        ap_id
+        "[x86-smp] topology online={} processor_ids={} qualified=yes",
+        online,
+        X86OnlineApicIds { bsp_id }
     );
     if flags & (1 << 9) == 0 {
         unsafe {
             core::arch::asm!("cli", options(nomem, nostack));
         }
     }
+}
+
+/// Start one AP as `logical` and run the four-step handshake (see
+/// `X86_READY`). Returns `false`, leaving that AP offline, when it cannot be
+/// started or refuses root operation; the caller then stops bring-up.
+#[cfg(target_arch = "x86_64")]
+fn x86_start_ap(
+    info: *mut crate::boot::limine::LimineMpInfo,
+    logical: usize,
+    ap_id: u32,
+    kernel_cr3: usize,
+) -> bool {
+    let stack = match crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES) {
+        Ok(stack) => stack,
+        Err(_) => {
+            log::warn!(
+                "[x86-smp] AP {} stack allocation failed; bring-up stops",
+                ap_id
+            );
+            return false;
+        }
+    };
+    if !CPU_TOPOLOGY.publish(logical, ap_id as usize)
+        || !hal::x86_64::apic::register_cpu(logical, ap_id)
+    {
+        log::warn!(
+            "[x86-smp] AP {} refused as logical {}; bring-up stops",
+            ap_id,
+            logical
+        );
+        return false;
+    }
+    let stack_top = stack.top;
+    core::mem::forget(stack);
+    extern "C" {
+        fn vi_x86_secondary_entry();
+    }
+    let context = &X86_SECONDARY[logical];
+    // Relaxed: the Release store to `goto_address` below publishes these.
+    context.stack_top.store(stack_top, Ordering::Relaxed);
+    context.kernel_cr3.store(kernel_cr3, Ordering::Relaxed);
+    context.logical.store(logical, Ordering::Relaxed);
+    context.lapic_id.store(ap_id as usize, Ordering::Relaxed);
+    unsafe {
+        (*info).extra_argument = core::ptr::from_ref(context) as u64;
+        (*info).goto_address.store(
+            vi_x86_secondary_entry as *const () as usize,
+            Ordering::Release,
+        );
+    }
+    // Step 1 answered by this AP (no earlier AP can still write these words:
+    // it is online or parked before this one is released).
+    x86_bounded_wait(|| {
+        X86_READY.load(Ordering::Acquire) == logical
+            || X86_AP_ROOT_REFUSED.load(Ordering::Acquire) == logical
+    });
+    if X86_AP_ROOT_REFUSED.load(Ordering::Acquire) == logical {
+        log::warn!(
+            "[x86-smp] AP {} refused x86 root operation; it stays offline",
+            ap_id
+        );
+        return false;
+    }
+    // Step 2: this AP answers the BSP's IPI-driven invalidation.
+    let epoch = request_tlb_flush(logical);
+    x86_bounded_wait(|| tlb_flush_completed(logical, epoch));
+    X86_QUALIFIED.store(logical, Ordering::Release);
+    // Step 3.
+    x86_bounded_wait(|| HART_ONLINE[logical].load(Ordering::Acquire));
+    true
+}
+
+/// One broadcast invalidation to every online AP at once, the shape every
+/// later shootdown takes (`tlb_shootdown::await_remote_invalidation`).
+/// Returns its acknowledgement latency in clock nanoseconds (0 without a
+/// clocksource). The APs still spin in their boot-complete wait with IF set.
+#[cfg(target_arch = "x86_64")]
+fn x86_broadcast_flush_proof() -> usize {
+    let started = hal::x86_64::clock::now_ns();
+    let requested = request_tlb_flush_set(online_harts().filter(|hart| *hart != 0));
+    x86_bounded_wait(|| tlb_flush_set_outstanding(&requested).is_none());
+    hal::x86_64::clock::now_ns().saturating_sub(started) as usize
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -1030,7 +1218,7 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
                 lapic_id,
                 reason
             );
-            X86_AP_ROOT_REFUSED.store(true, Ordering::Release);
+            X86_AP_ROOT_REFUSED.store(logical, Ordering::Release);
             loop {
                 unsafe {
                     core::arch::asm!("cli", "hlt", options(nomem, nostack));
@@ -1042,14 +1230,36 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
     unsafe {
         core::arch::asm!("sti", options(nomem, nostack));
     }
+    // Per-AP clock state: `init_secondary_cpu` ran the TSC skew check, armed
+    // this CPU's LAPIC/TSC-deadline tick and, when the BSP uses kvmclock,
+    // registered this vCPU's own pvclock slot (the MSR is per vCPU).
+    log::info!(
+        "[x86-smp] AP logical={} apic_id={} pvclock={}",
+        logical,
+        lapic_id,
+        if hal::x86_64::clock::kvmclock::registered_area().is_some() {
+            "own"
+        } else {
+            "none"
+        }
+    );
+    // Step 1 (see `X86_READY`).
     let epoch = request_tlb_flush(0);
     x86_bounded_wait(|| tlb_flush_completed(0, epoch));
-    X86_READY.store(true, Ordering::Release);
-    x86_bounded_wait(|| X86_QUALIFIED.load(Ordering::Acquire));
+    X86_READY.store(logical, Ordering::Release);
+    x86_bounded_wait(|| X86_QUALIFIED.load(Ordering::Acquire) >= logical);
+    // Step 3.
     HART_ONLINE[logical].store(true, Ordering::Release);
-    x86_bounded_wait(|| {
+    // Later APs are brought up while this one waits here. Each later AP costs
+    // the BSP at most three bounded waits, plus the closing broadcast and
+    // shootdown fixture, so four budgets per hart slot bound this wait.
+    x86_bounded_wait_steps(X86_WAIT_STEPS.saturating_mul(4 * MAX_HARTS), || {
+        // The shootdown fixture pairs the BSP with the RT hart only; any other
+        // AP just answers its IPIs from here.
         #[cfg(feature = "test-hooks")]
-        x86_shootdown_fixture_secondary();
+        if logical == HART_RT {
+            x86_shootdown_fixture_secondary();
+        }
         X86_BOOT_COMPLETE.load(Ordering::Acquire)
     });
     loop {
@@ -1194,9 +1404,13 @@ fn x86_shootdown_fixture_primary() {
     let allocator = allocator.as_mut().expect("fixture frame allocator");
     allocator.deallocate_frame(old);
     allocator.deallocate_frame(new);
-    log::info!("S22-X86-REMOTE-SHOOTDOWN: PASS harts=2 global=true irq_masked_lock=true before=4951 after=9320");
+    // Both shootdowns went to every online AP; the RT hart is the one that
+    // held IF clear and observed the binding.
+    let harts = online_hart_count();
+    log::info!("S22-X86-REMOTE-SHOOTDOWN: PASS harts={} global=true irq_masked_lock=true before=4951 after=9320", harts);
     log::info!(
-        "S22-X86-MASKED-SHOOTDOWN: PASS harts=2 irq_masked_uncontended_lock=true after=4951"
+        "S22-X86-MASKED-SHOOTDOWN: PASS harts={} irq_masked_uncontended_lock=true after=4951",
+        harts
     );
 }
 
@@ -1452,5 +1666,131 @@ mod tests {
         assert_eq!(complete.load(Ordering::Acquire), 6);
         assert!(publish_completion(&complete, 7));
         assert_eq!(complete.load(Ordering::Acquire), 7);
+    }
+
+    /// Four simulated harts: requester 0 broadcasts to 1, 2 and 3. Every
+    /// request is issued before any completion is consulted, the set waits on
+    /// the lowest silent hart, and it completes only when all three confirmed.
+    #[test]
+    fn epoch_set_broadcasts_before_waiting_and_completes_over_four_harts() {
+        const HARTS: usize = 4;
+        let me = 0;
+        let request = [const { AtomicUsize::new(0) }; HARTS];
+        let complete = [const { AtomicUsize::new(0) }; HARTS];
+        let mut issued = alloc::vec::Vec::new();
+        let set = RemoteEpochs::broadcast((0..HARTS).filter(|hart| *hart != me), |hart| {
+            issued.push(hart);
+            request[hart].fetch_add(1, Ordering::AcqRel) + 1
+        });
+        assert_eq!(issued, [1, 2, 3], "one request per remote, in id order");
+        assert_eq!(set.asked(), 3);
+        let completed = |hart: usize, epoch: usize| complete[hart].load(Ordering::Acquire) >= epoch;
+        assert_eq!(set.first_outstanding(completed), Some((1, 1)));
+        // Out of order: 3 and 1 answer, 2 stays silent.
+        assert!(publish_completion(&complete[3], 1));
+        assert!(publish_completion(&complete[1], 1));
+        assert_eq!(set.first_outstanding(completed), Some((2, 1)));
+        assert!(publish_completion(&complete[2], 1));
+        assert_eq!(set.first_outstanding(completed), None);
+        // The requester never asked itself.
+        assert_eq!(request[me].load(Ordering::Acquire), 0);
+    }
+
+    /// A completion published for an older request does not confirm a newer
+    /// set, and ids outside `MAX_HARTS` are never asked.
+    #[test]
+    fn epoch_set_ignores_stale_completions_and_out_of_range_targets() {
+        let request = [const { AtomicUsize::new(0) }; 4];
+        let complete = [const { AtomicUsize::new(0) }; 4];
+        for hart in 1..4 {
+            request[hart].store(5, Ordering::Release);
+            complete[hart].store(5, Ordering::Release);
+        }
+        let set = RemoteEpochs::broadcast([1, 2, 3, MAX_HARTS, usize::MAX], |hart| {
+            request[hart].fetch_add(1, Ordering::AcqRel) + 1
+        });
+        assert_eq!(set.asked(), 3);
+        let completed = |hart: usize, epoch: usize| complete[hart].load(Ordering::Acquire) >= epoch;
+        assert_eq!(set.first_outstanding(completed), Some((1, 6)));
+        for hart in 1..4 {
+            publish_completion(&complete[hart], 6);
+        }
+        assert_eq!(set.first_outstanding(completed), None);
+    }
+
+    /// The real TLB mailboxes, on the top four hart slots (no other host test
+    /// touches them): a set broadcast over four simulated harts stays
+    /// outstanding until each target publishes, and each publication only
+    /// retires its own slot.
+    #[test]
+    fn tlb_flush_set_over_four_simulated_harts() {
+        let harts = MAX_HARTS - 4..MAX_HARTS;
+        let set = request_tlb_flush_set(harts.clone());
+        assert_eq!(set.asked(), 4);
+        for hart in harts.clone() {
+            assert!(tlb_flush_pending(hart));
+        }
+        let first = harts.start;
+        assert_eq!(
+            tlb_flush_set_outstanding(&set).map(|(hart, _)| hart),
+            Some(first)
+        );
+        for hart in harts.clone().rev().skip(1) {
+            // Simulated service on `hart`: snapshot its request and publish it.
+            let epoch = TLB_FLUSH_REQUEST[hart].load(Ordering::Acquire);
+            publish_completion(&TLB_FLUSH_COMPLETE[hart], epoch);
+        }
+        assert_eq!(
+            tlb_flush_set_outstanding(&set).map(|(hart, _)| hart),
+            Some(harts.end - 1),
+            "the last silent hart is reported"
+        );
+        let last = harts.end - 1;
+        publish_completion(
+            &TLB_FLUSH_COMPLETE[last],
+            TLB_FLUSH_REQUEST[last].load(Ordering::Acquire),
+        );
+        assert_eq!(tlb_flush_set_outstanding(&set), None);
+        for hart in harts {
+            assert!(!tlb_flush_pending(hart));
+        }
+    }
+
+    /// Retirement-switch epochs over four simulated harts, through the same set
+    /// shape the scheduler's per-hart retirement wait uses: each hart completes
+    /// only its own epoch, and a request made after a completion is outstanding
+    /// again until that hart's next switch.
+    #[test]
+    fn retirement_switch_set_over_four_simulated_harts() {
+        let harts = MAX_HARTS - 8..MAX_HARTS - 4;
+        let set = RemoteEpochs::broadcast(harts.clone(), request_retirement_switch);
+        assert_eq!(set.asked(), 4);
+        assert_eq!(
+            set.first_outstanding(retirement_switch_completed)
+                .map(|(hart, _)| hart),
+            Some(harts.start)
+        );
+        for hart in harts.clone().take(3) {
+            complete_retirement_switch(hart);
+        }
+        let last = harts.end - 1;
+        assert!(retirement_switch_pending(last));
+        assert_eq!(
+            set.first_outstanding(retirement_switch_completed)
+                .map(|(hart, _)| hart),
+            Some(last)
+        );
+        complete_retirement_switch(last);
+        assert_eq!(set.first_outstanding(retirement_switch_completed), None);
+        let again = RemoteEpochs::broadcast([harts.start], request_retirement_switch);
+        assert_eq!(
+            again
+                .first_outstanding(retirement_switch_completed)
+                .map(|(hart, _)| hart),
+            Some(harts.start)
+        );
+        assert!(set.first_outstanding(retirement_switch_completed).is_none());
+        complete_retirement_switch(harts.start);
+        assert_eq!(again.first_outstanding(retirement_switch_completed), None);
     }
 }

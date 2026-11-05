@@ -621,9 +621,26 @@ fn emit_pcid_decision() {
 ///
 /// `flags` must be raw x86_64 PTE flags (use `pte_flags_*` helpers from
 /// `hal::paging`).  The function inserts the PTE into KERNEL_ROOT's PML4 and
-/// issues `invlpg` to flush the TLB entry.
+/// invalidates that page on every online CPU (`tlb_shootdown::flush_page`).
 #[cfg(target_arch = "x86_64")]
 pub fn map_page_x86(
+    allocator: &mut FrameAllocator,
+    vaddr: VAddr,
+    paddr: PhysAddr,
+    flags: u64,
+) -> PagingResult<()> {
+    map_page_x86_unflushed(allocator, vaddr, paddr, flags)?;
+    crate::memory::tlb_shootdown::flush_page(vaddr);
+    Ok(())
+}
+
+/// [`map_page_x86`] without the final invalidation of `vaddr`: the caller owns
+/// it and must invalidate every page it mapped this way (one `flush_range`
+/// over the batch) before anything may rely on the new leaves. A failed walk
+/// still invalidates before it recycles the detached tables, as in
+/// `map_page_x86`.
+#[cfg(target_arch = "x86_64")]
+fn map_page_x86_unflushed(
     allocator: &mut FrameAllocator,
     vaddr: VAddr,
     paddr: PhysAddr,
@@ -677,7 +694,6 @@ pub fn map_page_x86(
     unsafe {
         core::ptr::write_volatile(pte_ptr, paddr as u64 | flags);
     }
-    crate::memory::tlb_shootdown::flush_page(vaddr);
     Ok(())
 }
 
@@ -707,21 +723,37 @@ pub fn map_mmio_user_x86(phys: usize, size: usize) {
     map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio_user());
 }
 
+/// Page-aligned identity window `[start, end)` covering `[phys, phys + size)`.
+#[cfg(target_arch = "x86_64")]
+fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
+    let page_mask = PAGE_SIZE - 1;
+    (phys & !page_mask, (phys + size + page_mask) & !page_mask)
+}
+
+/// Write every leaf of the window first, then invalidate the whole window on
+/// every online CPU with ONE `flush_range` (phase 07b): a per-page shootdown
+/// made the 256 MiB ECAM window cost 65,536 broadcast rounds under
+/// `FRAME_ALLOCATOR`, which grew with the CPU count. The flush runs before
+/// this function returns, so a Cell reaches the window (after its
+/// `RequestMmio` returns) only once every CPU confirmed; an unconfirmed CPU
+/// is the same fail-stop panic in `flush_range` as before.
 #[cfg(target_arch = "x86_64")]
 fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
     let allocator = fa
         .as_mut()
         .expect("map_mmio_x86: frame allocator not ready");
-    let page_mask = PAGE_SIZE - 1;
-    let mut va = phys & !page_mask;
-    let end = (phys + size + page_mask) & !page_mask;
+    let (start, end) = mmio_page_window(phys, size);
+    let mut va = start;
     while va < end {
         // Errors are logged but not fatal; a broken mapping will fault on first use.
-        if let Err(e) = map_page_x86(allocator, va, va, flags) {
+        if let Err(e) = map_page_x86_unflushed(allocator, va, va, flags) {
             log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
         }
         va += PAGE_SIZE;
+    }
+    if end > start {
+        crate::memory::tlb_shootdown::flush_range(start, end - start);
     }
 }
 
@@ -1647,4 +1679,24 @@ fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
     // helper, so this is the x86 user-trap provenance required by the
     // deferred retirement funnel.
     crate::task::terminate_current_cell_on_user_trap_fault(error_code as usize, rip as usize, va);
+}
+
+#[cfg(all(test, target_arch = "x86_64"))]
+mod tests {
+    use super::*;
+
+    /// The batched MMIO flush covers exactly the pages the loop mapped: the
+    /// window is rounded out to whole pages and is empty only for size 0.
+    #[test]
+    fn mmio_window_covers_every_mapped_page_once() {
+        // 256 MiB ECAM: 65,536 pages, one flush.
+        let (start, end) = mmio_page_window(0xb000_0000, 0x1000_0000);
+        assert_eq!((start, (end - start) / PAGE_SIZE), (0xb000_0000, 65_536));
+        // Unaligned start and size round out to both enclosing pages.
+        assert_eq!(mmio_page_window(0xfebf_1004, 8), (0xfebf_1000, 0xfebf_2000));
+        assert_eq!(mmio_page_window(0xfebf_1ffc, 8), (0xfebf_1000, 0xfebf_3000));
+        // Size 0 maps nothing and flushes nothing.
+        let (start, end) = mmio_page_window(0xfebf_1000, 0);
+        assert_eq!(start, end);
+    }
 }

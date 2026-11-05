@@ -38,7 +38,7 @@ def cell_lines(text):
 def parse_processor_ids(value):
     if value == '-':
         return set()
-    if re.fullmatch(r'(0|[1-9]\d*)(;(0|[1-9]\d*))?', value) is None:
+    if re.fullmatch(r'(0|[1-9]\d*)(;(0|[1-9]\d*))*', value) is None:
         raise RuntimeError('malformed processor endpoint IDs')
     ids = [int(part) for part in value.split(';')]
     if len(set(ids)) != len(ids) or ids != sorted(ids) or any(i > 0xffffffff for i in ids):
@@ -54,7 +54,7 @@ def check_cpu_topology(output, cpus):
     if len(topology) != 1:
         raise RuntimeError('missing or duplicate actual kernel CPU topology evidence')
     record = re.fullmatch(
-        r'\[x86-smp\] topology online=(1|2) processor_ids=(\d+(?:;\d+)?) qualified=yes',
+        r'\[x86-smp\] topology online=([1-9]\d*) processor_ids=(\d+(?:;\d+)*) qualified=yes',
         topology[0],
     )
     if record is None:
@@ -150,12 +150,14 @@ def check_render_output(output, width, height, samples, depth, tile_size, worker
                 worker_ids = set().union(*(ids for _, _, ids in worker_records.values()))
                 if observed != worker_ids:
                     raise RuntimeError(f'{mode} CSV endpoints differ from worker render records')
-                # The main workload supplies per-mode multicore evidence.
+                # The main workload supplies per-mode multicore evidence: with
+                # two or more workers on two or more CPUs, renders must land on
+                # at least two distinct admitted CPUs (on a 2-CPU machine: both).
                 # Tiny tail/recovery waves check ownership and output; their
                 # tasks can legitimately finish before a peer schedules them.
-                if (require_multicore and len(cpu_ids) == 2
-                        and effective_workers >= 2 and worker_ids != cpu_ids):
-                    raise RuntimeError(f'{mode} lacks render endpoints on both admitted CPUs')
+                if (require_multicore and len(cpu_ids) >= 2
+                        and effective_workers >= 2 and len(worker_ids) < 2):
+                    raise RuntimeError(f'{mode} lacks render endpoints on two admitted CPUs')
         if 'baseline' in rows:
             for mode, row in rows.items():
                 for field in ('scene_hash', 'seed', 'timer_hz', 'width', 'height',
@@ -187,8 +189,9 @@ def main():
     parser.add_argument('--tile-size', type=int, default=8)
     parser.add_argument('--workers', type=int, choices=range(1, 5), default=1,
                         help='Number of independent worker Cells (1..4; not CPU parallelism)')
-    parser.add_argument('--cpus', type=int, choices=(1, 2), default=1,
-                        help='QEMU CPUs; require matching qualified kernel topology and render endpoints')
+    parser.add_argument('--cpus', type=int, choices=range(1, 65), default=4,
+                        help='QEMU CPUs (1..64, default 4); require matching qualified kernel '
+                             'topology and render endpoints')
     parser.add_argument('--accel', choices=('tcg', 'kvm'), default='tcg',
                         help='QEMU accelerator; KVM uses the host CPU model by default')
     parser.add_argument('--cpu-model',
@@ -322,8 +325,8 @@ def main():
             processor_evidence = ';'.join(str(i) for i in sorted(cpu_ids))
             topology = (f'actual qualified online CPUs={len(cpu_ids)} '
                         f'processor_ids={processor_evidence}')
-            endpoints = ('per-worker-mode render endpoints on both admitted CPUs'
-                         if len(cpu_ids) == 2 and min(
+            endpoints = ('per-worker-mode render endpoints on two or more admitted CPUs'
+                         if len(cpu_ids) >= 2 and min(
                              args.workers,
                              ((args.width + args.tile_size - 1) // args.tile_size
                               * ((args.height + args.tile_size - 1) // args.tile_size)),

@@ -305,7 +305,9 @@ fn ready_reservation_contract() -> bool {
     let Ok(held) = ready::PublicationReservation::reserve(normal) else {
         return false;
     };
-    let victim = 1 - hart;
+    // The other member of the steal scan's always-visited pair {0, 1}; every
+    // other queue is empty here, so it is the busiest victim for `hart`.
+    let victim = usize::from(hart == 0);
     let mut victims = alloc::vec::Vec::new();
     for n in 0..8 {
         ready::push_on_hart(victim, BASE + 200 + n, normal);

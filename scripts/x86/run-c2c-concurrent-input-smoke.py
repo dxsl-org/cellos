@@ -1,3 +1,5 @@
+import argparse
+import re
 import socket
 import subprocess
 import time
@@ -12,7 +14,19 @@ def sha256_file(path):
             h.update(chunk)
     return h.hexdigest()
 
+def check_topology(raw_log, cpus):
+    # Plan 261103-2218 phase 07b: the kernel must have brought every CPU online.
+    found = re.findall(rb"\[x86-smp\] topology online=(\d+) processor_ids=", raw_log)
+    if found != [str(cpus).encode()]:
+        raise RuntimeError(f"kernel topology {found!r} is not exactly online={cpus}")
+
 def main():
+    parser = argparse.ArgumentParser(description="C2C concurrent serial input smoke (x86_64)")
+    parser.add_argument("--cpus", type=int, choices=range(1, 65), default=4,
+                        help="QEMU CPUs (-smp); the kernel must report online=N")
+    parser.add_argument("--accel", choices=("tcg", "kvm"), default="tcg",
+                        help="QEMU accelerator; KVM uses the host CPU model")
+    args = parser.parse_args()
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     iso_path = os.path.join(repo_root, "build/vicell-x86-c2c-lifecycle.iso")
     kernel_path = os.path.join(repo_root, "build/x86-c2c-lifecycle-iso-root/boot/kernel.elf")
@@ -30,7 +44,9 @@ def main():
     cmd = [
         "qemu-system-x86_64",
         "-machine", "q35",
-        "-cpu", "qemu64,+pdpe1gb",
+        "-accel", args.accel,
+        "-cpu", "host" if args.accel == "kvm" else "qemu64,+pdpe1gb",
+        "-smp", str(args.cpus),
         "-m", "256M",
         "-nographic",
         "-cdrom", iso_path,
@@ -79,6 +95,14 @@ def main():
             f.write(raw_log)
         sys.exit(1)
 
+    try:
+        check_topology(raw_log, args.cpus)
+    except RuntimeError as error:
+        proc.kill()
+        print(f"Topology check failed: {error}", file=sys.stderr)
+        with open(log_path, "wb") as f:
+            f.write(raw_log)
+        sys.exit(1)
     time.sleep(0.5)
 
     def send_cmd(cmd_str):
