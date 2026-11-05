@@ -908,7 +908,7 @@ fn multi_source_wait_reports_each_source_once() -> bool {
     let syscall_rule = cw::source_is_valid(IPC, None)
         && cw::source_is_valid(mask, Some(1))
         && !cw::source_is_valid(mask, None)
-        && !cw::source_is_valid(IPC | (1 << 3), Some(1));
+        && !cw::source_is_valid(IPC | (1 << 4), Some(1));
 
     insert(SENDER, TEST_CELL);
     insert(RECEIVER, TEST_CELL + 1);

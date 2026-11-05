@@ -86,11 +86,13 @@ simple, because revoking is releasing the slot.
 
 The v1 wire record is fixed at 24 bytes. Its source word sits in bytes 12..16,
 between the slot and result fields. `WaitCompletion` submits a non-empty set of
-source bits from `NET_RX | TIMER | IPC` (`source::is_wait_mask_supported`);
+source bits from `NET_RX | TIMER | IPC | IRQ` (`source::is_wait_mask_supported`);
 `TIMER` needs a finite deadline. Zero and unknown submission masks are rejected
 up front. Every record still carries exactly one source; ready sources rotate
-`NET_RX → IPC → TIMER`. An `IPC` record's `result` is the operation token of one
-owned terminal, reported at most once; its outcome stays behind `IpcTake`. When
+`NET_RX → IPC → IRQ → TIMER`. An `IPC` record's `result` is the operation token of one
+owned terminal, reported at most once; its outcome stays behind `IpcTake`. An
+`IRQ` record (x86_64 only) reports one fired MSI/MSI-X line the waiting task holds
+from `AllocPcieIrq`; `result` is the line (Spec 17 §9, 2026-11-05). When
 decoding a record written by the original v1 kernel, source `0` is accepted as
 legacy `UNSPECIFIED`; that compatibility rule does not make `0` a valid new
 submission.

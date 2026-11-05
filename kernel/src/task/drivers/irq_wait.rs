@@ -9,6 +9,10 @@
 //! - `take_pending(irq)` — swap-and-read; used by both the lost-wakeup guard in
 //!   `sys_wait_irq` and the scheduler sweep in `pick_next`.
 //! - `clear_waiter(irq)` — scheduler calls after transitioning the task to Ready.
+//! - `pending_in(&set)` — lock-free peek of an [`IrqLineSet`] for the
+//!   `WaitCompletion(IRQ)` source; consuming stays with `take_pending`.
+//! - `hint_msi_wake()` / `take_wake_hint()` — the x86 MSI handler's request
+//!   for an early wake sweep, so an idle BSP does not wait for the next tick.
 //!
 //! # ISR safety
 //! `signal_irq` uses only `AtomicBool::store(Release)` — no Spinlock, no allocation,
@@ -202,6 +206,86 @@ pub fn get_mmio_base(irq: u8) -> usize {
     IRQ_MMIO_BASE[idx].load(Ordering::Acquire)
 }
 
+/// Set after an MSI's pending flag is published; tells the hart-0 scheduler
+/// pass to run its wake sweep now instead of at the next tick. Only the x86
+/// MSI handler sets it, so other boards never see an extra sweep.
+static MSI_WAKE: AtomicBool = AtomicBool::new(false);
+
+/// Request an early wake sweep. ISR-safe: one atomic store, no lock.
+///
+/// Must follow the `signal_irq` of the same interrupt, so a sweep that takes
+/// the hint also observes the pending flag.
+pub fn hint_msi_wake() {
+    MSI_WAKE.store(true, Ordering::Release);
+}
+
+/// Consume the early-sweep request; `true` when an MSI fired since the last call.
+pub fn take_wake_hint() -> bool {
+    MSI_WAKE.swap(false, Ordering::AcqRel)
+}
+
+/// Put back a pending flag that was taken but could not be reported.
+///
+/// Syscall context only. Unlike `signal_irq` it never acks a device: the
+/// interrupt was already acknowledged when it first fired.
+pub fn restore_pending(irq: u8) {
+    if let Some(flag) = IRQ_PENDING.get(irq as usize) {
+        flag.store(true, Ordering::Release);
+    }
+}
+
+const SET_WORDS: usize = MAX_IRQ / 64;
+
+/// A set of IRQ lines, one bit per line. Fixed size, `Copy`, never allocates,
+/// so it can be stored in a task and read under the scheduler lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IrqLineSet([u64; SET_WORDS]);
+
+impl IrqLineSet {
+    pub const EMPTY: Self = Self([0; SET_WORDS]);
+
+    pub fn insert(&mut self, line: u8) {
+        self.0[line as usize / 64] |= 1 << (line % 64);
+    }
+
+    pub fn contains(&self, line: u8) -> bool {
+        self.0[line as usize / 64] & (1 << (line % 64)) != 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(|word| *word == 0)
+    }
+
+    /// The first member after `cursor` in ascending order, wrapping from 255
+    /// to 0; `cursor` itself is considered last. Starting each choice after
+    /// the previous one keeps a busy line from starving the others.
+    pub fn next_after(&self, cursor: u8) -> Option<u8> {
+        (1..=MAX_IRQ)
+            .map(|step| cursor.wrapping_add(step as u8))
+            .find(|line| self.contains(*line))
+    }
+}
+
+/// The members of `set` whose pending flag is set, without consuming any.
+///
+/// Lock-free (acquire loads only), so it may run with or without the
+/// scheduler lock held. A line reported here may still be consumed by its
+/// owner's `WaitIrq` or revoked before the caller takes it.
+pub fn pending_in(set: &IrqLineSet) -> IrqLineSet {
+    let mut ready = IrqLineSet::EMPTY;
+    for (word, &bits) in set.0.iter().enumerate() {
+        let mut rest = bits;
+        while rest != 0 {
+            let bit = rest.trailing_zeros() as usize;
+            rest &= rest - 1;
+            if IRQ_PENDING[word * 64 + bit].load(Ordering::Acquire) {
+                ready.0[word] |= 1 << bit;
+            }
+        }
+    }
+    ready
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +329,54 @@ mod tests {
     /// `signal_irq` would ack a real MMIO base; tests set the flag directly.
     fn signal_irq_pending_only(irq: u8) {
         IRQ_PENDING[irq as usize].store(true, Ordering::Release);
+    }
+
+    #[test]
+    fn line_set_round_robin_wraps_and_considers_the_cursor_last() {
+        let mut set = IrqLineSet::EMPTY;
+        assert!(set.is_empty());
+        assert_eq!(set.next_after(0xFF), None);
+        for line in [0x30, 0x31, 0xDF] {
+            set.insert(line);
+        }
+        assert!(!set.is_empty());
+        assert!(set.contains(0xDF) && !set.contains(0x32));
+        assert_eq!(set.next_after(0xFF), Some(0x30));
+        assert_eq!(set.next_after(0x30), Some(0x31));
+        assert_eq!(set.next_after(0x31), Some(0xDF));
+        assert_eq!(set.next_after(0xDF), Some(0x30), "wraps past 255");
+        let mut one = IrqLineSet::EMPTY;
+        one.insert(0x41);
+        assert_eq!(one.next_after(0x41), Some(0x41), "the cursor itself last");
+    }
+
+    #[test]
+    fn pending_peek_reports_only_set_members_and_consumes_nothing() {
+        let mut set = IrqLineSet::EMPTY;
+        set.insert(0xD0);
+        set.insert(0xD1);
+        signal_irq_pending_only(0xD1);
+        signal_irq_pending_only(0xD2);
+
+        let ready = pending_in(&set);
+        assert!(ready.contains(0xD1));
+        assert!(!ready.contains(0xD0), "not pending");
+        assert!(!ready.contains(0xD2), "pending but outside the set");
+        assert!(take_pending(0xD1), "the peek left the flag set");
+        assert!(take_pending(0xD2));
+
+        restore_pending(0xD0);
+        assert!(pending_in(&set).contains(0xD0));
+        assert!(take_pending(0xD0));
+    }
+
+    #[test]
+    fn the_msi_wake_hint_is_taken_once() {
+        // A hart-0 scheduler pass in another test also swaps the hint.
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let _ = take_wake_hint();
+        hint_msi_wake();
+        assert!(take_wake_hint());
+        assert!(!take_wake_hint());
     }
 }

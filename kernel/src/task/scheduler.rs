@@ -2221,7 +2221,10 @@ impl Scheduler {
         }
 
         let time_advanced = now > self.last_global_sweep_tick;
-        let events_pending = crate::task::waker::has_any_pending();
+        // The MSI wake hint is swapped on every pass (non-short-circuit `|`), so
+        // an idle BSP woken from `hlt` by an MSI sweeps now, not at the next tick.
+        let events_pending = crate::task::waker::has_any_pending()
+            | crate::task::drivers::irq_wait::take_wake_hint();
 
         if time_advanced || events_pending {
             if time_advanced {
@@ -2298,6 +2301,14 @@ impl Scheduler {
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
                         task.trap_frame.regs[10] = 0;
+                        should_wake = true;
+                    }
+                    // WaitCompletion(IRQ): a pending line of the wait's own
+                    // snapshot readies it; the waiter takes the line itself,
+                    // under the allocation lock, after it runs again.
+                    TaskState::WaitCompletion { source, .. }
+                        if super::completion_wait::irq_wake_due(task, *source) =>
+                    {
                         should_wake = true;
                     }
                     TaskState::WaitCompletion {

@@ -54,8 +54,11 @@ static STATE: Spinlock<State> = Spinlock::new(State {
 static READY: AtomicBool = AtomicBool::new(false);
 static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 
+/// ISR: the pending flag first, then the early-sweep hint (one atomic store
+/// each, no lock), so a sweep that takes the hint sees the flag.
 fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
+    irq_wait::hint_msi_wake();
 }
 
 /// Install the MSI handler. `firmware_forbids_msi` is FADT IAPC_BOOT_ARCH
@@ -199,11 +202,64 @@ pub fn allocate(
 
 /// Whether `irq` belongs to an allocation `owner` holds (x86 `WaitIrq` gate).
 pub fn irq_owned_by(irq: u8, owner: usize) -> bool {
-    STATE
-        .lock()
+    holds(&STATE.lock(), owner, irq)
+}
+
+fn holds(state: &State, owner: usize, irq: u8) -> bool {
+    state
         .allocations
         .iter()
         .any(|a| a.owner == owner && irq >= a.irq.first_irq && irq < a.irq.first_irq + a.irq.count)
+}
+
+/// Every line `owner` holds: the snapshot a `WaitCompletion(IRQ)` waits on.
+/// Takes `STATE` alone; never call it with `SCHEDULER` held.
+pub fn lines_owned_by(owner: usize) -> irq_wait::IrqLineSet {
+    let mut set = irq_wait::IrqLineSet::EMPTY;
+    for a in STATE.lock().allocations.iter().filter(|a| a.owner == owner) {
+        for line in a.irq.first_irq..a.irq.first_irq + a.irq.count {
+            set.insert(line);
+        }
+    }
+    set
+}
+
+/// Consume `irq`'s pending flag only while `owner` still holds the line.
+///
+/// Ownership check and swap share one `STATE` hold, and [`release_for`]
+/// clears flags under `STATE` too, so a revoked (and possibly re-allocated)
+/// vector is never consumed by its former owner. `false` when the line is no
+/// longer owned or nothing was pending.
+pub fn take_owned(owner: usize, irq: u8) -> bool {
+    let state = STATE.lock();
+    holds(&state, owner, irq) && irq_wait::take_pending(irq)
+}
+
+/// Re-pend a line taken by [`take_owned`] whose record could not be
+/// delivered; a line revoked meanwhile is left alone.
+pub fn repend_owned(owner: usize, irq: u8) {
+    let state = STATE.lock();
+    if holds(&state, owner, irq) {
+        irq_wait::restore_pending(irq);
+    }
+}
+
+/// Record an allocation without touching config space; host tests only,
+/// under `TEST_STATE_LOCK`.
+#[cfg(test)]
+pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrqAlloc {
+    let mut state = STATE.lock();
+    let first = state.pool.alloc(count, 1).expect("test vectors");
+    let irq = PcieIrqAlloc {
+        first_irq: first,
+        count: count as u8,
+        kind: IRQ_KIND_MSIX,
+    };
+    for line in first..first + count as u8 {
+        let _ = irq_wait::take_pending(line);
+    }
+    state.allocations.push(Allocation { bdf, owner, irq });
+    irq
 }
 
 /// Free every allocation `owner` holds; returns how many. Call only after the
@@ -247,4 +303,45 @@ pub fn user_ranges(base: usize, len: usize) -> Vec<(usize, usize)> {
         .into_iter()
         .map(|(s, e)| (s as usize, (e - s) as usize))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_revoked_line_is_neither_taken_nor_repended_by_its_former_owner() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const OLD: usize = 73_101;
+        const NEW: usize = 73_102;
+        let irq = allocate_for_test(OLD, 0x0010, 2);
+        let (a, b) = (irq.first_irq, irq.first_irq + 1);
+        let owned = lines_owned_by(OLD);
+        assert!(owned.contains(a) && owned.contains(b));
+        assert!(lines_owned_by(NEW).is_empty());
+
+        irq_wait::restore_pending(a);
+        assert!(!take_owned(NEW, a), "not the owner");
+        assert!(take_owned(OLD, a));
+        assert!(!take_owned(OLD, a), "consumed once");
+        repend_owned(OLD, a);
+        assert!(take_owned(OLD, a), "a re-pended line is taken again");
+
+        irq_wait::restore_pending(b);
+        assert_eq!(release_for(OLD), 1);
+        assert!(lines_owned_by(OLD).is_empty());
+        assert!(
+            !take_owned(OLD, b),
+            "revocation dropped the flag and the line"
+        );
+
+        let reused = allocate_for_test(NEW, 0x0018, 2);
+        assert_eq!(reused.first_irq, a, "the freed block is handed out again");
+        irq_wait::restore_pending(a);
+        assert!(!take_owned(OLD, a), "the former owner cannot consume it");
+        repend_owned(OLD, b);
+        assert!(!irq_wait::take_pending(b), "repend after revoke is a no-op");
+        assert!(take_owned(NEW, a));
+        assert_eq!(release_for(NEW), 1);
+    }
 }

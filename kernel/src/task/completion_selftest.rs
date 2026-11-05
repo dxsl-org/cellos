@@ -127,6 +127,15 @@ fn source_validation_is_fail_closed() -> bool {
     if super::completion_wait::source_is_valid(1 << 31, Some(1)) {
         return fail("an unknown source bit was accepted");
     }
+    // Phase 04b: IRQ (MSI/MSI-X lines from AllocPcieIrq) exists on x86_64 only.
+    let irq = api::completion::source::IRQ;
+    let irq_valid = super::completion_wait::source_is_valid(irq | timer, Some(1));
+    if irq_valid != cfg!(target_arch = "x86_64") {
+        return fail("the IRQ source was accepted off x86_64 or refused on it");
+    }
+    if super::completion_wait::source_is_valid(1 << 4, Some(1)) {
+        return fail("the bit after IRQ was accepted");
+    }
     true
 }
 
@@ -198,6 +207,7 @@ fn task_exit_defers_timer_release() -> bool {
             task.completion_wait = Some(super::tcb::CompletionWait {
                 source: api::completion::source::TIMER,
                 slot,
+                irq_lines: super::drivers::irq_wait::IrqLineSet::EMPTY,
             });
             task.state = TaskState::WaitCompletion {
                 source: api::completion::source::TIMER,

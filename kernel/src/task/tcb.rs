@@ -101,10 +101,11 @@ pub enum TaskState {
         deadline: Option<u64>,
     },
     /// Blocked in `WaitCompletion`. `source` is the wait's source mask (any
-    /// non-empty subset of `NET_RX | TIMER | IPC`). NET_RX completions wake
-    /// through the queue, IPC terminals through `async_ipc::wake`, a queued raw
-    /// message only when the mask names NET_RX, and a finite deadline through
-    /// the timer sweep.
+    /// non-empty subset of `NET_RX | TIMER | IPC | IRQ`). NET_RX completions
+    /// wake through the queue, IPC terminals through `async_ipc::wake`, IRQ
+    /// lines of the task's `CompletionWait::irq_lines` through the scheduler
+    /// sweep, a queued raw message only when the mask names NET_RX, and a
+    /// finite deadline through the timer sweep.
     WaitCompletion {
         source: u32,
         deadline: Option<u64>,
@@ -579,6 +580,9 @@ pub struct Task {
     /// `completion_wait::SELECTION_ORDER`; rotation starts after it so one ready
     /// source cannot starve another. One byte, no allocation.
     pub completion_rotor: u8,
+    /// Last IRQ line a `WaitCompletion(IRQ)` delivered; the next choice starts
+    /// after it so one busy line cannot starve the task's other lines.
+    pub completion_irq_cursor: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -589,6 +593,11 @@ pub struct CompletionWait {
     /// multi-source mask without NET_RX is recorded as `TIMER` for that reason.
     pub source: u32,
     pub slot: crate::task::completion::SlotId,
+    /// Lines this wait covers when its mask names `IRQ`: every `AllocPcieIrq`
+    /// line the task held at entry (refreshed when a take finds one revoked).
+    /// Empty for every other mask. The scheduler sweep reads it under
+    /// `SCHEDULER` without taking the allocation lock.
+    pub irq_lines: crate::task::drivers::irq_wait::IrqLineSet,
 }
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
@@ -722,6 +731,7 @@ impl Task {
             completion: None,
             completion_wait: None,
             completion_rotor: super::completion_wait::INITIAL_ROTOR,
+            completion_irq_cursor: u8::MAX,
         }
     }
 
