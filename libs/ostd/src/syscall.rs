@@ -2102,6 +2102,27 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
 /// `GrantSlice` ABI contract: null is allowed, but any non-null pointer must
 /// name one aligned `usize` slot fully inside the caller's own user stack.
 pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
+    grant_slice_with_len(grant_id, 0)
+}
+
+/// [`sys_grant_slice_with_len`] that also requires `owner_tid` to own the Grant.
+///
+/// A grantee cannot otherwise tell who registered a Grant shared to it, so a
+/// service that binds a client-named Grant to that client (the compositor)
+/// must use this form. The kernel answers a Grant owned by anyone else exactly
+/// as an unknown id (`None`). `owner_tid == 0` would disable the kernel check
+/// (ABI a2 = 0 means "no expectation"), so it is refused here instead.
+pub fn sys_grant_slice_with_len_owned_by(
+    grant_id: usize,
+    owner_tid: usize,
+) -> Option<(*mut u8, usize)> {
+    if owner_tid == 0 {
+        return None;
+    }
+    grant_slice_with_len(grant_id, owner_tid)
+}
+
+fn grant_slice_with_len(grant_id: usize, expected_owner_tid: usize) -> Option<(*mut u8, usize)> {
     let mut len = 0usize;
     // SAFETY: `len` is a live writable stack slot for the duration of the call.
     let ret = unsafe {
@@ -2109,7 +2130,7 @@ pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
             ViSyscall::GrantSlice,
             grant_id,
             (&mut len as *mut usize) as usize,
-            0,
+            expected_owner_tid,
             0,
         )
     };

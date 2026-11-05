@@ -135,6 +135,7 @@ fn vfs_send_release_is_exact() -> bool {
         Syscall::GrantSlice {
             grant_id,
             size_out_ptr: 0,
+            expected_owner_tid: 0,
         },
     );
     if slice_result != Ok(grant_id) {
@@ -293,6 +294,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         Syscall::GrantSlice {
             grant_id,
             size_out_ptr: 0,
+            expected_owner_tid: 0,
         },
     );
     if slice_result != Ok(grant_id) {
@@ -324,6 +326,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         Syscall::GrantSlice {
             grant_id,
             size_out_ptr: 0,
+            expected_owner_tid: 0,
         },
     ) == Ok(usize::MAX);
     let released = crate::memory::pin::release_vfs_lease(
@@ -525,6 +528,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
             Syscall::GrantSlice {
                 grant_id,
                 size_out_ptr: 0,
+                expected_owner_tid: 0,
             },
         )
     });
@@ -563,6 +567,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
             Syscall::GrantSlice {
                 grant_id,
                 size_out_ptr: 0,
+                expected_owner_tid: 0,
             },
         ) == Ok(usize::MAX)
             && free_generation.is_some_and(|request_generation| {
@@ -592,6 +597,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
             Syscall::GrantSlice {
                 grant_id,
                 size_out_ptr: 1,
+                expected_owner_tid: 0,
             },
         )
     });

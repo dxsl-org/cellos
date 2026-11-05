@@ -1,5 +1,5 @@
 use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
-use ostd::syscall::{sys_grant_slice_with_len, sys_send};
+use ostd::syscall::{sys_grant_slice_with_len_owned_by, sys_send};
 
 use crate::framebuffer;
 use crate::surface_table::{SurfaceTable, MAX_SURFACE_DIM};
@@ -17,31 +17,42 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
 
 /// Bind a Grant to the sender's surface.
 ///
-/// The kernel resolves any Grant shared to the compositor, but reports neither
-/// who registered it nor lets the compositor ask, so `reg_id` (a guessable
-/// physical base) is not proof that the sender owns it. Two rules bound that:
-/// a Grant another owner's surface already presents, stages or is retiring is
-/// refused, and every refusal gets the same `\x00` reply as an id that does not
-/// resolve, so probing ids reveals nothing. A Grant shared to the compositor
-/// but not yet attached by its owner remains attachable by anyone; closing that
-/// needs a kernel answer for the Grant owner.
+/// `reg_id` is a guessable physical base, so it is no proof that the sender
+/// owns it: the kernel resolves the Grant only as the sender's own
+/// (`GrantSlice` with an expected owner, H-27), which answers a Grant
+/// registered by anyone else exactly as an unknown id. A Grant another owner's
+/// surface already presents, stages or is retiring is refused before asking.
+/// Every refusal gets the same `\x00` reply as an id that does not resolve, so
+/// probing ids reveals nothing.
 fn attach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     let Ok(frame) = <&[u8; 24]>::try_from(&buf[..24]) else {
         return;
     };
     let grant = AttachGrant::decode(frame);
+    let attached = admit_grant(&grant, sender, table, sys_grant_slice_with_len_owned_by);
+    sys_send(sender, if attached { b"\x01" } else { b"\x00" });
+}
+
+/// Attach decision for [`attach_grant`]; `resolve(reg_id, owner_tid)` is the
+/// owner-checked `GrantSlice` in production and a fake kernel in tests.
+fn admit_grant(
+    grant: &AttachGrant,
+    sender: usize,
+    table: &mut SurfaceTable,
+    resolve: impl FnOnce(usize, usize) -> Option<(*mut u8, usize)>,
+) -> bool {
     let reg_id = grant.reg_id as usize;
     let fmt = PixelFormat::from_u8(grant.fmt);
     let held_by_other = table
         .grant_holder(reg_id)
         .is_some_and(|holder| holder != sender);
     let geometry_ok = grant.width <= MAX_SURFACE_DIM && grant.height <= MAX_SURFACE_DIM;
-    let attached = !held_by_other
+    !held_by_other
         && geometry_ok
         && table
             .get(grant.cap as u64)
             .is_some_and(|surface| surface.owner == sender)
-        && sys_grant_slice_with_len(reg_id).is_some_and(|(_, grant_len)| {
+        && resolve(reg_id, sender).is_some_and(|(_, grant_len)| {
             (grant.width as usize)
                 .checked_mul(grant.height as usize)
                 .and_then(|pixels| pixels.checked_mul(fmt.bpp() as usize))
@@ -49,8 +60,7 @@ fn attach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
         })
         && table
             .get_mut(grant.cap as u64)
-            .is_some_and(|surface| surface.attach_grant(reg_id, grant.width, grant.height, fmt));
-    sys_send(sender, if attached { b"\x01" } else { b"\x00" });
+            .is_some_and(|surface| surface.attach_grant(reg_id, grant.width, grant.height, fmt))
 }
 
 fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
@@ -114,3 +124,7 @@ fn screen_size(sender: usize) {
     reply[4..8].copy_from_slice(&height.to_le_bytes());
     sys_send(sender, &reply);
 }
+
+#[cfg(test)]
+#[path = "grant_tests.rs"]
+mod tests;

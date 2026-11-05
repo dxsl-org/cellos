@@ -318,13 +318,20 @@ pub enum ViSyscall {
     /// Requires GrantCap (bit 39).
     GrantShare = 209,
     /// Return the raw pointer to a Grant region the caller has access to.
-    /// ABI: a0 = grant_id, a1 = optional `size_out` pointer → ptr (usize, same
-    /// as grant_id for identity-mapped SAS) on success.
+    /// ABI: a0 = grant_id, a1 = optional `size_out` pointer, a2 =
+    /// `expected_owner_tid` → ptr (usize, same as grant_id for identity-mapped
+    /// SAS) on success.
     ///
     /// `size_out` may be null. When non-null it must point to one aligned
     /// `usize` slot fully contained in the caller's own user stack; segment
     /// memory and arbitrary user mappings are rejected. An invalid `size_out`
     /// pointer makes the syscall fail with `InvalidInput`.
+    ///
+    /// `expected_owner_tid` (frozen 2026-11-06, H-27): `0` places no owner
+    /// expectation. A nonzero value that is not the tid that allocated or
+    /// registered the Grant returns exactly what an unknown `grant_id` returns
+    /// (`usize::MAX`), with no other observable difference; a grantee uses it
+    /// to bind a client-named Grant only to that client.
     ///
     /// Returns usize::MAX on permission denied or not found.
     GrantSlice = 210,

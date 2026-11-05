@@ -3579,6 +3579,7 @@ struct GrantSliceRequest {
     caller_id: usize,
     grant_id: usize,
     size_out_ptr: usize,
+    expected_owner_tid: usize,
     vfs_context: Option<VfsGrantContext>,
 }
 
@@ -3586,6 +3587,16 @@ struct GrantSliceAccess {
     base: usize,
     size: usize,
     size_out: Option<*mut usize>,
+}
+
+/// GrantSlice ABI a2: a grantee (the compositor) cannot otherwise learn who
+/// registered a grant shared to it, so a guessable grant id would let any
+/// client present another client's buffer as its own. A nonzero
+/// `expected_owner_tid` must name the row's owner; a mismatch is reported
+/// exactly as an unknown id, so the probe reveals neither existence nor owner.
+/// Zero keeps the pre-ABI behavior (no owner expectation).
+fn grant_owner_expected(expected_owner_tid: usize, owner: usize) -> bool {
+    expected_owner_tid == 0 || expected_owner_tid == owner
 }
 
 fn authorize_grant_slice_locked(
@@ -3596,6 +3607,11 @@ fn authorize_grant_slice_locked(
     size: usize,
     domain_owned: bool,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
+    // Checked first, before any log, output-slot validation or lease, so the
+    // refusal is indistinguishable from the not-found `Ok(None)` below.
+    if !grant_owner_expected(request.expected_owner_tid, grant_owner) {
+        return Ok(None);
+    }
     // A record owned by a private root is not sliceable for a SAS receiver: the
     // owner's backing lives in a root the SAS path cannot see, and a SAS receiver
     // would receive a raw mapping the private-root owner cannot audit. A managed
@@ -3646,12 +3662,14 @@ fn resolve_and_lease_grant(
     caller_id: usize,
     grant_id: usize,
     size_out_ptr: usize,
+    expected_owner_tid: usize,
     vfs_context: Option<VfsGrantContext>,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
     let request = GrantSliceRequest {
         caller_id,
         grant_id,
         size_out_ptr,
+        expected_owner_tid,
         vfs_context,
     };
     {
@@ -3759,9 +3777,14 @@ fn domain_grant_slice_row(
     shared_to: Option<(usize, GrantPerm)>,
     domain: Option<&Arc<super::domain_grant::DomainGrant>>,
     caller_id: usize,
+    expected_owner_tid: usize,
     receiver: &Arc<crate::memory::address_space::AddressSpace>,
     size_out: Option<*mut usize>,
 ) -> Result<usize, SyscallError> {
+    // Same sentinel as an id absent from both tables (see `grant_owner_expected`).
+    if !grant_owner_expected(expected_owner_tid, owner) {
+        return Ok(usize::MAX);
+    }
     let Some(record) = domain else {
         // A SAS-owned record's frames are not mapped in a private root, and a
         // mapping made here could not be revoked from the SAS side.
@@ -3816,6 +3839,7 @@ fn resolve_domain_grant_slice(
     caller_id: usize,
     grant_id: usize,
     size_out_ptr: usize,
+    expected_owner_tid: usize,
     receiver: &Arc<crate::memory::address_space::AddressSpace>,
 ) -> Result<usize, SyscallError> {
     let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
@@ -3829,6 +3853,7 @@ fn resolve_domain_grant_slice(
                 grant.shared_to,
                 grant.domain.as_ref(),
                 caller_id,
+                expected_owner_tid,
                 receiver,
                 size_out,
             );
@@ -3845,6 +3870,7 @@ fn resolve_domain_grant_slice(
         grant.shared_to,
         grant.domain.as_ref(),
         caller_id,
+        expected_owner_tid,
         receiver,
         size_out,
     )
@@ -4656,9 +4682,11 @@ pub enum Syscall {
         perm: usize,
     },
     /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
+    /// A nonzero `expected_owner_tid` (ABI a2) must equal the Grant's owner.
     GrantSlice {
         grant_id: usize,
         size_out_ptr: usize,
+        expected_owner_tid: usize,
     },
     /// 211: GrantFree — unmap + deallocate a Grant region.
     GrantFree {
@@ -9415,6 +9443,7 @@ fn handle_syscall_inner(
         Syscall::GrantSlice {
             grant_id,
             size_out_ptr,
+            expected_owner_tid,
         } => {
             // A caller that is not a live private root keeps the phase-01 denial
             // (`usize::MAX`): a private root that is retired, unknown or on an
@@ -9437,7 +9466,13 @@ fn handle_syscall_inner(
                 // A private-root receiver resolves the owner's exact rights and
                 // publishes the receiver mapping transactionally; a VFS context
                 // cannot exist for it, and no SAS record may be resolved.
-                return resolve_domain_grant_slice(caller_id, grant_id, size_out_ptr, &receiver);
+                return resolve_domain_grant_slice(
+                    caller_id,
+                    grant_id,
+                    size_out_ptr,
+                    expected_owner_tid,
+                    &receiver,
+                );
             }
             let vfs_context = match current_vfs_grant_lookup(caller_id) {
                 VfsGrantLookup::NotVfs => None,
@@ -9445,8 +9480,13 @@ fn handle_syscall_inner(
                 VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
                 VfsGrantLookup::Active(context) => Some(context),
             };
-            let Some(access) =
-                resolve_and_lease_grant(caller_id, grant_id, size_out_ptr, vfs_context)?
+            let Some(access) = resolve_and_lease_grant(
+                caller_id,
+                grant_id,
+                size_out_ptr,
+                expected_owner_tid,
+                vfs_context,
+            )?
             else {
                 return Ok(usize::MAX);
             };
@@ -10691,6 +10731,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::GrantSlice => Syscall::GrantSlice {
             grant_id: a0,
             size_out_ptr: a1,
+            expected_owner_tid: a2,
         },
         ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
         ViSyscall::GrantCacheSyncBegin => Syscall::GrantCacheSyncBegin {
@@ -11180,6 +11221,10 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
 #[cfg(target_arch = "riscv32")]
 const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
+
+#[cfg(test)]
+#[path = "grant-owner-tests.rs"]
+mod grant_owner_tests;
 
 #[cfg(test)]
 mod tests {

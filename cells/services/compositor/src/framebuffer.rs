@@ -58,7 +58,7 @@ impl ScreenFb {
         let h = (bottom - top) as usize;
         let screen_stride = self.width as usize * 4;
         let surf_stride = s.w as usize * 4;
-        let src_pixels = s.resolve_pixels(ostd::syscall::sys_grant_slice_with_len);
+        let src_pixels = s.resolve_pixels(ostd::syscall::sys_grant_slice_with_len_owned_by);
         for row in 0..h {
             let dst = (dst_y + row) * screen_stride + dst_x * 4;
             let src = (src_y + row) * surf_stride + src_x * 4;

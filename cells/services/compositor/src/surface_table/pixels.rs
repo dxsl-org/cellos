@@ -88,21 +88,24 @@ impl SurfaceState {
 
     /// Pixel data for one blit.
     ///
-    /// A Grant is resolved through `resolve` (the `GrantSlice` syscall in
-    /// production) on every call and the pointer is used only for this blit. A
-    /// Grant the owner has released, or that now resolves smaller than the surface
-    /// needs, is detached: the surface paints nothing until the owner attaches a
-    /// live buffer again.
+    /// A Grant is resolved through `resolve(reg_id, owner)` (the owner-checked
+    /// `GrantSlice` syscall in production) on every call and the pointer is used
+    /// only for this blit. Passing the surface owner means a Grant that is no
+    /// longer that client's resolves as unknown, so a blit can only ever read
+    /// the owner's own buffer. A Grant the owner has released, or that now
+    /// resolves smaller than the surface needs, is detached: the surface paints
+    /// nothing until the owner attaches a live buffer again.
     ///
     /// Residual: the owner can still free the Grant between this resolution and
     /// the copy, because a non-VFS `GrantSlice` installs no pin in the kernel.
     pub fn resolve_pixels(
         &mut self,
-        resolve: impl FnOnce(usize) -> Option<(*mut u8, usize)>,
+        resolve: impl FnOnce(usize, usize) -> Option<(*mut u8, usize)>,
     ) -> &[u8] {
         if let PixelSource::Grant { reg_id } = self.source {
+            let owner = self.owner;
             let live = self.content_len().and_then(|needed| {
-                resolve(reg_id)
+                resolve(reg_id, owner)
                     .filter(|&(ptr, len)| !ptr.is_null() && len >= needed)
                     .map(|(ptr, _)| (ptr, needed))
             });
