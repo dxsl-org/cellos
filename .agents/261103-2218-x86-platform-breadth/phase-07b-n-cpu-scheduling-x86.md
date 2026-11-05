@@ -74,7 +74,7 @@ The scheduler's per-hart queues stay as they are; stealing becomes `steal_from(v
 - [x] KVM `-smp 8`: `online=8`; TCG `-smp 4` green (lanes and limits in evidence).
 - [x] Stress loop: 10/10 passes, zero `invalidation unconfirmed` lines. Final run after the review fixes and D12: 10 × (KVM `-smp 4` boot + domain lane `X86_CPUS=4` KVM), 10/10 + 10/10, 0 unconfirmed lines in 20 logs. The first run's 3/10 domain failures were fixture timing (D12).
 - [x] riscv64/aarch64 lanes unchanged (still 2 harts).
-- [x] Review: independent race review of shootdown and stealing — PASS-with-fixes, no Critical; Minor fixes D13–D15 applied. Batching ELF-load/W^X flushes (reviewer R1): implemented under D16 (owner grant). Its independent race review is still pending.
+- [x] Review: independent race review of shootdown and stealing — PASS-with-fixes, no Critical; Minor fixes D13–D15 applied. Batching ELF-load/W^X flushes (reviewer R1): implemented under D16 (owner grant); its independent race review: PASS, 4 Minor, fixed in `ea6fdc533`.
 
 ## Risk Assessment
 

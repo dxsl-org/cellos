@@ -256,8 +256,20 @@ Notes on the other lanes:
 - **Witness inputs.** The worktree's `libc.a` was rebuilt with `scripts/build-mlibc.sh` (pin `ae1092eb2`). The cpp-hosted witness linked the gitignored `target/llvm-runtimes/x86_64` copied from the main checkout, because `build-llvm-runtimes.sh` was not run.
 - **Observed, not caused by R1.** The TCG (SVM) domain lane logs `X86-VMM-SMOKE: FAIL got_port=false got_hlt=false last_exit=Shutdown`. The lane does not assert this marker. Base `a09627f6a`, built and run the same way without R1, gives the same line. Under 07b it read `last_exit=Preempted`, so the exit reason changed with the security remediation. KVM (VMX) passes.
 
+### Independent race review
+
+Independent race review: PASS (4 Minor, fixed in `ea6fdc533`). The fixes are documentation and visibility only:
+- the W^X module doc describes the x86 acknowledged shootdown;
+- the `page_protect` header and its re-export list include `protect_pages`;
+- `map_page_deferred`/`flush_deferred_maps` are `pub(crate)`, and `map_page_deferred` documents its precondition (a new leaf or one that only gains rights; no frame freed before the batch flush);
+- the coalescer test's run ends below the top page.
+
+Re-run on `ea6fdc533`:
+- `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu`: `test result: ok. 464 passed; 0 failed`, with the four `page_protect::tests` `ok`.
+- clippy `-p cellos-kernel -- -D warnings`: x86_64, riscv64 and aarch64 each `Finished`.
+
 ### Not run
 
-- An independent race review of this change (grant: before S2 closes).
+- Guest lanes on `ea6fdc533`. That commit changes only comments, visibility and a host test; the code paths the guest lanes ran are those of `3bd6d132d`.
 - Physical hardware; lanes above 8 CPUs.
 - The riscv64/aarch64 shootdown fixtures at 2 harts. Their ELF/W^X paths are unchanged by construction (`map_page_deferred` is `map_page`, and `protect_pages` is the old loop).
