@@ -79,6 +79,15 @@ fn expect_exit_zero(qemu: &mut QemuRunner, why: &str) {
         !dump.contains("[power] poweroff: machine still running"),
         "{why}: the sleep write did not take effect\n{dump}"
     );
+    let evidence: Vec<&str> = dump
+        .lines()
+        .filter(|line| {
+            ["kernel boot v", "System ", "[supervisor] power", "[power]", "[acpi] power button"]
+                .iter()
+                .any(|needle| line.contains(needle))
+        })
+        .collect();
+    println!("{why}: QEMU exit {status:?}\n{}", evidence.join("\n"));
 }
 
 #[test]

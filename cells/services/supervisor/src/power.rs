@@ -66,7 +66,7 @@ pub fn shut_down(action: SystemPowerAction, origin: Origin) -> SystemPowerError 
         }
     }
     print_fmt(format_args!(
-        "[supervisor] power: {} ({:?}) froze={} refused={} kept={} settle<={}ms",
+        "[supervisor] power: {} ({:?}) froze={} refused={} kept={} settle<={}ms\n",
         action_name(action),
         origin,
         froze,
@@ -76,11 +76,11 @@ pub fn shut_down(action: SystemPowerAction, origin: Origin) -> SystemPowerError 
     ));
     if settle() {
         print_fmt(format_args!(
-            "[supervisor] power: second power-button press ended the settle window"
+            "[supervisor] power: second power-button press ended the settle window\n"
         ));
     }
     print_fmt(format_args!(
-        "[supervisor] power: requesting {}",
+        "[supervisor] power: requesting {}\n",
         action_name(action)
     ));
     let error = sys_system_power(action);
@@ -88,7 +88,7 @@ pub fn shut_down(action: SystemPowerAction, origin: Origin) -> SystemPowerError 
         let _ = sys_resume_cell(tid);
     }
     print_fmt(format_args!(
-        "[supervisor] power: {} refused ({:?}); resumed {} cells",
+        "[supervisor] power: {} refused ({:?}); resumed {} cells\n",
         action_name(action),
         error,
         froze
