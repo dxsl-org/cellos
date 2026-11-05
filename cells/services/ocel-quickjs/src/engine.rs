@@ -274,9 +274,6 @@ impl QuickJsContext {
             return String::from("null");
         }
         if ffi::vios_js_is_number(value) != 0 {
-            if ffi::vios_js_is_float(value) != 0 {
-                return format_float(ffi::vios_js_as_float(value));
-            }
             let mut d = 0.0f64;
             if ffi::JS_ToFloat64(self.ctx, &mut d, value) == 0 {
                 return format_float(d);

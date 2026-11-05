@@ -1,0 +1,26 @@
+# T-2 reproducer: the Rust half of ocel-quickjs's float boundary as a staticlib for
+# x86_64-unknown-none (soft-float, `rustc-abi: softfloat`), linked into a host program
+# beside the cell's own x86_64 `libquickjs.a` (hard-float SSE2). See run.sh.
+[package]
+name = "t2-float-repro"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "lib.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+# The version the workspace Cargo.lock resolves for libs/api and ocel-quickjs.
+libm = "=0.2.16"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+# One object: its strong math definitions are linked as a unit.
+codegen-units = 1
+# Standalone: not a member of the Cellos workspace.
+[workspace]

@@ -8,10 +8,12 @@
 //! * **No external libc.** Lua links the toolchain's `libc.a`/`libm.a` on
 //!   riscv64, which is why CI cannot build it (`Ubuntu's bare-elf gcc ships no
 //!   libc.a`). QuickJS here links nothing but the Rust crates it depends on:
-//!   `libs/api` already exports the C ABI it needs (allocation, strings, stdio,
-//!   the C99 math set via `libm`), and this cell supplies the three symbols that
-//!   ABI does not have (`gettimeofday`, `clock_gettime`, `localtime_r`) plus an
-//!   `errno`-free config that avoids float `printf` and `strtod` entirely.
+//!   `libs/api` already exports the C ABI it needs (allocation, strings,
+//!   stdio), and this cell supplies the rest itself: the three OS symbols that
+//!   ABI does not have (`gettimeofday`, `clock_gettime`, `localtime_r`), the
+//!   C99 math set over an integer-only boundary (`src/float_abi.rs`) rather
+//!   than `libs/api`'s `double`-signature exports, and an `errno`-free config
+//!   that avoids float `printf` and `strtod` entirely.
 //! * **We own the headers.** Upstream includes `<stdlib.h>`, `<stdio.h>`,
 //!   `<math.h>`, … which no bare-elf toolchain provides; `vendor/include/`
 //!   declares exactly the subset the engine uses.
@@ -184,8 +186,9 @@ fn compile_engine(target: &str) {
     if target.contains("x86_64") {
         build.flag("-mno-red-zone");
         build.flag("-mcmodel=small");
-        // The engine is floating point throughout; SSE2 is the x86_64 baseline
-        // and the Rust side of this target compiles with it enabled.
+        // The engine is floating point throughout; SSE2 is the x86_64 baseline.
+        // The Rust side of every x86_64 cell is soft-float, so no `double`
+        // may cross between the two (rule H1): see `src/float_abi.rs`.
         build.flag("-msse2");
         build.flag("-mfpmath=sse");
     }

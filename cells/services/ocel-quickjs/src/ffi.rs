@@ -3,11 +3,15 @@
 //!
 //! Everything else the engine links against — `malloc`/`free`/`realloc`,
 //! `mem*`/`str*`, `snprintf`/`vsnprintf`/`fprintf`/`fputc`/`fwrite`,
-//! `stdout`/`stderr`, `abort`, and the C99 math set — comes from `libs/api`,
-//! which every cell already links. This file therefore carries only the
-//! declarations of upstream `quickjs.h` that the engine driver uses, and the
-//! three bodies upstream expects from an OS: the clock and the epoch
-//! conversion behind `Date`.
+//! `stdout`/`stderr` and `abort` — comes from `libs/api`, which every cell
+//! already links; the C99 math set comes from this cell's `float_abi`. This
+//! file therefore carries only the declarations of upstream `quickjs.h` that
+//! the engine driver uses, and the three bodies upstream expects from an OS:
+//! the clock and the epoch conversion behind `Date`.
+//!
+//! Nothing declared here passes a float by value (rule H1, see `float_abi`):
+//! `JSValue` is two integer words on both sides, and numbers are read through
+//! `JS_ToFloat64`'s out pointer.
 
 #![allow(non_camel_case_types)]
 
@@ -26,11 +30,17 @@ pub struct JSContext {
 }
 
 /// `JSValue` is two words; the engine treats it as a tagged union.
+///
+/// Passing it by value is float-ABI neutral: on 64-bit targets (no NaN
+/// boxing) the C union shares its first word between integer, `double` and
+/// pointer members, and the x86_64 SysV classification merges that word to
+/// INTEGER, so hard-float C passes it in general-purpose registers exactly as
+/// this two-integer view does. A number inside it is only ever read through
+/// `JS_ToFloat64`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct JSValue {
-    /// `JSValueUnion` — either the small int or the `f64`, read through the
-    /// glue's `vios_js_as_*` once the glue has told us which it is.
+    /// `JSValueUnion`; only the C side interprets it.
     pub u: u64,
     /// Tag from the header's `JS_TAG_*` table. Only the glue interprets it.
     pub tag: i64,
@@ -78,8 +88,6 @@ extern "C" {
     pub fn vios_js_is_null(v: JSValue) -> c_int;
     pub fn vios_js_is_bool(v: JSValue) -> c_int;
     pub fn vios_js_is_number(v: JSValue) -> c_int;
-    pub fn vios_js_is_float(v: JSValue) -> c_int;
-    pub fn vios_js_as_float(v: JSValue) -> f64;
     pub fn vios_js_free(ctx: *mut JSContext, v: JSValue);
     pub fn vios_js_to_bounded_string(
         ctx: *mut JSContext,
@@ -95,28 +103,6 @@ extern "C" {
         >,
     );
     pub fn vios_js_throw_error(ctx: *mut JSContext, message: *const c_char) -> JSValue;
-}
-
-/// `lrint` — round to nearest, ties to even — which the Tier-A math set does
-/// not export and the engine's `Math` table takes the address of.
-///
-/// The engine only ever calls it on finite values in the integer range
-/// (`js_math_round`-adjacent paths), so the saturating cast below is the right
-/// contract: out-of-range or NaN input cannot be represented and saturates,
-/// exactly like the hardware conversion instruction.
-#[no_mangle]
-pub extern "C" fn lrint(x: f64) -> i64 {
-    if !x.is_finite() {
-        return 0;
-    }
-    let rounded = libm::rint(x);
-    if rounded <= i64::MIN as f64 {
-        i64::MIN
-    } else if rounded >= i64::MAX as f64 {
-        i64::MAX
-    } else {
-        rounded as i64
-    }
 }
 
 // ── Shim symbols the engine expects from the OS ─────────────────────────────
