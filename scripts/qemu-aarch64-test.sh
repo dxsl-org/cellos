@@ -4,9 +4,20 @@
 #
 # Mirrors scripts/qemu-boot-test.sh for the ARM64 virt machine.
 #
-# Usage: scripts/qemu-aarch64-test.sh [kernel-elf] [disk.img]
-#   kernel-elf  default: target/aarch64-unknown-none-softfloat/release/cellos-kernel
+# Usage: scripts/qemu-aarch64-test.sh [kernel] [disk.img]
+#   kernel      default: target/aarch64-unknown-none-softfloat/release/cellos-kernel
+#               An ELF or a raw arm64 `Image` (scripts/build-aarch64-image.sh);
+#               QEMU passes its generated FDT in x0 to an Image.
 #   disk.img    default: disk_arm_virt.img
+#
+# Environment:
+#   LANE        virt (default): non-VHE kernel, `-machine virt`, cortex-a57, 1 CPU.
+#               virt-vhe: a kernel built with CELLOS_AARCH64_HOST_REGIME=vhe on
+#               `virt,virtualization=on` with a VHE CPU and 2 CPUs. Asserts the
+#               VHE host regime line, EL0 Cell output and, with more than one
+#               CPU, hart 1 online.
+#   QEMU_CPU    override the lane's CPU (virt-vhe: cortex-a76)
+#   QEMU_SMP    override the lane's CPU count (virt-vhe: 2)
 
 set -euo pipefail
 
@@ -16,6 +27,24 @@ BOOT_WINDOW="${BOOT_WINDOW:-55}"
 ASSERT_PHASE04_BASELINE="${ASSERT_PHASE04_BASELINE:-0}"
 OMIT_OPTIONAL_DEVICES="${OMIT_OPTIONAL_DEVICES:-0}"
 MARKER_HELPER="$(dirname "$0")/assert-boot-markers.sh"
+LANE="${LANE:-virt}"
+case "$LANE" in
+    virt)
+        QEMU_MACHINE="virt"
+        QEMU_CPU="${QEMU_CPU:-cortex-a57}"
+        QEMU_SMP="${QEMU_SMP:-1}"
+        ;;
+    virt-vhe)
+        # gic-version=2: the EL2 host's vGIC uses GICv2 GICH/GICV.
+        QEMU_MACHINE="virt,virtualization=on,gic-version=2"
+        QEMU_CPU="${QEMU_CPU:-cortex-a76}"
+        QEMU_SMP="${QEMU_SMP:-2}"
+        ;;
+    *)
+        echo "FAIL: LANE must be 'virt' or 'virt-vhe' (got '$LANE')" >&2
+        exit 1
+        ;;
+esac
 
 if ! command -v qemu-system-aarch64 &>/dev/null; then
     echo "FAIL: qemu-system-aarch64 not found on PATH" >&2
@@ -34,11 +63,12 @@ if [[ ! -f "$DISK" ]]; then
     exit 1
 fi
 
-echo "[qemu-aarch64-test] Booting kernel=$KERNEL disk=$DISK (window=${BOOT_WINDOW}s)"
+echo "[qemu-aarch64-test] lane=$LANE Booting kernel=$KERNEL disk=$DISK (cpu=$QEMU_CPU smp=$QEMU_SMP window=${BOOT_WINDOW}s)"
 
 QEMU_ARGS=(
-    -machine virt
-    -cpu cortex-a57
+    -machine "$QEMU_MACHINE"
+    -cpu "$QEMU_CPU"
+    -smp "$QEMU_SMP"
     -m 256M
     -nographic
     -kernel "$KERNEL"
@@ -82,6 +112,17 @@ if grep -q "Cellos >" qemu-aarch64.log; then
             REQUIRED_MARKERS+=("gpu readiness:::VirtIO GPU Driver Cell registered")
         fi
         bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-qemu" "${REQUIRED_MARKERS[@]}"
+    fi
+    if [[ "$LANE" == "virt-vhe" ]]; then
+        # "USER:" lines are EL0 Cells writing through the console syscall.
+        VHE_MARKERS=(
+            "VHE host regime:::[INFO] host regime: EL2 VHE (E2H=1 TGE=1)"
+            "EL0 Cell syscalls:::USER: Init: OS ready."
+        )
+        if [[ "$QEMU_SMP" -gt 1 ]]; then
+            VHE_MARKERS+=("secondary hart:::[smp] hart 1 online")
+        fi
+        bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-virt-vhe" "${VHE_MARKERS[@]}"
     fi
     echo "PASS: aarch64 shell prompt reached — full boot successful"
     exit 0

@@ -675,6 +675,31 @@ jobs:
           chmod +x scripts/qemu-aarch64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-aarch64-test.sh
 
+      # Apple Silicon phase 02a: the same kernel as a raw arm64 Image, booted
+      # through QEMU's Image loader, which passes its generated FDT in x0.
+      - name: Boot test (aarch64, -kernel Image)
+        run: |
+          bash scripts/build-aarch64-image.sh
+          BOOT_WINDOW=90 bash scripts/qemu-aarch64-test.sh \
+            target/aarch64-unknown-none-softfloat/release/cellos-kernel.Image
+
+      # The VHE host variant (HCR_EL2.{E2H,TGE} = {1,1}) rebuilds the kernel in
+      # place, so it runs after every lane of the non-VHE kernel above.
+      - name: Build aarch64 kernel (VHE host)
+        env:
+          CELLOS_AARCH64_HOST_REGIME: vhe
+        run: >
+          cargo build --release
+          -p cellos-kernel
+          --target aarch64-unknown-none-softfloat
+          -Z build-std=core,alloc
+
+      - name: Boot test (aarch64 virt-vhe, -kernel Image, 2 CPUs)
+        run: |
+          bash scripts/build-aarch64-image.sh
+          LANE=virt-vhe BOOT_WINDOW=120 bash scripts/qemu-aarch64-test.sh \
+            target/aarch64-unknown-none-softfloat/release/cellos-kernel.Image
+
   # Tier 3b ARM64 hypervisor. Both jobs boot the Alpine guest to its shell
   # ("~ #") through scripts/qemu-hypervisor-smoke.sh; they differ only in the
   # CPU. The machinery job runs on every PR under QEMU-TCG; the boot-to-shell
@@ -774,6 +799,27 @@ jobs:
           chmod +x scripts/qemu-hypervisor-smoke.sh
           bash scripts/qemu-hypervisor-smoke.sh
 
+      # Apple Silicon phase 02a: the same guest under the VHE host
+      # (HCR_EL2.E2H = 1, guest EL1 bank through the _EL12 encodings). The
+      # non-VHE logs are kept under their own names first.
+      - name: Build aarch64 hypervisor kernel (VHE host)
+        env:
+          RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
+          EMBEDDED_OVERRIDE: "kernel/src/embedded-hv"
+          CELLOS_AARCH64_HOST_REGIME: vhe
+        run: |
+          mv qemu-hv.log qemu-hv-nonvhe.log
+          mv qemu-hv.raw.log qemu-hv-nonvhe.raw.log
+          cargo build --release -p cellos-kernel --features qemu-virt-1g \
+            --target aarch64-unknown-none-softfloat -Z build-std=core,alloc
+
+      - name: Run hypervisor machinery smoke test (TCG, VHE host on cortex-a76)
+        env:
+          HV_SMOKE_MODE: machinery
+          HV_SMOKE_CPU: cortex-a76
+          BOOT_WINDOW: "300"
+        run: bash scripts/qemu-hypervisor-smoke.sh
+
       # The historical EL2 IRQ/preemption intermittency is fixed. Retain the
       # complete boot output for regression diagnosis.
       - name: Upload QEMU boot log
@@ -784,6 +830,8 @@ jobs:
           path: |
             qemu-hv.log
             qemu-hv.raw.log
+            qemu-hv-nonvhe.log
+            qemu-hv-nonvhe.raw.log
           if-no-files-found: warn
           retention-days: 14
 

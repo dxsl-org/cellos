@@ -1,12 +1,13 @@
 //! AArch64 boot entry point.
 //!
-//! QEMU virt remains an EL2 host. On BCM the boot CPU retains an EL2 monitor,
-//! enters EL1h for the kernel and EL0 Cells, and returns to EL2 only via the
-//! private HVC gateway. Firmware starting us at EL1 cannot provide that gateway.
+//! QEMU virt remains an EL2 host, non-VHE or VHE as the backend's
+//! [`HostRegime`] says. On BCM the boot CPU retains an EL2 monitor, enters EL1h
+//! for the kernel and EL0 Cells, and returns to EL2 only via the private HVC
+//! gateway. Firmware starting us at EL1 cannot provide that gateway.
 
 use core::arch::global_asm;
 
-use super::backend::{ArmPlatform, Board, SecondaryStart};
+use super::backend::{ArmPlatform, Board, HostRegime, SecondaryStart};
 
 /// Boot through the Pi EL2 monitor install (`.el2_init`, BSS-clear epilogue).
 const BOARD_BCM: usize = <Board as ArmPlatform>::PI_MONITOR_BOOT as usize;
@@ -16,6 +17,25 @@ const SECONDARY_PSCI: usize = matches!(
     <Board as ArmPlatform>::SECONDARY_START,
     SecondaryStart::Psci
 ) as usize;
+
+/// The EL2 boot path sets `HCR_EL2.E2H` (VHE host).
+const HOST_VHE: usize = matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2Vhe) as usize;
+
+/// The EL2 boot path keeps `HCR_EL2.E2H` clear (non-VHE EL2 host).
+const HOST_EL2_NONVHE: usize =
+    matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2NonVhe) as usize;
+
+// `_secondary_entry` builds the non-VHE `TCR_EL2` from two 16-bit halves.
+const _: () = assert!(super::el2::EL2_TCR >> 32 == 0);
+
+/// `_start` begins with a Linux arm64 `Image` header.
+const IMAGE_HEADER: usize = <Board as ArmPlatform>::LINUX_IMAGE_HEADER as usize;
+
+/// `Image` header flags (booting.rst): little-endian (bit 0 = 0), 4 KiB pages
+/// (bits 2:1 = 1), and bit 3 = 0: the image is not relocatable, so the loader
+/// must place it at `text_offset` above a 2 MiB-aligned base at the start of
+/// DRAM — on QEMU virt that is exactly the link address.
+const IMAGE_FLAGS: usize = 1 << 1;
 
 /// Boot state a secondary core needs, published by the boot core before
 /// `PSCI_CPU_ON` and read by `_secondary_entry` with the MMU **still off**.
@@ -53,11 +73,16 @@ impl SecondaryContext {
     /// `kernel_root` is passed in rather than read from `TTBR0_EL1`: a Cell's
     /// root may be installed on the calling core, and no secondary may start
     /// under a Cell's translation regime.
+    ///
+    /// On a VHE host the `_EL1` encodings below are redirected to the EL2&0
+    /// regime's registers, so the context carries `MAIR_EL2`/`TCR_EL2`/
+    /// `SCTLR_EL2`, which `_secondary_entry` installs through the same
+    /// redirection after it sets `HCR_EL2.E2H`.
     pub fn for_hart(hart_id: u64, stack_top: u64, kernel_root: u64) -> Self {
         let mair: u64;
         let tcr: u64;
         let sctlr: u64;
-        // SAFETY: MAIR/TCR/SCTLR_EL1 are EL1-private and read-only here.
+        // SAFETY: MAIR/TCR/SCTLR (EL1, or EL2 under VHE) are read-only here.
         unsafe {
             core::arch::asm!(
                 "mrs {mair}, mair_el1",
@@ -93,6 +118,21 @@ global_asm!(
     .global _start
     .balign 4
 _start:
+    .if {image_header}
+    // Linux arm64 Image header (booting.rst), 64 bytes; the loader enters at
+    // offset 0 with x0 = FDT physical address, which the path below preserves.
+    b    .Lentry                  // code0
+    .long 0                       // code1
+    .quad __image_text_offset     // text_offset (linker-aarch64.ld)
+    .quad __image_size            // image_size, BSS and boot stack included
+    .quad {image_flags}           // flags
+    .quad 0                       // res2
+    .quad 0                       // res3
+    .quad 0                       // res4
+    .ascii "ARM\x64"              // magic
+    .long 0                       // res5: no PE/COFF header
+.Lentry:
+    .endif
     // Park secondary CPUs immediately.
     // QEMU raspi3b boots all 4 Cortex-A53 cores simultaneously; without this gate
     // they all execute kmain in parallel, corrupting BSS, frame allocator, paging,
@@ -161,22 +201,45 @@ _start:
     eret
     .endif
 
-    // F2: set HCR_EL2 = RW(1<<31) | TGE(1<<27) FIRST.
-    // TGE routes EL0 exceptions to VBAR_EL2 — required for Cell SVCs at EL2 host.
-    // RW ensures any future EL1 guest runs AArch64 (also harmless now).
+    // F2: set HCR_EL2 = RW(1<<31) | TGE(1<<27) FIRST, plus E2H(1<<34) on a VHE
+    // host. TGE routes EL0 exceptions to VBAR_EL2 — required for Cell SVCs at
+    // the EL2 host. RW ensures an EL1 guest runs AArch64. E2H selects the
+    // EL2&0 regime in which EL0 Cells translate through TTBR0_EL2.
     // SAFETY: we are at EL2; HCR_EL2 is EL2-private.
     mov x0, #(1 << 31)
     orr x0, x0, #(1 << 27)
+    .if {host_vhe}
+    orr x0, x0, #(1 << 34)
+    .endif
     msr hcr_el2, x0
     isb
+    // Read back: a CPU without FEAT_E2H0 keeps E2H set, one without FEAT_VHE
+    // keeps it clear. `el2_mark_active` stops boot on a mismatch. BCM never
+    // reaches this path (its `.el2_init` returns to EL1 above), so its entry
+    // bytes stay as they were.
+    .if {board_bcm} == 0
+    mrs x22, hcr_el2
+    .endif
 
     // TPIDR_EL2 is the per-CPU live-vCPU marker. Firmware does not guarantee
     // its reset value, so clear it before any normal Cell can trap from EL0.
     // vcpu_enter_guest is the only path allowed to make it non-zero.
     msr tpidr_el2, xzr
 
+    .if {host_vhe}
+    // E2H layout: CPTR_EL2.FPEN = 0b11 leaves FP/SIMD untrapped at EL2 and EL0.
+    mov x0, #(3 << 20)
+    msr cptr_el2, x0
+    // E2H layout: CNTHCTL_EL2.EL1PCTEN|EL1PCEN keep a guest's physical
+    // counter and timer untrapped; the EL0 enables stay clear as on the
+    // non-VHE host.
+    mov x0, #(3 << 10)
+    msr cnthctl_el2, x0
+    msr cntvoff_el2, xzr
+    .else
     // Enable FP/SIMD at EL2 host (CPTR_EL2=0 disables all traps).
     msr cptr_el2, xzr
+    .endif
     isb
 
     // Set SP_EL2 stack.
@@ -195,7 +258,10 @@ _start:
     str  xzr, [x0], #8
     b    1b
 2:
-    // Mark EL2_ACTIVE = true and jump to kmain.
+    // Mark EL2_ACTIVE = true (after the HCR_EL2 read-back check) and jump to kmain.
+    .if {board_bcm} == 0
+    mov  x0, x22
+    .endif
     bl   el2_mark_active
     mov  x0, #0             // hartid = 0
     mov  x1, x19            // DTB pointer
@@ -277,14 +343,71 @@ _start:
     .if {secondary_psci}
     // ── Secondary core entry (PSCI_CPU_ON) ───────────────────────────────────
     // x0 = &SecondaryContext, a *physical* address: firmware starts the core
-    // with the MMU off, caches off, at EL1, interrupts masked. This runs from
-    // the identity-mapped image, so control can flow straight into Rust once
-    // the boot core's translation regime is installed.
+    // with the MMU off, caches off, interrupts masked, at EL1 — or at EL2 on a
+    // `virtualization=on` machine. This runs from the identity-mapped image,
+    // so control can flow straight into Rust once the boot core's translation
+    // regime is installed.
     .global _secondary_entry
     .balign 4
 _secondary_entry:
     msr  daifset, #0xf
-    // Exceptions to EL1 use SP_EL1; set that before touching SP.
+    .if {host_vhe}
+    // A VHE host runs every hart at EL2; a core started lower cannot join.
+    // It parks and the boot core's bounded wait keeps the system single-hart.
+    mrs  x9, CurrentEL
+    cmp  x9, #(2 << 2)
+    b.ne .Lsecondary_park
+    // Same regime as the boot core. From here every `_EL1` access below is
+    // redirected to its EL2&0 counterpart, so the shared sequence installs the
+    // boot core's EL2 translation regime and CPTR_EL2.FPEN.
+    mov  x9, #(1 << 31)
+    orr  x9, x9, #(1 << 27)
+    orr  x9, x9, #(1 << 34)
+    msr  hcr_el2, x9
+    isb
+    msr  tpidr_el2, xzr
+    mov  x9, #(3 << 10)
+    msr  cnthctl_el2, x9
+    msr  cntvoff_el2, xzr
+    .endif
+    .if {host_el2_nonvhe}
+    // A `virtualization=on` machine starts the core at EL2. Install the boot
+    // core's non-VHE EL2 host state (`.el2_init`, `el2::el2_mmu_init`); the
+    // shared sequence below then mirrors the root into EL1&0 for EL0 Cells
+    // exactly as the boot core's mirror did.
+    mrs  x9, CurrentEL
+    cmp  x9, #(2 << 2)
+    b.ne 8f
+    mov  x9, #(1 << 31)
+    orr  x9, x9, #(1 << 27)
+    msr  hcr_el2, x9
+    isb
+    msr  tpidr_el2, xzr
+    msr  cptr_el2, xzr
+    mov  x9, #{el2_mair}
+    msr  mair_el2, x9
+    movz x9, #({el2_tcr} & 0xffff)
+    movk x9, #(({el2_tcr} >> 16) & 0xffff), lsl #16
+    msr  tcr_el2, x9
+    isb
+    ldr  x9, [x0, #{ctx_ttbr0}]
+    msr  ttbr0_el2, x9
+    dsb  sy
+    isb
+    tlbi alle2                  // this PE only
+    dsb  nsh
+    isb
+    mrs  x9, sctlr_el2
+    orr  x9, x9, #(1 << 0)
+    orr  x9, x9, #(1 << 2)
+    orr  x9, x9, #(1 << 12)
+    msr  sctlr_el2, x9
+    dsb  sy
+    isb
+8:
+    .endif
+    // Exceptions to EL1 use SP_EL1 (SP_EL2 on a VHE host at EL2); set that
+    // before touching SP.
     msr  spsel, #1
     isb
     mov  x9, #(3 << 20)         // CPACR_EL1.FPEN: FP/SIMD at EL1 and EL0
@@ -315,6 +438,12 @@ _secondary_entry:
     "#,
     board_bcm = const BOARD_BCM,
     secondary_psci = const SECONDARY_PSCI,
+    host_vhe = const HOST_VHE,
+    host_el2_nonvhe = const HOST_EL2_NONVHE,
+    el2_mair = const super::el2::EL2_MAIR,
+    el2_tcr = const super::el2::EL2_TCR,
+    image_header = const IMAGE_HEADER,
+    image_flags = const IMAGE_FLAGS,
     ctx_hart = const CTX_HART_ID,
     ctx_stack = const CTX_STACK_TOP,
     ctx_mair = const CTX_MAIR,
