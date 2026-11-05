@@ -65,4 +65,4 @@ Kernel internals: static `\_S5_` scan (structural walk of namespace terms; metho
 | CP2-06-1 | Supervisor in the x86 images | **granted 2026-11-05** ([record](s2-phase06-supervisor-image-grant.md)); implemented as deviation 7 |
 | CP2-06-2 | Ratify deviations 1–7 | Yes |
 | CP2-06-3 | Freeze 436 with the §1 envelope and sentinels | Yes |
-| CP2-06-4 | Accept the unrun rows (rv64/aarch64 boot lanes, the two prod-refusal tests) as follow-up evidence, or require them first | Owner's choice |
+| CP2-06-4 | Unrun rows | **Resolved 2026-11-05:** all ran (x86_64-boot 9/9 incl. both prod-refusal tests, xhci, igb, nic, iommu-dmar, serial, machine-pin, power on TCG and KVM; rv64 and aarch64 default boot lanes PASS). Remaining gap: no rv64/aarch64 image ships `/bin/shutdown`, so its non-x86 path is backed by code reading and cross-builds only |
