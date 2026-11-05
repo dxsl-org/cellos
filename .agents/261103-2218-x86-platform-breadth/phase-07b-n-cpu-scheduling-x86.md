@@ -74,7 +74,7 @@ The scheduler's per-hart queues stay as they are; stealing becomes `steal_from(v
 - [x] KVM `-smp 8`: `online=8`; TCG `-smp 4` green (lanes and limits in evidence).
 - [x] Stress loop: 10/10 passes, zero `invalidation unconfirmed` lines. Final run after the review fixes and D12: 10 × (KVM `-smp 4` boot + domain lane `X86_CPUS=4` KVM), 10/10 + 10/10, 0 unconfirmed lines in 20 logs. The first run's 3/10 domain failures were fixture timing (D12).
 - [x] riscv64/aarch64 lanes unchanged (still 2 harts).
-- [x] Review: independent race review of shootdown and stealing — PASS-with-fixes, no Critical; Minor fixes D13–D15 applied. Batching ELF-load/W^X flushes (reviewer R1) is left to the owner.
+- [x] Review: independent race review of shootdown and stealing — PASS-with-fixes, no Critical; Minor fixes D13–D15 applied. Batching ELF-load/W^X flushes (reviewer R1): implemented under D16 (owner grant). Its independent race review is still pending.
 
 ## Risk Assessment
 
@@ -135,3 +135,15 @@ Line cites are as of the S2 request base `28dee8b3d`; the code was re-located by
 - **D13 Decision (review minor a):** the x86 self-service in `await_remote_invalidation` re-reads `current_hart_id()` each pass, with IF masked around the read and `service_tlb_flush`, rather than a `debug_assert!` that IF is clear: callers run with IF set as well as clear, and with IF set the waiter may resume on another CPU, where servicing the stale id would forge an acknowledgement for a hart this CPU never flushed.
 - **D14 Decision (review minor b):** after the BSP observes `HART_ONLINE[logical]`, it issues one more `request_tlb_flush(logical)` and waits for it: until then every shootdown excluded the AP. The AP's boot-complete wait budget grows to `5 × MAX_HARTS`.
 - **D15 Decision (review minor c):** a failed AP pvclock registration makes kvmclock unusable system-wide (`kvmclock::retire` clears the read pointer, so `fallback_source` and later APs see `now_ns() == 0`), after demoting an active kvmclock source; an active kvmclock with no fallback stays (retiring it would stall time). No new static.
+- **D16 Deviation (owner grant `s2-phase07b-flush-batching-grant.md`, reviewer R1):** ELF segment mapping and the W^X lowering pass batch their TLB shootdowns.
+  - `loader/elf.rs` writes a segment's leaves through `paging::map_page_deferred`, then issues one `paging::flush_deferred_maps` over the segment, under the caller's `FRAME_ALLOCATOR` guard.
+  - `loader/wx.rs` calls `paging::protect_pages`. On x86 it holds `KERNEL_ROOT` from the first leaf write through the last flush, and calls `flush_range` once per contiguous run, on the error path too.
+  - `memory/page_protect.rs` (the body of `paging::protect_page`; Main confirmed it is in set by symbol): the x86 `protect_page` is split into a leaf rewrite plus its flush, with behaviour unchanged.
+  - riscv64/aarch64: `map_page_deferred` is `map_page` (which never flushed a new leaf there), `flush_deferred_maps` is a no-op, and `protect_pages` is the old per-page loop.
+  Why: one global shootdown per page (about 26 k per boot to the prompt) made KVM `-smp 4` boot range 3.6–75.6 s, past the 45 s CI lane. Under host contention this branch measured 33.7–44.7 s before and 9.9–22.0 s after. The vfs ELF and W^X steps fell from up to 4.8 s and 5.8 s to under 0.15 s.
+  Impact:
+  - Fail-stop on an unconfirmed acknowledgement is unchanged.
+  - A lowering is acknowledged by every online CPU before the Cell is registered or a frame is freed.
+  - A new segment is flushed before relocation and before the spawn returns.
+  - Host tests in `page_protect::tests`. Stress: 10/10 boots within 45 s plus 10/10 domain lanes, 0 unconfirmed. Evidence: "R1 flush batching" in `reports/phase-07b-evidence.md`.
+  Revert: revert `3bd6d132d`.
