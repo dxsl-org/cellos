@@ -109,7 +109,7 @@ if [[ ${#bad[@]} -gt 0 ]]; then
 fi
 # libc++'s Ryu files add the Boost-1.0 notice of Ulf Adams beside the SPDX line;
 # NOTICE carries it.
-ryu="$(grep -rl "Copyright 2018 Ulf Adams" "$SRC/libcxx" | wc -l)"
+ryu="$(grep -rl "Copyright 2018 Ulf Adams" "$SRC/libcxx/src" | wc -l)"
 echo "  $checked files: LLVM SPDX or build metadata; $ryu Ryu files also carry Boost-1.0 (Ulf Adams)"
 
 # ─── Common option set (both rows) ───────────────────────────────────────────

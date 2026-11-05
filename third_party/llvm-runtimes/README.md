@@ -26,7 +26,7 @@ Step 2 of the script reads every file under `libcxx/{include,src}`, `libcxxabi/{
   into SPDX-tagged `.cpp` files: `libcxx/src/iostream_init.h`,
   `libcxx/src/chrono_system_time_init.h`, `libcxx/src/memory_resource_init_helper.h`. The
   script fails if one of them grows;
-- the 22 Ryu files in `libcxx` (floating-point `to_chars`) also carry Ulf Adams' Boost
+- the 12 Ryu files under `libcxx/src` (floating-point `to_chars`) also carry Ulf Adams' Boost
   Software License 1.0 notice. Boost-1.0 requires no notice for object code; `NOTICE` names
   it anyway.
 
@@ -68,7 +68,7 @@ Every C ABI entry point called from Rust is `extern "C"` and `noexcept`.
 
 **Compiler builtins.** These come from `libgcc.a` of the compiler that built mlibc, which `libs/mlibc-shim` places ahead of Rust `compiler_builtins`. compiler-rt is not used (`*_USE_COMPILER_RT=OFF`). The witness links with `--no-allow-multiple-definition`, and no member of `compiler_builtins` is extracted.
 
-**Libc tier.** mlibc with the `posix` option (runtime plan R2/R3). Step 4 of the script fails if any libc symbol referenced by the archives is missing from `libc.a`. A gap is fixed in mlibc with a ledger row, never stubbed here.
+**Libc tier.** mlibc with the `posix` option (runtime plan R2/R3). Step 4 of the script fails if any libc symbol referenced by the archives is missing from `libc.a`. A gap is fixed in mlibc with a ledger row, never stubbed here. The first gap was five locale-suffixed functions: `strtoll_l` and `strtoull_l`, which `<locale>` needs in every consumer, and `strxfrm_l`, `wcscoll_l` and `wcsxfrm_l`, which libc++'s `locale.cpp` needs. `third_party/mlibc/patches/0002-posix-locale-l-functions.patch` adds them.
 
 **Facilities.**
 - Exceptions and RTTI: libc++abi, plus libunwind with `.eh_frame_hdr` lookup through mlibc's `dl_iterate_phdr`. The Cell links with `--eh-frame-hdr`, which rustc passes, so `PT_GNU_EH_FRAME` is present.
