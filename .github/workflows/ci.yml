@@ -1133,6 +1133,20 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+      # Plan 261103-2218 phase 06: `/bin/shutdown` enters S5 (QEMU exits 0),
+      # `/bin/shutdown -r` resets into a second boot, and QMP `system_powerdown`
+      # runs the supervisor shutdown. The runner omits `-no-reboot` so a reset
+      # boots again. `VICELL_POWER_ISO` pins the ISO the job just built.
+      - name: ACPI power integration test (x86_64, reset/S5/power button)
+        env:
+          VICELL_POWER_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test power-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture
+
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)
     runs-on: ubuntu-24.04
