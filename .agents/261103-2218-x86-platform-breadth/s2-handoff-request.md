@@ -1,6 +1,6 @@
 # Slice S2 (phases 06, 07a, 07b) — lock-handoff request
 
-Status: **draft for owner approval. Not effective.** It takes effect only after slice RE releases the Intel WIP lane (`.agents/cell-contract-0024-locks.md:174`) and the owner answers §6. Written 2026-11-04 against HEAD `28dee8b3d`. Line numbers are HEAD lines. The working tree differs from HEAD only in slice-RE files (`kernel/src/task{.rs,/elf_prepare.rs}`, `kernel/src/loader/{boot_ceiling.rs,launch_profile/targets.rs}`, `kernel/Cargo.toml`, `libs/ostd/src/startup.rs`). `[INFERENCE]` marks claims that were not read in code.
+Status: **approved by the owner 2026-11-05 with every §6 recommendation ([record](s2-handoff-approval.md)); effective — S2 holds the Intel WIP lane.** Written 2026-11-04 against HEAD `28dee8b3d`; line numbers below are HEAD lines and are re-located by symbol on the current tree. `[INFERENCE]` marks claims that were not read in code.
 
 ## 1. Phase 06 step 1 — recon result
 
