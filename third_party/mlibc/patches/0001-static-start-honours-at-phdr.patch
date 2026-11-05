@@ -1,0 +1,30 @@
+Cellos patch to mlibc (MIT) at pin ae1092eb, applied by scripts/build-mlibc.sh.
+Static start-up reads the program headers from AT_PHDR when the kernel passes
+them (Cell initial stack, CP1 cell-initial-stack-auxv), falling back to
+__ehdr_start otherwise. Cellos images do not map their ELF header.
+
+diff --git a/options/rtld/generic/main.cpp b/options/rtld/generic/main.cpp
+index b3022e4d..d05be1bb 100644
+--- a/options/rtld/generic/main.cpp
++++ b/options/rtld/generic/main.cpp
+@@ -541,11 +541,15 @@ extern "C" void *interpreterMain(uintptr_t *entry_stack) {
+ #else
+ 	(void)env_ld_library_path;
+ 	(void)env_ld_preload;
+-	auto ehdr = reinterpret_cast<elf_ehdr*>(__ehdr_start);
+-	phdr_pointer = reinterpret_cast<void*>((uintptr_t)ehdr->e_phoff + (uintptr_t)ehdr);
+-	phdr_entry_size = ehdr->e_phentsize;
+-	phdr_count = ehdr->e_phnum;
+-	entry_pointer = reinterpret_cast<void*>(ehdr->e_entry);
++	// Cellos: images do not map their ELF header; the kernel passes the
++	// program headers through AT_PHDR/AT_PHNUM/AT_ENTRY instead.
++	if(!phdr_pointer) {
++		auto ehdr = reinterpret_cast<elf_ehdr*>(__ehdr_start);
++		phdr_pointer = reinterpret_cast<void*>((uintptr_t)ehdr->e_phoff + (uintptr_t)ehdr);
++		phdr_entry_size = ehdr->e_phentsize;
++		phdr_count = ehdr->e_phnum;
++		entry_pointer = reinterpret_cast<void*>(ehdr->e_entry);
++	}
+ #endif
+ 	__ensure(phdr_pointer);
+ 	__ensure(entry_pointer);

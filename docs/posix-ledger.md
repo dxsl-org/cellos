@@ -261,44 +261,69 @@ and talks to the Net service over typed IPC (`libs/api/src/services/posix/net.rs
 ## Tier B: mlibc `sysdeps/vicell`
 
 Opt-in with `api = { features = ["mlibc"] }` plus `mlibc-shim`. The mlibc build
-turns off its `posix`, `linux`, `glibc` and `bsd` option sets
-(`third_party/mlibc/sysdeps/vicell/meson.build:8-14`). mlibc's own `libc.a`
-exports the consumer-visible libc functions. Cellos supplies only the `sys_*`
-hooks listed here. Hooks report failure by returning an errno value to mlibc,
-which then sets `errno` for its caller.
+enables its `posix` option set and keeps `linux`, `glibc` and `bsd` off
+(`third_party/mlibc/sysdeps/vicell/meson.build:9-18`). mlibc's own `libc.a`
+exports the consumer-visible libc functions. Cellos supplies only the sysdep
+hooks listed here, each a `Sysdeps<Tag>::operator()` named by its tag
+(`include/mlibc/sysdeps.hpp`), for riscv64, aarch64 and x86_64. A tag not
+listed returns `ENOSYS` through mlibc's `sysdep_or_enosys`. Hooks report
+failure by returning an errno value to mlibc, which then sets `errno` for its
+caller.
+
+**Start-up.** ostd's `_start` calls `__cellos_libc_start(entry_sp)` with the
+kernel's Cell initial stack (argc, argv, envp, auxv); mlibc's strong definition
+(`third_party/mlibc/sysdeps/vicell/generic/startup.cpp`) sets up the Tcb, static
+TLS, the stack guard and `environ`, then runs the constructors once (runtime plan
+CP1 `cp1-cell-initial-stack-auxv.md`; mlibc pin patch
+`third_party/mlibc/patches/0001-static-start-honours-at-phdr.patch`). Rows marked
+`partial` were exercised on x86_64 QEMU (TCG and KVM) by the witnesses below;
+riscv64 and aarch64 are not run.
 
 | profile | kind | sysdep | consumer_visible_symbol | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|---|
-| tier-b | mlibc-sysdep | `sys_libc_log` | none; mlibc internal logging | `VI_SYS_LOG` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:41-44` | ASCII message | n/a | unverified | none |
-| tier-b | mlibc-sysdep | `sys_libc_panic` | none; mlibc internal assertion path | log then `VI_SYS_EXIT` with status 1 | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:47-51` | terminates the Cell | never returns | unverified | none |
-| tier-b | mlibc-sysdep | `sys_exit` | `exit`, `_exit` [INFERENCE: mlibc dispatch] | `VI_SYS_EXIT` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:54-57` | terminates the Cell with a status | never returns | unverified | none |
-| tier-b | mlibc-sysdep | `sys_tcb_set` | none; TLS setup at start-up | writes `tp` on RV64 or `TPIDR_EL0` on AArch64 | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:61-70` | RV64 and AArch64 | other targets: no-op that reports success | unverified | none |
-| tier-b | mlibc-sysdep | `sys_futex_wait` | none; mlibc internal locks (pthreads disabled) | Yield loop while the value is unchanged | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:74-81` | single-threaded Cells | timeout ignored; not a blocking futex | unverified | none |
-| tier-b | mlibc-sysdep | `sys_futex_wake` | none; mlibc internal locks | no-op | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:84-86` | no waiters exist | always 0 | unverified | none |
-| tier-b | mlibc-sysdep | `sys_open` | `open`, `fopen` [INFERENCE: mlibc dispatch] | `VI_SYS_OPEN` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:90-97` | path, flags and mode passed through | any kernel failure maps to `ENOENT` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_read` | `read`, `fread` [INFERENCE: mlibc dispatch] | `VI_SYS_READ` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:100-106` | raw read | kernel failure maps to `EIO` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_write` | `write`, `printf`, `fwrite` [INFERENCE: mlibc dispatch] | `VI_SYS_WRITE` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:109-115` | raw write | kernel failure maps to `EIO` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_close` | `close`, `fclose` [INFERENCE: mlibc dispatch] | `VI_SYS_CLOSE` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:118-122` | close a kernel fd | kernel failure maps to `EBADF` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_seek` | `lseek`, `fseek` [INFERENCE: mlibc dispatch] | `VI_SYS_SEEK` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:125-131` | offset and whence passed through | kernel failure maps to `ESPIPE` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_clock_get` | `clock_gettime` [INFERENCE: mlibc dispatch] | `VI_SYS_GETTIME` (op 2 for realtime ns, op 0 for monotonic ticks) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:137-153` | `CLOCK_REALTIME` and `CLOCK_MONOTONIC` only | other clocks give `EINVAL`; a negative time gives `EIO` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_anon_allocate` | `malloc` through mlibc's slab allocator [INFERENCE: mlibc dispatch] | static 4 MiB bump arena | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:158-170` | 16-byte aligned, zeroed | `ENOMEM` when the arena is exhausted | unverified | none |
-| tier-b | mlibc-sysdep | `sys_anon_free` | `free` through the slab allocator [INFERENCE: mlibc dispatch] | no-op | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:172-175` | none | memory is never reclaimed | unverified | none |
-| tier-b | mlibc-sysdep | `sys_vm_map` | `mmap` [INFERENCE: mlibc dispatch] | `sys_anon_allocate` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:178-183` | `MAP_ANONYMOUS` only | any other mapping gives `EINVAL` | unverified | none |
-| tier-b | mlibc-sysdep | `sys_vm_unmap` | `munmap` [INFERENCE: mlibc dispatch] | `sys_anon_free` (no-op) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:185-187` | none | memory is never reclaimed | unverified | none |
-| tier-b | mlibc-sysdep | `sys_isatty` | `isatty` and stdio buffering choice [INFERENCE: mlibc dispatch] | constant | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:191-193` | fds 0-2 are terminals | other fds report not-a-terminal | unverified | none |
-| tier-b | mlibc-sysdep | `sys_fstat` | `fstat` [INFERENCE: mlibc dispatch] | `VI_SYS_FSTAT` (ViFstatV1 wire record) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:207-224` | only `st_mode` (character, regular or directory) and `st_size` are set | `EINVAL` for `NULL`; `EBADF` on a bad fd or short record; `EIO` on an unknown kind | unverified | none |
-| tier-b | mlibc-sysdep | `sys_stat` | `stat` [INFERENCE: mlibc dispatch] | `sys_open`, `sys_fstat`, `sys_close` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:226-234` | as `sys_fstat` on an opened path | `EINVAL` for `NULL`; otherwise the `sys_open` or `sys_fstat` error | unverified | none |
+| tier-b | mlibc-sysdep | `LibcLog` | none; mlibc internal logging | `VI_SYS_LOG` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:49-51` | ASCII message | n/a | unverified | none |
+| tier-b | mlibc-sysdep | `LibcPanic` | none; mlibc internal assertion path | log then `VI_SYS_EXIT` with status 1 | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:54-58` | terminates the calling task | never returns | unverified | none |
+| tier-b | mlibc-sysdep | `Exit` | `exit`, `_exit` [INFERENCE: mlibc dispatch] | `VI_SYS_EXIT` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:60-63` | from the root thread, ends the Cell | from a worker thread, ends only that thread | unverified | none |
+| tier-b | mlibc-sysdep | `TcbSet` | none; TLS setup at start-up and per thread | `SetTlsBase` (9) with mlibc's Linux offsets: Tcb + `sizeof(Tcb)` on RV64, Tcb + `sizeof(Tcb)` − 16 on AArch64, Tcb on x86_64 | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:49-59` | the kernel reinstalls the base on every resume | kernel refusal gives `EINVAL` | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:608` |
+| tier-b | mlibc-sysdep | `FutexWait` | `pthread_mutex_*`, `pthread_cond_*`, `pthread_join` [INFERENCE: mlibc dispatch] | `FutexWait` (17) | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:65-87` | timeout rounded up to 10 ms ticks plus one, so never early; a zero timeout is answered without the kernel | `EAGAIN` on value mismatch, `ETIMEDOUT`, `EINVAL` for a bad timespec or address | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606-609` |
+| tier-b | mlibc-sysdep | `FutexWake` | as `FutexWait` | `FutexWake` (18); one waiter or all | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:89-93` | keyed by address space, generation and address | `EINVAL` for a bad address | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606-607` |
+| tier-b | mlibc-sysdep | `Yield` | `sched_yield` [INFERENCE: mlibc dispatch] | `Yield` (104) | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:95-97` | gives up the time slice | n/a | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606` |
+| tier-b | mlibc-sysdep | `GetTid` | none; the root thread's tid before its Tcb exists | constant `0x3fffffff` | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:99-101` | inside mlibc's 30-bit futex owner mask; Spawn tids are small and never reused | n/a | unverified | none |
+| tier-b | mlibc-sysdep | `PrepareStack` | `pthread_create` [INFERENCE: mlibc dispatch] | start block (entry, arg, Tcb) for `__vicell_start_thread` | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:103-130` | a caller stack (`pthread_attr_setstack`) is used; otherwise the kernel's 64 KiB Spawn stack, reported as the stack size | a caller stack under 4 KiB gives `EINVAL`; `ENOMEM` from the arena | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606` |
+| tier-b | mlibc-sysdep | `Clone` | `pthread_create` [INFERENCE: mlibc dispatch] | `Spawn` (5) at `__vicell_start_thread` | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:132-138` | the thread shares the Cell's address space, authority and quota; 32 threads per Cell | `EAGAIN` when the kernel refuses | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606` |
+| tier-b | mlibc-sysdep | `ThreadExit` | `pthread_exit`, thread return [INFERENCE: mlibc dispatch] | `VI_SYS_EXIT` | `third_party/mlibc/sysdeps/vicell/generic/thread.cpp:141-144` | ends only the calling thread | never returns | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:606` |
+| tier-b | mlibc-sysdep | `Open` | `open`, `fopen` [INFERENCE: mlibc dispatch] | `VI_SYS_OPEN` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:65-71` | path, flags and mode passed through | any kernel failure maps to `ENOENT` | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:612` |
+| tier-b | mlibc-sysdep | `Read` | `read`, `fread` [INFERENCE: mlibc dispatch] | `VI_SYS_READ` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:73-78` | raw read | kernel failure maps to `EIO` | unverified | none |
+| tier-b | mlibc-sysdep | `Write` | `write`, `printf`, `fwrite` [INFERENCE: mlibc dispatch] | `VI_SYS_WRITE` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:80-85` | raw write | kernel failure maps to `EIO` | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:577-580` |
+| tier-b | mlibc-sysdep | `Close` | `close`, `fclose` [INFERENCE: mlibc dispatch] | `VI_SYS_CLOSE` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:87-90` | close a kernel fd | kernel failure maps to `EBADF` | unverified | none |
+| tier-b | mlibc-sysdep | `Seek` | `lseek`, `fseek` [INFERENCE: mlibc dispatch] | `VI_SYS_SEEK` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:92-97` | offset and whence passed through | kernel failure maps to `ESPIPE` | unverified | none |
+| tier-b | mlibc-sysdep | `ClockGet` | `clock_gettime` [INFERENCE: mlibc dispatch] | `VI_SYS_GETTIME`: op 2 for realtime ns; monotonic from op 0 × 100 (riscv64, 10 MHz), op 1 × 10⁶ (aarch64, ms), op 0 (x86_64, ns) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:116-129` | `CLOCK_REALTIME` and `CLOCK_MONOTONIC` only; aarch64 monotonic has 1 ms resolution | other clocks give `EINVAL`; a negative time gives `EIO` | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:579` |
+| tier-b | mlibc-sysdep | `Sleep` | `nanosleep`, `clock_nanosleep`, `sleep` [INFERENCE: mlibc dispatch] | timed `FutexWait` on a private word, re-armed against `CLOCK_MONOTONIC` | `third_party/mlibc/sysdeps/vicell/generic/posix.cpp:37-57` | never returns early; up to one 10 ms tick late; not interruptible (remaining time always 0) | `EINVAL` for a bad timespec; `EIO` if the clock fails | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:611` |
+| tier-b | mlibc-sysdep | `AnonAllocate` | `malloc` through mlibc's slab allocator [INFERENCE: mlibc dispatch] | static 16 MiB bump arena, CAS-advanced (interim until R3b) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:133-147` | 16-byte aligned, zeroed, thread-safe | `ENOMEM` when the arena is exhausted | partial | `docs/evidence/mlibc-runtime-x86-tcg.log:577` |
+| tier-b | mlibc-sysdep | `AnonFree` | `free` through the slab allocator [INFERENCE: mlibc dispatch] | no-op | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:149-151` | none | memory is never reclaimed | unverified | none |
+| tier-b | mlibc-sysdep | `VmMap` | `mmap` [INFERENCE: mlibc dispatch] | `AnonAllocate` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:154-157` | `MAP_ANONYMOUS` only | any other mapping gives `EINVAL` | unverified | none |
+| tier-b | mlibc-sysdep | `VmUnmap` | `munmap` [INFERENCE: mlibc dispatch] | `AnonFree` (no-op) | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:159-161` | none | memory is never reclaimed | unverified | none |
+| tier-b | mlibc-sysdep | `Isatty` | `isatty` and stdio buffering choice [INFERENCE: mlibc dispatch] | constant | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:164-166` | fds 0-2 are terminals (returns 0) | other fds return `ENOTTY` | unverified | none |
+| tier-b | mlibc-sysdep | `Stat` | `fstat`, `stat`, `fstatat(AT_FDCWD, …)` [INFERENCE: mlibc dispatch] | `VI_SYS_FSTAT` (ViFstatV1 wire record); by path through `Open`, `VI_SYS_FSTAT`, `Close` | `third_party/mlibc/sysdeps/vicell/generic/generic.cpp:192-203` | only `st_mode` (character, regular or directory) and `st_size` are set | `EINVAL` for `NULL` or a directory fd other than `AT_FDCWD`; `EBADF` on a bad fd or short record; `EIO` on an unknown kind; otherwise the `Open` error | unverified | none |
+| tier-b | mlibc-sysdep | `GetPid` | `getpid` [INFERENCE: mlibc dispatch] | constant 1 | `third_party/mlibc/sysdeps/vicell/generic/posix.cpp:61-63` | a Cell is one process; no process hierarchy | n/a | unverified | none |
+| tier-b | mlibc-sysdep | `Sysconf` | `sysconf` [INFERENCE: mlibc dispatch] | `_SC_NPROCESSORS_*` = 1 (no hart-count syscall); `_SC_PHYS_PAGES`/`_SC_AVPHYS_PAGES` from `MemInfo` (243) | `third_party/mlibc/sysdeps/vicell/generic/posix.cpp:66-88` | other names use mlibc's defaults | `-1`/`ENOSYS` for the page counts without the `MemInfo` allowlist bit | unverified | none |
+| tier-b | mlibc-sysdep | `GetEntropy` | `getentropy`, `getrandom` [INFERENCE: mlibc dispatch] | `GetRandom` (214), 64 bytes per call | `third_party/mlibc/sysdeps/vicell/generic/posix.cpp:91-104` | at most 256 bytes | `EIO` without an RNG device or above 256 bytes | unverified | none |
 
 `cells/tests/mlibc-smoke` exercises mlibc `malloc`/`free`, `printf` and
-`clock_gettime` (`cells/tests/mlibc-smoke/src/main.rs:60-114`). No integration
-runner asserts its markers, so it is not cited as evidence.
+`clock_gettime` (`cells/tests/mlibc-smoke/src/main.rs:60-114`);
+`cells/tests/mlibc-posix-x86` (x86_64) exercises threads, mutexes, `pthread_once`,
+timed condition waits, `clock_nanosleep`, TLS and `errno` per thread, and
+`dl_iterate_phdr` with a build-id note (`cells/tests/mlibc-posix-x86/c/witness.c`).
+`scripts/x86/qemu-mlibc-witness.sh` runs both from the shell of the image built by
+`scripts/build-x86_64-mlibc-witness-ci.sh`; the logs and their summary are
+`docs/evidence/mlibc-runtime-x86.txt`.
 
 ## Consumers
 
 | consumer | adapter | note |
 |---|---|---|
 | `cells/tests/posix-shim-test` | Tier A or Tier B, whichever the build selects | Declares the C ABI directly (`cells/tests/posix-shim-test/src/main.rs:56-75`). Witness for the rows that cite it. |
-| `cells/tests/mlibc-smoke` | Tier B | Link and runtime smoke only. |
+| `cells/tests/mlibc-smoke`, `cells/tests/mlibc-posix-x86` | Tier B | Runtime witnesses on x86_64 QEMU (`docs/evidence/mlibc-runtime-x86.txt`). |
 | `cells/demos/tetris-c` | Tier A | Class-A reference C port. |
 | `cells/runtimes/lua`, `cells/demos/doom`, `cells/demos/tetris-lua` | Tier A, plus toolchain picolibc on RV64 | The picolibc overlap is outside this ledger (see Scope). |
 | `cells/services/ocel-quickjs`, `cells/services/ocel-pdf` | Tier A | Use the allocation, string, stdio and math rows. |

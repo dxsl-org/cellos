@@ -13,14 +13,20 @@ extern "C" {
 typedef unsigned long msglen_t;
 typedef unsigned long msgqnum_t;
 
-/* WARNING: this diverges from the kernel ABI for 32-bit architectures;
- * the kernel splits the time_t fields into low/high fields for 32-bit,
- * which is an alignment and endianness concern. */
-struct msqid_ds {
-	struct ipc_perm msg_perm;
+struct msqid64_ds {
+	struct ipc64_perm msg_perm;
+#if (__INTPTR_WIDTH__ == 64) /* || x32 ABI */
 	time_t msg_stime;
 	time_t msg_rtime;
 	time_t msg_ctime;
+#else
+	unsigned long msg_stime;
+	unsigned long msg_stime_high;
+	unsigned long msg_rtime;
+	unsigned long msg_rtime_high;
+	unsigned long msg_ctime;
+	unsigned long msg_ctime_high;
+#endif
 	unsigned long msg_cbytes;
 	msgqnum_t msg_qnum;
 	msglen_t msg_qbytes;
@@ -29,7 +35,7 @@ struct msqid_ds {
 	unsigned long __unused[2];
 };
 
-#define msqid64_ds msqid_ds
+#define msqid_ds msqid64_ds
 
 #ifdef __cplusplus
 }

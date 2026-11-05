@@ -12,8 +12,9 @@ Discovery:
             identifiers passed to a `macro_rules!` macro whose body emits a
             `#[no_mangle]` function (the C99 math bridge). A symbol defined
             once per target architecture (setjmp/longjmp) counts once.
-    Tier B  third_party/mlibc/sysdeps/vicell/generic/generic.cpp
-            top-level `sys_*` function definitions (mlibc sysdeps).
+    Tier B  third_party/mlibc/sysdeps/vicell/generic/*.cpp
+            top-level `Sysdeps<Tag>::operator()` definitions (mlibc sysdeps),
+            named by their tag, e.g. `Open`.
 
 Ledger tables are recognised by their exact header row:
 
@@ -53,7 +54,7 @@ from pathlib import Path
 
 LEDGER = Path("docs/posix-ledger.md")
 TIER_A_DIR = Path("libs/api/src/services/posix")
-TIER_B_FILE = Path("third_party/mlibc/sysdeps/vicell/generic/generic.cpp")
+TIER_B_DIR = Path("third_party/mlibc/sysdeps/vicell/generic")
 EVIDENCE_DIR = "docs/evidence/"
 
 TIER_A_COLUMNS = (
@@ -76,7 +77,7 @@ FN_RE = re.compile(
 )
 STATIC_RE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?static\s+(?:mut\s+)?(\$?\w+)")
 MACRO_DEF_RE = re.compile(r"^\s*macro_rules!\s+(\w+)")
-SYSDEP_RE = re.compile(r"^(?:\[\[[^\]]*\]\]\s*)?[A-Za-z_][\w:<>*&\s]*?\b(sys_\w+)\s*\(")
+SYSDEP_RE = re.compile(r"^[A-Za-z_][\w:<>*&\s]*?\bSysdeps<(\w+)>::operator\(\)\s*\(")
 SYMBOL_RE = re.compile(r"^[A-Za-z_]\w*$")
 LINE_ANCHOR_RE = re.compile(r"^(?P<path>[^\s:]+):(?P<start>\d+)(?:-(?P<end>\d+))?$")
 FN_ANCHOR_RE = re.compile(r"^(?P<path>[^\s:]+)::(?P<name>\w+)$")
@@ -171,19 +172,23 @@ class Checker:
         return exports
 
     def discover_tier_b(self) -> dict[str, Export]:
-        rel = TIER_B_FILE.as_posix()
-        src = self.lines(rel)
-        if src is None:
-            self.error(rel, 0, "Tier B sysdep source missing")
+        root = self.repo / TIER_B_DIR
+        files = sorted(root.glob("*.cpp")) if root.is_dir() else []
+        if not files:
+            self.error(TIER_B_DIR.as_posix(), 0, "Tier B sysdep sources missing")
             return {}
         exports: dict[str, Export] = {}
-        for idx, text in enumerate(src):
-            if text[:1].isspace() or text.rstrip().endswith(";"):
-                continue
-            found = SYSDEP_RE.match(text)
-            if found:
-                name = found.group(1)
-                exports.setdefault(name, Export(name, "fn", rel, idx + 1))
+        for path in files:
+            rel = path.relative_to(self.repo).as_posix()
+            for idx, text in enumerate(self.lines(rel) or []):
+                if text[:1].isspace() or text.rstrip().endswith(";"):
+                    continue
+                found = SYSDEP_RE.match(text)
+                if found:
+                    name = found.group(1)
+                    if name in exports:
+                        self.error(rel, idx + 1, f"Tier B sysdep '{name}' defined twice")
+                    exports.setdefault(name, Export(name, "fn", rel, idx + 1))
         return exports
 
     # -------------------------------------------------------------------- ledger

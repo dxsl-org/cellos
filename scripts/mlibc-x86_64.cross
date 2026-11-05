@@ -1,0 +1,28 @@
+# Meson cross file for mlibc targeting Cellos x86_64 Tier-2 Cells.
+#
+# Compiler: the host GNU toolchain used freestanding. mlibc needs GCC >= 13 or
+# a clang that implements C++20 alias CTAD (clang 19+); Ubuntu's clang 18 does not.
+# Float ABI: hard-float SSE2 per the x86 Tier-2 runtime plan, rule H1
+# (docs/guides/tier1b-c-zig.md, "x86_64 C and the float boundary"): no float or
+# vector value may cross into soft-float Rust.
+# Code model: -fPIE, because Cells link as PIE (`-C relocation-model=pic`).
+#
+# Usage: bash scripts/build-mlibc.sh (handles clone, pin and patch)
+
+[binaries]
+c       = 'gcc'
+cpp     = 'g++'
+ar      = 'ar'
+strip   = 'strip'
+
+[host_machine]
+# 'vicell' selects sysdeps/vicell. This is NOT a Linux host: syscalls use the
+# Cellos ABI in sysdeps/vicell/include/vicell/syscall.h.
+system     = 'vicell'
+cpu_family = 'x86_64'
+cpu        = 'x86_64'
+endian     = 'little'
+
+[built-in options]
+c_args   = ['-ffreestanding', '-fPIE', '-msse2', '-mfpmath=sse', '-mno-red-zone', '-mcmodel=small']
+cpp_args = ['-ffreestanding', '-fPIE', '-msse2', '-mfpmath=sse', '-mno-red-zone', '-mcmodel=small']

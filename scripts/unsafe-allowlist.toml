@@ -192,6 +192,13 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/tests/mlibc-posix-x86/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 2 mlibc witness): one call into the witness's own C (`mlibc_posix_witness`, integer-only signature per rule H1); the C side is outside the Rust type system."
+approver = "owner (runtime plan R3 file set, 2026-11-04)"
+date = "2026-11-04"
+
+[[file]]
 path = "cells/tests/posix-shim-test/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
@@ -584,6 +591,13 @@ class = "c-ffi"
 reason = "Owns allowlisted unsafe under cells/tests/mlibc-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+
+[[crate]]
+name = "app-mlibc-posix-x86"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/mlibc-posix-x86/ — see the [[file]] entry of class \"c-ffi\" for the justification."
+approver = "owner (runtime plan R3 file set, 2026-11-04)"
+date = "2026-11-04"
 
 [[crate]]
 name = "app-posix-shim-test"

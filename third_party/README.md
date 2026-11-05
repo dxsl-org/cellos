@@ -44,3 +44,31 @@ mkdir /tmp/srv-mnt
 echo "Cellos RedoxFS" > /tmp/srv-mnt/hello.txt
 fusermount -u /tmp/srv-mnt
 ```
+
+## mlibc
+
+**Upstream**: https://github.com/managarm/mlibc  
+**Pin**: `ae1092eb211e42e80d2d1c73881c8c25fde80fe6` (2026-03-26), set in `scripts/build-mlibc.sh` and `scripts/setup-mlibc.ps1`  
+**License**: MIT  
+**Purpose**: Tier-B C library for opt-in Tier-2 Cells (ADR-0018; x86_64 per the x86 Tier-2 runtime plan)
+
+Not vendored. The build scripts fetch the pin into the gitignored `third_party/mlibc-src/`,
+copy in the Cellos port `third_party/mlibc/sysdeps/vicell/` (upstream `Sysdeps<Tag>` API),
+add a `vicell` branch to mlibc's `meson.build`, and build with the `posix` option set on.
+Each row writes `libc.a`, the building compiler's `libgcc.a` and mlibc's installed headers
+(`sysroot/include`) to `third_party/mlibc/build{,-aarch64,-x86_64}/` (gitignored).
+
+The pin is the newest commit GCC 13 builds; the next upstream commit needs GCC 14
+(C++23 explicit object parameters). Ubuntu's clang 18 cannot build this mlibc either
+(C++20 alias-template deduction). Every `sysdeps/vicell/include/abi-bits/` header is a
+copy of upstream `abis/linux/` at the pin (copies, not symlinks, so Windows checkouts
+work): the `O_*`, `SEEK_*`, `PROT_*` and `MAP_*` values the sysdeps pass to the kernel
+already equal Linux's, and `struct stat` is filled in C++, never shared with Rust.
+Moving the pin means re-copying them.
+
+```sh
+bash scripts/build-mlibc.sh                      # Linux/WSL2: every row whose compiler exists
+cargo build -p app-mlibc-smoke --release --target riscv64gc-unknown-none-elf
+RUSTFLAGS="-C relocation-model=pic" \
+  cargo build -p app-mlibc-smoke --release --target x86_64-unknown-none
+```

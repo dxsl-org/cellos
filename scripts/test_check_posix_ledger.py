@@ -62,12 +62,12 @@ math1!(cos, libm::cos);
 """,
     SYSDEPS: """\
 namespace mlibc {
-int sys_open(const char *pathname, int flags, mode_t mode, int *fd) {
+int Sysdeps<Open>::operator()(const char *pathname, int flags, mode_t mode, int *fd) {
     long ret = vicell_syscall(VI_SYS_OPEN, 0, 0, 0, 0);
     return 0;
 }
-[[noreturn]] void sys_exit(int status) {
-    sys_open(0, 0, 0, 0);
+void Sysdeps<Exit>::operator()(int status) {
+    sysdep<Open>(nullptr, 0, 0, nullptr);
 }
 }
 """,
@@ -100,10 +100,10 @@ ROW_MATH = (
     "| `docs/evidence/run.txt:1-2` |\n"
 )
 ROW_SYS_OPEN = (
-    f"| tier-b | mlibc-sysdep | `sys_open` | `open` [INFERENCE] | VI_SYS_OPEN | `{SYSDEPS}:2-5` | x | ENOENT "
+    f"| tier-b | mlibc-sysdep | `Open` | `open` [INFERENCE] | VI_SYS_OPEN | `{SYSDEPS}:2-5` | x | ENOENT "
     "| unverified | none |\n"
 )
-ROW_SYS_EXIT = f"| tier-b | mlibc-sysdep | `sys_exit` | `exit` | VI_SYS_EXIT | `{SYSDEPS}:6` | x | n/a | unverified | none |\n"
+ROW_SYS_EXIT = f"| tier-b | mlibc-sysdep | `Exit` | `exit` | VI_SYS_EXIT | `{SYSDEPS}:6` | x | n/a | unverified | none |\n"
 
 
 def ledger(*, a_rows=None, b_rows=None) -> str:
@@ -166,8 +166,20 @@ class PosixLedgerCheckerTests(unittest.TestCase):
         self.assert_rejected(f"{POSIX}/math.rs:12")
 
     def test_rejects_an_unlisted_sysdep(self):
-        self.write(SYSDEPS, SOURCES[SYSDEPS].replace("}\n}\n", "}\nint sys_isatty(int fd) {\n    return 0;\n}\n}\n"))
+        self.write(SYSDEPS, SOURCES[SYSDEPS].replace("}\n}\n", "}\nint Sysdeps<Isatty>::operator()(int fd) {\n    return 0;\n}\n}\n"))
         self.assert_rejected(f"{SYSDEPS}:9")
+
+    def test_rejects_an_unlisted_sysdep_in_another_source_file(self):
+        thread = SYSDEPS.replace("generic.cpp", "thread.cpp")
+        self.write(thread, "namespace mlibc {\nvoid Sysdeps<Yield>::operator()() {\n}\n}\n")
+        out = self.assert_rejected(f"{thread}:2")
+        self.assertIn("'Yield'", out)
+
+    def test_rejects_a_sysdep_defined_in_two_source_files(self):
+        thread = SYSDEPS.replace("generic.cpp", "thread.cpp")
+        self.write(thread, "namespace mlibc {\nvoid Sysdeps<Exit>::operator()(int status) {\n}\n}\n")
+        out = self.assert_rejected(f"{thread}:2")
+        self.assertIn("'Exit' defined twice", out)
 
     def test_rejects_a_ledger_symbol_that_is_not_exported(self):
         row = f"| tier-a | libc-symbol | `fork` | none | `{POSIX}/io.rs:1` | x | x | unverified | none |\n"

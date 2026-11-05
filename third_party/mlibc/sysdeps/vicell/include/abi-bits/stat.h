@@ -1,58 +1,142 @@
-// SPDX-License-Identifier: MIT
-// ViCell struct stat — layout matches posix/sysio.rs StatBuf (13 c_int/c_long fields).
-#pragma once
+#ifndef _ABIBITS_STAT_H
+#define _ABIBITS_STAT_H
 
-#include <stdint.h>
+#include <abi-bits/uid_t.h>
+#include <abi-bits/gid_t.h>
+#include <bits/off_t.h>
+#include <abi-bits/mode_t.h>
+#include <abi-bits/dev_t.h>
+#include <abi-bits/ino_t.h>
+#include <abi-bits/blksize_t.h>
+#include <abi-bits/blkcnt_t.h>
+#include <abi-bits/nlink_t.h>
+#include <bits/ansi/time_t.h>
+#include <bits/ansi/timespec.h>
 
-typedef uint32_t mode_t;
-typedef uint32_t uid_t;
-typedef uint32_t gid_t;
-typedef int64_t  off_t;
-typedef uint32_t nlink_t;
-typedef int64_t  ino_t;
-typedef int64_t  dev_t;
-typedef int64_t  blksize_t;
-typedef int64_t  blkcnt_t;
-typedef int64_t  time_t;
-
-struct stat {
-    dev_t     st_dev;
-    ino_t     st_ino;
-    mode_t    st_mode;
-    nlink_t   st_nlink;
-    uid_t     st_uid;
-    gid_t     st_gid;
-    dev_t     st_rdev;
-    off_t     st_size;
-    time_t    st_atime;
-    time_t    st_mtime;
-    time_t    st_ctime;
-    blksize_t st_blksize;
-    blkcnt_t  st_blocks;
-};
-
-// File type and mode bits
-#define S_IFMT   0170000
-#define S_IFREG  0100000
-#define S_IFDIR  0040000
-#define S_IFLNK  0120000
-#define S_IFCHR  0020000
-#define S_IFBLK  0060000
-#define S_IFIFO  0010000
-
-#define S_ISREG(m)  (((m) & S_IFMT) == S_IFREG)
-#define S_ISDIR(m)  (((m) & S_IFMT) == S_IFDIR)
-#define S_ISLNK(m)  (((m) & S_IFMT) == S_IFLNK)
+#define S_IFMT 0x0F000
+#define S_IFBLK 0x06000
+#define S_IFCHR 0x02000
+#define S_IFIFO 0x01000
+#define S_IFREG 0x08000
+#define S_IFDIR 0x04000
+#define S_IFLNK 0x0A000
+#define S_IFSOCK 0x0C000
 
 #define S_IRWXU 0700
 #define S_IRUSR 0400
 #define S_IWUSR 0200
 #define S_IXUSR 0100
-#define S_IRWXG 0070
-#define S_IRGRP 0040
-#define S_IWGRP 0020
-#define S_IXGRP 0010
-#define S_IRWXO 0007
-#define S_IROTH 0004
-#define S_IWOTH 0002
-#define S_IXOTH 0001
+#define S_IRWXG 070
+#define S_IRGRP 040
+#define S_IWGRP 020
+#define S_IXGRP 010
+#define S_IRWXO 07
+#define S_IROTH 04
+#define S_IWOTH 02
+#define S_IXOTH 01
+#define S_ISUID 04000
+#define S_ISGID 02000
+#define S_ISVTX 01000
+
+#define S_IREAD  S_IRUSR
+#define S_IWRITE S_IWUSR
+#define S_IEXEC  S_IXUSR
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(__x86_64__)
+
+struct stat {
+	dev_t st_dev;
+	ino_t st_ino;
+	nlink_t st_nlink;
+	mode_t st_mode;
+	uid_t st_uid;
+	gid_t st_gid;
+	unsigned int __pad0;
+	dev_t st_rdev;
+	off_t st_size;
+	blksize_t st_blksize;
+	blkcnt_t st_blocks;
+	struct timespec st_atim;
+	struct timespec st_mtim;
+	struct timespec st_ctim;
+	long __unused[3];
+};
+
+#elif (defined(__riscv) && __riscv_xlen == 64) || defined (__aarch64__) || defined(__loongarch64)
+
+struct stat {
+	dev_t st_dev;
+	ino_t st_ino;
+	mode_t st_mode;
+	nlink_t st_nlink;
+	uid_t st_uid;
+	gid_t st_gid;
+	dev_t st_rdev;
+	dev_t __pad1;
+	off_t st_size;
+	blksize_t st_blksize;
+	int __pad2;
+	blkcnt_t st_blocks;
+	struct timespec st_atim;
+	struct timespec st_mtim;
+	struct timespec st_ctim;
+	int __pad3[2];
+};
+
+#elif defined(__i386__)
+
+struct stat {
+	dev_t st_dev;
+	unsigned short int __st_dev_padding;
+	long __st_ino_truncated;
+	mode_t st_mode;
+	nlink_t st_nlink;
+	uid_t st_uid;
+	gid_t st_gid;
+	dev_t st_rdev;
+	unsigned short int __st_rdev_padding;
+	off64_t st_size;
+	blksize_t st_blksize;
+	blkcnt_t st_blocks;
+	struct timespec st_atim;
+	struct timespec st_mtim;
+	struct timespec st_ctim;
+	ino64_t st_ino;
+};
+
+#elif defined (__m68k__)
+
+struct stat {
+	dev_t st_dev;
+	unsigned char __st_dev_padding[2];
+	unsigned long __st_ino;
+	mode_t st_mode;
+	nlink_t st_nlink;
+	uid_t st_uid;
+	gid_t st_gid;
+	dev_t st_rdev;
+	unsigned char __st_rdev_padding;
+	long long st_size; /* TODO: off64_t? */
+	blksize_t st_blksize;
+	blkcnt_t st_blocks;
+	struct timespec st_atim;
+	struct timespec st_mtim;
+	struct timespec st_ctim;
+	ino_t st_ino;
+};
+
+#endif
+
+#if defined(_DEFAULT_SOURCE) || defined(_LARGEFILE64_SOURCE)
+#define stat64 stat
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _ABIBITS_STAT_H */

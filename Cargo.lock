@@ -426,6 +426,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-mlibc-posix-x86"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "mlibc-shim",
+ "ostd",
+]
+
+[[package]]
 name = "app-mlibc-smoke"
 version = "0.1.0"
 dependencies = [
@@ -836,6 +847,10 @@ name = "cell-build"
 version = "0.2.0"
 
 [[package]]
+name = "cell-initial-stack"
+version = "0.1.0"
+
+[[package]]
 name = "cellos-boards"
 version = "0.2.0"
 
@@ -858,6 +873,7 @@ version = "0.2.1"
 dependencies = [
  "api",
  "async-trait",
+ "cell-initial-stack",
  "cellos-boards",
  "cellos-boot-config",
  "crc32fast",

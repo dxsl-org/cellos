@@ -1,0 +1,76 @@
+x86_64 Tier-2 mlibc runtime witnesses (runtime plan slice RE, 2026-11-04)
+
+Scope: the Cell initial stack with auxv (CP1 cell-initial-stack-auxv, AX-1…AX-8),
+ostd's `__cellos_libc_start` hook and mlibc's static start-up, exercised by two
+Cells launched from the shell and admitted to a Tier 2 Paged Domain.
+
+Build and run (worktree with slice RE changes; mlibc pin ae1092eb + patch 0001):
+  bash scripts/build-mlibc.sh
+  bash scripts/build-x86_64-mlibc-witness-ci.sh
+  bash scripts/x86/qemu-mlibc-witness.sh                                   # TCG
+  X86_ACCEL=kvm X86_CPU_MODEL=qemu64,+pdpe1gb bash scripts/x86/qemu-mlibc-witness.sh
+
+Results: both runs end with "MLIBC-WITNESS: PASS".
+  mlibc-runtime-x86-tcg.log  TCG, qemu64,+pdpe1gb
+  mlibc-runtime-x86-kvm.log  KVM (WSL2 host), qemu64,+pdpe1gb
+
+Markers (TCG log line numbers):
+  571  [domain] admitted cell 'mlibc-smoke' to Tier 2 Paged Domain (CR3 isolation)
+  577  MLIBC-SMOKE: malloc OK            (AnonAllocate arena through mlibc's slab allocator)
+  578  MLIBC-SMOKE: printf OK (val=42)   (Write, stdio)
+  579  MLIBC-SMOKE: clock OK (sec=2)     (ClockGet CLOCK_MONOTONIC, x86 op 0 = ns)
+  580  MLIBC-SMOKE: 3/3 pass
+  588  [domain] admitted cell 'mlibc-posix-x86' to Tier 2 Paged Domain (CR3 isolation)
+  606  MLIBC-POSIX: threads OK           (8 threads × 1000 mutex rounds; PrepareStack, Clone over Spawn, ThreadExit, FutexWait/FutexWake, Yield)
+  607  MLIBC-POSIX: once OK              (pthread_once ran exactly once)
+  608  MLIBC-POSIX: tls-errno OK         (every thread saw the __thread initial image 7 and kept its own errno; TcbSet via SetTlsBase)
+  609  MLIBC-POSIX: cond-timedwait OK    (CLOCK_MONOTONIC condvar timed out, not before 50 ms)
+  611  MLIBC-POSIX: nanosleep OK         (clock_nanosleep 20 ms, never early)
+  612  MLIBC-POSIX: errno OK             (open of a missing path → -1, errno ENOENT)
+  613  MLIBC-POSIX: dl_iterate_phdr OK   (PT_GNU_EH_FRAME and an NT_GNU_BUILD_ID note found)
+  614  MLIBC-POSIX: 7/7 pass
+
+What a pass proves: the kernel wrote the initial stack into the root user stack
+and entered with sp at argc; ostd's `_start` passed it to mlibc's strong
+`__cellos_libc_start`; mlibc built its Tcb and static TLS block from the
+program headers it received through AT_PHDR, ran the constructors, and ran
+thread, futex, timer and ELF-introspection paths on x86_64 inside a private root.
+
+Not proven here: aarch64 (no compiler on the host), RV64 mlibc runtime (the
+disk-image path did not resolve /bin/mlibc-smoke; RV64 boot with the new
+initial stack was checked separately), `-cpu host` under KVM (the guest exits
+during boot selftests, before any Cell; its last line is PKU-SELFTEST, which
+precedes X86-VMM-SMOKE on a VMX host [INFERENCE: the VMM smoke is the cause]),
+physical hardware.
+
+Repeated runs (one boot, TCG): `MLIBC_POSIX_RUNS=100` passed 44 consecutive
+posix runs; the 45th spawn was refused before the Cell started
+("[fs] OOM: VIFS1 read of 792712 bytes", "PrepareChild refused … OutOfMemory").
+`free` around 10 runs: +564 KiB used after `mlibc-posix-x86` (8 threads per run),
++0 after 10 × `mlibc-smoke` and 10 × `ps` (no threads). The growth follows
+thread exits in a Tier-2 Cell [INFERENCE: kernel thread lifecycle; the witness
+threads use only Spawn, Exit and futexes]. Phase R3's 100-run criterion stays open.
+
+Slice TL (2026-11-04) — leak fixed. Cause: the scheduler's switch plan kept
+the incoming domain referenced across an exiting task's last switch, so a
+threaded Cell's domain was never released (no DOMAIN-FRAME-RELEASE after any
+posix run; root AddressSpace strong count 6 instead of 1-2 at retirement).
+After `SwitchPlan::root_switch` consumes the plan:
+  TCG, MLIBC_POSIX_RUNS=60: 60 × "MLIBC-POSIX: 7/7 pass",
+    "[mlibc-witness] domains released: 60 of 60 posix runs", MLIBC-WITNESS: PASS
+  KVM (qemu64,+pdpe1gb), 20 runs: "domains released: 20 of 20", PASS
+  Fix reverted, 3 runs: "FAIL: 0 of 3 posix domains released"
+  `free` used: 65216 -> 65236 KiB over 60 runs (was +56 KiB per run)
+100 runs in one boot remain blocked by a separate limit: the 64th program
+launch from one shell fails with "foreground preparation failed:
+QuotaExceeded" (VFS request logs per launched operation, MAX_CREATOR_LOGS = 64,
+freed only when the shell dies). Details:
+.agents/debug/debug-261104-1230-tier2-thread-exit-leak.md.
+
+Slice VL (2026-11-04) — the 64-launch limit is gone. VFS now drops a settled
+per-Operation request log once the kernel has removed the Operation:
+  TCG, MLIBC_POSIX_RUNS=100 (101 launches from one shell): 100 × "7/7 pass",
+    "domains released: 100 of 100 posix runs", MLIBC-WITNESS: PASS,
+    no "foreground preparation failed"
+  KVM (qemu64,+pdpe1gb), 100 runs: "domains released: 100 of 100", PASS
+Phase R3's 100-run criterion is met on TCG and KVM.

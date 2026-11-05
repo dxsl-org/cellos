@@ -40,18 +40,23 @@ Check-Command meson
 Check-Command ninja
 Check-Command riscv-none-elf-gcc
 
-# ─── Step 1: Clone mlibc source ───────────────────────────────────────────────
-Write-Host "`n=== Step 1: mlibc source ===" -ForegroundColor Cyan
-if (Test-Path (Join-Path $MlibcSrc '.git')) {
-    Write-Host "  mlibc already cloned at $MlibcSrc — pulling latest..." -ForegroundColor Yellow
-    git -C $MlibcSrc pull --ff-only
-} else {
-    Write-Host "  Cloning $MlibcRepo ..."
-    New-Item -ItemType Directory -Force $MlibcSrc | Out-Null
-    git clone --depth 1 $MlibcRepo $MlibcSrc
+# ─── Step 1: mlibc source at the pin ─────────────────────────────────────────
+# Same pin as scripts/build-mlibc.sh (see its header for why this commit).
+$MlibcPin = 'ae1092eb211e42e80d2d1c73881c8c25fde80fe6'
+Write-Host "`n=== Step 1: mlibc source @ $MlibcPin ===" -ForegroundColor Cyan
+if (-not (Test-Path (Join-Path $MlibcSrc '.git'))) {
+    git init -q $MlibcSrc
+    git -C $MlibcSrc remote add origin $MlibcRepo
 }
+git -C $MlibcSrc cat-file -e "$MlibcPin^{commit}" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    git -C $MlibcSrc fetch --depth 1 origin $MlibcPin
+    if ($LASTEXITCODE -ne 0) { Write-Error "fetch of $MlibcPin failed"; exit 1 }
+}
+git -C $MlibcSrc checkout -q -f $MlibcPin
+# Drops the previous patch, sysdeps copy, builds and wrap checkouts.
+git -C $MlibcSrc clean -q -ffdx -e subprojects/packagecache
 
-# Record the commit SHA for reproducibility
 $mlibcSha = git -C $MlibcSrc rev-parse HEAD
 Write-Host "  mlibc commit: $mlibcSha" -ForegroundColor DarkGray
 
@@ -63,6 +68,12 @@ if (-not (Test-Path $destSysdeps)) {
 }
 Copy-Item -Recurse -Force "$OurSysdeps\*" $destSysdeps
 Write-Host "  Copied sysdeps/vicell → $destSysdeps" -ForegroundColor Green
+# Cellos patches to mlibc itself (same set as scripts/build-mlibc.sh).
+Get-ChildItem (Join-Path $RepoRoot 'third_party\mlibc\patches\*.patch') | Sort-Object Name | ForEach-Object {
+    git -C $MlibcSrc apply $_.FullName
+    if ($LASTEXITCODE -ne 0) { Write-Error "git apply failed: $($_.Name)"; exit 1 }
+    Write-Host "  applied $($_.Name)" -ForegroundColor Green
+}
 
 # ─── Step 3: Patch mlibc's meson.build ────────────────────────────────────────
 Write-Host "`n=== Step 3: Patching meson.build ===" -ForegroundColor Cyan
@@ -75,27 +86,14 @@ elif host_machine.system() == 'vicell'
     subdir('sysdeps/vicell')
 "@
 
-# Only patch if the vicell branch isn't already there
+# Insert the vicell branch before the dispatch chain's final `else error(...)`.
+$content = $content -replace "(\r?\n\s*else\s*\r?\n\s*error\('No sysdeps defined)", "$patch`$1"
 if ($content -notmatch "host_machine\.system\(\) == 'vicell'") {
-    # Insert before the closing else/error in the host_machine.system() dispatch block.
-    # managarm/mlibc uses a pattern like: elif host_machine.system() == '<os>'
-    # followed eventually by: else / error(...)
-    # We insert before the final else that terminates the chain.
-    $content = $content -replace "(elif host_machine\.system\(\) == '[^']+'\s*\n\s*subdir\('[^']+'\)\s*\n)(else\s*\n\s*error\()", "`$1$patch`n`$2"
-
-    if ($content -match "host_machine\.system\(\) == 'vicell'") {
-        Set-Content -Path $mesonBuild -Value $content -NoNewline
-        Write-Host "  meson.build patched successfully" -ForegroundColor Green
-    } else {
-        Write-Warning "  Auto-patch failed — inserting at end of system() dispatch manually"
-        # Fallback: append before the last else..error block
-        $content = $content -replace "(else\s*\n\s*error\('Unknown OS)", "$patch`n`$1"
-        Set-Content -Path $mesonBuild -Value $content -NoNewline
-        Write-Host "  meson.build patched (fallback method)" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  meson.build already has vicell branch — skipping" -ForegroundColor DarkGray
+    Write-Error "no error('No sysdeps defined ...') block; insert the vicell branch by hand"
+    exit 1
 }
+Set-Content -Path $mesonBuild -Value $content -NoNewline
+Write-Host "  meson.build patched" -ForegroundColor Green
 
 # ─── Step 4: meson setup ──────────────────────────────────────────────────────
 Write-Host "`n=== Step 4: meson setup (riscv64) ===" -ForegroundColor Cyan
@@ -105,7 +103,7 @@ $mesonArgs = @(
     'setup', $buildDir, $MlibcSrc,
     "--cross-file=$CrossFile",
     '-Ddefault_library=static',
-    '-Dposix_option=disabled',
+    '-Dposix_option=enabled',
     '-Dlinux_option=disabled',
     '-Dheaders_only=false',
     '--wipe'
@@ -126,6 +124,10 @@ New-Item -ItemType Directory -Force $BuildOut | Out-Null
 $srcLib  = Join-Path $buildDir 'libc.a'
 $destLib = Join-Path $BuildOut 'libc.a'
 Copy-Item -Force $srcLib $destLib
+# libgcc helpers of the compiler that built libc.a; libs/mlibc-shim links them
+# before Rust's compiler_builtins (see scripts/build-mlibc.sh).
+$libgcc = & riscv-none-elf-gcc -march=rv64gc -mabi=lp64d -print-libgcc-file-name
+Copy-Item -Force $libgcc (Join-Path $BuildOut 'libgcc.a')
 
 $size = (Get-Item $destLib).Length / 1KB
 Write-Host "  third_party/mlibc/build/libc.a  ($([int]$size) KB)" -ForegroundColor Green
