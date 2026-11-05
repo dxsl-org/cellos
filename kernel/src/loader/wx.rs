@@ -167,21 +167,24 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
         }
     }
 
-    let mut lowered = 0usize;
-    for &(va, flags) in pages {
-        if flags.bits() & Flags::WRITE == 0 {
-            lowered += 1;
-        }
-        crate::memory::paging::protect_page(va, flags).map_err(|e| {
-            log::error!(
-                "[wx] '{}' failed to protect page 0x{:X}: {:?} — killing cell",
-                cell,
-                va,
-                e
-            );
-            ViError::InvalidInput
-        })?;
-    }
+    // One batch (phase 07b R1): `protect_pages` writes every leaf, then flushes
+    // each contiguous run once, and returns only after every online CPU
+    // acknowledged — on the error path too. So the lowering is in force on
+    // every CPU before step 4 registers the task, and before a failed spawn's
+    // teardown frees a frame; riscv64/aarch64 keep the per-page pass.
+    let lowered = pages
+        .iter()
+        .filter(|(_, flags)| flags.bits() & Flags::WRITE == 0)
+        .count();
+    crate::memory::paging::protect_pages(pages).map_err(|(va, e)| {
+        log::error!(
+            "[wx] '{}' failed to protect page 0x{:X}: {:?} — killing cell",
+            cell,
+            va,
+            e
+        );
+        ViError::InvalidInput
+    })?;
     log::info!(
         "[wx] '{}': {}/{} cell pages lowered to read-only/execute-only",
         cell,
