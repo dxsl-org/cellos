@@ -3,17 +3,17 @@
 //! deliberately remains false on Pi so paging, timers, traps and scheduling
 //! continue to use their EL1-host implementations.
 //!
-//! QEMU virt boot: boot.rs `.el2_init` -> `el2_mark_active` (host-regime
-//! check) -> kmain -> paging activation -> `el2_mmu_init` -> EL2 vectors and
-//! hypervisor timer. The EL2 host is non-VHE or VHE per
-//! [`ArmPlatform::HOST_REGIME`]; both share every EL2-named path here, and
-//! differ only in `HCR_EL2.E2H`, the `TCR_EL2`/`SCTLR_EL2` layouts, and the
-//! EL1&0 mirror the non-VHE host needs for EL0 Cells.
+//! QEMU virt boot: boot.rs `.el2_init` (E2H read back, TGE set only once E2H
+//! holds) -> `el2_mark_active` -> kmain -> paging activation -> `el2_mmu_init`
+//! (live `HCR_EL2` check before any Cell exists) -> EL2 vectors and
+//! hypervisor timer. The EL2 host is always VHE: the kernel and EL0 Cells
+//! share the EL2&0 regime. A CPU without FEAT_VHE never reaches this module's
+//! paths; its host drops to EL1 (`el2_stub`).
 
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-use super::backend::{ArmPlatform, Board, HostRegime};
+use super::backend::{hcr_translates_el0, ArmPlatform, Board};
 
 /// Set by `el2_mark_active()` at boot; read by `is_el2()` and assembly thunks.
 ///
@@ -41,31 +41,36 @@ pub fn is_el2() -> bool {
     EL2_ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Called from boot.rs assembly (`bl el2_mark_active`) before `bl kmain`,
-/// with the `HCR_EL2` value read back after the boot path wrote the backend's
-/// regime. A mismatch stops boot here, on the console, before the kernel runs
-/// a single instruction under the wrong translation regime.
+/// Called from boot.rs assembly (`bl el2_mark_active`) before `bl kmain`, once
+/// the boot path has established the VHE host regime.
 ///
 /// # Safety
 /// Must be called exactly once at boot before any concurrent access to `EL2_ACTIVE`.
 #[no_mangle]
-pub extern "C" fn el2_mark_active(hcr_readback: u64) {
-    if let Err(message) = <Board as ArmPlatform>::HOST_REGIME.check_hcr_readback(hcr_readback) {
-        Board::console_init();
-        Board::early_puts(message);
-        Board::early_puts("\n");
+pub extern "C" fn el2_mark_active() {
+    EL2_ACTIVE.store(true, Ordering::Relaxed);
+}
+
+/// Halt boot unless `HCR_EL2` keeps EL0 stage-1 translation on. The boot
+/// path never writes `{E2H,TGE} = {0,1}`; this reads the live register once
+/// more before the first Cell can be scheduled, so a regression there stops
+/// on the console instead of running Cells untranslated.
+fn check_live_hcr() {
+    let hcr: u64;
+    // SAFETY: EL2 (EL2_ACTIVE); reading HCR_EL2 has no side effects.
+    unsafe { core::arch::asm!("mrs {}, hcr_el2", out(reg) hcr, options(nomem, nostack)) };
+    if !hcr_translates_el0(hcr) {
+        Board::early_puts("[aarch64] HCR_EL2 {E2H,TGE} = {0,1}: EL0 untranslated, boot stopped\n");
         loop {
             aarch64_cpu::asm::wfi();
         }
     }
-    EL2_ACTIVE.store(true, Ordering::Relaxed);
+    Board::early_puts("[INFO] host regime: EL2 VHE (E2H=1 TGE=1), HCR_EL2 checked before EL0\n");
 }
 
-/// The EL2 host runs VHE (`HCR_EL2.E2H = 1`).
-const VHE: bool = matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2Vhe);
-
-/// Both non-VHE EL2 hosts use the same MAIR/TCR encoding as the EL1 identity
-/// root: index 0 is Device-nGnRnE, index 1 is Normal WB-WA, Inner-shareable.
+/// MAIR/TCR encoding shared by the Pi monitor's non-VHE EL2 regime and the
+/// EL1 identity root: index 0 is Device-nGnRnE, index 1 is Normal WB-WA,
+/// Inner-shareable.
 pub(crate) const EL2_MAIR: u64 = 0x0000_0000_0000_FF00;
 pub(crate) const EL2_TCR: u64 = 25
     | (1 << 8)       // IRGN0 = WB-WA-RA
@@ -115,8 +120,8 @@ pub unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
 
 /// VHE `TCR_EL2` (E2H=1: the `TCR_EL1` layout) for the EL2&0 regime that the
 /// kernel and EL0 Cells share: the same 39-bit TTBR0 walk as [`EL2_TCR`], with
-/// TTBR1_EL2 walks disabled. `IPS` stays 0 (32-bit), matching the non-VHE
-/// `PS`; both fields are wide enough for QEMU virt RAM.
+/// TTBR1_EL2 walks disabled. `IPS` stays 0 (32-bit), wide enough for QEMU
+/// virt RAM.
 const VHE_TCR: u64 = 25
     | (1 << 8)        // IRGN0 = WB-WA-RA
     | (1 << 10)       // ORGN0 = WB-WA-RA
@@ -130,30 +135,22 @@ const VHE_TCR: u64 = 25
 /// explicitly so a firmware reset value cannot fault those accesses.
 const SCTLR_SPAN: u64 = 1 << 23;
 
-/// Activate the EL2 MMU with the given L1 page table root.
-///
-/// Non-VHE: `TCR_EL2` bit31 and bit23 are RES1 (ARMv8.0 requirement), and the
-/// root is mirrored into the EL1&0 regime for EL0 Cells. VHE: `TCR_EL2` takes
-/// the `TCR_EL1` layout ([`VHE_TCR`]) and EL0 Cells translate through the same
-/// `TTBR0_EL2`, so there is no mirror. MAIR_EL2 mirrors the EL1 layout
-/// (index0=Device, index1=Normal-WB) in both.
+/// Activate the VHE EL2 MMU with the given L1 page table root. `TCR_EL2` takes
+/// the `TCR_EL1` layout ([`VHE_TCR`]); EL0 Cells translate through the same
+/// `TTBR0_EL2` as the kernel. MAIR_EL2 mirrors the EL1 layout (index0=Device,
+/// index1=Normal-WB).
 ///
 /// UART sentinel bytes are written to the supplied PL011 base: `'M'` (0x4D) just
 /// before `SCTLR_EL2.M` is set and `'N'` (0x4E) immediately after. "M" alone
 /// on the console means the very first post-MMU instruction fetch aborted —
-/// check that no PTE in the active table sets bit 54 on kernel pages (it is
-/// UXN at EL1 but the ONLY XN bit in the EL2 non-VHE regime).
+/// check the PXN bit on kernel pages in the active table.
 ///
 /// # Safety
 /// - `ttbr0_phys` must identity-cover the current PC and all page-table frames.
-/// - Must be called at EL2, after boot.rs wrote `HCR_EL2` for this regime.
+/// - Must be called at EL2, after boot.rs wrote `HCR_EL2` for the VHE host.
 pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
     let mair = EL2_MAIR;
-    let (tcr, sctlr_set) = if VHE {
-        (VHE_TCR, SCTLR_SPAN)
-    } else {
-        (EL2_TCR, 0)
-    };
+    let (tcr, sctlr_set) = (VHE_TCR, SCTLR_SPAN);
     // SAFETY: EL2-private registers; identity-map covers current PC and stack.
     unsafe {
         core::arch::asm!(
@@ -193,55 +190,7 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
         );
     }
 
-    if VHE {
-        // EL0 Cells already translate through TTBR0_EL2 in the EL2&0 regime;
-        // an EL1 mirror would only alias the redirected EL2 registers.
-        Board::early_puts("[INFO] host regime: EL2 VHE (E2H=1 TGE=1)\n");
-        return;
-    }
-
-    // ── EL1 stage-1 setup for cells at EL0 (non-VHE: EL0 uses TTBR0_EL1) ─────
-    // On Cortex-A53 / raspi3b (ARMv8.0, no VHE), HCR_EL2.TGE=1 routes EL0
-    // exceptions to EL2 but EL0 translations still use TTBR0_EL1/TCR_EL1.
-    // Mirror MAIR, TTBR0, and TCR from EL2 to EL1 so cells (at EL0) see the
-    // same KERNEL_ROOT page table as the kernel (at EL2).
-    //
-    // TCR_EL1 bit[23] = EPD1 (disable TTBR1_EL1, upper-half unused).
-    // TCR_EL2 bit[23] = RES1 (non-VHE ARMv8.0 requirement) — same bit, different semantics.
-    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
-    let tcr_el1: u64 = 25_u64
-        | (1 << 8)   // IRGN0 = WB-WA-RA
-        | (1 << 10)  // ORGN0 = WB-WA-RA
-        | (3 << 12)  // SH0   = Inner-shareable
-        | (1 << 23); // EPD1  = disable TTBR1_EL1
-                     // SAFETY: EL2 has full access to EL1 system registers; page table covers
-                     // all kernel and cell VAs; called after EL2 MMU is live.
-    unsafe {
-        core::arch::asm!(
-            "msr mair_el1,  {mair}",
-            "msr tcr_el1,   {tcr_el1}",
-            "isb",
-            "msr ttbr0_el1, {ttbr0}",
-            "dsb sy",
-            "isb",
-            "tlbi vmalle1",             // invalidate all EL1/EL0 TLB entries
-            "dsb nsh",
-            "isb",
-            // Enable EL1 MMU: M=1 (bit0), C=1 (bit2), I=1 (bit12).
-            "mrs {t}, sctlr_el1",
-            "orr {t}, {t}, #(1 << 0)",
-            "orr {t}, {t}, #(1 << 2)",
-            "orr {t}, {t}, #(1 << 12)",
-            "msr sctlr_el1, {t}",
-            "dsb sy",
-            "isb",
-            mair    = in(reg) mair,
-            tcr_el1 = in(reg) tcr_el1,
-            ttbr0   = in(reg) ttbr0_phys,
-            t       = out(reg) _,
-            options(nostack),
-        );
-    }
+    check_live_hcr();
 }
 
 // ── EL2 context switch ────────────────────────────────────────────────────────
@@ -362,18 +311,16 @@ __vectors_el2:
     // Preserve the original vector-dispatch behavior while recording which
     // lower-EL slot fired. x16/x17 are restored before entering the old target.
     //
-    // VHE: with SCTLR_EL2.SPAN = 1 an exception to EL2 leaves PSTATE.PAN as
-    // the interrupted context had it, so an exit from a guest that enabled PAN
+    // With SCTLR_EL2.SPAN = 1 an exception to EL2 leaves PSTATE.PAN as the
+    // interrupted context had it, so an exit from a guest that enabled PAN
     // would run the host with PAN set, and the host's first access to an
     // EL0-accessible page (a Cell's memory, the vCPU it is about to save) would
-    // fault. Clear it first. (Non-VHE EL2 has no PAN.) `msr pan, #0` is
-    // emitted as its encoding so it assembles without the `pan` target feature;
-    // FEAT_PAN is mandatory wherever FEAT_VHE is.
+    // fault. Clear it first. `msr pan, #0` is emitted as its encoding so it
+    // assembles without the `pan` target feature; FEAT_PAN is mandatory
+    // wherever FEAT_VHE is, and only the VHE host installs these vectors.
     .macro mark_lower_vector label, kind, target
 \label:
-    .if {vhe}
     .inst 0xd500409f            // msr pan, #0
-    .endif
     sub  sp, sp, #16
     stp  x16, x17, [sp]
     adrp x16, AARCH64_EL2_VECTOR_KIND
@@ -539,6 +486,5 @@ vt_irq_el2_cur:
     ldr  x30,       [sp, #240]
     add  sp, sp, #(36 * 8)
     eret
-"#,
-    vhe = const VHE as usize,
+"#
 );

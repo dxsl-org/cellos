@@ -11,13 +11,21 @@
 #   disk.img    default: disk_arm_virt.img
 #
 # Environment:
-#   LANE        virt (default): non-VHE kernel, `-machine virt`, cortex-a57, 1 CPU.
-#               virt-vhe: a kernel built with CELLOS_AARCH64_HOST_REGIME=vhe on
-#               `virt,virtualization=on` with a VHE CPU and 2 CPUs. Asserts the
-#               VHE host regime line, EL0 Cell output and, with more than one
-#               CPU, hart 1 online.
-#   QEMU_CPU    override the lane's CPU (virt-vhe: cortex-a76)
-#   QEMU_SMP    override the lane's CPU count (virt-vhe: 2)
+#   LANE        virt (default): `-machine virt`, cortex-a57, 1 CPU; firmware
+#               enters at EL1, so the host is EL1.
+#               virt-vhe: `virt,virtualization=on` with a VHE CPU and 2 CPUs.
+#               Asserts the VHE host regime line (HCR_EL2 checked before the
+#               first EL0 entry), EL0 Cell output and, with more than one CPU,
+#               hart 1 online.
+#               virt-el2-novhe: `virt,virtualization=on` with a CPU without
+#               FEAT_VHE (cortex-a72) and 2 CPUs. The host must drop to EL1
+#               rather than run Cells under HCR_EL2.{E2H,TGE} = {0,1}. Asserts
+#               the EL1 fallback line, EL0 Cell output and, with more than one
+#               CPU, hart 1 online (boot the `Image`: its FDT names the SMC
+#               PSCI conduit; an ELF boot stays single-hart).
+#   QEMU_CPU    override the lane's CPU (virt-vhe: cortex-a76,
+#               virt-el2-novhe: cortex-a72)
+#   QEMU_SMP    override the lane's CPU count (virt-vhe, virt-el2-novhe: 2)
 
 set -euo pipefail
 
@@ -40,8 +48,13 @@ case "$LANE" in
         QEMU_CPU="${QEMU_CPU:-cortex-a76}"
         QEMU_SMP="${QEMU_SMP:-2}"
         ;;
+    virt-el2-novhe)
+        QEMU_MACHINE="virt,virtualization=on,gic-version=2"
+        QEMU_CPU="${QEMU_CPU:-cortex-a72}"
+        QEMU_SMP="${QEMU_SMP:-2}"
+        ;;
     *)
-        echo "FAIL: LANE must be 'virt' or 'virt-vhe' (got '$LANE')" >&2
+        echo "FAIL: LANE must be 'virt', 'virt-vhe' or 'virt-el2-novhe' (got '$LANE')" >&2
         exit 1
         ;;
 esac
@@ -113,16 +126,24 @@ if grep -q "Cellos >" qemu-aarch64.log; then
         fi
         bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-qemu" "${REQUIRED_MARKERS[@]}"
     fi
-    if [[ "$LANE" == "virt-vhe" ]]; then
-        # "USER:" lines are EL0 Cells writing through the console syscall.
-        VHE_MARKERS=(
-            "VHE host regime:::[INFO] host regime: EL2 VHE (E2H=1 TGE=1)"
-            "EL0 Cell syscalls:::USER: Init: OS ready."
-        )
+    # "USER:" lines are EL0 Cells writing through the console syscall.
+    case "$LANE" in
+        virt-vhe)
+            LANE_MARKERS=("VHE host regime:::[INFO] host regime: EL2 VHE (E2H=1 TGE=1), HCR_EL2 checked before EL0")
+            ;;
+        virt-el2-novhe)
+            LANE_MARKERS=("EL1 fallback host regime:::[INFO] host regime: EL1 (CPU lacks FEAT_VHE")
+            ;;
+        *)
+            LANE_MARKERS=()
+            ;;
+    esac
+    if [[ ${#LANE_MARKERS[@]} -gt 0 ]]; then
+        LANE_MARKERS+=("EL0 Cell syscalls:::USER: Init: OS ready.")
         if [[ "$QEMU_SMP" -gt 1 ]]; then
-            VHE_MARKERS+=("secondary hart:::[smp] hart 1 online")
+            LANE_MARKERS+=("secondary hart:::[smp] hart 1 online")
         fi
-        bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-virt-vhe" "${VHE_MARKERS[@]}"
+        bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-$LANE" "${LANE_MARKERS[@]}"
     fi
     echo "PASS: aarch64 shell prompt reached — full boot successful"
     exit 0

@@ -32,14 +32,6 @@ pub type Board = bcm2837::Bcm2837;
 #[cfg(not(any(feature = "board-rpi3", feature = "board-rpi4")))]
 pub type Board = qemu_virt::QemuVirt;
 
-// Only the `virt` backend has a VHE variant; a Pi build silently ignoring the
-// request would ship the wrong regime under the right name.
-#[cfg(any(feature = "board-rpi3", feature = "board-rpi4"))]
-const _: () = assert!(
-    option_env!("CELLOS_AARCH64_HOST_REGIME").is_none(),
-    "CELLOS_AARCH64_HOST_REGIME selects the QEMU virt host regime only"
-);
-
 /// The selected board's EL2 monitor ([`NoEl2Monitor`] unless the host stays
 /// at EL1).
 pub type El2Monitor = <Board as ArmPlatform>::El2Monitor;
@@ -77,12 +69,12 @@ pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
 
     /// The regime the host kernel runs in when firmware enters at EL2.
     /// Firmware that enters at EL1 always yields an EL1 host, whatever this
-    /// says. Defaults keep every existing backend where it was: the Pi
-    /// monitor boards run an EL1 host, everything else a non-VHE EL2 host.
+    /// says. The Pi monitor boards run an EL1 host, everything else a VHE EL2
+    /// host that falls back to EL1 on a CPU without FEAT_VHE.
     const HOST_REGIME: HostRegime = if Self::PI_MONITOR_BOOT {
         HostRegime::El1
     } else {
-        HostRegime::El2NonVhe
+        HostRegime::El2Vhe
     };
 
     /// `_start` carries a Linux arm64 `Image` header (Linux
@@ -143,18 +135,17 @@ pub enum SecondaryStart {
 
 /// The host kernel's exception level and EL2 translation regime.
 ///
-/// Chosen per backend at compile time ([`ArmPlatform::HOST_REGIME`]) so a
-/// non-VHE build contains no VHE code and the reverse.
+/// There is no non-VHE EL2 host: under `HCR_EL2.{E2H,TGE} = {0,1}` the
+/// EL1&0 regime treats `SCTLR_EL1.M` as 0 for EL0 (ARM ARM
+/// `AArch64.S1Enabled`), so EL0 Cells would run untranslated, VA = PA, with
+/// no AP/UXN checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostRegime {
-    /// EL2 host with `HCR_EL2.{E2H,TGE} = {0,1}`. The kernel translates
-    /// through the EL2 regime and mirrors its root into the EL1&0 regime for
-    /// EL0 Cells.
-    El2NonVhe,
     /// EL2 host with `HCR_EL2.{E2H,TGE} = {1,1}` (FEAT_VHE). The kernel and EL0
     /// Cells share the EL2&0 regime (`TTBR0_EL2`, `TCR_EL2` in the EL1
     /// layout); a guest's EL1 bank is reached through the `_EL12`/`_EL02`
-    /// encodings. Required on CPUs without FEAT_E2H0, whose `E2H` is RES1.
+    /// encodings. A CPU without FEAT_VHE ignores the `E2H` write; the boot
+    /// path then drops the host to EL1 instead (`boot.rs` `.el2_init`).
     El2Vhe,
     /// EL1 host; EL2, when present, is a private monitor.
     El1,
@@ -162,44 +153,27 @@ pub enum HostRegime {
 
 /// `HCR_EL2.E2H`.
 pub const HCR_EL2_E2H: u64 = 1 << 34;
+/// `HCR_EL2.TGE`.
+pub const HCR_EL2_TGE: u64 = 1 << 27;
 
-impl HostRegime {
-    /// Verdict on the `HCR_EL2` value read back right after the EL2 boot path
-    /// wrote this regime's `E2H` choice. A CPU without FEAT_E2H0 ignores a
-    /// write of `E2H = 0`; a CPU without FEAT_VHE ignores a write of `E2H = 1`.
-    /// Either mismatch means the kernel would run under a translation regime it
-    /// was not built for, so boot stops with the returned message.
-    pub const fn check_hcr_readback(self, hcr: u64) -> Result<(), &'static str> {
-        let e2h = hcr & HCR_EL2_E2H != 0;
-        match self {
-            HostRegime::El2NonVhe if e2h => {
-                Err("[aarch64] host regime: CPU forces E2H, backend requires non-VHE")
-            }
-            HostRegime::El2Vhe if !e2h => {
-                Err("[aarch64] host regime: CPU lacks VHE, backend requires E2H")
-            }
-            _ => Ok(()),
-        }
-    }
+/// Whether an EL0 Cell may run under `hcr`: `{E2H,TGE} = {0,1}` disables EL0
+/// stage-1 translation, every other combination keeps it.
+pub const fn hcr_translates_el0(hcr: u64) -> bool {
+    hcr & HCR_EL2_TGE == 0 || hcr & HCR_EL2_E2H != 0
 }
 
-// The verdict table, checked by the compiler on every aarch64 build: the
-// shared core is never host-compiled, so these stand in for host tests.
+// Checked by the compiler on every aarch64 build: the shared core is never
+// host-compiled, so these stand in for host tests. The last line pins the
+// regime to the boot path: only the Pi monitor boot leaves the host at EL1,
+// every other EL2 entry sets `E2H` alongside `TGE`.
 const _: () = {
-    assert!(HostRegime::El2NonVhe
-        .check_hcr_readback(1 << 31 | 1 << 27)
-        .is_ok());
-    assert!(HostRegime::El2NonVhe
-        .check_hcr_readback(1 << 31 | 1 << 27 | HCR_EL2_E2H)
-        .is_err());
-    assert!(HostRegime::El2Vhe
-        .check_hcr_readback(1 << 31 | 1 << 27 | HCR_EL2_E2H)
-        .is_ok());
-    assert!(HostRegime::El2Vhe
-        .check_hcr_readback(1 << 31 | 1 << 27)
-        .is_err());
-    assert!(HostRegime::El1.check_hcr_readback(HCR_EL2_E2H).is_ok());
-    assert!(HostRegime::El1.check_hcr_readback(0).is_ok());
+    assert!(hcr_translates_el0(1 << 31 | HCR_EL2_TGE | HCR_EL2_E2H));
+    assert!(!hcr_translates_el0(1 << 31 | HCR_EL2_TGE));
+    assert!(hcr_translates_el0(1 << 31));
+    assert!(
+        matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El1)
+            == <Board as ArmPlatform>::PI_MONITOR_BOOT
+    );
 };
 
 /// The board's interrupt controller, as the trap path and SMP use it.

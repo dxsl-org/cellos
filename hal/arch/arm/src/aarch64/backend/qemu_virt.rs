@@ -6,41 +6,12 @@ use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
 
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
-    HostRegime, MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts,
-    SdhciFacts, SecondaryStart, VgicWindows,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
 use crate::aarch64::trap::{self, TrapFrame};
 use crate::aarch64::{timer, uart_pl011};
-
-/// The `virt` host regime, chosen at build time by `CELLOS_AARCH64_HOST_REGIME`:
-/// absent or `nonvhe` keeps the non-VHE EL2 host, `vhe` selects the VHE host
-/// (the `virt-vhe` lane). rustc records the variable as a build input, so
-/// changing it rebuilds this crate. Any other value fails the build.
-///
-/// A cargo feature is the board-selection convention; this variable stands in
-/// for one until the feature lines land (phase 02a deviation log).
-const VIRT_HOST_REGIME: HostRegime = match option_env!("CELLOS_AARCH64_HOST_REGIME") {
-    None => HostRegime::El2NonVhe,
-    Some(value) if str_eq(value, "nonvhe") => HostRegime::El2NonVhe,
-    Some(value) if str_eq(value, "vhe") => HostRegime::El2Vhe,
-    Some(_) => panic!("CELLOS_AARCH64_HOST_REGIME must be absent, `nonvhe` or `vhe`"),
-};
-
-const fn str_eq(a: &str, b: &str) -> bool {
-    let (a, b) = (a.as_bytes(), b.as_bytes());
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut i = 0;
-    while i < a.len() {
-        if a[i] != b[i] {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
 
 /// QEMU `virt` machine.
 pub struct QemuVirt;
@@ -51,13 +22,13 @@ impl ArmPlatform for QemuVirt {
     const PL011_BASE: usize = QEMU_ARM_VIRT.uart.mmio.base;
     const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;
-    /// The host keeps EL2 when firmware enters there (`virtualization=on`).
+    /// The host keeps EL2 when firmware enters there (`virtualization=on`) and
+    /// the CPU has FEAT_VHE; without it the host drops to EL1.
     const PI_MONITOR_BOOT: bool = false;
     const DTB_POLICY: DtbPolicy = DtbPolicy::Optional;
     const IDLE_PROBES: usize = 0;
     type VcpuExt = NoVcpuExt;
     type El2Monitor = NoEl2Monitor;
-    const HOST_REGIME: HostRegime = VIRT_HOST_REGIME;
     /// QEMU loads a raw `Image` at RAM base + `text_offset`, which is exactly
     /// the link address (`linker-aarch64.ld`).
     const LINUX_IMAGE_HEADER: bool = true;

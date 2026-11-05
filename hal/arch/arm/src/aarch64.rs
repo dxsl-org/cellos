@@ -21,6 +21,8 @@ pub mod domain;
 #[cfg(target_arch = "aarch64")]
 pub mod el2;
 #[cfg(target_arch = "aarch64")]
+pub mod el2_stub;
+#[cfg(target_arch = "aarch64")]
 pub mod gic;
 #[cfg(target_arch = "aarch64")]
 pub mod id_regs;

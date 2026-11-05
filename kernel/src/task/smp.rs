@@ -541,6 +541,7 @@ static mut SECONDARY_CONTEXT: [hal::aarch64::boot::SecondaryContext; MAX_HARTS] 
         tcr: 0,
         ttbr0: 0,
         sctlr: 0,
+        el2_host: 0,
     }; MAX_HARTS];
 
 /// Called by hart 0 **after** `task::init()` to bring secondary cores online.

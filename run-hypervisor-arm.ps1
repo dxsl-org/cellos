@@ -4,7 +4,9 @@
 # an Alpine Linux guest via Stage-2 MMU (Tier 3b — ARM64 EL2 VMM).
 #
 # Prerequisites:
-#   1. qemu-system-aarch64 >= 8.0 (for cortex-a72 + virtualization=on support).
+#   1. qemu-system-aarch64 >= 8.0 (for cortex-a76 + virtualization=on support).
+#      The EL2 host is VHE-only: on a CPU without FEAT_VHE the kernel boots an
+#      EL1 host and the hypervisor is unavailable.
 #      Install via winget: winget install QEMU.QEMU
 #      Or QEMU installer: https://www.qemu.org/download/
 #   2. Build the aarch64 kernel WITH the Alpine guest image embedded (see below):
@@ -71,7 +73,7 @@ if (-not (Test-Path $disk)) {
 Write-Host ""
 Write-Host "Starting ViCell hypervisor on QEMU ARM virt (aarch64 EL2)..."
 Write-Host "  Machine:  virt,virtualization=on,gic-version=2"
-Write-Host "  CPU:      cortex-a72 (ARMv8.0, EL2 capable)"
+Write-Host "  CPU:      cortex-a76 (ARMv8.2, FEAT_VHE for the EL2 host)"
 Write-Host "  RAM:      1 GiB total, including 128 MiB contiguous guest RAM"
 Write-Host "  Guest:    Alpine Linux via Stage-2 MMU (Tier 3b VMM)"
 Write-Host ""
@@ -86,7 +88,7 @@ Write-Host ""
 
 $qemuArgs = @(
     "-machine", "virt,virtualization=on,gic-version=2",
-    "-cpu", "cortex-a72",
+    "-cpu", "cortex-a76",
     "-m", "1G",
     "-kernel", $kernel,
     "-drive", "if=none,file=$disk,format=raw,id=hd0",

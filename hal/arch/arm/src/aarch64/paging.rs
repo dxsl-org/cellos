@@ -60,15 +60,15 @@ fn leaf_word(phys: PhysAddr, flags: PageFlags) -> u64 {
     };
     let mut entry = phys_to_pte_addr(phys) | PTE_VALID | PTE_PAGE | PTE_AF | sh | attr;
 
-    // Bit 54 is UXN in the EL1&0 regime but the ONLY XN bit in the EL2
-    // (non-VHE) regime — the same table is live in both when the kernel
-    // runs as EL2 host (virtualization=on / raspi3b). Kernel pages must
-    // therefore leave bit 54 clear or EL2 instruction fetch aborts the
-    // moment SCTLR_EL2.M is set. Nothing is lost at EL1: non-USER pages
-    // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
-    // A VHE host walks this table in the EL2&0 regime, whose descriptor
-    // semantics are the EL1&0 ones: the kernel at EL2 is held by PXN and
-    // EL0 Cells by AP[1]/UXN exactly as on the EL1 host.
+    // Bit 54 is UXN in the EL1&0 regime but the ONLY XN bit in the non-VHE
+    // EL2 regime, where the Pi EL2 monitor walks this same table
+    // (`el2::pi_monitor_mmu_init`). Kernel pages must therefore leave bit 54
+    // clear or the monitor's instruction fetch aborts the moment SCTLR_EL2.M
+    // is set. Nothing is lost at EL1: non-USER pages have AP[1]=0, so EL0
+    // cannot fetch from them regardless of UXN. The VHE host walks this table
+    // in the EL2&0 regime, whose descriptor semantics are the EL1&0 ones: the
+    // kernel at EL2 is held by PXN and EL0 Cells by AP[1]/UXN exactly as on
+    // the EL1 host.
     if flags.bits() & PageFlags::USER != 0 {
         entry |= PTE_AP_EL0 | PTE_PXN;
     }
@@ -107,18 +107,12 @@ pub const fn leaf_is_non_global(leaf: u64) -> bool {
 /// regime this page table is live in, all ASIDs, broadcast across the
 /// inner-shareable domain.
 ///
-/// Regime coverage: `activate` installs one root table in `TTBR0_EL1`, and when
-/// the kernel booted as an EL2 host it installs that SAME root in `TTBR0_EL2`
-/// as well (`el2::el2_mmu_init`). Two regimes then cache translations for the
-/// same VA independently, and `vaae1is` reaches only the EL1&0 one — a
-/// permission change would be honoured for cells at EL0 while the kernel's own
-/// EL2 accesses kept using the stale rights. `vae2is` covers the EL2 regime and
-/// is issued only when EL2 is active, because the instruction is UNDEFINED at
-/// EL1. The non-VHE EL2 regime has no ASIDs, so `vae2is` is already
-/// all-contexts; there is no `vaae2is` counterpart to look for. On a VHE host
-/// (`HCR_EL2.{E2H,TGE} = {1,1}`) both instructions target the one EL2&0
-/// regime the kernel and Cells share: `vaae1is` for every ASID, `vae2is` for
-/// the global kernel leaves, so the pair stays complete there too.
+/// Regime coverage: `activate` installs one root table in `TTBR0_EL1`, or, when
+/// the kernel booted as an EL2 host, in `TTBR0_EL2` (`el2::el2_mmu_init`).
+/// That host is always VHE (`HCR_EL2.{E2H,TGE} = {1,1}`), so the kernel and
+/// Cells share the one EL2&0 regime: `vaae1is` covers every ASID, `vae2is`
+/// the global kernel leaves. `vae2is` is issued only when EL2 is active,
+/// because the instruction is UNDEFINED at EL1.
 ///
 /// Ordering contract (Arm ARM §D8.13): `dsb ishst` first so the PTE store is
 /// observable by the other PEs' table walkers before the TLBI is broadcast;
@@ -319,7 +313,8 @@ impl PageTableTrait for PageTable {
             return;
         }
 
-        // ── EL1 path (unchanged) ─────────────────────────────────────────────
+        // ── EL1 path ─────────────────────────────────────────────────────────
+        super::el2_stub::report();
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
                                                // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)
         let tcr: u64 = 25      // T0SZ=25 (39-bit VA)

@@ -7,12 +7,15 @@
 # scripts/make-hypervisor-fs.sh). The guest boots `rdinit=/bin/pi-guest-init`,
 # which mounts /dev/vda and execs busybox sh; with HOME=/ its prompt is "~ #".
 #
-# Both modes require that prompt. They differ only in the CPU QEMU emulates:
+# Both modes require that prompt. They differ only in the CPU QEMU emulates.
+# The EL2 host is VHE-only (a CPU without FEAT_VHE boots an EL1 host with no
+# hypervisor), so the CPU must implement FEAT_VHE:
 #
-#   HV_SMOKE_MODE=machinery (default) — QEMU-TCG with an emulated cortex-a72.
+#   HV_SMOKE_MODE=machinery (default) — QEMU-TCG with an emulated cortex-a76.
 #     Runs on any host.
 #
-#   HV_SMOKE_MODE=boot — -enable-kvm -cpu host. Needs an ARM64 host with KVM.
+#   HV_SMOKE_MODE=boot — -enable-kvm -cpu host. Needs an ARM64 host with KVM
+#     nested virtualization whose guest CPU reports FEAT_VHE.
 #
 # Usage:
 #   bash scripts/qemu-hypervisor-smoke.sh [kernel-elf] [disk.img]
@@ -21,8 +24,8 @@
 #
 # Environment:
 #   HV_SMOKE_MODE  machinery (default) | boot
-#   HV_SMOKE_CPU   CPU QEMU emulates in machinery mode (default: cortex-a72);
-#                  a VHE-capable CPU (e.g. cortex-a76) runs the VHE host kernel
+#   HV_SMOKE_CPU   CPU QEMU emulates in machinery mode (default: cortex-a76);
+#                  it must implement FEAT_VHE
 #   BOOT_WINDOW    seconds to wait for the prompt (default: 300). QEMU is
 #                  stopped as soon as the prompt appears.
 #   LOG_TAIL       lines of qemu-hv.log printed on any failure (default: 200)
@@ -40,7 +43,7 @@ KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_hv_arm.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-300}"
 HV_SMOKE_MODE="${HV_SMOKE_MODE:-machinery}"
-HV_SMOKE_CPU="${HV_SMOKE_CPU:-cortex-a72}"
+HV_SMOKE_CPU="${HV_SMOKE_CPU:-cortex-a76}"
 
 if [[ "$HV_SMOKE_MODE" != "machinery" && "$HV_SMOKE_MODE" != "boot" ]]; then
     echo "FAIL: HV_SMOKE_MODE must be 'machinery' or 'boot' (got '$HV_SMOKE_MODE')" >&2

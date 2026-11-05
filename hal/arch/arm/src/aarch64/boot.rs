@@ -1,9 +1,10 @@
 //! AArch64 boot entry point.
 //!
-//! QEMU virt remains an EL2 host, non-VHE or VHE as the backend's
-//! [`HostRegime`] says. On BCM the boot CPU retains an EL2 monitor, enters EL1h
-//! for the kernel and EL0 Cells, and returns to EL2 only via the private HVC
-//! gateway. Firmware starting us at EL1 cannot provide that gateway.
+//! QEMU virt entered at EL2 stays an EL2 host only with FEAT_VHE; without it
+//! the host drops to EL1 and EL2 keeps only the SMCCC stub (`el2_stub`). On
+//! BCM the boot CPU retains an EL2 monitor, enters EL1h for the kernel and EL0
+//! Cells, and returns to EL2 only via the private HVC gateway. Firmware
+//! starting us at EL1 cannot provide that gateway.
 
 use core::arch::global_asm;
 
@@ -18,15 +19,8 @@ const SECONDARY_PSCI: usize = matches!(
     SecondaryStart::Psci
 ) as usize;
 
-/// The EL2 boot path sets `HCR_EL2.E2H` (VHE host).
+/// The EL2 boot path keeps a VHE EL2 host (`HCR_EL2.{E2H,TGE} = {1,1}`).
 const HOST_VHE: usize = matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2Vhe) as usize;
-
-/// The EL2 boot path keeps `HCR_EL2.E2H` clear (non-VHE EL2 host).
-const HOST_EL2_NONVHE: usize =
-    matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2NonVhe) as usize;
-
-// `_secondary_entry` builds the non-VHE `TCR_EL2` from two 16-bit halves.
-const _: () = assert!(super::el2::EL2_TCR >> 32 == 0);
 
 /// `_start` begins with a Linux arm64 `Image` header.
 const IMAGE_HEADER: usize = <Board as ArmPlatform>::LINUX_IMAGE_HEADER as usize;
@@ -64,6 +58,9 @@ pub struct SecondaryContext {
     pub ttbr0: u64,
     /// `SCTLR_EL1` — the boot core's live system control (M/C/I + hardening).
     pub sctlr: u64,
+    /// 1 when the boot core is a VHE EL2 host, 0 for an EL1 host: a core the
+    /// firmware starts at EL2 must join the same regime or park.
+    pub el2_host: u64,
 }
 
 impl SecondaryContext {
@@ -101,6 +98,7 @@ impl SecondaryContext {
             tcr,
             ttbr0: kernel_root,
             sctlr,
+            el2_host: super::el2::is_el2() as u64,
         }
     }
 }
@@ -111,9 +109,29 @@ const CTX_MAIR: usize = core::mem::offset_of!(SecondaryContext, mair);
 const CTX_TCR: usize = core::mem::offset_of!(SecondaryContext, tcr);
 const CTX_TTBR0: usize = core::mem::offset_of!(SecondaryContext, ttbr0);
 const CTX_SCTLR: usize = core::mem::offset_of!(SecondaryContext, sctlr);
+const CTX_EL2_HOST: usize = core::mem::offset_of!(SecondaryContext, el2_host);
 
 global_asm!(
     r#"
+    // Leave EL2 for an EL1h host at \target, DAIF masked: HCR_EL2.RW only
+    // (TGE=0, no traps, no Stage-2), FP/SIMD and the EL1 physical counter and
+    // timer untrapped (non-VHE CPTR_EL2/CNTHCTL_EL2 layouts).
+    .macro cellos_el2_to_el1 tmp, target
+    mov \tmp, #(1 << 31)       // HCR_EL2.RW=1, TGE=0: EL1 is AArch64
+    msr hcr_el2, \tmp
+    mov \tmp, #0x33ff          // CPTR_EL2 RES1 bits; no FP/SIMD traps to EL2
+    msr cptr_el2, \tmp
+    mov \tmp, #3               // EL1PCTEN | EL1PCEN
+    msr cnthctl_el2, \tmp
+    msr cntvoff_el2, xzr
+    mov \tmp, #0x3c5           // EL1h with D/A/I/F masked
+    msr spsr_el2, \tmp
+    adr \tmp, \target
+    msr elr_el2, \tmp
+    isb
+    eret
+    .endm
+
     .section .text.boot
     .global _start
     .balign 4
@@ -175,9 +193,9 @@ _start:
     eret
 
 .el2_init:
-    // Non-VHE EL0 Cells require the host at EL1. Keep EL2 as a private
-    // monitor for Stage-2 and guest world switches.
     .if {board_bcm}
+    // Pi: the host and its Cells run at EL1/EL0. Keep EL2 as a private
+    // monitor for Stage-2 and guest world switches.
     mov x20, #1               // preserve EL2 boot provenance across ERET
     adrp x0, __pi_monitor_stack_top
     add  x0, x0, :lo12:__pi_monitor_stack_top
@@ -186,60 +204,37 @@ _start:
     add  x0, x0, :lo12:__pi_monitor_vectors
     msr vbar_el2, x0
     msr tpidr_el2, xzr
-    mov x0, #(1 << 31)       // HCR_EL2.RW=1, TGE=0: EL1 is AArch64
-    msr hcr_el2, x0
-    mov x0, #0x33ff          // CPTR_EL2 RES1 bits; no FP/SIMD traps to EL2
-    msr cptr_el2, x0
-    mov x0, #3               // EL1PCTEN | EL1PCEN
-    msr cnthctl_el2, x0
-    msr cntvoff_el2, xzr
-    mov x0, #0x3c5           // EL1h with D/A/I/F masked
-    msr spsr_el2, x0
-    adr x0, .el1_entry
-    msr elr_el2, x0
-    isb
-    eret
-    .endif
-
-    // F2: set HCR_EL2 = RW(1<<31) | TGE(1<<27) FIRST, plus E2H(1<<34) on a VHE
-    // host. TGE routes EL0 exceptions to VBAR_EL2 — required for Cell SVCs at
-    // the EL2 host. RW ensures an EL1 guest runs AArch64. E2H selects the
-    // EL2&0 regime in which EL0 Cells translate through TTBR0_EL2.
+    cellos_el2_to_el1 x0, .el1_entry
+    .else
+    // An EL2 host needs FEAT_VHE. With HCR_EL2.TGE = 1 and E2H = 0 the EL1&0
+    // regime treats SCTLR_EL1.M as 0 for EL0 (ARM ARM AArch64.S1Enabled), so
+    // EL0 Cells would run untranslated with no AP/UXN checks. E2H goes in
+    // first and is read back; TGE follows only once E2H holds, so that pair
+    // is never live, not even between two writes.
     // SAFETY: we are at EL2; HCR_EL2 is EL2-private.
-    mov x0, #(1 << 31)
-    orr x0, x0, #(1 << 27)
-    .if {host_vhe}
-    orr x0, x0, #(1 << 34)
-    .endif
+    mov x0, #(1 << 31)       // RW: an EL1 guest runs AArch64
+    orr x0, x0, #(1 << 34)   // E2H: kernel and Cells share the EL2&0 regime
     msr hcr_el2, x0
     isb
-    // Read back: a CPU without FEAT_E2H0 keeps E2H set, one without FEAT_VHE
-    // keeps it clear. `el2_mark_active` stops boot on a mismatch. BCM never
-    // reaches this path (its `.el2_init` returns to EL1 above), so its entry
-    // bytes stay as they were.
-    .if {board_bcm} == 0
-    mrs x22, hcr_el2
-    .endif
+    mrs x0, hcr_el2
+    tbz x0, #34, .Lel2_no_vhe // no FEAT_VHE: E2H reads back 0
+    orr x0, x0, #(1 << 27)   // TGE: EL0 exceptions are taken to VBAR_EL2
+    msr hcr_el2, x0
+    isb
 
     // TPIDR_EL2 is the per-CPU live-vCPU marker. Firmware does not guarantee
     // its reset value, so clear it before any normal Cell can trap from EL0.
     // vcpu_enter_guest is the only path allowed to make it non-zero.
     msr tpidr_el2, xzr
 
-    .if {host_vhe}
     // E2H layout: CPTR_EL2.FPEN = 0b11 leaves FP/SIMD untrapped at EL2 and EL0.
     mov x0, #(3 << 20)
     msr cptr_el2, x0
     // E2H layout: CNTHCTL_EL2.EL1PCTEN|EL1PCEN keep a guest's physical
-    // counter and timer untrapped; the EL0 enables stay clear as on the
-    // non-VHE host.
+    // counter and timer untrapped; the EL0 enables stay clear.
     mov x0, #(3 << 10)
     msr cnthctl_el2, x0
     msr cntvoff_el2, xzr
-    .else
-    // Enable FP/SIMD at EL2 host (CPTR_EL2=0 disables all traps).
-    msr cptr_el2, xzr
-    .endif
     isb
 
     // Set SP_EL2 stack.
@@ -258,10 +253,6 @@ _start:
     str  xzr, [x0], #8
     b    1b
 2:
-    // Mark EL2_ACTIVE = true (after the HCR_EL2 read-back check) and jump to kmain.
-    .if {board_bcm} == 0
-    mov  x0, x22
-    .endif
     bl   el2_mark_active
     mov  x0, #0             // hartid = 0
     mov  x1, x19            // DTB pointer
@@ -271,6 +262,16 @@ _start:
 3:
     wfi
     b    3b
+
+.Lel2_no_vhe:
+    // No FEAT_VHE: the host runs at EL1 and EL2 keeps only the SMCCC stub
+    // (`el2_stub`), so an HVC from the host fails cleanly. No hypervisor.
+    mov x20, #1               // tells `.el1_entry` the host left EL2
+    adrp x0, __el2_stub_vectors
+    add  x0, x0, :lo12:__el2_stub_vectors
+    msr vbar_el2, x0
+    cellos_el2_to_el1 x0, .el1_entry
+    .endif
 
 .el1_entry:
     // Enable FP/SIMD in EL1 and EL0 (CPACR_EL1.FPEN = 0b11).
@@ -315,12 +316,14 @@ _start:
     str  xzr, [x0], #8
     b    4b
 5:
+    cbz x20, 7f               // x20 = 1: the host left EL2 for EL1 above
     .if {board_bcm}
-    cbz x20, 7f
     mov x0, x21              // original exception level passed to Rust
     bl el2_mark_monitor_boot
-7:
+    .else
+    bl el2_mark_el1_fallback
     .endif
+7:
     // Jump to Rust kmain(hartid=0, dtb=x19).
     mov  x0, #0             // hartid (CPU 0)
     mov  x1, x19            // DTB pointer stashed from entry x0
@@ -352,58 +355,40 @@ _start:
 _secondary_entry:
     msr  daifset, #0xf
     .if {host_vhe}
-    // A VHE host runs every hart at EL2; a core started lower cannot join.
-    // It parks and the boot core's bounded wait keeps the system single-hart.
+    // Join the boot core's regime (`SecondaryContext::el2_host`) or park; the
+    // boot core's bounded wait then keeps the system single-hart.
+    ldr  x10, [x0, #{ctx_el2_host}]
     mrs  x9, CurrentEL
     cmp  x9, #(2 << 2)
-    b.ne .Lsecondary_park
-    // Same regime as the boot core. From here every `_EL1` access below is
-    // redirected to its EL2&0 counterpart, so the shared sequence installs the
-    // boot core's EL2 translation regime and CPTR_EL2.FPEN.
+    b.eq 9f
+    cbnz x10, .Lsecondary_park  // an EL2 host cannot take a core started at EL1
+    b    8f
+9:
+    cbz  x10, .Lsecondary_to_el1
+    // VHE host, set up exactly as `.el2_init`: E2H read back before TGE, so
+    // TGE = 1 with E2H = 0 is never live. From here every `_EL1` access
+    // below is redirected to its EL2&0 counterpart, so the shared sequence
+    // installs the boot core's EL2 translation regime and CPTR_EL2.FPEN.
     mov  x9, #(1 << 31)
-    orr  x9, x9, #(1 << 27)
     orr  x9, x9, #(1 << 34)
+    msr  hcr_el2, x9
+    isb
+    mrs  x9, hcr_el2
+    tbz  x9, #34, .Lsecondary_park
+    orr  x9, x9, #(1 << 27)
     msr  hcr_el2, x9
     isb
     msr  tpidr_el2, xzr
     mov  x9, #(3 << 10)
     msr  cnthctl_el2, x9
     msr  cntvoff_el2, xzr
-    .endif
-    .if {host_el2_nonvhe}
-    // A `virtualization=on` machine starts the core at EL2. Install the boot
-    // core's non-VHE EL2 host state (`.el2_init`, `el2::el2_mmu_init`); the
-    // shared sequence below then mirrors the root into EL1&0 for EL0 Cells
-    // exactly as the boot core's mirror did.
-    mrs  x9, CurrentEL
-    cmp  x9, #(2 << 2)
-    b.ne 8f
-    mov  x9, #(1 << 31)
-    orr  x9, x9, #(1 << 27)
-    msr  hcr_el2, x9
-    isb
-    msr  tpidr_el2, xzr
-    msr  cptr_el2, xzr
-    mov  x9, #{el2_mair}
-    msr  mair_el2, x9
-    movz x9, #({el2_tcr} & 0xffff)
-    movk x9, #(({el2_tcr} >> 16) & 0xffff), lsl #16
-    msr  tcr_el2, x9
-    isb
-    ldr  x9, [x0, #{ctx_ttbr0}]
-    msr  ttbr0_el2, x9
-    dsb  sy
-    isb
-    tlbi alle2                  // this PE only
-    dsb  nsh
-    isb
-    mrs  x9, sctlr_el2
-    orr  x9, x9, #(1 << 0)
-    orr  x9, x9, #(1 << 2)
-    orr  x9, x9, #(1 << 12)
-    msr  sctlr_el2, x9
-    dsb  sy
-    isb
+    b    8f
+.Lsecondary_to_el1:
+    // The boot core runs an EL1 host (no FEAT_VHE); leave EL2 the same way.
+    adrp x9, __el2_stub_vectors
+    add  x9, x9, :lo12:__el2_stub_vectors
+    msr  vbar_el2, x9
+    cellos_el2_to_el1 x9, 8f
 8:
     .endif
     // Exceptions to EL1 use SP_EL1 (SP_EL2 on a VHE host at EL2); set that
@@ -439,9 +424,7 @@ _secondary_entry:
     board_bcm = const BOARD_BCM,
     secondary_psci = const SECONDARY_PSCI,
     host_vhe = const HOST_VHE,
-    host_el2_nonvhe = const HOST_EL2_NONVHE,
-    el2_mair = const super::el2::EL2_MAIR,
-    el2_tcr = const super::el2::EL2_TCR,
+    ctx_el2_host = const CTX_EL2_HOST,
     image_header = const IMAGE_HEADER,
     image_flags = const IMAGE_FLAGS,
     ctx_hart = const CTX_HART_ID,
