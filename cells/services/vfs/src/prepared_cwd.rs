@@ -18,6 +18,8 @@ use crate::caller::Caller;
 use crate::dirs::DirError;
 use crate::manager::VfsManager;
 
+mod closed_logs;
+
 type Scope = (u64, u64, u64, u64);
 const MAX_LOGS: usize = 512;
 const MAX_CREATOR_LOGS: usize = 64;
@@ -186,15 +188,17 @@ impl PreparedCwd {
         if self.logs.contains_key(&key) {
             return Ok(());
         }
-        if self.logs.len() >= MAX_LOGS
-            || self
-                .logs
-                .keys()
-                .filter(|k| k.0 == key.0 && k.1 == key.1)
-                .count()
-                >= MAX_CREATOR_LOGS
-        {
-            return Err(Status::QuotaExceeded);
+        let creator_full = |logs: &BTreeMap<Scope, RequestLog>| {
+            logs.len() >= MAX_LOGS
+                || logs.keys().filter(|k| k.0 == key.0 && k.1 == key.1).count() >= MAX_CREATOR_LOGS
+        };
+        if creator_full(&self.logs) {
+            // Usually already retired on the creator's previous request; this covers a
+            // creator whose launches reach VFS only through prepared-cwd records.
+            closed_logs::retire_closed(self, vfs, Some(owner));
+            if creator_full(&self.logs) {
+                return Err(Status::QuotaExceeded);
+            }
         }
         vfs.quota
             .charge(owner.cell, LOG_CHARGE)
@@ -1152,11 +1156,12 @@ fn reconcile_matching(vfs: &mut VfsManager, only: Option<Caller>) {
                 .logs
                 .get(&key)
                 .is_some_and(|log| log.kernel_pending.is_empty())
-            && state.logs.remove(&key).is_some()
         {
-            vfs.quota.release(CellId(key.0), LOG_CHARGE);
+            closed_logs::drop_log(&mut state, vfs, key);
         }
     }
+    // A live creator's logs go once the kernel has removed their Operation.
+    closed_logs::retire_closed(&mut state, vfs, only);
     state.flush_kernel_acks();
     vfs.dirs.prepared = state;
 }
@@ -1629,5 +1634,74 @@ mod tests {
             !idle_work(&vfs),
             "a committed child outlives its parent's log"
         );
+    }
+
+    #[test]
+    fn only_a_settled_unreferenced_log_is_offered_for_operation_removal() {
+        let mut vfs = VfsManager::new();
+        vfs.dirs.on_contact(PARENT);
+        let settled = |vfs: &mut VfsManager| {
+            let log = log(vfs);
+            log.kernel_next = 3;
+            log.kernel_acked = 2;
+        };
+        let offered = |vfs: &VfsManager, only| closed_logs::quiescent(&vfs.dirs.prepared, only);
+        settled(&mut vfs);
+        assert_eq!(
+            offered(&vfs, Some(PARENT)),
+            [(scope(PARENT, OPERATION), 2)],
+            "the probe re-acknowledges exactly the acknowledged ID"
+        );
+        assert!(
+            offered(&vfs, Some(CHILD)).is_empty(),
+            "another creator's log"
+        );
+
+        log(&mut vfs).outcomes.insert(1, outcome());
+        assert!(
+            offered(&vfs, None).is_empty(),
+            "the creator has not acknowledged"
+        );
+        log(&mut vfs).outcomes.clear();
+        log(&mut vfs).kernel_pending.insert(2);
+        assert!(
+            offered(&vfs, None).is_empty(),
+            "a kernel mutation is unresolved"
+        );
+        log(&mut vfs).kernel_pending.clear();
+        log(&mut vfs).kernel_acked = 1;
+        assert!(
+            offered(&vfs, None).is_empty(),
+            "the kernel ledger is not acknowledged"
+        );
+        log(&mut vfs).kernel_next = 1;
+        log(&mut vfs).kernel_acked = 0;
+        assert!(
+            offered(&vfs, None).is_empty(),
+            "no kernel ledger exists to prove the Operation removed"
+        );
+        settled(&mut vfs);
+        vfs.dirs
+            .prepared
+            .reservations
+            .insert(1, reservation(RECEIPT, 1, true));
+        assert!(
+            offered(&vfs, None).is_empty(),
+            "a reservation still names the scope"
+        );
+        vfs.dirs.prepared.reservations.clear();
+
+        let mut state = core::mem::take(&mut vfs.dirs.prepared);
+        assert!(closed_logs::drop_log(
+            &mut state,
+            &mut vfs,
+            scope(PARENT, OPERATION)
+        ));
+        assert!(!closed_logs::drop_log(
+            &mut state,
+            &mut vfs,
+            scope(PARENT, OPERATION)
+        ));
+        assert!(state.logs.is_empty());
     }
 }
