@@ -69,6 +69,7 @@ release; they are not a current all-tier or production security PASS.
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell executes privileged instruction (e.g., `wfi`) | Cells run in EL0/Ring3; trap dispatched to kernel | ✅ Mitigated |
+| AArch64 EL0 Cell runs untranslated under an EL2 host (`HCR_EL2.{E2H,TGE} = {0,1}` makes EL0 ignore `SCTLR_EL1.M`) | The QEMU `virt` EL2 host is VHE-only (`{1,1}`, EL2&0 regime with AP/UXN enforced); boot writes `E2H` and reads it back before setting `TGE`, a CPU without FEAT_VHE drops the host to EL1 (EL2 keeps only an SMCCC stub, no hypervisor), and `el2_mmu_init` re-reads `HCR_EL2` before the first Cell (2026-11-05) | ✅ Mitigated — QEMU TCG never showed the flaw (it translates EL0 under `{0,1}`); it applies on silicon/KVM |
 | `#[allow(unsafe_code)]` in a Cell | `scripts/cellos-sign --check --strict` fails CI when a Cell file contains `unsafe` and is not in the reviewed allowlist, and refuses to sign; allowlist entries carry reason/approver/date and are reported once past `review_by` | ✅ Mitigated, with a bounded hole — see `docs/specs/18-cell-trust-tiers.md` §2.1 |
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 
@@ -261,6 +262,11 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
   cell while still admitting unsigned ones. `.github/workflows/release.yml` builds `release-posture` and
   fails when the release-key secret is empty; `scripts/check-production-relay-image.py` requires
   `release-signing-key` for relay candidates.
+
+  Images from caller memory (`SpawnFromElf`, `CellSessionV1` route 2, `SpawnFromMem`) are copied into a
+  kernel-owned buffer before hashing, verification, manifest classification and loading (2026-11-05).
+  The grant routes copy through the caller's `TaskCopyView` under the grant-table lock: later writes to the
+  grant never reach verification or loading, and the grant cannot be freed mid-copy.
 - **TLS trust anchor (service-net `tls-ca-private`, 2026-11-05)** — `cells/services/net/roots/private.der`
   is a dev CA whose key exists only on the machine that generated it (`tools/hypha-mock-llm/gen-dev-ca.py`,
   key written 0600 and gitignored); fleet builds must replace it. The previous dev CA's key was committed
