@@ -27,7 +27,7 @@ created: 2026-11-03
 | 04a | [PCIe function ABI and MSI/MSI-X](phase-04a-pcie-function-abi-and-msix.md) — completed 2026-11-04 ([evidence](reports/phase-04a-evidence.md)); CP2 approved ([package](cp2-04a-pcie-function-abi.md)) | S1 | 03 | |
 | 04b | [IRQ-driven PCIe driver cells](phase-04b-irq-driven-pcie-drivers.md) — completed 2026-11-05 ([evidence](reports/phase-04b-evidence.md)); CP2 approved ([record](cp2-04b-waitcompletion-irq-approval.md)), scope nvme/ahci/xhci. Repair slice VH ([VMX host state](slice-vmx-host-state-repair.md)) closed the same day; S2 is next | S1+ | 04a | |
 | 05 | [virtio-pci cells and x86_64-vm profile](phase-05-virtio-pci-cells.md) — completed 2026-11-04 ([evidence](reports/phase-05-evidence.md)); checkpoint 05 signed by the owner 2026-11-04, S1 closed | S1 | 02, 04b | ✓ |
-| 06 | [ACPI reset, poweroff, power button](phase-06-acpi-power-and-reset.md) — implemented 2026-11-05 ([evidence](reports/phase-06-evidence.md)); CP2-06 pending the owner ([package](cp2-06-system-power.md)); 07a waits for it | S2 ops | 01, 03 | |
+| 06 | [ACPI reset, poweroff, power button](phase-06-acpi-power-and-reset.md) — completed 2026-11-05 ([evidence](reports/phase-06-evidence.md)); CP2-06 approved, 436 frozen ([record](cp2-06-system-power-approval.md)) | S2 ops | 01, 03 | |
 | 07a | [Per-CPU structures for N CPUs](phase-07a-percpu-generalization.md) | S2 | 03 | |
 | 07b | [N-CPU scheduling on x86](phase-07b-n-cpu-scheduling-x86.md) | S2 | 07a, 02 | ✓ |
 | 08 | [e1000 82545EM and e1000e 82574L](phase-08-e1000-family-vmware.md) | S3 VMware | 04b | |

@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "ACPI reset, S5 poweroff, power button"
-status: implemented (CP2-06 pending owner decision)
+status: completed (2026-11-05; CP2-06 approved, record cp2-06-system-power-approval.md)
 priority: P2
 effort: "3d"
 dependencies: [1, 3]
@@ -76,9 +76,9 @@ The kernel holds `kernel/src/acpi/power.rs` (register writes and the `\_S5_` sca
 
 ## Success Criteria
 
-- [ ] `power-x86` lanes (TCG and KVM): `reboot` reboots; `poweroff` exits QEMU; QMP `system_powerdown` exits QEMU after the `[supervisor] shutdown: vfs flushed` marker.
-- [ ] Unit tests: `\_S5_` extraction from the q35 fixture and a fixture with `\_S5` inside a method (must return NotSupported).
-- [ ] An unauthorized cell calling 436 gets `PermissionDenied` (unit test on dispatch).
+- [x] `power-x86` lanes (TCG and KVM): `reboot` reboots; `poweroff` exits QEMU; QMP `system_powerdown` exits QEMU after the `[supervisor] power: poweroff (PowerButton) froze=…` marker (replaces the "vfs flushed" marker, see Deviation Log).
+- [x] Unit tests: `\_S5_` extraction from the q35 fixture and a fixture with `\_S5` inside a method (must return NotSupported).
+- [x] An unauthorized cell calling 436 gets `PermissionDenied` (unit test on dispatch).
 
 ## Risk Assessment
 
@@ -103,3 +103,4 @@ Phase 09 uses ACPI shutdown in the VMware lane; phase 20 records the per-machine
 - **Deviation:** fixtures: q35 DSDT dumped with QMP `pmemsave`; the in-method fixture is hand-assembled (no `iasl`), `.asl` source committed beside it.
 - **Surprise:** `tests/integration/tests/ahci-x86.rs:280-282` comment ("On x86 `shutdown` halts the CPU") is stale; left unedited per request O6.
 - **B-1 (resolved by owner grant 2026-11-05, [record](s2-phase06-supervisor-image-grant.md)):** the canonical x86 images shipped no `/bin/supervisor`. Root cause of the failed first local witness: `scripts/generate-boot-config.py` selects the supervisor row of `config/services.toml` only with an init feature `supervisor`/`hostile-backend-recovery`/`hotswap-demo`. Fixed in the granted paths: supervisor row in `HEADLESS_CELLS` (desktop inherits), `supervisor` in both profiles' init features, signed set + assembler pin in `scripts/cellos_sign/signing.py`, `scripts/test_assemble_x86_image.py`. Every x86 image now runs the supervisor. CP2-06 deviation 7.
+- **2026-11-05 Closed.** Owner approved CP2-06 (deviations 1–7; 436 frozen). [Record](cp2-06-system-power-approval.md).

@@ -1,6 +1,6 @@
 # CP2 — phase 06: ACPI reset, S5 poweroff, power button, `SystemPower = 436`
 
-Status: **written 2026-11-05; implemented and verified (host, QEMU TCG, local KVM); owner decision pending.** Not approved; 436 is not frozen by this document.
+Status: **approved by the owner 2026-11-05 (Law-1 confirmation 2); `SystemPower = 436` frozen** ([record](cp2-06-system-power-approval.md)).
 Branch `feat/x86-s2-phase06-power` (base `a6392e1dc`). Handoff: [s2-handoff-request.md](s2-handoff-request.md), [approval](s2-handoff-approval.md). CP1: [cp1-pcie-irq-power-abi.md](cp1-pcie-irq-power-abi.md) §5 (D-4).
 Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md).
 
