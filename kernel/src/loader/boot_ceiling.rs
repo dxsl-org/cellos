@@ -214,9 +214,12 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         | "/bin/tier2-rpc-provider"
         | "/bin/tier2-rpc-driver"
         // x86 Tier-2 runtime witnesses (owner H-1): mlibc start-up, threads and
-        // timed waits. Capability-free; only the pre-annex X/M/W rights.
+        // timed waits, the cpp-hosted C++ runtime and libdrm-lite.
+        // Capability-free; only the pre-annex X/M/W rights.
         | "/bin/mlibc-smoke"
-        | "/bin/mlibc-posix-x86" => LEGACY,
+        | "/bin/mlibc-posix-x86"
+        | "/bin/cpp-hosted-smoke"
+        | "/bin/drm-lite-x86" => LEGACY,
         // SSH server: inbound listener only — no DNS, no outbound connect.
         "/bin/sshd" => CapSet {
             net_listen: true,

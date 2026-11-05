@@ -199,6 +199,13 @@ approver = "owner (runtime plan R3 file set, 2026-11-04)"
 date = "2026-11-04"
 
 [[file]]
+path = "cells/tests/drm-lite-x86/src/main.rs"
+class = "c-ffi"
+reason = "C FFI (Tier 2 libdrm-lite witness): one call into the witness's own C (`drm_lite_witness`, integer-only signature per rule H1); the C side is outside the Rust type system."
+approver = "owner (runtime plan R6 file set, 2026-11-05)"
+date = "2026-11-05"
+
+[[file]]
 path = "cells/tests/cpp-hosted-smoke/src/main.rs"
 class = "c-ffi"
 reason = "C FFI (Tier 2 cpp-hosted witness): two calls into the witness's own noexcept C++ entry points (`cpp_hosted_witness`, `cpp_hosted_uncaught`, integer-only signatures per rule H1); the C++ side is outside the Rust type system."
@@ -605,6 +612,13 @@ class = "c-ffi"
 reason = "Owns allowlisted unsafe under cells/tests/mlibc-posix-x86/ — see the [[file]] entry of class \"c-ffi\" for the justification."
 approver = "owner (runtime plan R3 file set, 2026-11-04)"
 date = "2026-11-04"
+
+[[crate]]
+name = "app-drm-lite-x86"
+class = "c-ffi"
+reason = "Owns allowlisted unsafe under cells/tests/drm-lite-x86/ — see the [[file]] entry of class \"c-ffi\" for the justification."
+approver = "owner (runtime plan R6 file set, 2026-11-05)"
+date = "2026-11-05"
 
 [[crate]]
 name = "app-cpp-hosted-smoke"

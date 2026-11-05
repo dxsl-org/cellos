@@ -71,9 +71,12 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/tier2-rpc-driver"
         | "/bin/std-smoke"
         // x86 Tier-2 runtime witnesses (owner H-1), launched from the shell by
-        // scripts/x86/qemu-mlibc-witness.sh.
+        // scripts/x86/qemu-mlibc-witness.sh, scripts/x86/qemu-cpp-hosted-smoke.sh
+        // and cells/tests/drm-lite-x86/run-qemu-x86.sh.
         | "/bin/mlibc-smoke"
         | "/bin/mlibc-posix-x86"
+        | "/bin/cpp-hosted-smoke"
+        | "/bin/drm-lite-x86"
         | "/bin/desktop"
         | "/bin/ocel-js"
         | "/bin/ocel-quickjs" | "/bin/ocel-pdf" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal" => LEGACY,
