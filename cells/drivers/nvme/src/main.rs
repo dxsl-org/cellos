@@ -25,6 +25,7 @@ mod controller;
 mod deadline;
 mod dispatch;
 mod dma;
+mod irq;
 mod queue;
 
 use controller::NvmeController;

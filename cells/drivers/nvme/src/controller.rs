@@ -8,6 +8,7 @@
 
 use crate::deadline::{self, Deadline, Spent};
 use crate::dma::AuthorizedDma;
+use crate::irq::CompletionIrq;
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
@@ -79,6 +80,20 @@ fn poll_spent(deadline: &mut Deadline) -> Option<Spent> {
     deadline.check(now_ms())
 }
 
+/// Empty reads of a command wait before the first park. A completion that lands while
+/// the BSP is busy wakes the parked driver only at the next scheduler tick, so a short
+/// spin keeps fast commands fast.
+const SPIN_BEFORE_PARK: u64 = 64;
+
+/// One more empty read of a command wait. Interrupt-driven: after the spin, park until
+/// an MSI-X or the park slice ends, then check the budget. Polled: [`poll_spent`].
+fn idle(deadline: &mut Deadline, irq: &mut CompletionIrq) -> Option<Spent> {
+    if deadline.polls() >= SPIN_BEFORE_PARK && irq.park() {
+        return deadline.check(now_ms());
+    }
+    poll_spent(deadline)
+}
+
 /// Log a completion that took at least `SLOW_COMPLETION_MS` (the first few only).
 fn note_slow(deadline: &Deadline, what: &str, opc: u8) {
     if let Some(ms) = deadline.slow(now_ms()) {
@@ -112,6 +127,8 @@ pub struct NvmeController {
     // start allocating DmaBufs directly on the controller instead of via Queue.
     #[allow(dead_code)]
     bdf: u32,
+    /// MSI-X (vector 0: admin CQ, vector 1: I/O CQ) or polling.
+    irq: CompletionIrq,
     /// Fault-injection builds only: exit (70) right after the next I/O doorbell.
     #[cfg(feature = "fault-inject")]
     exit_after_doorbell: bool,
@@ -189,6 +206,11 @@ impl NvmeController {
             admin.cq_virt()
         ));
 
+        // MSI-X must be live before CC.EN: enabling binds the admin CQ to vector 0,
+        // and a controller that saw MSI-X off then never signals that vector (QEMU's
+        // model drops it silently), leaving every admin wait to its park slices.
+        let irq = CompletionIrq::setup(bdf, 2);
+
         // 5. Enable controller.
         let cc = CC_EN | CC_CSS_NVM | CC_MPS_4K | CC_AMS_RR | CC_IOSQES | CC_IOCQES;
         Self::write32(&mmio, REG_CC, cc)?;
@@ -226,6 +248,7 @@ impl NvmeController {
             lba_bytes: 512,
             vwc: false,
             bdf,
+            irq,
             #[cfg(feature = "fault-inject")]
             exit_after_doorbell: false,
         };
@@ -301,14 +324,21 @@ impl NvmeController {
         // CDW10 layout (NVMe 1.x §5.3/§5.4): QSIZE[31:16] (0-based) | QID[15:0].
         // The first port of this file inverted the two fields — QEMU then created
         // CQ with QID=63 and Create-SQ failed with Invalid CQID (CQ 1 absent).
+        // Interrupts (CDW11.IEN, IV[31:16]) only when 435 granted vectors: the I/O CQ
+        // takes vector 1 when there are two, else shares vector 0 with the admin CQ.
         let io_cq_iova = ctrl.io.cq_iova();
+        let io_cq_irq = match ctrl.irq.vectors() {
+            0 => 0,
+            1 => 1 << 1,
+            _ => (1 << 16) | (1 << 1),
+        };
         ctrl.admin_cmd(
             ADMIN_OPC_CREATE_CQ,
             0,
             io_cq_iova,
             0,
             ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
-            0x1, // CDW11: IEN=0 (polled), PC=1 (physically contiguous)
+            io_cq_irq | 0x1,                         // CDW11: IV | IEN | PC=1
             0,
             0,
             0,
@@ -360,6 +390,7 @@ impl NvmeController {
 
     fn wait_command(&mut self, qid: usize, cid: u16, wait: &mut Deadline) -> Result<u16, Spent> {
         let doorbell = self.mmio.base() + REG_DB_BASE + (qid * 2 + 1) * self.db_stride;
+        let irq = &mut self.irq;
         let queue = if qid == 0 {
             &mut self.admin
         } else {
@@ -371,7 +402,7 @@ impl NvmeController {
                 // SAFETY: the CQ doorbell belongs to the controller's granted BAR0 mapping.
                 unsafe { core::ptr::write_volatile(doorbell as *mut u32, head as u32) };
             },
-            || poll_spent(wait),
+            || idle(wait, irq),
         )
     }
 

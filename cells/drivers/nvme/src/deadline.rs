@@ -70,6 +70,11 @@ impl Deadline {
         self.polls.is_multiple_of(POLL_YIELD_EVERY)
     }
 
+    /// Polls counted so far by [`tick`](Self::tick).
+    pub(crate) fn polls(&self) -> u64 {
+        self.polls
+    }
+
     /// `Some` once the budget is spent at `now`: elapsed milliseconds with a clock, the poll
     /// count without one.
     pub(crate) fn check(&self, now: Option<u64>) -> Option<Spent> {
