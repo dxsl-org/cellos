@@ -346,14 +346,23 @@ pub(crate) fn test_shape(hart: usize, priority: u8) -> (usize, usize, usize, usi
 /// Whether this target invokes `vi_context_switch_complete` from the incoming
 /// stack of every raw context switch.
 ///
-/// RV64 and x86_64 have this assembly hook. Other targets retain their
-/// established immediate Ready publication.
-pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool =
-    cfg!(any(target_arch = "riscv64", target_arch = "x86_64"));
+/// RV64, x86_64 and AArch64 (`__switch_el1`/`__switch_el2`) have this assembly
+/// hook. Every SMP target needs it: without it the outgoing Context is
+/// stealable by a peer between the SCHEDULER release and the register save.
+/// RISC-V32 is single-hart and retains immediate Ready publication.
+pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool = cfg!(any(
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+    target_arch = "aarch64"
+));
 
-#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+    target_arch = "aarch64"
+))]
 const _: [(); 1] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
+#[cfg(target_arch = "riscv32")]
 const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// Whether task→boot must clear scheduler identity before the raw switch.
 ///
@@ -361,21 +370,28 @@ const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// completed on the incoming stack. Other targets retain their existing path.
 pub const CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH: bool = !HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
-#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+    target_arch = "aarch64"
+))]
 const _: [(); 0] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
+#[cfg(target_arch = "riscv32")]
 const _: [(); 1] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
 
 /// Whether this target can prove the outgoing Context save from the incoming
 /// side of the same raw switch.  Keep Ready publication architecture-neutral:
 /// targets without that boundary retain their established queue semantics
-/// rather than acquiring a permanent RV64-only deferred-requeue state.
-pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool =
-    cfg!(any(target_arch = "riscv64", target_arch = "x86_64"));
+/// rather than acquiring a permanent target-specific deferred-requeue state.
+pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool = HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
-#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "x86_64",
+    target_arch = "aarch64"
+))]
 const _: [(); 1] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64"))]
+#[cfg(target_arch = "riscv32")]
 const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 
 /// Push task `id` with `priority` onto `hart_id`'s local ready queue.
@@ -617,19 +633,19 @@ pub fn abort_selected_switch(hart_id: usize) {
 }
 
 /// Task whose saved context has actually become active on `hart_id`.
+///
+/// Targets without the incoming-side hook never publish it, so their selected
+/// identity stands in.
 #[inline(always)]
 pub fn executing_task_id_for(hart_id: usize) -> usize {
     if hart_id >= MAX_HARTS {
         return 0;
     }
-    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-    {
+    if HAS_INCOMING_SWITCH_COMPLETION_HOOK {
         HART_LOCALS[hart_id]
             .executing_task_id
             .load(core::sync::atomic::Ordering::Acquire)
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
+    } else {
         current_task_id_for(hart_id)
     }
 }
@@ -649,15 +665,10 @@ pub fn set_executing_task_id(hart_id: usize, id: usize) {
 /// callback; other targets keep their established queue semantics.
 #[inline(always)]
 pub fn begin_outgoing_context_save(hart_id: usize, task_id: usize) {
-    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-    if hart_id < MAX_HARTS {
+    if HAS_OUTGOING_CONTEXT_SAVE_HOOK && hart_id < MAX_HARTS {
         HART_LOCALS[hart_id]
             .outgoing_context_save_task_id
             .store(task_id, core::sync::atomic::Ordering::Release);
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
-        let _ = (hart_id, task_id);
     }
 }
 
@@ -665,34 +676,23 @@ pub fn begin_outgoing_context_save(hart_id: usize, task_id: usize) {
 /// the old Context and execution is on the incoming stack.
 #[inline(always)]
 pub fn complete_outgoing_context_save(hart_id: usize) {
-    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-    if hart_id < MAX_HARTS {
+    if HAS_OUTGOING_CONTEXT_SAVE_HOOK && hart_id < MAX_HARTS {
         HART_LOCALS[hart_id]
             .outgoing_context_save_task_id
             .store(0, core::sync::atomic::Ordering::Release);
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
-        let _ = hart_id;
     }
 }
 
 /// Return the locally requeued task whose Context save has not completed.
 #[inline(always)]
 pub fn outgoing_context_save_task_id_for(hart_id: usize) -> usize {
-    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-    {
-        if hart_id < MAX_HARTS {
-            return HART_LOCALS[hart_id]
-                .outgoing_context_save_task_id
-                .load(core::sync::atomic::Ordering::Acquire);
-        }
+    if HAS_OUTGOING_CONTEXT_SAVE_HOOK && hart_id < MAX_HARTS {
+        HART_LOCALS[hart_id]
+            .outgoing_context_save_task_id
+            .load(core::sync::atomic::Ordering::Acquire)
+    } else {
+        0
     }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
-        let _ = hart_id;
-    }
-    0
 }
 
 /// Returns true while `task_id` is selected or executing on any hart.
@@ -726,11 +726,12 @@ pub fn steal_from_busiest(thief: usize) {
 /// Is `hart`'s queue visited by the victim scan?
 ///
 /// Harts 0 and 1 always are, which is the two-hart steal pair of every
-/// architecture: RV64 does not mark its boot hart in `HART_ONLINE`, and the
-/// single-hart steal probes queue work on an offline hart 1 on purpose. A hart
-/// above 1 exists only on x86 and only receives work once it is online (wakes
-/// and enqueues target the running hart or the online RT hart), so the scan
-/// skips the offline tail of the `MAX_HARTS` slots without taking its locks.
+/// architecture: host fixtures run without boot-time `HART_ONLINE`
+/// publication, and the single-hart steal probes queue work on an offline hart
+/// 1 on purpose. A hart above 1 exists only on x86 and only receives work once
+/// it is online (wakes and enqueues target the running hart or the online RT
+/// hart), so the scan skips the offline tail of the `MAX_HARTS` slots without
+/// taking its locks.
 fn steal_candidate(hart: usize) -> bool {
     hart < 2
         || crate::task::smp::HART_ONLINE
@@ -1016,5 +1017,38 @@ mod tests {
             pick_victim(0, 4, |hart| Some(stealable_in(&maps[hart], &|_| true))),
             Some(2)
         );
+    }
+
+    /// H-7 model: the origin hart has published `current = next` and released
+    /// SCHEDULER, but its raw switch has not yet saved the outgoing task. A
+    /// wake that queued that task on a peer hart must stay deferred there
+    /// until the incoming-side completion releases the save guard; only then
+    /// may the peer dispatch the (now saved) Context.
+    #[test]
+    fn woken_outgoing_task_is_not_dispatchable_before_its_save_completes() {
+        // Private hart slots and ids: no other host test touches these.
+        let (origin, peer) = (MAX_HARTS - 10, MAX_HARTS - 9);
+        let (outgoing, next) = (0x4807_0001, 0x4807_0002);
+        let normal = api::TaskPriority::Normal as u8;
+
+        // Scheduler under SCHEDULER: the outgoing identity is replaced by the
+        // incoming one, and the save guard plus selection pin are armed.
+        set_current_task_id(origin, next);
+        set_executing_task_id(origin, outgoing);
+        begin_outgoing_context_save(origin, outgoing);
+        set_selected_task_id(origin, next);
+        // A peer's wake lands before the origin's raw switch saved anything.
+        push_on_hart(peer, outgoing, normal);
+        assert!(owned_by_another_hart(peer, outgoing));
+        assert_eq!(pick_local_eligible(peer), None, "stale Context dispatched");
+
+        // Incoming side of the origin's switch: outgoing Context saved.
+        complete_outgoing_context_save(origin);
+        complete_selected_switch(origin, next);
+        assert!(!owned_by_another_hart(peer, outgoing));
+        assert_eq!(pick_local_eligible(peer), Some(outgoing));
+
+        set_current_task_id(origin, 0);
+        set_executing_task_id(origin, 0);
     }
 }

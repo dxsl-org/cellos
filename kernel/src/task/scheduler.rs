@@ -47,7 +47,7 @@ static DUMMY_VTABLE: RawWakerVTable =
     RawWakerVTable::new(|_| dummy_raw_waker(), |_| {}, |_| {}, |_| {});
 
 /// Publish boot ownership at the task→boot boundary on targets without an
-/// incoming-side completion hook.
+/// incoming-side completion hook (single-hart RISC-V32 only).
 ///
 /// Hook-backed targets leave outgoing identity visible until their incoming
 /// callback; other targets retain pre-switch publication.
@@ -2737,8 +2737,8 @@ impl Scheduler {
                 if !curr_ctx.is_null() && !next_ctx.is_null() {
                     // `cid` has been requeued but its saved Context is still
                     // live on this CPU.  Publish the no-steal guard immediately
-                    // before relinquishing SCHEDULER; RV64 clears it only after
-                    // `__switch` saved this Context on the incoming stack.
+                    // before relinquishing SCHEDULER; the incoming side of the
+                    // raw switch clears it only after this Context is saved.
                     rl::begin_outgoing_context_save(hart_id, cid);
                     if rl::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
                         rl::set_selected_task_id(hart_id, nid);
@@ -2764,10 +2764,9 @@ impl Scheduler {
                         .map(|t| &mut t.context as *mut _);
                     if let Some(c) = curr_ctx {
                         // There is no task successor, but boot is still an
-                        // incoming Context. RV64 keeps the outgoing zombie and
-                        // its hart attribution live until boot-side completion
-                        // has saved the Context; targets without that hook must
-                        // clear before entering boot.
+                        // incoming Context. Keep the outgoing zombie and its
+                        // hart attribution live until boot-side completion has
+                        // saved the Context.
                         rl::begin_outgoing_context_save(hart_id, cid);
                         prepare_task_to_boot_switch(hart_id);
                         return Some((c, core::ptr::null()));
@@ -2787,9 +2786,8 @@ impl Scheduler {
                     // registers before any cell SVC.
                     let curr_ctx = &mut task.context as *mut _;
                     // A remote IPC wake can race this task→idle fallback. Arm
-                    // before the raw switch; RV64 boot completion releases the
-                    // saved Context and clears attribution, while non-hook
-                    // targets clear before switching to boot.
+                    // before the raw switch; boot-side completion releases the
+                    // saved Context and clears attribution.
                     rl::begin_outgoing_context_save(hart_id, cid);
                     prepare_task_to_boot_switch(hart_id);
                     return Some((curr_ctx, core::ptr::null()));

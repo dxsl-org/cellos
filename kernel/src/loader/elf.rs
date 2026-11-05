@@ -3,23 +3,10 @@ use super::{ElfHeader, ElfParser};
 use types::*;
 use xmas_elf::ElfFile;
 
-/// Maximum user-space virtual address for RISC-V SV39.
-///
-/// SV39 splits the 39-bit VA space into:
-///   0x0000_0000_0000 – 0x003F_FFFF_FFFF  (user / lower half, 256 GB)
-///   0xFFC0_0000_0000 – 0xFFFF_FFFF_FFFF  (kernel / upper half, 256 GB)
-///
-/// 0x8000_0000 was wrong — it only allowed 2 GB and coincidentally matched
-/// the RISC-V physical RAM base (0x8000_0000 on QEMU virt), causing every
-/// cell ELF compiled at 0x8800_0000+ to be rejected.
-///
-/// The real boundary is half the SV39 address space: 2^38 = 0x40_0000_0000.
-/// Cells compiled at 0x0040_0000 (4 MB) are safely within this range.
-// SV39 user-half upper bound (256 GB). On 32-bit targets, checked arithmetic
-// below is the address-space bound because usize::MAX cannot represent the
-// exclusive 4 GiB limit.
-#[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
-const USER_VADDR_MAX: usize = 0x40_0000_0000; // 256 GB — SV39 user half
+/// Placement policy for every PT_LOAD (slot confinement, null page, stack
+/// guards); see the module docs.
+#[path = "image-va.rs"]
+pub(crate) mod image_va;
 
 pub struct ElfLoader;
 
@@ -40,14 +27,19 @@ pub struct LoadedPage {
 }
 
 impl ElfLoader {
-    /// Validate every PIE extent before any mapping or page-metadata allocation.
-    /// A large BSS must never spill into the next cell's still-unmapped slot.
-    pub(super) fn preflight_pages(elf: &ElfFile<'_>, load_base: usize) -> ViResult<usize> {
-        let slot_end = if load_base == 0 {
-            None
-        } else {
-            Some(super::va_alloc::slot_end(load_base).ok_or(ViError::InvalidInput)?)
-        };
+    /// Validate every PT_LOAD extent against the slot this spawn owns before
+    /// any mapping or page-metadata allocation (see [`image_va`]). A large BSS
+    /// must never spill into the next cell's still-unmapped slot, and no image
+    /// may cover the null page or a stack guard page.
+    ///
+    /// `load_base` is added to every `p_vaddr` (PIE base, or `0` for a fixed-VA
+    /// image); `slot_base` is the slot `va_alloc` handed this spawn.
+    pub(super) fn preflight_pages(
+        elf: &ElfFile<'_>,
+        load_base: usize,
+        slot_base: usize,
+    ) -> ViResult<usize> {
+        let slot = image_va::ImageSlot::of(slot_base).ok_or(ViError::InvalidInput)?;
         let mut pages = 0usize;
         for ph in elf.program_iter() {
             if !matches!(ph.get_type(), Ok(xmas_elf::program::Type::Load)) {
@@ -59,27 +51,34 @@ impl ElfLoader {
                 .checked_add(relative)
                 .ok_or(ViError::InvalidInput)?;
             let end = start.checked_add(size).ok_or(ViError::InvalidInput)?;
-            let page_start = start & !(crate::memory::paging::PAGE_SIZE - 1);
-            let page_end = end
-                .checked_add(crate::memory::paging::PAGE_SIZE - 1)
-                .ok_or(ViError::InvalidInput)?
-                & !(crate::memory::paging::PAGE_SIZE - 1);
-            if slot_end
-                .is_some_and(|limit| start >= limit || page_start < load_base || page_end > limit)
-            {
-                log::error!(
-                    "ELF: PIE extent {:#x}..{:#x} exceeds reserved {} MiB slot",
-                    start,
-                    end,
-                    super::va_alloc::CELL_VA_STRIDE / (1024 * 1024)
-                );
-                return Err(ViError::PermissionDenied);
-            }
+            let segment_pages = image_va::admit_segment(
+                start,
+                end,
+                slot,
+                crate::task::stack::overlaps_stack_reservation,
+            )?;
             pages = pages
-                .checked_add((page_end - page_start) / crate::memory::paging::PAGE_SIZE)
+                .checked_add(segment_pages)
                 .ok_or(ViError::InvalidInput)?;
         }
         Ok(pages)
+    }
+
+    /// The slot a fixed-VA (ET_EXEC) image is linked into: the one containing
+    /// its lowest PT_LOAD. The caller must claim it with
+    /// `va_alloc::reserve_cell_va` before loading; `preflight_pages` then holds
+    /// every other PT_LOAD to the same slot.
+    pub fn fixed_image_slot(&self, data: &[u8]) -> ViResult<usize> {
+        let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
+        let mut lowest: Option<usize> = None;
+        for ph in elf.program_iter() {
+            if matches!(ph.get_type(), Ok(xmas_elf::program::Type::Load)) {
+                let vaddr =
+                    usize::try_from(ph.virtual_addr()).map_err(|_| ViError::InvalidInput)?;
+                lowest = Some(lowest.map_or(vaddr, |low| low.min(vaddr)));
+            }
+        }
+        image_va::fixed_image_slot(lowest.ok_or(ViError::InvalidInput)?)
     }
 
     /// Load loadable segments into memory.
@@ -88,21 +87,27 @@ impl ElfLoader {
     /// - For fixed-VA cells (ET_EXEC, non-PIE): pass `0` — uses p_vaddr directly.
     /// - For PIE cells (ET_DYN): pass the VA base allocated by `va_alloc::alloc_cell_va`.
     ///
+    /// `slot_base` is the `va_alloc` slot this spawn owns (the PIE base, or the
+    /// slot claimed by `va_alloc::reserve_cell_va` for a fixed-VA image); every
+    /// page must lie inside it.
+    ///
     /// Returns one [`LoadedPage`] per mapped page so the caller can (a) hand the
     /// frames to `CellSegments` for reclamation and (b) run the W^X lowering pass
     /// once relocations are applied.
     ///
     /// # Errors
     /// - `ViError::InvalidInput` — malformed headers (file_size > mem_size, ranges
-    ///   outside the ELF buffer, arithmetic overflow).
-    /// - `ViError::PermissionDenied` — segment VA outside user space, a VA already
-    ///   owned by another live cell or kernel MMIO, or a PT_LOAD declaring W+X.
+    ///   outside the ELF buffer, arithmetic overflow) or `slot_base` not a slot.
+    /// - `ViError::PermissionDenied` — a page outside the owned slot, on the null
+    ///   page or a stack run, a VA already owned by another live cell or kernel
+    ///   MMIO, or a PT_LOAD declaring W+X.
     /// - `ViError::OutOfMemory` — no frame available, or the mapping failed.
     pub fn load_segments(
         &self,
         data: &[u8],
         frame_allocator: &mut crate::memory::frame::FrameAllocator,
         load_base: usize,
+        slot_base: usize,
     ) -> ViResult<alloc::vec::Vec<LoadedPage>> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
         // Record each mapped page so the cell's segment frames can be reclaimed
@@ -114,7 +119,7 @@ impl ElfLoader {
         // the kernel instead of failing the spawn (measured 2026-10-03: the growth
         // to 512 entries / 12 288 bytes is what ended the capacity sweep). One
         // entry per mapped page; summing page-aligned PT_LOAD spans is an upper bound.
-        let page_bound = Self::preflight_pages(&elf, load_base)?;
+        let page_bound = Self::preflight_pages(&elf, load_base, slot_base)?;
         let mut mapped: alloc::vec::Vec<LoadedPage> = alloc::vec::Vec::new();
         mapped
             .try_reserve_exact(page_bound)
@@ -178,26 +183,12 @@ impl ElfLoader {
                     Self::unwind(&mapped, frame_allocator);
                     return Err(ViError::InvalidInput);
                 }
-                // vaddr + mem_size must not overflow and must lie below the
-                // kernel VA window — prevents user ELF clobbering kernel maps.
+                // vaddr + mem_size must not overflow; preflight already held the
+                // extent to the owned slot, which lies below `USER_VADDR_MAX`.
                 let end_addr = vaddr
                     .checked_add(mem_size)
                     .ok_or(ViError::InvalidInput)
                     .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
-                #[cfg(not(any(
-                    target_arch = "riscv32",
-                    target_arch = "x86",
-                    target_arch = "arm"
-                )))]
-                if vaddr >= USER_VADDR_MAX || end_addr > USER_VADDR_MAX {
-                    log::error!(
-                        "ELF: segment VA range 0x{:X}-0x{:X} outside user space",
-                        vaddr,
-                        end_addr
-                    );
-                    Self::unwind(&mapped, frame_allocator);
-                    return Err(ViError::PermissionDenied);
-                }
 
                 let start_addr = vaddr;
 

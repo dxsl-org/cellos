@@ -20,14 +20,18 @@
 //! test images — see `super::syscall::domain_grant_lifecycle_supported`).
 //!
 //! The record is owned by the `PAGE_GRANT_TABLE`/`REG_GRANT_TABLE` rows in
-//! `super::syscall`; this module is the state machine they embed.
+//! `super::syscall`; this module is the state machine they embed. Publication
+//! and revocation are ordered by [`GrantLifecycle`] (lock order and the
+//! no-mapping-after-revoke invariant are documented there).
 
+pub(crate) use super::domain_grant_gate::DomainGrantState;
+use super::domain_grant_gate::GrantLifecycle;
 use super::domain_switch::DomainRef;
 use crate::memory::address_space::{AddressSpace, AddressSpaceError};
 use crate::memory::paging::{Flags, PAGE_SIZE};
 use crate::sync::Spinlock;
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use types::{CellId, GrantPerm, PhysAddr, VAddr};
 
 /// Marker prefix for the boot fixture.
@@ -40,13 +44,6 @@ use types::{CellId, GrantPerm, PhysAddr, VAddr};
 pub(crate) const ARCH_TAG: &str = "S22-RV64";
 #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
 pub(crate) const ARCH_TAG: &str = "S22-AARCH64";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DomainGrantState {
-    Live = 1,
-    Revoking = 2,
-    Revoked = 3,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DomainGrantError {
@@ -97,7 +94,7 @@ pub(crate) struct DomainGrant {
     owner_size: usize,
     owner_drained: AtomicBool,
     receiver: Spinlock<Option<DomainReceiver>>,
-    state: AtomicU8,
+    lifecycle: GrantLifecycle,
 }
 
 impl DomainGrant {
@@ -109,7 +106,7 @@ impl DomainGrant {
             owner_size: size,
             owner_drained: AtomicBool::new(false),
             receiver: Spinlock::new(None),
-            state: AtomicU8::new(DomainGrantState::Live as u8),
+            lifecycle: GrantLifecycle::new(),
         }
     }
 
@@ -119,12 +116,10 @@ impl DomainGrant {
         self.owner.address_space().is_live()
     }
 
+    /// Unordered snapshot for early refusals; [`Self::publish`] re-checks under
+    /// the lifecycle gate.
     pub(crate) fn state(&self) -> DomainGrantState {
-        match self.state.load(Ordering::Acquire) {
-            1 => DomainGrantState::Live,
-            2 => DomainGrantState::Revoking,
-            _ => DomainGrantState::Revoked,
-        }
+        self.lifecycle.state()
     }
 
     /// Is the receiver mapping already exactly `(cell, generation, root, rights)`?
@@ -152,6 +147,10 @@ impl DomainGrant {
     /// change revokes the old PTE. Every page is mapped transactionally; on any
     /// failure the pages already mapped are unmapped (with acknowledgement) and
     /// nothing is published.
+    ///
+    /// The `Live` check, the map loop and the receiver record run inside one
+    /// hold of the lifecycle gate, so a concurrent [`Self::revoke`] either
+    /// drains this mapping or makes this call map nothing.
     pub(crate) fn publish(
         &self,
         root: &Arc<AddressSpace>,
@@ -159,9 +158,19 @@ impl DomainGrant {
         generation: u64,
         rights: Flags,
     ) -> Result<(), DomainGrantError> {
-        if self.state() != DomainGrantState::Live {
-            return Err(DomainGrantError::NotLive);
-        }
+        self.lifecycle.while_live(DomainGrantError::NotLive, || {
+            self.publish_live(root, cell, generation, rights)
+        })
+    }
+
+    /// Body of [`Self::publish`]; the caller holds the gate and saw `Live`.
+    fn publish_live(
+        &self,
+        root: &Arc<AddressSpace>,
+        cell: CellId,
+        generation: u64,
+        rights: Flags,
+    ) -> Result<(), DomainGrantError> {
         if rights.bits() & Flags::EXECUTE != 0 || rights.bits() & Flags::READ == 0 {
             return Err(DomainGrantError::UnsupportedRights);
         }
@@ -174,7 +183,7 @@ impl DomainGrant {
         // A different tuple (re-share, target change or same-recipient
         // downgrade) revokes the old receiver PTE and shoots it down before the
         // new one is published.
-        self.drain_receiver()?;
+        self.drain_receiver_gated()?;
 
         let base = self.owner_base;
         let n_pages = self.owner_size.div_ceil(PAGE_SIZE).max(1);
@@ -217,6 +226,11 @@ impl DomainGrant {
     /// Remove the receiver PTE and confirm the invalidation. `Ok(())` means the
     /// receiver half is drained and its retained root may be dropped.
     pub(crate) fn drain_receiver(&self) -> Result<(), DomainGrantError> {
+        self.lifecycle.serialized(|| self.drain_receiver_gated())
+    }
+
+    /// [`Self::drain_receiver`] for a caller already holding the gate.
+    fn drain_receiver_gated(&self) -> Result<(), DomainGrantError> {
         let Some((root, base, size)) = ({
             let guard = self.receiver.lock();
             guard
@@ -279,25 +293,14 @@ impl DomainGrant {
     /// quiescence. Idempotent: a record left `Revoking` by an unacknowledged
     /// invalidation is retried with the same effect.
     pub(crate) fn revoke(&self) -> Result<(), DomainGrantError> {
-        match self.state() {
-            DomainGrantState::Revoked => return Ok(()),
-            DomainGrantState::Live => {
-                let _ = self.state.compare_exchange(
-                    DomainGrantState::Live as u8,
-                    DomainGrantState::Revoking as u8,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                );
-            }
-            DomainGrantState::Revoking => {}
-        }
-        if self.state() == DomainGrantState::Revoked {
+        // Any publication that saw `Live` has recorded its receiver by the time
+        // this returns, so the drain below sees it; later ones see `Revoking`.
+        if self.lifecycle.begin_revoke() == DomainGrantState::Revoked {
             return Ok(());
         }
         self.drain_receiver()?;
         self.drain_owner()?;
-        self.state
-            .store(DomainGrantState::Revoked as u8, Ordering::Release);
+        self.lifecycle.finish_revoke();
         Ok(())
     }
 }

@@ -195,7 +195,8 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
 
 // ── EL2 context switch ────────────────────────────────────────────────────────
 //
-// `__switch_el2` mirrors `__switch_el1` (context.rs global_asm) but reads/writes
+// `__switch_el2` mirrors `__switch_el1` (context.rs global_asm), including the
+// `vi_context_switch_complete` call on the incoming stack, but reads/writes
 // `elr_el2`/`spsr_el2` instead of `elr_el1`/`spsr_el1`.
 // CpuContext offsets (see context.rs):
 //   x19-x30: 0..88   sp: 96   elr: 104   spsr: 112   sp_el0: 120   daif: 128
@@ -224,21 +225,27 @@ __switch_el2:
     mrs  x9,  daif
     str  x9,       [x0, #128]
 
-    ldp  x19, x20, [x1, #0]
-    ldp  x21, x22, [x1, #16]
-    ldp  x23, x24, [x1, #32]
-    ldp  x25, x26, [x1, #48]
-    ldp  x27, x28, [x1, #64]
-    ldp  x29, x30, [x1, #80]
-    ldr  x9,       [x1, #96]
+    // Outgoing Context stored: adopt the incoming stack and publish completion.
+    mov  x19, x1
+    ldr  x9,       [x19, #96]
     mov  sp,  x9
-    ldp  x9,  x10, [x1, #104]
-    msr  elr_el2,  x9
-    msr  spsr_el2, x10
-    ldr  x9,       [x1, #120]
-    msr  sp_el0,   x9
-    ldr  x9,       [x1, #128]
-    msr  daif,     x9
+    mov  x29, xzr
+    bl   vi_context_switch_complete
+
+    mov  x9,  x19
+    ldp  x19, x20, [x9, #0]
+    ldp  x21, x22, [x9, #16]
+    ldp  x23, x24, [x9, #32]
+    ldp  x25, x26, [x9, #48]
+    ldp  x27, x28, [x9, #64]
+    ldp  x29, x30, [x9, #80]
+    ldp  x10, x11, [x9, #104]
+    msr  elr_el2,  x10
+    msr  spsr_el2, x11
+    ldr  x10,      [x9, #120]
+    msr  sp_el0,   x10
+    ldr  x10,      [x9, #128]
+    msr  daif,     x10
     ret
 "#
 );

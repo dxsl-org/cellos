@@ -255,26 +255,25 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
         // the emulator interleaves vCPUs — so the wait needs a budget, not
         // a yield.
         core::hint::spin_loop();
-        // Two or more harts can shoot each other down at once, each with IF
-        // possibly clear: answering our own requests here is what keeps a
-        // cycle of waiters from deadlocking. The hart is re-read on every
-        // pass instead of reusing `me`: callers run with IF either clear or
-        // set (a debug_assert on IF would be wrong for the latter), and with
-        // IF set a timer ISR may switch this context away and resume it on
-        // another CPU. Servicing a stale id would publish a completion for a
-        // hart whose TLB this CPU never flushed — a forged acknowledgement —
-        // and would leave the CPU we now run on (possibly in `requested`)
-        // unanswered. The read and the service run with IF masked, so no
-        // switch can fall between them; `service_tlb_flush(current)` then
-        // flushes exactly the CPU it acknowledges for. Masking only narrows
-        // the interrupt window, it never widens it.
-        #[cfg(target_arch = "x86_64")]
-        {
-            let flags = hal::arch::save_and_disable_interrupts();
-            smp::service_tlb_flush(crate::task::hart_local::current_hart_id());
-            // SAFETY: restores exactly the IF state saved above.
-            unsafe { hal::arch::restore_sstatus(flags) };
-        }
+        // Two or more harts can shoot each other down at once, each with
+        // interrupts possibly masked: answering our own requests here is what
+        // keeps a cycle of waiters from deadlocking. Every arch needs it now
+        // that hart 0 is a target too — hart 0 and hart 1 can each wait on the
+        // other. The hart is re-read on every pass instead of reusing `me`:
+        // callers run with interrupts either masked or not (a debug_assert
+        // would be wrong for the latter), and with them unmasked a timer ISR
+        // may switch this context away and resume it on another CPU.
+        // Servicing a stale id would publish a completion for a hart whose TLB
+        // this CPU never flushed — a forged acknowledgement — and would leave
+        // the CPU we now run on (possibly in `requested`) unanswered. The read
+        // and the service run with interrupts masked, so no switch can fall
+        // between them; `service_tlb_flush(current)` then flushes exactly the
+        // CPU it acknowledges for. Masking only narrows the interrupt window,
+        // it never widens it.
+        let flags = hal::arch::save_and_disable_interrupts();
+        smp::answer_tlb_flush_in_spin(crate::task::hart_local::current_hart_id());
+        // SAFETY: restores exactly the interrupt state saved above.
+        unsafe { hal::arch::restore_sstatus(flags) };
     }
     Ok(())
 }

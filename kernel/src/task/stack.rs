@@ -8,6 +8,16 @@ use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
 
+#[path = "stack-reservations.rs"]
+pub(crate) mod reservations;
+use reservations::STACK_RESERVATIONS;
+
+/// Does `[start, end)` overlap a live stack run, guard pages included? The ELF
+/// loader refuses such pages: an unmapped guard is not a free VA.
+pub(crate) fn overlaps_stack_reservation(start: usize, end: usize) -> bool {
+    STACK_RESERVATIONS.overlaps(start, end)
+}
+
 #[cfg(feature = "test-hooks")]
 const STACK_WATERMARK_PATTERN: u8 = 0xA5;
 
@@ -280,6 +290,15 @@ impl Stack {
         // Top is at the END of the allocated range.
         let top = base_addr + (total_pages * PAGE_SIZE);
 
+        // The guard VAs are now unmapped but owned: record the run so no cell
+        // image can be placed over them (see `reservations`). FRAME_ALLOCATOR,
+        // held since before the unmap, also excludes the ELF loader until then.
+        if let Err(error) = STACK_RESERVATIONS.insert(base_addr, top) {
+            error!("Stack alloc refused: run 0x{:X} not recorded", base_addr);
+            release_frames(allocator, base_addr, total_pages);
+            return Err(error);
+        }
+
         #[cfg(all(
             feature = "native-domains",
             feature = "test-hooks",
@@ -298,6 +317,7 @@ impl Stack {
                     Ok(id) => Some(id),
                     Err(()) => {
                         release_frames(allocator, base_addr, total_pages);
+                        STACK_RESERVATIONS.remove(base_addr, top);
                         return Err(ViError::NotSupported);
                     }
                 }
@@ -443,6 +463,9 @@ impl Drop for Stack {
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
             release_frames(allocator, self.base, total_pages);
+            // Only now are the guard VAs identity-mapped again, so the loader's
+            // collision check takes over from the reservation.
+            STACK_RESERVATIONS.remove(self.base, self.base + total_pages * PAGE_SIZE);
             #[cfg(cellos_p01_trace)]
             crate::p01_resources::finish(self.p01_obligation.take(), 1);
         }
@@ -474,22 +497,20 @@ pub struct CellSegments {
     pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
     /// ELF pages whose final mapping grants the Cell write permission.
     writable_pages: alloc::vec::Vec<types::VAddr>,
-    /// VA base allocated by `va_alloc::alloc_cell_va` for PIE cells; `0` for
-    /// fixed-VA cells.  Returned to the allocator's free list on drop.
-    pie_va_base: usize,
+    /// VA slot this image owns (`va_alloc::alloc_cell_va` for PIE,
+    /// `va_alloc::reserve_cell_va` for fixed-VA images); `0` for kernel-built
+    /// test segments. Returned to the allocator's free list on drop.
+    va_slot: usize,
     #[cfg(cellos_p01_trace)]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 
 impl CellSegments {
-    pub fn new(
-        pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
-        pie_va_base: usize,
-    ) -> Self {
+    pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, va_slot: usize) -> Self {
         Self {
             pages,
             writable_pages: alloc::vec::Vec::new(),
-            pie_va_base,
+            va_slot,
             #[cfg(cellos_p01_trace)]
             p01_obligation: None,
         }
@@ -498,12 +519,12 @@ impl CellSegments {
     pub fn with_writable_pages(
         pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
         writable_pages: alloc::vec::Vec<types::VAddr>,
-        pie_va_base: usize,
+        va_slot: usize,
     ) -> Self {
         Self {
             pages,
             writable_pages,
-            pie_va_base,
+            va_slot,
             #[cfg(cellos_p01_trace)]
             p01_obligation: None,
         }
@@ -619,8 +640,8 @@ impl Drop for CellSegments {
         if self.p01_obligation.is_some() {
             crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }
-        if self.pie_va_base != 0 {
-            crate::loader::va_alloc::free_cell_va(self.pie_va_base);
+        if self.va_slot != 0 {
+            crate::loader::va_alloc::free_cell_va(self.va_slot);
         }
     }
 }

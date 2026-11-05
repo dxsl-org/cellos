@@ -574,12 +574,18 @@ fn run_race_fixture() -> bool {
     let mut race_dst = [0u8; 128];
     let copy_result = staged_copy.commit(race_dst.as_mut_ptr());
 
+    // The revoker's unmap invalidates on every online hart, this one
+    // included, and this boot-hart wait does not take the IPI that would
+    // answer it (observed: "hart 0 silent through the 2000000 tick probe").
+    // Answer here, exactly as the trap path would.
+    let me = super::hart_local::current_hart_id();
     let mut drained = false;
     for _ in 0..400_000_000usize {
         if RACE_DONE.load(Ordering::Acquire) == 1 {
             drained = true;
             break;
         }
+        smp::answer_tlb_flush_in_spin(me);
         core::hint::spin_loop();
     }
     // Terminal-marker hygiene: the console writer has no cross-hart line
@@ -591,6 +597,7 @@ fn run_race_fixture() -> bool {
         {
             break;
         }
+        smp::answer_tlb_flush_in_spin(me);
         core::hint::spin_loop();
     }
     // Settle margin: ownership publication precedes the boundary log write,

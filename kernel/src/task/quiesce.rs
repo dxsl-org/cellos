@@ -663,22 +663,19 @@ impl QuiesceHarts for KernelHarts {
 #[cfg(target_arch = "riscv64")]
 const KERNEL_ACK_BUDGET_TICKS: u64 = 10 * hal::common::timer::TICKS_PER_10MS;
 
-/// The logical id of the hart that runs `kmain`. It never publishes
-/// `smp::HART_ONLINE` (`task::init` installs it as hart 0 before there is an SMP
-/// layer to publish into), so the online set has to name it explicitly.
+/// The logical id of the hart that runs `kmain`; the RV64 lane fixture drives
+/// the park hook from it.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 const BOOT_HART: usize = 0;
 
 /// Record every hart that can run kernel code for a request issued by
-/// `requester`, including the boot hart.
+/// `requester`.
 ///
-/// The boot hart never publishes `smp::HART_ONLINE` — it is running before there
-/// is anything to publish into — so the published secondary list alone is an
-/// incomplete online set. The requester used to be unioned in to cover that,
-/// which is only enough while the requester *is* the boot hart: a capture
-/// requested from hart 1 would leave hart 0 out of the target set, and a hart
-/// executing kernel code that can mutate the image would never be asked to stop.
+/// `smp::online_harts()` names the boot hart too (`task::init` publishes it
+/// before any secondary starts), so a capture requested from hart 1 still asks
+/// hart 0 to stop. The requester is running kernel code by definition and is
+/// recorded even if its own publication is not yet visible.
 fn online_hart_ids(requester: usize, out: &mut HartSet) -> Result<(), QuiesceError> {
-    out.insert(BOOT_HART)?;
     out.insert(requester)?;
     for hart in crate::task::smp::online_harts() {
         out.insert(hart)?;
@@ -1446,11 +1443,10 @@ mod tests {
     #[test]
     fn live_online_set_names_the_boot_hart_for_any_requester() {
         // The host cannot make `current_hart_id()` return a secondary hart, so the
-        // requester is named explicitly here — which is the whole point of the
-        // case: hart 0 runs kernel code without ever publishing `HART_ONLINE`, so a
-        // request issued from hart 1 has to name it from outside the published
-        // set. Before that, a capture requested from hart 1 would have left hart 0
-        // running and reported success on a set it never froze.
+        // requester is named explicitly here. The boot hart reaches the set only
+        // through its boot-time `HART_ONLINE` publication — the same path every
+        // remote shootdown uses — so a capture requested from hart 1 freezes it.
+        crate::task::smp::publish_boot_hart_online();
         let mut set = HartSet::new();
         online_hart_ids(1, &mut set).expect("ids are bounded");
         let ids: Vec<usize> = set.iter().collect();

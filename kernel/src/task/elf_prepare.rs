@@ -59,7 +59,7 @@ fn collect_reserved<T>(iter: impl ExactSizeIterator<Item = T>) -> Result<Vec<T>,
     Ok(out)
 }
 
-/// Own the PIE reservation before any subsequent fallible preparation step.
+/// Own the image's VA slot before any subsequent fallible preparation step.
 struct PreparationVa(usize);
 impl Drop for PreparationVa {
     fn drop(&mut self) {
@@ -101,18 +101,28 @@ pub fn prepare_elf_task(
 
     let loader = ElfLoader;
     let header = loader.parse_header(elf_data)?;
-    let load_base = if super::elf_is_pie(elf_data) {
-        crate::loader::va_alloc::alloc_cell_va().ok_or(ViError::OutOfMemory)?
+    // Every image owns exactly one VA slot and may map only inside it: a PIE
+    // takes any free slot; a fixed-VA image claims the slot it is linked into
+    // and is refused when another spawn holds it, so no image page can land
+    // on the null page, a stack guard or a foreign slot.
+    let (load_base, slot_base) = if super::elf_is_pie(elf_data) {
+        let base = crate::loader::va_alloc::alloc_cell_va().ok_or(ViError::OutOfMemory)?;
+        (base, base)
     } else {
-        0
+        let slot = loader.fixed_image_slot(elf_data)?;
+        if !crate::loader::va_alloc::reserve_cell_va(slot) {
+            log::error!("ELF: fixed-VA image slot {slot:#x} is owned by another cell");
+            return Err(ViError::PermissionDenied);
+        }
+        (0, slot)
     };
-    let mut va_rollback = PreparationVa(load_base);
+    let mut va_rollback = PreparationVa(slot_base);
     crate::loader::atomic_checkpoint("AP-01")?;
 
     let seg_pages = {
         let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = frames.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader.load_segments(elf_data, allocator, load_base)?
+        loader.load_segments(elf_data, allocator, load_base, slot_base)?
     };
     let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
     #[cfg(feature = "test-hooks")]
@@ -159,7 +169,7 @@ pub fn prepare_elf_task(
         crate::memory::heap::p01_owner::adopt_vec(&writable_pages);
     }
     let segments =
-        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, load_base);
+        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, slot_base);
     // Constructor is infallible: the segment owner now exclusively owns both
     // frame reclamation and PIE release, including every later failure edge.
     mapping_rollback.0 = None;

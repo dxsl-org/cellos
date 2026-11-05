@@ -79,7 +79,7 @@ fn test_pie_slot_admission_precedes_mapping() {
     assert!(super::va_alloc::slot_end(base + 1).is_none());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
     assert_eq!(
-        super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(),
+        super::elf::ElfLoader::preflight_pages(&elf, base, base).unwrap(),
         stride / 4096
     );
 
@@ -88,7 +88,7 @@ fn test_pie_slot_admission_precedes_mapping() {
     image[104..112].copy_from_slice(&((stride - 1) as u64).to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
     assert_eq!(
-        super::elf::ElfLoader::preflight_pages(&elf, base).unwrap(),
+        super::elf::ElfLoader::preflight_pages(&elf, base, base).unwrap(),
         stride / 4096
     );
 
@@ -97,7 +97,7 @@ fn test_pie_slot_admission_precedes_mapping() {
     let allocator = frames.as_mut().expect("ELF selftest needs frame allocator");
     let before = allocator.used_frames();
     assert!(matches!(
-        super::ElfLoader.load_segments(&image, allocator, base),
+        super::ElfLoader.load_segments(&image, allocator, base, base),
         Err(ViError::PermissionDenied)
     ));
     assert_eq!(
@@ -113,17 +113,39 @@ fn test_pie_slot_admission_precedes_mapping() {
     image[104..112].copy_from_slice(&(128u64 * 1024 * 1024).to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
     assert_eq!(
-        super::elf::ElfLoader::preflight_pages(&elf, base).is_ok(),
+        super::elf::ElfLoader::preflight_pages(&elf, base, base).is_ok(),
         cfg!(feature = "large-cell-va")
     );
     image[80..88].copy_from_slice(&u64::MAX.to_le_bytes());
     let elf = xmas_elf::ElfFile::new(&image).unwrap();
     assert!(matches!(
-        super::elf::ElfLoader::preflight_pages(&elf, base),
+        super::elf::ElfLoader::preflight_pages(&elf, base, base),
         Err(ViError::InvalidInput)
+    ));
+
+    // Fixed-VA (ET_EXEC) images: the null page has no slot, and the slot a
+    // live PIE holds cannot be claimed or reached from another slot.
+    image[16..18].copy_from_slice(&2u16.to_le_bytes()); // ET_EXEC
+    image[80..88].copy_from_slice(&0u64.to_le_bytes());
+    image[104..112].copy_from_slice(&4096u64.to_le_bytes());
+    assert!(matches!(
+        super::ElfLoader.fixed_image_slot(&image),
+        Err(ViError::PermissionDenied)
+    ));
+    image[80..88].copy_from_slice(&((base + 0x1000) as u64).to_le_bytes());
+    assert_eq!(super::ElfLoader.fixed_image_slot(&image), Ok(base));
+    assert!(
+        !super::va_alloc::reserve_cell_va(base),
+        "fixed-VA image claimed a live PIE slot"
+    );
+    let elf = xmas_elf::ElfFile::new(&image).unwrap();
+    assert!(matches!(
+        super::elf::ElfLoader::preflight_pages(&elf, 0, base + stride),
+        Err(ViError::PermissionDenied)
     ));
     super::va_alloc::free_cell_va(base);
     log::info!("  [ok] PIE slot boundaries reject oversized images before mapping");
+    log::info!("  [ok] fixed-VA images refused on the null page and foreign slots");
 }
 
 // ─── spawn_from_path path validation ─────────────────────────────────────────

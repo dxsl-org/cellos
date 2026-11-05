@@ -19,6 +19,19 @@ pub mod dir_inherit;
     )
 ))]
 pub(crate) mod domain_grant;
+/// Publish/revoke ordering for `domain_grant`; host-tested on its own.
+#[cfg(any(
+    test,
+    all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    )
+))]
+#[path = "task/domain-grant-gate.rs"]
+pub(crate) mod domain_grant_gate;
 #[cfg(all(
     feature = "native-domains",
     any(
@@ -833,6 +846,9 @@ pub fn init() {
     // Install hart-local state for hart 0 BEFORE the scheduler or timer start,
     // so current_cell_id() works correctly once interrupts are enabled.
     hart_local::install(0);
+    // Hart 0 is online from here on, on every architecture, so every later
+    // remote shootdown or flush-epoch set names it.
+    smp::publish_boot_hart_online();
 
     info!("Process: Initializing Scheduler...");
     let mut sched_guard = SCHEDULER.lock();
@@ -1119,45 +1135,6 @@ pub extern "Rust" fn vi_timer_tick() {
     yield_cpu();
 }
 
-/// Incoming side of an AArch64 raw switch without the assembly completion
-/// callback: it runs after the switch has changed
-/// stacks, i.e. in the incoming context.
-///
-/// The plan's own flag decides the safe-root acknowledgement. Inferring it from
-/// `current_domain() == 0` cannot work: a safe-root transition does not clear the
-/// hart's domain id — `acknowledge_safe_root` is what clears it — so the
-/// inference is false exactly when it is needed, and the acknowledgement, the
-/// root's release and the user-copy guard reset never happen.
-#[cfg(all(feature = "native-domains", target_arch = "aarch64"))]
-pub(crate) fn complete_incoming_switch(hart: usize) {
-    if hart_local::take_safe_root_pending() {
-        hart_local::acknowledge_safe_root();
-    }
-    // The displaced root's execution pin is released here on every architecture;
-    // the RV64 callback does the same after its own bookkeeping.
-    if let Some(space) = hart_local::take_staged_execution_release() {
-        let _ = space.set_current_hart(hart, false);
-    }
-    user_copy::clear_guard_for_context_switch();
-    // Phase 02: read the register this (already-resumed) context is translating
-    // through. Placed after the safe-root acknowledge on purpose — that call is
-    // what makes a stale published domain id unreadable here.
-    #[cfg(all(
-        feature = "native-domains",
-        feature = "test-hooks",
-        any(target_arch = "aarch64", target_arch = "x86_64")
-    ))]
-    crate::task::domain_switch_tests::observe_incoming_live_root();
-    // Same point, opposite edge: this is where the displaced root's release was
-    // attempted, so a domain teardown is observable here.
-    #[cfg(all(
-        feature = "native-domains",
-        feature = "test-hooks",
-        any(target_arch = "aarch64", target_arch = "x86_64")
-    ))]
-    crate::task::domain_switch_tests::observe_domain_teardown(hart);
-}
-
 /// Retire a remote-root switch only from the incoming context, after the raw
 /// context switch has changed stacks. Trap entry is intentionally not an ACK:
 /// the interrupted retiring task can still execute its outgoing kernel path.
@@ -1171,9 +1148,11 @@ pub extern "C" fn vi_context_switch_complete() {
     let pinned = hart_local::ready::selected_task_id_for(hart);
     let switched_to_boot =
         pinned == 0 && hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
-    // RV64 reaches this callback only after `__switch` has saved every
-    // callee-save register and CSR of the outgoing Context. Release the
-    // ready-queue steal guard before publishing the incoming ownership.
+    // Every hook-backed raw switch (RV64 `__switch`, x86_64 `switch_with_root`,
+    // AArch64 `__switch_el1`/`__switch_el2`) reaches this callback only after
+    // it saved every callee-save register and system register of the outgoing
+    // Context. Release the ready-queue steal guard before publishing the
+    // incoming ownership.
     hart_local::ready::complete_outgoing_context_save(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_outgoing_save_completion(hart);
@@ -1201,7 +1180,11 @@ pub extern "C" fn vi_context_switch_complete() {
     }
     #[cfg(all(
         feature = "native-domains",
-        any(target_arch = "riscv64", target_arch = "x86_64")
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     ))]
     {
         let safe_root = hart_local::take_safe_root_pending();
@@ -1217,10 +1200,14 @@ pub extern "C" fn vi_context_switch_complete() {
         }
         user_copy::clear_guard_for_context_switch();
     }
+    // Phase 02 domain witnesses: read the live root on the resumed context's
+    // own stack. Placed after the safe-root acknowledge on purpose — that call
+    // is what makes a stale published domain id unreadable here, and it is
+    // where the displaced root's release was attempted.
     #[cfg(all(
         feature = "native-domains",
         feature = "test-hooks",
-        target_arch = "x86_64"
+        any(target_arch = "aarch64", target_arch = "x86_64")
     ))]
     {
         domain_switch_tests::observe_incoming_live_root();
@@ -1657,6 +1644,16 @@ pub fn yield_cpu() {
     #[cfg(cellos_g1_cpu)]
     cpu_accounting::safe_point();
 
+    // AArch64 reaches this point from the boot idle loop with IRQs unmasked,
+    // and the SCHEDULER guard restores that state when it drops. Mask from
+    // selection through the raw switch: a timer IRQ in that window would
+    // re-enter the scheduler after this hart published its selected and
+    // outgoing-save identities but before the switch, and save the IRQ
+    // activation into the selected task's Context. The incoming Context
+    // restores its own DAIF; this activation restores the captured state when
+    // it resumes, at the end of `yield_cpu`.
+    #[cfg(target_arch = "aarch64")]
+    let outgoing_daif = crate::hal::arch::save_and_disable_interrupts();
     let hart_id = hart_local::current_hart_id();
     #[cfg(all(
         feature = "native-domains",
@@ -1795,11 +1792,6 @@ pub fn yield_cpu() {
                 crate::hal::arch::Context::switch_with_root(
                     final_curr, final_next, root_addr, asid,
                 );
-                #[cfg(target_arch = "aarch64")]
-                {
-                    complete_incoming_switch(hart_id);
-                    smp::complete_retirement_switch(hart_id);
-                }
             }
         }
     }
@@ -1890,6 +1882,11 @@ pub fn yield_cpu() {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("push {}", "popfq", in(reg) outgoing_rflags);
+    }
+    // Same rule for DAIF: restore this activation's own pre-selection state.
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        crate::hal::arch::restore_sstatus(outgoing_daif);
     }
 }
 

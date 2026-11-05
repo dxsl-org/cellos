@@ -260,17 +260,12 @@ static CPU_SEEN_PRIVATE_ROOT: core::sync::atomic::AtomicBool =
 /// The domain's **live** `TTBR0_EL1`, read from inside the domain's own kernel
 /// context.
 ///
-/// Called from `task::complete_incoming_switch`, which runs on the incoming side
-/// of a raw switch. For a resumed private-root task that is the task's own kernel
-/// stack under its own root — the one point where "what the plan programmed" and
-/// "what the PE is translating through" can be compared with no trap in between.
-///
-/// A *fresh* task's first entry is not one of those points: the switch routine
-/// returns into `x30`, so the code after the call belongs to the outgoing task
-/// and is reached only when that task is resumed. The observation therefore
-/// lands on the domain's first *resume*, which a `Yield` (or a peer cell running
-/// alongside it) guarantees — and a self-reselection still executes the
-/// post-switch code, because the routine saves and restores the same context.
+/// Called from `task::vi_context_switch_complete`, which the raw switch runs on
+/// the incoming stack after the incoming root is live. For a private-root task
+/// that is the task's own kernel stack under its own root — the one point where
+/// "what the plan programmed" and "what the PE is translating through" can be
+/// compared with no trap in between. A fresh task's first entry and a resume
+/// are both such points, since the callback precedes the jump into `x30`.
 ///
 /// The safe-root handoff is excluded by construction: the caller invokes this
 /// after `acknowledge_safe_root`, which clears the published domain identity, so
@@ -318,7 +313,7 @@ pub(crate) fn observe_incoming_live_root() {
 
 /// The frames a torn-down domain held are accounted for, not withheld forever.
 ///
-/// Called from `task::complete_incoming_switch` after the displaced root's staged
+/// Called from `task::vi_context_switch_complete` after the displaced root's staged
 /// release and the safe-root acknowledge. That acknowledge is the trigger:
 /// `domain_ack_generation` becoming non-zero is the published proof that this hart
 /// *left* a private root, and it is set on the same path that releases the
@@ -819,8 +814,9 @@ pub(crate) fn run_root_switch_witness() -> bool {
         crate::hal::arch::Context::switch_with_root(CTX_FIXTURE.0.get(), CTX_SCRATCH.0.get(), 0, 0);
     }
 
-    // The incoming side of the last switch: the same steps the scheduler path runs.
-    crate::task::complete_incoming_switch(hart_local::current_hart_id());
+    // The switch routine already ran the incoming-side completion
+    // (`vi_context_switch_complete`) on this stack: the same steps the
+    // scheduler path runs. Check what it left.
     let safe_root_consumed = !hart_local::take_safe_root_pending();
     let identity_cleared = hart_local::current_domain() == (0, 0);
     let observed_kernel = crate::hal::domain::current_root();

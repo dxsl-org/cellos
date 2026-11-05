@@ -176,6 +176,16 @@ extern "C" {
     fn __switch_el2(old: *mut CpuContext, new: *const CpuContext);
 }
 
+// Both switch stubs call the kernel's `vi_context_switch_complete` (an
+// `extern "C"`, `#[no_mangle]` symbol) on the incoming stack after the outgoing
+// Context is completely stored. That call is the only proof the scheduler has
+// that the outgoing Context may run elsewhere: until it returns, the outgoing
+// task's ready-queue entry stays guarded against a peer hart's dispatch.
+// Contract of the call site: IRQs still masked (DAIF is restored last), the
+// incoming `sp` adopted, `x29 = 0` so no frame chain reaches the outgoing stack
+// (unmapped under a private incoming root), and the incoming Context pointer
+// held in callee-saved x19 across the call; every incoming register is loaded
+// only afterwards.
 global_asm!(
     r#"
     .section .text
@@ -210,30 +220,36 @@ __switch_el1:
     // purpose: the outgoing context is already stored, and the only memory this
     // sequence touches afterwards is the *incoming* context and its stack. The
     // outgoing stack is not mapped in the incoming root, so nothing here may
-    // touch it — no calls, no spills, registers only.
+    // touch it — registers only until the incoming stack is adopted.
     cbz  x2,  1f
     msr  ttbr0_el1, x2
     isb
 1:
 
-    // Restore new context.
-    ldp  x19, x20, [x1, #0]
-    ldp  x21, x22, [x1, #16]
-    ldp  x23, x24, [x1, #32]
-    ldp  x25, x26, [x1, #48]
-    ldp  x27, x28, [x1, #64]
-    ldp  x29, x30, [x1, #80]
-    ldr  x9,       [x1, #96]
+    // Adopt the incoming stack, then publish switch completion from it.
+    mov  x19, x1
+    ldr  x9,       [x19, #96]
     mov  sp,  x9
-    ldp  x9,  x10, [x1, #104]
-    msr  elr_el1,  x9
-    msr  spsr_el1, x10
-    ldr  x9,       [x1, #120]
-    msr  sp_el0,   x9
+    mov  x29, xzr
+    bl   vi_context_switch_complete
+
+    // Restore new context after the completion callback.
+    mov  x9,  x19
+    ldp  x19, x20, [x9, #0]
+    ldp  x21, x22, [x9, #16]
+    ldp  x23, x24, [x9, #32]
+    ldp  x25, x26, [x9, #48]
+    ldp  x27, x28, [x9, #64]
+    ldp  x29, x30, [x9, #80]
+    ldp  x10, x11, [x9, #104]
+    msr  elr_el1,  x10
+    msr  spsr_el1, x11
+    ldr  x10,      [x9, #120]
+    msr  sp_el0,   x10
     // Restore DAIF: re-enables IRQs when loading boot context (DAIF.I=0),
     // keeps IRQs disabled when loading a task context from a SVC handler.
-    ldr  x9,       [x1, #128]
-    msr  daif,     x9
+    ldr  x10,      [x9, #128]
+    msr  daif,     x10
 
     ret
     "#

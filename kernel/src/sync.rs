@@ -39,12 +39,20 @@ impl<T> Spinlock<T> {
             // returns: a long one that takes locks but never waits on them
             // (spawn reading a 627 KiB image out of VIFS1) starved the peer's
             // shootdown past its probe budget. A peer may also hold this very
-            // lock while it waits. IF is masked here, so service only the
-            // lock-free local mailbox: never schedule, allocate, or log from
-            // this ownership window. With nothing owed it is a GS read and two
-            // loads.
-            #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
-            crate::task::smp::service_tlb_flush(crate::task::hart_local::current_hart_id());
+            // lock while it waits — on RV64/AArch64 too, now that hart 0 is a
+            // shootdown target like every other hart. Interrupts are masked
+            // here, so service only the lock-free, log-free local mailbox:
+            // never schedule, allocate, or log from this ownership window.
+            // With nothing owed it is a hart-id read and two loads.
+            #[cfg(all(
+                any(
+                    target_arch = "riscv64",
+                    target_arch = "aarch64",
+                    target_arch = "x86_64"
+                ),
+                not(all(test, not(target_os = "none")))
+            ))]
+            crate::task::smp::answer_tlb_flush_in_spin(crate::task::hart_local::current_hart_id());
             if self
                 .lock
                 .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)

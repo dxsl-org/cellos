@@ -116,23 +116,44 @@ pub fn tlb_flush_completed(hart_id: usize, epoch: usize) -> bool {
 /// Service one captured request. A newer request arriving during the local
 /// invalidate must NOT be acknowledged by that invalidate.
 pub fn service_tlb_flush(hart_id: usize) -> usize {
+    let (epoch, _advanced) = service_tlb_flush_captured(hart_id);
+    #[cfg(all(feature = "test-hooks", not(target_arch = "x86_64")))]
+    if _advanced {
+        log::info!(
+            "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
+            hart_id,
+            epoch
+        );
+    }
+    epoch
+}
+
+/// [`service_tlb_flush`] for spin loops that may already own other locks
+/// (lock acquisition, cross-hart fixture waits): lock-free and log-free.
+///
+/// Every hart, hart 0 included, is a shootdown target, so a hart spinning with
+/// interrupts masked on progress that a peer makes only after this hart's
+/// acknowledgement must answer here, or both stall until the peer's bounded
+/// probe fails.
+#[inline]
+pub fn answer_tlb_flush_in_spin(hart_id: usize) {
+    let _ = service_tlb_flush_captured(hart_id);
+}
+
+/// Returns the captured request epoch and whether this call published it.
+fn service_tlb_flush_captured(hart_id: usize) -> (usize, bool) {
     if hart_id >= MAX_HARTS {
-        return 0;
+        return (0, false);
     }
     let epoch = TLB_FLUSH_REQUEST[hart_id].load(Ordering::Acquire);
     if TLB_FLUSH_COMPLETE[hart_id].load(Ordering::Acquire) < epoch {
         crate::memory::paging::tlb_flush_all();
-        let _advanced = publish_completion(&TLB_FLUSH_COMPLETE[hart_id], epoch);
-        #[cfg(all(feature = "test-hooks", not(target_arch = "x86_64")))]
-        if _advanced {
-            log::info!(
-                "[selftest] TLB-ACK: stage=remote-flush-completed hart={} epoch={}",
-                hart_id,
-                epoch
-            );
-        }
+        return (
+            epoch,
+            publish_completion(&TLB_FLUSH_COMPLETE[hart_id], epoch),
+        );
     }
-    epoch
+    (epoch, false)
 }
 
 /// Publish `epoch` as complete without ever lowering `complete`; returns
@@ -224,9 +245,21 @@ pub fn tlb_flush_set_outstanding(set: &RemoteEpochs) -> Option<(usize, usize)> {
     set.first_outstanding(tlb_flush_completed)
 }
 
-/// The logical harts that completed kernel bring-up.
+/// The logical harts that completed kernel bring-up, the boot hart included.
+///
+/// Every remote-invalidation and flush-epoch target set is built from this
+/// iterator, so a hart missing here keeps stale translations unasked.
 pub fn online_harts() -> impl Iterator<Item = usize> {
     (0..MAX_HARTS).filter(|hart| HART_ONLINE[*hart].load(Ordering::Acquire))
+}
+
+/// Publish the boot hart (logical 0) as online on every architecture.
+///
+/// Called by `task::init` right after hart 0's hart-local state is installed,
+/// before any secondary starts: from then on a secondary's shootdown names hart
+/// 0, which services the request from its trap/IPI path like any other hart.
+pub fn publish_boot_hart_online() {
+    HART_ONLINE[0].store(true, Ordering::Release);
 }
 
 static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
@@ -382,25 +415,25 @@ pub fn logical_sbi_target(logical_hart: usize) -> Option<(usize, usize)> {
 
 /// Return the one remote RV64 hart this boot can have, if it is online.
 ///
-/// Hart 0 is running whenever this kernel reaches normal execution but is not
-/// represented by `HART_ONLINE`; secondary harts publish readiness with Release.
-/// RV64 runs at most two harts (`MAX_HARTS = 2`), so the remote hart is the RT
-/// hart for hart 0 and hart 0 for everyone else.
+/// Every hart, the boot hart included, publishes readiness in `HART_ONLINE`
+/// with Release. RV64 runs at most two harts (`MAX_HARTS = 2`), so the remote
+/// hart is the RT hart for hart 0 and hart 0 for everyone else.
 #[cfg(target_arch = "riscv64")]
 pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
     const _: () = assert!(MAX_HARTS == 2);
     let current = crate::task::hart_local::current_hart_id();
     let remote = if current == 0 { HART_RT } else { 0 };
-    let online = remote == 0 || HART_ONLINE[remote].load(Ordering::Acquire);
+    let online = HART_ONLINE[remote].load(Ordering::Acquire);
     online.then(|| logical_sbi_target(remote)).flatten()
 }
 
 /// Return the harts that completed kernel bring-up for the current boot.
 ///
-/// Hart zero is the active boot hart; each secondary contributes only after
-/// publishing `HART_ONLINE`, so test evidence cannot confuse configured SMP
-/// capacity with observed runtime availability. `TelemetrySnapshot` reports it
-/// as `online_cpus`.
+/// Hart zero is the active boot hart and is counted unconditionally, which
+/// equals `online_harts().count()` once `task::init` has published it; each
+/// secondary contributes only after publishing `HART_ONLINE`, so test evidence
+/// cannot confuse configured SMP capacity with observed runtime availability.
+/// `TelemetrySnapshot` reports it as `online_cpus`.
 pub(crate) fn online_hart_count() -> usize {
     1 + HART_ONLINE
         .iter()
@@ -939,10 +972,10 @@ fn x86_bounded_wait_steps(steps: usize, mut done: impl FnMut() -> bool) {
 /// x86 IDT fixture only: it runs inside `task::init`, before
 /// `start_secondaries`, on the BSP alone and never returns. Publish the same
 /// uniprocessor boot-complete state that `start_secondaries` publishes when no
-/// AP exists, so `yield_cpu` schedules the fixture's Ring-3 tasks.
+/// AP exists, so `yield_cpu` schedules the fixture's Ring-3 tasks. `task::init`
+/// has already published the BSP in `HART_ONLINE`.
 #[cfg(all(target_arch = "x86_64", feature = "x86-idt-cpl3-test"))]
 pub(crate) fn x86_idt_fixture_uniprocessor_ready() {
-    HART_ONLINE[0].store(true, Ordering::Release);
     X86_BOOT_COMPLETE.store(true, Ordering::Release);
 }
 
@@ -983,7 +1016,6 @@ impl core::fmt::Display for X86OnlineApicIds {
 pub fn start_secondaries() {
     use crate::boot::limine;
     let bsp_id = hal::x86_64::apic::current_id();
-    HART_ONLINE[0].store(true, Ordering::Release);
     #[cfg(feature = "test-hooks")]
     x86_handoff_fixture();
     let finish_up = || {
@@ -1679,6 +1711,20 @@ mod tests {
         assert_eq!(complete.load(Ordering::Acquire), 6);
         assert!(publish_completion(&complete, 7));
         assert_eq!(complete.load(Ordering::Acquire), 7);
+    }
+
+    /// H-8: the boot publication `task::init` makes on every architecture puts
+    /// hart 0 in `online_harts()`, so a shootdown issued from hart 1 (the
+    /// `filter(!= me)` every remote set uses) targets it, and the count the
+    /// telemetry reports agrees with the set.
+    #[test]
+    fn boot_hart_publication_names_hart_zero_in_remote_sets() {
+        publish_boot_hart_online();
+        assert_eq!(online_harts().next(), Some(0));
+        assert!(online_harts()
+            .filter(|hart| *hart != 1)
+            .any(|hart| hart == 0));
+        assert_eq!(online_harts().count(), online_hart_count());
     }
 
     /// Four simulated harts: requester 0 broadcasts to 1, 2 and 3. Every
