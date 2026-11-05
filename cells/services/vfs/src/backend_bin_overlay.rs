@@ -23,14 +23,14 @@ pub struct BinOverlay {
 }
 
 impl BinOverlay {
-    /// `store_base_lba` = `api::disk::PART_CELLSTORE_BASE_LBA` on the primary disk
-    /// `dev`. The cell-store FAT is mounted with prefix `/bin` so `/bin/<cell>`
-    /// strips to `<cell>` at the FAT root — matching the layout gen_disk writes
-    /// into the cell-store.
-    pub fn new(dev: DeviceRef, store_base_lba: u64) -> Self {
+    /// `store_base_lba`/`store_sectors` = `api::disk::PART_CELLSTORE_*` on the
+    /// primary disk `dev`. The cell-store FAT is mounted with prefix `/bin` so
+    /// `/bin/<cell>` strips to `<cell>` at the FAT root — matching the layout
+    /// gen_disk writes into the cell-store.
+    pub fn new(dev: DeviceRef, store_base_lba: u64, store_sectors: u64) -> Self {
         Self {
             boot: BootFsProxy::new(),
-            store: FatBackend::mount("/bin", dev, store_base_lba),
+            store: FatBackend::mount("/bin", dev, store_base_lba, store_sectors),
         }
     }
 }

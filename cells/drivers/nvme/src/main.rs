@@ -21,18 +21,19 @@
 #![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
+mod bounce;
 mod controller;
 mod deadline;
 mod dispatch;
 mod dma;
 mod irq;
+mod layout;
 mod queue;
 
+use bounce::BounceBuffer;
 use controller::NvmeController;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use dma::AuthorizedDma;
 use ostd::app::{AppContext, AppEvent};
-use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
@@ -51,7 +52,7 @@ const NVME_BAR0_LEN: usize = 0x4000; // 16 KiB
 
 struct NvmeState {
     ctrl: NvmeController,
-    io_buf: AuthorizedDma<DmaBuf>,
+    bounce: BounceBuffer,
 }
 
 static STATE: Mutex<Option<NvmeState>> = Mutex::new(None);
@@ -118,29 +119,18 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 }
             };
 
-            // Allocate a reusable 512-byte I/O DMA buffer and retain the
+            // Allocate the one-page I/O bounce buffer and retain the
             // device-visible address returned by authorization.
-            let io_buf = match DmaBuf::alloc(1) {
-                Some(b) => b,
-                None => {
-                    let _ = print_fmt(format_args!("[nvme] io buffer allocation failed\n"));
+            let bounce = match BounceBuffer::new(bdf) {
+                Ok(bounce) => bounce,
+                Err(why) => {
+                    let _ = print_fmt(format_args!("[nvme] io buffer {}\n", why));
                     ostd::syscall::sys_exit(1)
                 }
             };
-            let io_buf = match AuthorizedDma::authorize(io_buf, |buf| buf.authorize(bdf)) {
-                Ok(buf) => buf,
-                Err(error) => {
-                    let _ = print_fmt(format_args!(
-                        "[nvme] io buffer authorization failed: {:?}\n",
-                        error
-                    ));
-                    ostd::syscall::sys_exit(1)
-                }
-            };
-            let _ = print_fmt(format_args!(
-                "[nvme] io buffer iova=0x{:x}\n",
-                io_buf.iova()
-            ));
+            if let Some(page) = bounce.page() {
+                let _ = print_fmt(format_args!("[nvme] io buffer iova=0x{:x}\n", page.iova()));
+            }
             let _ = print_fmt(format_args!(
                 "[nvme] DMA authorized for bus {} device {} function {}\n",
                 (bdf >> 8) & 0xFF,
@@ -150,7 +140,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
             // Publish state before registration: VFS may route requests as soon
             // as the syscall succeeds.
-            *STATE.lock() = Some(NvmeState { ctrl, io_buf });
+            *STATE.lock() = Some(NvmeState { ctrl, bounce });
             if let Err(error) = sys_register_block_device(BlockDevice::Pci { bdf: bdf as u16 }) {
                 *STATE.lock() = None;
                 let _ = print_fmt(format_args!(
@@ -177,7 +167,12 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
                 1
             } else if let Some(state) = STATE.lock().as_mut() {
-                dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
+                dispatch::handle(
+                    &mut state.ctrl,
+                    &mut state.bounce,
+                    data.as_ref(),
+                    &mut reply,
+                )
             } else {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
                 1 // not initialised

@@ -1,19 +1,21 @@
 //! NVMe controller logic ported from kernel/src/task/drivers/blk_nvme.rs.
 //!
-//! In the Driver Cell, MMIO access goes through `ostd::mmio::MmioRegion`.
-//! DMA allocations retain the device-visible IOVA returned by authorization.
+//! In the Driver Cell, every register and doorbell access goes through the
+//! bounds-checked `ostd::mmio::MmioRegion`; device-reported geometry (doorbell
+//! stride, LBA format) is validated in `layout` before it is used. DMA allocations
+//! retain the device-visible IOVA returned by authorization.
 //!
-//! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
+//! Law 4 exception: Driver Cells may use `unsafe` for DMA memory access.
 //! Every `unsafe` block is annotated with `// SAFETY:`.
 
 use crate::deadline::{self, Deadline, Spent};
 use crate::dma::AuthorizedDma;
 use crate::irq::CompletionIrq;
+use crate::layout::{self, Doorbells};
 use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio::MmioRegion;
-use types::block_wire::BlockOutcome;
 use types::{ViError, ViResult};
 
 use crate::queue::{Queue, SqEntry};
@@ -26,7 +28,6 @@ const REG_CSTS: usize = 0x1C;
 const REG_AQA: usize = 0x24;
 const REG_ASQ: usize = 0x28;
 const REG_ACQ: usize = 0x30;
-const REG_DB_BASE: usize = 0x1000;
 
 const CC_EN: u32 = 1 << 0;
 const CC_CSS_NVM: u32 = 0;
@@ -114,13 +115,23 @@ fn note_slow(deadline: &Deadline, what: &str, opc: u8) {
 /// How many expected io rejections (reads past the namespace end) to log.
 static IO_ERR_LOG: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(3);
 
+/// Why an issued I/O command did not complete successfully. Either way the device
+/// may have executed it, so the caller reports `Indeterminate`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IoFailure {
+    /// The device answered with an error status: the command is finished.
+    Status,
+    /// The wait budget ran out with the command still outstanding: the device may
+    /// still DMA to or from its buffer.
+    TimedOut,
+}
+
 pub struct NvmeController {
     mmio: MmioRegion,
     admin: Queue,
     io: Queue,
-    db_stride: usize,
+    doorbells: Doorbells,
     pub n_sectors: u64,
-    pub lba_bytes: u32,
     pub vwc: bool,
     // reason: only read at construction (to authorize admin/IO queue DMA);
     // kept on the struct for a planned re-authorization path if read/write_sector
@@ -137,17 +148,26 @@ pub struct NvmeController {
 impl NvmeController {
     /// Initialise the NVMe controller reachable via `mmio` (BAR0).
     ///
-    /// Returns `Err(IO)` if the controller fails to reach RDY or Identify fails.
+    /// Returns `Err(IO)` if the controller fails to reach RDY or Identify fails, and
+    /// `Err(NotSupported)` if its doorbells overrun the claimed BAR0 window or
+    /// namespace 1 is not formatted with 512-byte blocks without metadata.
     pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
         // 1. Read capabilities — need CAP.DSTRD for doorbell stride.
-        // SAFETY: BAR0 is MMIO; read_volatile is required for hardware registers.
-        let cap = unsafe {
-            let lo = core::ptr::read_volatile((mmio.base() + REG_CAP) as *const u32) as u64;
-            let hi = core::ptr::read_volatile((mmio.base() + REG_CAP + 4) as *const u32) as u64;
-            lo | (hi << 32)
+        let cap =
+            Self::read32(&mmio, REG_CAP)? as u64 | (Self::read32(&mmio, REG_CAP + 4)? as u64) << 32;
+        let dstrd = ((cap >> 32) & 0xF) as u32;
+        let doorbells = match Doorbells::new(dstrd, mmio.len()) {
+            Ok(doorbells) => doorbells,
+            Err(end) => {
+                let _ = print_fmt(format_args!(
+                    "[nvme] CAP.DSTRD={} puts doorbells up to 0x{:x}, past the 0x{:x}-byte BAR0 window: controller refused\n",
+                    dstrd,
+                    end,
+                    mmio.len()
+                ));
+                return Err(ViError::NotSupported);
+            }
         };
-        let dstrd = ((cap >> 32) & 0xF) as usize;
-        let db_stride = 4 << dstrd;
         let rdy_budget_ms = deadline::rdy_budget_ms(cap);
         let _ = print_fmt(format_args!(
             "[nvme] CAP=0x{:016x} ready budget {} ms (CAP.TO)\n",
@@ -243,9 +263,8 @@ impl NvmeController {
             mmio,
             admin,
             io: Queue::new(bdf, IO_QUEUE_DEPTH)?,
-            db_stride,
+            doorbells,
             n_sectors: 0,
-            lba_bytes: 512,
             vwc: false,
             bdf,
             irq,
@@ -308,16 +327,28 @@ impl NvmeController {
                 0,
                 0,
             )?;
-            // SAFETY: id_buf is a valid 4-KiB Identify Namespace response.
-            unsafe {
+            // SAFETY: id_buf is the 4-KiB Identify Namespace response this cell owns;
+            // every offset read here is below 4096 (`layout::lba_format_offset`).
+            let (nsze, flbas, nlbaf, lbaf) = unsafe {
                 let ptr = id_buf.inner().virt();
-                ctrl.n_sectors = core::ptr::read_volatile(ptr as *const u64);
-                let flbas = *ptr.add(26); // FLBAS: current LBA format index
-                let lba_fmt_idx = (flbas & 0x0F) as usize;
-                let lba_ds = *ptr.add(128 + lba_fmt_idx * 4 + 1); // LBA data shift
-                ctrl.lba_bytes = 1u32 << lba_ds;
-            }
+                let flbas = *ptr.add(layout::ID_NS_FLBAS);
+                let lbaf_off = layout::lba_format_offset(layout::lba_format_index(flbas));
+                (
+                    core::ptr::read_volatile(ptr as *const u64),
+                    flbas,
+                    *ptr.add(layout::ID_NS_NLBAF),
+                    core::ptr::read_volatile(ptr.add(lbaf_off) as *const u32),
+                )
+            };
             id_buf.into_inner().free();
+            if let Err(why) = layout::validate_lba_format(flbas, nlbaf, u32::from_le(lbaf)) {
+                let _ = print_fmt(format_args!(
+                    "[nvme] namespace 1 LBA format refused: {:?} (FLBAS=0x{:x} NLBAF={} LBAF=0x{:08x}); this driver serves 512-byte blocks without metadata\n",
+                    why, flbas, nlbaf, u32::from_le(lbaf)
+                ));
+                return Err(ViError::NotSupported);
+            }
+            ctrl.n_sectors = u64::from_le(nsze);
         }
 
         // 9. Create I/O CQ (admin opcode 0x05).
@@ -366,30 +397,32 @@ impl NvmeController {
     // ── Register access ───────────────────────────────────────────────────────
 
     fn read32(mmio: &MmioRegion, off: usize) -> ViResult<u32> {
-        // SAFETY: mmio region was granted by kernel; volatile prevents caching.
-        Ok(unsafe { core::ptr::read_volatile((mmio.base() + off) as *const u32) })
+        mmio.read_u32(off)
     }
 
     fn write32(mmio: &MmioRegion, off: usize, val: u32) -> ViResult<()> {
-        // SAFETY: same contract as read32.
-        unsafe { core::ptr::write_volatile((mmio.base() + off) as *mut u32, val) };
-        Ok(())
+        mmio.write_u32(off, val)
     }
 
     fn write64(mmio: &MmioRegion, off: usize, val: u64) -> ViResult<()> {
-        // SAFETY: same contract as read32.
-        unsafe { core::ptr::write_volatile((mmio.base() + off) as *mut u64, val) };
-        Ok(())
+        mmio.write::<u64>(off, val)
+    }
+
+    /// `Doorbells::new` proved every doorbell of a queue this driver creates lies in
+    /// the window, so the region's bounds check cannot refuse these writes; it stays
+    /// as the guard that turns a miscomputed offset into a dropped write instead of
+    /// a store outside the claimed BAR.
+    fn ring(mmio: &MmioRegion, off: usize, val: u16) {
+        let _ = mmio.write_u32(off, val as u32);
     }
 
     fn ring_sq_tail(&self, qid: usize, tail: u16) {
-        let db_off = REG_DB_BASE + qid * 2 * self.db_stride;
-        // SAFETY: doorbell is within the granted BAR0 MMIO region.
-        unsafe { core::ptr::write_volatile((self.mmio.base() + db_off) as *mut u32, tail as u32) };
+        Self::ring(&self.mmio, self.doorbells.sq_tail(qid), tail);
     }
 
     fn wait_command(&mut self, qid: usize, cid: u16, wait: &mut Deadline) -> Result<u16, Spent> {
-        let doorbell = self.mmio.base() + REG_DB_BASE + (qid * 2 + 1) * self.db_stride;
+        let doorbell = self.doorbells.cq_head(qid);
+        let mmio = &self.mmio;
         let irq = &mut self.irq;
         let queue = if qid == 0 {
             &mut self.admin
@@ -398,10 +431,7 @@ impl NvmeController {
         };
         queue.wait_completion(
             cid,
-            |head| {
-                // SAFETY: the CQ doorbell belongs to the controller's granted BAR0 mapping.
-                unsafe { core::ptr::write_volatile(doorbell as *mut u32, head as u32) };
-            },
+            |head| Self::ring(mmio, doorbell, head),
             || idle(wait, irq),
         )
     }
@@ -489,8 +519,8 @@ impl NvmeController {
     // ── I/O command submit + poll ─────────────────────────────────────────────
 
     /// The SQ tail doorbell is the issue point and nothing before it can fail,
-    /// so every error here is `Indeterminate`: the controller may already have
-    /// executed the command.
+    /// so every error here is issued: the controller may already have executed
+    /// the command.
     fn submit_io(
         &mut self,
         opc: u8,
@@ -498,7 +528,7 @@ impl NvmeController {
         lba: u64,
         nlb: u16,
         prp1: u64,
-    ) -> Result<(), BlockOutcome> {
+    ) -> Result<(), IoFailure> {
         let depth = self.io.depth as usize;
         let tail = self.io.sq_tail as usize;
         let cid = self.io.next_cid();
@@ -537,7 +567,7 @@ impl NvmeController {
                     "[nvme] io timeout opc={} lba={} cid={} after {} (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})\n",
                     opc, lba, cid, spent, self.io.cq.head, self.io.sq_tail, self.io.cq.phase, raw, depth
                 ));
-                return Err(BlockOutcome::Indeterminate);
+                return Err(IoFailure::TimedOut);
             }
         };
         note_slow(&wait, "io", opc);
@@ -552,19 +582,22 @@ impl NvmeController {
                     status
                 ));
             }
-            return Err(BlockOutcome::Indeterminate);
+            return Err(IoFailure::Status);
         }
         Ok(())
     }
 
-    /// Read one 512-byte sector into `buf` (must be DMA-capable).
-    pub fn read_sector(&mut self, sector: u64, buf_phys: u64) -> Result<(), BlockOutcome> {
-        self.submit_io(NVM_OPC_READ, 1, sector, 0, buf_phys)
+    /// Read one 512-byte block into the page at `iova`. The namespace format is
+    /// 512-byte blocks without metadata (`layout::validate_lba_format`) and NLB=0,
+    /// so the transfer is 512 bytes and PRP1 alone describes it as long as it does
+    /// not cross a page (`layout::fits_one_prp`, enforced by `BounceBuffer`).
+    pub fn read_sector(&mut self, sector: u64, iova: u64) -> Result<(), IoFailure> {
+        self.submit_io(NVM_OPC_READ, 1, sector, 0, iova)
     }
 
-    /// Write one 512-byte sector from `buf` (must be DMA-capable).
-    pub fn write_sector(&mut self, sector: u64, buf_phys: u64) -> Result<(), BlockOutcome> {
-        self.submit_io(NVM_OPC_WRITE, 1, sector, 0, buf_phys)
+    /// Write one 512-byte block from the page at `iova`; see [`Self::read_sector`].
+    pub fn write_sector(&mut self, sector: u64, iova: u64) -> Result<(), IoFailure> {
+        self.submit_io(NVM_OPC_WRITE, 1, sector, 0, iova)
     }
 
     /// Fault-injection builds only: exit (70) right after ringing the SQ tail
@@ -575,7 +608,7 @@ impl NvmeController {
     }
 
     /// Send an NVMe flush command for the namespace.
-    pub fn flush(&mut self) -> Result<(), BlockOutcome> {
+    pub fn flush(&mut self) -> Result<(), IoFailure> {
         self.submit_io(NVM_OPC_FLUSH, 1, 0, 0, 0)
     }
 }

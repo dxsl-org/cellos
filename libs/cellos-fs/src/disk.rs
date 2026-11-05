@@ -20,6 +20,18 @@ pub enum FsError {
     Conflict,
 }
 
+impl FsError {
+    /// The medium failed or holds state the engine cannot trust. Every other
+    /// error is a refusal of the request itself, and [`crate::CellosFs::atomically`]
+    /// guarantees such a refusal staged nothing.
+    pub fn is_storage_fault(self) -> bool {
+        matches!(
+            self,
+            Self::IoError | Self::Corrupted | Self::PartitionOverflow
+        )
+    }
+}
+
 /// Abstract block device representing a raw storage medium or partition slice.
 pub trait BlockDevice {
     /// Read one 4096-byte block.

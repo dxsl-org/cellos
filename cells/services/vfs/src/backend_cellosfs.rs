@@ -159,10 +159,7 @@ impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
         match result {
             Ok(value) => Some(value),
             Err(error) => {
-                if matches!(
-                    error,
-                    FsError::IoError | FsError::Corrupted | FsError::PartitionOverflow
-                ) {
+                if error.is_storage_fault() {
                     *state = NativeState::Poisoned(Failure {
                         operation,
                         error,
@@ -174,6 +171,10 @@ impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
             }
         }
     }
+    /// Apply `f` and sync as one engine transaction. A refusal (NotFound, a
+    /// full directory, NoSpace, …) is rolled back by the engine and leaves the
+    /// mount serving; only a storage fault poisons it, because the medium may
+    /// then hold a partial update.
     fn mutate(
         &self,
         operation: Operation,
@@ -181,22 +182,26 @@ impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
         f: impl FnOnce(&mut CellosFs<D>) -> Result<(), FsError>,
     ) -> bool {
         let mut state = self.fs.lock();
+        let mut sync_stage = false;
         let result = match &mut *state {
-            NativeState::Ready(fs) => match f(fs) {
-                Ok(()) => fs.sync().map_err(|error| (error, true)),
-                Err(error) => Err((error, false)),
-            },
+            NativeState::Ready(fs) => fs.atomically(|fs| {
+                f(fs)?;
+                sync_stage = true;
+                fs.sync()
+            }),
             _ => return false,
         };
         match result {
             Ok(()) => true,
-            Err((error, sync_stage)) => {
-                *state = NativeState::Poisoned(Failure {
-                    operation,
-                    error,
-                    path_tag: path_tag(path),
-                    sync_stage,
-                });
+            Err(error) => {
+                if error.is_storage_fault() {
+                    *state = NativeState::Poisoned(Failure {
+                        operation,
+                        error,
+                        path_tag: path_tag(path),
+                        sync_stage,
+                    });
+                }
                 false
             }
         }
@@ -216,9 +221,11 @@ impl<D: cellos_fs::disk::BlockDevice> CellosFsBackend<D> {
             Err(FsError::Corrupted)
         }
     }
-    /// A staging mutation: no sync, poisoned only on a storage-level error.
+    /// A staging mutation: no sync, all-or-nothing, poisoned only on a
+    /// storage-level error.
     fn stage(&self, path: &str, f: impl FnOnce(&mut CellosFs<D>) -> Result<(), FsError>) -> bool {
-        self.read(Operation::Stage, path, f).is_some()
+        self.read(Operation::Stage, path, |fs| fs.atomically(f))
+            .is_some()
     }
 }
 impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
@@ -415,9 +422,8 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
     /// same per-entry `unlink`/`rmdir` mutations, each synced. A tree over the
     /// depth or entry bound is refused before anything is removed. If a removal
     /// fails, the entries removed before it stay removed, the entries after it
-    /// (always including the root) remain, the failing entry is left as its
-    /// failed mutation left it, and the instance is poisoned like any other
-    /// failed mutation.
+    /// (always including the root) remain, and the failing entry is unchanged
+    /// (refusal) or the instance is poisoned (storage fault), as in `mutate`.
     fn rmdir_recursive(&mut self, path: &str) -> bool {
         let Some(rel) = self.rel_path(path) else {
             return false;
@@ -457,8 +463,8 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
         let (Some(old), Some(new)) = (self.rel_path(old), self.rel_path(new)) else {
             return false;
         };
-        // Unsupported/type/duplicate checks are read-only before mutation entry.
-        // Never infer no effect from an error returned by the mutator itself.
+        // Unsupported/type/duplicate checks are read-only before mutation entry;
+        // a refusal inside the mutator is rolled back by `mutate` anyway.
         if self.read(Operation::Rename, old, |fs| {
             if !fs.lookup(old)?.is_file() {
                 return Ok(false);
@@ -553,8 +559,7 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
         // change the sealed bytes in between.
         let staged = match fs.lookup(stage_rel) {
             Ok(inode) => (inode.inode_num, inode.generation) == sealed,
-            Err(FsError::NotFound) => false,
-            Err(error) => {
+            Err(error) if error.is_storage_fault() => {
                 *state = NativeState::Poisoned(Failure {
                     operation: Operation::Publish,
                     error,
@@ -563,20 +568,24 @@ impl<D: cellos_fs::disk::BlockDevice + Send> FsBackend for CellosFsBackend<D> {
                 });
                 return refused;
             }
+            Err(_) => false,
         };
         if !staged {
             return SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED);
         }
-        let result = match fs.rename_replace_if(stage_rel, dst_rel, expect) {
-            Ok(()) => fs
-                .sync()
-                .map_err(|error| (error, true))
-                .and_then(|()| fs.lookup(dst_rel).map_err(|error| (error, true))),
+        let mut sync_stage = false;
+        let published = fs.atomically(|fs| {
+            fs.rename_replace_if(stage_rel, dst_rel, expect)?;
+            sync_stage = true;
+            fs.sync()
+        });
+        // After a successful sync the publication is on disk: any failure to
+        // observe it is Indeterminate, never a refusal.
+        let result = match published {
+            Ok(()) => fs.lookup(dst_rel).map_err(|error| (error, true)),
             Err(FsError::Conflict) => return SaveOutcome::Conflict,
-            Err(error @ (FsError::IoError | FsError::Corrupted | FsError::PartitionOverflow)) => {
-                Err((error, false))
-            }
-            // Refused before anything was staged in the engine.
+            Err(error) if error.is_storage_fault() => Err((error, sync_stage)),
+            // Rolled back by the engine: nothing was published.
             Err(_) => return refused,
         };
         match result {
@@ -777,6 +786,32 @@ mod tests {
         assert_eq!(backend.read_to_vec("/srv/d/child"), b"child");
         assert!(backend.unlink("/srv/d/child"));
         assert!(backend.rmdir("/srv/d"));
+    }
+    /// Audit H-23: any cell could disable the mount with one refused request
+    /// or 254 create/unlink pairs.
+    #[test]
+    fn refused_mutations_never_poison_and_inode_numbers_recycle() {
+        let (mut backend, _) = ready();
+        assert!(backend.write("/srv/keep", b"kept"));
+        assert!(!backend.write("/srv/nodir/x", b"x"));
+        assert!(!backend.write(&format!("/srv/{}", "n".repeat(47)), b"x"));
+        assert!(!backend.append("/srv", b"x"));
+        assert!(backend.mkdir("/srv/d"));
+        for i in 0..7 {
+            assert!(backend.write(&format!("/srv/d/{i}"), b"x"));
+        }
+        assert!(!backend.write("/srv/d/eighth", b"x"));
+        assert!(!backend.write("/srv/big", &alloc::vec![1; 127 * BLOCK_SIZE]));
+        assert!(backend.write("/srv/.cbx-save", b"not a directory"));
+        assert!(!backend.stage_create("/srv/.cbx-save/00000001"));
+        assert_eq!(backend.health(), BackendHealth::Ready);
+        assert_eq!(backend.stat("/srv/big"), None);
+        for _ in 0..300 {
+            assert!(backend.write("/srv/cycle", b"c"));
+            assert!(backend.unlink("/srv/cycle"));
+        }
+        assert_eq!(backend.health(), BackendHealth::Ready);
+        assert_eq!(backend.read_to_vec("/srv/keep"), b"kept");
     }
     #[test]
     fn recursive_removal_deletes_nested_tree_and_keeps_siblings() {

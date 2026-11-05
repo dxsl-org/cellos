@@ -27,15 +27,30 @@ pub struct BlockStream {
     /// see partition-relative sectors. `api::disk::PART_FAT32_BASE_LBA` for the
     /// `/mnt/sd` volume; `PART_CELLSTORE_BASE_LBA` for the `/bin` cell-store.
     base_lba: u64,
+    /// Partition length in sectors. fatfs derives sector numbers from the
+    /// on-disk BPB and FAT chains, which are untrusted: without this bound a
+    /// crafted volume reaches the partitions after it (cell table, `/data`,
+    /// `/srv`, cell-store).
+    sectors: u64,
 }
 
 impl BlockStream {
-    pub fn new(dev: DeviceRef, base_lba: u64) -> Self {
+    pub fn new(dev: DeviceRef, base_lba: u64, sectors: u64) -> Self {
         Self {
             dev,
             pos: 0,
             base_lba,
+            sectors,
         }
+    }
+
+    /// Absolute LBA of partition-relative `sector`, or `None` when it lies
+    /// outside the partition. Every device access goes through here.
+    fn abs_lba(&self, sector: u64) -> Option<u64> {
+        if sector >= self.sectors {
+            return None;
+        }
+        self.base_lba.checked_add(sector)
     }
 }
 
@@ -51,7 +66,8 @@ impl fatfs::Read for BlockStream {
         let sector = self.pos / SECTOR_SIZE;
         let off = (self.pos % SECTOR_SIZE) as usize;
         let mut sec = [0u8; 512];
-        if !blk_read(self.dev, self.base_lba + sector, &mut sec) {
+        let lba = self.abs_lba(sector).ok_or(())?;
+        if !blk_read(self.dev, lba, &mut sec) {
             return Err(());
         }
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
@@ -68,22 +84,22 @@ impl fatfs::Write for BlockStream {
             let sector = self.pos / SECTOR_SIZE;
             let off = (self.pos % SECTOR_SIZE) as usize;
             let chunk = core::cmp::min(buf.len() - written, SECTOR_SIZE as usize - off);
-
+            let lba = self.abs_lba(sector).ok_or(())?;
             if off == 0 && chunk == SECTOR_SIZE as usize {
                 // Full-sector write — no need to read first.
                 let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !blk_write(self.dev, self.base_lba + sector, &full).is_completed() {
+                if !blk_write(self.dev, lba, &full).is_completed() {
                     return Err(());
                 }
             } else {
                 // Partial sector — read-modify-write.
                 let mut sec = [0u8; 512];
-                if !blk_read(self.dev, self.base_lba + sector, &mut sec) {
+                if !blk_read(self.dev, lba, &mut sec) {
                     return Err(());
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !blk_write(self.dev, self.base_lba + sector, &sec).is_completed() {
+                if !blk_write(self.dev, lba, &sec).is_completed() {
                     return Err(());
                 }
             }
@@ -108,13 +124,7 @@ impl fatfs::Seek for BlockStream {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
         self.pos = match pos {
             fatfs::SeekFrom::Start(n) => n,
-            fatfs::SeekFrom::Current(n) => {
-                let result = self.pos as i64 + n;
-                if result < 0 {
-                    return Err(());
-                }
-                result as u64
-            }
+            fatfs::SeekFrom::Current(n) => self.pos.checked_add_signed(n).ok_or(())?,
             fatfs::SeekFrom::End(_) => return Err(()),
         };
         Ok(self.pos)
@@ -131,8 +141,11 @@ impl SectorDevice for BlockStream {
     /// out of nowhere. Sector reads are idempotent, so absorbing the blip here
     /// is both safe and the narrowest place to do it.
     fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
+        let Some(lba) = self.abs_lba(sector) else {
+            return false;
+        };
         for _ in 0..RAW_IO_ATTEMPTS {
-            if blk_read(self.dev, self.base_lba + sector, buf) {
+            if blk_read(self.dev, lba, buf) {
                 return true;
             }
         }
@@ -147,8 +160,11 @@ impl SectorDevice for BlockStream {
     /// `Indeterminate` write is not replayed: the device may already hold it
     /// (or part of it), and a replay is a second, unrequested medium write.
     fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
+        let Some(lba) = self.abs_lba(sector) else {
+            return false;
+        };
         for _ in 0..RAW_IO_ATTEMPTS {
-            match blk_write(self.dev, self.base_lba + sector, data) {
+            match blk_write(self.dev, lba, data) {
                 BlockOutcome::Completed => return true,
                 BlockOutcome::NotIssued => continue,
                 BlockOutcome::Indeterminate => return false,
@@ -171,9 +187,9 @@ pub struct CachedBlockStream {
 }
 
 impl CachedBlockStream {
-    pub fn new(dev: DeviceRef, base_lba: u64) -> Self {
+    pub fn new(dev: DeviceRef, base_lba: u64, sectors: u64) -> Self {
         Self {
-            inner: BlockStream::new(dev, base_lba),
+            inner: BlockStream::new(dev, base_lba, sectors),
             cache: PageCache::new(),
         }
     }
@@ -246,5 +262,39 @@ impl fatfs::Write for CachedBlockStream {
 impl fatfs::Seek for CachedBlockStream {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
         self.inner.seek(pos)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BlockStream;
+    use crate::blk_router::DeviceRef;
+    use crate::page_cache::SectorDevice;
+    use api::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
+
+    #[test]
+    fn sectors_past_the_partition_never_reach_the_device() {
+        let mut bs = BlockStream::new(
+            DeviceRef::Device(0),
+            PART_FAT32_BASE_LBA,
+            PART_FAT32_SECTORS,
+        );
+        assert_eq!(bs.abs_lba(0), Some(PART_FAT32_BASE_LBA));
+        assert_eq!(
+            bs.abs_lba(PART_FAT32_SECTORS - 1),
+            Some(PART_CELLTBL_BASE_LBA - 1)
+        );
+        // First sector of P2 (cell table) is outside P1.
+        assert_eq!(bs.abs_lba(PART_FAT32_SECTORS), None);
+        let mut buf = [0u8; 512];
+        assert!(!bs.read_raw_sector(PART_FAT32_SECTORS, &mut buf));
+        assert!(!bs.write_raw_sector(u64::MAX, &buf));
+    }
+
+    #[test]
+    fn base_plus_sector_overflow_is_refused() {
+        let bs = BlockStream::new(DeviceRef::Device(0), u64::MAX - 1, u64::MAX);
+        assert_eq!(bs.abs_lba(1), Some(u64::MAX));
+        assert_eq!(bs.abs_lba(2), None);
     }
 }

@@ -43,9 +43,9 @@ pub struct FatBackend {
 /// A temporary `BlockStream` is used so the probe does not interfere with the
 /// `CachedBlockStream` fatfs will create afterwards (positions are per-instance;
 /// both start at offset 0).
-fn probe_exfat(dev: DeviceRef, base_lba: u64) -> bool {
+fn probe_exfat(dev: DeviceRef, base_lba: u64, sectors: u64) -> bool {
     use fatfs::Read;
-    let mut bs = BlockStream::new(dev, base_lba);
+    let mut bs = BlockStream::new(dev, base_lba, sectors);
     let mut sec = [0u8; 512];
     // Guard against short reads — need at least 11 bytes for the OEM-Name field.
     match bs.read(&mut sec) {
@@ -60,9 +60,10 @@ impl FatBackend {
     /// cell-store (P6, `PART_CELLSTORE_BASE_LBA`) on the primary disk, and
     /// `/mnt/disk/<name>` (P1 offset) on a secondary disk. On failure (bad BPB
     /// or exFAT) the backend stays in fallback mode — every op fails cleanly
-    /// while other mounts keep working; see [`Self::is_mounted`].
-    pub fn mount(prefix: &str, dev: DeviceRef, base_lba: u64) -> Self {
-        if probe_exfat(dev, base_lba) {
+    /// while other mounts keep working; see [`Self::is_mounted`]. Every sector
+    /// fatfs touches is bounded to `sectors` from `base_lba`.
+    pub fn mount(prefix: &str, dev: DeviceRef, base_lba: u64, sectors: u64) -> Self {
+        if probe_exfat(dev, base_lba, sectors) {
             println("[vfs] exFAT volume detected — not supported; reformat to FAT32 or use /data (littlefs)");
             return Self {
                 fs: None,
@@ -71,7 +72,8 @@ impl FatBackend {
             };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
-        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(dev, base_lba), opts) {
+        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(dev, base_lba, sectors), opts)
+        {
             Ok(fs) => {
                 // Include the mount prefix so every FAT volume is distinguishable
                 // in the boot log.

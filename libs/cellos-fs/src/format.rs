@@ -247,9 +247,10 @@ pub struct InodeRecord {
     pub ctime: u64,
     pub extent_count: u32,
     pub inline_size: u32,
-    /// Mutation generation, bytes 492..500. A volume-unique `inode_num` never
-    /// reused plus this per-inode monotonic counter identifies one exact file
-    /// state (no ABA). Volumes written before this field read as 0.
+    /// Mutation generation, bytes 492..500. Monotonic per inode number across
+    /// reuse (a retired number's tombstone and its next inode continue the
+    /// count), so `(inode_num, generation)` identifies one exact file state
+    /// (no ABA). Volumes written before this field read as 0.
     pub generation: u64,
     pub payload: [u8; INODE_PAYLOAD_SIZE],
     pub checksum: u32,

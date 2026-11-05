@@ -18,12 +18,13 @@ pub(crate) const SECONDARY_ROOT: &str = "/mnt/disk";
 /// One disk-backed mount, in creation order.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum DiskMount {
-    /// FAT volume at `base_lba`; only secondary-disk prefixes are built at
-    /// runtime. A `secondary` volume that does not open is not mounted.
+    /// FAT volume of `sectors` at `base_lba`; only secondary-disk prefixes are
+    /// built at runtime. A `secondary` volume that does not open is not mounted.
     Fat {
         prefix: Cow<'static, str>,
         dev: DeviceRef,
         base_lba: u64,
+        sectors: u64,
         secondary: bool,
     },
     CellosFs {
@@ -32,13 +33,18 @@ pub(crate) enum DiskMount {
         base_lba: u64,
         sectors: u64,
     },
-    /// `/bin`: VIFS1 unioned with the FAT cell-store at `base_lba`.
-    BinOverlay { dev: DeviceRef, base_lba: u64 },
+    /// `/bin`: VIFS1 unioned with the FAT cell-store of `sectors` at `base_lba`.
+    BinOverlay {
+        dev: DeviceRef,
+        base_lba: u64,
+        sectors: u64,
+    },
 }
 
 /// The mounts for `discovery`: the primary disk carries exactly `/mnt/sd` (P1),
 /// `/data` (P4), the `/bin` overlay (P6) and `/srv` (P5); each secondary only a
-/// FAT32 volume at the P1 offset.
+/// FAT32 volume with the P1 geometry. Every mount carries its partition length:
+/// the FAT geometry on disk is untrusted and must not reach a neighbour.
 pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
     use api::disk::*;
     let dev = discovery.primary;
@@ -48,6 +54,7 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
             prefix: Cow::Borrowed("/mnt/sd"),
             dev,
             base_lba: PART_FAT32_BASE_LBA,
+            sectors: PART_FAT32_SECTORS,
             secondary: false
         },
         // Native P4/P5 require explicit offline provisioning; runtime never formats.
@@ -59,7 +66,8 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
         },
         DiskMount::BinOverlay {
             dev,
-            base_lba: PART_CELLSTORE_BASE_LBA
+            base_lba: PART_CELLSTORE_BASE_LBA,
+            sectors: PART_CELLSTORE_SECTORS
         },
         // /srv P5: existing native V1 volume, not an admitted durable journal.
         DiskMount::CellosFs {
@@ -77,6 +85,7 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
                 prefix: Cow::Owned(format!("{SECONDARY_ROOT}/{name}")),
                 dev: *dev,
                 base_lba: PART_FAT32_BASE_LBA,
+                sectors: PART_FAT32_SECTORS,
                 secondary: true,
             }),
     );
@@ -91,9 +100,10 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
                 prefix,
                 dev,
                 base_lba,
+                sectors,
                 secondary,
             } => {
-                let fat = FatBackend::mount(&prefix, dev, base_lba);
+                let fat = FatBackend::mount(&prefix, dev, base_lba, sectors);
                 if secondary && !fat.is_mounted() {
                     ostd::io::println(&format!("[vfs] {prefix}: no FAT32 volume"));
                     continue;
@@ -112,10 +122,15 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
                 )));
                 mounts.mount(prefix, index);
             }
-            DiskMount::BinOverlay { dev, base_lba } => {
+            DiskMount::BinOverlay {
+                dev,
+                base_lba,
+                sectors,
+            } => {
                 // VIFS1 ramdisk (bootstrap cells) unioned with the on-disk FAT
                 // cell-store (non-bootstrap cells).
-                let index = mounts.add_backend(Box::new(BinOverlay::new(dev, base_lba)));
+                let overlay = BinOverlay::new(dev, base_lba, sectors);
+                let index = mounts.add_backend(Box::new(overlay));
                 mounts.mount("/bin", index);
             }
         }
@@ -154,6 +169,7 @@ mod tests {
                 prefix: "/mnt/sd".into(),
                 dev: primary,
                 base_lba: PART_FAT32_BASE_LBA,
+                sectors: PART_FAT32_SECTORS,
                 secondary: false
             }
         );
@@ -170,7 +186,8 @@ mod tests {
             plan[2],
             DiskMount::BinOverlay {
                 dev: primary,
-                base_lba: PART_CELLSTORE_BASE_LBA
+                base_lba: PART_CELLSTORE_BASE_LBA,
+                sectors: PART_CELLSTORE_SECTORS
             }
         );
         assert_eq!(
@@ -182,6 +199,27 @@ mod tests {
                 sectors: PART_SRV_SECTORS
             }
         );
+        // Partition bounds are the only thing keeping one volume's untrusted
+        // geometry off its neighbours: the primary ranges must be disjoint.
+        let ranges: Vec<(u64, u64)> = plan
+            .iter()
+            .map(|m| match m {
+                DiskMount::Fat {
+                    base_lba, sectors, ..
+                }
+                | DiskMount::CellosFs {
+                    base_lba, sectors, ..
+                }
+                | DiskMount::BinOverlay {
+                    base_lba, sectors, ..
+                } => (*base_lba, base_lba + sectors),
+            })
+            .collect();
+        for (i, a) in ranges.iter().enumerate() {
+            for b in &ranges[i + 1..] {
+                assert!(a.1 <= b.0 || b.1 <= a.0, "{a:?} overlaps {b:?}");
+            }
+        }
     }
 
     #[test]
@@ -215,12 +253,14 @@ mod tests {
                     prefix: "/mnt/disk/pci-00-1f-2".into(),
                     dev: DeviceRef::Device(0),
                     base_lba: PART_FAT32_BASE_LBA,
+                    sectors: PART_FAT32_SECTORS,
                     secondary: true
                 },
                 DiskMount::Fat {
                     prefix: "/mnt/disk/mmio-10001000".into(),
                     dev: DeviceRef::Device(2),
                     base_lba: PART_FAT32_BASE_LBA,
+                    sectors: PART_FAT32_SECTORS,
                     secondary: true
                 },
             ]

@@ -22,12 +22,18 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
+mod inodes;
+
+#[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 pub struct CellosFs<D: BlockDevice> {
     disk: D,
     active_sb: Superblock,
     active_slot: u8, // 0 for A, 1 for B
     allocator: BitmapAllocator,
     dirty_inodes: BTreeMap<u64, InodeRecord>,
+    /// Retired inode numbers below `next_inode_num` → generation of their
+    /// last record. Reuse continues from that generation (see `inodes.rs`).
+    free_inodes: BTreeMap<u64, u64>,
 }
 #[cfg(not(all(feature = "g2-cow-experiment", not(target_os = "none"))))]
 impl<D: BlockDevice> CellosFs<D> {
@@ -73,6 +79,7 @@ impl<D: BlockDevice> CellosFs<D> {
             active_slot: 0,
             allocator,
             dirty_inodes: BTreeMap::new(),
+            free_inodes: BTreeMap::new(),
         })
     }
 
@@ -125,10 +132,12 @@ impl<D: BlockDevice> CellosFs<D> {
             active_slot,
             allocator,
             dirty_inodes: BTreeMap::new(),
+            free_inodes: BTreeMap::new(),
         };
         if !fs.root_inode()?.is_dir() {
             return Err(FsError::Corrupted);
         }
+        fs.free_inodes = fs.scan_free_inodes();
         Ok(fs)
     }
 
@@ -311,13 +320,19 @@ impl<D: BlockDevice> CellosFs<D> {
             return Err(FsError::AlreadyExists);
         }
 
-        let new_inode_num = self.active_sb.next_inode_num;
-        let next_inode_num = new_inode_num.checked_add(1).ok_or(FsError::NoSpace)?;
-        if new_inode_num == 0
-            || new_inode_num > self.active_sb.inode_blocks.len() as u64 * INODES_PER_BLOCK as u64
-        {
-            return Err(FsError::NoSpace);
-        }
+        let (new_inode_num, generation, next_inode_num) = match self.free_inodes.first_key_value() {
+            Some((&num, &generation)) => (num, generation, self.active_sb.next_inode_num),
+            None => {
+                let num = self.active_sb.next_inode_num;
+                let next = num.checked_add(1).ok_or(FsError::NoSpace)?;
+                if num == 0
+                    || num > self.active_sb.inode_blocks.len() as u64 * INODES_PER_BLOCK as u64
+                {
+                    return Err(FsError::NoSpace);
+                }
+                (num, 0, next)
+            }
+        };
         let file_type = if mode == INODE_MODE_DIR { 2 } else { 1 };
         let dir_entry =
             DirEntryRecord::new(new_inode_num, file_type, leaf_name).ok_or(FsError::InvalidName)?;
@@ -326,8 +341,10 @@ impl<D: BlockDevice> CellosFs<D> {
         DirPayload::insert(&mut parent_inode.payload, &mut count, &dir_entry)?;
         parent_inode.extent_count = count as u32;
         self.active_sb.next_inode_num = next_inode_num;
+        self.free_inodes.remove(&new_inode_num);
 
-        let new_inode = InodeRecord::new(new_inode_num, mode);
+        let mut new_inode = InodeRecord::new(new_inode_num, mode);
+        new_inode.generation = generation;
         self.put_inode(new_inode);
         self.put_inode(parent_inode);
         Ok(new_inode)
@@ -644,8 +661,7 @@ impl<D: BlockDevice> CellosFs<D> {
         }
 
         let mut count = parent_inode.extent_count as usize;
-        let removed_inode_num =
-            DirPayload::remove(&mut parent_inode.payload, &mut count, leaf_name)?;
+        DirPayload::remove(&mut parent_inode.payload, &mut count, leaf_name)?;
         parent_inode.extent_count = count as u32;
 
         if !child_inode.is_inline() {
@@ -658,7 +674,7 @@ impl<D: BlockDevice> CellosFs<D> {
         }
 
         self.put_inode(parent_inode);
-        self.dirty_inodes.remove(&removed_inode_num);
+        self.retire_inode(child_inode);
         Ok(())
     }
 
@@ -686,12 +702,11 @@ impl<D: BlockDevice> CellosFs<D> {
         }
 
         let mut count = parent_inode.extent_count as usize;
-        let removed_inode_num =
-            DirPayload::remove(&mut parent_inode.payload, &mut count, leaf_name)?;
+        DirPayload::remove(&mut parent_inode.payload, &mut count, leaf_name)?;
         parent_inode.extent_count = count as u32;
 
         self.put_inode(parent_inode);
-        self.dirty_inodes.remove(&removed_inode_num);
+        self.retire_inode(child_inode);
         Ok(())
     }
     /// Atomic non-replacing rename of a file from `old_path` to `new_path`.
@@ -845,7 +860,7 @@ impl<D: BlockDevice> CellosFs<D> {
         if !same {
             self.put_inode(dst_parent);
         }
-        self.dirty_inodes.remove(&old.inode_num);
+        self.retire_inode(old);
         Ok(())
     }
 

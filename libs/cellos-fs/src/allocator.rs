@@ -4,6 +4,7 @@ use crate::disk::{BlockDevice, FsError};
 use crate::format::BLOCK_SIZE;
 use alloc::vec::Vec;
 
+#[derive(Clone)]
 pub struct BitmapAllocator {
     start_block: u64,
     bitmap_blocks: u32,

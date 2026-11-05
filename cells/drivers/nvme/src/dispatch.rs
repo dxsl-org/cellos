@@ -2,9 +2,8 @@
 //!
 //! Wire format: `types::block_wire`, shared with the AHCI/virtio-blk cells.
 
-use crate::controller::NvmeController;
-use crate::dma::AuthorizedDma;
-use ostd::dma::DmaBuf;
+use crate::bounce::BounceBuffer;
+use crate::controller::{IoFailure, NvmeController};
 use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
 
 pub const REPLY_SIZE: usize = block_wire::REPLY_SIZE;
@@ -38,11 +37,20 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
     1
 }
 
+/// An issued command that failed: its outcome is unknown, and a timed-out one
+/// still owns its buffer page, so that page is quarantined before any reuse.
+fn failed(bounce: &mut BounceBuffer, failure: IoFailure, out: &mut [u8; REPLY_SIZE]) -> usize {
+    if failure == IoFailure::TimedOut {
+        bounce.quarantine();
+    }
+    status(out, BlockOutcome::Indeterminate)
+}
+
 /// Handle one incoming IPC message. Writes the reply into `out` and returns
 /// the number of bytes to send back: 513 for a completed read, else 1.
 pub fn handle(
     ctrl: &mut NvmeController,
-    io_buf: &AuthorizedDma<DmaBuf>,
+    bounce: &mut BounceBuffer,
     data: &[u8],
     out: &mut [u8; REPLY_SIZE],
 ) -> usize {
@@ -62,65 +70,63 @@ pub fn handle(
         ));
     }
 
-    match op {
-        DrvOp::Read => match ctrl.read_sector(sector, io_buf.iova()) {
+    if op == DrvOp::Flush {
+        return match ctrl.flush() {
+            Ok(()) => status(out, BlockOutcome::Completed),
+            Err(failure) => failed(bounce, failure, out),
+        };
+    }
+    // `None` after too many abandoned commands, or when no clean page could
+    // replace the last one.
+    let Some((page, iova)) = bounce.page().map(|buf| (buf.inner().virt(), buf.iova())) else {
+        return status(out, BlockOutcome::NotIssued);
+    };
+
+    if op == DrvOp::Read {
+        return match ctrl.read_sector(sector, iova) {
             Ok(()) => {
                 out[0] = BlockOutcome::Completed.to_byte();
                 // SAFETY: read_sector completed; DMA data is now stable in
-                // the CPU mapping retained by io_buf.
+                // the CPU mapping of the live bounce page.
                 unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        io_buf.inner().virt(),
-                        out[1..].as_mut_ptr(),
-                        SECTOR_SIZE,
-                    );
+                    core::ptr::copy_nonoverlapping(page, out[1..].as_mut_ptr(), SECTOR_SIZE);
                 }
                 REPLY_SIZE
             }
-            Err(outcome) => status(out, outcome),
-        },
+            Err(failure) => failed(bounce, failure, out),
+        };
+    }
 
-        DrvOp::Write => {
-            if data.len() < 10 + SECTOR_SIZE {
-                return status(out, BlockOutcome::NotIssued);
-            }
-            // SAFETY: write the caller payload into the CPU mapping before
-            // submitting the authorized device-visible IOVA.
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    data[10..].as_ptr(),
-                    io_buf.inner().virt(),
-                    SECTOR_SIZE,
-                );
-            }
-            // Fault-injection witnesses only. `F08B-DIE` kills this cell before
-            // the write is issued, with its controller still enabled;
-            // `F09C-DIE-ISSUED` kills it right after the write's doorbell.
-            #[cfg(feature = "fault-inject")]
-            {
-                let payload = &data[10..10 + SECTOR_SIZE];
-                if payload.windows(8).any(|window| window == b"F08B-DIE") {
-                    let _ = ostd::io::print_fmt(format_args!(
-                        "[nvme] fault-inject: driver exiting at lba={}\n",
-                        sector
-                    ));
-                    ostd::syscall::sys_exit(70);
-                }
-                if payload
-                    .windows(15)
-                    .any(|window| window == b"F09C-DIE-ISSUED")
-                {
-                    ctrl.exit_after_next_doorbell();
-                }
-            }
-            match ctrl.write_sector(sector, io_buf.iova()) {
-                Ok(()) => status(out, BlockOutcome::Completed),
-                Err(outcome) => status(out, outcome),
-            }
+    if data.len() < 10 + SECTOR_SIZE {
+        return status(out, BlockOutcome::NotIssued);
+    }
+    // SAFETY: write the caller payload into the CPU mapping before
+    // submitting the authorized device-visible IOVA.
+    unsafe {
+        core::ptr::copy_nonoverlapping(data[10..].as_ptr(), page, SECTOR_SIZE);
+    }
+    // Fault-injection witnesses only. `F08B-DIE` kills this cell before
+    // the write is issued, with its controller still enabled;
+    // `F09C-DIE-ISSUED` kills it right after the write's doorbell.
+    #[cfg(feature = "fault-inject")]
+    {
+        let payload = &data[10..10 + SECTOR_SIZE];
+        if payload.windows(8).any(|window| window == b"F08B-DIE") {
+            let _ = ostd::io::print_fmt(format_args!(
+                "[nvme] fault-inject: driver exiting at lba={}\n",
+                sector
+            ));
+            ostd::syscall::sys_exit(70);
         }
-        DrvOp::Flush => match ctrl.flush() {
-            Ok(()) => status(out, BlockOutcome::Completed),
-            Err(outcome) => status(out, outcome),
-        },
+        if payload
+            .windows(15)
+            .any(|window| window == b"F09C-DIE-ISSUED")
+        {
+            ctrl.exit_after_next_doorbell();
+        }
+    }
+    match ctrl.write_sector(sector, iova) {
+        Ok(()) => status(out, BlockOutcome::Completed),
+        Err(failure) => failed(bounce, failure, out),
     }
 }
