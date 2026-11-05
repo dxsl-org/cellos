@@ -101,11 +101,14 @@ signing-required = []
 release-signing-key = []
 # Named release kernel posture: release anchor, unsigned cells denied, absent or
 # unlisted policy fail-closed. Build with `--no-default-features --features release-posture`.
-release-posture = ["release-signing-key", "signing-required", "policy-required"]
+# `native-domains` is required: without it the user-copy boundary is a raw memcpy
+# (copy_glue legacy path), so any syscall pointer would reach kernel memory.
+release-posture = ["release-signing-key", "signing-required", "policy-required", "native-domains"]
 # Named fail-closed kernel posture selected by the production relay image owner.
-# Carries the release anchor so it never boots with a zero anchor; build with
-# `--no-default-features` and CELLOS_RELEASE_CELL_PUBLIC_KEY.
-production-relay-image = ["policy-required", "signing-required", "release-signing-key"]
+# Carries the release anchor so it never boots with a zero anchor, and the guarded
+# copy boundary (`native-domains`); build with `--no-default-features` and
+# CELLOS_RELEASE_CELL_PUBLIC_KEY.
+production-relay-image = ["policy-required", "signing-required", "release-signing-key", "native-domains"]
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []
