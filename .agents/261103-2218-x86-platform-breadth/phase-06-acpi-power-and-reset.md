@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "ACPI reset, S5 poweroff, power button"
-status: implemented (CP2-06 pending owner decision; guest acceptance blocked, see Deviation Log B-1)
+status: implemented (CP2-06 pending owner decision)
 priority: P2
 effort: "3d"
 dependencies: [1, 3]
@@ -71,8 +71,8 @@ The kernel holds `kernel/src/acpi/power.rs` (register writes and the `\_S5_` sca
 - [x] Shutdown path located (request §1; `cells/services/power` left untouched, H-S2-9)
 - [x] Reset + 436 (kernel, ostd, api; host-tested)
 - [x] `\_S5_` scanner + fixtures (`tests/fixtures/acpi/`)
-- [x] Poweroff (kernel; guest lane blocked by B-1)
-- [x] SCI power button (ISR + relay observed on TCG; supervisor leg blocked by B-1)
+- [x] Poweroff (`power-x86`: QEMU exit 0, TCG and KVM)
+- [x] SCI power button (`power-x86`: QMP `system_powerdown` → supervisor → exit 0, TCG and KVM)
 
 ## Success Criteria
 
@@ -102,4 +102,4 @@ Phase 09 uses ACPI shutdown in the VMware lane; phase 20 records the per-machine
 - **Deviation:** `sci::init` is not called under `cellos_g1_cpu` (G1 lane untouched).
 - **Deviation:** fixtures: q35 DSDT dumped with QMP `pmemsave`; the in-method fixture is hand-assembled (no `iasl`), `.asl` source committed beside it.
 - **Surprise:** `tests/integration/tests/ahci-x86.rs:280-282` comment ("On x86 `shutdown` halts the CPU") is stale; left unedited per request O6.
-- **B-1 (blocker, file outside the set):** the canonical x86 image ships no `/bin/supervisor` (`scripts/assemble-x86-image.py:106-127`; signing route pin and signed set at `scripts/cellos_sign/signing.py:64-70`). Guest lanes fail at the supervisor marker. A local uncommitted witness with the row, signed name and new pin still did not start the supervisor. Owner grant needed (CP2-06-1).
+- **B-1 (resolved by owner grant 2026-11-05, [record](s2-phase06-supervisor-image-grant.md)):** the canonical x86 images shipped no `/bin/supervisor`. Root cause of the failed first local witness: `scripts/generate-boot-config.py` selects the supervisor row of `config/services.toml` only with an init feature `supervisor`/`hostile-backend-recovery`/`hotswap-demo`. Fixed in the granted paths: supervisor row in `HEADLESS_CELLS` (desktop inherits), `supervisor` in both profiles' init features, signed set + assembler pin in `scripts/cellos_sign/signing.py`, `scripts/test_assemble_x86_image.py`. Every x86 image now runs the supervisor. CP2-06 deviation 7.
