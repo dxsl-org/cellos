@@ -21,6 +21,8 @@
 #
 # Environment:
 #   HV_SMOKE_MODE  machinery (default) | boot
+#   HV_SMOKE_CPU   CPU QEMU emulates in machinery mode (default: cortex-a72);
+#                  a VHE-capable CPU (e.g. cortex-a76) runs the VHE host kernel
 #   BOOT_WINDOW    seconds to wait for the prompt (default: 300). QEMU is
 #                  stopped as soon as the prompt appears.
 #   LOG_TAIL       lines of qemu-hv.log printed on any failure (default: 200)
@@ -38,6 +40,7 @@ KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_hv_arm.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-300}"
 HV_SMOKE_MODE="${HV_SMOKE_MODE:-machinery}"
+HV_SMOKE_CPU="${HV_SMOKE_CPU:-cortex-a72}"
 
 if [[ "$HV_SMOKE_MODE" != "machinery" && "$HV_SMOKE_MODE" != "boot" ]]; then
     echo "FAIL: HV_SMOKE_MODE must be 'machinery' or 'boot' (got '$HV_SMOKE_MODE')" >&2
@@ -61,7 +64,7 @@ echo "[hv-smoke] mode=$HV_SMOKE_MODE kernel=$KERNEL disk=$DISK (window=${BOOT_WI
 if [[ "$HV_SMOKE_MODE" == "boot" ]]; then
     CPU_ARGS=(-enable-kvm -cpu host)
 else
-    CPU_ARGS=(-cpu cortex-a72)
+    CPU_ARGS=(-cpu "$HV_SMOKE_CPU")
 fi
 
 QEMU_ARGS=(
