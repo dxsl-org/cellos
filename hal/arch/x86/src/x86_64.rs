@@ -26,9 +26,9 @@ pub mod hpet;
 #[cfg(target_arch = "x86_64")]
 pub mod idt;
 #[cfg(target_arch = "x86_64")]
-pub mod ioapic;
-#[cfg(target_arch = "x86_64")]
 pub mod invept;
+#[cfg(target_arch = "x86_64")]
+pub mod ioapic;
 #[cfg(target_arch = "x86_64")]
 pub mod ist;
 #[cfg(target_arch = "x86_64")]
