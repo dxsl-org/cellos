@@ -16,11 +16,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 /// to keep its Normal-priority worker on hart 1 until that worker has begun
 /// the controlled block-before-yield handoff.
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-static TEST_DISPATCH_RESERVATIONS: [AtomicUsize; MAX_HARTS] = {
-    #[allow(clippy::declare_interior_mutable_const)]
-    const EMPTY: AtomicUsize = AtomicUsize::new(0);
-    [EMPTY; MAX_HARTS]
-};
+static TEST_DISPATCH_RESERVATIONS: [AtomicUsize; MAX_HARTS] =
+    [const { AtomicUsize::new(0) }; MAX_HARTS];
 
 /// Reserve a test worker's initial dispatch on `hart_id`.
 ///
@@ -113,6 +110,10 @@ const NO_CLAIMS: BucketClaims = BucketClaims {
     created: AtomicBool::new(false),
     rollback_ahead: core::sync::atomic::AtomicUsize::new(0),
 };
+/// One claim set per `(hart, priority)` bucket. Static and linear in
+/// `MAX_HARTS`: on 64-bit targets 24 bytes × 256 priorities = 6 KiB per hart,
+/// 384 KiB of `.bss` at the x86_64 bound of 64 (plan 261103-2218 phase 07a size
+/// audit, which keeps it static).
 static CLAIMS: [[BucketClaims; 256]; MAX_HARTS] = [const { [NO_CLAIMS; 256] }; MAX_HARTS];
 
 fn claims(hart: usize, priority: u8) -> &'static BucketClaims {
@@ -710,7 +711,8 @@ pub fn any_hart_running(task_id: usize) -> bool {
 /// Move up to `ceil(stealable/2)` Normal/Background tasks from the busiest other
 /// hart's queue into `thief`'s queue.  Never steals RT tasks.
 ///
-/// Always locks hart 0 then hart 1 (ABBA-safe for MAX_HARTS=2).
+/// Always locks hart 0 then hart 1 (ABBA-safe). Until phase 07b brings up more
+/// than two harts, only harts 0 and 1 take part, whatever `MAX_HARTS` is.
 pub fn steal_from_busiest(thief: usize) {
     steal_from_busiest_with(
         thief,
@@ -723,10 +725,12 @@ pub(crate) fn steal_from_busiest_with(
     thief: usize,
     #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
 ) {
-    if thief >= MAX_HARTS {
+    // Two-hart steal: the victim is always the other one. `MAX_HARTS` may be
+    // larger (x86_64: 64), but phase 07a still brings at most harts 0 and 1
+    // online; any other thief does not steal rather than underflow below.
+    if thief > 1 || MAX_HARTS < 2 {
         return;
     }
-    // Only 2 harts: victim is always the other one.
     let victim = 1 - thief;
 
     // Acquire in hart-id order to prevent ABBA deadlock.
