@@ -123,10 +123,12 @@ pub fn init() {
         core::arch::asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack));
     }
 
-    // Kernel stays at PKRU=0 (all-access). No wrpkru needed here; the kernel
-    // runs at Ring-0 and PKRU only restricts Ring-3 accesses. Ring-3 cells get
-    // their pku_value set at spawn and restored on every ring-3 re-entry by the
-    // asm paths in syscall.rs and boot.rs.
+    // Kernel stays at PKRU=0 (all-access); no wrpkru needed here. PKRU gates
+    // every data access to U=1 pages — Ring-0 accesses included — so any path
+    // that can leave a foreign PKRU live (e.g. a guest's after a VM exit, see
+    // world_switch) must restore the kernel's before touching user memory.
+    // Ring-3 cells get their pku_value set at spawn and restored on every
+    // ring-3 re-entry by the asm paths in syscall.rs and boot.rs.
 
     // Arm the asm guard last — guarantees no ring-3 path executes wrpkru before
     // CR4.PKE is set (which would trap with #GP on CPUs without PKU).

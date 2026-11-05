@@ -54,9 +54,54 @@ const INT1_INTR: u32 = 1 << 0;
 const INT1_CPUID: u32 = 1 << 18;
 const INT1_PAUSE: u32 = 1 << 23;
 const INT1_HLT: u32 = 1 << 24;
+const INT1_INVLPGA: u32 = 1 << 26;
 const INT1_IOIO: u32 = 1 << 27;
 const INT1_MSR: u32 = 1 << 28;
+/// A guest triple fault must become `VMEXIT_SHUTDOWN`; un-intercepted it shuts
+/// down the physical processor.
+const INT1_SHUTDOWN: u32 = 1 << 31;
 const INT2_VMRUN: u32 = 1 << 0; // MANDATORY or VMRUN → VMEXIT_INVALID
+const INT2_VMMCALL: u32 = 1 << 1;
+const INT2_VMLOAD: u32 = 1 << 2;
+const INT2_VMSAVE: u32 = 1 << 3;
+const INT2_STGI: u32 = 1 << 4;
+const INT2_CLGI: u32 = 1 << 5;
+const INT2_SKINIT: u32 = 1 << 6;
+const INT2_MONITOR: u32 = 1 << 10;
+const INT2_MWAIT: u32 = 1 << 11;
+const INT2_MWAIT_COND: u32 = 1 << 12;
+const INT2_XSETBV: u32 = 1 << 13;
+
+/// Every SVM instruction is intercepted. Guest EFER.SVME must stay set for
+/// VMRUN's consistency check, which makes them all legal in the guest:
+/// un-intercepted, `CLGI` blocks physical INTR/NMI so the guest owns the CPU,
+/// `VMLOAD`/`VMSAVE` reach host-physical VMCB addresses, and `SKINIT` runs
+/// natively. `XSETBV` would rewrite the physical XCR0, and `MONITOR`/`MWAIT`
+/// would park the CPU outside host control.
+const INT2_ALWAYS: u32 = INT2_VMRUN
+    | INT2_VMMCALL
+    | INT2_VMLOAD
+    | INT2_VMSAVE
+    | INT2_STGI
+    | INT2_CLGI
+    | INT2_SKINIT
+    | INT2_MONITOR
+    | INT2_MWAIT
+    | INT2_MWAIT_COND
+    | INT2_XSETBV;
+
+// ── Exit codes produced by the intercepts above (AMD APM Vol.2 App. C) ──────
+pub const VMEXIT_INVLPGA: u64 = 0x7A;
+pub const VMEXIT_VMRUN: u64 = 0x80;
+pub const VMEXIT_VMLOAD: u64 = 0x82;
+pub const VMEXIT_VMSAVE: u64 = 0x83;
+pub const VMEXIT_STGI: u64 = 0x84;
+pub const VMEXIT_CLGI: u64 = 0x85;
+pub const VMEXIT_SKINIT: u64 = 0x86;
+pub const VMEXIT_MONITOR: u64 = 0x8A;
+pub const VMEXIT_MWAIT: u64 = 0x8B;
+pub const VMEXIT_MWAIT_COND: u64 = 0x8C;
+pub const VMEXIT_XSETBV: u64 = 0x8D;
 
 const VINTR_MASKING: u64 = 1 << 24; // physical INTR governed by host IF
 const NP_ENABLE_BIT: u64 = 1 << 0;
@@ -101,17 +146,23 @@ impl VmcbView {
     ) {
         // Control area. No CR-write intercept: on SVM the guest drives its own
         // paging/long-mode through NPT (CR0.PG trapping is a VMX-only need).
-        // CPUID IS intercepted so the run loop can clear the x2APIC feature bit
-        // (leaf 1 ECX[21]) — the guest then drives the LAPIC through the
-        // RAM-backed 0xFEE00000 xAPIC window instead of x2APIC MSRs. PAUSE is
-        // intercepted so guest busy-waits (jiffies calibration loops that spin
-        // on cpu_relax and never HLT) still receive paced timer ticks.
+        // CPUID IS intercepted so the run loop can apply the guest CPUID
+        // policy (`guest_cpuid`) — x2APIC, XSAVE, MONITOR and SVM hidden. PAUSE
+        // is intercepted so guest busy-waits (jiffies calibration loops that
+        // spin on cpu_relax and never HLT) still receive paced timer ticks.
         self.w32(OFF_CR_INTERCEPT, 0);
         self.w32(
             OFF_INTERCEPT1,
-            INT1_INTR | INT1_CPUID | INT1_PAUSE | INT1_HLT | INT1_IOIO | INT1_MSR,
+            INT1_INTR
+                | INT1_CPUID
+                | INT1_PAUSE
+                | INT1_HLT
+                | INT1_INVLPGA
+                | INT1_IOIO
+                | INT1_MSR
+                | INT1_SHUTDOWN,
         );
-        self.w32(OFF_INTERCEPT2, INT2_VMRUN);
+        self.w32(OFF_INTERCEPT2, INT2_ALWAYS);
         self.w64(OFF_IOPM_BASE, iopm_pa);
         self.w64(OFF_MSRPM_BASE, msrpm_pa);
         self.w32(OFF_ASID, asid);

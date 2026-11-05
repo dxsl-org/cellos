@@ -249,11 +249,16 @@ impl NestedPageTable {
 
     /// Map `n_pages` × 4 KiB at guest `gpa` → host `hpa`.
     ///
+    /// All-or-nothing: every interior table the range needs is allocated
+    /// before the first leaf is written, so a failed call leaves the existing
+    /// mapping exactly as it was (no partial window into host memory).
+    ///
     /// # Errors
-    /// * [`EptMapError::Overflow`] — `gpa`/`hpa` + span wraps (C-x1).
+    /// * [`EptMapError::Overflow`] — the byte span or `gpa`/`hpa` + span wraps.
     /// * [`EptMapError::OutOfBounds`] — range exceeds the 52-bit PA limit.
     /// * [`EptMapError::MmioHole`] — range overlaps a reserved MMIO hole.
-    /// * [`EptMapError::SasViolation`] — `hpa` escapes the carved guest RAM.
+    /// * [`EptMapError::SasViolation`] — the range is larger than, or escapes,
+    ///   the carved guest RAM.
     /// * [`EptMapError::OutOfMemory`] — sub-table allocation failed.
     pub fn map(
         &mut self,
@@ -262,7 +267,15 @@ impl NestedPageTable {
         n_pages: usize,
         writable: bool,
     ) -> Result<(), EptMapError> {
-        let span = (n_pages as u64) * PAGE_SIZE as u64;
+        if self.guest_ram_pages > 0 && n_pages > self.guest_ram_pages {
+            return Err(EptMapError::SasViolation);
+        }
+        // An unchecked product wraps to a tiny span for n_pages ≥ 2^52, which
+        // would let every range check below pass while the loop walks far past
+        // the carve (C-2).
+        let span = (n_pages as u64)
+            .checked_mul(PAGE_SIZE as u64)
+            .ok_or(EptMapError::Overflow)?;
         let gpa_end = gpa.checked_add(span).ok_or(EptMapError::Overflow)?;
         let hpa_end = hpa.checked_add(span).ok_or(EptMapError::Overflow)?;
         if gpa_end > GPA_LIMIT || hpa_end > GPA_LIMIT {
@@ -274,18 +287,24 @@ impl NestedPageTable {
             }
         }
         if self.guest_ram_pages > 0 {
-            let guest_end = self.guest_ram_pa + (self.guest_ram_pages as u64 * PAGE_SIZE as u64);
+            let guest_end = (self.guest_ram_pages as u64)
+                .checked_mul(PAGE_SIZE as u64)
+                .and_then(|bytes| self.guest_ram_pa.checked_add(bytes))
+                .ok_or(EptMapError::Overflow)?;
             if hpa < self.guest_ram_pa || hpa_end > guest_end {
                 return Err(EptMapError::SasViolation);
             }
         }
-        let mut cur_gpa = gpa;
-        let mut cur_hpa = hpa;
-        for _ in 0..n_pages {
-            self.map_single(cur_gpa, cur_hpa, writable)?;
-            cur_gpa += PAGE_SIZE as u64;
-            cur_hpa += PAGE_SIZE as u64;
+        // Pass 1: build every interior level. The only fallible step.
+        for page in 0..n_pages as u64 {
+            self.leaf_table(gpa + page * PAGE_SIZE as u64)?;
         }
+        // Pass 2: write leaves. Cannot fail — every table now exists.
+        for page in 0..n_pages as u64 {
+            let offset = page * PAGE_SIZE as u64;
+            self.map_single(gpa + offset, hpa + offset, writable)?;
+        }
+        self.invalidate();
         Ok(())
     }
 
@@ -307,16 +326,42 @@ impl NestedPageTable {
         if gpa >= GPA_LIMIT || hpa >= GPA_LIMIT {
             return Err(EptMapError::OutOfBounds);
         }
-        self.map_single(gpa, hpa, writable)
+        self.map_single(gpa, hpa, writable)?;
+        self.invalidate();
+        Ok(())
     }
 
-    /// Unmap `n_pages` starting at `gpa`; silently skips unmapped pages.
-    /// Sub-tables are freed only in `Drop`.
+    /// Unmap `n_pages` starting at `gpa`; silently skips unmapped pages and
+    /// stops at the GPA limit. Sub-tables are freed only in `Drop`.
     pub fn unmap(&mut self, gpa: u64, n_pages: usize) {
-        let mut cur = gpa;
-        for _ in 0..n_pages {
+        for page in 0..n_pages as u64 {
+            let Some(cur) = page
+                .checked_mul(PAGE_SIZE as u64)
+                .and_then(|offset| gpa.checked_add(offset))
+                .filter(|cur| *cur < GPA_LIMIT)
+            else {
+                break;
+            };
             self.unmap_single(cur);
-            cur += PAGE_SIZE as u64;
+        }
+        self.invalidate();
+    }
+
+    /// Drop this context's cached EPT translations on the current CPU.
+    ///
+    /// EPT guest-physical mappings are tagged by EP4TA and survive VM exits, so
+    /// a cleared or rewritten leaf stays live until `INVEPT`. `INVEPT` is
+    /// CPU-local: the registry also invalidates on the entering CPU before
+    /// every VM entry, which covers CPUs this call cannot reach. NPT needs
+    /// nothing here — every VMRUN flushes the guest's ASID.
+    fn invalidate(&self) {
+        if self.format == NestedFormat::Ept && crate::cpu_features::has_x86_virt() {
+            // SAFETY: an EPT table exists only on the VMX backend, and
+            // `has_x86_virt` means every online CPU completed VMXON (an AP that
+            // fails it never comes online).
+            if let Err(e) = unsafe { hal::x86_64::invept::invalidate_context(self.eptp()) } {
+                log::error!("[ept] INVEPT root={:#x} failed: {:?}", self.root_pa, e);
+            }
         }
     }
 
@@ -348,8 +393,9 @@ impl NestedPageTable {
 
     // ── Single-page walk ─────────────────────────────────────────────────────
 
-    fn map_single(&mut self, gpa: u64, hpa: u64, writable: bool) -> Result<(), EptMapError> {
-        // Descend/allocate three interior levels, then write the leaf.
+    /// Walk to the page table covering `gpa`, allocating missing interior
+    /// levels. Writes only table descriptors, never a leaf.
+    fn leaf_table(&mut self, gpa: u64) -> Result<*mut u64, EptMapError> {
         let mut level_va = self.root_va;
         for &idx in &[pml4_idx(gpa), pdpt_idx(gpa), pd_idx(gpa)] {
             // SAFETY: level_va valid for 512 entries; idx < 512.
@@ -367,10 +413,16 @@ impl NestedPageTable {
                 va
             };
         }
-        // SAFETY: level_va is the PT; pt_idx < 512.
+        Ok(level_va)
+    }
+
+    /// Write one leaf. The caller invalidates once its whole batch is written.
+    fn map_single(&mut self, gpa: u64, hpa: u64, writable: bool) -> Result<(), EptMapError> {
+        let pt = self.leaf_table(gpa)?;
         let leaf = self.leaf_desc(hpa, writable);
+        // SAFETY: pt is a live page table; pt_idx < 512.
         unsafe {
-            *level_va.add(pt_idx(gpa)) = leaf;
+            *pt.add(pt_idx(gpa)) = leaf;
         }
         Ok(())
     }
@@ -396,6 +448,19 @@ impl Drop for NestedPageTable {
     fn drop(&mut self) {
         #[cfg(cellos_p01_trace)]
         let _p01_activity = crate::p01_noncpu::activity();
+        // Translations must be gone before the root, tables or guest RAM can be
+        // handed out again: a later VM whose root lands on the same frame would
+        // otherwise resolve GPAs through this VM's cached entries.
+        if self.format == NestedFormat::Ept && crate::cpu_features::has_x86_virt() {
+            // SAFETY: as in `invalidate` — VMX backend, every online CPU in VMX operation.
+            if let Err(e) = unsafe { hal::x86_64::invept::invalidate_all(self.eptp()) } {
+                log::error!(
+                    "[ept] teardown INVEPT root={:#x} failed: {:?}",
+                    self.root_pa,
+                    e
+                );
+            }
+        }
         let mut g = FRAME_ALLOCATOR.lock();
         if let Some(alloc) = g.as_mut() {
             for &pa in &self.sub_frames {
@@ -413,3 +478,7 @@ impl Drop for NestedPageTable {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ept_tests.rs"]
+mod tests;

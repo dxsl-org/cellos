@@ -26,8 +26,9 @@
 ///
 /// `#[repr(C, u8)]` guarantees a stable ABI: the `u8` discriminant precedes each
 /// variant's payload in memory, and the total size equals the largest variant
-/// padded to alignment.  The kernel writes via `*mut ViVmExit` (SAS: kernel and
-/// cell share the same virtual address space, so the pointer is valid in both).
+/// padded to alignment.  The kernel encodes the exit field by field into a
+/// zeroed 80-byte record and copies it out through the caller's copy view; it
+/// never dereferences the caller's pointer directly.
 ///
 /// **Frozen at VERSION 1.** Never modify existing variant fields.
 #[repr(C, u8)]
@@ -81,8 +82,8 @@ impl ViVmExit {
 }
 
 // I1: the x86 variants (≤ 16 B payload) must NOT grow the enum past the
-// `Hvc { regs: [u64; 8] }` envelope, or `validate_user_buf(size_of::<ViVmExit>())`
-// in the run_vcpu syscall path breaks for every existing cell. Pin it.
+// `Hvc { regs: [u64; 8] }` envelope: the run_vcpu syscall copies out exactly
+// this many bytes, so growth breaks every existing cell. Pin it.
 const _: () = assert!(core::mem::size_of::<ViVmExit>() == 80);
 
 /// Well-known system service registration ID for the Tier 3 hypervisor service (`/bin/hypervisor`).

@@ -112,6 +112,20 @@ fn page_desc_device(pa: u64, writable: bool) -> u64 {
     (pa & PA_MASK) | ap | S2_AF | DESC_TABLE | DESC_VALID
 }
 
+/// End addresses of `n_pages` pages at `ipa` and `hpa`, both within the 40-bit
+/// space. Every step is checked: the page count is caller-controlled.
+fn checked_range(ipa: u64, hpa: u64, n_pages: usize) -> Result<(u64, u64), S2MapError> {
+    let page_bytes = (n_pages as u64)
+        .checked_mul(PAGE_SIZE as u64)
+        .ok_or(S2MapError::Overflow)?;
+    let ipa_end = ipa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
+    let hpa_end = hpa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
+    if ipa_end > IPA_LIMIT || hpa_end > IPA_LIMIT {
+        return Err(S2MapError::OutOfBounds);
+    }
+    Ok((ipa_end, hpa_end))
+}
+
 // ── Error type ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, PartialEq)]
@@ -234,15 +248,22 @@ impl Stage2Table {
     /// Map `n_pages` × 4 KB at guest IPA `ipa` → host PA `hpa`.
     ///
     /// # C3 — overflow guard
-    /// Both `ipa + n_pages × PAGE_SIZE` and `hpa + n_pages × PAGE_SIZE` are
-    /// checked with `checked_add`; a wrapping range returns `Overflow`.
+    /// The byte span (`n_pages × PAGE_SIZE`) and both range ends are computed
+    /// with checked arithmetic; any wrap returns `Overflow`. An unchecked span
+    /// wraps to a tiny value for `n_pages ≥ 2^52`, passing every range check
+    /// while the walk runs far past the carve.
     ///
     /// # M3 — MMIO-hole guard
     /// Any IPA that overlaps a reserved MMIO hole returns `MmioHole`.
     ///
     /// # SAS-isolation guard
-    /// If a guest-RAM region was carved via `carve_guest_ram`, `hpa` must
-    /// lie within it; otherwise `SasViolation` is returned.
+    /// If a guest-RAM region was carved via `carve_guest_ram`, the range may be
+    /// no larger than the carve and `hpa` must lie within it; otherwise
+    /// `SasViolation` is returned.
+    ///
+    /// # All-or-nothing
+    /// Every table the range needs is built before the first leaf is written,
+    /// so an error leaves the existing mapping unchanged.
     pub fn map(
         &mut self,
         ipa: u64,
@@ -250,18 +271,10 @@ impl Stage2Table {
         n_pages: usize,
         writable: bool,
     ) -> Result<(), S2MapError> {
-        let page_bytes = n_pages as u64 * PAGE_SIZE as u64;
-
-        // C3: overflow guards.
-        let ipa_end = ipa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
-        let hpa_end = hpa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
-
-        if ipa_end > IPA_LIMIT {
-            return Err(S2MapError::OutOfBounds);
+        if self.guest_ram_pages > 0 && n_pages > self.guest_ram_pages {
+            return Err(S2MapError::SasViolation);
         }
-        if hpa_end > IPA_LIMIT {
-            return Err(S2MapError::OutOfBounds);
-        }
+        let (ipa_end, hpa_end) = checked_range(ipa, hpa, n_pages)?;
 
         // M3: reject any mapping that touches a reserved MMIO hole.
         for &(hole_base, hole_end) in MMIO_HOLES {
@@ -272,31 +285,42 @@ impl Stage2Table {
 
         // SAS isolation: if guest RAM is known, HPA must stay within it.
         if self.guest_ram_pages > 0 {
-            let guest_end = self.guest_ram_pa + (self.guest_ram_pages as u64 * PAGE_SIZE as u64);
+            let guest_end = (self.guest_ram_pages as u64)
+                .checked_mul(PAGE_SIZE as u64)
+                .and_then(|bytes| self.guest_ram_pa.checked_add(bytes))
+                .ok_or(S2MapError::Overflow)?;
             if hpa < self.guest_ram_pa || hpa_end > guest_end {
                 return Err(S2MapError::SasViolation);
             }
         }
 
-        let mut cur_ipa = ipa;
-        let mut cur_hpa = hpa;
-        for _ in 0..n_pages {
-            self.map_single(cur_ipa, cur_hpa, writable)?;
-            cur_ipa += PAGE_SIZE as u64;
-            cur_hpa += PAGE_SIZE as u64;
+        self.build_tables(ipa, n_pages)?;
+        for page in 0..n_pages as u64 {
+            let offset = page * PAGE_SIZE as u64;
+            let l3 = self.leaf_table(ipa + offset)?;
+            // SAFETY: l3 is a live L3 table; l3_idx < 512.
+            unsafe {
+                *l3.add(l3_idx(ipa + offset)) = page_desc(hpa + offset, writable);
+            }
         }
         Ok(())
     }
 
     /// Unmap `n_pages` pages starting at guest IPA `ipa`.
     ///
-    /// Silently skips pages that are not mapped.  Does NOT free L2/L3 sub-tables
-    /// even if they become fully empty — deferred to `Drop`.
+    /// Silently skips pages that are not mapped and stops at the IPA limit.
+    /// Does NOT free L2/L3 sub-tables even if they become fully empty —
+    /// deferred to `Drop`.
     pub fn unmap(&mut self, ipa: u64, n_pages: usize) {
-        let mut cur = ipa;
-        for _ in 0..n_pages {
+        for page in 0..n_pages as u64 {
+            let Some(cur) = page
+                .checked_mul(PAGE_SIZE as u64)
+                .and_then(|offset| ipa.checked_add(offset))
+                .filter(|cur| *cur < IPA_LIMIT)
+            else {
+                break;
+            };
             self.unmap_single(cur);
-            cur += PAGE_SIZE as u64;
         }
     }
 
@@ -304,7 +328,7 @@ impl Stage2Table {
     ///
     /// Bypasses both the MMIO-hole guard and the SAS-isolation guard.  Use only for
     /// legitimate hardware passthrough (e.g., GICV HPA → GICC IPA for vGIC).
-    /// Uses Device-nGnRnE memory attributes.
+    /// Uses Device-nGnRnE memory attributes. All-or-nothing, like [`Self::map`].
     ///
     /// # Errors
     /// Returns `Overflow` on wraparound; `OutOfBounds` if range exceeds 40-bit IPA limit.
@@ -315,114 +339,58 @@ impl Stage2Table {
         n_pages: usize,
         writable: bool,
     ) -> Result<(), S2MapError> {
-        let page_bytes = n_pages as u64 * PAGE_SIZE as u64;
-        let ipa_end = ipa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
-        let hpa_end = hpa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
-        if ipa_end > IPA_LIMIT {
-            return Err(S2MapError::OutOfBounds);
-        }
-        if hpa_end > IPA_LIMIT {
-            return Err(S2MapError::OutOfBounds);
-        }
-        let mut cur_ipa = ipa;
-        let mut cur_hpa = hpa;
-        for _ in 0..n_pages {
-            self.map_single_device(cur_ipa, cur_hpa, writable)?;
-            cur_ipa += PAGE_SIZE as u64;
-            cur_hpa += PAGE_SIZE as u64;
+        checked_range(ipa, hpa, n_pages)?;
+        self.build_tables(ipa, n_pages)?;
+        for page in 0..n_pages as u64 {
+            let offset = page * PAGE_SIZE as u64;
+            let l3 = self.leaf_table(ipa + offset)?;
+            // SAFETY: l3 is a live L3 table; l3_idx < 512.
+            unsafe {
+                *l3.add(l3_idx(ipa + offset)) = page_desc_device(hpa + offset, writable);
+            }
         }
         Ok(())
     }
 
     // ── Single-page walk helpers ─────────────────────────────────────────────
 
-    fn map_single(&mut self, ipa: u64, hpa: u64, writable: bool) -> Result<(), S2MapError> {
-        // ── Level 1 ──────────────────────────────────────────────────────────
-        let l1_ptr: *mut u64 =
-            // SAFETY: root_va valid for 1024 entries; l1_idx < 1024.
-            unsafe { self.root_va.add(l1_idx(ipa)) };
-        let l1e = unsafe { *l1_ptr };
-
-        let l2_va: *mut u64 = if l1e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE) {
-            // Existing L2 table pointer.
-            phys_to_virt(desc_pa(l1e)) as *mut u64
-        } else if l1e & DESC_VALID == 0 {
-            // Allocate a fresh L2 table.
-            let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
-            // SAFETY: l1_ptr valid; DESC_TABLE|DESC_VALID cannot overlap PA bits.
-            unsafe {
-                *l1_ptr = table_desc(pa);
-            }
-            va
-        } else {
-            return Err(S2MapError::BlockConflict); // L1 block — refuse to split
-        };
-
-        // ── Level 2 ──────────────────────────────────────────────────────────
-        let l2_ptr: *mut u64 =
-            // SAFETY: l2_va valid for 512 entries; l2_idx < 512.
-            unsafe { l2_va.add(l2_idx(ipa)) };
-        let l2e = unsafe { *l2_ptr };
-
-        let l3_va: *mut u64 = if l2e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE) {
-            phys_to_virt(desc_pa(l2e)) as *mut u64
-        } else if l2e & DESC_VALID == 0 {
-            let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
-            // SAFETY: l2_ptr valid.
-            unsafe {
-                *l2_ptr = table_desc(pa);
-            }
-            va
-        } else {
-            return Err(S2MapError::BlockConflict); // L2 block
-        };
-
-        // ── Level 3 (page descriptor) ─────────────────────────────────────────
-        let l3_ptr: *mut u64 =
-            // SAFETY: l3_va valid for 512 entries; l3_idx < 512.
-            unsafe { l3_va.add(l3_idx(ipa)) };
-        // SAFETY: writing a well-formed page descriptor.
-        unsafe {
-            *l3_ptr = page_desc(hpa, writable);
+    /// Build every L2/L3 table `[ipa, ipa + n_pages pages)` needs. The only
+    /// fallible step of a map; writes no leaf, so failing here leaves every
+    /// existing translation intact (new empty tables are freed in `Drop`).
+    fn build_tables(&mut self, ipa: u64, n_pages: usize) -> Result<(), S2MapError> {
+        for page in 0..n_pages as u64 {
+            self.leaf_table(ipa + page * PAGE_SIZE as u64)?;
         }
-
         Ok(())
     }
 
-    /// Same L1→L2→L3 walk as `map_single`, but writes a Device-nGnRnE L3 descriptor.
-    fn map_single_device(&mut self, ipa: u64, hpa: u64, writable: bool) -> Result<(), S2MapError> {
+    /// Walk L1 → L2 → L3 for `ipa`, allocating missing tables, and return the
+    /// L3 table. Refuses to split an existing block descriptor.
+    fn leaf_table(&mut self, ipa: u64) -> Result<*mut u64, S2MapError> {
+        // SAFETY: root_va valid for 1024 entries; l1_idx < 1024.
         let l1_ptr: *mut u64 = unsafe { self.root_va.add(l1_idx(ipa)) };
-        let l1e = unsafe { *l1_ptr };
-        let l2_va: *mut u64 = if l1e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE) {
-            phys_to_virt(desc_pa(l1e)) as *mut u64
-        } else if l1e & DESC_VALID == 0 {
-            let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
-            unsafe {
-                *l1_ptr = table_desc(pa);
-            }
-            va
-        } else {
-            return Err(S2MapError::BlockConflict);
-        };
+        let l2_va = self.next_table(l1_ptr)?;
+        // SAFETY: l2_va valid for 512 entries; l2_idx < 512.
         let l2_ptr: *mut u64 = unsafe { l2_va.add(l2_idx(ipa)) };
-        let l2e = unsafe { *l2_ptr };
-        let l3_va: *mut u64 = if l2e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE) {
-            phys_to_virt(desc_pa(l2e)) as *mut u64
-        } else if l2e & DESC_VALID == 0 {
+        self.next_table(l2_ptr)
+    }
+
+    /// Follow (or create) the table that descriptor slot `slot` points to.
+    fn next_table(&mut self, slot: *mut u64) -> Result<*mut u64, S2MapError> {
+        // SAFETY: slot is an entry of a live table owned by `self`.
+        let desc = unsafe { *slot };
+        if desc & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE) {
+            Ok(phys_to_virt(desc_pa(desc)) as *mut u64)
+        } else if desc & DESC_VALID == 0 {
             let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
+            // SAFETY: slot valid; DESC_TABLE|DESC_VALID cannot overlap PA bits.
             unsafe {
-                *l2_ptr = table_desc(pa);
+                *slot = table_desc(pa);
             }
-            va
+            Ok(va)
         } else {
-            return Err(S2MapError::BlockConflict);
-        };
-        let l3_ptr: *mut u64 = unsafe { l3_va.add(l3_idx(ipa)) };
-        // SAFETY: writing a Device-nGnRnE page descriptor for MMIO passthrough.
-        unsafe {
-            *l3_ptr = page_desc_device(hpa, writable);
+            Err(S2MapError::BlockConflict) // block descriptor — refuse to split
         }
-        Ok(())
     }
 
     fn unmap_single(&mut self, ipa: u64) {
@@ -525,3 +493,7 @@ pub fn probe_stage2_table() {
 
     log::info!("[stage2::probe] Stage-2 table smoke-check passed");
 }
+
+#[cfg(test)]
+#[path = "stage2_tests.rs"]
+pub(crate) mod tests;

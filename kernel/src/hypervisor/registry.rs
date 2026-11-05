@@ -20,6 +20,10 @@ use types::{ViError, ViResult};
 #[cfg(target_arch = "aarch64")]
 use super::pending_irqs::PendingIrqs;
 
+/// Byte images of the records the hypervisor syscalls copy to the cell.
+#[path = "vmm_wire.rs"]
+pub(crate) mod vmm_wire;
+
 // ── AArch64-only concrete types ───────────────────────────────────────────────
 
 #[cfg(target_arch = "aarch64")]
@@ -323,18 +327,41 @@ pub fn map_guest_memory(
     }
 }
 
-/// World-switch into vCPU; write `ViVmExit` to `exit_out`.
-///
-/// # Safety
-/// `exit_out` must point to a valid, writable `ViVmExit`-sized buffer in the
-/// caller's address space.  Validated by the syscall layer before this call.
-pub unsafe fn run_vcpu(
+/// The guest-RAM window of `vm_id`: its first guest-physical address and its
+/// size in bytes. The syscall layer bounds every guest-memory request with it
+/// before staging any data.
+pub fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+    #[cfg(target_arch = "aarch64")]
+    {
+        const GUEST_IPA_BASE: u64 = 0x4000_0000;
+        let guard = registry_lock().lock();
+        let map = guard.as_ref().ok_or(ViError::NotFound)?;
+        let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let bytes = vm
+            .guest_pages
+            .checked_mul(crate::memory::paging::PAGE_SIZE)
+            .ok_or(ViError::InvalidInput)?;
+        Ok((GUEST_IPA_BASE, bytes))
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        super::svm_registry::guest_window(owner, vm_id)
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        let _ = (owner, vm_id);
+        Err(ViError::NotSupported)
+    }
+}
+
+/// World-switch into the vCPU and return the exit, converted to the API ABI.
+/// The syscall layer copies it to the cell; this never touches cell memory.
+pub fn run_vcpu(
     owner: usize,
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
-    exit_out: *mut api::hypervisor::ViVmExit,
-) -> ViResult<usize> {
+) -> ViResult<api::hypervisor::ViVmExit> {
     #[cfg(target_arch = "aarch64")]
     {
         let hal_exit = {
@@ -518,11 +545,7 @@ pub unsafe fn run_vcpu(
             | HalVmExit::Hlt
             | HalVmExit::Msr { .. } => ApiVmExit::Unknown { ec: 0, iss: 0 },
         };
-        // SAFETY: exit_out validated by syscall layer.
-        unsafe {
-            core::ptr::write(exit_out, api_exit);
-        }
-        Ok(0)
+        Ok(api_exit)
     }
     #[cfg(target_arch = "x86_64")]
     {
@@ -555,26 +578,25 @@ pub unsafe fn run_vcpu(
                 ApiVmExit::Unknown { ec: 0, iss: 0 }
             }
         };
-        // SAFETY: exit_out validated by the syscall layer.
-        unsafe {
-            core::ptr::write(exit_out, api_exit);
-        }
-        Ok(0)
+        Ok(api_exit)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        let _ = (owner, vm_id, vcpu_id, _budget_ns, exit_out);
+        let _ = (owner, vm_id, vcpu_id, _budget_ns);
         Err(ViError::NotSupported)
     }
 }
 
 /// Modes 0/1 read/write 32 guest GP-register words. On Pi mode 2 reads a
 /// 32-word timer snapshot (CNTV_CTL_EL0, CNTV_CVAL_EL0, then thirty zeros).
+///
+/// `regs` is a kernel copy of the cell's buffer: read modes fill it, mode 1
+/// consumes it. Words a backend does not model are left as they were.
 pub fn vcpu_regs(
     owner: usize,
     vm_id: usize,
     vcpu_id: usize,
-    buf_ptr: usize,
+    regs: &mut [u64; 32],
     mode: usize,
 ) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
@@ -586,9 +608,7 @@ pub fn vcpu_regs(
             .vcpus
             .get_mut(vcpu_id.saturating_sub(1))
             .ok_or(ViError::NotFound)?;
-        // buf_ptr points to 32×u64 (256 bytes), validated by syscall layer.
-        // SAFETY: buf_ptr validated; SAS — same VA in kernel and cell.
-        let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u64, 32) };
+        let buf = regs;
         match mode {
             1 => {
                 for (i, v) in buf[..31].iter().enumerate() {
@@ -618,35 +638,26 @@ pub fn vcpu_regs(
         if mode > 1 {
             return Err(ViError::InvalidArgument);
         }
-        super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, buf_ptr, mode == 1)
+        super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, regs, mode == 1)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        let _ = (owner, vm_id, vcpu_id, buf_ptr, mode);
+        let _ = (owner, vm_id, vcpu_id, regs, mode);
         Err(ViError::NotSupported)
     }
 }
 
-/// Copy `len` bytes from caller's `src_ptr` into guest physical RAM at `gpa`.
+/// Copy `src` into guest physical RAM at `gpa`.
 ///
-/// # Preconditions (enforced by caller / syscall layer)
-/// - `src_ptr + len` is within the caller cell's valid address range (via `validate_user_buf`).
-/// - `gpa + len` does not wrap (overflow guard in syscall layer).
-///
-/// # Safety (kernel-internal)
-/// `src_ptr` is a valid cell VA; in SAS, VA == PA for kernel-managed regions, but
-/// the copy uses `copy_nonoverlapping` which only reads the source — no guest access.
-pub fn write_guest_memory(
-    owner: usize,
-    vm_id: usize,
-    gpa: u64,
-    src_ptr: usize,
-    len: usize,
-) -> ViResult<usize> {
+/// `src` is kernel memory (the syscall layer stages cell data through the
+/// caller's copy view); the whole `[gpa, gpa + len)` range must lie inside the
+/// guest-RAM window or nothing is written.
+pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src: &[u8]) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         use crate::memory::paging::PAGE_SIZE;
         const GUEST_IPA_BASE: u64 = 0x4000_0000;
+        let len = src.len();
 
         let guard = registry_lock().lock();
         let map = guard.as_ref().ok_or(ViError::NotFound)?;
@@ -661,50 +672,37 @@ pub fn write_guest_memory(
             return Err(ViError::InvalidInput);
         }
 
-        // SAFETY: guest RAM is kernel-allocated identity-mapped memory.
-        // src_ptr validated by syscall layer (validate_user_buf); SAS means it's
-        // also accessible here. No active vCPU reads this region while we copy
-        // (the caller holds no vcpu run in progress — that would require RunVcpu,
-        // which cannot be concurrent in a single-task cell).
+        // SAFETY: guest RAM is kernel-allocated identity-mapped memory and
+        // `offset + len` lies inside it (checked above); `src` is a kernel
+        // slice, disjoint from guest RAM.
         unsafe {
             let dst = (vm.guest_pa as usize + offset) as *mut u8;
-            let src = src_ptr as *const u8;
-            core::ptr::copy_nonoverlapping(src, dst, len);
+            core::ptr::copy_nonoverlapping(src.as_ptr(), dst, len);
         }
         Ok(len)
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::write_guest_memory(owner, vm_id, gpa, src_ptr, len)
+        super::svm_registry::write_guest_memory(owner, vm_id, gpa, src)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        let _ = (owner, vm_id, gpa, src_ptr, len);
+        let _ = (owner, vm_id, gpa, src);
         Err(ViError::NotSupported)
     }
 }
 
-/// Copy `len` bytes from guest physical RAM at `gpa` into caller's `dst_ptr`.
+/// Copy guest physical RAM at `gpa` into `dst`.
 ///
-/// # Preconditions (enforced by caller / syscall layer)
-/// - `dst_ptr + len` is within the caller cell's valid address range (via `validate_user_buf`).
-/// - `gpa + len` does not wrap (overflow guard in syscall layer).
-///
-/// # Safety (kernel-internal)
-/// `dst_ptr` is a valid cell VA; in SAS, VA == PA for kernel-managed regions.
-/// Guest RAM is kernel-allocated identity-mapped memory — never freed while a vCPU
-/// is alive (teardown requires the VM to be destroyed first).
-pub fn read_guest_memory(
-    owner: usize,
-    vm_id: usize,
-    gpa: u64,
-    dst_ptr: usize,
-    len: usize,
-) -> ViResult<usize> {
+/// `dst` is kernel memory (the syscall layer copies it out through the
+/// caller's copy view); the whole `[gpa, gpa + len)` range must lie inside the
+/// guest-RAM window or nothing is read.
+pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst: &mut [u8]) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         use crate::memory::paging::PAGE_SIZE;
         const GUEST_IPA_BASE: u64 = 0x4000_0000;
+        let len = dst.len();
 
         let guard = registry_lock().lock();
         let map = guard.as_ref().ok_or(ViError::NotFound)?;
@@ -719,25 +717,22 @@ pub fn read_guest_memory(
             return Err(ViError::InvalidInput);
         }
 
-        // SAFETY: guest RAM is kernel-allocated identity-mapped memory.
-        // dst_ptr validated by syscall layer (validate_user_buf); SAS means it's
-        // also accessible here. No active vCPU writes this region while we copy
-        // (the caller holds no vcpu run in progress — that would require RunVcpu,
-        // which cannot be concurrent in a single-task cell).
+        // SAFETY: guest RAM is kernel-allocated identity-mapped memory and
+        // `offset + len` lies inside it (checked above); `dst` is a kernel
+        // slice, disjoint from guest RAM.
         unsafe {
             let src = (vm.guest_pa as usize + offset) as *const u8;
-            let dst = dst_ptr as *mut u8;
-            core::ptr::copy_nonoverlapping(src, dst, len);
+            core::ptr::copy_nonoverlapping(src, dst.as_mut_ptr(), len);
         }
         Ok(len)
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst_ptr, len)
+        super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
-        let _ = (owner, vm_id, gpa, dst_ptr, len);
+        let _ = (owner, vm_id, gpa, dst);
         Err(ViError::NotSupported)
     }
 }

@@ -17,37 +17,106 @@
 //!   `#VMEXIT` clears IF in hardware, so no host handler ever runs inside the
 //!   fence — see the inline comment at the `sti`).
 //!
+//! - **XCR0 / PKRU** (both backends) and, on VMX, **CR8 (TPR)** and
+//!   **IA32_KERNEL_GS_BASE** — no exit reloads them, so the Rust wrappers
+//!   [`svm_vmrun`] / [`vmx_vmrun`] snapshot the host values before entry and
+//!   restore them right after the exit (see `host_ext_state`). SVM's
+//!   KernelGSBase is already covered by the VMSAVE/VMLOAD pair.
+//!
 //! # gpr[] index = x86 register number
 //! 0=RAX 1=RCX 2=RDX 3=RBX 4=RSP 5=RBP 6=RSI 7=RDI 8..15=R8..R15.
 //! Slots 0 (RAX) and 4 (RSP) are VMCB-managed and untouched by this stub.
 
 use core::arch::global_asm;
 
-extern "C" {
-    /// Enter the guest via `VMRUN` and return on `#VMEXIT`.
-    ///
-    /// # Arguments (SysV: rdi, rsi, rdx)
-    /// * `guest_vmcb_pa` — physical address of the guest VMCB (4 KiB-aligned).
-    /// * `gpr_ptr` — pointer to the caller's `[u64; 16]` guest-GPR array.
-    /// * `host_vmcb_pa` — physical address of the host-save VMCB (VMSAVE target).
-    ///
-    /// # Safety
-    /// SVM root operation must be active (`EFER.SVME=1`), both VMCB frames valid
-    /// and kernel-owned, the guest VMCB fully initialised, and interrupts masked
-    /// (IF=0) for the whole call — an interrupt in the VMRUN→VMLOAD window would
-    /// read the guest's `gs:` base.
-    pub fn svm_vmrun(guest_vmcb_pa: u64, gpr_ptr: *mut u64, host_vmcb_pa: u64);
+mod host_ext_state;
+use host_ext_state::HostExtState;
 
-    /// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume` (if `launched != 0`).
-    ///
-    /// Returns 0 on successful VM-exit, 1 on VMfailInvalid, 2 on VMfailValid.
-    pub fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64) -> u32;
+use super::msr;
+
+const MSR_KERNEL_GS_BASE: u32 = 0xC000_0102;
+
+extern "C" {
+    fn svm_world_switch(guest_vmcb_pa: u64, gpr_ptr: *mut u64, host_vmcb_pa: u64);
+    fn vmx_world_switch(gpr_ptr: *mut u64, launched: u64) -> u32;
+}
+
+/// Enter the guest via `VMRUN` and return on `#VMEXIT`.
+///
+/// `guest_pkru` is the vCPU's PKRU: loaded before entry, refreshed from the
+/// register at exit, after which the host PKRU/XCR0 are back in place.
+///
+/// # Arguments
+/// * `guest_vmcb_pa` — physical address of the guest VMCB (4 KiB-aligned).
+/// * `gpr_ptr` — pointer to the caller's `[u64; 16]` guest-GPR array.
+/// * `host_vmcb_pa` — physical address of the host-save VMCB (VMSAVE target).
+///
+/// # Safety
+/// SVM root operation must be active (`EFER.SVME=1`), both VMCB frames valid
+/// and kernel-owned, the guest VMCB fully initialised, and interrupts masked
+/// (IF=0) for the whole call — an interrupt in the VMRUN→VMLOAD window would
+/// read the guest's `gs:` base.
+#[inline]
+pub unsafe fn svm_vmrun(
+    guest_vmcb_pa: u64,
+    gpr_ptr: *mut u64,
+    host_vmcb_pa: u64,
+    guest_pkru: &mut u32,
+) {
+    let host = HostExtState::enter(*guest_pkru);
+    svm_world_switch(guest_vmcb_pa, gpr_ptr, host_vmcb_pa);
+    host.exit(guest_pkru);
+}
+
+/// Guest values of the registers a VMX exit leaves holding guest state.
+#[derive(Default)]
+pub struct VmxGuestRegs {
+    pub pkru: u32,
+    /// The guest's `swapgs` partner; without the swap-back the VMM cell would
+    /// resume with a guest-chosen user GS base.
+    pub kernel_gs_base: u64,
+}
+
+/// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume`.
+///
+/// Returns 0 on VM exit, 1 on VMfailInvalid, 2 on VMfailValid. The host's
+/// PKRU, XCR0, KERNEL_GS_BASE and CR8 are identical before and after the call;
+/// `guest` carries the guest's PKRU/KERNEL_GS_BASE across exits. CR8 is
+/// restored only as a backstop: the VMCS sets CR8-load/store exiting, so the
+/// guest never reaches the physical TPR.
+///
+/// # Safety
+/// VMX root operation, this vCPU's VMCS current and fully initialised
+/// (host-state fields describing the *current* CPU), `gpr_ptr` a live
+/// `[u64; 16]`, and IF=0 for the whole call.
+#[inline]
+pub unsafe fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64, guest: &mut VmxGuestRegs) -> u32 {
+    let host_tpr: u64;
+    core::arch::asm!("mov {}, cr8", out(reg) host_tpr, options(nomem, nostack, preserves_flags));
+    let host_kgs = msr::read(MSR_KERNEL_GS_BASE);
+    if guest.kernel_gs_base != host_kgs {
+        msr::write(MSR_KERNEL_GS_BASE, guest.kernel_gs_base);
+    }
+    let host = HostExtState::enter(guest.pkru);
+    let status = vmx_world_switch(gpr_ptr, launched);
+    host.exit(&mut guest.pkru);
+    let kgs = msr::read(MSR_KERNEL_GS_BASE);
+    guest.kernel_gs_base = kgs;
+    if kgs != host_kgs {
+        msr::write(MSR_KERNEL_GS_BASE, host_kgs);
+    }
+    let tpr: u64;
+    core::arch::asm!("mov {}, cr8", out(reg) tpr, options(nomem, nostack, preserves_flags));
+    if tpr != host_tpr {
+        core::arch::asm!("mov cr8, {}", in(reg) host_tpr, options(nomem, nostack, preserves_flags));
+    }
+    status
 }
 
 global_asm!(
     ".section .text, \"ax\"",
-    ".global svm_vmrun",
-    "svm_vmrun:",
+    ".global svm_world_switch",
+    "svm_world_switch:",
     ".byte 0xF3, 0x0F, 0x1E, 0xFA", // ENDBR64 (CET-IBT landing pad)
     // Preserve callee-saved host registers for the Rust caller.
     "push rbp",
@@ -143,8 +212,8 @@ global_asm!(
     "pop rbx",
     "pop rbp",
     "ret",
-    ".global vmx_vmrun",
-    "vmx_vmrun:",
+    ".global vmx_world_switch",
+    "vmx_world_switch:",
     ".byte 0xF3, 0x0F, 0x1E, 0xFA", // ENDBR64
     "push rbp",
     "push rbx",

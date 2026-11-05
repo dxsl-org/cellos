@@ -20,11 +20,15 @@ pub mod domain;
 #[cfg(target_arch = "x86_64")]
 pub mod gdt;
 #[cfg(target_arch = "x86_64")]
+pub mod guest_cpuid;
+#[cfg(target_arch = "x86_64")]
 pub mod hpet;
 #[cfg(target_arch = "x86_64")]
 pub mod idt;
 #[cfg(target_arch = "x86_64")]
 pub mod ioapic;
+#[cfg(target_arch = "x86_64")]
+pub mod invept;
 #[cfg(target_arch = "x86_64")]
 pub mod ist;
 #[cfg(target_arch = "x86_64")]

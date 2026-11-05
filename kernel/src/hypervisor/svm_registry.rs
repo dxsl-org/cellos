@@ -14,7 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::memory::ept::{NestedFormat, NestedPageTable};
+use crate::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
 use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
@@ -66,49 +66,21 @@ impl X86Vcpu {
     fn inject_ext_irq_gated(&mut self, vector: u8) -> bool {
         match self {
             Self::Svm(v) => v.inject_ext_irq_gated(vector),
-            Self::Vmx(_) => unsafe {
-                let rflags =
-                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
-                let intr_info =
-                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_INTERRUPTIBILITY_INFO)
-                        .unwrap_or(0);
-                if (rflags & (1 << 9) != 0) && (intr_info & 0x3 == 0) {
-                    let _ = hal::x86_64::vmcs::vmwrite(
-                        hal::x86_64::vmcs::VM_ENTRY_INTR_INFO_FIELD,
-                        vector as u64 | (1 << 31),
-                    );
-                    true
-                } else {
-                    false
-                }
-            },
+            Self::Vmx(v) => v.inject_ext_irq_gated(vector),
         }
     }
 
     fn shutdown_diagnostics(&self) -> (u64, u64, u64) {
         match self {
             Self::Svm(v) => v.shutdown_diagnostics(),
-            Self::Vmx(_) => unsafe {
-                let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
-                let rflags =
-                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RFLAGS).unwrap_or(0);
-                let cr0 = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_CR0).unwrap_or(0);
-                (rip, rflags, cr0)
-            },
+            Self::Vmx(v) => v.shutdown_diagnostics(),
         }
     }
 
     fn npf_diagnostics(&self) -> (u64, u64, u64) {
         match self {
             Self::Svm(v) => v.npf_diagnostics(),
-            Self::Vmx(_) => unsafe {
-                let gpa = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_PHYSICAL_ADDRESS)
-                    .unwrap_or(0);
-                let rip = hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::GUEST_RIP).unwrap_or(0);
-                let qual =
-                    hal::x86_64::vmcs::vmread(hal::x86_64::vmcs::EXIT_QUALIFICATION).unwrap_or(0);
-                (qual, gpa, rip)
-            },
+            Self::Vmx(v) => v.npf_diagnostics(),
         }
     }
 }
@@ -161,6 +133,13 @@ impl Drop for SvmVm {
                         a.deallocate_frame(*iopm + 2 * PAGE_SIZE);
                     }
                     VcpuFrames::Vmx { vmcs } => {
+                        // A VMCS still active on this CPU may be written back
+                        // into its frame after the frame is reused.
+                        if crate::cpu_features::has_x86_virt() {
+                            // SAFETY: VMX backend with every online CPU in VMX
+                            // operation; `vmcs` is this vCPU's VMCS frame.
+                            let _ = unsafe { hal::x86_64::vmcs::vmclear(*vmcs as u64) };
+                        }
                         a.deallocate_frame(*vmcs);
                     }
                 }
@@ -201,7 +180,16 @@ fn alloc_contig(n: usize) -> Option<usize> {
 
 /// Allocate guest RAM + NPT, mapped at GPA 0; return the opaque `vm_id`.
 pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
-    let mut npt = NestedPageTable::new(nested_format()).ok_or_else(|| {
+    let format = nested_format();
+    // SAFETY: the EPT format is selected only on a VMX CPU, so the VMX
+    // capability MSRs exist.
+    if format == NestedFormat::Ept && !unsafe { hal::x86_64::invept::supported() } {
+        // Without INVEPT an unmap or a reused frame could never be made
+        // visible to the CPU: refuse EPT guests outright.
+        log::error!("[hv-x86] create_vm: CPU lacks INVEPT; EPT guests refused");
+        return Err(ViError::NotSupported);
+    }
+    let mut npt = NestedPageTable::new(format).ok_or_else(|| {
         log::error!("[hv-x86] create_vm: NestedPageTable::new OOM");
         ViError::OutOfMemory
     })?;
@@ -376,7 +364,21 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     Ok(vcpu_id)
 }
 
-/// Extend the guest NPT mapping to cover `[gpa, gpa+size)`.
+/// Guest-RAM window: GPA 0 and the carve size in bytes.
+pub fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+    let guard = VM_REGISTRY.lock();
+    let map = guard.as_ref().ok_or(ViError::NotFound)?;
+    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let bytes = vm
+        .guest_pages
+        .checked_mul(PAGE_SIZE)
+        .ok_or(ViError::InvalidInput)?;
+    Ok((0, bytes))
+}
+
+/// Extend the guest NPT mapping to cover `[gpa, gpa+size)`, backed by the
+/// start of the guest carve. The table refuses any range larger than the
+/// carve, and a refused map changes nothing.
 pub fn map_guest_memory(
     owner: usize,
     vm_id: usize,
@@ -390,8 +392,26 @@ pub fn map_guest_memory(
     let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
     vm.npt
         .map(gpa, vm.guest_pa, pages, writable)
-        .map_err(|_| ViError::OutOfMemory)?;
-    Ok(())
+        .map_err(|error| match error {
+            EptMapError::OutOfMemory => ViError::OutOfMemory,
+            _ => ViError::InvalidInput,
+        })
+}
+
+/// Make this CPU's EPT translations for `eptp` current before VM entry.
+///
+/// `INVEPT` is CPU-local and the VMM task may migrate between runs, so an
+/// unmap or a freed-and-reused root invalidated elsewhere could still be
+/// cached here. Invalidating on the entering CPU, with interrupts masked up to
+/// the entry, closes that for every CPU (the SVM path flushes its ASID on
+/// every VMRUN for the same reason).
+fn invalidate_ept_on_this_cpu(eptp: u64) -> ViResult<()> {
+    if !crate::cpu_features::has_x86_virt() {
+        return Err(ViError::NotSupported);
+    }
+    // SAFETY: `has_x86_virt` means every online CPU completed VMXON (an AP that
+    // fails it never comes online), and only the VMX backend builds VMX vCPUs.
+    unsafe { hal::x86_64::invept::invalidate_context(eptp) }
 }
 
 /// World-switch into a vCPU and return the HAL exit. Runs with interrupts
@@ -400,6 +420,7 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
     let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let eptp = vm.npt.eptp();
     let vcpu = vm
         .vcpus
         .get_mut(vcpu_id.saturating_sub(1))
@@ -410,6 +431,18 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
     // contract — no host gs: access while the guest GS.base is loaded).
     unsafe {
         core::arch::asm!("cli", options(nomem, nostack));
+    }
+    if matches!(vcpu, X86Vcpu::Vmx(_)) {
+        if let Err(error) = invalidate_ept_on_this_cpu(eptp) {
+            if if_was_set {
+                // SAFETY: restore the caller's interrupt-enable state.
+                unsafe {
+                    core::arch::asm!("sti", options(nomem, nostack));
+                }
+            }
+            log::error!("[hv-x86] INVEPT before entry failed: {:?}", error);
+            return Err(error);
+        }
     }
     // SAFETY: SVM root operation is active (P01 latched has_x86_virt); IF=0.
     let exit = unsafe { vcpu.run() };
@@ -440,18 +473,13 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
     Ok(exit)
 }
 
-/// Copy `len` bytes from the caller's `src_ptr` into guest RAM at GPA `gpa`
-/// (GPA base 0). Bounds-checked against the carved guest-RAM window.
-pub fn write_guest_memory(
-    owner: usize,
-    vm_id: usize,
-    gpa: u64,
-    src_ptr: usize,
-    len: usize,
-) -> ViResult<usize> {
+/// Copy `src` into guest RAM at GPA `gpa` (GPA base 0). Bounds-checked
+/// against the carved guest-RAM window before any byte is written.
+pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src: &[u8]) -> ViResult<usize> {
     let guard = VM_REGISTRY.lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
     let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let len = src.len();
     let offset = gpa as usize;
     let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
     if end > vm.guest_pages * PAGE_SIZE {
@@ -464,10 +492,10 @@ pub fn write_guest_memory(
         let chunk = (len - copied).min(page_remaining);
         let hpa = vm.npt.translate(current_gpa).ok_or(ViError::InvalidInput)?;
         // SAFETY: the software NPT walk resolves this GPA to kernel-owned guest
-        // RAM; the syscall layer validated `src_ptr`; `chunk` stays in one page.
+        // RAM; `chunk` stays in one page; `src` is a kernel slice.
         unsafe {
             core::ptr::copy_nonoverlapping(
-                (src_ptr + copied) as *const u8,
+                src[copied..].as_ptr(),
                 phys_to_virt(hpa as usize) as *mut u8,
                 chunk,
             );
@@ -477,17 +505,13 @@ pub fn write_guest_memory(
     Ok(len)
 }
 
-/// Copy `len` bytes from guest RAM at GPA `gpa` into the caller's `dst_ptr`.
-pub fn read_guest_memory(
-    owner: usize,
-    vm_id: usize,
-    gpa: u64,
-    dst_ptr: usize,
-    len: usize,
-) -> ViResult<usize> {
+/// Copy guest RAM at GPA `gpa` into `dst`. Bounds-checked like
+/// [`write_guest_memory`].
+pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst: &mut [u8]) -> ViResult<usize> {
     let guard = VM_REGISTRY.lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
     let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let len = dst.len();
     let offset = gpa as usize;
     let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
     if end > vm.guest_pages * PAGE_SIZE {
@@ -500,11 +524,11 @@ pub fn read_guest_memory(
         let chunk = (len - copied).min(page_remaining);
         let hpa = vm.npt.translate(current_gpa).ok_or(ViError::InvalidInput)?;
         // SAFETY: the software NPT walk resolves this GPA to kernel-owned guest
-        // RAM; the syscall layer validated `dst_ptr`; `chunk` stays in one page.
+        // RAM; `chunk` stays in one page; `dst` is a kernel slice.
         unsafe {
             core::ptr::copy_nonoverlapping(
                 phys_to_virt(hpa as usize) as *const u8,
-                (dst_ptr + copied) as *mut u8,
+                dst[copied..].as_mut_ptr(),
                 chunk,
             );
         }
@@ -513,12 +537,13 @@ pub fn read_guest_memory(
     Ok(len)
 }
 
-/// Read/write vCPU GPRs (16×u64, x86 register-number indexed).
+/// Read/write vCPU GPRs (16×u64, x86 register-number indexed) in the first 16
+/// words of `regs`; the remaining words are not modelled and left untouched.
 pub fn vcpu_regs(
     owner: usize,
     vm_id: usize,
     vcpu_id: usize,
-    buf_ptr: usize,
+    regs: &mut [u64; 32],
     write: bool,
 ) -> ViResult<usize> {
     let mut guard = VM_REGISTRY.lock();
@@ -528,12 +553,10 @@ pub fn vcpu_regs(
         .vcpus
         .get_mut(vcpu_id.saturating_sub(1))
         .ok_or(ViError::NotFound)?;
-    // SAFETY: buf_ptr validated by the syscall layer; SAS — same VA in kernel.
-    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u64, 16) };
     if write {
-        vcpu.gpr_mut().copy_from_slice(&buf[..16]);
+        vcpu.gpr_mut().copy_from_slice(&regs[..16]);
     } else {
-        buf[..16].copy_from_slice(vcpu.gpr());
+        regs[..16].copy_from_slice(vcpu.gpr());
     }
     Ok(0)
 }
@@ -595,7 +618,7 @@ pub fn x86_smoke() {
             return;
         }
     };
-    if write_guest_memory(OWNER, vm_id, ENTRY, BLOB.as_ptr() as usize, BLOB.len()).is_err() {
+    if write_guest_memory(OWNER, vm_id, ENTRY, &BLOB).is_err() {
         log::error!("[hv-x86] smoke: fixture write failed");
         reap_vms_for_task(OWNER);
         return;
@@ -663,15 +686,8 @@ pub fn x86_mmio_smoke() {
         return;
     };
     let mut observed = [0u8; BLOB.len()];
-    if write_guest_memory(OWNER, vm_id, ENTRY, BLOB.as_ptr() as usize, BLOB.len()).is_err()
-        || read_guest_memory(
-            OWNER,
-            vm_id,
-            ENTRY,
-            observed.as_mut_ptr() as usize,
-            observed.len(),
-        )
-        .is_err()
+    if write_guest_memory(OWNER, vm_id, ENTRY, &BLOB).is_err()
+        || read_guest_memory(OWNER, vm_id, ENTRY, &mut observed).is_err()
         || observed != BLOB
         || create_vcpu(OWNER, vm_id, ENTRY).is_err()
     {
@@ -692,9 +708,9 @@ pub fn x86_mmio_smoke() {
             reg,
         } if reg < 16 => {
             let mut regs = [0u64; 32];
-            vcpu_regs(OWNER, vm_id, 1, regs.as_mut_ptr() as usize, false).is_ok() && {
+            vcpu_regs(OWNER, vm_id, 1, &mut regs, false).is_ok() && {
                 regs[reg as usize] = MAGIC;
-                vcpu_regs(OWNER, vm_id, 1, regs.as_mut_ptr() as usize, true).is_ok()
+                vcpu_regs(OWNER, vm_id, 1, &mut regs, true).is_ok()
             }
         }
         _ => false,
@@ -732,9 +748,9 @@ pub fn x86_mmio_smoke() {
 fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervisor::ViVmExit) {
     let interrupts_were_enabled = interrupts_enabled();
     for _ in 0..1024 {
-        // SAFETY: the local exit slot is valid; `owner` owns this single-vCPU VM.
-        unsafe {
-            let _ = super::registry::run_vcpu(owner, vm_id, 1, 0, exit);
+        // `owner` owns this single-vCPU VM; a failed run keeps the last exit.
+        if let Ok(next) = super::registry::run_vcpu(owner, vm_id, 1, 0) {
+            *exit = next;
         }
         if !matches!(exit, api::hypervisor::ViVmExit::Preempted) {
             break;

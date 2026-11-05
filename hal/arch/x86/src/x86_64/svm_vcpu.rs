@@ -8,9 +8,12 @@
 
 use hal_hypervisor::ViVmExit;
 
+use super::guest_cpuid;
 use super::vmcb::{
     VmcbView, EFER_SVME, OFF_CR0, OFF_CR3, OFF_CR4, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1,
-    OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
+    OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP, VMEXIT_CLGI,
+    VMEXIT_INVLPGA, VMEXIT_MONITOR, VMEXIT_MWAIT, VMEXIT_MWAIT_COND, VMEXIT_SKINIT, VMEXIT_STGI,
+    VMEXIT_VMLOAD, VMEXIT_VMRUN, VMEXIT_VMSAVE, VMEXIT_XSETBV,
 };
 use super::vmexit_decode::{
     decode, decode_mmio, is_mmio_data_npf, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR, VMEXIT_INVALID,
@@ -65,6 +68,8 @@ pub struct SvmVcpu {
     last_pause_tick_ns: u64,
     /// Swallowed-PAUSE counter for the no-HPET fallback pace.
     pause_backlog: u32,
+    /// Guest PKRU, swapped with the host's around every VMRUN.
+    guest_pkru: u32,
 }
 
 // SAFETY: single-CPU kernel context in the current TCG bring-up (mirror
@@ -108,6 +113,7 @@ impl SvmVcpu {
             guest_ram_len,
             last_pause_tick_ns: 0,
             pause_backlog: 0,
+            guest_pkru: 0,
         }
     }
 
@@ -300,7 +306,12 @@ impl SvmVcpu {
             // SAFETY: root op active + IF=0 (caller contract); VMCB initialised;
             // gpr array lives for the call; frames kernel-owned.
             unsafe {
-                svm_vmrun(self.vmcb_pa, self.gpr.as_mut_ptr(), self.host_pa);
+                svm_vmrun(
+                    self.vmcb_pa,
+                    self.gpr.as_mut_ptr(),
+                    self.host_pa,
+                    &mut self.guest_pkru,
+                );
             }
 
             // Recover caller-managed guest RAX from the VMCB save area.
@@ -325,18 +336,15 @@ impl SvmVcpu {
                 // every other WRMSR is dropped; RDMSR of an intercepted MSR
                 // returns 0. Guest-context MSRs (STAR/LSTAR/…/FS_BASE/GS_BASE)
                 // are passthrough via the MSRPM allowlist and never reach here.
-                // CPUID: execute the real leaf, then clear the x2APIC feature
-                // bit (leaf 1 ECX[21]) so the guest stays in xAPIC mode and
-                // drives the LAPIC through the RAM-backed 0xFEE00000 MMIO window
-                // (x2APIC would need IRQ remapping this VMM does not provide).
+                // CPUID: execute the real leaf, then apply the guest CPUID
+                // policy — x2APIC hidden so the guest drives the LAPIC through
+                // the RAM-backed 0xFEE00000 MMIO window (x2APIC would need IRQ
+                // remapping this VMM does not provide), and every feature whose
+                // instructions are intercepted below (SVM, XSAVE, MONITOR).
                 VMEXIT_CPUID => {
                     let leaf = self.gpr[0] as u32;
                     let sub = self.gpr[1] as u32;
-                    let r = core::arch::x86_64::__cpuid_count(leaf, sub);
-                    let (a, b, mut c, d) = (r.eax, r.ebx, r.ecx, r.edx);
-                    if leaf == 1 {
-                        c &= !(1 << 21); // clear ECX[21] X2APIC (keep xAPIC, EDX[9])
-                    }
+                    let [a, b, c, d] = guest_cpuid::query(leaf, sub);
                     self.gpr[0] = a as u64; // RAX = eax
                     self.gpr[3] = b as u64; // RBX = ebx
                     self.gpr[1] = c as u64; // RCX = ecx
@@ -409,10 +417,25 @@ impl SvmVcpu {
                     }
                     return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
                 }
-                // VMMCALL consumed by the cell: advance past it (3-byte fallback).
+                // No hypercall ABI exists on x86: raise #UD, exactly what the
+                // guest saw before VMMCALL was intercepted. RIP stays on the
+                // faulting instruction.
                 VMEXIT_VMMCALL => {
-                    self.advance(code, info1, nrip);
-                    return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
+                    const EVENTINJ_UD: u64 = (1 << 31) | (3 << 8) | 6; // valid, exception, #UD
+                    self.vmcb.w64(OFF_EVENTINJ, EVENTINJ_UD);
+                    internal += 1;
+                    continue;
+                }
+                // Intercepted so the guest can never run them natively (see
+                // `vmcb::INT2_ALWAYS`); none is emulated, and the CPUID policy
+                // hides the features, so reaching one stops the VM.
+                VMEXIT_VMRUN | VMEXIT_VMLOAD | VMEXIT_VMSAVE | VMEXIT_STGI | VMEXIT_CLGI
+                | VMEXIT_SKINIT | VMEXIT_INVLPGA | VMEXIT_MONITOR | VMEXIT_MWAIT
+                | VMEXIT_MWAIT_COND | VMEXIT_XSETBV => {
+                    return ViVmExit::Unknown {
+                        ec: code as u32,
+                        iss: info1 as u32,
+                    };
                 }
                 // PAUSE — guest busy-wait (cpu_relax). Linux's calibration loops
                 // spin on jiffies with PAUSE and never reach HLT, so paced exits
@@ -477,9 +500,8 @@ impl SvmVcpu {
     /// Prefers the VMCB next-RIP (requires the NRIPS feature); when it reads 0
     /// (no-NRIPS host, e.g. QEMU TCG +svm) falls back to a fixed length keyed on
     /// the exit code. Only the exits the run loop consumes need a fallback:
-    /// HLT (0xF4, 1B), RDMSR/WRMSR (0F 32 / 0F 30, 2B), PAUSE (F3 90, 2B),
-    /// VMMCALL (0F 01 D9, 3B). Linux emits these without prefixes, so the
-    /// lengths are exact.
+    /// HLT (0xF4, 1B), RDMSR/WRMSR (0F 32 / 0F 30, 2B), PAUSE (F3 90, 2B).
+    /// Linux emits these without prefixes, so the lengths are exact.
     #[inline]
     fn advance(&mut self, code: u64, _info1: u64, nrip: u64) {
         if nrip != 0 {
@@ -489,7 +511,6 @@ impl SvmVcpu {
         let len: u64 = match code {
             VMEXIT_HLT => 1,
             VMEXIT_MSR | VMEXIT_CPUID | VMEXIT_PAUSE => 2, // 0F 30/32, 0F A2, F3 90
-            VMEXIT_VMMCALL => 3,
             _ => 0,
         };
         let rip = self.vmcb.r64(OFF_RIP);
