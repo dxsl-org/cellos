@@ -13,6 +13,7 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(mlibc_linked)");
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -21,10 +22,10 @@ fn main() {
         .and_then(|p| p.parent())
         .expect("mlibc-shim: could not find workspace root from CARGO_MANIFEST_DIR");
 
-    let build_dir = if arch == "aarch64" {
-        workspace_root.join("third_party/mlibc/build-aarch64")
-    } else {
-        workspace_root.join("third_party/mlibc/build")
+    let build_dir = match arch.as_str() {
+        "aarch64" => workspace_root.join("third_party/mlibc/build-aarch64"),
+        "x86_64" => workspace_root.join("third_party/mlibc/build-x86_64"),
+        _ => workspace_root.join("third_party/mlibc/build"),
     };
 
     let lib_path = build_dir.join("libc.a");
@@ -46,4 +47,16 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", build_dir.display());
     println!("cargo:rustc-link-lib=static=c");
     println!("cargo:rerun-if-changed={}", lib_path.display());
+    // src/lib.rs keeps mlibc's start-up object in the link only when libc.a is
+    // actually linked; without it the anchor would be an undefined symbol.
+    println!("cargo:rustc-cfg=mlibc_linked");
+
+    // libgcc.a of the compiler that built libc.a (scripts/build-mlibc.sh).
+    // Listed after libc so lld resolves mlibc's helper calls here, before
+    // Rust's compiler_builtins, whose riscv64 C objects use the soft-float ABI.
+    let libgcc_path = build_dir.join("libgcc.a");
+    if libgcc_path.exists() {
+        println!("cargo:rustc-link-lib=static=gcc");
+    }
+    println!("cargo:rerun-if-changed={}", libgcc_path.display());
 }

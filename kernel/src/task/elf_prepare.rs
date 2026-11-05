@@ -14,6 +14,9 @@ pub struct PreparedElfTask {
     segments: super::stack::CellSegments,
     entry: usize,
     load_base: usize,
+    /// Entry stack pointer: the Cell initial stack block (CP1 AX-2) on 64-bit
+    /// targets, the bare user stack top elsewhere.
+    user_sp: usize,
 }
 
 impl PreparedElfTask {
@@ -31,7 +34,7 @@ impl PreparedElfTask {
         task.kernel_stack = Some(self.kstack);
         task.user_stack = Some(self.ustack);
         task.segment_mem = Some(self.segments);
-        super::prime_user_mode_entry(&mut task, self.entry, 0);
+        super::prime_user_mode_entry_at(&mut task, self.entry, 0, self.user_sp);
         Ok((task, self.load_base))
     }
 
@@ -185,6 +188,11 @@ pub fn prepare_elf_task(
     let ustack = super::stack::Stack::new_user(pages).map_err(|_| ViError::OutOfMemory)?;
     #[cfg(feature = "test-hooks")]
     ustack.test_hook_prime_watermark();
+    let entry = header.entry.wrapping_add(load_base);
+    #[cfg(target_pointer_width = "64")]
+    let user_sp = write_initial_stack(elf_data, &ustack, load_base, entry, name)?;
+    #[cfg(not(target_pointer_width = "64"))]
+    let user_sp = ustack.top;
 
     Ok(PreparedElfTask {
         name: name.to_string(),
@@ -193,9 +201,67 @@ pub fn prepare_elf_task(
         kstack,
         ustack,
         segments,
-        entry: header.entry.wrapping_add(load_base),
+        entry,
         load_base,
+        user_sp,
     })
+}
+
+/// Write the Cell initial stack (argc, argv, envp, auxv; CP1 AX-2…AX-5) below
+/// the top of the root user stack and return the entry `sp`. Runs before the
+/// task exists, so the stack is reached through the shared address space where
+/// `Stack::new_user` mapped it; a Tier-2 domain maps the same frames later.
+#[cfg(target_pointer_width = "64")]
+fn write_initial_stack(
+    elf: &[u8],
+    ustack: &super::stack::Stack,
+    load_base: usize,
+    entry: usize,
+    name: &str,
+) -> Result<usize, ViError> {
+    use cell_initial_stack::{build, Image, MAX_PHDRS, PHENT};
+
+    let field = |at: usize, width: usize| -> Option<u64> {
+        let bytes = elf.get(at..at + width)?;
+        let mut word = [0u8; 8];
+        word[..width].copy_from_slice(bytes);
+        Some(u64::from_le_bytes(word))
+    };
+    // ELF64 header: e_phoff @32 (8), e_phentsize @54 (2), e_phnum @56 (2).
+    let (Some(phoff), Some(phentsize), Some(phnum)) = (field(32, 8), field(54, 2), field(56, 2))
+    else {
+        return Err(ViError::InvalidInput);
+    };
+    if phentsize as usize != PHENT || phnum as usize > MAX_PHDRS {
+        log::warn!(
+            "[loader] {}: {} program headers of {} bytes exceed the initial-stack bound ({} × {})",
+            name,
+            phnum,
+            phentsize,
+            MAX_PHDRS,
+            PHENT
+        );
+        return Err(ViError::InvalidInput);
+    }
+    let start = usize::try_from(phoff).map_err(|_| ViError::InvalidInput)?;
+    let phdrs = start
+        .checked_add(phnum as usize * PHENT)
+        .and_then(|end| elf.get(start..end))
+        .ok_or(ViError::InvalidInput)?;
+
+    let mut seed = [0u8; 16];
+    let random = (super::drivers::virtio_rng::get_random(&mut seed) == seed.len()).then_some(seed);
+    let image = Image {
+        phdrs,
+        load_base: load_base as u64,
+        entry: entry as u64,
+        random,
+    };
+    let block = build(ustack.top as u64, &image).map_err(|_| ViError::InvalidInput)?;
+    super::copy_glue::TaskCopyView::sas()
+        .write_bytes(block.sp() as usize, block.bytes())
+        .map_err(|_| ViError::OutOfMemory)?;
+    Ok(block.sp() as usize)
 }
 
 /// Observe each exact reserve failure while rollback still owns the live frames.

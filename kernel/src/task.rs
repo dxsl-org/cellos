@@ -168,6 +168,18 @@ extern "C" {
 /// - Same-cell threads inherit the current process image, so this mirrors the
 ///   cell-spawn user-entry contract instead of the kernel-thread trampoline.
 pub(crate) fn prime_user_mode_entry(task: &mut Task, entry: usize, arg: usize) {
+    let user_stack_top = task
+        .user_stack
+        .as_ref()
+        .expect("prime_user_mode_entry requires a user stack")
+        .top;
+    prime_user_mode_entry_at(task, entry, arg, user_stack_top);
+}
+
+/// As [`prime_user_mode_entry`], entering with `user_sp` instead of the bare
+/// user stack top. A Cell's root task enters with `sp` at its initial stack
+/// block (CP1 cell-initial-stack-auxv, AX-2), which lies inside its user stack.
+pub(crate) fn prime_user_mode_entry_at(task: &mut Task, entry: usize, arg: usize, user_sp: usize) {
     let kernel_stack = task
         .kernel_stack
         .as_ref()
@@ -176,8 +188,9 @@ pub(crate) fn prime_user_mode_entry(task: &mut Task, entry: usize, arg: usize) {
         .user_stack
         .as_ref()
         .expect("prime_user_mode_entry requires a user stack");
+    debug_assert!(user_sp <= user_stack.top && user_sp > user_stack.usable_start());
     let tf_ptr = kernel_stack.top - TRAP_FRAME_SIZE;
-    let user_stack_top = user_stack.top;
+    let user_stack_top = user_sp;
     let (_gp, _tp) = get_kernel_gp_tp();
 
     task.trap_frame = crate::hal::arch::ViTrapFrame::default();

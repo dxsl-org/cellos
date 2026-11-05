@@ -1,0 +1,8 @@
+[package]
+name = "cell-initial-stack"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Layout of the Cell initial stack (argc, argv, envp, auxv) the loader writes before first entry (CP1 cell-initial-stack-auxv, AX-2/AX-4/AX-5)"
+
+[dependencies]

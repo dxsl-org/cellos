@@ -16,7 +16,15 @@ use core::panic::PanicInfo;
 #[used]
 static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
 
+#[cfg(any(target_os = "none", target_os = "cellos"))]
+mod libc_hook;
+
 /// Cell entry point — sets up gp/sp and jumps into the ostd runtime.
+///
+/// Sequence: `__cellos_libc_start(entry_sp)` (ostd's weak default runs
+/// `.init_array`; a C library may replace it, see `startup/libc_hook.rs`),
+/// then `main`, then `Exit(0)`. `entry_sp` is the kernel's Cell initial stack
+/// (argc, argv, envp, auxv; CP1 cell-initial-stack-auxv, AX-2).
 ///
 /// # Safety
 /// Never call from Rust: the kernel loader jumps here exactly once on a fresh
@@ -32,22 +40,9 @@ pub unsafe extern "C" fn _start() -> ! {
         ".option norelax",
         "la gp, __global_pointer$",
         ".option pop",
+        "mv a0, sp",
         "andi sp, sp, -16",
-        // Use callee-saved s0/s1 as iterators — a0/a1 are caller-saved and
-        // would be clobbered by any constructor called via jalr.
-        // `lla` (load LOCAL address) is strictly PC-relative (auipc+addi); `la`
-        // for a linker-defined global would go GOT-indirect, which is fragile
-        // under -pie/pic (the GOT must be relocated first). PC-relative is
-        // correct here — the init-array is inside the cell's own image.
-        "lla  s0, __init_array_start",
-        "lla  s1, __init_array_end",
-        "1:",
-        "beq  s0, s1, 2f",
-        "ld   t0, 0(s0)",
-        "jalr t0",
-        "addi s0, s0, 8",
-        "j    1b",
-        "2:",
+        "call __cellos_libc_start",
         "call main",
         "li a7, 60", // ViSyscall::Exit
         "li a0, 0",  // exit code = 0 in a0 (ViCell ABI: syscall nr in a7, arg in a0)
@@ -56,25 +51,12 @@ pub unsafe extern "C" fn _start() -> ! {
     );
     // ViCell ARM64 ABI: x0=syscall_nr, x1=a0 (exit code).
     // Stack is kernel-aligned on entry; skip re-alignment to avoid clobbering sp.
+    // Every address is formed PC-relatively (`bl`, adrp+add in the hook): an
+    // R_AARCH64_ABS64 literal is rejected by rust-lld under -pie (Spec 17 §8).
     #[cfg(target_arch = "aarch64")]
     core::arch::naked_asm!(
-        // adrp+add (:lo12:) forms the address PC-relatively. `ldr x,=sym` would
-        // stash the address in a literal pool and emit an R_AARCH64_ABS64 that
-        // rust-lld REJECTS under -pie ("cannot be used against symbol; recompile
-        // with -fPIC") — which is why cells previously entered at bare `main`,
-        // skipping this crt0 and the post-main Exit ecall (CLI cells crashed
-        // scause=0xc sepc=0 on return). See docs/specs/17 §8 / cell-build.
-        "adrp x19, __init_array_start",
-        "add  x19, x19, :lo12:__init_array_start",
-        "adrp x20, __init_array_end",
-        "add  x20, x20, :lo12:__init_array_end",
-        "1:",
-        "cmp  x19, x20",
-        "b.eq 2f",
-        "ldr  x21, [x19], #8",
-        "blr  x21",
-        "b    1b",
-        "2:",
+        "mov  x0, sp",
+        "bl   __cellos_libc_start",
         "bl   main",
         "mov  x0, #60", // ViSyscall::Exit
         "mov  x1, #0",  // exit code = 0
@@ -87,16 +69,9 @@ pub unsafe extern "C" fn _start() -> ! {
     // sys_exit(0): ViSyscall::Exit = 60, exit code in RDI = 0.
     #[cfg(target_arch = "x86_64")]
     core::arch::naked_asm!(
+        "mov rdi, rsp",
         "and rsp, -16",
-        "lea rbx, [rip + __init_array_start]",
-        "lea r12, [rip + __init_array_end]",
-        "1:",
-        "cmp rbx, r12",
-        "je 2f",
-        "call [rbx]",
-        "add rbx, 8",
-        "jmp 1b",
-        "2:",
+        "call __cellos_libc_start",
         "call main",
         "mov rax, 60",  // ViSyscall::Exit
         "xor rdi, rdi", // exit code = 0
