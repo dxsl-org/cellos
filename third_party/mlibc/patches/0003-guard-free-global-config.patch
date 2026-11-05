@@ -1,0 +1,88 @@
+Cellos patch to mlibc (MIT) at pin ae1092eb…
+globalConfig() without a function-local static. In a cpp-hosted Cell
+(ADR-0034) __cxa_guard_acquire is libc++abi's, which locks a pthread mutex;
+mlibc's pthread_mutex_lock opens a ScopeTrace that calls globalConfig(), whose
+guarded static re-enters __cxa_guard_acquire: unbounded recursion that
+overflowed the root stack at start-up. The config is now constant-initialised
+and loaded once behind an atomic state word; switches read as off until loaded.
+
+diff --git a/options/internal/generic/global-config.cpp b/options/internal/generic/global-config.cpp
+index 3b7b862..fc8f845 100644
+--- a/options/internal/generic/global-config.cpp
++++ b/options/internal/generic/global-config.cpp
+@@ -20,13 +20,32 @@ static bool envEnabled(const char *env) {
+ 	return value && *value && *value != '0';
+ }
+ 
+-GlobalConfig::GlobalConfig() {
+-	debugMalloc = envEnabled("MLIBC_DEBUG_MALLOC");
+-	debugPrintf = envEnabled("MLIBC_DEBUG_PRINTF");
+-	debugLocale = envEnabled("MLIBC_DEBUG_LOCALE");
+-	debugPthreadTrace = envEnabled("MLIBC_DEBUG_PTHREAD_TRACE");
+-	debugPathResolution = envEnabled("MLIBC_DEBUG_PATH_RESOLUTION");
+-	debugMonetaryLengths = envEnabled("MLIBC_DEBUG_MONETARY_LENGTHS");
++namespace {
++
++constinit GlobalConfig config;
++
++// 0: not loaded, 1: loading (the loader may re-enter globalConfig()), 2: loaded.
++constinit int configState = 0;
++
++} // namespace
++
++const GlobalConfig &globalConfig() {
++	if(__atomic_load_n(&configState, __ATOMIC_ACQUIRE) == 2)
++		return config;
++	int expected = 0;
++	if(!__atomic_compare_exchange_n(&configState, &expected, 1, false,
++			__ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
++		return config;
++	GlobalConfig loaded;
++	loaded.debugMalloc = envEnabled("MLIBC_DEBUG_MALLOC");
++	loaded.debugPrintf = envEnabled("MLIBC_DEBUG_PRINTF");
++	loaded.debugLocale = envEnabled("MLIBC_DEBUG_LOCALE");
++	loaded.debugPthreadTrace = envEnabled("MLIBC_DEBUG_PTHREAD_TRACE");
++	loaded.debugPathResolution = envEnabled("MLIBC_DEBUG_PATH_RESOLUTION");
++	loaded.debugMonetaryLengths = envEnabled("MLIBC_DEBUG_MONETARY_LENGTHS");
++	config = loaded;
++	__atomic_store_n(&configState, 2, __ATOMIC_RELEASE);
++	return config;
+ }
+ 
+ } // namespace mlibc
+diff --git a/options/internal/include/mlibc/global-config.hpp b/options/internal/include/mlibc/global-config.hpp
+index 0235c54..96d94e0 100644
+--- a/options/internal/include/mlibc/global-config.hpp
++++ b/options/internal/include/mlibc/global-config.hpp
+@@ -4,20 +4,19 @@
+ namespace mlibc {
+ 
+ struct GlobalConfig {
+-	GlobalConfig();
+-
+-	bool debugMalloc;
+-	bool debugPrintf;
+-	bool debugLocale;
+-	bool debugPthreadTrace;
+-	bool debugPathResolution;
+-	bool debugMonetaryLengths;
++	bool debugMalloc = false;
++	bool debugPrintf = false;
++	bool debugLocale = false;
++	bool debugPthreadTrace = false;
++	bool debugPathResolution = false;
++	bool debugMonetaryLengths = false;
+ };
+ 
+-inline const GlobalConfig &globalConfig() {
+-	static GlobalConfig cached;
+-	return cached;
+-}
++// Never uses a function-local static: __cxa_guard_acquire may belong to a C++
++// runtime (libc++abi) that guards through a pthread mutex, and pthread's scope
++// trace calls globalConfig(). Every switch reads as off until the environment
++// has been loaded, including on re-entry while it loads.
++const GlobalConfig &globalConfig();
+ 
+ }
+ 
