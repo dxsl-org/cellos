@@ -45,6 +45,8 @@ mod engine;
 #[cfg(not(qjs_c_unavailable))]
 mod ffi;
 #[cfg(not(qjs_c_unavailable))]
+mod float_abi;
+#[cfg(not(qjs_c_unavailable))]
 mod native_layout;
 
 #[cfg(all(not(qjs_c_unavailable), not(test)))]

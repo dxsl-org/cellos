@@ -19,14 +19,6 @@ int vios_js_is_null(JSValue v) { return JS_IsNull(v); }
 int vios_js_is_bool(JSValue v) { return JS_IsBool(v); }
 int vios_js_is_number(JSValue v) { return JS_IsNumber(v); }
 
-/* Float64 vs. small-int, so the driver can read the union without guessing
-   from the decimal formatting. */
-int vios_js_is_float(JSValue v) {
-    return JS_TAG_IS_FLOAT64(JS_VALUE_GET_TAG(v));
-}
-
-double vios_js_as_float(JSValue v) { return JS_VALUE_GET_FLOAT64(v); }
-
 void vios_js_free(JSContext *ctx, JSValue v) { JS_FreeValue(ctx, v); }
 
 /* Bound UTF-8 conversion BEFORE QuickJS allocates a C string. A UTF-16 code
