@@ -1,0 +1,21 @@
+[package]
+name = "app-drm-lite-x86"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "x86_64 Tier-2 witness for libdrm-lite and the mlibc fd provider route, against the fake provider (runtime plan R6)"
+
+[[bin]]
+name = "drm-lite-x86"
+path = "src/main.rs"
+
+[dependencies]
+# `mlibc` suppresses the Tier-A posix exports so mlibc's libc.a can link.
+api        = { path = "../../../libs/api", version = "0.1.0", features = ["mlibc"] }
+ostd       = { path = "../../../libs/ostd", version = "0.2.0" }
+mlibc-shim = { path = "../../../libs/mlibc-shim", version = "0.1.0" }
+drm-cellos = { path = "../../../libs/drm-cellos", version = "0.1.0", features = ["fake-provider"] }
+
+[build-dependencies]
+cc = "1.0"
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
