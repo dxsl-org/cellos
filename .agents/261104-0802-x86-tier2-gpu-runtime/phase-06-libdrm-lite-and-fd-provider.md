@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "libdrm-lite and the Cellos fd provider (transport-shim side)"
-status: in-progress
+status: in-progress (all criteria met except the G3 interface review; mmap routing waits for R3b)
 priority: P1
 effort: "5-8d"
 dependencies: ["R3 (R3a for fd/ioctl; R3b for provider-backed mmap)"]
@@ -118,12 +118,12 @@ anv / vk runtime
 - [x] fd provider registry + `Ioctl` (`third_party/mlibc/sysdeps/vicell/{include/vicell/fd_provider{,_core}.h,generic/generic.cpp,include/mlibc/sysdeps.hpp}`); fd-aware `VmMap` waits for R3b
 - [x] Enumeration backend + fake provider (`libs/drm-cellos/c/{device,fake_provider,ioctl}.c`)
 - [x] Host tests (`bash libs/drm-cellos/tests/host/run.sh` → `DRM-LITE-HOST: 206/206 checks pass`, 2026-11-05)
-- [ ] QEMU x86 witness — Cell and runner built (`cells/tests/drm-lite-x86/**`); boot blocked on the `/bin/drm-lite-x86` launch row (H-1)
+- [x] QEMU x86 witness — `cells/tests/drm-lite-x86/**`; launch row landed in `6c61ba1ec`
 - [x] Ledger rows (`docs/posix-ledger.md` Tier B)
 
 ## Success Criteria
 
-- [ ] The witness passes under QEMU TCG and KVM. The host tests pass. (Host tests pass; QEMU waits for the launch row.)
+- [x] The witness passes under QEMU TCG and KVM (`DRM-LITE: 12/12 pass` on both; KVM with `qemu64,+pdpe1gb`; [evidence](../../docs/evidence/runtime-witnesses-x86-261105.txt)). The host tests pass (206/206).
 - [x] A link of the witness against the libdrm-lite archive has no unresolved `drm*` symbol (`nm -u target/x86_64-unknown-none/release/drm-lite-x86` lists only the weak `frg_log`/`frg_panic`).
 - [ ] G3 can register its transport with no change to R6 code (interface review with the G3 owner): note at [reports/r6-g3-transport-interface.md](reports/r6-g3-transport-interface.md), review pending.
 

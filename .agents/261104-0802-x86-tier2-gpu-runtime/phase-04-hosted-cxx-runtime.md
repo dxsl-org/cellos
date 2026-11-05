@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Hosted C++17 runtime profile: LLVM libc++, libc++abi, libunwind over mlibc"
-status: in-progress (QEMU TCG witness passes; KVM not yet run)
+status: completed (QEMU TCG + KVM `qemu64,+pdpe1gb`, 2026-11-05)
 priority: P1
 effort: "8-14d"
 dependencies: ["R3 (R3a minimum)", "ADR for cpp-hosted accepted (D-R4)"]
@@ -107,19 +107,17 @@ cpp-hosted Cell (x86_64 Tier-2)
 - [x] Pin the llvm-project tag + licence check per file (`llvmorg-19.1.7` @ `cd708029e0b2`; 1204 files; `scripts/build-llvm-runtimes.sh` step 2)
 - [x] Host dry run (x86_64-linux-gnu build + host witness run: 11/11 markers, uncaught exception aborts with the libc++abi line)
 - [x] Cross build over mlibc (step 4; every runtime libc reference resolves in mlibc `libc.a` after patch 0002)
-- [ ] Witness Cell (TCG + KVM). TCG passes: `CPP-HOSTED-SMOKE: PASS (runs: 5)` on 2026-11-05 ([log](reports/r4-evidence/qemu-x86-cpp-hosted-tcg-5runs.log)). KVM has not run (a separate known failure is under investigation by Main).
+- [x] Witness Cell (TCG + KVM). `CPP-HOSTED-SMOKE: PASS (runs: 5)` on TCG and on KVM (`qemu64,+pdpe1gb`) on main after the 2026-11-05 merges ([evidence](../../docs/evidence/runtime-witnesses-x86-261105.txt)). KVM `-cpu host` is not covered (test-hooks VMX smoke defect, `.agents/TODO.md`).
 - [x] Size measurement in the ADR (ADR-0034 Consequences, size table)
 - [x] Docs: guide, spec 05, spec 18, ledger, NOTICE
 
 ## Success Criteria
 
-- [ ] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM. TCG is met: `CPP-HOSTED: 11/11 pass` ×5 in one boot. KVM is still open.
-- [ ] An uncaught exception terminates the Cell with a logged reason and no kernel fault. TCG is met:
-  - `libc++abi: terminating due to uncaught exception of type std::runtime_error: cpp-hosted uncaught`;
+- [x] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM: `CPP-HOSTED: 11/11 pass` ×5 in one boot on each ([evidence](../../docs/evidence/runtime-witnesses-x86-261105.txt); KVM with `qemu64,+pdpe1gb`).
+- [x] An uncaught exception terminates the Cell with a logged reason and no kernel fault, on TCG and KVM:
+  - `libc++abi: terminating due to uncaught exception of type std::runtime_error: cpp-hosted uncaught` ×5 per boot;
   - `mlibc: sigaction failed in abort` and `mlibc PANIC` are logged;
   - no `[fault] Cell` line appears, `DOMAIN-FRAME-RELEASE: PASS` follows each run, and the prompt returns.
-
-  KVM is still open.
 - [x] `cpp-smoke` still passes its own absence assertions (build-level: riscv64 and x86_64 `cpp-smoke` link with no `__cxa_throw`/`_Unwind_*`/`__gxx_personality`/`_ZSt*`; 2026-11-05).
 
 ## Risk Assessment

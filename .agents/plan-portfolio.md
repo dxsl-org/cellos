@@ -190,6 +190,8 @@ Admission blockers, per the promotion rule:
 
 Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) is re-planned. Its [option B CP1](261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md) was approved 2026-11-04. **2026-11-05: the owner chose order (a) — 04b holds the Intel WIP lane now, then S2** ([record](261103-2218-x86-platform-breadth/lane-04b-schedule-approval.md)); S2 still needs H-S2-2…H-S2-11. Later slices (S3-S6: VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
 
+**2026-11-05 status:** 04b is implemented (TCG + local KVM; [evidence](261103-2218-x86-platform-breadth/reports/phase-04b-evidence.md)) and waits for the owner's CP2 decision ([package](261103-2218-x86-platform-breadth/cp2-04b-waitcompletion-irq.md)); it keeps the lane until then. Runtime slices beside the lane: R4 `cpp-hosted` completed and R6 libdrm-lite met every criterion except the G3 interface review, both on TCG and KVM `qemu64,+pdpe1gb` ([evidence](../docs/evidence/runtime-witnesses-x86-261105.txt)). Found: test-hooks kernels triple-fault under KVM `-cpu host` (VMX host state; fix proven, needs the lane; `.agents/TODO.md`).
+
 ## Registered — native Intel iGPU compute (ADR-0033, owner decision 2026-11-04); not yet in the WIP lane
 
 **Recorded 2026-11-04.** [Plan](261104-0801-x86-igpu-compute/plan.md); [vendor evidence](261104-0801-x86-igpu-compute/research/vendor-and-platform-evidence.md). The owner chose a native driver over guest passthrough, with the integrated GPU first. NVIDIA's route is decided later. Intel lane, single-WIP rule.
@@ -216,7 +218,7 @@ Admission blockers: owner machine selection and procurement (G0); per-slice lock
 
 | Order | Plan slice | Milestone / consumer | Acceptance scenario | Evidence ceiling |
 |---|---|---|---|---|
-| A1 (**in progress 2026-11-05**, [checkpoint](261104-0711-apple-silicon-group/phase-00-checkpoint-approval.md)) | Phase 02a: arm64 Image entry + VHE host | AS-2, shared-core prerequisite for both Apple tracks | `virt-vhe` lane reaches the shell with EL0 Cells, `QEMU_SMP=2`, hypervisor lane unchanged; `-kernel Image` boots; group-1 `.text` ±1% | QEMU `virt` |
+| A1 (implemented 2026-11-05 at QEMU TCG; **checkpoint pending the owner**, [evidence](261104-0711-apple-silicon-group/reports/phase-02a-evidence.md)) | Phase 02a: arm64 Image entry + VHE host | AS-2, shared-core prerequisite for both Apple tracks | `virt-vhe` lane reaches the shell with EL0 Cells, `QEMU_SMP=2`, hypervisor lane unchanged; `-kernel Image` boots; group-1 `.text` ±1% | QEMU `virt` |
 | A2 | Phases 02b, 02c | AS-2 | High-MMIO (>2^39) map; GICv3 FIQ timer; `-smp 4` | QEMU `virt` |
 | A3 | Phase 03 hosted guest | AS-3, Haily node on a Mac without replacing macOS | Shell, DHCP over virtio-net, two-boot persistence on an Apple host; refuses untranslated DMA without `cellos.profile=aarch64-vm` | `S1-hvf` |
 | A4 (`blocked: hardware`) | Phases 01, 04–07 bare metal | AS-1, AS-4…AS-7 | Per phase files; HCL §7 row | `S2-hv`, then `S2` |

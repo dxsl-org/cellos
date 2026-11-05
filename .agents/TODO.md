@@ -36,15 +36,12 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 - [ ] **Ginux Phase 02 debt #23 (owner admission)** — blocked bởi
   [tier1-baseline-admission](260821-1700-tier1-baseline-admission/plan.md) Phase 03
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
-- [ ] **T-1 `cmake/cellos-aarch64.cmake` builds riscv64 when `CELLOS_C_TARGET` is unset.**
-  - `set(ENV{…})` applies at configure time only.
-  - Reproduced 2026-11-04: `riscv64-unknown-elf-gcc: error: unrecognized command-line option '--target=aarch64-unknown-none-elf'`.
-  - Fix as in `cmake/cellos-x86_64.cmake` (`CMAKE_C_COMPILER_LAUNCHER env CELLOS_C_TARGET=…`). Opened by owner approval T-1 ([record](261104-0802-x86-tier2-gpu-runtime/handoff-and-xsave-approval.md)).
-- [ ] **T-2 `ocel-quickjs` x86 floating-point calling-convention mismatch.**
-  - `cells/services/ocel-quickjs/build.rs:184-191` compiles C with `-msse2 -mfpmath=sse`, but `libs/api` C99 math exports `f64` from soft-float Rust.
-  - `scripts/check-float-ffi-boundary.py` reports 20 exports (16 direct, 4 macro templates).
-  - No x86 test boots it; RV64 only (`tests/integration/tests/ocel-quickjs.rs:31-36`).
-  - Needs a reproducer first, then a fix that keeps `libs/api` unchanged or goes through Law-1. Opened by owner approval T-2.
+- [ ] **KVM `-cpu host`: test-hooks x86 kernels triple-fault in the VMX smoke** (found 2026-11-05).
+  - `hal/arch/x86/src/x86_64/vmx_vcpu.rs`: `HOST_GS_BASE` written from the low 32 bits only; `HOST_TR_BASE` never written; `EXIT_ACKNOWLEDGE_INTERRUPT` set but the external-interrupt exit is not handled (IPI 0xf0 stuck in ISR). Since `15830f4fd`.
+  - Fix proven in a throwaway worktree (mlibc witness PASS on KVM `-cpu host`): [report](debug/debug-261105-1036-kvm-host-vmx-boot-exit.md), [patch](debug/debug-261105-1036-kvm-host-vmx-boot-exit.patch). Touches `hal/arch/x86/**` and `kernel/src/hypervisor/svm_registry.rs`, so it needs the Intel lane and a handoff. Until then KVM runs use `X86_CPU_MODEL=qemu64,+pdpe1gb`.
+  - The patch exposes an existing SVM-guest triple fault on TCG (`[hv-x86] guest triple-fault: rip=0x6663`); not investigated.
+- [ ] **aarch64 secondary-core wait counts timer ticks with interrupts masked** (`kernel/src/task/smp.rs`, found by Apple A1): a core that never comes online hangs boot instead of falling back to one core.
+- [ ] **`scripts/check-posix-ledger.py` fails on 20 Tier-A rows** (`docs/posix-ledger.md:223-259`), present before the 2026-11-05 runtime merges.
 
 **C2C program (mở, có gate):**
 - [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical

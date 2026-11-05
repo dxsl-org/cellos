@@ -1,0 +1,25 @@
+x86 Tier-2 runtime witnesses on main after the 2026-11-05 merges (R4 cpp-hosted, R6 libdrm-lite, 04b)
+Tree: main at b40867086 + 9824fc4d2 (Apple A1 merge; no x86 file). QEMU 8.2.2, WSL2 host, local KVM nested under Hyper-V.
+CPU model for every run: X86_CPU_MODEL=qemu64,+pdpe1gb. KVM `-cpu host` is NOT covered: test-hooks kernels
+triple-fault in the VMX smoke there (.agents/debug/debug-261105-1036-kvm-host-vmx-boot-exit.md).
+
+Build:
+  bash scripts/build-mlibc.sh                      (pin + patches 0001-0003)
+  bash scripts/build-llvm-runtimes.sh x86_64       (llvmorg-19.1.7)
+  bash scripts/build-x86_64-cpp-hosted-ci.sh
+  bash scripts/build-x86_64-mlibc-witness-ci.sh
+
+cpp-hosted (X86_ACCEL=tcg|kvm CPP_HOSTED_RUNS=5 bash scripts/x86/qemu-cpp-hosted-smoke.sh)
+  tcg: CPP-HOSTED-SMOKE: PASS (runs: 5)  -- "USER: CPP-HOSTED: 11/11 pass" x5,
+       "libc++abi: terminating due to uncaught exception of type std::runtime_error: cpp-hosted uncaught" x5, "[fault] Cell" x0
+  kvm: CPP-HOSTED-SMOKE: PASS (runs: 5)  -- same counts: 11/11 pass x5, uncaught x5, faults 0
+
+libdrm-lite (X86_ACCEL=tcg|kvm bash cells/tests/drm-lite-x86/run-qemu-x86.sh)
+  tcg: USER: DRM-LITE: 12/12 pass -> DRM-LITE-WITNESS: PASS (tcg)
+  kvm: USER: DRM-LITE: 12/12 pass -> DRM-LITE-WITNESS: PASS (kvm)
+
+mlibc regression (X86_ACCEL=tcg|kvm bash scripts/x86/qemu-mlibc-witness.sh), after mlibc patch 0003
+  tcg: USER: MLIBC-SMOKE: 3/3 pass; USER: MLIBC-POSIX: 7/7 pass -> MLIBC-WITNESS: PASS
+  kvm: USER: MLIBC-SMOKE: 3/3 pass; USER: MLIBC-POSIX: 7/7 pass -> MLIBC-WITNESS: PASS
+
+Kernel host tests on the merged tree: cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu -> 432 passed.

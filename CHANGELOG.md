@@ -21,8 +21,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
   `AllocPcieIrq` (435) programs MSI-X or MSI. The MSI-X table pages are left out of a cell's BAR mapping. On x86, `WaitIrq` accepts only the caller's own vectors.
 - `FindPcieDevice`/`FindPcieDeviceByVendor` skip a function owned by another live driver, so a second instance of a driver reaches the next identical device.
+- **x86 drivers wait on interrupts** (phase 04b). `WaitCompletion` has a new x86_64 `IRQ` source that wakes on the caller's own MSI/MSI-X lines; nvme, ahci and xhci park on it instead of busy polling. Verified on QEMU TCG and local KVM; the ABI is pending CP2.
+- **Hosted C++17 for Tier-2 Cells** (`cpp-hosted`, ADR-0034): static LLVM libc++/libc++abi/libunwind over mlibc on x86_64; exceptions, RTTI, `std::thread` and iostreams work in a Cell.
+- **libdrm-lite** for x86_64 Tier-2 Cells, with an mlibc fd-provider registry that routes `open`/`close`/`fstat`/`ioctl` for registered path prefixes to user-space providers.
+- **aarch64:** QEMU `virt` kernels boot as a Linux arm64 `Image`, and a VHE host regime (`CELLOS_AARCH64_HOST_REGIME=vhe`) runs Cells at EL2&0. Verified on QEMU TCG only.
 
 ### Fixed
+- **`ocel-quickjs` math on x86_64.** Every C99 math call returned its own argument, because the engine's SSE2 C and the soft-float Rust exports pass floats in different registers. Math now crosses an integer-only boundary inside the cell; `lrint` gets its C99 `long` prototype.
+- **CMake toolchain files for aarch64 and riscv64** now pin the compiler target for every build step, not only configure. An aarch64 build with `CELLOS_C_TARGET` unset no longer calls the riscv64 compiler.
+- **mlibc start-up in C++ Cells.** `globalConfig()` no longer uses a guarded static; with libc++abi's guard it recursed through the pthread trace until the root stack overflowed.
 - **`wget` saves its download again when the shell launched it.**
   - **Cause:** the serial shell starts every foreground child with a cwd grant (`PreparedChildV1`), and the VFS seals such a child: path-string requests are refused (`ERR_DENIED`). `wget` still sent a path-string `VfsRequest::Write`, so every shell-launched download fetched the body and then printed `wget: VFS write failed`.
   - **Fix:** `wget` reads its own context and, when it holds a cwd grant, reaches the output file by handle: `OpenDir` down from the grant, `WriteAt` the leaf, then `CloseDir`. The output path must lie at or below the working directory; a Cell launched without a cwd grant still sends the path-string `Write`.
