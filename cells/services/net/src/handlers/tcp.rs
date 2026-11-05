@@ -10,9 +10,9 @@ use smoltcp::{
 
 use super::{make_tcp, send_typed, tcp_state_byte, try_promote};
 use crate::{
-    service_runtime::next_ephemeral_port,
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
+    stack_entropy::next_ephemeral_port,
     tls::socket::TlsSocketEntry,
 };
 

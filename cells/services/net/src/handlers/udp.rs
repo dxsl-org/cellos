@@ -9,9 +9,10 @@ use smoltcp::{
 use super::send_typed;
 use crate::{
     interface::VirtioNetDevice,
-    service_runtime::{next_ephemeral_port, now_instant},
+    service_runtime::now_instant,
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
+    stack_entropy::next_ephemeral_port,
 };
 
 pub(crate) fn handle_udp_request(

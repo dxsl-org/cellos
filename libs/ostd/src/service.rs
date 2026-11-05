@@ -236,6 +236,29 @@ pub fn classify_call_failure(held: ServiceBinding, live: Option<ServiceBinding>)
     }
 }
 
+/// Whether `sender_tid` — the tid the kernel stamped on a received message — is the
+/// live provider of `service_id` right now.
+///
+/// For a cell that serves exactly one peer service (a NIC driver serves only the net
+/// service): it asks the kernel's registry on every call instead of trusting a cached
+/// tid, so a restarted or hot-swapped provider is followed and a provider that is
+/// not yet registered (init registers a service after spawning it) is refused until
+/// it is. Never pass a tid taken from a message payload.
+pub fn sender_is_live_provider(service_id: u16, sender_tid: usize) -> bool {
+    let mut record = [0u8; SERVICE_BINDING_LEN];
+    binding_names_sender(
+        syscall::sys_lookup_service_bound(service_id, &mut record),
+        sender_tid,
+    )
+}
+
+/// Pure rule behind [`sender_is_live_provider`]: the kernel's live binding must exist,
+/// name a live provider, and address exactly `sender_tid`. Tids are never re-issued
+/// within one boot, so a matching tid is that provider's task and nobody else's.
+pub fn binding_names_sender(live: Option<ServiceBinding>, sender_tid: usize) -> bool {
+    matches!(live, Some(binding) if binding.is_live() && binding.tid == sender_tid as u64)
+}
+
 impl<const ID: u16> Default for ServiceRef<ID> {
     fn default() -> Self {
         Self::new()

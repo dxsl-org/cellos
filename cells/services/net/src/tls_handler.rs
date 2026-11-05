@@ -4,9 +4,9 @@ extern crate alloc;
 pub use crate::tls::dispatch::TlsPending;
 use crate::{
     interface::VirtioNetDevice,
-    service_runtime::next_ephemeral_port,
     socket_state::SocketState,
     socket_table::{SocketOwner, SocketTable},
+    stack_entropy::next_ephemeral_port,
     tls::dispatch::{ReplyTo, Request},
     tls::socket::TlsSocketEntry,
     tls_wire::{parse_raw_tls_request, RawTlsRequest},

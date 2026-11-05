@@ -2,12 +2,14 @@
 #![no_main]
 #![forbid(unsafe_code)]
 
+use api::syscall::service;
 use driver_dwc2_usb::lan_ipc;
 use ostd::io::println;
+use ostd::service::sender_is_live_provider;
 use ostd::syscall::{sys_heartbeat, sys_recv_timeout, sys_send, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, TrySend, RecvTimeout, Heartbeat, Log];
+api::declare_syscalls![Send, TrySend, RecvTimeout, Heartbeat, Log, LookupService];
 
 const POLL_TICKS: u64 = 1;
 const HEARTBEAT_TICKS: u64 = 5_000;
@@ -19,9 +21,17 @@ ostd::cell_main!(cell_main);
 /// untrusted client envelope and has no device capability of its own.
 fn cell_main() {
     let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    // Attach only from the registered NIC endpoint: the DWC2 host publishes
+    // `service::NIC_DRIVER` before it spawns this worker, so the kernel's registry
+    // names it. First-come attach let any cell that guessed this tid bind the
+    // front-end and black-hole every NIC request the real host forwards.
     let host_tid = loop {
         match sys_recv_timeout(0, &mut buf, POLL_TICKS) {
-            SyscallResult::Ok(sender) if sender > 0 && lan_ipc::is_attach(&buf[..1]) => {
+            SyscallResult::Ok(sender)
+                if sender > 0
+                    && lan_ipc::is_attach(&buf[..1])
+                    && sender_is_live_provider(service::NIC_DRIVER, sender) =>
+            {
                 break sender
             }
             _ => {}

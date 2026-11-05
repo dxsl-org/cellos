@@ -6,7 +6,7 @@
 
 use super::*;
 use smoltcp::{
-    iface::SocketHandle,
+    iface::{Config, SocketHandle},
     phy::{Loopback, Medium},
     socket::tcp,
     wire::IpEndpoint,

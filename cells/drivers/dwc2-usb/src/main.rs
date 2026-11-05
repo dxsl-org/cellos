@@ -8,7 +8,7 @@ use api::syscall::service;
 use api::{declare_manifest, declare_syscalls};
 #[cfg(feature = "loop-trace")]
 use driver_dwc2_usb::dispatch::OP_TX;
-use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF, STATUS_NOT_READY};
+use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF, STATUS_FAILED, STATUS_NOT_READY};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
@@ -570,6 +570,23 @@ fn cell_main() {
                     let leds = in_buf[1];
                     for iface in hid_interfaces.iter_mut() {
                         usb_hid::request_leds(iface, leds);
+                    }
+                } else if !ostd::service::sender_is_live_provider(service::NET, sender_tid) {
+                    // Only the live net service may drive the NIC; any other cell
+                    // could inject or read raw LAN frames. `sender_tid` is
+                    // kernel-stamped and the registry is asked per request, so a
+                    // restarted net service is followed without a cached tid. The
+                    // refusal never blocks: a sender that is not receiving must not
+                    // park this loop and with it HID polling.
+                    if nic_request_len(&in_buf).is_some() {
+                        match ostd::ipc::current() {
+                            Some(operation) => {
+                                let _ = ostd::ipc::reply(operation, &[STATUS_FAILED]);
+                            }
+                            None => {
+                                let _ = sys_try_send(sender_tid, &[STATUS_FAILED]);
+                            }
+                        }
                     }
                 } else if lan_worker_tid == 0 || lan_attach_pending || !port_enabled {
                     // Not ready means three things: the front-end is not spawned

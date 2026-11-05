@@ -71,6 +71,8 @@ mod rights;
 mod service_runtime;
 mod socket_state;
 mod socket_table;
+#[path = "stack-entropy.rs"]
+mod stack_entropy;
 mod tls;
 mod tls_handler;
 mod tls_wire;

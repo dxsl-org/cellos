@@ -242,7 +242,7 @@ impl ClockClient {
             .connect(
                 iface.context(),
                 remote,
-                crate::service_runtime::next_ephemeral_port(),
+                crate::stack_entropy::next_ephemeral_port(),
             )
             .is_err()
         {

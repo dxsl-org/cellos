@@ -1,7 +1,7 @@
 use alloc::{collections::BTreeMap, string::String};
 use api::ipc::{self, NetRequest, NetResponse};
 use api::syscall::events::NET_RX;
-use core::sync::atomic::{AtomicU16, Ordering};
+use core::sync::atomic::Ordering;
 #[cfg(any(not(feature = "ipc-wake-oracle"), feature = "hypervisor-bridge"))]
 use ostd::syscall::sys_wait_completion;
 use ostd::syscall::{sys_try_recv_attested, sys_yield};
@@ -9,7 +9,7 @@ use ostd::syscall::{sys_try_recv_attested, sys_yield};
 use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
 use ostd::{io::println, syscall::SyscallResult};
 use smoltcp::{
-    iface::{Config, Interface, SocketSet, SocketStorage},
+    iface::{Interface, SocketSet, SocketStorage},
     time::Instant,
     wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
 };
@@ -89,17 +89,9 @@ pub(crate) const fn classify_idle_ipc_wake(wait_return_ticks: u64) -> IdleIpcWak
         IdleIpcWakeClassification::Inconclusive
     }
 }
-static NEXT_PORT: AtomicU16 = AtomicU16::new(49152);
 /// One-shot log guard for a refused owner death watch.
 static WATCH_REFUSED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
-pub(crate) fn next_ephemeral_port() -> u16 {
-    let port = NEXT_PORT.fetch_add(1, Ordering::Relaxed);
-    if port >= 65534 {
-        NEXT_PORT.store(49152, Ordering::Relaxed);
-    }
-    port
-}
 /// Normalize architecture-specific raw clocks to the NET 10 MHz timebase.
 pub(crate) fn sys_get_time() -> u64 {
     ostd::syscall::sys_get_time_ms()
@@ -624,7 +616,9 @@ pub(crate) fn run() {
     println("[net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP");
 
     let mut device = VirtioNetDevice::new();
-    let config = Config::new(HardwareAddress::Ethernet(MAC));
+    // Seeded from the fail-closed entropy source: smoltcp's default seed of 0
+    // made ISNs, DNS ids/ports and IPv4 ids identical on every boot.
+    let config = crate::stack_entropy::seeded_config(HardwareAddress::Ethernet(MAC));
     let mut iface = Interface::new(config, &mut device, now_instant());
     iface.update_ip_addrs(|addresses| {
         let _ = addresses.push(IpCidr::new(IpAddress::v4(0, 0, 0, 0), 0));
@@ -839,7 +833,7 @@ pub(crate) fn run() {
                             );
                         }
                         watched.insert(owner, (principal.root_tid as usize, token));
-                    } else if !WATCH_REFUSED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                    } else if !WATCH_REFUSED.swap(true, Ordering::Relaxed) {
                         println("[net] owner death watch unavailable; socket reclaim deferred");
                     }
                 }

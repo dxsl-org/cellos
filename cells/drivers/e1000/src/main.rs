@@ -26,6 +26,7 @@ use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::print_fmt;
 use ostd::mmio;
+use ostd::service::{sender_is_live_provider, service};
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_find_pcie_device, sys_register_nic_driver, sys_try_send, PcieDeviceInfo};
 
@@ -109,6 +110,15 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     let _ = sys_try_send(sender_tid, bytes);
                 }
             };
+            // Only the live net service may drive the NIC; any other cell could
+            // inject or read raw frames. `sender_tid` is kernel-stamped and the
+            // registry is asked per request, so a restarted net service — or one
+            // init has not registered yet — is followed without a cached tid.
+            // The refusal is the ordinary failure byte the net service retries on.
+            if !sender_is_live_provider(service::NET, sender_tid) {
+                reply(&[1u8]);
+                return;
+            }
             let mut out_buf = [0u8; REPLY_BUF];
             if let Some(state) = STATE.lock().as_mut() {
                 match handle(&mut state.ctrl, data.as_ref(), &mut out_buf) {
