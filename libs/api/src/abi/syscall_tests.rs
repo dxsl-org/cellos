@@ -82,6 +82,7 @@ mod tests {
         (434, ViSyscall::QueryPcieFunction),
         (435, ViSyscall::AllocPcieIrq),
         (436, ViSyscall::SystemPower),
+        (441, ViSyscall::ResolveCellImage),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -376,6 +377,21 @@ mod tests {
             .with(ViSyscall::FreezeCell)
             .permits(ViSyscall::SystemPower));
         assert!(!SyscallSet::EMPTY.permits(ViSyscall::SystemPower));
+    }
+
+    /// 441 skips the ADR-0033 provisional block (437-440), which must keep
+    /// decoding as Unknown, and needs no allowlist bit: the registered-VFS
+    /// check at dispatch is the gate.
+    #[test]
+    fn resolve_cell_image_is_441_and_gated_at_dispatch() {
+        assert_eq!(ViSyscall::ResolveCellImage as usize, 441);
+        assert_eq!(ViSyscall::from(441), ViSyscall::ResolveCellImage);
+        for reserved in 437..=440 {
+            assert_eq!(ViSyscall::from(reserved), ViSyscall::Unknown);
+        }
+        assert_eq!(ViSyscall::from(442), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::ResolveCellImage.allowlist_bit(), None);
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::ResolveCellImage));
     }
 
     /// The 436 actions follow CP1 §5 (1 reboot, 2 poweroff) and its sentinels

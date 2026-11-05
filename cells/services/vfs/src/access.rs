@@ -21,6 +21,8 @@ mod machine_pin;
 mod rules;
 #[cfg(feature = "test-hooks")]
 pub(crate) mod selftest;
+#[path = "access/srv-owner.rs"]
+mod srv_owner;
 #[cfg(feature = "test-hooks")]
 pub(crate) mod stub;
 #[cfg(test)]
@@ -38,12 +40,17 @@ use machine_pin::{
     live_machine_pin_matches,
 };
 pub use rules::PathRule;
+use srv_owner::{
+    contains_srv_owner_namespace, is_srv_owner_namespace_path, is_srv_owner_store_rule,
+    srv_owner_matches, ImageLookup,
+};
 
 /// Path rules, evaluated whole-path first and by prefix second.
 pub struct AccessTable {
     exact: &'static [PathRule],
     prefixes: &'static [PathRule],
     service_lookup: fn(u16) -> Option<usize>,
+    image_lookup: ImageLookup,
 }
 
 impl AccessTable {
@@ -53,10 +60,20 @@ impl AccessTable {
     }
 
     pub(crate) fn with_service_lookup(service_lookup: fn(u16) -> Option<usize>) -> Self {
+        Self::with_lookups(service_lookup, default_image_lookup)
+    }
+
+    /// Both kernel queries replaceable, so a host test can stand in for the
+    /// service registry and for `ResolveCellImage`.
+    pub(crate) fn with_lookups(
+        service_lookup: fn(u16) -> Option<usize>,
+        image_lookup: ImageLookup,
+    ) -> Self {
         Self {
             exact: rules::EXACT_RULES,
             prefixes: rules::PREFIX_RULES,
             service_lookup,
+            image_lookup,
         }
     }
 
@@ -68,6 +85,7 @@ impl AccessTable {
             exact,
             prefixes,
             service_lookup: default_service_lookup,
+            image_lookup: default_image_lookup,
         }
     }
 
@@ -159,6 +177,9 @@ impl AccessTable {
             Some(rule) if is_machine_pin_store_rule(rule.prefix) => {
                 live_machine_pin_matches(caller, self.service_lookup)
             }
+            Some(rule) if is_srv_owner_store_rule(rule.prefix) => {
+                srv_owner_matches(caller, self.image_lookup)
+            }
             Some(rule) => match kind {
                 AccessKind::Read => rule.allow_read_all,
                 AccessKind::Write => rule.allow_write_all,
@@ -185,16 +206,20 @@ impl Default for AccessTable {
     }
 }
 
-/// Namespaces admitted only to one live service provider, which the fast path
-/// cannot prove and so must refuse outright.
+/// Namespaces admitted only to one live service provider or one measured
+/// program, which the fast path cannot prove and so must refuse outright.
 fn is_provider_namespace_path(path: &str) -> bool {
-    is_kms_namespace_path(path) || is_machine_pin_namespace_path(path)
+    is_kms_namespace_path(path)
+        || is_machine_pin_namespace_path(path)
+        || is_srv_owner_namespace_path(path)
 }
 
 /// Whether removing `path` would remove a provider-held namespace: `path` is
 /// inside one or is an ancestor of one. No caller, the provider included, may.
 fn contains_provider_namespace(path: &str) -> bool {
-    contains_kms_namespace(path) || contains_machine_pin_namespace(path)
+    contains_kms_namespace(path)
+        || contains_machine_pin_namespace(path)
+        || contains_srv_owner_namespace(path)
 }
 
 fn touches_boot_configuration(path: &str) -> bool {
@@ -227,5 +252,15 @@ fn default_service_lookup(service_id: u16) -> Option<usize> {
 
 #[cfg(not(target_os = "none"))]
 fn default_service_lookup(_service_id: u16) -> Option<usize> {
+    None
+}
+
+#[cfg(target_os = "none")]
+fn default_image_lookup(cell: u64, generation: u64) -> Option<api::cell_image::CellImage> {
+    ostd::syscall::sys_resolve_cell_image(cell, generation)
+}
+
+#[cfg(not(target_os = "none"))]
+fn default_image_lookup(_cell: u64, _generation: u64) -> Option<api::cell_image::CellImage> {
     None
 }

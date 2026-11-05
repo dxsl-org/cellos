@@ -71,6 +71,7 @@ fn a_whole_path_rule_overrides_the_prefix_it_sits_under() {
         exact: EXACT,
         prefixes: rules::PREFIX_RULES,
         service_lookup: table.service_lookup,
+        image_lookup: table.image_lookup,
     };
     assert!(!table.can_read(CELL, "/data/secret"));
     // Only the exact path is affected; its neighbours still follow /data/.

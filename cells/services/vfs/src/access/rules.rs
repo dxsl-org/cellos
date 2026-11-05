@@ -12,11 +12,11 @@
 //!
 //! Nothing here is keyed by *cell* either. Scoping a rule to "only the net cell"
 //! needs a binding from the calling cell to which program it is running, and the
-//! only candidate today — the cell name — is the last component of the
-//! `path_hint` its spawner passed, which the spawner chooses freely. A cell
-//! spawned as `path_hint = "/bin/vfs"` would inherit whatever the rule granted
-//! `/bin/vfs`. Cell-scoped rules wait for an identity the kernel vouches for
-//! (a signature bound to the path, or an attested measurement label).
+//! cell name is no such binding: it is the last component of the `path_hint` its
+//! spawner passed, which the spawner chooses freely. A cell spawned as
+//! `path_hint = "/bin/vfs"` would inherit whatever the rule granted `/bin/vfs`.
+//! The one program-scoped rule, `/srv/sshd`, matches the kernel-measured image
+//! instead: a signed image declaring that program name (`access::srv_owner`).
 
 /// Read/write decision for a path or a prefix.
 pub struct PathRule {
@@ -52,6 +52,13 @@ pub static EXACT_RULES: &[PathRule] = &[
     // provider (trusted init) is admitted (`access::machine_pin`).
     PathRule {
         prefix: "/srv/.cellos-machine",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    // The sshd host-key seed and authorized_keys. Only a signed image declaring
+    // the program name `sshd` is admitted (`access::srv_owner`).
+    PathRule {
+        prefix: "/srv/sshd",
         allow_read_all: false,
         allow_write_all: false,
     },
@@ -114,6 +121,11 @@ pub static PREFIX_RULES: &[PathRule] = &[
     },
     PathRule {
         prefix: "/srv/.cellos-machine/",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: "/srv/sshd/",
         allow_read_all: false,
         allow_write_all: false,
     },

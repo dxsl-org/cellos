@@ -14,6 +14,8 @@
 pub mod block_route;
 pub mod caller_identity;
 pub mod cap;
+#[path = "abi/cell-image.rs"]
+pub mod cell_image;
 pub mod cell_owner;
 pub mod cell_session;
 pub mod completion;

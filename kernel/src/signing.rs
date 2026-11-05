@@ -109,6 +109,56 @@ pub fn trust_anchor() -> (&'static str, [u8; 8]) {
     (posture, prefix)
 }
 
+/// The `api::cell_image` anchor class reported for an image this kernel's
+/// signature check verified. Follows the key `CELL_SIGNER_PUBKEY` actually
+/// selects (the private profile key overrides the others), not the feature
+/// list, so the class always names the key that did the verifying.
+pub const fn anchor_class() -> u8 {
+    anchor_class_for(
+        cfg!(feature = "phase02-terminal-profile"),
+        cfg!(feature = "release-signing-key"),
+        cfg!(feature = "dev-signing-key"),
+    )
+}
+
+const fn anchor_class_for(private: bool, release: bool, dev: bool) -> u8 {
+    if private {
+        api::cell_image::ANCHOR_PRIVATE
+    } else if release {
+        api::cell_image::ANCHOR_RELEASE
+    } else if dev {
+        api::cell_image::ANCHOR_DEV
+    } else {
+        // The zero placeholder key verifies nothing, so no image ever reaches
+        // the caller of this function with this value.
+        api::cell_image::ANCHOR_UNSIGNED
+    }
+}
+
+// VFS admits a dev-anchor `sshd` because only a dev-anchor kernel can report
+// one. A release kernel reporting `ANCHOR_DEV` would turn the public dev seed
+// into release authority, so such a build must not exist.
+const _: () = assert!(
+    !cfg!(feature = "release-signing-key") || anchor_class() != api::cell_image::ANCHOR_DEV
+);
+
+#[cfg(test)]
+mod anchor_tests {
+    #[test]
+    fn release_key_never_reports_the_dev_anchor() {
+        for bits in 0..8u8 {
+            let (private, release, dev) = (bits & 1 != 0, bits & 2 != 0, bits & 4 != 0);
+            let class = super::anchor_class_for(private, release, dev);
+            if release {
+                assert_ne!(class, api::cell_image::ANCHOR_DEV);
+            }
+            if dev && !release && !private {
+                assert_eq!(class, api::cell_image::ANCHOR_DEV);
+            }
+        }
+    }
+}
+
 /// Extract the 64-byte Ed25519 signature from the `__ViCell_sig` ELF section.
 ///
 /// Returns `None` unless exactly one in-bounds signature section has 64 bytes.

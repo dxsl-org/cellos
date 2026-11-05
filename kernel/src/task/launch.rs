@@ -21,6 +21,9 @@ pub struct LaunchRoutes {
 pub struct StagedMeasurement {
     pub path: String,
     pub digest: [u8; 32],
+    /// Identity bound to the published root (`Task::bind_image`); its digest
+    /// is `digest`, plus the signing anchor and vouched name if verified.
+    pub image: api::cell_image::ImageIdentity,
 }
 
 /// Security-complete data and reservations for one unpublished ELF task.
@@ -180,6 +183,10 @@ pub fn publish_prepared(
     task.pku_value = state.pku_value;
     task.is_critical = state.is_critical;
     task.root_tid = tid;
+    if let Some(measurement) = state.measurement.as_ref() {
+        // A fresh task from `into_task`, so the first binding always lands.
+        task.bind_image(measurement.image);
+    }
     let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
     state.granted.apply_to(&mut task);
     #[cfg(feature = "test-hooks")]
@@ -539,6 +546,9 @@ impl SessionPublication {
         task.pku_value = state.pku_value;
         task.is_critical = state.is_critical;
         state.granted.apply_to(&mut task);
+        if let Some(measurement) = state.measurement.as_ref() {
+            task.bind_image(measurement.image);
+        }
         let domain_lease = if state.is_domain {
             let path = state.measurement.as_ref().map_or("", |m| m.path.as_str());
             Some(admit_and_bind_domain(&mut task, path, state.granted)?)

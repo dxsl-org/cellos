@@ -15,6 +15,14 @@ Signing first adds a zero-filled signature section, signs that stable container,
 then replaces only the excluded 64-byte payload. The signature section must not
 have the ALLOC flag — it must never be in PT_LOAD.
 
+The same objcopy pass (re)writes `__ViCell_image`: the program name, which is
+the artifact file name without its `service-`/`app-`/`driver-` crate prefix
+(`service-sshd` → `sshd`). It lies inside the signed bytes, so the kernel
+reports it for a verified image and VFS binds `/srv/sshd/` to it
+(`api::cell_image`). An artifact name that is not a valid program name gets no
+section; such a cell still loads, with no name. Any section of that name the
+input already carried is dropped, so only the signer decides names.
+
 Usage:
     python scripts/cellos-sign --sign cell.elf                        (the only signing route)
     python scripts/sign-cell.py --verify --in cell-signed.elf         (check signature)
@@ -38,6 +46,7 @@ through this file can mint a production signature outside CI.
 
 import argparse
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -73,6 +82,23 @@ _CHECKED = False
 ELF_MAGIC = b'\x7fELF'
 SIG_SECTION = "__ViCell_sig"
 MANIFEST_SECTION = "__ViCell_manifest"
+IMAGE_SECTION = "__ViCell_image"
+# Crate-family prefixes of cell artifact names, stripped to get the program name.
+IMAGE_NAME_PREFIXES = ("service-", "app-", "driver-")
+# Mirrors `api::cell_image::is_valid_image_name`.
+_IMAGE_NAME = re.compile(rb"[a-z0-9_-]{1,24}")
+
+
+def image_name_for(elf_path: str) -> bytes | None:
+    """The `__ViCell_image` bytes for an artifact, or None when its file name
+    yields no valid program name."""
+    name = os.path.basename(elf_path)
+    for prefix in IMAGE_NAME_PREFIXES:
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    raw = name.encode()
+    return raw if _IMAGE_NAME.fullmatch(raw) else None
 
 
 # ── ELF helpers ───────────────────────────────────────────────────────────────
@@ -221,10 +247,23 @@ def _pub_bytes(priv: Ed25519PrivateKey) -> bytes:
 # ── Embed signature via objcopy ───────────────────────────────────────────────
 
 def _add_signature_placeholder(elf_path: str, out_path: str, objcopy: str) -> None:
-    """Create the stable final ELF layout with an excluded zero signature."""
+    """Create the stable final ELF layout with an excluded zero signature and
+    the signer-assigned `__ViCell_image` name (see the module docstring)."""
+    name = image_name_for(elf_path)
     with tempfile.NamedTemporaryFile(suffix=".sig", delete=False) as f:
         f.write(bytes(64))
         sig_file = f.name
+    with tempfile.NamedTemporaryFile(suffix=".name", delete=False) as f:
+        f.write(name or b"")
+        name_file = f.name
+    image_args = (
+        [
+            f"--add-section={IMAGE_SECTION}={name_file}",
+            f"--set-section-flags={IMAGE_SECTION}=noload,readonly",
+        ]
+        if name
+        else []
+    )
     try:
         subprocess.run(
             [
@@ -232,6 +271,8 @@ def _add_signature_placeholder(elf_path: str, out_path: str, objcopy: str) -> No
                 f"--remove-section={SIG_SECTION}",
                 f"--add-section={SIG_SECTION}={sig_file}",
                 f"--set-section-flags={SIG_SECTION}=noload,readonly",
+                f"--remove-section={IMAGE_SECTION}",
+                *image_args,
                 elf_path,
                 out_path,
             ],
@@ -239,6 +280,7 @@ def _add_signature_placeholder(elf_path: str, out_path: str, objcopy: str) -> No
         )
     finally:
         os.unlink(sig_file)
+        os.unlink(name_file)
 
 
 def _write_signature(elf_path: str, sig: bytes) -> None:

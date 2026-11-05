@@ -266,6 +266,11 @@ pub struct Task {
     /// Read once by `StateRestore` on the reserved argv key; dropped with the
     /// task record, exactly like any other terminal-state resource.
     pub inherited_argv: Option<Vec<u8>>,
+    /// Measured identity of the image this root was admitted from. `None` for
+    /// threads and kernel-built tasks. Private so the only writer is
+    /// [`Task::bind_image`], which refuses a second binding: the record is the
+    /// image of this incarnation for as long as the root lives.
+    image: Option<api::cell_image::ImageIdentity>,
     /// Canonical context retained for this committed root lifetime.
     pub(crate) child_context: Option<Vec<u8>>,
     pub(crate) child_stdio: [api::cell_session::ObjectRefV1; 4],
@@ -657,6 +662,7 @@ impl Task {
             tls_base: 0,
             staged_argv: None,
             inherited_argv: None,
+            image: None,
             child_context: None,
             child_stdio: [api::cell_session::ObjectRefV1::ZERO; 4],
             allowed_drivers,
@@ -733,6 +739,22 @@ impl Task {
             completion_rotor: super::completion_wait::INITIAL_ROTOR,
             completion_irq_cursor: u8::MAX,
         }
+    }
+
+    /// Record the measured image identity before the task is published.
+    /// Returns `false`, changing nothing, when an identity is already bound:
+    /// an incarnation is admitted from exactly one image.
+    pub(crate) fn bind_image(&mut self, image: api::cell_image::ImageIdentity) -> bool {
+        if self.image.is_some() {
+            return false;
+        }
+        self.image = Some(image);
+        true
+    }
+
+    /// The image identity bound by [`Self::bind_image`], if any.
+    pub(crate) fn image(&self) -> Option<api::cell_image::ImageIdentity> {
+        self.image
     }
 
     #[cfg(all(

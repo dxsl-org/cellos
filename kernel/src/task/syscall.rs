@@ -4259,6 +4259,13 @@ pub enum Syscall {
         out_ptr: usize,
         out_len: usize,
     },
+    /// 441: measured image identity of one live Cell generation (VFS only).
+    ResolveCellImage {
+        request_ptr: usize,
+        request_len: usize,
+        out_ptr: usize,
+        out_len: usize,
+    },
     /// 13: OpenCap — open a file and return a CapId.
     OpenCap {
         path_ptr: usize,
@@ -5000,7 +5007,8 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::WatchCellOwner { .. }
         | Syscall::CancelCellOwnerWatch { .. }
         | Syscall::ResolveCellOwnerRecord { .. }
-        | Syscall::WatchCellOwnerRecord { .. } => return None,
+        | Syscall::WatchCellOwnerRecord { .. }
+        | Syscall::ResolveCellImage { .. } => return None,
         // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
         Syscall::BlkRead { .. }
         | Syscall::BlkWrite { .. }
@@ -7495,6 +7503,32 @@ fn handle_syscall_inner(
             };
             let bytes = owner.to_bytes();
             write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+            Ok(len)
+        }
+
+        Syscall::ResolveCellImage {
+            request_ptr,
+            request_len,
+            out_ptr,
+            out_len,
+        } => {
+            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
+            let len = api::cell_image::CELL_IMAGE_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            let image = {
+                let guard = super::SCHEDULER.lock();
+                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+                super::cell_image::resolve_for_caller(
+                    sched,
+                    caller_id,
+                    request,
+                    crate::fast_ipc::is_registered_vfs_cell,
+                )
+                .ok_or(SyscallError::PermissionDenied)?
+            };
+            write_user_slice(caller_id, out_ptr, &image.to_bytes(), MAX_USER_BUF)?;
             Ok(len)
         }
 
@@ -10334,6 +10368,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_len: a3,
         },
         ViSyscall::WatchCellOwnerRecord => Syscall::WatchCellOwnerRecord {
+            request_ptr: a0,
+            request_len: a1,
+            out_ptr: a2,
+            out_len: a3,
+        },
+        ViSyscall::ResolveCellImage => Syscall::ResolveCellImage {
             request_ptr: a0,
             request_len: a1,
             out_ptr: a2,

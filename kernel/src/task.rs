@@ -99,6 +99,8 @@ mod ipc_wire_tests;
 pub use tcb::Task;
 pub mod async_ipc;
 pub mod cap_file_selftest;
+#[path = "task/cell-image.rs"]
+mod cell_image;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod context_handoff_selftest;
 #[cfg(cellos_g1_cpu)]

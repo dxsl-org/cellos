@@ -714,6 +714,21 @@ pub enum ViSyscall {
     /// Allowlist: SupervisorOp bit (49), shared with 413-415/419/422; the
     /// `SupervisorCap` check at dispatch is the authority gate.
     SystemPower = 436,
+    /// 441: Resolve the kernel-measured image identity of one live Cell
+    /// generation ([`crate::cell_image::CellImage`]).
+    ///
+    /// ABI: a0 = [`crate::cell_owner::CellOwnerRequest`] pointer, a1 = request
+    /// length, a2 = output pointer, a3 = output length (at least
+    /// [`crate::cell_image::CELL_IMAGE_LEN`]) → `CELL_IMAGE_LEN`. Fixed request
+    /// record from the start so RV32 carries both identity words exactly.
+    /// Errors: `PermissionDenied` unless the calling task belongs to the
+    /// registered VFS Cell, or when `(cell_id, generation)` is not live (a stale
+    /// generation never resolves); `BufferTooSmall`; `InvalidInput`. 437-440
+    /// stay reserved for ADR-0033.
+    ///
+    /// Allowlist: none; the VFS-provider check at dispatch is the gate, as for
+    /// `ResolveCellOwnerRecord`.
+    ResolveCellImage = 441,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1316,6 +1331,8 @@ impl ViSyscall {
             | Self::CancelCellOwnerWatch
             | Self::ResolveCellOwnerRecord
             | Self::WatchCellOwnerRecord
+            // ResolveCellImage: dispatch admits only the registered VFS Cell.
+            | Self::ResolveCellImage
             // This transport has no manifest bit: each selector must validate
             // the caller's live owner/issuer generation and object rights.
             | Self::CellSessionV1
@@ -1483,6 +1500,7 @@ impl From<usize> for ViSyscall {
             434 => ViSyscall::QueryPcieFunction,
             435 => ViSyscall::AllocPcieIrq,
             436 => ViSyscall::SystemPower,
+            441 => ViSyscall::ResolveCellImage,
             _ => ViSyscall::Unknown,
         }
     }

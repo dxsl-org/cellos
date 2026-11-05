@@ -24,6 +24,8 @@ pub mod elf;
 pub(crate) mod elf_section;
 pub mod elf_tests;
 mod governed_spawn;
+#[path = "loader/image-name-section.rs"]
+mod image_name_section;
 pub mod launch_profile;
 mod manifest_section;
 mod manifest_section_tests;

@@ -57,7 +57,8 @@ fn prepare_gated(
 
     // Signature extraction, byte coverage, and verification stay exactly at the
     // established boundary: structural classification first, task creation later.
-    let is_domain = match crate::signing::extract_sig(elf) {
+    let signature = crate::signing::extract_sig(elf);
+    let is_domain = match signature {
         Some(sig) => match crate::signing::verify_cell(elf, &sig) {
             Ok(true) => {
                 crate::audit::log_event(
@@ -107,6 +108,9 @@ fn prepare_gated(
             }
         }
     };
+    // Past this point a present signature has verified (every other outcome
+    // returned above).
+    let image = super::image_name_section::measured_identity(elf, elf_digest, signature.is_some());
 
     // Common owner admission gate: verify owner authorization for this ELF
     // before capability derivation or task creation.
@@ -228,6 +232,7 @@ fn prepare_gated(
         Some(crate::task::StagedMeasurement {
             path: path.to_string(),
             digest: elf_digest,
+            image,
         }),
         is_domain,
     );
@@ -300,6 +305,7 @@ pub(super) fn spawn_bootstrap_init(elf: &[u8]) -> ViResult<usize> {
 fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViResult<usize> {
     let granted = super::boot_ceiling::boot_ceiling("/bin/init");
     let prepared = crate::task::prepare_elf_task(elf, "init", CellId(0), alloc::vec::Vec::new())?;
+    let init_digest = crate::sha256::sha256(elf);
     let state = crate::task::TaskLaunchState::complete(
         None,
         granted,
@@ -323,7 +329,10 @@ fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViRe
         },
         Some(crate::task::StagedMeasurement {
             path: "/bin/init".to_string(),
-            digest: crate::sha256::sha256(elf),
+            digest: init_digest,
+            // Trusted init is embedded in the kernel image, not admitted
+            // through signature verification, so it states a digest only.
+            image: api::cell_image::ImageIdentity::unsigned(init_digest),
         }),
         false,
     );

@@ -1,7 +1,7 @@
 #![allow(unsafe_code)]
 
+use api::cell_image::{CellImage, CELL_IMAGE_LEN};
 use api::cell_owner::{CellOwner, CELL_OWNER_LEN};
-#[cfg(target_pointer_width = "32")]
 use api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
 use api::completion::{ViCompletion, COMPLETION_LEN};
 use api::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
@@ -1044,6 +1044,29 @@ pub fn sys_cancel_cell_owner_watch(token: u64) {
     unsafe {
         let _ = syscall(ViSyscall::CancelCellOwnerWatch, token as usize, 0, 0, 0);
     }
+}
+
+/// The kernel-measured image identity of the exact live `(cell_id,
+/// generation)`. Only the registered VFS Cell is answered; `None` for every
+/// other caller, for a stale generation, and for a malformed record.
+pub fn sys_resolve_cell_image(cell_id: u64, generation: u64) -> Option<CellImage> {
+    let request = CellOwnerRequest::new(cell_id, generation);
+    let mut bytes = [0; CELL_IMAGE_LEN];
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ResolveCellImage,
+            (&request as *const CellOwnerRequest) as usize,
+            CELL_OWNER_REQUEST_LEN,
+            bytes.as_mut_ptr() as usize,
+            bytes.len(),
+        )
+    };
+    let image = ((ret as usize) == CELL_IMAGE_LEN)
+        .then(|| CellImage::from_bytes(&bytes))
+        .flatten()?;
+    // The kernel echoes the request; a record for any other principal is not
+    // an answer to this question.
+    (image.cell_id == cell_id && image.generation == generation).then_some(image)
 }
 
 /// Resolve a well-known `service_id` to its current provider tid.

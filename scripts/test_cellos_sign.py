@@ -319,6 +319,40 @@ class AdmissionSentinelTests(unittest.TestCase):
             )
 
 
+class ImageNameTests(unittest.TestCase):
+    """`__ViCell_image` is assigned by the signer from the artifact name."""
+
+    def setUp(self):
+        self.signer = signing.load_signer(REPO_ROOT)
+
+    def test_crate_prefix_is_stripped(self):
+        name = self.signer.image_name_for
+        self.assertEqual(name("target/riscv64gc-unknown-none-elf/release/service-sshd"), b"sshd")
+        self.assertEqual(name("/r/app-init"), b"init")
+        self.assertEqual(name("/r/driver-virtio-blk"), b"virtio-blk")
+        self.assertEqual(name("/r/cellbox"), b"cellbox")
+
+    def test_unusable_names_get_no_section(self):
+        for path in ("/r/cell.elf", "/r/Service-X", "/r/" + "a" * 25, "/r/service-"):
+            self.assertIsNone(self.signer.image_name_for(path), path)
+
+    def objcopy_args(self, target: str) -> list:
+        with mock.patch.object(self.signer.subprocess, "run") as run:
+            self.signer._add_signature_placeholder(target, target + ".out", "objcopy")
+        return run.call_args.args[0]
+
+    def test_placeholder_pass_replaces_the_section(self):
+        args = self.objcopy_args("/r/service-sshd")
+        image = self.signer.IMAGE_SECTION
+        self.assertIn(f"--remove-section={image}", args)
+        added = [a for a in args if a.startswith(f"--add-section={image}=")]
+        self.assertEqual(len(added), 1)
+        # A nameless artifact still drops any inherited section and adds none.
+        args = self.objcopy_args("/r/cell.elf")
+        self.assertIn(f"--remove-section={image}", args)
+        self.assertFalse(any(a.startswith(f"--add-section={image}") for a in args))
+
+
 class SignPathStrictnessTests(unittest.TestCase):
     """The sign path must fail closed on an unverifiable F5, flag or no flag."""
 
