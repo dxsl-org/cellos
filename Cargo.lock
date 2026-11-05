@@ -1751,6 +1751,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "drm-cellos"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "mlibc-shim",
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.16.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
