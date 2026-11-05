@@ -123,8 +123,15 @@ impl SwitchPlan {
     /// Return the root switch that assembly must issue after saving `outgoing`.
     /// A zero PPN is the explicit no-write path, and it now means exactly one
     /// thing: SAS to SAS, where the kernel root is already live.
-    pub(crate) fn root_switch(&self) -> (usize, usize) {
-        match &self.transition {
+    ///
+    /// Consumes the plan so its root reference is released before the raw
+    /// switch. The outgoing task's stack frame never unwinds when that task has
+    /// exited, so a plan still alive across the switch would leak one reference
+    /// to the incoming root and keep that domain (its tables and ledger) alive
+    /// forever. The hart's execution pin, not the plan, keeps the programmed
+    /// root alive past this point.
+    pub(crate) fn root_switch(self) -> (usize, usize) {
+        match self.transition {
             DomainTransition::Activate(domain) => {
                 let (id, generation) = domain.tuple();
                 let root = root_tuple(&domain.0);
