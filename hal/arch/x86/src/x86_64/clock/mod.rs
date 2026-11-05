@@ -235,7 +235,13 @@ pub fn start_secondary(lapic_id: u32) -> bool {
 ///
 /// The boot CPU's area is what [`now_ns`] reads, which is valid only while the
 /// host declares the TSC stable on every vCPU. An AP whose own area lacks that
-/// declaration therefore demotes a kvmclock clocksource, as a skewed TSC does.
+/// declaration therefore makes kvmclock unusable system-wide: an active
+/// kvmclock clocksource is demoted (as a skewed TSC is), and the boot CPU's
+/// registration is retired from reads ([`kvmclock::retire`]) so that no later
+/// fallback — a TSC demotion on another AP — can pick kvmclock again. The one
+/// exception is an active kvmclock with nothing to demote to: it stays, since
+/// retiring it would stall [`now_ns`] (the `fetch_max` guard keeps it
+/// monotonic either way).
 fn register_secondary_pvclock() {
     if kvmclock::now_ns() == 0 {
         return;
@@ -249,11 +255,16 @@ fn register_secondary_pvclock() {
     let phys = PVCLOCK_PHYS.load(Ordering::Relaxed) + offset as u64;
     // SAFETY: `set_pvclock_area` handed over a dedicated zeroed page; this
     // logical CPU owns its slot and registers it once, on itself.
-    if !unsafe { kvmclock::register(virt + offset, phys) } && source() == ClockSource::Kvmclock {
-        if let Some(next) = fallback_source(false) {
-            install(next);
-        }
+    if unsafe { kvmclock::register(virt + offset, phys) } {
+        return;
     }
+    if source() == ClockSource::Kvmclock {
+        let Some(next) = fallback_source(false) else {
+            return;
+        };
+        install(next);
+    }
+    kvmclock::retire();
 }
 
 /// The source a demotion falls back to, best first; `None` when nothing better

@@ -31,7 +31,7 @@ use api::ipc::IPC_BUF_SIZE;
 use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 use ostd::io::println;
 use ostd::service::ServiceRef;
-use ostd::syscall::{sys_exit, sys_lookup_service_bound, sys_send, SyscallResult};
+use ostd::syscall::{sys_exit, sys_get_time_ms, sys_lookup_service_bound, sys_send, SyscallResult};
 use ostd::task::yield_now;
 use ostd::ViError;
 use tier2_rpc_proto::{
@@ -42,7 +42,7 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 
 // `LookupService` also authorizes `LookupServiceBound` (allowlist bit 37), which is the
 // whole resolution path this driver needs.
-api::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupService];
+api::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupService, GetTime];
 
 ostd::cell_main!(cell_main);
 
@@ -50,8 +50,11 @@ ostd::cell_main!(cell_main);
 /// changes the checksum, small enough to leave the reply inside one frame.
 const PAYLOAD_BYTES: usize = 512;
 
-/// Yields allowed for the provider to exit before the stale-descriptor leg gives up.
-const STALE_POLLS: usize = 2000;
+/// Wall-clock bound for the provider's exit to retire its registration. The kernel clears
+/// the entry inside the provider's own `Exit` (`exit_task` → `clear_tid`), so this waits
+/// for the provider's remaining run time (its last log lines and the exit syscall), which
+/// no yield count bounds: on an idle hart a yield returns in about a microsecond.
+const STALE_DEADLINE_MS: u64 = 5_000;
 
 fn fail(reason: &str) -> ! {
     println(&format!("[tier2-rpc] FAIL — {reason}"));
@@ -171,16 +174,23 @@ fn cell_main() {
     // opcode — deliberately not through the SDK, whose cache this leg is about — until
     // no live binding remains, then call. The call must fail: the SDK must not send to
     // the retired tid, and must not silently resolve onto some other incarnation.
+    let Some(started_ms) = sys_get_time_ms() else {
+        fail("the monotonic clock is unavailable to bound the stale-descriptor wait")
+    };
     let mut gone = false;
-    for _ in 0..STALE_POLLS {
+    loop {
         if live_binding().is_none() {
             gone = true;
             break;
         }
+        match sys_get_time_ms() {
+            Some(now_ms) if now_ms.saturating_sub(started_ms) < STALE_DEADLINE_MS => {}
+            _ => break,
+        }
         yield_now();
     }
     if !gone {
-        fail("the fixture's registry entry stayed live after the provider exited");
+        fail("the provider did not retire its registry entry within the 5 s bound");
     }
     println("[tier2-rpc] PROVIDER-GONE=none");
     match provider.call::<EchoRequest, EchoResponse>(&denied, &mut response_buffer) {

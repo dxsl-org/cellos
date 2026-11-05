@@ -39,8 +39,11 @@ Trong SAS, việc hai driver cùng ghi vào một địa chỉ phần cứng là
   x86_64 brings every firmware-reported CPU online up to `MAX_HARTS = 64`; logical
   2..N are additional normal harts. A CPU beyond 64 is logged `cpu N ignored:
   MAX_HARTS`; a LAPIC ID above 255 stays offline until interrupt remapping exists.
-  APs come up one at a time, and the first AP that cannot be started ends bring-up,
-  so the online set is always `0..online`.
+  APs come up one at a time, and the first AP that cannot be started or refuses root
+  operation ends bring-up, so the online set is always `0..online`. An AP that was
+  released but never answers a bring-up step within its bounded budget panics the boot
+  (fail-closed); a CPU is never silently missing. After an AP is online it receives one
+  more acknowledged invalidation, since shootdowns before that excluded it.
 * **Work Stealing**: an idle hart steals Normal/Background work from the busiest other
   hart's queue, at most half of the stealable entries. Victim selection is a bounded
   scan (each other hart slot once, starting after the thief, ties to the first found;

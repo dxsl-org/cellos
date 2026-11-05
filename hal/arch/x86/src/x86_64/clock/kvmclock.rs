@@ -99,6 +99,15 @@ pub fn registered_area() -> Option<u64> {
     (value & 1 != 0).then_some(value & !1)
 }
 
+/// Stop reading kvmclock: [`now_ns`] returns 0 from now on, which every
+/// fallback check treats as "kvmclock unusable". Called once a CPU's own
+/// registration lacks the stable bit, so the boot CPU's area no longer speaks
+/// for every vCPU. The host keeps updating the registered areas; nothing reads
+/// them, and the memory stays dedicated for the rest of the boot.
+pub fn retire() {
+    INFO.store(0, Ordering::Release);
+}
+
 /// Host system time in nanoseconds; 0 when not active.
 pub fn now_ns() -> u64 {
     let virt = INFO.load(Ordering::Acquire);

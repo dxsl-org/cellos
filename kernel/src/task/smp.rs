@@ -814,9 +814,13 @@ pub fn start_secondaries() {}
 //   2. BSP: flush proof on the AP (request_tlb_flush(logical) acknowledged),
 //      then `X86_QUALIFIED = logical`.
 //   3. AP: `HART_ONLINE[logical] = true`.
-//   4. BSP: proceeds to the next AP.
-// The first refusal or failure ends bring-up, so the online set is always the
-// contiguous range 0..online and the RT hart (1) is online whenever any AP is.
+//   4. BSP: one catch-up flush acknowledged by the AP (it was outside every
+//      shootdown target set until step 3), then the next AP.
+// A refusal (root operation) or a start failure (stack, topology) ends
+// bring-up, so the online set is always the contiguous range 0..online and
+// the RT hart (1) is online whenever any AP is. An AP that was released but
+// never answers a step within its bounded budget panics the boot
+// (`x86_bounded_wait`): fail-closed, never a silently missing CPU.
 #[cfg(target_arch = "x86_64")]
 static X86_READY: AtomicUsize = AtomicUsize::new(0);
 /// Highest logical AP the BSP has qualified (step 2); monotone, because APs
@@ -1179,6 +1183,14 @@ fn x86_start_ap(
     X86_QUALIFIED.store(logical, Ordering::Release);
     // Step 3.
     x86_bounded_wait(|| HART_ONLINE[logical].load(Ordering::Acquire));
+    // Step 4: catch-up invalidation. Until `HART_ONLINE[logical]` was visible,
+    // every shootdown (another AP's, or the BSP's own) excluded this AP from its
+    // target set, so a translation changed between step 2 and step 3 may still
+    // be cached here. One more acknowledged flush, requested only after the
+    // BSP observed the AP online, closes that window: every later shootdown
+    // targets it.
+    let epoch = request_tlb_flush(logical);
+    x86_bounded_wait(|| tlb_flush_completed(logical, epoch));
     true
 }
 
@@ -1251,9 +1263,9 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
     // Step 3.
     HART_ONLINE[logical].store(true, Ordering::Release);
     // Later APs are brought up while this one waits here. Each later AP costs
-    // the BSP at most three bounded waits, plus the closing broadcast and
-    // shootdown fixture, so four budgets per hart slot bound this wait.
-    x86_bounded_wait_steps(X86_WAIT_STEPS.saturating_mul(4 * MAX_HARTS), || {
+    // the BSP at most four bounded waits, plus the closing broadcast and
+    // shootdown fixture, so five budgets per hart slot bound this wait.
+    x86_bounded_wait_steps(X86_WAIT_STEPS.saturating_mul(5 * MAX_HARTS), || {
         // The shootdown fixture pairs the BSP with the RT hart only; any other
         // AP just answers its IPIs from here.
         #[cfg(feature = "test-hooks")]
