@@ -193,6 +193,7 @@ Each needs Law-1 CP1 before implementation and CP2 after it.
 | `ViPcieFunctionV1` (syscall 434 `QueryPcieFunction`) | K | syscall 434 envelope + exact 584 bytes | u16 version, set {1} | `out_len != 584` → `InvalidInput` | flag bits beyond 0-3 (bit 3 `DMA_REMAPPED`, CP2 amendment 2026-11-04), BAR kinds above 3, BAR flag bits beyond 0-1, `reserved*`, cap entries past `cap_count` and cap bytes past `len` all zero (`ViPcieFunctionV1::decode` refuses otherwise); `a3` zero | caller holds `PcieDriverCap` and owns the BDF; the record is assembled before the copy-out | `libs/api/src/abi/pcie_function.rs`; `kernel/src/task/drivers/pcie_msi/record.rs` |
 | `AllocPcieIrq` result (syscall 435) | K | register envelope; return `first_irq \| count<<8 \| kind<<16` | none (register form) | n/a | `want` outside 1..=32, empty mode or mode bits beyond 0-1 refused; `a3` zero | ownership, capability presence, carve rule and FADT MSI flag checked before any config write | `kernel/src/task/drivers/pcie_msi.rs` |
 | 418/424 lookup semantics | K | unchanged 48-byte `PcieDeviceInfo` | unchanged | unchanged | unchanged | skip devices owned by another live task (semantic change only) | `kernel/src/task/drivers/pcie_ecam.rs` (`find_class_where`, `find_vendor_device`) |
+| `SystemPower` (syscall 436, CP2-06 pending) | K | register envelope; `a0` 1 reboot, 2 poweroff; no return on success | none (register form) | n/a | unknown action or non-zero `a1..a3` → `InvalidInput` (checked after the gate) | `SupervisorCap` (allowlist bit 49) before any argument is acted on; poweroff needs a static `\_S5_` and an I/O PM1 control block, else `NotSupported` before any write | `kernel/src/task/syscall.rs` (`system_power`); `kernel/src/acpi/power.rs` |
 
 Error sentinels for 434/435 (`api::pcie_function::ERR_*`): `usize::MAX`
 permission denied, `MAX - 2` no function, `MAX - 3` invalid input,
@@ -201,6 +202,10 @@ permission denied, `MAX - 2` no function, `MAX - 3` invalid input,
 
 Envelope: the cell syscall stub carries four arguments, so "`a3..a5` zero" in
 CP1 is enforced as `a3` zero; `a4`/`a5` never reach the kernel.
+
+Error sentinels for 436 (`api::syscall::system_power::ERR_*`): `usize::MAX`
+permission denied, `MAX - 3` invalid input, `MAX - 5` not supported (the
+434/435 values). Same four-argument envelope: `a4`/`a5` never reach the kernel.
 
 ### 6.2 Proposed (not implemented)
 

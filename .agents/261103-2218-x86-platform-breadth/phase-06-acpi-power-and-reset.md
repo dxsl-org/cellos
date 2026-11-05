@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "ACPI reset, S5 poweroff, power button"
-status: pending
+status: implemented (CP2-06 pending owner decision; guest acceptance blocked, see Deviation Log B-1)
 priority: P2
 effort: "3d"
 dependencies: [1, 3]
@@ -68,11 +68,11 @@ The kernel holds `kernel/src/acpi/power.rs` (register writes and the `\_S5_` sca
 
 ## Todo List
 
-- [ ] Shutdown path located
-- [ ] Reset + 436
-- [ ] `\_S5_` scanner + fixtures
-- [ ] Poweroff
-- [ ] SCI power button
+- [x] Shutdown path located (request §1; `cells/services/power` left untouched, H-S2-9)
+- [x] Reset + 436 (kernel, ostd, api; host-tested)
+- [x] `\_S5_` scanner + fixtures (`tests/fixtures/acpi/`)
+- [x] Poweroff (kernel; guest lane blocked by B-1)
+- [x] SCI power button (ISR + relay observed on TCG; supervisor leg blocked by B-1)
 
 ## Success Criteria
 
@@ -94,4 +94,12 @@ Phase 09 uses ACPI shutdown in the VMware lane; phase 20 records the per-machine
 
 ## Deviation Log
 
-None.
+- **Drift (plan text):** Requirements say `a0 = 0 reboot | 1 poweroff`; the approved CP1 §5 governs: `a0 = 1` reboot, `a0 = 2` poweroff. Implemented as CP1.
+- **Drift (plan text):** Assumption 1 is false: the supervisor had no stop-all and no VFS flush. H-S2-8 (i) implemented instead: FreezeCell sweep of all Cells except the supervisor and the storage stack, bounded settle window (≤ 500 ms), then 436; markers claim no flush. The success-criterion marker `[supervisor] shutdown: vfs flushed` is replaced by `[supervisor] power: <action> (<origin>) froze=…`.
+- **Decision:** shell surface is `/bin/shutdown [-r]` → supervisor `OP_POWER` on x86 (H-S2-6 (a)); rv64/aarch64 keep raw 502 and ignore arguments.
+- **Deviation:** the SCI route and `PWRBTN_EN` are programmed from the first hart-0 tick (`relay_pending`), because the I/O APICs are registered after the ACPI init block.
+- **Deviation:** GPE0/1 blocks are disabled and cleared at ACPI-mode entry; their FADT fields are read from the raw FACP in `power.rs` (`fadt.rs` is outside the file set).
+- **Deviation:** `sci::init` is not called under `cellos_g1_cpu` (G1 lane untouched).
+- **Deviation:** fixtures: q35 DSDT dumped with QMP `pmemsave`; the in-method fixture is hand-assembled (no `iasl`), `.asl` source committed beside it.
+- **Surprise:** `tests/integration/tests/ahci-x86.rs:280-282` comment ("On x86 `shutdown` halts the CPU") is stale; left unedited per request O6.
+- **B-1 (blocker, file outside the set):** the canonical x86 image ships no `/bin/supervisor` (`scripts/assemble-x86-image.py:106-127`; signing route pin and signed set at `scripts/cellos_sign/signing.py:64-70`). Guest lanes fail at the supervisor marker. A local uncommitted witness with the row, signed name and new pin still did not start the supervisor. Owner grant needed (CP2-06-1).
