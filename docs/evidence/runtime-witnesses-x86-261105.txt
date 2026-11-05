@@ -23,3 +23,15 @@ mlibc regression (X86_ACCEL=tcg|kvm bash scripts/x86/qemu-mlibc-witness.sh), aft
   kvm: USER: MLIBC-SMOKE: 3/3 pass; USER: MLIBC-POSIX: 7/7 pass -> MLIBC-WITNESS: PASS
 
 Kernel host tests on the merged tree: cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu -> 432 passed.
+
+--- Slice VH (VMX host-state repair, commit 7b8f42eea), same day ---
+After the fix, every runner above was rerun on KVM -cpu host, KVM qemu64,+pdpe1gb and TCG qemu64,+pdpe1gb:
+  mlibc:      MLIBC-WITNESS: PASS on all three
+  cpp-hosted: CPP-HOSTED-SMOKE: PASS (runs: 5) on all three
+  drm-lite:   DRM-LITE-WITNESS: PASS on all three
+KVM -cpu host serial logs (LOG_DIR=/tmp/vh/host) show, per boot:
+  [INFO] x86 virt: root operation active (VMX)
+  [ INFO] X86-VMM-SMOKE: PASS (api-path PortOut+Hlt)
+  USER: MLIBC-POSIX: 7/7 pass   /   USER: CPP-HOSTED: 11/11 pass
+Before the fix the same KVM -cpu host boots stopped after "PKU-SELFTEST: SKIP" (triple fault, KVM_EXIT_SHUTDOWN).
+Host: cargo test -p hal-x86 (25 passed), -p cellos-kernel (432 passed); cellos-sign --check: F1 OK (998 files, unsafe in 77 allowlisted files).

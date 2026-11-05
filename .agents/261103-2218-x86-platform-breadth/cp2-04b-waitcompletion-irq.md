@@ -1,6 +1,6 @@
 # CP2 — phase 04b: `IRQ` source for `WaitCompletion`, MSI wake hint, IRQ-driven nvme/ahci/xhci
 
-Status: **awaiting the owner's decision (Law-1 confirmation 2).** Not approved.
+Status: **approved by the owner 2026-11-05 (Law-1 confirmation 2)**; `IRQ = 8` frozen ([record](cp2-04b-waitcompletion-irq-approval.md)).
 Written 2026-11-05 after implementation on `feat/x86-04b-irq-drivers` (base `6fee21927`).
 CP1: [cp1-04b-waitcompletion-irq.md](cp1-04b-waitcompletion-irq.md) (approved 2026-11-04, D-B-1…D-B-10), scheduled by [lane-04b-schedule-approval.md](lane-04b-schedule-approval.md).
 Evidence: [reports/phase-04b-evidence.md](reports/phase-04b-evidence.md).
@@ -67,4 +67,4 @@ ISR invariant: the MSI handler still does only atomic stores (pending flag, then
 
 ## 6. Approval record
 
-Pending.
+Approved 2026-11-05: CP2-04b-1 yes, CP2-04b-2 yes (deviations 1–4), CP2-04b-3 follow-up. [Record](cp2-04b-waitcompletion-irq-approval.md).

@@ -36,10 +36,8 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 - [ ] **Ginux Phase 02 debt #23 (owner admission)** — blocked bởi
   [tier1-baseline-admission](260821-1700-tier1-baseline-admission/plan.md) Phase 03
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
-- [ ] **KVM `-cpu host`: test-hooks x86 kernels triple-fault in the VMX smoke** (found 2026-11-05).
-  - `hal/arch/x86/src/x86_64/vmx_vcpu.rs`: `HOST_GS_BASE` written from the low 32 bits only; `HOST_TR_BASE` never written; `EXIT_ACKNOWLEDGE_INTERRUPT` set but the external-interrupt exit is not handled (IPI 0xf0 stuck in ISR). Since `15830f4fd`.
-  - Fix proven in a throwaway worktree (mlibc witness PASS on KVM `-cpu host`): [report](debug/debug-261105-1036-kvm-host-vmx-boot-exit.md), [patch](debug/debug-261105-1036-kvm-host-vmx-boot-exit.patch). Touches `hal/arch/x86/**` and `kernel/src/hypervisor/svm_registry.rs`, so it needs the Intel lane and a handoff. Until then KVM runs use `X86_CPU_MODEL=qemu64,+pdpe1gb`.
-  - The patch exposes an existing SVM-guest triple fault on TCG (`[hv-x86] guest triple-fault: rip=0x6663`); not investigated.
+- [ ] **SVM-guest triple fault in the x86 VMM smoke on TCG** (`[hv-x86] guest triple-fault: rip=0x6663`, `X86-VMM-SMOKE: FAIL … Shutdown`). Exposed by slice VH (`7b8f42eea`), which lets the smoke guest actually run; before it the smoke stopped at `Preempted`. The smoke only logs, so boots are unaffected. Not investigated ([VH record](261103-2218-x86-platform-breadth/slice-vmx-host-state-repair.md)).
+- [ ] **04b follow-up evidence (owner CP2-04b-3):** the `async_lifecycle` bench with the IRQ source, and the MSI-to-wake latency with the wake hint disabled (baseline for the 14 µs idle-KVM median) ([CP2](261103-2218-x86-platform-breadth/cp2-04b-waitcompletion-irq-approval.md)).
 - [ ] **aarch64 secondary-core wait counts timer ticks with interrupts masked** (`kernel/src/task/smp.rs`, found by Apple A1): a core that never comes online hangs boot instead of falling back to one core.
 - [ ] **`scripts/check-posix-ledger.py` fails on 20 Tier-A rows** (`docs/posix-ledger.md:223-259`), present before the 2026-11-05 runtime merges.
 

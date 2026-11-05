@@ -1,7 +1,7 @@
 ---
 phase: 2a
 title: "Linux arm64 Image entry and VHE host regime"
-status: completed-at-qemu-tcg-ceiling   # 2026-11-05, slice A1; checkpoint approval pending; evidence reports/phase-02a-evidence.md
+status: completed   # 2026-11-05, slice A1, QEMU 8.2.2 TCG ceiling; checkpoint approved (phase-02a-checkpoint-approval.md)
 priority: P2
 effort: "6d"
 dependencies: ["0"]
