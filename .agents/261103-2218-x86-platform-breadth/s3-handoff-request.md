@@ -1,6 +1,6 @@
 # Slice S3 (phases 08, 09) — lock-handoff request
 
-Status: **draft for owner approval, not effective.** Written 2026-11-06 against HEAD `78dd8b0b9` (S2 closed, Intel WIP lane free). Line numbers are HEAD lines and are re-located by symbol on the current tree. `[INFERENCE]` marks claims that were not read in code or observed in this session. The QEMU and VMware host facts in §1.4 and §1.5 come from read-only probes run in this session (no VM was created, started or modified).
+Status: **approved by the owner 2026-11-06 with every §6 recommendation ([record](s3-handoff-approval.md)); effective — S3 holds the Intel WIP lane.** Written 2026-11-06 against HEAD `78dd8b0b9`. Line numbers are HEAD lines and are re-located by symbol on the current tree. `[INFERENCE]` marks claims that were not read in code or observed in this session. The QEMU and VMware host facts in §1.4 and §1.5 come from read-only probes run in this session (no VM was created, started or modified).
 
 ## 1. Recon
 
