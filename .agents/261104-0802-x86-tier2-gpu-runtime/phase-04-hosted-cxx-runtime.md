@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Hosted C++17 runtime profile: LLVM libc++, libc++abi, libunwind over mlibc"
-status: in-progress (built and linked; runtime witness blocked on H-1 launch rows)
+status: in-progress (QEMU TCG witness passes; KVM not yet run)
 priority: P1
 effort: "8-14d"
 dependencies: ["R3 (R3a minimum)", "ADR for cpp-hosted accepted (D-R4)"]
@@ -107,14 +107,19 @@ cpp-hosted Cell (x86_64 Tier-2)
 - [x] Pin the llvm-project tag + licence check per file (`llvmorg-19.1.7` @ `cd708029e0b2`; 1204 files; `scripts/build-llvm-runtimes.sh` step 2)
 - [x] Host dry run (x86_64-linux-gnu build + host witness run: 11/11 markers, uncaught exception aborts with the libc++abi line)
 - [x] Cross build over mlibc (step 4; every runtime libc reference resolves in mlibc `libc.a` after patch 0002)
-- [ ] Witness Cell (TCG + KVM): built and linked (`scripts/build-x86_64-cpp-hosted-ci.sh --link-only` → `CPP-HOSTED-LINK: PASS`); runner `scripts/x86/qemu-cpp-hosted-smoke.sh` written; not booted — needs the `/bin/cpp-hosted-smoke` launch rows (H-1)
+- [ ] Witness Cell (TCG + KVM). TCG passes: `CPP-HOSTED-SMOKE: PASS (runs: 5)` on 2026-11-05 ([log](reports/r4-evidence/qemu-x86-cpp-hosted-tcg-5runs.log)). KVM has not run (a separate known failure is under investigation by Main).
 - [x] Size measurement in the ADR (ADR-0034 Consequences, size table)
 - [x] Docs: guide, spec 05, spec 18, ledger, NOTICE
 
 ## Success Criteria
 
-- [ ] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM. (Blocked on H-1. Host evidence only: the same C++ prints 11/11 on x86_64-linux-gnu.)
-- [ ] An uncaught exception terminates the Cell with a logged reason and no kernel fault. (Blocked on H-1; the runner asserts it.)
+- [ ] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM. TCG is met: `CPP-HOSTED: 11/11 pass` ×5 in one boot. KVM is still open.
+- [ ] An uncaught exception terminates the Cell with a logged reason and no kernel fault. TCG is met:
+  - `libc++abi: terminating due to uncaught exception of type std::runtime_error: cpp-hosted uncaught`;
+  - `mlibc: sigaction failed in abort` and `mlibc PANIC` are logged;
+  - no `[fault] Cell` line appears, `DOMAIN-FRAME-RELEASE: PASS` follows each run, and the prompt returns.
+
+  KVM is still open.
 - [x] `cpp-smoke` still passes its own absence assertions (build-level: riscv64 and x86_64 `cpp-smoke` link with no `__cxa_throw`/`_Unwind_*`/`__gxx_personality`/`_ZSt*`; 2026-11-05).
 
 ## Risk Assessment
@@ -156,3 +161,10 @@ All entries 2026-11-05.
     - New here: each per-function `.gcc_except_table.*` becomes its own output section, about 380 section headers in total.
     - The loader reads program headers, so this should not matter `[INFERENCE]`. It is unproven until the boot. A `.gcc_except_table : { *(.gcc_except_table .gcc_except_table.*) }` rule in `cell.ld.in` would remove the orphans, but `cell-build` is outside R4's file set.
 11. **Merge:** `main` (R6, `7ca2b7c61`) was merged into `feat/r4-hosted-cxx`, and mlibc was rebuilt from the committed tree with patch 0002. The private pre-merge mlibc build in `target/r4-mlibc` was verification scaffolding only.
+12. **Surprise → fix in mlibc (first TCG boot, after the H-1 rows landed on main `6c61ba1ec`).** The Cell faulted before `main`: `#PF user va=0x232af08 rip=0x108062ad0`, just below `rsp`.
+    - `rip` is `ScopeTrace::ScopeTrace` in mlibc's pthread code, calling `mlibc::globalConfig()`.
+    - `globalConfig()` was a function-local static, so it called `__cxa_guard_acquire`. In a `cpp-hosted` Cell that symbol is libc++abi's, which locks a pthread mutex. `pthread_mutex_lock` opens a `ScopeTrace`, which calls `globalConfig()` again: unbounded recursion that exhausted the 64-page (256 KiB) root stack.
+    - mlibc's own hidden guard never takes a lock, so mlibc-only Cells never recursed.
+    - The kernel stack size is not the cause.
+    - **Fix:** `third_party/mlibc/patches/0003-guard-free-global-config.patch`. The config is constant-initialised and loaded once behind an atomic state word; a re-entrant call while loading sees every debug switch off.
+    - Rebuilt mlibc, the runtimes and the image. TCG: `CPP-HOSTED-SMOKE: PASS (runs: 5 ...)`. The mlibc witness regression was rerun on TCG after the patch.
