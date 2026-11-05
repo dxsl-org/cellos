@@ -30,7 +30,7 @@ pub use hal::PageFlags as Flags;
 
 // Permission changes on existing mappings live in a sibling module but belong to
 // this namespace — `paging::protect_page` is where a reader looks for them.
-pub use super::page_protect::{protect_page, protect_range};
+pub use super::page_protect::{protect_page, protect_pages, protect_range};
 
 use crate::sync::Spinlock;
 
@@ -1022,6 +1022,64 @@ pub fn map_page(
     let pte_flags = super::page_protect::pte_bits_from_flags(flags);
     map_page_x86(allocator, vaddr, paddr, pte_flags)
 }
+
+/// [`map_page`] for one page of a batch whose invalidation the caller issues
+/// once, with [`flush_deferred_maps`] over the batch (Cell ELF segments, phase
+/// 07b R1, owner grant `s2-phase07b-flush-batching-grant.md`).
+///
+/// Concurrency contract, the same as the MMIO window batch
+/// (`map_mmio_x86_flags`):
+/// - x86_64: the leaf is written without `map_page`'s per-page global
+///   shootdown. The caller holds `FRAME_ALLOCATOR` (the `allocator` borrow)
+///   from the first leaf through `flush_deferred_maps`, which must cover every
+///   page mapped this way and must complete before the spawn that maps them
+///   returns or relocates through them. A failed walk still invalidates before
+///   it recycles detached tables, as in `map_page_x86`.
+/// - riscv64/aarch64: exactly [`map_page`], which issues no invalidation for a
+///   new leaf on those arches, so batching changes nothing there.
+///
+/// Precondition: the leaf is new (absent before this call) or only gains
+/// rights over what it already maps. Never use this to re-point a present leaf
+/// to another frame or to remove a right, and never free a frame a leaf mapped
+/// this way referred to before [`flush_deferred_maps`] has covered it — until
+/// then another CPU may still hold the old translation.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn map_page_deferred(
+    allocator: &mut FrameAllocator,
+    vaddr: VAddr,
+    paddr: PhysAddr,
+    flags: Flags,
+) -> PagingResult<()> {
+    let pte_flags = super::page_protect::pte_bits_from_flags(flags);
+    map_page_x86_unflushed(allocator, vaddr, paddr, pte_flags)
+}
+
+/// See the x86_64 [`map_page_deferred`].
+#[cfg(not(target_arch = "x86_64"))]
+pub(crate) fn map_page_deferred(
+    allocator: &mut FrameAllocator,
+    vaddr: VAddr,
+    paddr: PhysAddr,
+    flags: Flags,
+) -> PagingResult<()> {
+    map_page(allocator, vaddr, paddr, flags)
+}
+
+/// Complete a [`map_page_deferred`] batch over the page range `[start, end)`.
+///
+/// x86_64: ONE `tlb_shootdown::flush_range`, which returns only after every
+/// online CPU acknowledged (an unconfirmed CPU is its fail-stop panic,
+/// unchanged). Other arches: nothing, as `map_page_deferred` deferred nothing.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn flush_deferred_maps(start: VAddr, end: VAddr) {
+    if end > start {
+        crate::memory::tlb_shootdown::flush_range(start, end - start);
+    }
+}
+
+/// See the x86_64 [`flush_deferred_maps`].
+#[cfg(not(target_arch = "x86_64"))]
+pub(crate) fn flush_deferred_maps(_start: VAddr, _end: VAddr) {}
 
 /// Unmap a page: generic entry point.
 ///

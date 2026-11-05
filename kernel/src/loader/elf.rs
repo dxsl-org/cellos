@@ -219,7 +219,16 @@ impl ElfLoader {
                 let final_flags = super::wx::page_flags(ph_flags.is_write(), ph_flags.is_execute());
                 let flags = Flags::from_bits(final_flags.bits() | Flags::WRITE);
 
-                // Map pages
+                // Map pages. The invalidation is batched (phase 07b R1): every
+                // leaf of this segment is written through `map_page_deferred`
+                // under the caller's FRAME_ALLOCATOR guard, and ONE
+                // `flush_deferred_maps` over [start_page, end_page) — every page
+                // the loop touches, the merged boundary pages included — runs
+                // below, before the next segment and before this function
+                // returns, so relocation (which writes through the cell's VA)
+                // and the spawn's return only ever follow an acknowledged flush.
+                // An early return goes through `unwind`, which unmaps and
+                // flushes every recorded page before any frame is freed.
                 let mut current_page = start_page;
                 while current_page < end_page {
                     // Overwrite guard: reject VA collision with kernel MMIO or a
@@ -258,7 +267,7 @@ impl ElfLoader {
                                 Flags::from_bits(entry.final_flags.bits() | final_flags.bits());
                             if merged != entry.final_flags {
                                 entry.final_flags = merged;
-                                let _ = crate::memory::paging::map_page(
+                                let _ = crate::memory::paging::map_page_deferred(
                                     frame_allocator,
                                     current_page,
                                     phys,
@@ -281,7 +290,7 @@ impl ElfLoader {
                             }
                         };
 
-                        if crate::memory::paging::map_page(
+                        if crate::memory::paging::map_page_deferred(
                             frame_allocator,
                             current_page,
                             buf_frame,
@@ -353,6 +362,7 @@ impl ElfLoader {
 
                     current_page += 4096;
                 }
+                crate::memory::paging::flush_deferred_maps(start_page, end_page);
 
                 log::info!(
                     "ELF LOAD: 0x{:X}-0x{:X} flags={}{}{}",
