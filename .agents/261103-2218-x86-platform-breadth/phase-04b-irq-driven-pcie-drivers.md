@@ -1,7 +1,7 @@
 ---
 phase: 4b
 title: "IRQ-driven PCIe driver cells"
-status: re-planned (CP1 approved, not scheduled)
+status: implemented (CP2 pending owner decision)
 priority: P1
 effort: "3d"
 dependencies: ["4a"]
@@ -58,12 +58,12 @@ Each cell gets a small `irq.rs` helper: `setup(bdf, n) -> IrqSet`, `wait(idx, ti
 
 ## Todo List
 
-- [ ] nvme
-- [ ] ahci
-- [ ] e1000
-- [ ] igb
-- [ ] xhci
-- [ ] Idle-CPU evidence
+- [x] nvme (MSI-X: vector 0 admin CQ, vector 1 I/O CQ)
+- [x] ahci (MSI)
+- [ ] e1000 — re-scoped out by CP1 §7 (`irq=polled reason=request-driven`, NIC CP)
+- [ ] igb — re-scoped out by CP1 §7 (NIC CP)
+- [x] xhci (MSI-X, bring-up waits; steady-state input stays on the IPC receive timeout)
+- [ ] Idle-CPU evidence — replaced by the CP1 §9 MSI-to-wake latency criterion (see evidence)
 
 ## Success Criteria
 
@@ -96,3 +96,7 @@ Phase 05 builds virtio-pci on the same helper.
   - NIC RX left to a separate `MAILBOX`-source CP.
   
   Option A ([draft](cp1-04b-waitirq-timeout.md)) is superseded. Implementation waits for the owner to schedule it. That package's §7 and §9 replace this file's Requirements and Success Criteria for the re-scoped phase.
+- **2026-11-05 Implementation (Intel WIP lane, record `lane-04b-schedule-approval.md`).** Evidence: [reports/phase-04b-evidence.md](reports/phase-04b-evidence.md); CP2: [cp2-04b-waitcompletion-irq.md](cp2-04b-waitcompletion-irq.md).
+- **2026-11-05 Deviation — file set.** `kernel/src/task/ipc_pending_selftest.rs:911` is outside CP1 §6 but its boot self-test asserted `1 << 3` invalid. Main granted a one-token edit (`1 << 3` → `1 << 4`); recorded for ratification as CP2 deviation 1.
+- **2026-11-05 Deviation — `select_locked` signature kept.** `ipc_pending_selftest.rs` also calls `select_locked` and `WaiterRegistration::new` with their old arguments. Instead of the CP1 §5 `irq_ready` parameter, `select_locked` peeks the task's own IRQ snapshot (the same lock-free loads, under `SCHEDULER`), and `WaiterRegistration::with_irq_lines` was added beside the unchanged `new`. CP2 deviation 2.
+- **2026-11-05 Surprise — NVMe MSI-X order.** With 435 called after `CC.EN`, every admin wait expired (no line-0x30 wake in an instrumented KVM run): QEMU binds the admin CQ vector when the controller is enabled and drops notifications for a vector bound while MSI-X was off. The cell now allocates before `CC.EN`. CP2 deviation 3.

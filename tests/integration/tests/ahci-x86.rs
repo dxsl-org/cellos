@@ -167,7 +167,8 @@ fn ahci_driver_cell_identifies_sata_x86() {
 }
 
 /// The AHCI Driver Cell must bind the block route of its PCI function through
-/// the same surface NVMe uses: `[driver_cell] block driver registered`.
+/// the same surface NVMe uses: `[driver_cell] block driver registered`. Its
+/// IDENTIFY already completed on the ICH9 MSI (phase 04b).
 #[test]
 fn ahci_driver_cell_registers_block_driver_x86() {
     if !prerequisites_ok() {
@@ -187,6 +188,15 @@ fn ahci_driver_cell_registers_block_driver_x86() {
                 qemu.dump()
             )
         });
+    let serial = qemu.dump();
+    assert!(
+        serial.contains("[ahci] irq=msi"),
+        "AHCI cell did not take MSI completions:\n{serial}"
+    );
+    assert!(
+        !serial.contains("[ahci] irq=polled"),
+        "AHCI cell fell back to polling on q35:\n{serial}"
+    );
 }
 
 /// Booting with a SATA image attached must still reach the interactive shell —

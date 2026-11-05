@@ -2401,7 +2401,9 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
 /// finite timeout returns [`WaitCompletionResult::NoRecord`]; with `TIMER`, a
 /// nonzero duration is required and expiry returns a `TIMER` completion with
 /// `result = 0`. An `IPC` completion's `result` is the token of one owned
-/// operation that reached its terminal; each terminal is reported once.
+/// operation that reached its terminal; each terminal is reported once. An
+/// `IRQ` completion (x86_64) reports one fired MSI/MSI-X line this task holds
+/// from [`sys_alloc_pcie_irq`]; `result` is the line.
 ///
 /// `mask` is a non-empty set of `api::completion::source` bits; the record
 /// names exactly one of them.
@@ -3026,7 +3028,8 @@ pub fn sys_query_pcie_function(
 
 /// 435: allocate up to `want` (1..=32) MSI-X or MSI interrupts for the owned
 /// function at `bdf`; `mode` holds `api::pcie_function::IRQ_MODE_*` bits.
-/// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`.
+/// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`,
+/// or on every held line at once with `ipc::wait_any(source::IRQ, ticks)`.
 /// A repeat call returns the same allocation; it lives until the caller dies.
 pub fn sys_alloc_pcie_irq(
     bdf: u32,

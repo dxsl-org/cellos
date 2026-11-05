@@ -8,6 +8,10 @@
 //! transfer for the keyboard. Hubs beyond enumeration, SuperSpeed tuning,
 //! isochronous, storage and power management are out of scope.
 //!
+//! Phase 04b: when `AllocPcieIrq` grants a vector, interrupter 0 signals it and the
+//! command/control-transfer waits park on it between event-ring reads (see
+//! [`XhciController::idle`]); otherwise every wait polls exactly as before.
+//!
 //! The QEMU model (`qemu-xhci`) is NEC uPD720200-class; real controller
 //! revisions are not validated here (plan assumption A-03). Unsupported
 //! revisions, missing interrupters and non-HID devices fail closed with a named
@@ -19,6 +23,7 @@
 //! block carries a `// SAFETY:` comment.
 
 use crate::dma::DmaRegion;
+use crate::irq::{EventIrq, PARK_TICKS};
 use crate::regs::*;
 use core::sync::atomic::{fence, Ordering};
 use ostd::io::print_fmt;
@@ -79,6 +84,11 @@ pub struct XhciController {
     ep0_cycle: u32,
     int_enq: usize,
     int_cycle: u32,
+
+    /// Interrupt wake-ups for the event-ring waits, and whether interrupter 0
+    /// (`IMAN.IE` + `USBCMD.INTE`) was enabled for them.
+    irq: EventIrq,
+    intr_enabled: bool,
 }
 
 // ── Ring helpers ─────────────────────────────────────────────────────────────
@@ -142,6 +152,18 @@ fn ring_enqueue(ring: &DmaRegion, enq: &mut usize, cycle: &mut u32, trb: Trb) {
     }
     *enq = next;
 }
+
+/// Empty event-ring reads of a wait before its first park. A completion that lands
+/// while the BSP is busy wakes a parked driver only at the next scheduler tick, so a
+/// short spin keeps fast commands fast.
+const SPIN_BEFORE_PARK: u64 = 64;
+
+/// Polls one park is charged against a wait's [`POLL_LIMIT`] budget. The polled
+/// wait gives up the CPU once per [`POLL_YIELD_EVERY`] polls; a park gives it up
+/// for at most [`PARK_TICKS`] ticks, so it counts as that many yield slices. A lost
+/// interrupt therefore ends the wait after `POLL_LIMIT / PARK_POLLS` (~48) bounded
+/// parks, never later.
+const PARK_POLLS: u64 = POLL_YIELD_EVERY * PARK_TICKS;
 
 impl XhciController {
     /// Parse capabilities, reset the controller, program the rings, and start it.
@@ -247,7 +269,7 @@ impl XhciController {
         ring_init_link(&ep0_ring);
         ring_init_link(&int_ring);
 
-        let ctrl = Self {
+        let mut ctrl = Self {
             mmio,
             op,
             rt,
@@ -280,6 +302,8 @@ impl XhciController {
             ep0_cycle: 1,
             int_enq: 0,
             int_cycle: 1,
+            irq: EventIrq::default(),
+            intr_enabled: false,
         };
 
         // 1. HCRST — resets every register except the capability registers.
@@ -300,8 +324,13 @@ impl XhciController {
         ctrl.wr64(ctrl.op + OP_DCBAAP, ctrl.dcbaa.iova())?;
         ctrl.wr64(ctrl.op + OP_CRCR, ctrl.cmd_ring.iova() | 1)?; // RCS = 1
 
-        // 3. Configure interrupter 0: one event-ring segment, polling only (no
-        //    interrupt enable), so events accumulate in the ring for us to drain.
+        // 3. Interrupt vector, requested after HCRST so the reset cannot disturb
+        //    it. The kernel programs and enables MSI-X/MSI on the function.
+        ctrl.irq = EventIrq::setup(bdf);
+
+        // 4. Configure interrupter 0: one event-ring segment. Events always
+        //    accumulate in the ring for us to drain; the interrupt (when granted)
+        //    only says when to look.
         ctrl.erst.write_u64(0, ctrl.evt_ring.iova());
         ctrl.erst.write_u32(8, EVENT_TRBS as u32);
         ctrl.wr(ctrl.rt + RT_ERSTSZ, 1)?;
@@ -309,12 +338,21 @@ impl XhciController {
         // dequeue pointer must already be valid when it does.
         ctrl.wr64(ctrl.rt + RT_ERDP, ctrl.evt_ring.iova())?;
         ctrl.wr64(ctrl.rt + RT_ERSTBA, ctrl.erst.iova())?;
-        // Clear any pending interrupt and leave IE off (bit 1) — we poll.
-        ctrl.wr(ctrl.rt + RT_IMAN, 1)?;
+        if ctrl.irq.granted() {
+            // Moderation first, so the very first interrupt is already paced;
+            // then clear any pending interrupt and set IE.
+            ctrl.wr(ctrl.rt + RT_IMOD, IMOD_INTERVAL)?;
+            ctrl.wr(ctrl.rt + RT_IMAN, IMAN_IP | IMAN_IE)?;
+            ctrl.intr_enabled = true;
+        } else {
+            // Clear any pending interrupt and leave IE off — we poll.
+            ctrl.wr(ctrl.rt + RT_IMAN, IMAN_IP)?;
+        }
 
-        // 4. MaxSlotsEn then run. RS requires the rings to be programmed already.
+        // 5. MaxSlotsEn then run. RS requires the rings to be programmed already.
         ctrl.wr(ctrl.op + OP_CONFIG, max_slots as u32)?;
-        ctrl.wr(ctrl.op + OP_USBCMD, USBCMD_RS)?;
+        let inte = if ctrl.intr_enabled { USBCMD_INTE } else { 0 };
+        ctrl.wr(ctrl.op + OP_USBCMD, USBCMD_RS | inte)?;
         ctrl.wait_register(
             ctrl.op + OP_USBSTS,
             USBSTS_HCH,
@@ -502,7 +540,12 @@ impl XhciController {
 
     /// Drain pending events and return the latest HID report from the keyboard,
     /// re-arming the interrupt-IN transfer when it completes.
+    ///
+    /// Steady state is paced by the cell's IPC receive timeout, not by the
+    /// interrupt, so this only acknowledges it (before reading, see
+    /// [`Self::ack_interrupt`]) to keep `IMAN.IP`/`USBSTS.EINT` from staying latched.
     pub fn poll_report(&mut self) -> Option<[u8; 8]> {
+        self.ack_interrupt();
         let mut got = None;
         while let Some(trb) = self.next_event() {
             if event_type(trb.control) == TYPE_TRANSFER_EVENT
@@ -588,10 +631,40 @@ impl XhciController {
             self.evt_cycle ^= 1;
         }
         let erdp = self.evt_ring.iova() + (self.evt_deq * TRB_SIZE) as u64;
-        // EHB (bit 3) is write-1-to-clear; writing it acknowledges the consumed
-        // event and lets the controller reuse the slot.
-        let _ = self.wr64(self.rt + RT_ERDP, erdp | 0x8);
+        // EHB is write-1-to-clear; writing it acknowledges the consumed event,
+        // lets the controller reuse the slot, and re-arms the next interrupt.
+        let _ = self.wr64(self.rt + RT_ERDP, erdp | ERDP_EHB);
         Some(trb)
+    }
+
+    /// One empty read of an event-ring wait at poll `i`; returns the polls it used.
+    ///
+    /// Interrupt-driven: after [`SPIN_BEFORE_PARK`] polls, park until the vector
+    /// fires or the park slice ends, acknowledge, and let the caller re-read the
+    /// ring; the park costs [`PARK_POLLS`]. Polled (no vector, or after a 242
+    /// refusal): the original poll/yield cadence.
+    fn idle(&mut self, i: u64) -> u64 {
+        if i >= SPIN_BEFORE_PARK && self.irq.park() {
+            self.ack_interrupt();
+            return PARK_POLLS;
+        }
+        if i.is_multiple_of(POLL_YIELD_EVERY) {
+            ostd::task::yield_now();
+        }
+        1
+    }
+
+    /// Acknowledge interrupter 0 when it is enabled: `IMAN.IP` and `USBSTS.EINT`
+    /// are RW1C (IE is written back set). ERDP's EHB, which gates the next
+    /// interrupt, is cleared per consumed event by [`Self::next_event`].
+    ///
+    /// Callers acknowledge *before* re-reading the ring, so an event posted after
+    /// this point raises a fresh interrupt instead of being acknowledged unseen.
+    fn ack_interrupt(&self) {
+        if self.intr_enabled {
+            let _ = self.wr(self.rt + RT_IMAN, IMAN_IP | IMAN_IE);
+            let _ = self.wr(self.op + OP_USBSTS, USBSTS_EINT);
+        }
     }
 
     // ── Commands ─────────────────────────────────────────────────────────────
@@ -606,10 +679,10 @@ impl XhciController {
                 if event_type(event.control) == TYPE_COMMAND_COMPLETE {
                     return Ok((event_code(event.status), event_slot(event.control)));
                 }
-            } else if i.is_multiple_of(POLL_YIELD_EVERY) {
-                ostd::task::yield_now();
+                i += 1;
+            } else {
+                i += self.idle(i);
             }
-            i += 1;
         }
         let _ = print_fmt(format_args!(
             "[xhci] command timed out (type=0x{:x})\n",
@@ -787,10 +860,10 @@ impl XhciController {
                 {
                     return Ok((event_code(event.status), event_residual(event.status)));
                 }
-            } else if i.is_multiple_of(POLL_YIELD_EVERY) {
-                ostd::task::yield_now();
+                i += 1;
+            } else {
+                i += self.idle(i);
             }
-            i += 1;
         }
         Err(ViError::IO)
     }

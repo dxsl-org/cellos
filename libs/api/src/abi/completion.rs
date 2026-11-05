@@ -64,13 +64,19 @@ pub mod source {
     /// each terminal is reported at most once and only to its own
     /// `(cell, generation)` owner. Take the outcome with `IpcTake`.
     pub const IPC: u32 = 1 << 2;
+    /// An MSI/MSI-X line the waiting task holds from `AllocPcieIrq` (435) has
+    /// fired (x86_64 only). The record's `result` is that line number; each
+    /// record reports exactly one line, and other pending lines stay pending
+    /// for the next wait. A wait naming `IRQ` covers every line the calling
+    /// task holds when it starts.
+    pub const IRQ: u32 = 1 << 3;
 
-    const ALL: u32 = NET_RX | TIMER | IPC;
+    const ALL: u32 = NET_RX | TIMER | IPC | IRQ;
 
     /// Whether `mask` names exactly one source implemented by this ABI version.
     /// This is the rule for the source word of a written record.
     pub const fn is_single_supported(mask: u32) -> bool {
-        matches!(mask, NET_RX | TIMER | IPC)
+        matches!(mask, NET_RX | TIMER | IPC | IRQ)
     }
 
     /// Whether `mask` is a valid `WaitCompletion` request: non-empty and made
@@ -275,12 +281,44 @@ mod tests {
 
     #[test]
     fn wait_masks_are_non_empty_subsets_of_the_known_sources() {
-        for mask in 1..8u32 {
+        for mask in 1..16u32 {
             assert!(source::is_wait_mask_supported(mask), "mask {mask:#x}");
         }
         assert!(!source::is_wait_mask_supported(0));
-        assert!(!source::is_wait_mask_supported(1 << 3));
+        assert!(!source::is_wait_mask_supported(1 << 4));
         assert!(!source::is_wait_mask_supported(source::IPC | (1 << 31)));
+    }
+
+    #[test]
+    fn irq_is_the_next_single_bit_and_leaves_existing_values_unchanged() {
+        assert_eq!(source::NET_RX, 1);
+        assert_eq!(source::TIMER, 2);
+        assert_eq!(source::IPC, 4);
+        assert_eq!(source::IRQ, 8);
+        assert_eq!(source::IRQ.count_ones(), 1);
+        assert_eq!(
+            source::IRQ & (source::NET_RX | source::TIMER | source::IPC),
+            0
+        );
+        assert!(source::is_single_supported(source::IRQ));
+        assert!(!source::is_single_supported(source::IRQ | source::TIMER));
+    }
+
+    #[test]
+    fn irq_record_carries_the_line_and_refuses_a_mixed_source_word() {
+        let record = ViCompletion {
+            slot: 3,
+            source: source::IRQ,
+            result: 0x41,
+        };
+        let bytes = record.to_bytes();
+        assert_eq!(&bytes[12..16], &[0x08, 0x00, 0x00, 0x00]);
+        assert_eq!(&bytes[16..24], &0x41i64.to_le_bytes());
+        assert_eq!(ViCompletion::from_bytes(&bytes), Some(record));
+
+        let mut mixed = bytes;
+        mixed[12..16].copy_from_slice(&(source::IRQ | source::NET_RX).to_le_bytes());
+        assert_eq!(ViCompletion::from_bytes(&mixed), None);
     }
 
     #[test]

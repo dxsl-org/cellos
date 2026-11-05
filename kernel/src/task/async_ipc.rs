@@ -2546,7 +2546,9 @@ mod tests {
 
     // ---- Multi-source completion wait: IPC source (Phase 03d CP1 §5, §9) ----
 
-    use super::super::completion_wait::{select_locked, select_source, Selection};
+    use super::super::completion_wait::{
+        select_locked, select_source, Selection, INITIAL_ROTOR, SELECTION_ORDER,
+    };
     const IPC: u32 = api::completion::source::IPC;
     const NET_RX: u32 = api::completion::source::NET_RX;
     const TIMER: u32 = api::completion::source::TIMER;
@@ -2692,16 +2694,18 @@ mod tests {
     }
 
     #[test]
-    fn source_rotation_reaches_every_ready_source_within_three_selections() {
-        let order = [NET_RX, IPC, TIMER];
+    fn source_rotation_reaches_every_ready_source_within_four_selections() {
+        const IRQ: u32 = api::completion::source::IRQ;
+        let order = [NET_RX, IPC, IRQ, TIMER];
+        assert_eq!(SELECTION_ORDER, order);
         assert_eq!(select_source(0, 0), None);
-        for rotor in 0..3u8 {
-            for ready in 1..8u32 {
-                let ready_bits = (0..3)
+        for rotor in 0..4u8 {
+            for ready in 1..16u32 {
+                let ready_bits = (0..4)
                     .filter(|i| ready & (1 << i) != 0)
                     .fold(0, |acc, i| acc | order[i]);
-                let expected = (1..=3)
-                    .map(|step| (rotor as usize + step) % 3)
+                let expected = (1..=4)
+                    .map(|step| (rotor as usize + step) % 4)
                     .find(|&i| ready_bits & order[i] != 0)
                     .unwrap();
                 assert_eq!(
@@ -2710,21 +2714,26 @@ mod tests {
                 );
             }
         }
-        let mut rotor = 2;
-        let mut last = [0usize; 3];
-        let mut counts = [0usize; 3];
-        for round in 1..=300 {
-            let (_, index) = select_source(rotor, NET_RX | IPC | TIMER).unwrap();
+        assert_eq!(
+            select_source(INITIAL_ROTOR, NET_RX | IPC | IRQ | TIMER),
+            Some((NET_RX, 0)),
+            "a fresh task starts at NET_RX"
+        );
+        let mut rotor = INITIAL_ROTOR;
+        let mut last = [0usize; 4];
+        let mut counts = [0usize; 4];
+        for round in 1..=400 {
+            let (_, index) = select_source(rotor, NET_RX | IPC | IRQ | TIMER).unwrap();
             let index = index as usize;
             assert!(
-                round - last[index] <= 3,
-                "a ready source waits at most three selections"
+                round - last[index] <= 4,
+                "a ready source waits at most four selections"
             );
             last[index] = round;
             counts[index] += 1;
             rotor = index as u8;
         }
-        assert_eq!(counts, [100, 100, 100]);
+        assert_eq!(counts, [100, 100, 100, 100]);
     }
 
     #[test]
@@ -2970,7 +2979,7 @@ mod tests {
         // R6 NET_RX and IPC at the same instant: one record now, the other kept.
         add_operation(&mut sched, OWNER, PROVIDER, 58, Phase::Dispatched);
         settle(&mut sched, PROVIDER, 58);
-        sched.tasks.get_mut(&OWNER).unwrap().completion_rotor = 2;
+        sched.tasks.get_mut(&OWNER).unwrap().completion_rotor = INITIAL_ROTOR;
         let first = select(&mut sched, ALL_SOURCES, true, false).unwrap();
         assert_eq!((first.source, first.relevel_net_rx), (NET_RX, false));
         assert_eq!(

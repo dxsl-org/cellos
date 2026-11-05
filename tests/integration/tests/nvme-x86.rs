@@ -77,7 +77,7 @@ fn make_nvme_disk() -> PathBuf {
 }
 
 /// The NVMe Driver Cell must bind the QEMU `-device nvme` controller and
-/// register its block route.
+/// register its block route, with its completions MSI-X driven (phase 04b).
 ///
 /// Proves the whole PCIe storage chain under ring-3: Platform Cell ECAM scan,
 /// BAR registration, `sys_find_pcie_device`, user-mapped BAR0 MMIO, controller
@@ -104,7 +104,18 @@ fn nvme_driver_cell_registers_x86() {
             )
         });
 
+    // Every admin command after the allocation, Create I/O CQ included, already
+    // completed through `WaitCompletion(IRQ)`; q35 never refuses MSI-X.
+    let serial = qemu.dump();
     let _ = std::fs::remove_file(&disk);
+    assert!(
+        serial.contains("[nvme] irq=msix"),
+        "NVMe cell did not take MSI-X completions:\n{serial}"
+    );
+    assert!(
+        !serial.contains("[nvme] irq=polled"),
+        "NVMe cell fell back to polling on q35:\n{serial}"
+    );
 }
 
 /// VFS must mount a FAT32 volume served by the NVMe Driver Cell.

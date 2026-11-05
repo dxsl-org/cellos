@@ -353,6 +353,25 @@ the reason the value is safe against existing owners.
   - **Evidence:** `docs/evidence/c2c-multi-source-wait-x86.{txt,log}` at the x86 QEMU/TCG ceiling
     (NET_RX by host test only; two-CPU lane unforced). The frozen items are pinned by
     `scripts/check-multi-source-wait-law1-digests.sh`.
+- 2026-11-05 — **Recorded for a changed syscall surface; no ratified wire rule moved (Law-1
+  confirmation 1 at CP1: `.agents/261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md`;
+  confirmation 2 is the CP2 decision in `…/cp2-04b-waitcompletion-irq.md`).**
+  - **New source:** `api::completion::source::IRQ = 1 << 3` (bytes `08 00 00 00`) is appended.
+    The mask rule becomes a non-empty subset of `NET_RX | TIMER | IPC | IRQ`; record v1, its
+    length, version and magic are unchanged.
+  - **IRQ records (x86_64 only):** a wait naming `IRQ` covers every MSI/MSI-X line the calling
+    task holds from `AllocPcieIrq` (435) at entry. Each record reports one line, whose number is
+    `result`; other fired lines stay pending. A record the kernel fails to copy out re-pends its
+    line. A raw message does not interrupt an `IRQ` wait.
+  - **Errors:** `IRQ` on a kernel other than x86_64 is `InvalidInput`; `IRQ` with no held line (at
+    entry, or after every line was revoked mid-wait) is `PermissionDenied`. Bits 32..63 of a0 must be
+    zero (`InvalidInput`); they were silently dropped before.
+  - **Rotation:** ready sources rotate `NET_RX → IPC → IRQ → TIMER`.
+  - **Wake:** the x86 MSI handler still only sets a pending flag, plus an early-sweep hint the
+    hart-0 scheduler pass consumes, so an idle BSP wakes the waiter without waiting for the tick.
+  - **Unchanged:** opcode 242, its four arguments, allowlist bit 42, `WaitIrq = 234`, the `NET_RX`,
+    `TIMER` and `IPC` semantics, and the raw-message rule for masks naming `NET_RX`.
+  - Pinned by `scripts/check-multi-source-wait-law1-digests.sh` (amended in the same commit).
 
 ---
 

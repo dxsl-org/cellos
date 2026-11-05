@@ -104,7 +104,8 @@ fn prerequisites_ok() -> bool {
 }
 
 /// The xHCI Driver Cell must bind the q35 `qemu-xhci` controller, reset the port
-/// carrying the USB keyboard, and enumerate it (VID/PID of the QEMU keyboard).
+/// carrying the USB keyboard, and enumerate it (VID/PID of the QEMU keyboard),
+/// with interrupter 0 signalling MSI-X during bring-up (phase 04b).
 #[test]
 fn xhci_driver_cell_enumerates_usb_keyboard_x86() {
     if !prerequisites_ok() {
@@ -114,6 +115,7 @@ fn xhci_driver_cell_enumerates_usb_keyboard_x86() {
     let qemu = QemuRunner::boot_x86_bios_with_xhci(&iso_path());
 
     for marker in [
+        "[xhci] irq=msix",
         "[xhci] controller init ok",
         "[xhci] enumerated device vid=0x0627 pid=0x0001",
         "[xhci] USB HID keyboard ready",

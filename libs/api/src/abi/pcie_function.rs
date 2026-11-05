@@ -280,7 +280,8 @@ impl ViPcieFunctionV1 {
 /// Decoded `AllocPcieIrq` success value: `first_irq | count << 8 | kind << 16`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PcieIrqAlloc {
-    /// First logical IRQ; wait with `WaitIrq(first_irq + i, 0)`.
+    /// First logical IRQ; wait with `WaitIrq(first_irq + i, 0)` or
+    /// `WaitCompletion(IRQ)`, which covers every line of the allocation.
     pub first_irq: u8,
     pub count: u8,
     /// [`IRQ_KIND_MSIX`] or [`IRQ_KIND_MSI`].

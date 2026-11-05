@@ -144,6 +144,9 @@ pub enum Wake {
     Ipc(IpcOpId),
     /// The finite deadline elapsed (`TIMER` was requested).
     Timer,
+    /// This MSI/MSI-X line, one the task holds from `AllocPcieIrq`, fired
+    /// (`IRQ`, x86_64). Other fired lines stay pending for the next wait.
+    Irq(u8),
     /// Nothing to report: a deadline elapsed without `TIMER` requested, a raw
     /// message interrupted a wait naming `NET_RX`, or a NET_RX reservation was
     /// displaced by a newer waiter.
@@ -153,14 +156,18 @@ pub enum Wake {
 /// Park on several completion sources at once and report the one that fired.
 ///
 /// `sources` is a non-empty set of `api::completion::source::{NET_RX, TIMER,
-/// IPC}`; `TIMER` needs a nonzero `timeout_ticks`, and zero otherwise waits
-/// without a deadline. Ready sources rotate, so none starves another; each IPC
-/// terminal is reported once, and its outcome stays behind [`take`].
+/// IPC, IRQ}`; `TIMER` needs a nonzero `timeout_ticks`, and zero otherwise
+/// waits without a deadline. Ready sources rotate, so none starves another;
+/// each IPC terminal is reported once, and its outcome stays behind [`take`].
+/// `IRQ` covers every line this task holds from `AllocPcieIrq`; a driver
+/// passes a deadline and re-reads its device after every return, since a
+/// lost or revoked interrupt is only ever noticed at the deadline.
 ///
 /// # Errors
 /// [`IpcError::Recv`] when the kernel refuses the wait (no `WaitCompletion`
-/// authority, an invalid source set, or a full completion queue), and
-/// [`IpcError::Decode`] for a record whose source this SDK does not know.
+/// authority, an invalid source set, `IRQ` without a held line or off x86_64,
+/// or a full completion queue), and [`IpcError::Decode`] for a record whose
+/// source this SDK does not know.
 pub fn wait_any(sources: u32, timeout_ticks: u64) -> Result<Wake, IpcError> {
     decode_wake(sys_wait_completion_detailed(sources, timeout_ticks))
 }
@@ -173,6 +180,9 @@ fn decode_wake(result: WaitCompletionResult) -> Result<Wake, IpcError> {
             source::NET_RX if record.result >= 0 => Ok(Wake::NetRx),
             source::NET_RX => Ok(Wake::Interrupted),
             source::TIMER => Ok(Wake::Timer),
+            source::IRQ => u8::try_from(record.result)
+                .map(Wake::Irq)
+                .map_err(|_| IpcError::Decode),
             _ => Err(IpcError::Decode),
         },
         WaitCompletionResult::ErrorOrInvalid(_) => Err(IpcError::Recv),
@@ -239,8 +249,8 @@ fn park_for_terminal(timeout_ticks: u64) -> Result<Park, IpcError> {
     match decode_wake(sys_wait_completion_detailed(sources, timeout_ticks))? {
         Wake::Ipc(operation) => Ok(Park::Notified(operation)),
         Wake::Timer => Ok(Park::Timeout),
-        // Neither can end an `IPC`/`IPC|TIMER` wait.
-        Wake::NetRx | Wake::Interrupted => Err(IpcError::Recv),
+        // None of these can end an `IPC`/`IPC|TIMER` wait.
+        Wake::NetRx | Wake::Irq(_) | Wake::Interrupted => Err(IpcError::Recv),
     }
 }
 
@@ -714,6 +724,25 @@ mod tests {
             decode_wake(WaitCompletionResult::ErrorOrInvalid(-1)),
             Err(IpcError::Recv)
         );
+    }
+
+    #[test]
+    fn an_irq_record_decodes_to_its_line_and_an_out_of_range_line_is_refused() {
+        use super::{decode_wake, Wake};
+        use crate::syscall::WaitCompletionResult;
+        use api::completion::{source, ViCompletion};
+        let record = |result| {
+            WaitCompletionResult::Completion(ViCompletion {
+                slot: 1,
+                source: source::IRQ,
+                result,
+            })
+        };
+        assert_eq!(decode_wake(record(0x41)), Ok(Wake::Irq(0x41)));
+        assert_eq!(decode_wake(record(0)), Ok(Wake::Irq(0)));
+        assert_eq!(decode_wake(record(255)), Ok(Wake::Irq(255)));
+        assert_eq!(decode_wake(record(256)), Err(IpcError::Decode));
+        assert_eq!(decode_wake(record(-1)), Err(IpcError::Decode));
     }
 }
 

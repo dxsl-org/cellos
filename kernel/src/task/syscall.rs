@@ -10616,7 +10616,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::WaitCompletion => {
             // ABI: a0 = source mask (u32), a1 = timeout_ticks_lo,
             // a2 = timeout_ticks_hi, a3 = pointer to the result record.
-            let mask = a0 as u32;
+            // Bits 32..63 of a0 are reserved and must be zero: a mask that
+            // does not fit becomes `u32::MAX`, which the source rule refuses
+            // with InvalidInput instead of silently dropping the high bits.
+            let mask = u32::try_from(a0).unwrap_or(u32::MAX);
             let timeout = (a1 as u64) | ((a2 as u64) << 32);
             let deadline = if timeout == 0 {
                 None
@@ -11526,6 +11529,30 @@ mod tests {
                 Err(SyscallError::PermissionDenied)
             );
         });
+    }
+
+    #[test]
+    fn wait_completion_refuses_mask_bits_above_31_instead_of_dropping_them() {
+        use api::completion::source::{IRQ, TIMER};
+        let decode =
+            |a0: usize| match map_syscall(ViSyscall::WaitCompletion as usize, a0, 5, 0, 0x6000) {
+                Some(Syscall::WaitCompletion { mask, out_ptr, .. }) => (mask, out_ptr),
+                other => panic!("decoded wrong syscall variant: {other:?}"),
+            };
+        let (mask, out_ptr) = decode((IRQ | TIMER) as usize);
+        assert_eq!((mask, out_ptr), (IRQ | TIMER, 0x6000));
+        assert!(super::super::completion_wait::source_is_valid(
+            mask,
+            Some(1)
+        ));
+        #[cfg(target_pointer_width = "64")]
+        {
+            let (high, _) = decode((1usize << 32) | TIMER as usize);
+            assert!(!super::super::completion_wait::source_is_valid(
+                high,
+                Some(1)
+            ));
+        }
     }
 
     #[test]

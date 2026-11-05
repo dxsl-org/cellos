@@ -750,8 +750,8 @@ pub enum ViSyscall {
     QueryDirHandles = 241,
     /// 242: Wait for one asynchronous result on the caller's completion queue.
     ///
-    /// ABI: a0 = source mask (see [`crate::completion::source`]),
-    /// a1 = timeout_ticks_lo,
+    /// ABI: a0 = source mask (see [`crate::completion::source`]; bits 32..63
+    /// must be zero), a1 = timeout_ticks_lo,
     /// a2 = timeout_ticks_hi, a3 = pointer to a
     /// [`crate::completion::COMPLETION_LEN`]-byte buffer → 1 when a completion
     /// was written there, 0 when the wait ended with nothing.
@@ -762,7 +762,7 @@ pub enum ViSyscall {
     /// free slot refuses here, where the caller can act on it, rather than in
     /// the interrupt handler that is trying to report a result.
     ///
-    /// `mask` is a non-empty subset of `NET_RX | TIMER | IPC`
+    /// `mask` is a non-empty subset of `NET_RX | TIMER | IPC | IRQ`
     /// ([`crate::completion::source::is_wait_mask_supported`]); one return
     /// reports exactly one source. Source-specific semantics are deliberate:
     /// - `NET_RX`: zero waits indefinitely; a finite deadline that expires
@@ -774,7 +774,19 @@ pub enum ViSyscall {
     ///   `(cell, generation)` and owner/consumer thread); `result` is the
     ///   operation token. The terminal kind and bytes stay behind `IpcTake`.
     ///   A result already reported, or already taken, is never reported again.
-    /// - Several ready sources rotate (`NET_RX → IPC → TIMER`), so none starves.
+    /// - `IRQ` (x86_64 only): covers every MSI/MSI-X line the calling task
+    ///   holds from `AllocPcieIrq` when the wait starts; `result` is the one
+    ///   line consumed, and other pending lines stay pending. A queued raw IPC
+    ///   message does not interrupt it. A line revoked mid-wait no longer
+    ///   wakes it, so pass a deadline.
+    /// - Several ready sources rotate (`NET_RX → IPC → IRQ → TIMER`), so none
+    ///   starves.
+    ///
+    /// Errors: `InvalidInput` for an unknown or high mask bit, `TIMER` without
+    /// a deadline, `IRQ` on a kernel that is not x86_64, or a null buffer;
+    /// `PermissionDenied` when `IRQ` is named and the caller holds no
+    /// `AllocPcieIrq` line (at entry, or after every line was revoked);
+    /// `BufferTooSmall`; `TryAgain` when the queue has no free slot.
     ///
     /// Distinct from [`Self::WaitForEvent`], which reports only *that* an event
     /// bit fired. This reports *which submission* finished and with what result,

@@ -4,6 +4,9 @@
 #   .agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md
 #   .agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp2-approval.md
 # and recorded in docs/specs/17-ipc-wire-contract.md §9 (2026-11-02 entry).
+# Amended by the `IRQ = 1 << 3` source (x86 plan 261103-2218 phase 04b, CP1 approved
+# in .agents/261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md, CP2
+# pending in cp2-04b-waitcompletion-irq.md; Spec 17 §9 2026-11-05 entry).
 #
 # WHY this exists: once both confirmations are recorded the surface is FROZEN, and
 # from then on any removal, rename, layout/value change or addition needs the ABI
@@ -35,6 +38,8 @@ K_WAIT="kernel/src/task/completion_wait.rs"
 K_ASYNC="kernel/src/task/async_ipc.rs"
 K_TASK="kernel/src/task.rs"
 K_SCHED="kernel/src/task/scheduler.rs"
+K_SYSCALL="kernel/src/task/syscall.rs"
+K_MSI="kernel/src/task/drivers/pcie_msi.rs"
 
 failures=0
 
@@ -88,14 +93,17 @@ require_in "$COMPLETION" "pub const UNSPECIFIED: u32 = 0;" "UNSPECIFIED = 0 kept
 require_in "$COMPLETION" "pub const NET_RX: u32 = 1 << 0;" "NET_RX = 1 kept"
 require_in "$COMPLETION" "pub const TIMER: u32 = 1 << 1;" "TIMER = 2 kept"
 require_in "$COMPLETION" "pub const IPC: u32 = 1 << 2;" "IPC = 4 appended"
-require_in "$COMPLETION" "const ALL: u32 = NET_RX | TIMER | IPC;" "known source set"
-require_in "$COMPLETION" "matches!(mask, NET_RX | TIMER | IPC)" \
+require_in "$COMPLETION" "pub const IRQ: u32 = 1 << 3;" "IRQ = 8 appended (04b)"
+require_in "$COMPLETION" "const ALL: u32 = NET_RX | TIMER | IPC | IRQ;" "known source set"
+require_in "$COMPLETION" "matches!(mask, NET_RX | TIMER | IPC | IRQ)" \
     "a record carries exactly one known source"
 require_in "$COMPLETION" "pub const fn is_wait_mask_supported(mask: u32) -> bool {" \
     "wait-mask predicate present"
 require_in "$COMPLETION" "mask != 0 && mask & !ALL == 0" "wait mask is a non-empty known subset"
 require_in "$COMPLETION" "fn ipc_record_bytes_carry_the_token_without_moving_any_field()" \
     "IPC record byte test present"
+require_in "$COMPLETION" "fn irq_record_carries_the_line_and_refuses_a_mixed_source_word()" \
+    "IRQ record byte test present"
 
 # ── libs/api: opcode, allowlist and the exported allowlist symbol ─────────────
 require_in "$SYSCALL" "WaitCompletion = 242," "opcode 242 kept"
@@ -123,7 +131,20 @@ require_in "$K_WAIT" "api::completion::source::is_wait_mask_supported(mask)" \
 require_in "$K_WAIT" "if mask != api::completion::source::NET_RX && mask != api::completion::source::TIMER {" \
     "lone NET_RX/TIMER keep the original path"
 require_in "$K_WAIT" "fn wait_multi(" "multi-source wait present"
-require_in "$K_WAIT" "pub(super) const SELECTION_ORDER: [u32; 3] = [" "rotation order present"
+require_in "$K_WAIT" "pub(super) const SELECTION_ORDER: [u32; 4] = [" "rotation order present"
+require_in "$K_WAIT" "pub(super) const INITIAL_ROTOR: u8 = (SELECTION_ORDER.len() - 1) as u8;" \
+    "a fresh rotor starts at NET_RX"
+require_in "$K_WAIT" '(cfg!(target_arch = "x86_64") || mask & api::completion::source::IRQ == 0)' \
+    "IRQ is refused off x86_64"
+require_in "$K_WAIT" "return Err(SyscallError::PermissionDenied);" \
+    "an IRQ wait without a held line is refused"
+require_in "$K_SYSCALL" "let mask = u32::try_from(a0).unwrap_or(u32::MAX);" \
+    "mask bits 32..63 are refused, not dropped"
+require_in "$K_MSI" "irq_wait::hint_msi_wake();" "the MSI handler raises the wake hint"
+require_in "$K_SCHED" "| crate::task::drivers::irq_wait::take_wake_hint();" \
+    "the hart-0 pass swaps the MSI wake hint every time"
+require_in "$K_SCHED" "if super::completion_wait::irq_wake_due(task, *source) =>" \
+    "the sweep wakes an IRQ wait on a pending snapshot line"
 forbid_in "$K_WAIT" "PROTO_IPC" "no kernel-private prototype bit remains"
 require_in "$K_ASYNC" "source & api::completion::source::IPC != 0" \
     "IPC terminals wake an IPC-mask completion waiter"

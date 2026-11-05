@@ -18,6 +18,7 @@
 //! comes back, and the queue is the cell's bound on outstanding work.
 
 use super::completion::{self, Completion, CompletionQueue};
+use super::drivers::irq_wait::{self, IrqLineSet};
 use super::syscall::{validate_user_buf, SyscallError};
 use super::tcb::{CompletionWait, Task, TaskState};
 use super::waker;
@@ -32,11 +33,25 @@ pub(super) struct WaiterRegistration<'a> {
 }
 
 impl<'a> WaiterRegistration<'a> {
+    /// A registration for a wait that does not name `IRQ`.
     pub(super) fn new(
         queue: &'a CompletionQueue,
         tid: usize,
         slot: super::completion::SlotId,
         source: u32,
+    ) -> Option<Self> {
+        Self::with_irq_lines(queue, tid, slot, source, IrqLineSet::EMPTY)
+    }
+
+    /// `irq_lines` is the wait's IRQ snapshot, published in the same
+    /// `SCHEDULER` hold as the slot so the sweep never sees one without the
+    /// other.
+    pub(super) fn with_irq_lines(
+        queue: &'a CompletionQueue,
+        tid: usize,
+        slot: super::completion::SlotId,
+        source: u32,
+        irq_lines: IrqLineSet,
     ) -> Option<Self> {
         queue.register_waiter(tid);
         let registered = {
@@ -45,7 +60,11 @@ impl<'a> WaiterRegistration<'a> {
                 .as_mut()
                 .and_then(|sched| sched.tasks.get_mut(&tid))
                 .map(|task| {
-                    task.completion_wait = Some(CompletionWait { source, slot });
+                    task.completion_wait = Some(CompletionWait {
+                        source,
+                        slot,
+                        irq_lines,
+                    });
                 })
                 .is_some()
         };
@@ -76,27 +95,30 @@ impl Drop for WaiterRegistration<'_> {
 /// Validate the source/deadline pair before a queue slot is reserved.
 ///
 /// The mask is a non-empty subset of the public sources; `TIMER` needs a
-/// finite deadline to complete against.
+/// finite deadline to complete against. `IRQ` lines exist only on x86_64
+/// (MSI/MSI-X from `AllocPcieIrq`), so every other kernel refuses the bit.
 pub(super) fn source_is_valid(mask: u32, deadline: Option<u64>) -> bool {
     api::completion::source::is_wait_mask_supported(mask)
         && (mask & api::completion::source::TIMER == 0 || deadline.is_some())
+        && (cfg!(target_arch = "x86_64") || mask & api::completion::source::IRQ == 0)
 }
 
-/// Rotation order across completion sources (CP1 §5.5).
-pub(super) const SELECTION_ORDER: [u32; 3] = [
+/// Rotation order across completion sources (CP1 §5.5; IRQ per 04b CP1 §3.3).
+pub(super) const SELECTION_ORDER: [u32; 4] = [
     api::completion::source::NET_RX,
     api::completion::source::IPC,
+    api::completion::source::IRQ,
     api::completion::source::TIMER,
 ];
 
 /// A fresh task's rotor names TIMER as last delivered, so the first
 /// multi-source selection starts at NET_RX.
-pub(super) const INITIAL_ROTOR: u8 = 2;
+pub(super) const INITIAL_ROTOR: u8 = (SELECTION_ORDER.len() - 1) as u8;
 
 /// The ready source that follows `rotor` in [`SELECTION_ORDER`], with its index.
 ///
 /// A source stays eligible until it is delivered, and each delivery moves the
-/// rotor past it, so every ready source is chosen within three selections.
+/// rotor past it, so every ready source is chosen within four selections.
 pub(super) fn select_source(rotor: u8, ready: u32) -> Option<(u32, u8)> {
     (1..=SELECTION_ORDER.len()).find_map(|step| {
         let index = (rotor as usize + step) % SELECTION_ORDER.len();
@@ -105,12 +127,31 @@ pub(super) fn select_source(rotor: u8, ready: u32) -> Option<(u32, u8)> {
     })
 }
 
+/// The pending lines of this task's IRQ snapshot (empty when the wait does not
+/// name `IRQ`). Atomics only, so it is safe under `SCHEDULER`: it is the
+/// selector's readiness, the pre-park re-check, and the sweep's wake test.
+fn irq_lines_ready(task: &Task) -> IrqLineSet {
+    task.completion_wait
+        .as_ref()
+        .map_or(IrqLineSet::EMPTY, |wait| {
+            irq_wait::pending_in(&wait.irq_lines)
+        })
+}
+
+/// Whether the scheduler sweep must ready a task parked in `WaitCompletion`
+/// with `source`: the mask names `IRQ` and a snapshot line is pending. A
+/// pending line outside the snapshot never wakes it.
+pub(super) fn irq_wake_due(task: &Task, source: u32) -> bool {
+    source & api::completion::source::IRQ != 0 && !irq_lines_ready(task).is_empty()
+}
+
 /// One record chosen for a multi-source completion wait.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) struct Selection {
     /// The single source bit this record reports.
     pub source: u32,
-    /// `NET_RX` mask for NET_RX, the operation token for IPC, 0 for TIMER.
+    /// `NET_RX` mask for NET_RX, the operation token for IPC, the line for
+    /// IRQ, 0 for TIMER.
     pub result: isize,
     /// A ready NET_RX observation lost the selection and must be returned to
     /// the level flag ([`super::waker::relevel_net_rx`]) before the wait returns.
@@ -126,7 +167,11 @@ pub(super) struct Selection {
 /// results in; this function runs under `SCHEDULER`, where every IPC terminal
 /// transition is also serialized. A chosen IPC record consumes exactly one
 /// operation's one-shot notification; a ready IPC source that loses stays
-/// latched; TIMER is this call's deadline and is not carried over.
+/// latched; TIMER is this call's deadline and is not carried over. IRQ
+/// readiness is peeked here from the task's snapshot (atomics only); a chosen
+/// line is the first ready one after `completion_irq_cursor`, and it is *not*
+/// consumed here: the caller takes it with the ownership check outside
+/// `SCHEDULER`, and a line that loses stays pending.
 pub(super) fn select_locked(
     task: &mut Task,
     mask: u32,
@@ -141,6 +186,14 @@ pub(super) fn select_locked(
     {
         ready |= api::completion::source::IPC;
     }
+    let irq_ready = if mask & api::completion::source::IRQ != 0 {
+        irq_lines_ready(task)
+    } else {
+        IrqLineSet::EMPTY
+    };
+    if !irq_ready.is_empty() {
+        ready |= api::completion::source::IRQ;
+    }
     if timer_expired && mask & api::completion::source::TIMER != 0 {
         ready |= api::completion::source::TIMER;
     }
@@ -150,6 +203,10 @@ pub(super) fn select_locked(
         (notification.token as isize, notification.scanned)
     } else if source == api::completion::source::NET_RX {
         (api::completion::source::NET_RX as isize, 0)
+    } else if source == api::completion::source::IRQ {
+        let line = irq_ready.next_after(task.completion_irq_cursor)?;
+        task.completion_irq_cursor = line;
+        (line as isize, 0)
     } else {
         (0, 0)
     };
@@ -169,6 +226,8 @@ pub(super) enum CompletionParkDecision {
     MailboxPending,
     /// An owned IPC terminal still owes its one-shot notification.
     IpcPending,
+    /// A line of the wait's IRQ snapshot is already pending.
+    IrqPending,
 }
 
 /// Publish a completion wait only if no already-published IPC must interrupt it.
@@ -193,6 +252,11 @@ pub(super) fn publish_wait_state_locked(
         && super::async_ipc::has_pending_notification(task)
     {
         return CompletionParkDecision::IpcPending;
+    }
+    // An MSI that fires after this check finds the published state, and the
+    // sweep (triggered early by the MSI wake hint) readies the task.
+    if irq_wake_due(task, source) {
+        return CompletionParkDecision::IrqPending;
     }
     super::arm_ipc_block_handoff(tid);
     task.state = TaskState::WaitCompletion { source, deadline };
@@ -240,11 +304,12 @@ pub(super) fn finish_net_rx_wait(
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
 /// and write the result to `out_ptr`.
 ///
-/// `mask` is a non-empty subset of `NET_RX | TIMER | IPC`. `deadline` is an
-/// absolute tick count; `None` is invalid when the mask names `TIMER`, which
+/// `mask` is a non-empty subset of `NET_RX | TIMER | IPC | IRQ`. `deadline` is
+/// an absolute tick count; `None` is invalid when the mask names `TIMER`, which
 /// needs a finite instant to complete against. A lone `NET_RX` or `TIMER`
 /// keeps its original single-source path; every other mask goes through
-/// [`wait_multi`], which returns exactly one source per call.
+/// [`wait_multi`], which returns exactly one source per call. `IRQ` covers
+/// every line the caller holds from `AllocPcieIrq` when the call starts.
 ///
 /// # Returns
 /// `1` when a completion was written to `out_ptr`, `0` when the wait ended with
@@ -252,7 +317,9 @@ pub(super) fn finish_net_rx_wait(
 ///
 /// # Errors
 /// - `InvalidInput` — `mask` is empty or names a source this kernel does not
-///   serve, `TIMER` lacks a deadline, or `out_ptr` is null.
+///   serve (`IRQ` off x86_64), `TIMER` lacks a deadline, or `out_ptr` is null.
+/// - `PermissionDenied` — `IRQ` is named and the caller holds no line, at
+///   entry or after every line it held was revoked mid-wait.
 /// - `BufferTooSmall` — `out_ptr` cannot hold a whole record.
 /// - `TryAgain` — the caller's queue has no free slot. This is backpressure, and
 ///   it is reported here, to the cell that caused it, rather than to the
@@ -273,6 +340,16 @@ pub fn wait_completion(
         return Err(SyscallError::InvalidInput);
     }
     validate_user_buf(out_ptr, COMPLETION_LEN, COMPLETION_LEN)?;
+    // The snapshot takes the allocation lock alone, before any SCHEDULER hold.
+    let irq_lines = if mask & api::completion::source::IRQ != 0 {
+        let lines = owned_irq_lines(caller_id);
+        if lines.is_empty() {
+            return Err(SyscallError::PermissionDenied);
+        }
+        lines
+    } else {
+        IrqLineSet::EMPTY
+    };
 
     let queue = {
         let mut guard = super::SCHEDULER.lock();
@@ -288,7 +365,9 @@ pub fn wait_completion(
     } else {
         api::completion::source::TIMER
     };
-    let _waiter = match WaiterRegistration::new(&queue, caller_id, slot, slot_owner) {
+    let registration =
+        WaiterRegistration::with_irq_lines(&queue, caller_id, slot, slot_owner, irq_lines);
+    let _waiter = match registration {
         Some(waiter) => waiter,
         None => {
             let _ = queue.release(slot);
@@ -353,9 +432,10 @@ pub fn wait_completion(
             Some(CompletionParkDecision::MailboxPending) => {
                 return finish_net_rx_wait(caller_id, out_ptr, &queue);
             }
-            // A lone NET_RX or TIMER mask never names IPC, so this gate cannot
-            // fire here; it resolves ownership like a record-less interruption.
-            Some(CompletionParkDecision::IpcPending) => {
+            // A lone NET_RX or TIMER mask never names IPC or IRQ, so these
+            // gates cannot fire here; they resolve ownership like a
+            // record-less interruption.
+            Some(CompletionParkDecision::IpcPending | CompletionParkDecision::IrqPending) => {
                 if is_net_rx {
                     return finish_net_rx_wait(caller_id, out_ptr, &queue);
                 }
@@ -418,11 +498,13 @@ pub fn wait_completion(
 /// One reservation (`slot`) serves every source. Each round resolves NET_RX
 /// readiness outside `SCHEDULER` (its leaf lock is never taken under it),
 /// then selects under `SCHEDULER` with [`select_locked`], where every IPC
-/// terminal transition is serialized too. Nothing ready parks through
-/// [`publish_wait_state_locked`], which re-checks the mailbox and pending IPC
-/// notifications in the same hold that publishes the state. Exactly one
-/// source is reported; a NET_RX observation that is not reported goes back to
-/// the level flag, and an IPC notification that is not reported stays latched.
+/// terminal transition is serialized too. A chosen IRQ line is taken outside
+/// `SCHEDULER` under the allocation lock, which re-checks ownership. Nothing
+/// ready parks through [`publish_wait_state_locked`], which re-checks the
+/// mailbox, pending IPC notifications and the IRQ snapshot in the same hold
+/// that publishes the state. Exactly one source is reported; a NET_RX
+/// observation that is not reported goes back to the level flag, an IPC
+/// notification that is not reported stays latched, and so does an IRQ line.
 fn wait_multi(
     caller_id: usize,
     mask: u32,
@@ -439,9 +521,9 @@ fn wait_multi(
         // Consuming the level flag only after the arm keeps the lost-wakeup
         // argument of the single-source path: a frame either completed the
         // reservation (drainable) or left the flag set.
-        let net_rx_ready = has_net_rx
-            && (waker::consume_pending(api::completion::source::NET_RX) != 0
-                || queue.drainable() != 0);
+        let net_rx_flag =
+            has_net_rx && waker::consume_pending(api::completion::source::NET_RX) != 0;
+        let net_rx_ready = net_rx_flag || (has_net_rx && queue.drainable() != 0);
         let timer_expired = deadline.is_some_and(|at| super::system_ticks() as u64 >= at);
         let chosen = {
             let mut guard = super::SCHEDULER.lock();
@@ -452,6 +534,32 @@ fn wait_multi(
         };
         match chosen {
             None => return abandon_multi(queue, slot, has_net_rx, net_rx_ready),
+            Some(Some(selection))
+                if selection.source == api::completion::source::IRQ
+                    && !take_owned_line(caller_id, selection.result as u8) =>
+            {
+                // Revoked between peek and take. The flag observation goes
+                // back; a completed reservation is still drainable next round.
+                if net_rx_flag {
+                    waker::relevel_net_rx();
+                }
+                let lines = irq_lines_after_revoke(caller_id, queue, slot, has_net_rx)?;
+                let refreshed = {
+                    let mut guard = super::SCHEDULER.lock();
+                    guard
+                        .as_mut()
+                        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                        .map(|task| {
+                            if let Some(wait) = task.completion_wait.as_mut() {
+                                wait.irq_lines = lines;
+                            }
+                        })
+                };
+                if refreshed.is_none() {
+                    return abandon_multi(queue, slot, has_net_rx, false);
+                }
+                continue;
+            }
             Some(Some(selection)) => {
                 return finish_multi(caller_id, out_ptr, queue, slot, has_net_rx, selection);
             }
@@ -474,17 +582,74 @@ fn wait_multi(
             Some(CompletionParkDecision::MailboxPending) => {
                 return finish_multi_empty(caller_id, out_ptr, queue, slot, has_net_rx);
             }
-            Some(CompletionParkDecision::IpcPending) => continue,
+            Some(CompletionParkDecision::IpcPending | CompletionParkDecision::IrqPending) => {
+                continue
+            }
             Some(CompletionParkDecision::Parked) => super::yield_cpu(),
         }
     }
 }
 
+/// The lines the caller still holds after a take found its chosen line
+/// revoked. None left ends the wait: the reservation is released (any NET_RX
+/// evidence goes back to the level flag) and the call reports
+/// `PermissionDenied`, exactly as if it had started without lines.
+fn irq_lines_after_revoke(
+    caller_id: usize,
+    queue: &alloc::sync::Arc<CompletionQueue>,
+    slot: super::completion::SlotId,
+    has_net_rx: bool,
+) -> Result<IrqLineSet, SyscallError> {
+    let lines = owned_irq_lines(caller_id);
+    if !lines.is_empty() {
+        return Ok(lines);
+    }
+    if has_net_rx {
+        if settle_unreported_net_rx(queue) {
+            waker::relevel_net_rx();
+        }
+    } else {
+        let _ = queue.release(slot);
+    }
+    Err(SyscallError::PermissionDenied)
+}
+
+/// Every `AllocPcieIrq` line `tid` holds. Takes the allocation lock alone.
+#[cfg(target_arch = "x86_64")]
+fn owned_irq_lines(tid: usize) -> IrqLineSet {
+    super::drivers::pcie_msi::lines_owned_by(tid)
+}
+
+#[cfg(target_arch = "x86_64")]
+fn take_owned_line(tid: usize, line: u8) -> bool {
+    super::drivers::pcie_msi::take_owned(tid, line)
+}
+
+#[cfg(target_arch = "x86_64")]
+fn repend_owned_line(tid: usize, line: u8) {
+    super::drivers::pcie_msi::repend_owned(tid, line)
+}
+
+// Off x86_64 `source_is_valid` refuses `IRQ`, so no wait ever holds a line.
+#[cfg(not(target_arch = "x86_64"))]
+fn owned_irq_lines(_tid: usize) -> IrqLineSet {
+    IrqLineSet::EMPTY
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn take_owned_line(_tid: usize, _line: u8) -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+fn repend_owned_line(_tid: usize, _line: u8) {}
+
 /// Report `selection` and settle every other source's ownership.
 ///
 /// A record that cannot be copied out is not lost: an IPC notification is
-/// re-armed for the next wait, and a NET_RX observation goes back to the level
-/// flag. TIMER is this call's deadline and has nothing to restore.
+/// re-armed for the next wait, a NET_RX observation goes back to the level
+/// flag, and an IRQ line is re-pended if the caller still holds it. TIMER is
+/// this call's deadline and has nothing to restore.
 fn finish_multi(
     caller_id: usize,
     out_ptr: usize,
@@ -506,6 +671,8 @@ fn finish_multi(
             }
         } else if reported.source == api::completion::source::NET_RX {
             waker::relevel_net_rx();
+        } else if reported.source == api::completion::source::IRQ {
+            repend_owned_line(caller_id, reported.result as u8);
         }
     }
     written
@@ -770,6 +937,188 @@ mod tests {
         }
         assert!(queue.waiter_capacity() >= completion::MAX_WAITERS);
         assert_eq!(queue.waiter_capacity(), completion::MAX_WAITERS);
+    }
+
+    // ---- IRQ source (04b CP1 §3.3-§3.4, §9) ----
+
+    const IRQ: u32 = api::completion::source::IRQ;
+    const TIMER: u32 = api::completion::source::TIMER;
+
+    /// A task mid-`WaitCompletion` whose snapshot holds `lines`.
+    fn irq_waiter(lines: &[u8], slot: completion::SlotId) -> Box<Task> {
+        let mut task = Box::new(Task::new(
+            TID + 1,
+            CellId(72),
+            "msw-irq",
+            alloc::vec::Vec::new(),
+        ));
+        let mut irq_lines = IrqLineSet::EMPTY;
+        for line in lines {
+            irq_lines.insert(*line);
+        }
+        task.completion_wait = Some(CompletionWait {
+            source: TIMER,
+            slot,
+            irq_lines,
+        });
+        task
+    }
+
+    fn select_all(task: &mut Task, mask: u32, rounds: usize) -> alloc::vec::Vec<(u32, isize)> {
+        (0..rounds)
+            .map(|_| {
+                let chosen = select_locked(task, mask, true, true).expect("a ready source");
+                (chosen.source, chosen.result)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn four_source_rotor_serves_irq_between_net_rx_and_timer_without_consuming_it() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        let mut task = irq_waiter(&[0xC0, 0xC1], slot);
+        assert_eq!(task.completion_rotor, INITIAL_ROTOR);
+        irq_wait::restore_pending(0xC0);
+        irq_wait::restore_pending(0xC1);
+        let picks = select_all(&mut task, NET_RX | IRQ | TIMER, 6);
+        assert_eq!(
+            picks,
+            [
+                (NET_RX, NET_RX as isize),
+                (IRQ, 0xC0),
+                (TIMER, 0),
+                (NET_RX, NET_RX as isize),
+                (IRQ, 0xC1),
+                (TIMER, 0),
+            ]
+        );
+        assert!(
+            irq_wait::take_pending(0xC0) && irq_wait::take_pending(0xC1),
+            "selection only peeks; the waiter takes the line"
+        );
+        assert_eq!(select_locked(&mut task, IRQ, false, false), None);
+        let _ = queue.release(slot);
+    }
+
+    #[test]
+    fn irq_lines_are_served_round_robin_after_the_cursor() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        let mut task = irq_waiter(&[0xC2, 0xC3, 0xC6], slot);
+        for line in [0xC2, 0xC3, 0xC6] {
+            irq_wait::restore_pending(line);
+        }
+        let lines: alloc::vec::Vec<isize> = select_all(&mut task, IRQ, 4)
+            .into_iter()
+            .map(|(source, line)| {
+                assert_eq!(source, IRQ);
+                line
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            [0xC2, 0xC3, 0xC6, 0xC2],
+            "a busy line cannot starve the others"
+        );
+        assert!(irq_wait::take_pending(0xC3));
+        assert_eq!(select_all(&mut task, IRQ, 1), [(IRQ, 0xC6)]);
+        assert!(irq_wait::take_pending(0xC2) && irq_wait::take_pending(0xC6));
+        let _ = queue.release(slot);
+    }
+
+    #[test]
+    fn a_pending_snapshot_line_stops_a_park_and_wakes_the_sweep_but_an_outside_line_does_not() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        let mut task = irq_waiter(&[0xC4], slot);
+        task.state = TaskState::Ready;
+        assert!(!irq_wake_due(&task, IRQ | TIMER));
+        irq_wait::restore_pending(0xC5);
+        assert!(
+            !irq_wake_due(&task, IRQ | TIMER),
+            "a pending line outside the snapshot never wakes the waiter"
+        );
+        irq_wait::restore_pending(0xC4);
+        assert!(irq_wake_due(&task, IRQ | TIMER));
+        assert!(
+            !irq_wake_due(&task, TIMER),
+            "a mask without IRQ ignores lines"
+        );
+        assert_eq!(
+            publish_wait_state_locked(&mut task, TID + 1, IRQ | TIMER, Some(5)),
+            CompletionParkDecision::IrqPending
+        );
+        assert_eq!(task.state, TaskState::Ready, "the waiter does not park");
+        assert!(irq_wait::take_pending(0xC4) && irq_wait::take_pending(0xC5));
+        let _ = queue.release(slot);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn an_irq_wait_without_lines_is_refused_before_reserving() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        assert!(source_is_valid(IRQ, None), "x86_64 serves IRQ");
+        assert!(source_is_valid(IRQ | TIMER, Some(1)));
+        assert!(!source_is_valid(1 << 4, Some(1)));
+        assert_eq!(
+            wait_completion(72_302, IRQ | TIMER, Some(1), 0x1000),
+            Err(SyscallError::PermissionDenied)
+        );
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn a_take_after_revoke_fails_and_an_empty_refresh_releases_the_slot() {
+        use crate::task::drivers::pcie_msi;
+        const OWNER: usize = 72_301;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let revoked = pcie_msi::allocate_for_test(OWNER, 0x0020, 2);
+        let slot = queue.reserve().unwrap();
+        irq_wait::restore_pending(revoked.first_irq);
+        assert_eq!(pcie_msi::release_for(OWNER), 1);
+        assert!(!take_owned_line(OWNER, revoked.first_irq));
+        assert_eq!(
+            irq_lines_after_revoke(OWNER, &queue, slot, false),
+            Err(SyscallError::PermissionDenied)
+        );
+        assert!(settled(&queue), "the waiter-owned slot is released");
+
+        let kept = pcie_msi::allocate_for_test(OWNER, 0x0028, 1);
+        let slot = queue.reserve().unwrap();
+        let lines = irq_lines_after_revoke(OWNER, &queue, slot, false).expect("a line left");
+        assert!(lines.contains(kept.first_irq));
+        assert_eq!(queue.reserved(), 1, "the wait keeps its reservation");
+        let _ = queue.release(slot);
+        assert_eq!(pcie_msi::release_for(OWNER), 1);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn a_failed_copy_out_re_pends_the_irq_line() {
+        use crate::task::drivers::pcie_msi;
+        const OWNER: usize = 72_303;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let line = pcie_msi::allocate_for_test(OWNER, 0x0030, 1).first_irq;
+        let slot = queue.reserve().unwrap();
+        irq_wait::restore_pending(line);
+        assert!(take_owned_line(OWNER, line));
+        let selection = Selection {
+            source: IRQ,
+            result: line as isize,
+            relevel_net_rx: false,
+            scanned: 0,
+        };
+        // OWNER is not a live task, so the copy-out fails.
+        assert!(finish_multi(OWNER, 0x1000, &queue, slot, false, selection).is_err());
+        assert!(settled(&queue));
+        assert!(take_owned_line(OWNER, line), "the line is pending again");
+        assert_eq!(pcie_msi::release_for(OWNER), 1);
     }
 }
 

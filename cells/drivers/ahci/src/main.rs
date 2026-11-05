@@ -9,8 +9,10 @@
 //!      BAR5, so this cell uses `PcieDeviceInfo::bar_mem_base` (the first memory
 //!      BAR), not `bar0_base`.
 //!   3. Resets the HBA, starts the first port carrying an ATA disk, and completes
-//!      one polled IDENTIFY DEVICE. All DMA structures go through `DmaBuf` +
-//!      `authorize` so the phase-05 IOMMU path applies without rework.
+//!      one IDENTIFY DEVICE. All DMA structures go through `DmaBuf` +
+//!      `authorize` so the phase-05 IOMMU path applies without rework. Command
+//!      completion waits park on an MSI when `AllocPcieIrq` grants one
+//!      (`irq.rs`) and poll otherwise.
 //!   4. Publishes the block route of its controller's BDF via
 //!      `sys_register_block_device(BlockDevice::Pci { .. })` and serves the
 //!      DrvRequest IPC (512-byte sector read/write/flush) — the same wire NVMe
@@ -32,6 +34,7 @@ mod dispatch;
 mod dma;
 #[cfg(feature = "fault-inject")]
 mod fault_inject;
+mod irq;
 
 use crate::dma::AuthorizedDma;
 use controller::AhciController;
@@ -277,10 +280,12 @@ api::declare_manifest!(
 // calls: the AppContext base set (its `run()` loop uses Recv; `LookupService`
 // also resolves the VFS sender), the PCIe device path, block-route
 // registration, request replies, the timeout polling in controller.rs
-// (`GetTime`), the exit path, and the DMA calls behind `DmaBuf::alloc`/
-// `authorize`. `Exit`/`Yield` carry no allowlist bit and are always permitted;
-// naming them documents the intent (the macro skips them). Fault-injection
-// builds add `ShmAlloc`/`ShmMap` for the `F09C-DIE-SHM` seam only.
+// (`GetTime`), the exit path, the DMA calls behind `DmaBuf::alloc`/
+// `authorize`, and the MSI completion path (`AllocPcieIrq` at init,
+// `WaitCompletion(IRQ)` parks in irq.rs). `Exit`/`Yield` carry no allowlist
+// bit and are always permitted; naming them documents the intent (the macro
+// skips them). Fault-injection builds add `ShmAlloc`/`ShmMap` for the
+// `F09C-DIE-SHM` seam only.
 macro_rules! ahci_syscalls {
     ($($extra:ident),*) => {
         api::declare_syscalls![
@@ -303,7 +308,10 @@ macro_rules! ahci_syscalls {
             Exit,
             // DMA: `DmaBuf::alloc` -> GrantAlloc, `DmaBuf::authorize` -> GrantDma.
             GrantAlloc,
-            GrantDma
+            GrantDma,
+            // MSI completion: allocation (435) and the bounded IRQ park (242).
+            AllocPcieIrq,
+            WaitCompletion
             $(, $extra)*
         ];
     };
