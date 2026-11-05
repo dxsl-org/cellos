@@ -108,8 +108,25 @@ A `cpp-hosted` Cell does not ship in an image before that number is recorded (Sp
 
 The evidence ceiling is QEMU TCG and QEMU/KVM.
 
+**Size measurement (R4, 2026-11-05; host build, not run).** Bytes the three runtime archives add,
+as input sections that `--gc-sections` keeps, attributed from the lld link map by
+`bash scripts/build-llvm-runtimes.sh size`. The build is pinned at `llvmorg-19.1.7`, uses
+`-O2`/`Release` with `-ffunction-sections -fdata-sections`, and links over mlibc `posix` x86_64.
+
+| Link | libc++ | libc++abi | libunwind | Runtime total | Runtime `.bss`/`.tbss` | Stripped static PIE |
+|---|---:|---:|---:|---:|---:|---:|
+| Witness logic (`cpp-hosted-smoke/cpp/witness.cpp`) | 327,044 | 140,578 | 25,533 | **493,155** | 8,337 | 1,234,792 |
+| Mesa-shaped probe (`-fno-exceptions -fno-rtti`, containers, `<optional>`, `<variant>`, `<charconv>`; `cpp-hosted-smoke/cpp/mesa_probe.cpp`) | 4,534 | 135,689 | 25,407 | **165,630** | 2,655 | 769,168 |
+
+- The witness Cell itself, linked by cargo, attributes exactly the witness row: 327,044 + 140,578 + 25,533 bytes. Its stripped ELF is 1,309,224 bytes.
+- `.eh_frame` and `.eh_frame_hdr` are linker-generated, so lld does not attribute them per archive. Whole-image values are 157,416 bytes for the witness and 106,844 bytes for the probe, covering mlibc and C++ together.
+- The stripped totals include mlibc. Its 16 MiB arena is `.bss` and adds no file bytes.
+- Even a Mesa-only link carries most of libc++abi. Throwing `operator new` reaches `std::terminate`, and the default terminate handler pulls the demangler, about 100 KiB.
+
+**Compiler builtins (decided at the first link).** They come from `libgcc.a` of the compiler that built mlibc, linked by `libs/mlibc-shim` ahead of Rust `compiler_builtins`. compiler-rt is not built. The witness Cell also links with `--no-allow-multiple-definition` passed explicitly, and its link map shows no `compiler_builtins` member extracted.
+
 **Risks.**
-- Compiler-runtime builtins: compiler-rt or Rust `compiler_builtins`, exactly one. This is decided at the first link.
+- Compiler-runtime builtins: `libgcc.a` is the only provider today (above). lld rejects duplicate strong definitions by default, so a toolchain change that makes two providers collide fails the link rather than choosing silently.
 - Size growth.
 - Missing libc features. Each one is fixed in mlibc with a ledger row, never stubbed in libc++.
 

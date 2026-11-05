@@ -196,6 +196,7 @@ members = [
     "cells/tests/c-math-smoke",
     "cells/tests/mlibc-smoke",
     "cells/tests/mlibc-posix-x86",
+    "cells/tests/cpp-hosted-smoke",
     "libs/cell-initial-stack",
     "libs/drm-cellos",
     "cells/tests/drm-lite-x86",

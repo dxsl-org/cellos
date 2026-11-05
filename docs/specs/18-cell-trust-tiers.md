@@ -57,6 +57,8 @@ Profiles under the Dual-Mode Hybrid Architecture (ADR-0015):
 - **Tier 1**: Strict Safe Rust (`no_std` and in-tree pure-Rust `std`) + audited Driver Cells. Signed-only.
 - **Tier 2**: All C/C++/Zig FFI code (`posix-shim`, `mlibc`), the `cpp-freestanding` C++ subset
   profile ([ADR-0018](../decisions/0018-cell-native-portability-and-runtime-profiles.md) §2.3),
+  the `cpp-hosted` C++17 profile (LLVM libc++ over mlibc, x86_64 only;
+  [ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)),
   dynamic runtimes (Lua), and all unsigned native binaries. Contained by hardware MMU. Admission
   is gated by the on-path policy ruled in
   [ADR-0019](../decisions/0019-tier2-admission-control-on-path.md).

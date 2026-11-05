@@ -201,17 +201,45 @@ cell. What the profile actually provides, and where:
 `riscv64-unknown-elf-g++` has no libstdc++ headers and `clang++ --target=aarch64-unknown-none-elf`
 has no libc++ sysroot, so `#include <cstdint>` fails on both. The v1 contract is therefore
 *language-only* — classes, inheritance, virtual dispatch, templates, static construction,
-`new`/`delete` — with types taken from compiler builtins. Vendoring a libc++ header subset is a
-separate decision with its own size measurement.
+`new`/`delete` — with types taken from compiler builtins. Hosted C++ with the standard library
+is the separate `cpp-hosted` profile below, with its own size measurement.
 
-**Admitted on RV64 and AArch64 only**, because the profile's runtime layer is the POSIX shim,
-whose module is `#![cfg(any(riscv64, aarch64, wasm32, doc))]`
-(`libs/api/src/services/posix.rs:13-22`). The cell's build script fails with that reason on any
-other target instead of leaving an undefined-symbol dump.
+**Admitted on RV64, AArch64 and x86_64**, because the profile's runtime layer is the POSIX shim,
+whose module is compiled for those targets and wasm32
+(`libs/api/src/services/posix.rs:13-22`), and the cell's build script selects a compiler for each
+of them (`cells/tests/cpp-smoke/build.rs:62-152`). It fails with that reason on any other target
+instead of leaving an undefined-symbol dump.
 
 Exceptions, RTTI, thread-safe statics, and the STL runtime (`std::string`, `std::vector`,
-iostreams) need an unwinder and per-task TLS and remain separate decisions. Reference cell:
+iostreams) are not part of this profile; `cpp-hosted` provides them. Reference cell:
 `cells/tests/cpp-smoke`; runner: `scripts/qemu-cpp-smoke.sh`.
+
+#### `cpp-hosted` ([ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)) — built and linked, not yet run
+
+Hosted C++17 for **x86_64 Tier-2 cells**: static LLVM libc++, libc++abi and libunwind
+(`llvmorg-19.1.7`), built once with exceptions and RTTI, over mlibc with the `posix` option
+(Tier B). `cpp-freestanding` is unchanged, and one cell links exactly one of the two.
+Tier-1 cells, RV64 and AArch64 may not use it yet.
+
+| Concern | Where it lives |
+|---|---|
+| Build | `scripts/build-llvm-runtimes.sh` (pin, per-file licence check, host dry run, cross build over mlibc, size table) |
+| Profile contract: flags, facilities, refused features | `third_party/llvm-runtimes/README.md` |
+| C++ ABI, exceptions, RTTI, thread-safe statics, `operator new`/`delete` | libc++abi; the Tier-A layer is compiled out under `mlibc` |
+| Unwinding | libunwind, `.eh_frame_hdr` through mlibc's `dl_iterate_phdr` |
+| Threads, `thread_local` | mlibc pthread and static TLS on `Spawn`, `FutexWait`/`FutexWake`, `SetTlsBase` |
+| Libc | mlibc `libc.a` through `libs/mlibc-shim`; `api` with `features = ["mlibc"]` |
+| Witness | `cells/tests/cpp-hosted-smoke`; runner `scripts/x86/qemu-cpp-hosted-smoke.sh` |
+
+Translation units choose `-fexceptions -frtti` (llama.cpp) or `-fno-exceptions -fno-rtti` (Mesa)
+and link the same runtime. C++ is SSE2 hard-float under rule H1, and every Rust→C++ entry point is
+`extern "C"` and `noexcept`: an escaping exception reaches `std::terminate`, then `abort()`, and
+ends only the cell. The runtime adds 493,155 bytes of kept input sections to the witness and
+165,630 bytes to a Mesa-shaped link, with `-ffunction-sections` and `--gc-sections` (table in ADR-0034).
+
+Until the R3b memory work lands, every `std::thread` runs on the 64 KiB Spawn stack and every
+allocation comes from mlibc's 16 MiB static arena. `dlopen` is refused. Locales other than
+`C`/`POSIX` are refused unless measured.
 
 ### 3.3 Porting lanes for existing Linux applications
 

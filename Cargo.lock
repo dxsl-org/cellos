@@ -338,6 +338,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-cpp-hosted-smoke"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "mlibc-shim",
+ "ostd",
+]
+
+[[package]]
 name = "app-cpp-smoke"
 version = "0.1.0"
 dependencies = [

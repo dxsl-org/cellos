@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Hosted C++17 runtime profile: LLVM libc++, libc++abi, libunwind over mlibc"
-status: pending
+status: in-progress (built and linked; runtime witness blocked on H-1 launch rows)
 priority: P1
 effort: "8-14d"
 dependencies: ["R3 (R3a minimum)", "ADR for cpp-hosted accepted (D-R4)"]
@@ -104,18 +104,18 @@ cpp-hosted Cell (x86_64 Tier-2)
 
 ## Todo List
 
-- [ ] Pin the llvm-project tag + licence check per file
-- [ ] Host dry run
-- [ ] Cross build over mlibc
-- [ ] Witness Cell (TCG + KVM)
-- [ ] Size measurement in the ADR
-- [ ] Docs: guide, spec 05, spec 18, ledger, NOTICE
+- [x] Pin the llvm-project tag + licence check per file (`llvmorg-19.1.7` @ `cd708029e0b2`; 1204 files; `scripts/build-llvm-runtimes.sh` step 2)
+- [x] Host dry run (x86_64-linux-gnu build + host witness run: 11/11 markers, uncaught exception aborts with the libc++abi line)
+- [x] Cross build over mlibc (step 4; every runtime libc reference resolves in mlibc `libc.a` after patch 0002)
+- [ ] Witness Cell (TCG + KVM): built and linked (`scripts/build-x86_64-cpp-hosted-ci.sh --link-only` → `CPP-HOSTED-LINK: PASS`); runner `scripts/x86/qemu-cpp-hosted-smoke.sh` written; not booted — needs the `/bin/cpp-hosted-smoke` launch rows (H-1)
+- [x] Size measurement in the ADR (ADR-0034 Consequences, size table)
+- [x] Docs: guide, spec 05, spec 18, ledger, NOTICE
 
 ## Success Criteria
 
-- [ ] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM.
-- [ ] An uncaught exception terminates the Cell with a logged reason and no kernel fault.
-- [ ] `cpp-smoke` still passes its own absence assertions.
+- [ ] The witness prints all markers, including a caught exception and a joined `std::thread`, under TCG and KVM. (Blocked on H-1. Host evidence only: the same C++ prints 11/11 on x86_64-linux-gnu.)
+- [ ] An uncaught exception terminates the Cell with a logged reason and no kernel fault. (Blocked on H-1; the runner asserts it.)
+- [x] `cpp-smoke` still passes its own absence assertions (build-level: riscv64 and x86_64 `cpp-smoke` link with no `__cxa_throw`/`_Unwind_*`/`__gxx_personality`/`_ZSt*`; 2026-11-05).
 
 ## Risk Assessment
 
@@ -133,4 +133,26 @@ G3 links Mesa (`brw`, `gen`, Jay) and llama.cpp against `cpp-hosted`.
 
 ## Deviation Log
 
-None.
+All entries 2026-11-05.
+
+1. **Decision — pin `llvmorg-19.1.7`.** libc++ 19 is the newest release that supports clang 18, the compiler every Cellos C/C++ row uses; libc++ 20 needs clang 19. Reversible by moving the pin.
+2. **Surprise → fix in mlibc, not libc++.** libc++ needs `strtoll_l` and `strtoull_l` in `<locale>`, which every consumer TU includes, plus `strxfrm_l`, `wcscoll_l` and `wcsxfrm_l` in `locale.cpp`. mlibc at the pin has none of them. **Deviation (file set):** the fix is `third_party/mlibc/patches/0002-posix-locale-l-functions.patch`, which `scripts/build-mlibc.sh` applies after 0001. `patches/` is outside R4's §3 list, and Main approved committing it after R6 freed H-5. Ledger rows were added.
+3. **Decision — libc++ configuration for mlibc.**
+   - `_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE` goes into `__config_site`, as for musl: mlibc exposes no ctype table that libc++ knows.
+   - `-D_GNU_SOURCE` is part of the profile flags (what clang++ predefines on GNU targets). Without it, mlibc hides `Dl_info`/`dladdr` and the POSIX-2024 surface.
+   - The configure-time library probes (`*_HAS_{PTHREAD,DL,RT,...}_LIB`) are forced OFF. Static try-compiles made them all "succeed", and the resulting `.deplibs` made lld look for `-lpthread`/`-ldl`.
+   - `LIBCXX_HAS_MUSL_LIBC` stays OFF: it needs musl's `<bits/alltypes.h>`.
+4. **Deviation — build outputs under `target/llvm-runtimes/`**, not `third_party/llvm-runtimes/build-*`. A new `.gitignore` entry would have been outside the file set; `target/` is already ignored. `third_party/llvm-runtimes/` holds only the README.
+5. **Deviation — new standalone scripts (H-4):** `scripts/build-x86_64-cpp-hosted-ci.sh` (image and link proof) and `scripts/x86/qemu-cpp-hosted-smoke.sh` (runner), modelled on the mlibc-witness pair. No shared lane was edited.
+6. **Deviation (file set) — `scripts/unsafe-allowlist.toml`:** one `[[file]]` and one `[[crate]]` c-ffi entry for `app-cpp-hosted-smoke`, the same shape as R3's, approved by Main on 2026-11-05. Without them `cellos-sign --check` F1 refuses to sign the image.
+7. **Decision — single-run witness.** The Cell prints the 11 markers and `CPP-HOSTED: 11/11 pass`, then deliberately throws past a `noexcept` entry. A passing run therefore always exits with status 1, and its verdict is the markers, the libc++abi terminate line, a fresh prompt and no fault. One launch row instead of two, and no argv dependency.
+8. **Decision — size method.**
+   - Runtime bytes are the kept input sections that the lld map attributes to the three archives (`build-llvm-runtimes.sh size`). This matches the real Cell link byte for byte.
+   - `.eh_frame`/`.eh_frame_hdr` are linker-internal in lld maps, so they are reported per image.
+   - No Mesa build exists yet, so the "Mesa-only link" row uses a Mesa-shaped probe (`cpp/mesa_probe.cpp`, `-fno-exceptions -fno-rtti`).
+9. **Decision — compiler builtins:** `libgcc.a` from the mlibc build is the single provider; compiler-rt is not built, and no `compiler_builtins` member is extracted. Checked with `--no-allow-multiple-definition` and `--why-extract`.
+10. **Surprise — Cell linker script.** `libs/cell-build/src/cell.ld.in` has no rules for `.gcc_except_table.*`, `.eh_frame` or `.eh_frame_hdr`, so lld places them as orphans.
+    - The R-only PT_LOAD after `.bss` that holds `.eh_frame_hdr`/`.eh_frame` has the same shape as in `mlibc-posix-x86`, which already boots on QEMU.
+    - New here: each per-function `.gcc_except_table.*` becomes its own output section, about 380 section headers in total.
+    - The loader reads program headers, so this should not matter `[INFERENCE]`. It is unproven until the boot. A `.gcc_except_table : { *(.gcc_except_table .gcc_except_table.*) }` rule in `cell.ld.in` would remove the orphans, but `cell-build` is outside R4's file set.
+11. **Merge:** `main` (R6, `7ca2b7c61`) was merged into `feat/r4-hosted-cxx`, and mlibc was rebuilt from the committed tree with patch 0002. The private pre-merge mlibc build in `target/r4-mlibc` was verification scaffolding only.

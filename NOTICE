@@ -63,6 +63,24 @@ libsmarter (third_party/mlibc-src/subprojects/libsmarter/)
   Licensed under the MIT License
 
 ──────────────────────────────────────────────────────────────────────
+LLVM C++ runtimes: libc++, libc++abi, libunwind (cpp-hosted Cells;
+built by scripts/build-llvm-runtimes.sh, see third_party/llvm-runtimes/)
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (c) LLVM Project contributors
+  Licensed under the Apache License v2.0 with LLVM Exceptions
+  (SPDX: Apache-2.0 WITH LLVM-exception)
+  Source: https://github.com/llvm/llvm-project (tag llvmorg-19.1.7)
+  Full licence: libcxx/LICENSE.TXT at that tag; also
+  https://llvm.org/LICENSE.txt
+
+  libc++ floating-point formatting (libcxx/src/ryu/, libcxx/src/include/ryu/)
+  additionally carries:
+    Copyright 2018 Ulf Adams
+    Copyright (c) Microsoft Corporation. All rights reserved.
+    Boost Software License, Version 1.0
+
+──────────────────────────────────────────────────────────────────────
 doomgeneric (cells/demos/doom/src/c/doomgeneric/)
 ──────────────────────────────────────────────────────────────────────
 
