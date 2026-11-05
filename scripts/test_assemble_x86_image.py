@@ -59,15 +59,17 @@ class ManifestTables(unittest.TestCase):
     def test_headless_packages_and_paths(self):
         self.assertEqual(HEADLESS.packages(), [
             "app-cellbox", "service-vfs", "service-config", "service-input", "service-net",
-            "service-platform", "driver-nvme", "driver-e1000", "driver-igb", "driver-ahci",
-            "driver-xhci", "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
-            "driver-serial-x86", "app-sys-tools", "tier2-smoke", "tier2-exploit"])
+            "service-platform", "supervisor", "driver-nvme", "driver-e1000", "driver-igb",
+            "driver-ahci", "driver-xhci", "driver-virtio-blk", "driver-virtio-net",
+            "driver-virtio-scsi", "driver-serial-x86", "app-sys-tools", "tier2-smoke",
+            "tier2-exploit"])
         self.assertEqual(HEADLESS.image_paths(), {"/bin/" + name for name in (
-            "cellbox", "cellbox-ssh", "vfs", "config", "net", "input", "platform", "nvme",
-            "e1000", "igb", "ahci", "xhci", "block", "virtio-net", "virtio-scsi", "serial",
-            "ls", "cat", "echo", "ps", "kill", "shutdown", "tier2-smoke", "tier2-exploit")}
+            "cellbox", "cellbox-ssh", "vfs", "config", "net", "input", "platform", "supervisor",
+            "nvme", "e1000", "igb", "ahci", "xhci", "block", "virtio-net", "virtio-scsi",
+            "serial", "ls", "cat", "echo", "ps", "kill", "shutdown", "tier2-smoke",
+            "tier2-exploit")}
             | {"/POLICY.BIN"})
-        self.assertEqual(HEADLESS.init_features, ("input",))
+        self.assertEqual(HEADLESS.init_features, ("input", "supervisor"))
 
     def test_desktop_is_headless_plus_the_desktop_apps(self):
         self.assertEqual(DESKTOP.packages(), HEADLESS.packages() + [
@@ -75,7 +77,7 @@ class ManifestTables(unittest.TestCase):
         self.assertEqual(DESKTOP.image_paths() - HEADLESS.image_paths(), {"/bin/" + name for name in (
             "compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel")})
         self.assertTrue(HEADLESS.image_paths() < DESKTOP.image_paths())
-        self.assertEqual(DESKTOP.init_features, ("input", "ui"))
+        self.assertEqual(DESKTOP.init_features, ("input", "ui", "supervisor"))
 
     def test_alias_shares_one_source_and_retired_paths_are_absent(self):
         for profile in (HEADLESS, DESKTOP):
