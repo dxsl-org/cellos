@@ -78,18 +78,55 @@ Complete C standard library via mlibc (libc.a). Supports fork(), pthread, comple
 
 ### Build mlibc (One-Time Setup)
 
-On **Windows in WSL2**:
+On **Linux or WSL2** (`pwsh scripts/setup-mlibc.ps1` covers riscv64 on Windows):
 
 ```bash
-# In Cellos root
-cd scripts
-bash build-mlibc.sh
+# In Cellos root. Fetches managarm/mlibc at the pinned commit, applies sysdeps/vicell,
+# and builds every row whose compiler is installed (missing ones print SKIP).
+bash scripts/build-mlibc.sh
 
-# Check result: should create mlibc/aarch64-Cellos/lib/libc.a (and other targets)
-ls mlibc/aarch64-Cellos/lib/libc.a
+# Results (gitignored): libc.a plus the building compiler's libgcc.a per row
+ls third_party/mlibc/build/          # riscv64  (riscv64-unknown-elf-g++)
+ls third_party/mlibc/build-aarch64/  # aarch64  (aarch64-linux-gnu-g++)
+ls third_party/mlibc/build-x86_64/   # x86_64   (host g++, freestanding, SSE2)
 ```
 
-Mlibc is **git-ignored**; it's rebuilt as part of the kernel build. No commit needed.
+The pin and the sysdeps port are described in [third_party/README.md](../../third_party/README.md#mlibc).
+It needs **GCC 13 or newer**; clang 18 cannot compile this mlibc. Moving the pin past
+2026-03-26 needs GCC 14 (upstream adopted C++23 explicit object parameters). The outputs are not committed; rebuild after changing
+`third_party/mlibc/sysdeps/vicell/`.
+
+mlibc is built with its `posix` option set (threads, futexes, `nanosleep`, `sysconf`,
+`dl_iterate_phdr`, …); each row also installs mlibc's headers to
+`<row>/sysroot/include`. C or C++ compiled against this `libc.a` uses those headers,
+not the host's: `-ffreestanding -nostdinc -isystem <row>/sysroot/include -isystem
+$(gcc -print-file-name=include)`. [`cells/tests/mlibc-posix-x86/build.rs`](../../cells/tests/mlibc-posix-x86/build.rs)
+is the reference. What each hook does, and what it refuses, is in the
+[POSIX ledger](../posix-ledger.md) Tier-B table.
+
+**x86_64.** The row compiles hard-float SSE2 C, so rule H1 below applies to every
+Rust↔mlibc call. Link a Cell the way the x86 image scripts do:
+
+```bash
+RUSTFLAGS="-C relocation-model=pic" \
+  cargo build -p app-mlibc-posix-x86 --release --target x86_64-unknown-none
+```
+
+**Start-up.** Every Cell is entered with a Linux-shaped initial stack (argc 0, empty
+argv/envp, auxv with `AT_PHDR`, `AT_PHNUM`, `AT_BASE` = load base, `AT_ENTRY`,
+`AT_PAGESZ`, `AT_RANDOM` when the kernel has entropy). ostd's `_start` passes it to
+`__cellos_libc_start` before `main`; `mlibc-shim` links mlibc's definition, which
+sets up TLS, the Tcb and `environ` and runs the constructors once. Cells without
+mlibc get ostd's weak default, which only runs `.init_array`. After `main` returns,
+ostd exits with status 0 without calling mlibc's `exit()`; C code that relies on
+`atexit` handlers or stdio flushing calls `exit()` itself.
+
+Run the x86_64 witnesses with `bash scripts/build-x86_64-mlibc-witness-ci.sh` and
+`bash scripts/x86/qemu-mlibc-witness.sh` (QEMU, Tier 2 Paged Domain); see
+[the evidence](../evidence/mlibc-runtime-x86.txt). riscv64 and aarch64 mlibc Cells
+are not run yet. Calling a variadic C function such as `printf` from soft-float Rust
+leaves `%al` unset, so the callee may spill `xmm0-7`; that is harmless only while the
+kernel preserves the Cell's SSE state (runtime plan phase R5).
 
 ### Setup
 
@@ -329,13 +366,41 @@ inside a runtime that already set one up keeps working. A worker thread's `Exit`
 terminates only that thread (and wakes a `Wait` joiner); only the cell's root task
 exit retires the cell generation.
 
-**C/C++ `__thread` / `thread_local` is not supported yet.** It needs a TLS runtime:
-the loader must expose the program's `PT_TLS` segment (size + initial image) and the
-userspace side must allocate a block per thread and place it so the linker's
-`initial-exec` offsets resolve. The kernel primitive here is the part that runtime
-needs; the block management is a separate piece of work, tracked in
-`.agents/260922-1549-cell-native-portability-program/phase-03-per-task-tls-base.md`
-§ Deviation Log.
+**C/C++ `__thread` / `thread_local` works in mlibc Cells** (Tier-B profile): mlibc's
+start-up reads `PT_TLS` through the initial stack's `AT_PHDR`, allocates each
+thread's block and sets its base with `SetTlsBase`. Witnessed on x86_64
+([evidence](../evidence/mlibc-runtime-x86.txt), `tls-errno`). Cells without mlibc
+still have no TLS runtime: the kernel primitive is there, the block management is not
+(tracked in `.agents/260922-1549-cell-native-portability-program/phase-03-per-task-tls-base.md`
+§ Deviation Log).
+
+---
+
+## x86_64 C and the float boundary (rule H1)
+
+Every Rust Cell target on x86_64 is soft-float (`rustc-abi: softfloat`). `tools/cellos-cc` therefore has two x86 rows:
+
+| `CELLOS_C_TARGET` | Flags | Use |
+|---|---|---|
+| `x86_64-unknown-none` | `-mno-sse -mno-mmx` | Default. Any `float`/`double` use is a compile error. |
+| `x86_64-unknown-none-sse2` | `-msse2 -mfpmath=sse` | Tier-2 hard-float C/C++ (Mesa, llama.cpp, mlibc, libc++), per the x86 Tier-2 GPU runtime plan, owner decision D-R3. |
+
+`meson/cellos-x86_64.ini` and `cmake/cellos-x86_64.cmake` pin the SSE2 row. They carry `CELLOS_C_TARGET` themselves, so the caller's environment cannot switch rows.
+
+**Rule H1.** In a Cell that mixes soft-float Rust with SSE2 C, no function crossing Rust↔C may take or return any of these by value:
+- `float`, `double`, `long double`, `_Complex`, `f32`, `f64`;
+- an x86 vector type (`__m64`…`__m512`);
+- a struct or union containing one of the above.
+
+Callbacks count in both directions. Pointers to such values are allowed. The two sides pass these values in different registers, so a violation computes wrong numbers silently. Such Cells do not link the Tier-A `libs/api` POSIX shim, because its C99 math exports take `double`.
+
+Check a boundary with:
+
+```sh
+python3 scripts/check-float-ffi-boundary.py --rust <cell src or file> --c-header <include dir>
+```
+
+The checker is lexical. It reports `macro_rules!` export templates under their metavariable (for example `$c`) and cannot follow `void *` casts, so keep the boundary small: the Cell `main`, mlibc sysdeps, and the transport shim entry points.
 
 ---
 
@@ -482,7 +547,7 @@ If you copy ARM64 syscall patterns from Linux examples and use `x8`, **every cal
 
 ### x86_64 Support
 
-Level A (raw syscalls) works on x86_64. Level B (mlibc linking) is **not yet available** on x86_64 — mlibc's sysdeps currently only include riscv64 and aarch64.
+Level A (raw syscalls) works on x86_64. Level B (mlibc) builds and runs on x86_64 for Rust-hosted Cells (`third_party/mlibc/build-x86_64/libc.a`, see [Build mlibc](#build-mlibc-one-time-setup)); a Zig Level-B Cell on x86_64 has not been built or run.
 
 ---
 

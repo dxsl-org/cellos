@@ -14,6 +14,18 @@ case "$TARGET" in
     CC="${CELLOS_CC_REAL:-clang}"
     ARCH=(--target=aarch64-unknown-none-elf -mgeneral-regs-only)
     ;;
+  x86_64-unknown-none)
+    # Default x86 C: no SSE, so no float may cross into soft-float Rust.
+    CC="${CELLOS_CC_REAL:-clang}"
+    ARCH=(--target=x86_64-unknown-none-elf -mno-sse -mno-mmx -mno-red-zone -mcmodel=small)
+    ;;
+  x86_64-unknown-none-sse2)
+    # Tier-2 hard-float C/C++ (runtime plan D-R3, rule H1): SSE2 code beside
+    # soft-float Rust. No float or vector type may cross the Rust<->C boundary;
+    # scripts/check-float-ffi-boundary.py enforces it.
+    CC="${CELLOS_CC_REAL:-clang}"
+    ARCH=(--target=x86_64-unknown-none-elf -msse2 -mfpmath=sse -mno-red-zone -mcmodel=small)
+    ;;
   *) echo "cellos-cc: unsupported CELLOS_C_TARGET=$TARGET" >&2; exit 64 ;;
 esac
 case " $* " in
