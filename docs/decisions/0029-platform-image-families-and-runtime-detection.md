@@ -1,7 +1,7 @@
 # ADR-0029 — Platform image families and boot-time hardware detection
 
 **Date:** 2026-10-31
-**Status:** Accepted. x86-64 runtime selection is in scope under [ADR-0022](0022-intel-x86-64-c2c-only-direction.md). The behaviour-preserving aarch64 core/backend refactor is admitted by the ADR-0022 amendment of the same date. ARM groups 2 and 3 are design-only and unscheduled.
+**Status:** Accepted. x86-64 runtime selection is in scope under [ADR-0022](0022-intel-x86-64-c2c-only-direction.md). The behaviour-preserving aarch64 core/backend refactor is admitted by the ADR-0022 amendment of the same date. ARM group 2 is design-only and unscheduled. Group 3 (Apple Silicon) is an active secondary lane since 2026-11-04 ([ADR-0032](0032-apple-silicon-secondary-lane.md)).
 **Decider:** Cellos maintainer, approving the image-family split and the aarch64 three-group model in the planning conversation.
 **Implementation authority:** No ABI, manifest field or driver-admission change is approved here. Each concrete change goes through its own plan.
 
@@ -73,6 +73,13 @@ Drivers:
 - **Safe mode.** Init gates every configured service. A mismatch, an unreadable or unknown-version record, or missing facts withhold everything except `input` and the `cellbox` shell; boot-critical storage keeps running under catalog policy. A record is never re-pinned automatically: only definitive absence on a healthy store is a first boot. No store is safe mode under `Required` profiles and a warning under the `Optional` q35 profile.
 - **Re-confirmation.** `machine pin --confirm` from the console shell init started, in safe mode, for the digest init reports; it takes effect at the next boot.
 - **Trust.** The pin carries no authority and changes no profile or DMA decision. It is change detection, not a boot-integrity control: `limine.conf` (which selects the profile) and the kernel are unmeasured today, and an offline writer can delete the pin. Phase 02's note that firmware "cannot inject the command line" holds only on a measured or Secure Boot setup that does not exist yet (HCL R3).
+
+### Amendment 2026-11-04 — group 3 scheduled (ADR-0032)
+
+- Group 3 is no longer "design-only, outside the roadmap". It is scheduled as a secondary lane under [ADR-0032](0032-apple-silicon-secondary-lane.md), plan `.agents/261104-0711-apple-silicon-group/`. The "no code, tests or HCL entries until scheduled" consequence now applies to group 2 only.
+- §5 group 3 stands (separate family, one image per chip generation, DTB from m1n1, AIC/DART/RTKit, `DmaIsolation::Required`). ADR-0032 adds a hosted track: Cellos as a guest of macOS on Apple Silicon. It uses the generic virt backend with GICv3/virtio-pci and is not Apple SoC evidence.
+- §7 correction: m1n1 is MIT only up to v1.9.9 and GPL-2.0-or-later from v2.0.0. "Permissively licensed m1n1 code" therefore means tag `v1.9.9` or earlier. OpenBSD's ISC `apl*` drivers are the primary permissive reference (ADR-0030 amendment of the same date).
+- Consequence line "realistically M1/M2" is confirmed. Asahi added M3 support in 2026-09; M4 still lacks PCIe/DART/NVMe and is parked.
 
 ## Related
 

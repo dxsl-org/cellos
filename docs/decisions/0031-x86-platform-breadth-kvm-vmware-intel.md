@@ -31,7 +31,7 @@ The scouting, validation and red-team evidence is in the plan's `scout-report.md
 2. **Out of scope:**
    - AMD (stays parked; no AMD-Vi);
    - cloud-specific devices (ENA, gVNIC, Hyper-V VMBus);
-   - GPU drivers;
+   - GPU drivers (in this plan; native Intel iGPU compute has its own plan under [ADR-0033](0033-x86-intel-igpu-native-compute.md), 2026-11-04);
    - mlx5/bnxt/ice;
    - an Intel VMD driver;
    - MegaRAID/mpt3sas/smartpqi.
@@ -67,6 +67,10 @@ The scouting, validation and red-team evidence is in the plan's `scout-report.md
 - The G1 private lane (`cellos_g1_cpu`) keeps its HPET contract unchanged.
 - Each new driver Cell ships in the x86 image and the `qemu-x86_64-boot` CI job in the same change.
 - No production, remote or physical support claim follows from this ADR. Claims are bounded by the evidence ladder in ADR-0022.
+
+### Amendment 2026-11-04 — GPU dependency (ADR-0033)
+
+GPU drivers stay out of this plan. The native Intel iGPU compute plan (`.agents/261104-0801-x86-igpu-compute/`) depends on phases 04a (PCIe function ABI, MSI-X), 04b (IRQ-driven PCIe Cells) and 12 (VT-d multi-unit, RMRR, interrupt remapping). Those phases keep their scope and ownership; the GPU plan consumes them after they land.
 
 ## Related
 

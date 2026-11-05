@@ -4,6 +4,85 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-04 — Slice VL (Intel WIP lane, closed — lane released): a shell is no longer limited to 64 program launches per boot.**
+  - Cause: VFS kept one request log per launched child Operation (`cells/services/vfs/src/prepared_cwd.rs`) and dropped it only when the launching shell died. At `MAX_CREATOR_LOGS = 64` every further launch failed with `foreground preparation failed: QuotaExceeded`.
+  - Fix: a settled log is dropped once the kernel has removed its Operation. VFS learns this by re-acknowledging its last acknowledged kernel ID: a live ledger answers Ok, a removed Operation `UnknownRequest`. Runs on every reconcile and at the cap (`cells/services/vfs/src/prepared_cwd/closed_logs.rs`).
+  - Verified: `MLIBC_POSIX_RUNS=100` passes in one boot on TCG and KVM (101 launches, 100 of 100 domains released), which closes phase R3's 100-run criterion; `service-vfs` host tests 139/139 with a new selection test; x86 domain lane PASS.
+- **2026-11-04 — Slice TL (Intel WIP lane, closed): Tier-2 domains of Cells with threads are released again.**
+  - Cause: the scheduler's switch plan held a reference to the incoming task's domain across the raw switch, and an exiting task never returns from it. Each exiting thread followed by a domain task leaked one reference, so the Cell's domain was never dropped: 14 frames and ~620 KB of kernel heap per 8-thread run. The posix witness hit kernel-heap OOM after 44 runs. Pure-Rust threaded Cells leaked the same way.
+  - Fix: `SwitchPlan::root_switch` consumes the plan, so its reference drops before the switch; the hart's execution pin keeps the live root alive (`kernel/src/task/domain_switch.rs`).
+  - Regression: `scripts/x86/qemu-mlibc-witness.sh` requires one `DOMAIN-FRAME-RELEASE: PASS` per posix run (fix reverted: 0 of 3). Verified 60/60 runs on TCG and 20/20 on KVM; kernel host tests 421/421; x86 domain lane PASS.
+  - Found: VFS limited one shell to 64 program launches per boot; fixed by slice VL above. [Report](../.agents/debug/debug-261104-1230-tier2-thread-exit-leak.md).
+- **2026-11-04 — Slice RE (Intel WIP lane, closed — CP2 approved, "Cell initial stack v1" frozen, lane released): Cell initial stack + auxv; mlibc Cells run on x86_64.**
+  - Every 64-bit Cell's root task now starts with a Linux-shaped initial stack: argc 0, empty argv/envp, auxv `AT_PHDR` (stack copy), `AT_PHENT`, `AT_PHNUM`, `AT_PAGESZ`, `AT_BASE` (load base), `AT_ENTRY`, `AT_RANDOM` (x86 RDSEED/RDRAND). The layout lives in the new host-tested crate `libs/cell-initial-stack` and is recorded in [ABI boundary records §8](abi-boundary-records.md). More than 16 program headers refuse the spawn.
+  - ostd's `_start` calls `__cellos_libc_start(entry_sp)` before `main`. ostd's weak default runs `.init_array` as before; `mlibc-shim` links mlibc's start-up, which sets up TLS, the Tcb and `environ` and runs the constructors once. mlibc pin patch 0001 makes its static start-up read `AT_PHDR` (Cell images do not map their ELF header).
+  - `/bin/mlibc-smoke` and `/bin/mlibc-posix-x86` have launch rows (capability-free) and run from the shell in a Tier 2 Paged Domain: 3/3 and 7/7 under QEMU TCG and KVM ([evidence](evidence/mlibc-runtime-x86.txt); `scripts/build-x86_64-mlibc-witness-ci.sh`, `scripts/x86/qemu-mlibc-witness.sh`). Twelve Tier-B ledger rows move to `partial`; C `__thread` works in mlibc Cells.
+  - Interim: the mlibc heap arena grows from 4 to 16 MiB until anonymous memory lands (R3b).
+  - Regression: x86 domain lane PASS; RV64 default boot PASS; kernel host tests 421/421.
+  - CP2 approved ([record](../.agents/261104-0802-x86-tier2-gpu-runtime/cp2-cell-initial-stack-auxv-approval.md)), including mlibc pin patch 0001, the weak-default hook linkage and the interim 16 MiB arena. Carried open: Tier-2 threaded-run leak (≈ 56 KiB per 8-thread run; R3's 100-run criterion), RV64/aarch64 mlibc runtime, KVM `-cpu host` (this host's test-hooks boot exits before any Cell).
+- **2026-11-04 — x86 Tier-2 runtime R3a: mlibc `posix` on, thread/futex/time sysdeps, start-up CP opened (owner chose option B).**
+  - mlibc builds with `posix`. New sysdeps: `PrepareStack`, `Clone` (over `Spawn`), `ThreadExit`, `Yield`, `GetTid`, real `FutexWait`/`FutexWake` (17/18; timeouts rounded up, never early), `Sleep`, `GetPid`, `Sysconf`, `GetEntropy`; per-arch thread trampolines. 27 Tier-B rows in the [POSIX ledger](posix-ledger.md).
+  - Fixed in the R2 port: `TcbSet` wrote `tp`/`TPIDR_EL0` directly (overwritten on resume) — now `SetTlsBase` everywhere; `CLOCK_MONOTONIC` was 100× wrong on x86_64; the heap bump pointer was not thread-safe.
+  - Every `abi-bits` header now matches upstream Linux at the pin; each build row installs mlibc headers to `sysroot/include`.
+  - Witness `cells/tests/mlibc-posix-x86` (8 threads, mutex, once, timed condvar, `clock_nanosleep`, TLS/`errno` per thread, `dl_iterate_phdr` + build-id) links on x86_64; CI-safe without mlibc.
+  - Owner decision (option B): the kernel will pass a Linux-shaped initial stack with auxv and ostd's `_start` will call a weak `__cellos_libc_start`. The mlibc side is written; the [CP1 package](../.agents/261104-0802-x86-tier2-gpu-runtime/cp1-cell-initial-stack-auxv.md) AX-1…AX-8 was approved the same day ([record](../.agents/261104-0802-x86-tier2-gpu-runtime/cp1-cell-initial-stack-auxv-approval.md)); implementing it needs the Intel WIP lane, which S1 released at `b3b5d51e`.
+  - Not verified: any run of an mlibc Cell (start-up CP, H-1), aarch64 (no compiler).
+- **2026-11-04 — x86 Tier-2 runtime R2: mlibc pinned, ported to `Sysdeps<Tag>`, x86_64 `libc.a` links.**
+  - mlibc pinned at `ae1092eb` (2026-03-26), the newest upstream commit GCC 13 builds; the next commit needs GCC 14. `scripts/build-mlibc.sh` and `scripts/setup-mlibc.ps1` fetch the pin and clean the clone; [third_party/README.md](../third_party/README.md#mlibc) records it.
+  - `sysdeps/vicell` ported to upstream's `Sysdeps<Tag>` API (the old `sys_*` port no longer compiled), with an x86_64 syscall thunk, `TcbSet` → `SetTlsBase` and an empty x86 CRT. `abi-bits/` now matches upstream at the pin except four Cellos-specific headers.
+  - New x86_64 row: `scripts/mlibc-x86_64.cross` (host GCC, freestanding, SSE2, PIE) → `third_party/mlibc/build-x86_64/`; `libs/mlibc-shim` selects it.
+  - Each row also ships its compiler's `libgcc.a`, linked after `libc.a`: Rust's riscv64 `compiler_builtins` holds soft-float C objects that lld rejects next to lp64d code.
+  - POSIX ledger: 18 Tier-B rows named by tag (`Stat` replaces `sys_fstat`/`sys_stat`); `scripts/check-posix-ledger.py` discovers `Sysdeps<Tag>::operator()`.
+  - Verified: `app-mlibc-smoke` links for riscv64 and x86_64 (PIE, relative relocations only); two clean builds give identical `libc.a` hashes.
+  - Not verified: running mlibc Cells (no launch row on any arch; H-1), `__thread`/`errno` (mlibc static start-up is R3), aarch64 (no compiler on the host).
+- **2026-11-04 — x86 Tier-2 runtime: owner decisions approved, R0 documents, R1 toolchain.**
+  - Approved ("duyệt"):
+    - large-memory CP1 D-M1…D-M14 (`AnonMemory = 440`, `POLICY.BIN` v9 `anon_limit_mib`; handoff approved but not effective);
+    - runtime plan D-R1…D-R10.
+    - [ADR-0034](decisions/0034-hosted-cxx-runtime-profile.md) `cpp-hosted` accepted; it amends ADR-0018 §2.3.
+  - R1:
+    - `tools/cellos-cc` x86 rows: `x86_64-unknown-none` (no SSE) and `x86_64-unknown-none-sse2` (rule H1);
+    - `meson/cellos-x86_64.ini` and `cmake/cellos-x86_64.cmake`, which pin the SSE2 row themselves;
+    - `scripts/check-float-ffi-boundary.py` with 7 unit tests;
+    - the H1 rule in the `ffi-posix` guide.
+    - Verified: meson and CMake builds yield SSE2 objects with `CELLOS_C_TARGET` unset; the no-SSE row refuses `double` ("SSE register return with SSE disabled").
+  - Findings, not fixed here:
+    - `cmake/cellos-aarch64.cmake` falls back to riscv64 at build time when the variable is unset (reproduced);
+    - the checker reports 20 float exports in `libs/api` math (16 direct, 4 macro templates), which `ocel-quickjs` calls from SSE2 C on x86.
+  - The FPU-preserve witness is blocked on H-1: a launch row in S1-held `launch_profile/profiles.rs`.
+- **2026-11-04 — iGPU CP1 confirmation 1 approved ("duyệt theo khuyến nghị"); no code.**
+  - Approved: [record](../.agents/261104-0801-x86-igpu-compute/cp1-approval.md).
+    - `ExportDmaRange = 437`, `MapDmaExport = 438` (`ViDmaExportV1`, 48 bytes) and `RevokeDmaExport = 439`; `service::XE_GPU = 21`.
+    - Client-owned buffer exports (D-G1 = B), one shared VT-d domain with per-client PPGTT, and kernel-only revocation with drain.
+  - The lock handoff is recorded as approved but **not effective**. It needs the WIP lane, S1 releasing the shared kernel files, and breadth 04a/04b/12. ABI boundary records §7 lists the items as approved and not implemented.
+  - G3 is restated as a Tier-2 inference Cell linking `anv`; the Mesa OS-identity patch is allowed.
+  - Registered:
+    - a draft CP1 for x86 Tier-2 large memory (`AnonMemory = 440`, D-M1…D-M14);
+    - the plan `.agents/261104-0802-x86-tier2-gpu-runtime/` (mlibc `posix`, C++17 runtime, SSE2 C ABI, XSAVE, libdrm-lite; D-R2…D-R10 pending).
+- **2026-11-04 — iGPU pre-hardware work (ADR-0033, owner: "triển khai việc chưa cần máy trước").** No kernel, HAL or ABI file changed.
+  - `libs/intel-gpu-core` (new, standalone workspace, `no_std` + `alloc`, `forbid(unsafe_code)`). Logic follows the MIT `xe` driver:
+    - GuC CSS header parse with an exact pin;
+    - Xe2/Xe3 PPGTT entry encoding and a 4 KiB page-table builder;
+    - GuC CT headers and ring arithmetic;
+    - DRM syncobj semantics (binary, timeline, `WAIT_FOR_SUBMIT`/`WAIT_AVAILABLE`, query).
+  - Verified: 50 host tests, clippy `-D warnings`, `no_std` build for `x86_64-unknown-none`. A one-off parse of the real `xe/ptl_guc_70.bin` read release 70.72.1, and header + uCode + RSA (128 + 364,864 + 384 B) equals the blob size.
+  - G1 documents:
+    - `xe` uAPI subset `anv` issues (Mesa `e5d5578`, `xe_drm.h` `05441d69`);
+    - draft CP1 (`ExportDmaRange`/`MapDmaExport`/`RevokeDmaExport` 437–439, `service::XE_GPU = 21`, D-G0…D-G13; not approved);
+    - Mesa `anv` port-gap inventory.
+  - Breadth phase 12 Key Insights amended: the iGPU VT-d unit must translate when the GPU driver Cell is present.
+- **2026-11-04 — Native Intel iGPU compute registered (ADR-0033); no code.**
+  - [ADR-0033](decisions/0033-x86-intel-igpu-native-compute.md): native, compute-only support for one Intel integrated GPU, serving the `ai` service and Haily on the Intel node. The owner chose a native driver over guest passthrough, the iGPU first, and NVIDIA's route later. No new GPU API: applications use Vulkan, and the driver Cell serves the existing `xe` uAPI over IPC.
+  - Verified basis: `xe` driver and `xe_drm.h` are MIT; `xe` officially supports Lunar Lake, Battlemage, Panther Lake and Wildcat Lake; GuC firmware is redistributable under `LICENSE.xe` (no reverse engineering; patent grant covers OSI-licensed operating systems); Mesa `anv` is MIT.
+  - Amendments: ADR-0022 (GPU compute admitted for this plan), ADR-0031 (GPU dependency on phases 04a, 04b, 12). HCL §4 item 11, roadmap gate X86-PC-8, portfolio, current focus and the Haily roadmap updated.
+  - Plan `.agents/261104-0801-x86-igpu-compute/` (G0–G4) and its provenance ledger.
+- **2026-11-04 — Apple Silicon secondary lane registered (ADR-0032); no code.**
+  The owner made Apple Silicon (ADR-0029 aarch64 group 3) an active lane with lower priority than Intel x86-64 C2C, aimed at local AI-agent (Haily) nodes on Macs.
+  - [ADR-0032](decisions/0032-apple-silicon-secondary-lane.md): the Apple lane has its own single-WIP slot. It never takes file ownership from an Intel slice, and Intel goes first at shared checkpoints. Two tracks: a macOS-hosted guest, and bare metal following Asahi coverage (Mac mini M1 first; M4 and later parked). Apple GPU/ANE are out of scope.
+  - Amendments: ADR-0022 (secondary lane), ADR-0029 (group 3 scheduled), ADR-0030 (m1n1 is MIT only up to v1.9.9 and GPL-2.0-or-later from v2.0.0; Asahi kernel licences are per file: `drm/asahi`, RTKit, mailbox and SART offer MIT, while AIC, DART, Apple PCIe and Apple NVMe are GPL-only; OpenBSD `apl*` drivers, ISC, are the primary permissive reference).
+  - Plan `.agents/261104-0711-apple-silicon-group/`: phases 00–09, Asahi reference analysis, provenance ledger with a tainted-session rule for humans and AI agents.
+  - HCL §7 (Apple requirements A1–A8, empty table); roadmap pages and the portfolio updated.
+  - The analysis found these shared-core gaps, all unimplemented: non-VHE-only EL2 host, FIQ decoded as sync, GICv2 only, PSCI-only SMP, `MAX_HARTS = 2`, a 39-bit map with a 4 KiB granule, and no arm64 Image entry.
 - **2026-10-19 — Unified Desktop Phase 11 Complete image and user-path qualification.**
   Completed Phase 11 deliverables under approved [ADR-0027](decisions/0027-haiku-tabs-and-spotlight-hud-desktop.md)
   and implementation plan `.agents/261019-1310-unified-desktop/phase-11-qualification.md`:

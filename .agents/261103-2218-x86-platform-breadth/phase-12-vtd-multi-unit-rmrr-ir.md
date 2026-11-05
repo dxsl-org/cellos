@@ -26,7 +26,7 @@ On Intel servers and many client chipsets, devices sit behind different remappin
 ## Key Insights
 
 - A Xeon IIO stack per socket has its own DRHD; only one unit carries INCLUDE_PCI_ALL. Programming that unit for a device scoped to another unit leaves the device untranslated or blocked.
-- Client chips: one DRHD dedicated to the iGPU plus one INCLUDE_PCI_ALL. Cellos does not drive the iGPU, so its unit can be left with translation off.
+- Client chips: one DRHD dedicated to the iGPU plus one INCLUDE_PCI_ALL. Without the ADR-0033 GPU driver Cell, Cellos does not drive the iGPU, so its unit can stay with translation off. When that Cell is in the image, the iGPU's unit must translate before the Cell starts, and its stolen-memory RMRR stays mapped (ADR-0033 §4; iGPU plan CP1 draft D-G11, noted 2026-11-04).
 - Interrupt remapping needs its own IRTE table per unit. With IR on, MSI address/data are remappable-format handles, and the phase 04a MSI-X carve-out becomes a second layer.
 
 ## Requirements

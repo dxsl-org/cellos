@@ -43,7 +43,7 @@ The maintainer asked whether Cellos should move from "Apache 2.0" to GPL-3.0 so 
 2. **No GPL/AGPL/LGPL code in `kernel/`, `hal/`, `libs/`, or any driver Cell.**
    - Hardware support is written clean-room from public specifications (datasheets, ACPI/UEFI, Intel SDM/VT-d), or derived from code that carries a compatible license.
    - Reuse order:
-     1. A permissive SPDX identifier on the specific file. Examples: ACPICA (Intel/BSD), the Linux `i915`/`xe` DRM drivers (MIT), FreeBSD Intel NIC drivers (BSD), Asahi `m1n1` (MIT), and dual-licensed device-tree bindings.
+     1. A permissive SPDX identifier on the specific file. Examples: ACPICA (Intel/BSD), the Linux `i915`/`xe` DRM drivers (MIT), FreeBSD Intel NIC drivers (BSD), OpenBSD `apl*` Apple Silicon drivers (ISC), Asahi `m1n1` **up to v1.9.9 only** (MIT; GPL-2.0-or-later from v2.0.0, see the 2026-11-04 amendment), and dual-licensed device-tree bindings.
      2. Otherwise, clean-room: one person writes a behavioural specification and another implements it without access to the GPL source.
    - Rewriting C into Rust does not remove copyleft obligations.
 
@@ -90,3 +90,9 @@ It binds no Linux or Asahi copyright holder. Linux's own syscall note does not a
 - `ocel-pdf` (AGPL) must stay optional (`CELLOS_NO_OCEL_PDF=1`). AGPL source-offer obligations apply to any image that ships it. ADR-0017 already flags a commercial MuPDF license as an option.
 - The license gate became meaningful only once `deny.toml` explicitly accepted the existing `ocel-pdf` (AGPL-3.0) and `webpki-roots` (CDLA-Permissive-2.0, CA data) licenses. Before that it failed on both.
 - Adding a copyleft exception now requires an ADR-0030 review entry in the PR, plus a matching edit to `LEAVES` in `scripts/check-copyleft-leaves.sh`.
+
+### Amendment 2026-11-04 — m1n1 licence correction (ADR-0032)
+
+The example "Asahi `m1n1` (MIT)" was incomplete. The m1n1 README states that code up to v1.9.9 stays MIT, and that from v2.0.0 m1n1 is GPL-2.0-or-later, with code checked in after that GPL-only. Current source files carry `SPDX-License-Identifier: GPL-2.0-or-later` (verified 2026-11-04). Only m1n1 tag `v1.9.9` and earlier is a permissive source. Newer m1n1 may be used only as a separate, unmodified boot or development program. OpenBSD's `sys/arch/arm64/dev/apl*` drivers (ISC) are the primary permissive Apple Silicon reference. Rules and the provenance ledger: [ADR-0032](0032-apple-silicon-secondary-lane.md) §7.
+
+A second correction of the same date: the Context sentence "Linux, including the Asahi kernel drivers, is GPL-2.0-only" holds per file only. `irq-apple-aic.c` (GPL-2.0-or-later), `apple-dart.c` (GPL-2.0-only), `pcie-apple.c` and `nvme/host/apple.c` (GPL-2.0) are GPL. `drivers/gpu/drm/asahi/*.rs` (top-level files checked), `drivers/soc/apple/{rtkit,mailbox,sart}.c` (`GPL-2.0-only OR MIT`) and `include/uapi/drm/asahi_drm.h` (MIT) offer MIT. Mesa's Asahi driver is MIT. Those files fall under reuse order 1. The Linux `kernel::` abstractions they call remain GPL and are not copied.

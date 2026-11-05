@@ -1,0 +1,29 @@
+# Slice RE — runtime enablement: Cell initial stack + auxv, libc start-up hook, witness launch rows
+
+Status: **closed 2026-11-04 — CP2 approved by the owner ([record](cp2-cell-initial-stack-auxv-approval.md)); the Intel WIP lane is released.** Design: [CP1](cp1-cell-initial-stack-auxv.md), AX-1…AX-8 [approved](cp1-cell-initial-stack-auxv-approval.md); launch rows per H-1 ([record](handoff-and-xsave-approval.md)). CP2 package: [cp2-cell-initial-stack-auxv.md](cp2-cell-initial-stack-auxv.md).
+
+- **Pure layout:** new crate `libs/cell-initial-stack` (no_std, host-tested): builds the AX-2/AX-4 block for a given stack top.
+- **Kernel:** `kernel/src/task/elf_prepare.rs` (program headers, entropy, write the block into the user stack, carry the entry `sp`), `kernel/src/task.rs` (`prime_user_mode_entry` with an explicit user `sp`), `kernel/Cargo.toml` (dependency).
+- **ostd:** `libs/ostd/src/startup.rs` — `_start` passes its entry `sp` to `__cellos_libc_start`; ostd supplies a weak default that walks `.init_array`.
+- **mlibc:** `libs/mlibc-shim` (strong anchor reference), `third_party/mlibc/sysdeps/vicell/generic/startup.cpp` (anchor).
+- **Launch rows (H-1):** `kernel/src/loader/launch_profile/{profiles,targets,tests}.rs` for `/bin/mlibc-smoke` and `/bin/mlibc-posix-x86` on x86_64 (empty capability ceiling); image/signing rows; a new standalone runner script (H-4).
+- **Docs:** CP2 package, `docs/abi-boundary-records.md` row, guide/ledger/changelog.
+- Not touched: `libs/api/**`, `libs/types/**`, `hal/**`.
+
+## Acceptance
+
+1. ✅ Host tests pin the layout: `cargo test -p cell-initial-stack` 8/8 (alignment, pointer targets, header bound, optional `AT_RANDOM`, refusals).
+2. ✅ Existing Cells boot unchanged: x86 domain lane (`build-x86_64-domain-test-ci.sh` + `qemu-domain-test.sh`) PASS with every marker, including `cpp-smoke`'s static constructor through ostd's weak default; RV64 default kernel (`build-boot-ramdisk-ci.sh`, `qemu-boot-test.sh`) PASS — init, its services and the shell Cell start with no fault (the no-disk boot has no serial session, as before); kernel host tests 421/421, ostd host tests pass; kernel checks on riscv64, aarch64, x86_64 (+ `test-hooks,native-domains`).
+3. ✅ `/bin/mlibc-smoke` (3/3) and `/bin/mlibc-posix-x86` (7/7) pass under x86 QEMU TCG and KVM (`qemu64,+pdpe1gb`): [evidence](../../docs/evidence/mlibc-runtime-x86.txt).
+
+## Deviation Log
+
+1. **Surprise — mlibc's static start-up ignores `AT_PHDR`.** At the pin, `interpreterMain` reads the program headers from `__ehdr_start` in static builds (`options/rtld/generic/main.cpp:544-548`); Cell images do not map their ELF header, so the first run faulted in `_fetchFromPhdrs` on header-sized garbage. **Decision:** one upstream-shaped pin patch, `third_party/mlibc/patches/0001-static-start-honours-at-phdr.patch` (fall back to `__ehdr_start` only when no `AT_PHDR` was passed), applied by `build-mlibc.sh`/`setup-mlibc.ps1`. CP1 §3 assumed redirection alone sufficed.
+2. **Deviation — hook linkage (AX-6).** Instead of a weak *undefined* symbol loaded through the GOT, ostd defines a weak *default* `__cellos_libc_start` (`libs/ostd/src/startup/libc_hook.rs`, walks `.init_array`) and `_start` calls it directly. A weak definition never extracts an archive member, so `mlibc-shim` references `__cellos_libc_start_anchor` (defined next to the strong hook in `startup.cpp`) when libc.a is linked (`cfg(mlibc_linked)`). Same behaviour as AX-6; no GOT entry and no new relocation type in Cells (checked: only `R_*_RELATIVE` on all three arches).
+3. **Deviation — heap arena 4 → 16 MiB.** With `posix` on, mlibc's start-up touches enough slab size classes (256 KiB superblocks) to exhaust 4 MiB (`mlibc: anon arena exhausted`). Interim until R3b; every mlibc Cell carries 16 MiB of `.bss`.
+4. **Deviation — witness C flags.** Lane scripts export no-SSE `CFLAGS_x86_64_unknown_none` for Tier-1 C; cc-rs appended them after the witness's SSE2 flags (`SSE instruction set disabled`). The witness `build.rs` removes the CFLAGS environment and sets its own (rule H1).
+5. **Deviation — file set.** `kernel/src/loader/boot_ceiling.rs` (two LEGACY rows) in addition to `launch_profile/targets.rs` (shell-launch rows); `launch_profile/profiles.rs`/`tests.rs` needed no change (the census tests pin pre-annex rows only). `scripts/unsafe-allowlist.toml` gained the witness's `c-ffi` entries.
+6. **Observation — F1 gate at `b3b5d51e`.** `cellos-sign --check` failed on S1's virtio-pci drivers (no allowlist entries). Interim local runs used an uncommitted, immediately restored allowlist copy; the breadth session then added owner-approved entries in the working tree, and the final evidence runs used the real allowlist (`--check` clean).
+7. **Observation — KVM `-cpu host`.** On this WSL2 host (VMX exposed) the test-hooks kernel exits during boot selftests, before any Cell; the last line is `PKU-SELFTEST: SKIP`, which precedes `X86-VMM-SMOKE` [INFERENCE: the VMM smoke is the cause]. KVM evidence uses `qemu64,+pdpe1gb`. `X86-VMM-SMOKE: FAIL` under TCG appears in the existing domain lane too.
+8. **Not done — RV64 mlibc runtime.** `tools/add-cell-to-disk.py` into `disk_v3.img` left `/bin/mlibc-smoke` unresolved (`PrepareChild refused … NotFound`); RV64 mlibc runtime stays unverified (RV64 boot with the new stack is verified). Zig Level-B Cells enter through their own `_start` → `__libc_start_main`, which still skips mlibc's start-up.
+9. **Finding — threaded runs leak.** `scripts/x86/qemu-mlibc-witness.sh` gained `MLIBC_POSIX_RUNS`. One TCG boot passed 44 consecutive posix runs, then the 45th spawn failed in the kernel (`[fs] OOM: VIFS1 read of 792712 bytes`). `free` (now in the witness image): +564 KiB per 10 threaded runs, +0 per 10 `mlibc-smoke` or `ps` runs. Points at Tier-2 thread exit/reap [INFERENCE]; outside this slice's file set. R3's 100-run criterion stays open; recommended as its own kernel investigation.

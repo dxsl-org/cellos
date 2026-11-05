@@ -10,7 +10,9 @@ owns direction; this index owns child-plan scheduling. Every task must name a
 direct Intel C2C deliverable, required prerequisite, measured bottleneck or
 regression/security/build repair protecting that path, plus its acceptance
 scenario and evidence ceiling. An old plan's `active`/`ready` status is not
-authorization. Plans not admitted below are parked/historical.
+authorization. Plans not admitted below are parked/historical. Apple Silicon lane
+tasks follow [ADR-0032](../docs/decisions/0032-apple-silicon-secondary-lane.md) §3
+instead of the Intel C2C link, with Intel precedence.
 
 ## Sole contract-cutover owner — CELL-CONTRACT-0024
 
@@ -187,6 +189,39 @@ Admission blockers, per the promotion rule:
 | 3 (admitted 2026-11-04; **closed 2026-11-04**, checkpoint 05 signed) | S1 KVM, phases 01-05 | Necessary prerequisite: repeatable C2C nodes as default KVM guests (virtio, no HPET) | `kvm-default-vm`: shell, DHCP over virtio-net, two-boot persistence over virtio-blk and virtio-scsi; the same image under `x86_64-pc` + `intel-iommu` fails closed without `iommu_platform` | QEMU TCG + QEMU/KVM (local) |
 
 Closed with [evidence](261103-2218-x86-platform-breadth/reports/phase-05-evidence.md); S1 releases the WIP lane. Phase 04b (IRQ-driven drivers) is re-planned. Its [option B CP1](261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md) was approved 2026-11-04, and the work waits for the owner to schedule it. Later slices (S2-S6: power/SMP, VMware, Intel physical platform, NICs, qualification) each need their own handoff and, where listed, CP1/CP2. Single-WIP rule applies.
+
+## Registered — native Intel iGPU compute (ADR-0033, owner decision 2026-11-04); not yet in the WIP lane
+
+**Recorded 2026-11-04.** [Plan](261104-0801-x86-igpu-compute/plan.md); [vendor evidence](261104-0801-x86-igpu-compute/research/vendor-and-platform-evidence.md). The owner chose a native driver over guest passthrough, with the integrated GPU first. NVIDIA's route is decided later. Intel lane, single-WIP rule.
+
+| Order | Plan slice | C2C link (ADR-0022) | Acceptance scenario | Evidence ceiling |
+|---|---|---|---|---|
+| G0 (docs, no WIP) | Governance, machine, firmware pin | Direct deliverable for the `ai` service / Haily local inference on the Intel node (ADR-0033) | Machine class approved 2026-11-04 (Panther/Wildcat/Lunar Lake mini PC, I219/I226; [shortlist](261104-0801-x86-igpu-compute/research/machine-candidates.md)); GuC 70.72.1 and `LICENSE.xe` hashes pinned ([firmware-pin](261104-0801-x86-igpu-compute/research/firmware-pin.md)). Pending: exact model + procurement, iGPU/NIC PCI IDs, DMAR graphics DRHD/RMRR | docs |
+| G1 | `xe` uAPI subset + kernel ABI (no new GPU API) | same | **CP1 approved 2026-11-04** ([record](261104-0801-x86-igpu-compute/cp1-approval.md)): 437–439, `XE_GPU = 21`, D-G0…D-G13 as recommended. The handoff takes effect only with the WIP lane, after S1 releases the shared kernel files and after breadth 04a/04b/12. D-G0 (Tier-2 large memory) gets its own CP1 (draft in progress) | host |
+| G2 pre-hardware (owner 2026-11-04, parallel, new files only) | `libs/intel-gpu-core` | same | 50 host tests: GuC CSS header + exact pin (checked against the real `ptl_guc_70.bin`), Xe2/Xe3 PPGTT, GuC CT, DRM syncobj | host |
+| G2 (`blocked` until breadth 04a, 04b, 12) | iGPU driver Cell | same | GPU-written first-light marker read by a client Cell; 10,000 fenced submits; hang reset | host + S2 |
+| G3, G4 | Mesa `anv` Tier-2; inference + Linux comparison | same | Vulkan GEMM matches CPU; model output through the iGPU; four-way measurement report | S2 |
+| G-pre (owner decisions approved 2026-11-04) | [x86 Tier-2 GPU runtime](261104-0802-x86-tier2-gpu-runtime/plan.md) (D-R1…D-R10 approved): R1–R4 and R6 run beside the WIP slice on user-space files; R5 XSAVE needs the lane. [ADR-0034](../docs/decisions/0034-hosted-cxx-runtime-profile.md) `cpp-hosted` accepted. [Large-memory CP1](261104-0801-x86-igpu-compute/cp1-tier2-large-memory.md) approved (`AnonMemory = 440`, D-M1…D-M14); its implementation waits for the lane | Prerequisite of G3 | R1 (in progress): toolchain rows, cross files and the float-boundary checker done; the FPU-preserve witness Cell is not written yet. R2 done (x86 runtime criterion met; RV64 runtime open). R3a done on x86_64 QEMU, including the 100-run criterion (100/100 in one boot on TCG and KVM). **Slice RE closed 2026-11-04, CP2 approved** ([record](261104-0802-x86-tier2-gpu-runtime/cp2-cell-initial-stack-auxv-approval.md)): Cell initial stack v1 frozen, ostd libc hook, mlibc witnesses 3/3 and 7/7 under TCG and KVM ([evidence](../docs/evidence/mlibc-runtime-x86.txt)). **Slices TL and VL closed 2026-11-04** ([TL](261104-0802-x86-tier2-gpu-runtime/slice-thread-exit-leak.md), [VL](261104-0802-x86-tier2-gpu-runtime/slice-vfs-launch-log-retirement.md)): thread-exit domain leak and VFS 64-launch cap fixed; the WIP lane is free. Open: H-2…H-6, X-1…X-7, R3b | host / QEMU |
+
+Admission blockers: owner machine selection and procurement (G0); per-slice lock handoff; Law-1 CP1 (G1) and CP2 (G3). The owner orders GPU slices against the remaining x86 breadth slices.
+
+## Admitted — Apple Silicon secondary lane (ADR-0032, owner decision 2026-11-04); no slice in progress
+
+**Recorded 2026-11-04.** [Plan](261104-0711-apple-silicon-group/plan.md); [Asahi reference analysis](261104-0711-apple-silicon-group/research/asahi-linux-reference.md). The owner made Apple Silicon (ADR-0029 group 3) an active lane with lower priority than Intel. Lane rules (ADR-0032 §2–§3):
+
+- One Apple slice in progress at a time, in its own WIP slot beside the Intel one.
+- An Apple slice never takes file ownership from an Intel slice; on conflict it waits.
+- Intel goes first at shared owner checkpoints.
+- Apple tasks name an Apple milestone and consumer instead of an Intel C2C link.
+
+| Order | Plan slice | Milestone / consumer | Acceptance scenario | Evidence ceiling |
+|---|---|---|---|---|
+| A1 (next, needs handoff) | Phase 02a: arm64 Image entry + VHE host | AS-2, shared-core prerequisite for both Apple tracks | `virt-vhe` lane reaches the shell with EL0 Cells, `QEMU_SMP=2`, hypervisor lane unchanged; `-kernel Image` boots; group-1 `.text` ±1% | QEMU `virt` |
+| A2 | Phases 02b, 02c | AS-2 | High-MMIO (>2^39) map; GICv3 FIQ timer; `-smp 4` | QEMU `virt` |
+| A3 | Phase 03 hosted guest | AS-3, Haily node on a Mac without replacing macOS | Shell, DHCP over virtio-net, two-boot persistence on an Apple host; refuses untranslated DMA without `cellos.profile=aarch64-vm` | `S1-hvf` |
+| A4 (`blocked: hardware`) | Phases 01, 04–07 bare metal | AS-1, AS-4…AS-7 | Per phase files; HCL §7 row | `S2-hv`, then `S2` |
+
+Admission blockers: phase 00 owner checkpoint (lane rules + 02a handoff). The lock inventory has no `hal/arch/arm` relation today (checked 2026-11-04), so the 02a handoff records its file set against active Intel slices only. x86 breadth phase 07a (per-CPU N harts) and phase 17 (`bcm57xx`) stay Intel-owned; Apple extends them afterwards. No Mac purchase is approved.
 
 ## Done — C2C Phase 03 slice e, closure of lifetime, cancellation and fairness (admitted and closed 2026-11-02); C2C Phase 03 DONE
 

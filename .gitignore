@@ -113,6 +113,7 @@ third_party/mlibc-src/
 # mlibc build outputs
 third_party/mlibc/build/
 third_party/mlibc/build-aarch64/
+third_party/mlibc/build-x86_64/
 
 # Vove — private restricted sub-repo (git@github.com:dxsl-org/vove.git)
 # Maintained as a standalone git repo; zero trace in Cellos history.

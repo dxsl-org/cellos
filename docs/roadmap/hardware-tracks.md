@@ -1,6 +1,6 @@
 # Hardware Tracks
 
-**Last updated**: 2026-10-08
+**Last updated**: 2026-11-04 — Apple Silicon secondary lane (ADR-0032)
 
 This page collects the hardware qualification lanes that matter for roadmap
 reading. For the architecture split between board descriptors, SoC facts, and
@@ -16,11 +16,36 @@ machine first; only then consider a second independently qualified Intel node.
 Matching configuration is preferred, not mandatory. This is not purchase authorization:
 phase 07 and an explicit procurement decision remain mandatory.
 
-AMD, new ARM/RISC-V ports and expansion, GUI/browser, AI, robotics, and
+AMD, other new ARM/RISC-V ports and expansion, GUI/browser, AI, robotics, and
 general-purpose OS programs are paused. Existing implementations, inventory,
 historical evidence, and necessary shared-code cross-architecture regressions
 are retained, not converted into new platform work. Strategy approval grants
-no ABI/security exception, remote activation, or production readiness.
+no ABI/security exception, remote activation, or production readiness. Two
+exceptions exist: the Apple Silicon secondary lane below, and native compute on
+one Intel integrated GPU ([ADR-0033](../decisions/0033-x86-intel-igpu-native-compute.md),
+gate X86-PC-8).
+
+## Secondary Lane — Apple Silicon (aarch64 group 3)
+
+[ADR-0032](../decisions/0032-apple-silicon-secondary-lane.md) makes Apple Silicon an
+active lane with lower priority than Intel: one Apple slice at a time, never
+taking files from an Intel slice, with Intel first at shared checkpoints. The
+consumer is a local AI-agent (Haily) node. Plan:
+`.agents/261104-0711-apple-silicon-group/`; reference analysis of Asahi Linux in
+its `research/`.
+
+| Gate | Capability | Present boundary | Notes |
+|---|---|---|---|
+| AS-2 | Shared aarch64 core: arm64 Image entry, VHE host, FIQ, GICv3, spin-table, N harts, wide PA / 16 KiB DMA granule | Not started; today non-VHE EL2, FIQ→sync, GICv2, PSCI only, `MAX_HARTS = 2`, 39-bit map | QEMU `virt` evidence; group-1 lanes must not regress |
+| AS-3 | Hosted guest on Apple Silicon macOS (Virtualization.framework / QEMU-HVF) | Not started; needs GICv3 and aarch64 virtio-pci | `S1-hvf`; not Apple SoC evidence |
+| AS-4…AS-7 | Bare metal on Mac mini M1: m1n1 bench, AIC/UART/SMP, DART/PCIe/Ethernet/xHCI, ANS storage, native boot | Not started; no Apple machine recorded | `S2-hv` under the m1n1 hypervisor, then `S2`; rows in HCL §7 |
+| AS-8 | NEON CPU inference, compared with Asahi Linux and macOS CPU-only | No aarch64 SIMD in `libs/tensor-math` | Unfavourable results are reported, not hidden |
+| AS-9 | M2, then Pro/Max/Ultra; M3 when permissively referenced | Not started | M4 and later parked: Asahi has no PCIe/DART/NVMe for them |
+
+Licensing is per file. GPL-only Linux/Asahi files (AIC, DART, Apple PCIe, Apple
+NVMe) and m1n1 ≥ v2.0.0 are not sources. OpenBSD `apl*` drivers (ISC), m1n1 ≤ v1.9.9
+(MIT), Asahi files with an MIT option (`drm/asahi`, RTKit, mailbox, SART) and the
+dual-licensed Apple DT sources are (ADR-0030 amendment 2026-11-04).
 
 ## Board and SoC Ownership
 
@@ -87,6 +112,7 @@ qualified machine.
 | X86-PC-5 | Multi-port COM / RS232-485 | Phase 06 completed at `qemu` only; RS485 DE/RE timing remains unclaimed | Retained evidence; further serial work requires a named C2C dependency, not an industrial side program |
 | X86-PC-6 | Intel VMX/VT-x + EPT guest execution | Intel guest execution remains incomplete; `.agents/260711-1917-tier3b-x86-vtx/phase-09-vtx-backend-apic.md` owns the prerequisite | Required for Intel Tier 3 and the explicit C2C guest adapter; Intel hardware or a suitable nested-KVM lane is needed; AMD SVM QEMU evidence never qualifies VMX |
 | X86-PC-7 | CPU-inference kernels and vector-state work | Historical inventory only, parked | AI/SIMD is not an independent objective; reopen only for an explicit direct Intel C2C dependency |
+| X86-PC-8 | Native compute on one Intel integrated GPU | Not started; registered 2026-11-04 (ADR-0033, `.agents/261104-0801-x86-igpu-compute/`). Depends on breadth 04a, 04b, 12 | No QEMU model of Intel GPUs: host tests + physical `S2` only. Compute-only and headless; discrete Arc, NVIDIA and AMD stay out |
 
 Retained x86 substrate evidence includes Limine BIOS+UEFI boot, ACPI
 MADT/HPET/MCFG discovery, COM1 with polled fallback, NVMe, and virtio.

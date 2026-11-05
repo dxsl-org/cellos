@@ -36,6 +36,15 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 - [ ] **Ginux Phase 02 debt #23 (owner admission)** — blocked bởi
   [tier1-baseline-admission](260821-1700-tier1-baseline-admission/plan.md) Phase 03
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
+- [ ] **T-1 `cmake/cellos-aarch64.cmake` builds riscv64 when `CELLOS_C_TARGET` is unset.**
+  - `set(ENV{…})` applies at configure time only.
+  - Reproduced 2026-11-04: `riscv64-unknown-elf-gcc: error: unrecognized command-line option '--target=aarch64-unknown-none-elf'`.
+  - Fix as in `cmake/cellos-x86_64.cmake` (`CMAKE_C_COMPILER_LAUNCHER env CELLOS_C_TARGET=…`). Opened by owner approval T-1 ([record](261104-0802-x86-tier2-gpu-runtime/handoff-and-xsave-approval.md)).
+- [ ] **T-2 `ocel-quickjs` x86 floating-point calling-convention mismatch.**
+  - `cells/services/ocel-quickjs/build.rs:184-191` compiles C with `-msse2 -mfpmath=sse`, but `libs/api` C99 math exports `f64` from soft-float Rust.
+  - `scripts/check-float-ffi-boundary.py` reports 20 exports (16 direct, 4 macro templates).
+  - No x86 test boots it; RV64 only (`tests/integration/tests/ocel-quickjs.rs:31-36`).
+  - Needs a reproducer first, then a fix that keeps `libs/api` unchanged or goes through Law-1. Opened by owner approval T-2.
 
 **C2C program (mở, có gate):**
 - [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical

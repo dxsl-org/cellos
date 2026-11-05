@@ -11,7 +11,10 @@ fills rows; phase 01 defines the model).
 limits qualification to the headless Intel x86-64 Cell-to-Cell Anywhere profile.
 Select one exact machine first; qualify it before a separately authorized second
 node. Reusing its configuration is preferred, not required; each different
-configuration needs independent qualification. AMD/new ARM/RISC-V expansion is parked.
+configuration needs independent qualification. AMD/new ARM/RISC-V expansion is parked,
+except Apple Silicon, which is an active secondary lane under
+[ADR-0032](decisions/0032-apple-silicon-secondary-lane.md) with its own requirements in
+[§7](#7-apple-silicon-aarch64-group-3). Sections 1–6 cover x86 only.
 This list and completed QEMU gates authorize neither purchase nor remote/production
 activation; phase 07 and the existing security/authority gates still apply.
 
@@ -130,6 +133,11 @@ is a stop, not a caveat.
    a second node must match and wait for first-machine qualification and approval.
 10. Record industrial extras only; multi-port serial QEMU evidence does not
     claim physical RS485 timing, watchdog or GPIO support.
+11. If the machine is also the GPU target (ADR-0033): record the iGPU PCI ID and
+    generation. Prefer an `xe`-official platform (Lunar Lake, Panther Lake,
+    Wildcat Lake). ADL-N (N100/N150), MTL and ARL are force-probe in `xe`, a
+    recorded risk. Also record whether the ACPI DMAR has a graphics DRHD and a
+    stolen-memory RMRR. No GPU is qualified, and GPU support is not an HCL requirement.
 
 ## 5. Adding or changing a row
 
@@ -152,3 +160,37 @@ is a stop, not a caveat.
 
 Empty. A machine rejected for a mandatory requirement (most likely R3, R1, R2 or
 R4) is listed here with the reason, so the same mistake is not repeated.
+
+## 7. Apple Silicon (aarch64 group 3)
+
+**Owner:** `.agents/261104-0711-apple-silicon-group/` (phase 07 fills rows).
+**Authority:** [ADR-0032](decisions/0032-apple-silicon-secondary-lane.md), a lower-priority
+lane than Intel. Same closed-list rule as §1: a Mac that is not in the table is not
+supported. The admitted chip order is M1 (t8103), then M2 (t8112), then
+M1/M2 Pro/Max/Ultra. M3 needs a permissive reference first; M4 and later are parked.
+
+Evidence levels for this section: `S1-qemu` and `S1-hvf` (Cellos as a guest of
+macOS on Apple Silicon) are virtual-hardware results and never create a row.
+`S2-hv` (bare metal under the m1n1 hypervisor) is development evidence for a phase
+and does not create a row either. A row needs a native `S2` capture or `S3`.
+
+| # | Requirement | Why | Verified how |
+|---|---|---|---|
+| A1 | Exact machine on the admitted chip list, with an Asahi installer-supported model | Cellos follows Asahi's hardware coverage; every chip is its own image (ADR-0029 §5) | Model identifier, SoC, RAM, serial and system-firmware (iBoot) version in the capture |
+| A2 | Boot volume set to Permissive Security by the Asahi installer/1TR, with macOS and its recovery left intact | No signed or measured Cellos boot exists. The machine pin is change detection only (same limit as R3) | Installer transcript and the 1TR steps used |
+| A3 | Bootloader versions recorded: m1n1 stage 1/2, and U-Boot + Limine when the EFI path is used | m1n1 builds the FDT the kernel trusts; an unrecorded loader makes the row unreproducible | Versions and hashes of each stage |
+| A4 | A console: s5l UART through a USB-C debug adapter, or a framebuffer plus USB keyboard | No COM1 equivalent exists; the m1n1 vUART only exists under the hypervisor | Capture taken through the stated console |
+| A5 | Every DMA-capable device in use behind a DART with translation on and bypass refused; internal storage only under the phase 06 SART decision | `DmaIsolation::Required` (ADR-0032 §8) | Boot log of DART binding plus the DART fault test |
+| A6 | Internal NVMe (ANS2): mount → write → reboot → read on the Cellos partition only; macOS still boots afterwards | The disk also holds macOS, recovery and iSC partitions | Storage capture plus a macOS boot check |
+| A7 | Wired Ethernet with a captured PCI ID admitted by a shipped driver | Exact-ID admission, as R6 | `lspci -nn` under Asahi + Cellos bind and DHCP Tx/Rx capture |
+| A8 | All cores online (P and E clusters), timer and IPIs by FIQ | Spin-table SMP and AIC FIQ are Apple-specific paths | Boot log hart table and tick/IPI counters |
+
+Never write to the SPI NOR, SEP, system-firmware or iSC partitions, and never
+change boot policy beyond the installer's own steps. A machine that fails A1–A8
+goes into the rejected list below with the reason.
+
+| Machine / serial | SoC / RAM | System firmware | m1n1 / loader | A4 console | A5 DART | A6 storage | A7 NIC / PCI ID | A8 cores | Profile / pin digest | Level | Captured | Log | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| _(none)_ | | | | | | | | | | | | | |
+
+Rejected Apple machines: none.

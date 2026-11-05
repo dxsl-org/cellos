@@ -207,3 +207,24 @@ CP1 is enforced as `a3` zero; `a4`/`a5` never reach the kernel.
 | Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP1 |
 |---|---|---|---|---|---|---|---|
 | `SystemPower` (syscall 436) | K | register envelope, `a0` ∈ {1, 2} | none | n/a | `a1..a5` zero | `SupervisorCap` checked before any register write | [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §5 |
+
+## 7. Records from ADR-0033 (Intel iGPU compute)
+
+CP1 confirmation 1 was approved on 2026-11-04 ([package](../.agents/261104-0801-x86-igpu-compute/cp1-gpu-kernel-abi.md), [approval](../.agents/261104-0801-x86-igpu-compute/cp1-approval.md)). None of these is implemented. Numbers are provisional until CP2. The GPU requests themselves are the existing Linux `xe` uAPI carried over IPC; Cellos adds no GPU ABI.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP1 |
+|---|---|---|---|---|---|---|---|
+| `ExportDmaRange` (syscall 437) | K | register envelope | none | n/a | per package §5.1 | caller owns the range; holder named by registry service id in `DMA_EXPORT_SERVICES` | package §5.1 |
+| `MapDmaExport` (syscall 438) → `ViDmaExportV1` | K | syscall 438 envelope + exact 48 bytes | u16 version, set {1} | exact 48 | reserved zero, unknown flags refused | caller is the named holder with `PcieDriverCap` and owns the BDF; graphics DRHD translating; allowlist bit 48 shared with `GrantDma` | package §5.2 |
+| `RevokeDmaExport` (syscall 439) | K | register envelope | none | n/a | `a1..a3` zero | caller is the lease owner or holder; others get `FileNotFound` | package §5.3 |
+| `service::XE_GPU = 21` | K | registry constant | n/a | n/a | n/a | init-registered; added to `OWNER_WATCH_SERVICES` | package §5.4 |
+| `AnonMemory` (syscall 440), op-multiplexed map / unmap / protect | K | register envelope | none | n/a | per package; `prot` ∈ {none, R, RW}, never EXEC | x86_64 private-root callers only (others `NotSupported`); commit charged against the `POLICY.BIN` v9 `anon_limit_mib` budget before any frame is mapped; ranges under a live DMA export return `TryAgain`; no allowlist bit | [package](../.agents/261104-0801-x86-igpu-compute/cp1-tier2-large-memory.md) (approved 2026-11-04, [record](../.agents/261104-0801-x86-igpu-compute/cp1-tier2-large-memory-approval.md)) |
+| `POLICY.BIN` v9 `anon_limit_mib` | K, inside signed bytes | policy version 9 | v9 | per package | per package | per package | same package (D-M4) |
+
+## 8. Records from the x86 Tier-2 runtime plan (slice RE)
+
+CP1 AX-1…AX-8 approved 2026-11-04 ([package](../.agents/261104-0802-x86-tier2-gpu-runtime/cp1-cell-initial-stack-auxv.md), [approval](../.agents/261104-0802-x86-tier2-gpu-runtime/cp1-cell-initial-stack-auxv-approval.md)); implemented in slice RE; **CP2 approved 2026-11-04, frozen** ([package](../.agents/261104-0802-x86-tier2-gpu-runtime/cp2-cell-initial-stack-auxv.md), [approval](../.agents/261104-0802-x86-tier2-gpu-runtime/cp2-cell-initial-stack-auxv-approval.md)). The host tests in `libs/cell-initial-stack` pin the layout.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP |
+|---|---|---|---|---|---|---|---|
+| Cell initial stack v1 (argc, argv, envp, auxv at the entry `sp`) | K | layout pinned by `libs/cell-initial-stack` (64-bit LE words, `sp` 16-byte aligned) | v1 = this layout; no version word — a change is a new CP | bounded: ≤ 16 program headers, ≤ 8 auxv pairs, ≤ `MAX_BYTES` (1072) | `argc` = 0, argv/envp empty; `AT_BASE` carries the load base (Cellos meaning); unknown auxv keys are not emitted | built before the task exists; a header table that is not 56-byte entries or exceeds 16 entries refuses the spawn (`InvalidInput`) | CP2 approved, frozen |

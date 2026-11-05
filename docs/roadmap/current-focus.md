@@ -183,13 +183,36 @@ parked AI/GPU/browser program, change the ten-phase DAG or release existing
 ABI/protected/physical/production gates. First-version completion triggers an
 entry review, never automatic deployment.
 
+### Intel lane addition — native iGPU compute
+
+[ADR-0033](../decisions/0033-x86-intel-igpu-native-compute.md) (owner decision
+2026-11-04) admits native, compute-only support for one Intel integrated GPU,
+serving the `ai` service and Haily's local inference on the Intel node. The order
+is: a driver Cell modelled on the MIT `xe` driver that serves the existing `xe`
+uAPI (no new GPU API); Mesa `anv` (Vulkan) as a Tier-2 Cell; then measured inference against
+Linux on the same machine. It follows the Intel single-WIP rule and needs x86
+breadth phases 04a, 04b and 12 first. Plan: `.agents/261104-0801-x86-igpu-compute/`.
+NVIDIA's route is a later owner decision. Nothing is implemented yet.
+
+### Secondary lane — Apple Silicon for local agent nodes
+
+[ADR-0032](../decisions/0032-apple-silicon-secondary-lane.md) (owner decision
+2026-11-04) makes Apple Silicon an active lane with lower priority than Intel C2C.
+It has its own single-WIP slot, never takes files from an Intel slice, and waits
+behind Intel at shared checkpoints. Its consumer is a Haily/local-agent node on a
+Mac: first as a guest of macOS (hosted track), then bare metal on a Mac mini M1
+following Asahi Linux's hardware coverage. Plan:
+`.agents/261104-0711-apple-silicon-group/`. Nothing is implemented yet, and no
+Mac purchase is approved.
+
 ### Parked until an explicit scope decision
 
-ARM/RPi3/RISC-V/AMD bring-up and peripheral expansion; LAB/BASE/ASSEMBLY and robot
-acceptance; desktop/ViUI/Ocel/browser work; AI/NPU/GPU programs; general office or
-server replacement; standalone runtime breadth and general virtualization-platform
-expansion. Existing non-Intel authority/security work can supply a named C2C
-dependency, not an automatic second hardware program.
+ARM (other than the Apple Silicon lane)/RPi3/RISC-V/AMD bring-up and peripheral
+expansion; LAB/BASE/ASSEMBLY and robot acceptance; desktop/ViUI/Ocel/browser work;
+AI/NPU/GPU programs other than the ADR-0033 Intel iGPU plan (Apple GPU/ANE, discrete, NVIDIA and AMD GPUs included); general office or server replacement;
+standalone runtime breadth and general virtualization-platform expansion. Existing
+non-Intel authority/security work can supply a named C2C dependency, not an
+automatic additional hardware program.
 
 ### Evidence and security
 

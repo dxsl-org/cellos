@@ -126,6 +126,8 @@ readiness. Reuse retained evidence at its original ceiling.
 | Cross-node work | Authenticated/protected peer authority, explicit uncertain outcomes, bounded routing/placement/application budgets and safe drain | P08; no implicit remote fallback or automatic retry of uncertain side effects |
 | Legacy tool participants | Qualified isolated native or guest execution and explicit service adapters only where required | P07/P09; Intel VMX/guest participation has its own gates |
 | Physical deployment | Qualified first Intel node, then a separately qualified second node; exact NIC/storage/firmware/DMA and operational captures | P05/P10 and the [HCL](../hardware-compatibility-list.md) |
+| Local GPU inference (Intel) | Compute-only Intel iGPU through Vulkan (no Cellos-specific GPU API; the driver serves the existing `xe` uAPI), selected by the `ai` service with CPU fallback; measured against Linux on the same machine | [ADR-0033](../decisions/0033-x86-intel-igpu-native-compute.md), plan `.agents/261104-0801-x86-igpu-compute/` (G1–G4) |
+| Apple Silicon node (secondary lane) | A Haily node on a Mac: first as a macOS-hosted Cellos guest, then bare metal on a Mac mini M1; CPU-only (NEON) inference measured against Asahi Linux and macOS CPU-only on the same Mac | [ADR-0032](../decisions/0032-apple-silicon-secondary-lane.md), plan `.agents/261104-0711-apple-silicon-group/` (AS-3, AS-7, AS-8). No Apple GPU/ANE acceleration; lower priority than every Intel row |
 
 ## Deferred rollout roadmap
 

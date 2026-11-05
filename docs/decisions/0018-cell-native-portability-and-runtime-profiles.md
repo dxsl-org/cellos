@@ -9,6 +9,10 @@
 > TLS/futex and justified native stream mechanisms remain kernel primitives; no blanket
 > pipe deletion or new Linux personality is authorized. Existing ABI/implementation stays
 > in force until approved migration under the [cutover plan](../../.agents/261011-1200-cell-contract-authority/plan.md).
+>
+> **2026-11-04 profile amendment:** [ADR-0034](0034-hosted-cxx-runtime-profile.md)
+> adds the `cpp-hosted` profile (LLVM libc++/libc++abi/libunwind over mlibc
+> `posix`, x86_64 Tier-2 first) beside §2.3's `cpp-freestanding`.
 
 ## 1. Context
 

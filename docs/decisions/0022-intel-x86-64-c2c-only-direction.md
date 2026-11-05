@@ -1,7 +1,7 @@
 # ADR-0022: Make Intel x86-64 Cell-to-Cell Anywhere the sole development direction
 
 **Date**: 2026-10-08
-**Status**: Accepted — direction and scheduling; not implementation or hardware qualification. Amended 2026-10-31 by [ADR-0029](0029-platform-image-families-and-runtime-detection.md) (bounded aarch64 core refactor exception).
+**Status**: Accepted — direction and scheduling; not implementation or hardware qualification. Amended 2026-10-31 by [ADR-0029](0029-platform-image-families-and-runtime-detection.md) (bounded aarch64 core refactor exception), 2026-11-04 by [ADR-0031](0031-x86-platform-breadth-kvm-vmware-intel.md) (x86 platform breadth), 2026-11-04 by [ADR-0032](0032-apple-silicon-secondary-lane.md) (Apple Silicon secondary lane) and 2026-11-04 by [ADR-0033](0033-x86-intel-igpu-native-compute.md) (native Intel iGPU compute).
 **Decider**: Cellos maintainer, through explicit approval in the planning conversation
 
 ## Context
@@ -196,6 +196,37 @@ PC/server device families are admitted, each by exact device ID, through the pla
 task-admission rule and the single-WIP rule do not change. AMD stays parked. No
 hardware purchase is implied. Each slice still needs its own handoff, and CP1/CP2
 where it changes ABI.
+
+### Amendment 2026-11-04 — Apple Silicon secondary lane
+
+Owner decision recorded in [ADR-0032](0032-apple-silicon-secondary-lane.md). Intel
+x86-64 C2C stays the primary direction. Apple Silicon (ADR-0029 aarch64 group 3)
+becomes an active **secondary** lane with lower priority:
+
+- It has its own single-WIP slot. An Apple slice never takes file ownership from
+  an Intel slice, and Intel goes first at shared owner checkpoints.
+- Apple tasks name an Apple milestone and consumer (Haily/local-agent node or a
+  shared-core prerequisite) instead of an Intel C2C link, plus the usual
+  acceptance scenario and evidence ceiling.
+- §Paused scope still parks AMD, RISC-V, MCU, other new ARM bring-up and RPi
+  expansion. Shared aarch64 core work that the Apple lane needs is admitted only
+  through that lane's plan, `.agents/261104-0711-apple-silicon-group/`.
+- No hardware purchase, ABI change or file handoff is implied; each slice needs
+  its own.
+
+### Amendment 2026-11-04 — native Intel GPU compute
+
+Owner decision recorded in [ADR-0033](0033-x86-intel-igpu-native-compute.md).
+§Paused scope no longer parks GPU work entirely. Native, compute-only support for
+one Intel integrated GPU is admitted under the Intel direction, through
+`.agents/261104-0801-x86-igpu-compute/`. Its consumer is the `ai` service and
+Haily's local inference on the Intel node.
+
+- It follows the Intel single-WIP rule and the admission rule (milestone,
+  acceptance scenario, evidence ceiling).
+- Display, media, discrete GPUs, NVIDIA and AMD GPUs stay parked. NVIDIA's route
+  is a later owner decision.
+- No hardware purchase, ABI change or file handoff is implied.
 
 ## Related operational tooling decision
 
