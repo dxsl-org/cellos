@@ -218,11 +218,12 @@ What the port needed, and what it did **not**:
 
 | Need | Resolution |
 |---|---|
-| libc (memory, strings, stdio, math) | Already exported as the Tier-A C ABI in `libs/api/src/services/posix/`; the engine links no external libc, so this cell builds on CI's bare-elf GCC, which ships no `libc.a` |
+| libc (memory, strings, stdio) | Already exported as the Tier-A C ABI in `libs/api/src/services/posix/`; the engine links no external libc, so this cell builds on CI's bare-elf GCC, which ships no `libc.a` |
+| math (`sqrt`, `pow`, `exp`, …) | Not from `libs/api`: `vendor/include/math.h` maps each name to a C wrapper that passes the `double` as raw 64-bit bits to `src/float_abi.rs` (over `libm`). No float crosses C↔Rust, because on x86_64 the C is SSE2 and the Rust is soft-float, so their float registers differ |
 | float `printf`, `strtod` | Not needed: this release carries its own float64 parse/print (`dtoa.c`, `js_dtoa`/`js_atod`) and only formats `%u`/`%s` |
 | `setjmp`/`longjmp` | Not needed either (upstream includes `<setjmp.h>` in `dtoa.c` and never jumps); Tier A exports them regardless |
 | `malloc`/`free`/`realloc` | Tier A, over the cell's own heap (`ostd::declare_custom_heap!`) |
-| `abs`, `lrint` | `abs` in the cell's C glue, `lrint` over `libm` in the cell's Rust shim |
+| `abs`, `lrint` | `abs` in the cell's C glue; `lrint` (C99 `long lrint(double)`) through the same integer-only boundary in `src/float_abi.rs` |
 | `gettimeofday`, `clock_gettime`, `localtime_r` | The cell's shim, over the cell clock; `localtime_r` reports **UTC** (no timezone database) and `Date` therefore has no local time |
 | Atomics / `SharedArrayBuffer` | Compiled out (`VIOS_NO_ATOMICS`): a cell is single-threaded, and `Atomics.wait` cannot block without threads. This is the one local deviation from upstream source, marked in `vendor/quickjs/quickjs.c` |
 | Headers | `vendor/include/` declares exactly the subset the engine uses — no toolchain libc headers involved |
