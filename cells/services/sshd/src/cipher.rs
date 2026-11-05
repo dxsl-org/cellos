@@ -7,6 +7,12 @@ use alloc::vec::Vec;
 use chacha20::cipher::{KeyIvInit, StreamCipher};
 use chacha20::ChaCha20Legacy;
 
+/// RFC 4253 §6.1: before NEWKEYS a packet is at most 35000 bytes in total
+/// (length field included, no MAC), so `packet_length` ≤ 34996.
+pub const MAX_PLAINTEXT_PACKET_LENGTH: usize = 35000 - 4;
+/// After NEWKEYS: largest `packet_length` accepted from the client.
+const MAX_PACKET_LENGTH: usize = 65536;
+
 pub enum CipherMode {
     Plaintext,
     ChaCha20Poly1305 {
@@ -115,7 +121,6 @@ impl CipherMode {
                 cipher_k2.apply_keystream(body);
 
                 // Compute Poly1305 tag over enc_len || enc_body
-                let _poly = chacha20poly1305::Tag::default(); // tag calculation
                 let mut mac_data = Vec::with_capacity(4 + body.len());
                 mac_data.extend_from_slice(&enc_len);
                 mac_data.extend_from_slice(body);
@@ -148,7 +153,7 @@ impl CipherMode {
                     return Ok(None);
                 }
                 let packet_length = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
-                if !(2..=65536).contains(&packet_length) {
+                if !(2..=MAX_PLAINTEXT_PACKET_LENGTH).contains(&packet_length) {
                     return Err(());
                 }
                 let total_needed = 4 + packet_length;
@@ -186,10 +191,8 @@ impl CipherMode {
                 dec_len_bytes.copy_from_slice(&buf[0..4]);
                 cipher_k1.apply_keystream(&mut dec_len_bytes);
                 let packet_length = u32::from_be_bytes(dec_len_bytes) as usize;
-                if !(2..=65536).contains(&packet_length) {
-                    ostd::io::print("[cipher] invalid len: ");
-                    ostd::io::print_usize(packet_length);
-                    ostd::io::println("");
+                if !(2..=MAX_PACKET_LENGTH).contains(&packet_length) {
+                    crate::log("[cipher] invalid packet length");
                     return Err(());
                 }
                 let total_needed = 4 + packet_length + 16;
@@ -215,7 +218,7 @@ impl CipherMode {
                 let actual_tag = &buf[4 + packet_length..total_needed];
 
                 if computed_tag.as_slice() != actual_tag {
-                    ostd::io::println("[cipher] MAC mismatch!");
+                    crate::log("[cipher] MAC mismatch");
                     return Err(());
                 }
                 // Decrypt payload with K2 at counter 1

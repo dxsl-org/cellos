@@ -1,176 +1,94 @@
-//! SSH-2.0 Server daemon for Cellos.
-//! Listens on TCP port 22 and provides an authenticated remote shell session.
+//! SSH-2.0 server daemon for Cellos.
+//!
+//! Listens on TCP port 22 and serves one connection at a time:
+//! curve25519-sha256 key exchange with a fresh per-connection scalar, the
+//! persisted Ed25519 host key (`host_key`), chacha20-poly1305, and `publickey`
+//! (`ssh-ed25519`) login against `/srv/sshd/authorized_keys` (`auth`).
+//! A connection that has not logged in within [`LOGIN_GRACE_MS`] is dropped so
+//! one idle peer cannot hold the single slot.
 
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::syscall::service;
-use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_yield};
 
+mod auth;
+mod authorized_keys;
+mod base64;
 mod cipher;
+mod connection;
+mod handshake;
+mod host_key;
 mod kex;
 mod session;
+mod shell;
 mod ssh_packet;
 
-use session::{SessionPhase, SshSession};
-
-api::declare_syscalls![Send, Recv, Log, LookupService, GetTime, GetProcs];
+// GetRandom: per-connection KEX secrets and the first host key.
+// VfsMutate: creating /srv/sshd and the host key seed on first start.
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    LookupService,
+    GetTime,
+    GetProcs,
+    GetRandom,
+    VfsMutate
+];
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(6 * 1024 * 1024);
 
-const SSH_PORT: u16 = 22;
+/// Time from accept to `USERAUTH_SUCCESS` before the connection is dropped.
+pub const LOGIN_GRACE_MS: u64 = 60_000;
 
-#[cfg(not(test))]
-ostd::cell_main!(cell_main);
-
-fn cell_main() {
+/// Serial log line. Host unit tests have no kernel to log to.
+pub fn log(msg: &str) {
     #[cfg(target_os = "none")]
-    init_custom_heap();
-
-    println("[sshd] Cellos SSH-2.0 daemon starting...");
-
-    // 1. Resolve network service
-    let net_tid = loop {
-        if let Some(tid) = sys_lookup_service(service::NET) {
-            break tid;
-        }
-        sys_yield();
-    };
-    println("[sshd] Network service resolved");
-
-    // 2. Open TCP listening socket on port 22
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let mut resp_buf = [0u8; IPC_BUF_SIZE];
-
-    let listen_req = NetRequest::TcpListen { port: SSH_PORT };
-    let listen_cap = loop {
-        let resp = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-            net_tid,
-            &listen_req,
-            &mut req_buf,
-            &mut resp_buf,
-        );
-        match resp {
-            Ok(NetResponse::CapId(cap)) => {
-                println("[sshd] TCP listener active on 0.0.0.0:22");
-                break cap;
-            }
-            _ => {
-                sys_yield();
-            }
-        }
-    };
-
-    // 3. Client connection slot
-    let mut active_client: Option<(u32, SshSession)> = None;
-
-    // 4. Reactor loop
-    let accept_req = NetRequest::TcpAccept { cap_id: listen_cap };
-
-    loop {
-        let mut work_done = false;
-
-        // Try accepting new connection if slot is empty
-        if active_client.is_none() {
-            let resp = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                net_tid,
-                &accept_req,
-                &mut req_buf,
-                &mut resp_buf,
-            );
-            if let Ok(NetResponse::CapId(client_cap)) = resp {
-                println("[sshd] Client connected! Starting SSH handshake...");
-                let session = SshSession::new();
-                let initial = session.initial_outbound();
-
-                // Send version banner: SSH-2.0-Cellos_1.0\r\n
-                let send_req = NetRequest::TcpSend {
-                    cap_id: client_cap,
-                    data: &initial,
-                };
-                let _ = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                    net_tid,
-                    &send_req,
-                    &mut req_buf,
-                    &mut resp_buf,
-                );
-
-                active_client = Some((client_cap, session));
-                work_done = true;
-            }
-        }
-
-        // Process active client
-        if let Some((client_cap, ref mut session)) = active_client {
-            let recv_req = NetRequest::TcpRecv {
-                cap_id: client_cap,
-                buf_len: 2048,
-            };
-            let resp = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                net_tid,
-                &recv_req,
-                &mut req_buf,
-                &mut resp_buf,
-            );
-
-            match resp {
-                Ok(NetResponse::Data(chunk)) if !chunk.is_empty() => {
-                    work_done = true;
-                    let outbound = session.process_incoming(chunk);
-                    if !outbound.is_empty() {
-                        // Send in chunks <= 2048
-                        for slice in outbound.chunks(2048) {
-                            let send_req = NetRequest::TcpSend {
-                                cap_id: client_cap,
-                                data: slice,
-                            };
-                            let _ = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                                net_tid,
-                                &send_req,
-                                &mut req_buf,
-                                &mut resp_buf,
-                            );
-                        }
-                    }
-
-                    if session.phase == SessionPhase::Closed {
-                        println("[sshd] Session closed, closing socket");
-                        let close_req = NetRequest::TcpClose { cap_id: client_cap };
-                        let _ = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                            net_tid,
-                            &close_req,
-                            &mut req_buf,
-                            &mut resp_buf,
-                        );
-                        active_client = None;
-                    }
-                }
-                Ok(NetResponse::Eof) | Ok(NetResponse::Err(_)) | Err(_) => {
-                    println("[sshd] Client disconnected or socket closed");
-                    let close_req = NetRequest::TcpClose { cap_id: client_cap };
-                    let _ = ostd::ipc::service_call_typed::<NetRequest<'_>, NetResponse<'_>>(
-                        net_tid,
-                        &close_req,
-                        &mut req_buf,
-                        &mut resp_buf,
-                    );
-                    active_client = None;
-                    work_done = true;
-                }
-                _ => {}
-            }
-        }
-
-        if !work_done {
-            sys_yield();
-        }
-    }
+    ostd::io::println(msg);
+    #[cfg(not(target_os = "none"))]
+    let _ = msg;
 }
 
-#[cfg(test)]
+pub fn log2(prefix: &str, msg: &str) {
+    #[cfg(target_os = "none")]
+    {
+        ostd::io::print(prefix);
+        ostd::io::println(msg);
+    }
+    #[cfg(not(target_os = "none"))]
+    let _ = (prefix, msg);
+}
+
+#[cfg(target_os = "none")]
+ostd::cell_main!(cell_main);
+
+#[cfg(target_os = "none")]
+fn cell_main() {
+    init_custom_heap();
+    log("[sshd] Cellos SSH-2.0 daemon starting...");
+
+    while ostd::syscall::sys_lookup_service(api::syscall::service::VFS).is_none() {
+        ostd::syscall::sys_yield();
+    }
+    let host_key = match host_key::load_or_create(kex::kernel_entropy) {
+        Ok(keypair) => keypair,
+        Err(why) => {
+            log2("[sshd] refusing to start: ", why);
+            return;
+        }
+    };
+    log2(
+        "[sshd] host key ssh-ed25519 ",
+        &host_key::fingerprint(&host_key),
+    );
+    reactor::run(host_key);
+}
+
+#[cfg(target_os = "none")]
+mod reactor;
+
+#[cfg(not(target_os = "none"))]
 fn main() {}

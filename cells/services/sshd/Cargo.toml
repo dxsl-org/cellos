@@ -14,7 +14,10 @@ api = { path = "../../../libs/api", version = "0.1.0" }
 types = { path = "../../../libs/types", version = "0.1.0" }
 serde = { version = "1", default-features = false, features = ["derive"] }
 ed25519-compact = { version = "2", default-features = false }
-x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets"] }
+# The RFC 4252 §7 publickey signing input and strict ed25519 verification,
+# shared with the Cellos ssh client and KMS so all three sign/verify the same bytes.
+vissh = { path = "../../../libs/vissh", version = "0.1.0" }
+x25519-dalek = { version = "2.0", default-features = false, features = ["static_secrets", "zeroize"] }
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 chacha20 = { version = "0.9", default-features = false }
 poly1305 = { version = "0.8", default-features = false }
