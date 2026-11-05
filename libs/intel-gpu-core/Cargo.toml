@@ -1,0 +1,13 @@
+[package]
+name = "intel-gpu-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+description = "Hardware-independent logic for the Intel Xe2/Xe3 integrated-GPU driver Cell (ADR-0033): GuC firmware header, PPGTT encoding, GuC CT transport"
+
+# Standalone until the driver Cell (plan G2) joins the root workspace; this keeps
+# the pre-hardware work free of shared workspace edits (same pattern as
+# libs/durable-charge-codec).
+[workspace]
+
+[dependencies]
