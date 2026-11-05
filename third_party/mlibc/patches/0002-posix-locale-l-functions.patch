@@ -1,0 +1,88 @@
+Cellos patch to mlibc (MIT) at pin ae1092eb…
+The five POSIX-2008 / BSD locale-suffixed functions LLVM libc++ needs
+(cpp-hosted profile, ADR-0034): strtoll_l and strtoull_l from <locale>,
+strxfrm_l, wcscoll_l and wcsxfrm_l from libc++'s locale.cpp. mlibc supports
+only the C/POSIX locale, so each forwards to its unsuffixed function.
+
+diff --git a/options/ansi/include/wchar.h b/options/ansi/include/wchar.h
+index 2db19b04..a508e249 100644
+--- a/options/ansi/include/wchar.h
++++ b/options/ansi/include/wchar.h
+@@ -137,6 +137,9 @@ size_t wcslcpy(wchar_t *__restrict __dst, const wchar_t *__restrict __src, size_
+ wchar_t *wcpcpy(wchar_t *__restrict __ws1, const wchar_t *__restrict __ws2);
+ wchar_t *wcpncpy(wchar_t *__restrict __ws1, const wchar_t *__restrict __ws2, size_t __n);
+ 
++int wcscoll_l(const wchar_t *__a, const wchar_t *__b, locale_t __loc);
++size_t wcsxfrm_l(wchar_t *__restrict __dest, const wchar_t *__restrict __src, size_t __n, locale_t __loc);
++
+ #endif /* __MLIBC_POSIX_OPTION */
+ 
+ #endif /* !__MLIBC_ABI_ONLY */
+diff --git a/options/posix/generic/posix_stdlib.cpp b/options/posix/generic/posix_stdlib.cpp
+index 5f55b4c6..d51828e6 100644
+--- a/options/posix/generic/posix_stdlib.cpp
++++ b/options/posix/generic/posix_stdlib.cpp
+@@ -502,6 +502,21 @@ int strcoll_l(const char *a, const char *b, locale_t) {
+ 	return strcmp(a, b);
+ }
+ 
++// Integer parsing does not depend on the locale in mlibc: only the C/POSIX
++// digits and signs are recognised, as by strtoll/strtoull.
++long long strtoll_l(const char *__restrict__ nptr, char **__restrict__ endptr, int base, locale_t) {
++	return strtoll(nptr, endptr, base);
++}
++
++unsigned long long strtoull_l(const char *__restrict__ nptr, char **__restrict__ endptr, int base, locale_t) {
++	return strtoull(nptr, endptr, base);
++}
++
++// TODO: strxfrm_l should take "LC_COLLATE" into account, like strcoll_l.
++size_t strxfrm_l(char *__restrict__ dest, const char *__restrict__ src, size_t n, locale_t) {
++	return strxfrm(dest, src, n);
++}
++
+ int getsubopt(char **__restrict__ optionp, char *const *__restrict__ keylistp, char **__restrict__ valuep) {
+ 	*valuep = nullptr;
+ 
+diff --git a/options/posix/generic/wchar.cpp b/options/posix/generic/wchar.cpp
+index 26ac3dc0..69d917a8 100644
+--- a/options/posix/generic/wchar.cpp
++++ b/options/posix/generic/wchar.cpp
+@@ -650,3 +650,12 @@ wchar_t *wcpncpy(wchar_t *__restrict ws1, const wchar_t *__restrict ws2, size_t
+ 	}
+ 	return ws1;
+ }
++
++// TODO: take "LC_COLLATE" into account once wcscoll/wcsxfrm implement collation.
++int wcscoll_l(const wchar_t *a, const wchar_t *b, locale_t) {
++	return wcscoll(a, b);
++}
++
++size_t wcsxfrm_l(wchar_t *__restrict__ dest, const wchar_t *__restrict__ src, size_t n, locale_t) {
++	return wcsxfrm(dest, src, n);
++}
+diff --git a/options/posix/include/bits/posix/posix_stdlib.h b/options/posix/include/bits/posix/posix_stdlib.h
+index 3bb01f3f..45655622 100644
+--- a/options/posix/include/bits/posix/posix_stdlib.h
++++ b/options/posix/include/bits/posix/posix_stdlib.h
+@@ -90,6 +90,8 @@ int ptsname_r(int __fd, char *__buf, size_t __len);
+ double strtod_l(const char *__restrict__ __nptr, char ** __restrict__ __endptr, locale_t __loc);
+ long double strtold_l(const char *__restrict__ __nptr, char ** __restrict__ __endptr, locale_t __loc);
+ float strtof_l(const char *__restrict __string, char **__restrict __end, locale_t __loc);
++long long strtoll_l(const char *__restrict __nptr, char **__restrict __endptr, int __base, locale_t __loc);
++unsigned long long strtoull_l(const char *__restrict __nptr, char **__restrict __endptr, int __base, locale_t __loc);
+ 
+ int getsubopt(char **__restrict__ __optionp, char *const *__restrict__ __tokens, char **__restrict__ __valuep);
+ 
+diff --git a/options/posix/include/bits/posix/posix_string.h b/options/posix/include/bits/posix/posix_string.h
+index a8b8d465..1617caa1 100644
+--- a/options/posix/include/bits/posix/posix_string.h
++++ b/options/posix/include/bits/posix/posix_string.h
+@@ -22,6 +22,7 @@ char *stpncpy(char *__restrict __dest, const char *__restrict __src, size_t __n)
+ void *memccpy(void *__restrict __dest, const void *__restrict __src, int __c, size_t __n);
+ 
+ int strcoll_l(const char *__s1, const char *__s2, locale_t __locale);
++size_t strxfrm_l(char *__restrict __dest, const char *__restrict __src, size_t __n, locale_t __locale);
+ 
+ char *strerror_l(int __errnum, locale_t __locale);
+ 
