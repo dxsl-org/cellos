@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "libdrm-lite and the Cellos fd provider (transport-shim side)"
-status: pending
+status: in-progress
 priority: P1
 effort: "5-8d"
 dependencies: ["R3 (R3a for fd/ioctl; R3b for provider-backed mmap)"]
@@ -114,18 +114,18 @@ anv / vk runtime
 
 ## Todo List
 
-- [ ] Pin libdrm + provenance
-- [ ] fd provider registry + `Ioctl`
-- [ ] Enumeration backend + fake provider
-- [ ] Host tests
-- [ ] QEMU x86 witness
-- [ ] Ledger rows
+- [x] Pin libdrm + provenance (`third_party/libdrm/{README.md,update.sh}`; the provenance row in `../261104-0801-x86-igpu-compute/provenance.md` is the integrating session's)
+- [x] fd provider registry + `Ioctl` (`third_party/mlibc/sysdeps/vicell/{include/vicell/fd_provider{,_core}.h,generic/generic.cpp,include/mlibc/sysdeps.hpp}`); fd-aware `VmMap` waits for R3b
+- [x] Enumeration backend + fake provider (`libs/drm-cellos/c/{device,fake_provider,ioctl}.c`)
+- [x] Host tests (`bash libs/drm-cellos/tests/host/run.sh` → `DRM-LITE-HOST: 206/206 checks pass`, 2026-11-05)
+- [ ] QEMU x86 witness — Cell and runner built (`cells/tests/drm-lite-x86/**`); boot blocked on the `/bin/drm-lite-x86` launch row (H-1)
+- [x] Ledger rows (`docs/posix-ledger.md` Tier B)
 
 ## Success Criteria
 
-- [ ] The witness passes under QEMU TCG and KVM. The host tests pass.
-- [ ] A link of the witness against the libdrm-lite archive has no unresolved `drm*` symbol.
-- [ ] G3 can register its transport with no change to R6 code (interface review with the G3 owner).
+- [ ] The witness passes under QEMU TCG and KVM. The host tests pass. (Host tests pass; QEMU waits for the launch row.)
+- [x] A link of the witness against the libdrm-lite archive has no unresolved `drm*` symbol (`nm -u target/x86_64-unknown-none/release/drm-lite-x86` lists only the weak `frg_log`/`frg_panic`).
+- [ ] G3 can register its transport with no change to R6 code (interface review with the G3 owner): note at [reports/r6-g3-transport-interface.md](reports/r6-g3-transport-interface.md), review pending.
 
 ## Risk Assessment
 
@@ -143,4 +143,33 @@ G3 implements the IPC transport provider and the Mesa build against R3, R4 and R
 
 ## Deviation Log
 
-None.
+- **Surprise (2026-11-05).** mlibc's `ioctl()` and `<sys/ioctl.h>` belong to its `glibc` option, which D-R8 keeps off; with `posix` only, the `Ioctl` sysdep is reachable through `posix_devctl` alone.
+  - Decision: libdrm-lite supplies `ioctl` over `posix_devctl` (`libs/drm-cellos/c/ioctl.c`) and a Cellos-only `<sys/ioctl.h>` (`libs/drm-cellos/compat/`).
+  - The `Ioctl` sysdep cuts the request to 32 bits, undoing `posix_devctl`'s `int` sign extension (Linux ioctl numbers are 32-bit).
+  - Reversible: enabling mlibc's `glibc` option would make `ioctl` a duplicate symbol, failing at link.
+- **Deviation (2026-11-05).** `cellos_fd_provider_register(prefix, ops, ctx)` takes a third `ctx` argument (the plan wrote `(prefix, ops)`).
+  - The G3 transport needs per-provider state without globals; the ops table stays `const`.
+  - The table also carries `abi` (= 1) so a later table revision is detected at registration.
+  - Small and additive; no other caller exists.
+- **Deviation (2026-11-05).** Provider `mmap`/`munmap` are in the v1 ops table but not routed: `VmMap` still gives `EINVAL` for non-anonymous mappings (R3b not done; Main's instruction).
+  - The table shape is final, so G3 does not change when routing lands.
+  - Routing needs an fd-aware `VmMap` and a provider-mapping table for `VmUnmap`.
+  - The QEMU witness has no `mmap` check yet.
+- **Decision (2026-11-05).** Provider fds live at `0x100000`…`0x10003f`. The kernel numbers fds "highest open + 1" from 3 with no bound (`kernel/src/task.rs:2245`), so the kernel route refuses a kernel fd at or above the base (`EMFILE`, after closing it) instead of aliasing.
+  - 64 slots and 4 prefixes are fixed-size tables in libc's `.bss`.
+  - A `close` during an in-flight op releases the fd number at once and defers the provider's `close` to the last op (refcounted slot).
+  - Host-tested (`test_close_during_ioctl`, `test_slot_exhaustion`, `test_kernel_fd_in_provider_range`).
+- **Decision (2026-11-05).** The routing logic is a header-only C core (`include/vicell/fd_provider_core.h`) with a kernel-route callback table.
+  - `generic.cpp` and the Linux host tests compile the same code; the host harness defines `open`/`close`/`fstat`/`ioctl` over a fake VFS.
+  - The host's own `/dev/dri` is therefore never reached.
+  - `generic.cpp` keeps only the vicell glue.
+- **Deviation (2026-11-05).** `vicell/fd_provider.h` is not installed into the mlibc sysroot: `meson.build` installs only `abi-bits` and is outside R6's file set (`{generic/*.cpp,include/**}`).
+  - Consumers add `third_party/mlibc/sysdeps/vicell/include` with `-idirafter`; `libs/drm-cellos` exports it last in `DEP_DRM_LITE_INCLUDE`.
+  - The registry lives in `generic.cpp` for the same reason (a new `.cpp` needs a `meson.build` line).
+  - Reversible by one `install_headers` line once `meson.build` is in a slice's set.
+- **Decision (2026-11-05).** `xe_drm.h` is not in libdrm at the pin. The Linux uAPI header at `05441d69` (SPDX MIT, SHA-256 `a8aab5a3…`, as `xe-uapi-subset.md:13`) is vendored in `third_party/libdrm/include/drm/` for the `CONFIG` query. `drm_mode.h` is vendored because `drm.h` includes it.
+- **Decision (2026-11-05).** The libdrm subset keeps `drmMsg`/`drmDebugPrint`/`drmMalloc`/`drmFree` and `drm_server_info` (needed by the kept bodies), all `drmSyncobj*` and both `drmPrime*`, unmodified, generated by `third_party/libdrm/update.sh`.
+- **Decision (2026-11-05).** Cellos builds compile libdrm-lite with the host gcc, as mlibc and the R3a witness are built. gcc predefines `__linux__`, so `drm.h` takes the Linux uAPI branch with `compat/{linux/types.h,asm/ioctl.h}`. A clang `x86_64-unknown-none-elf` build (`tools/cellos-cc`) does not define it; recorded for G3 in the interface note.
+- **Surprise (2026-11-05).** The worktree's `third_party/mlibc/build-x86_64` was a symlink into the main tree's build. R6 replaced it locally (untracked) with its own build of the R6 sysdeps, so the main tree's `libc.a` is untouched. The R6 witness needs `scripts/build-mlibc.sh` rerun after merge.
+- **Evidence (2026-11-05).** Regression of the R3a witnesses on the R6 `libc.a`: `scripts/build-x86_64-mlibc-witness-ci.sh` then `X86_ACCEL=tcg scripts/x86/qemu-mlibc-witness.sh` → `MLIBC-WITNESS: PASS` with `MLIBC-POSIX: errno OK` (open of a missing path through the routing core → `ENOENT`) and `MLIBC-POSIX: 7/7 pass` (QEMU TCG, this worktree).
+- **Surprise (2026-11-05).** The same image under `X86_ACCEL=kvm` (twice) ends about 1.6 s after start: QEMU exits after the kernel's `PKU-SELFTEST: SKIP: PKU not active` line, before any Cell runs. R6 changes no kernel file and nothing in user space has started at that point; not investigated further in R6.
