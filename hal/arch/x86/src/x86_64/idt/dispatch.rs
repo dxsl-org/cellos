@@ -4,8 +4,8 @@ use super::{
     policy::{classify, Eoi, Origin, Route},
 };
 use hal_arch_trait::{
-    vi_handle_page_fault, vi_handle_uart_irq, vi_ipi_service, vi_terminate_on_user_trap_fault,
-    vi_timer_tick,
+    vi_handle_page_fault, vi_handle_sci, vi_handle_uart_irq, vi_ipi_service,
+    vi_terminate_on_user_trap_fault, vi_timer_tick,
 };
 
 #[no_mangle]
@@ -71,6 +71,11 @@ pub(super) extern "C" fn x86_64_idt_dispatch(frame: &mut EntryFrame) {
         Route::Uart => {
             debug_assert_eq!(selected.eoi, Eoi::After);
             unsafe { vi_handle_uart_irq() };
+            super::super::apic::eoi();
+        }
+        Route::Sci => {
+            debug_assert_eq!(selected.eoi, Eoi::After);
+            unsafe { vi_handle_sci() };
             super::super::apic::eoi();
         }
         Route::Msi => {

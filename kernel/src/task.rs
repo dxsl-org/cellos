@@ -1096,6 +1096,8 @@ pub extern "Rust" fn vi_timer_tick() {
     #[cfg(target_arch = "x86_64")]
     if hart_local::current_hart_id() == 0 {
         crate::task::drivers::console_drv::CONSOLE.lock().poll();
+        // ACPI power button: same hart, same no-lock point as the byte relay.
+        crate::acpi::sci::relay_pending();
     }
     #[cfg(not(target_arch = "x86_64"))]
     crate::task::drivers::console_drv::CONSOLE.lock().poll();

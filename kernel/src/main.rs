@@ -455,6 +455,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 topo.dmar_x2apic_opt_out()
             )
         });
+        // Power facts (`\_S5_`, reset register, GPE blocks) need the same
+        // firmware-range mapper; the G1 private lane keeps its own contract.
+        #[cfg(not(cellos_g1_cpu))]
+        crate::acpi::sci::init(&info, rsdp, &mut map_physical);
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
         let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();

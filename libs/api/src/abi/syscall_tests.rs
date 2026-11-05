@@ -81,6 +81,7 @@ mod tests {
         (433, ViSyscall::QueryMachineFacts),
         (434, ViSyscall::QueryPcieFunction),
         (435, ViSyscall::AllocPcieIrq),
+        (436, ViSyscall::SystemPower),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -356,6 +357,44 @@ mod tests {
             assert_eq!(call.allowlist_bit(), Some(50));
             assert!(!SyscallSet::EMPTY.permits(call));
         }
+    }
+
+    /// CP1 §5 (D-4): 436 is the next opcode after 435 and shares the
+    /// SupervisorOp bit (49), so a declaration of `FreezeCell` admits it at the
+    /// allowlist and `SupervisorCap` at dispatch decides.
+    #[test]
+    fn system_power_shares_the_supervisor_op_bit() {
+        assert_eq!(ViSyscall::SystemPower as usize, 436);
+        assert_eq!(ViSyscall::from(436), ViSyscall::SystemPower);
+        assert_eq!(ViSyscall::from(437), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::SystemPower.allowlist_bit(), Some(49));
+        assert_eq!(
+            ViSyscall::SystemPower.allowlist_bit(),
+            ViSyscall::FreezeCell.allowlist_bit()
+        );
+        assert!(SyscallSet::EMPTY
+            .with(ViSyscall::FreezeCell)
+            .permits(ViSyscall::SystemPower));
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::SystemPower));
+    }
+
+    /// The 436 actions follow CP1 §5 (1 reboot, 2 poweroff) and its sentinels
+    /// are the 434/435 values for the same conditions.
+    #[test]
+    fn system_power_actions_and_sentinels_are_fixed() {
+        use crate::syscall::system_power as sp;
+        assert_eq!((sp::ACTION_REBOOT, sp::ACTION_POWEROFF), (1, 2));
+        assert_eq!(sp::ERR_PERMISSION_DENIED, usize::MAX);
+        assert_eq!(sp::ERR_INVALID_INPUT, usize::MAX - 3);
+        assert_eq!(sp::ERR_NOT_SUPPORTED, usize::MAX - 5);
+        assert_eq!(
+            sp::ERR_NOT_SUPPORTED,
+            crate::pcie_function::ERR_NOT_SUPPORTED
+        );
+        assert_eq!(
+            sp::ERR_INVALID_INPUT,
+            crate::pcie_function::ERR_INVALID_INPUT
+        );
     }
 
     #[test]

@@ -4,15 +4,27 @@
 //!   0x01 — HotswapRequest  { target_service: [u8; 64], new_elf: [u8; 128] }  → total 193 B
 //!   0x02 — SnapshotRequest { }                                                → total   1 B
 //!   0x03 — StatusReply     { phase: u8, result: u8 }                          → total   3 B
+//!   0x04 — PowerRequest    { action: u8 }                                     → total   2 B
 //!
 //! Snapshot is global whole-RAM state, so the request is opcode-only. The App
-//! SDK hands the supervisor a zero-padded receive buffer; snapshot parsing is
-//! deliberately strict and accepts only an opcode followed by all-zero padding.
+//! SDK hands the supervisor a zero-padded receive buffer; snapshot and power
+//! parsing is deliberately strict and accepts only the fixed bytes followed
+//! by all-zero padding.
+//!
+//! `PowerRequest` is supervisor-private wire (owner decision H-S2-7), not
+//! Law-1 ABI. Its action byte is the `SystemPower` (436) a0 value. Two senders
+//! exist: the `/bin/shutdown` worker and the kernel's ACPI power-button relay
+//! (sender 0, `kernel/src/acpi/sci.rs`, poweroff only).
+
+use ostd::syscall::SystemPowerAction;
 
 pub const OP_HOTSWAP: u8 = 0x01;
 pub const OP_SNAPSHOT: u8 = 0x02;
 pub const OP_STATUS: u8 = 0x03;
+pub const OP_POWER: u8 = 0x04;
 pub const SNAPSHOT_STATUS_PHASE: u8 = 1;
+/// Status phase of a refused `PowerRequest`; success has no reply.
+pub const POWER_STATUS_PHASE: u8 = 2;
 pub const STATUS_OK: u8 = 0x00;
 pub const STATUS_UNAVAILABLE: u8 = 0x01;
 pub const STATUS_REJECTED_CALLER: u8 = 0xFD;
@@ -23,6 +35,10 @@ pub const SVC_NAME_LEN: usize = 64;
 pub const ELF_PATH_LEN: usize = 128;
 pub const HOTSWAP_REQUEST_LEN: usize = 1 + SVC_NAME_LEN + ELF_PATH_LEN;
 pub const SNAPSHOT_REQUEST_LEN: usize = 1;
+pub const POWER_REQUEST_LEN: usize = 2;
+/// `PowerRequest` actions: the 436 a0 values.
+pub const POWER_ACTION_REBOOT: u8 = 1;
+pub const POWER_ACTION_POWEROFF: u8 = 2;
 
 /// Hotswap request from an authorized `hotswap` CLI caller.
 pub struct HotswapRequest<'a> {
@@ -81,6 +97,21 @@ impl SnapshotRequest {
     }
 }
 
+/// Parse a `PowerRequest`: opcode, action byte, then all-zero padding.
+pub fn parse_power_request(buf: &[u8]) -> Option<SystemPowerAction> {
+    if buf.len() < POWER_REQUEST_LEN || buf[0] != OP_POWER {
+        return None;
+    }
+    if buf[POWER_REQUEST_LEN..].iter().any(|&byte| byte != 0) {
+        return None;
+    }
+    match buf[1] {
+        POWER_ACTION_REBOOT => Some(SystemPowerAction::Reboot),
+        POWER_ACTION_POWEROFF => Some(SystemPowerAction::PowerOff),
+        _ => None,
+    }
+}
+
 fn parse_service_name(field: &[u8]) -> Option<&str> {
     let value = parse_nul_terminated_ascii(field)?;
     if value
@@ -130,7 +161,11 @@ pub fn encode_snapshot_unavailable() -> [u8; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::{HotswapRequest, SnapshotRequest, HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_SNAPSHOT};
+    use super::{
+        parse_power_request, HotswapRequest, SnapshotRequest, HOTSWAP_REQUEST_LEN, OP_HOTSWAP,
+        OP_POWER, OP_SNAPSHOT,
+    };
+    use ostd::syscall::SystemPowerAction;
 
     #[test]
     fn parse_accepts_canonical_service_request() {
@@ -182,6 +217,38 @@ mod tests {
     #[test]
     fn snapshot_parse_rejects_wrong_opcode() {
         assert!(SnapshotRequest::parse(&[OP_HOTSWAP]).is_none());
+    }
+
+    #[test]
+    fn power_request_carries_the_436_action_and_nothing_else() {
+        let mut request = [0u8; 8];
+        request[0] = OP_POWER;
+        request[1] = 1;
+        assert_eq!(parse_power_request(&request), Some(SystemPowerAction::Reboot));
+        request[1] = 2;
+        assert_eq!(
+            parse_power_request(&request),
+            Some(SystemPowerAction::PowerOff)
+        );
+        for action in [0, 3, 0xFF] {
+            request[1] = action;
+            assert_eq!(parse_power_request(&request), None);
+        }
+        request[1] = 2;
+        request[5] = 1;
+        assert_eq!(parse_power_request(&request), None);
+        assert_eq!(parse_power_request(&[OP_POWER]), None);
+        assert_eq!(parse_power_request(&[OP_SNAPSHOT, 2]), None);
+    }
+
+    /// The kernel's power-button relay sends these bytes (`acpi/sci.rs`).
+    #[test]
+    fn kernel_power_button_bytes_parse_as_poweroff() {
+        let kernel_message = [0xAC, 0x00, 0x04, 0x02];
+        assert_eq!(
+            parse_power_request(&kernel_message[2..]),
+            Some(SystemPowerAction::PowerOff)
+        );
     }
 
     fn request_bytes(service_name: &str, elf_path: &str) -> [u8; HOTSWAP_REQUEST_LEN] {

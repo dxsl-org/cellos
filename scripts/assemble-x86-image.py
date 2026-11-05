@@ -110,6 +110,9 @@ HEADLESS_CELLS = (
     Cell("service-input", "service-input", ("/bin/input",)),
     Cell("service-net", "service-net", ("/bin/net",)),
     Cell("service-platform", "platform", ("/bin/platform",)),
+    # S2 phase 06 (grant 2026-11-05): `/bin/shutdown` and the ACPI power button
+    # ask the supervisor, so every x86 image runs it.
+    Cell("supervisor", "supervisor", ("/bin/supervisor",)),
     Cell("driver-nvme", "driver-nvme", ("/bin/nvme",)),
     Cell("driver-e1000", "driver-e1000", ("/bin/e1000",)),
     Cell("driver-igb", "driver-igb", ("/bin/igb",)),
@@ -137,8 +140,9 @@ DESKTOP_CELLS = HEADLESS_CELLS + (
 )
 
 PROFILES = {
-    "headless": Profile("headless", HEADLESS_CELLS, ("input",)),
-    "desktop": Profile("desktop", DESKTOP_CELLS, ("input", "ui")),
+    # `supervisor` selects the supervisor row of config/services.toml.
+    "headless": Profile("headless", HEADLESS_CELLS, ("input", "supervisor")),
+    "desktop": Profile("desktop", DESKTOP_CELLS, ("input", "ui", "supervisor")),
 }
 
 

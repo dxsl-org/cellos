@@ -1,4 +1,5 @@
-//! Supervisor Cell — Tier-1 Trusted Cell for hotswap/snapshot orchestration.
+//! Supervisor Cell — Tier-1 Trusted Cell for hotswap/snapshot orchestration
+//! and the orderly power path (`OP_POWER`, see `power.rs`).
 //!
 //! Holds `SupervisorCap` (granted by the kernel loader at spawn — path-based grant
 //! since all 8 manifest flag bits are occupied in v1) and `SpawnCap` (declared in
@@ -19,6 +20,7 @@ mod error;
 #[cfg(feature = "hostile-backend-recovery")]
 mod hostile_backend_recovery;
 mod hotswap;
+mod power;
 mod protocol;
 mod snapshot;
 mod transfer;
@@ -29,11 +31,16 @@ use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::syscall::{sys_get_procs, sys_lookup_service, sys_send};
 use protocol::{
-    encode_status, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_SNAPSHOT,
-    STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER, STATUS_SERVICE_NOT_FOUND,
+    encode_status, parse_power_request, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_POWER,
+    OP_SNAPSHOT, POWER_STATUS_PHASE, STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER,
+    STATUS_SERVICE_NOT_FOUND, STATUS_UNAVAILABLE,
 };
 
 const HOTSWAP_TASK_NAME: &str = "hotswap";
+/// The retained power worker, launched only by the shell (`/bin/shutdown`).
+const SHUTDOWN_TASK_NAME: &str = "shutdown";
+/// The kernel's sender id; it sends `OP_POWER` only as the ACPI power button.
+const KERNEL_SENDER: usize = 0;
 /// Task names reviewed to request a snapshot. Empty: the suite shell (`cellbox`) no
 /// longer qualifies (S2c-min) and no retained snapshot worker exists, so a snapshot is
 /// unavailable until a `SnapshotTarget` owner is added.
@@ -95,6 +102,11 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     return;
                 }
                 let _ = sys_send(sender_tid, &snapshot::run());
+                return;
+            }
+
+            if data[0] == OP_POWER {
+                handle_power(sender_tid, data);
             }
         }
 
@@ -121,6 +133,38 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         }
         _ => {}
     }
+}
+
+/// `OP_POWER` from the `/bin/shutdown` worker (reboot or poweroff) or from the
+/// kernel's power-button relay (poweroff only). Only a refused operator
+/// request gets a reply; success resets or powers off the machine.
+fn handle_power(sender_tid: usize, data: &[u8]) {
+    use ostd::syscall::SystemPowerAction;
+    let origin = if sender_tid == KERNEL_SENDER {
+        power::Origin::PowerButton
+    } else if sender_has_exact_name(sender_tid, SHUTDOWN_TASK_NAME) {
+        power::Origin::Operator
+    } else {
+        reply_power(sender_tid, STATUS_REJECTED_CALLER);
+        return;
+    };
+    let operator = origin == power::Origin::Operator;
+    let Some(action) = parse_power_request(data)
+        .filter(|&action| operator || action == SystemPowerAction::PowerOff)
+    else {
+        if operator {
+            reply_power(sender_tid, STATUS_INVALID_REQUEST);
+        }
+        return;
+    };
+    let _ = power::shut_down(action, origin);
+    if operator {
+        reply_power(sender_tid, STATUS_UNAVAILABLE);
+    }
+}
+
+fn reply_power(sender_tid: usize, status: u8) {
+    let _ = sys_send(sender_tid, &encode_status(POWER_STATUS_PHASE, status));
 }
 
 /// Map a well-known ASCII service name to its numeric `service::*` constant.

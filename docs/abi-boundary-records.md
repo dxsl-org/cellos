@@ -202,11 +202,18 @@ permission denied, `MAX - 2` no function, `MAX - 3` invalid input,
 Envelope: the cell syscall stub carries four arguments, so "`a3..a5` zero" in
 CP1 is enforced as `a3` zero; `a4`/`a5` never reach the kernel.
 
-### 6.2 Proposed (not implemented)
+### 6.2 Implemented in phase 06 (CP2-06 pending owner decision)
 
-| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP1 |
+Implemented on `feat/x86-s2-phase06-power` ([CP2-06](../.agents/261103-2218-x86-platform-breadth/cp2-06-system-power.md)); not frozen until the owner approves CP2-06. CP1: [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §5.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | Code |
 |---|---|---|---|---|---|---|---|
-| `SystemPower` (syscall 436) | K | register envelope, `a0` ∈ {1, 2} | none | n/a | `a1..a5` zero | `SupervisorCap` checked before any register write | [package](../.agents/261103-2218-x86-platform-breadth/cp1-pcie-irq-power-abi.md) §5 |
+| `SystemPower` (syscall 436) | K | register envelope; `a0` 1 reboot, 2 poweroff; no return on success | none (register form) | n/a | unknown action or non-zero `a1..a3` → `InvalidInput` (checked after the gate) | `SupervisorCap` (allowlist bit 49) before any argument is acted on; poweroff needs a static `\_S5_` and an I/O PM1 control block, else `NotSupported` before any write | `kernel/src/task/syscall.rs` (`system_power`); `kernel/src/acpi/power.rs` |
+
+Error sentinels for 436 (`api::syscall::system_power::ERR_*`): `usize::MAX`
+permission denied, `MAX - 3` invalid input, `MAX - 5` not supported (the
+434/435 values). Same four-argument envelope: `a4`/`a5` never reach the kernel.
+Cells reach them through `ostd::syscall::sys_system_power`.
 
 ## 7. Records from ADR-0033 (Intel iGPU compute)
 

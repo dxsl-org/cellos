@@ -945,6 +945,76 @@ impl QemuRunner {
         Self::boot_x86_q35(iso, cpus, &[])
     }
 
+    /// Plan 261103-2218 phase 06 power lanes: the plain q35 lane of
+    /// [`x86_lane`] (TCG, or `CELLOS_X86_ACCEL=kvm`) **without** `-no-reboot`,
+    /// so a guest reset boots the ISO again instead of ending QEMU, plus a QMP
+    /// monitor for [`Self::send_qmp_system_powerdown`].
+    pub fn boot_x86_bios_power(iso: &str) -> Self {
+        let serial_listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let serial_port = serial_listener.local_addr().unwrap().port();
+        let qmp_listener = TcpListener::bind("127.0.0.1:0").expect("probe qmp port");
+        let qmp_port = qmp_listener.local_addr().unwrap().port();
+        drop(qmp_listener);
+        let lane = x86_lane();
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args(&lane.accel)
+            .args([
+                "-machine",
+                &lane.machine,
+                "-cpu",
+                &lane.cpu,
+                "-m",
+                "256M",
+                "-display",
+                "none",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
+                "-monitor",
+                "none",
+                "-qmp",
+                &format!("tcp:127.0.0.1:{qmp_port},server,nowait"),
+                "-serial",
+                &format!("tcp:127.0.0.1:{serial_port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&serial_listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+        let monitor = (0..30).find_map(|_| {
+            TcpStream::connect(format!("127.0.0.1:{qmp_port}"))
+                .map_err(|_| thread::sleep(Duration::from_millis(100)))
+                .ok()
+        });
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor,
+        }
+    }
+
     /// Boot x86_64 q35 with Limine BIOS, explicit accelerator ("tcg" or "kvm"),
     /// virtio keyboard/tablet, and active QMP monitor for screendump and input injection.
     pub fn boot_x86_bios_with_accel(iso: &str, accel: &str) -> Self {
@@ -2354,6 +2424,32 @@ impl QemuRunner {
             }
             thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    /// Like [`Self::wait_for_natural_exit`], returning QEMU's exit status, or
+    /// `None` when it is still running after `timeout_secs`.
+    pub fn wait_for_exit_status(&mut self, timeout_secs: u64) -> Option<std::process::ExitStatus> {
+        self.writer.take();
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(status)) => return Some(status),
+                Ok(None) if Instant::now() <= deadline => {}
+                _ => return None,
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// Press the guest's ACPI power button (QMP `system_powerdown`). Needs a
+    /// constructor that opens the QMP monitor.
+    pub fn send_qmp_system_powerdown(&mut self) -> bool {
+        self.send_qmp_command(r#"{"execute":"system_powerdown"}"#)
+    }
+
+    /// How many times `needle` appears in the captured serial output.
+    pub fn output_count(&self, needle: &str) -> usize {
+        self.output.lock().unwrap().matches(needle).count()
     }
 
     /// True if the captured serial output contains `needle`.

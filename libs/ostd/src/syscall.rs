@@ -3041,6 +3041,47 @@ pub fn sys_alloc_pcie_irq(
     api::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
 }
 
+/// The `SystemPower` (436) action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemPowerAction {
+    Reboot,
+    PowerOff,
+}
+
+/// Why `SystemPower` (436) returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemPowerError {
+    /// No `SupervisorCap`, or the allowlist omits bit 49.
+    PermissionDenied,
+    InvalidInput,
+    /// Not x86_64, no static `\_S5_` or usable PM1 control block, or the
+    /// machine still ran after the sleep write.
+    NotSupported,
+}
+
+fn system_power_error(ret: usize) -> SystemPowerError {
+    use api::syscall::system_power as sp;
+    match ret {
+        sp::ERR_INVALID_INPUT => SystemPowerError::InvalidInput,
+        sp::ERR_NOT_SUPPORTED => SystemPowerError::NotSupported,
+        _ => SystemPowerError::PermissionDenied,
+    }
+}
+
+/// 436: reset or power off the machine. Requires `SupervisorCap`; orderly
+/// shutdown is the caller's job before this call. Returns only when the kernel
+/// refused or the action did not take effect.
+pub fn sys_system_power(action: SystemPowerAction) -> SystemPowerError {
+    use api::syscall::system_power as sp;
+    let a0 = match action {
+        SystemPowerAction::Reboot => sp::ACTION_REBOOT,
+        SystemPowerAction::PowerOff => sp::ACTION_POWEROFF,
+    };
+    // SAFETY: scalar arguments only.
+    let ret = unsafe { syscall(ViSyscall::SystemPower, a0, 0, 0, 0) } as usize;
+    system_power_error(ret)
+}
+
 /// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
 ///
 /// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,
@@ -3061,8 +3102,8 @@ pub fn sys_query_hotswap_ready(target_tid: usize) -> Result<bool, SyscallError> 
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result, SyscallError,
-        SyscallResult, WaitCompletionResult,
+        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result,
+        system_power_error, SyscallError, SyscallResult, SystemPowerError, WaitCompletionResult,
     };
     use api::completion::{source, ViCompletion, COMPLETION_LEN};
 
@@ -3126,5 +3167,23 @@ mod tests {
             decode_wait_completion_result(1, &[0u8; COMPLETION_LEN]),
             WaitCompletionResult::ErrorOrInvalid(1)
         );
+    }
+
+    #[test]
+    fn system_power_decoder_names_each_sentinel() {
+        use api::syscall::system_power as sp;
+        assert_eq!(
+            system_power_error(sp::ERR_INVALID_INPUT),
+            SystemPowerError::InvalidInput
+        );
+        assert_eq!(
+            system_power_error(sp::ERR_NOT_SUPPORTED),
+            SystemPowerError::NotSupported
+        );
+        assert_eq!(
+            system_power_error(sp::ERR_PERMISSION_DENIED),
+            SystemPowerError::PermissionDenied
+        );
+        assert_eq!(system_power_error(0), SystemPowerError::PermissionDenied);
     }
 }
