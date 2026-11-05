@@ -170,12 +170,23 @@ if ! grep -a -Fq "LFN 'std-smoke'" "$WORK/fat-layout.txt"; then
 fi
 
 echo "==> Step 5: Building kernel with embedded test image..."
-EMBEDDED_OVERRIDE="$EMBEDDED" cargo build --release \
+# The kernel embeds this lane's test ramdisk, so it is built into its own target
+# directory: the default target/<triple>/release/cellos-kernel is the rollout
+# kernel, and x86's make-iso-ci.sh refuses that path unless it embeds the exact
+# canonical kernel/src/embedded-x86_64 image.
+KERNEL_TARGET_DIR="$ROOT/target/std-smoke-kernel"
+KERNEL_ENV=(EMBEDDED_OVERRIDE="$EMBEDDED" CARGO_TARGET_DIR="$KERNEL_TARGET_DIR")
+if [[ "$ARCH" == "x86_64" ]]; then
+    # The PIC flags exported above are for cells; the x86 kernel needs the kernel
+    # code model (the same profile as .cargo/config.toml and ci.yml).
+    KERNEL_ENV+=("RUSTFLAGS=-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static")
+fi
+env "${KERNEL_ENV[@]}" cargo build --release \
     --target "$TARGET_BOOTSTRAP" \
     -Z build-std=core,alloc \
     -p cellos-kernel
 
-KERNEL="$REL/cellos-kernel"
+KERNEL="$KERNEL_TARGET_DIR/$TARGET_BOOTSTRAP/release/cellos-kernel"
 [[ -s "$KERNEL" ]] || { echo "FAIL: kernel missing at $KERNEL" >&2; exit 1; }
 
 echo "==> Step 6: Launching QEMU..."

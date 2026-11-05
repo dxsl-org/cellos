@@ -39,14 +39,16 @@ SRV_DIR="kernel/src/embedded-srv-test"
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
 export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include}"
 
-echo "==> Building base cells (init, shell, config, platform, block)..."
+echo "==> Building base cells (init, shell, config, input, platform, block)..."
 # platform + virtio-blk are REQUIRED: the /srv tests attach a disk, and
 # without /bin/platform + /bin/block in VIFS1 the VFS has no block driver —
 # every sector read fails and CellosFS P5 can never open.
+# input is REQUIRED too: cellbox creates its serial session through the INPUT
+# service, so without /bin/input the tests never reach a shell prompt.
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-cellbox -p service-config \
+    -p app-init -p app-cellbox -p service-config -p service-input \
     -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs (full — no test-hooks, full quota, CellosFS Native)..."
@@ -62,7 +64,7 @@ cargo build --release \
     -p app-srv-test -p app-posix-shim-test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init cellbox service-vfs service-config srv-test posix-shim-test platform driver-virtio-blk; do
+for bin in app-init cellbox service-vfs service-config service-input srv-test posix-shim-test platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -72,7 +74,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input" \
            "$REL/srv-test" "$REL/posix-shim-test" "$REL/platform" "$REL/driver-virtio-blk"
 
 echo "==> Assembling kernel_fs.img (srv-test)..."
@@ -85,12 +87,16 @@ printf 'ViCell-srv-test' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
-"$PYTHON_BIN" tools/mkfat32.py \
+# `input` selects /bin/input in services.toml; the generator also requires the
+# artifact, so both the feature and the /bin/input pair are needed.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input \
+    --config-output-dir "$TMPDIR_KFS/boot-config" \
     "$SRV_DIR/kernel_fs.img" \
     "$REL/app-init"       /bin/init \
     "$REL/cellbox"      /bin/cellbox \
     "$REL/service-vfs"    /bin/vfs \
     "$REL/service-config" /bin/config \
+    "$REL/service-input"  /bin/input \
     "$REL/platform"       /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/srv-test"       /bin/srv-test \
@@ -100,6 +106,10 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
 if [[ ! -f "$SRV_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
+fi
+if ! grep -Fxq 'path = "/bin/input"' "$TMPDIR_KFS/boot-config/services.toml"; then
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
+    exit 1
 fi
 # Prove the layout rather than trusting the exit code. mkfat32.py exits 0 for a
 # well-formed image whose destination paths went astray, so a /bin-less image

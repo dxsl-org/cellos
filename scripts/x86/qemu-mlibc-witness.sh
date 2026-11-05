@@ -37,6 +37,9 @@ case "$X86_ACCEL" in ""|kvm|tcg) ;; *) echo "FAIL: X86_ACCEL must be empty, kvm 
 [[ -f "$KERNEL" ]] || { echo "FAIL: kernel not found: $KERNEL (run scripts/build-x86_64-mlibc-witness-ci.sh)" >&2; exit 1; }
 command -v qemu-system-x86_64 >/dev/null 2>&1 || { echo "FAIL: qemu-system-x86_64 not found" >&2; exit 1; }
 
+# QEMU's serial log is redirected into LOG_DIR from a background job; a missing
+# directory fails only that redirection and surfaces as "shell prompt not reached".
+mkdir -p -- "$LOG_DIR"
 LABEL="x86-mlibc-witness${X86_ACCEL:+-$X86_ACCEL}"
 RAW_LOG="$LOG_DIR/qemu-$LABEL.raw.log"
 FIFO="$(mktemp -u "${TMPDIR:-/tmp}/cellos-mlibc-witness-XXXXXX.fifo")"
