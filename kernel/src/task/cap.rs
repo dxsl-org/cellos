@@ -466,6 +466,7 @@ impl CapSet {
             path,
             "/bin/nvme"
                 | "/bin/e1000"
+                | "/bin/e1000e"
                 | "/bin/igb"
                 | "/bin/virtio-net"
                 | "/bin/block"
@@ -1057,6 +1058,7 @@ mod tests {
             "/bin/python",
             "/bin/net",
             "/bin/e1000",
+            "/bin/e1000e",
             "/bin/ocel-js",
             "/bin/ocel-quickjs",
             "/bin/async-echo",

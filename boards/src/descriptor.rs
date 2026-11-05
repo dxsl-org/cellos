@@ -61,6 +61,8 @@ pub enum DriverId {
     UsbXhci,
     /// Intel `igb` (i210/i211) NIC family (phase 04a/04b).
     EthernetIgb,
+    /// Intel 82574L (`e1000e`) NIC, later the I219 base (plan phases 08/13).
+    EthernetE1000e,
     /// Additional 16550 ports beyond the COM1 console (phase 06).
     Uart16550Multi,
     /// virtio over PCI (net, block, SCSI) through the 434 capability record

@@ -83,6 +83,7 @@ members = [
     # Cells - Drivers
     "cells/drivers/disk",
     "cells/drivers/e1000",
+    "cells/drivers/e1000e",
     "cells/drivers/igb",
     "cells/drivers/serial-x86",
     "cells/drivers/gpio",

@@ -1253,6 +1253,7 @@ fn every_pre_annex_boot_row_keeps_observe_mutate() {
         "/bin/block",
         "/bin/nvme",
         "/bin/e1000",
+        "/bin/e1000e",
         "/bin/igb",
         "/bin/virtio-net",
         "/bin/virtio-gpu",
