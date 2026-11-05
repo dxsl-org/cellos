@@ -235,3 +235,12 @@ CP1 AX-1…AX-8 approved 2026-11-04 ([package](../.agents/261104-0802-x86-tier2-
 | Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP |
 |---|---|---|---|---|---|---|---|
 | Cell initial stack v1 (argc, argv, envp, auxv at the entry `sp`) | K | layout pinned by `libs/cell-initial-stack` (64-bit LE words, `sp` 16-byte aligned) | v1 = this layout; no version word — a change is a new CP | bounded: ≤ 16 program headers, ≤ 8 auxv pairs, ≤ `MAX_BYTES` (1072) | `argc` = 0, argv/envp empty; `AT_BASE` carries the load base (Cellos meaning); unknown auxv keys are not emitted | built before the task exists; a header table that is not 56-byte entries or exceeds 16 entries refuses the spawn (`InvalidInput`) | CP2 approved, frozen |
+
+## 9. Records from the `/srv/sshd` image-identity slice (audit §9)
+
+Approved and frozen on 2026-11-05 by two explicit user confirmations. 437-440 stay reserved for §7.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP |
+|---|---|---|---|---|---|---|---|
+| `ResolveCellImage` (syscall 441) → `CellImage` record | K | syscall 441 envelope; request = `CellOwnerRequest` (16 bytes, a0/a1), output a2/a3 ≥ 80 bytes (`libs/api/src/abi/cell-image.rs`) | u16 version, set {1}; other refused by `CellImage::from_bytes` | exact 80 written; decode refuses `!= 80` | reserved bytes 4..8 zero; anchor ∈ {0 unsigned, 1 dev, 2 release, 3 private}; `name_len` ≤ 24, name bytes past it zero; a name only under a signing anchor; zero cell/generation refused | the caller task must belong to the registered VFS Cell and `(cell_id, generation)` must be live, else `PermissionDenied`; the record is read from the root task's immutable `Task::image`, bound once before publication (`kernel/src/task/cell-image.rs`); no allowlist bit | approved 2026-11-05, frozen |
+| `__ViCell_image` | K, inside signed bytes | one non-`NOBITS` section, emitted by `scripts/sign-cell.py` from the artifact name minus `service-`/`app-`/`driver-` | none (raw name) | 1..=24 bytes `[a-z0-9_-]` | absent, duplicated, `NOBITS` or invalid → no name, the image still loads | read with the duplicate-refusing `ElfSections` parser and believed only when the signature verified (`kernel/src/loader/image-name-section.rs`) | approved 2026-11-05, frozen |

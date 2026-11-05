@@ -36,7 +36,8 @@ release; they are not a current all-tier or production security PASS.
 | Cell forges another Cell's CellId in IPC | Kernel verifies sender ID from TCB on every message; user cannot inject arbitrary sender values | ✅ Mitigated |
 | Cell guesses a service-local socket CapId | The net service currently allocates predictable CapIds without binding lookup to the caller, so another network-capable Cell may address a live socket owned by a peer | ❌ Open — see [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Malformed ELF binary spawns as a different Cell | ELF header validated before execution; Cell registry assigns IDs monotonically | ✅ Mitigated |
-| Network peer logs in to `/bin/sshd` without a key, or impersonates its host key | `publickey` (`ssh-ed25519`) only, verified over the RFC 4252 §7 input against `/srv/sshd/authorized_keys`; phases enforced per message (anything out of phase disconnects); 5 failures disconnect; 60 s login grace. Host key: a seed persisted at `/srv/sshd/host_ed25519.seed`, generated from kernel entropy on first start; x25519 scalar and KEXINIT cookie fresh per connection; no entropy → no start / no handshake; non-contributory DH refused | 🔶 Partial — `/srv/` is world-readable and writable by every `VfsMutate` Cell, so another Cell can read the host seed or add a key (see Known Limitations) |
+| Network peer logs in to `/bin/sshd` without a key, or impersonates its host key | `publickey` (`ssh-ed25519`) only, verified over the RFC 4252 §7 input against `/srv/sshd/authorized_keys`; phases enforced per message (anything out of phase disconnects); 5 failures disconnect; 60 s login grace. Host key: a seed persisted at `/srv/sshd/host_ed25519.seed`, generated from kernel entropy on first start; x25519 scalar and KEXINIT cookie fresh per connection; no entropy → no start / no handshake; non-contributory DH refused | 🔶 Partial — key files bound to the measured sshd image (below); spoofable under the dev posture (see Known Limitations) |
+| Another Cell reads the sshd host seed or adds itself to `authorized_keys` | `/srv/sshd/**` is admitted only to a Cell whose **kernel-measured image** is signature-verified and named `sshd` (`cells/services/vfs/src/access/srv-owner.rs`). The kernel records per incarnation the SHA-256 of the admitted bytes, the verifying anchor and the program name from the signed `__ViCell_image` section, which the signer assigns from the artifact name (`service-sshd` → `sshd`); an unsigned image carries no name. VFS asks the kernel (`ResolveCellImage`, syscall 441, registered VFS Cell only) for the exact `(cell, generation)` of each request — never a cached tid, so a stale or respawned generation does not match. Accepted anchors: release, and dev (only a dev-anchor kernel can report it; a release kernel reporting dev does not build). Every other caller is refused read, stat, list, write, append, mkdir, rename (either end), unlink, D03 save and handle traversal; nobody removes the namespace or an ancestor; the interrupt-disabled fast path refuses it outright | ✅ Mitigated under the release anchor; 🔶 dev posture: the dev seed is public, so a Cell that can spawn from bytes can sign an image named `sshd` |
 
 ### Tampering
 | Threat | Mitigation | Status |
@@ -395,11 +396,13 @@ Bước 4: Kernel unsafe blocks
 4. **Audit log:** *Shipped (Phase 26).* Cell actions are recorded in the kernel
    audit ring buffer (`kernel/src/audit.rs`).
 
-5. **sshd key files:** `/srv/sshd/host_ed25519.seed` and `/srv/sshd/authorized_keys`
-   sit under the generic `/srv/` VFS rule (read: every Cell; write: every Cell with
-   `VfsMutate`). Path rules cannot name a Cell until the kernel vouches for program
-   identity (`cells/services/vfs/src/access/rules.rs`), so a hostile installed Cell can
-   read the host key or authorize its own key. `/bin/sshd` is excluded from x86 images.
+5. **sshd key files under the dev posture:** `/srv/sshd/**` is bound to a signed image
+   named `sshd` (see Spoofing). With the release anchor only the release pipeline can
+   produce such an image. With the dev anchor the signing seed (`[0x43]*32`) is public,
+   so any Cell able to spawn from caller-supplied bytes can sign its own image as `sshd`
+   and read the host seed or add a key. Raw block access (VFS, block driver) and offline
+   disk access are outside the rule. The private profile anchor
+   (`phase02-terminal-profile`) is not admitted. `/bin/sshd` is excluded from x86 images.
 
 ## Defense in Depth
 
