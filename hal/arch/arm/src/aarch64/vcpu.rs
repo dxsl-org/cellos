@@ -5,14 +5,16 @@
 //! **Entry (`vcpu_enter_guest` asm):**
 //! 1. Save host callee-saved (x19-x30) + SP_EL2 to `vcpu.h_*` fields.
 //! 2. Store `vcpu` ptr in `TPIDR_EL2` (the guest-trap trampoline reads this).
-//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC | TID3`.
+//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC | TID3`
+//!    (plus `E2H` on a VHE host).
 //! 4. Restore guest GP (x1-x30), then x0 last (overwrites vcpu ptr).
 //! 5. `eret` → guest EL1.
 //!
 //! **Exit (`vt_vcpu_trap` asm in this module, branched to from
 //! `el2.rs::vt_sync_el2_lower` *and* `el2.rs::vt_irq_el2_lower`):**
 //! 1. Save guest x0-x30 + exit regs (ESR/ELR/FAR/HPFAR) to `vcpu.*`.
-//! 2. Restore host `HCR_EL2 = RW | TGE` (clears VM — mandatory before any Cell access).
+//! 2. Restore host `HCR_EL2 = RW | TGE` (`| E2H` on a VHE host; clears VM — mandatory
+//!    before any Cell access).
 //! 3. Clear `TPIDR_EL2` (marks no active guest).
 //! 4. Restore host callee-saved (x19-x30) + SP_EL2 from `vcpu.h_*`.
 //! 5. `ret` → returns to `run_vcpu_impl` as if `vcpu_enter_guest` returned.
@@ -38,11 +40,33 @@
 //!
 //! Pi EL1 host: eager Q0–Q31/FPCR/FPSR bank switch keeps guest FP and Cell FP
 //! isolated across every EL2 transition. QEMU virt's existing path is unchanged.
+//!
+//! # VHE host
+//!
+//! With `HCR_EL2.E2H = 1` the host's `_EL1` encodings are redirected to its own
+//! EL2 registers, so the guest's EL1 bank lives only behind the `_EL12`/`_EL02`
+//! encodings, and the host's own state (SCTLR/TTBR/TCR/MAIR/VBAR/SPSR/ELR_EL2,
+//! the CNTHP timer) never enters the guest's view. The switch therefore moves
+//! the guest bank through `_EL12`/`_EL02` and saves only the host registers the
+//! guest genuinely shares: `TPIDR_EL0`, `TPIDR_EL1` and `SP_EL0`.
 
 use core::arch::global_asm;
 use hal_hypervisor::ViVmExit;
 
-use super::backend::{ArmPlatform, ArmVcpuExt, Board};
+use super::backend::{ArmPlatform, ArmVcpuExt, Board, HostRegime};
+
+/// The host runs VHE: the guest EL1 bank moves through `_EL12`/`_EL02`.
+const VHE: bool = matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2Vhe);
+
+/// `CNTHCTL_EL2` while a guest may run. Non-VHE layout: EL1PCTEN|EL1PCEN
+/// (bits 1:0). E2H layout: the same two controls sit at bits 11:10, and bits
+/// 1:0 would instead open the counters to the host's EL0 Cells.
+const GUEST_CNTHCTL: u64 = if VHE { 3 << 10 } else { 3 };
+
+/// `CPTR_EL2` while a guest may run: no FP/SIMD trap. Non-VHE: the RES1-only
+/// value (bits[13:12] and [9:0]), leaving TFP/TTA/TCPAC/TAM clear — writing 0
+/// would clear the RES1 bits and is UNPREDICTABLE. E2H layout: `FPEN = 0b11`.
+const GUEST_CPTR: u64 = if VHE { 3 << 20 } else { 0x33FF };
 
 // ── AArch64Vcpu ──────────────────────────────────────────────────────────────
 
@@ -216,6 +240,81 @@ struct HostEl1Bank {
     ext: <VcpuExt as ArmVcpuExt>::HostBank,
 }
 
+// ── VHE guest bank (`_EL12` / `_EL02`) ───────────────────────────────────────
+//
+// Raw encodings: op1 = 5 selects the EL12/EL02 alias of the EL1/EL0 register
+// with the same CRn/CRm/op2, and assembles without the `vh` target feature.
+//   SCTLR_EL12 S3_5_C1_C0_0    TTBR0_EL12 S3_5_C2_C0_0    TTBR1_EL12 S3_5_C2_C0_1
+//   TCR_EL12   S3_5_C2_C0_2    SPSR_EL12  S3_5_C4_C0_0    ELR_EL12   S3_5_C4_C0_1
+//   ESR_EL12   S3_5_C5_C2_0    FAR_EL12   S3_5_C6_C0_0    MAIR_EL12  S3_5_C10_C2_0
+//   VBAR_EL12  S3_5_C12_C0_0   CNTV_CTL_EL02 S3_5_C14_C3_1  CNTV_CVAL_EL02 S3_5_C14_C3_2
+// TPIDR_EL0, TPIDR_EL1, SP_EL1 and SP_EL0 are not redirected under E2H and
+// keep their plain names.
+
+/// Install `vcpu`'s EL1 bank through the `_EL12`/`_EL02` encodings.
+///
+/// # Safety
+/// EL2 with `HCR_EL2.E2H = 1`, no guest running; the host's own state is in
+/// EL2 registers these encodings cannot reach.
+unsafe fn load_guest_bank_el12(vcpu: &AArch64Vcpu) {
+    unsafe {
+        core::arch::asm!(
+            "msr S3_5_C1_C0_0, {0}",  "msr S3_5_C2_C0_0, {1}",
+            "msr S3_5_C2_C0_1, {2}",  "msr S3_5_C2_C0_2, {3}",
+            "msr S3_5_C10_C2_0, {4}", "msr S3_5_C12_C0_0, {5}",
+            "msr tpidr_el0, {6}",     "msr tpidr_el1, {7}",
+            in(reg) vcpu.g_sctlr_el1, in(reg) vcpu.g_ttbr0_el1,
+            in(reg) vcpu.g_ttbr1_el1, in(reg) vcpu.g_tcr_el1,
+            in(reg) vcpu.g_mair_el1,  in(reg) vcpu.g_vbar_el1,
+            in(reg) vcpu.g_tpidr_el0, in(reg) vcpu.g_tpidr_el1,
+            options(nomem, nostack),
+        );
+        core::arch::asm!(
+            "msr S3_5_C14_C3_1, {0}", "msr S3_5_C14_C3_2, {1}",
+            "msr S3_5_C4_C0_0, {2}",  "msr S3_5_C4_C0_1, {3}",
+            "msr sp_el1, {4}",
+            "msr S3_5_C5_C2_0, {5}",  "msr S3_5_C6_C0_0, {6}",
+            in(reg) vcpu.g_cntv_ctl,  in(reg) vcpu.g_cntv_cval,
+            in(reg) vcpu.g_spsr_el1,  in(reg) vcpu.g_elr_el1,
+            in(reg) vcpu.g_sp_el1,
+            in(reg) vcpu.g_esr_el1,   in(reg) vcpu.g_far_el1,
+            options(nomem, nostack),
+        );
+    }
+}
+
+/// Capture the stopped guest's live EL1 bank through the `_EL12`/`_EL02`
+/// encodings; the counterpart of [`load_guest_bank_el12`].
+///
+/// # Safety
+/// EL2 with `HCR_EL2.E2H = 1`, guest stopped (`TPIDR_EL2` cleared).
+unsafe fn save_guest_bank_el12(vcpu: &mut AArch64Vcpu) {
+    unsafe {
+        core::arch::asm!(
+            "mrs {0}, S3_5_C1_C0_0",  "mrs {1}, S3_5_C2_C0_0",
+            "mrs {2}, S3_5_C2_C0_1",  "mrs {3}, S3_5_C2_C0_2",
+            "mrs {4}, S3_5_C10_C2_0", "mrs {5}, S3_5_C12_C0_0",
+            "mrs {6}, tpidr_el0",     "mrs {7}, tpidr_el1",
+            out(reg) vcpu.g_sctlr_el1, out(reg) vcpu.g_ttbr0_el1,
+            out(reg) vcpu.g_ttbr1_el1, out(reg) vcpu.g_tcr_el1,
+            out(reg) vcpu.g_mair_el1,  out(reg) vcpu.g_vbar_el1,
+            out(reg) vcpu.g_tpidr_el0, out(reg) vcpu.g_tpidr_el1,
+            options(nomem, nostack),
+        );
+        core::arch::asm!(
+            "mrs {0}, S3_5_C14_C3_1", "mrs {1}, S3_5_C14_C3_2",
+            "mrs {2}, S3_5_C4_C0_0",  "mrs {3}, S3_5_C4_C0_1",
+            "mrs {4}, sp_el1",
+            "mrs {5}, S3_5_C5_C2_0",  "mrs {6}, S3_5_C6_C0_0",
+            out(reg) vcpu.g_cntv_ctl, out(reg) vcpu.g_cntv_cval,
+            out(reg) vcpu.g_spsr_el1, out(reg) vcpu.g_elr_el1,
+            out(reg) vcpu.g_sp_el1,
+            out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
+            options(nomem, nostack),
+        );
+    }
+}
+
 // ── run_vcpu_impl ─────────────────────────────────────────────────────────────
 
 /// Run the vCPU until a VM exit occurs, returning the decoded exit reason.
@@ -230,28 +329,43 @@ struct HostEl1Bank {
 pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // ── 1. Snapshot host EL1 sysregs ────────────────────────────────────────
     let mut h = HostEl1Bank::default();
-    // SAFETY: reading EL1/EL0 sysregs from EL2 is unconditionally permitted.
-    unsafe {
-        core::arch::asm!(
-            "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
-            "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
-            "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
-            "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
-            out(reg) h.sctlr_el1, out(reg) h.ttbr0_el1,
-            out(reg) h.ttbr1_el1, out(reg) h.tcr_el1,
-            out(reg) h.mair_el1,  out(reg) h.vbar_el1,
-            out(reg) h.tpidr_el0, out(reg) h.tpidr_el1,
-            options(nomem, nostack),
-        );
-        core::arch::asm!(
-            "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
-            "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
-            "mrs {4}, sp_el1",
-            out(reg) h.cntv_ctl, out(reg) h.cntv_cval,
-            out(reg) h.spsr_el1, out(reg) h.elr_el1,
-            out(reg) h.sp_el1,
-            options(nomem, nostack),
-        );
+    if VHE {
+        // The host's translation, vector and exception state is in EL2
+        // registers the guest cannot reach; only the thread-ID registers are
+        // shared with the guest's bank.
+        // SAFETY: TPIDR_EL0/TPIDR_EL1 are not redirected under E2H; reading
+        // them at EL2 has no side effects.
+        unsafe {
+            core::arch::asm!(
+                "mrs {0}, tpidr_el0",  "mrs {1}, tpidr_el1",
+                out(reg) h.tpidr_el0, out(reg) h.tpidr_el1,
+                options(nomem, nostack),
+            );
+        }
+    } else {
+        // SAFETY: reading EL1/EL0 sysregs from EL2 is unconditionally permitted.
+        unsafe {
+            core::arch::asm!(
+                "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
+                "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
+                "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
+                "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
+                out(reg) h.sctlr_el1, out(reg) h.ttbr0_el1,
+                out(reg) h.ttbr1_el1, out(reg) h.tcr_el1,
+                out(reg) h.mair_el1,  out(reg) h.vbar_el1,
+                out(reg) h.tpidr_el0, out(reg) h.tpidr_el1,
+                options(nomem, nostack),
+            );
+            core::arch::asm!(
+                "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
+                "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
+                "mrs {4}, sp_el1",
+                out(reg) h.cntv_ctl, out(reg) h.cntv_cval,
+                out(reg) h.spsr_el1, out(reg) h.elr_el1,
+                out(reg) h.sp_el1,
+                options(nomem, nostack),
+            );
+        }
     }
     // SP_EL0 is shared between the blocked Cell (EL0) and the guest's EL0
     // bank. It must be saved and replaced on every lane: a guest that sets
@@ -264,30 +378,27 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
 
     // ── 2a. Configure virtual-timer access for guest ─────────────────────────
     // CNTVOFF_EL2 = 0: virtual timer offset from physical counter = 0.
-    // CNTHCTL_EL2 = 0b11: EL1PCTEN|EL1PCEN — EL1/EL0 may read physical counter.
-    // Linux uses the virtual timer (CNTV / PPI 27); these two writes enable it.
+    // CNTHCTL_EL2 = EL1PCTEN|EL1PCEN ([`GUEST_CNTHCTL`]) — EL1/EL0 may read the
+    // physical counter. Linux uses the virtual timer (CNTV / PPI 27); these
+    // two writes enable it.
     // SAFETY: EL2-private sysregs; safe to write unconditionally before guest entry.
     unsafe {
         core::arch::asm!(
             "msr cntvoff_el2, xzr",
-            "mov {0}, #3",
             "msr cnthctl_el2, {0}",
-            out(reg) _,
+            in(reg) GUEST_CNTHCTL,
             options(nomem, nostack),
         );
     }
 
     // ── 2b. Virtualize CPU identity + allow FP/SVE ───────────────────────────
-    // Non-VHE: a guest MIDR_EL1/MPIDR_EL1 read at EL1 returns VPIDR_EL2/VMPIDR_EL2,
+    // A guest MIDR_EL1/MPIDR_EL1 read at EL1 returns VPIDR_EL2/VMPIDR_EL2,
     // whose reset value is 0 under QEMU. A zero MIDR makes Linux mis-run CPU
     // errata/feature detection and take wrong early-boot code paths; mirror the
     // real host values so the guest sees the physical CPU it runs on.
-    // CPTR_EL2 = RES1-only (0x33FF: bits[13:12] and [9:0] are RES1 in the non-VHE
-    // format) leaves TFP/TTA/TCPAC/TAM clear so guest FP/SIMD/trace do not trap to
-    // EL2 — writing 0 would clear the RES1 bits and is UNPREDICTABLE. Phase-05 lazy
-    // FP is not implemented; the single vCPU owns FP state exclusively.
+    // CPTR_EL2 = [`GUEST_CPTR`] leaves guest FP/SIMD/trace untrapped. Phase-05
+    // lazy FP is not implemented; the single vCPU owns FP state exclusively.
     // SAFETY: all four are EL2-private; reading MIDR/MPIDR at EL2 is unprivileged.
-    const CPTR_EL2_RES1: u64 = 0x33FF;
     unsafe {
         core::arch::asm!(
             "mrs {tmp}, midr_el1",
@@ -297,7 +408,7 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
             "msr cptr_el2, {cptr}",
             "isb",
             tmp = out(reg) _,
-            cptr = in(reg) CPTR_EL2_RES1,
+            cptr = in(reg) GUEST_CPTR,
             options(nomem, nostack),
         );
     }
@@ -306,33 +417,37 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // SAFETY: writing EL1/EL0 sysregs from EL2 is permitted; Cells are EL0
     // and protected by TGE routing — these writes only affect the guest bank.
     unsafe {
-        core::arch::asm!(
-            "msr sctlr_el1, {0}",  "msr ttbr0_el1, {1}",
-            "msr ttbr1_el1, {2}",  "msr tcr_el1,   {3}",
-            "msr mair_el1,  {4}",  "msr vbar_el1,  {5}",
-            "msr tpidr_el0, {6}",  "msr tpidr_el1, {7}",
-            in(reg) vcpu.g_sctlr_el1, in(reg) vcpu.g_ttbr0_el1,
-            in(reg) vcpu.g_ttbr1_el1, in(reg) vcpu.g_tcr_el1,
-            in(reg) vcpu.g_mair_el1,  in(reg) vcpu.g_vbar_el1,
-            in(reg) vcpu.g_tpidr_el0, in(reg) vcpu.g_tpidr_el1,
-            options(nomem, nostack),
-        );
-        // ESR_EL1/FAR_EL1 are part of the guest bank too. A host IRQ can exit
-        // the guest between taking an exception and reading its syndrome; on
-        // the Pi the EL1 host's own Cell SVCs and aborts then overwrite both,
-        // and the resumed guest decodes the host's syndrome (observed on QEMU
-        // raspi3b: a guest EL0 data abort resumed with a host Cell's SVC ESR).
-        core::arch::asm!(
-            "msr cntv_ctl_el0,  {0}",  "msr cntv_cval_el0, {1}",
-            "msr spsr_el1,      {2}",  "msr elr_el1,       {3}",
-            "msr sp_el1,        {4}",
-            "msr esr_el1,       {5}",  "msr far_el1,       {6}",
-            in(reg) vcpu.g_cntv_ctl,  in(reg) vcpu.g_cntv_cval,
-            in(reg) vcpu.g_spsr_el1,  in(reg) vcpu.g_elr_el1,
-            in(reg) vcpu.g_sp_el1,
-            in(reg) vcpu.g_esr_el1,   in(reg) vcpu.g_far_el1,
-            options(nomem, nostack),
-        );
+        if VHE {
+            load_guest_bank_el12(vcpu);
+        } else {
+            core::arch::asm!(
+                "msr sctlr_el1, {0}",  "msr ttbr0_el1, {1}",
+                "msr ttbr1_el1, {2}",  "msr tcr_el1,   {3}",
+                "msr mair_el1,  {4}",  "msr vbar_el1,  {5}",
+                "msr tpidr_el0, {6}",  "msr tpidr_el1, {7}",
+                in(reg) vcpu.g_sctlr_el1, in(reg) vcpu.g_ttbr0_el1,
+                in(reg) vcpu.g_ttbr1_el1, in(reg) vcpu.g_tcr_el1,
+                in(reg) vcpu.g_mair_el1,  in(reg) vcpu.g_vbar_el1,
+                in(reg) vcpu.g_tpidr_el0, in(reg) vcpu.g_tpidr_el1,
+                options(nomem, nostack),
+            );
+            // ESR_EL1/FAR_EL1 are part of the guest bank too. A host IRQ can exit
+            // the guest between taking an exception and reading its syndrome; on
+            // the Pi the EL1 host's own Cell SVCs and aborts then overwrite both,
+            // and the resumed guest decodes the host's syndrome (observed on QEMU
+            // raspi3b: a guest EL0 data abort resumed with a host Cell's SVC ESR).
+            core::arch::asm!(
+                "msr cntv_ctl_el0,  {0}",  "msr cntv_cval_el0, {1}",
+                "msr spsr_el1,      {2}",  "msr elr_el1,       {3}",
+                "msr sp_el1,        {4}",
+                "msr esr_el1,       {5}",  "msr far_el1,       {6}",
+                in(reg) vcpu.g_cntv_ctl,  in(reg) vcpu.g_cntv_cval,
+                in(reg) vcpu.g_spsr_el1,  in(reg) vcpu.g_elr_el1,
+                in(reg) vcpu.g_sp_el1,
+                in(reg) vcpu.g_esr_el1,   in(reg) vcpu.g_far_el1,
+                options(nomem, nostack),
+            );
+        }
         // Program ELR_EL2 (guest PC) + SPSR_EL2 for `eret` in vcpu_enter_guest.
         core::arch::asm!(
             "msr elr_el2,  {0}",
@@ -369,28 +484,32 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // SAFETY: reading EL1 sysregs from EL2 is always permitted; the guest is
     // stopped (TPIDR_EL2 cleared by vt_vcpu_trap).
     unsafe {
-        core::arch::asm!(
-            "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
-            "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
-            "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
-            "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
-            out(reg) vcpu.g_sctlr_el1, out(reg) vcpu.g_ttbr0_el1,
-            out(reg) vcpu.g_ttbr1_el1, out(reg) vcpu.g_tcr_el1,
-            out(reg) vcpu.g_mair_el1,  out(reg) vcpu.g_vbar_el1,
-            out(reg) vcpu.g_tpidr_el0, out(reg) vcpu.g_tpidr_el1,
-            options(nomem, nostack),
-        );
-        core::arch::asm!(
-            "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
-            "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
-            "mrs {4}, sp_el1",
-            "mrs {5}, esr_el1",       "mrs {6}, far_el1",
-            out(reg) vcpu.g_cntv_ctl, out(reg) vcpu.g_cntv_cval,
-            out(reg) vcpu.g_spsr_el1, out(reg) vcpu.g_elr_el1,
-            out(reg) vcpu.g_sp_el1,
-            out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
-            options(nomem, nostack),
-        );
+        if VHE {
+            save_guest_bank_el12(vcpu);
+        } else {
+            core::arch::asm!(
+                "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
+                "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
+                "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
+                "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
+                out(reg) vcpu.g_sctlr_el1, out(reg) vcpu.g_ttbr0_el1,
+                out(reg) vcpu.g_ttbr1_el1, out(reg) vcpu.g_tcr_el1,
+                out(reg) vcpu.g_mair_el1,  out(reg) vcpu.g_vbar_el1,
+                out(reg) vcpu.g_tpidr_el0, out(reg) vcpu.g_tpidr_el1,
+                options(nomem, nostack),
+            );
+            core::arch::asm!(
+                "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
+                "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
+                "mrs {4}, sp_el1",
+                "mrs {5}, esr_el1",       "mrs {6}, far_el1",
+                out(reg) vcpu.g_cntv_ctl, out(reg) vcpu.g_cntv_cval,
+                out(reg) vcpu.g_spsr_el1, out(reg) vcpu.g_elr_el1,
+                out(reg) vcpu.g_sp_el1,
+                out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
+                options(nomem, nostack),
+            );
+        }
         core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) vcpu.g_sp_el0, options(nomem, nostack));
     }
     vcpu.ext.save_guest();
@@ -398,26 +517,34 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
     // SAFETY: restoring our own host state; EL1 sysregs safe to write from EL2.
     unsafe {
-        core::arch::asm!(
-            "msr sctlr_el1, {0}",  "msr ttbr0_el1, {1}",
-            "msr ttbr1_el1, {2}",  "msr tcr_el1,   {3}",
-            "msr mair_el1,  {4}",  "msr vbar_el1,  {5}",
-            "msr tpidr_el0, {6}",  "msr tpidr_el1, {7}",
-            in(reg) h.sctlr_el1, in(reg) h.ttbr0_el1,
-            in(reg) h.ttbr1_el1, in(reg) h.tcr_el1,
-            in(reg) h.mair_el1,  in(reg) h.vbar_el1,
-            in(reg) h.tpidr_el0, in(reg) h.tpidr_el1,
-            options(nomem, nostack),
-        );
-        core::arch::asm!(
-            "msr cntv_ctl_el0,  {0}",  "msr cntv_cval_el0, {1}",
-            "msr spsr_el1,      {2}",  "msr elr_el1,       {3}",
-            "msr sp_el1,        {4}",
-            in(reg) h.cntv_ctl,  in(reg) h.cntv_cval,
-            in(reg) h.spsr_el1,  in(reg) h.elr_el1,
-            in(reg) h.sp_el1,
-            options(nomem, nostack),
-        );
+        if VHE {
+            core::arch::asm!(
+                "msr tpidr_el0, {0}",  "msr tpidr_el1, {1}",
+                in(reg) h.tpidr_el0, in(reg) h.tpidr_el1,
+                options(nomem, nostack),
+            );
+        } else {
+            core::arch::asm!(
+                "msr sctlr_el1, {0}",  "msr ttbr0_el1, {1}",
+                "msr ttbr1_el1, {2}",  "msr tcr_el1,   {3}",
+                "msr mair_el1,  {4}",  "msr vbar_el1,  {5}",
+                "msr tpidr_el0, {6}",  "msr tpidr_el1, {7}",
+                in(reg) h.sctlr_el1, in(reg) h.ttbr0_el1,
+                in(reg) h.ttbr1_el1, in(reg) h.tcr_el1,
+                in(reg) h.mair_el1,  in(reg) h.vbar_el1,
+                in(reg) h.tpidr_el0, in(reg) h.tpidr_el1,
+                options(nomem, nostack),
+            );
+            core::arch::asm!(
+                "msr cntv_ctl_el0,  {0}",  "msr cntv_cval_el0, {1}",
+                "msr spsr_el1,      {2}",  "msr elr_el1,       {3}",
+                "msr sp_el1,        {4}",
+                in(reg) h.cntv_ctl,  in(reg) h.cntv_cval,
+                in(reg) h.spsr_el1,  in(reg) h.elr_el1,
+                in(reg) h.sp_el1,
+                options(nomem, nostack),
+            );
+        }
         core::arch::asm!("msr sp_el0, {sp}", sp = in(reg) h.sp_el0, options(nomem, nostack));
     }
     <VcpuExt as ArmVcpuExt>::restore_host(&h.ext);
@@ -594,6 +721,11 @@ vcpu_enter_guest:
     .else
     orr  x9, x9, #(1 << 18)  // TID3 (generic virt only)
     .endif
+    .if {vhe}
+    // E2H stays set for the guest: the host regime does not change, and the
+    // guest's EL1&0 regime runs with TGE clear.
+    orr  x9, x9, #(1 << 34)
+    .endif
     msr  hcr_el2, x9
     isb
 
@@ -718,7 +850,8 @@ vt_vcpu_trap:
     ldp q30, q31, [x9, #480]
     .endif
 
-    // Restore host HCR_EL2 (Pi: RW only; virt: RW|TGE). Clear VM and VI.
+    // Restore host HCR_EL2 (Pi: RW only; virt: RW|TGE, plus E2H on a VHE host).
+    // Clear VM and VI.
     // CRITICAL: must clear VM before Cell EL0 accesses run through Stage-2.
     // SAFETY: HCR_EL2 is EL2-private.
     mov  x1, #(1 << 31)
@@ -726,6 +859,9 @@ vt_vcpu_trap:
     // EL1 host: never set TGE, VM or VI on return.
     .else
     orr  x1, x1, #(1 << 27)
+    .endif
+    .if {vhe}
+    orr  x1, x1, #(1 << 34)
     .endif
     msr  hcr_el2, x1
     isb
@@ -746,4 +882,5 @@ vt_vcpu_trap:
     ret     // returns to run_vcpu_impl via restored h_x30
 "#,
     pi = const (<VcpuExt as ArmVcpuExt>::PI_WORLD_SWITCH as usize),
+    vhe = const VHE as usize,
 );

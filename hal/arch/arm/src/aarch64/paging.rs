@@ -66,6 +66,9 @@ fn leaf_word(phys: PhysAddr, flags: PageFlags) -> u64 {
     // therefore leave bit 54 clear or EL2 instruction fetch aborts the
     // moment SCTLR_EL2.M is set. Nothing is lost at EL1: non-USER pages
     // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
+    // A VHE host walks this table in the EL2&0 regime, whose descriptor
+    // semantics are the EL1&0 ones: the kernel at EL2 is held by PXN and
+    // EL0 Cells by AP[1]/UXN exactly as on the EL1 host.
     if flags.bits() & PageFlags::USER != 0 {
         entry |= PTE_AP_EL0 | PTE_PXN;
     }
@@ -112,7 +115,10 @@ pub const fn leaf_is_non_global(leaf: u64) -> bool {
 /// EL2 accesses kept using the stale rights. `vae2is` covers the EL2 regime and
 /// is issued only when EL2 is active, because the instruction is UNDEFINED at
 /// EL1. The non-VHE EL2 regime has no ASIDs, so `vae2is` is already
-/// all-contexts; there is no `vaae2is` counterpart to look for.
+/// all-contexts; there is no `vaae2is` counterpart to look for. On a VHE host
+/// (`HCR_EL2.{E2H,TGE} = {1,1}`) both instructions target the one EL2&0
+/// regime the kernel and Cells share: `vaae1is` for every ASID, `vae2is` for
+/// the global kernel leaves, so the pair stays complete there too.
 ///
 /// Ordering contract (Arm ARM §D8.13): `dsb ishst` first so the PTE store is
 /// observable by the other PEs' table walkers before the TLBI is broadcast;

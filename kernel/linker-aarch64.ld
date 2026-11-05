@@ -53,4 +53,11 @@ SECTIONS {
         . = ALIGN(4096);
         __domain_writable_end = .;
     }
+
+    /* Linux arm64 Image header fields (boot.rs `_start`, header-carrying
+     * backends only). text_offset is the image's offset above a 2 MiB-aligned
+     * load base; image_size spans the load address to the end of the boot
+     * stack, which the loader must keep free. */
+    __image_text_offset = __domain_text_start & 0x1FFFFF;
+    __image_size = __domain_writable_end - __domain_text_start;
 }
