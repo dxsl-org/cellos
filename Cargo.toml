@@ -198,6 +198,8 @@ members = [
     "cells/tests/mlibc-posix-x86",
     "cells/tests/cpp-hosted-smoke",
     "libs/cell-initial-stack",
+    "libs/drm-cellos",
+    "cells/tests/drm-lite-x86",
     "cells/tests/test-isolation",
     "cells/tests/input-test",
     "cells/tests/window-policy-probe",

@@ -1,0 +1,19 @@
+[package]
+name = "drm-cellos"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0 AND MIT"
+description = "libdrm-lite for x86_64 Tier-2 Cells: the pinned libdrm subset, the Cellos device-enumeration backend and ioctl (runtime plan R6)"
+# Dependents read the include directories from DEP_DRM_LITE_* (build.rs).
+links = "drm_lite"
+
+[features]
+# The test-only fd provider (include/drm-cellos-fake.h).
+fake-provider = []
+
+[dependencies]
+# libdrm-lite calls into mlibc (posix_devctl, malloc, stdio).
+mlibc-shim = { path = "../mlibc-shim", version = "0.1.0" }
+
+[build-dependencies]
+cc = "1.0"

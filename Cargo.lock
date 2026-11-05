@@ -359,6 +359,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-drm-lite-x86"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cc",
+ "cell-build",
+ "drm-cellos",
+ "mlibc-shim",
+ "ostd",
+]
+
+[[package]]
 name = "app-futex-test"
 version = "0.1.0"
 dependencies = [
@@ -1759,6 +1771,14 @@ dependencies = [
  "driver-hid",
  "ostd",
  "types",
+]
+
+[[package]]
+name = "drm-cellos"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "mlibc-shim",
 ]
 
 [[package]]

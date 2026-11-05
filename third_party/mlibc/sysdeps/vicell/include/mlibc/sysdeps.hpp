@@ -34,6 +34,9 @@ struct VicellSysdepTags :
 	VmUnmap,
 	Isatty,
 	Stat,
+	// generic/generic.cpp: fd providers (vicell/fd_provider.h); reached
+	// through posix_devctl, since `ioctl` itself is a glibc-option function
+	Ioctl,
 	// generic/thread.cpp
 	PrepareStack,
 	Clone,
