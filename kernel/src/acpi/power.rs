@@ -79,6 +79,18 @@ const MULTI_NAME_PREFIX: u8 = 0x2F;
 const EXT_OP_PREFIX: u8 = 0x5B;
 const ROOT_CHAR: u8 = b'\\';
 const PARENT_PREFIX: u8 = b'^';
+const ADD_OP: u8 = 0x72;
+const SUBTRACT_OP: u8 = 0x74;
+const MULTIPLY_OP: u8 = 0x77;
+const SHIFT_LEFT_OP: u8 = 0x79;
+const SHIFT_RIGHT_OP: u8 = 0x7A;
+const AND_OP: u8 = 0x7B;
+const NAND_OP: u8 = 0x7C;
+const OR_OP: u8 = 0x7D;
+const NOR_OP: u8 = 0x7E;
+const XOR_OP: u8 = 0x7F;
+const NOT_OP: u8 = 0x80;
+const MOD_OP: u8 = 0x85;
 const CREATE_DWORD_FIELD_OP: u8 = 0x8A;
 const CREATE_WORD_FIELD_OP: u8 = 0x8B;
 const CREATE_BYTE_FIELD_OP: u8 = 0x8C;
@@ -245,28 +257,43 @@ impl Scan<'_> {
         Some((value, pos + 1 + width))
     }
 
-    /// Skip one data object or name reference, the only TermArgs this scan
-    /// accepts at namespace scope. A name is taken as a plain reference.
-    fn skip_term(&self, pos: usize, end: usize) -> Option<usize> {
+    /// Skip one TermArg of the kinds this scan accepts at namespace scope: a
+    /// data object, a name (taken as a plain reference) or an integer
+    /// expression whose result is discarded (`NullName` target), so loading the
+    /// table cannot store into the namespace. `nest` bounds expression depth.
+    fn skip_term(&self, pos: usize, end: usize, nest: usize) -> Option<usize> {
         let op = self.byte(pos, end)?;
         if let Some((_, next)) = self.integer(pos, end) {
             return Some(next);
         }
-        match op {
+        let operands = match op {
             STRING_PREFIX => {
                 let nul = self.aml.get(pos + 1..end)?.iter().position(|&b| b == 0)?;
-                Some(pos + 1 + nul + 1)
+                return Some(pos + 1 + nul + 1);
             }
-            BUFFER_OP | PACKAGE_OP | VAR_PACKAGE_OP => Some(self.pkg_length(pos + 1, end)?.0),
-            EXT_OP_PREFIX if self.byte(pos + 1, end)? == REVISION_OP => Some(pos + 2),
-            byte if Self::starts_name(byte) => Some(self.name_string(pos, end)?.1),
-            _ => None,
+            BUFFER_OP | PACKAGE_OP | VAR_PACKAGE_OP => {
+                return Some(self.pkg_length(pos + 1, end)?.0)
+            }
+            EXT_OP_PREFIX if self.byte(pos + 1, end)? == REVISION_OP => return Some(pos + 2),
+            byte if Self::starts_name(byte) => return Some(self.name_string(pos, end)?.1),
+            ADD_OP | SUBTRACT_OP | MULTIPLY_OP | SHIFT_LEFT_OP | SHIFT_RIGHT_OP | AND_OP
+            | NAND_OP | OR_OP | NOR_OP | XOR_OP | MOD_OP => 2,
+            NOT_OP => 1,
+            _ => return None,
+        };
+        if nest >= MAX_NEST {
+            return None;
         }
+        let mut next = pos + 1;
+        for _ in 0..operands {
+            next = self.skip_term(next, end, nest + 1)?;
+        }
+        (self.byte(next, end)? == ZERO_OP).then_some(next + 1)
     }
 
     fn skip_terms(&self, mut pos: usize, end: usize, count: usize) -> Option<usize> {
         for _ in 0..count {
-            pos = self.skip_term(pos, end)?;
+            pos = self.skip_term(pos, end, 0)?;
         }
         Some(pos)
     }
@@ -380,7 +407,7 @@ impl Scan<'_> {
                     if name.is_root_s5(depth) {
                         return Err(self.s5_package(next, end));
                     }
-                    self.skip_term(next, end).ok_or(bad)?
+                    self.skip_term(next, end, 0).ok_or(bad)?
                 }
                 ALIAS_OP => {
                     let (_, next) = self.name_string(pos + 1, end).ok_or(bad)?;
