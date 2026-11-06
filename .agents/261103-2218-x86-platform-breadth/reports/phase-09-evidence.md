@@ -211,3 +211,136 @@ Other lanes:
 - **riscv64 default lane.** `PASS: FAT16 mounted — kernel booted (no disk)`.
 - **aarch64 default lane.** `PASS: aarch64 shell prompt reached — full boot successful`.
 - The regenerated `kernel/src/embedded{,-aarch64}/init` were restored.
+
+## Final checkpoint run (tip `eab0755c6`)
+
+Recorded 2026-11-06 on `feat/x86-s3-integration` at `eab0755c6` (worktree `/home/dmin/worktrees/cellos-s3-int`). This tip is everything above plus the first review's fixes, merged from `feat/x86-s3-review-fixes`:
+- `9bea3ddad`: syscall 236 records unadmitted Ethernet functions and re-reads the class under the `PCI_DEVICES` lock.
+- `fb328b418`: e1000e TX/RX fixes.
+- `c162ed509`: the vmxnet3 RX vector is masked only when it serves RX alone.
+- `d7cec8514`: PVSCSI classifies expired parks (D6) and refuses a translated DMA area (D5).
+- `b626704fb`: new `machine-pin-x86` test `q35_unbound_root_port_nic_is_in_the_pci_set`.
+- `290126206` and `12b9c29b6`: a comment fix and an ACPI test.
+
+The VMware matrix above (`…a3694a`) ran before this merge. Every gate below was re-run on this tip.
+
+Images were built outside the repository (`/home/dmin/worktrees/s3int-out/final/rebuild.sh`, the same route as above). Read-back: `published …/kernel_fs.img (12582912 B, sha256 aaa30cf2ea49433055727056aab5da15fa20902993c1fec48749ff758cdb3a15), 32 files`. ISO sha256:
+- default `8884456a516d83bcc64fa5527da66180eadf8ba6bd786aca81bd69270c7a6ff3`;
+- `limine-pc.conf` `46723fc95a54529ce926a7c71b91a9d07d699de4abc04e6403d6065a75854210`;
+- `limine-vm.conf` (the VMware ISO) `322ba0aedd9eb07540c24ea10fce3f140356cb4af625d58003734be7a71764a5`.
+
+`build/vicell-x86-prod-refusal.iso` was rebuilt on this tip (`2d9cfd3a…83de`). Tracked `kernel/src/embedded-x86_64/*` was not touched. The riscv64/aarch64 lanes regenerate `kernel/src/embedded{,-aarch64}/init`; both were restored, and `git status` was clean afterwards.
+
+**Verdict: every requested gate passes.**
+- Host: all gates pass.
+- QEMU TCG and KVM: 13 suites each, 72/72 tests per accelerator.
+- OVMF: 6/6 boots.
+- riscv64 and aarch64 lanes pass.
+- VMware: **39/39**.
+
+The one non-gate failure is the pre-existing `service-platform --tests` host clippy (see below). No failure needs attribution.
+
+### Host
+
+| Gate | Result |
+|---|---|
+| `cargo test -p cellos-kernel` (host; parallel and `--test-threads=1`) | `test result: ok. 511 passed` both (509 on `283345b32`) |
+| `cargo test -p driver-e1000e -p driver-vmxnet3 -p driver-pvscsi -p service-platform` | `22` / `13` / `10` / `9 passed` (`driver-e1000` has `test = false`) |
+| `cargo test -p cellos-boards` / `-p app-init` | `15` / `41 passed` |
+| `scripts/test_assemble_x86_image.py` / `scripts/test_cellos_sign.py` | `Ran 40 tests … OK` / `Ran 67 tests … OK (skipped=1)`. Pin check: `X86_CANDIDATE_RECIPE_SHA256 = "8c9b1ed0…d07928f"` equals `sha256sum scripts/assemble-x86-image.py` (`8c9b1ed0f0af27a0ecd9eb04ec10f5270cf73dd216d85d45bbb5b8672d07928f`) |
+| `scripts/x86/test_native_vmware_matrix.py` | `Ran 43 tests … OK` |
+| `cellos-sign --check --strict` | `OK: F1 — 142 crates and 1060 files scanned; unsafe confined to 79 allowlisted files`, `OK: F5 — rustc f53b654a8882 is the pinned nightly-2026-05-01` |
+| Law-1 scripts | `PASS: multi-source WaitCompletion Law-1 items intact …`, `OK: the frozen AI interface matches its Law 1 record`, `PASS: LookupServiceBound Law-1 items intact …` |
+| `mutable-globals --check` (CI recipe: `cargo run --release --manifest-path tools/mutable-globals/Cargo.toml -- --check`) | `640 declarations, 255 need review, 48 problems` (= base, ≤ 48). It printed no `is not current` line, so `docs/generated/mutable-globals.md` is current. Tool tests: `7 passed` |
+| clippy `-D warnings` | All clean: `cellos-kernel` on x86_64 / riscv64 / aarch64; `driver-{e1000,e1000e,vmxnet3,pvscsi}`, `service-platform` and `app-init` on x86_64-unknown-none and riscv64; `--tests` on the host for `driver-{e1000e,vmxnet3,pvscsi}`. `service-platform --tests` on the host still fails with the same 15 dead-code errors in `cfg(not(test))`-only functions (`function scan_and_register is never used`, …): pre-existing and not a CI gate, as recorded above |
+
+### QEMU (8.2.2; the ISOs above; `CELLOS_X86_SMP=4` for `x86_64-boot`)
+
+| Suite | TCG | KVM |
+|---|---|---|
+| `x86_64-boot` (SMP 4, incl. `x86_smp_brings_every_cpu_online`) | 10 | 10 |
+| `nic-x86` | 6 | 6 |
+| `vmxnet3-x86` | 2 | 2 |
+| `pvscsi-x86` | 3 | 3 |
+| `pcie-multibus-x86` | 3 | 3 |
+| `machine-pin-x86` (incl. `q35_unbound_root_port_nic_is_in_the_pci_set`) | 6 | 6 |
+| `ahci-x86` | 15 | 15 |
+| `nvme-x86` | 11 | 11 |
+| `virtio-x86` | 4 | 4 |
+| `power-x86` | 3 | 3 |
+| `iommu-dmar-x86` | 3 | 3 |
+| `xhci-x86` | 4 | 4 |
+| `igb-x86` (with `VICELL_IGB_VTD_ISO`) | 2 | 2 |
+
+Each cell is `test result: ok. N passed; 0 failed`.
+
+Decisive lines:
+- **vmxnet3, both accelerators, ± VT-d:**
+  - `[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit=0xfed90000`
+  - `[vmxnet3] controller bound 15ad:07b0 vmxnet3 rev=1 link_up=true speed=1000Mb/s mac=52:54:00:12:34:56 irq=msix rx=request-driven vectors=3 irq_wakes=0 park_expiries=0`
+- **e1000e (`nic-x86`, KVM):** `[e1000e] controller bound 8086:10d3 82574L link_up=true … irq=msix rx=request-driven vectors=3 irq_wakes=1 park_expiries=0`.
+- **PVSCSI and the D6 expiry counters.** The counters are now classified per cell lifetime (`d7cec8514`). On every boot the bind line is `[pvscsi] pci 00:03.0 15ad:07c0 target=0 lun=0 blocks=528384 irq=msi vectors=1 irq_wakes=W park_expiries=0 expiry_ready=0 expiry_empty=0`:
+  - TCG: `W` = 0 on five boots and 9 on one.
+  - KVM: `W` = 0, 1, 3 (three boots) and 4.
+
+  After bind, over 3 lanes × 2 boots:
+
+  | Accelerator | `irq wait expired` lines | `ring=ready` | `ring=empty` | `elapsed_ms` |
+  |---|---|---|---|---|
+  | TCG | 5 | 1 (`… ring=ready elapsed_ms=98 expiry_ready=1 expiry_empty=0`) | 4 | 93–200 |
+  | KVM | 4 | 0 | 4 (e.g. `… ring=empty elapsed_ms=99 expiry_ready=0 expiry_empty=2`) | 96–112 |
+
+  The phase-09 recording had TCG 10 / KVM 2 unclassified lines. Most expiries now find the ring **empty**: the park ran out while no completion had been written, so the expiry was not a missed interrupt. A completion missed by the MSI and found on the re-read happened once (TCG).
+
+Other lanes:
+- **OVMF** (q35, `-smp 1`, default ISO). All six boots reach `Cellos >`:
+  - KVM (`clock=kvmclock`, `apic=x2apic`), 6 s each: 1 GiB `allocator: 13 usable range(s), 250946 frames (980 MiB)`, 2 GiB `14 … 513089 frames (2004 MiB)`, 4 GiB `15 … 1037377 frames (4052 MiB)`.
+  - TCG (`clock=hpet`, `apic=xapic`): 1 / 2 / 4 GiB in 7 / 7 / 8 s.
+- **riscv64 default lane.** `PASS: FAT16 mounted — kernel booted (no disk)`.
+- **aarch64 default lane.** `PASS: aarch64 shell prompt reached — full boot successful`.
+
+### VMware matrix (ceiling: VMware local, `x86_64-vm` only)
+
+Run `20261106T022001Z-7ce6b8`: `python3 scripts/x86/test-native-vmware-matrix.py matrix --iso …/final/vicell-x86-vm.iso --jobs 3`, `ELAPSED 584.55 s`. Host: VMware Workstation 25.0.0 build 24995812 (`vmrun version 1.17.0.24995812`), `virtual_hw_version` `22` on all 78 boots. The cell judgment is the one described above.
+
+JSON: [s3-final-vmware-matrix.json](s3-final-vmware-matrix.json). It applies the same reduction as the phase-09 file: 2574 bridge and root-port marker lines are dropped. The source is `build/x86-backend-evidence/vmware-lane/20261106T022001Z-7ce6b8/summary.json`, sha256 `8ceabf1ca534f4e9751f16aa48b02afdf834d13eb1e73218616590ed8346f8d9`, retained with every serial log, VMX and `vmware.log`.
+
+Cleanup: `cleanup_confirmed: true` ×39. Afterwards `vmrun -T ws list` → `Total running VMs: 0`, and `C:\Temp\cellos-vmware\s3-lane\` is empty.
+
+Totals: status, prompt, network, persistence and poweroff are each **PASS 39 / FAIL 0**. All 78 boots have `dhcp_lease`, `guest_poweroff: true` and `hard_stop: false`. Each entry gives the time to the prompt (boot 1 / boot 2).
+
+| NIC | Storage | 2 vCPU BIOS | 2 vCPU EFI | 4 vCPU BIOS | 4 vCPU EFI |
+|---|---|---|---|---|---|
+| e1000 | sata | PASS (6.2 / 3.3 s) | PASS (6.1 / 4.6 s) | PASS (6.5 / 4.2 s) | PASS (7.3 / 4.6 s) |
+| e1000 | nvme | PASS (3.9 / 3.4 s) | PASS (4.0 / 4.1 s) | PASS (4.6 / 4.1 s) | PASS (4.9 / 5.9 s) |
+| e1000 | pvscsi | PASS (4.0 / 4.2 s) | PASS (4.8 / 4.3 s) | PASS (4.7 / 4.0 s) | PASS (5.0 / 6.1 s) |
+| e1000e | sata | PASS (4.0 / 4.3 s) | PASS (5.2 / 4.2 s) | PASS (6.6 / 4.1 s) | PASS (4.7 / 6.8 s) |
+| e1000e | nvme | PASS (6.2 / 3.3 s) | PASS (5.6 / 3.7 s) | PASS (4.4 / 3.9 s) | PASS (4.2 / 4.2 s) |
+| e1000e | pvscsi | PASS (4.0 / 3.5 s) | PASS (5.5 / 5.9 s) | PASS (6.2 / 5.9 s) | PASS (6.6 / 6.8 s) |
+| vmxnet3 | sata | PASS (5.7 / 5.1 s) | PASS (5.4 / 5.7 s) | PASS (6.2 / 5.5 s) | PASS (6.2 / 6.3 s) |
+| vmxnet3 | nvme | PASS (5.3 / 4.8 s) | PASS (5.6 / 5.3 s) | PASS (5.9 / 5.5 s) | PASS (6.5 / 6.3 s) |
+| vmxnet3 | pvscsi | PASS (5.7 / 4.6 s) | PASS (5.5 / 5.4 s) | PASS (6.3 / 5.5 s) | PASS (6.4 / 6.5 s) |
+
+| `pciBridge0` cell | Result | Decisive lines |
+|---|---|---|
+| `bridge0-sata-e1000-c2-bios` (5.6 / 4.9 s) | PASS | `platform-reg 02:00.0 vendor=8086 device=100f class=02:00:00 bar0=0xfd5c0000 mem=0xfd5c0000+0x20000`, `platform-reg 02:01.0 vendor=15ad device=07e0 class=01:06:01 bar0=0x0 mem=0xfd5ef000+0x1000`, `[ahci] ABAR claim ok base=0xfd5ef000 len=0x1000`, `[ahci] controller bound bdf=02:01.0`, `block driver registered: tid=5 device=pci-02-01-0 route=0`, `[e1000] controller bound 8086:100f 82545EM … irq=polled reason=request-driven`, `DHCP acquired` |
+| `bridge0-nvme-e1000e-c4-efi` (6.5 / 6.7 s) | PASS | `platform-reg 0b:00.0 vendor=15ad device=07f0 class=01:08:02 bar0=0xfe200000 mem=0xfe200000+0x4000`, `block driver registered: tid=4 device=pci-0b-00-0 route=0`, `[platform] registered bus 3 device 0 function 0 class 2:0:0`, `[e1000e] controller bound 8086:10d3 82574L link_up=true … irq=msix rx=request-driven vectors=3`, `DHCP acquired`. Boot 2 also has `platform-reg 03:00.0 vendor=8086 device=10d3 class=02:00:00 bar0=0xfea20000 mem=0xfea20000+0x20000`; see the serial note below |
+| `bridge0-pvscsi-vmxnet3-c2-efi` (5.6 / 6.1 s) | PASS | `platform-reg 03:00.0 vendor=15ad device=07c0 class=01:07:00 bar0=0x0 mem=0xfea10000+0x8000`, `platform-reg 0b:00.0 vendor=15ad device=07b0 class=02:00:00 bar0=0xfe213000 mem=0xfe213000+0x1000`, `[pvscsi] pci 03:00.0 15ad:07c0 … irq=msix vectors=1 irq_wakes=0 park_expiries=0 expiry_ready=0 expiry_empty=0`, `[vmxnet3] controller bound 15ad:07b0 vmxnet3 rev=1 link_up=true speed=10000Mb/s … irq=msix rx=request-driven vectors=3`, `DHCP acquired` |
+
+Marker counts over the 78 boots (MACs and wake counts elided):
+- **NIC:**
+  - 26 × `[e1000] controller bound 8086:100f 82545EM mac=… irq=polled reason=request-driven`;
+  - 26 × `[e1000e] controller bound 8086:10d3 82574L link_up=true mac=… irq=msix rx=request-driven vectors=3 irq_wakes=0 park_expiries=0`;
+  - 26 × `[vmxnet3] controller bound 15ad:07b0 vmxnet3 rev=1 link_up=true speed=10000Mb/s mac=… irq=msix rx=request-driven vectors=3 irq_wakes=0 park_expiries=0`;
+  - 78 × `[net] DHCP acquired — IP configured` and `[net] IP address: 192.168.232.128`.
+  - No `registration refused`, `unsupported Ethernet identity`, `driver gate`, `[fault]`, panic or `SAFE MODE` line.
+- **Storage:**
+  - AHCI `controller bound bdf=00:10.0` (16), `00:11.0` (8) and `02:01.0` (2);
+  - PVSCSI `pci 02:00.0` (24) and `03:00.0` (2);
+  - on every cell, boot 1 has `machine pin: first boot — recorded <id>` and boot 2 `machine pin: match <id>`.
+- **S5:**
+  - 78 × `[acpi] power: \_S5_ static SLP_TYPa=0 SLP_TYPb=0`;
+  - `[power] poweroff: PM1a_CNT 0x444 SLP_TYPa=0 PM1b_CNT 0x0 SLP_TYPb=0` on 40 BIOS boots and `PM1a_CNT 0x1004 …` on 38 EFI boots.
+- **PVSCSI on the real device (D6).** All 26 bind lines read `irq=msix vectors=1 irq_wakes=0..3 park_expiries=0 expiry_ready=0 expiry_empty=0`, and there is no `irq wait expired` line. The D6 expiries remain a QEMU (MSI) observation.
+
+Serial note: some log lines are missing from the serial capture. This is not a verdict input. It is the same in the earlier run: `USER: [platform] registered` appears 5/6/7 times per boot, 9/41/28 boots here against 7/46/25 in `…a3694a`. Lines also go missing within one cell, for example `bridge0-nvme-e1000e-c4-efi` boot 1 lacks the e1000e `platform-reg` line that boot 2 has. Every judged marker was present on every boot.

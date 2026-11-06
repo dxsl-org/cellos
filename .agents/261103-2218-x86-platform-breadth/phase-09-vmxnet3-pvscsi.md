@@ -75,13 +75,13 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 - [x] vmxnet3 (QEMU) — `reports/phase-09-evidence.md`
 - [x] PVSCSI (QEMU) — `reports/phase-09-evidence.md`
 - [x] Matrix script: `matrix` sweep of `nic × storage × vcpu × firmware` plus one `pciBridge0` cell per storage type, with prompt / NIC + DHCP / persistence / guest-S5 verdicts and 12 unit tests ([evidence](reports/phase-09-evidence.md#vmware-matrix-09-3-09-4))
-- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T020521Z-a3694a` on `283345b32` ([JSON](reports/s3-phase09-vmware-matrix.json))
+- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T020521Z-a3694a` on `283345b32` ([JSON](reports/s3-phase09-vmware-matrix.json)); final checkpoint run `20261106T022001Z-7ce6b8` on `eab0755c6` (review fixes merged) also 39/39 ([JSON](reports/s3-final-vmware-matrix.json), [evidence](reports/phase-09-evidence.md#final-checkpoint-run-tip-eab0755c6))
 
 ## Success Criteria
 
-- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (final `283345b32`): `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
-- [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only).
-- [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`).
+- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (`283345b32`), and on the final checkpoint tip `eab0755c6`: `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
+- [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only). Final checkpoint on `eab0755c6`: run `20261106T022001Z-7ce6b8`, 39/39 ([JSON](reports/s3-final-vmware-matrix.json)).
+- [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`, also on `eab0755c6`).
 - [ ] Review pass on both cells' DMA/ring code.
 
 ## Risk Assessment
