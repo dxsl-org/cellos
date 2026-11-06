@@ -12,7 +12,14 @@
 //!
 //! 3. **Release-on-exit**: `release_mmio_for(tid)` frees all ranges owned by
 //!    a task. Owners are task ids, the same key as `BDF_OWNERS`: the claiming
-//!    task holds the window, so retirement releases it per member task.
+//!    task holds the window, so retirement releases it per member task. On
+//!    AArch64 the released pages also return to their boot posture, which on
+//!    the Pi boards is kernel-only.
+//!
+//! 4. **Grant is the mapping**: `RequestMmio` sets USER on the whole pages of
+//!    a granted window. A sub-page window (the BCM2837 mailbox, which shares
+//!    its page with the IRQ controller) is never USER-mapped; the kernel
+//!    performs the owner's accesses to its bytes (`mediation`).
 //!
 //! # Current scope
 //! Allowlist is hardcoded per target (DTB discovery remains deferred).
@@ -22,6 +29,7 @@
 //! | QEMU ARM virt (aarch64) | PL011 UART0 | 0x0900_0000 | 0x1000 |
 //! | QEMU ARM virt (aarch64) | PL061 GPIO  | 0x0903_0000 | 0x1000 |
 //! | Raspberry Pi 3 | BCM2837 GPIO/BSC1/SPI0/AUX | exact 4-KiB windows | 0x1000 |
+//! | Raspberry Pi 3 | VideoCore mailbox (mediated) | 0x3F00_B880 | 0x40 |
 //! | QEMU RISC-V virt (riscv64) | (none yet — kernel serial owns UART) | — | — |
 
 use crate::sync::Spinlock;
@@ -152,7 +160,9 @@ const BCM2837_ALLOWED_SNAPSHOT: &[(usize, usize, u8)] = &[
     (0x3F21_5000, 0x1000, DEV_UART),
     (0x3F80_4000, 0x1000, DEV_I2C),
     (0x3F20_4000, 0x1000, DEV_SPI),
-    (0x3F00_B880, 0x1000, DEV_DISPLAY),
+    // Narrowed from 0x1000 (H-18): the mailbox registers only, never the
+    // IRQ-controller page they sit on; accesses are kernel-mediated.
+    (0x3F00_B880, 0x40, DEV_DISPLAY),
 ];
 #[cfg(target_arch = "aarch64")]
 const QEMU_ARM_VIRT_ALLOWED_SNAPSHOT: &[(usize, usize, u8)] = &[
@@ -687,10 +697,36 @@ fn bcm2837_self_test() -> bool {
 /// Release all MMIO regions owned by task `tid`.
 ///
 /// Retirement calls this for every member task of the retiring incarnation.
+/// On AArch64 the released windows' USER pages go back to the boot posture
+/// (kernel-only on the Pi boards): `RequestMmio` installed them, so without
+/// this a dead Cell's window would stay EL0-reachable for every other Cell.
 pub fn release_mmio_for(tid: usize) {
-    REGISTRY
-        .lock()
-        .retain(|_base, region| region.owner_tid != tid);
+    let mut registry = REGISTRY.lock();
+    #[cfg(all(target_arch = "aarch64", not(test)))]
+    let released: alloc::vec::Vec<(usize, usize)> = registry
+        .iter()
+        .filter(|(_, region)| region.owner_tid == tid)
+        .map(|(&base, region)| (base, region.len))
+        .collect();
+    registry.retain(|_base, region| region.owner_tid != tid);
+    // REGISTRY stays held so no new owner can claim a page between the check
+    // below and its PTE update; a page a live region still covers (a window
+    // handed over from a Terminated owner before this reap) keeps USER.
+    #[cfg(all(target_arch = "aarch64", not(test)))]
+    for (base, len) in released {
+        const PAGE: usize = 4096;
+        for page in user_pages(base, len).step_by(PAGE) {
+            let still_owned = registry
+                .iter()
+                .any(|(&live, region)| live < page + PAGE && page < live + region.len);
+            if still_owned {
+                continue;
+            }
+            if let Err(e) = crate::memory::paging::restore_mmio_boot_posture(page, PAGE) {
+                log::error!("[mmio] release tid={tid}: page {page:#x} kept USER ({e:?})");
+            }
+        }
+    }
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
@@ -976,6 +1012,12 @@ mod selftest;
 pub(crate) fn pcie_bar_window_self_test() -> bool {
     selftest::run()
 }
+
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64", test))]
+#[path = "resource_registry_mediation.rs"]
+mod mediation;
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+pub(crate) use mediation::user_pages;
 
 #[cfg(test)]
 #[path = "resource_registry_tests.rs"]

@@ -10,6 +10,10 @@ pub struct Bcm27xxMmioLayout {
     pub system_timer_base: usize,
     pub legacy_irq_base: usize,
     pub mailbox_base: usize,
+    /// Bytes of the VideoCore mailbox register block (mailbox 0 read through
+    /// mailbox 1 status), not a page: the mailbox shares its 4 KiB page with
+    /// the legacy IRQ controller and the ARM timer, so the kernel never
+    /// USER-maps that page and mediates each access to these bytes instead.
     pub mailbox_grant_size: usize,
     pub gpio_base: usize,
     pub gpio_grant_size: usize,
@@ -57,7 +61,7 @@ pub const BCM2837: Bcm27xxSocProfile = Bcm27xxSocProfile {
         system_timer_base: 0x3F00_3000,
         legacy_irq_base: 0x3F00_B200,
         mailbox_base: 0x3F00_B880,
-        mailbox_grant_size: 0x1000,
+        mailbox_grant_size: 0x40,
         gpio_base: 0x3F20_0000,
         gpio_grant_size: 0x1000,
         bsc1_base: 0x3F80_4000,

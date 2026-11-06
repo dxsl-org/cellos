@@ -26,7 +26,7 @@ fn bcm2837_mapping_and_grant_spans_are_bounded() {
     assert_eq!(mmio.local_controller_base, peripheral_end);
     assert_eq!(mmio.local_controller_end(), Some(0x4000_1000));
     assert_eq!(mmio.gpio_grant_size, 0x1000);
-    assert_eq!(mmio.mailbox_grant_size, 0x1000);
+    assert_eq!(mmio.mailbox_grant_size, 0x40);
     assert_eq!(mmio.bsc1_grant_size, 0x1000);
     assert_eq!(mmio.spi0_grant_size, 0x1000);
     assert_eq!(mmio.aux_grant_size, 0x1000);
@@ -40,6 +40,36 @@ fn bcm2837_mapping_and_grant_spans_are_bounded() {
     assert!(mmio.aux_base + mmio.aux_grant_size <= peripheral_end);
     assert!(mmio.gpio_base + mmio.gpio_grant_size <= mmio.spi0_base);
     assert!(mmio.spi0_base + mmio.spi0_grant_size <= mmio.aux_base);
+}
+
+/// The kernel USER-maps only whole pages inside a grant (H-18): every page
+/// window must be page-aligned, and the one sub-page grant — the mailbox —
+/// must stop short of the legacy IRQ controller and ARM timer it shares a
+/// page with, because the kernel performs its accesses byte-exactly.
+#[test]
+fn bcm2837_grants_are_page_windows_except_the_mediated_mailbox() {
+    const PAGE: usize = 0x1000;
+    let mmio = BCM2837.mmio;
+    for (base, size) in [
+        (mmio.gpio_base, mmio.gpio_grant_size),
+        (mmio.bsc1_base, mmio.bsc1_grant_size),
+        (mmio.spi0_base, mmio.spi0_grant_size),
+        (mmio.aux_base, mmio.aux_grant_size),
+        (mmio.dwc2_base, mmio.dwc2_grant_size),
+    ] {
+        assert_eq!(base % PAGE, 0, "{base:#x} is not page-aligned");
+        assert_eq!(size % PAGE, 0, "{base:#x}+{size:#x} is not whole pages");
+    }
+
+    let mailbox_page = mmio.mailbox_base & !(PAGE - 1);
+    let mailbox_end = mmio.mailbox_base + mmio.mailbox_grant_size;
+    assert_eq!(mailbox_page, mmio.legacy_irq_base & !(PAGE - 1));
+    assert!(mmio.mailbox_grant_size < PAGE);
+    // IRQ registers end at +0x228, the ARM timer at +0x424; the mailbox
+    // window starts after both and stays inside the page.
+    assert!(mmio.legacy_irq_base + 0x228 <= mmio.mailbox_base);
+    assert!(mmio.peripheral_base + 0xB424 <= mmio.mailbox_base);
+    assert!(mailbox_end <= mailbox_page + PAGE);
 }
 
 #[test]

@@ -267,9 +267,12 @@ pub fn init_kernel_paging(
     #[cfg(target_arch = "aarch64")]
     {
         use hal::aarch64::backend::{ArmResources, Board};
-        // Cell-accessible windows: individual cells receive sub-regions via
-        // sys_request_mmio / resource_registry; kernel-only windows (interrupt
-        // controllers, platform bus, ECAM) keep mmio_flags.
+        // Board maps marked `cell_access` boot USER (QEMU virt's documented
+        // peripheral/VirtIO windows only); every other device window, the whole
+        // Pi peripheral aperture included, is kernel-only. A Cell reaches a
+        // kernel-only window solely through `RequestMmio`, which sets USER on
+        // the granted whole pages (`grant_mmio_user`); retirement restores the
+        // boot posture (`restore_mmio_boot_posture`).
         let cell_mmio_flags = PageFlags::from_bits(
             PageFlags::VALID
                 | PageFlags::READ
@@ -834,23 +837,19 @@ pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     Ok(cleared)
 }
 
-/// Re-establish user accessibility for `[base, base+len)` on RISC-V/AArch64.
+/// Make the whole pages of `[base, base+len)` reachable from EL0/U-mode on
+/// RISC-V/AArch64.
 ///
-/// The counterpart of [`clear_mmio_user`]. On these targets the boot identity
-/// map is what makes an allowlisted window reachable from EL0, so a revocation
-/// is otherwise permanent: a Cell that legitimately requests the window again
-/// gets the registry grant while the leaf stays kernel-only, and it dies on its
-/// first access. Called by the capability self-test (which must not leave the
-/// machine disarmed) and by `RequestMmio`, mirroring what x86 does when it maps
-/// a claimed window on demand.
+/// The counterpart of [`clear_mmio_user`], called by `RequestMmio` once the
+/// registry granted the window (and by the capability self-test). Only pages
+/// lying entirely inside the window gain USER: a page shared with registers
+/// the Cell was not granted stays kernel-only, and the kernel mediates the
+/// Cell's accesses to its granted bytes instead (`resource_registry`
+/// mediation). Unmapped pages are skipped.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
-    let Some(end) = checked_page_end(base, len) else {
-        return Ok(0);
-    };
     let mut granted = 0;
-    let mut va = base & !(PAGE_SIZE - 1);
-    while va < end {
+    for va in crate::resource_registry::user_pages(base, len).step_by(PAGE_SIZE) {
         match protect_page(va, mmio_user_flags()) {
             Ok(()) => granted += 1,
             // Not mapped: nothing to grant.
@@ -860,9 +859,47 @@ pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
                 return Err(e);
             }
         }
-        va += PAGE_SIZE;
     }
     Ok(granted)
+}
+
+/// Return the whole pages of `[base, base+len)` to the access the boot map
+/// gave them, once no Cell holds the window any more.
+///
+/// AArch64: USER only inside a board map marked `cell_access` (QEMU virt's
+/// documented peripheral/VirtIO windows), kernel-only everywhere else — on
+/// the Pi boards that is every peripheral page. RISC-V boot-maps its Cell
+/// MMIO windows (VirtIO, ECAM) USER, so restoring is granting.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn restore_mmio_boot_posture(base: usize, len: usize) -> PagingResult<usize> {
+    #[cfg(target_arch = "riscv64")]
+    {
+        grant_mmio_user(base, len)
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        use hal::aarch64::backend::{ArmResources, Board};
+        let mut restored = 0;
+        for va in crate::resource_registry::user_pages(base, len).step_by(PAGE_SIZE) {
+            let boot_user = <Board as ArmResources>::KERNEL_MMIO_MAPS
+                .iter()
+                .any(|map| map.cell_access && map.base <= va && va < map.end);
+            let flags = if boot_user {
+                mmio_user_flags()
+            } else {
+                mmio_kernel_flags()
+            };
+            match protect_page(va, flags) {
+                Ok(()) => restored += 1,
+                Err(PageTableError::InvalidAddress) => {}
+                Err(e) => {
+                    log::error!("[paging] restore_mmio_boot_posture: {va:#x} ({e:?})");
+                    return Err(e);
+                }
+            }
+        }
+        Ok(restored)
+    }
 }
 
 /// Boot MMIO mapping flags *with* `USER` — what an allowlisted window carries

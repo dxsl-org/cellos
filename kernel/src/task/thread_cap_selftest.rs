@@ -300,22 +300,22 @@ pub fn self_test() -> bool {
         }
 
         // The window above came from the *board's* allowlist, so revoking it
-        // disarmed EL0 access to it for the whole system: on RISC-V and AArch64 the
-        // boot identity map is the only thing that makes an allowlisted window
-        // reachable, and nothing re-established it afterwards — which is how
-        // `/bin/periph-demo` lost the PL011 window at boot before this line
-        // existed. A self-test must not leave the machine in a state the boot did
-        // not produce, so the window is re-armed here whatever the assertions said.
+        // changed its mapping for the whole system. A self-test must not leave
+        // the machine in a state the boot did not produce, so the window goes
+        // back to its boot posture whatever the assertions said: USER where the
+        // board boot-maps it for Cells (RISC-V, QEMU virt — `/bin/periph-demo`
+        // lost the PL011 window at boot before this existed), kernel-only on
+        // the Pi boards, where only a live `RequestMmio` grant sets USER.
         if let Some((base, len)) = window {
             #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-            match crate::memory::paging::grant_mmio_user(base, len) {
+            match crate::memory::paging::restore_mmio_boot_posture(base, len) {
                 Ok(pages) => log::info!(
-                    "[selftest] REVOKE-MMIO: window {:#x} re-armed for EL0 ({} page(s))",
+                    "[selftest] REVOKE-MMIO: window {:#x} restored to boot posture ({} page(s))",
                     base,
                     pages
                 ),
                 Err(e) => log::error!(
-                    "[selftest] REVOKE-MMIO: window {:#x} could not be re-armed: {:?}",
+                    "[selftest] REVOKE-MMIO: window {:#x} could not be restored: {:?}",
                     base,
                     e
                 ),

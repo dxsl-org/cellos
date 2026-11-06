@@ -140,21 +140,23 @@ impl ArmResources for Bcm2711 {
     };
 
     const KERNEL_MMIO_MAPS: &'static [MmioMap] = &[
-        // Cell-accessible device windows: GPIO, PL011 UART, SDHCI.
+        // GPIO, PL011 UART, SDHCI: kernel-only at boot. `RequestMmio` sets USER
+        // on the GPIO/UART pages a Cell claims; EMMC2 (ADMA: it can write any
+        // RAM) is never in the allowlist, so no Cell ever reaches it.
         MmioMap {
             base: BCM2711.mmio.gpio_base,
             end: window_end(BCM2711.mmio.gpio_base, BCM2711.mmio.gpio_grant_size),
-            cell_access: true,
+            cell_access: false,
         },
         MmioMap {
             base: BCM2711.mmio.uart_base,
             end: window_end(BCM2711.mmio.uart_base, BCM2711.mmio.uart_grant_size),
-            cell_access: true,
+            cell_access: false,
         },
         MmioMap {
             base: BCM2711.mmio.sdhci_base,
             end: window_end(BCM2711.mmio.sdhci_base, BCM2711.mmio.sdhci_grant_size),
-            cell_access: true,
+            cell_access: false,
         },
         // GIC-400 distributor and CPU interface (kernel-only).
         MmioMap {
@@ -186,3 +188,17 @@ impl ArmResources for Bcm2711 {
     const BOARD_PINMUX_GPIO_BASE: Option<usize> = None;
     const SUPERVISOR_DEVICE_MMIO: &'static [MmioSpan] = &[];
 }
+
+// H-18: no boot map gives EL0 any part of the board's MMIO; a Cell reaches a
+// window only through a live `RequestMmio` grant. Fails the build otherwise.
+const _: () = {
+    let maps = <Bcm2711 as ArmResources>::KERNEL_MMIO_MAPS;
+    let mut i = 0;
+    while i < maps.len() {
+        assert!(
+            !maps[i].cell_access,
+            "BCM2711 boot MMIO maps must be kernel-only"
+        );
+        i += 1;
+    }
+};

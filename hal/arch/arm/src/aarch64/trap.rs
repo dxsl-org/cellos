@@ -90,6 +90,25 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // With HCR_EL2.TGE=1 all EL0 exceptions trap to EL2 — these ECs only
         // arrive from EL0 in our setup (there is no EL1 guest).
         0x20 | 0x24 => {
+            // A Cell's access to a sub-page MMIO window it owns (the BCM2837
+            // mailbox shares its page with the IRQ controller, so that page is
+            // never USER-mapped): the kernel performs the one access and the
+            // Cell resumes after the instruction. Every other abort is a fault.
+            // SAFETY: #[no_mangle] in the kernel resource registry; the lower-EL
+            // EC proves the frame belongs to the interrupted EL0 context.
+            if ec == 0x24
+                && unsafe {
+                    hal_arch_trait::vi_emulate_el0_mmio_aarch64(
+                        esr as usize,
+                        frame.far_el1 as usize,
+                        frame.elr_el1 as usize,
+                        &mut frame.regs,
+                    )
+                }
+            {
+                frame.elr_el1 += 4;
+                return;
+            }
             // Lower-EL EC proves the privilege origin, but a recoverable Cell
             // fault also needs a live attribution.  Never manufacture a
             // deferred record for an inconsistent unowned EL0 trap.

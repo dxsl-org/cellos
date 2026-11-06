@@ -197,16 +197,19 @@ impl ArmResources for Bcm2837 {
     };
 
     const KERNEL_MMIO_MAPS: &'static [MmioMap] = &[
-        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): cell MMIO.
-        // Covers mini UART, GPIO, I2C, SPI, EMMC — kernel maps them all; individual
-        // cells receive sub-regions via sys_request_mmio / resource_registry.
+        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): kernel-only.
+        // It holds the DMA engine (no IOMMU: a channel writes any RAM), the
+        // legacy IRQ controller and system timer behind the kernel tick, EMMC
+        // and DWC2. A Cell reaches only the allowlisted windows it claims:
+        // `RequestMmio` sets USER on exactly the granted whole pages and
+        // retirement clears it; the sub-page mailbox is kernel-mediated.
         MmioMap {
             base: BCM2837.mmio.peripheral_base,
             end: match BCM2837.mmio.peripheral_end() {
                 Some(end) => end,
                 None => panic!("BCM2837 peripheral span must not overflow"),
             },
-            cell_access: true,
+            cell_access: false,
         },
         // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
         MmioMap {
@@ -259,6 +262,20 @@ impl ArmResources for Bcm2837 {
         },
     ];
 }
+
+// H-18: no boot map gives EL0 any part of the board's MMIO; a Cell reaches a
+// window only through a live `RequestMmio` grant. Fails the build otherwise.
+const _: () = {
+    let maps = <Bcm2837 as ArmResources>::KERNEL_MMIO_MAPS;
+    let mut i = 0;
+    while i < maps.len() {
+        assert!(
+            !maps[i].cell_access,
+            "BCM2837 boot MMIO maps must be kernel-only"
+        );
+        i += 1;
+    }
+};
 
 /// The Pi non-VHE EL2 monitor ([`super::monitor`]): the host and its Cells
 /// stay at EL1/EL0, and Stage-2 and guest runs go through its HVC gateway.

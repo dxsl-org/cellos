@@ -133,6 +133,13 @@ pub type HandleVirtioIrq = unsafe extern "Rust" fn(irq: u32);
 #[cfg(target_arch = "aarch64")]
 /// AArch64 GPIO interrupt callback supplied by the kernel driver layer.
 pub type GpioNotifyIrq = unsafe extern "Rust" fn();
+#[cfg(target_arch = "aarch64")]
+/// AArch64 hook that completes an EL0 data abort on a sub-page MMIO window
+/// the current task owns (`esr`, `far`, the faulting `pc`, the saved
+/// `x0..x30`). Returns `true` after performing the access; the caller then
+/// skips the instruction.
+pub type EmulateEl0MmioAarch64 =
+    unsafe extern "Rust" fn(esr: usize, far: usize, pc: usize, regs: &mut [u64; 31]) -> bool;
 
 /// AArch64 USB interrupt callback supplied by the kernel driver layer.
 pub type UsbSignalIrq = unsafe extern "Rust" fn();
@@ -216,6 +223,12 @@ extern "Rust" {
     pub fn vi_handle_virtio_irq(irq: u32);
     pub fn vi_gpio_notify_irq();
     pub fn vi_signal_usb_irq();
+    pub fn vi_emulate_el0_mmio_aarch64(
+        esr: usize,
+        far: usize,
+        pc: usize,
+        regs: &mut [u64; 31],
+    ) -> bool;
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -226,6 +239,8 @@ const _: HandleVirtioIrq = vi_handle_virtio_irq;
 const _: GpioNotifyIrq = vi_gpio_notify_irq;
 #[cfg(target_arch = "aarch64")]
 const _: UsbSignalIrq = vi_signal_usb_irq;
+#[cfg(target_arch = "aarch64")]
+const _: EmulateEl0MmioAarch64 = vi_emulate_el0_mmio_aarch64;
 
 #[cfg(target_arch = "x86_64")]
 extern "Rust" {
