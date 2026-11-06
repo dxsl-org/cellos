@@ -25,6 +25,12 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 [record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md)).
 
 **Ứng viên kế tiếp** (chưa admit; chọn trong portfolio theo promotion rule):
+- [ ] **Net service MAC và NIC promiscuous (sau S3)** — net service dùng một MAC cố định `52:54:00:12:34:56`, mọi NIC chạy promiscuous; chặn LAN C2C giữa hai node. Ứng viên slice kế tiếp, cần owner handoff ([record](261103-2218-x86-platform-breadth/s3-close-approval.md)).
+- [ ] **OVMF ≥2 CPU panic** tại `smp.rs:1100` (frame-0 root). Cần owner quyết định cách xử lý.
+- [ ] **Driver BAR/DMA gate (S3 MINOR)** — memory BAR gate chỉ ở claim; GrantDma/MSI chưa kiểm; có race probe BAR bus-0 Platform.
+- [ ] **Syscall 236 log** không phân biệt được `Ok(1)` với `FileNotFound` qua `libs/ostd`.
+- [ ] **VMware serial** đôi khi rớt dòng log.
+- [ ] **Gate có sẵn trên main (không do S3):** `clippy --tests` lỗi dead code ở `service-platform` (15 lỗi, không thuộc CI); `cargo fmt --all --check` fail; `driver-registration-contract` fail; mutable-globals 48 problems (giới hạn 48).
 - [ ] **C2C slice tiếp theo** (Phase 03 đã done) — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
   bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice
   ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).

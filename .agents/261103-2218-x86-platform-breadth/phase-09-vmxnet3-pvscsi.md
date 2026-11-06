@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "vmxnet3 and PVSCSI cells, VMware matrix"
-status: "implemented (S3 checkpoint: DMA/ring review pending)"
+status: "completed (S3 closed 2026-11-06 by the owner; independent DMA/ring review done)"
 priority: P2
 effort: "5d"
 dependencies: [5, 8]
@@ -82,7 +82,7 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 - [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (`283345b32`), and on the final checkpoint tip `eab0755c6`: `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
 - [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only). Final checkpoint on `eab0755c6`: run `20261106T022001Z-7ce6b8`, 39/39 ([JSON](reports/s3-final-vmware-matrix.json)).
 - [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`, also on `eab0755c6`).
-- [ ] Review pass on both cells' DMA/ring code.
+- [x] Review pass on both cells' DMA/ring code (fixes: `eab0755c6`, `98b670640`; `d986a555b`, `8eeb1d4e3`).
 
 ## Risk Assessment
 
