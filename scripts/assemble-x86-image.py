@@ -116,12 +116,16 @@ HEADLESS_CELLS = (
     Cell("driver-nvme", "driver-nvme", ("/bin/nvme",)),
     Cell("driver-e1000", "driver-e1000", ("/bin/e1000",)),
     Cell("driver-igb", "driver-igb", ("/bin/igb",)),
+    Cell("driver-e1000e", "driver-e1000e", ("/bin/e1000e",)),
+    Cell("driver-vmxnet3", "driver-vmxnet3", ("/bin/vmxnet3",)),
     Cell("driver-ahci", "driver-ahci", ("/bin/ahci",)),
     Cell("driver-xhci", "driver-xhci", ("/bin/xhci",)),
     # virtio over PCI (ADR-0031 phase 05): each exits cleanly without its device.
     Cell("driver-virtio-blk", "driver-virtio-blk", ("/bin/block",)),
     Cell("driver-virtio-net", "driver-virtio-net", ("/bin/virtio-net",)),
     Cell("driver-virtio-scsi", "driver-virtio-scsi", ("/bin/virtio-scsi",)),
+    # VMware PVSCSI (phase 09): init spawns it with the other block cells.
+    Cell("driver-pvscsi", "driver-pvscsi", ("/bin/pvscsi",)),
     Cell("driver-serial-x86", "driver-serial-x86", ("/bin/serial",)),
     *(Cell("app-sys-tools", worker, ("/bin/" + worker,)) for worker in WORKERS),
     # Tier-2 fixtures stay unsigned: they exercise the untrusted-cell wall.

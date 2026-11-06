@@ -2576,34 +2576,22 @@ fn offer_pcie_device(
         crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
         _ => 0x4000, // fallback 16 KiB
     };
-    // NOTE (phase 02a evidence): this reads the kernel's own ECAM scan
-    // (`dev.bars`), which retains every BAR. The Platform-Cell registration path
-    // stores only BAR0 today, so a device whose MMIO lives at a later BAR (ICH9
-    // AHCI's ABAR is BAR5) would report `bar_mem_base = 0` through that path;
-    // extending that registration belongs to the Platform Cell's owner, and the
-    // AHCI cell fails closed meanwhile. First *memory* BAR with a non-zero base,
-    // for devices whose BAR0 is I/O or empty. Empty BARs decode as
-    // `Memory32 { addr: 0, .. }`, so the base must be checked or the first
-    // absent slot wins. `bar0_*` keep their existing first-BAR meaning;
-    // NVMe/e1000 are unaffected because their BAR0 is memory.
-    let (bar_mem_base, bar_mem_len): (u64, u64) = dev
-        .bars
-        .iter()
-        .find_map(|bar| match bar {
-            crate::task::drivers::pcie_ecam::Bar::Memory32 { addr, size } if *addr != 0 => {
-                Some((*addr as u64, *size as u64))
-            }
-            crate::task::drivers::pcie_ecam::Bar::Memory64 { addr, size } if *addr != 0 => {
-                Some((*addr, *size))
-            }
-            _ => None,
-        })
-        .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
-        .unwrap_or((bar0_base, bar0_len));
-    // Under VT-d, a virtio function without ACCESS_PLATFORM would DMA around
-    // the translation; no cell may own it (ADR-0031 phase 05, review HIGH).
-    // Judged only before the first claim: the probe remaps the common-config
-    // page kernel-only, which must not happen under a live owner's mapping.
+    // First *memory* BAR with a non-zero base, for devices whose BAR0 is I/O or
+    // empty (ICH9's and VMware's AHCI decode their ABAR at BAR5). Every recorded
+    // function carries its full BAR set: the boot scan decodes bus 0, and
+    // `register_device` decodes a Platform-Cell-registered function (bus ≥ 1,
+    // e.g. behind VMware's `pciBridge0`) the same way. `bar0_*` keep their
+    // existing first-BAR meaning; NVMe/e1000 are unaffected because their BAR0
+    // is memory.
+    let (bar_mem_base, bar_mem_len): (u64, u64) =
+        crate::task::drivers::pcie_ecam::first_memory_bar(&dev.bars)
+            .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
+            .unwrap_or((bar0_base, bar0_len));
+    // Under VT-d, a virtio function without ACCESS_PLATFORM or a PVSCSI
+    // adapter would DMA around the translation; no cell may own it (ADR-0031
+    // phase 05 review HIGH; H-S3-13). Judged only before the first claim: the
+    // virtio probe remaps the common-config page kernel-only, which must not
+    // happen under a live owner's mapping.
     #[cfg(target_arch = "x86_64")]
     if crate::resource_registry::owner_of_bdf(bdf).is_none()
         && crate::task::drivers::pcie_msi::dma_bypasses_iommu(&dev)
@@ -2614,6 +2602,13 @@ fn offer_pcie_device(
     // "not found" and may retry after reap.
     if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
         return Ok(0);
+    }
+    // The owner may now reach its BARs: memory decoding on, bus mastering
+    // still off until its first GrantDma, after the cell has reset the device.
+    // Only when firmware placed every memory BAR: an unassigned one would
+    // decode at address 0 (the cell then fails closed on base 0, as before).
+    if crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+        crate::task::drivers::pcie_ecam::enable_memory_decode(bdf);
     }
     if out_ptr != 0 {
         let mut dev_bytes = [0u8; 48];
@@ -9071,6 +9066,11 @@ fn handle_syscall_inner(
         // 236: RegisterPciDevice — Platform Cell announces a device with class/BAR info.
         // Populates PCI_DEVICES so sys_find_pcie_device queries work without kernel ECAM scan.
         // After each registration, attempt deferred IOMMU init (no-op until IOMMU device appears).
+        // Every function that answers is recorded, as the bus-0 scan records it, so
+        // the machine fingerprint (433) does not depend on the driver table. `1`
+        // means recorded but an Ethernet ID no Driver Cell drives: the handout
+        // queries never offer it, and the Platform Cell names its ID. A BDF with no
+        // function inside the admitted window is `FileNotFound` and not recorded.
         Syscall::RegisterPciDevice {
             bdf,
             cls,
@@ -9080,10 +9080,15 @@ fn handle_syscall_inner(
             if !caller_has_platform(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            crate::task::drivers::pcie_ecam::register_device(bdf, cls, bar0_base, bar0_size);
+            use crate::task::drivers::pcie_ecam::{register_device, Registration};
+            let registration = register_device(bdf, cls, bar0_base, bar0_size);
             crate::task::drivers::pcie_ecam::mark_platform_registered();
             crate::task::drivers::iommu::try_deferred_init();
-            Ok(0)
+            match registration {
+                Registration::Recorded => Ok(0),
+                Registration::RecordedWithoutDriver => Ok(1),
+                Registration::Absent => Err(SyscallError::FileNotFound),
+            }
         }
 
         // 237: ReadLog — drain the user-log ring buffer into a cell-provided buffer.

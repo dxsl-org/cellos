@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 ### Added
+- **e1000 82545EM and e1000e 82574L, vmxnet3 and PVSCSI** (x86 platform breadth slice S3, phases 08 and 09). Owner-closed 2026-11-06 ([record](.agents/261103-2218-x86-platform-breadth/s3-close-approval.md)).
+  - New cells `/bin/e1000` (`8086:100f`, 82545EM), `/bin/e1000e` (`8086:10d3`, 82574L), `/bin/vmxnet3` (`15ad:07b0`) and `/bin/pvscsi` (`15ad:07c0`). Every Platform-registered function goes into `PCI_DEVICES`; syscall 236 returns 0, 1 (recorded, no driver) or FileNotFound.
+  - The kernel refuses PVSCSI under active VT-d (QEMU's PVSCSI model bypasses the IOMMU); VMware is unaffected.
+  - Memory Space is enabled at claim only when every memory BAR has a base; bus mastering only at GrantDma. One-time machine-pin change for bus ≥1 Ethernet functions.
+  - Caveat: the net service uses one fixed MAC `52:54:00:12:34:56` and all NICs run promiscuous; this blocks LAN C2C between two nodes.
+  - Evidence ceiling: QEMU 8.2.2 TCG and local KVM (nested on WSL2); VMware Workstation 25 local, `x86_64-vm` only. VMware vIOMMU never activates (`GCAP=0xffffffffffffffff`), so VMware production is not claimed.
 - **Cellos boots as a default KVM guest** (ADR-0031, x86 platform breadth slice S1). Verified on QEMU/KVM with the `kvm-default-vm` lane. Real VMware hosts and physical Intel machines are not yet qualified.
   - **Profile:** new `x86_64-vm` profile, bound only by `cellos.profile=x86_64-vm` under a hypervisor (D-VM). DMA isolation is optional under it, and the boot log says so.
   - **Timekeeping:** the kernel no longer needs HPET. It picks invariant TSC, kvmclock, HPET or the ACPI PM timer, and drives the tick with TSC-deadline when the CPU has it.

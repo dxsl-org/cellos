@@ -21,6 +21,16 @@ path = "/bin/igb"
 restart = "never"
 
 [[cells]]
+name = "e1000e"
+path = "/bin/e1000e"
+restart = "never"
+
+[[cells]]
+name = "vmxnet3"
+path = "/bin/vmxnet3"
+restart = "never"
+
+[[cells]]
 name = "serial"
 path = "/bin/serial"
 restart = "never"

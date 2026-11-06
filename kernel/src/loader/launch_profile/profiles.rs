@@ -23,10 +23,11 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
     }
     match target {
         "/bin/ai" | "/bin/ahci" | "/bin/xhci" | "/bin/bcm-display" | "/bin/block" | "/bin/compositor" | "/bin/config"
-        | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
+        | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/e1000e" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/cellbox"
         | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
         | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net" | "/bin/virtio-scsi"
+        | "/bin/vmxnet3" | "/bin/pvscsi"
         | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
         // Ocel's demand-only Tier 2 JavaScript engines. Init activates the exact
         // fixed target on a document lease, not through the boot service plan.

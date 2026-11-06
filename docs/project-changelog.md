@@ -4,6 +4,7 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-06 — Slice S3 closed (x86 breadth phases 08 and 09, VMware; owner sign-off, [record](../.agents/261103-2218-x86-platform-breadth/s3-close-approval.md)).** Independent DMA/ring review ran as a checkpoint; fixes landed in `eab0755c6`, `98b670640`, `d986a555b` and `8eeb1d4e3`. Final gates: QEMU TCG and KVM 72/72 per accelerator; VMware 39/39 (`reports/s3-final-vmware-matrix.json`). The S3 lane is released on merge into `main`.
 - **2026-11-06 — Slice S2 closed (x86 breadth phases 06, 07a, 07b + R1; owner sign-off, [record](../.agents/261103-2218-x86-platform-breadth/s2-close-approval.md)); the Intel WIP lane is free.**
   - 07a: per-CPU state sized by a per-arch `MAX_HARTS` (x86 64 from the HAL's `MAX_CPUS`; G1, riscv64, aarch64 2) and a write-once `CpuTopology` table; x86 `.bss` +2.8 MiB (IST stacks).
   - 07b: every MP CPU up to 64 online, one AP at a time with a catch-up flush; set-based shootdown (publish all, IPI all, one deadline, fail-stop kept); N-way steal with RT excluded, `scheduler.rs` unchanged; per-AP kvmclock with a retire path; `-smp 4` CI lane; c2c-render saves through the cwd grant. The `tier2-rpc-driver` fixture now waits on a 5 s wall-clock bound (its 2000-yield budget ran out while the provider was still printing; kernel clears the registry inside Exit).

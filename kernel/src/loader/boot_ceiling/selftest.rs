@@ -91,16 +91,19 @@ pub fn run() -> bool {
 
     // Positive direction: each privileged boot cell must still receive the cap
     // its install path requests once the ceiling is intersected.
-    let privileged: [PrivCapCase; 11] = [
+    let privileged: [PrivCapCase; 14] = [
         ("/bin/platform", |c| c.platform),
         ("/bin/supervisor", |c| c.supervisor),
         ("/bin/block", |c| c.pcie_driver),
         ("/bin/nvme", |c| c.pcie_driver),
         ("/bin/e1000", |c| c.pcie_driver),
+        ("/bin/e1000e", |c| c.pcie_driver),
         ("/bin/igb", |c| c.pcie_driver),
         ("/bin/virtio-net", |c| c.pcie_driver),
         ("/bin/virtio-gpu", |c| c.pcie_driver),
         ("/bin/virtio-scsi", |c| c.pcie_driver),
+        ("/bin/vmxnet3", |c| c.pcie_driver),
+        ("/bin/pvscsi", |c| c.pcie_driver),
         ("/bin/input", |c| c.pcie_driver),
         ("/bin/dwc2-usb", |c| c.usb_driver),
     ];

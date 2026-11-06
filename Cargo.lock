@@ -1551,6 +1551,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-e1000e"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-gpio"
 version = "0.1.0"
 dependencies = [
@@ -1653,6 +1663,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-pvscsi"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "scsi-block",
+ "types",
+]
+
+[[package]]
 name = "driver-pwm-gpio"
 version = "0.1.0"
 dependencies = [
@@ -1749,6 +1770,16 @@ dependencies = [
  "types",
  "virtio-drivers",
  "virtio-pci-transport",
+]
+
+[[package]]
+name = "driver-vmxnet3"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
 ]
 
 [[package]]

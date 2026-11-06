@@ -9,11 +9,13 @@ const COMPATIBLES: [&str; 1] = ["cellos,x86_64-pc"];
 ///
 /// Only mechanisms that exist in this tree are listed: `has_driver` gates real
 /// kernel init, so listing a driver whose cell has not landed would claim an
-/// initialisation that cannot happen. The NIC (`EthernetIgb`) is listed now
-/// that its driver cell exists (phase 04a); the extra-serial
+/// initialisation that cannot happen. The NICs (`EthernetIgb`, phase 04a;
+/// `EthernetE1000e`, phase 08; `EthernetVmxnet3`, phase 09) and PVSCSI
+/// (`StoragePvscsi`, phase 09; vIOMMU guests run this profile, ADR-0031 §4) are
+/// listed now that their driver cells exist; the extra-serial
 /// (`Uart16550Multi`) variant is declared in `boards/src/descriptor.rs` and is
 /// added to this list by the phase that ships its driver cell.
-const DRIVERS: [DriverId; 10] = [
+const DRIVERS: [DriverId; 13] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
@@ -23,6 +25,9 @@ const DRIVERS: [DriverId; 10] = [
     DriverId::UsbXhci,
     DriverId::EthernetE1000,
     DriverId::EthernetIgb,
+    DriverId::EthernetE1000e,
+    DriverId::EthernetVmxnet3,
+    DriverId::StoragePvscsi,
     DriverId::VirtioPci,
 ];
 

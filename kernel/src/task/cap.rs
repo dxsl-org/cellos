@@ -466,6 +466,7 @@ impl CapSet {
             path,
             "/bin/nvme"
                 | "/bin/e1000"
+                | "/bin/e1000e"
                 | "/bin/igb"
                 | "/bin/virtio-net"
                 | "/bin/block"
@@ -473,6 +474,8 @@ impl CapSet {
                 | "/bin/virtio-gpu"
                 | "/bin/ahci"
                 | "/bin/virtio-scsi"
+                | "/bin/vmxnet3"
+                | "/bin/pvscsi"
         ) {
             self.pcie_driver = true;
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
@@ -1057,6 +1060,8 @@ mod tests {
             "/bin/python",
             "/bin/net",
             "/bin/e1000",
+            "/bin/e1000e",
+            "/bin/vmxnet3",
             "/bin/ocel-js",
             "/bin/ocel-quickjs",
             "/bin/async-echo",

@@ -30,8 +30,8 @@ created: 2026-11-03
 | 06 | [ACPI reset, poweroff, power button](phase-06-acpi-power-and-reset.md) — completed 2026-11-05 ([evidence](reports/phase-06-evidence.md)); CP2-06 approved, 436 frozen ([record](cp2-06-system-power-approval.md)) | S2 ops | 01, 03 | |
 | 07a | [Per-CPU structures for N CPUs](phase-07a-percpu-generalization.md) — completed 2026-11-05 ([evidence](reports/phase-07a-evidence.md)) | S2 | 03 | |
 | 07b | [N-CPU scheduling on x86](phase-07b-n-cpu-scheduling-x86.md) — completed 2026-11-05 with R1 flush batching ([evidence](reports/phase-07b-evidence.md)); S2 closed by the owner ([record](s2-close-approval.md)) | S2 | 07a, 02 | ✓ |
-| 08 | [e1000 82545EM and e1000e 82574L](phase-08-e1000-family-vmware.md) — S3 holds the lane from 2026-11-06 ([request](s3-handoff-request.md), [approval](s3-handoff-approval.md)) | S3 VMware | 04b | |
-| 09 | [vmxnet3 and PVSCSI](phase-09-vmxnet3-pvscsi.md) — S3, after 08 | S3 | 05, 08 | ✓ |
+| 08 | [e1000 82545EM and e1000e 82574L](phase-08-e1000-family-vmware.md) — completed 2026-11-06 and closed by the owner under S3 ([record](s3-close-approval.md)); QEMU TCG + local KVM ([evidence](reports/phase-08-evidence.md)), VMware rows in 09 | S3 VMware | 04b | ✓ |
+| 09 | [vmxnet3 and PVSCSI](phase-09-vmxnet3-pvscsi.md) — completed 2026-11-06 and closed by the owner under S3 ([record](s3-close-approval.md)); independent DMA/ring review done | S3 | 05, 08 | ✓ |
 | 10 | [Console: SPCR, COM2/MMIO UART, framebuffer](phase-10-console-spcr-framebuffer.md) | S4 physical | 01, 03 | |
 | 11 | [xHCI hubs, BIOS handoff, multi-controller](phase-11-xhci-hubs-multi-controller.md) | S4 | 04b | |
 | 12 | [VT-d multi-unit, RMRR, interrupt remapping](phase-12-vtd-multi-unit-rmrr-ir.md) | S4 | 04a | ✓ |

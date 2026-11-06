@@ -83,6 +83,8 @@ members = [
     # Cells - Drivers
     "cells/drivers/disk",
     "cells/drivers/e1000",
+    "cells/drivers/e1000e",
+    "cells/drivers/vmxnet3",
     "cells/drivers/igb",
     "cells/drivers/serial-x86",
     "cells/drivers/gpio",
@@ -101,6 +103,7 @@ members = [
     "cells/drivers/virtio-net",
     "cells/drivers/virtio-blk",
     "cells/drivers/virtio-scsi",
+    "cells/drivers/pvscsi",
     "cells/drivers/virtio-gpu",
     "cells/drivers/gpio-sifive",
     "cells/drivers/serial",

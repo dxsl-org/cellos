@@ -1,4 +1,4 @@
-//! Intel e1000 (82540EM) NIC controller logic ported from nic_e1000.rs.
+//! Intel e1000 (82540EM / 82545EM) NIC controller logic ported from nic_e1000.rs.
 //!
 //! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
 //! Every `unsafe` block carries a `// SAFETY:` comment.

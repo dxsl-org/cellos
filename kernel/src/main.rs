@@ -767,9 +767,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // `HEAP_FRAMES * 4096` bytes starting at this frame, so a scattered
         // allocation would write over frames this kernel does not own. Refusing
         // here is the only safe outcome — never a smaller or fragmented heap.
-        memory::frame::reserve_contiguous_run(allocator, HEAP_FRAMES).expect(
-            "OOM: no contiguous run for the boot heap — refusing to boot with a \
-             fragmented heap",
+        // The run is taken in the bitmap's range, right after the bitmap and the
+        // early frames there: the shared `[bitmap, heap)` registration below
+        // depends on that order.
+        memory::frame::reserve_boot_heap(allocator, HEAP_FRAMES).expect(
+            "OOM: no contiguous run for the boot heap in the frame bitmap's range — \
+             refusing to boot with a fragmented heap",
         )
     };
     let heap_size = HEAP_FRAMES * 4096;
@@ -1209,6 +1212,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         )
     ))]
     if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
+        // `[bitmap, heap)`: the bitmap, plus any early boot frames the next-fit
+        // cursor handed out from the bitmap's range before `reserve_boot_heap`
+        // placed the heap there. When the bitmap's range is not the first
+        // usable one (UEFI maps: ≥ 1 GiB under VMware, 4 GiB under OVMF), the
+        // early paging frames come from lower ranges and the span is just the
+        // bitmap.
         let (bm_start, _) = guard.bitmap_range();
         memory::domain_supervisor_registry::register(
             bm_start,

@@ -217,6 +217,35 @@ pub fn virtio_pci_devices(blk_disk: &str, scsi_disk: &str, vtd: bool, iommu_plat
     args
 }
 
+/// QEMU arguments for the phase 09 PVSCSI lane: `-nic none`, an NVMe disk on
+/// `nvme_disk` (the primary) and one `scsi-hd` on `scsi_disk` behind QEMU's
+/// `pvscsi` (`15ad:07c0`). `vtd` puts `intel-iommu` before the endpoints.
+/// `root_port` places the PVSCSI function behind a `pcie-root-port` (bus 1).
+pub fn pvscsi_devices(nvme_disk: &str, scsi_disk: &str, vtd: bool, root_port: bool) -> Vec<String> {
+    let mut args: Vec<String> = vec!["-nic".into(), "none".into()];
+    if vtd {
+        args.extend(["-device".into(), "intel-iommu".into()]);
+    }
+    args.extend([
+        "-drive".into(),
+        format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+        "-device".into(),
+        "nvme,drive=nvme0,serial=deadbeef01".into(),
+    ]);
+    if root_port {
+        args.extend(["-device".into(), "pcie-root-port,id=rp1,chassis=1,slot=2".into()]);
+    }
+    args.extend([
+        "-device".into(),
+        format!("pvscsi,id=pvscsi0{}", if root_port { ",bus=rp1" } else { "" }),
+        "-drive".into(),
+        format!("file={scsi_disk},format=raw,if=none,id=pvsd0"),
+        "-device".into(),
+        "scsi-hd,drive=pvsd0,bus=pvscsi0.0".into(),
+    ]);
+    args
+}
+
 /// Resolve the qemu-system-x86_64 binary.
 ///
 /// Order: `$ViCell_QEMU_X86` env override → bare name on PATH → Windows default.
@@ -1325,6 +1354,11 @@ impl QemuRunner {
             "-boot",
             "d",
             "-no-reboot",
+            // The lane's oracle is "no NIC device, so no cell holds the NIC
+            // role": drop q35's default 82574L, which `/bin/e1000e` binds since
+            // plan 261103-2218 phase 08 (H-S3-7 lever b, this lane only).
+            "-nic",
+            "none",
             "-device",
             "qemu-xhci,id=xhci",
         ]);
@@ -1437,6 +1471,24 @@ impl QemuRunner {
 
     /// [`Self::boot_x86_bios_with_nic`] with `cpus` vCPUs (`-smp`).
     pub fn boot_x86_bios_with_nic_smp(iso: &str, nvme_disk: &str, cpus: usize) -> Self {
+        Self::boot_x86_bios_with_plain_nic(iso, nvme_disk, "e1000", cpus)
+    }
+
+    /// Boot x86_64 q35 from a Limine ISO with NVMe plus one QEMU NIC `model`
+    /// (`e1000`, `e1000-82545em`, `e1000e`, `igb`, …) on a restricted user
+    /// netdev, behind Intel VT-d when `vtd` is set. The `-netdev` suppresses
+    /// q35's default 82574L, so `model` is the only Ethernet function and
+    /// exactly one NIC Driver Cell can bind (plan 261103-2218 phase 08).
+    pub fn boot_x86_bios_with_nic_model(iso: &str, nvme_disk: &str, model: &str, vtd: bool) -> Self {
+        if vtd {
+            Self::boot_x86_bios_with_vtd_nic(iso, nvme_disk, model, 1)
+        } else {
+            Self::boot_x86_bios_with_plain_nic(iso, nvme_disk, model, 1)
+        }
+    }
+
+    /// Shared body of the plain (no VT-d) NIC lanes; `nic` is the QEMU model.
+    fn boot_x86_bios_with_plain_nic(iso: &str, nvme_disk: &str, nic: &str, cpus: usize) -> Self {
         Self::boot_x86_q35(
             iso,
             cpus,
@@ -1448,7 +1500,7 @@ impl QemuRunner {
                 "-netdev".into(),
                 "user,id=net0,restrict=on".into(),
                 "-device".into(),
-                "e1000,netdev=net0".into(),
+                format!("{nic},netdev=net0"),
             ],
         )
     }
@@ -1654,6 +1706,23 @@ impl QemuRunner {
     /// so the PCI set holds only what the lane names. `intel-iommu` precedes
     /// the NIC so QEMU wires it up first.
     pub fn boot_x86_bios_for_machine_pin(iso: &str, nvme_disk: &str, vtd: bool, nic: Option<&str>) -> Self {
+        Self::boot_x86_q35(iso, 1, &Self::machine_pin_devices(nvme_disk, vtd, false, nic))
+    }
+
+    /// [`Self::boot_x86_bios_for_machine_pin`] with VT-d and one
+    /// `pcie-root-port` (`rp1`, secondary bus 1) in every boot; `nic`, when
+    /// given, sits behind it at `01:00.0`, so only the NIC differs between
+    /// boots and it is found by the Platform Cell, not the bus-0 scan.
+    pub fn boot_x86_bios_for_machine_pin_behind_root_port(iso: &str, nvme_disk: &str, nic: Option<&str>) -> Self {
+        Self::boot_x86_q35(iso, 1, &Self::machine_pin_devices(nvme_disk, true, true, nic))
+    }
+
+    /// The machine pin lanes' devices: NVMe, optionally `intel-iommu` (first,
+    /// so QEMU wires it up before the endpoints), optionally a
+    /// `pcie-root-port` `rp1`, and `nic` on a restricted user netdev (behind
+    /// `rp1` when present). Without `nic`, `-nic none` drops QEMU's default
+    /// q35 NIC (e1000e).
+    fn machine_pin_devices(nvme_disk: &str, vtd: bool, root_port: bool, nic: Option<&str>) -> Vec<String> {
         let mut devices = vec![
             "-drive".into(),
             format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
@@ -1663,17 +1732,23 @@ impl QemuRunner {
         if vtd {
             devices.extend(["-device".into(), "intel-iommu".into()]);
         }
-        if let Some(nic) = nic {
-            devices.extend([
+        if root_port {
+            devices.extend(["-device".into(), "pcie-root-port,id=rp1,chassis=1,slot=1".into()]);
+        }
+        match nic {
+            Some(nic) => devices.extend([
                 "-netdev".into(),
                 "user,id=net0,restrict=on".into(),
                 "-device".into(),
-                format!("{nic},netdev=net0"),
-            ]);
-        } else {
-            devices.extend(["-nic".into(), "none".into()]);
+                if root_port {
+                    format!("{nic},netdev=net0,bus=rp1")
+                } else {
+                    format!("{nic},netdev=net0")
+                },
+            ]),
+            None => devices.extend(["-nic".into(), "none".into()]),
         }
-        Self::boot_x86_q35(iso, 1, &devices)
+        devices
     }
 
     /// Boot q35 with an NVMe endpoint behind a PCIe root port on bus 1.
@@ -1753,6 +1828,90 @@ impl QemuRunner {
         }
     }
 
+    /// Boot q35 (the env-selected [`x86_lane`]) in the bus topology of a VMware
+    /// guest (plan 261103-2218, S3 findings S1/S2):
+    /// - q35's own ICH9 SATA is off (`sata=off`), so the only AHCI controller is
+    ///   an `ich9-ahci` at `01:01.0` behind a conventional `pci-bridge` (VMware's
+    ///   `pciBridge0`), with `sata_disk` on port 0 and the boot ISO on port 1;
+    /// - an `e1000` (82540EM, which a Driver Cell drives) at `02:00.0` behind
+    ///   PCIe root port 1, on a restricted user netdev;
+    /// - a `pcnet` (AMD `1022:2000`, which no Driver Cell drives) at `03:00.0`
+    ///   behind PCIe root port 2.
+    pub fn boot_x86_bios_with_bridged_devices(iso: &str, sata_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+        let lane = x86_lane();
+
+        let mut child = Command::new(qemu_binary_x86())
+            .args(&lane.accel)
+            .args([
+                "-machine",
+                &format!("{},sata=off", lane.machine),
+                "-cpu",
+                &lane.cpu,
+                "-m",
+                "256M",
+                "-nographic",
+                "-no-reboot",
+                "-monitor",
+                "none",
+                "-device",
+                "pci-bridge,id=br1,chassis_nr=1,bus=pcie.0,addr=0x3",
+                "-device",
+                "ich9-ahci,id=sata1,bus=br1,addr=0x1",
+                "-drive",
+                &format!("file={sata_disk},format=raw,if=none,id=sata0"),
+                "-device",
+                "ide-hd,drive=sata0,bus=sata1.0",
+                "-drive",
+                &format!("file={iso},media=cdrom,if=none,id=cd0,readonly=on"),
+                "-device",
+                "ide-cd,drive=cd0,bus=sata1.1,bootindex=0",
+                "-device",
+                "pcie-root-port,id=rp1,chassis=2,slot=1,bus=pcie.0,addr=0x4",
+                "-device",
+                "pcie-root-port,id=rp2,chassis=3,slot=2,bus=pcie.0,addr=0x5",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "e1000,netdev=net0,bus=rp1",
+                "-netdev",
+                "user,id=net1,restrict=on",
+                "-device",
+                "pcnet,netdev=net1,bus=rp2",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        let stream = accept_qemu_serial(&listener, &mut child);
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
     /// Boot q35 (the env-selected [`x86_lane`]) with the three virtio-pci
     /// functions the phase 05 cells drive: `virtio-net-pci` on a restricted
     /// user netdev, `virtio-blk-pci` on `blk_disk` and `virtio-scsi-pci` with one
@@ -1767,6 +1926,14 @@ impl QemuRunner {
         iommu_platform: bool,
     ) -> Self {
         let devices = virtio_pci_devices(blk_disk, scsi_disk, vtd, iommu_platform);
+        Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", 1, &devices)
+    }
+
+    /// Boot q35 (the env-selected [`x86_lane`]) with an NVMe primary disk and
+    /// QEMU's VMware PVSCSI adapter carrying one `scsi-hd` (plan 261103-2218
+    /// phase 09); see [`pvscsi_devices`] for `vtd` and `root_port`.
+    pub fn boot_x86_pvscsi(iso: &str, nvme_disk: &str, scsi_disk: &str, vtd: bool, root_port: bool) -> Self {
+        let devices = pvscsi_devices(nvme_disk, scsi_disk, vtd, root_port);
         Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", 1, &devices)
     }
 

@@ -59,12 +59,18 @@ fn generic_pc_descriptor_declares_only_shipped_drivers() {
     // Phase 02a ships the AHCI storage Driver Cell, so the descriptor may now
     // claim it. Phase 03 ships the xHCI USB host Driver Cell (the x86 keyboard
     // arrives over USB), so `UsbXhci` may be claimed too. Phase 04a ships the
-    // igb NIC Driver Cell, so `EthernetIgb` may be claimed as well. Only the
+    // igb NIC Driver Cell and phase 08 the 82574L `e1000e` cell, so
+    // `EthernetIgb` and `EthernetE1000e` may be claimed as well. Only the
     // extra-serial family (`Uart16550Multi`) remains unshipped: listing it
     // early would make `has_driver` claim an initialisation that cannot happen.
     assert!(board.has_driver(DriverId::StorageAhci));
     assert!(board.has_driver(DriverId::UsbXhci));
     assert!(board.has_driver(DriverId::EthernetIgb));
+    assert!(board.has_driver(DriverId::EthernetE1000e));
+    // Phase 09: VMware's paravirtual NIC and SCSI host (vIOMMU guests run the
+    // strict profile, ADR-0031 §4).
+    assert!(board.has_driver(DriverId::EthernetVmxnet3));
+    assert!(board.has_driver(DriverId::StoragePvscsi));
     assert!(!board.has_driver(DriverId::Uart16550Multi));
     assert_eq!(board.validate_for(Architecture::X86_64), Ok(()));
 }
@@ -140,6 +146,11 @@ fn x86_catalog_holds_exactly_the_bindable_x86_profiles() {
     assert_eq!(catalog[1].dma_isolation, DmaIsolation::Optional);
     assert_eq!(catalog[2].dma_isolation, DmaIsolation::Optional);
     assert!(catalog[2].has_driver(DriverId::VirtioPci));
+    // VMware/KVM default guests carry an 82574L (phase 08).
+    assert!(catalog[2].has_driver(DriverId::EthernetE1000e));
+    // ... and VMware guests vmxnet3 and PVSCSI (phase 09).
+    assert!(catalog[2].has_driver(DriverId::EthernetVmxnet3));
+    assert!(catalog[2].has_driver(DriverId::StoragePvscsi));
 }
 
 #[test]

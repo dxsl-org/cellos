@@ -1,15 +1,26 @@
-//! x86_64 q35 e1000 DHCP data-plane gates, with and without Intel VT-d.
+//! x86_64 q35 Intel NIC DHCP data-plane gates, with and without Intel VT-d.
 //!
 //! The complete oracle crosses every Driver-Cell boundary: the Platform Cell
-//! discovers e1000, the e1000 Cell registers, the net service submits a DHCP
-//! frame through that driver, e1000 reports an RX frame, and smoltcp acquires an
-//! address from QEMU's isolated SLIRP DHCP server.
+//! discovers the NIC, its Driver Cell binds the exact SKU and registers, the net
+//! service submits a DHCP frame through that driver, the driver reports an RX
+//! frame, and smoltcp acquires an address from QEMU's isolated SLIRP DHCP server.
+//!
+//! Three QEMU models, each with and without VT-d (plan 261103-2218 phase 08):
+//! `e1000` (82540EM) and `e1000-82545em` (82545EM) bind `/bin/e1000`, polled
+//! (`irq=polled reason=request-driven`); `e1000e` (82574L) binds `/bin/e1000e`
+//! with MSI-X for its bounded waits and request-driven RX (`irq=msix
+//! rx=request-driven`, H-S3-4). Every lane names its SKU and proves that no
+//! sibling NIC cell bound or registered: the `-netdev` suppresses q35's default
+//! 82574L, so exactly one Ethernet function exists.
 //!
 //! The VT-d variant additionally requires isolation to become active before
-//! the e1000 DMA traffic. Its retained NVMe registration proves an independent
+//! the NIC DMA traffic. Its retained NVMe registration proves an independent
 //! DMA client also completes real queue traffic through the translated domain.
 //!
-//! Both tests skip gracefully when the x86_64 ISO is not built or
+//! The bridge witness lines say `first e1000 TX/RX` whichever NIC cell is bound
+//! (`cells/services/net/src/interface.rs`).
+//!
+//! Every test skips gracefully when the x86_64 ISO is not built or
 //! `qemu-system-x86_64` is not on PATH.
 
 use std::path::PathBuf;
@@ -69,31 +80,96 @@ fn require_marker(qemu: &QemuRunner, disk: &std::path::Path, marker: &str, conte
     });
 }
 
-fn assert_e1000_dhcp_order(serial: &str, first_marker: &str) {
+/// One QEMU NIC model and what its Driver Cell must print.
+struct Lane {
+    model: &'static str,
+    /// The bind line prefix naming cell, vendor:device and SKU.
+    bind: &'static str,
+    /// The interrupt posture the bind line must carry.
+    irq: &'static str,
+}
+
+const E1000: Lane = Lane {
+    model: "e1000",
+    bind: "[e1000] controller bound 8086:100e 82540EM",
+    irq: "irq=polled reason=request-driven",
+};
+const E1000_82545EM: Lane = Lane {
+    model: "e1000-82545em",
+    bind: "[e1000] controller bound 8086:100f 82545EM",
+    irq: "irq=polled reason=request-driven",
+};
+const E1000E: Lane = Lane {
+    model: "e1000e",
+    bind: "[e1000e] controller bound 8086:10d3 82574L",
+    irq: "irq=msix rx=request-driven",
+};
+
+/// Every NIC cell's bind line; exactly one may appear per lane.
+const BIND_LINES: [&str; 4] = [
+    "[e1000] controller bound",
+    "[e1000e] controller bound",
+    "[igb] controller bound",
+    "[virtio-net] ready",
+];
+
+fn assert_dhcp_order(serial: &str, lane: &Lane, first_marker: &str) {
     let first = serial
         .find(first_marker)
         .unwrap_or_else(|| panic!("missing initial marker {first_marker:?}\n{serial}"));
+    let bind = serial
+        .find(lane.bind)
+        .unwrap_or_else(|| panic!("{}: missing bind line {:?}\n{serial}", lane.model, lane.bind));
     let registered = serial
         .find("[driver_cell] NIC driver registered")
         .unwrap_or_else(|| panic!("missing NIC registration\n{serial}"));
     let tx = serial
         .find("[net-bridge] first e1000 TX")
-        .unwrap_or_else(|| panic!("missing e1000 Tx evidence\n{serial}"));
+        .unwrap_or_else(|| panic!("missing NIC Tx evidence\n{serial}"));
     let rx = serial
         .find("[net-bridge] first e1000 RX")
-        .unwrap_or_else(|| panic!("missing e1000 Rx evidence\n{serial}"));
+        .unwrap_or_else(|| panic!("missing NIC Rx evidence\n{serial}"));
     let dhcp = serial
         .find("[net] DHCP acquired")
         .unwrap_or_else(|| panic!("missing DHCP acquisition\n{serial}"));
+    let bind_line = serial[bind..].lines().next().unwrap_or_default();
     let tx_line = serial[tx..].lines().next().unwrap_or_default();
 
     assert!(
-        tx_line.contains("accepted=true"),
-        "first e1000 Tx was not accepted by its Driver Cell: {tx_line}\n{serial}"
+        bind_line.contains(lane.irq),
+        "{}: bind line lacks {:?}: {bind_line}\n{serial}",
+        lane.model,
+        lane.irq
     );
     assert!(
-        first <= registered && registered < tx && tx < rx && rx < dhcp,
-        "invalid e1000 DHCP evidence order\n{serial}"
+        tx_line.contains("accepted=true"),
+        "first Tx was not accepted by its Driver Cell: {tx_line}\n{serial}"
+    );
+    assert!(
+        first <= registered && bind < registered && registered < tx && tx < rx && rx < dhcp,
+        "{}: invalid DHCP evidence order\n{serial}",
+        lane.model
+    );
+    // Exactly one NIC cell bound and registered: no sibling touched the device.
+    for line in BIND_LINES {
+        let expected = usize::from(lane.bind.starts_with(line));
+        assert_eq!(
+            serial.matches(line).count(),
+            expected,
+            "{}: {line:?} seen a wrong number of times\n{serial}",
+            lane.model
+        );
+    }
+    assert_eq!(
+        serial.matches("[driver_cell] NIC driver registered").count(),
+        1,
+        "{}: more than one NIC driver registered\n{serial}",
+        lane.model
+    );
+    assert!(
+        !serial.contains("driver gate closed"),
+        "{}: the NIC was refused by an identity gate\n{serial}",
+        lane.model
     );
     assert!(!serial.contains("[KERNEL PANIC]"), "kernel panic\n{serial}");
     assert!(
@@ -101,6 +177,11 @@ fn assert_e1000_dhcp_order(serial: &str, first_marker: &str) {
         "Cell panic\n{serial}"
     );
     assert!(!serial.contains("[fault] Cell"), "Cell fault\n{serial}");
+    // Evidence: the decisive lines of a passing lane, in boot order.
+    for at in [first, bind, registered, tx, rx, dhcp] {
+        let line = serial[at..].lines().next().unwrap_or_default();
+        eprintln!("[nic-x86 {}] {}", lane.model, line.trim_end());
+    }
 }
 
 fn make_nvme_disk() -> PathBuf {
@@ -121,94 +202,95 @@ fn make_nvme_disk() -> PathBuf {
     path
 }
 
-/// Ordinary q35: require Driver-Cell Tx/Rx and a completed DHCP lease.
-#[test]
-fn nic_x86_e1000_dhcp() {
+/// Ordinary q35 (`vtd = false`) or VT-d q35: require the SKU bind line, Driver
+/// Cell Tx/Rx and a completed DHCP lease; under VT-d, isolation must precede the
+/// NIC DMA and the NVMe DMA must complete through the translated domain.
+fn run_lane(lane: &Lane, vtd: bool) {
     if !prerequisites_ok() {
         return;
     }
 
     let disk = make_nvme_disk();
-    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    let qemu = QemuRunner::boot_x86_bios_with_nic_model(
+        &iso_path(),
+        &disk.to_string_lossy(),
+        lane.model,
+        vtd,
+    );
+    let model = lane.model;
 
-    let registration = "[driver_cell] NIC driver registered";
+    let first = if vtd {
+        let active = "[vtd] Intel VT-d: DMA isolation ACTIVE";
+        require_marker(&qemu, &disk, active, "VT-d did not activate");
+        require_marker(
+            &qemu,
+            &disk,
+            "[driver_cell] block driver registered",
+            "NVMe DMA did not complete under VT-d",
+        );
+        active
+    } else {
+        lane.bind
+    };
+    require_marker(&qemu, &disk, lane.bind, &format!("{model}: Driver Cell did not bind"));
     require_marker(
         &qemu,
         &disk,
-        registration,
-        "e1000 Driver Cell did not register",
+        "[driver_cell] NIC driver registered",
+        &format!("{model}: Driver Cell did not register"),
     );
     require_marker(
         &qemu,
         &disk,
         "[net-bridge] first e1000 TX",
-        "net service did not submit DHCP through e1000",
+        &format!("{model}: net service did not submit DHCP through the NIC"),
     );
     require_marker(
         &qemu,
         &disk,
         "[net-bridge] first e1000 RX",
-        "e1000 did not receive the SLIRP DHCP response",
+        &format!("{model}: the NIC did not receive the SLIRP DHCP response"),
     );
     require_marker(
         &qemu,
         &disk,
         "[net] IP address:",
-        "isolated SLIRP DHCP did not complete",
+        &format!("{model}: isolated SLIRP DHCP did not complete"),
     );
 
     // Keep the guest alive briefly after success so an immediate panic/fault
     // emitted behind the DHCP line reaches the byte-at-a-time serial reader.
     std::thread::sleep(std::time::Duration::from_millis(500));
-    assert_e1000_dhcp_order(&qemu.dump(), registration);
+    assert_dhcp_order(&qemu.dump(), lane, first);
     let _ = std::fs::remove_file(&disk);
 }
 
-/// VT-d q35: isolation must precede accepted e1000 DMA and DHCP completion.
+#[test]
+fn nic_x86_e1000_dhcp() {
+    run_lane(&E1000, false);
+}
+
 #[test]
 fn nic_x86_vtd_e1000_dhcp() {
-    if !prerequisites_ok() {
-        return;
-    }
+    run_lane(&E1000, true);
+}
 
-    let disk = make_nvme_disk();
-    let qemu = QemuRunner::boot_x86_bios_with_vtd(&iso_path(), &disk.to_string_lossy());
+#[test]
+fn nic_x86_e1000_82545em_dhcp() {
+    run_lane(&E1000_82545EM, false);
+}
 
-    let active = "[vtd] Intel VT-d: DMA isolation ACTIVE";
-    require_marker(&qemu, &disk, active, "VT-d did not activate");
-    require_marker(
-        &qemu,
-        &disk,
-        "[driver_cell] block driver registered",
-        "NVMe DMA did not complete under VT-d",
-    );
-    require_marker(
-        &qemu,
-        &disk,
-        "[driver_cell] NIC driver registered",
-        "e1000 Driver Cell did not register under VT-d",
-    );
-    require_marker(
-        &qemu,
-        &disk,
-        "[net-bridge] first e1000 TX",
-        "net service did not submit DHCP through VT-d e1000",
-    );
-    require_marker(
-        &qemu,
-        &disk,
-        "[net-bridge] first e1000 RX",
-        "e1000 did not receive DHCP through VT-d",
-    );
-    require_marker(
-        &qemu,
-        &disk,
-        "[net] IP address:",
-        "isolated SLIRP DHCP did not complete under VT-d",
-    );
+#[test]
+fn nic_x86_vtd_e1000_82545em_dhcp() {
+    run_lane(&E1000_82545EM, true);
+}
 
-    // The final forbidden-marker scan must include immediate post-DHCP output.
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    assert_e1000_dhcp_order(&qemu.dump(), active);
-    let _ = std::fs::remove_file(&disk);
+#[test]
+fn nic_x86_e1000e_dhcp() {
+    run_lane(&E1000E, false);
+}
+
+#[test]
+fn nic_x86_vtd_e1000e_dhcp() {
+    run_lane(&E1000E, true);
 }

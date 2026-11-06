@@ -156,8 +156,9 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         // PCIe driver cells: each claims a BAR/MMIO range and authorises DMA.
         // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
         // to the request before the ceiling intersection.
-        "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/igb" | "/bin/virtio-net"
-        | "/bin/virtio-gpu" | "/bin/virtio-scsi" | "/bin/input" | "/bin/ahci" => CapSet {
+        "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/e1000e" | "/bin/igb" | "/bin/virtio-net"
+        | "/bin/virtio-gpu" | "/bin/virtio-scsi" | "/bin/vmxnet3" | "/bin/pvscsi" | "/bin/input"
+        | "/bin/ahci" => CapSet {
             pcie_driver: true,
             mmio_devices: DEV_DISPLAY,
             ..LEGACY

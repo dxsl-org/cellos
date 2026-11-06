@@ -20,32 +20,43 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Ethernet controller IDs that have a Driver Cell in this image.
+/// Ethernet controller IDs that have a Driver Cell in this image, each with its
+/// owning cell.
 ///
 /// This is the **family gate**: an Ethernet device is offered to a Driver Cell
 /// only when a cell drives its family, and every other Ethernet ID is still
 /// rejected **by name** at scan time (`[e1000] unsupported Ethernet
 /// vvvv:dddd; driver gate closed`). Widened in phase 04a of the x86 PC lane from
-/// "82540EM only" to "families that have a driver cell": the 82540EM
+/// "82540EM only" to "families that have a driver cell": the 8254x family
 /// (`/bin/e1000`) and the igb family (`/bin/igb`) — QEMU's 82576 model plus the
-/// datasheet i210/i211 SKUs the cell's `identity.rs` lists.
+/// datasheet i210/i211 SKUs the cell's `identity.rs` lists. Phase 08 (S3) adds
+/// the 82545EM to `/bin/e1000` and the 82574L to the new `/bin/e1000e`: the
+/// default NICs of VMware guests, and the latter is also q35's default NIC.
+/// Phase 09 (S3) adds VMware's paravirtual vmxnet3 (`/bin/vmxnet3`). PVSCSI
+/// (`15AD:07C0`) is a SCSI controller (class `01:00:00`), not gated here.
 ///
-/// The table bounds what the *kernel* offers; the cell repeats the identity
-/// check before programming a register model, so neither can bind a foreign
-/// family by accident.
-pub const ETHERNET_DRIVER_IDS: [(u16, u16); 5] = [
-    (0x8086, 0x100E), // 82540EM — /bin/e1000
-    (0x8086, 0x10C9), // 82576 — QEMU's igb model, /bin/igb
-    (0x8086, 0x1533), // i210 copper with external flash — /bin/igb
-    (0x1AF4, 0x1041), // virtio-net (modern) — /bin/virtio-net (ADR-0031 phase 05)
-    (0x1AF4, 0x1000), // virtio-net (transitional, modern caps required) — /bin/virtio-net
+/// The table bounds what the *kernel* offers; each cell names its own IDs
+/// through the vendor:device query (424) and repeats the identity check before
+/// programming a register model, so no cell can bind a foreign family by
+/// accident. Every owner's `identity.rs` lists exactly its rows here.
+pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 8] = [
+    (0x8086, 0x100E, "/bin/e1000"), // 82540EM
+    (0x8086, 0x100F, "/bin/e1000"), // 82545EM copper (QEMU e1000-82545em, VMware e1000)
+    (0x8086, 0x10D3, "/bin/e1000e"), // 82574L (QEMU e1000e, q35 default, VMware e1000e)
+    (0x8086, 0x10C9, "/bin/igb"),   // 82576 — QEMU's igb model
+    (0x8086, 0x1533, "/bin/igb"),   // i210 copper with external flash
+    (0x1AF4, 0x1041, "/bin/virtio-net"), // virtio-net (modern), ADR-0031 phase 05
+    (0x1AF4, 0x1000, "/bin/virtio-net"), // virtio-net (transitional, modern caps required)
+    (0x15AD, 0x07B0, "/bin/vmxnet3"), // VMware vmxnet3 (QEMU vmxnet3, VMware default PV NIC)
 ];
 
 // Deliberately refused until the cell implements their prerequisites: flashless
 // i210 (0x157B/0x157C) and i211 (0x1539) need an **iNVM** read path, and
-// fibre/SerDes/SGMII (0x1536/0x1537/0x1538) need media-specific link setup.
-// Widening this table without that work would hand a device to a cell that cannot
-// drive it, which is worse than refusing it by name.
+// fibre/SerDes/SGMII (0x1536/0x1537/0x1538) need media-specific link setup; the
+// 82574LA (0x10F6) and every I219 are `Target` entries of `/bin/e1000e` that no
+// lane validates yet (phase 13). Widening this table without that work would
+// hand a device to a cell that cannot drive it, which is worse than refusing it
+// by name.
 
 /// Ethernet IDs served by the **legacy class-triple** query (`FindPcieDevice`,
 /// opcode 418).
@@ -56,17 +67,23 @@ pub const ETHERNET_DRIVER_IDS: [(u16, u16); 5] = [
 /// release it before `/bin/igb` can claim it — a scheduling-dependent race. The
 /// fix is [`find_vendor_device`] (opcode 424), which matches exactly. `find_class`
 /// therefore keeps serving only the family that predates the identity query, the
-/// 82540EM; a cell whose controller shares its class with another cell MUST use
-/// the vendor:device query. The family gate above is unchanged and still governs
-/// the scan warning and the vendor query.
+/// 82540EM, so 418's semantics stay byte-identical; every in-tree Ethernet cell,
+/// `/bin/e1000` included since phase 08 (H-S3-6), uses the vendor:device query.
+/// The family gate above still governs the scan warning and the vendor query.
 pub const ETHERNET_LEGACY_CLASS_IDS: [(u16, u16); 1] = [(0x8086, 0x100E)];
+
+/// The Driver Cell that owns Ethernet `(vendor_id, device_id)`, if any.
+pub fn ethernet_driver_cell(vendor_id: u16, device_id: u16) -> Option<&'static str> {
+    ETHERNET_DRIVER_IDS
+        .iter()
+        .find(|&&(vendor, device, _)| vendor == vendor_id && device == device_id)
+        .map(|&(_, _, cell)| cell)
+}
 
 /// Whether `(vendor_id, device_id)` is an Ethernet family some Driver Cell in
 /// this image implements. Everything else fails closed.
 pub fn ethernet_id_has_driver(vendor_id: u16, device_id: u16) -> bool {
-    ETHERNET_DRIVER_IDS
-        .iter()
-        .any(|&(vendor, device)| vendor == vendor_id && device == device_id)
+    ethernet_driver_cell(vendor_id, device_id).is_some()
 }
 
 /// Whether the legacy class-triple query may hand out `(vendor_id, device_id)`.
@@ -606,6 +623,58 @@ unsafe fn walk_caps(
     (msix, pm)
 }
 
+/// BARs (type-0 headers only), MSI-X and PM capabilities of one function: the
+/// record the boot scan keeps, so a function the Platform Cell registers later
+/// is recorded exactly like a scanned one.
+///
+/// # Safety
+/// `ecam_base + (config_bus << 20)` must map the function's bus window.
+unsafe fn decode_function(
+    ecam_base: usize,
+    config_bus: u8,
+    dev: u8,
+    fun: u8,
+) -> ([Bar; 6], Option<MsixCap>, Option<PmCap>) {
+    // SAFETY (all reads below): the caller guarantees the bus window is mapped.
+    let hdr = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
+    // Decode BARs for type-0 headers (endpoints). Skip bridges (type-1).
+    let bars = if hdr == 0 {
+        unsafe { decode_bars(ecam_base, config_bus, dev, fun) }
+    } else {
+        [Bar::None; 6]
+    };
+    let (msix, pm) = unsafe { walk_caps(ecam_base, config_bus, dev, fun) };
+    (bars, msix, pm)
+}
+
+/// [`decode_function`] for `bus:dev.fun` inside the admitted window
+/// `bus_start..=bus_end`; `None` outside it or when no function answers.
+///
+/// # Safety
+/// `ecam_base` must map config space for buses `bus_start..=bus_end`.
+#[cfg(target_arch = "x86_64")]
+unsafe fn decode_function_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bus: u8,
+    dev: u8,
+    fun: u8,
+) -> Option<([Bar; 6], Option<MsixCap>, Option<PmCap>)> {
+    // The bus's own 1 MiB window, addressed as local bus 0 (as `init` does for
+    // a nonzero-start allocation).
+    let bus_base = config_addr_in_range(ecam_base, bus_start, bus_end, bus, 0, 0, 0)? as usize;
+    if dev >= 32 || fun >= 8 {
+        return None;
+    }
+    // SAFETY: `bus_base` is the checked start of `bus` inside the caller's window.
+    if unsafe { read16(bus_base, 0, dev, fun, CFG_VENDOR_ID) } == 0xFFFF {
+        return None;
+    }
+    // SAFETY: as above.
+    Some(unsafe { decode_function(bus_base, 0, dev, fun) })
+}
+
 // ── Scanner ───────────────────────────────────────────────────────────────────
 
 /// Scan one bus of the ECAM window and populate the global device list.
@@ -641,17 +710,8 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
             let subclass = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_SUBCLASS) };
             let class = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_CODE) };
 
-            // Decode BARs for type-0 headers (endpoints). Skip bridges (type-1).
-            let hdr = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
-            let bars = if hdr == 0 {
-                // SAFETY: the selected ECAM bus window is identity-mapped.
-                unsafe { decode_bars(ecam_base, config_bus, dev, fun) }
-            } else {
-                [Bar::None; 6]
-            };
-
             // SAFETY: the selected ECAM bus window is identity-mapped.
-            let (msix, pm) = unsafe { walk_caps(ecam_base, config_bus, dev, fun) };
+            let (bars, msix, pm) = unsafe { decode_function(ecam_base, config_bus, dev, fun) };
 
             let bar0_addr = bars[0].base_addr();
             log::info!(
@@ -776,6 +836,60 @@ pub fn enable_bus_master(bdf: u32) {
             (command | CMD_MEM_SPACE | CMD_BUS_MASTER) & !CMD_INTX_DISABLE,
         );
     }
+}
+
+/// Command register once a Driver Cell owns the function: memory decoding on,
+/// every other bit as it was. Bus mastering stays off until `GrantDma`
+/// ([`enable_bus_master`]), so a device the cell has not reset yet cannot DMA.
+const fn decoding_command(command: u16) -> u16 {
+    command | CMD_MEM_SPACE
+}
+
+/// Turn on memory decoding (only) for a function a Driver Cell has just
+/// claimed, so its first register access does not depend on firmware having
+/// enabled decoding. VMware's EFI leaves it off on a function it has no driver
+/// for (vmxnet3), and BAR reads then return all-ones.
+pub fn enable_memory_decode(bdf: u32) {
+    let (ecam_base, bus_start, bus_end) = ecam_window();
+    if ecam_base == 0 {
+        return;
+    }
+    // SAFETY: the admitted ECAM window is identity-mapped for the kernel's life.
+    if !unsafe { enable_memory_decode_in_window(ecam_base, bus_start, bus_end, bdf) } {
+        let (bus, dev, fun) = split_bdf(bdf);
+        log::warn!(
+            "[pcie] refusing memory-decode enable outside ECAM range: {bus:02x}:{dev:02x}.{fun}"
+        );
+    }
+}
+
+/// [`enable_memory_decode`] against an explicit ECAM window; `false` when the
+/// BDF lies outside it. An absent function (all-ones command) is left alone.
+///
+/// # Safety
+/// `ecam_base` must map config space for buses `bus_start..=bus_end`.
+unsafe fn enable_memory_decode_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bdf: u32,
+) -> bool {
+    if bdf > 0xFFFF {
+        return false;
+    }
+    let (bus, dev, fun) = split_bdf(bdf);
+    let Some(ptr) = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, CFG_COMMAND)
+    else {
+        return false;
+    };
+    // SAFETY: `ptr` was range-checked against the caller's window.
+    unsafe {
+        let command = core::ptr::read_volatile(ptr as *const u16);
+        if command != 0xFFFF && command & CMD_MEM_SPACE == 0 {
+            core::ptr::write_volatile(ptr as *mut u16, decoding_command(command));
+        }
+    }
+    true
 }
 
 // ── Retirement quiescence ─────────────────────────────────────────────────────
@@ -1015,50 +1129,250 @@ pub fn init() {
     }
 }
 
+/// What [`register_device`] (syscall 236) did with a Platform Cell registration.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Registration {
+    /// The function is in `PCI_DEVICES`: recorded now, or earlier by the boot
+    /// scan or a previous registration.
+    Recorded,
+    /// Recorded exactly like [`Registration::Recorded`], so the machine
+    /// fingerprint (433) sees it as it sees a bus-0 function, but it is an
+    /// Ethernet controller (`02:00:00`) no Driver Cell drives
+    /// ([`ethernet_id_has_driver`]): the handout queries ([`find_class_where`],
+    /// [`find_vendor_device`]) never offer it.
+    RecordedWithoutDriver,
+    /// No function answers at the BDF inside the admitted window (or there is
+    /// no window); nothing is recorded.
+    Absent,
+}
+
 /// Register a device announced by the Platform Cell via `sys_register_pci_device`.
 ///
-/// Decodes `bdf` and `cls` into a `PciDevice` stub with BAR0 populated.
-/// Skips duplicate BDFs (idempotent: kernel ECAM scan may already have found the device).
-/// Also registers BAR0 in the Resource Registry for `sys_request_mmio` validation.
-pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
+/// On x86 the kernel records the function from config space, exactly as the
+/// boot scan records a bus-0 function: identity, class code, every BAR and its
+/// capabilities are re-read by BDF through the admitted ECAM window, so `cls`
+/// is only compared (a mismatch is logged) and never stored. A function behind
+/// a bridge (bus ≥ 1) therefore keeps a BAR other than BAR0 — VMware's and
+/// ICH9's AHCI decode their ABAR at BAR5. Every function is recorded, an
+/// Ethernet ID without a Driver Cell included (that one reports
+/// [`Registration::RecordedWithoutDriver`]; the queries are the only gate).
+///
+/// The duplicate check, the BAR size probe and the insert run under one
+/// `PCI_DEVICES` guard, so two registrations of one BDF cannot both probe it or
+/// both insert it; a BDF already present (the kernel ECAM scan may have found
+/// it) is not probed again. Other architectures keep the Platform Cell's class
+/// and BAR0. A new record also registers BAR0 in the Resource Registry for
+/// `sys_request_mmio` validation.
+#[must_use]
+pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) -> Registration {
     // Canonical BDF wire layout everywhere (Platform Cell, FindPcieDevice,
-    // GrantDma, iommu_x86): bus[15:8] | dev[7:3] | fun[2:0]. An earlier decode
-    // here assumed bus<<16|dev<<8|fun, which garbled the stored (bus,dev,fun)
-    // tuple for every device (it only round-tripped through FindPcieDevice's
-    // re-encode by luck on bus 0).
-    let bus = ((bdf >> 8) & 0xFF) as u8;
-    let dev = ((bdf >> 3) & 0x1F) as u8;
-    let fun = (bdf & 0x07) as u8;
-    let class = ((cls >> 16) & 0xFF) as u8;
-    let subclass = ((cls >> 8) & 0xFF) as u8;
-    let prog_if = (cls & 0xFF) as u8;
+    // GrantDma, iommu_x86): bus[15:8] | dev[7:3] | fun[2:0].
+    let (bus, dev, fun) = split_bdf(bdf);
+
     #[cfg(target_arch = "x86_64")]
-    let (vendor_id, device_id) = {
-        let ecam_base = ecam_base_x86();
-        let (bus_start, bus_end) = ecam_bus_range_x86();
+    let (registration, added) = {
+        let (ecam_base, bus_start, bus_end) = ecam_window();
         if ecam_base == 0 {
-            (0, 0)
-        } else {
-            // SAFETY: x86 paging maps the validated MCFG allocation before the
-            // Platform Cell can issue registration syscalls.
-            unsafe {
-                read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)
-                    .unwrap_or((0, 0))
-            }
+            return Registration::Absent;
+        }
+        let mut devices = PCI_DEVICES.lock();
+        // SAFETY: x86 paging maps the validated MCFG allocation before the
+        // Platform Cell can issue registration syscalls.
+        unsafe {
+            record_in_window(
+                ecam_base,
+                bus_start,
+                bus_end,
+                (bus, dev, fun),
+                cls,
+                &mut devices,
+            )
         }
     };
-    #[cfg(not(target_arch = "x86_64"))]
-    let (vendor_id, device_id) = (0, 0);
 
-    {
-        let devices = PCI_DEVICES.lock();
-        if devices.iter().any(|d| d.bdf == (bus, dev, fun)) {
-            return; // already present (kernel ECAM scan ran first)
+    #[cfg(not(target_arch = "x86_64"))]
+    let (registration, added) = {
+        let mut devices = PCI_DEVICES.lock();
+        let added = !devices.iter().any(|d| d.bdf == (bus, dev, fun));
+        if added {
+            let (class, subclass, prog_if) = ((cls >> 16) as u8, (cls >> 8) as u8, cls as u8);
+            let bars = platform_bar0(bar0_base, bar0_size);
+            log::info!(
+                "[pcie] platform-reg {:02x}:{:02x}.{} class={:02x}:{:02x}:{:02x} bar0={:#x}",
+                bus,
+                dev,
+                fun,
+                class,
+                subclass,
+                prog_if,
+                bars[0].base_addr()
+            );
+            #[cfg(cellos_p01_trace)]
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::DRIVER_SHARED,
+            );
+            devices.push(PciDevice {
+                bdf: (bus, dev, fun),
+                vendor_id: 0,
+                device_id: 0,
+                class,
+                subclass,
+                prog_if,
+                bars,
+                msix: None,
+                pm: None,
+            });
         }
+        (Registration::Recorded, added)
+    };
+
+    if added && bar0_base != 0 && bar0_size != 0 {
+        crate::resource_registry::register_pcie_bar(bar0_base, bar0_size);
+    }
+    registration
+}
+
+/// Record `bdf` in `devices` from config space unless it is already there:
+/// `(outcome, whether a record was added)`. The caller holds the
+/// `PCI_DEVICES` guard for the whole call, which makes the check, the probe
+/// and the insert one step per BDF.
+///
+/// # Safety
+/// The admitted ECAM window must be identity-mapped and remain live.
+#[cfg(target_arch = "x86_64")]
+unsafe fn record_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bdf: (u8, u8, u8),
+    reported_cls: u32,
+    devices: &mut Vec<PciDevice>,
+) -> (Registration, bool) {
+    let (bus, dev, fun) = bdf;
+    // SAFETY: the caller guarantees the window is live and mapped.
+    let identity = unsafe { read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun) };
+    let Some((vendor_id, device_id)) = identity.filter(|&(vendor, _)| vendor != 0xFFFF) else {
+        return (Registration::Absent, false);
+    };
+    // SAFETY: as above.
+    let Some((class, subclass, prog_if)) =
+        (unsafe { class_code_in_range(ecam_base, bus_start, bus_end, bus, dev, fun) })
+    else {
+        return (Registration::Absent, false);
+    };
+    let registration = if ethernet_without_driver(class, subclass, prog_if, vendor_id, device_id) {
+        Registration::RecordedWithoutDriver
+    } else {
+        Registration::Recorded
+    };
+    if devices.iter().any(|d| d.bdf == bdf) {
+        return (registration, false);
     }
 
-    let bars = if bar0_base != 0 {
-        let bar0 = if bar0_size <= u32::MAX as usize {
+    // Probed only for a new BDF and under the guard: no Driver Cell can own a
+    // function before it is in `PCI_DEVICES`, so the BAR size probe cannot
+    // disturb a live owner, and no second registration can probe it meanwhile.
+    // SAFETY: as above.
+    let Some((bars, msix, pm)) =
+        (unsafe { decode_function_in_window(ecam_base, bus_start, bus_end, bus, dev, fun) })
+    else {
+        return (Registration::Absent, false);
+    };
+    let class_code = (u32::from(class) << 16) | (u32::from(subclass) << 8) | u32::from(prog_if);
+    if reported_cls & 0x00FF_FFFF != class_code {
+        log::warn!(
+            "[pcie] platform-reg {:02x}:{:02x}.{} reported class {:06x}; config space says {:06x}",
+            bus,
+            dev,
+            fun,
+            reported_cls,
+            class_code
+        );
+    }
+    let (mem_base, mem_len) = first_memory_bar(&bars).unwrap_or((0, 0));
+    log::info!(
+        "[pcie] platform-reg {:02x}:{:02x}.{} vendor={:04x} device={:04x} \
+         class={:02x}:{:02x}:{:02x} bar0={:#x} mem={:#x}+{:#x}",
+        bus,
+        dev,
+        fun,
+        vendor_id,
+        device_id,
+        class,
+        subclass,
+        prog_if,
+        bars[0].base_addr(),
+        mem_base,
+        mem_len
+    );
+
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
+    devices.push(PciDevice {
+        bdf,
+        vendor_id,
+        device_id,
+        class,
+        subclass,
+        prog_if,
+        bars,
+        msix,
+        pm,
+    });
+    (registration, true)
+}
+
+/// Whether a function of this class and identity is an Ethernet controller
+/// (`02:00:00`) that no Driver Cell in this image drives.
+#[cfg(target_arch = "x86_64")]
+fn ethernet_without_driver(
+    class: u8,
+    subclass: u8,
+    prog_if: u8,
+    vendor_id: u16,
+    device_id: u16,
+) -> bool {
+    (class, subclass, prog_if) == (0x02, 0x00, 0x00)
+        && !ethernet_id_has_driver(vendor_id, device_id)
+}
+
+/// `(class, subclass, prog_if)` of one checked ECAM function, from the class
+/// register dword at 0x08 (revision ID, prog IF, subclass, class code).
+///
+/// # Safety
+/// The admitted ECAM window must be identity-mapped and remain live.
+#[cfg(target_arch = "x86_64")]
+unsafe fn class_code_in_range(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bus: u8,
+    dev: u8,
+    fun: u8,
+) -> Option<(u8, u8, u8)> {
+    let class_reg = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, 0x08)?;
+    // SAFETY: the checked, 4-byte-aligned class register lies in the live
+    // function header the caller guarantees.
+    let class_code = unsafe { core::ptr::read_volatile(class_reg.cast::<u32>()) };
+    Some((
+        (class_code >> 24) as u8,
+        (class_code >> 16) as u8,
+        (class_code >> 8) as u8,
+    ))
+}
+
+/// The Platform Cell's BAR0 as a BAR set: the record of a registration on an
+/// architecture where the kernel does not re-read the function.
+#[cfg(any(not(target_arch = "x86_64"), test))]
+fn platform_bar0(bar0_base: usize, bar0_size: usize) -> [Bar; 6] {
+    let mut bars = [Bar::None; 6];
+    if bar0_base != 0 {
+        bars[0] = if bar0_size <= u32::MAX as usize {
             Bar::Memory32 {
                 addr: bar0_base as u32,
                 size: bar0_size as u32,
@@ -1069,48 +1383,31 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
                 size: bar0_size as u64,
             }
         };
-        let mut arr = [Bar::None; 6];
-        arr[0] = bar0;
-        arr
-    } else {
-        [Bar::None; 6]
-    };
-
-    log::info!(
-        "[pcie] platform-reg {:02x}:{:02x}.{} class={:02x}:{:02x}:{:02x} bar0={:#x}",
-        bus,
-        dev,
-        fun,
-        class,
-        subclass,
-        prog_if,
-        bar0_base
-    );
-
-    let mut devices = PCI_DEVICES.lock();
-    #[cfg(cellos_p01_trace)]
-    let _semantic = crate::memory::heap::p01_owner::creation(
-        None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED,
-    );
-    devices.push(PciDevice {
-        bdf: (bus, dev, fun),
-        vendor_id,
-        device_id,
-        class,
-        subclass,
-        prog_if,
-        bars,
-        msix: None,
-        pm: None,
-    });
-    #[cfg(cellos_p01_trace)]
-    drop(_semantic);
-    drop(devices);
-
-    if bar0_base != 0 && bar0_size != 0 {
-        crate::resource_registry::register_pcie_bar(bar0_base, bar0_size);
     }
+    bars
+}
+
+/// `(base, size)` of the first memory BAR with a non-zero base. Empty BARs
+/// decode as `Memory32 { addr: 0, .. }`, so the base must be checked or the
+/// first absent slot wins.
+pub fn first_memory_bar(bars: &[Bar; 6]) -> Option<(u64, u64)> {
+    bars.iter().find_map(|bar| match *bar {
+        Bar::Memory32 { addr, size } if addr != 0 => Some((addr as u64, size as u64)),
+        Bar::Memory64 { addr, size } if addr != 0 => Some((addr, size)),
+        _ => None,
+    })
+}
+
+/// Whether firmware placed every memory BAR the function implements: at least
+/// one memory BAR, and none with a size but base 0. Memory decoding is turned
+/// on at claim time only then; an unassigned BAR would decode at address 0.
+pub fn memory_bars_assigned(bars: &[Bar; 6]) -> bool {
+    let unassigned = bars.iter().any(|bar| match *bar {
+        Bar::Memory32 { addr, size } => addr == 0 && size != 0,
+        Bar::Memory64 { addr, size } => addr == 0 && size != 0,
+        _ => false,
+    });
+    !unassigned && first_memory_bar(bars).is_some()
 }
 
 /// Return a cloned snapshot of the discovered device list.
@@ -1159,18 +1456,15 @@ unsafe fn fingerprint_in_window(
             // SAFETY: the caller guarantees the window is live and mapped.
             let (vendor, device) =
                 unsafe { read_identity_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)? };
-            // Dword at 0x08: revision ID, prog IF, subclass, class code.
-            let class_reg =
-                config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, 0x08)?;
-            // SAFETY: the checked, 4-byte-aligned class register lies in the
-            // same live function header.
-            let class_code = unsafe { core::ptr::read_volatile(class_reg.cast::<u32>()) };
+            // SAFETY: as above.
+            let (class, subclass, prog_if) =
+                unsafe { class_code_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)? };
             Some(api::machine_facts::PciFunctionId {
                 vendor,
                 device,
-                class: (class_code >> 24) as u8,
-                subclass: (class_code >> 16) as u8,
-                prog_if: (class_code >> 8) as u8,
+                class,
+                subclass,
+                prog_if,
             })
         })
         .collect()
@@ -1206,13 +1500,13 @@ pub fn find_class_where(
             if d.class != class || d.subclass != subclass || d.prog_if != prog_if {
                 return false;
             }
-            // Ethernet spans more than one Driver Cell (/bin/e1000 and /bin/igb),
-            // so the class triple can no longer name a device uniquely. It is
-            // served only for the legacy family; the igb family claims its own
-            // controller by exact vendor:device (`find_vendor_device`). Binding
-            // an I219/e1000e-class endpoint by generic Ethernet class would
-            // program an incompatible register model, so an ID with no cell
-            // stays refused here and is named in `scan`'s warning.
+            // Ethernet spans several Driver Cells (/bin/e1000, /bin/e1000e,
+            // /bin/igb, /bin/virtio-net), so the class triple cannot name a
+            // device uniquely. It is served only for the legacy family; every
+            // cell claims its own controller by exact vendor:device
+            // (`find_vendor_device`). Binding an endpoint by generic Ethernet
+            // class would program an incompatible register model, so an ID with
+            // no cell stays refused here and is named in `scan`'s warning.
             #[cfg(target_arch = "x86_64")]
             if class == 0x02 && subclass == 0x00 && prog_if == 0x00 {
                 return ethernet_class_query_serves(d.vendor_id, d.device_id);
@@ -1337,31 +1631,56 @@ mod tests {
 
     #[test]
     fn ethernet_family_gate_covers_driver_cells_only() {
-        // Families with a Driver Cell are offered.
-        assert!(ethernet_id_has_driver(0x8086, 0x100E)); // 82540EM, /bin/e1000
-        assert!(ethernet_id_has_driver(0x8086, 0x10C9)); // QEMU igb model
-        assert!(ethernet_id_has_driver(0x8086, 0x1533)); // i210 copper, external flash
-                                                         // Everything else stays refused by name — notably the recorded
-                                                         // e1000e/I219 follow-up, a non-Intel Ethernet controller, and the igb
-                                                         // SKUs whose prerequisites the cell does not implement yet (flashless
-                                                         // i210 and i211 need iNVM; fibre/SerDes/SGMII need media link setup).
-        assert!(!ethernet_id_has_driver(0x8086, 0x10D3)); // e1000e/I219
-        assert!(!ethernet_id_has_driver(0x8086, 0x1539)); // i211 — needs iNVM
-        assert!(!ethernet_id_has_driver(0x8086, 0x157B)); // i210 flashless — needs iNVM
-        assert!(!ethernet_id_has_driver(0x8086, 0x1536)); // i210 fibre — needs media setup
-        assert!(ethernet_id_has_driver(0x1AF4, 0x1000)); // virtio-net, transitional
-        assert!(ethernet_id_has_driver(0x1AF4, 0x1041)); // virtio-net, modern
-        assert!(!ethernet_id_has_driver(0x1AF4, 0x1042)); // virtio-blk is not Ethernet
-        assert!(!ethernet_id_has_driver(0x8086, 0x0));
+        // Every admitted ID is offered to exactly its owning cell.
+        assert_eq!(ethernet_driver_cell(0x8086, 0x100E), Some("/bin/e1000")); // 82540EM
+        assert_eq!(ethernet_driver_cell(0x8086, 0x100F), Some("/bin/e1000")); // 82545EM
+        assert_eq!(ethernet_driver_cell(0x8086, 0x10D3), Some("/bin/e1000e")); // 82574L
+        assert_eq!(ethernet_driver_cell(0x8086, 0x10C9), Some("/bin/igb")); // QEMU igb
+        assert_eq!(ethernet_driver_cell(0x8086, 0x1533), Some("/bin/igb")); // i210 copper
+        assert_eq!(ethernet_driver_cell(0x1AF4, 0x1000), Some("/bin/virtio-net"));
+        assert_eq!(ethernet_driver_cell(0x1AF4, 0x1041), Some("/bin/virtio-net"));
+        assert_eq!(ethernet_driver_cell(0x15AD, 0x07B0), Some("/bin/vmxnet3")); // vmxnet3
+        // Everything else stays refused (and `scan` names it): the igb SKUs whose
+        // prerequisites the cell does not implement (flashless i210 and i211
+        // need iNVM; fibre/SerDes/SGMII need media link setup), the e1000e
+        // `Target` SKUs (82574LA, I219), an unknown Intel ID, a non-Intel
+        // controller, and non-Ethernet virtio.
+        for (vendor, device) in [
+            (0x8086, 0x1539), // i211 — needs iNVM
+            (0x8086, 0x157B), // i210 flashless — needs iNVM
+            (0x8086, 0x1536), // i210 fibre — needs media setup
+            (0x8086, 0x10F6), // 82574LA — e1000e Target
+            (0x8086, 0x15B7), // I219-LM — e1000e Target (phase 13)
+            (0x8086, 0x1011), // 82545EM fiber — not admitted
+            (0x8086, 0xBEEF), // unknown Intel ID
+            (0x8086, 0x0),
+            (0x10EC, 0x8168), // Realtek RTL8111 — no cell
+            (0x1AF4, 0x1042), // virtio-blk is not Ethernet
+            (0x15AD, 0x07C0), // PVSCSI is storage, not Ethernet
+            (0x15AD, 0x0720), // VMware vmxnet (v1/v2) — no cell
+        ] {
+            assert!(
+                !ethernet_id_has_driver(vendor, device),
+                "{vendor:04x}:{device:04x} must stay refused"
+            );
+            assert_eq!(ethernet_driver_cell(vendor, device), None);
+        }
+        // Each ID has exactly one owner.
+        for (index, &(vendor, device, _)) in ETHERNET_DRIVER_IDS.iter().enumerate() {
+            assert!(ETHERNET_DRIVER_IDS[index + 1..]
+                .iter()
+                .all(|&(v, d, _)| (v, d) != (vendor, device)));
+        }
     }
 
     #[test]
     fn class_triple_serves_only_the_legacy_family() {
-        // Only the 82540EM keeps the class-triple query: every other family is
-        // reachable exclusively by `find_vendor_device`, so the two Ethernet
-        // Driver Cells cannot race for one class triple.
+        // Only the 82540EM keeps the class-triple query (418 is unchanged):
+        // every other family is reachable exclusively by `find_vendor_device`,
+        // so the Ethernet Driver Cells cannot race for one class triple.
+        assert_eq!(ETHERNET_LEGACY_CLASS_IDS, [(0x8086, 0x100E)]);
         assert!(ethernet_class_query_serves(0x8086, 0x100E));
-        for &(vendor, device) in &ETHERNET_DRIVER_IDS {
+        for &(vendor, device, _) in &ETHERNET_DRIVER_IDS {
             if (vendor, device) != (0x8086, 0x100E) {
                 assert!(
                     !ethernet_class_query_serves(vendor, device),
@@ -1383,6 +1702,245 @@ mod tests {
         // SAFETY: the test owns a correctly sized, live in-memory ECAM stand-in.
         let identity = unsafe { read_identity_in_range(ecam.as_ptr() as usize, 64, 65, 65, 3, 2) };
         assert_eq!(identity, Some((0x8086, 0x100E)));
+    }
+
+    /// The registration outcome uses the scan's Ethernet family gate, so no
+    /// second Ethernet ID list exists: only an Ethernet function without a
+    /// Driver Cell reports `RecordedWithoutDriver`, on any bus.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn ethernet_without_driver_follows_the_family_table() {
+        // (class, subclass, prog_if, vendor, device, without driver)
+        let cases: [(u8, u8, u8, u16, u16, bool); 6] = [
+            // Non-Ethernet functions are never gated, whatever their identity.
+            (0x01, 0x06, 0x01, 0x15AD, 0x07E0, false), // VMware AHCI
+            (0x01, 0x08, 0x02, 0x15AD, 0x07F0, false), // VMware NVMe
+            (0x02, 0x80, 0x00, 0x8086, 0xBEEF, false), // other network controller
+            // Ethernet: gated unless an ID has a Driver Cell.
+            (0x02, 0x00, 0x00, 0x8086, 0x100E, false), // 82540EM, /bin/e1000
+            (0x02, 0x00, 0x00, 0x1022, 0x2000, true),  // AMD PCnet, no cell
+            (0x02, 0x00, 0x00, 0x8086, 0xBEEF, true),  // unknown Intel ID
+        ];
+        for (class, subclass, prog_if, vendor, device, without) in cases {
+            assert_eq!(
+                ethernet_without_driver(class, subclass, prog_if, vendor, device),
+                without,
+                "{class:02x}:{subclass:02x}:{prog_if:02x} {vendor:04x}:{device:04x}"
+            );
+        }
+        // VMware's NICs (82545EM, 82574L, vmxnet3) follow the table, whatever
+        // the phase that admits them.
+        for (vendor, device) in [(0x8086, 0x100F), (0x8086, 0x10D3), (0x15AD, 0x07B0)] {
+            assert_eq!(
+                ethernet_without_driver(0x02, 0x00, 0x00, vendor, device),
+                !ethernet_id_has_driver(vendor, device),
+                "{vendor:04x}:{device:04x}"
+            );
+        }
+    }
+
+    /// A type-0 function at `bus:00.0` of an in-memory window that starts at
+    /// bus 0: identity dword, class dword (0x08) and BAR5.
+    #[cfg(target_arch = "x86_64")]
+    fn put_function(ecam: &mut [u8], bus: usize, identity: u32, class: u32, bar5: u32) {
+        let at = bus * ECAM_BYTES_PER_BUS;
+        ecam[at..at + 0x40].fill(0);
+        for (off, value) in [
+            (CFG_VENDOR_ID, identity),
+            (0x08, class),
+            (CFG_BAR0 + 5 * 4, bar5),
+        ] {
+            ecam[at + off..at + off + 4].copy_from_slice(&value.to_ne_bytes());
+        }
+    }
+
+    /// Syscall 236's record step over a three-bus in-memory window (`0..=2`).
+    #[cfg(target_arch = "x86_64")]
+    fn register_in(
+        ecam: &mut [u8],
+        bdf: (u8, u8, u8),
+        cls: u32,
+        devices: &mut Vec<PciDevice>,
+    ) -> (Registration, bool) {
+        assert_eq!(ecam.len(), 3 * ECAM_BYTES_PER_BUS);
+        // SAFETY: the test owns the live three-bus in-memory ECAM stand-in.
+        unsafe { record_in_window(ecam.as_mut_ptr() as usize, 0, 2, bdf, cls, devices) }
+    }
+
+    /// An Ethernet function without a Driver Cell behind a root port is
+    /// recorded like a bus-0 function, so the machine fingerprint sees it,
+    /// while the handout queries still never offer it.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn registration_records_an_ethernet_function_without_a_driver() {
+        let mut ecam = alloc::vec![0xFFu8; 3 * ECAM_BYTES_PER_BUS];
+        // 01:00.0 AMD PCnet 1022:2000, class 02:00:00 (revision 0x10).
+        put_function(&mut ecam, 1, 0x2000_1022, 0x0200_0010, 0);
+        let mut devices = Vec::new();
+        assert_eq!(
+            register_in(&mut ecam, (1, 0, 0), 0x02_00_00, &mut devices),
+            (Registration::RecordedWithoutDriver, true)
+        );
+        assert_eq!(devices.len(), 1);
+        let pcnet = devices[0].clone();
+        assert_eq!((pcnet.vendor_id, pcnet.device_id), (0x1022, 0x2000));
+        assert_eq!(
+            (pcnet.class, pcnet.subclass, pcnet.prog_if),
+            (0x02, 0x00, 0x00)
+        );
+
+        // SAFETY: as in `register_in`.
+        let ids = unsafe { fingerprint_in_window(ecam.as_mut_ptr() as usize, 0, 2, &[pcnet.bdf]) };
+        assert_eq!(
+            ids,
+            [api::machine_facts::PciFunctionId {
+                vendor: 0x1022,
+                device: 0x2000,
+                class: 0x02,
+                subclass: 0x00,
+                prog_if: 0x00,
+            }]
+        );
+
+        // The queries stay the only gate.
+        test_insert_devices(&[pcnet]);
+        assert!(find_vendor_device(0x1022, 0x2000, |_| true).is_none());
+        assert!(find_class_where(0x02, 0x00, 0x00, |_| true).is_none_or(|d| d.vendor_id != 0x1022));
+        test_remove_devices(0x1022);
+    }
+
+    /// The class code is read from config space, never taken from the
+    /// Platform Cell's `cls`; a second registration of one BDF neither probes
+    /// nor inserts again; an absent function records nothing.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn registration_rereads_the_class_and_records_each_bdf_once() {
+        let mut ecam = alloc::vec![0xFFu8; 3 * ECAM_BYTES_PER_BUS];
+        // 02:00.0 VMware AHCI 15ad:07e0, class 01:06:01, ABAR at BAR5.
+        put_function(&mut ecam, 2, 0x07E0_15AD, 0x0106_0100, 0xFD5F_F000);
+        let mut devices = Vec::new();
+        // A `cls` claiming Ethernet does not change the record.
+        assert_eq!(
+            register_in(&mut ecam, (2, 0, 0), 0x02_00_00, &mut devices),
+            (Registration::Recorded, true)
+        );
+        let ahci = &devices[0];
+        assert_eq!(
+            (ahci.class, ahci.subclass, ahci.prog_if),
+            (0x01, 0x06, 0x01)
+        );
+        assert_eq!((ahci.vendor_id, ahci.device_id), (0x15AD, 0x07E0));
+        assert_eq!(ahci.bars[5].base_addr(), 0xFD5F_F000);
+
+        // Moving BAR5 shows whether a repeat registration decodes again.
+        put_function(&mut ecam, 2, 0x07E0_15AD, 0x0106_0100, 0xFE00_0000);
+        assert_eq!(
+            register_in(&mut ecam, (2, 0, 0), 0x01_06_01, &mut devices),
+            (Registration::Recorded, false)
+        );
+        assert_eq!(devices.len(), 1);
+        assert_eq!(
+            devices[0].bars[5].base_addr(),
+            0xFD5F_F000,
+            "not probed again"
+        );
+
+        // Nothing answers at 02:01.0, and bus 3 is outside the window.
+        for bdf in [(2, 1, 0), (3, 0, 0)] {
+            assert_eq!(
+                register_in(&mut ecam, bdf, 0x01_06_01, &mut devices),
+                (Registration::Absent, false)
+            );
+        }
+        assert_eq!(devices.len(), 1);
+    }
+
+    /// A function behind a bridge is decoded through its own bus window and
+    /// keeps a BAR other than BAR0: VMware's AHCI at 02:00.0 behind `pciBridge0`
+    /// decodes its ABAR at BAR5, which a BAR0-only record lost (S3 finding S2).
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn registered_function_keeps_every_bar_of_its_bus() {
+        let mut ecam = alloc::vec![0xFFu8; 3 * ECAM_BYTES_PER_BUS];
+        let at = 2 * ECAM_BYTES_PER_BUS; // 02:00.0
+        ecam[at..at + 0x40].fill(0);
+        let mut put32 = |off: usize, value: u32| {
+            ecam[at + off..at + off + 4].copy_from_slice(&value.to_ne_bytes());
+        };
+        put32(CFG_VENDOR_ID, 0x07E0_15AD);
+        put32(0x08, 0x0106_0100); // class 01:06:01
+        put32(CFG_BAR0 + 5 * 4, 0xFD5F_F000); // BAR5: 32-bit memory
+        let base = ecam.as_mut_ptr() as usize;
+
+        // SAFETY: the test owns a live three-bus in-memory ECAM stand-in.
+        let (bars, msix, pm) = unsafe { decode_function_in_window(base, 0, 2, 2, 0, 0) }
+            .expect("02:00.0 answers inside the window");
+        assert_eq!(
+            first_memory_bar(&bars).map(|(addr, _)| addr),
+            Some(0xFD5F_F000)
+        );
+        assert!(matches!(
+            bars[5],
+            Bar::Memory32 {
+                addr: 0xFD5F_F000,
+                ..
+            }
+        ));
+        assert_eq!(bars[0].base_addr(), 0);
+        assert!(msix.is_none() && pm.is_none());
+        // The size probe restored the BAR.
+        let bar5 = at + CFG_BAR0 + 5 * 4;
+        assert_eq!(
+            u32::from_ne_bytes(ecam[bar5..bar5 + 4].try_into().unwrap()),
+            0xFD5F_F000
+        );
+
+        // SAFETY: as above; nothing answers at 02:01.0, and bus 3 is outside.
+        let base = ecam.as_mut_ptr() as usize;
+        assert!(unsafe { decode_function_in_window(base, 0, 2, 2, 1, 0) }.is_none());
+        assert!(unsafe { decode_function_in_window(base, 0, 2, 3, 0, 0) }.is_none());
+    }
+
+    #[test]
+    fn first_memory_bar_skips_empty_and_io_slots() {
+        let mut bars = [Bar::Memory32 { addr: 0, size: 0 }; 6];
+        bars[1] = Bar::Io;
+        bars[4] = Bar::Memory64 {
+            addr: 0x8_0000_0000,
+            size: 0x4000,
+        };
+        assert_eq!(first_memory_bar(&bars), Some((0x8_0000_0000, 0x4000)));
+        assert_eq!(first_memory_bar(&[Bar::None; 6]), None);
+        assert!(matches!(
+            platform_bar0(0xFEBF_0000, 0x2_0000)[0],
+            Bar::Memory32 {
+                addr: 0xFEBF_0000,
+                size: 0x2_0000
+            }
+        ));
+        assert_eq!(first_memory_bar(&platform_bar0(0, 0)), None);
+    }
+
+    #[test]
+    fn decoding_waits_for_every_memory_bar_to_be_assigned() {
+        let mut bars = [Bar::None; 6];
+        assert!(!memory_bars_assigned(&bars), "no memory BAR");
+        bars[0] = Bar::Memory32 {
+            addr: 0xFE01_3000,
+            size: 0x1000,
+        };
+        bars[1] = Bar::Io;
+        assert!(memory_bars_assigned(&bars));
+        bars[2] = Bar::Memory64 {
+            addr: 0,
+            size: 0x2000,
+        };
+        assert!(!memory_bars_assigned(&bars), "a sized BAR at base 0");
+        bars[2] = Bar::Memory64 {
+            addr: 0x8_0000_0000,
+            size: 0x2000,
+        };
+        assert!(memory_bars_assigned(&bars));
     }
 
     /// One in-memory function at bus 0, 00:02.0, inside a one-bus window.
@@ -1478,6 +2036,37 @@ mod tests {
         // SAFETY: as above.
         let overflow = unsafe { quiesce_in_window(base, 0, 0, 0x02_00_00) };
         assert_eq!(overflow, Err(QuiesceError::OutOfRange));
+    }
+
+    #[test]
+    fn claim_enables_memory_decoding_but_never_bus_mastering() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        let base = ecam.as_mut_ptr() as usize;
+        // A function a previous owner left quiesced (INTx off, no bus master).
+        function_config(&mut ecam, CFG_COMMAND, CMD_INTX_DISABLE);
+        // SAFETY: the test owns a one-bus in-memory ECAM stand-in.
+        assert!(unsafe { enable_memory_decode_in_window(base, 0, 0, 2 << 3) });
+        assert_eq!(
+            read_config(&ecam, CFG_COMMAND),
+            CMD_MEM_SPACE | CMD_INTX_DISABLE
+        );
+        // Outside the window or above 16 bits: refused, nothing written.
+        // SAFETY: as above.
+        assert!(!unsafe { enable_memory_decode_in_window(base, 0, 0, (1 << 8) | (2 << 3)) });
+        assert!(!unsafe { enable_memory_decode_in_window(base, 0, 0, 0x02_00_00) });
+        assert_eq!(
+            decoding_command(CMD_BUS_MASTER),
+            CMD_BUS_MASTER | CMD_MEM_SPACE
+        );
+        assert_eq!(decoding_command(0) & CMD_BUS_MASTER, 0);
+
+        // An absent function reads all-ones and is not written.
+        let mut absent = alloc::vec![0xFFu8; ECAM_BYTES_PER_BUS];
+        // SAFETY: as above.
+        assert!(unsafe {
+            enable_memory_decode_in_window(absent.as_mut_ptr() as usize, 0, 0, 2 << 3)
+        });
+        assert!(absent.iter().all(|&byte| byte == 0xFF));
     }
 
     /// The fingerprint takes identity and class code from config space by BDF,

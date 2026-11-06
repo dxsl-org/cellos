@@ -162,6 +162,12 @@ DEV_POLICY = [
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     # igb NIC family (i210/i211): same pcie_driver-only shape as /bin/e1000.
     ("/bin/igb",         0, 0, 0, 0, 0, 0,     1, 0, 0),
+    # e1000e NIC (82574L, phase 08): same pcie_driver-only shape as /bin/igb.
+    ("/bin/e1000e",      0, 0, 0, 0, 0, 0,     1, 0, 0),
+    # vmxnet3 NIC and PVSCSI host (VMware paravirtual, phase 09): same
+    # pcie_driver-only shape as /bin/e1000e and /bin/virtio-scsi.
+    ("/bin/vmxnet3",     0, 0, 0, 0, 0, 0,     1, 0, 0),
+    ("/bin/pvscsi",      0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-gpu",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/bcm-display", 0, 0, 0, 0, DEV_DISPLAY, 0,     0, 0, 0),
     ("/bin/dwc2-usb",    0, 0, 1, 0, 0, 0,     0, 0, 0, 1),
