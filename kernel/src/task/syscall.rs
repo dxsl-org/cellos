@@ -2604,7 +2604,11 @@ fn offer_pcie_device(
     }
     // The owner may now reach its BARs: memory decoding on, bus mastering
     // still off until its first GrantDma, after the cell has reset the device.
-    crate::task::drivers::pcie_ecam::enable_memory_decode(bdf);
+    // Only when firmware placed every memory BAR: an unassigned one would
+    // decode at address 0 (the cell then fails closed on base 0, as before).
+    if crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+        crate::task::drivers::pcie_ecam::enable_memory_decode(bdf);
+    }
     if out_ptr != 0 {
         let mut dev_bytes = [0u8; 48];
         dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());

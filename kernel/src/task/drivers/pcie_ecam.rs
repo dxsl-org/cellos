@@ -1284,6 +1284,18 @@ pub fn first_memory_bar(bars: &[Bar; 6]) -> Option<(u64, u64)> {
     })
 }
 
+/// Whether firmware placed every memory BAR the function implements: at least
+/// one memory BAR, and none with a size but base 0. Memory decoding is turned
+/// on at claim time only then; an unassigned BAR would decode at address 0.
+pub fn memory_bars_assigned(bars: &[Bar; 6]) -> bool {
+    let unassigned = bars.iter().any(|bar| match *bar {
+        Bar::Memory32 { addr, size } => addr == 0 && size != 0,
+        Bar::Memory64 { addr, size } => addr == 0 && size != 0,
+        _ => false,
+    });
+    !unassigned && first_memory_bar(bars).is_some()
+}
+
 /// Return a cloned snapshot of the discovered device list.
 pub fn devices() -> Vec<PciDevice> {
     let devices = PCI_DEVICES.lock();
@@ -1680,6 +1692,28 @@ mod tests {
             }
         ));
         assert_eq!(first_memory_bar(&platform_bar0(0, 0)), None);
+    }
+
+    #[test]
+    fn decoding_waits_for_every_memory_bar_to_be_assigned() {
+        let mut bars = [Bar::None; 6];
+        assert!(!memory_bars_assigned(&bars), "no memory BAR");
+        bars[0] = Bar::Memory32 {
+            addr: 0xFE01_3000,
+            size: 0x1000,
+        };
+        bars[1] = Bar::Io;
+        assert!(memory_bars_assigned(&bars));
+        bars[2] = Bar::Memory64 {
+            addr: 0,
+            size: 0x2000,
+        };
+        assert!(!memory_bars_assigned(&bars), "a sized BAR at base 0");
+        bars[2] = Bar::Memory64 {
+            addr: 0x8_0000_0000,
+            size: 0x2000,
+        };
+        assert!(memory_bars_assigned(&bars));
     }
 
     /// One in-memory function at bus 0, 00:02.0, inside a one-bus window.
