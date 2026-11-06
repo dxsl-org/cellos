@@ -9058,8 +9058,11 @@ fn handle_syscall_inner(
         // 236: RegisterPciDevice — Platform Cell announces a device with class/BAR info.
         // Populates PCI_DEVICES so sys_find_pcie_device queries work without kernel ECAM scan.
         // After each registration, attempt deferred IOMMU init (no-op until IOMMU device appears).
-        // An Ethernet function outside the kernel's family gate is refused
-        // (`NotSupported`) and not recorded; the Platform Cell names its ID.
+        // Every function that answers is recorded, as the bus-0 scan records it, so
+        // the machine fingerprint (433) does not depend on the driver table. `1`
+        // means recorded but an Ethernet ID no Driver Cell drives: the handout
+        // queries never offer it, and the Platform Cell names its ID. A BDF with no
+        // function inside the admitted window is `FileNotFound` and not recorded.
         Syscall::RegisterPciDevice {
             bdf,
             cls,
@@ -9069,14 +9072,14 @@ fn handle_syscall_inner(
             if !caller_has_platform(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            let recorded =
-                crate::task::drivers::pcie_ecam::register_device(bdf, cls, bar0_base, bar0_size);
+            use crate::task::drivers::pcie_ecam::{register_device, Registration};
+            let registration = register_device(bdf, cls, bar0_base, bar0_size);
             crate::task::drivers::pcie_ecam::mark_platform_registered();
             crate::task::drivers::iommu::try_deferred_init();
-            if recorded {
-                Ok(0)
-            } else {
-                Err(SyscallError::NotSupported)
+            match registration {
+                Registration::Recorded => Ok(0),
+                Registration::RecordedWithoutDriver => Ok(1),
+                Registration::Absent => Err(SyscallError::FileNotFound),
             }
         }
 
