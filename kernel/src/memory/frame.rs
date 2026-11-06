@@ -73,6 +73,9 @@ pub struct FrameAllocator {
     used_frames: usize,
     /// Bitmap storage
     bitmap: BitmapStorage,
+    /// Index into `ranges` of the range whose first frames hold the bitmap; the
+    /// boot heap is reserved in the same range ([`reserve_boot_heap`]).
+    bitmap_range: usize,
     /// Index of the last allocated frame (for next-fit search)
     last_alloc_index: usize,
     #[cfg(cellos_p01_trace)]
@@ -89,27 +92,34 @@ impl FrameAllocator {
     /// marked used.
     pub fn new_from_map(entries: &[MemoryMapEntry]) -> Self {
         let plan = plan_managed_ranges(entries);
-        let bitmap_start = plan.bitmap_start();
         let bitmap_u64_count = plan.total_frames().div_ceil(64);
 
         // SAFETY: the plan guarantees the largest range can hold the bitmap, and the
         // allocator is constructed once during single-threaded boot.
         let bitmap = unsafe {
             core::slice::from_raw_parts_mut(
-                phys_to_virt(bitmap_start) as *mut u64,
+                phys_to_virt(plan.bitmap_start()) as *mut u64,
                 bitmap_u64_count,
             )
         };
-        for slot in bitmap.iter_mut() {
-            *slot = 0;
-        }
+        Self::from_plan(plan, BitmapStorage::Borrowed(bitmap))
+    }
+
+    /// The allocator over `plan`: `bitmap` (one bit per managed frame) is cleared
+    /// and the frames that hold it, at the start of the plan's bitmap range, are
+    /// marked used.
+    fn from_plan(plan: ManagedPlan, mut bitmap: BitmapStorage) -> Self {
+        bitmap.slice_mut().fill(0);
+        let bitmap_start = plan.bitmap_start();
+        let bitmap_pages = core::mem::size_of_val(bitmap.slice()).div_ceil(PAGE_SIZE);
 
         let mut allocator = Self {
             ranges: plan.ranges,
             range_count: plan.range_count(),
             total_frames: plan.total_frames(),
             used_frames: 0,
-            bitmap: BitmapStorage::Borrowed(bitmap),
+            bitmap,
+            bitmap_range: plan.bitmap_range,
             last_alloc_index: 0,
             #[cfg(cellos_p01_trace)]
             p01_epoch: 1,
@@ -118,7 +128,6 @@ impl FrameAllocator {
         };
 
         // The bitmap lives inside managed memory, so its own frames are reserved.
-        let bitmap_pages = (bitmap_u64_count * 8).div_ceil(PAGE_SIZE);
         if let Some(index) = allocator.index_of_addr(bitmap_start) {
             for offset in 0..bitmap_pages {
                 allocator.mark_used(index + offset);
@@ -517,27 +526,29 @@ impl FrameAllocator {
         if n == 1 {
             return self.allocate_frame();
         }
+        (0..self.range_count).find_map(|range_index| self.allocate_contiguous_in(range_index, n))
+    }
+
+    /// First run of `n` free frames inside managed range `range_index`, marked
+    /// allocated; `None` when that range has no such run.
+    fn allocate_contiguous_in(&mut self, range_index: usize, n: usize) -> Option<PhysAddr> {
         // No allocation here: this runs during boot (the heap reservation) before the
         // global allocator exists.
-        for range_index in 0..self.range_count {
-            let Some(range) = self.ranges[range_index] else {
-                continue;
-            };
-            if range.frames < n {
-                continue;
-            }
-            let limit = range.index_base + range.frames - n;
-            'outer: for start in range.index_base..=limit {
-                for i in 0..n {
-                    if self.is_frame_allocated(start + i) {
-                        continue 'outer;
-                    }
+        let range = self.ranges[range_index]?;
+        if range.frames < n {
+            return None;
+        }
+        let limit = range.index_base + range.frames - n;
+        'outer: for start in range.index_base..=limit {
+            for i in 0..n {
+                if self.is_frame_allocated(start + i) {
+                    continue 'outer;
                 }
-                for i in 0..n {
-                    self.mark_used(start + i);
-                }
-                return Some(self.frame_index_to_addr(start));
             }
+            for i in 0..n {
+                self.mark_used(start + i);
+            }
+            return Some(self.frame_index_to_addr(start));
         }
         None
     }
@@ -677,6 +688,25 @@ impl Drop for OwnedFrame {
 /// smaller or scattered heap.
 pub fn reserve_contiguous_run(allocator: &mut FrameAllocator, frames: usize) -> Option<PhysAddr> {
     allocator.allocate_contiguous(frames)
+}
+
+/// Reserve the boot heap: the first run of `frames` free frames inside the range
+/// that hosts the frame bitmap, as one contiguous transaction like
+/// [`reserve_contiguous_run`].
+///
+/// The bitmap occupies the first frames of that range, and every frame handed out
+/// before the heap comes from the next-fit cursor starting at the first managed
+/// frame, so the frames of that range below the heap are exactly the bitmap plus
+/// the early boot frames that reached it. `main.rs` registers
+/// `[bitmap start, heap start)` as shared kernel memory and relies on this. A first
+/// fit over every range does not keep it: when the largest range (the bitmap's) is
+/// not the first one with room — UEFI maps at ≥ 1 GiB under VMware and at 4 GiB under
+/// OVMF — the heap landed below the bitmap and that registration failed.
+///
+/// `None` (no such run in the bitmap's range) must fail boot; placing the heap in
+/// another range would break the registered span.
+pub fn reserve_boot_heap(allocator: &mut FrameAllocator, frames: usize) -> Option<PhysAddr> {
+    allocator.allocate_contiguous_in(allocator.bitmap_range, frames)
 }
 
 /// Largest number of disjoint usable ranges the allocator tracks.
@@ -862,6 +892,8 @@ pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
         total_frames: total,
         used_frames: 0,
         bitmap: BitmapStorage::Owned(alloc::vec![0u64; total.div_ceil(64)].into_boxed_slice()),
+        // The owned bitmap is outside managed memory; the boot heap would go in range 0.
+        bitmap_range: 0,
         last_alloc_index: 0,
         #[cfg(cellos_p01_trace)]
         p01_epoch: 1,
@@ -872,7 +904,9 @@ pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
 
 #[cfg(test)]
 mod tests {
-    use super::{plan_managed_ranges, reserve_contiguous_run, FrameAllocator, PAGE_SIZE};
+    use super::{
+        plan_managed_ranges, reserve_boot_heap, reserve_contiguous_run, FrameAllocator, PAGE_SIZE,
+    };
     use crate::boot::{MemoryMapEntry, MemoryType};
 
     fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
@@ -1058,6 +1092,7 @@ mod tests {
             bitmap: super::BitmapStorage::Owned(
                 alloc::vec![0u64; total_frames.div_ceil(64)].into_boxed_slice(),
             ),
+            bitmap_range: 0,
             last_alloc_index: 0,
             #[cfg(cellos_p01_trace)]
             p01_epoch: 1,
@@ -1167,6 +1202,175 @@ mod tests {
         assert_eq!(
             allocator.total_frames(),
             allocator.used_frames() + allocator.free_frames()
+        );
+    }
+
+    /// `HEAP_FRAMES` of the 64-bit boot path in `main.rs` (32 MiB).
+    const BOOT_HEAP_FRAMES: usize = 8_192;
+
+    /// The allocator `FrameAllocator::new_from_map` builds over `ranges` (the
+    /// `[boot]   range start..end` lines a boot logs), with an owned bitmap, and
+    /// the physical address of the bitmap's first frame.
+    fn boot_allocator(ranges: &[(usize, usize)]) -> (FrameAllocator, usize) {
+        let entries: alloc::vec::Vec<_> = ranges
+            .iter()
+            .map(|&(start, end)| map_entry(start, end - start, MemoryType::Usable))
+            .collect();
+        let plan = plan_managed_ranges(&entries);
+        let bitmap_start = plan.bitmap_start();
+        let words = plan.total_frames().div_ceil(64);
+        let bitmap = super::BitmapStorage::Owned(alloc::vec![0u64; words].into_boxed_slice());
+        (FrameAllocator::from_plan(plan, bitmap), bitmap_start)
+    }
+
+    /// The boot path up to `register(bitmap start, heap start)` in `main.rs`:
+    /// `early` single frames (paging and firmware mappings), then the heap.
+    /// Returns the allocator, the bitmap's first frame and the heap.
+    fn boot_heap(ranges: &[(usize, usize)], early: usize) -> (FrameAllocator, usize, usize) {
+        let (mut allocator, bitmap_start) = boot_allocator(ranges);
+        for _ in 0..early {
+            allocator.allocate_frame().expect("early boot frame");
+        }
+        let heap = reserve_boot_heap(&mut allocator, BOOT_HEAP_FRAMES)
+            .expect("the bitmap's range holds the boot heap");
+        (allocator, bitmap_start, heap)
+    }
+
+    /// The span `main.rs` registers as shared kernel memory, `[bitmap start, heap
+    /// start)`, is a non-empty run of one managed range in which every frame is
+    /// already owned (the bitmap or an early boot frame), and the heap follows it.
+    fn assert_registered_span_is_owned(
+        allocator: &FrameAllocator,
+        bitmap_start: usize,
+        heap: usize,
+    ) {
+        assert!(
+            bitmap_start < heap,
+            "registration needs start < end: bitmap {bitmap_start:#x}, heap {heap:#x}"
+        );
+        let range = allocator
+            .managed_ranges()
+            .find(|range| {
+                bitmap_start >= range.start && bitmap_start < range.start + range.frames * PAGE_SIZE
+            })
+            .expect("the bitmap is managed");
+        assert_eq!(bitmap_start, range.start, "the bitmap opens its range");
+        assert!(
+            heap + BOOT_HEAP_FRAMES * PAGE_SIZE <= range.start + range.frames * PAGE_SIZE,
+            "the heap {heap:#x} lies in the bitmap's range {range:?}"
+        );
+        for frame in (bitmap_start..heap + BOOT_HEAP_FRAMES * PAGE_SIZE).step_by(PAGE_SIZE) {
+            let index = allocator.index_of_addr(frame).expect("managed frame");
+            assert!(
+                allocator.is_frame_allocated(index),
+                "frame {frame:#x} inside the registered span or heap is free"
+            );
+        }
+    }
+
+    /// VMware Workstation 25, EFI, 1024 MiB (S3 V0 run `efi-m1024`), and QEMU q35
+    /// + OVMF, 4096 MiB: the largest range (the bitmap's) is not the first range
+    /// with 32 MiB free, so a first fit put the heap below the bitmap and
+    /// `register(bitmap start, heap start)` panicked at boot.
+    #[test]
+    fn boot_heap_follows_the_bitmap_on_uefi_maps() {
+        let vmware_efi_1024 = [
+            (0x3000, 0xa0000),
+            (0x10_0000, 0xdf2_d000),
+            (0xdf7_3000, 0xfb6_f000),
+            (0xfbf_f000, 0x39ab_4000),
+            (0x3c00_0000, 0x3fff_6000),
+            (0x3fff_9000, 0x4000_0000),
+        ];
+        let ovmf_4096 = [
+            (0x0, 0xa0000),
+            (0x10_0000, 0x80_0000),
+            (0x80_8000, 0x80_b000),
+            (0x80_c000, 0x81_0000),
+            (0x90_0000, 0x7800_5000),
+            (0x7a3f_7000, 0x7bf4_e000),
+            (0x7bfe_4000, 0x7e4d_8000),
+            (0x7e4d_e000, 0x7e4e_4000),
+            (0x7e55_b000, 0x7ea4_d000),
+            (0x7ea4_f000, 0x7ea5_5000),
+            (0x7ea5_8000, 0x7f00_e000),
+            (0x7f0c_f000, 0x7f8e_d000),
+            (0x7fbf_f000, 0x7fe0_0000),
+            (0x7fe7_7000, 0x7fef_4000),
+            (0x1_0000_0000, 0x1_8000_0000),
+        ];
+        for map in [&vmware_efi_1024[..], &ovmf_4096[..]] {
+            let (mut first_fit, bitmap_start) = boot_allocator(map);
+            let below = reserve_contiguous_run(&mut first_fit, BOOT_HEAP_FRAMES)
+                .expect("a first fit finds a run");
+            assert!(
+                below < bitmap_start,
+                "fixture: a first fit lands below the bitmap ({below:#x} < {bitmap_start:#x})"
+            );
+
+            let (allocator, bitmap_start, heap) = boot_heap(map, 64);
+            assert_registered_span_is_owned(&allocator, bitmap_start, heap);
+        }
+    }
+
+    /// Where the heap already followed the bitmap — a BIOS map (VMware, 4096 MiB)
+    /// and a single-range map whose early frames follow the bitmap (the RV64 /
+    /// AArch64 shape) — the boot heap lands exactly where the first fit put it.
+    #[test]
+    fn boot_heap_is_unchanged_where_it_already_followed_the_bitmap() {
+        let vmware_bios_4096 = [
+            (0x5_a000, 0x9_f000),
+            (0x10_0000, 0xbda5_5000),
+            (0x1_0000_0000, 0x1_4000_0000),
+        ];
+        let single_range = [(0x8020_0000, 0x8800_0000)];
+        for map in [&vmware_bios_4096[..], &single_range[..]] {
+            let (mut first_fit, _) = boot_allocator(map);
+            for _ in 0..64 {
+                first_fit.allocate_frame().expect("early boot frame");
+            }
+            let expected = reserve_contiguous_run(&mut first_fit, BOOT_HEAP_FRAMES)
+                .expect("a first fit finds a run");
+
+            let (allocator, bitmap_start, heap) = boot_heap(map, 64);
+            assert_eq!(heap, expected, "the heap does not move");
+            assert_registered_span_is_owned(&allocator, bitmap_start, heap);
+        }
+        // Single range: the early frames sit between the bitmap and the heap and
+        // are part of the registered span.
+        let (_, bitmap_start, heap) = boot_heap(&single_range, 64);
+        let frames = (0x8800_0000 - 0x8020_0000) / PAGE_SIZE;
+        let bitmap_pages = (frames.div_ceil(64) * 8).div_ceil(PAGE_SIZE);
+        assert_eq!(heap, bitmap_start + (bitmap_pages + 64) * PAGE_SIZE);
+    }
+
+    /// No run in the bitmap's range refuses the heap, marks nothing, and does not
+    /// fall back to another range — that would break the registered span.
+    #[test]
+    fn boot_heap_refuses_rather_than_leave_the_bitmap_range() {
+        // Two equal ranges: the bitmap takes the second (the last of equal maxima),
+        // so only the first still has a free 32 MiB run.
+        let size = BOOT_HEAP_FRAMES * PAGE_SIZE;
+        let map = [
+            (0x10_0000, 0x10_0000 + size),
+            (0x1_0000_0000, 0x1_0000_0000 + size),
+        ];
+        let (mut allocator, bitmap_start) = boot_allocator(&map);
+        assert_eq!(
+            bitmap_start, 0x1_0000_0000,
+            "fixture: the bitmap is in the second range"
+        );
+        let used = allocator.used_frames();
+        assert_eq!(reserve_boot_heap(&mut allocator, BOOT_HEAP_FRAMES), None);
+        assert_eq!(
+            allocator.used_frames(),
+            used,
+            "a refused heap marks no frame"
+        );
+        assert_eq!(
+            reserve_contiguous_run(&mut allocator, BOOT_HEAP_FRAMES),
+            Some(0x10_0000),
+            "fixture: another range had room"
         );
     }
 }
