@@ -97,7 +97,7 @@ fn encoders_write_the_configuration_at_its_offsets() {
         &[0, 3, 2],
         "no automask, 3 vectors, events on 2"
     );
-    assert_eq!(bytes.u32(120), 0x0D, "ucast | bcast | allmulti");
+    assert_eq!(bytes.u32(120), 0x1D, "ucast | bcast | allmulti | promisc");
     assert_eq!(bytes.u32(136), 1, "VLAN ID 0 (untagged) admitted");
     assert!(bytes.1.keys().all(|&o| o < DRIVER_SHARED_LEN));
 

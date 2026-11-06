@@ -18,8 +18,11 @@ const MAX_INTRS: usize = 25;
 pub(crate) const REV1_MAGIC: u32 = 0xBABE_FEE1;
 /// Guest OS word: FreeBSD-type, 64-bit (the value OpenBSD's driver also uses).
 const GOS_FREEBSD_64: u32 = 0x10 | 0x02;
-/// `rxmode`: unicast (0x01) | broadcast (0x04) | all-multicast (0x08).
-const RXMODE: u32 = 0x01 | 0x04 | 0x08;
+/// `rxmode`: unicast (0x01) | broadcast (0x04) | all-multicast (0x08) |
+/// promiscuous (0x10). The net service frames with its own fixed station
+/// address (`52:54:00:12:34:56`), not the device's, so replies to it arrive
+/// only through the promiscuous path, as on the e1000 family (`RCTL.UPE|MPE`).
+const RXMODE: u32 = 0x01 | 0x04 | 0x08 | 0x10;
 const MTU: u32 = 1500;
 
 #[repr(C)]
