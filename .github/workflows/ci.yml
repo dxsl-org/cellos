@@ -1115,7 +1115,8 @@ jobs:
 
       # Plan 261103-2218 phase 09: QEMU `pvscsi` + `scsi-hd` on `/bin/pvscsi`
       # next to an NVMe primary: IRQ-driven bind line and two-boot persistence
-      # on q35 without and with VT-d, and on x86_64-pc under VT-d (pinned node).
+      # on q35 without VT-d; under VT-d (q35, and x86_64-pc on a pinned node)
+      # the kernel refuses the adapter, whose rings bypass the IOMMU (H-S3-13).
       - name: PVSCSI integration test (x86_64)
         env:
           VICELL_X86_PC_ISO: ${{ github.workspace }}/build/x86-pc-lane/vicell-x86-pc.iso

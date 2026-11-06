@@ -2587,10 +2587,11 @@ fn offer_pcie_device(
         crate::task::drivers::pcie_ecam::first_memory_bar(&dev.bars)
             .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
             .unwrap_or((bar0_base, bar0_len));
-    // Under VT-d, a virtio function without ACCESS_PLATFORM would DMA around
-    // the translation; no cell may own it (ADR-0031 phase 05, review HIGH).
-    // Judged only before the first claim: the probe remaps the common-config
-    // page kernel-only, which must not happen under a live owner's mapping.
+    // Under VT-d, a virtio function without ACCESS_PLATFORM or a PVSCSI
+    // adapter would DMA around the translation; no cell may own it (ADR-0031
+    // phase 05 review HIGH; H-S3-13). Judged only before the first claim: the
+    // virtio probe remaps the common-config page kernel-only, which must not
+    // happen under a live owner's mapping.
     #[cfg(target_arch = "x86_64")]
     if crate::resource_registry::owner_of_bdf(bdf).is_none()
         && crate::task::drivers::pcie_msi::dma_bypasses_iommu(&dev)

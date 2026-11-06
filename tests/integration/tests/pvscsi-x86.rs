@@ -5,9 +5,14 @@
 //! QEMU's model, `irq=msix` where the adapter offers MSI-X; H-S3-5), the VFS
 //! mounts its FAT32 volume as the secondary disk, a file written on the first
 //! boot reads back on the second (two-boot persistence, the `virtio-x86.rs`
-//! pattern). Lanes: default q35 image without and with `intel-iommu`, and the
-//! strict `x86_64-pc` image under `intel-iommu` on a provisioned node (pin
-//! store on the NVMe disk, `scripts/x86/machine_pin_disk.py`).
+//! pattern), on the default q35 image without `intel-iommu`.
+//!
+//! QEMU's model reads and writes its rings by physical address, around the
+//! vIOMMU, so under VT-d the kernel refuses to hand the function out
+//! (H-S3-13): the `intel-iommu` lanes — default q35 image, and the strict
+//! `x86_64-pc` image on a provisioned node (pin store on the NVMe disk,
+//! `scripts/x86/machine_pin_disk.py`) — assert that refusal, an idle cell and
+//! a booted system instead of a bind.
 //!
 //! Tests skip when the ISO or QEMU is absent (`ci_guard` turns that into a
 //! failure under CI).
@@ -19,6 +24,9 @@ use vicell_integration_tests::{ci_guard, qemu_binary_x86, x86_iso_path, QemuRunn
 
 const READY: &str = "[pvscsi] ready";
 const BIND: &str = "[pvscsi] pci ";
+const KERNEL_REFUSAL: &str =
+    "[pcie] refusing 00:03.0 15ad:07c0: PVSCSI rings are accessed by physical address and would bypass VT-d";
+const CELL_IDLE: &str = "[pvscsi] no controller - exiting";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -92,32 +100,53 @@ fn two_boot(lane: &str, nvme: &str, markers: &[&str], boot: impl Fn(&str, &str) 
     println!("P09 {lane} boot 2:\n{}", evidence(&shutdown(second)));
 }
 
-fn plain_lane(vtd: bool) {
+/// One boot under VT-d: the kernel refuses the adapter, the cell finds none,
+/// and the system still reaches the prompt with nothing bound to PVSCSI.
+fn refused_under_vtd(lane: &str, nvme: &str, markers: &[&str], boot: impl Fn(&str, &str) -> QemuRunner) {
+    let scsi = fixture();
+    let qemu = boot(nvme, &scsi.arg());
+    wait_all(&qemu, &[KERNEL_REFUSAL, CELL_IDLE], lane);
+    wait_all(&qemu, markers, lane);
+    let output = shutdown(qemu);
+    for bad in [BIND, READY, "[KERNEL PANIC]", "PANIC: Application crashed!", "[fault] Cell"] {
+        assert!(!output.contains(bad), "{lane}: {bad}\n{output}");
+    }
+    assert_eq!(output.matches(KERNEL_REFUSAL).count(), 1, "{lane}: refusal logged once\n{output}");
+    println!("P09 {lane}:\n{}", evidence(&output));
+}
+
+#[test]
+fn pvscsi_binds_and_persists_x86() {
     let iso = x86_iso_path(&repo_root());
     if !prerequisites_ok(&iso) {
         return;
     }
     let nvme = fixture();
-    let markers: &[&str] = if vtd { &["[vtd] Intel VT-d: DMA isolation ACTIVE", PROMPT] } else { &[PROMPT] };
-    let lane = if vtd { "q35 + intel-iommu" } else { "q35" };
-    two_boot(lane, &nvme.arg(), markers, |nvme, scsi| QemuRunner::boot_x86_pvscsi(&iso, nvme, scsi, vtd, false));
+    two_boot("q35", &nvme.arg(), &[PROMPT], |nvme, scsi| {
+        QemuRunner::boot_x86_pvscsi(&iso, nvme, scsi, false, false)
+    });
 }
 
 #[test]
-fn pvscsi_binds_and_persists_x86() {
-    plain_lane(false);
-}
-
-#[test]
-fn pvscsi_binds_and_persists_under_vtd_x86() {
-    plain_lane(true);
+fn pvscsi_is_refused_under_vtd_x86() {
+    let iso = x86_iso_path(&repo_root());
+    if !prerequisites_ok(&iso) {
+        return;
+    }
+    let nvme = fixture();
+    refused_under_vtd(
+        "q35 + intel-iommu",
+        &nvme.arg(),
+        &["[vtd] Intel VT-d: DMA isolation ACTIVE", PROMPT],
+        |nvme, scsi| QemuRunner::boot_x86_pvscsi(&iso, nvme, scsi, true, false),
+    );
 }
 
 /// The strict `x86_64-pc` image under `intel-iommu`: the NVMe primary carries
-/// the machine pin store (P1 FAT32 + blank CellosFS), so boot 1 pins and
-/// boot 2 matches.
+/// the machine pin store (P1 FAT32 + blank CellosFS), so the node boots
+/// normally while the kernel refuses the adapter.
 #[test]
-fn pvscsi_persists_on_x86_64_pc_under_vtd_x86() {
+fn pvscsi_is_refused_on_x86_64_pc_under_vtd_x86() {
     let Ok(iso) = std::env::var("VICELL_X86_PC_ISO") else {
         eprintln!("SKIP pvscsi x86_64-pc lane: VICELL_X86_PC_ISO unset");
         return;
@@ -132,7 +161,7 @@ fn pvscsi_persists_on_x86_64_pc_under_vtd_x86() {
         .status()
         .expect("run machine_pin_disk.py");
     assert!(status.success(), "machine_pin_disk.py failed: {status}");
-    two_boot(
+    refused_under_vtd(
         "x86_64-pc + intel-iommu",
         &pin.to_string_lossy(),
         &["[x86-gate] board=x86_64-pc", "[vtd] Intel VT-d: DMA isolation ACTIVE", PROMPT],
