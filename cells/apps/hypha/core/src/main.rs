@@ -1,6 +1,6 @@
 //! Hypha `core` — the agent brain (P3: fs + sys + spawn tools).
 //!
-//! Spawns `llm-gateway`, `tool-fs`, `tool-sys`, and `tool-spawn`, then loops:
+//! Spawns `llm-gateway`, `tool-sys`, `tool-fs`, and `tool-spawn`, then loops:
 //! read a line from stdin (UART), keep the conversation in heap, run an agentic
 //! turn (LLM + optional tool sub-loop), print the final reply.
 //!
@@ -8,6 +8,10 @@
 //! - fs tools  (read_file / write_file / list_dir) → tool-fs
 //! - sys tools (list_cells / sys_info / lookup_service) → tool-sys
 //! - spawn tools (spawn_cell / kill_cell) → tool-spawn
+//!
+//! LLM output is untrusted: side-effecting calls wait for the operator's `y`
+//! ([`tool_gate`]), and `tool-fs`/`tool-spawn` are spawned bound to this core so
+//! no other cell can drive them ([`tool_owner`]).
 
 #![no_std]
 #![no_main]
@@ -19,14 +23,19 @@ extern crate ostd;
 use agent_proto::{AgentToolRequest, AgentToolResponse, LlmReply, LlmRequest, ToolCall};
 use alloc::string::String;
 use alloc::vec::Vec;
+use hypha_core::preamble::system_preamble;
+use hypha_core::{tool_gate, tool_owner};
 use ostd::input::request_focus;
 use ostd::io::{print, println, stdin};
-use ostd::syscall::{sys_exit, sys_recv, sys_send, sys_spawn_from_path, SyscallResult};
+use ostd::syscall::{
+    sys_exit, sys_recv, sys_send, sys_spawn_from_path, sys_spawn_from_path_raw, SyscallResult,
+};
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 // GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
 // GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
 // one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
+// StateStash: publishes the owner argv each bound tool cell is spawned with.
 api::declare_syscalls![
     Send,
     Recv,
@@ -35,7 +44,8 @@ api::declare_syscalls![
     Log,
     SpawnFromPath,
     LookupService,
-    GrantAlloc
+    GrantAlloc,
+    StateStash
 ];
 
 const GATEWAY_PATH: &str = "/bin/llm-gateway";
@@ -46,16 +56,6 @@ const TOOL_SPAWN_PATH: &str = "/bin/tool-spawn";
 const PROMPT_MAX: usize = 3500;
 // Tool call agentic loop guard — prevents infinite tool chains.
 const MAX_TOOL_ROUNDS: usize = 5;
-
-const SYSTEM_PREAMBLE: &str = "\
-system: You are Hypha, a helpful AI agent inside Cellos OS. \
-Writable dirs: /data (persistent), /tmp (scratch). Read-only: /bin (binaries). \
-When you need a tool, reply with ONLY this line: \
-TOOL_CALL: {\"name\":\"TOOL\",\"args\":{ARGS_JSON}} \
-File tools: read_file({\"path\":\"...\"}), write_file({\"path\":\"...\",\"content\":\"...\"}), list_dir({\"path\":\"...\"}). \
-Sys tools: list_cells({}), sys_info({}), lookup_service({\"name\":\"vfs|net|input\"}). \
-Spawn tools: spawn_cell({\"path\":\"/bin/...\"}), kill_cell({\"tid\":N}). \
-After tool_result: incorporate it into your answer.\n";
 
 /// Holds the tid for each tool cell. 0 means unavailable (failed to spawn).
 struct Tools {
@@ -90,36 +90,22 @@ fn cell_main() {
         }
     };
 
-    let tool_fs = match sys_spawn_from_path(TOOL_FS_PATH) {
-        SyscallResult::Ok(tid) => {
-            println("[hypha] tool-fs ready");
-            tid
-        }
-        _ => {
-            println("[hypha] WARN: tool-fs not found");
-            0
-        }
-    };
-
-    let tool_sys = match sys_spawn_from_path(TOOL_SYS_PATH) {
-        SyscallResult::Ok(tid) => {
-            println("[hypha] tool-sys ready");
-            tid
-        }
-        _ => {
-            println("[hypha] WARN: tool-sys not found");
-            0
-        }
-    };
-
-    let tool_spawn = match sys_spawn_from_path(TOOL_SPAWN_PATH) {
-        SyscallResult::Ok(tid) => {
-            println("[hypha] tool-spawn ready");
-            tid
-        }
-        _ => {
-            println("[hypha] WARN: tool-spawn not found");
-            0
+    let tool_sys = spawn_tool(TOOL_SYS_PATH, "tool-sys", &[]);
+    // Bind the authority-holding tools to this core. The kernel offers no
+    // "own tid" query; tool-sys echoes the kernel-stamped sender instead.
+    let owner_argv = (tool_sys != 0)
+        .then(|| invoke(tool_sys, "caller_tid", "{}").ok())
+        .flatten()
+        .and_then(|reply| tool_owner::parse_caller_tid(&reply))
+        .map(|tid| alloc::vec![tool_owner::owner_arg(tid)]);
+    let (tool_fs, tool_spawn) = match &owner_argv {
+        Some(argv) => (
+            spawn_tool(TOOL_FS_PATH, "tool-fs", argv),
+            spawn_tool(TOOL_SPAWN_PATH, "tool-spawn", argv),
+        ),
+        None => {
+            println("[hypha] WARN: own tid unknown; tool-fs and tool-spawn not started");
+            (0, 0)
         }
     };
 
@@ -128,6 +114,7 @@ fn cell_main() {
         sys: tool_sys,
         spawn: tool_spawn,
     };
+    let preamble = system_preamble();
     let mut conversation: Vec<(&'static str, String)> = Vec::new();
     let sin = stdin();
 
@@ -154,7 +141,7 @@ fn cell_main() {
         }
 
         conversation.push(("user", String::from(user)));
-        let prompt = render_prompt(&conversation);
+        let prompt = render_prompt(&preamble, &conversation);
 
         match run_turn(gw, &tools, &prompt) {
             Ok(reply) => {
@@ -240,6 +227,7 @@ fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
 
 /// Dispatch one tool call to the appropriate tool cell via `AgentToolRequest` IPC.
 /// Routes by tool name: fs / sys / spawn tools go to their respective cells.
+/// Side-effecting calls run only after the operator approves them on the console.
 fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
     let cell_tid = tools.route(&call.name);
     if cell_tid == 0 {
@@ -248,18 +236,35 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
             call.name
         ));
     }
+    if tool_gate::needs_confirmation(&call.name) && !operator_approves(call) {
+        // Ends the turn: a denied call must not let the model chain further calls.
+        return Err(alloc::format!(
+            "tool call '{}' denied by operator",
+            call.name
+        ));
+    }
+    invoke(cell_tid, &call.name, &call.args_json)
+}
 
-    let req = AgentToolRequest::Invoke {
-        name: &call.name,
-        args_json: &call.args_json,
-    };
+/// Show the exact call and wait for the operator's answer on this console.
+/// Keys typed while the model was answering were discarded by `ask()`'s receive
+/// loop, so only an answer typed after the prompt can approve.
+fn operator_approves(call: &ToolCall) -> bool {
+    print(tool_gate::confirmation_prompt(&call.name, &call.args_json).as_str());
+    let mut answer = String::new();
+    stdin().read_line(&mut answer).is_ok() && tool_gate::is_confirmed(&answer)
+}
+
+/// One `AgentToolRequest::Invoke` round trip with tool cell `cell_tid`.
+fn invoke(cell_tid: usize, name: &str, args_json: &str) -> Result<String, String> {
+    let req = AgentToolRequest::Invoke { name, args_json };
     let mut out = [0u8; 4096];
     let encoded =
         postcard::to_slice(&req, &mut out).map_err(|_| String::from("tool request too large"))?;
 
     match sys_send(cell_tid, encoded) {
         SyscallResult::Ok(_) => {}
-        _ => return Err(alloc::format!("send to tool cell '{}' failed", call.name)),
+        _ => return Err(alloc::format!("send to tool cell '{}' failed", name)),
     }
 
     let mut buf = [0u8; 4096];
@@ -275,7 +280,39 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
                 };
             }
             SyscallResult::Ok(_) => continue,
-            _ => return Err(alloc::format!("no reply from tool cell '{}'", call.name)),
+            _ => return Err(alloc::format!("no reply from tool cell '{}'", name)),
+        }
+    }
+}
+
+/// Spawn a tool cell with `argv` as its command line; 0 when it cannot start.
+///
+/// Route order mirrors the shell: the kernel path route first — the only one
+/// that admits a launch edge carrying authority (tool-spawn's SpawnCap) — then
+/// the VFS route. A rejected attempt discards the staged argv, so it is
+/// re-published before each attempt; otherwise a bound tool would start unbound.
+fn spawn_tool(path: &str, label: &str, argv: &[String]) -> usize {
+    let attempt = |spawn: fn(&str) -> SyscallResult| {
+        if !ostd::set_spawn_argv(argv) {
+            return None;
+        }
+        match spawn(path) {
+            SyscallResult::Ok(tid) => Some(tid),
+            _ => None,
+        }
+    };
+    match attempt(sys_spawn_from_path_raw).or_else(|| attempt(sys_spawn_from_path)) {
+        Some(tid) => {
+            print("[hypha] ");
+            print(label);
+            println(" ready");
+            tid
+        }
+        None => {
+            print("[hypha] WARN: ");
+            print(label);
+            println(" not found");
+            0
         }
     }
 }
@@ -283,8 +320,8 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
 /// Flatten the heap conversation into a single role-tagged transcript.
 /// The system preamble is prepended so the LLM always knows about tools.
 /// Trimmed from the front if it would exceed the one-message IPC budget.
-fn render_prompt(conv: &[(&'static str, String)]) -> String {
-    let mut s = String::from(SYSTEM_PREAMBLE);
+fn render_prompt(preamble: &str, conv: &[(&'static str, String)]) -> String {
+    let mut s = String::from(preamble);
     for (role, text) in conv {
         s.push_str(role);
         s.push_str(": ");

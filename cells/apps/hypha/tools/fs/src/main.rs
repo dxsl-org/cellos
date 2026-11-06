@@ -1,13 +1,17 @@
 //! Hypha `tool-fs` — filesystem tool cell (P2).
 //!
-//! Receives [`AgentToolRequest::Invoke`] from `core`, dispatches to
-//! [`ostd::clients::VfsClient`] (VFS service via IPC — no `block_io` cap needed),
-//! and replies [`AgentToolResponse::Ok`] or [`AgentToolResponse::Err`].
+//! Receives [`AgentToolRequest::Invoke`] from the `core` that spawned it,
+//! dispatches to [`ostd::clients::VfsClient`] (VFS service via IPC — no
+//! `block_io` cap needed), and replies [`AgentToolResponse::Ok`] or
+//! [`AgentToolResponse::Err`].
 //!
-//! Supported tools:
+//! Supported tools, every path confined to [`workspace::WORKSPACE_ROOT`]:
 //! - `read_file`  `{"path":"..."}` → `{"content":"..."}`
 //! - `write_file` `{"path":"...","content":"..."}` → `{"ok":true}`
 //! - `list_dir`   `{"path":"..."}` → `{"files":["a","b",...]}`
+//!
+//! Requests from any sender other than the owner named in the spawn argv are
+//! dropped unanswered ([`tool_owner`]); an unbound instance exits at once.
 
 #![no_std]
 #![no_main]
@@ -18,6 +22,7 @@ extern crate ostd;
 
 use agent_proto::{AgentToolRequest, AgentToolResponse};
 use alloc::string::String;
+use hypha_tool_fs::{tool_owner, workspace};
 use ostd::app::{AppContext, AppEvent};
 use ostd::clients::VfsClient;
 use ostd::io::println;
@@ -25,7 +30,8 @@ use ostd::runtime::CellRuntime;
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate];
+// StateRestore: reads the spawn argv that names the owning core.
+api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate, StateRestore];
 
 ostd::cell_main!(cell_main);
 
@@ -33,9 +39,20 @@ const READ_FILE_MAX_BYTES: usize = 64 * 1024;
 const READ_FILE_RESULT_CHAR_LIMIT: usize = 2048;
 
 fn cell_main() {
+    let Some(owner) = tool_owner::parse_owner(&ostd::args()) else {
+        println("[tool-fs] refusing to start: no owner in spawn argv");
+        sys_exit(1);
+    };
+    // The workspace may not exist on a fresh disk; an existing one is not an
+    // error, and any other failure resurfaces on the first write.
+    let _ = VfsClient::new().mkdir(workspace::WORKSPACE_ROOT);
     println("[tool-fs] ready");
     CellRuntime::new().no_heartbeat().run(|ctx, ev| match ev {
-        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
+        // Any other sender falls through unanswered, not refused: a reply to an
+        // arbitrary sender would let it stall this cell on a send it never receives.
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data }
+            if tool_owner::admits(owner, sender_tid) =>
+        {
             handle(ctx, sender_tid, &data);
         }
         AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => sys_exit(0),
@@ -56,10 +73,36 @@ fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
     }
 }
 
+/// The confined `path` argument, or the refusal to report.
+fn workspace_path<'a>(tool: &str, args_json: &'a str) -> Result<&'a str, AgentToolResponse> {
+    let raw = args_extract_str(args_json, "path").ok_or_else(|| AgentToolResponse::Err {
+        message: alloc::format!("{}: missing 'path' arg", tool),
+    })?;
+    workspace::confine(raw).map_err(|why| AgentToolResponse::Err {
+        message: alloc::format!(
+            "{} {}: refused ({:?}); paths must be under {}",
+            tool,
+            raw,
+            why,
+            workspace::WORKSPACE_ROOT
+        ),
+    })
+}
+
 fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
+    let path = match name {
+        "read_file" | "write_file" | "list_dir" => match workspace_path(name, args_json) {
+            Ok(path) => path,
+            Err(refusal) => return refusal,
+        },
+        other => {
+            return AgentToolResponse::Err {
+                message: alloc::format!("unknown tool: {}", other),
+            }
+        }
+    };
     match name {
         "read_file" => {
-            let path = args_extract_str(args_json, "path").unwrap_or("/data/notes.txt");
             let mut vfs = VfsClient::new();
             match vfs.read_file_bounded(path, READ_FILE_MAX_BYTES) {
                 Ok(bytes) => AgentToolResponse::Ok {
@@ -71,7 +114,6 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
             }
         }
         "write_file" => {
-            let path = args_extract_str(args_json, "path").unwrap_or("/data/hypha-out.txt");
             let content = args_extract_str(args_json, "content").unwrap_or("");
             let mut vfs = VfsClient::new();
             match vfs.write_file(path, content.as_bytes()) {
@@ -83,8 +125,8 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
                 },
             }
         }
-        "list_dir" => {
-            let path = args_extract_str(args_json, "path").unwrap_or("/data");
+        // "list_dir": the only name the guard above lets through besides these two.
+        _ => {
             let mut vfs = VfsClient::new();
             match vfs.list_dir(path) {
                 Ok(raw) => {
@@ -118,9 +160,6 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
                 },
             }
         }
-        other => AgentToolResponse::Err {
-            message: alloc::format!("unknown tool: {}", other),
-        },
     }
 }
 

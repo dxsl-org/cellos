@@ -7,6 +7,14 @@ license = "MPL-2.0"
 # Hypha tool-fs — filesystem tool cell for the Hypha AI agent (P2).
 # Handles AgentToolRequest::Invoke{name,args_json} and dispatches to VfsClient.
 # Supports: read_file, write_file, list_dir. No block_io cap — uses VFS IPC.
+# The owner binding and workspace confinement live in the lib so they are
+# host-testable; the bin is the no_main cell and has no host test harness.
+
+[[bin]]
+name = "hypha-tool-fs"
+path = "src/main.rs"
+test = false
+doc = false
 
 [dependencies]
 ostd        = { path = "../../../../../libs/ostd", version = "0.2.0" }

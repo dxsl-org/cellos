@@ -14,6 +14,11 @@ primitive, Hypha is a useful app *and* a showcase of what makes Cellos unique:
 - **Zero-copy IPC** — multi-KB prompts/responses move via Grant, not message-copy.
 - **Natural-language robot control** — ties into the G1 robot demo (sensor → reason → actuator).
 
+Model output is untrusted input: `core` asks the operator (`y`) before every `spawn_cell`,
+`kill_cell` and `write_file`; `tool-fs`/`tool-spawn` serve only the `core` that spawned them
+(`tools/tool-owner.rs`); files stay under `/data/hypha`; `spawn_cell` is limited to
+`SPAWN_ALLOWLIST` and `kill_cell` to cells `tool-spawn` started. See `docs/security-model.md`.
+
 ## Strategic role
 
 Building Hypha **surfaces the missing modules of Cellos**. It is both the deliverable and the

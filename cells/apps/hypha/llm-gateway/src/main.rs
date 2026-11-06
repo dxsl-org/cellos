@@ -7,11 +7,12 @@
 //!   prompt fits one AI IPC message — the rules live in `hypha_llm_gateway::local` and are pinned
 //!   by host tests there.
 //! - **network** (second): an HTTP chat-completion round trip to an OpenAI-compatible endpoint.
-//!   Two transports (see `transport.rs`):
-//!   - **plaintext** (`USE_TLS = false`, default): plain TCP via `NetClient` to a plain-HTTP mock
-//!     (`tools/hypha-mock-llm/mock_proxy.py --plain`, port 8080). Easiest to test — no TLS
-//!     variable.
-//!   - **TLS** (`USE_TLS = true`): TLS 1.3 via the net service (port 8443).
+//!   Transport is chosen by `hypha_llm_gateway::endpoint` (see `transport.rs`):
+//!   - **TLS** (default, every endpoint): TLS 1.3 via the net service (port 8443), which
+//!     verifies the server chain and SNI against its build-selected roots.
+//!   - **plaintext** (only with the `qemu-plaintext-llm` feature, and only to the QEMU host
+//!     alias 10.0.2.2): plain TCP via `NetClient` to `tools/hypha-mock-llm/mock_proxy.py
+//!     --plain` on port 8080. Lab use only: anyone on that path writes the model's reply.
 //!
 //! Both backends run over IPC only: this cell holds **no** network capability. `core` spawns it
 //! and talks to it by tid (no registry in P1). Which backend answered is printed per turn.
@@ -29,6 +30,7 @@ use agent_proto::{LlmReply, LlmRequest};
 use ai_sdk::{AiClient, AiClientError, InferParams};
 use alloc::format;
 use alloc::string::String;
+use hypha_llm_gateway::endpoint::{self, Transport};
 use hypha_llm_gateway::{http, local};
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::{print, print_usize, println};
@@ -38,15 +40,12 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![Send, Recv, Log, LookupService];
 
 // ── Configuration ────────────────────────────────────────────────────────────
-// Plaintext (default): the NetClient.tcp_send contract bug (os-gap G16) is fixed
-// and the transport retries until the socket is Established. TLS is currently
-// avoided — the net cell's embedded-tls handshake faults on a real server
-// (os-gap G17, load page fault). Flip to true once G17 is resolved.
-const USE_TLS: bool = false;
 // 10.0.2.2 = QEMU user-net gateway = the host (pin the IP — os-gap G3).
-const PROXY_IP: [u8; 4] = [10, 0, 2, 2];
-const PROXY_PORT: u16 = if USE_TLS { 8443 } else { 8080 };
+const PROXY_IP: [u8; 4] = endpoint::QEMU_SLIRP_HOST;
 const PROXY_HOST: &str = "10.0.2.2";
+/// TLS unless this build opted into lab plaintext to the QEMU host alias.
+const TRANSPORT: Transport =
+    endpoint::select_transport(PROXY_IP, cfg!(feature = "qemu-plaintext-llm"));
 const MODEL: &str = "claude-sonnet-4-6";
 /// Reply text must fit one IPC message (os-gap G5: Grant streaming comes later).
 const IPC_REPLY_MAX: usize = 3800;
@@ -132,17 +131,17 @@ fn complete_over_network(model: &str, prompt: &str) -> Result<String, String> {
     let request = http::build_post(PROXY_HOST, "/v1/chat/completions", &body);
 
     print("[gw] ");
-    println(if USE_TLS {
+    println(if TRANSPORT.is_tls() {
         "TLS mode -> :8443"
     } else {
-        "plaintext mode -> :8080"
+        "plaintext mode (qemu-plaintext-llm) -> :8080"
     });
 
     let resp = transport::roundtrip(
-        USE_TLS,
+        TRANSPORT.is_tls(),
         PROXY_HOST,
         PROXY_IP,
-        PROXY_PORT,
+        TRANSPORT.port(),
         request.as_bytes(),
     )?;
 

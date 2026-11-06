@@ -1800,6 +1800,9 @@ jobs:
         # (whose local-backend decision table is policy, not plumbing) are host-testable
         # for the same reason: ai-sdk keeps `ostd` behind the `ostd-transport` feature,
         # which stays off for host tests, and the gateway links ostd only in its binary.
+        # hypha-core/-tool-fs/-tool-spawn follow the gateway's lib/bin split: their libs
+        # hold the tool owner binding, operator confirmation gate, workspace confinement
+        # and spawn/kill allowlists that keep LLM output from driving their authority.
         # tensor-math and ai-engine carry the inference numerics — the Q8_0 kernel's
         # bit-exact agreement with the dense kernel, the sampler, and the model reader —
         # so they belong here too; the checkpoint tests inside ai-engine skip when no
@@ -1809,8 +1812,8 @@ jobs:
           cargo test -p types       --target x86_64-unknown-linux-gnu
           cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
-          cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway \
-            --target x86_64-unknown-linux-gnu
+          cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway -p hypha-core \
+            -p hypha-tool-fs -p hypha-tool-spawn --target x86_64-unknown-linux-gnu
           cargo test -p tensor-math -p ai-engine --target x86_64-unknown-linux-gnu
           cargo bench -p ai-engine --target x86_64-unknown-linux-gnu --no-run
           # cellos-kernel's own `#[cfg(test)]` modules: the launch-profile pins,

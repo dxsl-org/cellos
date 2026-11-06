@@ -6,7 +6,14 @@ license = "MPL-2.0"
 
 # Hypha tool-spawn — cell lifecycle tool (P3).
 # Provides spawn_cell (sys_spawn_from_path) and kill_cell (sys_force_exit).
-# Requires SpawnCap (manifest spawn=true).
+# Requires SpawnCap (manifest spawn=true). The owner binding and the spawn/kill
+# policy live in the lib so they are host-testable; the bin is the no_main cell.
+
+[[bin]]
+name = "hypha-tool-spawn"
+path = "src/main.rs"
+test = false
+doc = false
 
 [dependencies]
 ostd        = { path = "../../../../../libs/ostd", version = "0.2.0" }

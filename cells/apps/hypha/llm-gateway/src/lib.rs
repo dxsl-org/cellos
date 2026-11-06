@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+pub mod endpoint;
 pub mod http;
 #[path = "json-validation.rs"]
 mod json_validation;

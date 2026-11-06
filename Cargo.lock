@@ -2472,6 +2472,8 @@ dependencies = [
  "agent-proto",
  "api",
  "cell-build",
+ "hypha-tool-fs",
+ "hypha-tool-spawn",
  "ostd",
  "postcard",
 ]

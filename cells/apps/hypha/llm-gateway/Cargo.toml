@@ -15,6 +15,12 @@ path = "src/main.rs"
 test = false
 doc = false
 
+[features]
+# Lab only: reach the QEMU host alias 10.0.2.2 in plaintext (mock_proxy.py --plain, :8080)
+# instead of TLS. Off by default: whoever controls the wire writes the model's reply,
+# which proposes the agent's tool calls. Every other endpoint is TLS regardless.
+qemu-plaintext-llm = []
+
 [dependencies]
 ostd        = { path = "../../../../libs/ostd", version = "0.2.0", features = ["json"] }
 api         = { path = "../../../../libs/api", version = "0.1.0" }

@@ -4,8 +4,12 @@
 //! - `list_cells` — running cells via [`sys_get_procs`]
 //! - `sys_info`   — static OS / arch string
 //! - `lookup_service` — service name → provider tid via [`sys_lookup_service`]
+//! - `caller_tid` — the kernel-stamped tid of the requester, as `{"tid":N}`
 //!
-//! No SpawnCap required — all syscalls are open to any cell.
+//! No SpawnCap required — all syscalls are open to any cell, so this cell
+//! serves any sender: it lends no authority the sender lacks. `caller_tid` is
+//! how `core` learns its own tid to bind `tool-fs`/`tool-spawn` (see
+//! `tools/tool-owner.rs`); `core` never routes it for the LLM.
 
 #![no_std]
 #![no_main]
@@ -39,6 +43,13 @@ fn cell_main() {
 
 fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
     let reply = match postcard::from_bytes::<AgentToolRequest<'_>>(data) {
+        // `sender` is stamped by the kernel receive path, never read from the
+        // payload; the reply format is pinned by `tool_owner::parse_caller_tid`.
+        Ok(AgentToolRequest::Invoke {
+            name: "caller_tid", ..
+        }) => AgentToolResponse::Ok {
+            result_json: alloc::format!("{{\"tid\":{}}}", sender),
+        },
         Ok(AgentToolRequest::Invoke { name, args_json }) => dispatch(name, args_json),
         Err(_) => AgentToolResponse::Err {
             message: String::from("bad AgentToolRequest encoding"),

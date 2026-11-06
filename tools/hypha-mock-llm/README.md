@@ -19,17 +19,18 @@ On the **host** (needs Python 3; `cryptography` is used for cert-gen in TLS mode
 `openssl` one-liner):
 
 ```sh
-# Plaintext (easiest — matches the gateway default USE_TLS=false, port 8080):
+# Plaintext (lab only — needs a gateway built with --features qemu-plaintext-llm, port 8080):
 python tools/hypha-mock-llm/mock_proxy.py --plain
 # [mock-llm] PLAIN HTTP mock LLM listening on 0.0.0.0:8080
 
-# TLS 1.3 (set USE_TLS=true in llm-gateway/src/main.rs, port 8443):
+# TLS 1.3 (the gateway default, port 8443):
 python tools/hypha-mock-llm/mock_proxy.py
 # [mock-llm] TLS 1.3 mock LLM listening on 0.0.0.0:8443
 ```
 
-The gateway defaults to **plaintext** (`USE_TLS = false` in
-`cells/apps/hypha/llm-gateway/src/main.rs`) — pair it with `--plain`. Flip both for TLS.
+The gateway defaults to **TLS** (`hypha_llm_gateway::endpoint`). Plaintext to the QEMU host
+alias is opt-in via the `qemu-plaintext-llm` cargo feature — pair it with `--plain`. Tool calls
+from either transport still need the operator's `y` on the hypha console.
 
 Then boot Cellos with **QEMU user-mode (SLIRP) networking** (the default), where the guest reaches
 the host at `10.0.2.2`. In the Cellos shell:
