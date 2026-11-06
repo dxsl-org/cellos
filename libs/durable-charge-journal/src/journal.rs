@@ -1,70 +1,74 @@
 #![forbid(unsafe_code)]
 
-use cellos_fs::disk::BlockDevice;
-use crate::superblock::Superblock;
+use crate::head_record::verify_head;
+use crate::slot_select::{select_slot, JournalExpectation};
+use crate::superblock::{blocks_for, Superblock, BLOCK_BYTES, FIRST_DATA_BLOCK};
 use crate::JournalError;
+use cellos_fs::disk::BlockDevice;
+use durable_charge_codec::Limits;
+use ed25519_compact::KeyPair;
 
 pub struct Journal<D: BlockDevice> {
     device: D,
     active_superblock: Superblock,
-    active_slot: u8, // 0 for Block 0 (A), 1 for Block 1 (B)
+    active_slot: u64, // 0 for Block 0 (A), 1 for Block 1 (B)
 }
 
 impl<D: BlockDevice> Journal<D> {
-    /// Format a fresh double-buffered DCO1 journal on the given device.
+    /// Format a fresh double-buffered DCO1 journal signed by `writer`.
     pub fn format(
         mut device: D,
         ledger_id: [u8; 32],
         genesis_id: [u8; 32],
         writer_epoch: u64,
+        writer: &KeyPair,
     ) -> Result<Self, JournalError> {
+        // DCO1 headers refuse zero identities and epoch 0, so such a journal could never
+        // accept a record; refusing here keeps the chain root (`genesis_id`) meaningful.
+        if ledger_id == [0; 32] || genesis_id == [0; 32] || writer_epoch == 0 {
+            return Err(JournalError::Identity);
+        }
         let total_blocks = device.total_blocks();
-        if total_blocks < 4 {
+        if total_blocks < FIRST_DATA_BLOCK + 2 {
             return Err(JournalError::Capacity);
         }
-
-        let sb_a = Superblock::new(ledger_id, genesis_id, writer_epoch, total_blocks);
-        let mut buf = [0u8; 4096];
-        sb_a.encode(&mut buf);
-        device.write_block(0, &buf).map_err(|_| JournalError::DeviceIo)?;
-
-        // Slot B initialized with sequence 0 (invalid/stale)
-        buf.fill(0);
-        device.write_block(1, &buf).map_err(|_| JournalError::DeviceIo)?;
-
-        device.flush().map_err(|_| JournalError::DeviceIo)?;
-
+        let sb = Superblock::genesis(
+            ledger_id,
+            genesis_id,
+            writer_epoch,
+            *writer.pk,
+            total_blocks,
+        );
+        let mut buf = [0u8; BLOCK_BYTES];
+        // Clear B before A so an interrupted format never pairs a fresh A with a stale B.
+        write_block(&mut device, 1, &buf)?;
+        flush(&mut device)?;
+        sb.encode(&writer.sk, &mut buf);
+        write_block(&mut device, 0, &buf)?;
+        flush(&mut device)?;
         Ok(Self {
             device,
-            active_superblock: sb_a,
+            active_superblock: sb,
             active_slot: 0,
         })
     }
 
-    /// Open an existing journal, choosing the valid superblock with the highest sequence.
-    pub fn open(mut device: D) -> Result<Self, JournalError> {
-        let mut buf_a = [0u8; 4096];
-        let mut buf_b = [0u8; 4096];
-
-        let res_a = device.read_block(0, &mut buf_a)
-            .map_err(|_| JournalError::DeviceIo)
-            .and_then(|_| Superblock::decode(&buf_a));
-        let res_b = device.read_block(1, &mut buf_b)
-            .map_err(|_| JournalError::DeviceIo)
-            .and_then(|_| Superblock::decode(&buf_b));
-
-        match (res_a, res_b) {
-            (Ok(sb_a), Ok(sb_b)) => {
-                if sb_a.sequence >= sb_b.sequence {
-                    Ok(Self { device, active_superblock: sb_a, active_slot: 0 })
-                } else {
-                    Ok(Self { device, active_superblock: sb_b, active_slot: 1 })
-                }
-            }
-            (Ok(sb_a), Err(_)) => Ok(Self { device, active_superblock: sb_a, active_slot: 0 }),
-            (Err(_), Ok(sb_b)) => Ok(Self { device, active_superblock: sb_b, active_slot: 1 }),
-            (Err(_), Err(_)) => Err(JournalError::Uninitialized),
+    /// Open an existing journal: see `select_slot` for slot rules. The newest slot
+    /// must meet `min_sequence` and its head record must hash to the signed `head_digest`.
+    pub fn open(mut device: D, expect: &JournalExpectation) -> Result<Self, JournalError> {
+        let (sb, slot) = select_slot(&mut device, expect)?;
+        if sb.total_journal_blocks != device.total_blocks() {
+            return Err(JournalError::Corrupt);
         }
+        if sb.sequence < expect.min_sequence {
+            return Err(JournalError::Rollback);
+        }
+        verify_head(&mut device, &sb)?;
+        Ok(Self {
+            device,
+            active_superblock: sb,
+            active_slot: slot,
+        })
     }
 
     pub fn superblock(&self) -> &Superblock {
@@ -75,74 +79,88 @@ impl<D: BlockDevice> Journal<D> {
         &mut self.device
     }
 
-    /// Append a pre-encoded DCO1 record bytes to the journal with double-barrier durability.
-    pub fn append_record(&mut self, record_bytes: &[u8], record_digest: [u8; 32]) -> Result<u64, JournalError> {
-        if record_bytes.len() < 248 {
-            return Err(JournalError::RecordLength);
+    /// Append one DCO1 record with double-barrier durability and return its revision.
+    ///
+    /// The record is fully decoded here and its digest is computed from its bytes; it
+    /// must belong to this ledger, carry the current writer epoch, and link to the
+    /// head (`local_revision = head + 1`, `previous_record_digest = head_digest`).
+    pub fn append_record(
+        &mut self,
+        writer: &KeyPair,
+        record_bytes: &[u8],
+        limits: &Limits,
+    ) -> Result<u64, JournalError> {
+        let sb = self.active_superblock;
+        if *writer.pk != sb.writer_public_key {
+            return Err(JournalError::WriterKey);
         }
-
-        let mut curr_block = self.active_superblock.head_block;
-        let mut curr_offset = self.active_superblock.head_offset as usize;
-        let total_blocks = self.active_superblock.total_journal_blocks;
-
-        // Verify available capacity
-        let needed_bytes = record_bytes.len();
-        let remaining_in_curr = 4096 - curr_offset;
-        let additional_bytes = needed_bytes.saturating_sub(remaining_in_curr);
-        let additional_blocks = (additional_bytes + 4095) / 4096;
-        if curr_block + (additional_blocks as u64) >= total_blocks {
+        let record =
+            durable_charge_codec::decode(record_bytes, limits).map_err(JournalError::Record)?;
+        let header = &record.header;
+        if header.journal_ledger != sb.ledger_id || header.journal_genesis != sb.genesis_id {
+            return Err(JournalError::Identity);
+        }
+        if header.journal_writer_epoch != sb.writer_epoch {
+            return Err(JournalError::StaleWriter);
+        }
+        let revision = sb
+            .head_revision
+            .checked_add(1)
+            .ok_or(JournalError::Overflow)?;
+        if header.local_revision != revision || header.previous_record_digest != sb.head_digest {
+            return Err(JournalError::Chain);
+        }
+        let len = u32::try_from(record_bytes.len()).map_err(|_| JournalError::Capacity)?;
+        let start = sb.next_block;
+        let end = start
+            .checked_add(blocks_for(record_bytes.len()))
+            .ok_or(JournalError::Overflow)?;
+        // `end == total` is a legal full journal; only extents past the device are refused.
+        if end > sb.total_journal_blocks {
             return Err(JournalError::Capacity);
         }
 
-        // Barrier 1: write all record data blocks
-        let mut written = 0;
-        let mut block_buf = [0u8; 4096];
-
-        while written < needed_bytes {
-            let chunk_len = core::cmp::min(needed_bytes - written, 4096 - curr_offset);
-            if curr_offset > 0 || chunk_len < 4096 {
-                // Partial block write: read-modify-write
-                self.device.read_block(curr_block, &mut block_buf)
-                    .map_err(|_| JournalError::DeviceIo)?;
-            }
-            block_buf[curr_offset..curr_offset + chunk_len]
-                .copy_from_slice(&record_bytes[written..written + chunk_len]);
-
-            self.device.write_block(curr_block, &block_buf)
-                .map_err(|_| JournalError::DeviceIo)?;
-
-            written += chunk_len;
-            curr_offset += chunk_len;
-            if curr_offset == 4096 {
-                curr_block += 1;
-                curr_offset = 0;
-            }
+        // Barrier 1: records start on a block boundary and are written as whole
+        // zero-padded blocks, so no committed record block is ever read-modify-written.
+        let mut block = [0u8; BLOCK_BYTES];
+        for (index, chunk) in record_bytes.chunks(BLOCK_BYTES).enumerate() {
+            block.fill(0);
+            block[..chunk.len()].copy_from_slice(chunk);
+            write_block(&mut self.device, start + index as u64, &block)?;
         }
+        flush(&mut self.device)?;
 
-        // Flush data blocks to hardware media
-        self.device.flush().map_err(|_| JournalError::DeviceIo)?;
+        // Barrier 2: commit by signing the successor into the inactive slot.
+        let next = Superblock {
+            sequence: sb.sequence.checked_add(1).ok_or(JournalError::Overflow)?,
+            head_revision: revision,
+            head_record_block: start,
+            head_record_len: len,
+            head_digest: record.digest,
+            next_block: end,
+            ..sb
+        };
+        let next_slot = 1 - self.active_slot;
+        next.encode(&writer.sk, &mut block);
+        write_block(&mut self.device, next_slot, &block)?;
+        flush(&mut self.device)?;
 
-        // Barrier 2: prepare next superblock and write to the alternate slot
-        let next_slot = if self.active_slot == 0 { 1 } else { 0 };
-        let mut next_sb = self.active_superblock;
-        next_sb.sequence = self.active_superblock.sequence.checked_add(1).ok_or(JournalError::Overflow)?;
-        next_sb.head_revision = self.active_superblock.head_revision.checked_add(1).ok_or(JournalError::Overflow)?;
-        next_sb.head_block = curr_block;
-        next_sb.head_offset = curr_offset as u32;
-        next_sb.head_digest = record_digest;
-
-        let mut sb_buf = [0u8; 4096];
-        next_sb.encode(&mut sb_buf);
-
-        self.device.write_block(next_slot as u64, &sb_buf)
-            .map_err(|_| JournalError::DeviceIo)?;
-
-        // Flush alternate superblock
-        self.device.flush().map_err(|_| JournalError::DeviceIo)?;
-
-        self.active_superblock = next_sb;
+        self.active_superblock = next;
         self.active_slot = next_slot;
-
-        Ok(self.active_superblock.head_revision)
+        Ok(revision)
     }
+}
+
+fn write_block<D: BlockDevice>(
+    device: &mut D,
+    block: u64,
+    buf: &[u8; BLOCK_BYTES],
+) -> Result<(), JournalError> {
+    device
+        .write_block(block, buf)
+        .map_err(|_| JournalError::DeviceIo)
+}
+
+fn flush<D: BlockDevice>(device: &mut D) -> Result<(), JournalError> {
+    device.flush().map_err(|_| JournalError::DeviceIo)
 }

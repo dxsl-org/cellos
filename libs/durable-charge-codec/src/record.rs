@@ -4,7 +4,9 @@ use crate::references::{Ref, AdmissionRequirement};
 
 pub const HEADER_BYTES: usize = 216;
 pub const OVERHEAD: usize = 248;
-const DOMAIN: &[u8] = b"cellos/durable-charge/record/v1\0";
+/// Record digest = SHA-256(DIGEST_DOMAIN || bytes[..len-32]). Public so a journal can
+/// re-verify a stored record by streaming its blocks without a whole-record buffer.
+pub const DIGEST_DOMAIN: &[u8] = b"cellos/durable-charge/record/v1\0";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Header {
@@ -321,7 +323,7 @@ pub fn decode<'a>(bytes:&'a[u8],limits:&Limits)->Result<Record<'a>,Error> {
     let work=bytes.len().checked_add(payload_work(kind,&bytes[216..216+n])?).ok_or(Error::Overflow)?;
     if work>limits.max_work {return Err(Error::WorkExhausted)}
     payload(kind,&h,&bytes[216..216+n],limits)?;
-    let mut hash=Sha256::new();hash.update(DOMAIN);hash.update(&bytes[..216+n]);
+    let mut hash=Sha256::new();hash.update(DIGEST_DOMAIN);hash.update(&bytes[..216+n]);
     let digest:[u8;32]=hash.finalize().into();
     if bytes[216+n..]!=digest {return Err(Error::Digest)}
     Ok(Record {kind,header:h,payload:&bytes[216..216+n],digest,bytes})
@@ -362,7 +364,7 @@ pub fn encode(kind:u16,h:&Header,p:&[u8],out:&mut[u8],l:&Limits)->Result<usize,E
     b[160..168].copy_from_slice(&h.local_revision.to_le_bytes());b[168..176].copy_from_slice(&h.journal_writer_epoch.to_le_bytes());
     b[176..208].copy_from_slice(&h.previous_record_digest);b[208..212].copy_from_slice(&(p.len() as u32).to_le_bytes());
     b[212..216].fill(0);b[216..216+p.len()].copy_from_slice(p);
-    let mut hash=Sha256::new();hash.update(DOMAIN);hash.update(&b[..n-32]);b[n-32..].copy_from_slice(&hash.finalize());Ok(n)
+    let mut hash=Sha256::new();hash.update(DIGEST_DOMAIN);hash.update(&b[..n-32]);b[n-32..].copy_from_slice(&hash.finalize());Ok(n)
 }
 
 /// Borrowed shape-specific payload views. They describe bytes, not admitted facts.
