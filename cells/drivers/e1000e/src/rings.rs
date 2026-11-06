@@ -154,14 +154,24 @@ pub(crate) fn tx_done(ring: &DmaBuf, slot: usize) -> bool {
     tx_status(ring, slot).1 & DESC_STATUS_DD != 0
 }
 
-/// Whether TX slot `slot` may be (re)filled: never posted since the ring was
-/// cleared, or written back (DD). A posted slot without DD still belongs to
-/// the controller.
-pub(crate) fn tx_slot_free(ring: &DmaBuf, slot: usize) -> bool {
-    let (cmd, status) = tx_status(ring, slot);
-    tx_slot_reusable(cmd, status)
+/// Whether TX slot `slot` of a `slots`-slot ring may be filled now: it and the
+/// slot after it are both free. One slot always stays empty, so the tail
+/// written after this post (`TDT = slot + 1`) never lands on a descriptor the
+/// controller still owns — `TDT == TDH` would read as an empty ring.
+pub(crate) fn tx_has_room(ring: &DmaBuf, slot: usize, slots: usize) -> bool {
+    tx_room(slot, slots, |s| tx_status(ring, s))
 }
 
+fn tx_room(slot: usize, slots: usize, status: impl Fn(usize) -> (u8, u8)) -> bool {
+    [slot, (slot + 1) % slots].into_iter().all(|s| {
+        let (cmd, st) = status(s);
+        tx_slot_reusable(cmd, st)
+    })
+}
+
+/// A slot is free when it was never posted since the ring was cleared, or the
+/// controller wrote it back (DD). A posted slot without DD still belongs to
+/// the controller.
 fn tx_slot_reusable(cmd: u8, status: u8) -> bool {
     cmd == 0 || status & DESC_STATUS_DD != 0
 }
@@ -281,5 +291,32 @@ mod tests {
             !tx_slot_reusable(TXD_CMD_FRAME, 0),
             "posted, still owned by the controller"
         );
+    }
+
+    /// With nothing written back, a ring of N slots takes N - 1 frames: the
+    /// tail never wraps onto a descriptor the controller still owns. One
+    /// write-back at the slot after the tail frees room again.
+    #[test]
+    fn a_full_tx_ring_keeps_one_slot_empty() {
+        use core::cell::RefCell;
+        const SLOTS: usize = crate::dma_layout::TX_SLOTS;
+        let ring = RefCell::new([(0u8, 0u8); SLOTS]);
+        let room = |slot| tx_room(slot, SLOTS, |s| ring.borrow()[s]);
+        let mut next = 0;
+        let mut posted = 0;
+        while room(next) {
+            ring.borrow_mut()[next] = (TXD_CMD_FRAME, 0);
+            next = (next + 1) % SLOTS;
+            posted += 1;
+            assert!(posted < SLOTS, "the ring filled every slot");
+        }
+        assert_eq!(posted, SLOTS - 1);
+        assert_eq!(next, SLOTS - 1, "the empty slot is the tail");
+        // The head (slot 0) completes: the tail may advance onto it.
+        ring.borrow_mut()[0].1 = DESC_STATUS_DD;
+        assert!(room(next));
+        // A tail slot itself still owned by the controller is refused too.
+        ring.borrow_mut()[next] = (TXD_CMD_FRAME, 0);
+        assert!(!room(next));
     }
 }

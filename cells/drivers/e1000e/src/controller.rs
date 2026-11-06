@@ -147,14 +147,15 @@ impl E1000eController {
     }
 
     /// Transmit `frame` (no FCS) and wait, bounded, for its write-back.
-    /// `IO` when the slot to fill was posted and never written back: the
-    /// controller may still read it, so it is not overwritten.
+    /// `IO` when the slot to fill or the one after it was posted and never
+    /// written back: the controller may still read the first, and posting
+    /// would move the tail onto the second (one slot always stays empty).
     pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidInput);
         }
         let slot = self.tx_next;
-        if !rings::tx_slot_free(&self.tx_ring, slot) {
+        if !rings::tx_has_room(&self.tx_ring, slot, TX_SLOTS) {
             return Err(ViError::IO);
         }
         self.tx_next = (slot + 1) % TX_SLOTS;
