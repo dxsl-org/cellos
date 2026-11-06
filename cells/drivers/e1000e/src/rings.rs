@@ -10,6 +10,7 @@
 //! lifetime, and every index is bounded by the slot count before the access.
 
 use core::mem::size_of;
+use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 
 /// Legacy transmit descriptor.
@@ -44,6 +45,8 @@ pub(crate) const TXD_CMD_RS: u8 = 1 << 3;
 /// Command for a single-buffer frame: end of packet, insert FCS, report status.
 pub(crate) const TXD_CMD_FRAME: u8 = TXD_CMD_EOP | TXD_CMD_IFCS | TXD_CMD_RS;
 pub(crate) const DESC_STATUS_DD: u8 = 1 << 0;
+/// RX status: last descriptor of a frame.
+pub(crate) const RXD_STAT_EOP: u8 = 1 << 1;
 
 /// Largest frame moved in one descriptor; `RCTL.BSIZE = 00` is 2048 bytes.
 pub const BUF_SIZE: usize = 2048;
@@ -75,18 +78,59 @@ pub(crate) fn post_rx(ring: &DmaBuf, slot: usize, iova: u64) {
     }
 }
 
-/// RX slot `slot`'s completion: `Some(length)` once the controller set DD.
-pub(crate) fn rx_completed(ring: &DmaBuf, slot: usize) -> Option<usize> {
+/// A written-back RX descriptor, as [`rx_completed`] classifies it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RxCompletion {
+    /// DD clear: the controller still owns the slot.
+    Pending,
+    /// A whole, error-free frame of this many bytes.
+    Frame(usize),
+    /// Hand the slot back without delivering it: an error was reported, or it
+    /// is part of a frame spread over several descriptors.
+    Drop,
+}
+
+/// RX slot `slot`'s completion. `in_fragment` is true while the descriptors
+/// of a multi-descriptor frame are being dropped; it is updated here.
+pub(crate) fn rx_completed(ring: &DmaBuf, slot: usize, in_fragment: &mut bool) -> RxCompletion {
     assert!((slot + 1) * size_of::<RxDesc>() <= ring.size());
     // SAFETY: the slot lies inside the owned ring page (asserted above).
-    let (status, length) = unsafe {
-        let desc = (ring.virt() as *const RxDesc).add(slot);
+    let desc = unsafe { (ring.virt() as *const RxDesc).add(slot) };
+    // SAFETY: as above.
+    let status = unsafe { core::ptr::read_volatile(&(*desc).status) };
+    if status & DESC_STATUS_DD == 0 {
+        return RxCompletion::Pending;
+    }
+    // The rest of the write-back and the frame bytes are valid only once DD
+    // is seen: no read of them may move above the DD read.
+    fence(Ordering::Acquire);
+    // SAFETY: as above.
+    let (errors, length) = unsafe {
         (
-            core::ptr::read_volatile(&(*desc).status),
+            core::ptr::read_volatile(&(*desc).errors),
             core::ptr::read_volatile(&(*desc).length),
         )
     };
-    (status & DESC_STATUS_DD != 0).then_some(length as usize)
+    rx_written_back(status, errors, length, in_fragment)
+}
+
+/// Classify a descriptor whose DD bit is set. A frame is delivered only when
+/// it fits one descriptor (EOP set, not the tail of a dropped frame) and the
+/// controller reported no error.
+pub(crate) fn rx_written_back(
+    status: u8,
+    errors: u8,
+    length: u16,
+    in_fragment: &mut bool,
+) -> RxCompletion {
+    let eop = status & RXD_STAT_EOP != 0;
+    let tail_of_dropped = *in_fragment;
+    *in_fragment = !eop;
+    if !eop || tail_of_dropped || errors != 0 {
+        RxCompletion::Drop
+    } else {
+        RxCompletion::Frame(length as usize)
+    }
 }
 
 /// Fill TX slot `slot` for one frame of `len` bytes at `iova`.
@@ -107,11 +151,32 @@ pub(crate) fn post_tx(ring: &DmaBuf, slot: usize, iova: u64, len: u16) {
 
 /// Whether the controller wrote back DD for TX slot `slot`.
 pub(crate) fn tx_done(ring: &DmaBuf, slot: usize) -> bool {
+    tx_status(ring, slot).1 & DESC_STATUS_DD != 0
+}
+
+/// Whether TX slot `slot` may be (re)filled: never posted since the ring was
+/// cleared, or written back (DD). A posted slot without DD still belongs to
+/// the controller.
+pub(crate) fn tx_slot_free(ring: &DmaBuf, slot: usize) -> bool {
+    let (cmd, status) = tx_status(ring, slot);
+    tx_slot_reusable(cmd, status)
+}
+
+fn tx_slot_reusable(cmd: u8, status: u8) -> bool {
+    cmd == 0 || status & DESC_STATUS_DD != 0
+}
+
+/// `(cmd, status)` of TX slot `slot`.
+fn tx_status(ring: &DmaBuf, slot: usize) -> (u8, u8) {
     assert!((slot + 1) * size_of::<TxDesc>() <= ring.size());
     // SAFETY: the slot lies inside the owned ring page (asserted above).
-    let status =
-        unsafe { core::ptr::read_volatile(&(*((ring.virt() as *const TxDesc).add(slot))).status) };
-    status & DESC_STATUS_DD != 0
+    unsafe {
+        let desc = (ring.virt() as *const TxDesc).add(slot);
+        (
+            core::ptr::read_volatile(&(*desc).cmd),
+            core::ptr::read_volatile(&(*desc).status),
+        )
+    }
 }
 
 /// Copy `frame` (≤ the buffer page) into the TX buffer `buf`.
@@ -163,5 +228,58 @@ mod tests {
         // TDLEN/RDLEN must be 128-byte aligned (datasheet §10.2.6/§10.2.7).
         assert_eq!(bytes % 128, 0);
         assert_eq!(ring_bytes(crate::dma_layout::RX_SLOTS) % 128, 0);
+    }
+
+    #[test]
+    fn rx_delivers_only_whole_error_free_frames() {
+        let mut in_fragment = false;
+        let eop = DESC_STATUS_DD | RXD_STAT_EOP;
+        assert_eq!(
+            rx_written_back(eop, 0, 60, &mut in_fragment),
+            RxCompletion::Frame(60)
+        );
+        // Any reported error (CRC, symbol, sequence, RX data) drops the frame.
+        assert_eq!(
+            rx_written_back(eop, 0x01, 60, &mut in_fragment),
+            RxCompletion::Drop
+        );
+        assert_eq!(
+            rx_written_back(eop, 0x80, 60, &mut in_fragment),
+            RxCompletion::Drop
+        );
+        assert!(!in_fragment);
+        // A frame over several descriptors is dropped up to and including EOP,
+        // so its tail is never delivered as a frame of its own.
+        assert_eq!(
+            rx_written_back(DESC_STATUS_DD, 0, 2048, &mut in_fragment),
+            RxCompletion::Drop
+        );
+        assert!(in_fragment);
+        assert_eq!(
+            rx_written_back(DESC_STATUS_DD, 0, 2048, &mut in_fragment),
+            RxCompletion::Drop
+        );
+        assert_eq!(
+            rx_written_back(eop, 0, 100, &mut in_fragment),
+            RxCompletion::Drop
+        );
+        assert!(!in_fragment);
+        assert_eq!(
+            rx_written_back(eop, 0, 64, &mut in_fragment),
+            RxCompletion::Frame(64)
+        );
+    }
+
+    #[test]
+    fn tx_slot_is_reusable_only_when_never_posted_or_written_back() {
+        assert!(tx_slot_reusable(0, 0), "cleared ring");
+        assert!(
+            tx_slot_reusable(TXD_CMD_FRAME, DESC_STATUS_DD),
+            "written back"
+        );
+        assert!(
+            !tx_slot_reusable(TXD_CMD_FRAME, 0),
+            "posted, still owned by the controller"
+        );
     }
 }
