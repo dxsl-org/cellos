@@ -100,14 +100,15 @@ pub(crate) enum Refusal {
 }
 
 /// Select device revision 1 and UPT version 1, the only ones this cell speaks.
+/// An all-ones read is a BAR that does not decode, never an offer.
 pub(crate) fn negotiate(vd: &impl RegisterFile) -> ViResult<Result<(), Refusal>> {
     let revisions = vd.rd32(VD_VRRS)?;
-    if revisions & REVISION_1 == 0 {
+    if revisions == u32::MAX || revisions & REVISION_1 == 0 {
         return Ok(Err(Refusal::Revision(revisions)));
     }
     vd.wr32(VD_VRRS, REVISION_1)?;
     let upt = vd.rd32(VD_UVRS)?;
-    if upt & REVISION_1 == 0 {
+    if upt == u32::MAX || upt & REVISION_1 == 0 {
         return Ok(Err(Refusal::Upt(upt)));
     }
     vd.wr32(VD_UVRS, REVISION_1)?;

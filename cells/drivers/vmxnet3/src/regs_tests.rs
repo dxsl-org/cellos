@@ -54,6 +54,15 @@ fn negotiation_selects_revision_1_or_refuses_by_value() {
     let fake = Fake::new(1, 0);
     assert_eq!(negotiate(&fake).unwrap(), Err(Refusal::Upt(0)));
     assert!(!fake.writes.borrow().iter().any(|&(o, _)| o == VD_UVRS));
+    // A BAR that does not decode reads all-ones: refused, not taken as an offer.
+    assert_eq!(
+        negotiate(&Fake::new(u32::MAX, 1)).unwrap(),
+        Err(Refusal::Revision(u32::MAX))
+    );
+    assert_eq!(
+        negotiate(&Fake::new(1, u32::MAX)).unwrap(),
+        Err(Refusal::Upt(u32::MAX))
+    );
 }
 
 #[test]

@@ -7,11 +7,13 @@
 //!      (`identity::classify`) before touching MMIO.
 //!   2. Reads BAR0 (PT: doorbells, vector masks) and BAR1 (VD: commands) from
 //!      the 434 function record and claims both.
-//!   3. Negotiates revision 1, resets the device, reads the permanent MAC,
-//!      allocates MSI-X through 435 (H-S3-4 b: bounded bring-up, link and
-//!      TX-completion waits only), places `DriverShared`, the queue
-//!      descriptors, one TX and one RX queue and every frame buffer in one
-//!      `GrantDma`-authorized allocation, and activates the device.
+//!   3. Authorizes one `GrantDma` allocation for the BDF first (it turns on
+//!      memory decoding, which firmware may have left off), then negotiates
+//!      revision 1, resets the device, reads the permanent MAC, allocates
+//!      MSI-X through 435 (H-S3-4 b: bounded bring-up, link and TX-completion
+//!      waits only), places `DriverShared`, the queue descriptors, one TX and
+//!      one RX queue and every frame buffer in that allocation, and activates
+//!      the device.
 //!   4. Registers as the NIC driver only after bring-up and serves the
 //!      unchanged Tx/Rx/GetMac wire. RX stays request-driven: the net service
 //!      asks for frames, so the RX vector stays masked (`rx=request-driven`).
