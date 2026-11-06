@@ -10,11 +10,13 @@
 #![allow(unsafe_code)]
 
 use super::sysio::raw_syscall;
-use crate::ipc::{decode, encode, NetRequest, NetResponse, IPC_BUF_SIZE};
-use crate::syscall::ViSyscall;
+use crate::ipc::{encode, NetRequest, NetResponse, IPC_BUF_SIZE};
+use crate::net_reply::admit_net_reply;
+use crate::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+use crate::syscall::{service, ViSyscall};
 use core::cell::UnsafeCell;
 use core::ffi::{c_char, c_int, c_void};
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 
 pub(super) const SOCK_BASE_FD: c_int = 10;
 const MAX_SOCKETS: usize = 8;
@@ -27,8 +29,6 @@ const SEND_BUDGET_MS: u64 = 5_000;
 /// Backstop when the cell cannot read `GetTime`: two IPC round-trips plus a
 /// yield per attempt, so this is a wall-clock bound in practice too.
 const SEND_ATTEMPT_CEILING: usize = 100_000;
-
-static NET_TID_CACHE: AtomicUsize = AtomicUsize::new(0);
 
 /// cap_id slot per socket fd. 0 = free, u32::MAX = reserved (alloc in progress).
 static SOCK_CAPS: [AtomicU32; MAX_SOCKETS] = [
@@ -51,19 +51,64 @@ pub struct sockaddr_in {
     pub sin_zero: [u8; 8],
 }
 
-fn net_tid() -> usize {
-    let cached = NET_TID_CACHE.load(Ordering::Relaxed);
-    if cached != 0 {
-        return cached;
+/// The live NET provider, asked of the kernel for every round trip: a restarted
+/// or hot-swapped service answers from a new tid, and that tid is the only
+/// sender whose reply is believed.
+fn net_provider() -> Option<ServiceBinding> {
+    let mut record = [0u8; SERVICE_BINDING_LEN];
+    // SAFETY: `record` is a live writable buffer of the length passed; the kernel
+    // writes the whole record or nothing.
+    let written = unsafe {
+        raw_syscall(
+            ViSyscall::LookupServiceBound,
+            service::NET as usize,
+            record.as_mut_ptr() as usize,
+            record.len(),
+            0,
+        )
+    };
+    if written as usize != SERVICE_BINDING_LEN {
+        return None;
     }
-    // LookupService = 206, service::NET = 2
-    let tid = unsafe { raw_syscall(ViSyscall::LookupService, 2, 0, 0, 0) };
-    if tid > 0 {
-        NET_TID_CACHE.store(tid as usize, Ordering::Relaxed);
-        tid as usize
-    } else {
-        0
-    }
+    ServiceBinding::from_bytes(&record)
+}
+
+/// One request/reply with the net service; `None` on any transport failure or
+/// refused reply.
+///
+/// The `Recv` mask is the provider's tid, so another task's message stays queued
+/// instead of being consumed as the answer, and [`admit_net_reply`] re-checks the
+/// kernel-stamped sender before decoding.
+fn net_call<'b>(
+    req: &NetRequest<'_>,
+    resp_buf: &'b mut [u8; IPC_BUF_SIZE],
+) -> Option<NetResponse<'b>> {
+    let provider = net_provider()?;
+    let tid = provider.tid as usize;
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let encoded = encode(req, &mut req_buf).ok()?;
+    // SAFETY: `encoded` is live and initialised; `resp_buf` is live and writable
+    // for its full length, which bounds the kernel's copy.
+    let sender = unsafe {
+        if raw_syscall(
+            ViSyscall::Send,
+            tid,
+            encoded.as_ptr() as usize,
+            encoded.len(),
+            0,
+        ) < 0
+        {
+            return None;
+        }
+        raw_syscall(
+            ViSyscall::Recv,
+            tid,
+            resp_buf.as_mut_ptr() as usize,
+            resp_buf.len(),
+            0,
+        )
+    };
+    admit_net_reply(&provider, sender, resp_buf)
 }
 
 fn alloc_fd() -> Option<(c_int, usize)> {
@@ -122,11 +167,6 @@ pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int)
     if addr.is_null() || addrlen < core::mem::size_of::<sockaddr_in>() as c_int {
         return -1;
     }
-    let net = net_tid();
-    if net == 0 {
-        return -1;
-    }
-
     let sin = addr as *const sockaddr_in;
     if (*sin).sin_family != AF_INET as u16 {
         return -1;
@@ -134,33 +174,9 @@ pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int)
     let ip = (*sin).sin_addr.to_be_bytes();
     let port = u16::from_be((*sin).sin_port);
 
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let req = NetRequest::TcpConnect { addr: ip, port };
-    let Ok(encoded) = encode(&req, &mut req_buf) else {
-        return -1;
-    };
-    raw_syscall(
-        ViSyscall::Send,
-        net,
-        encoded.as_ptr() as usize,
-        encoded.len(),
-        0,
-    );
-
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let n = raw_syscall(
-        ViSyscall::Recv,
-        0,
-        resp_buf.as_mut_ptr() as usize,
-        resp_buf.len(),
-        0,
-    );
-    if n <= 0 {
-        return -1;
-    }
-
-    match decode::<NetResponse>(&resp_buf[..n as usize]) {
-        Ok(NetResponse::CapId(cap)) if cap > 0 => {
+    match net_call(&NetRequest::TcpConnect { addr: ip, port }, &mut resp_buf) {
+        Some(NetResponse::CapId(cap)) if cap > 0 => {
             SOCK_CAPS[idx as usize].store(cap, Ordering::Release);
             0
         }
@@ -172,38 +188,10 @@ pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int)
 const TCP_STATE_CLOSED: u8 = 0x00;
 
 /// One `SocketState` round-trip; `None` when the service cannot answer.
-fn socket_state(cap: u32, net: usize) -> Option<u8> {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let req = NetRequest::SocketState { cap_id: cap };
-    let encoded = encode(&req, &mut req_buf).ok()?;
-    // SAFETY: `encoded` is a live, initialized buffer and `net` is a task id
-    // returned by LookupService; the syscall only reads those bytes.
-    unsafe {
-        raw_syscall(
-            ViSyscall::Send,
-            net,
-            encoded.as_ptr() as usize,
-            encoded.len(),
-            0,
-        );
-    }
+fn socket_state(cap: u32) -> Option<u8> {
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    // SAFETY: `resp_buf` is a live, writable buffer; the kernel writes at most
-    // `resp_buf.len()` bytes and reports how many.
-    let n = unsafe {
-        raw_syscall(
-            ViSyscall::Recv,
-            0,
-            resp_buf.as_mut_ptr() as usize,
-            resp_buf.len(),
-            0,
-        )
-    };
-    if n <= 0 {
-        return None;
-    }
-    match decode::<NetResponse>(&resp_buf[..n as usize]) {
-        Ok(NetResponse::State(state)) => Some(state),
+    match net_call(&NetRequest::SocketState { cap_id: cap }, &mut resp_buf) {
+        Some(NetResponse::State(state)) => Some(state),
         _ => None,
     }
 }
@@ -221,18 +209,10 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
     let Some(cap) = cap_from_fd(fd) else {
         return -1;
     };
-    let net = net_tid();
-    if net == 0 {
-        return -1;
-    }
 
     let capped = len.min(495);
     let data = core::slice::from_raw_parts(buf as *const u8, capped);
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = NetRequest::TcpSend { cap_id: cap, data };
-    let Ok(encoded) = encode(&req, &mut req_buf) else {
-        return -1;
-    };
 
     // smoltcp accepts nothing until the socket reaches Established, so a
     // `send()` straight after `connect()` waits on the handshake — a wait the
@@ -243,26 +223,9 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
     let clock_available = start_ms >= 0;
 
     for _attempt in 0..SEND_ATTEMPT_CEILING {
-        raw_syscall(
-            ViSyscall::Send,
-            net,
-            encoded.as_ptr() as usize,
-            encoded.len(),
-            0,
-        );
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let n = raw_syscall(
-            ViSyscall::Recv,
-            0,
-            resp_buf.as_mut_ptr() as usize,
-            resp_buf.len(),
-            0,
-        );
-        if n <= 0 {
-            return -1;
-        }
-        match decode::<NetResponse>(&resp_buf[..n as usize]) {
-            Ok(NetResponse::Data(bytes)) if bytes.len() >= 4 => {
+        match net_call(&req, &mut resp_buf) {
+            Some(NetResponse::Data(bytes)) if bytes.len() >= 4 => {
                 let accepted = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
                 if accepted > 0 || capped == 0 {
                     return (accepted as i32).min(capped as i32);
@@ -271,7 +234,7 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
                 // writable again: report the failure now instead of burning the
                 // handshake budget, which is what a caller without a listener
                 // would otherwise pay for a full 5 s per call.
-                if socket_state(cap, net) == Some(TCP_STATE_CLOSED) {
+                if socket_state(cap) == Some(TCP_STATE_CLOSED) {
                     return -1;
                 }
                 if clock_available {
@@ -302,41 +265,14 @@ pub unsafe extern "C" fn recv(fd: c_int, buf: *mut c_void, len: usize, _flags: c
     let Some(cap) = cap_from_fd(fd) else {
         return -1;
     };
-    let net = net_tid();
-    if net == 0 {
-        return -1;
-    }
 
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = NetRequest::TcpRecv {
         cap_id: cap,
         buf_len: len as u32,
     };
-    let Ok(encoded) = encode(&req, &mut req_buf) else {
-        return -1;
-    };
-    raw_syscall(
-        ViSyscall::Send,
-        net,
-        encoded.as_ptr() as usize,
-        encoded.len(),
-        0,
-    );
-
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let n = raw_syscall(
-        ViSyscall::Recv,
-        0,
-        resp_buf.as_mut_ptr() as usize,
-        resp_buf.len(),
-        0,
-    );
-    if n <= 0 {
-        return 0;
-    }
-
-    match decode::<NetResponse>(&resp_buf[..n as usize]) {
-        Ok(NetResponse::Data(data)) => {
+    match net_call(&req, &mut resp_buf) {
+        Some(NetResponse::Data(data)) => {
             let copy_len = data.len().min(len);
             core::ptr::copy_nonoverlapping(data.as_ptr(), buf as *mut u8, copy_len);
             copy_len as c_int
@@ -375,22 +311,9 @@ unsafe fn socket_close(fd: c_int) -> c_int {
     }
 
     if cap != u32::MAX {
-        let net = net_tid();
-        if net != 0 {
-            let mut req_buf = [0u8; IPC_BUF_SIZE];
-            let req = NetRequest::TcpClose { cap_id: cap };
-            if let Ok(encoded) = encode(&req, &mut req_buf) {
-                raw_syscall(
-                    ViSyscall::Send,
-                    net,
-                    encoded.as_ptr() as usize,
-                    encoded.len(),
-                    0,
-                );
-                let mut r = [0u8; 4];
-                raw_syscall(ViSyscall::Recv, 0, r.as_mut_ptr() as usize, r.len(), 0);
-            }
-        }
+        // Best effort: the slot is released whatever the service answers.
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        let _ = net_call(&NetRequest::TcpClose { cap_id: cap }, &mut resp_buf);
     }
     SOCK_CAPS[idx].store(0, Ordering::Release);
     0
@@ -448,44 +371,9 @@ const MAX_NAME_SCAN: usize = 255;
 /// (IPv4 literal, SLIRP alias, UDP A-record query to the DHCP-leased server),
 /// so the C surface carries no resolver of its own.
 fn resolve_name(name: &str) -> Option<[u8; 4]> {
-    let net = net_tid();
-    if net == 0 {
-        return None;
-    }
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let req = NetRequest::Resolve { hostname: name };
-    let Ok(encoded) = encode(&req, &mut req_buf) else {
-        return None;
-    };
-    // SAFETY: `encoded` is a live, initialized buffer and `net` is a task id
-    // returned by LookupService; the syscall only reads those bytes.
-    unsafe {
-        raw_syscall(
-            ViSyscall::Send,
-            net,
-            encoded.as_ptr() as usize,
-            encoded.len(),
-            0,
-        );
-    }
-
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    // SAFETY: `resp_buf` is a live, writable buffer; the kernel writes at most
-    // `resp_buf.len()` bytes and reports how many.
-    let n = unsafe {
-        raw_syscall(
-            ViSyscall::Recv,
-            0,
-            resp_buf.as_mut_ptr() as usize,
-            resp_buf.len(),
-            0,
-        )
-    };
-    if n <= 0 {
-        return None;
-    }
-    match decode::<NetResponse>(&resp_buf[..n as usize]) {
-        Ok(NetResponse::Addr(addr)) => Some(addr),
+    match net_call(&NetRequest::Resolve { hostname: name }, &mut resp_buf) {
+        Some(NetResponse::Addr(addr)) => Some(addr),
         _ => None,
     }
 }

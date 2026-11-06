@@ -63,8 +63,12 @@ pub mod startup;
 pub mod sync;
 pub mod syscall;
 
-/// Allocator hooks (to be implemented).
+/// The cell's global allocator (bare-metal builds only).
 pub mod heap;
+/// Preemption-safe lock around the free list; host-tested on its own.
+#[cfg(any(test, target_os = "none"))]
+#[path = "locked-heap.rs"]
+mod locked_heap;
 
 /// I/O traits and functions.
 pub mod io;

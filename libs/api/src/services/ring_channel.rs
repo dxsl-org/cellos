@@ -26,6 +26,9 @@ pub enum RingError {
     MessageTooLarge,
     /// Output buffer is smaller than the message length.
     BufferTooSmall,
+    /// The peer left a slot length above `RING_SLOT_BYTES`; the ring lives in
+    /// shared memory, so its contents are the peer's word, not an invariant.
+    Corrupt,
 }
 
 /// Metadata associated with a received ring message.
@@ -187,6 +190,9 @@ impl SpscRing {
         }
 
         let len = slot.len.load(Ordering::Relaxed) as usize;
+        if len > RING_SLOT_BYTES {
+            return Err(RingError::Corrupt);
+        }
         if out.len() < len {
             return Err(RingError::BufferTooSmall);
         }
@@ -305,6 +311,17 @@ mod tests {
             ring.try_push(&big_msg, 0, 0),
             Err(RingError::MessageTooLarge)
         );
+    }
+
+    #[test]
+    fn test_spsc_ring_refuses_a_peer_written_oversize_len() {
+        // A hostile peer owns half of the shared ring and may store any length;
+        // indexing the slot's 64-byte payload by it would panic the receiver.
+        let ring = SpscRing::new();
+        ring.try_push(b"ok", 1, 0).unwrap();
+        ring.slots[0].len.store(4096, Ordering::Relaxed);
+        let mut buf = [0u8; 8192];
+        assert_eq!(ring.try_pop(&mut buf), Err(RingError::Corrupt));
     }
 }
 

@@ -9,18 +9,19 @@
 //! `linked_list_allocator` (the same crate the kernel heap uses) so transient
 //! `String`/`Vec` allocations are actually reclaimed and a cell can run forever.
 //!
-//! ## Why `static mut Heap` and not `LockedHeap`
-//! Every ViCell cell is single-task / single-hart, so allocator entries never
-//! overlap and no lock is needed. Crucially, `LockedHeap` embeds a spinlock whose
-//! atomic write-back FAULTS in a cell: the const-initialised allocator static lands
-//! in the ELF's RELRO (read-only) segment, and an `amoor.w` to a read-only page
-//! traps (scause=0xf). A zero-sized `CellAllocator` plus mutable state in `.bss`
-//! (`static mut`) sidesteps that entirely — there is no writable allocator static
-//! to be placed read-only.
+//! ## Why a `static mut` and a yielding lock
+//! A cell may run several tasks (`task::spawn`) that share this heap and can be
+//! preempted, or run on other harts, mid-operation; [`CellHeap`] serialises every
+//! allocator entry with a lock whose waiters yield so a preempted holder always
+//! gets to finish (see `locked-heap.rs`). The state is a `static mut` in writable
+//! `.bss`, never a plain `static`: a const-initialised allocator static once
+//! landed in the ELF's RELRO (read-only) segment, and the lock's first atomic
+//! write-back to a read-only page trapped (scause=0xf). A zero-sized
+//! `CellAllocator` keeps the `#[global_allocator]` static free of writable data.
 
+use crate::locked_heap::CellHeap;
 use core::alloc::{GlobalAlloc, Layout};
-use core::ptr::{addr_of_mut, null_mut, NonNull};
-use linked_list_allocator::Heap;
+use core::ptr::{addr_of, addr_of_mut};
 
 /// Default per-cell heap size: 512 KiB gives ample headroom for normal cells
 /// while keeping footprint minimal. Cells needing larger heaps (e.g. VFS, compositor)
@@ -33,10 +34,21 @@ const HEAP_SIZE: usize = 1024 * 1024;
 struct HeapArena([u8; HEAP_SIZE]);
 static mut HEAP_MEM: HeapArena = HeapArena([0; HEAP_SIZE]);
 
-/// Free-list allocator state. `static mut` (writable `.bss`), serialized solely by
-/// the single-task execution model — see the module note on why no lock is used.
-static mut HEAP: Heap = Heap::empty();
-static mut HEAP_INIT: bool = false;
+/// Free-list allocator state behind its lock; see the module note on placement.
+static mut HEAP: CellHeap = CellHeap::empty();
+
+/// Shared view of the heap. Only ever borrowed shared: all mutation goes through
+/// the interior lock, so no `&mut` alias of the static is ever formed.
+fn cell_heap() -> &'static CellHeap {
+    // SAFETY: see above — the static is never reached by `&mut`.
+    unsafe { &*addr_of!(HEAP) }
+}
+
+/// Lock waiter's relax step: give the hart to the (possibly preempted) holder.
+/// Must not allocate, which `sys_yield` does not.
+fn yield_to_holder() {
+    crate::syscall::sys_yield();
+}
 
 /// Initialize the cell heap with a custom static arena before any allocation occurs.
 /// If called before the first allocation, the default `HEAP_MEM` is never touched.
@@ -47,9 +59,7 @@ static mut HEAP_INIT: bool = false;
 /// for the rest of the program: the allocator hands out sub-slices of exactly that region, and a
 /// second call (or any earlier allocation) would leave live blocks outside the new arena.
 pub unsafe fn init_custom_heap_raw(ptr: *mut u8, len: usize) {
-    let heap = &mut *addr_of_mut!(HEAP);
-    heap.init(ptr, len);
-    HEAP_INIT = true;
+    cell_heap().init(ptr, len, yield_to_holder);
 }
 
 #[macro_export]
@@ -74,27 +84,20 @@ macro_rules! declare_custom_heap {
 /// Zero-sized handle; all real state lives in the `static mut`s above so this
 /// `#[global_allocator]` static carries no writable data that could land read-only.
 struct CellAllocator;
-// SAFETY: single-task cells never enter the allocator concurrently, so the
-// unsynchronised access to the `static mut` heap state is race-free. Allocation
-// correctness is delegated to the well-tested `linked_list_allocator::Heap`.
+// SAFETY: `CellHeap` serialises every entry under its lock, so tasks of one cell
+// never touch the free list concurrently. Allocation correctness is delegated to
+// the well-tested `linked_list_allocator::Heap`.
 unsafe impl GlobalAlloc for CellAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let heap = &mut *addr_of_mut!(HEAP);
-        if !HEAP_INIT {
-            // SAFETY: HEAP_MEM is a 'static, 16-byte-aligned arena owned solely by the
-            // heap; init runs exactly once (single-task → no race on HEAP_INIT).
-            heap.init(addr_of_mut!(HEAP_MEM) as *mut u8, HEAP_SIZE);
-            HEAP_INIT = true;
-        }
-        heap.allocate_first_fit(layout)
-            .map_or(null_mut(), |p| p.as_ptr())
+        // SAFETY: HEAP_MEM is a 'static, 16-byte-aligned arena owned solely by the
+        // heap; `CellHeap::alloc` runs this lazy init once, under the lock.
+        cell_heap().alloc(layout, yield_to_holder, || {
+            (addr_of_mut!(HEAP_MEM) as *mut u8, HEAP_SIZE)
+        })
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if let Some(p) = NonNull::new(ptr) {
-            let heap = &mut *addr_of_mut!(HEAP);
-            heap.deallocate(p, layout);
-        }
+        cell_heap().dealloc(ptr, layout, yield_to_holder);
     }
 }
 

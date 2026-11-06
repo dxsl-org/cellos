@@ -4,7 +4,8 @@
 //! its own stacks and a new TID, and inherits the cell's identity on every axis it
 //! gates (CellId, capability set, syscall allowlist, PKU domain). Threads therefore
 //! share the cell's heap, quota, and address space — the isolation boundary stays
-//! the cell, not the thread.
+//! the cell, not the thread. The shared heap is safe to use from every thread: the
+//! allocator serialises entries under a lock whose waiters yield (`heap`).
 //!
 //! Per-thread state is the cell's own business, carried in the user thread pointer
 //! (`SetTlsBase`): a thread that wants its own TLS block allocates one and claims it

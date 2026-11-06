@@ -26,7 +26,9 @@ api::declare_syscalls![
     WaitCompletion,
     StateRestore,
     Exit,
-    Yield
+    Yield,
+    // `fastpath-echo` resolves the host's channel Grant (owner-checked).
+    GrantSlice
 ];
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
@@ -102,13 +104,15 @@ fn cell_main() {
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
         "ipc-echo" => echo::run(),
         "fastpath-echo" => {
-            let mut addr_buf = [0u8; 8];
-            let sender = match ostd::syscall::sys_recv(0, &mut addr_buf) {
+            let mut token_buf = [0u8; 8];
+            let sender = match ostd::syscall::sys_recv(0, &mut token_buf) {
                 ostd::syscall::SyscallResult::Ok(sid) if sid != 0 => sid,
                 _ => return,
             };
-            let handle = u64::from_le_bytes(addr_buf);
-            let client = match ostd::ring_channel::ChannelClient::connect(handle) {
+            // The Grant must be owned by the kernel-stamped sender, so a token
+            // from anyone else resolves to nothing.
+            let token = u64::from_le_bytes(token_buf);
+            let client = match ostd::ring_channel::ChannelClient::connect(token, sender) {
                 Some(c) => c,
                 None => return,
             };

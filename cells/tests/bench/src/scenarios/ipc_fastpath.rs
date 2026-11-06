@@ -43,8 +43,7 @@ impl ViBenchmark for IpcFastpathBench {
     }
 
     fn setup(&mut self) -> api::ViResult<()> {
-        let host = ChannelHost::new();
-        let handle = host.handle();
+        let host = ChannelHost::new().ok_or(ViError::OutOfMemory)?;
 
         if !sys_set_spawn_args("fastpath-echo") {
             return Err(ViError::IO);
@@ -59,9 +58,15 @@ impl ViBenchmark for IpcFastpathBench {
             ostd::task::yield_now();
         }
 
-        // Handshake: exchange channel address token via 1 initial syscall
-        let handle_bytes = handle.to_le_bytes();
-        if !matches!(sys_send(self.echo_tid, &handle_bytes), SyscallResult::Ok(_)) {
+        // Handshake: share the channel Grant with the echo task and send it the
+        // Grant token via 1 initial syscall; the echo resolves it with our tid.
+        let token = host
+            .share_with(self.echo_tid)
+            .ok_or(ViError::PermissionDenied)?;
+        if !matches!(
+            sys_send(self.echo_tid, &token.to_le_bytes()),
+            SyscallResult::Ok(_)
+        ) {
             return Err(ViError::IO);
         }
 
@@ -92,17 +97,16 @@ impl ViBenchmark for IpcFastpathBench {
     }
 
     fn teardown(&mut self) -> api::ViResult<()> {
-        self.host = None;
-        if self.echo_tid == 0 {
-            return Ok(());
-        }
-        match sys_force_exit(self.echo_tid) {
-            SyscallResult::Ok(_) => {
-                self.echo_tid = 0;
-                Ok(())
+        if self.echo_tid != 0 {
+            // Stop the echo before its channel Grant is freed: the client's view
+            // must not outlive the memory under it.
+            match sys_force_exit(self.echo_tid) {
+                SyscallResult::Ok(_) => self.echo_tid = 0,
+                SyscallResult::Err(_) => return Err(ViError::IO),
             }
-            SyscallResult::Err(_) => Err(ViError::IO),
         }
+        self.host = None;
+        Ok(())
     }
 }
 

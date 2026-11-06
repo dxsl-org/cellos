@@ -3,11 +3,36 @@
 //!
 //! Provides non-blocking, spinning, and yielding send/recv primitives
 //! for inter-cell communication within the Cellos SAS.
+//!
+//! ## What crosses between cells
+//! The shared `BiRingChannel` lives in a kernel Grant, and the token a host hands
+//! its peer is the Grant id. The peer resolves it through `GrantSlice` with the
+//! host's kernel-stamped tid as the expected owner, so the kernel — not the
+//! token's bits — decides which memory the client's ring stores land in: a forged
+//! token, someone else's Grant, a Grant not shared to the client, or one too
+//! short for a channel all resolve to `None`. The channel holds only atomics, so
+//! whatever bytes a hostile peer leaves in it are a valid value; the ring ops
+//! refuse nonsensical slot lengths instead of trusting them.
+//!
+//! ## How long the client's view lasts
+//! The host's `ChannelHost` owns the Grant and frees it on drop, so a host keeps
+//! it alive until its peer is gone. A private-root (domain) client loses the
+//! mapping when the Grant is freed (`GrantFree` revokes receivers), so a late
+//! access faults inside the client. On the SAS path `GrantFree` also drops the
+//! user mapping, but the frames can later be reissued at the same address to
+//! another owner — a kernel property every Grant consumer shares, which this API
+//! cannot close from user space.
 #![allow(unsafe_code)]
 
+use crate::grant::GrantHandle;
+use crate::syscall::{
+    sys_grant_share, sys_grant_slice_with_len, sys_grant_slice_with_len_owned_by,
+};
 pub use api::ring_channel::{
     BiRingChannel, RingError, RingMessageMeta, SpscRing, SpscSlot, RING_CAPACITY, RING_SLOT_BYTES,
 };
+use core::mem::{align_of, size_of};
+use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Producer half of a single-producer single-consumer ring channel.
@@ -149,61 +174,86 @@ impl<'a> FastpathEndpoint<'a> {
     }
 }
 
-use alloc::boxed::Box;
+/// `GrantShare` permission for a peer that both reads and writes the rings.
+const GRANT_PERM_READ_WRITE: u8 = 2;
 
-/// Host that allocates and owns a shared `BiRingChannel`.
+/// View a kernel-resolved Grant mapping as a channel; `None` when the mapping is
+/// null, misaligned, or too short to hold a whole `BiRingChannel`.
+fn channel_in_grant(ptr: *mut u8, len: usize) -> Option<NonNull<BiRingChannel>> {
+    if len < size_of::<BiRingChannel>()
+        || !(ptr as usize).is_multiple_of(align_of::<BiRingChannel>())
+    {
+        return None;
+    }
+    NonNull::new(ptr.cast())
+}
+
+/// Host that owns a shared `BiRingChannel` placed in a kernel Grant.
 pub struct ChannelHost {
-    channel: Box<BiRingChannel>,
+    grant: GrantHandle<u8>,
+    channel: NonNull<BiRingChannel>,
 }
 
 impl ChannelHost {
-    /// Allocate a new channel on the heap.
-    pub fn new() -> Self {
-        Self {
-            channel: Box::new(BiRingChannel::new()),
-        }
+    /// Allocate a channel in a fresh Grant owned by this task; `None` when the
+    /// kernel refuses the allocation.
+    pub fn new() -> Option<Self> {
+        let grant = GrantHandle::<u8>::alloc(size_of::<BiRingChannel>())?;
+        let (ptr, len) = sys_grant_slice_with_len(grant.id())?;
+        let channel = channel_in_grant(ptr, len)?;
+        // SAFETY: the fresh Grant is mapped for at least a whole aligned channel
+        // and is not shared yet, so nothing else observes this initialising write.
+        unsafe { channel.as_ptr().write(BiRingChannel::new()) };
+        Some(Self { grant, channel })
     }
 
-    /// Obtain the 64-bit address token to send to the peer cell.
-    pub fn handle(&self) -> u64 {
-        (&*self.channel as *const BiRingChannel) as usize as u64
+    /// Share the channel with `peer_tid` (read-write) and return the token the
+    /// peer passes to [`ChannelClient::connect`]; `None` if the kernel refuses.
+    pub fn share_with(&self, peer_tid: usize) -> Option<u64> {
+        sys_grant_share(self.grant.id(), peer_tid, GRANT_PERM_READ_WRITE)
+            .then_some(self.grant.id() as u64)
     }
 
     /// Get the Endpoint A view for the local cell.
     pub fn endpoint(&self) -> FastpathEndpoint<'_> {
-        FastpathEndpoint::new_endpoint_a(&self.channel)
+        // SAFETY: `self.grant` keeps the Grant mapped for as long as `self`, which
+        // bounds the borrow; `new` initialised the channel, and its atomics are the
+        // only state the peer shares.
+        FastpathEndpoint::new_endpoint_a(unsafe { self.channel.as_ref() })
     }
 }
 
-impl Default for ChannelHost {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Client that attaches to an existing `BiRingChannel` via its address token.
+/// Client attached to a host's channel Grant.
 pub struct ChannelClient {
-    ptr: *const BiRingChannel,
+    channel: NonNull<BiRingChannel>,
 }
 
 impl ChannelClient {
-    /// Connect to a channel handle provided by the host cell.
-    /// Returns None if the handle is null or misaligned.
-    pub fn connect(handle: u64) -> Option<Self> {
-        let addr = handle as usize;
-        if addr == 0 || !addr.is_multiple_of(core::mem::align_of::<BiRingChannel>()) {
-            return None;
-        }
+    /// Attach to the channel Grant `token` that `host_tid` allocated and shared
+    /// to this task.
+    ///
+    /// `host_tid` must be the sender tid the kernel stamped on the message that
+    /// carried `token`, never a value from a payload. `None` unless the kernel
+    /// resolves `token` as a Grant owned by `host_tid`, accessible to this task,
+    /// and long enough for a whole channel.
+    pub fn connect(token: u64, host_tid: usize) -> Option<Self> {
+        let grant_id = usize::try_from(token).ok()?;
+        let (ptr, len) = sys_grant_slice_with_len_owned_by(grant_id, host_tid)?;
         Some(Self {
-            ptr: addr as *const BiRingChannel,
+            channel: channel_in_grant(ptr, len)?,
         })
     }
 
     /// Get the Endpoint B view for the client cell.
     pub fn endpoint(&self) -> FastpathEndpoint<'_> {
-        // SAFETY: The handle was issued by a live ChannelHost in the shared address space
-        // and verified to be non-null and properly aligned.
-        let channel = unsafe { &*self.ptr };
-        FastpathEndpoint::new_endpoint_b(channel)
+        // SAFETY: `connect` took the pointer from the kernel's validation of a
+        // Grant shared to this task and bounded it to a whole aligned channel; an
+        // atomics-only channel is valid for any bytes the host leaves in it. The
+        // view lasts while the host holds its Grant (see the module note).
+        FastpathEndpoint::new_endpoint_b(unsafe { self.channel.as_ref() })
     }
 }
+
+#[cfg(test)]
+#[path = "ring-channel-tests.rs"]
+mod tests;

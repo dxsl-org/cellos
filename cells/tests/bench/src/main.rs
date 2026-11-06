@@ -35,7 +35,12 @@ api::declare_syscalls![
     MemInfo,
     Exit,
     Yield,
-    VfsMutate
+    VfsMutate,
+    // `ipc_fastpath` places its ring channel in a Grant shared to the echo task.
+    GrantAlloc,
+    GrantShare,
+    GrantSlice,
+    GrantFree
 ];
 #[cfg(feature = "g1-cpu-workload")]
 api::declare_syscalls![
