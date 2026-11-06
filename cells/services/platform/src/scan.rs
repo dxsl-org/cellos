@@ -9,7 +9,6 @@
 //! command register before each probe and restored after to prevent the device
 //! from responding to MMIO accesses during the transient probe window.
 
-use ostd::io::println;
 use ostd::mmio::MmioRegion;
 use ostd::syscall::{sys_register_pci_device, sys_register_pcie_bar};
 
@@ -219,14 +218,6 @@ fn scan_bus_and_register<R: ConfigSpace + ?Sized>(region: &R, bus: u8) {
             let subclass = r8(region, dev, fun, CFG_SUBCLASS);
             let prog_if = r8(region, dev, fun, CFG_CLASS_PROG);
             let device_id = r16(region, dev, fun, CFG_DEVICE_ID);
-            if class == 0x02
-                && subclass == 0x00
-                && prog_if == 0x00
-                && (vendor_id != 0x8086 || device_id != 0x100E)
-            {
-                println("[platform] unsupported Ethernet identity — registration skipped");
-                continue;
-            }
             let cls: u32 = ((class as u32) << 16) | ((subclass as u32) << 8) | (prog_if as u32);
 
             let mut bar0_base: usize = 0;
@@ -271,10 +262,18 @@ fn scan_bus_and_register<R: ConfigSpace + ?Sized>(region: &R, bus: u8) {
 
             // Register class/BAR0 info so the kernel PCI_DEVICES list is populated
             // and sys_find_pcie_device queries work without a kernel ECAM scan.
+            // The kernel re-reads the function and applies its Ethernet family
+            // gate (`ETHERNET_DRIVER_IDS`, `pcie_ecam.rs`), the only Ethernet ID
+            // table: a controller no Driver Cell drives is refused, on every bus.
             if sys_register_pci_device(bdf, cls, bar0_base, bar0_size).is_ok() {
                 let _ = ostd::io::print_fmt(format_args!(
                     "[platform] registered bus {} device {} function {} class {}:{}:{}\n",
                     bus, dev, fun, class, subclass, prog_if
+                ));
+            } else {
+                let _ = ostd::io::print_fmt(format_args!(
+                    "[platform] registration refused bus {} device {} function {} id {:04x}:{:04x} class {}:{}:{}\n",
+                    bus, dev, fun, vendor_id, device_id, class, subclass, prog_if
                 ));
             }
         }
