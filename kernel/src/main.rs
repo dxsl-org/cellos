@@ -1212,8 +1212,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         )
     ))]
     if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
-        // `[bitmap, heap)`: the bitmap and the early boot frames after it in its
-        // range; `reserve_boot_heap` placed the heap right after them.
+        // `[bitmap, heap)`: the bitmap, plus any early boot frames the next-fit
+        // cursor handed out from the bitmap's range before `reserve_boot_heap`
+        // placed the heap there. When the bitmap's range is not the first
+        // usable one (UEFI maps: ≥ 1 GiB under VMware, 4 GiB under OVMF), the
+        // early paging frames come from lower ranges and the span is just the
+        // bitmap.
         let (bm_start, _) = guard.bitmap_range();
         memory::domain_supervisor_registry::register(
             bm_start,
