@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "vmxnet3 and PVSCSI cells, VMware matrix"
-status: "in progress: 09.1-09.2 done at QEMU; 09.3-4 VMware matrix pending"
+status: "implemented (S3 checkpoint: DMA/ring review pending)"
 priority: P2
 effort: "5d"
 dependencies: [5, 8]
@@ -74,14 +74,14 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 - [x] V0 VMware tooling smoke: pipe relay, typed input, two-boot persistence on SATA and NVMe (BIOS + EFI, 2/4 vCPU), host probes ([evidence](reports/s3-v0-vmware-tooling-evidence.md), [JSON](reports/s3-v0-vmware-smoke.json))
 - [x] vmxnet3 (QEMU) — `reports/phase-09-evidence.md`
 - [x] PVSCSI (QEMU) — `reports/phase-09-evidence.md`
-- [ ] Matrix script (VMX generation for every cell and the `lane` runner landed in V0; the `nic × storage × vcpu × firmware` sweep with DHCP verdicts remains)
-- [ ] VMware matrix run + evidence
+- [x] Matrix script: `matrix` sweep of `nic × storage × vcpu × firmware` plus one `pciBridge0` cell per storage type, with prompt / NIC + DHCP / persistence / guest-S5 verdicts and 12 unit tests ([evidence](reports/phase-09-evidence.md#vmware-matrix-09-3-09-4))
+- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T013618Z-6528a8` ([JSON](reports/s3-phase09-vmware-matrix.json))
 
 ## Success Criteria
 
-- [ ] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass in CI under TCG and locally under KVM.
-- [ ] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes. Results JSON committed as local evidence.
-- [ ] `test_native_vmware_matrix.py` unit tests pass.
+- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM, on the integration tree before and after the D-S5/D-S6 fixes: `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
+- [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only).
+- [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`).
 - [ ] Review pass on both cells' DMA/ring code.
 
 ## Risk Assessment
@@ -116,3 +116,28 @@ S4 (physical platform).
 - **V0-S3 (Surprise).** EFI with ≥ 1024 MiB panics: `kernel/src/main.rs:1219:10: frame allocator bitmap and early paging registration must succeed`. BIOS is unaffected up to 4096 MiB. Kernel fix outside S3.
 - **V0-S4 (Surprise).** VMware EFI `\_S5_` is unparsed (`scan stopped at opcode 0x5b offset 0x1f59; poweroff refused`), so EFI guests are hard-stopped. Persistence is unaffected.
 - **V0-S5 (Surprise, closes A3).** `vvtd.enable` powers on and exposes a DMAR, but `[vtd] Intel VT-d not present (GCAP=0xffffffffffffffff)`, and `x86_64-pc` refuses untranslated DMA. A3 is false, so H-S3-9 applies: the matrix runs under `x86_64-vm` only, with no VMware production-guest claim.
+- **D-S1 (S1 fix: Ethernet behind bridges and root ports).** Per the [grant](s3-v0-findings-grant.md) and the [S1/S2 report](reports/s3-fix-pci-discovery-evidence.md):
+  - The platform cell's hand-kept `100E` filter is gone (`scan.rs`). Every function is offered to the kernel. `register_device` (`pcie_ecam.rs`) applies `ethernet_id_has_driver`, the one Ethernet ID table, and syscall 236 returns `NotSupported` for a refused function.
+  - A refusal now prints `[platform] registration refused bus B device D function F id vvvv:dddd class C:S:P`.
+  - Deviation: the gate decision needed `pcie_ecam.rs` and `syscall.rs`. Both are S2 rows; this is kernel policy, not wire.
+  - Deviation (D-S1b): a refused function's BAR windows stay registered, as in the bus-0 scan. Without the 418/424 hand-out a window grants nothing.
+  - Closes V0-S1 and D8.
+- **D-S2 (S2 fix: every BAR of a Platform-registered function).** `register_device` decodes every BAR and the MSI-X/PM capabilities through `decode_function_in_window`, as the bus-0 scan does. `offer_pcie_device` uses `first_memory_bar`. Root cause: the 236 path stored only BAR0, and AHCI's ABAR is BAR5. Closes V0-S2. Matrix: `bridge0-sata-e1000-c2-bios` → `[ahci] ABAR claim ok base=0xfd5ef000` on `02:01.0`. New QEMU test `bridged_ahci_and_root_port_nics_follow_the_scan_rules` (`pcie-multibus-x86`).
+- **D-S3 (S3 fix: EFI boot heap in the bitmap's range).** Per the [report](reports/s3-fix-s3-evidence.md): the heap was a first fit over all ranges and could land below the bitmap, which sits in the largest range. The `[bitmap, heap)` registration then failed (`main.rs:1219`). `reserve_boot_heap` now reserves inside the bitmap's range and refuses boot otherwise. Closes V0-S3 and supersedes V0-D4: matrix EFI cells run at 1024 MiB, and OVMF 1/2/4 GiB boots. Surprise reported there, not fixed: OVMF `-smp ≥ 2` panics `AP requires permanent shared kernel root`, because a PML4 at frame 0 collides with the "unset" sentinel. VMware maps do not start at 0, so the lanes are unaffected.
+- **D-S4 (S4 fix: `\_S5_` scan on VMware's EFI DSDT).** Per the [report](reports/s3-fix-s4-evidence.md): `skip_term` accepts integer-expression TermArgs with a `NullName` target (VMware EFI `OperationRegion (EICH, SystemMemory, (ECFG + 0x4000), 0x4000)`). A storing target is still `Unparsed`. VMware DSDT fixtures were added. Closes V0-S4. Matrix: `\_S5_ static SLP_TYPa=0 SLP_TYPb=0` and guest S5 power-off on all 78 boots, BIOS and EFI.
+- **D-S5 Surprise → fix (vmxnet3 under VMware EFI).**
+  - Symptom: `[vmxnet3] controller initialization failed: unusable MAC ff:ff:ff:ff:ff:ff` (EFI only). BIOS read the MAC through the same queries.
+  - `[INFERENCE]` EFI leaves memory decoding off on the function, and the cell read BAR1 before `GrantDma` enabled `MEM_SPACE | BUS_MASTER`. The command register was not read directly.
+  - Fix `6d3192477`: the DMA area is authorized before the first register access, and `negotiate` refuses all-ones `VRRS`/`UVRS`.
+  - Smallest option, inside the cell. The other cells also read registers before 435/`GrantDma` and rely on firmware-enabled decoding; this is an open item for S4 (physical).
+- **D-S6 Surprise → fix (vmxnet3 DHCP on VMware).**
+  - The net service frames with a fixed `52:54:00:12:34:56`, not the NIC's MAC. QEMU's default vNIC MAC is the same address, which hid the problem.
+  - The e1000 family receives in promiscuous mode. vmxnet3 filtered unicast to `00:0c:29:…`, so the DHCP OFFER was dropped.
+  - Fix `14640724a`: `rxMode` adds PROMISC (`0x1D`). This updates D3's "rx mode unicast+broadcast+all-multicast".
+  - The fixed station MAC itself (one MAC for every Cellos guest on an L2) is outside S3 and is reported as an open risk.
+- **D-S7 Decision (matrix shape).**
+  - The lease is required on both boots, inside 45 s of power-on. Guest S5 is a verdict: no hard stop.
+  - `pciBridge0` cells: `sata`+e1000 c2 BIOS, `nvme`+e1000e c4 EFI, `pvscsi`+vmxnet3 c2 EFI.
+  - Cells run three at a time (`--jobs 3`); each has its own directory, pipe and disk.
+  - The committed JSON drops only the PCI bridge and root-port enumeration lines from the markers; the full summary is retained under `build/` with its sha256.
+- **D-S8 Observation (D6 on the real device).** VMware's PVSCSI offers MSI-X: `irq=msix vectors=1 irq_wakes=0..5 park_expiries=0` on 26 boots, with no `irq wait expired` line. D6's post-park re-reads remain a QEMU (MSI) observation. D5 (VT-d confinement of PVSCSI ring pages) stays unproven, because VMware exposes no working remapper (V0-S5).
