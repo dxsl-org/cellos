@@ -75,11 +75,11 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 - [x] vmxnet3 (QEMU) — `reports/phase-09-evidence.md`
 - [x] PVSCSI (QEMU) — `reports/phase-09-evidence.md`
 - [x] Matrix script: `matrix` sweep of `nic × storage × vcpu × firmware` plus one `pciBridge0` cell per storage type, with prompt / NIC + DHCP / persistence / guest-S5 verdicts and 12 unit tests ([evidence](reports/phase-09-evidence.md#vmware-matrix-09-3-09-4))
-- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T015154Z-4728a7` on `cb015dc1e` ([JSON](reports/s3-phase09-vmware-matrix.json))
+- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T020521Z-a3694a` on `283345b32` ([JSON](reports/s3-phase09-vmware-matrix.json))
 
 ## Success Criteria
 
-- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (final `cb015dc1e`): `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
+- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (final `283345b32`): `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
 - [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only).
 - [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`).
 - [ ] Review pass on both cells' DMA/ring code.
@@ -130,7 +130,7 @@ S4 (physical platform).
   - `[INFERENCE]` EFI leaves memory decoding off on the function, and the cell read BAR1 before anything turned decoding on. Only 435 and `GrantDma` did that, and both also set `BUS_MASTER`. The command register was not read directly.
   - First fix `6d3192477`: the DMA area was authorized before the first register access. The H-S3-13 re-check rejected this order, because bus mastering then came on before `CMD_RESET_DEV`. Without an IOMMU (the VMware lane), a relaunched cell's still-activated device could DMA into frames its predecessor freed.
   - Final fix:
-    - Kernel `173fb292d`: `offer_pcie_device` sets Memory Space alone right after `claim_bdf_owner` (`pcie_ecam::enable_memory_decode`; an absent function or one outside the ECAM window is left alone). Bus mastering still waits for `GrantDma`. This covers every cell, including e1000e (`CTRL` read) and PVSCSI (`ADAPTER_RESET` status), which also touch MMIO before 435/`GrantDma`.
+    - Kernel `173fb292d` + `283345b32`: `offer_pcie_device` sets Memory Space alone right after `claim_bdf_owner` (`pcie_ecam::enable_memory_decode`). It does so only when every memory BAR has a base (`memory_bars_assigned`); an absent function, or one outside the ECAM window, is left alone. Bus mastering still waits for `GrantDma`. This covers every cell, including e1000e (`CTRL` read) and PVSCSI (`ADAPTER_RESET` status), which also touch MMIO before 435/`GrantDma`.
     - vmxnet3 `cb015dc1e`: bring-up is back to reset → MSI-X → `GrantDma`. `negotiate` keeps refusing all-ones `VRRS`/`UVRS`.
   - The kernel file is within the S2 row of the [grant](s3-v0-findings-grant.md) (the PCIe BAR path). It is policy, not wire: no syscall, argument or error changed.
 - **D-S6 Surprise → fix (vmxnet3 DHCP on VMware).**

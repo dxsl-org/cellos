@@ -88,7 +88,7 @@ Not re-run this phase: `xhci-x86`, `iommu-dmar-x86`, `machine-pin-x86`, `serial-
 
 ## VMware matrix (09.3-09.4)
 
-Recorded 2026-11-06 on `feat/x86-s3-integration` (worktree `/home/dmin/worktrees/cellos-s3-int`). The ISO was built from the tree of `cb015dc1e`: the merged S3 tip `087d99ab1` plus the matrix findings' fixes below (kernel memory decoding at claim time, vmxnet3 all-ones refusal and promiscuous receive).
+Recorded 2026-11-06 on `feat/x86-s3-integration` (worktree `/home/dmin/worktrees/cellos-s3-int`). The ISO was built from the tree of `283345b32`: the merged S3 tip `087d99ab1` plus the matrix findings' fixes below (kernel memory decoding at claim time when every memory BAR is placed, vmxnet3 all-ones refusal and promiscuous receive).
 
 **Ceiling: VMware local.**
 - VMware Workstation 25.0.0 build 24995812 (`vmrun version 1.17.0.24995812`), virtual hardware 22 (read back from every `vmware.log`).
@@ -98,9 +98,13 @@ Recorded 2026-11-06 on `feat/x86-s3-integration` (worktree `/home/dmin/worktrees
 
 **Verdict: 39/39 cells PASS** — the 36 grid cells plus one `pciBridge0` cell per storage type, two boots each, on every dimension. Every VM was created under `C:\Temp\cellos-vmware\s3-lane\` and deleted: `cleanup_confirmed: true` ×39, the lane root was empty and `Total running VMs: 0` after the run.
 
-Run `20261106T015154Z-4728a7`: `python3 scripts/x86/test-native-vmware-matrix.py matrix --iso …/vicell-x86-vm.iso --jobs 3`, which took 547 s. An earlier full run on the intermediate `14640724a` image (`20261106T013618Z-6528a8`, vmxnet3 reaching decoding through an early `GrantDma`) also gave 39/39; it is superseded because that order was withdrawn (D-S5).
-- ISO: `vicell-x86-vm.iso`, sha256 `76fb669a17a32d1226dd7744c7af7cf06b2aebddb24613cd675053a0f80ebba6`. It was built by `make-iso-ci.sh` with `limine-vm.conf` from an out-of-tree headless assembly; tracked `kernel/src/embedded-x86_64/*` was not touched.
-- JSON: [s3-phase09-vmware-matrix.json](s3-phase09-vmware-matrix.json). It drops the PCI bridge and root-port enumeration lines from the per-boot markers and is otherwise verbatim. Its `reduction` block names the full summary (`build/x86-backend-evidence/vmware-lane/20261106T015154Z-4728a7/summary.json`, sha256 in the file), which is retained with every serial log, VMX and `vmware.log`.
+Run `20261106T020521Z-a3694a`: `python3 scripts/x86/test-native-vmware-matrix.py matrix --iso …/vicell-x86-vm.iso --jobs 3`, which took 559 s. Two earlier full runs also gave 39/39 and are superseded:
+- `20261106T013618Z-6528a8` on `14640724a`: vmxnet3 got memory decoding from an early `GrantDma`, an order that was withdrawn (D-S5).
+- `20261106T015154Z-4728a7` on `cb015dc1e`: claim-time decoding without the BAR-assigned check.
+
+Run details:
+- ISO: `vicell-x86-vm.iso`, sha256 `21af039cf4a30ff222af5a859aa02467322f1483f6082f72d16eb25753add465`. It was built by `make-iso-ci.sh` with `limine-vm.conf` from an out-of-tree headless assembly; tracked `kernel/src/embedded-x86_64/*` was not touched.
+- JSON: [s3-phase09-vmware-matrix.json](s3-phase09-vmware-matrix.json). It drops the PCI bridge and root-port enumeration lines from the per-boot markers and is otherwise verbatim. Its `reduction` block names the full summary (`build/x86-backend-evidence/vmware-lane/20261106T020521Z-a3694a/summary.json`, sha256 in the file), which is retained with every serial log, VMX and `vmware.log`.
 
 ### How a cell is judged (`matrix_scenarios`, `lane_verdict`)
 
@@ -134,15 +138,15 @@ Totals: status, prompt, NIC, persistence and S5 are each **PASS 39 / FAIL 0**. E
 
 | NIC | Storage | 2 vCPU BIOS | 2 vCPU EFI | 4 vCPU BIOS | 4 vCPU EFI |
 |---|---|---|---|---|---|
-| e1000 | sata | PASS (5.4 / 5.1 s) | PASS (7.0 / 6.2 s) | PASS (7.6 / 5.4 s) | PASS (6.5 / 7.6 s) |
-| e1000 | nvme | PASS (5.5 / 4.8 s) | PASS (6.0 / 5.9 s) | PASS (7.8 / 6.9 s) | PASS (8.2 / 7.7 s) |
-| e1000 | pvscsi | PASS (7.0 / 4.7 s) | PASS (7.3 / 6.3 s) | PASS (7.1 / 6.1 s) | PASS (7.4 / 6.8 s) |
-| e1000e | sata | PASS (5.7 / 4.9 s) | PASS (5.8 / 5.3 s) | PASS (6.7 / 4.1 s) | PASS (6.5 / 5.5 s) |
-| e1000e | nvme | PASS (5.5 / 4.0 s) | PASS (4.5 / 5.0 s) | PASS (5.1 / 4.2 s) | PASS (5.7 / 4.5 s) |
-| e1000e | pvscsi | PASS (4.3 / 3.6 s) | PASS (4.5 / 4.5 s) | PASS (4.8 / 4.2 s) | PASS (4.6 / 5.4 s) |
-| vmxnet3 | sata | PASS (4.4 / 3.6 s) | PASS (3.8 / 3.9 s) | PASS (4.5 / 4.0 s) | PASS (4.9 / 4.6 s) |
-| vmxnet3 | nvme | PASS (4.4 / 3.6 s) | PASS (3.8 / 3.8 s) | PASS (4.9 / 4.4 s) | PASS (5.3 / 5.0 s) |
-| vmxnet3 | pvscsi | PASS (4.3 / 4.7 s) | PASS (4.9 / 4.6 s) | PASS (4.8 / 4.3 s) | PASS (5.2 / 4.2 s) |
+| e1000 | sata | PASS (6.0 / 4.7 s) | PASS (5.9 / 6.8 s) | PASS (6.1 / 6.0 s) | PASS (6.9 / 6.7 s) |
+| e1000 | nvme | PASS (5.5 / 5.1 s) | PASS (6.1 / 6.5 s) | PASS (7.7 / 6.6 s) | PASS (7.4 / 7.2 s) |
+| e1000 | pvscsi | PASS (6.6 / 4.7 s) | PASS (6.1 / 6.3 s) | PASS (7.0 / 6.7 s) | PASS (7.1 / 8.0 s) |
+| e1000e | sata | PASS (6.0 / 6.0 s) | PASS (6.2 / 6.2 s) | PASS (7.8 / 7.2 s) | PASS (5.6 / 6.8 s) |
+| e1000e | nvme | PASS (4.4 / 4.5 s) | PASS (5.3 / 4.4 s) | PASS (5.3 / 4.3 s) | PASS (5.1 / 5.3 s) |
+| e1000e | pvscsi | PASS (4.1 / 3.5 s) | PASS (5.0 / 4.7 s) | PASS (5.9 / 4.4 s) | PASS (6.0 / 5.2 s) |
+| vmxnet3 | sata | PASS (4.4 / 3.6 s) | PASS (4.6 / 3.7 s) | PASS (4.5 / 3.8 s) | PASS (4.4 / 4.1 s) |
+| vmxnet3 | nvme | PASS (3.8 / 3.4 s) | PASS (3.5 / 3.6 s) | PASS (9.7 / 5.4 s) | PASS (8.6 / 6.0 s) |
+| vmxnet3 | pvscsi | PASS (5.8 / 3.5 s) | PASS (4.3 / 4.6 s) | PASS (4.7 / 4.4 s) | PASS (4.4 / 4.7 s) |
 
 | `pciBridge0` cell | Result | Decisive lines (boot 1) |
 |---|---|---|
@@ -150,11 +154,11 @@ Totals: status, prompt, NIC, persistence and S5 are each **PASS 39 / FAIL 0**. E
 | `bridge0-nvme-e1000e-c4-efi` | PASS | `platform-reg 03:00.0 class=02:00:00 … mem=0xfea20000+0x20000`, `platform-reg 0b:00.0 class=01:08:02 …`, `block driver registered: tid=4 device=pci-0b-00-0`, `[e1000e] controller bound 8086:10d3 82574L link_up=true … irq=msix … vectors=3`, `DHCP acquired` |
 | `bridge0-pvscsi-vmxnet3-c2-efi` | PASS | `platform-reg 03:00.0 class=01:07:00 bar0=0x0 mem=0xfea10000+0x8000`, `[pvscsi] pci 03:00.0 15ad:07c0 target=0 lun=0 blocks=1127680 irq=msix vectors=1`, `platform-reg 0b:00.0 class=02:00:00`, `[vmxnet3] controller bound 15ad:07b0 … irq=msix … vectors=3`, `DHCP acquired` |
 
-Decisive lines (quoted from the run):
+Decisive lines (quoted from run `…4728a7`; the final run printed the same lines with other generated MACs, e.g. `vmxnet3-pvscsi-c4-efi` → `[vmxnet3] controller bound 15ad:07b0 vmxnet3 rev=1 link_up=true speed=10000Mb/s mac=00:0c:29:b5:81:31 irq=msix`):
 - **NIC.** `[e1000] controller bound 8086:100f 82545EM mac=00:0c:29:a2:60:3a irq=polled reason=request-driven` (13 cells, bus 0 or behind `pciBridge0`); `[e1000e] controller bound 8086:10d3 82574L link_up=true … irq=msix rx=request-driven vectors=3` (bus 2/3/0x0a behind root ports); `[vmxnet3] controller bound 15ad:07b0 vmxnet3 rev=1 link_up=true speed=10000Mb/s mac=00:0c:29:f9:0b:87 irq=msix rx=request-driven vectors=3` (`vmxnet3-pvscsi-c4-efi`). On every boot: `[net] DHCP acquired — IP configured`, `[net] IP address: 192.168.232.128`.
 - **Storage.** `[ahci] controller bound bdf=00:11.0 cap=0xc1341f1d version=0x00010300`; NVMe `platform-reg 0a:00.0 class=01:08:02 bar0=0xfe000000 mem=0xfe000000+0x4000` → `block driver registered: tid=4 device=pci-0a-00-0 route=0`; `[pvscsi] pci 02:00.0 15ad:07c0 target=0 lun=0 blocks=1127680 irq=msix vectors=1 irq_wakes=3 park_expiries=0` as the only disk → `/mnt/sd`; then `machine pin: first boot — recorded …` / `machine pin: match …`.
 - **S5 (BIOS and EFI).** `[acpi] power: \_S5_ static SLP_TYPa=0 SLP_TYPb=0`, then `System shutting down...` and `[power] poweroff: PM1a_CNT 0x444 SLP_TYPa=0 PM1b_CNT 0x0 SLP_TYPb=0`; `guest_poweroff: true`, `hard_stop: false` on all 78 boots.
-- **PVSCSI on the real device (D6 input).** The bind line reports `irq=msix vectors=1` on all 26 PVSCSI boots (QEMU offers MSI only), with `irq_wakes=0..3 park_expiries=0` (`0..5` in the superseded run). There is **no** `[pvscsi] irq wait expired` line in either run. The post-park re-reads of D6 are therefore so far a QEMU-model observation.
+- **PVSCSI on the real device (D6 input).** The bind line reports `irq=msix vectors=1` on all 26 PVSCSI boots of each run (QEMU offers MSI only), with `irq_wakes=0..6 park_expiries=0`. No run has a `[pvscsi] irq wait expired` line. The post-park re-reads of D6 are therefore so far a QEMU-model observation.
 
 ### Matrix failures found and fixed (D-S5, D-S6 in the phase file)
 
@@ -162,7 +166,7 @@ Smoke runs on the merged tip, before the fixes:
 
 | Run | Cell | Decisive line | Root cause → fix |
 |---|---|---|---|
-| `20261106T011319Z-733d6b`, `…011941Z-0c8d5c` | `vmxnet3-pvscsi-c4-efi` | `[vmxnet3] controller initialization failed: unusable MAC ff:ff:ff:ff:ff:ff`, then `[net] NIC driver unavailable: legacy frame path` | BAR1 reads all-ones under VMware EFI only. Under BIOS, the same build read `mac=00:0c:29:bd:6e:34` through the same `GET_PERM_MAC` queries (`20261106T012342Z-e08a62`). `[INFERENCE]` EFI leaves memory decoding off on a function it has no driver for. The cell read BAR1 before anything turned decoding on: only 435 and `GrantDma` did, and both also set `BUS_MASTER`. First fix `6d3192477`: the DMA area was authorized before the first register access (debug run `20261106T012818Z-ce969d`: `controller bound … mac=00:0c:29:86:99:1c`). The DMA/ring review rejected it, because bus mastering then came on before `CMD_RESET_DEV`: without an IOMMU, a relaunched cell's still-active device could DMA into freed frames. **Final fix `173fb292d` + `cb015dc1e`:** `offer_pcie_device` sets Memory Space alone right after the BDF claim (`pcie_ecam::enable_memory_decode`; bus mastering waits for `GrantDma`), and vmxnet3 is back to reset → MSI-X → `GrantDma`. `negotiate` still refuses an all-ones `VRRS`/`UVRS`. Final run: `vmxnet3-pvscsi-c4-efi` → `controller bound … mac=00:0c:29:f9:0b:87`, and all 20 EFI cells (18 grid, 2 bridge) pass |
+| `20261106T011319Z-733d6b`, `…011941Z-0c8d5c` | `vmxnet3-pvscsi-c4-efi` | `[vmxnet3] controller initialization failed: unusable MAC ff:ff:ff:ff:ff:ff`, then `[net] NIC driver unavailable: legacy frame path` | BAR1 reads all-ones under VMware EFI only. Under BIOS, the same build read `mac=00:0c:29:bd:6e:34` through the same `GET_PERM_MAC` queries (`20261106T012342Z-e08a62`). `[INFERENCE]` EFI leaves memory decoding off on a function it has no driver for. The cell read BAR1 before anything turned decoding on: only 435 and `GrantDma` did, and both also set `BUS_MASTER`. First fix `6d3192477`: the DMA area was authorized before the first register access (debug run `20261106T012818Z-ce969d`: `controller bound … mac=00:0c:29:86:99:1c`). The DMA/ring review rejected it, because bus mastering then came on before `CMD_RESET_DEV`: without an IOMMU, a relaunched cell's still-active device could DMA into freed frames. **Final fix `173fb292d` + `cb015dc1e` + `283345b32`:** `offer_pcie_device` sets Memory Space alone right after the BDF claim (`pcie_ecam::enable_memory_decode`; bus mastering waits for `GrantDma`). It does so only when every memory BAR has a base (`memory_bars_assigned`), so an unassigned BAR never decodes at address 0. vmxnet3 is back to reset → MSI-X → `GrantDma`, and `negotiate` still refuses an all-ones `VRRS`/`UVRS`. Final run: `vmxnet3-pvscsi-c4-efi` → `controller bound … mac=00:0c:29:b5:81:31`, and all 20 EFI cells (18 grid, 2 bridge) pass |
 | `20261106T012342Z-e08a62`, `…011941Z-0c8d5c` | `vmxnet3-sata-c2-bios` | bound, `[net-bridge] first e1000 TX accepted=true`, `first e1000 RX len=131`, no lease; boot 2 `[net-bridge] NIC driver reply timeout; frame not acknowledged` | A debug build (`20261106T013135Z-3e6040`, not committed) showed TX and RX working. The transmitted DHCP DISCOVER is `ffffffffffff 525400123456 0800 …` with chaddr `525400123456`: the net service frames with its fixed `52:54:00:12:34:56`, not the vNIC's `00:0c:29:…`. Every RX was broadcast or multicast, and the unicast OFFER never passed the device's unicast filter. The e1000 cells receive it because they run `RCTL.UPE\|MPE`. QEMU hid this because its default vNIC MAC is the same `52:54:00:12:34:56`. **Fix `14640724a`:** vmxnet3 `rxMode` adds PROMISC (`0x1D`). Re-run `20261106T013523Z-5ae857`: `vmxnet3-sata-c2-bios`, `vmxnet3-pvscsi-c4-efi` and `bridge0-pvscsi-vmxnet3-c2-efi` all PASS |
 | `20261106T011319Z-733d6b` | `e1000-sata-c2-efi`, `e1000e-nvme-c2-bios` | `NIC refused: [vmxnet3] no vmxnet3 controller present` | Harness defect: the first sweep treated every idle NIC cell as a refusal. Only the cell's own idle line counts now (unit test `test_refusal_or_own_idle_fails_while_other_idle_cells_do_not`) |
 
@@ -174,7 +178,7 @@ Host, on the integration tree:
 
 | Gate | Result |
 |---|---|
-| `cargo test -p cellos-kernel` (host; parallel and `--test-threads=1`) | `ok. 507 passed` both on the merged tip; `508 passed` with `173fb292d` (new `claim_enables_memory_decoding_but_never_bus_mastering`) |
+| `cargo test -p cellos-kernel` (host; parallel and `--test-threads=1`) | `ok. 507 passed` both on the merged tip; `509 passed` on `283345b32` (new `claim_enables_memory_decoding_but_never_bus_mastering`, `decoding_waits_for_every_memory_bar_to_be_assigned`) |
 | `cargo test -p driver-e1000e -p driver-vmxnet3 -p driver-pvscsi -p service-platform` | `20` / `13` / `8` / `9 passed` (`driver-e1000` has `test = false`) |
 | `cargo test -p cellos-boards` / `-p app-init` | `15` / `41 passed` |
 | `scripts/test_assemble_x86_image.py` / `scripts/test_cellos_sign.py` | `Ran 40 … OK` / `Ran 67 … OK (skipped=1)`. Assembler pin `8c9b1ed0…07928f` = `sha256(scripts/assemble-x86-image.py)`; the merge changed no input |
@@ -185,7 +189,7 @@ Host, on the integration tree:
 | `cargo fmt --all --check` | **fails** — not from the fixes here (their hunks are formatted). The diffs are in S3-merged code: `pcie_ecam.rs` `ETHERNET_DRIVER_IDS` comment alignment and an `ethernet_driver_cell` test (phases 08/09), and `acpi/power.rs`, `acpi/tests.rs` (S4). They are also in pre-S3 code: `acpi/{mod,sci}.rs`, the `SystemPower` arms in `syscall.rs`, `supervisor/src/{power,protocol}.rs`, `sys-tools/src/bin/shutdown.rs`, `drm-cellos`/`cpp-hosted-smoke`/`drm-lite-x86` `build.rs`. These were left unformatted because another branch is editing `pcie_ecam.rs` |
 | `scripts/x86/test_native_vmware_matrix.py` | `Ran 43 tests … OK` (31 before; 12 new `MatrixSweepTests`) |
 
-QEMU 8.2.2, ISOs from the same tree (`CELLOS_X86_SMP=4` for `x86_64-boot`; `build/vicell-x86-prod-refusal.iso` built by `build-x86_64-prod-refusal-ci.sh`). Pass counts are identical on the default ISO of the merged tip (sha256 `325a7817…60c79b`), of `14640724a` (`bcf1efdf…97c633`) and of the final `cb015dc1e` (`3fcd62bc…f4a737`):
+QEMU 8.2.2, ISOs from the same tree (`CELLOS_X86_SMP=4` for `x86_64-boot`; `build/vicell-x86-prod-refusal.iso` built by `build-x86_64-prod-refusal-ci.sh`). The same counts passed on every default ISO: the merged tip (sha256 `325a7817…60c79b`), `14640724a` (`bcf1efdf…97c633`), `cb015dc1e` (`3fcd62bc…f4a737`) and the final `283345b32` (`3769ef11…d4bd03`):
 
 | Suite | TCG | KVM |
 |---|---|---|
