@@ -1,13 +1,13 @@
 //! vmxnet3 bring-up (the data path is in `datapath.rs`).
 //!
-//! Order: one DMA allocation authorized for the BDF before any register access
-//! and before any of its addresses is written anywhere (the `GrantDma`
-//! authorization turns on memory decoding and bus mastering; VMware's EFI leaves
-//! decoding off on this function, so BAR1 reads all-ones until then), revision
-//! negotiation, device reset, permanent MAC, MSI-X (435), RX ring 0 filled,
-//! queue descriptors and `DriverShared` written, `DriverShared` address
-//! programmed, `ACTIVATE_DEV`, RX producers, receive filters, vector masks,
-//! bounded link wait.
+//! Order: revision negotiation, device reset, permanent MAC, MSI-X (435), one
+//! DMA allocation authorized for the BDF before any of its addresses is
+//! written anywhere, RX ring 0 filled, queue descriptors and `DriverShared`
+//! written, `DriverShared` address programmed, `ACTIVATE_DEV`, RX producers,
+//! receive filters, vector masks, bounded link wait. The device is reset
+//! before `GrantDma` turns bus mastering on; the kernel turns memory decoding
+//! on when the cell claims the function (`FindPcieDevice*`), so the first
+//! register read does not depend on firmware.
 
 use crate::datapath::ack_events;
 use crate::dma::DmaArea;
@@ -74,7 +74,6 @@ pub struct Vmxnet3 {
 impl Vmxnet3 {
     /// Bring the device up on BAR0 `pt` and BAR1 `vd` for the function `bdf`.
     pub fn new(pt: MmioRegion, vd: MmioRegion, bdf: u32) -> Result<Self, InitError> {
-        let dma = DmaArea::new(DMA_PAGES, bdf).ok_or(InitError::Dma)?;
         negotiate(&vd)?.map_err(InitError::Refused)?;
         vd.wr32(VD_CMD, CMD_RESET_DEV)?;
         let mac = permanent_mac(&vd)?;
@@ -83,6 +82,7 @@ impl Vmxnet3 {
         }
         let irq = NicIrq::setup(bdf);
         let plan = IntrPlan::for_vectors(irq.vectors());
+        let dma = DmaArea::new(DMA_PAGES, bdf).ok_or(InitError::Dma)?;
         // From here on, dropping `ctrl` quiesces and resets the device.
         let mut ctrl = Self {
             pt,
