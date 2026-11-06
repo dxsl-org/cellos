@@ -2602,6 +2602,9 @@ fn offer_pcie_device(
     if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
         return Ok(0);
     }
+    // The owner may now reach its BARs: memory decoding on, bus mastering
+    // still off until its first GrantDma, after the cell has reset the device.
+    crate::task::drivers::pcie_ecam::enable_memory_decode(bdf);
     if out_ptr != 0 {
         let mut dev_bytes = [0u8; 48];
         dev_bytes[0..4].copy_from_slice(&bdf.to_ne_bytes());

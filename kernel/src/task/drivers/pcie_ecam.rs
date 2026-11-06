@@ -838,6 +838,60 @@ pub fn enable_bus_master(bdf: u32) {
     }
 }
 
+/// Command register once a Driver Cell owns the function: memory decoding on,
+/// every other bit as it was. Bus mastering stays off until `GrantDma`
+/// ([`enable_bus_master`]), so a device the cell has not reset yet cannot DMA.
+const fn decoding_command(command: u16) -> u16 {
+    command | CMD_MEM_SPACE
+}
+
+/// Turn on memory decoding (only) for a function a Driver Cell has just
+/// claimed, so its first register access does not depend on firmware having
+/// enabled decoding. VMware's EFI leaves it off on a function it has no driver
+/// for (vmxnet3), and BAR reads then return all-ones.
+pub fn enable_memory_decode(bdf: u32) {
+    let (ecam_base, bus_start, bus_end) = ecam_window();
+    if ecam_base == 0 {
+        return;
+    }
+    // SAFETY: the admitted ECAM window is identity-mapped for the kernel's life.
+    if !unsafe { enable_memory_decode_in_window(ecam_base, bus_start, bus_end, bdf) } {
+        let (bus, dev, fun) = split_bdf(bdf);
+        log::warn!(
+            "[pcie] refusing memory-decode enable outside ECAM range: {bus:02x}:{dev:02x}.{fun}"
+        );
+    }
+}
+
+/// [`enable_memory_decode`] against an explicit ECAM window; `false` when the
+/// BDF lies outside it. An absent function (all-ones command) is left alone.
+///
+/// # Safety
+/// `ecam_base` must map config space for buses `bus_start..=bus_end`.
+unsafe fn enable_memory_decode_in_window(
+    ecam_base: usize,
+    bus_start: u8,
+    bus_end: u8,
+    bdf: u32,
+) -> bool {
+    if bdf > 0xFFFF {
+        return false;
+    }
+    let (bus, dev, fun) = split_bdf(bdf);
+    let Some(ptr) = config_addr_in_range(ecam_base, bus_start, bus_end, bus, dev, fun, CFG_COMMAND)
+    else {
+        return false;
+    };
+    // SAFETY: `ptr` was range-checked against the caller's window.
+    unsafe {
+        let command = core::ptr::read_volatile(ptr as *const u16);
+        if command != 0xFFFF && command & CMD_MEM_SPACE == 0 {
+            core::ptr::write_volatile(ptr as *mut u16, decoding_command(command));
+        }
+    }
+    true
+}
+
 // ── Retirement quiescence ─────────────────────────────────────────────────────
 
 /// Command register after quiescence: no new DMA, no INTx. Memory decoding is
@@ -1721,6 +1775,37 @@ mod tests {
         // SAFETY: as above.
         let overflow = unsafe { quiesce_in_window(base, 0, 0, 0x02_00_00) };
         assert_eq!(overflow, Err(QuiesceError::OutOfRange));
+    }
+
+    #[test]
+    fn claim_enables_memory_decoding_but_never_bus_mastering() {
+        let mut ecam = alloc::vec![0u8; ECAM_BYTES_PER_BUS];
+        let base = ecam.as_mut_ptr() as usize;
+        // A function a previous owner left quiesced (INTx off, no bus master).
+        function_config(&mut ecam, CFG_COMMAND, CMD_INTX_DISABLE);
+        // SAFETY: the test owns a one-bus in-memory ECAM stand-in.
+        assert!(unsafe { enable_memory_decode_in_window(base, 0, 0, 2 << 3) });
+        assert_eq!(
+            read_config(&ecam, CFG_COMMAND),
+            CMD_MEM_SPACE | CMD_INTX_DISABLE
+        );
+        // Outside the window or above 16 bits: refused, nothing written.
+        // SAFETY: as above.
+        assert!(!unsafe { enable_memory_decode_in_window(base, 0, 0, (1 << 8) | (2 << 3)) });
+        assert!(!unsafe { enable_memory_decode_in_window(base, 0, 0, 0x02_00_00) });
+        assert_eq!(
+            decoding_command(CMD_BUS_MASTER),
+            CMD_BUS_MASTER | CMD_MEM_SPACE
+        );
+        assert_eq!(decoding_command(0) & CMD_BUS_MASTER, 0);
+
+        // An absent function reads all-ones and is not written.
+        let mut absent = alloc::vec![0xFFu8; ECAM_BYTES_PER_BUS];
+        // SAFETY: as above.
+        assert!(unsafe {
+            enable_memory_decode_in_window(absent.as_mut_ptr() as usize, 0, 0, 2 << 3)
+        });
+        assert!(absent.iter().all(|&byte| byte == 0xFF));
     }
 
     /// The fingerprint takes identity and class code from config space by BDF,
