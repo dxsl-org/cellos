@@ -16,6 +16,9 @@
 //!   disk without `/srv` warns and boots normally.
 //! * `q35_vtd_removal_names_the_dmar_and_vtd_fields` — pin under VT-d, boot
 //!   without it: the diff names `dmar.present` and `vtd.active`.
+//! * `q35_unbound_root_port_nic_is_in_the_pci_set` — a `pcnet` (no Driver
+//!   Cell) added behind a PCIe root port is named in the diff exactly like a
+//!   bus-0 function, while the Platform Cell still names it refused.
 //!
 //! Disks come from `scripts/x86/machine_pin_disk.py` (P1 FAT32 + blank P5
 //! CellosFS). Serial capture maps bytes to chars one to one, so markers are
@@ -293,4 +296,35 @@ fn q35_vtd_removal_names_the_dmar_and_vtd_fields() {
     require(&qemu, SAFE_MODE, "the VT-d change did not enter safe mode");
     let serial = settle(&qemu);
     assert!(!serial.contains(NET_LAUNCHED), "net started in safe mode\n{serial}");
+}
+
+#[test]
+fn q35_unbound_root_port_nic_is_in_the_pci_set() {
+    let iso = q35_iso();
+    if !prerequisites_ok(&iso) {
+        return;
+    }
+    let disk = Disk::new(false);
+    let boot = |nic| {
+        eprintln!("[machine-pin] boot iso={iso} vtd=true root-port nic={nic:?}");
+        QemuRunner::boot_x86_bios_for_machine_pin_behind_root_port(&iso, &disk.path(), nic)
+    };
+    {
+        let qemu = boot(None);
+        require(&qemu, FIRST_BOOT, "q35 first boot did not pin");
+        require(&qemu, PROMPT, "no shell");
+        settle(&qemu);
+    }
+    let qemu = boot(Some("pcnet"));
+    require(
+        &qemu,
+        "[platform] registration refused bus 1 device 0 function 0 id 1022:2000 class 2:0:0",
+        "the Platform Cell did not name the unbound NIC",
+    );
+    require(&qemu, MISMATCH, "the root-port NIC did not change the pin");
+    require(&qemu, "Init: machine pin: pci +1022:2000 02:00:00", "the diff does not name the unbound NIC");
+    require(&qemu, SAFE_MODE, "a mismatch did not enter safe mode");
+    let serial = settle(&qemu);
+    assert!(!serial.contains("Init: machine pin: pci -"), "only a function was added\n{serial}");
+    assert!(!serial.contains("Init: machine pin: changed "), "only the PCI set changed\n{serial}");
 }

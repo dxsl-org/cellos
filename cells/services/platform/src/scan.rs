@@ -262,9 +262,11 @@ fn scan_bus_and_register<R: ConfigSpace + ?Sized>(region: &R, bus: u8) {
 
             // Register class/BAR0 info so the kernel PCI_DEVICES list is populated
             // and sys_find_pcie_device queries work without a kernel ECAM scan.
-            // The kernel re-reads the function and applies its Ethernet family
-            // gate (`ETHERNET_DRIVER_IDS`, `pcie_ecam.rs`), the only Ethernet ID
-            // table: a controller no Driver Cell drives is refused, on every bus.
+            // The kernel re-reads the function and records every one that answers
+            // (the machine pin sees each), then applies its Ethernet family gate
+            // (`ETHERNET_DRIVER_IDS`, `pcie_ecam.rs`), the only Ethernet ID table:
+            // a controller no Driver Cell drives is recorded but answered with a
+            // non-zero refusal, on every bus, so this cell names the refused ID.
             if sys_register_pci_device(bdf, cls, bar0_base, bar0_size).is_ok() {
                 let _ = ostd::io::print_fmt(format_args!(
                     "[platform] registered bus {} device {} function {} class {}:{}:{}\n",

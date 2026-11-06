@@ -39,6 +39,8 @@ pub struct E1000eController {
     dma_iovas: DmaIovas,
     tx_next: usize,
     rx_head: usize,
+    /// Dropping the descriptors of a frame spread over several of them.
+    rx_in_fragment: bool,
     pub mac: [u8; 6],
     /// Whether `STATUS.LU` was up before RX was enabled.
     pub link_up: bool,
@@ -86,6 +88,7 @@ impl E1000eController {
                     dma_iovas,
                     tx_next: 0,
                     rx_head: 0,
+                    rx_in_fragment: false,
                     mac,
                     link_up: false,
                 };
@@ -144,11 +147,16 @@ impl E1000eController {
     }
 
     /// Transmit `frame` (no FCS) and wait, bounded, for its write-back.
+    /// `IO` when the slot to fill was posted and never written back: the
+    /// controller may still read it, so it is not overwritten.
     pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidInput);
         }
         let slot = self.tx_next;
+        if !rings::tx_slot_free(&self.tx_ring, slot) {
+            return Err(ViError::IO);
+        }
         self.tx_next = (slot + 1) % TX_SLOTS;
         rings::copy_in(&self.tx_bufs[slot], frame);
         let iova = self.dma_iovas.tx_descriptor_iova(slot);
@@ -167,17 +175,26 @@ impl E1000eController {
     }
 
     /// Take the next received frame into `out`; 0 when none is ready.
+    /// Errored and multi-descriptor frames are dropped.
     pub fn recv_frame(&mut self, out: &mut [u8]) -> usize {
-        let head = self.rx_head;
-        let Some(length) = rings::rx_completed(&self.rx_ring, head) else {
-            return 0;
-        };
-        let copy_len = length.min(out.len()).min(BUF_SIZE);
-        rings::copy_out(&self.rx_bufs[head], out, copy_len);
-        rings::post_rx(&self.rx_ring, head, self.dma_iovas.rx_descriptor_iova(head));
-        self.rx_head = (head + 1) % RX_SLOTS;
-        compiler_fence(Ordering::Release);
-        let _ = self.mmio.wr32(RDT, head as u32);
-        copy_len
+        for _ in 0..RX_SLOTS {
+            let head = self.rx_head;
+            let length = match rings::rx_completed(&self.rx_ring, head, &mut self.rx_in_fragment) {
+                rings::RxCompletion::Pending => return 0,
+                rings::RxCompletion::Frame(length) => Some(length.min(out.len()).min(BUF_SIZE)),
+                rings::RxCompletion::Drop => None,
+            };
+            if let Some(copy_len) = length {
+                rings::copy_out(&self.rx_bufs[head], out, copy_len);
+            }
+            rings::post_rx(&self.rx_ring, head, self.dma_iovas.rx_descriptor_iova(head));
+            self.rx_head = (head + 1) % RX_SLOTS;
+            compiler_fence(Ordering::Release);
+            let _ = self.mmio.wr32(RDT, head as u32);
+            if let Some(copy_len) = length {
+                return copy_len;
+            }
+        }
+        0
     }
 }

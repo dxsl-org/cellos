@@ -42,7 +42,8 @@ pub(crate) struct IntrPlan {
 impl IntrPlan {
     /// `granted` MSI-X vectors (`None`: polled). With three: TX → 0, RX → 1,
     /// events → 2. Fewer fold onto the last granted vector; the RX vector
-    /// stays masked unless it is shared with TX (RX is request-driven).
+    /// stays masked unless it is shared with TX or events (RX is
+    /// request-driven).
     pub(crate) const fn for_vectors(granted: Option<u8>) -> Self {
         let (nintr, ictrl) = match granted {
             None | Some(0) => (1, ICTRL_DISABLE_ALL),
@@ -58,6 +59,13 @@ impl IntrPlan {
             event: last,
             ictrl,
         }
+    }
+
+    /// Whether the RX vector is masked: only when it serves RX alone. Masking
+    /// a vector RX shares with TX or events would silence those causes too
+    /// (with two vectors RX and events share vector 1).
+    pub(crate) const fn masks_rx(&self) -> bool {
+        self.rx != self.tx && self.rx != self.event
     }
 }
 
@@ -193,5 +201,9 @@ mod tests {
         let polled = IntrPlan::for_vectors(None);
         assert_eq!((polled.nintr, polled.ictrl), (1, ICTRL_DISABLE_ALL));
         assert_eq!(IntrPlan::for_vectors(Some(0)), polled);
+        // RX alone on its vector is masked; a vector it shares never is.
+        assert!(three.masks_rx());
+        assert!(!two.masks_rx(), "vector 1 also carries events");
+        assert!(!one.masks_rx(), "vector 0 also carries TX and events");
     }
 }

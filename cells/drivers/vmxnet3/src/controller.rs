@@ -147,11 +147,11 @@ impl Vmxnet3 {
             vd.wr32(VD_CMD, command)?;
         }
         // PT writes are ignored before activation, so the masks go last. RX
-        // stays masked unless it shares the TX vector.
+        // stays masked unless it shares the TX or the event vector.
         if self.irq.vectors().is_some() {
             pt.wr32(pt_imask(plan.tx), 0)?;
             pt.wr32(pt_imask(plan.event), 0)?;
-            if plan.rx != plan.tx {
+            if plan.masks_rx() {
                 pt.wr32(pt_imask(plan.rx), 1)?;
             }
         } else {

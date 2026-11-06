@@ -1706,6 +1706,23 @@ impl QemuRunner {
     /// so the PCI set holds only what the lane names. `intel-iommu` precedes
     /// the NIC so QEMU wires it up first.
     pub fn boot_x86_bios_for_machine_pin(iso: &str, nvme_disk: &str, vtd: bool, nic: Option<&str>) -> Self {
+        Self::boot_x86_q35(iso, 1, &Self::machine_pin_devices(nvme_disk, vtd, false, nic))
+    }
+
+    /// [`Self::boot_x86_bios_for_machine_pin`] with VT-d and one
+    /// `pcie-root-port` (`rp1`, secondary bus 1) in every boot; `nic`, when
+    /// given, sits behind it at `01:00.0`, so only the NIC differs between
+    /// boots and it is found by the Platform Cell, not the bus-0 scan.
+    pub fn boot_x86_bios_for_machine_pin_behind_root_port(iso: &str, nvme_disk: &str, nic: Option<&str>) -> Self {
+        Self::boot_x86_q35(iso, 1, &Self::machine_pin_devices(nvme_disk, true, true, nic))
+    }
+
+    /// The machine pin lanes' devices: NVMe, optionally `intel-iommu` (first,
+    /// so QEMU wires it up before the endpoints), optionally a
+    /// `pcie-root-port` `rp1`, and `nic` on a restricted user netdev (behind
+    /// `rp1` when present). Without `nic`, `-nic none` drops QEMU's default
+    /// q35 NIC (e1000e).
+    fn machine_pin_devices(nvme_disk: &str, vtd: bool, root_port: bool, nic: Option<&str>) -> Vec<String> {
         let mut devices = vec![
             "-drive".into(),
             format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
@@ -1715,17 +1732,23 @@ impl QemuRunner {
         if vtd {
             devices.extend(["-device".into(), "intel-iommu".into()]);
         }
-        if let Some(nic) = nic {
-            devices.extend([
+        if root_port {
+            devices.extend(["-device".into(), "pcie-root-port,id=rp1,chassis=1,slot=1".into()]);
+        }
+        match nic {
+            Some(nic) => devices.extend([
                 "-netdev".into(),
                 "user,id=net0,restrict=on".into(),
                 "-device".into(),
-                format!("{nic},netdev=net0"),
-            ]);
-        } else {
-            devices.extend(["-nic".into(), "none".into()]);
+                if root_port {
+                    format!("{nic},netdev=net0,bus=rp1")
+                } else {
+                    format!("{nic},netdev=net0")
+                },
+            ]),
+            None => devices.extend(["-nic".into(), "none".into()]),
         }
-        Self::boot_x86_q35(iso, 1, &devices)
+        devices
     }
 
     /// Boot q35 with an NVMe endpoint behind a PCIe root port on bus 1.
