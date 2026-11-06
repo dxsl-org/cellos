@@ -118,12 +118,19 @@ fn start() {
         sys_exit(0)
     }
     let (target, lun, blocks) = (disk.target(), disk.lun()[1], disk.block_count());
-    let (wakes, expiries, refused) = irq::evidence();
+    let evidence = irq::evidence();
     let (mode, why, vectors) = match granted {
-        Some((mode, vectors)) if !refused => (mode, "", vectors),
+        Some((mode, vectors)) if !evidence.refused => (mode, "", vectors),
         Some(_) => ("polled reason=", "wait-refused", 0),
         None => ("polled reason=", reason, 0),
     };
+    let irq::Evidence {
+        wakes,
+        expiries,
+        expiry_ready,
+        expiry_empty,
+        ..
+    } = evidence;
 
     // Publish state before registration: VFS may route a request as soon as
     // the syscall succeeds.
@@ -134,7 +141,7 @@ fn start() {
         fail(format_args!("block driver registration failed: {error:?}"));
     }
     let _ = print_fmt(format_args!(
-        "[pvscsi] pci {b:02x}:{d:02x}.{f:x} {:04x}:{:04x} target={target} lun={lun} blocks={blocks} irq={mode}{why} vectors={vectors} irq_wakes={wakes} park_expiries={expiries}\n",
+        "[pvscsi] pci {b:02x}:{d:02x}.{f:x} {:04x}:{:04x} target={target} lun={lun} blocks={blocks} irq={mode}{why} vectors={vectors} irq_wakes={wakes} park_expiries={expiries} expiry_ready={expiry_ready} expiry_empty={expiry_empty}\n",
         record.vendor_id, record.device_id
     ));
     ostd::io::println("[pvscsi] ready");

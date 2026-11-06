@@ -17,10 +17,24 @@ pub struct DmaArea {
 impl DmaArea {
     /// Allocate `pages` and authorize them for `bdf`; `None` on either failure
     /// (an allocation the device was never authorized for is freed).
+    ///
+    /// Also `None` when the device-visible address is not the physical one
+    /// (phase-09 D5): QEMU's PVSCSI reads request and writes completion
+    /// descriptors and sense by physical address, bypassing the IOMMU, so a
+    /// translated IOVA would send those accesses to other memory. That
+    /// allocation stays pinned by its authorization and is reclaimed with the
+    /// cell; the device never learns its address.
     pub fn new(pages: usize, bdf: u32) -> Option<Self> {
         let buf = DmaBuf::alloc(pages)?;
         match buf.authorize(bdf) {
-            Ok(iova) => Some(Self { buf, iova }),
+            Ok(iova) if identity_mapped(iova, buf.phys()) => Some(Self { buf, iova }),
+            Ok(iova) => {
+                let _ = ostd::io::print_fmt(format_args!(
+                    "[pvscsi] DMA address {iova:#x} is not the physical {:#x}; refused (rings bypass the IOMMU)\n",
+                    buf.phys()
+                ));
+                None
+            }
             Err(_) => {
                 buf.free();
                 None
@@ -78,5 +92,22 @@ impl DmaArea {
             // SAFETY: inside this allocation (checked by `at`).
             *byte = unsafe { base.add(i).read_volatile() };
         }
+    }
+}
+
+/// Whether a device-visible address equals the CPU physical one.
+fn identity_mapped(iova: u64, phys: usize) -> bool {
+    u64::try_from(phys).is_ok_and(|phys| phys == iova)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_an_identity_mapped_area_is_accepted() {
+        assert!(identity_mapped(0x1234_5000, 0x1234_5000));
+        assert!(!identity_mapped(0x1000, 0x1234_5000), "translated IOVA");
+        assert!(!identity_mapped(0x1_0000_0000 + 0x5000, 0x5000));
     }
 }
