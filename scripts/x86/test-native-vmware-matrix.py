@@ -6,14 +6,21 @@ Subcommands:
   lane             one NIC x storage x vCPU x firmware cell: pipe serial through
                    vmware_serial_relay.py, typed commands, two-boot persistence.
   v0               the S3 V0 tooling smoke: the lane cells and host probes of V0_SCENARIOS.
+  matrix           the phase-09 sweep (matrix_scenarios): {e1000, e1000e, vmxnet3} x
+                   {sata, nvme, pvscsi} x {2, 4 vCPU} x {bios, efi}, two boots each, plus
+                   one `pciBridge0` cell per storage type. Verdicts per cell: prompt, NIC
+                   bind + DHCP lease, two-boot persistence with host read-back, guest S5.
 
 The lane creates every VM under LANE_ROOT (C:\\Temp\\cellos-vmware\\s3-lane), one
 directory per scenario, and deletes it (`vmrun deleteVM` + removal) after the
 run. Retained evidence goes to build/x86-backend-evidence/vmware-lane/<run>/.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+import fnmatch
 import hashlib
 import importlib.util
+import itertools
 import json
 from pathlib import Path
 import re
@@ -191,13 +198,27 @@ SHUTDOWN_TIMEOUT = 30.0
 TYPE_DELAY = 0.005
 REJECT = ("kernel panic", "panicked at", "[fault] cell", "tier 2 admission: enabled")
 MARKER_KEYS = ("[x86-gate] board=", "[acpi] gates:", "[x86-smp] topology", "[driver_cell]",
-               "[vfs] FAT32", "Init: machine pin", "SAFE MODE", "[e1000]", "[igb]",
-               "[virtio-net]", "[net]", "[pcie]", "Ethernet", "class 2:0:0",
-               "[ahci]", "[nvme]", "System shutting down", "shutdown:", "panic", "[fault]")
+               "[vfs] FAT32", "Init: machine pin", "SAFE MODE", "[e1000]", "[e1000e]", "[igb]",
+               "[vmxnet3]", "[virtio-net]", "[net]", "[net-bridge]", "[pcie]", "[platform]",
+               "Ethernet", "class 2:0:0", "[ahci]", "[nvme]", "[pvscsi]", "[acpi] power",
+               "[power]", "System shutting down", "shutdown:", "panic", "[fault]")
+# Matrix NIC verdict: the exact VMware identity bound by its own cell, the
+# registration with the net bridge, and a DHCP lease from VMnet8 (NAT).
+NIC_BIND = {"e1000": "[e1000] controller bound 8086:100f ",
+            "e1000e": "[e1000e] controller bound 8086:10d3 ",
+            "vmxnet3": "[vmxnet3] controller bound 15ad:07b0 "}
+NIC_REGISTERED = "[driver_cell] NIC driver registered: tid="
+DHCP_LEASE = "[net] DHCP acquired"
+# Every NIC cell starts; the ones without a device log `[<cell>] no … controller
+# present; driver cell idle`. Only the cell's own idle line is a refusal (nic_errors).
+NIC_REFUSALS = ("driver gate closed", "[platform] registration refused",
+                "[platform] unsupported Ethernet identity")
+DHCP_TIMEOUT = 45.0
 
-# EFI cells run at 512 MiB: at >= 1024 MiB the kernel panics under VMware EFI
-# (`efi-m1024` records it; BIOS is unaffected up to 4096 MiB). Probes record a
-# host or Cellos fact and pass when they ran and were cleaned up.
+# V0 as run: EFI cells at 512 MiB, because at >= 1024 MiB the kernel then panicked
+# under VMware EFI (`efi-m1024` records it; fixed since by S3, so the matrix runs EFI
+# at 1024 MiB). Probes record a host or Cellos fact and pass when they ran and were
+# cleaned up.
 V0_SCENARIOS = (
     {"name": "bios-sata-c2", "firmware": "bios", "storage": "sata", "cpus": 2, "boots": 2},
     {"name": "efi-sata-c2", "firmware": "efi", "storage": "sata", "cpus": 2, "boots": 2,
@@ -220,6 +241,38 @@ V0_SCENARIOS = (
      "legacy_bridge": True, "probe": True},
 )
 
+MATRIX_NICS = ("e1000", "e1000e", "vmxnet3")
+MATRIX_STORAGE = ("sata", "nvme", "pvscsi")
+MATRIX_CPUS = (2, 4)
+MATRIX_FIRMWARE = ("bios", "efi")
+# One `pciBridge0` cell per storage type (VMware's own default VMX shape): AHCI and
+# the e1000 move behind the legacy bridge, the PCIe devices behind its root ports.
+MATRIX_BRIDGE = (("sata", "e1000", 2, "bios"), ("nvme", "e1000e", 4, "efi"),
+                 ("pvscsi", "vmxnet3", 2, "efi"))
+
+
+def matrix_scenarios():
+    """The phase-09 sweep: 36 grid cells plus the `pciBridge0` cells, two boots each."""
+    base = {"boots": 2, "memory_mib": 1024, "net": True, "poweroff": True}
+    cells = [dict(base, name=f"{nic}-{storage}-c{cpus}-{firmware}", nic=nic, storage=storage,
+                  cpus=cpus, firmware=firmware)
+             for nic, storage, cpus, firmware in itertools.product(
+                 MATRIX_NICS, MATRIX_STORAGE, MATRIX_CPUS, MATRIX_FIRMWARE)]
+    cells += [dict(base, name=f"bridge0-{storage}-{nic}-c{cpus}-{firmware}", nic=nic,
+                   storage=storage, cpus=cpus, firmware=firmware, legacy_bridge=True)
+              for storage, nic, cpus, firmware in MATRIX_BRIDGE]
+    return cells
+
+
+def select_scenarios(specs, patterns):
+    """Scenarios whose name matches any fnmatch pattern (all when none given)."""
+    if not patterns:
+        return list(specs)
+    chosen = [spec for spec in specs if any(fnmatch.fnmatchcase(spec["name"], p) for p in patterns)]
+    if not chosen:
+        raise LaneError("no scenario matches " + ", ".join(patterns))
+    return chosen
+
 
 class LaneError(Exception):
     pass
@@ -228,10 +281,12 @@ class LaneError(Exception):
 def lane_spec(raw):
     spec = {"nic": None, "storage": None, "cpus": 2, "firmware": "bios", "viommu": False,
             "legacy_bridge": False, "boots": 1, "memory_mib": 1024, "window": 120.0,
-            "profile": "vm", "probe": False}
+            "profile": "vm", "probe": False, "net": False, "poweroff": False}
     spec.update(raw)
     if spec["boots"] not in (1, 2) or (spec["boots"] == 2 and not spec["storage"]):
         raise LaneError("two boots need storage; boots must be 1 or 2")
+    if spec["net"] and spec["nic"] not in NIC_BIND:
+        raise LaneError("a NIC verdict needs one of " + ", ".join(NIC_BIND))
     return spec
 
 
@@ -493,6 +548,28 @@ def read_nonce(nonce):
     return action
 
 
+def wait_dhcp(serial, rec):
+    """Give the guest DHCP_TIMEOUT from power-on for its lease; the boot's markers judge it."""
+    rec["dhcp_lease"] = serial.wait_for(DHCP_LEASE, 0, time.monotonic() + DHCP_TIMEOUT)
+
+
+def nic_errors(spec, rec):
+    """NIC verdict of one boot: its own cell bound the VMware identity, registered, leased."""
+    markers = rec.get("markers", [])
+    errors = ["missing marker: " + text.strip() for text in (NIC_BIND[spec["nic"]], NIC_REGISTERED, DHCP_LEASE)
+              if not any(text in line for line in markers)]
+    idle = f"[{spec['nic']}] no "
+    errors += ["NIC refused: " + line for line in markers
+               if any(text in line for text in NIC_REFUSALS) or idle in line]
+    return errors
+
+
+def poweroff_errors(rec):
+    if rec.get("guest_poweroff") and not rec.get("hard_stop"):
+        return []
+    return ["no guest S5 power-off: " + ("hard stop" if rec.get("hard_stop") else "VM still listed")]
+
+
 def boot_expectations(spec, index, rec):
     """Errors for missing or forbidden boot markers of one boot record."""
     errors = []
@@ -515,7 +592,47 @@ def boot_expectations(spec, index, rec):
                 errors.append("missing marker: " + text)
         if seen("SAFE MODE"):
             errors.append("SAFE MODE with a provisioned disk")
+    if spec["net"]:
+        errors += nic_errors(spec, rec)
+    if spec["poweroff"]:
+        errors += poweroff_errors(rec)
     return errors
+
+
+def lane_dimensions(spec, res):
+    """Per-dimension verdicts (prompt, network, persistence, poweroff) of a judged cell."""
+    boots = res["boots"]
+    complete = len(boots) == spec["boots"]
+    def every(check):
+        return "PASS" if complete and all(check(rec) for rec in boots) else "FAIL"
+    return {
+        "prompt": every(lambda rec: rec.get("prompt_seconds") is not None),
+        "network": every(lambda rec: rec.get("prompt_seconds") is not None and not nic_errors(spec, rec))
+                   if spec["net"] else "N/A",
+        "persistence": res["persistence"],
+        "poweroff": every(lambda rec: not poweroff_errors(rec)) if spec["poweroff"] else "N/A",
+    }
+
+
+def decisive_failures(res):
+    """Every failure reason of a cell, boot-scoped, in the order it arose."""
+    lines = list(res["errors"])
+    for rec in res["boots"]:
+        lines += [f"boot {rec['boot']}: {text}" for text in rec.get("errors", []) + rec.get("expectation_errors", [])]
+    return lines
+
+
+def matrix_table(results):
+    """One row per cell (status, dimensions, first decisive failure) and per-dimension totals."""
+    rows = [{"cell": r["scenario"], "status": r["status"], **r.get("dimensions", {}),
+             "decisive": (r.get("failures") or [None])[0]} for r in results]
+    totals = {}
+    for row in rows:
+        for key in ("status", "prompt", "network", "persistence", "poweroff"):
+            if key in row:
+                totals.setdefault(key, {}).setdefault(row[key], 0)
+                totals[key][row[key]] += 1
+    return {"cells": rows, "totals": totals}
 
 
 def lane_verdict(spec, res):
@@ -546,6 +663,8 @@ def lane_verdict(spec, res):
              and len(boots) == spec["boots"] and res["relay_input"] == "PASS"
              and res["persistence"] in ("PASS", "N/A"))
     res["status"] = "PASS" if clean else "FAIL"
+    res["dimensions"] = lane_dimensions(spec, res)
+    res["failures"] = [] if clean else decisive_failures(res)
     return res
 
 
@@ -566,9 +685,13 @@ def run_lane(vmrun, vdisk, iso, spec, run_id, evidence_root):
         if spec["storage"]:
             make_lane_disk(vdisk, spec["storage"], run_dir, evidence)
         first = [check_relay_input] + ([write_nonce(nonce)] if spec["boots"] == 2 else [])
+        second = [read_nonce(nonce)]
+        if spec["net"]:
+            first.append(wait_dhcp)
+            second.append(wait_dhcp)
         res["boots"].append(lane_boot(vmrun, spec, run_dir, evidence, 1, first))
         if spec["boots"] == 2 and res["boots"][0].get("nonce_written"):
-            res["boots"].append(lane_boot(vmrun, spec, run_dir, evidence, 2, [read_nonce(nonce)]))
+            res["boots"].append(lane_boot(vmrun, spec, run_dir, evidence, 2, second))
             if res["boots"][1]["stopped"]:
                 res["host_readback"] = host_read(run_dir / "disk.vmdk", PERSIST_FILE)
     except (LaneError, OSError, subprocess.SubprocessError) as exc:
@@ -604,6 +727,8 @@ def lane_main(args):
         specs = [{"name": args.name, "nic": args.nic, "storage": args.storage, "cpus": args.cpus,
                   "firmware": args.firmware, "viommu": args.viommu, "boots": args.boots,
                   "profile": args.profile}]
+    elif args.command == "matrix":
+        specs = select_scenarios(matrix_scenarios(), args.only)
     else:
         specs = [dict(spec) for spec in V0_SCENARIOS]
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:6]
@@ -617,7 +742,6 @@ def lane_main(args):
         out = subprocess.run(command, capture_output=True, text=True, cwd=str(LANE_ROOT))
         match = re.search(r"(vmrun version [^\r\n]*|build \d+|Python [^\r\n]*)", out.stdout + out.stderr)
         host[key] = match.group(0) if match else None
-    results = []
     used = {}
     for spec in specs:
         spec.setdefault("memory_mib", args.memory_mib)
@@ -625,17 +749,26 @@ def lane_main(args):
         profile = spec.get("profile", "vm")
         iso = isos[profile].resolve(strict=True)
         used[profile] = {"iso": str(iso), "sha256": sha256(iso)}
+
+    def one(spec):
         print(f"lane {spec['name']} ...", flush=True)
-        res = run_lane(vmrun, vdisk, iso, spec, run_id, evidence_root)
-        print(f"  {res['status']} relay_input={res['relay_input']} persistence={res['persistence']} "
-              f"cleanup={res['cleanup_confirmed']} errors={res['errors']}", flush=True)
-        results.append(res)
+        res = run_lane(vmrun, vdisk, isos[spec.get("profile", "vm")].resolve(strict=True), spec,
+                       run_id, evidence_root)
+        dims = " ".join(f"{k}={v}" for k, v in res.get("dimensions", {}).items())
+        print(f"  {spec['name']}: {res['status']} relay_input={res['relay_input']} {dims} "
+              f"cleanup={res['cleanup_confirmed']} failures={res.get('failures', res['errors'])}", flush=True)
+        return res
+
+    # Cells are independent VMs (own directory, pipe and disk), so they may run side by side.
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        results = list(pool.map(one, specs))
     summary = {
         "format": "cellos-vmware-lane-v1", "run_id": run_id, "command": args.command,
         "ceiling": "VMware local: Workstation on a Windows host with Hyper-V, driven from WSL2; "
                    "not CI, ESXi or physical hardware",
         "host": host, "isos": used, "lane_root": VM.to_host_path(LANE_ROOT),
-        "hw_version_requested": VM.HW_VERSION, "results": results,
+        "hw_version_requested": VM.HW_VERSION, "jobs": args.jobs,
+        "matrix": matrix_table(results), "results": results,
     }
     out = Path(args.json) if args.json else evidence_root / "summary.json"
     out.write_text(json.dumps(summary, indent=2) + "\n")
@@ -717,8 +850,9 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command")
     commands.add_parser("fault", help="native AHCI storage/fault matrix (default)")
-    for name in ("lane", "v0"):
-        sub = commands.add_parser(name, help="one lane cell" if name == "lane" else "S3 V0 tooling smoke")
+    for name in ("lane", "v0", "matrix"):
+        sub = commands.add_parser(name, help={"lane": "one lane cell", "v0": "S3 V0 tooling smoke",
+                                              "matrix": "phase-09 VMware matrix sweep"}[name])
         sub.add_argument("--iso", default=str(ROOT / "build/vicell-x86-vm.iso"),
                          help="x86_64-vm ISO (make-iso-ci.sh with limine-vm.conf)")
         sub.add_argument("--pc-iso", default=str(ROOT / "build/vicell-x86-pc.iso"),
@@ -726,6 +860,11 @@ def main():
         sub.add_argument("--memory-mib", type=int, default=1024)
         sub.add_argument("--window", type=float, default=120.0, help="seconds from vmrun start to the prompt")
         sub.add_argument("--json", help="summary JSON path (default: <evidence>/summary.json)")
+        sub.add_argument("--jobs", type=int, default=1, choices=range(1, 7), metavar="1-6",
+                         help="cells run side by side (default 1)")
+        if name == "matrix":
+            sub.add_argument("--only", action="append", default=[], metavar="GLOB",
+                             help="run only the cells whose name matches (repeatable)")
         if name == "lane":
             sub.add_argument("--name", default="lane")
             sub.add_argument("--nic", choices=VM.NIC_MODELS)

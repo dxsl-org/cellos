@@ -289,6 +289,172 @@ class LaneVerdictTests(unittest.TestCase):
         self.assertFalse(serial.wait_for("Cellos >", len(serial.data), MATRIX.time.monotonic() + 0.2))
 
 
+def net_boot_record(index, nic="vmxnet3", cpus=2, **override):
+    """A matrix boot: storage markers plus the NIC bind/registration/lease and a guest S5."""
+    rec = lane_boot_record(index, cpus=cpus)
+    rec["markers"] = rec["markers"] + [
+        "[ INFO] " + MATRIX.NIC_BIND[nic] + "x mac=00:0c:29:00:00:01 irq=msix",
+        "[ WARN] [driver_cell] NIC driver registered: tid=12",
+        "[net] DHCP acquired — IP configured"]
+    rec.update({"guest_poweroff": True, "hard_stop": False})
+    rec.update(override)
+    return rec
+
+
+class MatrixSweepTests(unittest.TestCase):
+    RUN = "20261106T000356Z-87620f"
+
+    def test_sweep_covers_the_grid_once_plus_one_bridge_cell_per_storage(self):
+        cells = MATRIX.matrix_scenarios()
+        names = [cell["name"] for cell in cells]
+        self.assertEqual(len(names), len(set(names)))
+        grid = [cell for cell in cells if not cell.get("legacy_bridge")]
+        self.assertEqual(len(grid), 36)
+        self.assertEqual({(c["nic"], c["storage"], c["cpus"], c["firmware"]) for c in grid},
+                         set(MATRIX.itertools.product(("e1000", "e1000e", "vmxnet3"), ("sata", "nvme", "pvscsi"),
+                                                      (2, 4), ("bios", "efi"))))
+        bridged = [cell for cell in cells if cell.get("legacy_bridge")]
+        self.assertEqual(sorted(cell["storage"] for cell in bridged), ["nvme", "pvscsi", "sata"])
+        for cell in cells:
+            with self.subTest(cell=cell["name"]):
+                spec = MATRIX.lane_spec(dict(cell))
+                self.assertEqual((spec["boots"], spec["memory_mib"], spec["net"], spec["poweroff"]),
+                                 (2, 1024, True, True))
+
+    def test_every_cell_name_fits_the_pipe_and_generates_its_vmx(self):
+        for cell in MATRIX.matrix_scenarios():
+            with self.subTest(cell=cell["name"]):
+                pipe = rf"\\.\pipe\cellos-{self.RUN}-{cell['name']}-b2"
+                self.assertTrue(MATRIX.VM.PIPE_NAME.fullmatch(pipe))
+                keys = vmx_keys(MATRIX.VM.make_vmx(
+                    "C:/t/c.iso", pipe, cell["cpus"], cell["memory_mib"], firmware=cell["firmware"],
+                    nic=cell["nic"], storage=cell["storage"], disk="C:/t/disk.vmdk", pipe=True,
+                    legacy_bridge=cell.get("legacy_bridge", False)))
+                self.assertEqual((keys["memsize"], keys["firmware"], keys["ethernet0.virtualDev"]),
+                                 ("1024", cell["firmware"], cell["nic"]))
+                self.assertEqual(keys.get("pciBridge0.present"),
+                                 "TRUE" if cell.get("legacy_bridge") else None)
+
+    def test_only_selects_by_glob_and_refuses_an_empty_selection(self):
+        cells = MATRIX.matrix_scenarios()
+        self.assertEqual(MATRIX.select_scenarios(cells, []), cells)
+        chosen = MATRIX.select_scenarios(cells, ["vmxnet3-*-efi"])
+        self.assertEqual(len(chosen), 6)
+        self.assertTrue(all(c["nic"] == "vmxnet3" and c["firmware"] == "efi" for c in chosen))
+        self.assertEqual(len(MATRIX.select_scenarios(cells, ["bridge0-*", "e1000-sata-c2-bios"])), 4)
+        with self.assertRaises(MATRIX.LaneError):
+            MATRIX.select_scenarios(cells, ["igb-*"])
+
+    def verdict(self, boots, nic="vmxnet3", readback=NONCE):
+        spec = MATRIX.lane_spec({"name": "cell", "nic": nic, "storage": "pvscsi", "boots": 2,
+                                 "net": True, "poweroff": True})
+        res = {"boots": boots, "errors": [], "cleanup_confirmed": True, "nonce": NONCE,
+               "host_readback": readback}
+        return MATRIX.lane_verdict(spec, res)
+
+    def test_complete_matrix_cell_passes_every_dimension(self):
+        res = self.verdict([net_boot_record(1), net_boot_record(2)])
+        self.assertEqual(res["status"], "PASS")
+        self.assertEqual(res["dimensions"], {"prompt": "PASS", "network": "PASS",
+                                             "persistence": "PASS", "poweroff": "PASS"})
+        self.assertEqual(res["failures"], [])
+
+    def test_lease_is_required_on_every_boot(self):
+        second = net_boot_record(2)
+        second["markers"] = [line for line in second["markers"] if "DHCP acquired" not in line]
+        res = self.verdict([net_boot_record(1), second])
+        self.assertEqual((res["status"], res["dimensions"]["network"], res["dimensions"]["persistence"]),
+                         ("FAIL", "FAIL", "PASS"))
+        self.assertIn("boot 2: missing marker: [net] DHCP acquired", res["failures"])
+
+    def test_bind_must_be_the_cells_own_vmware_identity(self):
+        for nic, other in (("e1000e", "e1000"), ("e1000", "vmxnet3"), ("vmxnet3", "e1000e")):
+            with self.subTest(nic=nic):
+                boots = [net_boot_record(1, nic=other), net_boot_record(2, nic=other)]
+                self.assertEqual(self.verdict(boots, nic=nic)["dimensions"]["network"], "FAIL")
+
+    def test_refusal_or_own_idle_fails_while_other_idle_cells_do_not(self):
+        refusals = ("[platform] registration refused bus 3 device 0 function 0 id 15ad:07b0 class 2:0:0",
+                    "[ WARN] [e1000] unsupported Ethernet 8086:100f; driver gate closed",
+                    "[vmxnet3] no vmxnet3 controller present; driver cell idle")
+        for line in refusals:
+            with self.subTest(line=line):
+                first = net_boot_record(1)
+                first["markers"].append(line)
+                res = self.verdict([first, net_boot_record(2)])
+                self.assertEqual((res["status"], res["dimensions"]["network"]), ("FAIL", "FAIL"))
+        first = net_boot_record(1)
+        first["markers"].append("[e1000e] no 82574 controller present; driver cell idle")
+        self.assertEqual(self.verdict([first, net_boot_record(2)])["status"], "PASS")
+        first = net_boot_record(1, nic="e1000")
+        first["markers"].append("[vmxnet3] no vmxnet3 controller present; driver cell idle")
+        boots = [first, net_boot_record(2, nic="e1000")]
+        self.assertEqual(self.verdict(boots, nic="e1000")["status"], "PASS")
+
+    def test_hard_stop_fails_the_poweroff_dimension_only(self):
+        res = self.verdict([net_boot_record(1), net_boot_record(2, guest_poweroff=False, hard_stop=True)])
+        self.assertEqual(res["status"], "FAIL")
+        self.assertEqual((res["dimensions"]["poweroff"], res["dimensions"]["network"],
+                          res["dimensions"]["persistence"]), ("FAIL", "PASS", "PASS"))
+        self.assertIn("boot 2: no guest S5 power-off: hard stop", res["failures"])
+
+    def test_missing_second_boot_fails_prompt_and_network(self):
+        res = self.verdict([net_boot_record(1, nonce_written=False)])
+        self.assertEqual((res["dimensions"]["prompt"], res["dimensions"]["network"],
+                          res["dimensions"]["persistence"]), ("FAIL", "FAIL", "FAIL"))
+
+    def test_nic_verdict_needs_a_nic(self):
+        with self.assertRaises(MATRIX.LaneError):
+            MATRIX.lane_spec({"name": "cell", "net": True})
+
+    def test_matrix_table_counts_each_dimension(self):
+        good = self.verdict([net_boot_record(1), net_boot_record(2)])
+        good["scenario"] = "a"
+        bad = self.verdict([net_boot_record(1), net_boot_record(2, hard_stop=True)])
+        bad["scenario"] = "b"
+        table = MATRIX.matrix_table([good, bad])
+        self.assertEqual([row["cell"] for row in table["cells"]], ["a", "b"])
+        self.assertIsNone(table["cells"][0]["decisive"])
+        self.assertEqual(table["cells"][1]["decisive"], "boot 2: no guest S5 power-off: hard stop")
+        self.assertEqual(table["totals"]["status"], {"PASS": 1, "FAIL": 1})
+        self.assertEqual(table["totals"]["network"], {"PASS": 2})
+
+    def test_jobs_run_cells_side_by_side_and_keep_matrix_order(self):
+        started, lock = [], MATRIX.threading.Lock()
+        def fake_run_lane(vmrun, vdisk, iso, spec, run_id, evidence_root):
+            with lock:
+                started.append(spec["name"])
+            MATRIX.time.sleep(0.05 if spec["name"].endswith("bios") else 0.01)
+            return MATRIX.lane_verdict(MATRIX.lane_spec(spec), {
+                "scenario": spec["name"], "boots": [net_boot_record(1, nic=spec["nic"], cpus=spec["cpus"]),
+                                                    net_boot_record(2, nic=spec["nic"], cpus=spec["cpus"])],
+                "errors": [], "cleanup_confirmed": True, "nonce": NONCE, "host_readback": NONCE})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            iso = root / "vm.iso"
+            iso.write_bytes(b"iso")
+            args = MATRIX.argparse.Namespace(command="matrix", iso=str(iso), pc_iso=str(iso),
+                                             memory_mib=1024, window=120.0, json=None, jobs=3,
+                                             only=["e1000-*"])
+            with patch.object(MATRIX.VM, "find_vmrun", return_value=root / "vmrun.exe"), \
+                 patch.object(MATRIX.VM, "IS_WSL_WIN", True), \
+                 patch.object(MATRIX.VM, "to_host_path", side_effect=str), \
+                 patch.object(MATRIX, "EVIDENCE_ROOT", root / "evidence"), \
+                 patch.object(MATRIX, "LANE_ROOT", root / "lane"), \
+                 patch.object(MATRIX.subprocess, "run",
+                              return_value=MATRIX.subprocess.CompletedProcess([], 0, "", "")), \
+                 patch.object(MATRIX, "run_lane", side_effect=fake_run_lane), \
+                 patch("builtins.print"):
+                self.assertEqual(MATRIX.lane_main(args), 0)
+            summary = MATRIX.json.loads(next((root / "evidence").glob("*/summary.json")).read_text())
+        expected = [c["name"] for c in MATRIX.matrix_scenarios() if c["name"].startswith("e1000-")]
+        self.assertEqual(len(expected), 12)
+        self.assertEqual(sorted(started), sorted(expected))
+        self.assertEqual([row["cell"] for row in summary["matrix"]["cells"]], expected)
+        self.assertEqual(summary["matrix"]["totals"]["status"], {"PASS": 12})
+        self.assertEqual(summary["jobs"], 3)
+
+
 RELAY_SPEC = importlib.util.spec_from_file_location(
     "vmware_serial_relay", Path(__file__).with_name("vmware_serial_relay.py"))
 RELAY = importlib.util.module_from_spec(RELAY_SPEC)
