@@ -396,6 +396,26 @@ fn s5_scan_accepts_only_a_root_name_with_constant_slp_types() {
             opcode: 0x5B
         }
     );
+    // A name operand inside an expression must be followed by the next operand
+    // (first position) or the `NullName` target (last position). Anything else
+    // — here `Store`, as a method invocation's argument list could start — means
+    // the name was not a plain reference, and the term is refused.
+    for expression in [
+        &b"\x72ECFG\x70\x0B\x00\x40\x00"[..],
+        b"\x72\x0B\x00\x40ECFG\x70\x00",
+    ] {
+        let mut term = b"\x5B\x80REG0\x00".to_vec();
+        term.extend_from_slice(expression);
+        term.extend_from_slice(&[0x0B, 0x00, 0x40]);
+        term.extend_from_slice(&s5);
+        assert_eq!(
+            scan(&term),
+            S5::Unparsed {
+                offset: 36,
+                opcode: 0x5B
+            }
+        );
+    }
     assert_eq!(scan(&[]), S5::Absent);
 }
 
