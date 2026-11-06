@@ -71,9 +71,10 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 
 ## Todo List
 
+- [x] V0 VMware tooling smoke: pipe relay, typed input, two-boot persistence on SATA and NVMe (BIOS + EFI, 2/4 vCPU), host probes ([evidence](reports/s3-v0-vmware-tooling-evidence.md), [JSON](reports/s3-v0-vmware-smoke.json))
 - [x] vmxnet3 (QEMU) — `reports/phase-09-evidence.md`
 - [x] PVSCSI (QEMU) — `reports/phase-09-evidence.md`
-- [ ] Matrix script
+- [ ] Matrix script (VMX generation for every cell and the `lane` runner landed in V0; the `nic × storage × vcpu × firmware` sweep with DHCP verdicts remains)
 - [ ] VMware matrix run + evidence
 
 ## Success Criteria
@@ -106,3 +107,12 @@ S4 (physical platform).
 - **D6 Surprise (PVSCSI interrupt mode).** QEMU's `pvscsi` offers MSI with one vector and no MSI-X, so the lanes log `irq=msi vectors=1`. Under TCG every probe completion arrived inside the 64-read spin (`irq_wakes=0` at bind); under KVM parks were woken by the MSI (`irq_wakes=1..7` at bind). After bind both runs logged `[pvscsi] irq wait expired after 10 ticks; re-reading the ring` (TCG 10 lines, KVM 2 lines, over 3 PVSCSI lanes × 2 boots): some VFS-I/O completions were found by the post-park re-read, not by a wake. Bounded and correct per H-S3-5, but the cause (late MSI vs. a slow host write) is not yet established — open item for the H-S3-13 review.
 - **D8 Observation (bus ≥ 1, integrator request).** QEMU probe with `vmxnet3` and `pvscsi` each behind a `pcie-root-port`: the platform cell logs `[platform] unsupported Ethernet identity — registration skipped` for the vmxnet3 at bus 1 and `/bin/vmxnet3` exits `no vmxnet3 controller present; driver cell idle`; `pvscsi` registers at `bus 2 device 0` and binds (`[pvscsi] pci 02:00.0 15ad:07c0 … irq=msi`). `cells/services/platform/src/scan.rs` not edited (owner decision pending).
 - **D7 Decision (PVSCSI target scan).** Targets 0..16 (VMware's default bus width; QEMU allows 64), selection timeout = absent target, first disk wins; command status of `ADAPTER_RESET`/`SETUP_RINGS` and the device-written ring sizes are checked before use.
+- **V0-D1 (Decision, 2026-11-06).** One pinned `virtualHW.version = "22"` (`vmware-boot-test.py` `HW_VERSION`), recorded from `vmware.log` per boot. The AHCI fault scenarios use it too, through the shared generator (14 → 22, not re-run).
+- **V0-D2 (Decision).** Lane disk = `machine_pin_disk.py` → `qemu-img` seed VMDK → `vmware-vdiskmanager.exe -r … -t 0`. `x86_64-vm` needs the pin store, so the guest is a provisioned node.
+- **V0-D3 (Decision).** PCIe root ports `pciBridge4-7` are always in the VMX. Without them, e1000e/vmxnet3/NVMe fail power-on with `msg.pci.noslotavail`. `pciBridge0` is opt-in (`legacy_bridge`), see V0-S2.
+- **V0-D4 (Deviation).** EFI cells run at 512 MiB until V0-S3 is fixed; BIOS cells at 1024 MiB.
+- **V0-S1 (Surprise, blocks the VMware NIC rows of 08/09).** VMware puts e1000e/vmxnet3 on bus ≥ 1. The kernel scan logs bus 0 only, and the platform cell skips every class `02:00:00` except `8086:100E` (`cells/services/platform/src/scan.rs:222-229`, outside request §2). The new NIC cells cannot see their VMware devices without a discovery-path change. Owner decision needed.
+- **V0-S2 (Surprise).** With `pciBridge0`, AHCI moves to bus 2 and logs `[ahci] controller has no usable MMIO BAR (base=0x0 len=0x2000)`, then SAFE MODE. Recorded by probe `bridge0-sata`.
+- **V0-S3 (Surprise).** EFI with ≥ 1024 MiB panics: `kernel/src/main.rs:1219:10: frame allocator bitmap and early paging registration must succeed`. BIOS is unaffected up to 4096 MiB. Kernel fix outside S3.
+- **V0-S4 (Surprise).** VMware EFI `\_S5_` is unparsed (`scan stopped at opcode 0x5b offset 0x1f59; poweroff refused`), so EFI guests are hard-stopped. Persistence is unaffected.
+- **V0-S5 (Surprise, closes A3).** `vvtd.enable` powers on and exposes a DMAR, but `[vtd] Intel VT-d not present (GCAP=0xffffffffffffffff)`, and `x86_64-pc` refuses untranslated DMA. A3 is false, so H-S3-9 applies: the matrix runs under `x86_64-vm` only, with no VMware production-guest claim.

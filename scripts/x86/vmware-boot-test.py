@@ -92,29 +92,99 @@ def find_vmrun(override):
                       "--vmrun PATH. Searched PATH and " + searched)
 
 
-def make_vmx(iso, serial, cpus, memory):
+# One pinned VMX hardware version for every Cellos VMware lane: Workstation 25
+# hardware (NVMe, PVSCSI, e1000e, vmxnet3 and "Virtualize IOMMU" all need >= 14).
+# The lane records the version vmware.log reports for each run.
+HW_VERSION = "22"
+FIRMWARES = ("bios", "efi")
+NIC_MODELS = ("e1000", "e1000e", "vmxnet3")
+STORAGE_MODELS = ("sata", "nvme", "pvscsi")
+PIPE_NAME = re.compile(r"\\\\\.\\pipe\\cellos-[A-Za-z0-9._-]{1,64}")
+
+
+def vmx_pipe(name):
+    # A Windows pipe name needs its backslashes; accept only the lane's own
+    # \\.\pipe\cellos-<run> spelling so nothing else reaches the VMX unquoted.
+    if not PIPE_NAME.fullmatch(name):
+        raise BootFailure("unsupported serial pipe name: " + repr(name))
+    return '"' + name + '"'
+
+
+def make_vmx(iso, serial, cpus, memory, firmware="bios", nic=None, storage=None,
+             disk=None, pipe=False, viommu=False, legacy_bridge=False,
+             hw_version=HW_VERSION, name="Cellos x86 boot compatibility"):
+    """VMX text for one Cellos guest.
+
+    `serial` is a host file path, or with `pipe` the `\\\\.\\pipe\\cellos-<run>`
+    name VMware serves for vmware_serial_relay.py. `nic` is one of NIC_MODELS on
+    VMnet8 (NAT); `storage` one of STORAGE_MODELS with `disk` on target 0;
+    `viommu` sets "Virtualize IOMMU" (`vvtd.enable`); `legacy_bridge` adds
+    VMware's PCI bridge `pciBridge0`, which moves SATA/e1000 off bus 0.
+    """
+    if firmware not in FIRMWARES:
+        raise BootFailure("unsupported firmware: " + repr(firmware))
+    if nic is not None and nic not in NIC_MODELS:
+        raise BootFailure("unsupported NIC model: " + repr(nic))
+    if (storage is None) != (disk is None) or (storage is not None and storage not in STORAGE_MODELS):
+        raise BootFailure("storage needs exactly one of " + ", ".join(STORAGE_MODELS) + " and a disk")
     entries = {
         ".encoding": "UTF-8", "config.version": "8",
-        "virtualHW.version": "10", "displayName": "Cellos x86 boot compatibility",
-        "guestOS": "other-64", "firmware": "bios", "memsize": str(memory),
+        "virtualHW.version": hw_version, "displayName": name,
+        "guestOS": "other-64", "firmware": firmware, "memsize": str(memory),
         "numvcpus": str(cpus), "cpuid.coresPerSocket": str(cpus),
         "bios.bootOrder": "cdrom", "msg.autoAnswer": "TRUE",
-        # Cellos requires an ACPI-described HPET for its timer/sleep gate.
+        # Not a Cellos requirement since phase 02 (timekeeping without HPET);
+        # it pins VMware's default platform timer explicitly.
         "hpet0.present": "TRUE",
         "ide1:0.present": "TRUE", "ide1:0.deviceType": "cdrom-image",
         "ide1:0.fileName": iso, "ide1:0.startConnected": "TRUE",
-        "serial0.present": "TRUE", "serial0.fileType": "file",
-        "serial0.fileName": serial, "serial0.startConnected": "TRUE",
-        "serial0.yieldOnMsrRead": "TRUE", "serial0.tryNoRxLoss": "FALSE",
+        "serial0.present": "TRUE", "serial0.startConnected": "TRUE",
+        "serial0.yieldOnMsrRead": "TRUE",
         "ethernet0.present": "FALSE", "floppy0.present": "FALSE",
         "sound.present": "FALSE", "usb.present": "FALSE",
         "ehci.present": "FALSE", "usb_xhci.present": "FALSE",
         "vmci0.present": "FALSE", "sata0.present": "FALSE",
-        "scsi0.present": "FALSE", "mks.enable3d": "FALSE",
-        "isolation.tools.hgfs.disable": "TRUE",
+        "nvme0.present": "FALSE", "scsi0.present": "FALSE",
+        "mks.enable3d": "FALSE", "isolation.tools.hgfs.disable": "TRUE",
     }
-    return "".join(key + " = " + vmx_string(value) + "\n"
+    # e1000e, vmxnet3, NVMe and PVSCSI sit behind PCIe root ports; without them
+    # power-on fails with msg.pci.noslotavail (V0, 2026-11-06).
+    for port in range(4, 8):
+        entries.update({f"pciBridge{port}.present": "TRUE",
+                        f"pciBridge{port}.virtualDev": "pcieRootPort",
+                        f"pciBridge{port}.functions": "8"})
+    if legacy_bridge:
+        entries["pciBridge0.present"] = "TRUE"
+    if pipe:
+        # The guest must not lose typed bytes while its UART FIFO is full.
+        entries.update({"serial0.fileType": "pipe", "serial0.pipe.endPoint": "server",
+                        "serial0.tryNoRxLoss": "TRUE"})
+    else:
+        entries.update({"serial0.fileType": "file", "serial0.fileName": serial,
+                        "serial0.tryNoRxLoss": "FALSE"})
+    if firmware == "efi":
+        entries["uefi.secureBoot.enabled"] = "FALSE"
+    if nic is not None:
+        entries.update({"ethernet0.present": "TRUE", "ethernet0.virtualDev": nic,
+                        "ethernet0.connectionType": "nat",
+                        "ethernet0.addressType": "generated",
+                        "ethernet0.startConnected": "TRUE"})
+    if storage == "sata":
+        entries.update({"sata0.present": "TRUE", "sata0:0.present": "TRUE",
+                        "sata0:0.fileName": disk})
+    elif storage == "nvme":
+        entries.update({"nvme0.present": "TRUE", "nvme0:0.present": "TRUE",
+                        "nvme0:0.fileName": disk})
+    elif storage == "pvscsi":
+        entries.update({"scsi0.present": "TRUE", "scsi0.virtualDev": "pvscsi",
+                        "scsi0:0.present": "TRUE", "scsi0:0.fileName": disk})
+    if viommu:
+        entries["vvtd.enable"] = "TRUE"
+    text = "".join(key + " = " + vmx_string(value) + "\n"
                    for key, value in entries.items())
+    if pipe:
+        text += "serial0.fileName = " + vmx_pipe(serial) + "\n"
+    return text
 
 
 def run_logged(command, logfile, timeout):
@@ -176,7 +246,7 @@ def main():
     parser.add_argument("iso", nargs="?", default="build/vicell-x86.iso",
                         help="production Limine ISO (default: build/vicell-x86.iso)")
     parser.add_argument("--vmrun", help="explicit native vmrun executable path")
-    parser.add_argument("--cpus", type=int, choices=(1, 2), default=1,
+    parser.add_argument("--cpus", type=int, choices=(1, 2, 4), default=1,
                         help="vCPU exposure, not SMP qualification (default: 1)")
     parser.add_argument("--memory-mib", type=int, choices=(256, 512), default=256,
                         help="guest memory in MiB (default: 256)")
