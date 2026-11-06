@@ -27,32 +27,46 @@ else
     exit 1
 fi
 
-REL="target/riscv64gc-unknown-none-elf/release"
+OUT_REL="target/riscv64gc-unknown-none-elf/release"
+# build-test-hooks-ci.sh builds its cells under its own cargo target directory
+# (CELLOS_TEST_HOOKS_TARGET_DIR, default target/test-hooks) and copies only its
+# kernel back to OUT_REL. Reading cells from OUT_REL therefore packed stale (or
+# missing) binaries, so resolve the same directory once and export it so the
+# child script and this one cannot disagree.
+export CELLOS_TEST_HOOKS_TARGET_DIR="${CELLOS_TEST_HOOKS_TARGET_DIR:-target/test-hooks}"
+REL="$CELLOS_TEST_HOOKS_TARGET_DIR/riscv64gc-unknown-none-elf/release"
 TH_DIR="kernel/src/embedded-test-hooks"
 DOMAIN_TARGET="target/native-domain-test"
 DOMAIN_EMBED="$DOMAIN_TARGET/embedded"
-DOMAIN_KERNEL="$REL/cellos-kernel-native-domain-test"
+DOMAIN_KERNEL="$OUT_REL/cellos-kernel-native-domain-test"
 
 # Reuse the signed test fixture/image construction. It never enables
 # native-domains; that feature is compiled only into the isolated kernel below.
 bash scripts/build-test-hooks-ci.sh
 
-echo "==> Building the phase-03 Tier-2 grant pair cells..."
+echo "==> Building the phase-03 Tier-2 grant pair cells and service-input..."
+# Same target directory as the test-hooks cells: the image below is assembled
+# from one directory, so every binary in it comes from this invocation's builds.
+# service-input is here because cellbox creates its serial session through the
+# INPUT service; without it the grant-pair case boots to "shell: authenticated
+# serial session failed: NotFound" and never sees a prompt.
+CARGO_TARGET_DIR="$CELLOS_TEST_HOOKS_TARGET_DIR" \
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p tier2-grant-owner -p tier2-grant-receiver
+    -p tier2-grant-owner -p tier2-grant-receiver -p service-input
 
 OWNER_ELF="$REL/tier2-grant-owner"
 RECEIVER_ELF="$REL/tier2-grant-receiver"
-for elf in "$OWNER_ELF" "$RECEIVER_ELF"; do
-    [[ -f "$elf" ]] || { echo "FAIL: grant pair cell missing: $elf" >&2; exit 1; }
+INPUT_ELF="$REL/service-input"
+for elf in "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF"; do
+    [[ -f "$elf" ]] || { echo "FAIL: native-domain image cell missing: $elf" >&2; exit 1; }
 done
 
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
-echo "==> Signing the Tier-2 grant pair cells..."
-sign_cells "$OWNER_ELF" "$RECEIVER_ELF"
+echo "==> Signing the Tier-2 grant pair cells and service-input..."
+sign_cells "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF"
 
 echo "==> Assembling the throwaway grant-pair VIFS1 image..."
 rm -rf "$DOMAIN_TARGET"
@@ -67,9 +81,12 @@ printf 'ViCell-test' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
-# Same cell set as the shared test-hooks image, plus the grant pair installed on
-# the two reviewed Tier-2 launch paths this lane's shell edge admits.
-"$PYTHON_BIN" tools/mkfat32.py \
+# Same cell set as the shared test-hooks image, plus /bin/input and the grant
+# pair installed on the two reviewed Tier-2 launch paths this lane's shell edge
+# admits. `input` selects /bin/input in services.toml; the generator also
+# requires the artifact, so both the feature and the pair are needed.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input \
+    --config-output-dir "$TMPDIR_KFS/boot-config" \
     "$DOMAIN_EMBED/kernel_fs.img" \
     "$REL/app-init"         /bin/init \
     "$REL/cellbox"        /bin/cellbox \
@@ -79,10 +96,15 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/service-net"      /bin/net \
     "$REL/driver-virtio-net" /bin/virtio-net \
     "$REL/atomic-publication-probe" /bin/atomic-probe \
+    "$INPUT_ELF"            /bin/input \
     "$OWNER_ELF"            /bin/tier2-smoke \
     "$RECEIVER_ELF"         /bin/tier2-exploit \
     "$TMPDIR_KFS/hostname"  /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
+
+grep -Fxq 'path = "/bin/input"' "$TMPDIR_KFS/boot-config/services.toml" || {
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
+    exit 1; }
 
 [[ -f "$DOMAIN_EMBED/kernel_fs.img" ]] || {
     echo "FAIL: mkfat32.py did not produce the grant-pair kernel_fs.img" >&2; exit 1; }
@@ -91,7 +113,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 # well-formed image whose destination paths went astray, and then the boot fails
 # as a confusing "cell not found".
 "$PYTHON_BIN" tools/inspect_fat.py "$DOMAIN_EMBED/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
-for required in "LFN 'vfs-test'" "LFN 'atomic-probe'" "LFN 'tier2-smoke'" "LFN 'tier2-exploit'"; do
+for required in "LFN 'vfs-test'" "LFN 'atomic-probe'" "LFN 'input'" "LFN 'tier2-smoke'" "LFN 'tier2-exploit'"; do
     if ! grep -q -- "$required" "$TMPDIR_KFS/fat-layout.txt"; then
         echo "FAIL: grant-pair kernel_fs.img lacks $required" >&2
         cat "$TMPDIR_KFS/fat-layout.txt" >&2
@@ -109,6 +131,6 @@ cargo build --release \
     --features test-hooks,native-domains \
     -p cellos-kernel
 
-mkdir -p "$REL"
+mkdir -p "$OUT_REL"
 cp "$DOMAIN_TARGET/riscv64gc-unknown-none-elf/release/cellos-kernel" "$DOMAIN_KERNEL"
 printf 'PASS: native-domain test-hooks kernel: %s\n' "$DOMAIN_KERNEL"

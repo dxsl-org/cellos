@@ -129,13 +129,17 @@ fn counter_worker() {
 }
 
 /// Wait until the ping word holds `expected`, then advance it to `next` and wake.
+///
+/// The word toggles between two values, so "not my turn" is exactly `next`. The
+/// futex must park only while the word still holds that value: passing `expected`
+/// would park after the peer's handoff store and sleep through it until timeout.
 fn ping_pong(id: u32, expected: u32, next: u32, rounds: u32) {
     for _ in 0..rounds {
         loop {
             if PING_WORD.load(Ordering::Acquire) == expected {
                 break;
             }
-            match sys_futex_wait(word_addr(&PING_WORD), expected, WAIT_TIMEOUT_TICKS) {
+            match sys_futex_wait(word_addr(&PING_WORD), next, WAIT_TIMEOUT_TICKS) {
                 Ok(FutexWaitOutcome::Woken) | Ok(FutexWaitOutcome::ValueMismatch) => {}
                 Ok(FutexWaitOutcome::TimedOut) => {
                     PING_TIMEOUTS.fetch_add(1, Ordering::Relaxed);
