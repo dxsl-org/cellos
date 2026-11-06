@@ -2,7 +2,9 @@
 //!
 //! Places the DMA-backed NVMe endpoint behind a root port at `01:00.0` and
 //! verifies both ordinary discovery and Intel VT-d queue/Identify DMA from that
-//! same requester ID.
+//! same requester ID. A VMware-shaped topology (AHCI behind a conventional PCI
+//! bridge, NICs behind root ports) checks that a function on bus ≥ 1 keeps every
+//! BAR and meets the same Ethernet family gate as bus 0.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -111,6 +113,37 @@ fn bus1_nvme_dma_completes_under_vtd() {
         active < mapping && mapping < initialized,
         "invalid VT-d/DMA order:\n{serial}"
     );
+    assert!(!serial.contains("[KERNEL PANIC]"), "{serial}");
+    let _ = std::fs::remove_file(disk);
+}
+
+/// The VMware guest topology (S3 findings S1/S2), reproduced on q35: AHCI
+/// behind a conventional PCI bridge decodes its ABAR at BAR5, which the
+/// Platform-Cell registration once dropped (`no usable MMIO BAR (base=0x0)`).
+/// Ethernet functions behind root ports follow the kernel's family gate: the
+/// 82540EM registers and binds, the PCnet is refused by ID.
+#[test]
+fn bridged_ahci_and_root_port_nics_follow_the_scan_rules() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let disk = make_nvme_disk();
+    let qemu = QemuRunner::boot_x86_bios_with_bridged_devices(&iso_path(), &disk.to_string_lossy());
+    for marker in [
+        "[platform] registered bus 1 device 1 function 0 class 1:6:1",
+        "[platform] registered bus 2 device 0 function 0 class 2:0:0",
+        "[platform] registration refused bus 3 device 0 function 0 id 1022:2000 class 2:0:0",
+        "[ahci] controller bound",
+        "[ahci] IDENTIFY DEVICE ok",
+        "[driver_cell] NIC driver registered",
+        "[net] DHCP acquired",
+        "Cellos >",
+    ] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|error| panic!("{marker:?} not seen: {error}\n{}", qemu.dump()));
+    }
+    let serial = qemu.dump();
+    assert!(!serial.contains("no usable MMIO BAR"), "{serial}");
     assert!(!serial.contains("[KERNEL PANIC]"), "{serial}");
     let _ = std::fs::remove_file(disk);
 }
