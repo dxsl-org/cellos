@@ -1821,9 +1821,10 @@ jobs:
           cargo test -p driver-i2c-bcm -p driver-spi-bcm -p service-compositor \
             -p service-hypervisor --target x86_64-unknown-linux-gnu
           # Phase 10 S10-3c: the NVMe driver's time budgets and init's block-driver wait.
-          # Both bins gate `no_std`/`no_main` on `not(test)`, so the hosted test build
+          # Plan 261103-2218 phase 08: the e1000e cell's register/PHY/ring/IVAR tests.
+          # These bins gate `no_std`/`no_main` on `not(test)`, so the hosted test build
           # gets libtest's entry; before that, neither crate's tests ever linked.
-          cargo test -p driver-nvme -p app-init --target x86_64-unknown-linux-gnu
+          cargo test -p driver-nvme -p app-init -p driver-e1000e --target x86_64-unknown-linux-gnu
           # `app-net-tools` and `app-wasm` are bin-only crates whose entry comes
           # from `ostd::cell_main!`: the macro now emits `#[no_mangle]` only for
           # the bare-metal target and their headers gate `no_std`/`no_main` the

@@ -71,5 +71,5 @@ TCG (`BOOT_WINDOW=90`) and KVM (`X86_ACCEL=kvm X86_CPU_MODEL=host`, `BOOT_WINDOW
 ## Not run / open
 
 - VMware rows (A2): phase 09 matrix.
-- `cargo test -p driver-e1000e` is not in any CI job: §2 limits the CI edit to `qemu-x86_64-boot`. Proposed: add `-p driver-e1000e` to the host-unit-test step next to `cargo test -p driver-nvme -p app-init` (`ci.yml` ~1808).
+- `cargo test -p driver-e1000e` now runs in CI's host-test step (`cargo test -p driver-nvme -p app-init -p driver-e1000e`), approved by the integrator 2026-11-06 (phase file D7).
 - `tests/integration/tests/driver-registration-contract.rs::virtio_drivers_publish_ready_state_and_fail_closed` fails at base (`virtio-blk must check registration result`); files untouched by this phase.
