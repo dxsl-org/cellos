@@ -270,6 +270,12 @@ const Q35_DSDT: &[u8] = include_bytes!("../../../tests/fixtures/acpi/q35-dsdt.am
 /// `Name (\_S5_, ..)` only inside `Method (_PTS)`; source beside the fixture.
 const S5_IN_METHOD_DSDT: &[u8] =
     include_bytes!("../../../tests/fixtures/acpi/s5-in-method-dsdt.aml");
+/// The DSDTs VMware Workstation 25.0.0 (virtual hardware 22) builds for the
+/// S3 lane VM (2 vCPU, SATA): EFI at 512 MiB (37954 bytes) and BIOS at
+/// 1024 MiB (66014 bytes), OEM `PTLTD `/`Custom  `. Carved from the `.vmem` of
+/// the suspended guest by following RSDP → XSDT → FADT.
+const VMWARE_EFI_DSDT: &[u8] = include_bytes!("../../../tests/fixtures/acpi/vmware-efi-dsdt.aml");
+const VMWARE_BIOS_DSDT: &[u8] = include_bytes!("../../../tests/fixtures/acpi/vmware-bios-dsdt.aml");
 
 fn definition_block(signature: &[u8; 4], body: &[u8]) -> Vec<u8> {
     let mut table = vec![0u8; 36];
@@ -321,6 +327,21 @@ fn s5_scan_refuses_a_name_created_inside_a_method() {
 }
 
 #[test]
+fn s5_scan_reads_the_vmware_dsdts() {
+    for dsdt in [VMWARE_EFI_DSDT, VMWARE_BIOS_DSDT] {
+        assert_eq!(&dsdt[..4], b"DSDT");
+        assert_eq!(dsdt.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)), 0);
+        assert_eq!(
+            scan_definition_block(dsdt),
+            S5::Static {
+                slp_typ_a: 0,
+                slp_typ_b: 0
+            }
+        );
+    }
+}
+
+#[test]
 fn s5_scan_accepts_only_a_root_name_with_constant_slp_types() {
     let scan = |body: &[u8]| scan_definition_block(&definition_block(b"DSDT", body));
     let s5 = name_package(b"_S5_", 5, 7);
@@ -355,6 +376,24 @@ fn s5_scan_accepts_only_a_root_name_with_constant_slp_types() {
         S5::Unparsed {
             offset: 36,
             opcode: 0x70
+        }
+    );
+    // `OperationRegion (REG0, SystemMemory, (ECFG + 0x4000), 0x4000)` (VMware
+    // EFI): an integer expression whose result is discarded is skipped.
+    let region = |target: &[u8]| {
+        let mut term = b"\x5B\x80REG0\x00\x72ECFG\x0B\x00\x40".to_vec();
+        term.extend_from_slice(target);
+        term.extend_from_slice(&[0x0B, 0x00, 0x40]);
+        term.extend_from_slice(&s5);
+        term
+    };
+    assert_eq!(scan(&region(&[0x00])), expected);
+    // One that stores its result while the table loads is not decoded.
+    assert_eq!(
+        scan(&region(b"\\_S5_")),
+        S5::Unparsed {
+            offset: 36,
+            opcode: 0x5B
         }
     );
     assert_eq!(scan(&[]), S5::Absent);
