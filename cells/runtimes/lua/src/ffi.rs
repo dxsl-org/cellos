@@ -4,7 +4,7 @@
 //! lauxlib.h in `src/c/src/` for the full API.
 #![allow(dead_code)] // reason: FFI binding surface — keep the coherent lua.h subset even where bindings don't call every shim
 
-use core::ffi::{c_char, c_int};
+use core::ffi::{c_char, c_int, CStr};
 
 /// Opaque Lua interpreter state.  Always heap-allocated by Lua; never moved.
 #[repr(C)]
@@ -31,18 +31,12 @@ extern "C" {
 
     // ── Execution ────────────────────────────────────────────────────────────
 
-    /// Compile and push `s` as a Lua chunk onto the stack.
-    /// Returns `LUA_OK` on success; otherwise pushes an error string.
-    pub fn luaL_loadstring(L: *mut LuaState, s: *const c_char) -> c_int;
-
     /// Compile `sz` bytes at `buff` as a Lua chunk named `name`.
     ///
-    /// This is the real exported symbol; `luaL_loadbuffer` in lua.h is the macro
-    /// `luaL_loadbufferx(L,s,sz,n,NULL)`. Pass `core::ptr::null()` for `mode`
-    /// to get the same default behavior (text + binary).
-    /// Unlike `luaL_loadstring`, the buffer need not be NUL-terminated,
-    /// making it correct for raw file content from VFS.
-    pub fn luaL_loadbufferx(
+    /// Private on purpose: callers go through [`load_text`], which pins
+    /// `mode` to text. A null or "b"-containing mode would let the
+    /// unverified bytecode undumper run on attacker bytes.
+    fn luaL_loadbufferx(
         L: *mut LuaState,
         buff: *const c_char,
         sz: usize,
@@ -129,6 +123,31 @@ extern "C" {
     /// `n` is a `lua_Integer` (i64) key, used for 1-indexed array construction.
     /// Bypasses `__newindex` metamethod — use for raw table writes.
     pub fn lua_rawseti(L: *mut LuaState, idx: c_int, n: i64);
+}
+
+/// Compile `src` as Lua source text and push the chunk (or an error string).
+///
+/// The only chunk loader exposed to the cell. Mode "t" makes Lua refuse any
+/// buffer starting with the bytecode signature `\x1bLua` before the undumper
+/// sees it; the script-level `load`/`loadfile`/`dofile`/`require` are pinned
+/// to the same mode by `sandbox-prelude.lua`. Returns `LUA_OK` on success.
+///
+/// # Safety
+/// `L` must be a valid, non-null Lua state.
+#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+pub unsafe fn load_text(L: *mut LuaState, src: &[u8], name: &CStr) -> c_int {
+    // SAFETY: caller guarantees L is valid; `src` is readable for its length
+    // (no NUL terminator required); `name` and the "t" literal are NUL-terminated
+    // and outlive the call.
+    unsafe {
+        luaL_loadbufferx(
+            L,
+            src.as_ptr().cast::<c_char>(),
+            src.len(),
+            name.as_ptr(),
+            c"t".as_ptr(),
+        )
+    }
 }
 
 /// Convenience: pop `n` items from the stack.

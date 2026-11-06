@@ -33,8 +33,8 @@ impl VfsReadOps for MockOps {
     ) -> ViResult<VfsResponse<'a>> {
         self.calls.push(format!("{req:?}"));
         match self.replies.pop_front().expect("missing reply") {
-            TestReply::Dir(raw) => Ok(VfsResponse::DirHandle(ViDirHandle(raw))),
-            TestReply::File(raw) => Ok(VfsResponse::FileHandle(ViVfsFileHandle(raw))),
+            TestReply::Dir(raw) => Ok(VfsResponse::DirHandle(ViDirHandle(raw.into()))),
+            TestReply::File(raw) => Ok(VfsResponse::FileHandle(ViVfsFileHandle(raw.into()))),
             TestReply::Data(bytes) => {
                 resp_buf[..bytes.len()].copy_from_slice(&bytes);
                 Ok(VfsResponse::Data(&resp_buf[..bytes.len()]))

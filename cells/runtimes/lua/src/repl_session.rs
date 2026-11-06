@@ -7,7 +7,7 @@ extern crate alloc;
 
 use crate::ffi::{LuaState, LUA_OK};
 use alloc::string::String;
-use core::ffi::c_char;
+use core::ffi::CStr;
 use ostd::repl::{ReadResult, Repl};
 
 /// Prompt strings.
@@ -77,9 +77,15 @@ pub unsafe fn eval(L: *mut LuaState, code: &str) -> bool {
 unsafe fn try_eval(L: *mut LuaState, code: &str) -> bool {
     let mut nul_buf = alloc::vec![0u8; code.len() + 1];
     nul_buf[..code.len()].copy_from_slice(code.as_bytes());
+    // Same chunk text and name `luaL_loadstring` used (source up to the first
+    // NUL), but compiled text-only: console and `-e` input never reach the
+    // bytecode undumper.
+    let Ok(source) = CStr::from_bytes_until_nul(&nul_buf) else {
+        return false; // unreachable: nul_buf always ends with NUL
+    };
 
-    // SAFETY: nul_buf has a valid NUL terminator; L is non-null.
-    let rc = unsafe { crate::ffi::luaL_loadstring(L, nul_buf.as_ptr() as *const c_char) };
+    // SAFETY: L is non-null; `source` is NUL-terminated and outlives the call.
+    let rc = unsafe { crate::ffi::load_text(L, source.to_bytes(), source) };
     if rc != LUA_OK {
         print_error(L);
         return false;
@@ -100,7 +106,7 @@ unsafe fn try_eval(L: *mut LuaState, code: &str) -> bool {
 ///
 /// # Safety
 /// `L` must be a valid, non-null Lua state; the top of the stack must hold
-/// the error message from a failed `luaL_loadstring`.
+/// the error message from a failed `load_text`.
 #[allow(non_snake_case)]
 unsafe fn is_incomplete(L: *mut LuaState) -> bool {
     let mut len = 0usize;

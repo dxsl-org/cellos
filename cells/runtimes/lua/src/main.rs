@@ -7,7 +7,15 @@ extern crate ostd;
 
 // Lua Cell has no direct network device access; vnet delegates via net service IPC.
 // Scripts load from VFS only; io.popen/os.execute/debug are stripped at init.
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+// Tier 2 (own address space): the interpreter is C with no bytecode verifier,
+// running untrusted VFS/network-sourced scripts, so a memory-safety bug in it
+// must stay inside this cell rather than reach the shared address space.
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+);
 api::declare_syscalls![
     Send,
     Recv,
@@ -51,6 +59,8 @@ const JSON_LUA: &[u8] = include_bytes!("../scripts/json.lua");
 const JSON_TEST_LUA: &[u8] = include_bytes!("../scripts/json_test.lua");
 #[cfg(not(lua_c_unavailable))]
 const CORO_TEST_LUA: &[u8] = include_bytes!("../scripts/coroutine_test.lua");
+#[cfg(not(lua_c_unavailable))]
+const BYTECODE_REFUSAL_TEST_LUA: &[u8] = include_bytes!("../scripts/bytecode-refusal-test.lua");
 
 /// Install bundled Lua scripts into `/tmp` so `require()` can find them.
 ///
@@ -63,6 +73,7 @@ fn install_bundled_scripts() {
     bindings_vfs::write_bytes("/tmp/json.lua", JSON_LUA);
     bindings_vfs::write_bytes("/tmp/json_test.lua", JSON_TEST_LUA);
     bindings_vfs::write_bytes("/tmp/coroutine_test.lua", CORO_TEST_LUA);
+    bindings_vfs::write_bytes("/tmp/bytecode-refusal-test.lua", BYTECODE_REFUSAL_TEST_LUA);
 }
 
 #[cfg(not(lua_c_unavailable))]
@@ -75,109 +86,23 @@ fn vfs_read_to_vec(path: &str) -> alloc::vec::Vec<u8> {
 }
 
 #[cfg(not(lua_c_unavailable))]
-/// Inject Lua-level `io.open` and `io.write` wrappers, then strip dangerous stdlib.
+/// Install the sandbox prelude: VFS-backed `io.*`, text-only chunk loaders,
+/// and removal of dangerous stdlib (see `sandbox-prelude.lua`).
 ///
-/// `ViCell_io_write` (C primitive) and `vfs.*` must already be registered.
-/// Removes io.popen, os.execute, and debug; network is exposed only via vnet IPC.
+/// Returns `false` if the prelude failed to compile or run; the caller must
+/// not execute user code then, because the sandbox would be only partly applied.
 ///
 /// # Safety
 /// `L` must be a valid, non-null Lua state with `vfs` and `ViCell_io_write`
 /// already registered as globals.
 #[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
-unsafe fn inject_io_setup(L: *mut ffi::LuaState) {
-    // Single-quoted strings throughout to avoid escaping double-quotes in Rust.
-    // string.char(10) produces the newline character for line-splitting.
-    // Dangerous stdlib is nil'd here to enforce the sandbox boundary:
-    //   io.popen  — would spawn a shell process (impossible in SAS, but remove anyway)
-    //   os.execute — arbitrary shell commands
-    //   debug     — can inspect/mutate internal Lua state, breaks sandbox
-    //   package.loadlib — loads native C libraries (impossible without dlopen, remove anyway)
-    const SETUP: &[u8] = b"
-io.write = function(...)
-  for _, v in ipairs({...}) do ViCell_io_write(tostring(v)) end
-end
-io.popen   = nil
-os.execute = nil
-debug      = nil
-if package then
-  package.loadlib = nil
-  -- Override the file-system searcher to use VFS-backed io.open instead of
-  -- C fopen (which calls ViSyscall::Open, not in this cell's allowlist).
-  -- Scripts are installed to /tmp at startup via install_bundled_scripts().
-  package.path = '/tmp/?.lua'
-  package.searchers = {
-    package.searchers[1],
-    function(name)
-      local path = '/tmp/' .. name:gsub('%.', '/') .. '.lua'
-      local f = io.open(path, 'r')
-      if not f then return 'module ' .. name .. ' not found at ' .. path end
-      local src = f:read('*a')
-      f:close()
-      return load(src, '@' .. path)
-    end,
-  }
-end
-io.open = function(path, mode)
-  mode = mode or 'r'
-  if mode == 'r' or mode == 'rb' then
-    local d = vfs.read(path)
-    if d == nil then return nil, 'cannot open: ' .. tostring(path) end
-    local h = {_d = d, _p = 1}
-    local NL = string.char(10)
-    function h:read(f)
-      f = f or '*l'
-      if f == '*a' or f == '*all' then
-        self._p = #self._d + 1
-        return self._d
-      end
-      local s, e = string.find(self._d, NL, self._p, true)
-      if s then
-        local line = string.sub(self._d, self._p, s - 1)
-        self._p = e + 1
-        return line
-      elseif self._p <= #self._d then
-        local line = string.sub(self._d, self._p)
-        self._p = #self._d + 1
-        return line
-      end
-      return nil
-    end
-    function h:close() return true end
-    return h
-  elseif mode == 'w' or mode == 'wb' then
-    local h = {_path = path, _buf = ''}
-    function h:write(...)
-      for _, v in ipairs({...}) do self._buf = self._buf .. tostring(v) end
-      return self
-    end
-    function h:close() vfs.write(self._path, self._buf); return true end
-    return h
-  elseif mode == 'a' then
-    local h = {_path = path, _buf = ''}
-    function h:write(...)
-      for _, v in ipairs({...}) do self._buf = self._buf .. tostring(v) end
-      return self
-    end
-    function h:close() vfs.append(self._path, self._buf); return true end
-    return h
-  end
-  return nil, 'unsupported mode: ' .. tostring(mode)
-end
-\0";
-    // SAFETY: SETUP is a valid NUL-terminated Lua chunk; L is non-null.
-    let rc = unsafe {
-        ffi::luaL_loadbufferx(
-            L,
-            SETUP.as_ptr() as *const core::ffi::c_char,
-            SETUP.len() - 1, // exclude NUL
-            c"io_setup".as_ptr(),
-            core::ptr::null(),
-        )
-    };
-    if rc == ffi::LUA_OK {
-        // SAFETY: L is non-null; pcallk executes the loaded chunk.
-        unsafe { ffi::lua_pcallk(L, 0, 0, 0, 0, core::ptr::null_mut()) };
-    }
+unsafe fn inject_io_setup(L: *mut ffi::LuaState) -> bool {
+    const SETUP: &[u8] = include_bytes!("sandbox-prelude.lua");
+    // SAFETY: L is non-null; SETUP is Lua source text.
+    let rc = unsafe { ffi::load_text(L, SETUP, c"=sandbox-prelude") };
+    // SAFETY: L is non-null; pcallk executes the loaded chunk.
+    rc == ffi::LUA_OK
+        && unsafe { ffi::lua_pcallk(L, 0, 0, 0, 0, core::ptr::null_mut()) } == ffi::LUA_OK
 }
 
 #[cfg(not(lua_c_unavailable))]
@@ -260,7 +185,14 @@ extern "C" fn main() -> usize {
         ffi::lua_setglobal(L, c"ViCell_io_write".as_ptr());
     }
     // SAFETY: L is non-null; vfs and ViCell_io_write are already registered.
-    unsafe { inject_io_setup(L) };
+    if !unsafe { inject_io_setup(L) } {
+        // Fail closed: a partly applied prelude may leave raw loaders or
+        // `debug` reachable, so no user code runs.
+        // SAFETY: the failed load/pcall left its error message on the stack.
+        unsafe { repl_session::print_error(L) };
+        ostd::io::println("[lua] sandbox setup failed; refusing to run scripts");
+        return 1;
+    }
 
     // `lua -e <code>`: evaluate the chunk and exit (no REPL). The text after
     // `-e` is a distinct argument, so source containing spaces remains intact.
@@ -291,17 +223,12 @@ extern "C" fn main() -> usize {
             let mut chunk_name = alloc::vec![b'@'; 1 + path.len() + 1];
             chunk_name[1..1 + path.len()].copy_from_slice(path.as_bytes());
             *chunk_name.last_mut().unwrap() = 0;
-            // SAFETY: L is valid; file_buf contains valid Lua source bytes;
-            // chunk_name is NUL-terminated and outlives the pcall.
-            let rc = unsafe {
-                ffi::luaL_loadbufferx(
-                    L,
-                    file_buf.as_ptr() as *const core::ffi::c_char,
-                    file_buf.len(),
-                    chunk_name.as_ptr() as *const core::ffi::c_char,
-                    core::ptr::null(),
-                )
-            };
+            // Always Ok: the buffer ends with NUL (a NUL inside `path` only
+            // shortens the name used in messages).
+            let name = core::ffi::CStr::from_bytes_until_nul(&chunk_name).unwrap_or(c"=?");
+            // SAFETY: L is valid; `name` outlives the call. A file holding a
+            // precompiled chunk is refused here (text-only load).
+            let rc = unsafe { ffi::load_text(L, &file_buf, name) };
             let rc = if rc == ffi::LUA_OK {
                 // SAFETY: compiled chunk is at the top of a valid Lua state.
                 unsafe { ffi::lua_pcallk(L, 0, ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut()) }

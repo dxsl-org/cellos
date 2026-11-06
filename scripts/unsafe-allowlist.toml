@@ -96,42 +96,42 @@ date = "2026-07-14"
 [[file]]
 path = "cells/runtimes/lua/src/bindings_io.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
 path = "cells/runtimes/lua/src/bindings_net.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
 path = "cells/runtimes/lua/src/bindings_vfs.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
 path = "cells/runtimes/lua/src/ffi.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
 path = "cells/runtimes/lua/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
 path = "cells/runtimes/lua/src/repl_session.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
