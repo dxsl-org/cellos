@@ -344,3 +344,62 @@ Marker counts over the 78 boots (MACs and wake counts elided):
 - **PVSCSI on the real device (D6).** All 26 bind lines read `irq=msix vectors=1 irq_wakes=0..3 park_expiries=0 expiry_ready=0 expiry_empty=0`, and there is no `irq wait expired` line. The D6 expiries remain a QEMU (MSI) observation.
 
 Serial note: some log lines are missing from the serial capture. This is not a verdict input. It is the same in the earlier run: `USER: [platform] registered` appears 5/6/7 times per boot, 9/41/28 boots here against 7/46/25 in `…a3694a`. Lines also go missing within one cell, for example `bridge0-nvme-e1000e-c4-efi` boot 1 lacks the e1000e `platform-reg` line that boot 2 has. Every judged marker was present on every boot.
+
+## Post-review-2 run (tip `98b670640`)
+
+Recorded 2026-11-06 on `feat/x86-s3-integration` at `98b670640`. That commit merges `feat/x86-s3-review2-fixes`:
+- `d986a555b`: e1000e keeps one TX slot empty.
+- `8eeb1d4e3`: the kernel offer gate refuses PVSCSI `15ad:07c0` while VT-d is active, and `pvscsi-x86`'s VT-d lanes now assert that refusal.
+
+Images were rebuilt out of tree (`/home/dmin/worktrees/s3int-out/r2/rebuild.sh`): `kernel_fs.img` sha256 `48737f28838d5d28c7b8547f61ba1e4170137715fda9ff17b5b20d34ce668d88`, 32 files. ISO sha256:
+- default `8d100bc64ffc50754dc6befde92e2d4cc03472f3d9e8b66ab1f70fb72e035b31`;
+- pc `dc05623d2a8e1774aecb196ecbd37c4178ac14a155e397d7582b3b972d789fe7`;
+- vm `f2a88b1899a64275acfd36939fb1ebfc5214c9c5fb4c8d56d2c3967d97598430`.
+
+`build/vicell-x86-prod-refusal.iso` was rebuilt on this tip.
+
+**Verdict: all pass.** Kernel host 512/512; QEMU 22/22 tests per accelerator; VMware subset 23/23. No `[pcie] refusing` line on VMware.
+
+| Gate | Result |
+|---|---|
+| `cargo test -p cellos-kernel` (host; parallel and `--test-threads=1`) | `test result: ok. 512 passed` both (new `pvscsi_and_bypassing_virtio_are_refused_only_under_vtd ... ok`) |
+| QEMU TCG / KVM `x86_64-boot` (SMP 4) | `10` / `10 passed` |
+| `nic-x86` | `6` / `6 passed` |
+| `pvscsi-x86` | `3` / `3 passed` (`pvscsi_binds_and_persists_x86`, `pvscsi_is_refused_under_vtd_x86`, `pvscsi_is_refused_on_x86_64_pc_under_vtd_x86`) |
+| `iommu-dmar-x86` | `3` / `3 passed` |
+
+QEMU decisive lines, identical under TCG and KVM:
+- **VT-d lanes:** `[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit=0xfed90000`, then `[pcie] refusing 00:03.0 15ad:07c0: PVSCSI rings are accessed by physical address and would bypass VT-d` and `[pvscsi] no controller - exiting` (once per lane).
+- **Plain q35 lane, both boots:** `[pvscsi] pci 00:03.0 15ad:07c0 target=0 lun=0 blocks=528384 irq=msi vectors=1 … park_expiries=0 expiry_ready=0 expiry_empty=0`.
+- **D6:** one `irq wait expired … ring=empty elapsed_ms=94 expiry_ready=0 expiry_empty=1` under TCG, none under KVM.
+- **e1000e (`nic-x86`):** `[e1000e] controller bound 8086:10d3 82574L link_up=true … irq=msix rx=request-driven vectors=3 irq_wakes=1 park_expiries=3` (TCG), `… park_expiries=0` / `1` (KVM).
+
+### VMware matrix subset (ceiling: VMware local, `x86_64-vm` only)
+
+Run `20261106T025345Z-235cef`: `matrix --iso …/r2/vicell-x86-vm.iso --jobs 3 --only 'e1000e-*' --only '*-pvscsi-*' --only 'bridge0-*'`, `ELAPSED 332.66 s`. It covers 23 cells: the 12 e1000e cells, the 12 PVSCSI cells with the 4 e1000e+pvscsi cells counted once, and the 3 `pciBridge0` cells.
+
+JSON: [s3-post-review2-vmware-matrix.json](s3-post-review2-vmware-matrix.json), reduced by the same rule (1518 bridge marker lines dropped). The source summary has sha256 `67117b2f496ca42db885663f72ea1994041afac6b1c1b54023b1aafe8f157ce7`.
+
+Results:
+- Status, prompt, network, persistence and poweroff are each **PASS 23 / FAIL 0**.
+- All 46 boots: `dhcp_lease`, `guest_poweroff: true`, `hard_stop: false`, hardware version `22`.
+- Cleanup: `cleanup_confirmed` ×23; afterwards `Total running VMs: 0`, and the lane root is empty.
+
+| NIC | Storage | 2 vCPU BIOS | 2 vCPU EFI | 4 vCPU BIOS | 4 vCPU EFI |
+|---|---|---|---|---|---|
+| e1000e | sata | PASS (4.5 / 3.8 s) | PASS (4.5 / 4.6 s) | PASS (4.4 / 4.0 s) | PASS (4.6 / 4.5 s) |
+| e1000e | nvme | PASS (4.1 / 3.7 s) | PASS (3.9 / 6.8 s) | PASS (5.2 / 4.5 s) | PASS (5.6 / 5.2 s) |
+| e1000e | pvscsi | PASS (5.1 / 4.1 s) | PASS (4.4 / 4.5 s) | PASS (5.5 / 4.3 s) | PASS (6.7 / 7.0 s) |
+| e1000 | pvscsi | PASS (6.0 / 4.1 s) | PASS (6.3 / 5.1 s) | PASS (6.8 / 4.6 s) | PASS (5.3 / 5.3 s) |
+| vmxnet3 | pvscsi | PASS (5.6 / 4.8 s) | PASS (5.6 / 5.7 s) | PASS (6.8 / 6.1 s) | PASS (7.1 / 6.8 s) |
+
+The bridge cells pass: `bridge0-sata-e1000-c2-bios` (5.6 / 5.2 s), `bridge0-nvme-e1000e-c4-efi` (6.5 / 6.1 s), `bridge0-pvscsi-vmxnet3-c2-efi` (5.5 / 5.2 s).
+
+Decisive lines:
+- **The PVSCSI gate does not fire on VMware.** Across all 46 serial logs, `grep '\[pcie\] refusing'` finds 0 lines, and none mention `15ad:07c0`.
+  - VMware's vIOMMU is never active: every boot logs `[acpi] gates: … dmar=false` and `[vtd] no DMAR-discovered register base; refusing q35 fallback`.
+  - PVSCSI binds on all 26 PVSCSI boots: 24 × `[pvscsi] pci 02:00.0 15ad:07c0 target=0 lun=0 blocks=1127680 irq=msix vectors=1 irq_wakes=0..6 park_expiries=0 expiry_ready=0 expiry_empty=0`, and 2 × the same line on `03:00.0` (bridge cell). There is no `irq wait expired` line.
+  - The other `refusing` lines are the `[vtd]` line above and two `[sched] … refusing spawn_thread` lines per boot. The full run `…7ce6b8` on `eab0755c6` has the same three lines once per boot.
+- **e1000e:** 26 × `[e1000e] controller bound 8086:10d3 82574L link_up=true mac=… irq=msix rx=request-driven vectors=3 irq_wakes=0 park_expiries=0`.
+- **Other NIC binds:** 10 × `[e1000] controller bound 8086:100f 82545EM … irq=polled` and 10 × `[vmxnet3] controller bound 15ad:07b0 … speed=10000Mb/s … irq=msix`.
+- **All boots:** 46 × `[net] DHCP acquired — IP configured`.
