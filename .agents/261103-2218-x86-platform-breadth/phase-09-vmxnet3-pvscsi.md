@@ -75,11 +75,11 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 - [x] vmxnet3 (QEMU) — `reports/phase-09-evidence.md`
 - [x] PVSCSI (QEMU) — `reports/phase-09-evidence.md`
 - [x] Matrix script: `matrix` sweep of `nic × storage × vcpu × firmware` plus one `pciBridge0` cell per storage type, with prompt / NIC + DHCP / persistence / guest-S5 verdicts and 12 unit tests ([evidence](reports/phase-09-evidence.md#vmware-matrix-09-3-09-4))
-- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T013618Z-6528a8` ([JSON](reports/s3-phase09-vmware-matrix.json))
+- [x] VMware matrix run + evidence: 39/39 PASS, run `20261106T015154Z-4728a7` on `cb015dc1e` ([JSON](reports/s3-phase09-vmware-matrix.json))
 
 ## Success Criteria
 
-- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM, on the integration tree before and after the D-S5/D-S6 fixes: `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
+- [x] `vmxnet3-x86` (DHCP, ± VT-d) and `pvscsi-x86` (persistence) pass under TCG and KVM on the integration tree, both before the D-S5/D-S6 fixes and after them (final `cb015dc1e`): `2` / `3 passed` each. These are local runs of the CI recipe; no CI run was observed from this lane.
 - [x] VMware matrix: every cell of {e1000, e1000e, vmxnet3} × {sata, nvme, pvscsi} × {2, 4 vCPU} × {bios, efi} passes: 36/36, plus the 3 `pciBridge0` cells, two boots each, EFI at 1024 MiB. Results JSON committed as local evidence (ceiling: VMware local, `x86_64-vm` only).
 - [x] `test_native_vmware_matrix.py` unit tests pass (`Ran 43 tests … OK`).
 - [ ] Review pass on both cells' DMA/ring code.
@@ -127,17 +127,21 @@ S4 (physical platform).
 - **D-S4 (S4 fix: `\_S5_` scan on VMware's EFI DSDT).** Per the [report](reports/s3-fix-s4-evidence.md): `skip_term` accepts integer-expression TermArgs with a `NullName` target (VMware EFI `OperationRegion (EICH, SystemMemory, (ECFG + 0x4000), 0x4000)`). A storing target is still `Unparsed`. VMware DSDT fixtures were added. Closes V0-S4. Matrix: `\_S5_ static SLP_TYPa=0 SLP_TYPb=0` and guest S5 power-off on all 78 boots, BIOS and EFI.
 - **D-S5 Surprise → fix (vmxnet3 under VMware EFI).**
   - Symptom: `[vmxnet3] controller initialization failed: unusable MAC ff:ff:ff:ff:ff:ff` (EFI only). BIOS read the MAC through the same queries.
-  - `[INFERENCE]` EFI leaves memory decoding off on the function, and the cell read BAR1 before `GrantDma` enabled `MEM_SPACE | BUS_MASTER`. The command register was not read directly.
-  - Fix `6d3192477`: the DMA area is authorized before the first register access, and `negotiate` refuses all-ones `VRRS`/`UVRS`.
-  - Smallest option, inside the cell. The other cells also read registers before 435/`GrantDma` and rely on firmware-enabled decoding; this is an open item for S4 (physical).
+  - `[INFERENCE]` EFI leaves memory decoding off on the function, and the cell read BAR1 before anything turned decoding on. Only 435 and `GrantDma` did that, and both also set `BUS_MASTER`. The command register was not read directly.
+  - First fix `6d3192477`: the DMA area was authorized before the first register access. The H-S3-13 re-check rejected this order, because bus mastering then came on before `CMD_RESET_DEV`. Without an IOMMU (the VMware lane), a relaunched cell's still-activated device could DMA into frames its predecessor freed.
+  - Final fix:
+    - Kernel `173fb292d`: `offer_pcie_device` sets Memory Space alone right after `claim_bdf_owner` (`pcie_ecam::enable_memory_decode`; an absent function or one outside the ECAM window is left alone). Bus mastering still waits for `GrantDma`. This covers every cell, including e1000e (`CTRL` read) and PVSCSI (`ADAPTER_RESET` status), which also touch MMIO before 435/`GrantDma`.
+    - vmxnet3 `cb015dc1e`: bring-up is back to reset → MSI-X → `GrantDma`. `negotiate` keeps refusing all-ones `VRRS`/`UVRS`.
+  - The kernel file is within the S2 row of the [grant](s3-v0-findings-grant.md) (the PCIe BAR path). It is policy, not wire: no syscall, argument or error changed.
 - **D-S6 Surprise → fix (vmxnet3 DHCP on VMware).**
   - The net service frames with a fixed `52:54:00:12:34:56`, not the NIC's MAC. QEMU's default vNIC MAC is the same address, which hid the problem.
   - The e1000 family receives in promiscuous mode. vmxnet3 filtered unicast to `00:0c:29:…`, so the DHCP OFFER was dropped.
   - Fix `14640724a`: `rxMode` adds PROMISC (`0x1D`). This updates D3's "rx mode unicast+broadcast+all-multicast".
-  - The fixed station MAC itself (one MAC for every Cellos guest on an L2) is outside S3 and is reported as an open risk.
+  - Untested risk `[INFERENCE]`: vmxnet3, like the e1000 family, now depends on the virtual switch accepting promiscuous receive and forged transmits. Workstation allows both; ESXi standard-vSwitch defaults (Promiscuous Reject, Forged Transmits Reject) would break networking. This is an HCL note for S4.
+  - The fixed station MAC itself is outside S3 and is reported as an open risk: every Cellos guest on one L2 uses the same MAC. The real fix is for the net service to use the driver's `GetMac`.
 - **D-S7 Decision (matrix shape).**
   - The lease is required on both boots, inside 45 s of power-on. Guest S5 is a verdict: no hard stop.
   - `pciBridge0` cells: `sata`+e1000 c2 BIOS, `nvme`+e1000e c4 EFI, `pvscsi`+vmxnet3 c2 EFI.
   - Cells run three at a time (`--jobs 3`); each has its own directory, pipe and disk.
   - The committed JSON drops only the PCI bridge and root-port enumeration lines from the markers; the full summary is retained under `build/` with its sha256.
-- **D-S8 Observation (D6 on the real device).** VMware's PVSCSI offers MSI-X: `irq=msix vectors=1 irq_wakes=0..5 park_expiries=0` on 26 boots, with no `irq wait expired` line. D6's post-park re-reads remain a QEMU (MSI) observation. D5 (VT-d confinement of PVSCSI ring pages) stays unproven, because VMware exposes no working remapper (V0-S5).
+- **D-S8 Observation (D6 on the real device).** VMware's PVSCSI offers MSI-X: `irq=msix vectors=1 irq_wakes=0..5 park_expiries=0` on 26 boots in each of the two full runs, with no `irq wait expired` line. D6's post-park re-reads remain a QEMU (MSI) observation. D5 (VT-d confinement of PVSCSI ring pages) stays unproven, because VMware exposes no working remapper (V0-S5).
