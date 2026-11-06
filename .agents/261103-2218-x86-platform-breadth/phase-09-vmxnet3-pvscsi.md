@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "vmxnet3 and PVSCSI cells, VMware matrix"
-status: pending
+status: in-progress
 priority: P2
 effort: "5d"
 dependencies: [5, 8]
@@ -71,9 +71,10 @@ The two paravirtual devices VMware recommends: vmxnet3 `15AD:07B0` and PVSCSI `1
 
 ## Todo List
 
+- [x] V0 VMware tooling smoke: pipe relay, typed input, two-boot persistence on SATA and NVMe (BIOS + EFI, 2/4 vCPU), host probes ([evidence](reports/s3-v0-vmware-tooling-evidence.md), [JSON](reports/s3-v0-vmware-smoke.json))
 - [ ] vmxnet3 (QEMU)
 - [ ] PVSCSI (QEMU)
-- [ ] Matrix script
+- [ ] Matrix script (VMX generation for every cell and the `lane` runner landed in V0; the `nic × storage × vcpu × firmware` sweep with DHCP verdicts remains)
 - [ ] VMware matrix run + evidence
 
 ## Success Criteria
@@ -98,4 +99,12 @@ S4 (physical platform).
 
 ## Deviation Log
 
-None.
+- **V0-D1 (Decision, 2026-11-06).** One pinned `virtualHW.version = "22"` (`vmware-boot-test.py` `HW_VERSION`), recorded from `vmware.log` per boot. The AHCI fault scenarios use it too, through the shared generator (14 → 22, not re-run).
+- **V0-D2 (Decision).** Lane disk = `machine_pin_disk.py` → `qemu-img` seed VMDK → `vmware-vdiskmanager.exe -r … -t 0`. `x86_64-vm` needs the pin store, so the guest is a provisioned node.
+- **V0-D3 (Decision).** PCIe root ports `pciBridge4-7` are always in the VMX. Without them, e1000e/vmxnet3/NVMe fail power-on with `msg.pci.noslotavail`. `pciBridge0` is opt-in (`legacy_bridge`), see V0-S2.
+- **V0-D4 (Deviation).** EFI cells run at 512 MiB until V0-S3 is fixed; BIOS cells at 1024 MiB.
+- **V0-S1 (Surprise, blocks the VMware NIC rows of 08/09).** VMware puts e1000e/vmxnet3 on bus ≥ 1. The kernel scan logs bus 0 only, and the platform cell skips every class `02:00:00` except `8086:100E` (`cells/services/platform/src/scan.rs:222-229`, outside request §2). The new NIC cells cannot see their VMware devices without a discovery-path change. Owner decision needed.
+- **V0-S2 (Surprise).** With `pciBridge0`, AHCI moves to bus 2 and logs `[ahci] controller has no usable MMIO BAR (base=0x0 len=0x2000)`, then SAFE MODE. Recorded by probe `bridge0-sata`.
+- **V0-S3 (Surprise).** EFI with ≥ 1024 MiB panics: `kernel/src/main.rs:1219:10: frame allocator bitmap and early paging registration must succeed`. BIOS is unaffected up to 4096 MiB. Kernel fix outside S3.
+- **V0-S4 (Surprise).** VMware EFI `\_S5_` is unparsed (`scan stopped at opcode 0x5b offset 0x1f59; poweroff refused`), so EFI guests are hard-stopped. Persistence is unaffected.
+- **V0-S5 (Surprise, closes A3).** `vvtd.enable` powers on and exposes a DMAR, but `[vtd] Intel VT-d not present (GCAP=0xffffffffffffffff)`, and `x86_64-pc` refuses untranslated DMA. A3 is false, so H-S3-9 applies: the matrix runs under `x86_64-vm` only, with no VMware production-guest claim.
