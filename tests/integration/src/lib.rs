@@ -217,6 +217,35 @@ pub fn virtio_pci_devices(blk_disk: &str, scsi_disk: &str, vtd: bool, iommu_plat
     args
 }
 
+/// QEMU arguments for the phase 09 PVSCSI lane: `-nic none`, an NVMe disk on
+/// `nvme_disk` (the primary) and one `scsi-hd` on `scsi_disk` behind QEMU's
+/// `pvscsi` (`15ad:07c0`). `vtd` puts `intel-iommu` before the endpoints.
+/// `root_port` places the PVSCSI function behind a `pcie-root-port` (bus 1).
+pub fn pvscsi_devices(nvme_disk: &str, scsi_disk: &str, vtd: bool, root_port: bool) -> Vec<String> {
+    let mut args: Vec<String> = vec!["-nic".into(), "none".into()];
+    if vtd {
+        args.extend(["-device".into(), "intel-iommu".into()]);
+    }
+    args.extend([
+        "-drive".into(),
+        format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+        "-device".into(),
+        "nvme,drive=nvme0,serial=deadbeef01".into(),
+    ]);
+    if root_port {
+        args.extend(["-device".into(), "pcie-root-port,id=rp1,chassis=1,slot=2".into()]);
+    }
+    args.extend([
+        "-device".into(),
+        format!("pvscsi,id=pvscsi0{}", if root_port { ",bus=rp1" } else { "" }),
+        "-drive".into(),
+        format!("file={scsi_disk},format=raw,if=none,id=pvsd0"),
+        "-device".into(),
+        "scsi-hd,drive=pvsd0,bus=pvscsi0.0".into(),
+    ]);
+    args
+}
+
 /// Resolve the qemu-system-x86_64 binary.
 ///
 /// Order: `$ViCell_QEMU_X86` env override → bare name on PATH → Windows default.
@@ -1790,6 +1819,14 @@ impl QemuRunner {
         iommu_platform: bool,
     ) -> Self {
         let devices = virtio_pci_devices(blk_disk, scsi_disk, vtd, iommu_platform);
+        Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", 1, &devices)
+    }
+
+    /// Boot q35 (the env-selected [`x86_lane`]) with an NVMe primary disk and
+    /// QEMU's VMware PVSCSI adapter carrying one `scsi-hd` (plan 261103-2218
+    /// phase 09); see [`pvscsi_devices`] for `vtd` and `root_port`.
+    pub fn boot_x86_pvscsi(iso: &str, nvme_disk: &str, scsi_disk: &str, vtd: bool, root_port: bool) -> Self {
+        let devices = pvscsi_devices(nvme_disk, scsi_disk, vtd, root_port);
         Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", 1, &devices)
     }
 

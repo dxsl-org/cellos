@@ -32,12 +32,14 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// datasheet i210/i211 SKUs the cell's `identity.rs` lists. Phase 08 (S3) adds
 /// the 82545EM to `/bin/e1000` and the 82574L to the new `/bin/e1000e`: the
 /// default NICs of VMware guests, and the latter is also q35's default NIC.
+/// Phase 09 (S3) adds VMware's paravirtual vmxnet3 (`/bin/vmxnet3`). PVSCSI
+/// (`15AD:07C0`) is a SCSI controller (class `01:00:00`), not gated here.
 ///
 /// The table bounds what the *kernel* offers; each cell names its own IDs
 /// through the vendor:device query (424) and repeats the identity check before
 /// programming a register model, so no cell can bind a foreign family by
 /// accident. Every owner's `identity.rs` lists exactly its rows here.
-pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 7] = [
+pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 8] = [
     (0x8086, 0x100E, "/bin/e1000"), // 82540EM
     (0x8086, 0x100F, "/bin/e1000"), // 82545EM copper (QEMU e1000-82545em, VMware e1000)
     (0x8086, 0x10D3, "/bin/e1000e"), // 82574L (QEMU e1000e, q35 default, VMware e1000e)
@@ -45,6 +47,7 @@ pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 7] = [
     (0x8086, 0x1533, "/bin/igb"),   // i210 copper with external flash
     (0x1AF4, 0x1041, "/bin/virtio-net"), // virtio-net (modern), ADR-0031 phase 05
     (0x1AF4, 0x1000, "/bin/virtio-net"), // virtio-net (transitional, modern caps required)
+    (0x15AD, 0x07B0, "/bin/vmxnet3"), // VMware vmxnet3 (QEMU vmxnet3, VMware default PV NIC)
 ];
 
 // Deliberately refused until the cell implements their prerequisites: flashless
@@ -1359,6 +1362,7 @@ mod tests {
         assert_eq!(ethernet_driver_cell(0x8086, 0x1533), Some("/bin/igb")); // i210 copper
         assert_eq!(ethernet_driver_cell(0x1AF4, 0x1000), Some("/bin/virtio-net"));
         assert_eq!(ethernet_driver_cell(0x1AF4, 0x1041), Some("/bin/virtio-net"));
+        assert_eq!(ethernet_driver_cell(0x15AD, 0x07B0), Some("/bin/vmxnet3")); // vmxnet3
         // Everything else stays refused (and `scan` names it): the igb SKUs whose
         // prerequisites the cell does not implement (flashless i210 and i211
         // need iNVM; fibre/SerDes/SGMII need media link setup), the e1000e
@@ -1375,6 +1379,8 @@ mod tests {
             (0x8086, 0x0),
             (0x10EC, 0x8168), // Realtek RTL8111 — no cell
             (0x1AF4, 0x1042), // virtio-blk is not Ethernet
+            (0x15AD, 0x07C0), // PVSCSI is storage, not Ethernet
+            (0x15AD, 0x0720), // VMware vmxnet (v1/v2) — no cell
         ] {
             assert!(
                 !ethernet_id_has_driver(vendor, device),

@@ -62,12 +62,12 @@ class QualifiedRoute:
 # assembler, is a reviewed source change of this table.
 X86_CANONICAL_ROOT = "kernel/src/embedded-x86_64"
 X86_CANDIDATE_RECIPE = "scripts/assemble-x86-image.py"
-X86_CANDIDATE_RECIPE_SHA256 = "2676e091be0f95ac82e92b87a37d62b74789f2dffaa77491bcb4d39600a47625"
+X86_CANDIDATE_RECIPE_SHA256 = "8c9b1ed0f0af27a0ecd9eb04ec10f5270cf73dd216d85d45bbb5b8672d07928f"
 _X86_HEADLESS_SIGNED = frozenset({
     "cellbox", "service-vfs", "service-config", "service-input", "service-net", "platform",
     "driver-nvme", "driver-e1000", "driver-igb", "driver-e1000e", "driver-ahci", "driver-xhci",
-    "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
-    "driver-serial-x86", "ls", "cat", "echo", "ps", "kill", "shutdown", "app-init",
+    "driver-vmxnet3", "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
+    "driver-pvscsi", "driver-serial-x86", "ls", "cat", "echo", "ps", "kill", "shutdown", "app-init",
     "supervisor",
 })
 _X86_DESKTOP_SIGNED = _X86_HEADLESS_SIGNED | frozenset({

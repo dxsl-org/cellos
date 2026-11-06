@@ -63,6 +63,10 @@ pub enum DriverId {
     EthernetIgb,
     /// Intel 82574L (`e1000e`) NIC, later the I219 base (plan phases 08/13).
     EthernetE1000e,
+    /// VMware vmxnet3 paravirtual NIC (phase 09).
+    EthernetVmxnet3,
+    /// VMware PVSCSI paravirtual SCSI host (phase 09).
+    StoragePvscsi,
     /// Additional 16550 ports beyond the COM1 console (phase 06).
     Uart16550Multi,
     /// virtio over PCI (net, block, SCSI) through the 434 capability record

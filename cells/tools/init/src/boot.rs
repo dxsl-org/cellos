@@ -513,7 +513,8 @@ fn supervised_block_driver(name: &str, path: &str, tid: usize) -> crate::service
 
 /// Spawn the block Driver Cells and wait until each has bound its route or
 /// exited. Returns the drivers init supervises from here on (NVMe and, on x86,
-/// AHCI and virtio-scsi); the VirtIO block driver is waited for but not supervised.
+/// AHCI, virtio-scsi and PVSCSI); the VirtIO block driver is waited for but not
+/// supervised.
 pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Service> {
     let mut supervised = alloc::vec::Vec::new();
     let mut spawned = alloc::vec::Vec::new();
@@ -543,6 +544,13 @@ pub(crate) fn start_block_drivers() -> alloc::vec::Vec<crate::service_table::Ser
             "/bin/virtio-scsi",
             tid,
         ));
+    }
+    // S3 phase 09: VMware's PVSCSI host is a block driver too; it exits
+    // cleanly without a controller.
+    #[cfg(target_arch = "x86_64")]
+    if let SyscallResult::Ok(tid) = sys_spawn_from_path("/bin/pvscsi") {
+        spawned.push(tid);
+        supervised.push(supervised_block_driver("pvscsi", "/bin/pvscsi", tid));
     }
     let started = ostd::syscall::sys_get_time_ms();
     let mut yields = 0;

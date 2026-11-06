@@ -374,6 +374,20 @@ approver = "owner (x86 breadth phase 05, 2026-11-04)"
 date = "2026-11-04"
 
 [[file]]
+path = "cells/drivers/vmxnet3/src/dma.rs"
+class = "driver-mmio"
+reason = "Driver Cell (VMware vmxnet3): volatile reads and writes of DriverShared, the queue descriptors, the generation-bit rings and the frame buffers in one DMA allocation the cell owns for its lifetime, authorized for the controller BDF before any of its addresses is programmed; every offset is bounds-checked against the allocation. MMIO goes through the bounds-checked MmioRegion. The wall is the DMA authorization, not LBI."
+approver = "owner (x86 breadth S3 phase 09, 2026-11-06)"
+date = "2026-11-06"
+
+[[file]]
+path = "cells/drivers/pvscsi/src/dma.rs"
+class = "driver-mmio"
+reason = "Driver Cell (VMware PVSCSI): volatile reads and writes of the ring state, request/completion rings, sense and data bounce buffer in one DMA allocation the cell owns for its lifetime, authorized for the adapter BDF before any of its addresses is programmed; every offset is bounds-checked against the allocation. MMIO goes through the bounds-checked MmioRegion. The wall is the DMA authorization, not LBI."
+approver = "owner (x86 breadth S3 phase 09, 2026-11-06)"
+date = "2026-11-06"
+
+[[file]]
 path = "cells/services/input/src/virtio_device.rs"
 class = "driver-mmio"
 reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
@@ -745,6 +759,20 @@ class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/virtio-scsi/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "owner (x86 breadth phase 05, 2026-11-04)"
 date = "2026-11-04"
+
+[[crate]]
+name = "driver-vmxnet3"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/vmxnet3/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "owner (x86 breadth S3 phase 09, 2026-11-06)"
+date = "2026-11-06"
+
+[[crate]]
+name = "driver-pvscsi"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/pvscsi/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "owner (x86 breadth S3 phase 09, 2026-11-06)"
+date = "2026-11-06"
 
 [[crate]]
 name = "service-input"

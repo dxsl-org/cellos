@@ -1076,6 +1076,19 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture --test-threads=2
 
+      # Plan 261103-2218 phase 09: QEMU `vmxnet3` on `/bin/vmxnet3`, with and
+      # without VT-d: SKU bind line with `irq=msix rx=request-driven`,
+      # registration → TX → RX → DHCP order, exactly one NIC Driver Cell.
+      - name: vmxnet3 integration test (x86_64)
+        env:
+          VICELL_NIC_ISO: ${{ github.workspace }}/build/vicell-x86.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test vmxnet3-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture --test-threads=2
+
       # ADR-0031 phase 05: virtio-net/blk/scsi over PCI. Default q35 lane (DHCP +
       # two-boot persistence), vIOMMU fail-closed without iommu_platform, and
       # vIOMMU with iommu_platform=on. The kvm-default-vm acceptance test needs
@@ -1099,6 +1112,19 @@ jobs:
           X86_LIMINE_CONF=scripts/x86/limine-pc.conf \
             X86_ISO_ROOT="$RUNNER_TEMP/x86-pc-iso-root" \
             bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-pc.iso
+
+      # Plan 261103-2218 phase 09: QEMU `pvscsi` + `scsi-hd` on `/bin/pvscsi`
+      # next to an NVMe primary: IRQ-driven bind line and two-boot persistence
+      # on q35 without and with VT-d, and on x86_64-pc under VT-d (pinned node).
+      - name: PVSCSI integration test (x86_64)
+        env:
+          VICELL_X86_PC_ISO: ${{ github.workspace }}/build/x86-pc-lane/vicell-x86-pc.iso
+        run: >
+          cargo test
+          --manifest-path tests/integration/Cargo.toml
+          --test pvscsi-x86
+          --target x86_64-unknown-linux-gnu
+          -- --nocapture --test-threads=1
 
       - name: VT-d DMAR discovery + fail-closed lanes (x86_64-pc)
         env:
@@ -1821,10 +1847,11 @@ jobs:
           cargo test -p driver-i2c-bcm -p driver-spi-bcm -p service-compositor \
             -p service-hypervisor --target x86_64-unknown-linux-gnu
           # Phase 10 S10-3c: the NVMe driver's time budgets and init's block-driver wait.
-          # Plan 261103-2218 phase 08: the e1000e cell's register/PHY/ring/IVAR tests.
+          # Plan 261103-2218 phase 08: the e1000e cell's register/PHY/ring/IVAR tests;
+          # phase 09: vmxnet3 layout/ring/command and PVSCSI layout/LUN/completion tests.
           # These bins gate `no_std`/`no_main` on `not(test)`, so the hosted test build
           # gets libtest's entry; before that, neither crate's tests ever linked.
-          cargo test -p driver-nvme -p app-init -p driver-e1000e --target x86_64-unknown-linux-gnu
+          cargo test -p driver-nvme -p app-init -p driver-e1000e -p driver-vmxnet3 -p driver-pvscsi --target x86_64-unknown-linux-gnu
           # `app-net-tools` and `app-wasm` are bin-only crates whose entry comes
           # from `ostd::cell_main!`: the macro now emits `#[no_mangle]` only for
           # the bare-metal target and their headers gate `no_std`/`no_main` the

@@ -8,7 +8,7 @@ const COMPATIBLES: [&str; 1] = ["cellos,x86_64-vm"];
 /// Drivers a generic x86_64 guest may use: the PC set plus virtio over PCI.
 /// HPET is listed because many hypervisors offer it; the timer path no longer
 /// requires it (phase 02 selects TSC, kvmclock, HPET or the PM timer).
-const DRIVERS: [DriverId; 11] = [
+const DRIVERS: [DriverId; 13] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
@@ -19,6 +19,8 @@ const DRIVERS: [DriverId; 11] = [
     DriverId::EthernetE1000,
     DriverId::EthernetIgb,
     DriverId::EthernetE1000e,
+    DriverId::EthernetVmxnet3,
+    DriverId::StoragePvscsi,
     DriverId::VirtioPci,
 ];
 

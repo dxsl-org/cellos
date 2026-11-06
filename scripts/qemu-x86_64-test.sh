@@ -6,10 +6,10 @@
 #
 # Usage: BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh [iso]
 #   iso   default: build/vicell-x86.iso
-# Optional: X86_NIC_MODEL=e1000|e1000-82545em|e1000e|igb attaches exactly that
-# NIC (q35's default NIC dropped) and asserts its Driver Cell binds it and
-# carries DHCP. With no model, q35's default NIC (an 82574L) must be bound by
-# /bin/e1000e (plan 261103-2218 phase 08, H-S3-7).
+# Optional: X86_NIC_MODEL=e1000|e1000-82545em|e1000e|igb|vmxnet3 attaches
+# exactly that NIC (q35's default NIC dropped) and asserts its Driver Cell binds
+# it and carries DHCP. With no model, q35's default NIC (an 82574L) must be
+# bound by /bin/e1000e (plan 261103-2218 phase 08, H-S3-7; vmxnet3 phase 09).
 
 set -euo pipefail
 
@@ -67,11 +67,11 @@ esac
 # isolated.
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
-    e1000|e1000-82545em|e1000e|igb)
+    e1000|e1000-82545em|e1000e|igb|vmxnet3)
         NIC_ARGS=(-nic none -netdev user,id=net0,restrict=on -device "$X86_NIC_MODEL,netdev=net0")
         ;;
     *)
-        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000-82545em, e1000e, or igb" >&2
+        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000-82545em, e1000e, igb, or vmxnet3" >&2
         exit 1
         ;;
 esac
@@ -135,13 +135,14 @@ case "$X86_NIC_MODEL" in
     e1000) EXPECT_BIND="\[e1000\] controller bound 8086:100e 82540EM" ;;
     e1000-82545em) EXPECT_BIND="\[e1000\] controller bound 8086:100f 82545EM" ;;
     igb) EXPECT_BIND="\[igb\] controller bound 8086:10c9" ;;
+    vmxnet3) EXPECT_BIND="\[vmxnet3\] controller bound 15ad:07b0 vmxnet3 .* irq=msix rx=request-driven" ;;
 esac
 if ! grep -qa "$EXPECT_BIND" qemu-x86_64.log; then
     echo "FAIL: expected NIC bind line '$EXPECT_BIND'" >&2
     grep -ai "controller bound\|unsupported Ethernet\|e1000" qemu-x86_64.log | head -5
     exit 1
 fi
-NIC_CELLS_BOUND="$(grep -caE '\[(e1000|e1000e|igb)\] controller bound|\[virtio-net\] ready' qemu-x86_64.log || true)"
+NIC_CELLS_BOUND="$(grep -caE '\[(e1000|e1000e|igb|vmxnet3)\] controller bound|\[virtio-net\] ready' qemu-x86_64.log || true)"
 if [[ "$NIC_CELLS_BOUND" != "1" ]]; then
     echo "FAIL: $NIC_CELLS_BOUND NIC Driver Cells bound; exactly one expected" >&2
     grep -aiE "controller bound|virtio-net\] ready" qemu-x86_64.log | head -5
