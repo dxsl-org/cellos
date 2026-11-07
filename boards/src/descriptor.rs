@@ -72,6 +72,8 @@ pub enum DriverId {
     /// virtio over PCI (net, block, SCSI) through the 434 capability record
     /// (ADR-0031 phase 05).
     VirtioPci,
+    /// Intel I225/I226 (`igc`) 2.5GbE NIC family (phase 15).
+    EthernetIgc,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,7 +1,7 @@
 ---
 phase: 15
 title: "Intel I225/I226 (igc)"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P2
 effort: "4d + physical capture"
 dependencies: ["4b"]
@@ -54,14 +54,14 @@ The I225/I226 2.5GbE controllers are standard on recent Intel boards and mini PC
 
 ## Todo List
 
-- [ ] Identity + regs
-- [ ] Reset/PHY
-- [ ] Data path
-- [ ] Physical capture
+- [X] Identity + regs
+- [X] Reset/PHY
+- [X] Data path
+- [ ] Physical capture (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests green; cell packaged in the x86 image.
+- [X] Host tests green; cell packaged in the x86 image.
 - [ ] Physical capture per contract; otherwise `blocked: hardware`.
 
 ## Risk Assessment

@@ -37,7 +37,7 @@ created: 2026-11-03
 | 12 | [VT-d multi-unit, RMRR, interrupt remapping](phase-12-vtd-multi-unit-rmrr-ir.md) — completed 2026-11-07 | S4 | 04a | ✓ |
 | 13 | [Intel I219 (e1000e PCH)](phase-13-nic-i219.md) — driver code and host tests complete; capture pending physical machine | S5 NIC | 08, 12 | |
 | 14 | [Intel I350 (igb)](phase-14-nic-i350.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
-| 15 | [Intel I225/I226 (igc)](phase-15-nic-igc.md) | S5 | 04b | |
+| 15 | [Intel I225/I226 (igc)](phase-15-nic-igc.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
 | 16 | [Realtek RTL8111/8125 (r8169)](phase-16-nic-realtek.md) | S5 | 04b | |
 | 17 | [Broadcom BCM5720 (tg3)](phase-17-nic-bcm5720.md) | S5 | 04b | |
 | 18 | [Intel 82599/X540/X550 (ixgbe)](phase-18-nic-ixgbe.md) | S5 | 04b | |

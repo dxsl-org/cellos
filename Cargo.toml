@@ -86,6 +86,7 @@ members = [
     "cells/drivers/e1000e",
     "cells/drivers/vmxnet3",
     "cells/drivers/igb",
+    "cells/drivers/igc",
     "cells/drivers/serial-x86",
     "cells/drivers/gpio",
     "cells/drivers/gpio-bcm",
