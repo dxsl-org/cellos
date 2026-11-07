@@ -76,6 +76,8 @@ pub enum DriverId {
     EthernetIgc,
     /// Realtek RTL8111/8168/8125 (`r8169`) NIC family (phase 16).
     EthernetR8169,
+    /// Broadcom BCM5719/BCM5720 (`tg3`/`bge`) NIC family (phase 17).
+    EthernetBcm57xx,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

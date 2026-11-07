@@ -1497,6 +1497,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-bcm57xx"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-can-loopback"
 version = "0.1.0"
 dependencies = [

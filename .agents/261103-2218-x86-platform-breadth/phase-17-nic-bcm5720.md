@@ -1,7 +1,7 @@
 ---
 phase: 17
 title: "Broadcom BCM5719/BCM5720 (tg3 family)"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P2
 effort: "6d + physical capture"
 dependencies: ["4b"]
@@ -56,14 +56,14 @@ The BCM5720 (`14e4:165F`) and BCM5719 (`14e4:1657`) are the onboard LOMs of Dell
 
 ## Todo List
 
-- [ ] Identity + APE
-- [ ] Reset/link
-- [ ] Data path
-- [ ] Physical capture incl. BMC
+- [X] Identity + APE
+- [X] Reset/link
+- [X] Data path
+- [ ] Physical capture incl. BMC (pending physical server capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests: APE lock acquire/release, unload notification on every exit path.
+- [X] Host tests: APE lock acquire/release, unload notification on every exit path.
 - [ ] Physical capture per contract plus continuous BMC ping with no loss above 5 s across boot and a driver-cell restart; otherwise `blocked: hardware`.
 
 ## Risk Assessment

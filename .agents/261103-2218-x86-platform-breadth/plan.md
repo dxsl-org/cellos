@@ -39,7 +39,7 @@ created: 2026-11-03
 | 14 | [Intel I350 (igb)](phase-14-nic-i350.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
 | 15 | [Intel I225/I226 (igc)](phase-15-nic-igc.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
 | 16 | [Realtek RTL8111/8125 (r8169)](phase-16-nic-realtek.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
-| 17 | [Broadcom BCM5720 (tg3)](phase-17-nic-bcm5720.md) | S5 | 04b | |
+| 17 | [Broadcom BCM5720 (tg3)](phase-17-nic-bcm5720.md) — driver code and host tests complete; capture pending physical machine | S5 | 04b | |
 | 18 | [Intel 82599/X540/X550 (ixgbe)](phase-18-nic-ixgbe.md) | S5 | 04b | |
 | 19 | [Intel X710 (i40e)](phase-19-nic-i40e.md) | S5 | 04b | |
 | 20 | [Physical qualification and HCL rows](phase-20-physical-qualification-hcl.md) | S6 | 05-07b, 09-12 + machine NIC | ✓ |
