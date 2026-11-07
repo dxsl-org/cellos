@@ -83,9 +83,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
   **stack RWX** trên RISC-V/AArch64 (`remap_range_user` có `EXECUTE`). Ưu tiên thấp hơn vì ADR-0022 chỉ x86,
   nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
 
-**Đợt 2 — Medium bảo mật:**
-- [ ] Beacon replay: `boot_epoch = sys_get_time_ms()`, state không persist
-  (`cells/services/net-broker/src/local_runtime.rs`, `beacon.rs`).
 
 **Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
 - [ ] x86 TLB: `kernel/src/memory/tlb_shootdown.rs` vẫn gọi `tlb_flush_all()` cho mọi thay đổi và probe ack

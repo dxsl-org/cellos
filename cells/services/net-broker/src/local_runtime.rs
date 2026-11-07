@@ -45,6 +45,24 @@ impl RuntimeState {
         }
     }
 }
+const EPOCH_FILE: &str = "/srv/net-broker/boot_epoch.bin";
+
+fn load_or_update_boot_epoch() -> Option<u64> {
+    let now_ms = sys_get_time_ms().unwrap_or(1);
+    let mut vfs = ostd::clients::VfsClient::new();
+    let stored_epoch = if let Ok(bytes) = vfs.read_file_bounded(EPOCH_FILE, 8) {
+        if bytes.len() == 8 {
+            u64::from_le_bytes(bytes.try_into().unwrap())
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    let boot_epoch = now_ms.max(stored_epoch.saturating_add(1));
+    let _ = vfs.write_file(EPOCH_FILE, &boot_epoch.to_le_bytes());
+    Some(boot_epoch)
+}
 
 pub struct BrokerNetworkState {
     gossip_key: [u8; 32],
@@ -71,7 +89,7 @@ impl BrokerNetworkState {
         let gossip_key = beacon::derive_gossip_key(k1);
         let cluster_id = ClusterId::from_name("robots").0;
         let machine_id = beacon::derive_machine_id(&identity.node_id);
-        let boot_epoch = sys_get_time_ms()?;
+        let boot_epoch = load_or_update_boot_epoch()?;
         let mut net = NetRef::new();
         let channel = BeaconChannel::init(&mut net)?;
         Some(Self {
