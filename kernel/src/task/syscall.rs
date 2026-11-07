@@ -50,8 +50,15 @@ static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
 /// ("ShmMap kernel_text_phys") nor map a peer's or a dead predecessor's frame.
 /// Root retirement reclaims the dead incarnation's frames
 /// ([`release_shm_for`]). A leaf lock: never held while taking another.
-static SHM_HANDLES: Spinlock<BTreeMap<usize, crate::cell::state_stash::Incarnation>> =
-    Spinlock::new(BTreeMap::new());
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ShmRecord {
+    pub(crate) owner: crate::cell::state_stash::Incarnation,
+    pub(crate) recipient: Option<u64>,
+    pub(crate) size: usize,
+    pub(crate) rights: u32,
+}
+
+static SHM_HANDLES: Spinlock<BTreeMap<usize, ShmRecord>> = Spinlock::new(BTreeMap::new());
 
 const MAX_IN_FLIGHT_DMA_PUBLICATIONS: usize = 64;
 static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> =
@@ -111,34 +118,62 @@ pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationG
     reserve_dma_publication(tid, quota)
 }
 
-fn shm_register(frame: usize, owner: crate::cell::state_stash::Incarnation) {
+fn shm_register(
+    frame: usize,
+    owner: crate::cell::state_stash::Incarnation,
+    size: usize,
+    recipient: Option<u64>,
+    rights: u32,
+) {
     #[cfg(cellos_p01_trace)]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    SHM_HANDLES.lock().insert(frame, owner);
+    SHM_HANDLES.lock().insert(
+        frame,
+        ShmRecord {
+            owner,
+            recipient,
+            size,
+            rights,
+        },
+    );
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 /// Whether `handle` is an outstanding `ShmAlloc` frame owned by exactly `owner`
 /// (same Cell and generation).
 fn shm_owned_by(handle: usize, owner: crate::cell::state_stash::Incarnation) -> bool {
-    SHM_HANDLES.lock().get(&handle) == Some(&owner)
+    SHM_HANDLES.lock().get(&handle).map(|r| r.owner) == Some(owner)
 }
 
-/// Remove every `ShmAlloc` record of `owner` and return its frames. Records of
-/// any other Cell or generation are left untouched.
-fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
+fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Option<ShmRecord> {
+    let guard = SHM_HANDLES.lock();
+    let record = guard.get(&handle).copied()?;
+    if (record.owner.cell == cell && record.owner.generation == generation)
+        || record.recipient == Some(cell)
+    {
+        Some(record)
+    } else {
+        None
+    }
+}
+
+/// Remove every `ShmAlloc` record of `owner` and return its frames and total bytes.
+fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec<usize>, usize) {
     let mut frames = Vec::new();
+    let mut total_bytes = 0usize;
     SHM_HANDLES.lock().retain(|&frame, record| {
-        if *record == owner {
+        if record.owner == owner {
             frames.push(frame);
+            total_bytes = total_bytes.saturating_add(record.size);
             false
         } else {
             true
         }
     });
-    frames
+    (frames, total_bytes)
 }
 
 /// Reclaim the `ShmAlloc` frames of a retired root's incarnation.
@@ -159,13 +194,14 @@ fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<usize> {
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
-    let frames = shm_take_for(crate::cell::state_stash::Incarnation {
+    let (frames, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
         cell: cell_id,
         generation,
     });
     if frames.is_empty() {
         return 0;
     }
+    crate::memory::cell_quota::refund(cell_id as usize, total_bytes);
     let kernel_rwx = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
@@ -6498,42 +6534,47 @@ fn handle_syscall_inner(
             }
             Ok(0)
         }
-        Syscall::ShmAlloc { size: _ } => {
-            // Allocate a single frame from the global allocator and register
-            // it in the SHM handle table, bound to the caller's live Cell
-            // incarnation, so subsequent ShmMap calls can verify the caller
-            // owns the frame rather than forging an arbitrary physical address.
+        Syscall::ShmAlloc { size } => {
             let Some((cell, generation)) = live_cell_identity(caller_id) else {
                 return Err(SyscallError::PermissionDenied);
             };
             let owner = crate::cell::state_stash::Incarnation { cell, generation };
+            let page_size = crate::memory::paging::PAGE_SIZE;
+            let bytes = if size == 0 {
+                page_size
+            } else {
+                size.div_ceil(page_size) * page_size
+            };
+
+            if !crate::memory::cell_quota::charge(cell as usize, bytes) {
+                return Err(SyscallError::BufferTooSmall);
+            }
+
             let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
             if let Some(allocator) = frame_guard.as_mut() {
                 if let Some(frame) = allocator.allocate_frame() {
                     drop(frame_guard);
-                    shm_register(frame, owner);
+                    shm_register(frame, owner, bytes, None, 0x3);
                     return Ok(frame);
                 }
             }
+            crate::memory::cell_quota::refund(cell as usize, bytes);
             Err(SyscallError::BufferTooSmall)
         }
-        Syscall::ShmMap {
-            handle,
-            target_pid: _,
-        } => {
-            // CRITICAL: handle must be a frame previously issued by ShmAlloc
-            // to the caller's own incarnation (same Cell and generation).
-            // Without this check, a cell could pass `handle = kernel_text_phys`
-            // and obtain a user-accessible mapping to kernel code, or map a
-            // peer's (or a dead predecessor's) frame.
-            let owns = live_cell_identity(caller_id).is_some_and(|(cell, generation)| {
-                shm_owned_by(
-                    handle,
-                    crate::cell::state_stash::Incarnation { cell, generation },
-                )
-            });
-            if !owns {
+        Syscall::ShmMap { handle, target_pid } => {
+            let Some((caller_cell, caller_gen)) = live_cell_identity(caller_id) else {
                 return Err(SyscallError::PermissionDenied);
+            };
+            let Some(record) = shm_accessible_by(handle, caller_cell, caller_gen) else {
+                return Err(SyscallError::PermissionDenied);
+            };
+
+            if target_pid != 0 && record.owner.cell == caller_cell {
+                if let Some((target_cell, _)) = live_cell_identity(target_pid) {
+                    if let Some(r) = SHM_HANDLES.lock().get_mut(&handle) {
+                        r.recipient = Some(target_cell);
+                    }
+                }
             }
 
             let frame = handle;
@@ -13292,7 +13333,7 @@ mod tests {
             cell: 0x5A1,
             generation: 3,
         };
-        shm_register(FRAME, owner);
+        shm_register(FRAME, owner, 4096, None, 0x3);
 
         assert!(shm_owned_by(FRAME, owner));
         assert!(!shm_owned_by(
@@ -13311,7 +13352,7 @@ mod tests {
         ));
         assert!(!shm_owned_by(FRAME + 0x1000, owner));
 
-        assert_eq!(shm_take_for(owner), alloc::vec![FRAME]);
+        assert_eq!(shm_take_for(owner), (alloc::vec![FRAME], 4096));
         assert!(!shm_owned_by(FRAME, owner));
     }
 
@@ -13333,19 +13374,39 @@ mod tests {
             cell: 0x5B2,
             generation: 2,
         };
-        shm_register(0x5B0_0000, dead);
-        shm_register(0x5B0_1000, successor);
-        shm_register(0x5B0_2000, dead);
-        shm_register(0x5B0_3000, peer);
+        shm_register(0x5B0_0000, dead, 4096, None, 0x3);
+        shm_register(0x5B0_1000, successor, 4096, None, 0x3);
+        shm_register(0x5B0_2000, dead, 4096, None, 0x3);
+        shm_register(0x5B0_3000, peer, 4096, None, 0x3);
 
-        assert_eq!(shm_take_for(dead), alloc::vec![0x5B0_0000, 0x5B0_2000]);
+        assert_eq!(
+            shm_take_for(dead),
+            (alloc::vec![0x5B0_0000, 0x5B0_2000], 8192)
+        );
         assert!(!shm_owned_by(0x5B0_0000, dead));
         assert!(!shm_owned_by(0x5B0_2000, dead));
         assert!(shm_owned_by(0x5B0_1000, successor));
         assert!(shm_owned_by(0x5B0_3000, peer));
-        assert!(shm_take_for(dead).is_empty());
+        assert_eq!(shm_take_for(dead), (alloc::vec![], 0));
 
-        assert_eq!(shm_take_for(successor), alloc::vec![0x5B0_1000]);
-        assert_eq!(shm_take_for(peer), alloc::vec![0x5B0_3000]);
+        assert_eq!(shm_take_for(successor), (alloc::vec![0x5B0_1000], 4096));
+        assert_eq!(shm_take_for(peer), (alloc::vec![0x5B0_3000], 4096));
+    }
+
+    #[test]
+    fn shm_accessible_by_owner_and_authorized_recipient() {
+        use super::{shm_accessible_by, shm_register};
+        use crate::cell::state_stash::Incarnation;
+        const FRAME: usize = 0x5C0_0000;
+        let owner = Incarnation {
+            cell: 10,
+            generation: 1,
+        };
+        shm_register(FRAME, owner, 4096, Some(20), 0x3);
+
+        assert!(shm_accessible_by(FRAME, 10, 1).is_some());
+        assert!(shm_accessible_by(FRAME, 20, 1).is_some());
+        assert!(shm_accessible_by(FRAME, 30, 1).is_none());
+        assert!(shm_accessible_by(FRAME, 10, 2).is_none()); // Different generation
     }
 }

@@ -79,9 +79,6 @@ cite dòng theo tree 2026-10-21 — đọc lại theo tên symbol trước khi s
 Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
 
 **Đợt 1 — Critical/High, sửa trước:**
-- [ ] **`ShmAlloc`/`ShmMap` còn thiếu quota và record đầy đủ:** owner-bind (cell, generation) + thu hồi
-  khi owner retire đã có (`990c04d08`); còn: `ShmAlloc { size: _ }` bỏ `size` (luôn 1 frame), handle =
-  địa chỉ vật lý, không tính vào cell quota, `ShmMap { target_pid: _ }`, chưa có recipient/rights/revoke.
 - [ ] **PTE cài trước khi reserve ledger → mapping mồ côi khi lỗi:** `kernel/src/memory/address_space.rs`.
   Reserve ledger/rollback trước khi đổi page table, hoặc unmap + TLB invalidate trên mọi nhánh lỗi.
 - [ ] **`L2Send/L2Recv` và `MulticastJoin/Leave` không kiểm tra caller/cap:**
