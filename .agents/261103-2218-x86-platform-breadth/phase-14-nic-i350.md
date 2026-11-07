@@ -1,7 +1,7 @@
 ---
 phase: 14
 title: "Intel I350 in the igb cell"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P2
 effort: "1.5d + physical capture"
 dependencies: ["4b"]
@@ -56,14 +56,14 @@ The I350 (`8086:1521` copper, 4-port) is the most common onboard and add-in 1GbE
 
 ## Todo List
 
-- [ ] Identity
-- [ ] Semaphore/init
-- [ ] Regression lanes
-- [ ] Physical capture
+- [X] Identity
+- [X] Semaphore/init
+- [X] Regression lanes
+- [ ] Physical capture (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] `igb-x86` (2/2) green; host tests green.
+- [X] `igb-x86` (2/2) green; host tests green.
 - [ ] Physical capture per contract on an I350; otherwise `blocked: hardware`.
 
 ## Risk Assessment

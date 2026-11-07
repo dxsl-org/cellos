@@ -26,14 +26,15 @@
 //! `PcieDriverCap` is granted by init via the reviewed `/bin/igb` launch edge —
 //! NOT via a manifest flag (all 8 flag bits in v1 are occupied).
 
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
 mod controller;
 mod dispatch;
 mod dma_layout;
 mod identity;
+mod sync;
 
 use controller::IgbController;
 use dispatch::{handle, NicReply, REPLY_BUF};
@@ -123,7 +124,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
-            let ctrl = match IgbController::new(mmio_region, info.bdf) {
+            let ctrl = match IgbController::new(mmio_region, info.bdf, sku) {
                 Ok(c) => c,
                 Err(error) => {
                     let _ = print_fmt(format_args!(

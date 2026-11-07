@@ -39,12 +39,13 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// through the vendor:device query (424) and repeats the identity check before
 /// programming a register model, so no cell can bind a foreign family by
 /// accident. Every owner's `identity.rs` lists exactly its rows here.
-pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 8] = [
+pub const ETHERNET_DRIVER_IDS: [(u16, u16, &str); 9] = [
     (0x8086, 0x100E, "/bin/e1000"),      // 82540EM
     (0x8086, 0x100F, "/bin/e1000"),      // 82545EM copper (QEMU e1000-82545em, VMware e1000)
     (0x8086, 0x10D3, "/bin/e1000e"),     // 82574L (QEMU e1000e, q35 default, VMware e1000e)
     (0x8086, 0x10C9, "/bin/igb"),        // 82576 — QEMU's igb model
     (0x8086, 0x1533, "/bin/igb"),        // i210 copper with external flash
+    (0x8086, 0x1521, "/bin/igb"),        // I350 copper (server 4-port)
     (0x1AF4, 0x1041, "/bin/virtio-net"), // virtio-net (modern), ADR-0031 phase 05
     (0x1AF4, 0x1000, "/bin/virtio-net"), // virtio-net (transitional, modern caps required)
     (0x15AD, 0x07B0, "/bin/vmxnet3"),    // VMware vmxnet3 (QEMU vmxnet3, VMware default PV NIC)
@@ -1637,6 +1638,7 @@ mod tests {
         assert_eq!(ethernet_driver_cell(0x8086, 0x10D3), Some("/bin/e1000e")); // 82574L
         assert_eq!(ethernet_driver_cell(0x8086, 0x10C9), Some("/bin/igb")); // QEMU igb
         assert_eq!(ethernet_driver_cell(0x8086, 0x1533), Some("/bin/igb")); // i210 copper
+        assert_eq!(ethernet_driver_cell(0x8086, 0x1521), Some("/bin/igb")); // I350 copper
         assert_eq!(
             ethernet_driver_cell(0x1AF4, 0x1000),
             Some("/bin/virtio-net")

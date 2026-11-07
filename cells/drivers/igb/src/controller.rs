@@ -23,6 +23,8 @@ use crate::dma_layout::{
     for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
     InitialDmaProgram, RX_SLOTS, TX_SLOTS,
 };
+use crate::identity::IgbSku;
+use crate::sync;
 use core::sync::atomic::{compiler_fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::mmio::MmioRegion;
@@ -215,6 +217,8 @@ pub struct IgbController {
     pub mac: [u8; 6],
     /// Whether `STATUS.LU` was observed up before RX was enabled.
     pub link_up: bool,
+    #[allow(dead_code)]
+    pub sku: IgbSku,
 }
 
 // SAFETY: IgbController is only accessed from the single-threaded Cell event loop.
@@ -230,7 +234,7 @@ impl IgbController {
     }
 
     /// Bring the controller up on `mmio` (BAR0) for the PCIe device at `bdf`.
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
+    pub fn new(mmio: MmioRegion, bdf: u32, sku: IgbSku) -> ViResult<Self> {
         // 1. Quiesce inherited state. A restarted driver may otherwise inherit an
         //    enabled RX/TX pair and stale ring addresses.
         wr(&mmio, CTRL, CTRL_RST)?;
@@ -249,7 +253,14 @@ impl IgbController {
         // 2. Restart PHY autonegotiation. The reset left `STATUS.LU` cleared and
         //    the autoneg timer disarmed, so this is what brings the link back;
         //    without it RX is permanently refused by the controller.
-        restart_phy_autoneg(&mmio)?;
+        if sku == IgbSku::I350 {
+            sync::init_i350_features(&mmio)?;
+            let port = (bdf & 0x07) as u8;
+            let phy_mask = sync::phy_mask_for_port(port);
+            sync::with_swfw_sync(&mmio, phy_mask, || restart_phy_autoneg(&mmio))?;
+        } else {
+            restart_phy_autoneg(&mmio)?;
+        }
 
         // 3. Force link up, mask interrupts, clear any latched cause.
         wr(&mmio, CTRL, CTRL_SLU | CTRL_ASDE)?;
@@ -260,9 +271,22 @@ impl IgbController {
         //    multicast table. RAL0/RAH0 also make an exact-match (non-promiscuous)
         //    frame pass, so the filter is real even though RCTL also opens the
         //    promiscuous paths for the DHCP broadcast.
-        let mac_lo = nvm_read(&mmio, 0)?;
-        let mac_mid = nvm_read(&mmio, 1)?;
-        let mac_hi = nvm_read(&mmio, 2)?;
+        let (mac_lo, mac_mid, mac_hi) = if sku == IgbSku::I350 {
+            let port_offset = ((bdf & 0x07) as u16) * 3;
+            sync::with_swfw_sync(&mmio, sync::eep_mask(), || {
+                Ok((
+                    nvm_read(&mmio, port_offset)?,
+                    nvm_read(&mmio, port_offset + 1)?,
+                    nvm_read(&mmio, port_offset + 2)?,
+                ))
+            })?
+        } else {
+            (
+                nvm_read(&mmio, 0)?,
+                nvm_read(&mmio, 1)?,
+                nvm_read(&mmio, 2)?,
+            )
+        };
         let mac = [
             mac_lo as u8,
             (mac_lo >> 8) as u8,
@@ -318,6 +342,7 @@ impl IgbController {
                     rx_head: 0,
                     mac,
                     link_up: false,
+                    sku,
                 };
 
                 let layout = ctrl.dma_iovas;

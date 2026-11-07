@@ -7,7 +7,6 @@ license.workspace = true
 [[bin]]
 name = "driver-igb"
 path = "src/main.rs"
-test = false
 
 [dependencies]
 types = { path = "../../../libs/types", version = "0.1.0" }

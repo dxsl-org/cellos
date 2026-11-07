@@ -37,6 +37,8 @@ pub const I210_IDS: [u16; 6] = [0x1533, 0x1536, 0x1537, 0x1538, 0x157B, 0x157C];
 /// i211 SKU device ID (datasheet §3.4 / I211 proxy flow). Target only: the i211
 /// reads its MAC from iNVM, which this cell does not implement yet.
 pub const I211_IDS: [u16; 1] = [0x1539];
+/// I350 SKU device IDs (Intel Ethernet Controller I350 Datasheet §6.2.5).
+pub const I350_IDS: [u16; 5] = [0x1521, 0x1522, 0x1523, 0x1524, 0x1546];
 
 /// The device IDs this cell actually claims: the ones whose NVM access and media
 /// path it implements.
@@ -51,14 +53,14 @@ pub const I211_IDS: [u16; 1] = [0x1539];
 /// path; `0x1536`/`0x1537`/`0x1538` (fibre/SerDes/SGMII) need **media-specific
 /// link setup** rather than the copper BMCR restart. Claiming any of them without
 /// that work would register a device this cell cannot drive.
-pub const SUPPORTED_DEVICE_IDS: [u16; 2] = [QEMU_MODEL_ID, 0x1533];
+pub const SUPPORTED_DEVICE_IDS: [u16; 3] = [QEMU_MODEL_ID, 0x1533, 0x1521];
 
 /// Every device ID this cell hands to `sys_find_pcie_device_by_vendor`, in query
 /// order, all under [`VENDOR_INTEL`].
 ///
 /// Naming the controller exactly is what removes the sibling race: `/bin/e1000`
 /// can never hold this device, so there is no decline-and-retry window.
-pub const QUERY_DEVICE_IDS: [u16; 2] = SUPPORTED_DEVICE_IDS;
+pub const QUERY_DEVICE_IDS: [u16; 3] = SUPPORTED_DEVICE_IDS;
 
 // Compile-time check (this cell sets `test = false`, so a `#[cfg(test)]` module
 // would never be compiled): the query list is exactly the supported set, every
@@ -67,6 +69,7 @@ pub const QUERY_DEVICE_IDS: [u16; 2] = SUPPORTED_DEVICE_IDS;
 const _: () = {
     assert!(QUERY_DEVICE_IDS[0] == QEMU_MODEL_ID);
     assert!(QUERY_DEVICE_IDS[1] == 0x1533);
+    assert!(QUERY_DEVICE_IDS[2] == 0x1521);
     assert!(QUERY_DEVICE_IDS.len() == SUPPORTED_DEVICE_IDS.len());
     let mut i = 0;
     while i < QUERY_DEVICE_IDS.len() {
@@ -87,6 +90,8 @@ pub enum IgbSku {
     I210,
     /// The i211 SKU; same register model, not model-validated.
     I211,
+    /// The I350 SKU (8086:1521 copper, server multi-port).
+    I350,
     /// Anything else: the caller must fail closed and name vendor:device.
     Unsupported,
 }
@@ -116,6 +121,13 @@ pub const fn classify(vendor_id: u16, device_id: u16) -> IgbSku {
         }
         i += 1;
     }
+    let mut i = 0;
+    while i < I350_IDS.len() {
+        if device_id == I350_IDS[i] {
+            return IgbSku::I350;
+        }
+        i += 1;
+    }
     IgbSku::Unsupported
 }
 
@@ -125,6 +137,7 @@ pub const fn sku_name(sku: IgbSku) -> &'static str {
         IgbSku::I82576 => "82576 (QEMU model)",
         IgbSku::I210 => "i210 (datasheet)",
         IgbSku::I211 => "i211 (datasheet)",
+        IgbSku::I350 => "I350 (copper)",
         IgbSku::Unsupported => "unsupported",
     }
 }
@@ -147,6 +160,11 @@ mod tests {
         assert_eq!(classify(VENDOR_INTEL, 0x157B), IgbSku::I210);
         assert_eq!(classify(VENDOR_INTEL, 0x157C), IgbSku::I210);
         assert_eq!(classify(VENDOR_INTEL, 0x1539), IgbSku::I211);
+        assert_eq!(classify(VENDOR_INTEL, 0x1521), IgbSku::I350);
+        assert_eq!(classify(VENDOR_INTEL, 0x1522), IgbSku::I350);
+        assert_eq!(classify(VENDOR_INTEL, 0x1523), IgbSku::I350);
+        assert_eq!(classify(VENDOR_INTEL, 0x1524), IgbSku::I350);
+        assert_eq!(classify(VENDOR_INTEL, 0x1546), IgbSku::I350);
     }
 
     #[test]
