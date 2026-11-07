@@ -1,7 +1,7 @@
 ---
 phase: 16
 title: "Realtek RTL8111/8168 and RTL8125 (r8169 family)"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P2
 effort: "5d + physical capture"
 dependencies: ["4b"]
@@ -57,14 +57,14 @@ Realtek is the most common NIC on consumer boards and cheap mini PCs, including 
 
 ## Todo List
 
-- [ ] Identity/XID
-- [ ] 8168 path
-- [ ] 8125 path
-- [ ] Physical captures
+- [X] Identity/XID
+- [X] 8168 path
+- [X] 8125 path
+- [ ] Physical captures (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests: XID → MAC kind table; descriptor encoding.
+- [X] Host tests: XID → MAC kind table; descriptor encoding.
 - [ ] Physical capture per contract for each `Driveable` XID; otherwise `blocked: hardware`.
 
 ## Risk Assessment

@@ -1693,6 +1693,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-r8169"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-serial"
 version = "0.2.0"
 dependencies = [

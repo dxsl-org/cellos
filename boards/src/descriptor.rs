@@ -74,6 +74,8 @@ pub enum DriverId {
     VirtioPci,
     /// Intel I225/I226 (`igc`) 2.5GbE NIC family (phase 15).
     EthernetIgc,
+    /// Realtek RTL8111/8168/8125 (`r8169`) NIC family (phase 16).
+    EthernetR8169,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
