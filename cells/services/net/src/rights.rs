@@ -56,7 +56,8 @@ pub(crate) fn required_right(request: &NetRequest<'_>) -> Option<Right> {
         }
         NetRequest::TcpListen { .. }
         | NetRequest::UdpBind { .. }
-        | NetRequest::MulticastJoin { .. } => Some(Right::Listen),
+        | NetRequest::MulticastJoin { .. }
+        | NetRequest::MulticastLeave { .. } => Some(Right::Listen),
         NetRequest::L2Send { .. } | NetRequest::L2Recv { .. } => Some(Right::L2),
         NetRequest::TcpSend { .. }
         | NetRequest::TcpRecv { .. }
@@ -65,7 +66,6 @@ pub(crate) fn required_right(request: &NetRequest<'_>) -> Option<Right> {
         | NetRequest::UdpRecv { .. }
         | NetRequest::SocketState { .. }
         | NetRequest::GetLocalIp
-        | NetRequest::MulticastLeave { .. }
         | NetRequest::TcpReady { .. }
         | NetRequest::TcpRecvReady { .. }
         | NetRequest::TcpSendReady { .. }

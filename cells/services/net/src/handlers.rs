@@ -7,8 +7,9 @@ pub(crate) mod tcp;
 mod tests;
 mod udp;
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use ostd::sync::Mutex;
 use ostd::syscall::sys_send;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
@@ -33,6 +34,7 @@ use crate::{
 /// guest's receive path reached this service at all.
 pub static L2_SEND_REQUESTS: core::sync::atomic::AtomicUsize =
     core::sync::atomic::AtomicUsize::new(0);
+static MULTICAST_MEMBERS: Mutex<BTreeMap<[u8; 4], BTreeSet<usize>>> = Mutex::new(BTreeMap::new());
 pub static L2_RECV_REQUESTS: core::sync::atomic::AtomicUsize =
     core::sync::atomic::AtomicUsize::new(0);
 
@@ -188,16 +190,43 @@ pub(crate) fn handle_typed(
     match req {
         NetRequest::GetLocalIp => send_typed(sender, R::Addr(*local_ip)),
         NetRequest::MulticastJoin { cap_id: _, group } => {
+            let mut members = MULTICAST_MEMBERS.lock();
+            let set = members.entry(group).or_default();
+            if set.contains(&sender) {
+                send_typed(sender, R::Ok);
+                return;
+            }
+            let is_first = set.is_empty();
             let g = IpAddress::v4(group[0], group[1], group[2], group[3]);
-            let ok = iface.join_multicast_group(device, g, now_instant()).is_ok();
-            send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
+            let ok = if is_first {
+                iface.join_multicast_group(device, g, now_instant()).is_ok()
+            } else {
+                true
+            };
+            if ok {
+                set.insert(sender);
+                send_typed(sender, R::Ok);
+            } else {
+                send_typed(sender, R::Err(0xFF));
+            }
         }
         NetRequest::MulticastLeave { cap_id: _, group } => {
-            let g = IpAddress::v4(group[0], group[1], group[2], group[3]);
-            let ok = iface
-                .leave_multicast_group(device, g, now_instant())
-                .is_ok();
-            send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
+            let mut members = MULTICAST_MEMBERS.lock();
+            let Some(set) = members.get_mut(&group) else {
+                send_typed(sender, R::Err(0xFF));
+                return;
+            };
+            if !set.remove(&sender) {
+                send_typed(sender, R::Err(0xFF));
+                return;
+            }
+            let is_last = set.is_empty();
+            if is_last {
+                members.remove(&group);
+                let g = IpAddress::v4(group[0], group[1], group[2], group[3]);
+                let _ = iface.leave_multicast_group(device, g, now_instant());
+            }
+            send_typed(sender, R::Ok);
         }
         NetRequest::Resolve { hostname } => {
             // The service reactor intercepts wire lookups and retains their
@@ -210,10 +239,10 @@ pub(crate) fn handle_typed(
         }
         NetRequest::L2Send { data } => {
             L2_SEND_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            // The frame came out of the guest's TX queue, so its source address is
-            // where the guest's replies must be routed (see
-            // `VirtioNetDevice::learn_guest_mac_from` — the hypervisor's registered
-            // belief and the guest's own address disagree on the board).
+            if data.len() < 14 || data.len() > 1514 {
+                send_typed(sender, R::Err(0xFF));
+                return;
+            }
             device.learn_guest_mac_from(data);
             if let Some(accepted) = device.send_l2(data, sender) {
                 send_typed(sender, if accepted { R::Ok } else { R::Err(0xFF) });
@@ -221,6 +250,10 @@ pub(crate) fn handle_typed(
         }
         NetRequest::L2Recv { guest_mac } => {
             L2_RECV_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            if guest_mac == [0; 6] || guest_mac == [0xFF; 6] || (guest_mac[0] & 1 != 0) {
+                send_typed(sender, R::Err(0xFF));
+                return;
+            }
             let operation = ostd::ipc::current();
             static FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);
@@ -230,9 +263,6 @@ pub(crate) fn handle_typed(
             device.set_guest_mac(guest_mac);
             let _ = device.pump_rx_split();
             if let Some(frame) = device.pop_guest_rx() {
-                // Split the guest receive chain: this line proves the net
-                // service handed a frame to the hypervisor, and the virtio-net
-                // side prints its own when the frame reaches the guest's queue.
                 static FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
                     core::sync::atomic::AtomicBool::new(false);
                 if !FIRST_GUEST_RX.swap(true, core::sync::atomic::Ordering::Relaxed) {
@@ -252,11 +282,11 @@ pub(crate) fn handle_typed(
             } else {
                 if let Some(operation) = operation {
                     let mut rb = [0u8; IPC_BUF_SIZE];
-                    if let Ok(s) = ipc::encode(&R::Ok, &mut rb) {
+                    if let Ok(s) = ipc::encode(&R::Err(0), &mut rb) {
                         let _ = ostd::ipc::reply(operation, s);
                     }
                 } else {
-                    send_typed(sender, R::Ok);
+                    send_typed(sender, R::Err(0));
                 }
             }
         }

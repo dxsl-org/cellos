@@ -84,7 +84,7 @@ fn census() -> [(NetRequest<'static>, u8, Option<Right>); 21] {
                 group: [239, 0, 0, 1],
             },
             14,
-            None,
+            Some(Right::Listen),
         ),
         (NetRequest::L2Send { data: &[0u8; 60] }, 15, Some(Right::L2)),
         (

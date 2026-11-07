@@ -79,11 +79,6 @@ cite dòng theo tree 2026-10-21 — đọc lại theo tên symbol trước khi s
 Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
 
 **Đợt 1 — Critical/High, sửa trước:**
-- [ ] **PTE cài trước khi reserve ledger → mapping mồ côi khi lỗi:** `kernel/src/memory/address_space.rs`.
-  Reserve ledger/rollback trước khi đổi page table, hoặc unmap + TLB invalidate trên mọi nhánh lỗi.
-- [ ] **`L2Send/L2Recv` và `MulticastJoin/Leave` không kiểm tra caller/cap:**
-  `cells/services/net/src/handlers.rs` (ai cũng inject/drain frame thô; `cap_id: _`).
-  Yêu cầu binding hypervisor sống hoặc capability raw-L2; multicast refcount theo socket owner.
 - [ ] **Non-x86: MMIO VirtIO/ECAM/peripheral map `USER` lúc boot** (`kernel/src/memory/paging.rs`) và
   **stack RWX** trên RISC-V/AArch64 (`remap_range_user` có `EXECUTE`). Ưu tiên thấp hơn vì ADR-0022 chỉ x86,
   nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.

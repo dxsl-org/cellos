@@ -721,6 +721,11 @@ impl AddressSpace {
         {
             return Err(AddressSpaceError::Dying);
         }
+        // Reserve ledger space before mapping: a late reservation failure after
+        // the PTE is installed would create an orphaned mapping.
+        ledger
+            .try_reserve(1)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         let page = allocate_owned_frame()?;
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
@@ -755,15 +760,8 @@ impl AddressSpace {
             return Err(error);
         }
         drop(pruned_tables);
-        // The ledger is one entry per mapped page; pushing grows through the
-        // infallible allocator, so a full heap would halt the kernel instead of
-        // failing the spawn (measured 2026-10-03: the growth to 208 entries /
-        // 6 656 bytes is what ended the capacity sweep).
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
-        ledger
-            .try_reserve(1)
-            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         ledger.push(MappingEntry {
             virtual_address,
             physical_address: page.physical_address(),
@@ -837,7 +835,10 @@ impl AddressSpace {
         {
             return Err(AddressSpaceError::InvalidMapping);
         }
-
+        let user_pages = (user_stack.top - user_stack.usable_start()) / PAGE_SIZE;
+        ledger
+            .try_reserve(user_pages)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         let mut table_frames = self.table_frames.lock();
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
@@ -868,11 +869,6 @@ impl AddressSpace {
                     physical_address,
                     user_flags(user_stack_flags),
                 )?;
-                // Same reason as `map_private_page`: a ledger push must be able to
-                // fail as a spawn error, not as a kernel halt.
-                ledger
-                    .try_reserve(1)
-                    .map_err(|_| AddressSpaceError::OutOfMemory)?;
                 ledger.push(MappingEntry {
                     virtual_address: address,
                     physical_address,
@@ -1111,6 +1107,9 @@ impl AddressSpace {
         {
             return Err(AddressSpaceError::Dying);
         }
+        ledger
+            .try_reserve(1)
+            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         let mut table_frames = self.table_frames.lock();
         let mut pruned_tables = Vec::new();
         #[cfg(cellos_p01_trace)]
@@ -1138,13 +1137,8 @@ impl AddressSpace {
             return Err(error);
         }
         drop(pruned_tables);
-        // Same reason as `map_private_page`: a ledger push must fail as an
-        // operation error, never as a kernel halt.
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
-        ledger
-            .try_reserve(1)
-            .map_err(|_| AddressSpaceError::OutOfMemory)?;
         ledger.push(MappingEntry {
             virtual_address,
             physical_address,
