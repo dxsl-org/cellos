@@ -337,7 +337,15 @@ impl Scan<'_> {
 
     /// Scope-like term (the opcode at `op`, its PkgLength at `pkg`), then
     /// NameString, `fixed` bytes and a TermList. Returns the end of the term.
-    fn scope(&mut self, op: usize, pkg: usize, end: usize, depth: usize, fixed: usize, nest: usize) -> Result<usize, S5> {
+    fn scope(
+        &mut self,
+        op: usize,
+        pkg: usize,
+        end: usize,
+        depth: usize,
+        fixed: usize,
+        nest: usize,
+    ) -> Result<usize, S5> {
         let bad = self.unparsed(op);
         let (pkg_end, body) = self.pkg_length(pkg, end).ok_or(bad)?;
         let (name, list) = self.name_string(body, pkg_end).ok_or(bad)?;
@@ -418,8 +426,11 @@ impl Scan<'_> {
                     next
                 }
                 EXTERNAL_OP => self.name_string(pos + 1, end).ok_or(bad)?.1 + 2,
-                CREATE_DWORD_FIELD_OP | CREATE_WORD_FIELD_OP | CREATE_BYTE_FIELD_OP
-                | CREATE_BIT_FIELD_OP | CREATE_QWORD_FIELD_OP => {
+                CREATE_DWORD_FIELD_OP
+                | CREATE_WORD_FIELD_OP
+                | CREATE_BYTE_FIELD_OP
+                | CREATE_BIT_FIELD_OP
+                | CREATE_QWORD_FIELD_OP => {
                     let next = self.skip_terms(pos + 1, end, 2).ok_or(bad)?;
                     self.name_string(next, end).ok_or(bad)?.1
                 }

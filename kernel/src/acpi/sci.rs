@@ -156,7 +156,10 @@ fn arm() {
     let vector = crate::hal::idt::policy::SCI_VECTOR;
     if !crate::hal::ioapic::route_gsi(gsi, vector, destination, flags) {
         STATE.store(STATE_OFF, Ordering::Release);
-        log::warn!("[acpi] sci: no I/O APIC serves GSI {}; power button off", gsi);
+        log::warn!(
+            "[acpi] sci: no I/O APIC serves GSI {}; power button off",
+            gsi
+        );
         return;
     }
     let half = PM1_ENABLE_OFFSET.load(Ordering::Relaxed);
@@ -212,7 +215,10 @@ pub fn relay_pending() {
     }) {
         Some(tid) => {
             RELAY_BLOCKED_LOGGED.store(false, Ordering::Relaxed);
-            log::warn!("[acpi] power button: poweroff request relayed to supervisor tid {}", tid);
+            log::warn!(
+                "[acpi] power button: poweroff request relayed to supervisor tid {}",
+                tid
+            );
         }
         None => {
             PENDING.store(true, Ordering::Release);

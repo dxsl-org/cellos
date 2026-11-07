@@ -307,7 +307,9 @@ fn package_term(op: &[u8], head: &[u8], body: &[u8]) -> Vec<u8> {
 fn s5_scan_reads_the_q35_dsdt() {
     assert_eq!(&Q35_DSDT[..4], b"DSDT");
     assert_eq!(
-        Q35_DSDT.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+        Q35_DSDT
+            .iter()
+            .fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
         0
     );
     assert_eq!(
@@ -322,7 +324,9 @@ fn s5_scan_reads_the_q35_dsdt() {
 #[test]
 fn s5_scan_refuses_a_name_created_inside_a_method() {
     let pattern = [0x08, b'\\', b'_', b'S', b'5', b'_', 0x12];
-    assert!(S5_IN_METHOD_DSDT.windows(pattern.len()).any(|w| w == pattern));
+    assert!(S5_IN_METHOD_DSDT
+        .windows(pattern.len())
+        .any(|w| w == pattern));
     assert_eq!(scan_definition_block(S5_IN_METHOD_DSDT), S5::NotStatic);
 }
 
@@ -330,7 +334,10 @@ fn s5_scan_refuses_a_name_created_inside_a_method() {
 fn s5_scan_reads_the_vmware_dsdts() {
     for dsdt in [VMWARE_EFI_DSDT, VMWARE_BIOS_DSDT] {
         assert_eq!(&dsdt[..4], b"DSDT");
-        assert_eq!(dsdt.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)), 0);
+        assert_eq!(
+            dsdt.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+            0
+        );
         assert_eq!(
             scan_definition_block(dsdt),
             S5::Static {

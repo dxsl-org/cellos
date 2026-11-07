@@ -553,6 +553,12 @@ impl CellAuthority {
         if slot.admission_cut {
             return Err(ControlStatus::AdmissionCut);
         }
+        if slot
+            .expiry
+            .is_some_and(|limit| crate::task::system_ticks() as u64 >= limit)
+        {
+            return Err(ControlStatus::Denied);
+        }
         Ok(slot)
     }
 
@@ -669,6 +675,12 @@ impl CellAuthority {
         }
         if slot.admission_cut {
             return Err(ControlStatus::AdmissionCut);
+        }
+        if slot
+            .expiry
+            .is_some_and(|limit| crate::task::system_ticks() as u64 >= limit)
+        {
+            return Err(ControlStatus::Denied);
         }
         if (slot.rights & required_rights) != required_rights {
             return Err(ControlStatus::Denied);
@@ -1356,6 +1368,22 @@ mod tests {
         assert_eq!(auth.slots, before);
         assert_eq!(auth.next_ticket_counter, u64::MAX);
         assert_eq!(auth.verify_ticket(parent).unwrap().rights, 3);
+    }
+
+    #[test]
+    fn expired_ticket_is_denied() {
+        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let ticket = auth
+            .allocate_slot(
+                Principal::Kernel,
+                Principal::Kernel,
+                ResourceKind::BootFSFile,
+                0x7,
+                Some(0),
+                None,
+            )
+            .unwrap();
+        assert_eq!(auth.verify_ticket(ticket), Err(ControlStatus::Denied));
     }
 
     fn derive_request(ticket: u64, destination: (u64, u64), rights: u32) -> [u8; 48] {

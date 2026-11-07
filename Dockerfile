@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:24.04
 
 # Install dependencies
 RUN apt update
@@ -6,7 +6,9 @@ RUN apt install -y build-essential curl git wget
 RUN apt install -y qemu-system-aarch64 dosfstools mtools
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh && \
+    sh /tmp/rustup.sh -y && \
+    rm /tmp/rustup.sh
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Copy just ./scripts/

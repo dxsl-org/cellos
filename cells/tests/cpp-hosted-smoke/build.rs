@@ -34,8 +34,11 @@ fn main() {
     for path in [&libcxx, &mlibc, &lib.join("libc++.a")] {
         println!("cargo:rerun-if-changed={}", path.display());
     }
-    let (Ok(libcxx), Ok(mlibc), Ok(lib)) = (libcxx.canonicalize(), mlibc.canonicalize(), lib.canonicalize())
-    else {
+    let (Ok(libcxx), Ok(mlibc), Ok(lib)) = (
+        libcxx.canonicalize(),
+        mlibc.canonicalize(),
+        lib.canonicalize(),
+    ) else {
         println!(
             "cargo:warning=cpp-hosted runtime or mlibc headers missing ({}); witness not built \
              (run `bash scripts/build-mlibc.sh` and `bash scripts/build-llvm-runtimes.sh x86_64`)",

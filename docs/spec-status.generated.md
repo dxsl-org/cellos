@@ -6,14 +6,14 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 431 |
+| Sections scanned | 432 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 291 |
+| Ratified/Accepted sections | 292 |
 | …of those, anchored | 18 |
 | Anchor violations | 2 |
-| Coverage gaps (ratified, unanchored) | 273 |
+| Coverage gaps (ratified, unanchored) | 274 |
 | Status-prose hits | 80 |
-| Plans linked from status docs | 8 |
+| Plans linked from status docs | 13 |
 | Structural errors (plan frontmatter, doc links) | 0 |
 
 ## Anchored sections
@@ -49,14 +49,19 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 | Plan | Frontmatter status | Linked from |
 |---|---|---|
-| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:183` |
-| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:416` |
-| `.agents/261011-1200-cell-contract-authority/plan.md` | `complete` | `.agents/plan-portfolio.md:17`, `.agents/plan-portfolio.md:27`, `README.md:76`, `README.md:100`, `docs/README.md:13` |
-| `.agents/261019-1310-unified-desktop/plan.md` | `completed` | `.agents/plan-portfolio.md:96` |
-| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:167` |
-| `.agents/261020-1750-cellbox-cli/plan.md` | `closed-at-stated-ceilings-with-deferred-items` | `.agents/plan-portfolio.md:108`, `.agents/plan-portfolio.md:110`, `.agents/plan-portfolio.md:127`, `docs/README.md:21` |
-| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:156` |
-| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:155` |
+| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:268` |
+| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:501` |
+| `.agents/261011-1200-cell-contract-authority/plan.md` | `complete` | `.agents/plan-portfolio.md:19`, `.agents/plan-portfolio.md:29`, `README.md:76`, `README.md:100`, `docs/README.md:13` |
+| `.agents/261019-1310-unified-desktop/plan.md` | `completed` | `.agents/plan-portfolio.md:98` |
+| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:252` |
+| `.agents/261020-1750-cellbox-cli/plan.md` | `closed-at-stated-ceilings-with-deferred-items` | `.agents/plan-portfolio.md:110`, `.agents/plan-portfolio.md:112`, `.agents/plan-portfolio.md:129`, `docs/README.md:21` |
+| `.agents/261030-1945-ginux-lessons-hardening/plan.md` | `closed` | `.agents/plan-portfolio.md:150` |
+| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:174` |
+| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:173` |
+| `.agents/261103-2218-x86-platform-breadth/plan.md` | `pending` | `.agents/plan-portfolio.md:185` |
+| `.agents/261104-0711-apple-silicon-group/plan.md` | `pending` | `.agents/plan-portfolio.md:214` |
+| `.agents/261104-0801-x86-igpu-compute/plan.md` | `pending` | `.agents/plan-portfolio.md:199` |
+| `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:208` |
 
 ## Open findings
 
@@ -106,20 +111,20 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/04-hardware.md:26` — 3. Interrupt Model: "Async Waker Dispatch"
 - `docs/specs/04-hardware.md:31` — 4. Resource Registry (MMIO Isolation)
 - `docs/specs/04-hardware.md:36` — 5. SMP & Real-Time Affinity
-- `docs/specs/04-hardware.md:42` — 6. Hang detection
-- `docs/specs/04-hardware.md:50` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
-- `docs/specs/04-hardware.md:54` — Target platforms
-- `docs/specs/04-hardware.md:67` — G1 peripheral driver priority (cells/drivers/)
-- `docs/specs/04-hardware.md:79` — G2 server driver priority (strict order — each prerequisite for next)
-- `docs/specs/04-hardware.md:91` — x86_64 PC class driver priority (planned — no physical qualification)
-- `docs/specs/04-hardware.md:119` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
-- `docs/specs/04-hardware.md:121` — PCIe ECAM host controller
-- `docs/specs/04-hardware.md:134` — RISC-V IOMMU (non-optional before NIC)
-- `docs/specs/04-hardware.md:144` — 9. G3: NPU Driver Path
-- `docs/specs/04-hardware.md:149` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
-- `docs/specs/04-hardware.md:155` — Level B — Kernel NPU scheduler (G3)
-- `docs/specs/04-hardware.md:163` — Level B+ — SiFive X390 VCIX (second impl)
-- `docs/specs/04-hardware.md:171` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
+- `docs/specs/04-hardware.md:62` — 6. Hang detection
+- `docs/specs/04-hardware.md:70` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
+- `docs/specs/04-hardware.md:74` — Target platforms
+- `docs/specs/04-hardware.md:87` — G1 peripheral driver priority (cells/drivers/)
+- `docs/specs/04-hardware.md:99` — G2 server driver priority (strict order — each prerequisite for next)
+- `docs/specs/04-hardware.md:111` — x86_64 PC class driver priority (planned — no physical qualification)
+- `docs/specs/04-hardware.md:139` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
+- `docs/specs/04-hardware.md:141` — PCIe ECAM host controller
+- `docs/specs/04-hardware.md:154` — RISC-V IOMMU (non-optional before NIC)
+- `docs/specs/04-hardware.md:164` — 9. G3: NPU Driver Path
+- `docs/specs/04-hardware.md:169` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
+- `docs/specs/04-hardware.md:175` — Level B — Kernel NPU scheduler (G3)
+- `docs/specs/04-hardware.md:183` — Level B+ — SiFive X390 VCIX (second impl)
+- `docs/specs/04-hardware.md:191` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
 - `docs/specs/05-application.md:7` — 1. Application tier taxonomy
 - `docs/specs/05-application.md:35` — 2. Tier 1: Trusted SAS Cells
 - `docs/specs/05-application.md:46` — 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services
@@ -128,17 +133,18 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/05-application.md:105` — 3. Tier 1 `ffi-posix` profile (legacy alias: Tier 1b)
 - `docs/specs/05-application.md:116` — 3.1 Two-profile C library strategy (G2)
 - `docs/specs/05-application.md:186` — 3.2 C++ profile: `cpp-freestanding` (ADR-0018 §2.3) — shipped 2026-09-22
-- `docs/specs/05-application.md:216` — 3.3 Porting lanes for existing Linux applications
-- `docs/specs/05-application.md:236` — 4. Tier 3: Virtualization (Linux Ecosystem)
-- `docs/specs/05-application.md:238` — 4.1 Tại sao cần Tier 3
-- `docs/specs/05-application.md:248` — 4.2 Tier 3 `linux-guest` profile (legacy alias: Tier 3b) [G2]
-- `docs/specs/05-application.md:277` — 4.3 VMM: Minimal VMM (custom, ~2.9K LOC shipped; ~9K planned at full device coverage)
-- `docs/specs/05-application.md:344` — 4.3.1 Tier-3 Threat Model (guest-escape)
-- `docs/specs/05-application.md:380` — 4.4 Kernel H-extension requirements (RISC-V)
-- `docs/specs/05-application.md:410` — 4.5 Multi-arch HAL trait
-- `docs/specs/05-application.md:437` — 4.6 Implementation status
-- `docs/specs/05-application.md:477` — 5. Platform Profiles
-- `docs/specs/05-application.md:487` — 6. Những đường sai cần tránh (Wrong Paths)
+- `docs/specs/05-application.md:217` — `cpp-hosted` ([ADR-0034](../decisions/0034-hosted-cxx-runtime-profile.md)) — witnessed on QEMU TCG 2026-11-05
+- `docs/specs/05-application.md:251` — 3.3 Porting lanes for existing Linux applications
+- `docs/specs/05-application.md:271` — 4. Tier 3: Virtualization (Linux Ecosystem)
+- `docs/specs/05-application.md:273` — 4.1 Tại sao cần Tier 3
+- `docs/specs/05-application.md:283` — 4.2 Tier 3 `linux-guest` profile (legacy alias: Tier 3b) [G2]
+- `docs/specs/05-application.md:312` — 4.3 VMM: Minimal VMM (custom, ~2.9K LOC shipped; ~9K planned at full device coverage)
+- `docs/specs/05-application.md:379` — 4.3.1 Tier-3 Threat Model (guest-escape)
+- `docs/specs/05-application.md:415` — 4.4 Kernel H-extension requirements (RISC-V)
+- `docs/specs/05-application.md:445` — 4.5 Multi-arch HAL trait
+- `docs/specs/05-application.md:472` — 4.6 Implementation status
+- `docs/specs/05-application.md:512` — 5. Platform Profiles
+- `docs/specs/05-application.md:522` — 6. Những đường sai cần tránh (Wrong Paths)
 - `docs/specs/06-graphics.md:8` — 1. Triết lý Đồ họa: Shared Framebuffer
 - `docs/specs/06-graphics.md:11` — Quy trình hiển thị Zero-Copy
 - `docs/specs/06-graphics.md:18` — 2. Hệ thống Input: Focus-Gated Dispatcher
@@ -262,31 +268,31 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/17-ipc-wire-contract.md:205` — 7. Fail loud, never silent
 - `docs/specs/17-ipc-wire-contract.md:224` — 8. Case studies (the evidence this spec is built on)
 - `docs/specs/17-ipc-wire-contract.md:248` — 9. Compliance checklist & amendments
-- `docs/specs/17-ipc-wire-contract.md:330` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
-- `docs/specs/17-ipc-wire-contract.md:339` — 10.1 `NET_READY` frame
-- `docs/specs/17-ipc-wire-contract.md:354` — 10.2 Collision-safety invariants (normative)
-- `docs/specs/17-ipc-wire-contract.md:370` — 10.3 Interest registration
-- `docs/specs/17-ipc-wire-contract.md:384` — 10.4 Edge semantics + delivery
-- `docs/specs/17-ipc-wire-contract.md:396` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
-- `docs/specs/17-ipc-wire-contract.md:415` — 10.6 One recv consumer per tid + demux
-- `docs/specs/17-ipc-wire-contract.md:435` — 10.7 Handle namespace (frozen)
-- `docs/specs/17-ipc-wire-contract.md:445` — 11. Caller attestation — Ratified 2026-07-30
-- `docs/specs/17-ipc-wire-contract.md:450` — 11.1 The problem
-- `docs/specs/17-ipc-wire-contract.md:468` — 11.2 The mechanism
-- `docs/specs/17-ipc-wire-contract.md:485` — 11.3 Normative rules
-- `docs/specs/17-ipc-wire-contract.md:505` — 11.4 Direct (non-`ecall`) service calls
-- `docs/specs/17-ipc-wire-contract.md:532` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
-- `docs/specs/17-ipc-wire-contract.md:536` — 12.1 Copied IPC across Domain Boundaries
-- `docs/specs/17-ipc-wire-contract.md:546` — 12.2 Inter-Domain Zero-Copy Grants
-- `docs/specs/17-ipc-wire-contract.md:553` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+- `docs/specs/17-ipc-wire-contract.md:378` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
+- `docs/specs/17-ipc-wire-contract.md:387` — 10.1 `NET_READY` frame
+- `docs/specs/17-ipc-wire-contract.md:402` — 10.2 Collision-safety invariants (normative)
+- `docs/specs/17-ipc-wire-contract.md:418` — 10.3 Interest registration
+- `docs/specs/17-ipc-wire-contract.md:432` — 10.4 Edge semantics + delivery
+- `docs/specs/17-ipc-wire-contract.md:444` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+- `docs/specs/17-ipc-wire-contract.md:463` — 10.6 One recv consumer per tid + demux
+- `docs/specs/17-ipc-wire-contract.md:483` — 10.7 Handle namespace (frozen)
+- `docs/specs/17-ipc-wire-contract.md:493` — 11. Caller attestation — Ratified 2026-07-30
+- `docs/specs/17-ipc-wire-contract.md:498` — 11.1 The problem
+- `docs/specs/17-ipc-wire-contract.md:516` — 11.2 The mechanism
+- `docs/specs/17-ipc-wire-contract.md:533` — 11.3 Normative rules
+- `docs/specs/17-ipc-wire-contract.md:553` — 11.4 Direct (non-`ecall`) service calls
+- `docs/specs/17-ipc-wire-contract.md:580` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+- `docs/specs/17-ipc-wire-contract.md:584` — 12.1 Copied IPC across Domain Boundaries
+- `docs/specs/17-ipc-wire-contract.md:594` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:601` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
-- `docs/specs/18-cell-trust-tiers.md:89` — 2.1 Tier 1 admission — `cellos-sign`
-- `docs/specs/18-cell-trust-tiers.md:136` — 2.2 Tier 2 admission — nothing
-- `docs/specs/18-cell-trust-tiers.md:152` — 2.3 Upgrade path (G2+, optional)
-- `docs/specs/18-cell-trust-tiers.md:162` — 3. Rejected alternatives
-- `docs/specs/18-cell-trust-tiers.md:174` — 4. Consequences
-- `docs/specs/18-cell-trust-tiers.md:203` — 5. Cross-references
+- `docs/specs/18-cell-trust-tiers.md:91` — 2.1 Tier 1 admission — `cellos-sign`
+- `docs/specs/18-cell-trust-tiers.md:138` — 2.2 Tier 2 admission — nothing
+- `docs/specs/18-cell-trust-tiers.md:154` — 2.3 Upgrade path (G2+, optional)
+- `docs/specs/18-cell-trust-tiers.md:164` — 3. Rejected alternatives
+- `docs/specs/18-cell-trust-tiers.md:176` — 4. Consequences
+- `docs/specs/18-cell-trust-tiers.md:205` — 5. Cross-references
 - `docs/specs/18c-publisher-provenance-envelope.md:5` — Purpose and scope
 - `docs/specs/18c-publisher-provenance-envelope.md:13` — Terms
 - `docs/specs/18c-publisher-provenance-envelope.md:21` — Canonical envelope encoding, version 1
@@ -302,12 +308,12 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/20-unified-ipc-contract.md:47` — 2.3 Frames, bounds and capacity
 - `docs/specs/20-unified-ipc-contract.md:59` — 2.4 Submission and outcome matrix
 - `docs/specs/20-unified-ipc-contract.md:77` — 2.6 Local RPC lifecycle — synchronous and nonblocking callers share one operation
-- `docs/specs/20-unified-ipc-contract.md:175` — 2.5 Liveness and safety boundaries
-- `docs/specs/20-unified-ipc-contract.md:179` — 3. Boundedness and runtime constraints
-- `docs/specs/20-unified-ipc-contract.md:188` — 4. ABI and caller inventory (proposal, no additions)
-- `docs/specs/20-unified-ipc-contract.md:199` — 5. Behavioral proof matrix (required before promotion, not a passing test report)
-- `docs/specs/20-unified-ipc-contract.md:211` — 6. Open gates and ratification checklist
-- `docs/specs/20-unified-ipc-contract.md:226` — 7. Revision record
+- `docs/specs/20-unified-ipc-contract.md:202` — 2.5 Liveness and safety boundaries
+- `docs/specs/20-unified-ipc-contract.md:206` — 3. Boundedness and runtime constraints
+- `docs/specs/20-unified-ipc-contract.md:215` — 4. ABI and caller inventory (proposal, no additions)
+- `docs/specs/20-unified-ipc-contract.md:226` — 5. Behavioral proof matrix (required before promotion, not a passing test report)
+- `docs/specs/20-unified-ipc-contract.md:238` — 6. Open gates and ratification checklist
+- `docs/specs/20-unified-ipc-contract.md:253` — 7. Revision record
 - `docs/specs/23-native-sdk-contract.md:14` — 1. Scope and non-claims
 - `docs/specs/23-native-sdk-contract.md:37` — 2. Vocabulary and evidence rule
 - `docs/specs/23-native-sdk-contract.md:39` — 2.1 Stability
@@ -347,7 +353,7 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for safety, not hardware MMU
 - `docs/specs/00-context.md:196` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
 - `docs/specs/00-context.md:198` — `LOC` in: | `libs/api` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
-- `docs/specs/04-hardware.md:89` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
+- `docs/specs/04-hardware.md:109` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
 - `docs/specs/05-application.md:152` — `✅` in: | Strings | `memcpy/memmove/memset/strlen/strcpy/strcmp` | ✅ Done |
@@ -362,18 +368,18 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/05-application.md:171` — `✅` in: - ✅ libopus, libvpx (codec, không cần fork)
 - `docs/specs/05-application.md:172` — `✅` in: - ✅ Vendor sensor calibration/fusion libraries
 - `docs/specs/05-application.md:182` — `✅` in: | fork/exec | ❌ By design | ✅ Full Linux |
-- `docs/specs/05-application.md:305` — `LOC` in: Cellos tự viết VMM tối giản thay vì fork crosvm (~75K LOC thực tế, kéo theo tokio + mmap dependencies).
-- `docs/specs/05-application.md:315` — `LOC` in: - crosvm thực tế ~75K LOC (không phải ~20K như estimate ban đầu)
-- `docs/specs/05-application.md:320` — `LOC` in: **Tại sao không QEMU:** ~1M LOC C, cần JIT/mmap/fork — không fit Tier 1 cell.
-- `docs/specs/05-application.md:323` — `LOC` in: **Cấu trúc `cells/services/hypervisor/` (shipped ARM64, ~2.9K LOC cell+kernel; ~9K là mục tiêu khi phủ đủ device):**
-- `docs/specs/05-application.md:357` — `✅` in: | 1 | Wrapper `read/write_guest_memory` (mọi truy cập RAM guest đi qua đây) | Kernel bounds-check GPA vào cửa sổ guest-R
-- `docs/specs/05-application.md:362` — `✅` in: | 6 | MMIO dispatch default arm | Run-loop có default arm (log + error) cho IPA chưa đăng ký. | ✅ (m2 red-team ARM64 đã 
-- `docs/specs/05-application.md:363` — `✅` in: | 7 | Config-space reads | `config_read` trả hằng số (`virtio_blk.rs:41-47`). | ✅ hiện tại; giữ bất biến "config trả giá
-- `docs/specs/05-application.md:427` — `✅` in: | **ARM64** | EL2 non-VHE (HCR_EL2, VTTBR_EL2, Stage-2, GICH) | `hal-arm` | **✅ G1 shipped** (P01–P10) |
-- `docs/specs/05-application.md:439` — `✅` in: **ARM64 EL2 VMM — ✅ COMPLETE (G1, 2026-06-16)**
-- `docs/specs/05-application.md:489` — `✅` in: 1. **Type-1 hypervisor**: Tier 3 phải chạy ON TOP of Cellos, không phải thay thế kernel. Cellos kernel = Type-2 host. ✅ 
-- `docs/specs/05-application.md:490` — `LOC` in: 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
-- `docs/specs/05-application.md:491` — `✅` in: 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM 
+- `docs/specs/05-application.md:340` — `LOC` in: Cellos tự viết VMM tối giản thay vì fork crosvm (~75K LOC thực tế, kéo theo tokio + mmap dependencies).
+- `docs/specs/05-application.md:350` — `LOC` in: - crosvm thực tế ~75K LOC (không phải ~20K như estimate ban đầu)
+- `docs/specs/05-application.md:355` — `LOC` in: **Tại sao không QEMU:** ~1M LOC C, cần JIT/mmap/fork — không fit Tier 1 cell.
+- `docs/specs/05-application.md:358` — `LOC` in: **Cấu trúc `cells/services/hypervisor/` (shipped ARM64, ~2.9K LOC cell+kernel; ~9K là mục tiêu khi phủ đủ device):**
+- `docs/specs/05-application.md:392` — `✅` in: | 1 | Wrapper `read/write_guest_memory` (mọi truy cập RAM guest đi qua đây) | Kernel bounds-check GPA vào cửa sổ guest-R
+- `docs/specs/05-application.md:397` — `✅` in: | 6 | MMIO dispatch default arm | Run-loop có default arm (log + error) cho IPA chưa đăng ký. | ✅ (m2 red-team ARM64 đã 
+- `docs/specs/05-application.md:398` — `✅` in: | 7 | Config-space reads | `config_read` trả hằng số (`virtio_blk.rs:41-47`). | ✅ hiện tại; giữ bất biến "config trả giá
+- `docs/specs/05-application.md:462` — `✅` in: | **ARM64** | EL2 non-VHE (HCR_EL2, VTTBR_EL2, Stage-2, GICH) | `hal-arm` | **✅ G1 shipped** (P01–P10) |
+- `docs/specs/05-application.md:474` — `✅` in: **ARM64 EL2 VMM — ✅ COMPLETE (G1, 2026-06-16)**
+- `docs/specs/05-application.md:524` — `✅` in: 1. **Type-1 hypervisor**: Tier 3 phải chạy ON TOP of Cellos, không phải thay thế kernel. Cellos kernel = Type-2 host. ✅ 
+- `docs/specs/05-application.md:525` — `LOC` in: 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
+- `docs/specs/05-application.md:526` — `✅` in: 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM 
 - `docs/specs/09-vfs.md:56` — `LOC` in: * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI
 - `docs/specs/09b-vfs-native-fs-adr.md:16` — `LOC` in: Use **RedoxFS** (MIT licence, approximately 10 K LOC Rust) as the `/srv` backend. Do not
 - `docs/specs/09b-vfs-native-fs-adr.md:44` — `LOC` in: | Option | LOC | Licence | CoW | Checksum | `no_std` | Verdict |

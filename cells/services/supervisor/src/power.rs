@@ -11,9 +11,8 @@
 use api::syscall::{service, ProcessInfo};
 use ostd::io::print_fmt;
 use ostd::syscall::{
-    sys_freeze_cell, sys_get_procs, sys_lookup_block_route, sys_lookup_service,
-    sys_recv_timeout, sys_resume_cell, sys_system_power, SyscallResult, SystemPowerAction,
-    SystemPowerError,
+    sys_freeze_cell, sys_get_procs, sys_lookup_block_route, sys_lookup_service, sys_recv_timeout,
+    sys_resume_cell, sys_system_power, SyscallResult, SystemPowerAction, SystemPowerError,
 };
 
 use crate::protocol::{OP_POWER, POWER_ACTION_POWEROFF};
@@ -47,7 +46,9 @@ pub fn shut_down(action: SystemPowerAction, origin: Origin) -> SystemPowerError 
     let kept = storage_stack(&mut keep);
     let own = sys_lookup_service(service::SUPERVISOR);
     let mut rows = [ProcessInfo::default(); PROCESS_TABLE_ROWS];
-    let count = sys_get_procs(&mut rows).unwrap_or(0).min(PROCESS_TABLE_ROWS);
+    let count = sys_get_procs(&mut rows)
+        .unwrap_or(0)
+        .min(PROCESS_TABLE_ROWS);
     let mut frozen = [0usize; PROCESS_TABLE_ROWS];
     let (mut froze, mut refused) = (0usize, 0usize);
     for row in &rows[..count] {

@@ -20,7 +20,8 @@ fn main() {
     }
     println!(
         "cargo:rerun-if-changed={}",
-        root.join("third_party/mlibc/sysdeps/vicell/include/vicell").display()
+        root.join("third_party/mlibc/sysdeps/vicell/include/vicell")
+            .display()
     );
 
     let target = env::var("TARGET").unwrap_or_default();
@@ -36,7 +37,10 @@ fn main() {
         );
         return;
     };
-    let canon = |p: PathBuf| p.canonicalize().unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+    let canon = |p: PathBuf| {
+        p.canonicalize()
+            .unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+    };
     let compat = canon(manifest.join("compat"));
     let include = canon(manifest.join("include"));
     let libdrm = canon(root.join("third_party/libdrm"));
@@ -45,7 +49,12 @@ fn main() {
 
     // Lane scripts export no-SSE CFLAGS for ordinary Tier-1 C; cc-rs would
     // append them after the SSE2 contract below and break rule H1.
-    for key in ["CFLAGS", "TARGET_CFLAGS", "CFLAGS_x86_64-unknown-none", "CFLAGS_x86_64_unknown_none"] {
+    for key in [
+        "CFLAGS",
+        "TARGET_CFLAGS",
+        "CFLAGS_x86_64-unknown-none",
+        "CFLAGS_x86_64_unknown_none",
+    ] {
         env::remove_var(key);
     }
     let gcc_include = Command::new("gcc")
@@ -91,7 +100,11 @@ fn main() {
 
     build(
         "drm_lite",
-        &[libdrm.join("xf86drm.c"), manifest.join("c/device.c"), manifest.join("c/ioctl.c")],
+        &[
+            libdrm.join("xf86drm.c"),
+            manifest.join("c/device.c"),
+            manifest.join("c/ioctl.c"),
+        ],
     );
     if env::var_os("CARGO_FEATURE_FAKE_PROVIDER").is_some() {
         build("drm_cellos_fake", &[manifest.join("c/fake_provider.c")]);

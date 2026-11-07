@@ -782,8 +782,14 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
             if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
                 continue;
             }
-            let start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+            let mut start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
             let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
+            // Physical frame 0 (0x0..PAGE_SIZE) is never managed: on x86 it contains
+            // real-mode IVT/BDA and physical 0 is the universal 'not set' sentinel for
+            // VI_KERNEL_CR3; on all architectures address 0 is the null/unmapped sentinel.
+            if start == 0 {
+                start = PAGE_SIZE;
+            }
             if end <= start || start < cursor {
                 continue;
             }
@@ -829,8 +835,11 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
         if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
             continue;
         }
-        let start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let mut start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
+        if start == 0 {
+            start = PAGE_SIZE;
+        }
         if end <= start {
             // Smaller than one page: it contributes no frame.
             continue;
@@ -955,6 +964,18 @@ mod tests {
             "adjacent usable entries are one range"
         );
         assert_eq!(plan.total_frames(), 0x0200_0000 / PAGE_SIZE);
+    }
+    #[test]
+    fn frame_zero_is_never_managed() {
+        let entries = [map_entry(0, 0x10_0000, MemoryType::Usable)];
+        let plan = plan_managed_ranges(&entries);
+        assert_eq!(plan.range_count(), 1);
+        let ranges: alloc::vec::Vec<_> = plan.ranges().collect();
+        assert_eq!(
+            ranges[0].start, PAGE_SIZE,
+            "physical address 0 must be excluded"
+        );
+        assert_eq!(ranges[0].frames, (0x10_0000 - PAGE_SIZE) / PAGE_SIZE);
     }
 
     #[test]

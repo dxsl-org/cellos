@@ -774,13 +774,16 @@ fn start_psci_secondaries() {
             }
         }
 
-        let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
+        // Bounded wait using the hardware monotonic counter (CNTPCT_EL0) which
+        // advances even with interrupts masked on the boot hart.
+        let timeout_ticks = (hal::aarch64::timer::counter_frequency_hz() / 2).max(1);
+        let start = hal::aarch64::timer::counter_now();
         loop {
             if HART_ONLINE[hart_id].load(Ordering::Acquire) {
                 log::info!("[smp] hart {} online, parked", hart_id);
                 break;
             }
-            if crate::task::system_ticks() >= deadline {
+            if hal::aarch64::timer::counter_now().wrapping_sub(start) >= timeout_ticks {
                 log::warn!(
                     "[smp] hart {} did not come online in time — continuing single-hart",
                     hart_id

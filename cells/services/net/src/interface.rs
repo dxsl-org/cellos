@@ -52,7 +52,7 @@ const MIN_FRAME: usize = 14;
 /// NIC Driver Cell IPC op codes shared by VirtIO and e1000 providers.
 const OP_TX: u8 = 0;
 const OP_RX: u8 = 1;
-
+const OP_GETMAC: u8 = 2;
 /// Status bytes a NIC driver answers a request with (see the drivers' wire
 /// protocol). Only [`STATUS_OK`] means the frame went out; the rest are refusals
 /// this cell retries, and the value is carried to the L2Send caller so its log can
@@ -142,6 +142,18 @@ mod nic_driver_cache_tests {
 
         invalidate_cached_nic_driver(&cache, 7);
         assert_eq!(cache.load(Ordering::Relaxed), 9);
+    }
+}
+
+#[cfg(test)]
+mod driver_mac_tests {
+    use super::*;
+
+    #[test]
+    fn query_driver_mac_defaults_to_none_without_driver() {
+        let mut dev = VirtioNetDevice::new();
+        assert_eq!(dev.driver_mac(), None);
+        assert_eq!(dev.query_driver_mac(), None);
     }
 }
 
@@ -280,6 +292,7 @@ pub struct VirtioNetDevice {
     guest_rx_queue: VecDeque<Box<[u8]>>,
     tx_queue: VecDeque<OutboundFrame>,
     guest_mac: Option<[u8; 6]>,
+    driver_mac: Option<([u8; 6], usize)>,
     l2_replies: VecDeque<(ReplyTo, u8, u64)>,
     tx_burst: u8,
 }
@@ -305,6 +318,7 @@ impl VirtioNetDevice {
             guest_rx_queue: VecDeque::new(),
             tx_queue: VecDeque::new(),
             guest_mac: None,
+            driver_mac: None,
             l2_replies: VecDeque::new(),
             tx_burst: 0,
         }
@@ -317,6 +331,31 @@ impl VirtioNetDevice {
     #[allow(dead_code)]
     pub fn push_rx(&mut self, frame: Box<[u8]>) {
         self.rx_queue.push_back(frame);
+    }
+    /// The station address queried from the bound NIC driver, if any.
+    #[allow(dead_code)]
+    pub fn driver_mac(&self) -> Option<[u8; 6]> {
+        self.driver_mac.map(|(mac, _)| mac)
+    }
+
+    /// Query the bound NIC driver's hardware MAC via IPC `OP_GETMAC` (2).
+    ///
+    /// Validates that the returned MAC is non-zero, not broadcast, and unicast
+    /// (least significant bit of first octet is 0). Caches the result by driver TID.
+    pub fn query_driver_mac(&mut self) -> Option<[u8; 6]> {
+        let tid = nic_driver_tid()?;
+        if let Some((mac, cached_tid)) = self.driver_mac {
+            if cached_tid == tid {
+                return Some(mac);
+            }
+        }
+        let mut reply = [0u8; 6];
+        Self::command(tid, &[OP_GETMAC], &mut reply)?;
+        if reply == [0; 6] || reply == [0xff; 6] || (reply[0] & 1 != 0) {
+            return None;
+        }
+        self.driver_mac = Some((reply, tid));
+        Some(reply)
     }
 
     /// Register the guest MAC address the *hypervisor* believes the guest has

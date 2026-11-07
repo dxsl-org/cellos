@@ -15,7 +15,7 @@ driver-disk = { path = "../../drivers/disk", version = "0.1.0" }
 # short name, so the real name lives in the LFN). Without `lfn`, fatfs sees only
 # the mangled 8.3 form (`NC~1`) and a lookup of `/bin/nc` from the disk cell-store
 # fails — which silently made the cell-store unreadable for interactive spawns.
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", version = "0.4.0", default-features = false, features = ["alloc", "lfn"] }
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "c4b88477b22ca7e5131fbd8891f62a5deaa88e6e", version = "0.4.0", default-features = false, features = ["alloc", "lfn"] }
 
 cellos-fs = { path = "../../../libs/cellos-fs", version = "0.1.0" }
 

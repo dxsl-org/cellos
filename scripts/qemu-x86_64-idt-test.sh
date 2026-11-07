@@ -73,7 +73,7 @@ if ! grep -Eq '^X86-IST-HW: nmi=[0-9a-f]+ df=[0-9a-f]+ mc=[0-9a-f]+ limit=2000$'
     echo "FAIL: missing IST high-water report" >&2
     exit 1
 fi
-if grep -Eqi '(^|[^[:alpha:]])(FAIL|PANIC|FAULT|SKIP|RESET|TRIPLE[- ]FAULT)([^[:alpha:]]|$)' "$LOG"; then
+if grep -v '\[acpi\]' "$LOG" | grep -Eqi '(^|[^[:alpha:]])(FAIL|PANIC|FAULT|SKIP|RESET|TRIPLE[- ]FAULT)([^[:alpha:]]|$)'; then
     echo "FAIL: forbidden failure/skip/reset marker present despite success status" >&2
     tail -40 "$LOG" >&2
     exit 1

@@ -21,10 +21,10 @@ const ARCH_TAG: &str = "AARCH64";
 #[cfg(target_arch = "x86_64")]
 const ARCH_TAG: &str = "X86";
 
-/// Invalidations one domain activation must issue on this architecture. RV64
-/// fences for the incoming ASID as part of installing it; AArch64 carries the
-/// ASID in `TTBR0_EL1`, so a switch to a root whose translations are still
-/// valid issues no `tlbi` at all.
+// Invalidations one domain activation must issue on this architecture. RV64
+// fences for the incoming ASID as part of installing it; AArch64 carries the
+// ASID in `TTBR0_EL1`, so a switch to a root whose translations are still
+// valid issues no `tlbi` at all.
 
 /// Harts running kernel code in this boot.
 ///

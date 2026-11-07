@@ -24,6 +24,7 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(dead_code))]
 
 extern crate alloc;
 use alloc::string::String;

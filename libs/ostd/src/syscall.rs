@@ -2353,7 +2353,7 @@ pub fn sys_register_pci_device(
     cls: u32,
     bar0_base: usize,
     bar0_size: usize,
-) -> Result<(), SyscallError> {
+) -> Result<bool, SyscallError> {
     // SAFETY: kernel validates PlatformCap at dispatch.
     let ret = unsafe {
         syscall(
@@ -2364,10 +2364,12 @@ pub fn sys_register_pci_device(
             bar0_size,
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(SyscallError::PermissionDenied)
+    match ret {
+        0 => Ok(true),
+        1 => Ok(false),
+        -3 => Err(SyscallError::FileNotFound),
+        SYSCALL_DENIED => Err(SyscallError::PermissionDenied),
+        _ => Err(SyscallError::Unknown),
     }
 }
 

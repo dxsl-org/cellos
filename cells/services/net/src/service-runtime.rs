@@ -616,9 +616,38 @@ pub(crate) fn run() {
     println("[net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP");
 
     let mut device = VirtioNetDevice::new();
-    // Seeded from the fail-closed entropy source: smoltcp's default seed of 0
-    // made ISNs, DNS ids/ports and IPv4 ids identical on every boot.
-    let config = crate::stack_entropy::seeded_config(HardwareAddress::Ethernet(MAC));
+
+    // Query the NIC Driver Cell's hardware MAC. A brief yield window allows
+    // a concurrently starting driver cell to publish its endpoint before smoltcp starts.
+    let mut hardware_mac = None;
+    for _ in 0..100 {
+        if let Some(mac) = device.query_driver_mac() {
+            hardware_mac = Some(mac);
+            break;
+        }
+        ostd::syscall::sys_yield();
+    }
+
+    let initial_mac = match hardware_mac {
+        Some(mac) => {
+            println(&alloc::format!(
+                "[net] hardware MAC from NIC driver: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                mac[0],
+                mac[1],
+                mac[2],
+                mac[3],
+                mac[4],
+                mac[5]
+            ));
+            EthernetAddress(mac)
+        }
+        None => {
+            println("[net] NIC driver MAC unavailable — using fallback MAC 52:54:00:12:34:56");
+            MAC
+        }
+    };
+
+    let config = crate::stack_entropy::seeded_config(HardwareAddress::Ethernet(initial_mac));
     let mut iface = Interface::new(config, &mut device, now_instant());
     iface.update_ip_addrs(|addresses| {
         let _ = addresses.push(IpCidr::new(IpAddress::v4(0, 0, 0, 0), 0));
@@ -669,9 +698,26 @@ pub(crate) fn run() {
     let mut trace_recv: u64 = 0;
     #[cfg(feature = "loop-trace")]
     let mut trace_last = sys_get_time();
+    let mut mac_synchronized = hardware_mac.is_some();
 
     loop {
         ostd::syscall::sys_heartbeat(500);
+        if !mac_synchronized {
+            if let Some(mac) = device.query_driver_mac() {
+                println(&alloc::format!(
+                    "[net] hardware MAC bound from NIC driver: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+                ));
+                iface.set_hardware_addr(HardwareAddress::Ethernet(EthernetAddress(mac)));
+                mac_synchronized = true;
+                #[cfg(not(feature = "hypervisor-bridge"))]
+                if dhcp_state == DhcpState::Pending {
+                    sockets
+                        .get_mut::<smoltcp::socket::dhcpv4::Socket>(dhcp_handle)
+                        .reset();
+                }
+            }
+        }
         // `loop-trace` image: one line every ~2 s with what the turn is spending
         // its time on. A stopped heartbeat is the signal that the service is
         // parked inside a driver command rather than looping.

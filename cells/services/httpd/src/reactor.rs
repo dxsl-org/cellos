@@ -104,6 +104,9 @@ enum FileStep {
 impl FileSession {
     fn new(path: &str) -> Result<Self, ()> {
         api::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ())?;
+        if path.starts_with("/srv") || path.starts_with("/etc") || path.starts_with("/.cellos") {
+            return Err(());
+        }
         let components = path[1..]
             .split('/')
             .map(|part| {
@@ -1010,7 +1013,12 @@ impl Reactor<'_> {
             Ok(Route::NotFound) => Some(handlers::not_found()),
             Ok(Route::Restart) => Some(handlers::api_restart()),
             Ok(Route::Files(path)) => {
-                if self.backend_count() >= MAX_BACKENDS {
+                if path.starts_with("/srv")
+                    || path.starts_with("/etc")
+                    || path.starts_with("/.cellos")
+                {
+                    Some(handlers::response(403, "text/plain", b"Forbidden", false))
+                } else if self.backend_count() >= MAX_BACKENDS {
                     self.refused += 1;
                     Some(handlers::response(
                         503,
@@ -1197,6 +1205,13 @@ mod state_tests {
         }));
         assert!(matches!(invalid.stage, FileStep::Done));
         assert_eq!(invalid.outcome, 500);
+    }
+
+    #[test]
+    fn sensitive_paths_are_refused() {
+        assert!(FileSession::new("/srv/secret").is_err());
+        assert!(FileSession::new("/etc/passwd").is_err());
+        assert!(FileSession::new("/.cellos-machine").is_err());
     }
 
     #[test]

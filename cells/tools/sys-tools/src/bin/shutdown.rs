@@ -83,9 +83,18 @@ fn request_from_supervisor(
         ostd::syscall::SystemPowerAction::Reboot => api::syscall::system_power::ACTION_REBOOT,
         ostd::syscall::SystemPowerAction::PowerOff => api::syscall::system_power::ACTION_POWEROFF,
     };
-    let request = [APP_MESSAGE_PREFIX[0], APP_MESSAGE_PREFIX[1], OP_POWER, action as u8];
+    let request = [
+        APP_MESSAGE_PREFIX[0],
+        APP_MESSAGE_PREFIX[1],
+        OP_POWER,
+        action as u8,
+    ];
     if !matches!(sys_send(supervisor, &request), SyscallResult::Ok(_)) {
-        exit_with(output, b"shutdown: cannot send request to supervisor\n", deadline);
+        exit_with(
+            output,
+            b"shutdown: cannot send request to supervisor\n",
+            deadline,
+        );
     }
     let mut status = [0u8; 3];
     match sys_recv_timeout(supervisor, &mut status, REPLY_TIMEOUT_TICKS) {
@@ -94,7 +103,11 @@ fn request_from_supervisor(
             b"shutdown: refused; the supervisor resumed the system\n",
             deadline,
         ),
-        _ => exit_with(output, b"shutdown: the machine did not power off or reset\n", deadline),
+        _ => exit_with(
+            output,
+            b"shutdown: the machine did not power off or reset\n",
+            deadline,
+        ),
     }
 }
 

@@ -267,16 +267,25 @@ fn scan_bus_and_register<R: ConfigSpace + ?Sized>(region: &R, bus: u8) {
             // (`ETHERNET_DRIVER_IDS`, `pcie_ecam.rs`), the only Ethernet ID table:
             // a controller no Driver Cell drives is recorded but answered with a
             // non-zero refusal, on every bus, so this cell names the refused ID.
-            if sys_register_pci_device(bdf, cls, bar0_base, bar0_size).is_ok() {
-                let _ = ostd::io::print_fmt(format_args!(
-                    "[platform] registered bus {} device {} function {} class {}:{}:{}\n",
-                    bus, dev, fun, class, subclass, prog_if
-                ));
-            } else {
-                let _ = ostd::io::print_fmt(format_args!(
-                    "[platform] registration refused bus {} device {} function {} id {:04x}:{:04x} class {}:{}:{}\n",
-                    bus, dev, fun, vendor_id, device_id, class, subclass, prog_if
-                ));
+            match sys_register_pci_device(bdf, cls, bar0_base, bar0_size) {
+                Ok(true) => {
+                    let _ = ostd::io::print_fmt(format_args!(
+                        "[platform] registered bus {} device {} function {} class {}:{}:{}\n",
+                        bus, dev, fun, class, subclass, prog_if
+                    ));
+                }
+                Ok(false) => {
+                    let _ = ostd::io::print_fmt(format_args!(
+                        "[platform] registered (no driver) bus {} device {} function {} id {:04x}:{:04x} class {}:{}:{}\n",
+                        bus, dev, fun, vendor_id, device_id, class, subclass, prog_if
+                    ));
+                }
+                Err(error) => {
+                    let _ = ostd::io::print_fmt(format_args!(
+                        "[platform] registration refused bus {} device {} function {} id {:04x}:{:04x} class {}:{}:{} error {:?}\n",
+                        bus, dev, fun, vendor_id, device_id, class, subclass, prog_if, error
+                    ));
+                }
             }
         }
     }

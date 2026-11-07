@@ -224,7 +224,10 @@ mod tests {
         let mut request = [0u8; 8];
         request[0] = OP_POWER;
         request[1] = 1;
-        assert_eq!(parse_power_request(&request), Some(SystemPowerAction::Reboot));
+        assert_eq!(
+            parse_power_request(&request),
+            Some(SystemPowerAction::Reboot)
+        );
         request[1] = 2;
         assert_eq!(
             parse_power_request(&request),

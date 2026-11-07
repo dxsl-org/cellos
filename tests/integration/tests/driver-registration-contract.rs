@@ -66,7 +66,7 @@ fn virtio_drivers_publish_ready_state_and_fail_closed() {
     assert_registration_contract(
         "virtio-blk",
         include_str!("../../../cells/drivers/virtio-blk/src/main.rs"),
-        "if let Err(error) = sys_register_block_device(BlockDevice::Mmio { base })",
+        "if let Err(error) = sys_register_block_device(route)",
         "block driver registration failed",
     );
 }

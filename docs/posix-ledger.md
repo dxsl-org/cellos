@@ -207,20 +207,20 @@ and talks to the Net service over typed IPC (`libs/api/src/services/posix/net.rs
 
 | profile | kind | entry_point | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|
-| tier-a | libc-symbol | `socket` | local socket table | `libs/api/src/services/posix/net.rs:100-109` | `AF_INET` with `SOCK_STREAM` only | `-1` for any other domain or type, or when the table is full; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `connect` | Net IPC TCP connect | `libs/api/src/services/posix/net.rs:116-121` | IPv4 `sockaddr_in` | `-1` on a bad fd, bad address or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `send` | Net IPC `TcpSend` | `libs/api/src/services/posix/net.rs:211-291` | at most 495 bytes per call; waits up to 5 s for the handshake | `-1` on `NULL`, bad fd, refused peer, timeout or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `recv` | Net IPC receive | `libs/api/src/services/posix/net.rs:297-346` | copies at most `len` bytes | `-1` on `NULL`, bad fd or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
-| tier-a | libc-symbol | `_close` | socket fds 10-17 use the local table; other fds use `ViSyscall::Close` | `libs/api/src/services/posix/net.rs:355-361` | closes a socket or a kernel fd | `-1` on failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
-| tier-a | libc-symbol | `close` | `_close` | `libs/api/src/services/posix/net.rs:365-368` | as `_close` | as `_close` | unverified | none |
-| tier-a | libc-symbol | `gethostbyname` | Net service resolver over IPC | `libs/api/src/services/posix/net.rs:493-551` | IPv4 only; a single address; static result storage | `NULL` for a `NULL`, empty, over-long or unresolvable name, or an unreachable service; `h_errno` not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::test_net_dns` |
+| tier-a | libc-symbol | `socket` | local socket table | `libs/api/src/services/posix/net.rs:146-154` | `AF_INET` with `SOCK_STREAM` only | `-1` for any other domain or type, or when the table is full; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `connect` | Net IPC TCP connect | `libs/api/src/services/posix/net.rs:162-185` | IPv4 `sockaddr_in` | `-1` on a bad fd, bad address or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `send` | Net IPC `TcpSend` | `libs/api/src/services/posix/net.rs:205-254` | at most 495 bytes per call; waits up to 5 s for the handshake | `-1` on `NULL`, bad fd, refused peer, timeout or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `recv` | Net IPC receive | `libs/api/src/services/posix/net.rs:261-282` | copies at most `len` bytes | `-1` on `NULL`, bad fd or transport error; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::echo_round_trip` |
+| tier-a | libc-symbol | `_close` | socket fds 10-17 use the local table; other fds use `ViSyscall::Close` | `libs/api/src/services/posix/net.rs:292-297` | closes a socket or a kernel fd | `-1` on failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
+| tier-a | libc-symbol | `close` | `_close` | `libs/api/src/services/posix/net.rs:302-304` | as `_close` | as `_close` | unverified | none |
+| tier-a | libc-symbol | `gethostbyname` | Net service resolver over IPC | `libs/api/src/services/posix/net.rs:392-438` | IPv4 only; a single address; static result storage | `NULL` for a `NULL`, empty, over-long or unresolvable name, or an unreachable service; `h_errno` not set | partial | `tests/integration/tests/boot.rs::posix_shim_net`; `cells/tests/posix-shim-test/src/main.rs::test_net_dns` |
 
 ### File, process and time
 
 | profile | kind | entry_point | backing | source | semantic_subset | unsupported_result | status | evidence |
 |---|---|---|---|---|---|---|---|---|
-| tier-a | libc-symbol | `_open` | `ViSyscall::Open` | `libs/api/src/services/posix/sysio.rs:140-150` | path, flags and mode passed through to the kernel | `-1` on kernel failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
-| tier-a | libc-symbol | `open` | `_open` | `libs/api/src/services/posix/sysio.rs:154-157` | as `_open` | as `_open` | unverified | none |
+| tier-a | libc-symbol | `_open` | `ViSyscall::Open` | `libs/api/src/services/posix/sysio.rs:144-154` | path, flags and mode passed through to the kernel | `-1` on kernel failure; errno not set | partial | `tests/integration/tests/boot.rs::posix_shim_fstat`; `cells/tests/posix-shim-test/src/fstat.rs::test_fstat` |
+| tier-a | libc-symbol | `open` | `_open` | `libs/api/src/services/posix/sysio.rs:158-160` | as `_open` | as `_open` | unverified | none |
 | tier-a | libc-symbol | `_write` | `ViSyscall::Write` | `libs/api/src/services/posix/sysio.rs:502-505` | raw kernel write | kernel error value returned as `-1`; errno not set | unverified | none |
 | tier-a | libc-symbol | `write` | `_write` | `libs/api/src/services/posix/sysio.rs:509-512` | as `_write` | as `_write` | unverified | none |
 | tier-a | libc-symbol | `_read` | `ViSyscall::Read` | `libs/api/src/services/posix/sysio.rs:516-519` | raw kernel read | kernel error value returned as `-1`; errno not set | unverified | none |
@@ -242,19 +242,19 @@ and talks to the Net service over typed IPC (`libs/api/src/services/posix/net.rs
 | tier-a | libc-symbol | `_putchar` | `ViSyscall::Write` to fd 1 | `libs/api/src/services/posix/sysio.rs:490-494` | one byte to stdout | failure not reported | unverified | none |
 | tier-a | libc-symbol | `_isatty` | constant | `libs/api/src/services/posix/sysio.rs:696-703` | fds 0-2 report 1; all others 0 | errno not set | unverified | none |
 | tier-a | libc-symbol | `_getpid` | constant | `libs/api/src/services/posix/sysio.rs:707-710` | always 1 | not a Cell identity | unverified | none |
-| tier-a | libc-symbol | `_times` | none | `libs/api/src/services/posix/sysio.rs:232-241` | zeroes the `tms` fields and returns 0 | no CPU accounting | unverified | none |
+| tier-a | libc-symbol | `_times` | none | `libs/api/src/services/posix/sysio.rs:236-245` | zeroes the `tms` fields and returns 0 | no CPU accounting | unverified | none |
 | tier-a | libc-symbol | `_exit` | `ViSyscall::Exit` | `libs/api/src/services/posix/sysio.rs:722-728` | terminates the Cell with a status | never returns | unverified | none |
 | tier-a | libc-symbol | `_time` | `ViSyscall::GetTime` epoch seconds | `libs/api/src/services/posix/sysio.rs:737-745` | whole seconds | returns 0 when the time syscall fails; errno not set | unverified | none |
 | tier-a | libc-symbol | `_gettimeofday` | `ViSyscall::GetTime` epoch seconds | `libs/api/src/services/posix/sysio.rs:750-760` | `tv_usec` always 0; timezone ignored | returns 0 even when the time syscall fails, leaving `tv` unwritten | unverified | none |
-| tier-a | libc-symbol | `_fcntl` | none | `libs/api/src/services/posix/sysio.rs:162-165` | none | `-1` always; errno not set | unverified | none |
-| tier-a | libc-symbol | `_execve` | none | `libs/api/src/services/posix/sysio.rs:169-176` | none; no exec in SAS | `-1` always; errno not set | unverified | none |
-| tier-a | libc-symbol | `_fork` | none | `libs/api/src/services/posix/sysio.rs:180-183` | none; no fork in SAS | `-1` always; errno not set (not `ENOSYS`) | unverified | none |
-| tier-a | libc-symbol | `fork` | `_fork` | `libs/api/src/services/posix/sysio.rs:187-190` | none | `-1` always; errno not set (not `ENOSYS`) | unverified | none |
-| tier-a | libc-symbol | `dlopen` | none | `libs/api/src/services/posix/sysio.rs:195-198` | none; static linking only | `NULL` always; errno not set and no `dlerror` | unverified | none |
-| tier-a | libc-symbol | `mprotect` | none | `libs/api/src/services/posix/sysio.rs:202-205` | none; W^X is fixed by the loader | `-1` always; errno not set | unverified | none |
-| tier-a | libc-symbol | `mmap` | none | `libs/api/src/services/posix/sysio.rs:210-220` | none, including `MAP_ANONYMOUS` | `NULL` always, not `MAP_FAILED`; errno not set | unverified | none |
-| tier-a | libc-symbol | `_wait` | none | `libs/api/src/services/posix/sysio.rs:224-227` | none | `-1` always; errno not set | unverified | none |
-| tier-a | libc-symbol | `_link` | none | `libs/api/src/services/posix/sysio.rs:245-248` | none | `-1` always; errno not set | unverified | none |
+| tier-a | libc-symbol | `_fcntl` | none | `libs/api/src/services/posix/sysio.rs:166-168` | none | `-1` always; errno not set | unverified | none |
+| tier-a | libc-symbol | `_execve` | none | `libs/api/src/services/posix/sysio.rs:173-180` | none; no exec in SAS | `-1` always; errno not set | unverified | none |
+| tier-a | libc-symbol | `_fork` | none | `libs/api/src/services/posix/sysio.rs:184-186` | none; no fork in SAS | `-1` always; errno not set (not `ENOSYS`) | unverified | none |
+| tier-a | libc-symbol | `fork` | `_fork` | `libs/api/src/services/posix/sysio.rs:191-193` | none | `-1` always; errno not set (not `ENOSYS`) | unverified | none |
+| tier-a | libc-symbol | `dlopen` | none | `libs/api/src/services/posix/sysio.rs:199-201` | none; static linking only | `NULL` always; errno not set and no `dlerror` | unverified | none |
+| tier-a | libc-symbol | `mprotect` | none | `libs/api/src/services/posix/sysio.rs:206-208` | none; W^X is fixed by the loader | `-1` always; errno not set | unverified | none |
+| tier-a | libc-symbol | `mmap` | none | `libs/api/src/services/posix/sysio.rs:214-224` | none, including `MAP_ANONYMOUS` | `NULL` always, not `MAP_FAILED`; errno not set | unverified | none |
+| tier-a | libc-symbol | `_wait` | none | `libs/api/src/services/posix/sysio.rs:228-230` | none | `-1` always; errno not set | unverified | none |
+| tier-a | libc-symbol | `_link` | none | `libs/api/src/services/posix/sysio.rs:249-251` | none | `-1` always; errno not set | unverified | none |
 | tier-a | libc-symbol | `_kill` | none | `libs/api/src/services/posix/sysio.rs:714-717` | none; no signals in SAS | `-1` always; errno not set | unverified | none |
 | tier-a | libc-symbol | `_sbrk` | none; the Rust allocator owns the heap | `libs/api/src/services/posix/sysio.rs:766-769` | none | `NULL` always, not `(void*)-1`; errno not set | unverified | none |
 

@@ -164,6 +164,10 @@ cells/apps/vove/
 /build/x86-prod-check-iso/
 /build/x86-prod-refusal-iso-root/
 /build/x86-python-gate/
+/build/x86-cpp-hosted-iso-root/
+/build/x86-drm-lite-iso-root/
+/build/x86-mlibc-witness-iso-root/
+/build/x86-vm-lane/
 /build/cp1-prerequisites/g0-vtd-readiness*.json
 /build/cp1-prerequisites/profile-readiness.json
 /build/g1-*

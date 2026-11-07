@@ -2128,7 +2128,6 @@ impl Scheduler {
         let task = self
             .tasks
             .get(&tid)
-            .map(|t| &**t)
             .or_else(|| self.zombies.iter().find(|t| t.id == tid).map(|t| &**t));
         match result {
             Some((_, incoming)) if incoming.is_null() => {
@@ -2619,7 +2618,7 @@ impl Scheduler {
                         rl::pick_local_eligible_with(hart_id, &eligible, &mut reservation)
                     });
                 let Some(id) = candidate else { break };
-                let task = self.tasks.get(&id).map(|task| &**task);
+                let task = self.tasks.get(&id);
                 if Some(id) == current_id
                     || super::cpu_accounting::require(super::cpu_accounting::stage(
                         self, hart_id, task,

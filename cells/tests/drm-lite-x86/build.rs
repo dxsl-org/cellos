@@ -30,7 +30,12 @@ fn main() {
 
     // Lane scripts export no-SSE CFLAGS for ordinary Tier-1 C; cc-rs would
     // append them after the SSE2 contract below and break rule H1.
-    for key in ["CFLAGS", "TARGET_CFLAGS", "CFLAGS_x86_64-unknown-none", "CFLAGS_x86_64_unknown_none"] {
+    for key in [
+        "CFLAGS",
+        "TARGET_CFLAGS",
+        "CFLAGS_x86_64-unknown-none",
+        "CFLAGS_x86_64_unknown_none",
+    ] {
         env::remove_var(key);
     }
     let gcc_include = Command::new("gcc")
