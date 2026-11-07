@@ -115,8 +115,8 @@ pub enum ViSyscall {
     /// (kernel's USER: prefixed UART path) — gives the fb-console cell a live
     /// mirror of everything that appears on the serial console.
     ///
-    /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
-    /// Gated by ReadLogCap (allowlist bit 54) — declare with `ReadLog` in manifest.
+    /// ABI: a0 = buf_ptr, a1 = max, a2 = log_source (0 = user log, 1 = audit log) → bytes_copied.
+    /// Source 0 is gated by ReadLogCap (bit 54); source 1 also requires supervisor privilege.
     ReadLog = 237,
     /// Spawn a cell from ELF bytes supplied in a caller-owned Grant region.
     ///

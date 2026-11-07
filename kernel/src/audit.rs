@@ -132,6 +132,9 @@ pub enum AuditEvent {
     /// net_connect, bit2 net_listen, bit3 net_l2). Recorded for the grant, not
     /// only a narrowing, because `net_l2` puts raw frames on the NIC.
     NetRightsGranted = 27,
+    /// Synthetic event recorded when ring buffer overflows and older records are evicted.
+    /// Payload: `encode_u32x2(evicted_count, cumulative_dropped)`.
+    RecordsDropped = 28,
 }
 
 struct AuditRing {
@@ -167,44 +170,57 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     let record_len = 10 + plen as usize;
 
     // Capture the outgoing interrupt state and mask interrupts on this hart.
-    // Two reasons: a same-hart ISR must not re-enter the write and wait on the
-    // lock below, and the record's bytes must be ordered before its publication.
     let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
 
     let _serialised = WRITE.lock();
-    let head = RING.head.load(Ordering::Relaxed);
+    let mut head = RING.head.load(Ordering::Relaxed);
     let tail = RING.tail.load(Ordering::Relaxed);
-    // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
     let buf = unsafe { &mut *RING.buf.get() };
 
+    let is_drop_event = matches!(event, AuditEvent::RecordsDropped);
+    let needed = if !is_drop_event {
+        record_len + 18
+    } else {
+        record_len
+    };
+
     // Evict whole records from the tail until the new one fits.
-    let (tail, evicted) = evict_for(buf, head, tail, record_len);
+    let (new_tail, evicted) = evict_for(buf, head, tail, needed);
     if evicted != 0 {
-        RING.tail.store(tail, Ordering::Release);
-        RING.dropped.fetch_add(evicted, Ordering::Relaxed);
+        RING.tail.store(new_tail, Ordering::Release);
+        let total = RING.dropped.fetch_add(evicted, Ordering::Relaxed) + evicted;
+        if !is_drop_event {
+            let drop_payload = encode_u32x2(evicted as u32, total as u32);
+            let drop_len =
+                write_record_bytes(buf, head, AuditEvent::RecordsDropped as u8, &drop_payload);
+            head = head.wrapping_add(drop_len);
+        }
     }
 
+    let written = write_record_bytes(buf, head, event as u8, &payload[..plen as usize]);
+    RING.head
+        .store(head.wrapping_add(written), Ordering::Release);
+
+    unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
+}
+
+fn write_record_bytes(buf: &mut [u8; BUF_SIZE], pos: usize, event: u8, payload: &[u8]) -> usize {
+    let plen = payload.len().min(255) as u8;
     #[cfg(target_arch = "riscv64")]
     let mtime = hal::common::timer::read_mtime().to_le_bytes();
     #[cfg(not(target_arch = "riscv64"))]
     let mtime = 0u64.to_le_bytes();
-    let mut pos = head;
+    let mut curr = pos;
     for &b in mtime
         .iter()
-        .chain(core::slice::from_ref(&(event as u8)))
+        .chain(core::slice::from_ref(&event))
         .chain(core::slice::from_ref(&plen))
-        .chain(&payload[..plen as usize])
+        .chain(payload)
     {
-        buf[pos & MASK] = b;
-        pos = pos.wrapping_add(1);
+        buf[curr & MASK] = b;
+        curr = curr.wrapping_add(1);
     }
-
-    // Publish the write — consumer sees it only after this Release store.
-    RING.head
-        .store(head.wrapping_add(record_len), Ordering::Release);
-
-    // SAFETY: `saved_interrupts` was captured on this hart by the call above.
-    unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
+    10 + plen as usize
 }
 
 /// Length of the record starting at ring position `at`: the 8-byte timestamp,

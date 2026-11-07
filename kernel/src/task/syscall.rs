@@ -4872,6 +4872,7 @@ pub enum Syscall {
     ReadLog {
         buf_ptr: usize,
         max: usize,
+        source: usize,
     },
     /// ViSyscall 9: SetTlsBase — set the caller's own user thread pointer and
     /// return the previous value. Self-only (no target parameter) and always
@@ -9139,19 +9140,32 @@ fn handle_syscall_inner(
         // 237: ReadLog — drain the user-log ring buffer into a cell-provided buffer.
         // The caller must have allowlist bit 54 (ReadLog) set in its manifest.
         // Returns the number of bytes actually copied (0 when nothing available).
-        Syscall::ReadLog { buf_ptr, max } => {
+        Syscall::ReadLog {
+            buf_ptr,
+            max,
+            source,
+        } => {
             if max == 0 {
                 return Ok(0);
             }
             if buf_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            let max = max.min(4096);
+            let max = max.min(65536);
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(max)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(max, 0);
-            let n = crate::task::read_log_ring(&mut kbuf);
+            let n = match source {
+                0 => crate::task::read_log_ring(&mut kbuf),
+                1 => {
+                    if !caller_has_supervisor(caller_id) {
+                        return Err(SyscallError::PermissionDenied);
+                    }
+                    crate::audit::drain(&mut kbuf)
+                }
+                _ => return Err(SyscallError::InvalidInput),
+            };
             if n > 0 {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
             }
@@ -10898,6 +10912,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::ReadLog => Syscall::ReadLog {
             buf_ptr: a0,
             max: a1,
+            source: a2,
         },
         ViSyscall::Chdir => Syscall::ChDir {
             path_ptr: a0,

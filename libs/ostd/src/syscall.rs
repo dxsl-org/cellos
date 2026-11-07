@@ -252,17 +252,31 @@ pub fn sys_log(msg: &str) -> SyscallResult {
     }
 }
 
+pub const READ_LOG_USER: usize = 0;
+pub const READ_LOG_AUDIT: usize = 1;
+
 /// Drain up to `buf.len()` bytes from the kernel user-log ring buffer.
 ///
 /// Returns the number of bytes actually copied (0 when no new output is available).
 /// Requires the `ReadLog` capability declared in the cell manifest.
 pub fn sys_read_log(buf: &mut [u8]) -> usize {
+    sys_read_log_source(buf, READ_LOG_USER)
+}
+
+/// Drain up to `buf.len()` bytes from the kernel audit event ring buffer.
+///
+/// Returns bytes copied. Requires the `ReadLog` capability and supervisor privilege.
+pub fn sys_read_audit_log(buf: &mut [u8]) -> usize {
+    sys_read_log_source(buf, READ_LOG_AUDIT)
+}
+
+fn sys_read_log_source(buf: &mut [u8], source: usize) -> usize {
     let n = unsafe {
         syscall(
             ViSyscall::ReadLog,
             buf.as_mut_ptr() as usize,
             buf.len(),
-            0,
+            source,
             0,
         )
     };

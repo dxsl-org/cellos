@@ -84,9 +84,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
   nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
 
 **Đợt 2 — Medium bảo mật:**
-- [ ] `RunVcpu`/`VcpuRegs` forward raw pointer sau `validate_user_buf` → dùng struct kernel-local + `TaskCopyView`.
-- [ ] Audit ring: ring đầy nay evict record cũ nhất và đếm (`990c04d08`), nhưng `drain()`/`dropped_count()`
-  vẫn không có caller (`kernel/src/audit.rs`). Thêm drain interface có quyền + event synthetic ghi số record đã mất.
 - [ ] Beacon replay: `boot_epoch = sys_get_time_ms()`, state không persist
   (`cells/services/net-broker/src/local_runtime.rs`, `beacon.rs`).
 - [ ] Allowlist unsafe hết hạn chỉ in `NOTE`, không fail (`scripts/cellos_sign/policy.py` `stale_entries`,
