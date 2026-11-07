@@ -26,10 +26,9 @@ The default `scripts/x86/limine.conf` names `cellos.profile=qemu-q35-x86_64`
 instead. The kernel accepts that weaker profile only when CPUID reports a
 hypervisor.
 
-Driver families are added to `enabled_drivers` by the phase that ships them
-(`.agents/261004-1957-x86-pc-lane/`): AHCI storage (02a/02b), xHCI USB (03),
-Intel `igb` NIC (04a/04b), extra 16550 ports (06). A descriptor never lists a
-driver whose cell does not exist — `has_driver` gates real kernel init.
+Driver families are added to `enabled_drivers` by the phase that ships them:
+AHCI storage, xHCI USB, PVSCSI, and NICs (`e1000`, `e1000e`, `igb`, `igc`, `r8169`, `bcm57xx`, `ixgbe`, `i40e`, `vmxnet3`).
+A descriptor never lists a driver whose cell does not exist — `has_driver` gates real kernel init.
 
 ## Machine pin and re-confirmation (ADR-0029 §3)
 

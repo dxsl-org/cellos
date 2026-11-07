@@ -71,6 +71,11 @@ fn generic_pc_descriptor_declares_only_shipped_drivers() {
     // strict profile, ADR-0031 §4).
     assert!(board.has_driver(DriverId::EthernetVmxnet3));
     assert!(board.has_driver(DriverId::StoragePvscsi));
+    assert!(board.has_driver(DriverId::EthernetIgc));
+    assert!(board.has_driver(DriverId::EthernetR8169));
+    assert!(board.has_driver(DriverId::EthernetBcm57xx));
+    assert!(board.has_driver(DriverId::EthernetIxgbe));
+    assert!(board.has_driver(DriverId::EthernetI40e));
     assert!(!board.has_driver(DriverId::Uart16550Multi));
     assert_eq!(board.validate_for(Architecture::X86_64), Ok(()));
 }

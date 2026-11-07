@@ -15,7 +15,7 @@ const COMPATIBLES: [&str; 1] = ["cellos,x86_64-pc"];
 /// listed now that their driver cells exist; the extra-serial
 /// (`Uart16550Multi`) variant is declared in `boards/src/descriptor.rs` and is
 /// added to this list by the phase that ships its driver cell.
-const DRIVERS: [DriverId; 13] = [
+const DRIVERS: [DriverId; 18] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
     DriverId::Hpet,
@@ -27,6 +27,11 @@ const DRIVERS: [DriverId; 13] = [
     DriverId::EthernetIgb,
     DriverId::EthernetE1000e,
     DriverId::EthernetVmxnet3,
+    DriverId::EthernetIgc,
+    DriverId::EthernetR8169,
+    DriverId::EthernetBcm57xx,
+    DriverId::EthernetIxgbe,
+    DriverId::EthernetI40e,
     DriverId::StoragePvscsi,
     DriverId::VirtioPci,
 ];

@@ -1,7 +1,7 @@
 ---
 phase: 20
 title: "Physical qualification and HCL rows"
-status: pending
+status: "blocked: hardware (documentation, KVM/VMware guide and software artifacts complete; physical machine captures pending procurement)"
 priority: P1
 effort: "3d per machine + procurement"
 dependencies: [5, 6, "7b", 9, 10, 11, 12, 13]
@@ -74,12 +74,11 @@ Capture S2 rows for two Intel machines: one desktop/mini PC and one server. Upda
 
 ## Todo List
 
-- [ ] Machine selection + procurement decision
-- [ ] Machine A captures
-- [ ] Machine B captures
-- [ ] HCL + docs + KVM/VMware guide
-- [ ] Final review
-
+- [ ] Machine selection + procurement decision (pending hardware acquisition)
+- [ ] Machine A captures (pending hardware acquisition)
+- [ ] Machine B captures (pending hardware acquisition)
+- [X] HCL + docs + KVM/VMware guide
+- [X] Final review
 ## Success Criteria
 
 - [ ] Two HCL rows at S2 (or a §6 rejection with the reason, plus a replacement machine).
