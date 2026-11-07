@@ -43,8 +43,8 @@ G2-J, downstream ABI ratification, remote activation and production stay blocked
   P07 optional POSIX/runtime, P08 remote authority and placement/autoscaling with
   durable application-wide budgets, P09 Intel VMX/guest bridge and P10 exact
   physical/profile qualification and concurrent local/cluster workloads. P01 owns
-  exact contract/ABI/manifest/lifecycle/budget inventory and adoption. The existing
-  ten-phase DAG remains pending; this avoids a circular prerequisite/unlock dependency.
+  exact contract/ABI/manifest/lifecycle/budget inventory and adoption. The ten-phase
+  DAG completed on 2026-10-16; legacy execution locks are retired slice by slice.
 - **No automatic unlock:** documentation completion, a green old test, or finishing
   the controlling plan does not release a legacy slice. Record explicit per-slice
   rebase against the new contracts, file-owner handoff, retained technical/approval

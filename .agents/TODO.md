@@ -86,9 +86,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
 **Đợt 2 — Medium bảo mật:**
 - [ ] Beacon replay: `boot_epoch = sys_get_time_ms()`, state không persist
   (`cells/services/net-broker/src/local_runtime.rs`, `beacon.rs`).
-- [ ] Docs lệch code: `docs/security-model.md:45` nói default G1 để `signing-required` off, `kernel/Cargo.toml`
-  default **có**; `plan-portfolio.md` mâu thuẫn trạng thái 10 pha ADR-0024 ("COMPLETED MILESTONE" vs
-  "ten-phase DAG remains pending").
 
 **Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
 - [ ] x86 TLB: `kernel/src/memory/tlb_shootdown.rs` vẫn gọi `tlb_flush_all()` cho mọi thay đổi và probe ack
