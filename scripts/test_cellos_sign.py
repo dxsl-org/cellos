@@ -239,6 +239,38 @@ class ScannerLiteralTests(unittest.TestCase):
             self.assertFalse(result.ok)
             self.assertEqual({v.layer for v in result.violations}, {"attribute", "token"})
 
+    def test_stale_entries_become_violations_under_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
+            write(root, "cells/x/src/main.rs", '#![forbid(unsafe_code)]\nfn main() { }\n')
+            allow_content = (
+                'version = 1\n'
+                'max_age_days = 90\n\n'
+                '[[crate]]\n'
+                'name = "old-crate"\n'
+                'class = "driver-mmio"\n'
+                'reason = "test"\n'
+                'approver = "test"\n'
+                'date = "2026-01-01"\n'
+            )
+            write(root, "a.toml", allow_content)
+            allow = allowlist.load(root, "a.toml")
+            today = _dt.date(2026, 6, 1)
+
+            # Non-strict mode: stale entries are in stale_entries, but not violations
+            normal = policy.check(root, allow, today=today, strict=False)
+            self.assertTrue(normal.ok)
+            self.assertEqual(len(normal.stale_entries), 1)
+            self.assertEqual(len(normal.violations), 0)
+
+            # Strict mode: stale entries become violations
+            strict_res = policy.check(root, allow, today=today, strict=True)
+            self.assertFalse(strict_res.ok)
+            self.assertEqual(len(strict_res.stale_entries), 1)
+            self.assertEqual(len(strict_res.violations), 1)
+            self.assertEqual(strict_res.violations[0].layer, "stale")
+
 
 class ToolchainTests(unittest.TestCase):
     def test_reads_the_pin_from_disk(self):

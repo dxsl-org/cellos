@@ -80,7 +80,7 @@ def _crate_of(path: str, owners: list[tuple[str, str]]) -> str:
     return "<no crate>"
 
 
-def check(repo: Path, allow: Allowlist, today: _dt.date | None = None) -> Result:
+def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: bool = False) -> Result:
     """Run both F1 layers over `cells/`. Pure source parsing — no build, no network."""
     today = today or _dt.date.today()
     repo = repo.resolve()
@@ -152,11 +152,21 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None) -> Result
     # itself, but a shrinking list must be visible so it can be tightened) ────
     result.unused_file_entries = sorted(set(allow.files) - seen_unsafe)
     result.unused_crate_entries = sorted(set(allow.crates) - used_crate_entries)
-    result.stale_entries = [
-        f"{e.key} (approved {e.date}, {e.age_days(today)}d ago"
-        + (f", review_by {e.review_by}" if e.review_by else "")
-        + (f", tracking {e.tracking}" if e.tracking else "")
-        + ")"
-        for e in allow.stale(today)
-    ]
+    for e in allow.stale(today):
+        desc = (
+            f"{e.key} (approved {e.date}, {e.age_days(today)}d ago"
+            + (f", review_by {e.review_by}" if e.review_by else "")
+            + (f", tracking {e.tracking}" if e.tracking else "")
+            + ")"
+        )
+        result.stale_entries.append(desc)
+        if strict:
+            result.violations.append(
+                Violation(
+                    layer="stale",
+                    crate=_crate_of(e.key, owners),
+                    path=e.key,
+                    detail=f"overdue for re-review: {desc}",
+                )
+            )
     return result

@@ -61,7 +61,7 @@ def run_check(args: argparse.Namespace) -> int:
         print(f"FAIL: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
-    result = policy.check(repo, allow, today=_dt.date.today())
+    result = policy.check(repo, allow, today=_dt.date.today(), strict=getattr(args, "strict", False))
     status = toolchain.check(repo)
     _report(result, status, args.quiet)
 

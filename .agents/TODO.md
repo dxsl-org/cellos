@@ -86,8 +86,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
 **Đợt 2 — Medium bảo mật:**
 - [ ] Beacon replay: `boot_epoch = sys_get_time_ms()`, state không persist
   (`cells/services/net-broker/src/local_runtime.rs`, `beacon.rs`).
-- [ ] Allowlist unsafe hết hạn chỉ in `NOTE`, không fail (`scripts/cellos_sign/policy.py` `stale_entries`,
-  `cli.py`; `scripts/unsafe-allowlist.toml` `max_age_days = 90`). Làm stale = violation trong `--strict`.
 - [ ] Docs lệch code: `docs/security-model.md:45` nói default G1 để `signing-required` off, `kernel/Cargo.toml`
   default **có**; `plan-portfolio.md` mâu thuẫn trạng thái 10 pha ADR-0024 ("COMPLETED MILESTONE" vs
   "ten-phase DAG remains pending").
