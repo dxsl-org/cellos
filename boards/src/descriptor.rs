@@ -78,6 +78,8 @@ pub enum DriverId {
     EthernetR8169,
     /// Broadcom BCM5719/BCM5720 (`tg3`/`bge`) NIC family (phase 17).
     EthernetBcm57xx,
+    /// Intel 82599/X540/X550 (`ixgbe`) 10GbE NIC family (phase 18).
+    EthernetIxgbe,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

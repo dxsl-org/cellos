@@ -60,13 +60,13 @@ class ManifestTables(unittest.TestCase):
         self.assertEqual(HEADLESS.packages(), [
             "app-cellbox", "service-vfs", "service-config", "service-input", "service-net",
             "service-platform", "supervisor", "driver-nvme", "driver-e1000", "driver-igb",
-            "driver-e1000e", "driver-vmxnet3", "driver-igc", "driver-r8169", "driver-bcm57xx", "driver-ahci", "driver-xhci", "driver-virtio-blk",
+            "driver-e1000e", "driver-vmxnet3", "driver-igc", "driver-r8169", "driver-bcm57xx", "driver-ixgbe", "driver-ahci", "driver-xhci", "driver-virtio-blk",
             "driver-virtio-net", "driver-virtio-scsi", "driver-pvscsi", "driver-serial-x86",
             "app-sys-tools", "tier2-smoke",
             "tier2-exploit"])
         self.assertEqual(HEADLESS.image_paths(), {"/bin/" + name for name in (
             "cellbox", "cellbox-ssh", "vfs", "config", "net", "input", "platform", "supervisor",
-            "nvme", "e1000", "igb", "e1000e", "vmxnet3", "igc", "r8169", "bcm57xx", "ahci", "xhci", "block", "virtio-net",
+            "nvme", "e1000", "igb", "e1000e", "vmxnet3", "igc", "r8169", "bcm57xx", "ixgbe", "ahci", "xhci", "block", "virtio-net",
             "virtio-scsi", "pvscsi", "serial", "ls", "cat", "echo", "ps", "kill", "shutdown", "tier2-smoke",
             "tier2-exploit")}
             | {"/POLICY.BIN"})

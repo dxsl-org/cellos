@@ -1,7 +1,7 @@
 ---
 phase: 18
 title: "Intel 82599/X540/X550 10GbE (ixgbe family)"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P3
 effort: "6d + physical capture"
 dependencies: ["4b"]
@@ -55,14 +55,14 @@ The most widely deployed 10GbE family in existing servers: 82599 SFP+ (`8086:10F
 
 ## Todo List
 
-- [ ] Identity
-- [ ] 82599 + SFP
-- [ ] X540/X550
-- [ ] Physical captures
+- [X] Identity
+- [X] 82599 + SFP
+- [X] X540/X550
+- [ ] Physical captures (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests green.
+- [X] Host tests green.
 - [ ] Physical capture per contract for each `Driveable` ID; otherwise `blocked: hardware`.
 
 ## Risk Assessment
