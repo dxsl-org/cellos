@@ -80,6 +80,8 @@ pub enum DriverId {
     EthernetBcm57xx,
     /// Intel 82599/X540/X550 (`ixgbe`) 10GbE NIC family (phase 18).
     EthernetIxgbe,
+    /// Intel X710/XL710 (`i40e`) 10GbE/40GbE NIC family (phase 19).
+    EthernetI40e,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

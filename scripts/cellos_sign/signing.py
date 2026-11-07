@@ -66,7 +66,7 @@ X86_CANDIDATE_RECIPE_SHA256 = "8c9b1ed0f0af27a0ecd9eb04ec10f5270cf73dd216d85d45b
 _X86_HEADLESS_SIGNED = frozenset({
     "cellbox", "service-vfs", "service-config", "service-input", "service-net", "platform",
     "driver-nvme", "driver-e1000", "driver-igb", "driver-e1000e", "driver-ahci", "driver-xhci",
-    "driver-vmxnet3", "driver-igc", "driver-r8169", "driver-bcm57xx", "driver-ixgbe", "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
+    "driver-vmxnet3", "driver-igc", "driver-r8169", "driver-bcm57xx", "driver-ixgbe", "driver-i40e", "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
     "driver-pvscsi", "driver-serial-x86", "ls", "cat", "echo", "ps", "kill", "shutdown", "app-init",
     "supervisor",
 })

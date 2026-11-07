@@ -90,6 +90,7 @@ members = [
     "cells/drivers/r8169",
     "cells/drivers/bcm57xx",
     "cells/drivers/ixgbe",
+    "cells/drivers/i40e",
     "cells/drivers/serial-x86",
     "cells/drivers/gpio",
     "cells/drivers/gpio-bcm",

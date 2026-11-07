@@ -122,6 +122,7 @@ HEADLESS_CELLS = (
     Cell("driver-r8169", "driver-r8169", ("/bin/r8169",)),
     Cell("driver-bcm57xx", "driver-bcm57xx", ("/bin/bcm57xx",)),
     Cell("driver-ixgbe", "driver-ixgbe", ("/bin/ixgbe",)),
+    Cell("driver-i40e", "driver-i40e", ("/bin/i40e",)),
     Cell("driver-ahci", "driver-ahci", ("/bin/ahci",)),
     Cell("driver-xhci", "driver-xhci", ("/bin/xhci",)),
     # virtio over PCI (ADR-0031 phase 05): each exits cleanly without its device.

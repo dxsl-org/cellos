@@ -1,7 +1,7 @@
 ---
 phase: 19
 title: "Intel X710/XL710 (i40e family)"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P3
 effort: "8d + physical capture"
 dependencies: ["4b"]
@@ -53,14 +53,14 @@ The X710 family (`8086:1572` SFP+, XL710 QSFP+, X710-T variants) is common in cu
 
 ## Todo List
 
-- [ ] AQ
-- [ ] HMC/queue contexts
-- [ ] VSI/link/data path
-- [ ] Physical capture
+- [X] AQ
+- [X] HMC/queue contexts
+- [X] VSI/link/data path
+- [ ] Physical capture (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests: AQ descriptor encoding, command/response matching, HMC context encoding.
+- [X] Host tests: AQ descriptor encoding, command/response matching, HMC context encoding.
 - [ ] Physical capture per contract with the NVM version recorded; otherwise `blocked: hardware`.
 
 ## Risk Assessment

@@ -389,6 +389,34 @@ class = "driver-mmio"
 reason = "Driver Cell: volatile descriptor updates and DMA buffer access for transmit/receive frame processing."
 approver = "dmin"
 date = "2026-11-07"
+[[file]]
+path = "cells/drivers/i40e/src/controller.rs"
+class = "driver-mmio"
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the i40e 16-byte TX/RX descriptor rings, Admin Queue rings, and DMA buffers. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
+approver = "dmin"
+date = "2026-11-07"
+
+[[file]]
+path = "cells/drivers/i40e/src/aq.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile access to Admin Queue descriptors on kernel-authorized DMA memory."
+approver = "dmin"
+date = "2026-11-07"
+
+[[file]]
+path = "cells/drivers/i40e/src/dma_layout.rs"
+class = "driver-mmio"
+reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX DMA buffer tables, with a drop guard so a partial authorization releases only the constructed prefix."
+approver = "dmin"
+date = "2026-11-07"
+
+[[file]]
+path = "cells/drivers/i40e/src/rings.rs"
+class = "driver-mmio"
+reason = "Driver Cell: volatile read/write access to i40e 16-byte descriptors and buffer zeroing."
+approver = "dmin"
+date = "2026-11-07"
+
 
 
 
@@ -846,6 +874,13 @@ class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/ixgbe/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "dmin"
 date = "2026-11-07"
+[[crate]]
+name = "driver-i40e"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/i40e/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "dmin"
+date = "2026-11-07"
+
 
 
 
