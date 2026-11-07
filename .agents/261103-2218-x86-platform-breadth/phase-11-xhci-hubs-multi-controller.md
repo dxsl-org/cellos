@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "xHCI: BIOS handoff, hubs, multiple controllers"
-status: pending
+status: completed
 priority: P2
 effort: "4d"
 dependencies: ["4b"]
@@ -63,16 +63,15 @@ Make USB keyboards work on real Intel PCs and on BMC virtual consoles: take the 
 
 ## Todo List
 
-- [ ] Legacy handoff + unit test
-- [ ] Hub class
-- [ ] Two-level hub lane
-- [ ] Multi-controller
+- [X] Legacy handoff + unit test
+- [X] Hub class
+- [X] Two-level hub lane
+- [X] Multi-controller
 
 ## Success Criteria
 
-- [ ] `xhci-x86` gains three cases (behind hub, behind two hubs, second controller), each echoing the injected key in the shell; the existing 4 cases stay green.
-- [ ] Handoff unit test: BIOS-owned cleared → ok; never cleared → forced + logged.
-
+- [X] `xhci-x86` gains three cases (behind hub, behind two hubs, second controller), each echoing the injected key in the shell; the existing 4 cases stay green.
+- [X] Handoff unit test: BIOS-owned cleared → ok; never cleared → forced + logged.
 ## Risk Assessment
 
 - Real-controller quirks (Intel PCH port routing, USB3 link training) only surface physically, in phase 20.

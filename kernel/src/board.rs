@@ -217,6 +217,39 @@ pub(crate) fn profile_option(cmdline: &[u8]) -> Result<Option<&str>, CmdlineErro
     Ok(found)
 }
 
+#[cfg(target_arch = "x86_64")]
+const CONSOLE_KEY: &str = "cellos.console";
+
+/// The `cellos.console=` value on `cmdline`, or `None` when it is absent.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn console_option(cmdline: &[u8]) -> Result<Option<&str>, CmdlineError> {
+    if cmdline.len() > CMDLINE_MAX {
+        return Err(CmdlineError::TooLong);
+    }
+    if !cmdline
+        .iter()
+        .all(|byte| matches!(byte, b'\t' | 0x20..=0x7E))
+    {
+        return Err(CmdlineError::NotPrintableAscii);
+    }
+    let text = core::str::from_utf8(cmdline).map_err(|_| CmdlineError::NotPrintableAscii)?;
+    let mut found = None;
+    for token in text.split([' ', '\t']).filter(|token| !token.is_empty()) {
+        let value = match token.split_once('=') {
+            Some((CONSOLE_KEY, value)) => value,
+            None if token == CONSOLE_KEY => "",
+            _ => continue,
+        };
+        if value.is_empty() || value.len() > 64 {
+            continue;
+        }
+        if found.replace(value).is_some() {
+            return Err(CmdlineError::DuplicateProfile);
+        }
+    }
+    Ok(found)
+}
+
 /// Where the bound profile came from.
 #[cfg(target_arch = "x86_64")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,8 +1,8 @@
 # Generic x86_64 PC / server board
 
 Compatibility contract for the x86_64 PC class: the baseline a machine must
-expose to be listed — standard legacy COM1 wiring, standard firmware windows,
-and the Limine ACPI boot path.
+expose to be listed — a console (16550 UART via COM1/SPCR/SOL or GOP linear framebuffer),
+standard firmware windows, and the Limine ACPI boot path.
 
 **No physical machine is qualified by this file, and it does not claim that
 every PC has that wiring.** Whether a *specific* machine boots Cellos, exposes

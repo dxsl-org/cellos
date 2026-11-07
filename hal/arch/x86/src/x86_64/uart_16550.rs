@@ -1,24 +1,100 @@
-//! 16550A UART mechanism via x86 port I/O.
+//! 16550A UART mechanism via x86 port I/O and MMIO.
 //!
 //! Two-phase init:
 //!   1. `init()` — baud-rate, framing, FIFO setup (IRQs disabled; used at early boot).
-//!   2. `init_input_irq()` — enable UART RX + redirect the configured ISA IRQ.
+//!   2. `init_input_irq()` — enable UART RX + redirect the configured ISA IRQ or GSI.
 //!      Call this AFTER the IOAPIC (and LAPIC) are live.
 
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{
+    AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+};
+
+static TX_LOCK: AtomicBool = AtomicBool::new(false);
+
+struct UartLockGuard {
+    flags: usize,
+}
+
+fn lock_uart() -> UartLockGuard {
+    let flags: usize;
+    // SAFETY: reading and masking local CPU flags prevents local interrupt preemptions.
+    unsafe {
+        core::arch::asm!("pushfq", "pop {}", "cli", out(reg) flags, options(nomem, nostack));
+    }
+    let mut spins = 0usize;
+    while TX_LOCK
+        .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {
+        spins += 1;
+        if spins > 1_000_000 {
+            // Break lock on panic/NMI to avoid deadlocking diagnostic output.
+            TX_LOCK.store(true, Ordering::Release);
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    UartLockGuard { flags }
+}
+
+impl Drop for UartLockGuard {
+    fn drop(&mut self) {
+        TX_LOCK.store(false, Ordering::Release);
+        if self.flags & (1 << 9) != 0 {
+            // SAFETY: restoring IF bit if it was set before acquiring lock.
+            unsafe {
+                core::arch::asm!("sti", options(nomem, nostack));
+            }
+        }
+    }
+}
+
+/// Addressing for a 16550 UART controller (legacy I/O port or MMIO).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UartAddress {
+    IoPort(u16),
+    Mmio {
+        base_phys: u64,
+        base_virt: usize,
+        stride: u8,
+    },
+}
+
+/// Complete configuration for a console UART.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ConsoleConfig {
+    pub addr: UartAddress,
+    pub irq: u8,
+    pub gsi: u32,
+    pub is_gsi: bool,
+    pub baud: u32,
+}
+
+pub const DEFAULT_CONSOLE_CONFIG: ConsoleConfig = ConsoleConfig {
+    addr: UartAddress::IoPort(0x03F8),
+    irq: 4,
+    gsi: 4,
+    is_gsi: false,
+    baud: 115200,
+};
+
+static CONSOLE_PORT: AtomicU16 = AtomicU16::new(0x03F8);
+static CONSOLE_MMIO_PHYS: AtomicU64 = AtomicU64::new(0);
+static CONSOLE_MMIO_VIRT: AtomicUsize = AtomicUsize::new(0);
+static CONSOLE_MMIO_STRIDE: AtomicU8 = AtomicU8::new(1);
+static CONSOLE_IS_MMIO: AtomicBool = AtomicBool::new(false);
+static CONSOLE_GSI: AtomicU32 = AtomicU32::new(4);
+static CONSOLE_IS_GSI: AtomicBool = AtomicBool::new(false);
+static CONSOLE_BAUD: AtomicU32 = AtomicU32::new(115200);
 
 /// One declared serial port: port-I/O base plus its legacy ISA IRQ.
-///
-/// Mirrors the board profile's `PortIoDevice` without depending on it, so the
-/// arch HAL stays free of board facts — the kernel converts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SerialPortSpec {
     pub base: u16,
     pub irq: u8,
 }
 
-/// Ports this mechanism can carry. A machine declaring more needs a bigger
-/// table, not a silently dropped tail: `configure_all` refuses the excess.
+/// Ports this mechanism can carry.
 pub const MAX_PORTS: usize = 8;
 
 /// Registered ports, console first: `base | irq << 16`, 0 = absent/unused.
@@ -28,18 +104,10 @@ static PORT_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Console slot: the pre-existing single-port configuration.
 static CONFIG: AtomicU32 = AtomicU32::new(0);
 
-/// IDT vector allocated for COM1 RX interrupts.
+/// IDT vector allocated for COM1/console RX interrupts.
 pub const UART_VECTOR: u8 = 0x24;
 
-/// Configure the platform-owned console port and ISA IRQ before the first UART
-/// access.
-///
-/// `port_base` is the first 16550 port and `isa_irq` is its legacy ISA line.
-/// Repeating the same configuration is harmless.
-///
-/// # Panics
-///
-/// Panics for a zero port, a non-ISA IRQ, or a conflicting second configuration.
+/// Configure the platform-owned console port and ISA IRQ before the first UART access.
 pub fn configure(port_base: u16, isa_irq: u8) {
     assert!(port_base != 0, "x86 UART port base must be non-zero");
     assert!(isa_irq < 16, "x86 UART IRQ must be an ISA IRQ");
@@ -51,19 +119,61 @@ pub fn configure(port_base: u16, isa_irq: u8) {
     {
         panic!("x86 UART configured more than once");
     }
+    set_console_config(ConsoleConfig {
+        addr: UartAddress::IoPort(port_base),
+        irq: isa_irq,
+        gsi: isa_irq as u32,
+        is_gsi: false,
+        baud: 115200,
+    });
+}
+
+/// Reconfigure the active console to a new port/MMIO and GSI/IRQ.
+pub fn set_console_config(cfg: ConsoleConfig) {
+    match cfg.addr {
+        UartAddress::IoPort(port) => {
+            CONSOLE_PORT.store(port, Ordering::Release);
+            CONSOLE_IS_MMIO.store(false, Ordering::Release);
+        }
+        UartAddress::Mmio {
+            base_phys,
+            base_virt,
+            stride,
+        } => {
+            CONSOLE_MMIO_PHYS.store(base_phys, Ordering::Release);
+            CONSOLE_MMIO_VIRT.store(base_virt, Ordering::Release);
+            CONSOLE_MMIO_STRIDE.store(stride, Ordering::Release);
+            CONSOLE_IS_MMIO.store(true, Ordering::Release);
+        }
+    }
+    CONSOLE_GSI.store(cfg.gsi, Ordering::Release);
+    CONSOLE_IS_GSI.store(cfg.is_gsi, Ordering::Release);
+    CONSOLE_BAUD.store(cfg.baud, Ordering::Release);
+    program_uart(cfg.addr, cfg.baud, 0x0B);
+}
+
+/// Query the currently active console configuration.
+pub fn active_console_config() -> ConsoleConfig {
+    let is_mmio = CONSOLE_IS_MMIO.load(Ordering::Acquire);
+    let addr = if is_mmio {
+        UartAddress::Mmio {
+            base_phys: CONSOLE_MMIO_PHYS.load(Ordering::Acquire),
+            base_virt: CONSOLE_MMIO_VIRT.load(Ordering::Acquire),
+            stride: CONSOLE_MMIO_STRIDE.load(Ordering::Acquire),
+        }
+    } else {
+        UartAddress::IoPort(CONSOLE_PORT.load(Ordering::Acquire))
+    };
+    ConsoleConfig {
+        addr,
+        irq: (CONFIG.load(Ordering::Acquire) >> 16) as u8,
+        gsi: CONSOLE_GSI.load(Ordering::Acquire),
+        is_gsi: CONSOLE_IS_GSI.load(Ordering::Acquire),
+        baud: CONSOLE_BAUD.load(Ordering::Acquire),
+    }
 }
 
 /// Register every declared port, probing all but the console.
-///
-/// Index 0 is the console: it is already carrying the log, so it is trusted and
-/// takes the slot unconditionally. Every later port must pass [`probe`] before it
-/// is offered, which is what turns "the descriptor declares a port the machine
-/// does not have" into a named refusal instead of a cell writing into empty port
-/// space.
-///
-/// Returns the number of usable ports, console included. A declared list longer
-/// than [`MAX_PORTS`] is truncated and the excess is refused (never dropped
-/// silently).
 pub fn configure_all(ports: &[SerialPortSpec]) -> usize {
     let declared = ports.len().min(MAX_PORTS);
     let mut usable = 0usize;
@@ -73,14 +183,12 @@ pub fn configure_all(ports: &[SerialPortSpec]) -> usize {
             continue;
         }
         let console = index == 0;
-        if !console && !probe(spec.base) {
+        if !console && !probe_uart(UartAddress::IoPort(spec.base)) {
             continue;
         }
         let packed = u32::from(spec.base) | (u32::from(spec.irq) << 16);
         PORTS[index].store(packed, Ordering::Relaxed);
         if !console {
-            // Program the port before offering it, so a cell never sees a
-            // half-configured UART.
             program_115200(spec.base, 0x03);
         }
         usable = index + 1;
@@ -90,44 +198,36 @@ pub fn configure_all(ports: &[SerialPortSpec]) -> usize {
     usable
 }
 
-/// Probe one port for a 16550 register set, restoring every register it touches.
-///
-/// Two independent tests, because a floating bus and a non-UART device fail them
-/// differently:
-///   * the scratch register (offset 7) must return what was written — a missing
-///     port reads back 0xFF or the last value written;
-///   * the divisor latch (DLAB set) must return what was written — an 8250-class
-///     part without the latch, or unrelated hardware, will not.
-///
-/// The caller must not probe the console: it is already configured, and a probe
-/// would perturb its divisor latch mid-log.
-fn probe(base: u16) -> bool {
-    let saved_scratch = inb(base + 7);
-    outb(base + 7, 0xA5);
-    let scratch = inb(base + 7);
-    outb(base + 7, saved_scratch);
+pub fn probe(base: u16) -> bool {
+    probe_uart(UartAddress::IoPort(base))
+}
+
+/// Probe a 16550 UART controller at the given address.
+pub fn probe_uart(addr: UartAddress) -> bool {
+    let saved_scratch = reg_read(addr, 7);
+    reg_write(addr, 7, 0xA5);
+    let scratch = reg_read(addr, 7);
+    reg_write(addr, 7, saved_scratch);
     if scratch != 0xA5 {
         return false;
     }
 
-    let saved_lcr = inb(base + 3);
-    outb(base + 3, 0x80); // DLAB
-    let saved_dll = inb(base);
-    let saved_dlm = inb(base + 1);
-    outb(base, 0x5A);
-    let latch = inb(base);
-    outb(base, saved_dll);
-    outb(base + 1, saved_dlm);
-    outb(base + 3, saved_lcr);
+    let saved_lcr = reg_read(addr, 3);
+    reg_write(addr, 3, 0x80); // DLAB
+    let saved_dll = reg_read(addr, 0);
+    let saved_dlm = reg_read(addr, 1);
+    reg_write(addr, 0, 0x5A);
+    let latch = reg_read(addr, 0);
+    reg_write(addr, 0, saved_dll);
+    reg_write(addr, 1, saved_dlm);
+    reg_write(addr, 3, saved_lcr);
     latch == 0x5A
 }
 
-/// Number of usable ports (console included) registered by [`configure_all`].
 pub fn port_count() -> usize {
     PORT_COUNT.load(Ordering::Relaxed)
 }
 
-/// Declared base of a registered port, or `None` when the slot is empty.
 pub fn port_base_at(index: usize) -> Option<u16> {
     let packed = PORTS.get(index)?.load(Ordering::Relaxed);
     if packed == 0 {
@@ -137,7 +237,6 @@ pub fn port_base_at(index: usize) -> Option<u16> {
     }
 }
 
-/// Declared ISA IRQ of a registered port, or `None` when the slot is empty.
 pub fn port_irq_at(index: usize) -> Option<u8> {
     let packed = PORTS.get(index)?.load(Ordering::Relaxed);
     if packed == 0 {
@@ -153,7 +252,7 @@ fn config() -> u32 {
     config
 }
 
-fn port_base() -> u16 {
+pub fn port_base() -> u16 {
     config() as u16
 }
 
@@ -163,116 +262,147 @@ fn isa_irq() -> u8 {
 
 #[inline]
 fn outb(port: u16, val: u8) {
-    // SAFETY: port I/O on the configured UART does not affect memory safety.
     unsafe {
         core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack));
     }
 }
+
 #[inline]
 fn inb(port: u16) -> u8 {
     let val: u8;
-    // SAFETY: reading port I/O does not affect memory safety.
     unsafe {
         core::arch::asm!("in al, dx", in("dx") port, out("al") val, options(nomem, nostack));
     }
     val
 }
 
-/// Initialise COM1 at 115200 8N1. IRQs intentionally left DISABLED here;
-/// call `init_input_irq()` later to enable them once the IOAPIC/LAPIC are ready.
+#[inline]
+pub fn reg_read(addr: UartAddress, reg: u8) -> u8 {
+    match addr {
+        UartAddress::IoPort(port) => inb(port + reg as u16),
+        UartAddress::Mmio {
+            base_virt, stride, ..
+        } => {
+            let offset = (reg as usize) * (stride as usize);
+            let ptr = (base_virt + offset) as *const u8;
+            unsafe { core::ptr::read_volatile(ptr) }
+        }
+    }
+}
+
+#[inline]
+pub fn reg_write(addr: UartAddress, reg: u8, val: u8) {
+    match addr {
+        UartAddress::IoPort(port) => outb(port + reg as u16, val),
+        UartAddress::Mmio {
+            base_virt, stride, ..
+        } => {
+            let offset = (reg as usize) * (stride as usize);
+            let ptr = (base_virt + offset) as *mut u8;
+            unsafe { core::ptr::write_volatile(ptr, val) }
+        }
+    }
+}
+
+#[inline]
+pub fn console_addr() -> UartAddress {
+    if CONSOLE_IS_MMIO.load(Ordering::Relaxed) {
+        UartAddress::Mmio {
+            base_phys: CONSOLE_MMIO_PHYS.load(Ordering::Relaxed),
+            base_virt: CONSOLE_MMIO_VIRT.load(Ordering::Relaxed),
+            stride: CONSOLE_MMIO_STRIDE.load(Ordering::Relaxed),
+        }
+    } else {
+        UartAddress::IoPort(CONSOLE_PORT.load(Ordering::Relaxed))
+    }
+}
+
+pub fn baud_divisor(baud: u32) -> u16 {
+    match baud {
+        9600 => 12,
+        19200 => 6,
+        38400 => 3,
+        57600 => 2,
+        _ => 1,
+    }
+}
+
+pub fn program_uart(addr: UartAddress, baud: u32, mcr: u8) {
+    let divisor = baud_divisor(baud);
+    reg_write(addr, 1, 0x00); // Disable IRQs
+    reg_write(addr, 3, 0x80); // DLAB = 1
+    reg_write(addr, 0, (divisor & 0xFF) as u8);
+    reg_write(addr, 1, (divisor >> 8) as u8);
+    reg_write(addr, 3, 0x03); // 8N1, clear DLAB
+    reg_write(addr, 2, 0xC7); // FIFO, 14-byte threshold
+    reg_write(addr, 4, mcr);
+}
+
 pub fn init() {
-    // MCR bit 3 (OUT2) gates interrupt delivery to the IOAPIC on the console.
-    program_115200(port_base(), 0x0B);
+    program_uart(console_addr(), CONSOLE_BAUD.load(Ordering::Relaxed), 0x0B);
 }
 
-/// Program one 16550 port at 115200 8N1 with IRQs disabled.
-///
-/// `mcr` carries the modem-control byte: the console sets OUT2 (`0x0B`) because
-/// its IRQ is routed through the IOAPIC; the extra ports are polled and use
-/// `0x03`.
 fn program_115200(port: u16, mcr: u8) {
-    outb(port + 1, 0x00); // Disable IRQs
-    outb(port + 3, 0x80); // DLAB = 1
-    outb(port, 0x01); // Divisor low  (115200 baud)
-    outb(port + 1, 0x00); // Divisor high
-    outb(port + 3, 0x03); // 8N1
-    outb(port + 2, 0xC7); // FIFO, 14-byte threshold
-    outb(port + 4, mcr);
+    program_uart(UartAddress::IoPort(port), 115200, mcr);
 }
 
-/// Poll one COM1 byte without requiring ACPI, LAPIC, or IOAPIC routing.
-///
-/// This is the pre-ACPI receive diagnostic path. Physical IRQ delivery is a
-/// separate sub-gate enabled by [`init_input_irq`] after MADT validation.
 pub fn poll_input() -> Option<u8> {
-    let port = port_base();
-    if inb(port + 5) & 0x01 != 0 {
-        Some(inb(port))
+    let addr = console_addr();
+    if reg_read(addr, 5) & 0x01 != 0 {
+        Some(reg_read(addr, 0))
     } else {
         None
     }
 }
 
-/// Enable COM1 RX interrupts and route IOAPIC IRQ 4 → IDT vector 0x24.
-///
-/// Preconditions: `init()` called, LAPIC and IOAPIC are initialised
-/// (i.e. after `crate::init_timers()` in kmain).
-///
-/// After this call, each received byte fires vector 0x24, which calls
-/// `vi_handle_uart_irq()` → pushes the byte into the kernel RX buffer →
-/// the shell's `sys_recv` on the input service drains it. `false` when no
-/// registered I/O APIC serves the IRQ's GSI (the IER bit stays off).
 pub fn init_input_irq() -> bool {
-    // Route first: an enabled RX interrupt without a route would be lost.
-    if !super::apic::ioapic_redirect(isa_irq(), UART_VECTOR) {
+    let is_gsi = CONSOLE_IS_GSI.load(Ordering::Acquire);
+    let gsi = CONSOLE_GSI.load(Ordering::Acquire);
+    let routed = if is_gsi {
+        super::apic::ioapic_redirect_gsi(gsi, UART_VECTOR, 0)
+    } else {
+        super::apic::ioapic_redirect(isa_irq(), UART_VECTOR)
+    };
+    if !routed {
         return false;
     }
-    // Enable UART RX-ready interrupt (IER bit 0).
-    outb(port_base() + 1, 0x01);
+    let addr = console_addr();
+    reg_write(addr, 1, 0x01);
     true
 }
 
-/// Write one byte, blocking on TX hold register empty.
 pub fn putchar(byte: u8) {
-    let port = port_base();
-    while inb(port + 5) & 0x20 == 0 {
+    let _guard = lock_uart();
+    let addr = console_addr();
+    while reg_read(addr, 5) & 0x20 == 0 {
         core::hint::spin_loop();
     }
-    outb(port, byte);
+    reg_write(addr, 0, byte);
 }
 
-/// Write one byte to a registered port, blocking on its TX hold register.
-///
-/// Returns `false` for an unregistered index, so a caller can never emit into
-/// port space the machine did not prove it has.
 pub fn write_to(index: usize, byte: u8) -> bool {
     let Some(port) = port_base_at(index) else {
         return false;
     };
-    while inb(port + 5) & 0x20 == 0 {
+    let _guard = lock_uart();
+    let addr = UartAddress::IoPort(port);
+    while reg_read(addr, 5) & 0x20 == 0 {
         core::hint::spin_loop();
     }
-    outb(port, byte);
+    reg_write(addr, 0, byte);
     true
 }
 
-/// Poll one byte from a registered port without requiring IRQ routing.
-///
-/// The extra ports are polled rather than interrupt-driven: each port would need
-/// its own IDT vector and an IIR-based demultiplexer, which this phase does not
-/// add. Returns `None` for an unregistered index or an empty FIFO.
 pub fn read_from(index: usize) -> Option<u8> {
     let port = port_base_at(index)?;
-    if inb(port + 5) & 0x01 != 0 {
-        Some(inb(port))
+    let addr = UartAddress::IoPort(port);
+    if reg_read(addr, 5) & 0x01 != 0 {
+        Some(reg_read(addr, 0))
     } else {
         None
     }
 }
 
-/// Initialise a registered port at 115200 8N1 with IRQs disabled.
-///
-/// Used for the extra ports; the console keeps [`init`] + [`init_input_irq`].
 pub fn init_port(index: usize) -> bool {
     let Some(port) = port_base_at(index) else {
         return false;
@@ -280,40 +410,83 @@ pub fn init_port(index: usize) -> bool {
     program_115200(port, 0x03);
     true
 }
-/// Set a registered port's baud rate, keeping 8N1 and IRQs disabled.
-///
-/// Supported rates are the exact standard divisors from a 1.8432 MHz clock:
-/// 115200, 57600, 38400, 19200, 9600. Anything else is refused rather than
-/// rounded, so a caller never gets a line speed it did not ask for.
-///
-/// Returns `false`, touching no register, for an unregistered port or an
-/// unsupported rate.
+
 pub fn configure_baud(index: usize, baud: u32) -> bool {
     let Some(port) = port_base_at(index) else {
         return false;
     };
-    let divisor: u16 = match baud {
-        115_200 => 1,
-        57_600 => 2,
-        38_400 => 3,
-        19_200 => 6,
-        9_600 => 12,
-        _ => return false,
-    };
-    let saved_lcr = inb(port + 3);
-    outb(port + 3, 0x80); // DLAB
-    outb(port, (divisor & 0xFF) as u8);
-    outb(port + 1, (divisor >> 8) as u8);
-    outb(port + 3, saved_lcr & 0x7F); // clear DLAB, keep the framing bits
+    program_uart(UartAddress::IoPort(port), baud, 0x03);
     true
 }
 
-/// Write string, converting `\n` to `\r\n`.
 pub fn puts(s: &str) {
+    let _guard = lock_uart();
+    let addr = console_addr();
     for b in s.bytes() {
         if b == b'\n' {
-            putchar(b'\r');
+            while reg_read(addr, 5) & 0x20 == 0 {
+                core::hint::spin_loop();
+            }
+            reg_write(addr, 0, b'\r');
         }
-        putchar(b);
+        while reg_read(addr, 5) & 0x20 == 0 {
+            core::hint::spin_loop();
+        }
+        reg_write(addr, 0, b);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn register_addressing_mmio_strides() {
+        let mut buffer = [0u8; 64];
+        let base_virt = buffer.as_mut_ptr() as usize;
+
+        // Stride 1: reg 5 is at offset 5
+        let addr_stride1 = UartAddress::Mmio {
+            base_phys: 0x1000,
+            base_virt,
+            stride: 1,
+        };
+        reg_write(addr_stride1, 5, 0x20);
+        assert_eq!(buffer[5], 0x20);
+        assert_eq!(reg_read(addr_stride1, 5), 0x20);
+
+        // Stride 4: reg 5 is at offset 20
+        buffer.fill(0);
+        let addr_stride4 = UartAddress::Mmio {
+            base_phys: 0x1000,
+            base_virt,
+            stride: 4,
+        };
+        reg_write(addr_stride4, 5, 0x20);
+        assert_eq!(buffer[20], 0x20);
+        assert_eq!(reg_read(addr_stride4, 5), 0x20);
+    }
+
+    #[test]
+    fn baud_divisor_values() {
+        assert_eq!(baud_divisor(9600), 12);
+        assert_eq!(baud_divisor(19200), 6);
+        assert_eq!(baud_divisor(38400), 3);
+        assert_eq!(baud_divisor(57600), 2);
+        assert_eq!(baud_divisor(115200), 1);
+    }
+
+    #[test]
+    fn probe_on_mock_mmio_buffer() {
+        let mut buffer = [0u8; 64];
+        let base_virt = buffer.as_mut_ptr() as usize;
+        let addr = UartAddress::Mmio {
+            base_phys: 0x1000,
+            base_virt,
+            stride: 4,
+        };
+        reg_write(addr, 7, 0xA5);
+        reg_write(addr, 0, 0x5A);
+        assert!(probe_uart(addr));
     }
 }

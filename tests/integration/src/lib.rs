@@ -1238,7 +1238,7 @@ impl QemuRunner {
     /// `cpus` vCPUs, COM1 bridged to the serial socket, and `devices` appended in
     /// order (QEMU wires devices in command-line order, which the VT-d lane
     /// relies on).
-    fn boot_x86_q35(iso: &str, cpus: usize, devices: &[String]) -> Self {
+    pub fn boot_x86_q35(iso: &str, cpus: usize, devices: &[String]) -> Self {
         Self::boot_x86_q35_lane(iso, &x86_lane(), "256M", cpus, devices)
     }
 
@@ -1329,7 +1329,43 @@ impl QemuRunner {
         Self::boot_x86_xhci_inner(iso, false)
     }
 
+    /// Boot q35 with xHCI and a USB keyboard behind a single USB hub.
+    pub fn boot_x86_bios_with_xhci_hub(iso: &str) -> Self {
+        Self::boot_x86_xhci_custom(iso, &[
+            "-device", "qemu-xhci,id=xhci",
+            "-device", "usb-hub,bus=xhci.0,port=1,id=hub1",
+            "-device", "usb-kbd,bus=xhci.0,port=1.2",
+        ])
+    }
+
+    /// Boot q35 with xHCI and a USB keyboard behind two cascaded USB hubs.
+    pub fn boot_x86_bios_with_xhci_two_hubs(iso: &str) -> Self {
+        Self::boot_x86_xhci_custom(iso, &[
+            "-device", "qemu-xhci,id=xhci",
+            "-device", "usb-hub,bus=xhci.0,port=1,id=hub1",
+            "-device", "usb-hub,bus=xhci.0,port=1.1,id=hub2",
+            "-device", "usb-kbd,bus=xhci.0,port=1.1.2",
+        ])
+    }
+
+    /// Boot q35 with two xHCI controllers and a keyboard on the second controller.
+    pub fn boot_x86_bios_with_xhci_multi_controller(iso: &str) -> Self {
+        Self::boot_x86_xhci_custom(iso, &[
+            "-device", "qemu-xhci,id=xhci1",
+            "-device", "qemu-xhci,id=xhci2",
+            "-device", "usb-kbd,bus=xhci2.0",
+        ])
+    }
+
     fn boot_x86_xhci_inner(iso: &str, keyboard: bool) -> Self {
+        if keyboard {
+            Self::boot_x86_xhci_custom(iso, &["-device", "qemu-xhci,id=xhci", "-device", "usb-kbd,bus=xhci.0"])
+        } else {
+            Self::boot_x86_xhci_custom(iso, &["-device", "qemu-xhci,id=xhci"])
+        }
+    }
+
+    fn boot_x86_xhci_custom(iso: &str, extra_devices: &[&str]) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
@@ -1359,12 +1395,8 @@ impl QemuRunner {
             // plan 261103-2218 phase 08 (H-S3-7 lever b, this lane only).
             "-nic",
             "none",
-            "-device",
-            "qemu-xhci,id=xhci",
         ]);
-        if keyboard {
-            cmd.args(["-device", "usb-kbd,bus=xhci.0"]);
-        }
+        cmd.args(extra_devices);
         let qmp_arg = format!("tcp:127.0.0.1:{qmp_port},server,nowait");
         let serial_arg = format!("tcp:127.0.0.1:{port}");
         cmd.args(["-qmp", &qmp_arg, "-serial", &serial_arg]);
@@ -1695,6 +1727,25 @@ impl QemuRunner {
                 "user,id=net0,restrict=on".into(),
                 "-device".into(),
                 format!("{nic},netdev=net0"),
+            ],
+        )
+    }
+    /// Boot x86_64 q35 with NVMe + Intel VT-d with Interrupt Remapping enabled (`intremap=on`).
+    pub fn boot_x86_bios_with_vtd_ir(iso: &str, nvme_disk: &str) -> Self {
+        Self::boot_x86_q35(
+            iso,
+            1,
+            &[
+                "-drive".into(),
+                format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device".into(),
+                "nvme,drive=nvme0,serial=deadbeef01".into(),
+                "-device".into(),
+                "intel-iommu,intremap=on".into(),
+                "-netdev".into(),
+                "user,id=net0,restrict=on".into(),
+                "-device".into(),
+                "e1000,netdev=net0".into(),
             ],
         )
     }

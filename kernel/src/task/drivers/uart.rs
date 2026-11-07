@@ -98,6 +98,8 @@ impl fmt::Write for DirectWriter {
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
             {
                 crate::hal::uart_16550::putchar(c);
+                #[cfg(target_arch = "x86_64")]
+                crate::task::drivers::fb_console::putchar(c);
             }
         }
         Ok(())

@@ -491,6 +491,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             ),
             Err(error) => panic!("[board] {}", error),
         }
+        let console_opt = crate::board::console_option(cmdline).unwrap_or(None);
+        let _ =
+            crate::task::drivers::console_select::select_and_apply_console(console_opt, &acpi_info);
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -1543,6 +1546,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                         owner, phys_addr, size, width, height, pitch,
                     );
                     log_info("[boot] x86_64 Limine linear framebuffer mapped and registered");
+                    crate::task::drivers::fb_console::init(
+                        fb.addr,
+                        width as usize,
+                        height as usize,
+                        pitch,
+                    );
                     unsafe {
                         let ptr = fb.addr as *mut u32;
                         let stride = pitch / 4;

@@ -306,6 +306,9 @@ impl XhciController {
             intr_enabled: false,
         };
 
+        // 0. USBLEGSUP BIOS-to-OS ownership handoff (xHCI 1.2 §4.22.1).
+        let _ = crate::legacy::bios_handoff(&ctrl.mmio, hccparams1);
+
         // 1. HCRST — resets every register except the capability registers.
         //    Operational registers live at BAR + CAPLENGTH, not BAR.
         ctrl.wr(ctrl.op + OP_USBCMD, USBCMD_HCRST)?;
@@ -383,7 +386,14 @@ impl XhciController {
             port, self.speed
         ));
 
-        // Enable Slot, then point the DCBAA at the device context for that slot.
+        let topo = crate::topology::DeviceTopology::root(port, self.speed);
+        self.enumerate_device_at(topo)
+    }
+
+    fn enumerate_device_at(
+        &mut self,
+        topo: crate::topology::DeviceTopology,
+    ) -> ViResult<Enumerated> {
         let (code, slot) = self.command(Trb {
             parameter: 0,
             status: 0,
@@ -399,10 +409,8 @@ impl XhciController {
         self.slot = slot;
         self.dcbaa.write_u64(slot as usize * 8, self.dev_ctx.iova());
 
-        // EP0 max packet: 8 for full/low speed (the device descriptor then tells
-        // us the real value), 64 for high speed.
-        self.ep0_mps = if self.speed == SPEED_HIGH { 64 } else { 8 };
-        self.build_ep0_context();
+        self.ep0_mps = if topo.speed == SPEED_HIGH { 64 } else { 8 };
+        self.build_ep0_context(&topo);
         let (code, _) = self.command(Trb {
             parameter: self.input_ctx.iova(),
             status: 0,
@@ -436,7 +444,7 @@ impl XhciController {
         self.data.read_bytes(0, &mut short);
         let real_mps = short[7] as u16;
         if real_mps != self.ep0_mps && real_mps >= 8 {
-            self.evaluate_ep0(real_mps)?;
+            self.evaluate_ep0(real_mps, &topo)?;
             self.ep0_mps = real_mps;
         }
 
@@ -463,8 +471,16 @@ impl XhciController {
             vid, pid
         ));
 
-        // Configuration descriptor: 9-byte header for wTotalLength, then the whole
-        // thing, from which the HID boot-keyboard interface + endpoint are found.
+        // If the device is a Hub, recurse into hub downstream ports
+        if full[4] == crate::hub::USB_CLASS_HUB {
+            let _ = print_fmt(format_args!(
+                "[xhci] USB hub discovered at depth {} (vid=0x{:04x} pid=0x{:04x})\n",
+                topo.depth, vid, pid
+            ));
+            return self.enumerate_hub(topo);
+        }
+
+        // Configuration descriptor
         let mut cfg9 = [0u8; 9];
         let got = self.control_in(
             BM_GET_DESCRIPTOR,
@@ -530,12 +546,122 @@ impl XhciController {
             iface as u16,
         )?;
 
-        // DCI = 2*endpoint_number + direction (IN = 1): EP1 IN is DCI 3.
         self.int_dci = 2 * ep_num + 1;
         self.int_mps = mps;
-        self.configure_interrupt_endpoint(ep_num, mps, interval)?;
+        self.configure_interrupt_endpoint(ep_num, mps, interval, &topo)?;
         self.arm_interrupt()?;
         Ok(Enumerated { vid, pid })
+    }
+
+    fn enumerate_hub(&mut self, topo: crate::topology::DeviceTopology) -> ViResult<Enumerated> {
+        let parent_slot = self.slot;
+        // 1. SET_CONFIGURATION(1) on the hub
+        self.control_no_data(BM_SET_CONFIGURATION, USB_REQ_SET_CONFIGURATION, 1, 0)?;
+
+        // 2. Read Hub Descriptor
+        let got = self.control_in(
+            crate::hub::BM_REQ_HUB_GET_DESC,
+            crate::hub::USB_REQ_GET_DESCRIPTOR,
+            crate::hub::USB_DT_HUB,
+            0,
+            8,
+        )?;
+        if got < 7 {
+            return Err(ViError::IO);
+        }
+        let mut desc = [0u8; 8];
+        self.data.read_bytes(0, &mut desc);
+        let hub_desc = crate::hub::HubDescriptor::parse(&desc).ok_or(ViError::NotSupported)?;
+        let _ = print_fmt(format_args!(
+            "[xhci] USB hub ready: {} downstream ports\n",
+            hub_desc.num_ports
+        ));
+
+        // 3. Update Hub slot context (Hub = 1, Number of Ports)
+        self.input_ctx.zero();
+        self.input_ctx.write_u32(ICC_ADD, ctx_flag(0)); // Evaluate Slot Context
+        let slot_dw0 = slot_info(1, topo.speed) | (1 << 26) | (topo.route_string & 0x000F_FFFF);
+        self.input_ctx.write_u32(SLOT_CTX, slot_dw0);
+        let slot_dw1 = ((topo.root_port as u32) << 16) | ((hub_desc.num_ports as u32) << 24);
+        self.input_ctx.write_u32(SLOT_CTX + 4, slot_dw1);
+        let (code, _) = self.command(Trb {
+            parameter: self.input_ctx.iova(),
+            status: 0,
+            control: trb_type(TYPE_EVALUATE_CONTEXT) | ((parent_slot as u32) << 24),
+        })?;
+        if code != CMPLT_SUCCESS {
+            let _ = print_fmt(format_args!(
+                "[xhci] evaluate hub context failed: code={}\n",
+                code
+            ));
+        }
+
+        // 4. Power on all downstream ports
+        for p in 1..=hub_desc.num_ports {
+            let _ = self.control_no_data(
+                crate::hub::BM_REQ_HUB_CLASS_OTHER,
+                crate::hub::USB_REQ_SET_FEATURE,
+                crate::hub::PORT_POWER,
+                p as u16,
+            );
+        }
+        // Brief power-on delay
+        for _ in 0..50 {
+            ostd::task::yield_now();
+        }
+
+        // 5. Scan downstream ports
+        for p in 1..=hub_desc.num_ports {
+            let mut status_buf = [0u8; 4];
+            let got = self.control_in(
+                crate::hub::BM_REQ_HUB_PORT_STATUS,
+                crate::hub::USB_REQ_GET_STATUS,
+                0,
+                p as u16,
+                4,
+            )?;
+            if got < 4 {
+                continue;
+            }
+            self.data.read_bytes(0, &mut status_buf);
+            let w_status = u16::from_le_bytes([status_buf[0], status_buf[1]]);
+            if w_status & crate::hub::PORT_STAT_CONNECTION != 0 {
+                // Device connected on downstream port p!
+                // Reset downstream port
+                let _ = self.control_no_data(
+                    crate::hub::BM_REQ_HUB_CLASS_OTHER,
+                    crate::hub::USB_REQ_SET_FEATURE,
+                    crate::hub::PORT_RESET,
+                    p as u16,
+                );
+                // Wait for reset to complete
+                for _ in 0..100 {
+                    let _ = self.control_in(
+                        crate::hub::BM_REQ_HUB_PORT_STATUS,
+                        crate::hub::USB_REQ_GET_STATUS,
+                        0,
+                        p as u16,
+                        4,
+                    );
+                    self.data.read_bytes(0, &mut status_buf);
+                    let st = u16::from_le_bytes([status_buf[0], status_buf[1]]);
+                    if st & crate::hub::PORT_STAT_RESET == 0
+                        && st & crate::hub::PORT_STAT_ENABLE != 0
+                    {
+                        break;
+                    }
+                    ostd::task::yield_now();
+                }
+                let speed = crate::hub::port_speed_from_status(w_status);
+                let Some(child_topo) = topo.child_of(parent_slot, p, speed) else {
+                    continue;
+                };
+
+                // Enumerate child on child_topo
+                return self.enumerate_device_at(child_topo);
+            }
+        }
+        Err(ViError::NotFound)
     }
 
     /// Drain pending events and return the latest HID report from the keyboard,
@@ -747,13 +873,17 @@ impl XhciController {
     // ── Contexts and transfers ───────────────────────────────────────────────
 
     /// Build the input context for the initial Address Device (slot + EP0).
-    fn build_ep0_context(&self) {
+    fn build_ep0_context(&self, topo: &crate::topology::DeviceTopology) {
         self.input_ctx.zero();
         self.input_ctx.write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(1));
-        self.input_ctx.write_u32(SLOT_CTX, slot_info(1, self.speed));
-        // Root Hub Port Number is slot-context dword 1 bits 23:16.
-        self.input_ctx
-            .write_u32(SLOT_CTX + 4, (self.port as u32) << 16);
+        let slot_dw0 = slot_info(1, topo.speed) | (topo.route_string & 0x000F_FFFF);
+        self.input_ctx.write_u32(SLOT_CTX, slot_dw0);
+        let slot_dw1 = (topo.root_port as u32) << 16;
+        self.input_ctx.write_u32(SLOT_CTX + 4, slot_dw1);
+        if topo.tt_slot != 0 {
+            let slot_dw2 = (topo.tt_slot as u32) | ((topo.tt_port as u32) << 8);
+            self.input_ctx.write_u32(SLOT_CTX + 8, slot_dw2);
+        }
         let ep0 = ep_ctx(1); // EP0 is DCI 1
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
@@ -763,12 +893,17 @@ impl XhciController {
     }
 
     /// Update EP0's max packet size after reading the device descriptor.
-    fn evaluate_ep0(&mut self, mps: u16) -> ViResult<()> {
+    fn evaluate_ep0(&mut self, mps: u16, topo: &crate::topology::DeviceTopology) -> ViResult<()> {
         self.input_ctx.zero();
         self.input_ctx.write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(1));
-        self.input_ctx.write_u32(SLOT_CTX, slot_info(1, self.speed));
-        self.input_ctx
-            .write_u32(SLOT_CTX + 4, (self.port as u32) << 16);
+        let slot_dw0 = slot_info(1, topo.speed) | (topo.route_string & 0x000F_FFFF);
+        self.input_ctx.write_u32(SLOT_CTX, slot_dw0);
+        let slot_dw1 = (topo.root_port as u32) << 16;
+        self.input_ctx.write_u32(SLOT_CTX + 4, slot_dw1);
+        if topo.tt_slot != 0 {
+            let slot_dw2 = (topo.tt_slot as u32) | ((topo.tt_port as u32) << 8);
+            self.input_ctx.write_u32(SLOT_CTX + 8, slot_dw2);
+        }
         let ep0 = ep_ctx(1); // EP0 is DCI 1
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
@@ -791,22 +926,27 @@ impl XhciController {
     }
 
     /// Add the interrupt-IN endpoint to the device via Configure Endpoint.
-    fn configure_interrupt_endpoint(&mut self, ep_num: u8, mps: u16, interval: u8) -> ViResult<()> {
-        // The add-flag bit, Context Entries and context offset are all keyed on
-        // the DCI, not the endpoint number: EP1 IN is DCI 3.
+    fn configure_interrupt_endpoint(
+        &mut self,
+        ep_num: u8,
+        mps: u16,
+        interval: u8,
+        topo: &crate::topology::DeviceTopology,
+    ) -> ViResult<()> {
         let dci = 2 * ep_num + 1;
         self.input_ctx.zero();
         self.input_ctx
             .write_u32(ICC_ADD, ctx_flag(0) | ctx_flag(dci));
-        self.input_ctx
-            .write_u32(SLOT_CTX, slot_info(dci as u32, self.speed));
-        self.input_ctx
-            .write_u32(SLOT_CTX + 4, (self.port as u32) << 16);
+        let slot_dw0 = slot_info(dci as u32, topo.speed) | (topo.route_string & 0x000F_FFFF);
+        self.input_ctx.write_u32(SLOT_CTX, slot_dw0);
+        let slot_dw1 = (topo.root_port as u32) << 16;
+        self.input_ctx.write_u32(SLOT_CTX + 4, slot_dw1);
+        if topo.tt_slot != 0 {
+            let slot_dw2 = (topo.tt_slot as u32) | ((topo.tt_port as u32) << 8);
+            self.input_ctx.write_u32(SLOT_CTX + 8, slot_dw2);
+        }
         let ep = ep_ctx(dci);
-        // Endpoint Interval is dword 0 bits 23:16. Full/low speed encodes the
-        // endpoint descriptor's bInterval (frames) directly; high/SuperSpeed
-        // encode bInterval - 1 (125 us microframes).
-        let interval_field = if self.speed >= SPEED_HIGH {
+        let interval_field = if topo.speed >= SPEED_HIGH {
             interval.saturating_sub(1)
         } else {
             interval

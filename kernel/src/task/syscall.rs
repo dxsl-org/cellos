@@ -801,6 +801,12 @@ fn reserve_authorized_dma_publication(
     if crate::resource_registry::owner_of_bdf(bdf) != Some(caller_id) {
         return Err(DmaGrantError::BdfNotOwned);
     }
+    #[cfg(target_arch = "x86_64")]
+    if let Some(dev) = crate::task::drivers::pcie_ecam::device(bdf) {
+        if !crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+            return Err(DmaGrantError::BdfNotOwned);
+        }
+    }
     let quota = crate::memory::cell_quota::try_reserve_dma(caller_cell.0 as usize, size)
         .ok_or(DmaGrantError::QuotaExceeded)?;
     let publication =
@@ -2531,7 +2537,10 @@ fn system_power(caller_id: usize, action: usize) -> SyscallResult {
     use api::syscall::system_power as sp;
     match action {
         sp::ACTION_REBOOT => {
-            log::warn!("[kernel] SystemPower: reboot requested by tid {}", caller_id);
+            log::warn!(
+                "[kernel] SystemPower: reboot requested by tid {}",
+                caller_id
+            );
             crate::acpi::power::reboot()
         }
         sp::ACTION_POWEROFF => {
@@ -8901,12 +8910,7 @@ fn handle_syscall_inner(
             }
             alloc_pcie_irq(caller_id, bdf, want, mode)
         }
-        Syscall::SystemPower {
-            action,
-            a1,
-            a2,
-            a3,
-        } => {
+        Syscall::SystemPower { action, a1, a2, a3 } => {
             if !caller_has_supervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -9729,6 +9733,8 @@ fn handle_syscall_inner(
                     height as u16,
                     pitch,
                 ) {
+                    #[cfg(target_arch = "x86_64")]
+                    crate::task::drivers::fb_console::handover();
                     Ok(0)
                 } else {
                     // This cannot be recovered safely: pages are firmware-owned
@@ -12385,12 +12391,7 @@ mod tests {
             let run = |action, a1, a2, a3| {
                 super::encode_system_power_result(super::handle_syscall(
                     tid,
-                    Syscall::SystemPower {
-                        action,
-                        a1,
-                        a2,
-                        a3,
-                    },
+                    Syscall::SystemPower { action, a1, a2, a3 },
                 ))
             };
             for action in [0, 3, usize::MAX] {

@@ -318,3 +318,23 @@ fn q35_without_a_remapper_names_the_fallback_and_the_identity_contract() {
     assert!(!serial.contains("[KERNEL PANIC]"), "kernel panic\n{serial}");
     let _ = std::fs::remove_file(&disk);
 }
+/// Boot with Intel VT-d Interrupt Remapping enabled: the kernel must detect IR,
+/// initialize the IRTA table, activate IR, and log the status line.
+#[test]
+fn x86_pc_enables_vtd_interrupt_remapping() {
+    let iso = pc_iso();
+    if !prerequisites_ok(&iso) {
+        return;
+    }
+
+    let disk = make_nvme_disk();
+    let qemu = QemuRunner::boot_x86_bios_with_vtd_ir(&iso, &disk.to_string_lossy());
+
+    require_marker(
+        &qemu,
+        &disk,
+        ACTIVE,
+        "VT-d DMA isolation must be active",
+    );
+    let _ = std::fs::remove_file(&disk);
+}

@@ -26,15 +26,19 @@
 //! Law 4 exception: this cell uses `unsafe` for DMA memory access; MMIO goes
 //! through the bounds-checked `ostd::mmio::MmioRegion`.
 
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
+#![cfg_attr(test, allow(dead_code))]
 extern crate alloc;
 
 mod controller;
 mod dma;
+mod hub;
 mod input;
 mod irq;
+mod legacy;
 mod regs;
+mod topology;
 
 use alloc::vec::Vec;
 use api::syscall::service;
@@ -232,6 +236,7 @@ fn poll() {
     }
 }
 
+#[cfg(not(test))]
 #[no_mangle]
 pub fn main() {
     let mut ctx = AppContext::new();

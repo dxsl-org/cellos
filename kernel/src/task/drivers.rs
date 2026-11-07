@@ -18,6 +18,12 @@ pub mod uart;
 mod bcm_pinmux;
 pub mod block;
 pub mod console_drv;
+#[cfg(target_arch = "x86_64")]
+pub mod console_select;
+#[cfg(target_arch = "x86_64")]
+pub mod fb_console;
+#[cfg(target_arch = "x86_64")]
+pub mod fb_font;
 #[cfg(target_arch = "riscv64")]
 pub mod irq_dispatch;
 pub mod mmc;

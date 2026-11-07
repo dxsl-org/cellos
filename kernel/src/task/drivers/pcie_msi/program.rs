@@ -37,6 +37,17 @@ fn enable_function(cfg: &Config, extra: u16) -> Option<()> {
         command | CMD_MEM_SPACE | CMD_BUS_MASTER | extra,
     )
 }
+fn msi_message_for_vector(vector: u8) -> Option<(u64, u32)> {
+    if crate::task::drivers::iommu_x86::ir::is_ir_active() {
+        let bsp_id = hal::x86_64::apic::cpu_apic_id(0)?;
+        let idx = crate::task::drivers::iommu_x86::program_ir_entry(vector, bsp_id, 0, false)?;
+        let addr = crate::task::drivers::iommu_x86::ir::remappable_msi_address(idx);
+        let data = crate::task::drivers::iommu_x86::ir::remappable_msi_data();
+        Some((addr, data))
+    } else {
+        hal::x86_64::msi::bsp_message(vector)
+    }
+}
 
 /// Program `count` MSI-X entries starting at `first`, mask the rest of the
 /// table, then enable MSI-X with INTx disabled. `table_phys` is the table's
@@ -59,7 +70,7 @@ pub fn program_msix(
     for index in 0..entries {
         let entry = (table_phys + index * MSIX_ENTRY_BYTES) as *mut u32;
         let message = (index < count)
-            .then(|| hal::x86_64::msi::bsp_message(first + index as u8))
+            .then(|| msi_message_for_vector(first + index as u8))
             .flatten();
         // SAFETY: the table lies inside the function's BAR (checked by the carve
         // rule) and the caller identity-mapped it kernel-only.
@@ -81,7 +92,7 @@ pub fn program_msix(
 pub fn program_msi(cfg: &Config, cap: u8, first: u8, count: usize) -> Option<()> {
     let base = cap as usize;
     let control = cfg.read16(base + 2)?;
-    let (address, data) = hal::x86_64::msi::bsp_message(first)?;
+    let (address, data) = msi_message_for_vector(first)?;
     cfg.write16(base + 2, control & !MSI_ENABLE)?;
     cfg.write32(base + 4, address as u32)?;
     let (data_at, mask_at) = if control & MSI_64BIT != 0 {

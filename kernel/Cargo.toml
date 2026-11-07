@@ -16,7 +16,7 @@ virtio-drivers = "0.7.0"
 linked_list_allocator = "0.10"
 rlsf = { version = "0.2", default-features = false }
 async-trait = "0.1.89"
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", version = "0.4.0", default-features = false, features = ["alloc", "lfn"] }
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "c4b88477b22ca7e5131fbd8891f62a5deaa88e6e", version = "0.4.0", default-features = false, features = ["alloc", "lfn"] }
 xmas-elf = "0.10"
 crc32fast = { version = "1", default-features = false }
 # Ed25519 signature VERIFY (no_std, verify-only) for signed operator policy (P5).

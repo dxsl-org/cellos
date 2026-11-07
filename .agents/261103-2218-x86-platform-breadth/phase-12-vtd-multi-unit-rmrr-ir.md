@@ -1,7 +1,7 @@
 ---
 phase: 12
 title: "VT-d: multiple DRHD units, RMRR, interrupt remapping"
-status: pending
+status: completed
 priority: P1
 effort: "4d"
 dependencies: ["4a"]
@@ -71,18 +71,18 @@ Split `iommu_x86.rs` into `iommu_x86/{mod.rs, unit.rs, context.rs, domain.rs, in
 
 ## Todo List
 
-- [ ] Module split
-- [ ] Multi-unit registry
-- [ ] RMRR
-- [ ] Interrupt remapping
-- [ ] Lanes + negative test
+- [X] Module split
+- [X] Multi-unit registry
+- [X] RMRR
+- [X] Interrupt remapping
+- [X] Lanes + negative test
 
 ## Success Criteria
 
-- [ ] Host tests pass: 3-unit scope lookup, RMRR identity mapping, IRTE encoding (xAPIC and x2APIC destinations).
-- [ ] KVM IR lane: `ir=on`, drivers use remapped MSI, DHCP + NVMe persistence pass at `-smp 4`.
-- [ ] Existing VT-d lanes unchanged.
-- [ ] Review: independent `haily-reviewer` security pass on unit selection, RMRR and IR.
+- [X] Host tests pass: 3-unit scope lookup, RMRR identity mapping, IRTE encoding (xAPIC and x2APIC destinations).
+- [X] KVM IR lane: `ir=on`, drivers use remapped MSI, DHCP + NVMe persistence pass at `-smp 4`.
+- [X] Existing VT-d lanes unchanged.
+- [X] Review: independent `haily-reviewer` security pass on unit selection, RMRR and IR.
 
 ## Risk Assessment
 

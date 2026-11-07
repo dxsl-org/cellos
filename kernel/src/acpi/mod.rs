@@ -31,7 +31,9 @@ mod spcr;
 #[cfg(test)]
 mod tests;
 
-pub use dmar::{DeviceScope, DrhdEntry, RmrrEntry, SCOPE_PATH_MAX};
+pub use dmar::{
+    DeviceScope, DrhdEntry, RmrrEntry, DRHD_SCOPES_MAX, RMRR_SCOPES_MAX, SCOPE_PATH_MAX,
+};
 pub use fadt::FadtInfo;
 pub use records::{AcpiTopology, BoundedVec, CpuEntry, Gas, IoApicEntry, LapicNmi, McfgAlloc};
 pub use spcr::SpcrInfo;
@@ -234,7 +236,9 @@ fn root_table(
     let virt = map_physical(rsdp_phys, core::mem::size_of::<sdt::RsdpV2>())?;
     // SAFETY: the mapper admitted the 36-byte v2 layout.
     let rsdp: [u8; 36] = unsafe { sdt::read_unaligned(virt) };
-    let v1_sum = rsdp[..20].iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    let v1_sum = rsdp[..20]
+        .iter()
+        .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
     if &rsdp[..8] != b"RSD PTR " || v1_sum != 0 {
         return None;
     }

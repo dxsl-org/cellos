@@ -25,12 +25,6 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 [record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md)).
 
 **Ứng viên kế tiếp** (chưa admit; chọn trong portfolio theo promotion rule):
-- [ ] **Net service MAC và NIC promiscuous (sau S3)** — net service dùng một MAC cố định `52:54:00:12:34:56`, mọi NIC chạy promiscuous; chặn LAN C2C giữa hai node. Ứng viên slice kế tiếp, cần owner handoff ([record](261103-2218-x86-platform-breadth/s3-close-approval.md)).
-- [ ] **OVMF ≥2 CPU panic** tại `smp.rs:1100` (frame-0 root). Cần owner quyết định cách xử lý.
-- [ ] **Driver BAR/DMA gate (S3 MINOR)** — memory BAR gate chỉ ở claim; GrantDma/MSI chưa kiểm; có race probe BAR bus-0 Platform.
-- [ ] **Syscall 236 log** không phân biệt được `Ok(1)` với `FileNotFound` qua `libs/ostd`.
-- [ ] **VMware serial** đôi khi rớt dòng log.
-- [ ] **Gate có sẵn trên main (không do S3):** `clippy --tests` lỗi dead code ở `service-platform` (15 lỗi, không thuộc CI); `cargo fmt --all --check` fail; `driver-registration-contract` fail; mutable-globals 48 problems (giới hạn 48).
 - [ ] **C2C slice tiếp theo** (Phase 03 đã done) — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
   bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice
   ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).
@@ -44,13 +38,6 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
 - [ ] **SVM-guest triple fault in the x86 VMM smoke on TCG** (`[hv-x86] guest triple-fault: rip=0x6663`, `X86-VMM-SMOKE: FAIL … Shutdown`). Exposed by slice VH (`7b8f42eea`), which lets the smoke guest actually run; before it the smoke stopped at `Preempted`. The smoke only logs, so boots are unaffected. Not investigated ([VH record](261103-2218-x86-platform-breadth/slice-vmx-host-state-repair.md)).
 - [ ] **04b follow-up evidence (owner CP2-04b-3):** the `async_lifecycle` bench with the IRQ source, and the MSI-to-wake latency with the wake hint disabled (baseline for the 14 µs idle-KVM median) ([CP2](261103-2218-x86-platform-breadth/cp2-04b-waitcompletion-irq-approval.md)).
-- [ ] **aarch64 secondary-core wait counts timer ticks with interrupts masked** (`kernel/src/task/smp.rs`, found by Apple A1): a core that never comes online hangs boot instead of falling back to one core.
-- [ ] **`scripts/check-posix-ledger.py` fails on 20 Tier-A rows** (`docs/posix-ledger.md:223-259`), present before the 2026-11-05 runtime merges.
-- [ ] **CI gate `tools/mutable-globals --check` is red: 48 problems at `e03e8f5b6`** (`640 declarations, 255 need review`). 35 unclassified statics come from breadth phases 02–06 and 04b: hal `clock/*` (incl. `PVCLOCK_VIRT/PHYS`), ioapic `UNIT_*`, apic `X2APIC`/`IRQ_OVERRIDE_FLAGS`, msi `HANDLER`, acpi `TOPOLOGY`, `acpi::sci::*`, `acpi::power::FACTS`, `pcie_msi::*`, `irq_wait::MSI_WAKE`. The rest come from the 2026-11-05 security remediation: `va_alloc::SLOTS`, stale `BUMP`/`FREE`, `STACK_RESERVATIONS`, `SAS_WINDOWS`, `service_registry::OWNERS`, `gpu_scanout` `WARNED`×2, stale syscall `WARNED`×2. Each needs a `[[global]]` entry in `scripts/mutable-globals.toml` (lifetime, mutation, owner, contexts incl. `irq`/`ap`, seal, retirement); reviewing them may surface real hazards.
-- [ ] **G1 private lane (`cellos_g1_cpu`) does not build** at `26d8f3f3c`: `E0614` at `kernel/src/task/scheduler.rs:2131,2622` and a lint at `domain_switch_tests.rs:27` (found by S2 07a, built as `p01_capture.py` does). `scheduler.rs` is pinned under S2; needs its own slice.
-- [ ] **x86 IDT fixture `scripts/qemu-x86_64-idt-test.sh` fails**: its forbidden-word check (`RESET` as a word) matches the phase-01 FADT log line `[acpi] FADT: … reset=true …` (`kernel/src/acpi/fadt.rs:123`). Also `hal/arch/x86/src/x86_64/idt/probe_ist.rs:271` prints a literal `guards=9` that the script expects, while the check before it now runs over 257 guards. Fix either the log key or the regex, not both blindly.
-- [ ] **Net service sends every frame from the fixed MAC `52:54:00:12:34:56`** (found by the S3 VMware matrix, 2026-11-06). Every NIC cell must run promiscuous to receive its DHCP offer (vmxnet3 fixed that way in `14640724a`), and two Cellos guests on one L2 network would share a MAC. Blocks two-node LAN C2C. Fix: the net service takes the bound NIC's own MAC from the driver registration.
-- [ ] **QEMU OVMF with ≥ 2 CPUs panics: `smp.rs:1100: AP requires permanent shared kernel root`** (found by the S3 EFI-memory fix). OVMF reports usable memory from physical `0x0`, so the kernel's top-level page table can land at frame 0, which is also the "not set" value for the recorded kernel root. Options: never hand out frame 0, or stop using 0 as "not set". VMware maps start at `0x3000`/`0x5a000` and are unaffected.
 
 **C2C program (mở, có gate):**
 - [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical
@@ -92,42 +79,24 @@ cite dòng theo tree 2026-10-21 — đọc lại theo tên symbol trước khi s
 Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
 
 **Đợt 1 — Critical/High, sửa trước:**
-- [ ] **sshd xác thực mọi credential:** `cells/services/sshd/src/session.rs` nhánh `SSH_MSG_USERAUTH_REQUEST`
-  gửi `USERAUTH_SUCCESS` vô điều kiện. Cần public-key auth thật với authorized keys được provision;
-  chỉ vào `ActiveSession` sau khi verify.
-- [ ] **sshd private key hard-code:** `cells/services/sshd/src/kex.rs` (seed host key Ed25519 literal,
-  `StaticSecret::from([...])` X25519 tĩnh cho mọi handshake). Host key qua KMS/sealed storage;
-  X25519 ephemeral mới mỗi handshake từ `GetRandom`.
 - [ ] **`ShmAlloc`/`ShmMap` còn thiếu quota và record đầy đủ:** owner-bind (cell, generation) + thu hồi
   khi owner retire đã có (`990c04d08`); còn: `ShmAlloc { size: _ }` bỏ `size` (luôn 1 frame), handle =
   địa chỉ vật lý, không tính vào cell quota, `ShmMap { target_pid: _ }`, chưa có recipient/rights/revoke.
-- [ ] **`GpuFlush` deref con trỏ user chưa validate:** `syscall.rs` nhánh `Syscall::GpuFlush`
-  `from_raw_parts(data_ptr, data_len)` sau check số học; nhánh driver forward raw address. Đọc qua
-  `TaskCopyView` hoặc grant pinned có owner-check, gửi grant id thay địa chỉ.
 - [ ] **PTE cài trước khi reserve ledger → mapping mồ côi khi lỗi:** `kernel/src/memory/address_space.rs`.
   Reserve ledger/rollback trước khi đổi page table, hoặc unmap + TLB invalidate trên mọi nhánh lỗi.
-- [ ] **httpd `GET /files/...` không auth + VFS root rule `allow_read_all: true`:**
-  `cells/services/httpd/src/router.rs` (`Route::File`), `cells/services/vfs/src/access/rules.rs` (rule `/`).
-  Giới hạn document-root; thay global read rule bằng capability theo caller.
 - [ ] **`L2Send/L2Recv` và `MulticastJoin/Leave` không kiểm tra caller/cap:**
   `cells/services/net/src/handlers.rs` (ai cũng inject/drain frame thô; `cap_id: _`).
   Yêu cầu binding hypervisor sống hoặc capability raw-L2; multicast refcount theo socket owner.
-- [ ] **Supply chain:** `cells/services/vfs/Cargo.toml` `fatfs` git không `rev`; `deny.toml` thiếu `[sources]`;
-  `.github/workflows/release.yml` `dtolnay/rust-toolchain@master` với `contents: write`;
-  `Dockerfile` `ubuntu:latest` + `curl | sh`. Pin SHA/digest, commit lockfile, deny unknown git sources.
 - [ ] **Non-x86: MMIO VirtIO/ECAM/peripheral map `USER` lúc boot** (`kernel/src/memory/paging.rs`) và
   **stack RWX** trên RISC-V/AArch64 (`remap_range_user` có `EXECUTE`). Ưu tiên thấp hơn vì ADR-0022 chỉ x86,
   nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
 
 **Đợt 2 — Medium bảo mật:**
-- [ ] CSpace `expiry` lưu và attenuate khi derive nhưng không enforce theo thời gian ở `verify_ticket`/`park_file`
-  (`kernel/src/cell/cspace.rs`).
 - [ ] `RunVcpu`/`VcpuRegs` forward raw pointer sau `validate_user_buf` → dùng struct kernel-local + `TaskCopyView`.
 - [ ] Audit ring: ring đầy nay evict record cũ nhất và đếm (`990c04d08`), nhưng `drain()`/`dropped_count()`
   vẫn không có caller (`kernel/src/audit.rs`). Thêm drain interface có quyền + event synthetic ghi số record đã mất.
 - [ ] Beacon replay: `boot_epoch = sys_get_time_ms()`, state không persist
   (`cells/services/net-broker/src/local_runtime.rs`, `beacon.rs`).
-- [ ] sshd một client pre-auth chiếm slot duy nhất + `rx_buf` không giới hạn (`sshd/src/main.rs`, `session.rs`).
 - [ ] Allowlist unsafe hết hạn chỉ in `NOTE`, không fail (`scripts/cellos_sign/policy.py` `stale_entries`,
   `cli.py`; `scripts/unsafe-allowlist.toml` `max_age_days = 90`). Làm stale = violation trong `--strict`.
 - [ ] Docs lệch code: `docs/security-model.md:45` nói default G1 để `signing-required` off, `kernel/Cargo.toml`

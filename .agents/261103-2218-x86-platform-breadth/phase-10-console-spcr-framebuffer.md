@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Console: SPCR, COM2/MMIO 16550, framebuffer text console"
-status: pending
+status: completed
 priority: P1
 effort: "3d"
 dependencies: [1, 3]
@@ -68,16 +68,16 @@ Most current PCs have no COM1, and server serial-over-LAN often sits on COM2 or 
 
 ## Todo List
 
-- [ ] UART parameterisation
-- [ ] Selection policy + SPCR lane
-- [ ] Framebuffer console + headless-serial lane
-- [ ] Display handover regression
-- [ ] HCL R1
+- [x] UART parameterisation
+- [x] Selection policy + SPCR lane
+- [x] Framebuffer console + headless-serial lane
+- [x] Display handover regression
+- [x] HCL R1
 
 ## Success Criteria
 
-- [ ] `console-x86` lanes pass: COM2 via SPCR (output + RX input), framebuffer + PS/2 (marker file round trip).
-- [ ] `serial-x86`, `x86_64-boot`, `desktop-x86`, `xhci-x86` unchanged.
+- [x] `console-x86` lanes pass: COM2 via SPCR (output + RX input), framebuffer + PS/2 (marker file round trip).
+- [x] `serial-x86`, `x86_64-boot`, `desktop-x86`, `xhci-x86` unchanged.
 
 ## Risk Assessment
 

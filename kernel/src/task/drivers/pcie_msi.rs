@@ -107,6 +107,9 @@ pub fn allocate(
         PcieFunctionError::NotFound => PcieFunctionError::NotSupported,
         other => other,
     })?;
+    if !crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+        return Err(PcieFunctionError::NotSupported);
+    }
     if !READY.load(Ordering::Acquire) || FIRMWARE_FORBIDS_MSI.load(Ordering::Acquire) {
         return Err(PcieFunctionError::NotSupported);
     }

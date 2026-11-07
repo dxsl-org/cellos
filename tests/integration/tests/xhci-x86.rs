@@ -299,3 +299,103 @@ fn xhci_com1_input_still_works_x86() {
         )
     });
 }
+fn verify_keyboard_input(mut qemu: QemuRunner) {
+    qemu.wait_for("[xhci] USB HID keyboard ready", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "xHCI keyboard not ready within {BOOT_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for("[driver_cell] USB HID producer registered", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "xHCI did not publish the USB HID producer role within {BOOT_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "shell prompt not reached: {e}\n--- serial output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_qemu_key("q");
+    thread::sleep(Duration::from_millis(500));
+    qemu.send_qemu_key("q");
+
+    qemu.wait_for_after("[xhci] key down code=0x10", checkpoint, KEY_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "injected key never reached the xHCI HID decode within {KEY_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+    qemu.wait_for_after("[xhci] key up code=0x10", checkpoint, KEY_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "release was never decoded within {KEY_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    thread::sleep(Duration::from_millis(500));
+    qemu.send_qemu_key("ret");
+    for marker in [
+        "name=cellbox route=Path target=/bin/qq ",
+        "shell: foreground preparation failed: Denied",
+    ] {
+        qemu.wait_for_after(marker, checkpoint, KEY_TIMEOUT)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "injected keystrokes never reached the shell as the command `qq` within {KEY_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                    qemu.dump()
+                )
+            });
+    }
+}
+
+/// A USB keyboard attached behind an external USB 2.0 hub (single tier) must be
+/// enumerated and accept injected keystrokes that execute in the shell.
+#[test]
+fn xhci_keyboard_behind_hub_x86() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let qemu = QemuRunner::boot_x86_bios_with_xhci_hub(&iso_path());
+    qemu.wait_for("[xhci] USB hub ready", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "xHCI hub not enumerated within {BOOT_TIMEOUT}s: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+    verify_keyboard_input(qemu);
+}
+
+/// A USB keyboard attached behind two cascaded USB 2.0 hubs (two tiers) must be
+/// enumerated and accept injected keystrokes that execute in the shell.
+#[test]
+fn xhci_keyboard_behind_two_hubs_x86() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let qemu = QemuRunner::boot_x86_bios_with_xhci_two_hubs(&iso_path());
+    verify_keyboard_input(qemu);
+}
+
+/// In a system with two xHCI controllers, a USB keyboard attached to the second
+/// controller must be enumerated by a driver cell instance and echo keystrokes.
+#[test]
+fn xhci_keyboard_on_second_controller_x86() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let qemu = QemuRunner::boot_x86_bios_with_xhci_multi_controller(&iso_path());
+    verify_keyboard_input(qemu);
+}

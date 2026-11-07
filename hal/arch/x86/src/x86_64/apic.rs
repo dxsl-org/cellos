@@ -338,15 +338,21 @@ pub fn init_lapic_calibrated(ticks_per_ms: u64) {
 
 /// Route an ISA IRQ to an IDT vector on CPU 0, through the MADT override
 /// table (GSI and polarity/trigger) and the owning I/O APIC.
+pub fn ioapic_redirect_gsi(gsi: u32, vec: u8, flags: u16) -> bool {
+    let destination =
+        cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
+    super::ioapic::route_gsi(gsi, vec, destination, flags)
+}
+
+/// Route an ISA IRQ to an IDT vector on CPU 0, through the MADT override
+/// table (GSI and polarity/trigger) and the owning I/O APIC.
 pub fn ioapic_redirect(isa_irq: u8, vec: u8) -> bool {
     let index = isa_irq as usize;
     let (gsi, flags) = match (IRQ_OVERRIDES.get(index), IRQ_OVERRIDE_FLAGS.get(index)) {
         (Some(gsi), Some(flags)) => (gsi.load(Ordering::Relaxed), flags.load(Ordering::Relaxed)),
         _ => (isa_irq as u32, 0),
     };
-    let destination =
-        cpu_apic_id(0).expect("BSP APIC ID must be registered before IOAPIC redirection");
-    super::ioapic::route_gsi(gsi, vec, destination, flags)
+    ioapic_redirect_gsi(gsi, vec, flags)
 }
 
 #[cfg(test)]
