@@ -1,7 +1,7 @@
 ---
 phase: 13
 title: "Intel I219 (PCH LAN) in the e1000e cell"
-status: pending
+status: "blocked: hardware (driver code and host tests complete; capture pending physical machine)"
 priority: P1
 effort: "4d + physical capture"
 dependencies: [8, 12]
@@ -62,15 +62,15 @@ The I219 sits on nearly every Intel business desktop, mini PC and NUC, so it is 
 
 ## Todo List
 
-- [ ] Identity + tests
-- [ ] Semaphore/ULP + tests
-- [ ] Link + data path
-- [ ] Physical capture
+- [X] Identity + tests
+- [X] Semaphore/ULP + tests
+- [X] Link + data path
+- [ ] Physical capture (pending physical machine capture per contract)
 
 ## Success Criteria
 
-- [ ] Host tests: semaphore release on every exit path; ULP exit sequence order; identity classification.
-- [ ] 82574L lanes from phase 08 still green (shared cell).
+- [X] Host tests: semaphore release on every exit path; ULP exit sequence order; identity classification.
+- [X] 82574L lanes from phase 08 still green (shared cell).
 - [ ] Physical: bind, link, DHCP, 10-minute ping, VT-d active before first DMA — on the exact machine. Otherwise `blocked: hardware`.
 
 ## Risk Assessment

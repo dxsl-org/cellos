@@ -36,6 +36,7 @@ mod dma_layout;
 mod fake;
 mod identity;
 mod irq;
+mod pch;
 mod phy;
 mod regs;
 mod reset;
@@ -100,7 +101,7 @@ fn bring_up() {
         ostd::syscall::sys_exit(1);
     };
 
-    let ctrl = match E1000eController::new(mmio_region, info.bdf) {
+    let ctrl = match E1000eController::new(mmio_region, info.bdf, identity.kind) {
         Ok(ctrl) => ctrl,
         Err(error) => {
             let _ = print_fmt(format_args!(

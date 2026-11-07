@@ -2,6 +2,7 @@
 //! and `MDIC` handshakes, so NVM and PHY code run against device-shaped
 //! behaviour instead of a recording of the driver's own writes.
 
+use crate::pch;
 use crate::phy::{
     BMCR_ANENABLE, BMCR_ANRESTART, MDIC_DATA_MASK, MDIC_ERROR, MDIC_OP_READ, MDIC_OP_WRITE,
     MDIC_PHY_SHIFT, MDIC_READY, MDIC_REG_SHIFT, MII_BMCR,
@@ -92,6 +93,23 @@ impl RegisterFile for FakeRegs {
                     self.regs.borrow_mut().insert(STATUS, status);
                 }
                 value & !CTRL_RST
+            }
+            pch::FLASH_HSFSTS if self.responsive && value & pch::HSFCTL_START != 0 => {
+                let addr = self.get(pch::FLASH_FADDR) as usize;
+                let word_idx = addr >> 1;
+                let data = self.nvm.get(word_idx).copied().unwrap_or(0xFFFF);
+                self.regs
+                    .borrow_mut()
+                    .insert(pch::FLASH_FDATA0, u32::from(data));
+                pch::HSFSTS_FLCDONE
+            }
+            pch::H2ME if self.responsive => {
+                if value & pch::H2ME_ENFORCE_SETTINGS != 0 && value & pch::H2ME_ULP == 0 {
+                    let mut fwsm = self.get(pch::FWSM);
+                    fwsm &= !pch::FWSM_ULP_CFG_DONE;
+                    self.regs.borrow_mut().insert(pch::FWSM, fwsm);
+                }
+                value
             }
             _ => value,
         };

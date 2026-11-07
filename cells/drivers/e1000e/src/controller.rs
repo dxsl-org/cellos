@@ -10,6 +10,7 @@ use crate::dma_layout::{
     for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
     InitialDmaProgram, RX_SLOTS, TX_SLOTS,
 };
+use crate::identity::MacKind;
 use crate::irq::NicIrq;
 use crate::regs::*;
 use crate::reset::reset_and_read_mac;
@@ -44,12 +45,14 @@ pub struct E1000eController {
     pub mac: [u8; 6],
     /// Whether `STATUS.LU` was up before RX was enabled.
     pub link_up: bool,
+    #[allow(dead_code)]
+    pub kind: MacKind,
 }
 
 impl E1000eController {
     /// Bring the controller up on `mmio` (BAR0) for the function at `bdf`.
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
-        let mac = reset_and_read_mac(&mmio)?;
+    pub fn new(mmio: MmioRegion, bdf: u32, kind: MacKind) -> ViResult<Self> {
+        let mac = reset_and_read_mac(&mmio, kind)?;
 
         let irq = NicIrq::setup(bdf);
         irq.program(&mmio)?;
@@ -57,7 +60,7 @@ impl E1000eController {
             CTRL,
             (mmio.rd32(CTRL)? | CTRL_SLU | CTRL_ASDE) & !CTRL_GIO_MASTER_DISABLE,
         )?;
-        phy::restart_autoneg(&mmio)?;
+        phy::restart_autoneg(&mmio, kind)?;
 
         let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
         let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
@@ -91,6 +94,7 @@ impl E1000eController {
                     rx_in_fragment: false,
                     mac,
                     link_up: false,
+                    kind,
                 };
                 let mut result = Ok(());
                 for_each_initial_dma_program(&dma_iovas, |program| {

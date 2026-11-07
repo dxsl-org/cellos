@@ -9,6 +9,7 @@
 //! `STATUS.LU` follows the PHY's autonegotiation, so the cell restarts autoneg
 //! explicitly and then waits for link (bounded, see `controller.rs`).
 
+use crate::identity::MacKind;
 use crate::regs::{RegisterFile, MDIC};
 use types::{ViError, ViResult};
 
@@ -64,13 +65,25 @@ pub(crate) fn phy_write(regs: &impl RegisterFile, reg: u32, data: u16) -> ViResu
 
 /// Advertise autonegotiation and restart it. The link then comes up when the
 /// PHY completes autoneg; the caller waits on `STATUS.LU`.
-pub(crate) fn restart_autoneg(regs: &impl RegisterFile) -> ViResult<()> {
-    let bmcr = phy_read(regs, MII_BMCR)?;
-    phy_write(
-        regs,
-        MII_BMCR,
-        bmcr | BMCR_ANENABLE | BMCR_ANRESTART | BMCR_SPEED1000 | BMCR_FULL_DUPLEX,
-    )
+pub(crate) fn restart_autoneg(regs: &impl RegisterFile, kind: MacKind) -> ViResult<()> {
+    match kind {
+        MacKind::I82574 => {
+            let bmcr = phy_read(regs, MII_BMCR)?;
+            phy_write(
+                regs,
+                MII_BMCR,
+                bmcr | BMCR_ANENABLE | BMCR_ANRESTART | BMCR_SPEED1000 | BMCR_FULL_DUPLEX,
+            )
+        }
+        MacKind::PchLan(_) => crate::pch::with_swflag(regs, || {
+            let bmcr = phy_read(regs, MII_BMCR)?;
+            phy_write(
+                regs,
+                MII_BMCR,
+                bmcr | BMCR_ANENABLE | BMCR_ANRESTART | BMCR_SPEED1000 | BMCR_FULL_DUPLEX,
+            )
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -105,7 +118,7 @@ mod tests {
         let regs = FakeRegs::new();
         regs.phy.borrow_mut()[MII_BMCR as usize] = BMCR_FULL_DUPLEX;
         assert_eq!(phy_link_up(&regs), Ok(false));
-        restart_autoneg(&regs).expect("MDIC write completes");
+        restart_autoneg(&regs, MacKind::I82574).expect("MDIC write completes");
         // The written BMCR kept the old bits and asked for autoneg.
         let written = regs
             .writes
@@ -130,5 +143,27 @@ mod tests {
         regs.phy_address = PHY_ADDR;
         regs.responsive = false;
         assert_eq!(phy_write(&regs, MII_BMCR, 0), Err(ViError::IO));
+    }
+
+    #[test]
+    fn pch_lan_autoneg_restart_acquires_and_releases_semaphore() {
+        let regs = FakeRegs::new();
+        regs.phy.borrow_mut()[MII_BMCR as usize] = BMCR_FULL_DUPLEX;
+        restart_autoneg(
+            &regs,
+            MacKind::PchLan(crate::identity::PchGen::SunrisePoint),
+        )
+        .expect("PCH LAN autoneg succeeds");
+        let writes = regs.writes.borrow();
+        assert!(
+            writes
+                .iter()
+                .any(|&(o, v)| o == crate::pch::EXTCNF_CTRL
+                    && v & crate::pch::EXTCNF_CTRL_SWFLAG != 0)
+        );
+        assert_eq!(
+            regs.get(crate::pch::EXTCNF_CTRL) & crate::pch::EXTCNF_CTRL_SWFLAG,
+            0
+        );
     }
 }

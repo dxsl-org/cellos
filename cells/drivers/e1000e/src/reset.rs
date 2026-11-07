@@ -1,10 +1,7 @@
-//! Quiesce, global reset and the station address.
-//!
-//! The 82574 auto-loads `RAL0`/`RAH0` from the NVM after reset (datasheet
-//! §5.6, §10.2.5.13); `EERD` words 0..3 are the fallback when that entry is not
-//! valid. The address is written back so the exact-match filter is real even
-//! though `RCTL` also opens the promiscuous paths for the DHCP broadcast.
-
+//! Quiesce, global reset and station address for 82574 and PCH LAN (I219).
+//! `RAL0`/`RAH0` auto-loaded from NVM/flash; `EERD` or SPI flash is the fallback.
+use crate::identity::{MacKind, PchGen};
+use crate::pch;
 use crate::regs::*;
 use types::{ViError, ViResult};
 
@@ -23,7 +20,14 @@ fn poll_bits(regs: &impl RegisterFile, offset: usize, mask: u32, clear: bool) ->
 }
 
 /// Quiesce, reset and mask the controller, then return its station address.
-pub(crate) fn reset_and_read_mac(regs: &impl RegisterFile) -> ViResult<[u8; 6]> {
+pub(crate) fn reset_and_read_mac(regs: &impl RegisterFile, kind: MacKind) -> ViResult<[u8; 6]> {
+    match kind {
+        MacKind::I82574 => reset_and_read_mac_82574(regs),
+        MacKind::PchLan(gen) => reset_and_read_mac_pch(regs, gen),
+    }
+}
+
+fn reset_and_read_mac_82574(regs: &impl RegisterFile) -> ViResult<[u8; 6]> {
     // Stop new master requests so the reset cannot cut a DMA in half. A part
     // that never reports quiesced is still reset (the datasheet's fallback).
     regs.wr32(CTRL, regs.rd32(CTRL)? | CTRL_GIO_MASTER_DISABLE)?;
@@ -40,8 +44,45 @@ pub(crate) fn reset_and_read_mac(regs: &impl RegisterFile) -> ViResult<[u8; 6]> 
         Some(mac) => mac,
         None => mac_from_nvm_words([nvm_read(regs, 0)?, nvm_read(regs, 1)?, nvm_read(regs, 2)?]),
     };
-    // All zeros means neither source produced an address; binding would publish
-    // an unusable NIC route, so fail before any DMA.
+    if mac == [0u8; 6] {
+        return Err(ViError::IO);
+    }
+    let (ral, rah) = receive_address(mac);
+    regs.wr32(RAL0, ral)?;
+    regs.wr32(RAH0, rah)?;
+    for index in 0..MTA_ENTRIES {
+        regs.wr32(MTA + index * 4, 0)?;
+    }
+    Ok(mac)
+}
+
+fn reset_and_read_mac_pch(regs: &impl RegisterFile, gen: PchGen) -> ViResult<[u8; 6]> {
+    pch::disable_ulp(regs, gen)?;
+
+    regs.wr32(CTRL, regs.rd32(CTRL)? | CTRL_GIO_MASTER_DISABLE)?;
+    let _ = poll_bits(regs, STATUS, STATUS_GIO_MASTER_ENABLE, true)?;
+
+    pch::with_swflag(regs, || {
+        regs.wr32(IMC, u32::MAX)?;
+        regs.wr32(CTRL, regs.rd32(CTRL)? | CTRL_RST)?;
+        if !poll_bits(regs, CTRL, CTRL_RST, true)? {
+            return Err(ViError::IO);
+        }
+        regs.wr32(IMC, u32::MAX)?;
+        let _ = regs.rd32(ICR)?;
+        Ok(())
+    })?;
+
+    pch::configure_k1_workarounds(regs)?;
+
+    let mac = match mac_from_receive_address(regs.rd32(RAL0)?, regs.rd32(RAH0)?) {
+        Some(mac) => mac,
+        None => mac_from_nvm_words([
+            pch::read_flash_word(regs, 0)?,
+            pch::read_flash_word(regs, 1)?,
+            pch::read_flash_word(regs, 2)?,
+        ]),
+    };
     if mac == [0u8; 6] {
         return Err(ViError::IO);
     }
@@ -105,7 +146,7 @@ mod tests {
         regs.wr32(RAH0, rah).unwrap();
         regs.wr32(STATUS, STATUS_GIO_MASTER_ENABLE).unwrap();
         assert_eq!(
-            reset_and_read_mac(&regs),
+            reset_and_read_mac(&regs, MacKind::I82574),
             Ok([0x52, 0x54, 0x00, 0xAB, 0xCD, 0xEF])
         );
         let writes = regs.writes.borrow();
@@ -132,12 +173,30 @@ mod tests {
         let mut regs = FakeRegs::new();
         regs.nvm[..3].copy_from_slice(&[0x5452, 0x1200, 0x5634]);
         assert_eq!(
-            reset_and_read_mac(&regs),
+            reset_and_read_mac(&regs, MacKind::I82574),
             Ok([0x52, 0x54, 0x00, 0x12, 0x34, 0x56])
         );
         assert_eq!(regs.get(RAH0), RAH_AV | 0x5634);
         regs.nvm[..3].copy_from_slice(&[0, 0, 0]);
         regs.wr32(RAH0, 0).unwrap();
-        assert_eq!(reset_and_read_mac(&regs), Err(ViError::IO));
+        assert_eq!(reset_and_read_mac(&regs, MacKind::I82574), Err(ViError::IO));
+    }
+
+    #[test]
+    fn reset_pch_lan_with_flash_nvm_fallback() {
+        let mut regs = FakeRegs::new();
+        regs.nvm[..3].copy_from_slice(&[0x5452, 0x1200, 0x5634]);
+        assert_eq!(
+            reset_and_read_mac(&regs, MacKind::PchLan(PchGen::SunrisePoint)),
+            Ok([0x52, 0x54, 0x00, 0x12, 0x34, 0x56])
+        );
+        let writes = regs.writes.borrow();
+        // Semaphore was acquired (bit 5) and released (cleared)
+        assert!(writes
+            .iter()
+            .any(|&(o, v)| o == pch::EXTCNF_CTRL && v & pch::EXTCNF_CTRL_SWFLAG != 0));
+        assert_eq!(regs.get(pch::EXTCNF_CTRL) & pch::EXTCNF_CTRL_SWFLAG, 0);
+        // K1 / PLL was configured
+        assert_ne!(regs.get(pch::FEXTNVM6) & pch::FEXTNVM6_REQ_PLL_CLK, 0);
     }
 }
