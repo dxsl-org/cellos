@@ -209,19 +209,8 @@ pub fn init_kernel_paging(
                 .identity_map(uart_region, uart_region + 0x1000, mmio_flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
         }
-        // VirtIO MMIO (0x10001000–0x10010000): USER-accessible for Driver Cells (U-mode).
-        // The kernel's tech-debt VirtIO drivers (virtio_blk) also access these slots from
-        // S-mode. With sstatus.SUM=1 (set in main.rs right after activate_paging), S-mode
-        // can access USER-mapped pages throughout the kernel lifetime. SUM=1 is safe and
-        // intentional in Cellos's SAS+LBI model — Rust type safety provides isolation.
-        let rv_cell_mmio = PageFlags::from_bits(
-            PageFlags::VALID
-                | PageFlags::READ
-                | PageFlags::WRITE
-                | PageFlags::USER
-                | PageFlags::ACCESSED
-                | PageFlags::DIRTY,
-        );
+        // VirtIO MMIO (0x10001000–0x10010000): kernel-only at boot (mmio_flags).
+        // Driver Cells reach their respective VirtIO slots via RequestMmio grants.
         let virtio_start = if uart_region != 0 {
             uart_region + 0x1000
         } else {
@@ -231,7 +220,7 @@ pub fn init_kernel_paging(
             .identity_map(
                 virtio_start,
                 virtio_start + 0xF000,
-                rv_cell_mmio,
+                mmio_flags,
                 &mut alloc_fn,
             )
             .map_err(|_| PageTableError::OutOfMemory)?;
@@ -259,7 +248,7 @@ pub fn init_kernel_paging(
                 crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
                 crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
                     + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
-                rv_cell_mmio,
+                mmio_flags,
                 &mut alloc_fn,
             )
             .map_err(|_| PageTableError::OutOfMemory)?;
@@ -267,29 +256,13 @@ pub fn init_kernel_paging(
     #[cfg(target_arch = "aarch64")]
     {
         use hal::aarch64::backend::{ArmResources, Board};
-        // Board maps marked `cell_access` boot USER (QEMU virt's documented
-        // peripheral/VirtIO windows only); every other device window, the whole
-        // Pi peripheral aperture included, is kernel-only. A Cell reaches a
-        // kernel-only window solely through `RequestMmio`, which sets USER on
-        // the granted whole pages (`grant_mmio_user`); retirement restores the
-        // boot posture (`restore_mmio_boot_posture`).
-        let cell_mmio_flags = PageFlags::from_bits(
-            PageFlags::VALID
-                | PageFlags::READ
-                | PageFlags::WRITE
-                | PageFlags::USER
-                | PageFlags::DEVICE
-                | PageFlags::ACCESSED
-                | PageFlags::DIRTY,
-        );
+        // All device windows boot kernel-only (mmio_flags). A Cell reaches a
+        // window solely through `RequestMmio`, which sets USER on the granted
+        // whole pages (`grant_mmio_user`); retirement restores the boot posture
+        // (`restore_mmio_boot_posture`).
         for map in <Board as ArmResources>::KERNEL_MMIO_MAPS {
-            let flags = if map.cell_access {
-                cell_mmio_flags
-            } else {
-                mmio_flags
-            };
             root_table
-                .identity_map(map.base, map.end, flags, &mut alloc_fn)
+                .identity_map(map.base, map.end, mmio_flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
         }
     }
@@ -872,34 +845,7 @@ pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
 /// MMIO windows (VirtIO, ECAM) USER, so restoring is granting.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn restore_mmio_boot_posture(base: usize, len: usize) -> PagingResult<usize> {
-    #[cfg(target_arch = "riscv64")]
-    {
-        grant_mmio_user(base, len)
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        use hal::aarch64::backend::{ArmResources, Board};
-        let mut restored = 0;
-        for va in crate::resource_registry::user_pages(base, len).step_by(PAGE_SIZE) {
-            let boot_user = <Board as ArmResources>::KERNEL_MMIO_MAPS
-                .iter()
-                .any(|map| map.cell_access && map.base <= va && va < map.end);
-            let flags = if boot_user {
-                mmio_user_flags()
-            } else {
-                mmio_kernel_flags()
-            };
-            match protect_page(va, flags) {
-                Ok(()) => restored += 1,
-                Err(PageTableError::InvalidAddress) => {}
-                Err(e) => {
-                    log::error!("[paging] restore_mmio_boot_posture: {va:#x} ({e:?})");
-                    return Err(e);
-                }
-            }
-        }
-        Ok(restored)
-    }
+    clear_mmio_user(base, len)
 }
 
 /// Boot MMIO mapping flags *with* `USER` — what an allowlisted window carries
@@ -1282,7 +1228,6 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
                 PageFlags::VALID
                     | PageFlags::READ
                     | PageFlags::WRITE
-                    | PageFlags::EXECUTE
                     | PageFlags::USER
                     | PageFlags::ACCESSED
                     | PageFlags::DIRTY,

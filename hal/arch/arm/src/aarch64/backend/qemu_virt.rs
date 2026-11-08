@@ -161,18 +161,17 @@ impl ArmResources for QemuVirt {
             end: QEMU_ARM_VIRT.gic_map.end(),
             cell_access: false,
         },
-        // Peripheral MMIO (GPIO PL061, UART PL011, RTC): cells access directly via
-        // driver rlibs (bit-bang GPIO/I2C/SPI/PWM). LBI guarantees only cells with
-        // the GPIO capability can construct driver objects, so USER access is safe.
+        // Peripheral MMIO (GPIO PL061, UART PL011, RTC): kernel-only at boot.
+        // Cells reach these windows through RequestMmio grants.
         MmioMap {
             base: QEMU_ARM_VIRT.peripheral_map.base,
             end: QEMU_ARM_VIRT.peripheral_map.end(),
-            cell_access: true,
+            cell_access: false,
         },
         MmioMap {
             base: QEMU_ARM_VIRT.virtio.region().base,
             end: QEMU_ARM_VIRT.virtio.region().end(),
-            cell_access: true,
+            cell_access: false,
         },
         MmioMap {
             base: QEMU_ARM_VIRT.platform_bus_map.base,
@@ -213,3 +212,16 @@ impl ArmResources for QemuVirt {
         },
     ];
 }
+
+// Boot MMIO maps must be kernel-only; cells reach windows only via RequestMmio.
+const _: () = {
+    let maps = <QemuVirt as ArmResources>::KERNEL_MMIO_MAPS;
+    let mut i = 0;
+    while i < maps.len() {
+        assert!(
+            !maps[i].cell_access,
+            "QemuVirt boot MMIO maps must be kernel-only"
+        );
+        i += 1;
+    }
+};

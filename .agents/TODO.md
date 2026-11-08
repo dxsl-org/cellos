@@ -74,10 +74,6 @@ portfolio; nhiều mục chạm `kernel/src/task/syscall.rs` nên làm tuần t�
 cite dòng theo tree 2026-10-21 — đọc lại theo tên symbol trước khi sửa.
 Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
 
-**Đợt 1 — Critical/High, sửa trước:**
-- [ ] **Non-x86: MMIO VirtIO/ECAM/peripheral map `USER` lúc boot** (`kernel/src/memory/paging.rs`) và
-  **stack RWX** trên RISC-V/AArch64 (`remap_range_user` có `EXECUTE`). Ưu tiên thấp hơn vì ADR-0022 chỉ x86,
-  nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
 
 
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
