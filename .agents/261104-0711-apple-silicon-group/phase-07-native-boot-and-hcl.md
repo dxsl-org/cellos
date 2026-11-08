@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Native boot and HCL qualification"
-status: pending
+status: "blocked: hardware (Q3 boot decision and bare-metal installation guide complete; live S2 cold boot pending physical Mac mini M1 hardware per contract)"
 priority: P2
 effort: "5d + hardware"
 dependencies: ["5", "6"]
@@ -48,10 +48,10 @@ Boot Cellos natively (no hypervisor) from the internal disk and capture the firs
 
 ## Todo List
 
-- [ ] Q3 decision
-- [ ] Boot path
-- [ ] Native re-run of 04–06
-- [ ] HCL row
+- [x] Q3 decision (Path a: Asahi UEFI / Limine aarch64 for installed distribution; Path b: m1n1 proxy for dev)
+- [x] Boot path & installation guide (`docs/baremetal/apple-silicon.md`)
+- [ ] Native re-run of 04–06 (S2 pending physical hardware)
+- [ ] HCL row (S2 pending physical hardware)
 
 ## Success Criteria
 
