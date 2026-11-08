@@ -29,14 +29,15 @@ compile_error!(
     "large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half"
 );
 
-/// Cell VA region start — 4 GiB (0x1_0000_0000).
+/// Cell VA region start — 64 GiB (0x10_0000_0000).
 ///
-/// Must lie above ALL identity-mapped regions in the SAS:
+/// Must lie above ALL identity-mapped regions in the SAS, avoiding collision
+/// when physical RAM extends to >= 4 GiB (e.g. 0x1_0000_0000..0x1_8000_0000):
 ///   - QEMU virt RISC-V: UART/VirtIO MMIO at 0x1000_0000–0x1001_0000
 ///   - PCIe ECAM at 0x3000_0000 (1 MiB); VirtIO BAR below 0x8000_0000
-///   - RAM identity map: 256 MB at 0x8000_0000 → ends at 0x8FFF_FFFF
+///   - RAM identity map: supports physical configurations up to 48 GiB
 ///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
-///     4 GiB clears all of the above with room to spare and remains well inside
+///     64 GiB clears all of the above with room to spare and remains well inside
 ///     the SV39 user-half (256 GiB = 0x40_0000_0000).
 ///
 /// RISC-V medany: even the 256 MiB desktop slot stays within ±2 GiB.
@@ -45,7 +46,7 @@ compile_error!(
 /// PIE cells never occur there and `alloc_cell_va` is never actually called;
 /// this constant only needs to type-check as a 32-bit `usize` on that target.
 #[cfg(not(target_arch = "riscv32"))]
-pub(crate) const CELL_VA_START: usize = 0x1_0000_0000;
+pub(crate) const CELL_VA_START: usize = 0x10_0000_0000;
 #[cfg(target_arch = "riscv32")]
 pub(crate) const CELL_VA_START: usize = 0x2000_0000;
 

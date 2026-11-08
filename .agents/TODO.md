@@ -97,8 +97,7 @@ source/tests/evidence and do not rerun recorded failures just to reconfirm them.
   - `Scheduler::cell_owners` vẫn là `Vec` đặc `MAX_CELLS` slot → `BTreeMap<u32, CellOwnerSlot>`;
   - allocation infallible còn lại trên đường spawn/exit: `BTreeMap::insert`, `queue.clone()` trong `scheduler::exit_task`,
     `Box::new` trong `spawn_with_stacks_configured`, `to_vec`/`clone` nhỏ trong test-hooks;
-  - cell không load khi khách có ≥4 GiB RAM: `ELF: load VA 0x100000000 already mapped` cho `/bin/platform` và init
-    (VA base cell đụng mapping kernel) — chặn mọi phép đo ở 4 GiB.
+  - cell không load khi khách có ≥4 GiB RAM: đã nâng `CELL_VA_START` lên 64 GiB (`0x10_0000_0000`), loại bỏ triệt để va chạm identity-map với RAM vật lý cao.
 - [ ] **Beam-parity B1/B2** (B0 done): B1 concurrency trong cell + cancellation (cần ADR cancellation); B2 cost/scale
   per-request (WIP-limited cùng D5).
 - [ ] **Cell-native portability residual:** port bên thứ ba cần `fork`/`exec` (process tree) vẫn class D; C TLS xem mục std thread.
