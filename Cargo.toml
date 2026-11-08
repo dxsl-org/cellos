@@ -241,6 +241,7 @@ members = [
 
     # Cells - Runtimes
     "cells/runtimes/lua",
+    "cells/runtimes/mesa-anv",
     "cells/services/sshd",
 
 ]

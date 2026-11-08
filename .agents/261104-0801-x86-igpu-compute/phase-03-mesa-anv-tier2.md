@@ -61,9 +61,9 @@ Owner decisions 2026-11-04 (Q1, Q3 per the [port-gap](research/mesa-anv-port-gap
 
 ## Todo List
 
-- [ ] ioctl/POSIX inventory
-- [ ] Cross build
-- [ ] Shim
+- [x] ioctl/POSIX inventory: documented in research/mesa-anv-port-gaps.md and xe-uapi-subset.md
+- [ ] Cross build (blocked: x86 Tier-2 large memory and toolchain prerequisites)
+- [x] Shim: implemented in cells/runtimes/mesa-anv with host tests against XeSession and Syncobjs
 - [ ] Smokes
 - [ ] CP2
 
