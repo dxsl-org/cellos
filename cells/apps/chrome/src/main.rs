@@ -33,6 +33,7 @@ api::declare_syscalls![
     GrantShare,
     GrantSlice,
     GrantUnregister,
+    Call,
     Send,
     Recv,
     TryRecv,
@@ -65,6 +66,9 @@ pub struct ChromeApp {
     pub guest_status: String,
     pub should_close: bool,
     pub next_tab_id: u32,
+    pub hv_tid: usize,
+    pub session_id: u32,
+    pub vmm_active: bool,
 }
 
 impl ChromeApp {
@@ -95,11 +99,12 @@ impl ChromeApp {
             is_url_focused: false,
             is_fullscreen: false,
             saved_dims: (w, h),
-            guest_status: String::from(
-                "Intel VT-x (VMX root) | VirtIO-GPU 1280x800 | PVH Single-App",
-            ),
+            guest_status: String::from("Standalone Kiosk (VMM offline) | Local UI Viewport"),
             should_close: false,
             next_tab_id: 3,
+            hv_tid: 0,
+            session_id: 0,
+            vmm_active: false,
         }
     }
 
@@ -624,6 +629,42 @@ fn cell_main() {
     let mut fonts = TextFonts::new();
     let mut app = ChromeApp::new(win_w, win_h);
 
+    // Connect to Hypervisor service (service ID 14) for Tier 3 MicroVM session
+    let hv_tid =
+        ostd::syscall::sys_lookup_service(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
+    if hv_tid != 0 {
+        let launch_req = api::services::vmm_session::VmmLaunchRequest::new("chrome", win_w, win_h);
+        let mut req_buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
+        if launch_req.encode(&mut req_buf).is_ok() {
+            if matches!(
+                ostd::syscall::sys_send(hv_tid, &req_buf),
+                ostd::syscall::SyscallResult::Ok(_)
+            ) {
+                let mut reply_buf = [0u8; 64];
+                if let ostd::syscall::SyscallResult::Ok(n) =
+                    ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 100)
+                {
+                    if n > 0 {
+                        if let Ok(reply) =
+                            api::services::vmm_session::VmmLaunchReply::decode(&reply_buf[..n])
+                        {
+                            if reply.status == api::services::vmm_session::VMM_STATUS_OK {
+                                app.hv_tid = hv_tid;
+                                app.session_id = reply.session_id;
+                                app.vmm_active = true;
+                                app.guest_status = String::from(
+                                    "Connected: Tier 3 MicroVM | Scanout Active | VirtIO-Input",
+                                );
+                                ostd::io::println(
+                                    "[chrome] Connected to Tier 3 MicroVM via Hypervisor service",
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     while !ostd::input::request_focus() {
         sys_yield();
     }
@@ -635,15 +676,32 @@ fn cell_main() {
     loop {
         if app.should_close {
             ostd::io::println("[chrome] User requested window close. Terminating guest container.");
+            if app.vmm_active && app.hv_tid != 0 {
+                let term = [api::services::vmm_session::VMM_OP_TERMINATE_APP, 0, 0, 0];
+                let _ = ostd::syscall::sys_send(app.hv_tid, &term);
+            }
             break;
         }
-
         let mut need_render = false;
         for ev in ostd::input::poll_events(16) {
             match ev {
                 InputEvent::MouseMove { x, y, .. } => {
+                    let dx = x - cursor_x;
+                    let dy = y - cursor_y;
                     cursor_x = x;
                     cursor_y = y;
+                    if app.vmm_active && app.hv_tid != 0 && (dx != 0 || dy != 0) {
+                        let rel_req = api::services::vmm_session::VmmInputForwardRequest::new(
+                            app.session_id,
+                            2, // EV_REL
+                            0, // REL_X
+                            dx,
+                        );
+                        let mut b = [0u8; 16];
+                        if rel_req.encode(&mut b).is_ok() {
+                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
+                        }
+                    }
                 }
                 InputEvent::MouseButton {
                     button: MouseButton::Left,

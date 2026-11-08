@@ -22,7 +22,16 @@ use ostd::io::println;
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = true, network = true, spawn = true);
-api::declare_syscalls![Log, Send, Recv, LookupService, Spawn, Yield, Exit];
+api::declare_syscalls![
+    Log,
+    Send,
+    Recv,
+    RecvTimeout,
+    LookupService,
+    Spawn,
+    Yield,
+    Exit
+];
 
 ostd::cell_main!(cell_main);
 
@@ -104,7 +113,8 @@ fn cell_main() {
     }
 
     // Connect to Hypervisor service (service ID 14)
-    let hv_tid = ostd::syscall::sys_lookup_service(14).unwrap_or(0);
+    let hv_tid =
+        ostd::syscall::sys_lookup_service(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
     if hv_tid == 0 {
         println("[vm-runner] ERROR: Hypervisor service (ID 14) unavailable.");
         sys_exit(1);
@@ -118,7 +128,51 @@ fn cell_main() {
         "[vm-runner] Spawning MicroVM on Intel VT-x: base='{}' app='{}' mode={} ram={}M",
         config.base_image, config.app_image, config.mode, config.ram_mb
     ));
-    println("[vm-runner] MicroVM active. Session ready.");
 
-    sys_exit(0);
+    let launch_req = api::services::vmm_session::VmmLaunchRequest::new(&app_name, 1024, 768);
+    let mut req_buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
+    if launch_req.encode(&mut req_buf).is_err() {
+        println("[vm-runner] ERROR: Failed to encode VmmLaunchRequest.");
+        sys_exit(1);
+    }
+
+    if !matches!(
+        ostd::syscall::sys_send(hv_tid, &req_buf),
+        ostd::syscall::SyscallResult::Ok(_)
+    ) {
+        println("[vm-runner] ERROR: Failed to send VmmLaunchRequest to Hypervisor.");
+        sys_exit(1);
+    }
+
+    let mut reply_buf = [0u8; 64];
+    match ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 200) {
+        ostd::syscall::SyscallResult::Ok(n)
+            if n >= api::services::vmm_session::VmmLaunchReply::LEN =>
+        {
+            match api::services::vmm_session::VmmLaunchReply::decode(&reply_buf[..n]) {
+                Ok(reply) if reply.status == api::services::vmm_session::VMM_STATUS_OK => {
+                    println(&format!(
+                        "[vm-runner] MicroVM active (session_id={}). Session ready.",
+                        reply.session_id
+                    ));
+                    sys_exit(0);
+                }
+                Ok(reply) => {
+                    println(&format!(
+                        "[vm-runner] ERROR: Hypervisor rejected launch (status={})",
+                        reply.status
+                    ));
+                    sys_exit(1);
+                }
+                Err(_) => {
+                    println("[vm-runner] ERROR: Corrupt reply from Hypervisor.");
+                    sys_exit(1);
+                }
+            }
+        }
+        _ => {
+            println("[vm-runner] ERROR: Hypervisor reply timeout.");
+            sys_exit(1);
+        }
+    }
 }

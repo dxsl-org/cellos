@@ -32,3 +32,4 @@ pub mod serde_helpers;
 pub mod session;
 pub mod ssh_completion;
 pub mod vfs_file_handles;
+pub mod vmm_session;
