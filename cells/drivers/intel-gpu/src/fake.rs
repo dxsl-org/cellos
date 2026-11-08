@@ -36,6 +36,10 @@ impl FakeRegs {
         fake.set(XE2_GT_GEOMETRY_DSS_2, 0);
         // EU enable: 0xFF
         fake.set(XELP_EU_ENABLE, 0xFF);
+        fake.set(
+            crate::guc::GUC_STATUS,
+            crate::guc::GUC_STATUS_BOOTLOADER_READY,
+        );
         fake
     }
 
@@ -49,6 +53,10 @@ impl FakeRegs {
         fake.set(XE2_GT_GEOMETRY_DSS_1, 0x00FF);
         fake.set(XE2_GT_GEOMETRY_DSS_2, 0);
         fake.set(XELP_EU_ENABLE, 0xFF);
+        fake.set(
+            crate::guc::GUC_STATUS,
+            crate::guc::GUC_STATUS_BOOTLOADER_READY,
+        );
         fake
     }
 
@@ -82,6 +90,12 @@ impl RegisterFile for FakeRegs {
                     self.set(FORCEWAKE_ACK_GT, current_ack & !FORCEWAKE_ACK_BIT);
                 }
             }
+        }
+        // Simulate GuC DMA transfer completion
+        if offset == crate::guc::GUC_DMA_CTRL && (value & crate::guc::GUC_DMA_CTRL_START) != 0 {
+            // DMA finishes immediately in simulation
+            self.set(crate::guc::GUC_DMA_CTRL, 0);
+            self.set(crate::guc::GUC_STATUS, crate::guc::GUC_STATUS_UKERNEL_READY);
         }
 
         Ok(())

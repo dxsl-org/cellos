@@ -11,6 +11,8 @@ mod controller;
 #[cfg(test)]
 mod fake;
 mod forcewake;
+mod ggtt;
+mod guc;
 mod identity;
 mod regs;
 
