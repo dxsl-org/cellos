@@ -30,7 +30,7 @@ use crate::views::places::PLACES_WIDTH;
 use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
-use ostd::syscall::{sys_get_resolution, sys_yield};
+use ostd::syscall::{sys_get_resolution, sys_spawn_from_path, sys_yield, SyscallResult};
 use ostd::typography::TextFonts;
 use viui::surface::components::{
     GridItemDef, GridView, ListView, ListViewItemDef, PlacesItemDef, PlacesSidebar,
@@ -329,6 +329,14 @@ fn cell_main() {
                                     app.preview_selected();
                                 }
                             }
+                            Some(digit @ '1'..='9') if app.quick_look.is_open => {
+                                let idx = (digit as usize) - ('1' as usize);
+                                if idx < app.quick_look.candidates.len() {
+                                    let app_id = app.quick_look.candidates[idx].app_id;
+                                    app.quick_look.close();
+                                    app.open_selected_with(app_id);
+                                }
+                            }
                             Some('1') => app.switch_view_mode(ViewMode::List),
                             Some('2') => app.switch_view_mode(ViewMode::Grid),
                             Some('3') => app.switch_view_mode(ViewMode::Columns),
@@ -408,6 +416,9 @@ fn cell_main() {
                 _ => {}
             }
         }
+        if let Some(intent) = app.take_launch_intent() {
+            dispatch_launch_intent(&intent);
+        }
 
         if need_render {
             if app.current_path != title_path {
@@ -418,6 +429,31 @@ fn cell_main() {
         }
 
         sys_yield();
+    }
+}
+fn dispatch_launch_intent(intent: &api::services::mime::LaunchIntent) {
+    ostd::io::print("[files] LaunchIntent: ");
+    ostd::io::print(intent.action.as_str());
+    ostd::io::print(" target=");
+    ostd::io::print(&intent.target_path);
+    ostd::io::print(" app=");
+    ostd::io::println(intent.app_binary);
+
+    let spawn_target = if intent.action == api::services::mime::FileAction::Run
+        && intent.target_path.starts_with("/bin/")
+    {
+        &intent.target_path
+    } else {
+        intent.app_binary
+    };
+
+    match sys_spawn_from_path(spawn_target) {
+        SyscallResult::Ok(tid) => {
+            ostd::io::println(&format!("[files] Spawned application PID {}", tid));
+        }
+        SyscallResult::Err(_) => {
+            ostd::io::println("[files] ERROR: Application spawn rejected by kernel.");
+        }
     }
 }
 

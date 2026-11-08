@@ -28,6 +28,7 @@ pub struct FileItem {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
+    pub mime: api::services::mime::MimeType,
     /// `Stat` size; `None` for folders and when the VFS refused the `Stat`.
     pub size: Option<u64>,
     pub icon: &'static str,
@@ -42,25 +43,19 @@ impl FileItem {
     ) -> Self {
         let name = name.into();
         let path = path.into();
-        let icon = if is_dir {
-            "[D]"
-        } else if name.ends_with(".md") || name.ends_with(".txt") {
-            "[M]"
-        } else if name.ends_with(".pdf") {
-            "[P]"
-        } else if name.ends_with(".png") || name.ends_with(".jpg") || name.ends_with(".ppm") {
-            "[I]"
-        } else if name.ends_with(".rs") || name.ends_with(".c") || name.ends_with(".toml") {
-            "[T]"
+        let mime = if is_dir {
+            api::services::mime::MimeType::InodeDirectory
         } else {
-            "[?]"
+            api::services::mime::MimeType::from_path(&path)
         };
+        let icon = mime.icon_tag();
 
         Self {
             name,
             path,
             is_dir,
             size,
+            mime,
             icon,
         }
     }

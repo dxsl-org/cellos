@@ -22,6 +22,7 @@ pub mod hotswap;
 pub mod input;
 pub mod ipc;
 pub mod machine_pin;
+pub mod mime;
 pub mod net;
 #[path = "services/net-reply.rs"]
 pub mod net_reply;

@@ -63,10 +63,6 @@ Còn mở:
   UI kiosk trên host (không tạo VM; chuỗi `Intel VT-x (VMX root)` là literal). Cần guest app-only
   fullscreen, interactive host tab, resize/input/dialog/teardown; không dùng log launcher thay bằng
   chứng. Phụ thuộc mục Intel VMX/EPT ở trên.
-- [ ] **File Association & MIME Router:** chưa có registry/Open With/launch intent (không có
-  `mime`/`open_with` trong `cells/apps` hay `libs/api/src/services`; Quick Look chỉ hiện gợi ý
-  "Open With"). Theo [hợp đồng đề xuất](261019-1310-unified-desktop/contracts.md): tách Open/Preview
-  khỏi Run script/ELF, quyền tối thiểu, gate ABI nếu cần; nối vào Files + Desktop launcher.
 - Deferred by approved scope (plan): Files split-pane/cây thư mục đầy đủ, Trash/Undo, drag-to-group/detach.
 
 ## Khắc phục bảo mật & hiệu năng (audit 2026-10-21)

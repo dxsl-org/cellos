@@ -61,6 +61,7 @@ pub struct FilesApp<F: FileSystem> {
     pub width: u32,
     pub height: u32,
     pub quick_look: QuickLookState,
+    pub pending_intent: Option<api::services::mime::LaunchIntent>,
 }
 
 impl<F: FileSystem> FilesApp<F> {
@@ -78,6 +79,7 @@ impl<F: FileSystem> FilesApp<F> {
             width,
             height,
             quick_look: QuickLookState::new(),
+            pending_intent: None,
         };
         app.load_directory(initial_path);
         app
@@ -159,7 +161,7 @@ impl<F: FileSystem> FilesApp<F> {
         }
     }
 
-    /// Enter a folder, or Quick Look a file.
+    /// Enter a folder, or stage a LaunchIntent for a file.
     pub fn open_selected(&mut self) {
         let Some(item) = self.items.get(self.selected_index).cloned() else {
             return;
@@ -167,8 +169,39 @@ impl<F: FileSystem> FilesApp<F> {
         if item.is_dir {
             self.load_directory(&item.path);
         } else {
-            self.preview_selected();
+            let intent = api::services::mime::AssociationRegistry::resolve_intent(&item.path, None);
+            self.status_message = format!(
+                "{} {} with {}",
+                intent.action.as_str(),
+                item.name,
+                intent.app_id
+            );
+            self.pending_intent = Some(intent);
         }
+    }
+
+    /// Open selected file with a specific candidate application ID.
+    pub fn open_selected_with(&mut self, app_id: &str) {
+        let Some(item) = self.items.get(self.selected_index).cloned() else {
+            return;
+        };
+        if !item.is_dir {
+            if let Some(intent) = api::services::mime::AssociationRegistry::resolve_intent_with_app(
+                &item.path, app_id, None,
+            ) {
+                self.status_message = format!(
+                    "{} {} with {}",
+                    intent.action.as_str(),
+                    item.name,
+                    intent.app_id
+                );
+                self.pending_intent = Some(intent);
+            }
+        }
+    }
+
+    pub fn take_launch_intent(&mut self) -> Option<api::services::mime::LaunchIntent> {
+        self.pending_intent.take()
     }
 
     /// Open Quick Look on the selection; text kinds are read through the VFS (bounded).
@@ -537,8 +570,19 @@ mod tests {
     fn quick_look_reads_the_selected_file() {
         let mut app = app_at(c5_tree(), "/tmp/c5dir");
         app.selected_index = 1;
-        app.open_selected();
+        app.preview_selected();
         assert!(app.quick_look.is_open);
         assert_eq!(app.quick_look.lines, ["c5"]);
+    }
+
+    #[test]
+    fn open_selected_stages_launch_intent() {
+        let mut app = app_at(c5_tree(), "/tmp/c5dir");
+        app.selected_index = 1;
+        app.open_selected();
+        let intent = app.take_launch_intent().expect("staged launch intent");
+        assert_eq!(intent.target_path, "/tmp/c5dir/a.txt");
+        assert_eq!(intent.action, api::services::mime::FileAction::Open);
+        assert_eq!(intent.app_id, "terminal");
     }
 }

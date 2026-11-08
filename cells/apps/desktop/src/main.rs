@@ -158,6 +158,18 @@ fn cell_main() {
                                     sp_surf.move_to(-2000, -2000);
                                     need_tb_render = true;
                                 }
+                                SpotlightAction::LaunchIntent(intent) => {
+                                    ostd::io::print("[desktop] Spotlight: Launching intent ");
+                                    ostd::io::print(intent.action.as_str());
+                                    ostd::io::print(" target=");
+                                    ostd::io::print(&intent.target_path);
+                                    ostd::io::print(" with app=");
+                                    ostd::io::println(intent.app_binary);
+                                    launch_application(intent.app_binary);
+                                    sp_state.close();
+                                    sp_surf.move_to(-2000, -2000);
+                                    need_tb_render = true;
+                                }
                                 SpotlightAction::SwitchTask(_) => {
                                     ostd::io::println(
                                         "[desktop] Spotlight: Switching focus to task",
@@ -267,6 +279,18 @@ fn cell_main() {
                         {
                             SpotlightAction::LaunchApp(path) => {
                                 launch_application(path);
+                                sp_state.close();
+                                sp_surf.move_to(-2000, -2000);
+                                need_tb_render = true;
+                            }
+                            SpotlightAction::LaunchIntent(intent) => {
+                                ostd::io::print("[desktop] Spotlight: Launching intent ");
+                                ostd::io::print(intent.action.as_str());
+                                ostd::io::print(" target=");
+                                ostd::io::print(&intent.target_path);
+                                ostd::io::print(" with app=");
+                                ostd::io::println(intent.app_binary);
+                                launch_application(intent.app_binary);
                                 sp_state.close();
                                 sp_surf.move_to(-2000, -2000);
                                 need_tb_render = true;

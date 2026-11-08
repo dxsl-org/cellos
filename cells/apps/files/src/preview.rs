@@ -33,23 +33,19 @@ pub enum PreviewKind {
 
 impl PreviewKind {
     pub fn of(item: &FileItem) -> Self {
-        let name = item.name.as_str();
         if item.is_dir {
             Self::Folder
-        } else if name.ends_with(".png") || name.ends_with(".jpg") || name.ends_with(".ppm") {
-            Self::Image
-        } else if name.ends_with(".md") {
-            Self::Markdown
-        } else if name.ends_with(".rs")
-            || name.ends_with(".c")
-            || name.ends_with(".toml")
-            || name.ends_with(".txt")
-        {
-            Self::Code
-        } else if name.ends_with(".pdf") {
-            Self::Pdf
         } else {
-            Self::Unsupported
+            match item.mime {
+                api::services::mime::MimeType::ImagePng
+                | api::services::mime::MimeType::ImageJpeg
+                | api::services::mime::MimeType::ImagePpm => Self::Image,
+                api::services::mime::MimeType::TextMarkdown => Self::Markdown,
+                api::services::mime::MimeType::TextPlain
+                | api::services::mime::MimeType::TextSource => Self::Code,
+                api::services::mime::MimeType::ApplicationPdf => Self::Pdf,
+                _ => Self::Unsupported,
+            }
         }
     }
 
@@ -73,7 +69,11 @@ impl PreviewKind {
 pub struct QuickLookState {
     pub is_open: bool,
     pub file_name: String,
+    pub file_path: String,
     pub kind: PreviewKind,
+    pub mime: api::services::mime::MimeType,
+    pub default_app: Option<&'static str>,
+    pub candidates: &'static [api::services::mime::AppCandidate],
     pub lines: Vec<String>,
 }
 
@@ -82,7 +82,11 @@ impl QuickLookState {
         Self {
             is_open: false,
             file_name: String::new(),
+            file_path: String::new(),
             kind: PreviewKind::Unsupported,
+            mime: api::services::mime::MimeType::Unknown,
+            default_app: None,
+            candidates: &[],
             lines: Vec::new(),
         }
     }
@@ -92,7 +96,12 @@ impl QuickLookState {
     pub fn show(&mut self, item: &FileItem, text: Option<FsResult<Vec<u8>>>) {
         self.is_open = true;
         self.file_name = item.name.clone();
+        self.file_path = item.path.clone();
         self.kind = PreviewKind::of(item);
+        self.mime = item.mime;
+        self.default_app =
+            api::services::mime::AssociationRegistry::default_app(item.mime).map(|a| a.app_name);
+        self.candidates = api::services::mime::AssociationRegistry::candidates_for_mime(item.mime);
         self.lines.clear();
         match text {
             Some(Ok(bytes)) if bytes.is_empty() => self.lines.push(String::from("(empty file)")),
@@ -221,6 +230,21 @@ pub fn render(
     let footer_y = ql_y + ql_h as i32 - 28;
     fill_rect(surf, ql_x, footer_y, ql_w, 28, Color::rgb(245, 245, 248));
     fill_rect(surf, ql_x, footer_y, ql_w, 1, Color::rgb(215, 218, 224));
+    let footer_text = if let Some(app) = state.default_app {
+        if state.mime.is_executable() {
+            format!("Enter: Run in {}    Space/Esc: Dismiss", app)
+        } else if state.candidates.len() > 1 {
+            format!(
+                "Enter: Open ({})  ·  1..{}: Open With  ·  Esc: Dismiss",
+                app,
+                state.candidates.len()
+            )
+        } else {
+            format!("Enter: Open with {}    Space/Esc: Dismiss", app)
+        }
+    } else {
+        String::from("Space / Esc: Dismiss    ↑ / ↓: Navigate Items")
+    };
     draw_label(
         surf,
         fonts,
@@ -228,10 +252,10 @@ pub fn render(
         footer_y + 4,
         ql_w - 32,
         20,
-        "Space / Esc: Dismiss    ↑ / ↓: Navigate Items",
+        &footer_text,
         FontFace::UiRegular,
         12.0,
-        Color::rgb(120, 125, 140),
+        Color::rgb(100, 105, 120),
     );
 }
 

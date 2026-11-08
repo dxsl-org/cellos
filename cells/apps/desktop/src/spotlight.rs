@@ -49,11 +49,12 @@ impl SpotlightSection {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpotlightAction {
     None,
     Close,
     LaunchApp(&'static str),
+    LaunchIntent(api::services::mime::LaunchIntent),
     TogglePin(&'static str),
     SwitchTask(usize),
     CycleTheme,
@@ -274,6 +275,79 @@ fn render_applications(
     state: &SpotlightState,
     sw: u32,
 ) {
+    if state.query.starts_with('/') {
+        let intent = api::services::mime::AssociationRegistry::resolve_intent(&state.query, None);
+        let app_name = api::services::mime::AssociationRegistry::default_app(intent.mime)
+            .map(|a| a.app_name)
+            .unwrap_or(intent.app_id);
+        let row_y = LIST_START_Y;
+        let row_w = sw.saturating_sub(28);
+        fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, theme::BTN_ACTIVE);
+        fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
+
+        draw_label(
+            surf,
+            fonts,
+            24,
+            row_y,
+            34,
+            ROW_HEIGHT,
+            intent.mime.icon_tag(),
+            FontFace::UiRegular,
+            14.0,
+            theme::ACCENT_CYAN,
+            true,
+        );
+
+        let text_x = 70;
+        let text_w = (run_x(sw) - 10 - text_x).max(0) as u32;
+        let name_height = (fonts.line_height(FontFace::UiSemibold, 15.0) + 1.0) as u32;
+        let desc_height = (fonts.line_height(FontFace::UiRegular, 13.0) + 1.0) as u32;
+        let text_y = row_y + (ROW_HEIGHT as i32 - name_height as i32 - desc_height as i32 - 4) / 2;
+
+        let title = alloc::format!("{} {}", intent.action.as_str(), state.query);
+        let desc = alloc::format!("Handler: {} · {}", app_name, intent.mime.display_name());
+        draw_label(
+            surf,
+            fonts,
+            text_x,
+            text_y,
+            text_w,
+            name_height,
+            &title,
+            FontFace::UiSemibold,
+            15.0,
+            theme::TEXT_PRIMARY,
+            false,
+        );
+        draw_label(
+            surf,
+            fonts,
+            text_x,
+            text_y + name_height as i32 + 4,
+            text_w,
+            desc_height,
+            &desc,
+            FontFace::UiRegular,
+            13.0,
+            theme::TEXT_MUTED,
+            false,
+        );
+
+        draw_button(
+            surf,
+            fonts,
+            run_x(sw),
+            row_y + ACTION_Y,
+            ACTION_WIDTH,
+            ACTION_HEIGHT,
+            intent.action.as_str(),
+            theme::BTN_NORMAL,
+            theme::BTN_HOVER,
+            theme::TEXT_PRIMARY,
+        );
+        return;
+    }
     let results = registry.filtered(&state.query);
     if results.is_empty() {
         draw_label(
@@ -625,13 +699,22 @@ pub fn handle_key(
         }
         KeySym::Return => match state.section {
             SpotlightSection::Cells => {
-                let results = registry.filtered(&state.query);
-                if let Some(app) = results.get(state.selected_index) {
-                    let path = app.path;
+                if state.query.starts_with('/') {
+                    let intent = api::services::mime::AssociationRegistry::resolve_intent(
+                        &state.query,
+                        None,
+                    );
                     state.close();
-                    SpotlightAction::LaunchApp(path)
+                    SpotlightAction::LaunchIntent(intent)
                 } else {
-                    SpotlightAction::None
+                    let results = registry.filtered(&state.query);
+                    if let Some(app) = results.get(state.selected_index) {
+                        let path = app.path;
+                        state.close();
+                        SpotlightAction::LaunchApp(path)
+                    } else {
+                        SpotlightAction::None
+                    }
                 }
             }
             SpotlightSection::ActiveCells => {
@@ -697,6 +780,19 @@ pub fn handle_click(
 
     match state.section {
         SpotlightSection::Cells => {
+            if state.query.starts_with('/') {
+                let row_y = LIST_START_Y;
+                let row_h = ROW_HEIGHT as i32;
+                if is_inside(x, y, 14, row_y, sw - 28, row_h as u32) {
+                    let intent = api::services::mime::AssociationRegistry::resolve_intent(
+                        &state.query,
+                        None,
+                    );
+                    state.close();
+                    return SpotlightAction::LaunchIntent(intent);
+                }
+                return SpotlightAction::None;
+            }
             let results = registry.filtered(&state.query);
             let total_results = results.len();
             let max_display = total_results.min(MAX_RESULTS);
@@ -823,5 +919,23 @@ mod tests {
         let act_esc = handle_key(&registry, &mut state, KeySym::Escape, None);
         assert_eq!(act_esc, SpotlightAction::Close);
         assert!(!state.is_open);
+    }
+    #[test]
+    fn test_spotlight_path_query_resolves_launch_intent() {
+        let registry = AppRegistry::new();
+        let mut state = SpotlightState::new();
+        state.open();
+        state.query = String::from("/data/manual.pdf");
+
+        let action = handle_key(&registry, &mut state, KeySym::Return, None);
+        match action {
+            SpotlightAction::LaunchIntent(intent) => {
+                assert_eq!(intent.target_path, "/data/manual.pdf");
+                assert_eq!(intent.mime, api::services::mime::MimeType::ApplicationPdf);
+                assert_eq!(intent.app_id, "ocel");
+                assert_eq!(intent.action, api::services::mime::FileAction::Open);
+            }
+            other => panic!("expected LaunchIntent, got {:?}", other),
+        }
     }
 }
