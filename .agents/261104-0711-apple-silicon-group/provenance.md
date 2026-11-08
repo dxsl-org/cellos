@@ -25,4 +25,10 @@ Note (2026-11-04, planning session): the planning session read the m1n1 `README.
 
 | Cellos file | Component | Sources (class, exact path + revision) | Notes |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| `hal/arch/arm/src/aarch64/translation_config.rs` | Translation config | Class D: Arm Architecture Reference Manual ARMv8 (DDI 0487) | PA/VA translation derivation |
+| `libs/tensor-math/src/neon.rs` | NEON SIMD kernels | Class D: Arm Architecture Reference Manual ARMv8 NEON intrinsics | `vmlaq_f32`, `vmull_s8`, `vpadalq_s16` |
+| `boards/apple/macmini-m1/board.rs` | Mac mini M1 descriptor | Class D: Linux `arch/arm64/boot/dts/apple/t8103-j274.dts` (MIT option) | DRAM base, peripherals, compatible strings |
+| `boards/apple/macmini-m2/board.rs` | Mac mini M2 descriptor | Class D: Linux `arch/arm64/boot/dts/apple/t8112-j473.dts` (MIT option) | DRAM base, peripherals, compatible strings |
+| `kernel/src/task/drivers/iommu_pt.rs` | Apple DART page table builder | Class P: OpenBSD `sys/arch/arm64/dev/apldart.c` (ISC) | 16 KiB granule, 2-level mapping, bypass refusal |
+| `libs/apple-rtkit/src/lib.rs` | Apple RTKit, SART, PartitionGuard | Class P: OpenBSD `aplrtk.c`, `aplmbox.c`, `aplsart.c` (ISC); Linux `soc/apple/{rtkit,mailbox,sart}.c` (MIT option) | 128-bit ASC mailbox, SART filtering, partition protection |
+| `docs/baremetal/apple-silicon.md` | Installation guide | Class D: m1n1 user guide (MIT tag `v1.9.9`), Asahi UEFI documentation | Partition layout, 1TR bputil, Limine EFI |

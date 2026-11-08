@@ -25,13 +25,13 @@ created: 2026-11-04
 | 01 | AS-1 | [m1n1 development bench and fact capture](phase-01-m1n1-bench-and-fact-capture.md) | bare metal | 00 | | S2-hv (no Cellos code) |
 | 02a | AS-2 | [Linux Image entry and VHE host regime](phase-02a-image-entry-and-vhe-host.md) | shared core | 00 | ✓ | S1-qemu |
 | 02b | AS-2 | [Paging: granule and wide physical address](phase-02b-paging-granule-and-wide-pa.md) | shared core | 02a | ✓ | S1-qemu |
-| 02c | AS-2 | [FIQ, spin-table, N harts, GICv3](phase-02c-fiq-spin-table-n-harts-gicv3.md) | shared core | 02a | | S1-qemu |
-| 03 | AS-3 | [Hosted track: guest on Apple Silicon macOS](phase-03-hosted-guest-on-macos.md) | hosted | 02a, 02c | | S1-hvf |
+| 02c | AS-2 | [FIQ, spin-table, N harts, GICv3](phase-02c-fiq-spin-table-n-harts-gicv3.md) | shared core | 02a | ✓ | S1-qemu |
+| 03 | AS-3 | [Hosted track: guest on Apple Silicon macOS](phase-03-hosted-guest-on-macos.md) | hosted | 02a, 02c | ✓ | S1-hvf |
 | 04 | AS-4 | [Bare-metal backend under the m1n1 hypervisor](phase-04-baremetal-backend-under-m1n1-hv.md) | bare metal | 01, 02a-02c | ✓ | S2-hv |
 | 05 | AS-5 | [DART, Apple PCIe, Ethernet, xHCI](phase-05-dart-pcie-ethernet-xhci.md) | bare metal | 04 | ✓ | S2-hv |
 | 06 | AS-6 | [Internal storage: ANS2 via RTKit and SART](phase-06-ans-storage-rtkit-sart.md) | bare metal | 05 | ✓ | S2-hv |
 | 07 | AS-7 | [Native boot and HCL qualification](phase-07-native-boot-and-hcl.md) | bare metal | 05, 06 | ✓ | S2 |
-| 08 | AS-8 | [CPU inference (NEON) and Haily measurement](phase-08-neon-inference-and-haily-measurement.md) | both | 03 or 07 | | S1-hvf / S2 |
+| 08 | AS-8 | [CPU inference (NEON) and Haily measurement](phase-08-neon-inference-and-haily-measurement.md) | both | 03 or 07 | ✓ | S1-hvf / S2 |
 | 09 | AS-9 | [Chip-generation expansion](phase-09-chip-generation-expansion.md) | bare metal | 07 | ✓ | S2 per chip |
 
 ```mermaid
