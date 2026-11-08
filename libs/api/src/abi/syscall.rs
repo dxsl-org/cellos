@@ -721,6 +721,32 @@ pub enum ViSyscall {
     /// Allowlist: SupervisorOp bit (49), shared with 413-415/419/422; the
     /// `SupervisorCap` check at dispatch is the authority gate.
     SystemPower = 436,
+    /// 437: Export client memory for device DMA ([`crate::dma_export`], ADR-0033).
+    ///
+    /// ABI: a0 = va, a1 = len, a2 = holder_service, a3 = flags → export_id.
+    /// Errors: [`crate::dma_export::ERR_INVALID_INPUT`],
+    /// [`crate::dma_export::ERR_PERMISSION_DENIED`],
+    /// [`crate::dma_export::ERR_FILE_NOT_FOUND`],
+    /// [`crate::dma_export::ERR_NOT_SUPPORTED`],
+    /// [`crate::dma_export::ERR_OUT_OF_MEMORY`].
+    /// Allowlist: none (dispatch gate).
+    ExportDmaRange = 437,
+    /// 438: Map client-exported DMA memory into holder domain ([`crate::dma_export`], ADR-0033).
+    ///
+    /// ABI: a0 = export_id, a1 = bdf, a2 = out_ptr, a3 = out_len (48) → 0 with
+    /// [`crate::dma_export::ViDmaExportV1`] written.
+    /// Allowlist: DriverRegistration bit (48), shared with [`Self::GrantDma`].
+    MapDmaExport = 438,
+    /// 439: Revoke client-memory DMA export ([`crate::dma_export`], ADR-0033).
+    ///
+    /// ABI: a0 = export_id, a1..a3 = 0 → 0.
+    /// Allowlist: none (dispatch gate).
+    RevokeDmaExport = 439,
+    /// 440: Manage Tier-2 large anonymous memory ([`crate::anon_memory`], ADR-0033).
+    ///
+    /// ABI: a0 = op, a1 = addr, a2 = len, a3 = prot/flags → base VA or 0.
+    /// Allowlist: none (dispatch gate).
+    AnonMemory = 440,
     /// 441: Resolve the kernel-measured image identity of one live Cell
     /// generation ([`crate::cell_image::CellImage`]).
     ///
@@ -1249,7 +1275,7 @@ impl ViSyscall {
             | Self::ReadGuestMemory => Some(44),
             // GrantDma (bit 48): PCIe DMA authorization. Cells that need to drive
             // hardware DMA (Driver Cells) declare this capability in their manifest.
-            Self::GrantDma => Some(48),
+            Self::GrantDma | Self::MapDmaExport => Some(48),
             // SupervisorOp (bit 49): freeze/resume/kill/query a live Cell.
             // Gated by SupervisorCap which is ONLY granted via direct kernel TCB write.
             Self::FreezeCell
@@ -1371,6 +1397,9 @@ impl ViSyscall {
             | Self::PipeShare
             // GetCpuCount returns scalar online hart count; carries no authority
             | Self::GetCpuCount
+            | Self::ExportDmaRange
+            | Self::RevokeDmaExport
+            | Self::AnonMemory
             | Self::Unknown => None,
          }
     }
@@ -1514,6 +1543,10 @@ impl From<usize> for ViSyscall {
             434 => ViSyscall::QueryPcieFunction,
             435 => ViSyscall::AllocPcieIrq,
             436 => ViSyscall::SystemPower,
+            437 => ViSyscall::ExportDmaRange,
+            438 => ViSyscall::MapDmaExport,
+            439 => ViSyscall::RevokeDmaExport,
+            440 => ViSyscall::AnonMemory,
             441 => ViSyscall::ResolveCellImage,
             _ => ViSyscall::Unknown,
         }
@@ -1613,8 +1646,8 @@ pub mod service {
     ///
     /// Ids 1–13 are the services above, 14 is
     /// [`crate::hypervisor::HYPERVISOR_SERVICE_ID`], 15 `AI`, 16 `OCEL_JS`,
-    /// 17 this producer role, 18 `OCEL_PDF`, 19 `OCEL_ACTIVATOR` and 20
-    /// `MACHINE_PIN`; next free: 21.
+    /// 17 this producer role, 18 `OCEL_PDF`, 19 `OCEL_ACTIVATOR`, 20
+    /// `MACHINE_PIN` and 21 `XE_GPU`; next free: 22.
     pub const USB_HID_PRODUCER: u16 = 17;
     /// Ocel's isolated native PDF rasterizer (`/bin/ocel-pdf`).
     pub const OCEL_PDF: u16 = 18;
@@ -1624,6 +1657,8 @@ pub mod service {
     /// kernel accepts this registration only from trusted init naming itself;
     /// the VFS admits the live provider alone to `/srv/.cellos-machine/`.
     pub const MACHINE_PIN: u16 = 20;
+    /// Intel GPU driver Cell serving the Linux `xe` uAPI over IPC (ADR-0033).
+    pub const XE_GPU: u16 = 21;
 }
 
 /// Arguments for `SpawnFromMem`.

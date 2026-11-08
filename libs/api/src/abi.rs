@@ -11,6 +11,7 @@
 //! - Only add at new explicit discriminant/offset values.
 //! - Even additions require 2× confirmation (they change the build contract).
 
+pub mod anon_memory;
 pub mod block_route;
 pub mod caller_identity;
 pub mod cap;
@@ -23,6 +24,9 @@ pub mod dir_attestation;
 pub mod dir_handles;
 pub mod dir_handles_tests;
 pub mod disk;
+pub mod dma_export;
+#[cfg(test)]
+mod dma_export_tests;
 pub mod fast_ipc;
 pub mod hypervisor;
 pub mod machine_facts;

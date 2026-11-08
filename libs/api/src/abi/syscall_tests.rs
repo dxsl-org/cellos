@@ -82,6 +82,10 @@ mod tests {
         (434, ViSyscall::QueryPcieFunction),
         (435, ViSyscall::AllocPcieIrq),
         (436, ViSyscall::SystemPower),
+        (437, ViSyscall::ExportDmaRange),
+        (438, ViSyscall::MapDmaExport),
+        (439, ViSyscall::RevokeDmaExport),
+        (440, ViSyscall::AnonMemory),
         (441, ViSyscall::ResolveCellImage),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
@@ -367,7 +371,6 @@ mod tests {
     fn system_power_shares_the_supervisor_op_bit() {
         assert_eq!(ViSyscall::SystemPower as usize, 436);
         assert_eq!(ViSyscall::from(436), ViSyscall::SystemPower);
-        assert_eq!(ViSyscall::from(437), ViSyscall::Unknown);
         assert_eq!(ViSyscall::SystemPower.allowlist_bit(), Some(49));
         assert_eq!(
             ViSyscall::SystemPower.allowlist_bit(),
@@ -379,19 +382,48 @@ mod tests {
         assert!(!SyscallSet::EMPTY.permits(ViSyscall::SystemPower));
     }
 
-    /// 441 skips the ADR-0033 provisional block (437-440), which must keep
-    /// decoding as Unknown, and needs no allowlist bit: the registered-VFS
+    /// 441 is ResolveCellImage, and needs no allowlist bit: the registered-VFS
     /// check at dispatch is the gate.
     #[test]
     fn resolve_cell_image_is_441_and_gated_at_dispatch() {
         assert_eq!(ViSyscall::ResolveCellImage as usize, 441);
         assert_eq!(ViSyscall::from(441), ViSyscall::ResolveCellImage);
-        for reserved in 437..=440 {
-            assert_eq!(ViSyscall::from(reserved), ViSyscall::Unknown);
-        }
         assert_eq!(ViSyscall::from(442), ViSyscall::Unknown);
         assert_eq!(ViSyscall::ResolveCellImage.allowlist_bit(), None);
         assert!(SyscallSet::EMPTY.permits(ViSyscall::ResolveCellImage));
+    }
+
+    /// 437-440 are the ADR-0033 GPU DMA export and AnonMemory syscalls.
+    /// 438 shares bit 48 with GrantDma; 437, 439, 440 have no allowlist bit.
+    #[test]
+    fn gpu_dma_export_and_anon_memory_syscalls() {
+        assert_eq!(ViSyscall::ExportDmaRange as usize, 437);
+        assert_eq!(ViSyscall::MapDmaExport as usize, 438);
+        assert_eq!(ViSyscall::RevokeDmaExport as usize, 439);
+        assert_eq!(ViSyscall::AnonMemory as usize, 440);
+
+        assert_eq!(ViSyscall::from(437), ViSyscall::ExportDmaRange);
+        assert_eq!(ViSyscall::from(438), ViSyscall::MapDmaExport);
+        assert_eq!(ViSyscall::from(439), ViSyscall::RevokeDmaExport);
+        assert_eq!(ViSyscall::from(440), ViSyscall::AnonMemory);
+
+        assert_eq!(ViSyscall::ExportDmaRange.allowlist_bit(), None);
+        assert_eq!(ViSyscall::MapDmaExport.allowlist_bit(), Some(48));
+        assert_eq!(ViSyscall::RevokeDmaExport.allowlist_bit(), None);
+        assert_eq!(ViSyscall::AnonMemory.allowlist_bit(), None);
+
+        assert_eq!(
+            ViSyscall::MapDmaExport.allowlist_bit(),
+            ViSyscall::GrantDma.allowlist_bit()
+        );
+        assert!(SyscallSet::EMPTY
+            .with(ViSyscall::GrantDma)
+            .permits(ViSyscall::MapDmaExport));
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::MapDmaExport));
+
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::ExportDmaRange));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::RevokeDmaExport));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::AnonMemory));
     }
 
     /// The 436 actions follow CP1 §5 (1 reboot, 2 poweroff) and its sentinels
