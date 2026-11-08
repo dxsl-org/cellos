@@ -11,6 +11,7 @@ use core::arch::aarch64::*;
 
 /// Hardware-accelerated f32 inner product using ARM NEON (4x unrolled).
 #[cfg(target_arch = "aarch64")]
+#[allow(inline_always_mismatching_target_features)]
 #[inline]
 pub unsafe fn dot_f32_neon(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len();
@@ -84,6 +85,7 @@ pub unsafe fn dot_f32_neon(a: &[f32], b: &[f32]) -> f32 {
 /// Uses `vmull_s8` widening multiply and `vpadalq_s16` pairwise accumulate for broad
 /// compatibility across all ARMv8.0+ cores (including Apple M1/M2/M3 and Cortex-A53/A72).
 #[cfg(target_arch = "aarch64")]
+#[allow(inline_always_mismatching_target_features)]
 #[inline]
 pub unsafe fn dot_q8_0_block_neon(w: &[u8; 32], x: &[u8; 32]) -> i32 {
     let w_ptr = w.as_ptr() as *const i8;
