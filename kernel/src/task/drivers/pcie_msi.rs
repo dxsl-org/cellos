@@ -56,9 +56,14 @@ static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 
 /// ISR: the pending flag first, then the early-sweep hint (one atomic store
 /// each, no lock), so a sweep that takes the hint sees the flag.
-fn on_msi(vector: u8) {
+/// If the vector belongs to the registered NIC driver, signal NET_RX for
+/// WaitCompletion(NET_RX) / WaitForEvent(NET_RX).
+pub(crate) fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
     irq_wait::hint_msi_wake();
+    if crate::task::drivers::driver_cell::owns_registered_nic_irq(vector as u32) {
+        crate::task::waker::signal_net_rx();
+    }
 }
 
 /// Install the MSI handler. `firmware_forbids_msi` is FADT IAPC_BOOT_ARCH
@@ -346,5 +351,41 @@ mod tests {
         assert!(!irq_wait::take_pending(b), "repend after revoke is a no-op");
         assert!(take_owned(NEW, a));
         assert_eq!(release_for(NEW), 1);
+    }
+
+    #[test]
+    fn on_msi_signals_net_rx_only_for_registered_nic() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        const NIC_TID: usize = 99_001;
+        const OTHER_TID: usize = 99_002;
+        let nic_alloc = allocate_for_test(NIC_TID, 0x0010, 1);
+        let other_alloc = allocate_for_test(OTHER_TID, 0x0020, 1);
+
+        // Clear any leftover pending NET_RX.
+        let _ = crate::task::waker::consume_pending(api::syscall::events::NET_RX);
+
+        // MSI for non-NIC driver: signals IRQ but does NOT signal NET_RX.
+        on_msi(other_alloc.first_irq);
+        assert!(irq_wait::take_pending(other_alloc.first_irq));
+        assert_eq!(
+            crate::task::waker::consume_pending(api::syscall::events::NET_RX),
+            0
+        );
+
+        // Register NIC driver.
+        crate::task::drivers::driver_cell::register_nic_driver(NIC_TID);
+
+        // MSI for NIC driver: signals IRQ AND signals NET_RX.
+        on_msi(nic_alloc.first_irq);
+        assert!(irq_wait::take_pending(nic_alloc.first_irq));
+        assert_eq!(
+            crate::task::waker::consume_pending(api::syscall::events::NET_RX),
+            api::syscall::events::NET_RX
+        );
+
+        // Deregister NIC driver.
+        crate::task::drivers::driver_cell::deregister_nic_driver(NIC_TID);
+        release_for(NIC_TID);
+        release_for(OTHER_TID);
     }
 }

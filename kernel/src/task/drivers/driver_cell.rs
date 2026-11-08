@@ -268,10 +268,24 @@ pub fn deregister_nic_driver(tid: usize) {
     }
 }
 
-/// Returns true only for the cached VirtIO IRQ proven to belong to the active NIC.
+/// Returns true only for the cached VirtIO IRQ proven to belong to the active NIC,
+/// or (on x86_64) a PCIe MSI vector allocated to the registered NIC driver.
 pub fn owns_registered_nic_irq(irq: u32) -> bool {
-    let state = NIC_DRIVER_STATE.lock();
-    state.owner_tid != 0 && irq != 0 && state.virtio_irq == irq
+    let (owner_tid, virtio_irq) = {
+        let state = NIC_DRIVER_STATE.lock();
+        (state.owner_tid, state.virtio_irq)
+    };
+    if owner_tid == 0 || irq == 0 {
+        return false;
+    }
+    if virtio_irq == irq {
+        return true;
+    }
+    #[cfg(target_arch = "x86_64")]
+    if irq <= 0xFF && crate::task::drivers::pcie_msi::irq_owned_by(irq as u8, owner_tid) {
+        return true;
+    }
+    false
 }
 
 /// Record `tid` as the active GPU driver.  Overwrites any previous registration.
@@ -351,9 +365,9 @@ pub fn deregister_all_for(tid: usize) {
 #[cfg(test)]
 mod tests {
     use super::{
-        block_route_record, deregister_all_for, publish_block_route, publish_role_or_rollback,
-        reset_block_routes, BlockDeviceName, NicDriverState, GPU_DRIVER_CELL, INPUT_CELL_TID,
-        NIC_DRIVER_STATE, USB_HID_PRODUCER_CELL,
+        block_route_record, deregister_all_for, owns_registered_nic_irq, publish_block_route,
+        publish_role_or_rollback, reset_block_routes, BlockDeviceName, NicDriverState,
+        GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE, USB_HID_PRODUCER_CELL,
     };
     use api::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI, MAX_BLOCK_ROUTES};
     use core::sync::atomic::{AtomicUsize, Ordering};
@@ -424,6 +438,41 @@ mod tests {
             "stale NIC IRQ cache must not survive owner teardown"
         );
 
+        reset_roles();
+    }
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn owns_registered_nic_irq_recognizes_pcie_msi_on_x86() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        reset_roles();
+        const NIC_OWNER: usize = 88_001;
+        const OTHER_OWNER: usize = 88_002;
+        let nic_alloc = crate::task::drivers::pcie_msi::allocate_for_test(NIC_OWNER, 0x0010, 2);
+        let other_alloc = crate::task::drivers::pcie_msi::allocate_for_test(OTHER_OWNER, 0x0020, 2);
+
+        // Before registration, neither is recognized.
+        assert!(!owns_registered_nic_irq(nic_alloc.first_irq as u32));
+        assert!(!owns_registered_nic_irq(other_alloc.first_irq as u32));
+
+        // Register NIC owner.
+        *NIC_DRIVER_STATE.lock() = NicDriverState {
+            owner_tid: NIC_OWNER,
+            virtio_irq: 0,
+        };
+
+        // NIC owner's MSI vectors are recognized.
+        assert!(owns_registered_nic_irq(nic_alloc.first_irq as u32));
+        assert!(owns_registered_nic_irq((nic_alloc.first_irq + 1) as u32));
+        // Other owner's vectors or unallocated vectors are refused.
+        assert!(!owns_registered_nic_irq(other_alloc.first_irq as u32));
+        assert!(!owns_registered_nic_irq(0xFE));
+
+        // Teardown clears recognition.
+        deregister_all_for(NIC_OWNER);
+        assert!(!owns_registered_nic_irq(nic_alloc.first_irq as u32));
+
+        crate::task::drivers::pcie_msi::release_for(NIC_OWNER);
+        crate::task::drivers::pcie_msi::release_for(OTHER_OWNER);
         reset_roles();
     }
 
