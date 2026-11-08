@@ -36,8 +36,12 @@ const OFF_ES: usize = 0x400;
 const OFF_CS: usize = 0x410;
 const OFF_SS: usize = 0x420;
 const OFF_DS: usize = 0x430;
+const OFF_FS: usize = 0x440;
+const OFF_GS: usize = 0x450;
 const OFF_GDTR: usize = 0x460;
+const OFF_LDTR: usize = 0x470;
 const OFF_IDTR: usize = 0x480;
+const OFF_TR: usize = 0x490;
 const OFF_CPL: usize = 0x4CB;
 const OFF_EFER: usize = 0x4D0;
 pub(crate) const OFF_CR4: usize = 0x548;
@@ -115,6 +119,7 @@ const GPAT_DEFAULT: u64 = 0x0007_0406_0007_0406;
 // Flat-segment packed attributes (AMD 12-bit form).
 const ATTR_CODE32: u16 = 0xC9B; // P,S,code(exec/read),DB=1,G=1,L=0
 const ATTR_DATA: u16 = 0xC93; // P,S,data(read/write),DB=1,G=1
+const ATTR_TSS32: u16 = 0x08B; // P,system(S=0),32-bit TSS busy (type=11)
 
 /// A view over a caller-owned, 4 KiB-aligned VMCB frame.
 pub struct VmcbView {
@@ -176,7 +181,11 @@ impl VmcbView {
         self.set_segment(OFF_DS, 0x10, ATTR_DATA);
         self.set_segment(OFF_ES, 0x10, ATTR_DATA);
         self.set_segment(OFF_SS, 0x10, ATTR_DATA);
-        self.set_dtr(OFF_GDTR, gdt_gpa, 0x17);
+        self.set_segment(OFF_FS, 0x10, ATTR_DATA);
+        self.set_segment(OFF_GS, 0x10, ATTR_DATA);
+        self.set_segment_with_limit(OFF_TR, 0x18, ATTR_TSS32, 0x67);
+        self.set_segment_with_limit(OFF_LDTR, 0, 0, 0);
+        self.set_dtr(OFF_GDTR, gdt_gpa, if gdt_gpa == 0 { 0 } else { 0x17 });
         self.set_dtr(OFF_IDTR, 0, 0);
         self.w8(OFF_CPL, 0);
         self.w64(OFF_EFER, EFER_SVME);
@@ -228,11 +237,15 @@ impl VmcbView {
         unsafe { core::ptr::write_volatile(self.base.add(off), val) }
     }
 
-    fn set_segment(&mut self, off: usize, selector: u16, attrib: u16) {
+    fn set_segment_with_limit(&mut self, off: usize, selector: u16, attrib: u16, limit: u32) {
         self.w16(off, selector);
         self.w16(off + 2, attrib);
-        self.w32(off + 4, 0xFFFF_FFFF); // flat 4 GiB limit (G=1)
-        self.w64(off + 8, 0);
+        self.w32(off + 4, limit);
+        self.w64(off + 8, 0); // base = 0
+    }
+
+    fn set_segment(&mut self, off: usize, selector: u16, attrib: u16) {
+        self.set_segment_with_limit(off, selector, attrib, 0xFFFF_FFFF); // flat 4 GiB limit (G=1)
     }
 
     fn set_dtr(&mut self, off: usize, base: u64, limit: u32) {
