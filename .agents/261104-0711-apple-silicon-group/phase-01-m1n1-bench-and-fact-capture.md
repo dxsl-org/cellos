@@ -60,7 +60,7 @@ flowchart LR
 - [ ] Machine identity
 - [ ] Asahi install and captures
 - [ ] Proxy and hypervisor loop from the dev host
-- [ ] Bench guide
+- [x] Bench guide (`docs/baremetal/apple-silicon-bench.md`, `tools/apple-host/run-m1n1-proxy.sh`, `dump-m1-facts.sh`)
 
 ## Success Criteria
 
