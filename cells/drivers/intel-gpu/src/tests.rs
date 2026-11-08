@@ -145,3 +145,65 @@ fn guc_upload_invalid_size_rejected() {
         Err(ViError::InvalidArgument)
     );
 }
+#[test]
+fn client_vm_ppgtt_bind_and_translate() {
+    use crate::ppgtt_store::ClientVm;
+    use intel_gpu_core::pte::PatIndex;
+
+    let mut vm = ClientVm::new_ptl(1).unwrap();
+    assert_ne!(vm.root_table(), 0);
+
+    // Bind 16 KiB (4 pages) at VA 0x100000 to PA 0x200000
+    let va_base = 0x100000;
+    let pa_base = 0x200000;
+    let size = 16384;
+    assert_eq!(
+        vm.bind_range(va_base, pa_base, size, true, PatIndex::WB),
+        Ok(())
+    );
+
+    // Verify all 4 pages translate correctly
+    for i in 0..4 {
+        let va = va_base + i * 4096;
+        let expected_pa = pa_base + i * 4096;
+        assert_eq!(vm.translate(va), Ok(Some(expected_pa)));
+        // Byte offset within page preserved
+        assert_eq!(vm.translate(va + 0x123), Ok(Some(expected_pa + 0x123)));
+    }
+
+    // Unmapped address translates to None
+    assert_eq!(vm.translate(0x500000), Ok(None));
+
+    // Double mapping returns AlreadyExists
+    assert_eq!(
+        vm.bind_range(va_base, pa_base, 4096, true, PatIndex::WB),
+        Err(ViError::AlreadyExists)
+    );
+
+    // Unbind range
+    assert_eq!(vm.unbind_range(va_base, size), Ok(()));
+    assert_eq!(vm.translate(va_base), Ok(None));
+}
+
+#[test]
+fn client_vm_misaligned_bind_rejected() {
+    use crate::ppgtt_store::ClientVm;
+    use intel_gpu_core::pte::PatIndex;
+
+    let mut vm = ClientVm::new_ptl(2).unwrap();
+    // Misaligned VA
+    assert_eq!(
+        vm.bind_range(0x1001, 0x2000, 4096, true, PatIndex::WB),
+        Err(ViError::InvalidArgument)
+    );
+    // Misaligned PA
+    assert_eq!(
+        vm.bind_range(0x1000, 0x2001, 4096, true, PatIndex::WB),
+        Err(ViError::InvalidArgument)
+    );
+    // Misaligned size
+    assert_eq!(
+        vm.bind_range(0x1000, 0x2000, 4095, true, PatIndex::WB),
+        Err(ViError::InvalidArgument)
+    );
+}

@@ -14,6 +14,7 @@ mod forcewake;
 mod ggtt;
 mod guc;
 mod identity;
+mod ppgtt_store;
 mod regs;
 
 #[cfg(test)]

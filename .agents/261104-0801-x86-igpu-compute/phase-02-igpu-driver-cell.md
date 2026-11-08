@@ -67,7 +67,7 @@ Pre-hardware progress (2026-11-04): the hardware-independent parts are in `libs/
 
 - [x] Probe/forcewake
 - [x] GuC up
-- [ ] PPGTT
+- [x] PPGTT
 - [ ] First light
 - [ ] Fences/reset
 - [ ] Physical capture
