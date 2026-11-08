@@ -26,6 +26,7 @@
 
 use core::fmt;
 
+pub mod neon;
 pub mod quant;
 
 /// Errors that are the caller's fault (shape mismatch), never arithmetic faults.
@@ -188,10 +189,20 @@ pub fn matvec_q8_0_int8(
             };
             let d_w = quant::f16_to_f32(u16::from_le_bytes([w_lo, w_hi]));
             let d_a = quant::f16_to_f32(u16::from_le_bytes([a_lo, a_hi]));
-            let mut sum = 0i32;
-            for (&weight, &activation) in block[2..].iter().zip(&vector[2..]) {
-                sum += i32::from(weight as i8) * i32::from(activation as i8);
-            }
+            #[cfg(target_arch = "aarch64")]
+            let sum = unsafe {
+                let w_arr: &[u8; 32] = block[2..34].try_into().unwrap();
+                let x_arr: &[u8; 32] = vector[2..34].try_into().unwrap();
+                neon::dot_q8_0_block_neon(w_arr, x_arr)
+            };
+            #[cfg(not(target_arch = "aarch64"))]
+            let sum = {
+                let mut s = 0i32;
+                for (&weight, &activation) in block[2..].iter().zip(&vector[2..]) {
+                    s += i32::from(weight as i8) * i32::from(activation as i8);
+                }
+                s
+            };
             acc[index % 4] += (d_w * d_a) * sum as f32;
         }
         *slot = reduce_lanes(acc);
@@ -545,9 +556,16 @@ fn reduce_lanes(acc: [f32; 4]) -> f32 {
 /// Sequential f32 inner product over equally long slices.
 #[inline]
 fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
-    let mut acc = [0.0f32; 4];
-    accumulate_products(&mut acc, a, b);
-    reduce_lanes(acc)
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        neon::dot_f32_neon(a, b)
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let mut acc = [0.0f32; 4];
+        accumulate_products(&mut acc, a, b);
+        reduce_lanes(acc)
+    }
 }
 
 #[cfg(test)]

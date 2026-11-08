@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "CPU inference (NEON) and Haily measurement"
-status: pending
+status: "blocked: hardware (NEON kernels and host tests complete; benchmark capture pending physical Apple Silicon machine)"
 priority: P2
 effort: "8d"
 dependencies: ["3 or 7"]
@@ -46,9 +46,9 @@ Make the native inference path useful on Apple CPUs (NEON dot products for `Q8_0
 
 ## Todo List
 
-- [ ] Baseline
-- [ ] NEON kernels + tests
-- [ ] Comparison report
+- [x] Baseline
+- [x] NEON kernels + tests
+- [ ] Comparison report (pending physical Apple Silicon machine capture per contract)
 
 ## Success Criteria
 
