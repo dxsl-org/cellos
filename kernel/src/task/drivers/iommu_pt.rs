@@ -487,3 +487,204 @@ fn report(marker: &str, ok: bool) {
         log::error!("{marker}: FAIL");
     }
 }
+// ── Apple DART (Device Address Resolution Table, Phase 05) ─────────────────────
+
+pub const DART_PAGE_SIZE: usize = 16384;
+pub const DART_PAGE_MASK: u64 = 0x3FFF;
+pub const DART_PTE_VALID: u64 = 1 << 0;
+pub const DART_PTE_READ: u64 = 1 << 1;
+pub const DART_PTE_WRITE: u64 = 1 << 2;
+pub const DART_PTE_ADDR_MASK: u64 = 0x0000_FFFF_FFFF_C000;
+pub const DART_ENTRIES_PER_TABLE: usize = 2048; // 16 KiB / 8 bytes
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DartError {
+    BypassForbidden,
+    Misaligned,
+}
+
+fn alloc_dart_page() -> (usize, u64) {
+    let layout = Layout::from_size_align(16384, 16384).expect("iommu_pt: dart page");
+    let ptr = {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
+        (unsafe { alloc_zeroed(layout) }) as usize
+    };
+    assert!(ptr != 0, "[iommu_pt] OOM allocating DART 16 KiB page");
+    (ptr, virt_to_phys(ptr))
+}
+
+/// 2-level identity-mapping page table for Apple DART IOMMU (16 KiB pages).
+pub struct AppleDartPt {
+    root_phys: u64,
+    root_virt: usize,
+}
+
+unsafe impl Send for AppleDartPt {}
+
+impl Default for AppleDartPt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AppleDartPt {
+    pub fn new() -> Self {
+        let (v, p) = alloc_dart_page();
+        Self {
+            root_phys: p,
+            root_virt: v,
+        }
+    }
+
+    pub fn root_phys(&self) -> u64 {
+        self.root_phys
+    }
+
+    /// Add an identity mapping (IOVA == PA) for [phys, phys+size), padded to 16 KiB pages. Idempotent.
+    pub fn map_range(&self, phys: u64, size: usize) {
+        let start = phys & !DART_PAGE_MASK;
+        let end = (phys + size as u64 + DART_PAGE_MASK) & !DART_PAGE_MASK;
+        let mut pa = start;
+        while pa < end {
+            self.map_page(pa);
+            pa += DART_PAGE_SIZE as u64;
+        }
+    }
+
+    fn map_page(&self, pa: u64) {
+        let l1_idx = ((pa >> 25) & 0x7FF) as usize;
+        let l2_idx = ((pa >> 14) & 0x7FF) as usize;
+        let l2_table_phys = self.get_or_alloc_l2(l1_idx);
+        let l2_virt = phys_to_virt_inner(l2_table_phys);
+        let pte_addr = (l2_virt + l2_idx * 8) as *mut u64;
+        let pte = (pa & DART_PTE_ADDR_MASK) | DART_PTE_VALID | DART_PTE_READ | DART_PTE_WRITE;
+        unsafe {
+            pte_addr.write_volatile(pte);
+        }
+    }
+
+    fn get_or_alloc_l2(&self, l1_idx: usize) -> u64 {
+        let entry_ptr = (self.root_virt + l1_idx * 8) as *mut u64;
+        let current = unsafe { entry_ptr.read_volatile() };
+        if current & DART_PTE_VALID != 0 {
+            current & DART_PTE_ADDR_MASK
+        } else {
+            let (_, p) = alloc_dart_page();
+            let entry = (p & DART_PTE_ADDR_MASK) | DART_PTE_VALID;
+            unsafe {
+                entry_ptr.write_volatile(entry);
+            }
+            p
+        }
+    }
+
+    /// Clear identity mappings for [phys, phys+size), returning the number of 16 KiB pages unmapped.
+    pub fn unmap_range(&self, phys: u64, size: usize) -> usize {
+        let start = phys & !DART_PAGE_MASK;
+        let end = (phys + size as u64 + DART_PAGE_MASK) & !DART_PAGE_MASK;
+        let mut pa = start;
+        let mut count = 0;
+        while pa < end {
+            if self.unmap_page(pa) {
+                count += 1;
+            }
+            pa += DART_PAGE_SIZE as u64;
+        }
+        count
+    }
+
+    fn unmap_page(&self, pa: u64) -> bool {
+        let l1_idx = ((pa >> 25) & 0x7FF) as usize;
+        let l2_idx = ((pa >> 14) & 0x7FF) as usize;
+        let l1_entry_ptr = (self.root_virt + l1_idx * 8) as *const u64;
+        let l1_entry = unsafe { l1_entry_ptr.read_volatile() };
+        if l1_entry & DART_PTE_VALID == 0 {
+            return false;
+        }
+        let l2_table_phys = l1_entry & DART_PTE_ADDR_MASK;
+        let l2_virt = phys_to_virt_inner(l2_table_phys);
+        let pte_addr = (l2_virt + l2_idx * 8) as *mut u64;
+        let old = unsafe { pte_addr.read_volatile() };
+        if old & DART_PTE_VALID != 0 {
+            unsafe {
+                pte_addr.write_volatile(0);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Apple DART stream bypass is forbidden under DmaIsolation::Required.
+    pub fn set_bypass(&self, enable: bool) -> Result<(), DartError> {
+        if enable {
+            Err(DartError::BypassForbidden)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn is_bypass_enabled(&self) -> bool {
+        false
+    }
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub(crate) fn leaf_present(&self, pa: u64) -> bool {
+        let l1_idx = ((pa >> 25) & 0x7FF) as usize;
+        let l2_idx = ((pa >> 14) & 0x7FF) as usize;
+        let l1_entry_ptr = (self.root_virt + l1_idx * 8) as *const u64;
+        let l1_entry = unsafe { l1_entry_ptr.read_volatile() };
+        if l1_entry & DART_PTE_VALID == 0 {
+            return false;
+        }
+        let l2_table_phys = l1_entry & DART_PTE_ADDR_MASK;
+        let l2_virt = phys_to_virt_inner(l2_table_phys);
+        let pte_addr = (l2_virt + l2_idx * 8) as *const u64;
+        unsafe { pte_addr.read_volatile() & DART_PTE_VALID != 0 }
+    }
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub(crate) fn level1_present(&self, pa: u64) -> bool {
+        let l1_idx = ((pa >> 25) & 0x7FF) as usize;
+        let l1_entry_ptr = (self.root_virt + l1_idx * 8) as *const u64;
+        unsafe { l1_entry_ptr.read_volatile() & DART_PTE_VALID != 0 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dart_16k_mapping_and_bypass_refusal() {
+        let pt = AppleDartPt::new();
+        assert_eq!(pt.set_bypass(true), Err(DartError::BypassForbidden));
+        assert!(!pt.is_bypass_enabled());
+
+        const BASE: u64 = 0x8_0000_0000; // 32 GiB base on Apple Silicon M1
+        const PAGE_16K: usize = 16384;
+
+        // Map 3 pages (48 KiB)
+        pt.map_range(BASE, 3 * PAGE_16K);
+        assert!(pt.leaf_present(BASE));
+        assert!(pt.leaf_present(BASE + PAGE_16K as u64));
+        assert!(pt.leaf_present(BASE + 2 * PAGE_16K as u64));
+        assert!(!pt.leaf_present(BASE + 3 * PAGE_16K as u64));
+
+        // Unmap middle page
+        let unmapped = pt.unmap_range(BASE + PAGE_16K as u64, PAGE_16K);
+        assert_eq!(unmapped, 1);
+        assert!(pt.leaf_present(BASE));
+        assert!(!pt.leaf_present(BASE + PAGE_16K as u64));
+        assert!(pt.leaf_present(BASE + 2 * PAGE_16K as u64));
+
+        // Unmapping again is idempotent
+        assert_eq!(pt.unmap_range(BASE + PAGE_16K as u64, PAGE_16K), 0);
+
+        // Remap middle page
+        pt.map_range(BASE + PAGE_16K as u64, PAGE_16K);
+        assert!(pt.leaf_present(BASE + PAGE_16K as u64));
+    }
+}

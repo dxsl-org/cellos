@@ -36,8 +36,7 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 - [ ] **Ginux Phase 02 debt #23 (owner admission)** — blocked bởi
   [tier1-baseline-admission](260821-1700-tier1-baseline-admission/plan.md) Phase 03
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
-- [ ] **SVM-guest triple fault in the x86 VMM smoke on TCG** (`[hv-x86] guest triple-fault: rip=0x6663`, `X86-VMM-SMOKE: FAIL … Shutdown`). Exposed by slice VH (`7b8f42eea`), which lets the smoke guest actually run; before it the smoke stopped at `Preempted`. The smoke only logs, so boots are unaffected. Not investigated ([VH record](261103-2218-x86-platform-breadth/slice-vmx-host-state-repair.md)).
-- [ ] **04b follow-up evidence (owner CP2-04b-3):** the `async_lifecycle` bench with the IRQ source, and the MSI-to-wake latency with the wake hint disabled (baseline for the 14 µs idle-KVM median) ([CP2](261103-2218-x86-platform-breadth/cp2-04b-waitcompletion-irq-approval.md)).
+- [ ] **04b follow-up evidence (owner CP2-04b-3):** the MSI-to-wake latency with the wake hint disabled (baseline for the 14 µs idle-KVM median) ([CP2](261103-2218-x86-platform-breadth/cp2-04b-waitcompletion-irq-approval.md)); `async_lifecycle` IRQ bench landed (`48d40d06c`).
 
 **C2C program (mở, có gate):**
 - [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical

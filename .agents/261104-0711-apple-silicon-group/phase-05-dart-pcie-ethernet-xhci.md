@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "DART IOMMU, Apple PCIe, Ethernet and xHCI"
-status: pending
+status: "blocked: hardware (DART 16 KiB page table builder and host tests complete; live S2-hv boot pending physical Mac mini M1 hardware per contract)"
 priority: P2
 effort: "12d + hardware"
 dependencies: ["4"]
@@ -51,16 +51,16 @@ DART behind the IOMMU trait, the Apple PCIe root complex (per-port link-up, ECAM
 
 ## Todo List
 
-- [ ] DART + host tests
-- [ ] PCIe enumeration
-- [ ] xHCI
-- [ ] Ethernet
-- [ ] DART fault test
+- [x] DART + host tests (`AppleDartPt` in `kernel/src/task/drivers/iommu_pt.rs`: 16 KiB pages, L1/L2 tables, bypass refusal)
+- [ ] PCIe enumeration (S2-hv pending hardware)
+- [ ] xHCI (S2-hv pending hardware)
+- [ ] Ethernet (S2-hv pending hardware)
+- [ ] DART fault test (S2-hv pending hardware)
 
 ## Success Criteria
 
 - [ ] S2-hv: DHCP Tx/Rx over the on-board Ethernet, USB keyboard input at the shell, a DART fault captured with no memory corruption.
-- [ ] Host tests cover DART mapping, padding and the bypass refusal.
+- [x] Host tests cover DART mapping, padding and the bypass refusal (`dart_16k_mapping_and_bypass_refusal`).
 
 ## Risk Assessment
 
