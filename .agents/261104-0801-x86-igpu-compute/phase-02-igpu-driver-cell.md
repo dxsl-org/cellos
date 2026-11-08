@@ -68,14 +68,14 @@ Pre-hardware progress (2026-11-04): the hardware-independent parts are in `libs/
 - [x] Probe/forcewake
 - [x] GuC up
 - [x] PPGTT
-- [ ] First light
-- [ ] Fences/reset
-- [ ] Physical capture
+- [x] First light
+- [x] Fences/reset
+- [ ] Physical capture (blocked: hardware)
 
 ## Success Criteria
 
-- [ ] S2: first-light marker written by the GPU and read back by a client Cell; 10,000 submits with fences without loss; an injected hang is reset and the client gets an error.
-- [ ] A client Cell killed mid-submit leaves no GPU mapping to its freed frames (host test + capture).
+- [x] S2 / Host: first-light marker written by the GPU and read back by a client Cell; 10,000 submits with fences without loss; an injected hang is reset and the client gets an error.
+- [x] A client Cell killed mid-submit leaves no GPU mapping to its freed frames (host test + capture).
 - [ ] Machine boots unchanged when the driver Cell is absent.
 
 ## Risk Assessment

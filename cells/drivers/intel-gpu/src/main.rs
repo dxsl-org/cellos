@@ -7,6 +7,7 @@
 #![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
+mod batch;
 mod controller;
 #[cfg(test)]
 mod fake;

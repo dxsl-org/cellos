@@ -207,3 +207,161 @@ fn client_vm_misaligned_bind_rejected() {
         Err(ViError::InvalidArgument)
     );
 }
+#[test]
+fn first_light_marker_write_and_readback() {
+    use crate::batch::{build_store_marker_batch, simulate_gpu_execution};
+    use crate::ppgtt_store::ClientVm;
+    use intel_gpu_core::pte::PatIndex;
+
+    // 1. Create client VM with 48-bit PTL PPGTT
+    let mut vm = ClientVm::new_ptl(1).unwrap();
+
+    // 2. Simulated physical memory buffer (64 KiB starting at PA 0x200000)
+    let phys_base: u64 = 0x200000;
+    let mut phys_mem = alloc::vec![0u8; 64 * 1024];
+
+    // 3. Map batch buffer at VA 0x100000 (PA 0x200000)
+    let batch_va: u64 = 0x100000;
+    let batch_pa: u64 = 0x200000;
+    vm.bind_range(batch_va, batch_pa, 4096, true, PatIndex::WB)
+        .unwrap();
+
+    // 4. Map target output buffer at VA 0x110000 (PA 0x204000)
+    let target_va: u64 = 0x110000;
+    let target_pa: u64 = 0x204000;
+    vm.bind_range(target_va, target_pa, 4096, true, PatIndex::WB)
+        .unwrap();
+
+    // 5. Construct batch buffer: MI_STORE_DATA_IMM writing 0xDEAD_BEEF to target_va
+    let marker: u32 = 0xDEAD_BEEF;
+    let batch_words = build_store_marker_batch(target_va, marker);
+
+    // Copy batch words into simulated physical memory at batch_pa offset
+    let batch_mem_offset = (batch_pa - phys_base) as usize;
+    for (i, &word) in batch_words.iter().enumerate() {
+        let off = batch_mem_offset + i * 4;
+        phys_mem[off..off + 4].copy_from_slice(&word.to_le_bytes());
+    }
+
+    // Target memory is initially zero
+    let target_mem_offset = (target_pa - phys_base) as usize;
+    assert_eq!(
+        &phys_mem[target_mem_offset..target_mem_offset + 4],
+        &[0, 0, 0, 0]
+    );
+
+    // 6. Simulate GPU execution of the batch buffer
+    let insn_count = simulate_gpu_execution(&mut vm, batch_va, &mut phys_mem, phys_base).unwrap();
+    assert_eq!(insn_count, 2); // 1 MI_STORE_DATA_IMM + 1 MI_BATCH_BUFFER_END
+
+    // 7. Verify the marker was written by the GPU to target memory and read back
+    let read_back = u32::from_le_bytes([
+        phys_mem[target_mem_offset],
+        phys_mem[target_mem_offset + 1],
+        phys_mem[target_mem_offset + 2],
+        phys_mem[target_mem_offset + 3],
+    ]);
+    assert_eq!(read_back, marker);
+}
+
+#[test]
+fn stress_10000_submits_with_fences_without_loss() {
+    use intel_gpu_core::backend::*;
+    use intel_gpu_core::syncobj::*;
+
+    let mut session = XeSession::new();
+    let mut syncobjs = Syncobjs::new();
+
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4096, 501, vm_id, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+
+    let op = BindOp {
+        op: XE_VM_BIND_OP_MAP,
+        flags: 0,
+        gem_handle: bo,
+        obj_offset: 0,
+        addr: 0x10000,
+        range: 4096,
+        pat_index: 0,
+    };
+    session.vm_bind(vm_id, &[op]).unwrap();
+
+    let q_id = session
+        .exec_queue_create(vm_id, XE_ENGINE_CLASS_RENDER, XE_EXEC_QUEUE_PRIORITY_NORMAL)
+        .unwrap();
+
+    // 10,000 submit and complete cycle
+    for i in 0..10_000 {
+        let fence = syncobjs.new_fence();
+        let sync_h = syncobjs.create(0).unwrap();
+        syncobjs.attach(sync_h, 0, fence).unwrap();
+
+        let job_id = session.exec(q_id, 0x10000, 0, Some(fence)).unwrap();
+        assert_eq!(
+            syncobjs.poll_wait(&[sync_h], &[0], WAIT_ALL, false),
+            Ok(WaitState::Pending)
+        );
+
+        // Complete job
+        session.complete_job(q_id, job_id, &mut syncobjs).unwrap();
+        assert_eq!(
+            syncobjs.poll_wait(&[sync_h], &[0], WAIT_ALL, false),
+            Ok(WaitState::Ready { first: 0 })
+        );
+
+        // Clean up syncobj handle
+        syncobjs.destroy(sync_h).unwrap();
+    }
+}
+
+#[test]
+fn injected_hang_reset_and_client_error() {
+    use intel_gpu_core::backend::*;
+    use intel_gpu_core::syncobj::*;
+
+    let mut session = XeSession::new();
+    let mut syncobjs = Syncobjs::new();
+
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4096, 601, vm_id, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+
+    let op = BindOp {
+        op: XE_VM_BIND_OP_MAP,
+        flags: 0,
+        gem_handle: bo,
+        obj_offset: 0,
+        addr: 0x10000,
+        range: 4096,
+        pat_index: 0,
+    };
+    session.vm_bind(vm_id, &[op]).unwrap();
+
+    let q_id = session
+        .exec_queue_create(vm_id, XE_ENGINE_CLASS_RENDER, XE_EXEC_QUEUE_PRIORITY_NORMAL)
+        .unwrap();
+
+    let fence1 = syncobjs.new_fence();
+    let fence2 = syncobjs.new_fence();
+    let job1 = session.exec(q_id, 0x10000, 0, Some(fence1)).unwrap();
+    let _job2 = session.exec(q_id, 0x10000, 0, Some(fence2)).unwrap();
+
+    // Inject GPU hang
+    session.inject_hang(q_id, &mut syncobjs).unwrap();
+    assert_eq!(
+        session.exec_queue_get_property_ban(q_id),
+        Ok(XE_EXEC_QUEUE_BAN_FLAG_HANG)
+    );
+
+    // Banned queue rejects new submits with -ECANCELED
+    assert_eq!(session.exec(q_id, 0x10000, 0, None), Err(XeError::Canceled));
+
+    // Trying to complete jobs on banned queue fails
+    assert_eq!(
+        session.complete_job(q_id, job1, &mut syncobjs),
+        Err(XeError::NoEntry)
+    );
+}
