@@ -468,6 +468,7 @@ const AARCH64_BOARD: &BoardDescriptor =
         hal::aarch64::backend::ArmSoc::Bcm2711 => {
             &cellos_boards::raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B
         }
+        hal::aarch64::backend::ArmSoc::AppleT8103 => &cellos_boards::apple_macmini_m1::MACMINI_M1,
     };
 
 #[cfg(target_arch = "aarch64")]

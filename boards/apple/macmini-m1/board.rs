@@ -11,12 +11,20 @@ const DRIVERS: [DriverId; 2] = [DriverId::UartAppleS5l, DriverId::IrqAppleAic1];
 /// Fallback DRAM memory map for Mac mini M1 (t8103, J274) when m1n1 passes memory.
 ///
 /// DRAM starts at 0x8_0000_0000 (32 GiB base, 39-bit physical address).
-const FALLBACK_MEMORY: [MemoryRange; 1] = [MemoryRange {
-    name: "dram",
-    base: 0x8_0000_0000,
-    size: 0x2_0000_0000, // 8 GiB baseline
-    kind: MemoryRangeKind::Usable,
-}];
+const FALLBACK_MEMORY: [MemoryRange; 2] = [
+    MemoryRange {
+        name: "kernel",
+        base: 0x8_0008_0000,
+        size: 0x0_0200_0000, // 32 MiB kernel span
+        kind: MemoryRangeKind::Kernel,
+    },
+    MemoryRange {
+        name: "usable",
+        base: 0x8_0208_0000,
+        size: 0x1_FDF8_0000, // 8 GiB baseline usable RAM
+        kind: MemoryRangeKind::Usable,
+    },
+];
 
 /// Mac mini M1 (t8103, J274) descriptor (Phase 04, ADR-0032 §4–5).
 ///

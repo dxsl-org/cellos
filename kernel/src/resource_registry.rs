@@ -91,7 +91,11 @@ const ALLOWED: &[(usize, usize, u8)] =
         hal::aarch64::backend::ArmSoc::QemuArmVirt => QEMU_ARM_VIRT_ALLOWED,
         hal::aarch64::backend::ArmSoc::Bcm2837 => BCM2837_ALLOWED,
         hal::aarch64::backend::ArmSoc::Bcm2711 => BCM2711_ALLOWED,
+        hal::aarch64::backend::ArmSoc::AppleT8103 => APPLE_T8103_ALLOWED,
     };
+
+#[cfg(target_arch = "aarch64")]
+const APPLE_T8103_ALLOWED: &[(usize, usize, u8)] = &[];
 
 #[cfg(target_arch = "aarch64")]
 const BCM2837_ALLOWED: &[(usize, usize, u8)] = &[
@@ -595,7 +599,7 @@ pub fn self_test() -> bool {
     match <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SOC {
         hal::aarch64::backend::ArmSoc::Bcm2837 => return bcm2837_self_test(),
         hal::aarch64::backend::ArmSoc::QemuArmVirt => return qemu_arm_virt_self_test(),
-        hal::aarch64::backend::ArmSoc::Bcm2711 => {}
+        hal::aarch64::backend::ArmSoc::Bcm2711 | hal::aarch64::backend::ArmSoc::AppleT8103 => {}
     }
     true
 }

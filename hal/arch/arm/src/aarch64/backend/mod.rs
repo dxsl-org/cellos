@@ -10,11 +10,20 @@
 //! crate still compiles with both, and the kernel's own conflict
 //! `compile_error!` reports the combination.
 
-#[cfg(all(feature = "board-rpi4", not(feature = "board-rpi3")))]
+#[cfg(feature = "board-apple-t8103")]
+pub mod apple_t8103;
+#[cfg(all(
+    feature = "board-rpi4",
+    not(any(feature = "board-rpi3", feature = "board-apple-t8103"))
+))]
 mod bcm2711;
-#[cfg(feature = "board-rpi3")]
+#[cfg(all(feature = "board-rpi3", not(feature = "board-apple-t8103")))]
 pub mod bcm2837;
-#[cfg(not(any(feature = "board-rpi3", feature = "board-rpi4")))]
+#[cfg(not(any(
+    feature = "board-rpi3",
+    feature = "board-rpi4",
+    feature = "board-apple-t8103"
+)))]
 mod qemu_virt;
 
 /// The Raspberry Pi non-VHE EL2 monitor. Both BCM boards install its vectors
@@ -23,13 +32,20 @@ mod qemu_virt;
 pub mod monitor;
 
 /// The backend selected for this build.
-#[cfg(all(feature = "board-rpi4", not(feature = "board-rpi3")))]
+#[cfg(feature = "board-apple-t8103")]
+pub type Board = apple_t8103::AppleT8103;
+#[cfg(all(
+    feature = "board-rpi4",
+    not(any(feature = "board-rpi3", feature = "board-apple-t8103"))
+))]
 pub type Board = bcm2711::Bcm2711;
-/// The backend selected for this build.
-#[cfg(feature = "board-rpi3")]
+#[cfg(all(feature = "board-rpi3", not(feature = "board-apple-t8103")))]
 pub type Board = bcm2837::Bcm2837;
-/// The backend selected for this build.
-#[cfg(not(any(feature = "board-rpi3", feature = "board-rpi4")))]
+#[cfg(not(any(
+    feature = "board-rpi3",
+    feature = "board-rpi4",
+    feature = "board-apple-t8103"
+)))]
 pub type Board = qemu_virt::QemuVirt;
 
 /// The selected board's EL2 monitor ([`NoEl2Monitor`] unless the host stays
@@ -274,6 +290,8 @@ pub enum ArmSoc {
     Bcm2837,
     /// BCM2711 (Raspberry Pi 4).
     Bcm2711,
+    /// Apple M1 (t8103, Mac mini M1).
+    AppleT8103,
 }
 
 /// Platform facts published at boot.

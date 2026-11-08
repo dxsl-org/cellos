@@ -29,3 +29,4 @@ mte = []
 # controller, and auto-detected timer frequency instead of GIC + QEMU virt defaults.
 board-rpi3 = ["dep:hal-soc-bcm27xx"]
 board-rpi4 = ["dep:hal-soc-bcm27xx"]
+board-apple-t8103 = []
