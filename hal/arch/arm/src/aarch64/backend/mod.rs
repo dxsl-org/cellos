@@ -44,6 +44,8 @@ pub type El2Monitor = <Board as ArmPlatform>::El2Monitor;
 pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
     /// DMA remapping unit in front of the board's bus masters.
     type Iommu: ArmIommu;
+    /// Alignment and padding granule for DMA buffers (4 KiB default, 16 KiB on Apple DART).
+    const DMA_GRANULE: usize = 4096;
 
     /// MMIO base that the shared PL011 driver (`uart_pl011`) addresses.
     const PL011_BASE: usize;
@@ -129,6 +131,8 @@ pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
 pub enum SecondaryStart {
     /// Firmware starts each core through `PSCI_CPU_ON`.
     Psci,
+    /// Firmware uses spin-table release address protocol.
+    SpinTable,
     /// The board stays single-hart; the reason is logged at boot.
     None(&'static str),
 }
@@ -202,6 +206,12 @@ pub trait ArmIrqController {
     /// Handle one IRQ exception: identify the source, acknowledge it and
     /// dispatch it to the kernel hooks.
     fn handle_irq();
+
+    /// Handle one FIQ exception: identify the source, acknowledge it and
+    /// dispatch it to the kernel hooks.
+    fn handle_fiq() {
+        panic!("unexpected FIQ exception on backend without FIQ support");
+    }
 }
 
 /// The board's host tick source.

@@ -122,6 +122,7 @@ pub unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
 /// kernel and EL0 Cells share: the same 39-bit TTBR0 walk as [`EL2_TCR`], with
 /// TTBR1_EL2 walks disabled. `IPS` stays 0 (32-bit), wide enough for QEMU
 /// virt RAM.
+#[allow(dead_code)]
 const VHE_TCR: u64 = 25
     | (1 << 8)        // IRGN0 = WB-WA-RA
     | (1 << 10)       // ORGN0 = WB-WA-RA
@@ -150,7 +151,8 @@ const SCTLR_SPAN: u64 = 1 << 23;
 /// - Must be called at EL2, after boot.rs wrote `HCR_EL2` for the VHE host.
 pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
     let mair = EL2_MAIR;
-    let (tcr, sctlr_set) = (VHE_TCR, SCTLR_SPAN);
+    let tcr = super::paging::current_translation_config().vhe_tcr_value();
+    let sctlr_set = SCTLR_SPAN;
     // SAFETY: EL2-private registers; identity-map covers current PC and stack.
     unsafe {
         core::arch::asm!(
@@ -281,7 +283,7 @@ __vectors_el2:
     // ── Current EL, SP_ELx ──────────────────────────────────────────────────
     .balign 0x80; b vt_sync_el2_cur
     .balign 0x80; b vt_irq_el2_cur
-    .balign 0x80; b vt_sync_el2_cur
+    .balign 0x80; b vt_fiq_el2_cur
     .balign 0x80; b vt_sync_el2_cur
     // ── Lower EL (AArch64) — Cell SVCs and timer IRQs ───────────────────────
     .balign 0x80; b vt_sync_el2_lower_marked
@@ -341,7 +343,7 @@ __vectors_el2:
 
     mark_lower_vector vt_sync_el2_lower_marked,   1, vt_sync_el2_lower
     mark_lower_vector vt_irq_el2_lower_marked,    2, vt_irq_el2_lower
-    mark_lower_vector vt_fiq_el2_lower_marked,    3, vt_sync_el2_lower
+    mark_lower_vector vt_fiq_el2_lower_marked,    3, vt_fiq_el2_lower
     mark_lower_vector vt_serror_el2_lower_marked, 4, vt_sync_el2_lower
 
     vt_sync_el2_cur:
@@ -472,6 +474,67 @@ vt_irq_el2_cur:
     stp  x11, x12, [sp, #264]
     mov  x0,  sp
     bl   vi_aarch64_irq_handler
+    ldp  x9,  x10, [sp, #248]
+    msr  elr_el2,  x9
+    msr  spsr_el2, x10
+    ldp  x0,  x1,  [sp, #0]
+    ldp  x2,  x3,  [sp, #16]
+    ldp  x4,  x5,  [sp, #32]
+    ldp  x6,  x7,  [sp, #48]
+    ldp  x8,  x9,  [sp, #64]
+    ldp  x10, x11, [sp, #80]
+    ldp  x12, x13, [sp, #96]
+    ldp  x14, x15, [sp, #112]
+    ldp  x16, x17, [sp, #128]
+    ldp  x18, x19, [sp, #144]
+    ldp  x20, x21, [sp, #160]
+    ldp  x22, x23, [sp, #176]
+    ldp  x24, x25, [sp, #192]
+    ldp  x26, x27, [sp, #208]
+    ldp  x28, x29, [sp, #224]
+    ldr  x30,       [sp, #240]
+    add  sp, sp, #(36 * 8)
+    eret
+    .balign 4
+vt_fiq_el2_lower:
+    sub  sp, sp, #16
+    stp  x0, x1, [sp]
+    mrs  x0, tpidr_el2
+    cbz  x0, 1f
+    mov  x1, #1
+    str  x1, [x0, #520]        // vcpu.exit_is_irq = 1 → decode_exit reports Preempted
+    b    vt_vcpu_trap
+1:  ldp  x0, x1, [sp]
+    add  sp, sp, #16
+    b    vt_fiq_el2_cur
+
+    .balign 4
+vt_fiq_el2_cur:
+    sub  sp, sp, #(36 * 8)
+    stp  x0,  x1,  [sp, #0]
+    stp  x2,  x3,  [sp, #16]
+    stp  x4,  x5,  [sp, #32]
+    stp  x6,  x7,  [sp, #48]
+    stp  x8,  x9,  [sp, #64]
+    stp  x10, x11, [sp, #80]
+    stp  x12, x13, [sp, #96]
+    stp  x14, x15, [sp, #112]
+    stp  x16, x17, [sp, #128]
+    stp  x18, x19, [sp, #144]
+    stp  x20, x21, [sp, #160]
+    stp  x22, x23, [sp, #176]
+    stp  x24, x25, [sp, #192]
+    stp  x26, x27, [sp, #208]
+    stp  x28, x29, [sp, #224]
+    str  x30,       [sp, #240]
+    mrs  x9,  elr_el2
+    mrs  x10, spsr_el2
+    mrs  x11, far_el2
+    mrs  x12, esr_el2
+    stp  x9,  x10, [sp, #248]
+    stp  x11, x12, [sp, #264]
+    mov  x0,  sp
+    bl   vi_aarch64_fiq_handler
     ldp  x9,  x10, [sp, #248]
     msr  elr_el2,  x9
     msr  spsr_el2, x10

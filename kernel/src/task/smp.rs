@@ -25,7 +25,12 @@ pub use topology::{CpuTopology, CPU_TOPOLOGY};
 /// - riscv64 / aarch64 / 32-bit targets: 2 (QEMU virt `-smp 2`, G2 entry).
 #[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
 pub const MAX_HARTS: usize = hal::x86_64::syscall::MAX_CPUS;
-#[cfg(not(all(target_arch = "x86_64", not(cellos_g1_cpu))))]
+#[cfg(all(target_arch = "aarch64", not(cellos_g1_cpu)))]
+pub const MAX_HARTS: usize = 32;
+#[cfg(not(any(
+    all(target_arch = "x86_64", not(cellos_g1_cpu)),
+    all(target_arch = "aarch64", not(cellos_g1_cpu))
+)))]
 pub const MAX_HARTS: usize = 2;
 // The HAL owns one GS record, GDT/TSS and IST set per logical CPU.
 #[cfg(target_arch = "x86_64")]
@@ -587,6 +592,7 @@ pub fn start_secondaries() {
     use hal::aarch64::backend::{ArmPlatform, Board, SecondaryStart};
     match <Board as ArmPlatform>::SECONDARY_START {
         SecondaryStart::Psci => start_psci_secondaries(),
+        SecondaryStart::SpinTable => start_spin_table_secondaries(),
         SecondaryStart::None(reason) => log::info!("[smp] {}", reason),
     }
 }
@@ -792,6 +798,81 @@ fn start_psci_secondaries() {
             }
             core::hint::spin_loop();
         }
+    }
+}
+#[cfg(target_arch = "aarch64")]
+fn start_spin_table_secondaries() {
+    use crate::boot::firmware_smp;
+    use crate::task::stack::Stack;
+    use crate::task::STACK_PAGES;
+
+    let described = firmware_smp::cpu_count();
+    if described <= 1 {
+        log::info!("[smp] spin-table: 1 CPU described — single-hart");
+        return;
+    }
+    let attempt = MAX_HARTS.min(described);
+
+    extern "C" {
+        fn _secondary_entry();
+    }
+    let entry = _secondary_entry as *const () as usize;
+    let kernel_root = match *crate::memory::paging::KERNEL_ROOT.lock() {
+        Some(root) => root,
+        None => {
+            log::warn!("[smp] spin-table: kernel page tables not published");
+            return;
+        }
+    };
+
+    for hart_id in 1..attempt {
+        let release_addr = match firmware_smp::cpu_release_addr(hart_id) {
+            Some(addr) => addr as usize,
+            None => {
+                log::info!("[smp] hart {hart_id}: no cpu-release-addr in FDT");
+                continue;
+            }
+        };
+
+        if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
+            continue;
+        }
+
+        let stack = match Stack::new_kernel(STACK_PAGES) {
+            Ok(s) => s,
+            Err(e) => {
+                log::warn!("[smp] hart {hart_id} stack alloc failed: {e:?}");
+                continue;
+            }
+        };
+        let stack_top = stack.top;
+        core::mem::forget(stack);
+
+        let context = hal::aarch64::boot::SecondaryContext::for_hart(
+            hart_id as u64,
+            stack_top as u64,
+            kernel_root as u64,
+        );
+        let context_addr = unsafe {
+            let slot = core::ptr::addr_of_mut!(SECONDARY_CONTEXT[hart_id]);
+            slot.write(context);
+            slot as usize
+        };
+        hal::aarch64::cache::clean_data_cache_range(
+            context_addr,
+            core::mem::size_of::<hal::aarch64::boot::SecondaryContext>(),
+        );
+
+        unsafe {
+            core::ptr::write_volatile(release_addr as *mut u64, entry as u64);
+        }
+        hal::aarch64::cache::clean_data_cache_range(release_addr, 8);
+        core::sync::atomic::fence(Ordering::SeqCst);
+        unsafe {
+            core::arch::asm!("sev", options(nomem, nostack));
+        }
+
+        log::info!("[smp] hart {hart_id} spin-table release written to {release_addr:#x}");
     }
 }
 

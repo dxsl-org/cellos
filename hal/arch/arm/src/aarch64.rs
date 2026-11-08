@@ -25,6 +25,8 @@ pub mod el2_stub;
 #[cfg(target_arch = "aarch64")]
 pub mod gic;
 #[cfg(target_arch = "aarch64")]
+pub mod gicv3;
+#[cfg(target_arch = "aarch64")]
 pub mod id_regs;
 #[cfg(target_arch = "aarch64")]
 pub mod mte;
@@ -47,6 +49,7 @@ pub mod uart_pl011;
 pub mod vcpu;
 // Its list-register planning is pure and host-tested; the GICH accessors are
 // plain volatile MMIO, so the module compiles for every target.
+pub mod translation_config;
 pub mod vgic;
 
 #[cfg(target_arch = "aarch64")]
@@ -57,6 +60,13 @@ pub use context::CpuContext as Context;
 pub use paging::PageTable;
 #[cfg(target_arch = "aarch64")]
 pub use paging::PAGE_SIZE;
+#[cfg(target_arch = "aarch64")]
+pub use paging::{current_translation_config, set_translation_config, TranslationConfig};
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn dma_granule() -> usize {
+    <backend::Board as backend::ArmPlatform>::DMA_GRANULE
+}
 
 // ── Stub for non-AArch64 targets ─────────────────────────────────────────────
 

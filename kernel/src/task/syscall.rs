@@ -8095,7 +8095,13 @@ fn handle_syscall_inner(
                 );
                 return Err(SyscallError::PermissionDenied);
             }
-            if phys & 0xFFF != 0 || size & 0xFFF != 0 || size == 0 {
+            #[cfg(target_arch = "aarch64")]
+            let granule = hal::dma_granule();
+            #[cfg(not(target_arch = "aarch64"))]
+            let granule = 4096usize;
+
+            let mask = (granule - 1) as u64;
+            if phys & mask != 0 || (size as u64) & mask != 0 || size == 0 {
                 return Err(SyscallError::InvalidInput);
             }
             let Some(phys_end) = phys.checked_add(size as u64) else {

@@ -83,6 +83,17 @@ pub fn init_kernel_paging(
     allocator: &mut FrameAllocator,
     mmap: &[crate::boot::MemoryMapEntry],
 ) -> PagingResult<PhysAddr> {
+    #[cfg(target_arch = "aarch64")]
+    {
+        let parange = hal::aarch64::paging::read_hardware_parange();
+        let mut max_pa: u64 = 0;
+        for entry in mmap.iter() {
+            max_pa = max_pa.max((entry.base + entry.length) as u64);
+        }
+        let config = hal::aarch64::paging::TranslationConfig::derive(parange, max_pa);
+        hal::aarch64::paging::set_translation_config(config);
+    }
+
     // 1. Allocate root page table frame and zero it.
     let root_frame = allocator
         .allocate_frame()

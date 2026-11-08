@@ -1,7 +1,7 @@
 ---
 phase: 2b
 title: "Paging: translation granule and wide physical address"
-status: pending
+status: completed
 priority: P2
 effort: "6d"
 dependencies: ["2a"]
@@ -52,11 +52,11 @@ Decide Q1 (16 KiB CPU granule, or 4 KiB with 16 KiB DMA alignment). Make the VA/
 
 ## Todo List
 
-- [ ] Q1 decision
-- [ ] TranslationConfig + host tests
-- [ ] 4-level walk
-- [ ] DMA granule
-- [ ] High-MMIO QEMU lane
+- [x] Q1 decision: maintain 4 KiB CPU translation granule; enforce 16 KiB alignment and padding for DMA buffers under Apple Silicon profile (preserves Cell ABI).
+- [x] TranslationConfig + host tests
+- [x] 4-level walk
+- [x] DMA granule
+- [x] High-MMIO QEMU lane
 
 ## Success Criteria
 

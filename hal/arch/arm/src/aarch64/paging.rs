@@ -151,6 +151,15 @@ pub fn flush_tlb_page(virt: VAddr) {
         );
     }
 }
+pub use super::translation_config::*;
+#[inline]
+pub fn read_hardware_parange() -> u8 {
+    let mmfr0: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, id_aa64mmfr0_el1", out(reg) mmfr0, options(nomem, nostack));
+    }
+    (mmfr0 & 0xF) as u8
+}
 
 #[repr(C, align(4096))]
 pub struct PageTable {
@@ -169,25 +178,43 @@ impl PageTable {
 
     /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
     pub fn prune_empty(&mut self, virt: VAddr, dealloc: &mut dyn FnMut(PhysAddr)) {
+        let config = current_translation_config();
+        if config.levels == 4 {
+            let idx = (virt >> 39) & 0x1FF;
+            let entry = self.entries[idx];
+            if entry & PTE_VALID == 0 {
+                return;
+            }
+            let l1_table = unsafe { &mut *((entry & !0xFFF) as *mut PageTable) };
+            Self::prune_l1(l1_table, virt, dealloc);
+            if !l1_table.entries.iter().any(|e| e & PTE_VALID != 0) {
+                let l1_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
+                self.entries[idx] = 0;
+                dealloc(l1_phys);
+            }
+        } else {
+            Self::prune_l1(self, virt, dealloc);
+        }
+    }
+
+    fn prune_l1(l1_table: &mut PageTable, virt: VAddr, dealloc: &mut dyn FnMut(PhysAddr)) {
         let l1_index = (virt >> 30) & 0x1FF;
-        let l1_entry = self.entries[l1_index];
+        let l1_entry = l1_table.entries[l1_index];
         if l1_entry & PTE_VALID == 0 {
             return;
         }
         let l2_phys = (l1_entry & !0xFFF) as PhysAddr;
-        // SAFETY: a valid table descriptor names a live L2 table.
         let l2 = unsafe { &mut *(l2_phys as *mut PageTable) };
         let l2_index = (virt >> 21) & 0x1FF;
         let l2_entry = l2.entries[l2_index];
         if l2_entry & PTE_VALID == 0 {
             if !l2.entries.iter().any(|entry| entry & PTE_VALID != 0) {
-                self.entries[l1_index] = 0;
+                l1_table.entries[l1_index] = 0;
                 dealloc(l2_phys);
             }
             return;
         }
         let l3_phys = (l2_entry & !0xFFF) as PhysAddr;
-        // SAFETY: a valid table descriptor names a live L3 table.
         let l3 = unsafe { &mut *(l3_phys as *mut PageTable) };
         if l3.entries.iter().any(|entry| entry & PTE_VALID != 0) {
             return;
@@ -197,12 +224,25 @@ impl PageTable {
         if l2.entries.iter().any(|entry| entry & PTE_VALID != 0) {
             return;
         }
-        self.entries[l1_index] = 0;
+        l1_table.entries[l1_index] = 0;
         dealloc(l2_phys);
     }
+
     /// Return the hardware leaf entry for `virt` without synthesizing flags.
     pub fn leaf_entry(&self, virt: VAddr) -> Option<u64> {
-        let l1 = self.entries[(virt >> 30) & 0x1FF];
+        let config = current_translation_config();
+        let l1_table = if config.levels == 4 {
+            let l0_idx = (virt >> 39) & 0x1FF;
+            let l0_entry = self.entries[l0_idx];
+            if l0_entry & PTE_VALID == 0 {
+                return None;
+            }
+            unsafe { &*((l0_entry & !0xFFF) as *const PageTable) }
+        } else {
+            self
+        };
+
+        let l1 = l1_table.entries[(virt >> 30) & 0x1FF];
         if l1 & PTE_VALID == 0 {
             return None;
         }
@@ -230,11 +270,19 @@ impl PageTableTrait for PageTable {
         flags: PageFlags,
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<()> {
+        let config = current_translation_config();
+        let l1_table = if config.levels == 4 {
+            let l0_idx = (virt >> 39) & 0x1FF;
+            self.get_or_alloc(l0_idx, alloc_fn)?
+        } else {
+            self
+        };
+
         let l1_idx = (virt >> 30) & 0x1FF;
         let l2_idx = (virt >> 21) & 0x1FF;
         let l3_idx = (virt >> 12) & 0x1FF;
 
-        let l2_table = self.get_or_alloc(l1_idx, alloc_fn)?;
+        let l2_table = l1_table.get_or_alloc(l1_idx, alloc_fn)?;
         let l3_table = l2_table.get_or_alloc(l2_idx, alloc_fn)?;
 
         let entry = leaf_word(phys, flags);
@@ -254,11 +302,23 @@ impl PageTableTrait for PageTable {
     }
 
     fn unmap(&mut self, virt: VAddr) -> ViResult<()> {
+        let config = current_translation_config();
+        let l1_table = if config.levels == 4 {
+            let l0_idx = (virt >> 39) & 0x1FF;
+            let l0_entry = self.entries[l0_idx];
+            if l0_entry & PTE_VALID == 0 {
+                return Err(ViError::NotFound);
+            }
+            unsafe { &mut *((l0_entry & !0xFFF) as *mut PageTable) }
+        } else {
+            self
+        };
+
         let l1_idx = (virt >> 30) & 0x1FF;
         let l2_idx = (virt >> 21) & 0x1FF;
         let l3_idx = (virt >> 12) & 0x1FF;
 
-        let l1_entry = self.entries[l1_idx];
+        let l1_entry = l1_table.entries[l1_idx];
         if l1_entry & PTE_VALID == 0 {
             return Err(ViError::NotFound);
         }
@@ -279,10 +339,22 @@ impl PageTableTrait for PageTable {
     }
 
     fn translate(&self, virt: VAddr) -> Option<PhysAddr> {
+        let config = current_translation_config();
+        let l1_table = if config.levels == 4 {
+            let l0_idx = (virt >> 39) & 0x1FF;
+            let l0_entry = self.entries[l0_idx];
+            if l0_entry & PTE_VALID == 0 {
+                return None;
+            }
+            unsafe { &*((l0_entry & !0xFFF) as *const PageTable) }
+        } else {
+            self
+        };
+
         let l1_idx = (virt >> 30) & 0x1FF;
         let l2_idx = (virt >> 21) & 0x1FF;
         let l3_idx = (virt >> 12) & 0x1FF;
-        let l1_entry = self.entries[l1_idx];
+        let l1_entry = l1_table.entries[l1_idx];
         if l1_entry & PTE_VALID == 0 {
             return None;
         }
@@ -315,15 +387,9 @@ impl PageTableTrait for PageTable {
 
         // ── EL1 path ─────────────────────────────────────────────────────────
         super::el2_stub::report();
+        let config = current_translation_config();
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
-                                               // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)
-        let tcr: u64 = 25      // T0SZ=25 (39-bit VA)
-                     | (1 << 8)  // IRGN0=WB-WA
-                     | (1 << 10) // ORGN0=WB-WA
-                     | (3 << 12) // SH0=Inner-shareable
-                     | (1 << 23); // EPD1=disable TTBR1
-                                  // SAFETY: MMU activation sequence per AArch64 Architecture Reference Manual.
-                                  // Order: write MAIR/TCR, then TTBR0, then barriers, then enable in SCTLR.
+        let tcr: u64 = config.tcr_el1_value();
         unsafe {
             core::arch::asm!(
                 "msr mair_el1, {mair}",

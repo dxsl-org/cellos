@@ -1,7 +1,7 @@
 ---
 phase: 2c
 title: "FIQ path, spin-table secondaries, N harts, GICv3"
-status: pending
+status: completed
 priority: P2
 effort: "8d"
 dependencies: ["2a"]
@@ -52,10 +52,10 @@ checkpoint: false
 
 ## Todo List
 
-- [ ] FIQ dispatch
-- [ ] GICv3
-- [ ] SpinTable
-- [ ] N harts (after x86 07a)
+- [x] FIQ dispatch
+- [x] GICv3
+- [x] SpinTable
+- [x] N harts (after x86 07a)
 
 ## Success Criteria
 

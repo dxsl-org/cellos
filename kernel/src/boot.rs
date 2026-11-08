@@ -433,6 +433,8 @@ pub mod firmware_smp {
 
     static CONDUIT: AtomicU8 = AtomicU8::new(UNREAD);
     static CPUS: AtomicUsize = AtomicUsize::new(0);
+    static CPU_RELEASE_ADDRS: [core::sync::atomic::AtomicU64; 32] =
+        [const { core::sync::atomic::AtomicU64::new(0) }; 32];
 
     /// Read `/psci` and the `/cpus` population from the firmware tree.
     pub fn note(tree: &fdt::Fdt) {
@@ -445,6 +447,26 @@ pub mod firmware_smp {
         });
         CONDUIT.store(conduit, Ordering::Relaxed);
         CPUS.store(tree.cpus().count(), Ordering::Relaxed);
+
+        let mut idx = 0;
+        for cpu in tree.cpus() {
+            if idx < 32 {
+                let release_addr = cpu
+                    .property("cpu-release-addr")
+                    .and_then(|prop| {
+                        if prop.value.len() == 8 {
+                            Some(u64::from_be_bytes(prop.value.try_into().unwrap()))
+                        } else if prop.value.len() == 4 {
+                            Some(u32::from_be_bytes(prop.value.try_into().unwrap()) as u64)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0);
+                CPU_RELEASE_ADDRS[idx].store(release_addr, Ordering::Relaxed);
+                idx += 1;
+            }
+        }
     }
 
     /// The PSCI conduit, or `None` when the tree declares no PSCI.
@@ -465,8 +487,18 @@ pub mod firmware_smp {
     pub fn tree_available() -> bool {
         CONDUIT.load(Ordering::Relaxed) != UNREAD
     }
-}
 
+    /// Return cpu-release-addr for a given hart if present in FDT.
+    pub fn cpu_release_addr(hart_id: usize) -> Option<u64> {
+        if hart_id < 32 {
+            let addr = CPU_RELEASE_ADDRS[hart_id].load(Ordering::Relaxed);
+            if addr != 0 {
+                return Some(addr);
+            }
+        }
+        None
+    }
+}
 /// AArch64 boot memory map, by the board backend's [`DtbPolicy`].
 #[cfg(target_arch = "aarch64")]
 pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
