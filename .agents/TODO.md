@@ -82,36 +82,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
 `kernel/src/embedded-*/kernel_fs.img` mâu thuẫn giữa `kernel/build.rs` (gitignored) và
 `scripts/build-x86_64-c2c-lifecycle-ci.sh` (committed) **(verify)**.
 
-## Rust `std::thread`/`std::sync` trên Cellos — thread = kernel task cùng Cell (nghiên cứu 2026-10-21)
-
-Gate "chờ cellbox-cli" đã mở (Cellbox đóng 2026-10-31); chưa admit trong portfolio.
-Báo cáo: [research-261021-1540-std-threads-cell-vs-os-thread.md](reports/research-261021-1540-std-threads-cell-vs-os-thread.md).
-Quyết định: **Cell không thay OS thread** (Cell = authority/recovery/CSpace/quota; `std::sync` cần heap + atomic chung;
-`FutexWait` key có generation nên by design không wake xuyên Cell Tier‑2, `kernel/src/task/futex.rs:1-12`). Triển khai
-theo mẫu Hermit (`sys/thread/hermit.rs` + `sys/sync/futex/hermit.rs`) / Motor OS. Actor/C2C (ADR‑0021) là tầng trên `std`.
-Substrate kernel đã có: `Spawn=5` (task cùng Cell), `FutexWait=17`/`FutexWake=18`, `Wait=8`,
-`SetTlsBase=9`; `libs/port-platform/cellos_pthread.c` đã dùng đúng bộ này. Thiếu: PAL, `PT_TLS`, số hart.
-
-- [x] **PAL `library/std/src/sys/thread/cellos.rs`** (triển khai trong `patches/rust-std-cellos.patch`):
-  `Thread::new` = `Box<ThreadInit>` → `sys_spawn(thread_start, ptr)`; `thread_start` chạy `init.init()()`,
-  `thread_local::destructors::run()`, `rt::thread_cleanup()`, `sys_exit(0)`; `join` = `Wait=8`; `sleep` = futex timeout
-  (không busy-yield); `available_parallelism` = số hart (`ViSyscall::GetCpuCount = 263`). Đã xác thực sysroot check trên x86_64, aarch64, riscv64.
-- [x] **`sys/sync/futex/cellos.rs`**: đã triển khai trong `patches/rust-std-cellos.patch`: `futex_wait(&AtomicU32, expected, timeout)`
-  → `FutexWait=17` (Duration→tick, 0 = vô hạn; ValueMismatch→`true`, TimedOut→`false`); `futex_wake` → `FutexWake=18(count=1)`;
-  `futex_wake_all` → `count=0`. Đã thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs`
-  và `thread_parking`.
-- [x] **TLS**: cấp block per-thread (+ TCB self-pointer cho x86_64 variant II) và gọi `SetTlsBase=9` đầu `thread_start`
-  và trong `common::init`; bật `"has-thread-local": true` trong `targets/*.json` → std dùng `thread_local/native` (bỏ `no_threads` trong patch).
-- [x] **Kernel**: đã rà soát `MAX_THREADS_PER_CELL = 32` (`scheduler.rs`), map stack vào domain, clone PKU và `Wait=8`
-  trả về qua zombie quiescence khi worker kết thúc hoặc bị kernel kill.
-- [x] **Witness**: đã tích hợp vào `cells/demos/std-smoke/src/main.rs`: `thread::scope` + `Arc<Mutex<Vec>>` + `Condvar` + `thread_local!` destructor
-  + 32 create/join vòng (đối chiếu `cells/tests/c-pthread/src/witness.c`); build check PASS trên cả 3 target (x86_64, aarch64, riscv64).
-- [x] **Docs**: [ADR-0035](../docs/decisions/0035-std-threads-as-intra-cell-kernel-tasks.md) "Rust std::thread and std::sync as intra-Cell kernel tasks";
-  cập nhật invariant `available_parallelism` ở `docs/roadmap/runtime-and-platform-tracks.md`; mở class B (OS threads) của ADR‑0018 §2.2 sang L1.
-- [x] **POSIX theo sau (ADR‑0018, không mở rộng phạm vi)**: đã mở rộng `cellos_pthread.c` và `cellos_pthread.h`
-  (rwlock, barrier, `pthread_key`, detach, `__thread` TLS qua `SetTlsBase=9`); đối chiếu `cells/tests/c-pthread/src/witness.c`
-  chứng thực đầy đủ mutex, condvar, rwlock, barrier, key/destructor, detach và 32 vòng create/join tuần tự.
-
 ## Parked / deferred backlog — subject to the current queue
 
 Chỉ còn việc chưa xong. Old `[in-progress]`/`next` wording is not permission to resume; preserve
