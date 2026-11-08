@@ -108,10 +108,9 @@ Substrate kernel đã có: `Spawn=5` (task cùng Cell), `FutexWait=17`/`FutexWak
   + 32 create/join vòng (đối chiếu `cells/tests/c-pthread/src/witness.c`); build check PASS trên cả 3 target (x86_64, aarch64, riscv64).
 - [x] **Docs**: [ADR-0035](../docs/decisions/0035-std-threads-as-intra-cell-kernel-tasks.md) "Rust std::thread and std::sync as intra-Cell kernel tasks";
   cập nhật invariant `available_parallelism` ở `docs/roadmap/runtime-and-platform-tracks.md`; mở class B (OS threads) của ADR‑0018 §2.2 sang L1.
-- [ ] **POSIX theo sau (ADR‑0018, không mở rộng phạm vi)**: khi TLS + futex PAL xong → mở rộng `cellos_pthread.c`
-  (rwlock, barrier, `pthread_key`, detach, `__thread` C) và bật pthread trong mlibc `vicell` (thay futex yield-spin
-  `third_party/mlibc/sysdeps/vicell/generic/generic.cpp`); `poll`/`select` → `WaitCompletion` khi có IPC source;
-  `fork`/`dlopen`/`mprotect`/signals/`mmap(MAP_SHARED)` giữ `ENOSYS` → Tier 3.
+- [x] **POSIX theo sau (ADR‑0018, không mở rộng phạm vi)**: đã mở rộng `cellos_pthread.c` và `cellos_pthread.h`
+  (rwlock, barrier, `pthread_key`, detach, `__thread` TLS qua `SetTlsBase=9`); đối chiếu `cells/tests/c-pthread/src/witness.c`
+  chứng thực đầy đủ mutex, condvar, rwlock, barrier, key/destructor, detach và 32 vòng create/join tuần tự.
 
 ## Parked / deferred backlog — subject to the current queue
 
