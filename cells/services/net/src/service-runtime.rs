@@ -27,10 +27,6 @@ use crate::{
 const IPC_BUF_SIZE: usize = 4096;
 const MAC: EthernetAddress = EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
 const NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS: u64 = 10;
-#[cfg(any(
-    test,
-    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
-))]
 const SCHEDULER_TICK_MS: u64 = 10;
 const IPC_BURST_GRACE_YIELDS: u8 = 1;
 const SMOLTCP_MAINTENANCE_INTERVAL_MS: u64 = 100;
@@ -919,13 +915,24 @@ pub(crate) fn run() {
                     // sequential IPC bursts then avoid one timer quantum per call.
                     sys_yield();
                 } else {
+                    let next_poll = iface.poll_at(now_instant(), &sockets);
+                    let wait_ticks = match next_poll {
+                        Some(at) => {
+                            let now = now_instant();
+                            if at <= now {
+                                1
+                            } else {
+                                let diff_ms = (at - now).total_millis();
+                                (diff_ms / SCHEDULER_TICK_MS)
+                                    .clamp(1, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS)
+                            }
+                        }
+                        None => NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
+                    };
                     #[cfg(feature = "ipc-wake-oracle")]
                     let wait_started_ticks = sys_get_time();
                     #[cfg(feature = "ipc-wake-oracle")]
-                    let completion = match sys_wait_completion_detailed(
-                        NET_RX,
-                        NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
-                    ) {
+                    let completion = match sys_wait_completion_detailed(NET_RX, wait_ticks) {
                         WaitCompletionResult::NoRecord => {
                             idle_ipc_wake_oracle.arm(
                                 wait_started_ticks,
@@ -945,8 +952,7 @@ pub(crate) fn run() {
                         }
                     };
                     #[cfg(not(feature = "ipc-wake-oracle"))]
-                    let completion =
-                        sys_wait_completion(NET_RX, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS);
+                    let completion = sys_wait_completion(NET_RX, wait_ticks);
                     if let Some(completion) = completion {
                         pending_net_rx_proof =
                             completion.source == NET_RX && completion.result == NET_RX as i64;

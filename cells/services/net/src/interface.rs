@@ -287,6 +287,8 @@ mod tx_queue_retry_tests {
 
 /// smoltcp device with a bounded local TX queue and one async driver command.
 /// A smoltcp transmit token commits to local queue admission, not peer receipt.
+const FRAME_POOL_CAPACITY: usize = 32;
+
 pub struct VirtioNetDevice {
     rx_queue: VecDeque<Box<[u8]>>,
     guest_rx_queue: VecDeque<Box<[u8]>>,
@@ -295,6 +297,7 @@ pub struct VirtioNetDevice {
     driver_mac: Option<([u8; 6], usize)>,
     l2_replies: VecDeque<(ReplyTo, u8, u64)>,
     tx_burst: u8,
+    frame_pool: alloc::vec::Vec<Box<[u8]>>,
 }
 
 struct OutboundFrame {
@@ -321,9 +324,30 @@ impl VirtioNetDevice {
             driver_mac: None,
             l2_replies: VecDeque::new(),
             tx_burst: 0,
+            frame_pool: alloc::vec::Vec::new(),
         }
     }
 
+    pub fn alloc_frame(&mut self, len: usize) -> Box<[u8]> {
+        if let Some(buf) = self.frame_pool.pop() {
+            if buf.len() == len {
+                return buf;
+            }
+        }
+        alloc::vec![0u8; len].into_boxed_slice()
+    }
+
+    pub fn recycle_frame(&mut self, frame: Box<[u8]>) {
+        if self.frame_pool.len() < FRAME_POOL_CAPACITY {
+            self.frame_pool.push(frame);
+        }
+    }
+
+    fn clone_into_pooled_frame(&mut self, frame: &[u8]) -> Box<[u8]> {
+        let mut buf = self.alloc_frame(frame.len());
+        buf.copy_from_slice(frame);
+        buf
+    }
     /// Enqueue an inbound frame received from a NIC provider.
     // reason: pump_rx()/pump_rx_split() currently pull frames themselves via
     // the Driver Cell or disabled legacy syscalls; push_rx is the counterpart
@@ -545,6 +569,7 @@ impl VirtioNetDevice {
                     let status = if accepted { STATUS_OK } else { STATUS_FAILED };
                     self.l2_replies.push_back((target, status, now));
                 }
+                self.recycle_frame(sent.bytes);
             }
             let mut scratch = [0u8; MAX_FRAME];
             let n = ostd::syscall::sys_net_rx(&mut scratch);
@@ -646,11 +671,14 @@ impl VirtioNetDevice {
         }
         match self.guest_mac {
             Some(mac) if frame.len() >= 6 && frame[..6] == mac => {
-                self.guest_rx_queue.push_back(Box::from(frame));
+                let b = self.clone_into_pooled_frame(frame);
+                self.guest_rx_queue.push_back(b);
             }
             Some(_) if frame.len() >= 6 && frame[..6] == [0xff; 6] => {
-                self.guest_rx_queue.push_back(Box::from(frame));
-                self.rx_queue.push_back(Box::from(frame));
+                let b1 = self.clone_into_pooled_frame(frame);
+                let b2 = self.clone_into_pooled_frame(frame);
+                self.guest_rx_queue.push_back(b1);
+                self.rx_queue.push_back(b2);
             }
             Some(guest_mac) => {
                 // A frame that arrived while the guest is registered but is not
@@ -669,12 +697,15 @@ impl VirtioNetDevice {
                         frame.len()
                     ));
                 }
-                self.rx_queue.push_back(Box::from(frame));
+                let b = self.clone_into_pooled_frame(frame);
+                self.rx_queue.push_back(b);
             }
-            None => self.rx_queue.push_back(Box::from(frame)),
+            None => {
+                let b = self.clone_into_pooled_frame(frame);
+                self.rx_queue.push_back(b);
+            }
         }
     }
-
     fn queue_tx(&mut self, frame: Box<[u8]>) {
         debug_assert!(self.tx_queue.len() < TX_QUEUE_LIMIT);
         self.tx_queue.push_back(OutboundFrame {
@@ -698,7 +729,9 @@ impl VirtioNetDevice {
     /// answer the same request twice).
     fn settle_tx_verdict(&mut self, status: u8) -> bool {
         if status == STATUS_OK {
-            self.tx_queue.pop_front();
+            if let Some(frame) = self.tx_queue.pop_front() {
+                self.recycle_frame(frame.bytes);
+            }
             return true;
         }
         let refusals = {
@@ -710,7 +743,9 @@ impl VirtioNetDevice {
             frame.refusals
         };
         if refusals >= MAX_TX_REFUSALS {
-            self.tx_queue.pop_front();
+            if let Some(frame) = self.tx_queue.pop_front() {
+                self.recycle_frame(frame.bytes);
+            }
             static FIRST_TX_DROP: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);
             if !FIRST_TX_DROP.swap(true, Ordering::Relaxed) {
@@ -799,7 +834,7 @@ impl TxToken for NetTxToken<'_> {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        let mut frame = alloc::vec![0u8; len].into_boxed_slice();
+        let mut frame = self.0.alloc_frame(len);
         let result = f(&mut frame);
         self.0.queue_tx(frame);
         result
