@@ -30,6 +30,8 @@ use ostd::syscall::{
 };
 use ostd::task::yield_now;
 
+#[cfg(target_arch = "x86_64")]
+use api::completion::source::IRQ;
 use api::completion::source::{IPC, NET_RX, TIMER};
 
 const PROBE_PATH: &str = "/bin/bench-probe";
@@ -719,10 +721,15 @@ fn msw_mixed_leg(provider: usize, raw_source: usize) {
     let ipc_second = matches!(wait(IPC | TIMER, 500), Ok(Wake::Ipc(op)) if op == call.operation());
     take_or_fail(&call, &mut reply_buf);
     let raw2_ok = raw_from_source(&mut raw);
+    #[cfg(target_arch = "x86_64")]
+    let unallocated_irq_refused = matches!(wait_any(IRQ, 5), Err(ostd::ipc::IpcError::Recv));
+    #[cfg(not(target_arch = "x86_64"))]
+    let unallocated_irq_refused = true;
     println(&format!(
         "[async-lifecycle] MSW-MIXED timer={timer} interrupted_by_raw={interrupted} \
          ipc_after_raw={ipc_after_raw} raw_ignored_without_netrx={raw_ignored} \
-         ipc_second={ipc_second} netrx_records={netrx_records} netrx_producer=absent-x86"
+         ipc_second={ipc_second} netrx_records={netrx_records} netrx_producer=absent-x86 \
+         unallocated_irq_refused={unallocated_irq_refused}"
     ));
     if !(timer
         && interrupted
@@ -731,7 +738,8 @@ fn msw_mixed_leg(provider: usize, raw_source: usize) {
         && raw_ignored
         && raw2_ok
         && ipc_second
-        && netrx_records == 0)
+        && netrx_records == 0
+        && unallocated_irq_refused)
     {
         msw_fail("mixed leg");
     }

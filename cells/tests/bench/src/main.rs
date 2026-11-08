@@ -73,6 +73,8 @@ use scenarios::{
 const PROFILE: &str = "rv64-qemu-virt-2h-256m-v2";
 #[cfg(target_arch = "x86_64")]
 const PROFILE: &str = "x86_64-q35-2c-256m-v1";
+#[cfg(target_arch = "aarch64")]
+const PROFILE: &str = "aarch64-qemu-virt-2h-256m-v1";
 
 /// PDR performance targets (nanoseconds). All checked against p99.
 const TARGET_CTX_SWITCH_NS: u64 = 100_000;
