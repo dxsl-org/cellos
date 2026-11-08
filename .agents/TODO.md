@@ -80,9 +80,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
   nhưng phải sửa trước khi mở lại bất kỳ lane ARM/RISC-V nào.
 
 
-**Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
-- [ ] Recv copy payload vào `Vec` tạm dưới `SCHEDULER` rồi copy lần 2 ra user (`syscall.rs`).
-
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
 `kernel_image()` trả `None`) / `cell_session.rs` 132 KB; CI chưa build kernel với
 `--no-default-features --features production-relay-image` (chỉ chạy test của checker script); provenance

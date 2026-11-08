@@ -3160,6 +3160,60 @@ fn read_cell_owner_request(
     api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
 }
 
+#[derive(Clone, Debug)]
+pub(super) enum MsgPayload {
+    Inline { len: u8, bytes: [u8; 32] },
+    Heap(alloc::vec::Vec<u8>),
+}
+
+impl MsgPayload {
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Inline { len, .. } => *len as usize,
+            Self::Heap(vec) => vec.len(),
+        }
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Inline { len, bytes } => &bytes[..*len as usize],
+            Self::Heap(vec) => vec.as_slice(),
+        }
+    }
+
+    pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
+        if slice.len() <= 32 {
+            let mut bytes = [0u8; 32];
+            bytes[..slice.len()].copy_from_slice(slice);
+            Ok(Self::Inline {
+                len: slice.len() as u8,
+                bytes,
+            })
+        } else {
+            let mut vec = alloc::vec::Vec::new();
+            vec.try_reserve_exact(slice.len()).map_err(|_| ())?;
+            vec.extend_from_slice(slice);
+            Ok(Self::Heap(vec))
+        }
+    }
+}
+
+impl core::ops::Deref for MsgPayload {
+    type Target = [u8];
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
 /// Non-owning peek at the next delivery event. Payload bytes are copied into
 /// kernel memory; the original record is NOT removed. Call `commit_resume`
 /// after a successful copy-out to remove exactly the same event.
@@ -3179,7 +3233,7 @@ pub(super) enum ResumeSnapshot {
         delivery_id: Option<u64>,
         sender_cell_id: u64,
         sender_generation: u64,
-        payload: alloc::vec::Vec<u8>,
+        payload: MsgPayload,
     },
     /// Woken with no pending message (timeout, manual wake, or 0-return).
     Wake { sender_tid: usize },
@@ -3222,11 +3276,7 @@ pub(super) fn snapshot_resume(task: &super::Task, mask: usize) -> Result<ResumeS
             Some(crate::p01_resources::owner(task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
         );
-        let mut payload = alloc::vec::Vec::new();
-        payload
-            .try_reserve_exact(msg.payload().len())
-            .map_err(|_| ())?;
-        payload.extend_from_slice(msg.payload());
+        let payload = MsgPayload::from_slice(msg.payload())?;
         return Ok(ResumeSnapshot::Message {
             sender_tid: msg.sender_tid,
             wire_header,
@@ -5527,11 +5577,7 @@ fn handle_syscall_inner(
                     let wire_header = msg.wire_header();
                     // Allocation failure is a real error, not "no message":
                     // encoding it as None would block despite queued data.
-                    let mut data = alloc::vec::Vec::new();
-                    if data.try_reserve_exact(msg.payload().len()).is_err() {
-                        return Err(());
-                    }
-                    data.extend_from_slice(msg.payload());
+                    let data = MsgPayload::from_slice(msg.payload()).map_err(|_| ())?;
                     let caller_view = TaskCopyView::of(t);
                     let (sender_cell_id, sender_generation) = match wire_header {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
@@ -5832,11 +5878,7 @@ fn handle_syscall_inner(
                     let record = &t.pending_msgs.as_slice()[pos];
                     let sender_tid = record.sender_tid;
                     let wire_header = record.wire_header();
-                    let mut tmp = alloc::vec::Vec::new();
-                    if tmp.try_reserve_exact(record.payload().len()).is_err() {
-                        return Err(());
-                    }
-                    tmp.extend_from_slice(record.payload());
+                    let tmp = MsgPayload::from_slice(record.payload()).map_err(|_| ())?;
                     if let Some(header) = wire_header {
                         super::async_ipc::dispatch(sched, caller_id, header);
                     }
@@ -5912,11 +5954,7 @@ fn handle_syscall_inner(
                     // Fallible snapshot: allocation failure must not be
                     // mistaken for "no message" (the receiver would block
                     // despite queued data).
-                    let mut data = alloc::vec::Vec::new();
-                    if data.try_reserve_exact(record.payload().len()).is_err() {
-                        return Err(());
-                    }
-                    data.extend_from_slice(record.payload());
+                    let data = MsgPayload::from_slice(record.payload()).map_err(|_| ())?;
                     let caller_view = TaskCopyView::of(t);
                     let (sender_cell_id, sender_generation) = match wire_header {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
@@ -6143,11 +6181,7 @@ fn handle_syscall_inner(
                         .as_ref()
                         .map(|h| (h.sender_cell_id, h.sender_generation));
                     let caller_view = TaskCopyView::of(t);
-                    let mut data = alloc::vec::Vec::new();
-                    if data.try_reserve_exact(msg.payload().len()).is_err() {
-                        return Err(());
-                    }
-                    data.extend_from_slice(msg.payload());
+                    let data = MsgPayload::from_slice(msg.payload()).map_err(|_| ())?;
                     // t is no longer borrowed here.
                     let (sender_cell_id, sender_generation) = inline_cell_context
                         .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
