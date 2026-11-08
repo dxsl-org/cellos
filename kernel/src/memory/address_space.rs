@@ -458,6 +458,7 @@ impl AddressSpaceBuilder {
         #[cfg(feature = "test-hooks")]
         let supervisor_registrations =
             register_private_table_frames(&root, &table_frames, identity.raw())?;
+        ledger.sort_unstable_by_key(|e| e.virtual_address);
         Ok(Arc::new(AddressSpace {
             identity,
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
@@ -560,10 +561,19 @@ impl AddressSpace {
     /// the caller still confirms the live PTE before moving bytes.
     #[allow(dead_code)]
     pub(crate) fn page_proof_for(&self, virtual_address: VAddr) -> Option<(Flags, PhysAddr)> {
-        self.ledger.lock().iter().find_map(|entry| {
-            (entry.virtual_address == virtual_address)
-                .then_some((entry.flags, entry.physical_address))
-        })
+        let ledger = self.ledger.lock();
+        let idx = ledger
+            .binary_search_by_key(&virtual_address, |e| e.virtual_address)
+            .ok()?;
+        let entry = &ledger[idx];
+        Some((entry.flags, entry.physical_address))
+    }
+
+    fn insert_ledger_entry(ledger: &mut Vec<MappingEntry>, entry: MappingEntry) {
+        match ledger.binary_search_by_key(&entry.virtual_address, |e| e.virtual_address) {
+            Ok(pos) => ledger[pos] = entry,
+            Err(pos) => ledger.insert(pos, entry),
+        }
     }
     /// Records a hart executing this root; clearing remains available after retirement for Phase 06 acknowledgement.
     pub fn set_current_hart(&self, hart: usize, current: bool) -> Result<(), AddressSpaceError> {
@@ -643,7 +653,7 @@ impl AddressSpace {
         let mut pending = self.invalidation_pending.lock();
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
-        self.ledger.lock().push(entry);
+        Self::insert_ledger_entry(&mut self.ledger.lock(), entry);
         pending.retain(|address| *address != entry.virtual_address);
     }
 
@@ -762,12 +772,15 @@ impl AddressSpace {
         drop(pruned_tables);
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
-        ledger.push(MappingEntry {
-            virtual_address,
-            physical_address: page.physical_address(),
-            kind,
-            flags: user_flags(flags),
-        });
+        Self::insert_ledger_entry(
+            &mut ledger,
+            MappingEntry {
+                virtual_address,
+                physical_address: page.physical_address(),
+                kind,
+                flags: user_flags(flags),
+            },
+        );
         frames.push(page);
         Ok(())
     }
@@ -1139,12 +1152,15 @@ impl AddressSpace {
         drop(pruned_tables);
         #[cfg(cellos_p01_trace)]
         let _semantic = self.p01_creation();
-        ledger.push(MappingEntry {
-            virtual_address,
-            physical_address,
-            kind: MappingKind::Grant,
-            flags: user_flags(flags),
-        });
+        Self::insert_ledger_entry(
+            &mut ledger,
+            MappingEntry {
+                virtual_address,
+                physical_address,
+                kind: MappingKind::Grant,
+                flags: user_flags(flags),
+            },
+        );
         Ok(())
     }
 

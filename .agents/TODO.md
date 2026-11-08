@@ -82,9 +82,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
 
 **Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
 - [ ] Recv copy payload vào `Vec` tạm dưới `SCHEDULER` rồi copy lần 2 ra user (`syscall.rs`).
-- [ ] `kernel/src/task/async_ipc.rs`: `Vec::remove`/`position` dưới `SCHEDULER` → slab theo token.
-- [ ] User-copy probe `page_proof_for`: `ledger.lock().iter().find_map` mỗi page → O(N·L) (`address_space.rs`).
-- [ ] VFS LRU `touch` `retain()` O(n) mỗi hit (`cells/services/vfs/src/page_cache.rs`).
 - [ ] Net: maintenance wake cố định 10 tick ≈ 100 ms (`cells/services/net/src/service-runtime.rs`) → deadline từ
   smoltcp `poll_at` + NIC IRQ; `Box<[u8]>` mới mỗi frame RX/TX (`interface.rs`) → frame pool.
 

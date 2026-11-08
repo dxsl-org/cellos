@@ -107,7 +107,9 @@ impl PageCache {
     fn evict(&mut self, sector: u64) {
         if self.entries.remove(&sector).is_some() {
             self.total_bytes -= 512;
-            self.lru_order.retain(|&s| s != sector);
+            if let Some(pos) = self.lru_order.iter().position(|&s| s == sector) {
+                self.lru_order.remove(pos);
+            }
         }
     }
 
@@ -132,9 +134,14 @@ impl PageCache {
     }
 
     fn touch(&mut self, sector: u64) {
-        // O(n) scan — acceptable while the cache holds a few thousand sectors.
-        self.lru_order.retain(|&s| s != sector);
-        self.lru_order.push_front(sector);
+        // If the sector is already the most-recently used (front), avoid any scan.
+        if self.lru_order.front() == Some(&sector) {
+            return;
+        }
+        if let Some(pos) = self.lru_order.iter().position(|&s| s == sector) {
+            self.lru_order.remove(pos);
+            self.lru_order.push_front(sector);
+        }
     }
 }
 

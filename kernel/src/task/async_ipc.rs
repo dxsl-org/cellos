@@ -131,7 +131,7 @@ impl Operations {
     }
     fn remove(&mut self, id: usize) -> Option<Operation> {
         let pos = self.0.iter().position(|op| op.id == id)?;
-        Some(self.0.remove(pos))
+        Some(self.0.swap_remove(pos))
     }
     fn push(&mut self, op: Operation) -> Result<(), Failure> {
         if self.0.len() == MAX_OPERATIONS {
