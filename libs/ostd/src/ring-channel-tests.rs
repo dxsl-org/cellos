@@ -53,3 +53,7 @@ fn refuses_a_misaligned_mapping() {
 fn refuses_a_null_mapping() {
     assert!(channel_in_grant(core::ptr::null_mut(), size_of::<BiRingChannel>()).is_none());
 }
+#[test]
+fn refuses_zero_host_tid_in_connect() {
+    assert!(super::ChannelClient::connect(12345, 0).is_none());
+}

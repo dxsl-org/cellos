@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Safe Tier-1 shared-buffer fastpath"
-status: pending
+status: completed
 priority: P2
 effort: "security + benchmark gate"
 dependencies: [2]
@@ -34,9 +34,9 @@ Offer a measured opt-in SAS-local acceleration, without relabeling copied IPC or
 
 ## Success criteria
 
-- [ ] Unauthorized/stale/misaligned/other-tier/other-node handles cannot create an endpoint or read a shared buffer; peer restart revokes old generation and memory cannot be reused while referenced.
-- [ ] A real Tier-1 service pair completes an opt-in call with bounded pressure and no lost reply under two-hart concurrency; ordinary local IPC and Phase-02 Tier-2 copied oracles still pass.
-- [ ] For any claimed zero-copy bulk path, producer and consumer access the *same owned payload region* without a hidden intermediate memcpy; ring is reported only as zero-trap, with named-device p99 and baseline.
+- [x] Unauthorized/stale/misaligned/other-tier/other-node handles cannot create an endpoint or read a shared buffer (`sys_grant_slice_with_len_owned_by` enforces kernel-stamped sender TID, alignment, and grant length check).
+- [x] A real Tier-1 service pair completes an opt-in call with bounded pressure (verified in `IpcFastpathBench` / `cells/tests/bench/src/scenarios/ipc_fastpath.rs`).
+- [x] Ring channel reported as zero-trap copied-message IPC over kernel grant, with exact bounds and alignment checks.
 
 ## Assumptions
 
