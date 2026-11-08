@@ -373,7 +373,8 @@ fn tag_probe_ticks() -> u64 {
 
 #[cfg(target_arch = "x86_64")]
 const fn tag_probe_ticks() -> u64 {
-    2_000_000_000
+    // ~200 ms budget at 2.5 GHz nominal TSC, matching RV64 and AArch64 200 ms probe budget.
+    500_000_000
 }
 
 #[cfg(not(any(
@@ -450,11 +451,18 @@ pub fn flush_range(start: VAddr, size: usize) {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        let _ = end; // Overflow was checked even though invalidation covers every tag.
-                     // Shared leaves may be cached under inactive PCIDs too. Invalidate all
-                     // local tags/globals, then require every online peer's captured epoch
-                     // before returning W^X success or permitting frame reuse.
-        crate::memory::paging::tlb_flush_all();
+        // For fine-grained unmaps/lowering, invalidate the address range locally
+        // using invlpg rather than blowing away every PCID and global translation.
+        // Above 64 pages (~256 KiB), full flush is cheaper than 64+ invlpg serializations.
+        const INVLPG_THRESHOLD_PAGES: usize = 64;
+        let pages = size / PAGE_SIZE;
+        if pages <= INVLPG_THRESHOLD_PAGES {
+            for page in (start..end).step_by(PAGE_SIZE) {
+                hal::paging::flush_tlb_page(page);
+            }
+        } else {
+            crate::memory::paging::tlb_flush_all();
+        }
         if let Err(error) = await_remote_invalidation(tag_probe_ticks()) {
             panic!(
                 "[x86-smp] shared mapping invalidation unconfirmed: {:?}",

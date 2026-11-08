@@ -2431,16 +2431,24 @@ impl Scheduler {
             }
         }
 
-        // 2. Poll Async Tasks
-        let has_polling = self.tasks.values().any(|t| t.state == TaskState::Polling);
-        if has_polling {
+        // 2. Poll Async Tasks: filter directly for active polling tasks
+        let polling_ids: Vec<usize> = self
+            .tasks
+            .iter()
+            .filter_map(|(&id, t)| {
+                if t.state == TaskState::Polling {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !polling_ids.is_empty() {
             let mut polled_tasks = Vec::new();
             let waker = dummy_waker();
             let mut cx = Context::from_waker(&waker);
 
-            // Iterate keys to avoid borrow check issues
-            let keys: Vec<usize> = self.tasks.keys().cloned().collect();
-            for id in keys {
+            for id in polling_ids {
                 if let Some(task) = self.tasks.get_mut(&id) {
                     if task.state == TaskState::Polling {
                         #[cfg(cellos_p01_trace)]

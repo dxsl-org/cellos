@@ -81,13 +81,6 @@ Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-r
 
 
 **Đợt 3 — Hiệu năng (làm benchmark harness trước; `evidence/benchmark-std-parity-*.json` là `fixture_only`, chỉ đo syscall-yield):**
-- [ ] x86 TLB: `kernel/src/memory/tlb_shootdown.rs` vẫn gọi `tlb_flush_all()` cho mọi thay đổi và probe ack
-  2×10⁹ TSC (completion/ack đã sửa ở `1917c7448`, `81ceceec4`). → `invlpg`/`INVPCID` theo địa chỉ; defer frame
-  reuse qua `deferred_release`.
-- [ ] Scheduler tick hart 0 giữ `SCHEDULER` quét toàn bộ `tasks` nhiều lần + `collect()` allocate
-  (`kernel/src/task/scheduler.rs`). → index deadline/heartbeat/poll; làm việc ngoài lock.
-- [ ] Frame allocator: `find_free` quét từng bit, `find_free_run` O(F×N), dưới `FRAME_ALLOCATOR` lock
-  (`kernel/src/memory/frame.rs`). → `trailing_zeros` + bitmap tầng 2 hoặc buddy.
 - [ ] Recv copy payload vào `Vec` tạm dưới `SCHEDULER` rồi copy lần 2 ra user (`syscall.rs`).
 - [ ] `kernel/src/task/async_ipc.rs`: `Vec::remove`/`position` dưới `SCHEDULER` → slab theo token.
 - [ ] User-copy probe `page_proof_for`: `ledger.lock().iter().find_map` mỗi page → O(N·L) (`address_space.rs`).

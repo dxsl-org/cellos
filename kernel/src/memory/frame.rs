@@ -230,18 +230,21 @@ impl FrameAllocator {
 
             let block = self.bitmap.slice()[u64_idx];
 
-            // Optimization: Skip full blocks
             if block == !0 {
-                // All 1s
                 bit_idx = (u64_idx + 1) * 64;
                 continue;
             }
 
-            // Check if specific bit is 0
-            if (block & (1u64 << bit_offset)) == 0 {
-                return Some(bit_idx);
+            let free_mask = !block & (!0u64 << bit_offset);
+            if free_mask != 0 {
+                let first_free = u64_idx * 64 + free_mask.trailing_zeros() as usize;
+                return if first_free < end_idx {
+                    Some(first_free)
+                } else {
+                    None
+                };
             }
-            bit_idx += 1;
+            bit_idx = (u64_idx + 1) * 64;
         }
         None
     }
@@ -482,18 +485,30 @@ impl FrameAllocator {
         }
         let mut run_start = 0usize;
         let mut run_len = 0usize;
-        for idx in 0..self.total_frames {
-            if self.is_frame_allocated(idx) {
-                run_len = 0;
+        let mut idx = 0usize;
+        while idx < self.total_frames {
+            // When not in a run and on a 64-bit boundary, fast-skip fully allocated blocks
+            if run_len == 0
+                && idx.is_multiple_of(64)
+                && idx + 64 <= self.total_frames
+                && self.bitmap.slice()[idx / 64] == !0
+            {
+                idx += 64;
                 continue;
             }
-            if run_len == 0 {
-                run_start = idx;
+
+            if self.is_frame_allocated(idx) {
+                run_len = 0;
+            } else {
+                if run_len == 0 {
+                    run_start = idx;
+                }
+                run_len += 1;
+                if run_len == n {
+                    return Some(run_start);
+                }
             }
-            run_len += 1;
-            if run_len == n {
-                return Some(run_start);
-            }
+            idx += 1;
         }
         None
     }
