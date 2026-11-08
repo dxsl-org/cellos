@@ -92,10 +92,10 @@ theo mẫu Hermit (`sys/thread/hermit.rs` + `sys/sync/futex/hermit.rs`) / Motor 
 Substrate kernel đã có: `Spawn=5` (task cùng Cell), `FutexWait=17`/`FutexWake=18`, `Wait=8`,
 `SetTlsBase=9`; `libs/port-platform/cellos_pthread.c` đã dùng đúng bộ này. Thiếu: PAL, `PT_TLS`, số hart.
 
-- [ ] **PAL `library/std/src/sys/thread/cellos.rs`** (sửa `patches/rust-std-cellos.patch`, hiện `Thread = unsupported`):
+- [x] **PAL `library/std/src/sys/thread/cellos.rs`** (triển khai trong `patches/rust-std-cellos.patch`):
   `Thread::new` = `Box<ThreadInit>` → `sys_spawn(thread_start, ptr)`; `thread_start` chạy `init.init()()`,
-  `thread_local::destructors::run()`, `rt::thread_cleanup()`, `sys_exit(0)`; `join` = `Wait=8`; `sleep` = TIMER completion
-  (không busy-yield); `available_parallelism` = số hart — đã xong qua `ViSyscall::GetCpuCount` (263) trong kernel/ostd/patch.
+  `thread_local::destructors::run()`, `rt::thread_cleanup()`, `sys_exit(0)`; `join` = `Wait=8`; `sleep` = futex timeout
+  (không busy-yield); `available_parallelism` = số hart (`ViSyscall::GetCpuCount = 263`). Đã xác thực sysroot check trên x86_64, aarch64, riscv64.
 - [x] **`sys/sync/futex/cellos.rs`**: đã triển khai trong `patches/rust-std-cellos.patch`: `futex_wait(&AtomicU32, expected, timeout)`
   → `FutexWait=17` (Duration→tick, 0 = vô hạn; ValueMismatch→`true`, TimedOut→`false`); `futex_wake` → `FutexWake=18(count=1)`;
   `futex_wake_all` → `count=0`. Đã thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs`
