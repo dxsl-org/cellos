@@ -80,6 +80,20 @@ impl FatBackend {
                 ostd::io::print("[vfs] FAT32 ");
                 ostd::io::print(prefix);
                 println(" volume mounted");
+                for entry in fs.root_dir().iter().flatten() {
+                    let name = entry.file_name();
+                    if name.eq_ignore_ascii_case("guest_disk.img")
+                        || name.eq_ignore_ascii_case("guest.img")
+                    {
+                        println(&alloc::format!(
+                            "[vfs-fat-mount] {} entry='{}' (sfn='{}') len={}",
+                            prefix,
+                            name,
+                            entry.short_file_name(),
+                            entry.len(),
+                        ));
+                    }
+                }
                 Some(fs)
             }
             Err(_) => {
@@ -471,9 +485,19 @@ impl FsBackend for FatBackend {
         if file.seek(fatfs::SeekFrom::Start(offset)).is_err() {
             return false;
         }
-        file.write_all(content).is_ok()
+        let ok = file.write_all(content).is_ok();
+        if ok && (path.contains("guest_disk.img") || path.contains("guest.img")) {
+            let end_pos = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(u64::MAX);
+            println(&alloc::format!(
+                "[vfs-fat-write] path={} offset={} bytes={} post_write_size={}",
+                path,
+                offset,
+                content.len(),
+                end_pos
+            ));
+        }
+        ok
     }
-
     /// Append; creates the file (and parents) if absent — first append behaves
     /// like a write. `fatfs::File::seek(End(0))` translates to
     /// `disk.seek(Start(abs_end))` internally, so the `End` arm of

@@ -160,7 +160,10 @@ pub fn run() {
     #[cfg(not(feature = "volatile-disk"))]
     let persistent_disk = match crate::persistent_disk::open() {
         Ok(Some(disk)) => {
-            println("[hv-x86] persistent disk: /mnt/sd/guest_disk.img");
+            println(&alloc::format!(
+                "[hv-x86] persistent disk: /mnt/sd/guest_disk.img (size={})",
+                disk.2
+            ));
             Some(disk)
         }
         Ok(None) => {

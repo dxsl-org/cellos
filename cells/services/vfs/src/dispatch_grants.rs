@@ -40,7 +40,18 @@ pub(crate) fn read_handle_grant<'a>(
             vfs.read_at(&path, offset, &mut buf[..n])
         }
     }) {
-        Some(bytes) if vfs.healthy(&path) => VfsResponse::GrantDone { bytes },
+        Some(bytes) if vfs.healthy(&path) => {
+            if bytes < max_read && crate::access::is_guest_disk_path(&path) {
+                ostd::io::println(&alloc::format!(
+                    "[vfs] guest_disk short read: path={} offset={} got={} want={}",
+                    path,
+                    offset,
+                    bytes,
+                    max_read
+                ));
+            }
+            VfsResponse::GrantDone { bytes }
+        }
         _ => VfsResponse::Err(ERR_IO),
     }
 }
@@ -79,6 +90,14 @@ pub(crate) fn write_handle_grant<'a>(
     };
     let is_guest_disk = crate::access::is_guest_disk_path(&path);
     if is_guest_disk && end > file_len {
+        ostd::io::println(&alloc::format!(
+            "[vfs] guest_disk write beyond capacity: path={} offset={} bytes={} end={} file_len={}",
+            path,
+            offset,
+            bytes,
+            end,
+            file_len
+        ));
         return VfsResponse::Err(ERR_DENIED);
     }
     let new_len = file_len.max(end);
