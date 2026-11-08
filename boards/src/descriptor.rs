@@ -23,6 +23,7 @@ pub enum SocId {
     Bcm2837,
     Bcm2711,
     AppleT8103,
+    AppleT8112,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -41,6 +42,7 @@ pub enum DriverId {
     TimerBcm2835System,
     UartAppleS5l,
     IrqAppleAic1,
+    IrqAppleAic2,
     RtcGoldfish,
     RtcPl031,
     VirtioMmio,

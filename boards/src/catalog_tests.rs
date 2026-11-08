@@ -202,3 +202,16 @@ fn macmini_m1_descriptor_declares_typed_drivers() {
         Some(SocId::AppleT8103)
     );
 }
+#[test]
+fn macmini_m2_descriptor_declares_typed_drivers() {
+    let board = crate::apple_macmini_m2::MACMINI_M2;
+    assert_eq!(board.architecture, Architecture::Aarch64);
+    assert_eq!(board.soc, SocId::AppleT8112);
+    assert_eq!(board.dma_isolation, DmaIsolation::Required);
+    assert!(board.has_driver(DriverId::UartAppleS5l));
+    assert!(board.has_driver(DriverId::IrqAppleAic2));
+    assert_eq!(
+        crate::find_by_slug(crate::aarch64_catalog(), "macmini-m2").map(|b| b.soc),
+        Some(SocId::AppleT8112)
+    );
+}

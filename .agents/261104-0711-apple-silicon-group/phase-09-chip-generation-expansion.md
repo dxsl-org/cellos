@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Chip-generation expansion"
-status: pending
+status: "blocked: hardware (M2 board descriptor and catalog qualification complete; live S2 captures pending physical hardware per contract)"
 priority: P3
 effort: "per chip: 8-15d + hardware"
 dependencies: ["7"]
@@ -47,9 +47,9 @@ Extend the bare-metal track one chip at a time. Each chip is its own image, back
 
 ## Todo List
 
-- [ ] M2
-- [ ] Pro/Max/Ultra
-- [ ] M3
+- [x] M2 (Mac mini M2 `t8112, J473` descriptor, `SocId::AppleT8112`, `IrqAppleAic2`, catalog tests)
+- [ ] Pro/Max/Ultra (S2 pending physical hardware)
+- [ ] M3 (S2 pending physical hardware)
 
 ## Success Criteria
 
