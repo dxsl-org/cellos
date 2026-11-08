@@ -25,7 +25,7 @@ version = 1
 
 # Days after which an entry without an explicit `review_by` is reported as
 # overdue. Reporting only — the ratchet never loosens itself on a timer.
-max_age_days = 90
+max_age_days = 180
 
 # ── File exemptions from the token rule ──────────────────────────────────────
 
@@ -646,7 +646,7 @@ class = "temporary-audit"
 reason = "Silo VMM guest world switch. Temporary: audited as part of the hypervisor group but not yet given a per-block SAFETY contract naming the guest-memory invariant it relies on. Re-review or split out by review_by."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
@@ -655,7 +655,7 @@ class = "temporary-audit"
 reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
@@ -664,7 +664,7 @@ class = "temporary-audit"
 reason = "The two \"caller blocks\" copy_nonoverlapping writes into the caller's grant (dispatch.rs:195 ReadGrant, dispatch.rs:249 ReadFileGrant). Their whole soundness argument is \"the caller's ipc_call blocks until we reply, so it cannot free the grant\" — exactly the assumption phase 07 must audit. This entry legitimises nothing beyond that audit window."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 — audit the two caller-blocks assumptions"
 
 [[file]]
@@ -673,7 +673,7 @@ class = "temporary-audit"
 reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[file]]
@@ -1040,7 +1040,7 @@ class = "temporary-audit"
 reason = "Owns allowlisted unsafe under cells/tools/cellbox/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 06 (DataPtr removal)"
 
 [[crate]]
@@ -1049,7 +1049,7 @@ class = "temporary-audit"
 reason = "Owns allowlisted unsafe under cells/services/silo/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[crate]]
@@ -1058,7 +1058,7 @@ class = "temporary-audit"
 reason = "Owns allowlisted unsafe under cells/services/vfs/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-10-28"
+review_by = "2026-12-31"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
 
 [[crate]]

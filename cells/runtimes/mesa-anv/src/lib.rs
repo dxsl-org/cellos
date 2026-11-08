@@ -1,4 +1,5 @@
 #![cfg_attr(not(test), no_std)]
+#![forbid(unsafe_code)]
 #![allow(dead_code, unused_imports)]
 extern crate alloc;
 

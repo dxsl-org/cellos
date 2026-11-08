@@ -7,6 +7,11 @@ version = 1
 # a driver can exit normally when its hardware is absent.
 
 [[cells]]
+name = "virtio-net"
+path = "/bin/virtio-net"
+restart = "never"
+
+[[cells]]
 name = "e1000"
 path = "/bin/e1000"
 restart = "never"
@@ -14,6 +19,16 @@ restart = "never"
 [[cells]]
 name = "igb"
 path = "/bin/igb"
+restart = "never"
+
+[[cells]]
+name = "e1000e"
+path = "/bin/e1000e"
+restart = "never"
+
+[[cells]]
+name = "vmxnet3"
+path = "/bin/vmxnet3"
 restart = "never"
 
 [[cells]]
@@ -38,4 +53,10 @@ path = "/bin/net"
 service_id = 2
 required = true
 restart = "always"
-# cellos-generated sha256=484b0bffbb9d472e3c1149e3bf38205604c92e7682d2172fea0a4ac2b1967855
+
+[[cells]]
+name = "supervisor"
+path = "/bin/supervisor"
+service_id = 11
+restart = "always"
+# cellos-generated sha256=b57f552dbcace2cf57da54c93b23594ce9c8bd7858f4ad56400b83e5bc911409

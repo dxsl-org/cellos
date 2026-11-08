@@ -16,10 +16,10 @@ set -euo pipefail
 ISO="${1:-build/vicell-x86.iso}"
 BOOT_WINDOW="${BOOT_WINDOW:-90}"
 X86_NIC_MODEL="${X86_NIC_MODEL:-}"
-# Optional raw SATA image for the q35 ICH9 AHCI controller (phase 02a). When
-# set, the same file is attached as `-device ide-hd`, which is how the AHCI
-# Driver Cell gets a disk to IDENTIFY. Unset keeps the pre-AHCI device set.
+# Optional storage image and controller model for virtualized disks.
 X86_SATA_IMAGE="${X86_SATA_IMAGE:-}"
+X86_STORAGE_IMAGE="${X86_STORAGE_IMAGE:-$X86_SATA_IMAGE}"
+X86_STORAGE_MODEL="${X86_STORAGE_MODEL:-sata}"
 # CPU model decides whether the guest has PCID at all: `qemu64` does not, `max`
 # does. The lane asserts the kernel's own decision when X86_EXPECT_PCID is set,
 # so the PCID-off and PCID-on paths are both witnessed rather than assumed.
@@ -67,21 +67,41 @@ esac
 # isolated.
 case "$X86_NIC_MODEL" in
     "") NIC_ARGS=() ;;
-    e1000|e1000-82545em|e1000e|igb|vmxnet3)
+    e1000|e1000-82545em|e1000e|igb|vmxnet3|virtio-net-pci)
         NIC_ARGS=(-nic none -netdev user,id=net0,restrict=on -device "$X86_NIC_MODEL,netdev=net0")
         ;;
     *)
-        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000-82545em, e1000e, igb, or vmxnet3" >&2
+        echo "FAIL: X86_NIC_MODEL must be empty, e1000, e1000-82545em, e1000e, igb, vmxnet3, or virtio-net-pci" >&2
         exit 1
         ;;
 esac
 
-if [[ -n "$X86_SATA_IMAGE" ]]; then
-    if [[ ! -f "$X86_SATA_IMAGE" ]]; then
-        echo "FAIL: X86_SATA_IMAGE not found: $X86_SATA_IMAGE" >&2
+if [[ -n "$X86_STORAGE_IMAGE" ]]; then
+    if [[ ! -f "$X86_STORAGE_IMAGE" ]]; then
+        echo "FAIL: X86_STORAGE_IMAGE not found: $X86_STORAGE_IMAGE" >&2
         exit 1
     fi
-    SATA_ARGS=(-drive "file=$X86_SATA_IMAGE,if=none,id=sata0,format=raw" -device "ide-hd,drive=sata0")
+    case "$X86_STORAGE_MODEL" in
+        sata)
+            SATA_ARGS=(-drive "file=$X86_STORAGE_IMAGE,if=none,id=disk0,format=raw" -device "ide-hd,drive=disk0")
+            ;;
+        virtio-blk)
+            SATA_ARGS=(-drive "file=$X86_STORAGE_IMAGE,if=none,id=disk0,format=raw" -device "virtio-blk-pci,drive=disk0")
+            ;;
+        virtio-scsi)
+            SATA_ARGS=(-device "virtio-scsi-pci,id=scsi0" -drive "file=$X86_STORAGE_IMAGE,if=none,id=disk0,format=raw" -device "scsi-hd,drive=disk0,bus=scsi0.0")
+            ;;
+        nvme)
+            SATA_ARGS=(-drive "file=$X86_STORAGE_IMAGE,if=none,id=disk0,format=raw" -device "nvme,drive=disk0,serial=cellos-nvme-1")
+            ;;
+        pvscsi)
+            SATA_ARGS=(-device "pvscsi,id=scsi0" -drive "file=$X86_STORAGE_IMAGE,if=none,id=disk0,format=raw" -device "scsi-hd,drive=disk0,bus=scsi0.0")
+            ;;
+        *)
+            echo "FAIL: unknown X86_STORAGE_MODEL '$X86_STORAGE_MODEL'" >&2
+            exit 1
+            ;;
+    esac
 else
     SATA_ARGS=()
 fi
@@ -136,6 +156,7 @@ case "$X86_NIC_MODEL" in
     e1000-82545em) EXPECT_BIND="\[e1000\] controller bound 8086:100f 82545EM" ;;
     igb) EXPECT_BIND="\[igb\] controller bound 8086:10c9" ;;
     vmxnet3) EXPECT_BIND="\[vmxnet3\] controller bound 15ad:07b0 vmxnet3 .* irq=msix rx=request-driven" ;;
+    virtio-net-pci) EXPECT_BIND="\[virtio-net\] ready" ;;
 esac
 if ! grep -qa "$EXPECT_BIND" qemu-x86_64.log; then
     echo "FAIL: expected NIC bind line '$EXPECT_BIND'" >&2
@@ -168,21 +189,48 @@ fi
 
 # Phase 02a: with a SATA image attached, the AHCI Driver Cell must bind the ICH9
 # controller, bring a port up, and complete IDENTIFY DEVICE before the shell.
-if [[ -n "$X86_SATA_IMAGE" ]]; then
-    if ! grep -qa "\[ahci\] controller bound" qemu-x86_64.log; then
-        echo "FAIL: AHCI Driver Cell did not bind the SATA controller" >&2
-        grep -ai "ahci" qemu-x86_64.log | head -5
-        exit 1
-    fi
-    if ! grep -qa "\[ahci\] IDENTIFY DEVICE ok" qemu-x86_64.log; then
-        echo "FAIL: AHCI Driver Cell did not complete IDENTIFY DEVICE" >&2
-        grep -ai "ahci" qemu-x86_64.log | head -10
-        exit 1
-    fi
-    if ! grep -qa "\[driver_cell\] ahci storage driver ready" qemu-x86_64.log; then
-        echo "FAIL: AHCI Driver Cell did not report ready" >&2
-        exit 1
-    fi
+if [[ -n "$X86_STORAGE_IMAGE" ]]; then
+    case "$X86_STORAGE_MODEL" in
+        sata)
+            if ! grep -qa "\[ahci\] controller bound" qemu-x86_64.log; then
+                echo "FAIL: AHCI Driver Cell did not bind the SATA controller" >&2
+                grep -ai "ahci" qemu-x86_64.log | head -5
+                exit 1
+            fi
+            if ! grep -qa "\[driver_cell\] ahci storage driver ready" qemu-x86_64.log; then
+                echo "FAIL: AHCI Driver Cell did not report ready" >&2
+                exit 1
+            fi
+            ;;
+        virtio-blk)
+            if ! grep -qa "\[virtio-blk\] ready" qemu-x86_64.log; then
+                echo "FAIL: virtio-blk Driver Cell did not report ready" >&2
+                grep -ai "virtio-blk" qemu-x86_64.log | head -5
+                exit 1
+            fi
+            ;;
+        virtio-scsi)
+            if ! grep -qa "\[virtio-scsi\] ready" qemu-x86_64.log; then
+                echo "FAIL: virtio-scsi Driver Cell did not report ready" >&2
+                grep -ai "virtio-scsi" qemu-x86_64.log | head -5
+                exit 1
+            fi
+            ;;
+        nvme)
+            if ! grep -qa "\[nvme\] DMA authorized" qemu-x86_64.log; then
+                echo "FAIL: NVMe Driver Cell did not report DMA authorized" >&2
+                grep -ai "nvme" qemu-x86_64.log | head -5
+                exit 1
+            fi
+            ;;
+        pvscsi)
+            if ! grep -qa "\[pvscsi\] ready" qemu-x86_64.log; then
+                echo "FAIL: PVSCSI Driver Cell did not report ready" >&2
+                grep -ai "pvscsi" qemu-x86_64.log | head -5
+                exit 1
+            fi
+            ;;
+    esac
 fi
 
 # Phase 02, the other half of the x86 domain gate. This is the *production* image

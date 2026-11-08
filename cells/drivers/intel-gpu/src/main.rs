@@ -5,6 +5,7 @@
 
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
+#![forbid(unsafe_code)]
 extern crate alloc;
 
 mod batch;
