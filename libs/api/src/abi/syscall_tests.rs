@@ -493,7 +493,7 @@ mod tests {
 
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
-        let unassigned = [50, 99, 100, 108, 263, 999, usize::MAX];
+        let unassigned = [50, 99, 100, 108, 264, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(
@@ -644,6 +644,13 @@ mod allowlist {
             .with(ViSyscall::Log)
             .0;
         assert_eq!(mask, 0x403u64, "bit-packing mismatch: got {:#x}", mask);
+    }
+
+    #[test]
+    fn get_cpu_count_abi_is_stable() {
+        assert_eq!(ViSyscall::GetCpuCount as usize, 263);
+        assert_eq!(ViSyscall::from(263), ViSyscall::GetCpuCount);
+        assert_eq!(ViSyscall::GetCpuCount.allowlist_bit(), None);
     }
 
     #[test]

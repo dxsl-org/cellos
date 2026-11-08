@@ -289,6 +289,18 @@ pub fn sys_yield() {
     }
 }
 
+/// Query the number of online CPUs / hardware harts (at least 1).
+///
+/// Always permitted past the syscall allowlist; required by `available_parallelism`.
+pub fn sys_get_cpu_count() -> usize {
+    let ret = unsafe { syscall(ViSyscall::GetCpuCount, 0, 0, 0, 0) };
+    if ret > 0 {
+        ret as usize
+    } else {
+        1
+    }
+}
+
 pub fn sys_exit(code: usize) -> ! {
     unsafe {
         syscall(ViSyscall::Exit, code, 0, 0, 0);

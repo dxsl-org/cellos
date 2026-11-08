@@ -4512,6 +4512,8 @@ pub enum Syscall {
         result_ptr: usize,
         result_capacity: usize,
     },
+    /// 263: GetCpuCount — query number of online logical CPUs/harts.
+    GetCpuCount,
 
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -5021,6 +5023,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::PipeClose { .. } => V::PipeClose,
         Syscall::PipeShare { .. } => V::PipeShare,
         Syscall::CellSessionV1 { .. } => return None,
+        Syscall::GetCpuCount => V::GetCpuCount,
         Syscall::Log { .. } => V::Log,
         Syscall::SetTimer { .. } => V::SetTimer,
         Syscall::ShmAlloc { .. } => V::ShmAlloc,
@@ -8516,6 +8519,7 @@ fn handle_syscall_inner(
                 _ => Ok(0),
             }
         }
+        Syscall::GetCpuCount => Ok(crate::task::smp::online_hart_count()),
         Syscall::AudioPlay { .. } => {
             // No Sound Cell registered; virtio_sound.rs removed (kernel boundary law).
             // Syscall 218 is reserved — do not reuse. A VirtIO Sound Driver Cell
@@ -10471,6 +10475,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             result_ptr: a2,
             result_capacity: a3,
         },
+        ViSyscall::GetCpuCount => Syscall::GetCpuCount,
         ViSyscall::Reply => Syscall::Reply {
             caller: a0,
             result: a1,
@@ -12619,6 +12624,20 @@ mod tests {
         });
         with_scheduler_task(1u64 << 56, |tid| {
             assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
+        });
+    }
+
+    #[test]
+    fn get_cpu_count_maps_and_is_always_permitted() {
+        let syscall = map_syscall(ViSyscall::GetCpuCount as usize, 0, 0, 0, 0)
+            .expect("GetCpuCount must decode");
+        assert!(matches!(syscall, Syscall::GetCpuCount));
+        assert_eq!(syscall_to_vi(&syscall), Some(ViSyscall::GetCpuCount));
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::GetCpuCount as usize, tid),
+                Ok(())
+            );
         });
     }
 

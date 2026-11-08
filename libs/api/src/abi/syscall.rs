@@ -899,6 +899,10 @@ pub enum ViSyscall {
     /// a0=request ptr, a1=request len, a2=result ptr, a3=result capacity.
     /// Returns zero after a complete typed result, or usize::MAX without effects.
     CellSessionV1 = 262,
+    /// 263: Query the number of online CPUs / hardware harts.
+    /// ABI: (no args) → online_hart_count (> 0).
+    /// Always permitted (no allowlist bit). Required by `std::thread::available_parallelism`.
+    GetCpuCount = 263,
 }
 
 /// Fixed-width little-endian status written only by a successful `IpcTake`.
@@ -1365,8 +1369,10 @@ impl ViSyscall {
             | Self::PipeWrite
             | Self::PipeClose
             | Self::PipeShare
+            // GetCpuCount returns scalar online hart count; carries no authority
+            | Self::GetCpuCount
             | Self::Unknown => None,
-        }
+         }
     }
 }
 
@@ -1475,6 +1481,7 @@ impl From<usize> for ViSyscall {
             260 => ViSyscall::IpcCurrent,
             261 => ViSyscall::IpcReply,
             262 => ViSyscall::CellSessionV1,
+            263 => ViSyscall::GetCpuCount,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

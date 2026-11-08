@@ -95,11 +95,11 @@ Substrate kernel đã có: `Spawn=5` (task cùng Cell), `FutexWait=17`/`FutexWak
 - [ ] **PAL `library/std/src/sys/thread/cellos.rs`** (sửa `patches/rust-std-cellos.patch`, hiện `Thread = unsupported`):
   `Thread::new` = `Box<ThreadInit>` → `sys_spawn(thread_start, ptr)`; `thread_start` chạy `init.init()()`,
   `thread_local::destructors::run()`, `rt::thread_cleanup()`, `sys_exit(0)`; `join` = `Wait=8`; `sleep` = TIMER completion
-  (không busy-yield); `available_parallelism` = số hart — **cần syscall/`MemInfo` trả số hart** (hiện hard-code 1 trong patch).
-- [ ] **`sys/sync/futex/cellos.rs`**: `futex_wait(&AtomicU32, expected, timeout)` → `FutexWait=17` (Duration→tick, 0 = vô hạn;
-  `ValueMismatch`→`true`, `TimedOut`→`false`); `futex_wake` → `FutexWake=18(count=1)`; `futex_wake_all` → `count=0`.
-  Thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs` và `thread_parking`.
-  **Không viết Mutex/Condvar riêng.**
+  (không busy-yield); `available_parallelism` = số hart — đã xong qua `ViSyscall::GetCpuCount` (263) trong kernel/ostd/patch.
+- [x] **`sys/sync/futex/cellos.rs`**: đã triển khai trong `patches/rust-std-cellos.patch`: `futex_wait(&AtomicU32, expected, timeout)`
+  → `FutexWait=17` (Duration→tick, 0 = vô hạn; ValueMismatch→`true`, TimedOut→`false`); `futex_wake` → `FutexWake=18(count=1)`;
+  `futex_wake_all` → `count=0`. Đã thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs`
+  và `thread_parking`.
 - [ ] **TLS**: loader expose `PT_TLS` (size/align/init image/tbss) qua launch profile (`docs/guides/tier1b-c-zig.md`);
   runtime user cấp block per-thread (+ TCB self-pointer cho x86_64 variant II) và gọi `SetTlsBase` đầu `thread_start`;
   `target_thread_local = true` trong `targets/*.json` → std dùng `thread_local/native` (bỏ `no_threads` trong patch).

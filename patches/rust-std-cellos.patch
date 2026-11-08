@@ -345,15 +345,193 @@ index 0000000..13df19e
 +pub mod os {
 +    pub use crate::sys::env_consts::os::*;
 +}
+diff --git b/library/std/src/sys/pal/cellos/futex.rs b/library/std/src/sys/pal/cellos/futex.rs
+new file mode 100644
+index 0000000..f012345
+--- /dev/null
++++ b/library/std/src/sys/pal/cellos/futex.rs
+@@ -0,0 +1,129 @@
++use crate::sync::atomic::Atomic;
++use crate::time::Duration;
++
++/// An atomic for use as a futex that is at least 32-bits but may be larger
++pub type Futex = Atomic<Primitive>;
++/// Must be the underlying type of Futex
++pub type Primitive = u32;
++
++/// An atomic for use as a futex that is at least 8-bits but may be larger.
++pub type SmallFutex = Atomic<SmallPrimitive>;
++/// Must be the underlying type of SmallFutex
++pub type SmallPrimitive = u32;
++
++const SYS_FUTEX_WAIT: usize = 17;
++const SYS_FUTEX_WAKE: usize = 18;
++
++pub fn futex_wait(futex: &Atomic<u32>, expected: u32, timeout: Option<Duration>) -> bool {
++    let ticks = match timeout {
++        Some(d) => {
++            let ms = d.as_millis();
++            let t = (ms + 9) / 10;
++            if t == 0 {
++                1
++            } else if t > usize::MAX as u128 {
++                usize::MAX
++            } else {
++                t as usize
++            }
++        }
++        None => 0,
++    };
++
++    let ret: usize;
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!(
++            "ecall",
++            inlateout("a0") futex.as_ptr() as usize => ret,
++            in("a1") expected as usize,
++            in("a2") ticks,
++            in("a3") 0usize,
++            in("a7") SYS_FUTEX_WAIT,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            inlateout("x0") SYS_FUTEX_WAIT => ret,
++            in("x1") futex.as_ptr() as usize,
++            in("x2") expected as usize,
++            in("x3") ticks,
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            inlateout("rax") SYS_FUTEX_WAIT => ret,
++            in("rdi") futex.as_ptr() as usize,
++            in("rsi") expected as usize,
++            in("rdx") ticks,
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
++    {
++        ret = 0;
++    }
++
++    ret != 2
++}
++
++#[inline]
++pub fn futex_wake(futex: &Atomic<u32>) -> bool {
++    let ret: usize;
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!(
++            "ecall",
++            inlateout("a0") futex.as_ptr() as usize => ret,
++            in("a1") 1usize,
++            in("a2") 0usize,
++            in("a3") 0usize,
++            in("a7") SYS_FUTEX_WAKE,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            inlateout("x0") SYS_FUTEX_WAKE => ret,
++            in("x1") futex.as_ptr() as usize,
++            in("x2") 1usize,
++            in("x3") 0usize,
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            inlateout("rax") SYS_FUTEX_WAKE => ret,
++            in("rdi") futex.as_ptr() as usize,
++            in("rsi") 1usize,
++            in("rdx") 0usize,
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
++    {
++        ret = 0;
++    }
++
++    ret > 0 && ret != usize::MAX
++}
++
++#[inline]
++pub fn futex_wake_all(futex: &Atomic<u32>) {
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!(
++            "ecall",
++            in("a0") futex.as_ptr() as usize,
++            in("a1") 0usize,
++            in("a2") 0usize,
++            in("a3") 0usize,
++            in("a7") SYS_FUTEX_WAKE,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            in("x0") SYS_FUTEX_WAKE,
++            in("x1") futex.as_ptr() as usize,
++            in("x2") 0usize,
++            in("x3") 0usize,
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            in("rax") SYS_FUTEX_WAKE,
++            in("rdi") futex.as_ptr() as usize,
++            in("rsi") 0usize,
++            in("rdx") 0usize,
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
++    {}
++}
 diff --git b/library/std/src/sys/pal/cellos/mod.rs b/library/std/src/sys/pal/cellos/mod.rs
 new file mode 100644
 index 0000000..18c8ccb
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/mod.rs
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,10 @@
 +pub mod alloc;
 +pub mod common;
 +pub mod env;
++pub mod futex;
 +pub mod random;
 +pub mod thread;
 +pub mod time;
@@ -441,16 +619,60 @@ new file mode 100644
 index 0000000..ac2abcb
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,93 @@
 +use crate::io;
 +use crate::num::NonZero;
 +
 +const SYS_YIELD: usize = 104;
++const SYS_GET_CPU_COUNT: usize = 263;
 +
 +pub fn available_parallelism() -> io::Result<NonZero<usize>> {
-+    Ok(NonZero::new(1).unwrap())
++    let count: usize;
++    #[cfg(target_arch = "riscv64")]
++    unsafe {
++        core::arch::asm!(
++            "ecall",
++            inlateout("a0") 0usize => count,
++            in("a1") 0usize,
++            in("a2") 0usize,
++            in("a3") 0usize,
++            in("a7") SYS_GET_CPU_COUNT,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "aarch64")]
++    unsafe {
++        core::arch::asm!(
++            "svc #0",
++            inlateout("x0") SYS_GET_CPU_COUNT => count,
++            in("x1") 0usize,
++            in("x2") 0usize,
++            in("x3") 0usize,
++            in("x4") 0usize,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(target_arch = "x86_64")]
++    unsafe {
++        core::arch::asm!(
++            "syscall",
++            inlateout("rax") SYS_GET_CPU_COUNT => count,
++            in("rdi") 0usize,
++            in("rsi") 0usize,
++            in("rdx") 0usize,
++            in("r10") 0usize,
++            lateout("rcx") _,
++            lateout("r11") _,
++            options(nostack, preserves_flags)
++        );
++    }
++    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
++    {
++        count = 1;
++    }
++    let n = NonZero::new(if count > 0 { count } else { 1 }).unwrap();
++    Ok(n)
 +}
-+
 +pub fn yield_now() {
 +    #[cfg(target_arch = "riscv64")]
 +    unsafe {
@@ -799,3 +1021,68 @@ index 6cd1850..522952f 100644
      target_os = "windows" => {
          mod windows;
          use windows as imp;
+diff --git a/library/std/src/sys/sync/condvar/mod.rs b/library/std/src/sys/sync/condvar/mod.rs
+index 0000001..0000002 100644
+--- a/library/std/src/sys/sync/condvar/mod.rs
++++ b/library/std/src/sys/sync/condvar/mod.rs
+@@ -10,7 +10,8 @@ cfg_select! {
+         target_os = "fuchsia",
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
++        target_os = "cellos",
+     ) => {
+         mod futex;
+         pub use futex::Condvar;
+     }
+diff --git a/library/std/src/sys/sync/mutex/mod.rs b/library/std/src/sys/sync/mutex/mod.rs
+index 0000001..0000002 100644
+--- a/library/std/src/sys/sync/mutex/mod.rs
++++ b/library/std/src/sys/sync/mutex/mod.rs
+@@ -9,7 +9,8 @@ cfg_select! {
+         target_os = "dragonfly",
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
++        target_os = "cellos",
+     ) => {
+         mod futex;
+         pub use futex::Mutex;
+     }
+diff --git a/library/std/src/sys/sync/once/mod.rs b/library/std/src/sys/sync/once/mod.rs
+index 0000001..0000002 100644
+--- a/library/std/src/sys/sync/once/mod.rs
++++ b/library/std/src/sys/sync/once/mod.rs
+@@ -19,7 +19,8 @@ cfg_select! {
+         target_os = "dragonfly",
+         target_os = "fuchsia",
+         target_os = "hermit",
++        target_os = "cellos",
+     ) => {
+         mod futex;
+         pub use futex::{Once, OnceState};
+     }
+diff --git a/library/std/src/sys/sync/rwlock/mod.rs b/library/std/src/sys/sync/rwlock/mod.rs
+index 0000001..0000002 100644
+--- a/library/std/src/sys/sync/rwlock/mod.rs
++++ b/library/std/src/sys/sync/rwlock/mod.rs
+@@ -10,7 +10,8 @@ cfg_select! {
+         all(target_family = "wasm", target_feature = "atomics"),
+         target_os = "hermit",
+        target_os = "motor",
++        target_os = "cellos",
+     ) => {
+         mod futex;
+         pub use futex::RwLock;
+     }
+diff --git a/library/std/src/sys/sync/thread_parking/mod.rs b/library/std/src/sys/sync/thread_parking/mod.rs
+index 0000001..0000002 100644
+--- a/library/std/src/sys/sync/thread_parking/mod.rs
++++ b/library/std/src/sys/sync/thread_parking/mod.rs
+@@ -10,7 +10,8 @@ cfg_select! {
+         target_os = "fuchsia",
+         target_os = "motor",
+         target_os = "hermit",
++        target_os = "cellos",
+     ) => {
+         mod futex;
+         pub use futex::Parker;
+     }
