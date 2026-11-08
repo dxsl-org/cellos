@@ -189,3 +189,16 @@ fn find_by_slug_is_exact_and_confined_to_the_named_catalog() {
     }
     assert!(crate::find_by_slug(&[], "x86_64-pc").is_none());
 }
+#[test]
+fn macmini_m1_descriptor_declares_typed_drivers() {
+    let board = crate::apple_macmini_m1::MACMINI_M1;
+    assert_eq!(board.architecture, Architecture::Aarch64);
+    assert_eq!(board.soc, SocId::AppleT8103);
+    assert_eq!(board.dma_isolation, DmaIsolation::Required);
+    assert!(board.has_driver(DriverId::UartAppleS5l));
+    assert!(board.has_driver(DriverId::IrqAppleAic1));
+    assert_eq!(
+        crate::find_by_slug(crate::aarch64_catalog(), "macmini-m1").map(|b| b.soc),
+        Some(SocId::AppleT8103)
+    );
+}

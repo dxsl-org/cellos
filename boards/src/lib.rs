@@ -31,6 +31,9 @@ pub mod qemu_q35_x86_64;
 #[path = "../pc/x86_64-pc/board.rs"]
 pub mod pc_x86_64;
 
+/// Apple Mac mini M1 (t8103, J274) descriptor (ADR-0032 §4–5).
+#[path = "../apple/macmini-m1/board.rs"]
+pub mod apple_macmini_m1;
 /// Generic AArch64 virtual machine descriptor (ADR-0032 §5).
 #[path = "../vm/aarch64-vm/board.rs"]
 pub mod vm_aarch64;
@@ -76,6 +79,9 @@ pub fn pc_x86_64() -> &'static BoardDescriptor {
 pub fn vm_aarch64() -> &'static BoardDescriptor {
     &vm_aarch64::AARCH64_VM
 }
+pub fn macmini_m1() -> &'static BoardDescriptor {
+    &apple_macmini_m1::MACMINI_M1
+}
 
 /// Every x86_64 descriptor one x86_64 image may bind at boot, strictest first.
 ///
@@ -92,11 +98,12 @@ static X86_CATALOG: [&BoardDescriptor; 3] = [
 pub fn x86_catalog() -> &'static [&'static BoardDescriptor] {
     &X86_CATALOG
 }
-static AARCH64_CATALOG: [&BoardDescriptor; 4] = [
+static AARCH64_CATALOG: [&BoardDescriptor; 5] = [
     &qemu_virt_aarch64::QEMU_VIRT_AARCH64,
     &raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B,
     &raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B,
     &vm_aarch64::AARCH64_VM,
+    &apple_macmini_m1::MACMINI_M1,
 ];
 
 /// Returns the compiled AArch64 catalog.

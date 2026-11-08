@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Bare-metal Apple backend under the m1n1 hypervisor"
-status: pending
+status: "blocked: hardware (descriptors and host tests complete; S2-hv boot pending physical Mac mini M1 hardware per contract)"
 priority: P2
 effort: "10d + hardware"
 dependencies: ["1", "2a", "2b", "2c"]
@@ -51,11 +51,11 @@ New backend `apple_t8103` for the Mac mini M1, run as a guest of the m1n1 hyperv
 
 ## Todo List
 
-- [ ] Specs + ledger
-- [ ] UART/banner
-- [ ] AIC + timer
-- [ ] SMP + IPI
-- [ ] Profile, pin, reset
+- [x] Specs + ledger (OpenBSD ISC / Linux MIT references)
+- [ ] UART/banner (S2-hv pending hardware)
+- [ ] AIC + timer (S2-hv pending hardware)
+- [ ] SMP + IPI (S2-hv pending hardware)
+- [x] Profile, pin, reset (Mac mini M1 board descriptor and catalog qualification in boards/apple/macmini-m1)
 
 ## Success Criteria
 
