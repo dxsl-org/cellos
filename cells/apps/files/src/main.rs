@@ -307,13 +307,25 @@ fn cell_main() {
                             app.open_selected();
                         }
                         KeySym::Backspace => app.navigate_up(),
-                        KeySym::Delete => app.delete_selected(),
+                        KeySym::Delete => {
+                            if ke.modifiers.contains(Modifiers::SHIFT) {
+                                app.delete_selected();
+                            } else {
+                                app.trash_selected();
+                            }
+                        }
+                        KeySym::Tab => app.switch_active_pane(),
+                        KeySym::F3 => app.toggle_split_pane(),
+                        KeySym::F5 => app.copy_to_other_pane(false),
+                        KeySym::F6 => app.copy_to_other_pane(true),
                         _ => match ch {
                             Some(c) if ke.modifiers.contains(Modifiers::CTRL) => {
                                 match c.to_ascii_lowercase() {
                                     'c' => app.copy_selected(false),
                                     'x' => app.copy_selected(true),
                                     'v' => app.paste_into_current(),
+                                    'z' => app.undo_last_trash(),
+                                    'e' => app.toggle_split_pane(),
                                     'l' => app.begin_prompt(PromptKind::GoTo),
                                     'n' if ke.modifiers.contains(Modifiers::SHIFT) => {
                                         app.begin_prompt(PromptKind::NewFile)

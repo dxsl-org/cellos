@@ -70,6 +70,13 @@ impl FileItem {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrashRecord {
+    pub name: String,
+    pub original_path: String,
+    pub trashed_path: String,
+    pub is_dir: bool,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlacesItem {
@@ -109,6 +116,12 @@ pub const DEFAULT_PLACES: &[PlacesItem] = &[
         path: "/srv",
         icon: "[=]",
         is_pinned: false,
+    },
+    PlacesItem {
+        name: "Trash",
+        path: "/data/.trash",
+        icon: "[T]",
+        is_pinned: true,
     },
 ];
 

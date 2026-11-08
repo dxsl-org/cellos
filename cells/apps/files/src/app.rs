@@ -9,7 +9,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::fs::{self, FileSystem, FsResult, PREVIEW_READ_MAX};
-use crate::model::{resolve_conflict_name, FileItem, PlacesItem, ViewMode, DEFAULT_PLACES};
+use crate::model::{
+    resolve_conflict_name, FileItem, PlacesItem, TrashRecord, ViewMode, DEFAULT_PLACES,
+};
 use crate::preview::{PreviewKind, QuickLookState};
 
 /// Longest text the path/name prompt accepts (one FAT long name).
@@ -48,6 +50,19 @@ pub struct Prompt {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActivePane {
+    #[default]
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneState {
+    pub current_path: String,
+    pub items: Vec<FileItem>,
+    pub selected_index: usize,
+}
 pub struct FilesApp<F: FileSystem> {
     pub fs: F,
     pub current_path: String,
@@ -62,6 +77,10 @@ pub struct FilesApp<F: FileSystem> {
     pub height: u32,
     pub quick_look: QuickLookState,
     pub pending_intent: Option<api::services::mime::LaunchIntent>,
+    pub trash_stack: Vec<TrashRecord>,
+    pub split_pane_enabled: bool,
+    pub active_pane: ActivePane,
+    pub secondary_pane: Option<PaneState>,
 }
 
 impl<F: FileSystem> FilesApp<F> {
@@ -80,6 +99,10 @@ impl<F: FileSystem> FilesApp<F> {
             height,
             quick_look: QuickLookState::new(),
             pending_intent: None,
+            trash_stack: Vec::new(),
+            split_pane_enabled: false,
+            active_pane: ActivePane::Left,
+            secondary_pane: None,
         };
         app.load_directory(initial_path);
         app
@@ -275,6 +298,180 @@ impl<F: FileSystem> FilesApp<F> {
             ),
             Err(e) => {
                 self.status_message = format!("Cannot delete {}: {}", item.name, e.describe())
+            }
+        }
+    }
+    /// Move the selected entry to Trash (`/data/.trash`), preserving it for Undo.
+    pub fn trash_selected(&mut self) {
+        let Some(item) = self.selected_entry() else {
+            return;
+        };
+        // If already in the trash, perform permanent deletion
+        if self.current_path.starts_with("/data/.trash") {
+            self.delete_selected();
+            return;
+        }
+        // Ensure trash directory exists
+        let _ = self.fs.mkdir("/data/.trash");
+        let trash_existing: Vec<String> = self
+            .fs
+            .list_dir("/data/.trash")
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        let target_name = resolve_conflict_name(&item.name, &trash_existing);
+        let trashed_path = fs::join("/data/.trash", &target_name);
+        match fs::move_entry(&mut self.fs, &item.path, &trashed_path, item.is_dir) {
+            Ok(()) => {
+                self.trash_stack.push(TrashRecord {
+                    name: item.name.clone(),
+                    original_path: item.path.clone(),
+                    trashed_path,
+                    is_dir: item.is_dir,
+                });
+                self.refresh(
+                    None,
+                    format!("Moved {} to Trash (Ctrl+Z to Undo)", item.name),
+                );
+            }
+            Err(e) => {
+                self.status_message =
+                    format!("Cannot move {} to Trash: {}", item.name, e.describe());
+            }
+        }
+    }
+
+    /// Restore the most recently trashed item to its original location.
+    pub fn undo_last_trash(&mut self) {
+        let Some(record) = self.trash_stack.pop() else {
+            self.status_message = String::from("Nothing to undo in Trash");
+            return;
+        };
+        let parent = fs::parent(&record.original_path);
+        let dest_existing: Vec<String> = self
+            .fs
+            .list_dir(parent)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        let restored_name = resolve_conflict_name(&record.name, &dest_existing);
+        let restored_path = fs::join(parent, &restored_name);
+        match fs::move_entry(
+            &mut self.fs,
+            &record.trashed_path,
+            &restored_path,
+            record.is_dir,
+        ) {
+            Ok(()) => {
+                self.refresh(
+                    Some(&restored_name),
+                    format!("Restored {} from Trash", record.name),
+                );
+            }
+            Err(e) => {
+                let status = format!("Cannot restore {}: {}", record.name, e.describe());
+                self.trash_stack.push(record);
+                self.status_message = status;
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn can_undo_trash(&self) -> bool {
+        !self.trash_stack.is_empty()
+    }
+
+    pub fn toggle_split_pane(&mut self) {
+        if self.split_pane_enabled {
+            self.split_pane_enabled = false;
+            self.secondary_pane = None;
+            self.active_pane = ActivePane::Left;
+            self.status_message = String::from("Split pane disabled");
+        } else {
+            let secondary_path = if self.current_path != "/data" {
+                "/data"
+            } else {
+                "/"
+            };
+            let secondary_items = self.read_listing(secondary_path).unwrap_or_default();
+            self.secondary_pane = Some(PaneState {
+                current_path: String::from(secondary_path),
+                items: secondary_items,
+                selected_index: 0,
+            });
+            self.split_pane_enabled = true;
+            self.active_pane = ActivePane::Left;
+            self.status_message =
+                String::from("Split pane enabled (Tab: switch pane, F5: copy across)");
+        }
+    }
+
+    pub fn switch_active_pane(&mut self) {
+        if !self.split_pane_enabled {
+            return;
+        }
+        let Some(secondary) = self.secondary_pane.take() else {
+            return;
+        };
+        let primary = PaneState {
+            current_path: core::mem::replace(&mut self.current_path, secondary.current_path),
+            items: core::mem::replace(&mut self.items, secondary.items),
+            selected_index: core::mem::replace(&mut self.selected_index, secondary.selected_index),
+        };
+        self.secondary_pane = Some(primary);
+        self.active_pane = match self.active_pane {
+            ActivePane::Left => ActivePane::Right,
+            ActivePane::Right => ActivePane::Left,
+        };
+        self.status_message = format!(
+            "Active pane: {:?} ({})",
+            self.active_pane, self.current_path
+        );
+    }
+
+    /// Copy or move the selected item in the active pane to the target pane directly.
+    pub fn copy_to_other_pane(&mut self, cut: bool) {
+        if !self.split_pane_enabled {
+            return;
+        }
+        let Some(item) = self.selected_entry() else {
+            return;
+        };
+        let Some(secondary) = &self.secondary_pane else {
+            return;
+        };
+        let target_dir = secondary.current_path.clone();
+        let existing: Vec<String> = secondary
+            .items
+            .iter()
+            .filter(|i| i.name != PARENT_ENTRY)
+            .map(|i| i.name.clone())
+            .collect();
+        let final_name = resolve_conflict_name(&item.name, &existing);
+        let dst = fs::join(&target_dir, &final_name);
+        let result = if cut {
+            fs::move_entry(&mut self.fs, &item.path, &dst, item.is_dir)
+        } else {
+            fs::copy_entry(&mut self.fs, &item.path, &dst, item.is_dir)
+        };
+        match result {
+            Ok(()) => {
+                let verb = if cut { "Moved" } else { "Copied" };
+                let status = format!("{} {} -> {}", verb, item.name, dst);
+                self.refresh(None, status);
+                let sec_path = self.secondary_pane.as_ref().map(|s| s.current_path.clone());
+                if let Some(sec_path) = sec_path {
+                    if let Ok(new_items) = self.read_listing(&sec_path) {
+                        if let Some(sec) = &mut self.secondary_pane {
+                            sec.items = new_items;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                self.status_message = format!("Operation failed: {}", e.describe());
             }
         }
     }
@@ -584,5 +781,67 @@ mod tests {
         assert_eq!(intent.target_path, "/tmp/c5dir/a.txt");
         assert_eq!(intent.action, api::services::mime::FileAction::Open);
         assert_eq!(intent.app_id, "terminal");
+    }
+    #[test]
+    fn trash_and_undo_restores_file() {
+        let fs = FakeFs::new()
+            .dir("/data")
+            .file("/data/memo.txt", b"important\n");
+        let mut app = app_at(fs, "/data");
+        assert_eq!(names(&app), ["..", "memo.txt"]);
+        app.selected_index = 1;
+        assert!(!app.can_undo_trash());
+
+        // Trash the file
+        app.trash_selected();
+        assert!(app.can_undo_trash());
+        assert_eq!(names(&app), ["..", ".trash"]);
+        assert!(app.status_message.contains("Moved memo.txt to Trash"));
+
+        // Verify it was moved to /data/.trash/memo.txt
+        assert!(app.fs.stat("/data/.trash/memo.txt").is_ok());
+        assert!(app.fs.stat("/data/memo.txt").is_err());
+
+        // Undo trash
+        app.undo_last_trash();
+        assert!(!app.can_undo_trash());
+        assert_eq!(names(&app), ["..", ".trash", "memo.txt"]);
+        assert!(app.status_message.contains("Restored memo.txt from Trash"));
+        assert!(app.fs.stat("/data/memo.txt").is_ok());
+        assert!(app.fs.stat("/data/.trash/memo.txt").is_err());
+    }
+
+    #[test]
+    fn split_pane_toggles_and_copies_across() {
+        let fs = FakeFs::new()
+            .dir("/data")
+            .file("/data/item.txt", b"payload\n")
+            .dir("/mnt");
+        let mut app = app_at(fs, "/data");
+        assert!(!app.split_pane_enabled);
+
+        // Enable split pane
+        app.toggle_split_pane();
+        assert!(app.split_pane_enabled);
+        assert_eq!(app.active_pane, ActivePane::Left);
+        assert!(app.secondary_pane.is_some());
+
+        // Switch active pane to Right
+        app.switch_active_pane();
+        assert_eq!(app.active_pane, ActivePane::Right);
+
+        // Switch back to Left
+        app.switch_active_pane();
+        assert_eq!(app.active_pane, ActivePane::Left);
+
+        // Copy item.txt from /data to secondary pane
+        app.selected_index = 1;
+        app.copy_to_other_pane(false);
+        assert!(app.status_message.contains("Copied item.txt"));
+
+        // Disable split pane
+        app.toggle_split_pane();
+        assert!(!app.split_pane_enabled);
+        assert!(app.secondary_pane.is_none());
     }
 }

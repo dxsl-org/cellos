@@ -60,7 +60,7 @@ Còn mở:
   UI kiosk trên host (không tạo VM; chuỗi `Intel VT-x (VMX root)` là literal). Cần guest app-only
   fullscreen, interactive host tab, resize/input/dialog/teardown; không dùng log launcher thay bằng
   chứng. Phụ thuộc mục Intel VMX/EPT ở trên.
-- Deferred by approved scope (plan): Files split-pane/cây thư mục đầy đủ, Trash/Undo, drag-to-group/detach.
+- Deferred by approved scope (plan): Files drag-to-group/detach (split-pane và Trash/Undo đã landed).
 
 ## Kiến trúc & nợ kỹ thuật tồn đọng
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
