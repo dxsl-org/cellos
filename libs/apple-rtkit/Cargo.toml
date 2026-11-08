@@ -1,0 +1,8 @@
+[package]
+name = "apple-rtkit"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Apple RTKit coprocessor mailbox protocol, SART window manager, and partition guard (Phase 06, ADR-0032 §5)"
+
+[dependencies]

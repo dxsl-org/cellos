@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Internal storage: ANS2 NVMe through RTKit and SART"
-status: pending
+status: "blocked: hardware (RTKit protocol library, SART filtering and partition guard host tests complete; live S2-hv boot pending physical Mac mini M1 hardware per contract)"
 priority: P2
 effort: "12d + hardware"
 dependencies: ["5"]
@@ -50,10 +50,10 @@ The internal SSD is an MMIO NVMe controller (ANS2) whose firmware runs on an RTK
 
 ## Todo List
 
-- [ ] RTKit library + tests
-- [ ] Q2 decision + SART
-- [ ] Read-only bring-up
-- [ ] Partition guard + write path
+- [x] RTKit library + tests (`libs/apple-rtkit/**`: 128-bit message packing, management handshake, SART window manager, PartitionGuard)
+- [x] Q2 decision + SART (SART window manager filters physical DMA ranges to permitted cell buffers)
+- [ ] Read-only bring-up (S2-hv pending hardware)
+- [ ] Partition guard + write path (S2-hv pending hardware)
 
 ## Success Criteria
 
