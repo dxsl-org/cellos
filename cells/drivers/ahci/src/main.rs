@@ -25,8 +25,8 @@
 //! `PcieDriverCap` is granted by init via the reviewed `/bin/ahci` launch edge —
 //! not via a manifest flag (all 8 flag bits in v1 are occupied).
 
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
 mod controller;
