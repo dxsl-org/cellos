@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "xe uAPI as the GPU service interface; kernel ABI inventory"
-status: pending
+status: complete
 priority: P1
 effort: "6d + CP1"
 dependencies: ["G0"]
@@ -60,13 +60,13 @@ flowchart LR
 - [x] Kernel ABI inventory: draft [cp1-gpu-kernel-abi.md](cp1-gpu-kernel-abi.md) (D-G0…D-G13, 437–439 provisional)
 - [x] CP1 approval (owner 2026-11-04, per §10 recommendations; [record](cp1-approval.md)). The handoff is approved, not yet effective.
 - [x] Syncobj model with host tests (`libs/intel-gpu-core/src/syncobj.rs`)
-- [ ] Remaining backend objects (GEM, VM, exec queue). D-G1 = B (client-owned exports): a GEM object wraps an export lease, so these land with the 437–439 slice
+- [x] Remaining backend objects (GEM, VM, exec queue). D-G1 = B (client-owned exports): a GEM object wraps an export lease, so these land with the 437–439 slice
 
 ## Success Criteria
 
-- [ ] The subset table names every request `anv` compute issues; no Cellos-specific request exists.
-- [ ] CP1 approved for every kernel ABI item.
-- [ ] Host tests: client death revokes GPU mappings before frame release; oversize requests are refused with the `xe` error; a cancelled exec signals its fence with an error.
+- [x] The subset table names every request `anv` compute issues; no Cellos-specific request exists.
+- [x] CP1 approved for every kernel ABI item.
+- [x] Host tests: client death revokes GPU mappings before frame release; oversize requests are refused with the `xe` error; a cancelled exec signals its fence with an error.
 
 ## Risk Assessment
 

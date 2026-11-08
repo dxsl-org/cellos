@@ -12,6 +12,7 @@
 
 extern crate alloc;
 
+pub mod backend;
 pub mod ct;
 pub mod guc_fw;
 pub mod ppgtt;
