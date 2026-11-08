@@ -16,10 +16,7 @@ fn gem_create_validations() {
     );
 
     // Invalid caching
-    assert_eq!(
-        session.gem_create(4096, 100, 0, 99),
-        Err(XeError::Invalid)
-    );
+    assert_eq!(session.gem_create(4096, 100, 0, 99), Err(XeError::Invalid));
 
     // VM must exist if specified
     assert_eq!(
@@ -28,7 +25,9 @@ fn gem_create_validations() {
     );
 
     // Valid create
-    let h1 = session.gem_create(8192, 100, 0, XE_GEM_CPU_CACHING_WB).unwrap();
+    let h1 = session
+        .gem_create(8192, 100, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
     assert_eq!(h1, 1);
     let offset = session.gem_mmap_offset(h1).unwrap();
     assert_eq!(offset, (1u64) << 32);
@@ -42,7 +41,9 @@ fn gem_create_validations() {
 fn vm_bind_bounds_and_oversize_refusal() {
     let mut session = XeSession::new();
     let vm_id = session.vm_create(0).unwrap();
-    let bo = session.gem_create(16384, 101, 0, XE_GEM_CPU_CACHING_WB).unwrap();
+    let bo = session
+        .gem_create(16384, 101, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
 
     // Oversize 48-bit address space refusal
     let op_oversize_va = BindOp {
@@ -54,7 +55,10 @@ fn vm_bind_bounds_and_oversize_refusal() {
         range: 8192,
         pat_index: 0,
     };
-    assert_eq!(session.vm_bind(vm_id, &[op_oversize_va]), Err(XeError::Invalid));
+    assert_eq!(
+        session.vm_bind(vm_id, &[op_oversize_va]),
+        Err(XeError::Invalid)
+    );
 
     // Oversize BO offset refusal
     let op_oversize_bo = BindOp {
@@ -66,7 +70,10 @@ fn vm_bind_bounds_and_oversize_refusal() {
         range: 8192,
         pat_index: 0,
     };
-    assert_eq!(session.vm_bind(vm_id, &[op_oversize_bo]), Err(XeError::Invalid));
+    assert_eq!(
+        session.vm_bind(vm_id, &[op_oversize_bo]),
+        Err(XeError::Invalid)
+    );
 
     // Valid map
     let op_valid = BindOp {
@@ -106,7 +113,9 @@ fn vm_private_bo_isolation() {
     let vm2 = session.vm_create(0).unwrap();
 
     // Create BO bound specifically to vm1
-    let bo1 = session.gem_create(4096, 201, vm1, XE_GEM_CPU_CACHING_WB).unwrap();
+    let bo1 = session
+        .gem_create(4096, 201, vm1, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
 
     // Binding bo1 to vm1 succeeds
     let op1 = BindOp {
@@ -139,7 +148,9 @@ fn exec_and_fence_cancellation_on_hang() {
     let mut syncobjs = Syncobjs::new();
 
     let vm_id = session.vm_create(0).unwrap();
-    let bo = session.gem_create(4096, 301, vm_id, XE_GEM_CPU_CACHING_WB).unwrap();
+    let bo = session
+        .gem_create(4096, 301, vm_id, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
 
     // Map batch buffer
     let op = BindOp {
@@ -158,10 +169,7 @@ fn exec_and_fence_cancellation_on_hang() {
         .unwrap();
 
     // Unmapped batch buffer address is refused
-    assert_eq!(
-        session.exec(q_id, 0x50000, 0, None),
-        Err(XeError::Invalid)
-    );
+    assert_eq!(session.exec(q_id, 0x50000, 0, None), Err(XeError::Invalid));
 
     // Oversize sync count (> 1024) is refused
     assert_eq!(
@@ -190,10 +198,7 @@ fn exec_and_fence_cancellation_on_hang() {
     );
 
     // Submitting on banned queue returns -ECANCELED
-    assert_eq!(
-        session.exec(q_id, 0x10000, 0, None),
-        Err(XeError::Canceled)
-    );
+    assert_eq!(session.exec(q_id, 0x10000, 0, None), Err(XeError::Canceled));
 
     // Waiter discovers fence is completed
     assert_eq!(
@@ -208,8 +213,12 @@ fn client_death_revokes_gpu_mappings_before_frame_release() {
     let mut syncobjs = Syncobjs::new();
 
     let vm_id = session.vm_create(0).unwrap();
-    let bo1 = session.gem_create(8192, 401, vm_id, XE_GEM_CPU_CACHING_WB).unwrap();
-    let bo2 = session.gem_create(4096, 402, vm_id, XE_GEM_CPU_CACHING_WB).unwrap();
+    let bo1 = session
+        .gem_create(8192, 401, vm_id, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+    let bo2 = session
+        .gem_create(4096, 402, vm_id, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
 
     let op1 = BindOp {
         op: XE_VM_BIND_OP_MAP,
@@ -232,7 +241,11 @@ fn client_death_revokes_gpu_mappings_before_frame_release() {
     session.vm_bind(vm_id, &[op1, op2]).unwrap();
 
     let q_id = session
-        .exec_queue_create(vm_id, XE_ENGINE_CLASS_COMPUTE, XE_EXEC_QUEUE_PRIORITY_NORMAL)
+        .exec_queue_create(
+            vm_id,
+            XE_ENGINE_CLASS_COMPUTE,
+            XE_EXEC_QUEUE_PRIORITY_NORMAL,
+        )
         .unwrap();
 
     let fence = syncobjs.new_fence();

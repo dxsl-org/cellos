@@ -65,7 +65,7 @@ Pre-hardware progress (2026-11-04): the hardware-independent parts are in `libs/
 
 ## Todo List
 
-- [ ] Probe/forcewake
+- [x] Probe/forcewake
 - [ ] GuC up
 - [ ] PPGTT
 - [ ] First light

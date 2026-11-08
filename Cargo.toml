@@ -57,6 +57,7 @@ members = [
     "libs/virtio-pci-transport",
     "libs/scsi-block",
     "libs/apple-rtkit",
+    "libs/intel-gpu-core",
     # HAL
     "hal/core",
     "hal/soc/bcm27xx",
@@ -99,6 +100,7 @@ members = [
     "cells/drivers/ahci",
     "cells/drivers/xhci",
     "cells/drivers/gpu",
+    "cells/drivers/intel-gpu",
     "cells/drivers/i2c-gpio",
     "cells/drivers/i2c-bcm",
     "cells/drivers/spi-gpio",

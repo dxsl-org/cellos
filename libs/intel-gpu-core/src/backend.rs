@@ -10,9 +10,9 @@
 //! are revoked before client frames are released, and pending fences are signaled
 //! with error.
 
+use crate::syncobj::{FenceId, Syncobjs};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use crate::syncobj::{FenceId, Syncobjs};
 
 pub const PAGE_SIZE_4K: usize = 4096;
 pub const MAX_VA: u64 = (1u64 << 48) - 1;
@@ -219,7 +219,10 @@ impl XeSession {
         }
 
         let handle = self.next_gem_handle;
-        self.next_gem_handle = self.next_gem_handle.checked_add(1).ok_or(XeError::OutOfMemory)?;
+        self.next_gem_handle = self
+            .next_gem_handle
+            .checked_add(1)
+            .ok_or(XeError::OutOfMemory)?;
 
         let mmap_offset = (handle as u64) << 32;
         let bo = GemObject {
@@ -281,11 +284,17 @@ impl XeSession {
                     }
 
                     if op.flags & XE_VM_BIND_FLAG_NULL == 0 {
-                        let bo = self.gem_objects.get(&op.gem_handle).ok_or(XeError::NoEntry)?;
+                        let bo = self
+                            .gem_objects
+                            .get(&op.gem_handle)
+                            .ok_or(XeError::NoEntry)?;
                         if bo.vm_id != 0 && bo.vm_id != vm_id {
                             return Err(XeError::Invalid);
                         }
-                        let bo_end = op.obj_offset.checked_add(op.range).ok_or(XeError::Invalid)?;
+                        let bo_end = op
+                            .obj_offset
+                            .checked_add(op.range)
+                            .ok_or(XeError::Invalid)?;
                         if bo_end > bo.size as u64 {
                             return Err(XeError::Invalid);
                         }
@@ -313,7 +322,8 @@ impl XeSession {
                     {
                         return Err(XeError::Invalid);
                     }
-                    vm.mappings.retain(|m| !(m.addr == op.addr && m.range == op.range));
+                    vm.mappings
+                        .retain(|m| !(m.addr == op.addr && m.range == op.range));
                 }
                 XE_VM_BIND_OP_UNMAP_ALL => {
                     if op.gem_handle != 0 {
@@ -343,7 +353,10 @@ impl XeSession {
         }
 
         let q_id = self.next_queue_id;
-        self.next_queue_id = self.next_queue_id.checked_add(1).ok_or(XeError::OutOfMemory)?;
+        self.next_queue_id = self
+            .next_queue_id
+            .checked_add(1)
+            .ok_or(XeError::OutOfMemory)?;
 
         let q = ExecQueue::new(q_id, vm_id, engine_class, priority);
         self.exec_queues.insert(q_id, q);
@@ -374,7 +387,10 @@ impl XeSession {
             return Err(XeError::Invalid);
         }
 
-        let q = self.exec_queues.get_mut(&queue_id).ok_or(XeError::NoEntry)?;
+        let q = self
+            .exec_queues
+            .get_mut(&queue_id)
+            .ok_or(XeError::NoEntry)?;
         if q.banned {
             return Err(XeError::Canceled);
         }
@@ -388,7 +404,10 @@ impl XeSession {
         }
 
         let job_id = self.next_job_id;
-        self.next_job_id = self.next_job_id.checked_add(1).ok_or(XeError::OutOfMemory)?;
+        self.next_job_id = self
+            .next_job_id
+            .checked_add(1)
+            .ok_or(XeError::OutOfMemory)?;
 
         q.in_flight.push(InFlightJob {
             job_id,
@@ -406,7 +425,10 @@ impl XeSession {
         job_id: u64,
         syncobjs: &mut Syncobjs,
     ) -> Result<(), XeError> {
-        let q = self.exec_queues.get_mut(&queue_id).ok_or(XeError::NoEntry)?;
+        let q = self
+            .exec_queues
+            .get_mut(&queue_id)
+            .ok_or(XeError::NoEntry)?;
         let idx = q
             .in_flight
             .iter()
@@ -422,7 +444,10 @@ impl XeSession {
 
     /// Inject GPU hang: bans queue and signals all in-flight fences with completion/error.
     pub fn inject_hang(&mut self, queue_id: u32, syncobjs: &mut Syncobjs) -> Result<(), XeError> {
-        let q = self.exec_queues.get_mut(&queue_id).ok_or(XeError::NoEntry)?;
+        let q = self
+            .exec_queues
+            .get_mut(&queue_id)
+            .ok_or(XeError::NoEntry)?;
         q.banned = true;
         q.ban_reason = XE_EXEC_QUEUE_BAN_FLAG_HANG;
 

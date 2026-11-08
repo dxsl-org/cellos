@@ -1687,6 +1687,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "driver-intel-gpu"
+version = "0.1.0"
+dependencies = [
+ "api",
+ "cell-build",
+ "intel-gpu-core",
+ "ostd",
+ "types",
+]
+
+[[package]]
 name = "driver-ixgbe"
 version = "0.1.0"
 dependencies = [
@@ -2634,6 +2645,10 @@ dependencies = [
  "quote",
  "syn 3.0.3",
 ]
+
+[[package]]
+name = "intel-gpu-core"
+version = "0.1.0"
 
 [[package]]
 name = "itertools"
