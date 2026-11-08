@@ -25,9 +25,7 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 [record](260927-1100-c2c-anywhere-tier-aware/phase-03e-closure-cp2-approval.md)).
 
 **Ứng viên kế tiếp** (chưa admit; chọn trong portfolio theo promotion rule):
-- [ ] **C2C slice tiếp theo** (Phase 03 đã done) — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong. Toàn
-  bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice
-  ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).
+- [ ] **C2C slice tiếp theo** (Phases 03 & 08 done) — Phase 01 đã sign-off 2026-10-09, Phase 02 slice A+B xong, Phase 03e closure xong, Phase 08 fastpath xong (`885525b20`). Toàn bộ execution còn lại bị khoá bởi `CELL-CONTRACT-0024`: cần owner handoff theo slice ([plan](260927-1100-c2c-anywhere-tier-aware/plan.md), [locks](cell-contract-0024-locks.md)).
 - [ ] **VFS/storage/search research** — parked; chỉ tiếp tục khi owner yêu cầu
   ([plan](261019-1534-vfs-storage-search-research/plan.md)).
 - [ ] **Cellbox physical/production gates** — blocked (Intel vật lý, production). Deferred trong
@@ -64,17 +62,7 @@ Còn mở:
   chứng. Phụ thuộc mục Intel VMX/EPT ở trên.
 - Deferred by approved scope (plan): Files split-pane/cây thư mục đầy đủ, Trash/Undo, drag-to-group/detach.
 
-## Khắc phục bảo mật & hiệu năng (audit 2026-10-21)
-
-Gate cũ "chờ cellbox-cli" đã mở: Cellbox đóng 2026-10-31
-([ADR-0028](../docs/decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md),
-[plan](261020-1750-cellbox-cli/plan.md)). Mỗi mục vẫn phải được chọn làm slice (security repair) trong
-portfolio; nhiều mục chạm `kernel/src/task/syscall.rs` nên làm tuần tự. Nguồn: audit đọc-only 4 agent;
-cite dòng theo tree 2026-10-21 — đọc lại theo tên symbol trước khi sửa.
-Không trùng với `docs/roadmap/open-risk-register.md` (signing/dev-key/weak-rng/socket CapId/Spectre/VMX đã ghi ở đó).
-
-
-
+## Kiến trúc & nợ kỹ thuật tồn đọng
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
 `kernel_image()` trả `None`) / `cell_session.rs` 132 KB; CI chưa build kernel với
 `--no-default-features --features production-relay-image` (chỉ chạy test của checker script); provenance
