@@ -225,11 +225,12 @@ fn main() {
     for cell in &cells {
         let src = embedded_src.join(cell);
         if !src.exists() {
-            // kernel_fs.img is a build artifact (gitignored: 4-36 MB) that
-            // gen_disk.ps1 / build-*-ci.sh assemble before a bootable build.
-            // For compile-only contexts (clippy, CI lint) emit an empty stub so
-            // include_bytes! in ramdisk.rs resolves — a kernel built from the
-            // stub compiles but has no VIFS1, so it must never be booted.
+            // kernel_fs.img may be pre-committed for canonical targets
+            // (e.g. embedded-x86_64, signed and tracked via manifest.json)
+            // or dynamically assembled by gen_disk.ps1 / build-*-ci.sh via
+            // EMBEDDED_OVERRIDE. For compile-only contexts where it is absent,
+            // emit an empty stub so include_bytes! in ramdisk.rs resolves —
+            // a kernel built from the stub compiles but has no VIFS1.
             if *cell == "kernel_fs.img" {
                 fs::write(embedded_out.join(cell), []).expect("write kernel_fs.img stub");
                 println!(

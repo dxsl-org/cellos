@@ -65,9 +65,8 @@ Còn mở:
 ## Kiến trúc & nợ kỹ thuật tồn đọng
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
 `kernel_image()` trả `None`) / `cell_session.rs` 132 KB; CI đã bổ sung bước build-check kernel với
-`--no-default-features --features production-relay-image` trong job `kms-ssh-dev-posture`; provenance
-`kernel/src/embedded-*/kernel_fs.img` mâu thuẫn giữa `kernel/build.rs` (gitignored) và
-`scripts/build-x86_64-c2c-lifecycle-ci.sh` (committed) **(verify)**.
+`--no-default-features --features production-relay-image` trong job `kms-ssh-dev-posture`;
+provenance `kernel/src/embedded-*/kernel_fs.img` đã làm rõ: canonical `embedded-x86_64` được commit có `manifest.json` bảo vệ, các lane khác tạo động qua `EMBEDDED_OVERRIDE` (build script), `build.rs` đã cập nhật mô tả.
 
 ## Parked / deferred backlog — subject to the current queue
 
