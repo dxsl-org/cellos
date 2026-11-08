@@ -1050,6 +1050,23 @@ unsafe fn quiesce_in_window(
 /// Must be called after paging is active (ECAM window mapped) and before
 /// Driver Cells are spawned (they call sys_find_pcie_device to discover their
 /// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
+#[cfg(target_arch = "aarch64")]
+static AARCH64_ECAM_BASE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(target_arch = "aarch64")]
+pub fn record_ecam_base_aarch64(base: usize) {
+    AARCH64_ECAM_BASE.store(base, core::sync::atomic::Ordering::Release);
+}
+
+#[cfg(target_arch = "aarch64")]
+pub fn ecam_base_aarch64() -> usize {
+    let base = AARCH64_ECAM_BASE.load(core::sync::atomic::Ordering::Acquire);
+    if base != 0 {
+        base
+    } else {
+        0x1000_0000
+    }
+}
 pub fn init() {
     // Determine ECAM base for the current architecture.
     // x86_64: use only the runtime value from validated ACPI MCFG.
@@ -1057,9 +1074,14 @@ pub fn init() {
     let ecam_base = ecam_base_x86();
     #[cfg(target_arch = "riscv64")]
     let ecam_base = ECAM_BASE_RISCV;
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64")))]
-    let ecam_base = 0usize; // see `ecam_window`: no discovered config space
-
+    #[cfg(target_arch = "aarch64")]
+    let ecam_base = ecam_base_aarch64();
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "riscv64",
+        target_arch = "aarch64"
+    )))]
+    let ecam_base = 0usize;
     #[cfg(target_arch = "x86_64")]
     let scan_bus = ecam_bus_range_x86().0;
     #[cfg(not(target_arch = "x86_64"))]

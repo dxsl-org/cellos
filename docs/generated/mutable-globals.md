@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 471 | 196 | 195 | 1 | 8 | 269 |
+| kernel | yes | 472 | 196 | 195 | 1 | 8 | 270 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 117 | 67 | 67 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -306,7 +306,7 @@ Source files outside the module tree:
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (389)
+## Other declarations (390)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -626,6 +626,7 @@ Source files outside the module tree:
 | `kernel::task::drivers::iommu_riscv::PSCID_NEXT @cfg(target_arch = "riscv64")` | `kernel/src/task/drivers/iommu_riscv.rs` | static | `AtomicU16` | cfg inactive in this profile |
 | `kernel::task::drivers::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` | `kernel/src/task/drivers/iommu_riscv.rs` | static | `Spinlock<BTreeMap<u64,RiscvDomain>>` | cfg inactive in this profile |
 | `kernel::task::drivers::irq_dispatch::UNKNOWN_RV64_IRQ_WARNINGS @cfg(target_arch = "riscv64")` | `kernel/src/task/drivers/irq_dispatch.rs` | static | `AtomicU8` | cfg inactive in this profile |
+| `kernel::task::drivers::pcie_ecam::AARCH64_ECAM_BASE @cfg(target_arch = "aarch64")` | `kernel/src/task/drivers/pcie_ecam.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::task::drivers::ramdisk::DISK_IMAGE @cfg(not (target_arch = "riscv32"))` | `kernel/src/task/drivers/ramdisk.rs` | static | `&[u8]` | syntactically immutable |
 | `kernel::task::drivers::ramdisk::DISK_IMAGE @cfg(target_arch = "riscv32")` | `kernel/src/task/drivers/ramdisk.rs` | static | `&[u8]` | cfg inactive in this profile |
 | `kernel::task::drivers::virtio_rng::TEST_ENTROPY_ENABLED @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/task/drivers/virtio_rng.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |

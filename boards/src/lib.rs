@@ -31,6 +31,9 @@ pub mod qemu_q35_x86_64;
 #[path = "../pc/x86_64-pc/board.rs"]
 pub mod pc_x86_64;
 
+/// Generic AArch64 virtual machine descriptor (ADR-0032 §5).
+#[path = "../vm/aarch64-vm/board.rs"]
+pub mod vm_aarch64;
 /// Generic x86_64 virtual machine descriptor (ADR-0031 D-VM).
 #[path = "../vm/x86_64-vm/board.rs"]
 pub mod vm_x86_64;
@@ -70,6 +73,9 @@ pub fn qemu_q35_x86_64() -> &'static BoardDescriptor {
 pub fn pc_x86_64() -> &'static BoardDescriptor {
     &pc_x86_64::X86_64_PC
 }
+pub fn vm_aarch64() -> &'static BoardDescriptor {
+    &vm_aarch64::AARCH64_VM
+}
 
 /// Every x86_64 descriptor one x86_64 image may bind at boot, strictest first.
 ///
@@ -85,6 +91,17 @@ static X86_CATALOG: [&BoardDescriptor; 3] = [
 /// Returns the compiled x86_64 catalog.
 pub fn x86_catalog() -> &'static [&'static BoardDescriptor] {
     &X86_CATALOG
+}
+static AARCH64_CATALOG: [&BoardDescriptor; 4] = [
+    &qemu_virt_aarch64::QEMU_VIRT_AARCH64,
+    &raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B,
+    &raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B,
+    &vm_aarch64::AARCH64_VM,
+];
+
+/// Returns the compiled AArch64 catalog.
+pub fn aarch64_catalog() -> &'static [&'static BoardDescriptor] {
+    &AARCH64_CATALOG
 }
 
 /// Returns the descriptor in `catalog` whose slug equals `slug` byte for byte.

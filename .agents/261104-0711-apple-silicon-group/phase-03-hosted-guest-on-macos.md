@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Hosted track: Cellos as a guest on Apple Silicon macOS"
-status: pending
+status: completed
 priority: P2
 effort: "6d"
 dependencies: ["2a", "2c"]
@@ -47,10 +47,10 @@ Run Cellos on a Mac without replacing macOS: a Virtualization.framework guest (t
 
 ## Todo List
 
-- [ ] FDT ECAM
-- [ ] virtio-pci aarch64
-- [ ] `aarch64-vm` profile
-- [ ] macOS runner + S1-hvf capture
+- [x] FDT ECAM
+- [x] virtio-pci aarch64
+- [x] `aarch64-vm` profile
+- [x] macOS runner + S1-hvf capture
 
 ## Success Criteria
 

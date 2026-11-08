@@ -18,6 +18,8 @@ pub enum SocId {
     /// Generic x86_64 virtual machine: PC wiring under a hypervisor, DMA
     /// isolation optional and operator-selected (ADR-0031 D-VM).
     GenericX86Vm,
+    /// Generic AArch64 virtual machine: hypervisor-hosted guest with GICv3 and PCIe.
+    GenericAArch64Vm,
     Bcm2837,
     Bcm2711,
 }
@@ -32,6 +34,7 @@ pub enum DriverId {
     PlicSifive,
     ClintSifive,
     GicV2,
+    GicV3,
     IrqBcm2836Local,
     IrqBcm2835Legacy,
     TimerBcm2835System,

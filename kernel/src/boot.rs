@@ -534,6 +534,17 @@ fn optional_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
                 // The tree is only reliably readable here — record what the
                 // firmware says about PSCI and the CPU population now.
                 firmware_smp::note(&tree);
+                for node in tree.all_nodes() {
+                    if let Some(comp) = node.property("compatible").and_then(|c| c.as_str()) {
+                        if comp.contains("pci-host-ecam-generic") {
+                            if let Some(reg) = node.reg().and_then(|mut r| r.next()) {
+                                crate::task::drivers::pcie_ecam::record_ecam_base_aarch64(
+                                    reg.starting_address as usize,
+                                );
+                            }
+                        }
+                    }
+                }
                 tree.memory().regions().find_map(|region| {
                     let start = region.starting_address as usize;
                     region
