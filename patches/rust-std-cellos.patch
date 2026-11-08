@@ -319,10 +319,13 @@ new file mode 100644
 index 0000000..eb94fd7
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/common.rs
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,19 @@
 +use crate::io as std_io;
 +
-+pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {}
++pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {
++    #[cfg(target_thread_local)]
++    crate::sys::pal::thread::setup_thread_tls();
++}
 +pub unsafe fn cleanup() {}
 +
 +pub fn unsupported<T>() -> std_io::Result<T> {
@@ -619,7 +622,7 @@ new file mode 100644
 index 0000000..ac2abcb
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
-@@ -0,0 +1,279 @@
+@@ -0,0 +1,364 @@
 +use crate::boxed::Box;
 +use crate::io;
 +use crate::num::NonZero;
@@ -638,6 +641,7 @@ index 0000000..ac2abcb
 +
 +const SYS_SPAWN: usize = 5;
 +const SYS_WAIT: usize = 8;
++const SYS_SET_TLS_BASE: usize = 9;
 +const SYS_EXIT: usize = 60;
 +const SYS_YIELD: usize = 104;
 +const SYS_GET_CPU_COUNT: usize = 263;
@@ -761,6 +765,83 @@ index 0000000..ac2abcb
 +    loop {}
 +}
 +
++unsafe fn sys_set_tls_base(base: usize) -> usize {
++    let ret: usize;
++    #[cfg(target_arch = "riscv64")]
++    core::arch::asm!(
++        "ecall",
++        inlateout("a0") base => ret,
++        in("a1") 0usize,
++        in("a2") 0usize,
++        in("a3") 0usize,
++        in("a7") SYS_SET_TLS_BASE,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "aarch64")]
++    core::arch::asm!(
++        "svc #0",
++        inlateout("x0") SYS_SET_TLS_BASE => ret,
++        in("x1") base,
++        in("x2") 0usize,
++        in("x3") 0usize,
++        in("x4") 0usize,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(target_arch = "x86_64")]
++    core::arch::asm!(
++        "syscall",
++        inlateout("rax") SYS_SET_TLS_BASE => ret,
++        in("rdi") base,
++        in("rsi") 0usize,
++        in("rdx") 0usize,
++        in("r10") 0usize,
++        lateout("rcx") _,
++        lateout("r11") _,
++        options(nostack, preserves_flags)
++    );
++    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
++    {
++        let _ = base;
++        ret = 0;
++    }
++    ret
++}
++
++pub unsafe fn setup_thread_tls() -> *mut u8 {
++    let layout = match crate::alloc::Layout::from_size_align(4096, 64) {
++        Ok(l) => l,
++        Err(_) => return core::ptr::null_mut(),
++    };
++    let ptr = crate::sys::pal::alloc::alloc(layout);
++    if ptr.is_null() {
++        return core::ptr::null_mut();
++    }
++    core::ptr::write_bytes(ptr, 0, 4096);
++    #[cfg(target_arch = "x86_64")]
++    {
++        let tcb = ptr.add(4096 - 64) as *mut usize;
++        *tcb = tcb as usize;
++        sys_set_tls_base(tcb as usize);
++    }
++    #[cfg(target_arch = "aarch64")]
++    {
++        sys_set_tls_base(ptr as usize);
++    }
++    #[cfg(target_arch = "riscv64")]
++    {
++        sys_set_tls_base(ptr as usize);
++    }
++    ptr
++}
++
++pub unsafe fn teardown_thread_tls(ptr: *mut u8) {
++    if !ptr.is_null() {
++        if let Ok(layout) = crate::alloc::Layout::from_size_align(4096, 64) {
++            crate::sys::pal::alloc::dealloc(ptr, layout);
++        }
++    }
++}
++
 +impl Thread {
 +    // unsafe: see thread::Builder::spawn_unchecked for safety requirements
 +    pub unsafe fn new(_stack: usize, init: Box<ThreadInit>) -> io::Result<Thread> {
@@ -780,6 +861,9 @@ index 0000000..ac2abcb
 +        }
 +
 +        extern "C" fn thread_start(data: usize) {
++            #[cfg(target_thread_local)]
++            let tls_ptr = unsafe { setup_thread_tls() };
++
 +            let init = unsafe { Box::from_raw(data as *mut ThreadInit) };
 +            let rust_start = init.init();
 +            rust_start();
@@ -787,8 +871,12 @@ index 0000000..ac2abcb
 +            #[cfg(target_thread_local)]
 +            unsafe {
 +                crate::sys::thread_local::destructors::run();
++                crate::rt::thread_cleanup();
++                teardown_thread_tls(tls_ptr);
 +            }
++            #[cfg(not(target_thread_local))]
 +            crate::rt::thread_cleanup();
++
 +            unsafe {
 +                sys_exit(0);
 +            }
@@ -1173,22 +1261,16 @@ diff --git a/library/std/src/sys/thread_local/mod.rs b/library/std/src/sys/threa
 index e88011a..782de96 100644
 --- a/library/std/src/sys/thread_local/mod.rs
 +++ b/library/std/src/sys/thread_local/mod.rs
-@@ -30,6 +30,7 @@ cfg_select! {
-         target_os = "zkvm",
-         target_os = "trusty",
-         target_os = "vexos",
-+        target_os = "cellos",
-     ) => {
-         mod no_threads;
-         pub use no_threads::{EagerStorage, LazyStorage, thread_local_inner};
-@@ -100,6 +101,7 @@ pub(crate) mod guard {
-             target_os = "zkvm",
-             target_os = "trusty",
-             target_os = "vexos",
+@@ -118,6 +118,7 @@ pub(crate) mod guard {
+         any(
+             target_os = "hermit",
+             target_os = "xous",
 +            target_os = "cellos",
          ) => {
-             pub(crate) fn enable() {
-                 // FIXME: Right now there is no concept of "thread exit" on
+             // `std` is the only runtime, so it just calls the destructor functions
+             // itself when the time comes.
+             pub(crate) fn enable() {}
+         }
 diff --git a/library/std/src/sys/time/mod.rs b/library/std/src/sys/time/mod.rs
 index 6cd1850..522952f 100644
 --- a/library/std/src/sys/time/mod.rs

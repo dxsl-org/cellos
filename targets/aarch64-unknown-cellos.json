@@ -5,6 +5,7 @@
   "default-uwtable": false,
   "disable-redzone": true,
   "features": "+v8a,+strict-align,+neon,+bti,+paca,+pacg",
+  "has-thread-local": true,
   "linker": "rust-lld",
   "linker-flavor": "gnu-lld",
   "llvm-target": "aarch64-unknown-none",

@@ -112,7 +112,7 @@ sysroot overlay for all three, and `scripts/run-std-smoke-qemu.sh` boots the std
 cell in QEMU on each of them — riscv64 and aarch64 on the `virt` machine with
 virtio-blk, x86_64 through the Limine ISO with nvme/e1000 — asserting the PAL
 invariants (freeing and over-aligned allocator paths, `Instant`, `yield_now`,
-`available_parallelism = 1`, argv, and the fail-closed fs/net/process arms). The `rust-std-lane` CI job keeps the patch,
+`available_parallelism` query reporting live online harts under ADR-0035, multi-thread spawn/join, Mutex/Condvar, thread::scope, native TLS, argv, and the fail-closed fs/net/process arms). The `rust-std-lane` CI job keeps the patch,
 the three target specs, and those contract tests honest.
 
 That is a host/QEMU software witness, not qualification: no triple is published,

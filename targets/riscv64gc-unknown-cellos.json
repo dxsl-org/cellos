@@ -7,6 +7,7 @@
   "eh-frame-header": false,
   "emit-debug-gdb-scripts": false,
   "features": "+m,+a,+f,+d,+c,+zicsr,+zifencei",
+  "has-thread-local": true,
   "linker": "rust-lld",
   "linker-flavor": "gnu-lld",
   "llvm-abiname": "lp64d",

@@ -6,7 +6,7 @@ extern crate ostd;
 api::declare_manifest!(
     block_io = false,
     network = false,
-    spawn = false,
+    spawn = true,
     gpio = false,
     uart = false,
     hypervisor = false,
@@ -14,7 +14,10 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![Log, Yield, GetTime, GetRandom, StateRestore];
+api::declare_syscalls![
+    Log, Yield, GetTime, GetRandom, StateRestore,
+    Spawn, Wait, SetTlsBase, FutexWait, FutexWake, GetCpuCount
+];
 
 ostd::cell_main!(extern "C" cell_main);
 use serde::{Deserialize, Serialize};
@@ -148,6 +151,105 @@ fn cell_main() {
         parallelism
     );
     assert_eq!(parallelism, 1);
+
+    // 4b. Rust std Threading & Synchronization Witness
+    // (matches cells/tests/c-pthread/src/witness.c + thread::scope + thread_local! destructor)
+    println!("[std-smoke] Starting Threading & Sync witness (Mutex, Condvar, Scope, TLS)...");
+
+    // Witness A: Arc<Mutex<(waiting, total, released)>> + Condvar
+    let sync_state = std::sync::Arc::new((
+        std::sync::Mutex::new((0u32, 0u32, false)),
+        std::sync::Condvar::new(),
+    ));
+    let s1 = std::sync::Arc::clone(&sync_state);
+    let s2 = std::sync::Arc::clone(&sync_state);
+
+    let h1 = std::thread::spawn(move || {
+        let (lock, cvar) = &*s1;
+        let mut st = lock.lock().unwrap();
+        st.0 += 1;
+        cvar.notify_one();
+        while !st.2 {
+            st = cvar.wait(st).unwrap();
+        }
+        st.1 += 1;
+        1usize
+    });
+
+    let h2 = std::thread::spawn(move || {
+        let (lock, cvar) = &*s2;
+        let mut st = lock.lock().unwrap();
+        st.0 += 1;
+        cvar.notify_one();
+        while !st.2 {
+            st = cvar.wait(st).unwrap();
+        }
+        st.1 += 2;
+        2usize
+    });
+
+    {
+        let (lock, cvar) = &*sync_state;
+        let mut st = lock.lock().unwrap();
+        while st.0 < 2 {
+            st = cvar.wait(st).unwrap();
+        }
+        st.2 = true;
+        cvar.notify_all();
+    }
+
+    let res1 = h1.join().expect("join worker 1");
+    let res2 = h2.join().expect("join worker 2");
+    assert_eq!((res1, res2), (1, 2));
+    assert_eq!(sync_state.0.lock().unwrap().1, 3);
+    println!("[std-smoke] Thread spawn/join + Mutex + Condvar PASS");
+
+    // Witness B: Arc<Mutex<Vec<i32>>> + thread::scope with borrowed stack slices
+    let mut numbers = vec![10, 20, 30, 40];
+    let shared_vec = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sv_clone = std::sync::Arc::clone(&shared_vec);
+
+    std::thread::scope(|s| {
+        let sv = &sv_clone;
+        s.spawn(move || {
+            sv.lock().unwrap().push(100);
+        });
+        s.spawn(|| {
+            numbers[0] += 5;
+            numbers[1] += 5;
+        });
+    });
+    assert_eq!(numbers[0], 15);
+    assert_eq!(numbers[1], 25);
+    assert_eq!(*shared_vec.lock().unwrap(), vec![100]);
+    println!("[std-smoke] thread::scope + Arc<Mutex<Vec>> PASS");
+
+    // Witness C: thread_local! with destructor execution
+    struct DtorTracker;
+    static DTOR_RAN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    impl Drop for DtorTracker {
+        fn drop(&mut self) {
+            DTOR_RAN.store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+    thread_local! {
+        static TRACKER: std::cell::Cell<Option<DtorTracker>> = const { std::cell::Cell::new(None) };
+    }
+
+    let h_tls = std::thread::spawn(|| {
+        TRACKER.with(|t| t.set(Some(DtorTracker)));
+    });
+    h_tls.join().expect("join tls thread");
+    assert!(DTOR_RAN.load(std::sync::atomic::Ordering::Acquire), "TLS destructor failed to execute");
+    println!("[std-smoke] Native TLS + destructor execution PASS");
+
+    // Witness D: 32 sequential create/join cycles (proving task table reclamation)
+    for i in 0..32 {
+        let handle = std::thread::spawn(move || i + 1);
+        let val = handle.join().expect("sequential thread join");
+        assert_eq!(val, i + 1);
+    }
+    println!("[std-smoke] 32 sequential create/join cycles PASS");
 
     // 5. Environment constants
     println!(

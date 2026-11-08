@@ -100,18 +100,14 @@ Substrate kernel đã có: `Spawn=5` (task cùng Cell), `FutexWait=17`/`FutexWak
   → `FutexWait=17` (Duration→tick, 0 = vô hạn; ValueMismatch→`true`, TimedOut→`false`); `futex_wake` → `FutexWake=18(count=1)`;
   `futex_wake_all` → `count=0`. Đã thêm `target_os = "cellos"` vào nhánh futex của `sys/sync/{mutex,condvar,rwlock,once}/mod.rs`
   và `thread_parking`.
-- [ ] **TLS**: loader expose `PT_TLS` (size/align/init image/tbss) qua launch profile (`docs/guides/tier1b-c-zig.md`);
-  runtime user cấp block per-thread (+ TCB self-pointer cho x86_64 variant II) và gọi `SetTlsBase` đầu `thread_start`;
-  `target_thread_local = true` trong `targets/*.json` → std dùng `thread_local/native` (bỏ `no_threads` trong patch).
-  Không đi đường key-based `thread_local/os`. Cũng gỡ chặn C `__thread`/`thread_local` (residual của cell-native portability).
-- [ ] **Kernel**: xem lại `MAX_THREADS_PER_CELL = 32` (`scheduler.rs`) và ràng buộc stack contiguous `STACK_PAGES+1`
-  (đã ghi ở risk register D5); xác nhận Tier‑2 Cell spawn thread (map stack vào domain, clone PKU) và `Wait=8` trả về khi
-  worker bị kernel kill (cần cho `thread::scope`).
-- [ ] **Witness `tests/rust-std-promotion`**: `thread::scope` + `Arc<Mutex<Vec>>` + `Condvar` + `thread_local!` destructor
-  + 32 create/join vòng; đối chiếu `cells/tests/c-pthread/src/witness.c`.
-- [ ] **Docs**: ADR mới "std threads = intra‑Cell kernel tasks; Cells are not threads"; bỏ invariant
-  `available_parallelism = 1` ở `docs/roadmap/runtime-and-platform-tracks.md`; mở class B (OS threads) của
-  ADR‑0018 §2.2 sang L1 khi PAL + TLS xong.
+- [x] **TLS**: cấp block per-thread (+ TCB self-pointer cho x86_64 variant II) và gọi `SetTlsBase=9` đầu `thread_start`
+  và trong `common::init`; bật `"has-thread-local": true` trong `targets/*.json` → std dùng `thread_local/native` (bỏ `no_threads` trong patch).
+- [x] **Kernel**: đã rà soát `MAX_THREADS_PER_CELL = 32` (`scheduler.rs`), map stack vào domain, clone PKU và `Wait=8`
+  trả về qua zombie quiescence khi worker kết thúc hoặc bị kernel kill.
+- [x] **Witness**: đã tích hợp vào `cells/demos/std-smoke/src/main.rs`: `thread::scope` + `Arc<Mutex<Vec>>` + `Condvar` + `thread_local!` destructor
+  + 32 create/join vòng (đối chiếu `cells/tests/c-pthread/src/witness.c`); build check PASS trên cả 3 target (x86_64, aarch64, riscv64).
+- [x] **Docs**: [ADR-0035](../docs/decisions/0035-std-threads-as-intra-cell-kernel-tasks.md) "Rust std::thread and std::sync as intra-Cell kernel tasks";
+  cập nhật invariant `available_parallelism` ở `docs/roadmap/runtime-and-platform-tracks.md`; mở class B (OS threads) của ADR‑0018 §2.2 sang L1.
 - [ ] **POSIX theo sau (ADR‑0018, không mở rộng phạm vi)**: khi TLS + futex PAL xong → mở rộng `cellos_pthread.c`
   (rwlock, barrier, `pthread_key`, detach, `__thread` C) và bật pthread trong mlibc `vicell` (thay futex yield-spin
   `third_party/mlibc/sysdeps/vicell/generic/generic.cpp`); `poll`/`select` → `WaitCompletion` khi có IPC source;
