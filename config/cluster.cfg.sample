@@ -1,0 +1,15 @@
+# CellOS C2C Cluster Peer Configuration (/etc/cellos/cluster.cfg)
+# Each peer entry defines the NodeId (32-byte hex public key), relay endpoint,
+# and direct LAN IP/port.
+
+# Peer 0 (Node A)
+peer_0_node_id=0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20
+peer_0_relay_ip=169.254.192.1
+peer_0_relay_port=8765
+peer_0_direct=169.254.192.1:9088
+
+# Peer 1 (Node B)
+peer_1_node_id=2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40
+peer_1_relay_ip=169.254.192.2
+peer_1_relay_port=8765
+peer_1_direct=169.254.192.2:9088

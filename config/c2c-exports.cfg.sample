@@ -1,0 +1,11 @@
+# CellOS C2C Service Export Registry (/etc/cellos/c2c-exports.cfg)
+# Version must be 1. Defines which local services are exposed across the cluster.
+
+c2c_exports_version=1
+
+# Export 0: Net Broker service (ID 8), export ID 1, retry class idempotent, scope remote
+export_0_service_id=8
+export_0_export_id=1
+export_0_version=1
+export_0_retry_class=idempotent
+export_0_scope=remote

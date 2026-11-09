@@ -353,6 +353,8 @@ impl VfsManager {
             "/etc/cellos/services.toml" => "/mnt/sd/etc/cellos/services.toml",
             "/etc/cellos/autoload.toml" => "/mnt/sd/etc/cellos/autoload.toml",
             "/etc/cellos/cluster.key" => "/mnt/sd/etc/cellos/cluster.key",
+            "/etc/cellos/cluster.cfg" => "/mnt/sd/etc/cellos/cluster.cfg",
+            "/etc/cellos/c2c-exports.cfg" => "/mnt/sd/etc/cellos/c2c-exports.cfg",
             _ => return None,
         };
         if let Some(backend) = self.mounts.backend(persistent) {
