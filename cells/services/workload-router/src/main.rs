@@ -1,6 +1,9 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
+
+#[cfg(test)]
+extern crate std;
 
 extern crate alloc;
 extern crate ostd;
