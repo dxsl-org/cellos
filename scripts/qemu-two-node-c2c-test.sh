@@ -41,6 +41,13 @@ echo "==========================================================================
 # Cleanup handler on exit/interrupt
 NODE_A_PID=""
 NODE_B_PID=""
+FIFO_A="$WORK_DIR/node-a.in"
+FIFO_B="$WORK_DIR/node-b.in"
+rm -f "$FIFO_A" "$FIFO_B"
+mkfifo "$FIFO_A" "$FIFO_B"
+exec 3<>"$FIFO_A"
+exec 4<>"$FIFO_B"
+
 cleanup() {
     if [[ -n "$NODE_A_PID" ]] && kill -0 "$NODE_A_PID" 2>/dev/null; then
         kill "$NODE_A_PID" 2>/dev/null || true
@@ -48,9 +55,11 @@ cleanup() {
     if [[ -n "$NODE_B_PID" ]] && kill -0 "$NODE_B_PID" 2>/dev/null; then
         kill "$NODE_B_PID" 2>/dev/null || true
     fi
+    exec 3>&- || true
+    exec 4>&- || true
+    rm -f "$FIFO_A" "$FIFO_B"
 }
 trap cleanup EXIT INT TERM
-
 # ── 1. Launch Node A (Server / Socket Listener) ──────────────────────────────
 echo "[c2c-cluster] Launching Node A (L2 Listener on :$SOCKET_PORT, MAC 52:54:00:c2:c0:01)..."
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
@@ -64,7 +73,7 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -no-reboot \
     -netdev "socket,id=c2clan,listen=127.0.0.1:$SOCKET_PORT" \
     -device "virtio-net-pci,netdev=c2clan,mac=52:54:00:c2:c0:01" \
-    < /dev/null > "$NODE_A_LOG" 2>&1 &
+    < "$FIFO_A" > "$NODE_A_LOG" 2>&1 &
 NODE_A_PID=$!
 
 # Wait briefly for Node A to bind the listener port
@@ -83,9 +92,25 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -no-reboot \
     -netdev "socket,id=c2clan,connect=127.0.0.1:$SOCKET_PORT" \
     -device "virtio-net-pci,netdev=c2clan,mac=52:54:00:c2:c0:02" \
-    < /dev/null > "$NODE_B_LOG" 2>&1 &
+    < "$FIFO_B" > "$NODE_B_LOG" 2>&1 &
 NODE_B_PID=$!
 
+# Background feeder: when both nodes reach prompt, run ifconfig and clean shutdown
+(
+    for _ in {1..40}; do
+        if grep -qa "Cellos >" "$NODE_A_LOG" 2>/dev/null && grep -qa "Cellos >" "$NODE_B_LOG" 2>/dev/null; then
+            break
+        fi
+        sleep 0.5
+    done
+    sleep 6
+    echo "ifconfig" > "$FIFO_A"
+    echo "ifconfig" > "$FIFO_B"
+    sleep 2
+    echo "/bin/shutdown" > "$FIFO_A"
+    echo "/bin/shutdown" > "$FIFO_B"
+) &
+FEEDER_PID=$!
 # ── 3. Await Boot Completion ────────────────────────────────────────────────
 echo "[c2c-cluster] Waiting for both nodes to reach shell prompt..."
 wait "$NODE_A_PID" || true
@@ -119,6 +144,22 @@ if ! grep -qa "169.254.192.1" "$NODE_A_LOG"; then
 fi
 if ! grep -qa "169.254.192.2" "$NODE_B_LOG"; then
     echo "FAIL: Node B did not assign IPv4 Link-Local 169.254.192.2" >&2
+    FAIL=1
+fi
+if ! grep -qa "eth0: inet 169.254.192.1  netmask 255.255.0.0" "$NODE_A_LOG"; then
+    echo "FAIL: Node A user-space ifconfig did not report Link-Local address" >&2
+    FAIL=1
+fi
+if ! grep -qa "eth0: inet 169.254.192.2  netmask 255.255.0.0" "$NODE_B_LOG"; then
+    echo "FAIL: Node B user-space ifconfig did not report Link-Local address" >&2
+    FAIL=1
+fi
+if ! grep -qa "power: requesting poweroff" "$NODE_A_LOG"; then
+    echo "FAIL: Node A did not execute clean ACPI poweroff" >&2
+    FAIL=1
+fi
+if ! grep -qa "power: requesting poweroff" "$NODE_B_LOG"; then
+    echo "FAIL: Node B did not execute clean ACPI poweroff" >&2
     FAIL=1
 fi
 

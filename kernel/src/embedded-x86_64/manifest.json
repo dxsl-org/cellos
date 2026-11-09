@@ -45,14 +45,14 @@
       "signed": true
     },
     "/bin/cellbox": {
-      "sha256": "73e50439e54031b487a18353963346d9aae1bca19cf15e8ebb6ee38ab689140a",
+      "sha256": "a563df6ebf9e539758a857e9bb7ef910d91e0d95fa36fb0fc97ff2c13c1cf6fb",
       "size": 3021944,
       "package": "app-cellbox",
       "binary": "cellbox",
       "signed": true
     },
     "/bin/cellbox-ssh": {
-      "sha256": "73e50439e54031b487a18353963346d9aae1bca19cf15e8ebb6ee38ab689140a",
+      "sha256": "a563df6ebf9e539758a857e9bb7ef910d91e0d95fa36fb0fc97ff2c13c1cf6fb",
       "size": 3021944,
       "package": "app-cellbox",
       "binary": "cellbox",
@@ -213,7 +213,7 @@
       "signed": false
     },
     "/bin/vfs": {
-      "sha256": "1cef1285aa1dcaa4e26e61d1c02074cd527144f265ce277006be5ce887498d65",
+      "sha256": "3c021706aeef56e7a0d94d4c095643ece99ecea10b91e572a551952afb54bbda",
       "size": 643248,
       "package": "service-vfs",
       "binary": "service-vfs",
@@ -261,7 +261,7 @@
     }
   },
   "kernel_fs_img": {
-    "sha256": "69e2eefc149c95791d90954903a9be96eaa518cc16fe24284d229ede48c5fc90",
+    "sha256": "0323a0fa322c558fdd35fcefdb4c90e7426b416c71ef50f057a9ef3e3ecec301",
     "size": 12582912
   },
   "init": {
@@ -270,9 +270,9 @@
     "package": "app-init"
   },
   "source": {
-    "git_head": "cb3d305e8abca5266718de2b8b624f15fe8ab9ed",
+    "git_head": "364b86ad846ee5316e4cefba11ec82c268ea1305",
     "dirty_files": 39,
-    "dirty_digest_sha256": "ea3728ba09540b1a79a0d613b13e9d5cf3e680ed20b2deea261441ff720b186d",
+    "dirty_digest_sha256": "b19a4256e5bfdccdcf40f589ce4db75cc006fc528839878b870866ec0bec23c3",
     "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
     "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
     "rustflags": "-C relocation-model=pic",
@@ -282,6 +282,6 @@
       "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": null
     }
   },
-  "build_started_utc": "2026-11-09T01:59:00+00:00",
-  "build_finished_utc": "2026-11-09T01:59:22+00:00"
+  "build_started_utc": "2026-11-09T03:15:29+00:00",
+  "build_finished_utc": "2026-11-09T03:16:13+00:00"
 }
