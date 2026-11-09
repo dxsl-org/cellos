@@ -15,10 +15,11 @@ fn main() {
     let toolchain_file = match target.as_str() {
         "riscv64gc-unknown-none-elf" => "cmake/cellos-riscv64.cmake",
         "aarch64-unknown-none-softfloat" => "cmake/cellos-aarch64.cmake",
+        "x86_64-unknown-none" => "cmake/cellos-x86_64.cmake",
         other => panic!(
             "the external C porting smoke has no toolchain for target {other}; \
-             supported targets are riscv64gc-unknown-none-elf and \
-             aarch64-unknown-none-softfloat"
+             supported targets are riscv64gc-unknown-none-elf, \
+             aarch64-unknown-none-softfloat, and x86_64-unknown-none"
         ),
     };
     let toolchain = format!(
