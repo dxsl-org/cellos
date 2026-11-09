@@ -36,10 +36,7 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
   ([phase-02](261030-1945-ginux-lessons-hardening/phase-02-mutable-global-inventory.md)).
 
 **C2C program (mở, có gate):**
-- [ ] Reconcile one exact Intel machine against the HCL (máy x86 Dell mini PC là ứng viên); physical
-  bring-up và acquisition gated riêng. Bắt buộc kiểm thử đạt trên cả 3 môi trường (QEMU TCG, QEMU/KVM,
-  VMware) trước khi nạp lên board thật. Kèm: Ginux Phase 03 KVM baseline cần máy vật lý có
-  governor/timer metadata. No AMD/new ARM/RISC-V program.
+- [ ] Reconcile one exact Intel machine against the HCL: khảo sát và chọn máy Dell OptiPlex 7080 Micro đã hoàn tất (`docs/roadmap/intel-x86-hcl-procurement-survey.md`); physical bring-up và acquisition gated riêng (chờ máy thật). Kiểm thử đã đạt trên cả 3 môi trường ảo hoá (QEMU TCG, QEMU/KVM, VMware). Kèm: Ginux Phase 03 KVM baseline cần máy vật lý có governor/timer metadata. No AMD/new ARM/RISC-V program.
 - [ ] **Intel VMX/EPT:** VMX vCPU backend đã landed (`15830f4fd`: VMCS accessors, `VmxVcpu`,
   VMLAUNCH/VMRESUME, CR0/CR4 fixed MSRs) nhưng **chưa chạy thật** (TCG không có VMX; VMX AP path chưa
   exercise). Còn: qualify guest lifecycle/storage/network trên Intel

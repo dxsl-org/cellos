@@ -74,7 +74,7 @@ Capture S2 rows for two Intel machines: one desktop/mini PC and one server. Upda
 
 ## Todo List
 
-- [ ] Machine selection + procurement decision (pending hardware acquisition)
+- [x] Machine selection survey & procurement assessment completed (`docs/roadmap/intel-x86-hcl-procurement-survey.md`); physical hardware acquisition pending
 - [ ] Machine A captures (pending hardware acquisition)
 - [ ] Machine B captures (pending hardware acquisition)
 - [X] HCL + docs + KVM/VMware guide
