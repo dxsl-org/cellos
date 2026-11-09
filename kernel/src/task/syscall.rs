@@ -4964,6 +4964,13 @@ pub enum Syscall {
         handle: usize,
         target_tid: usize,
     },
+    /// ViSyscall 440: AnonMemory — manage Tier-2 large anonymous memory.
+    AnonMemory {
+        op: usize,
+        addr: usize,
+        len: usize,
+        flags: usize,
+    },
 }
 
 /// Return the syscall allowlist only for an active caller.
@@ -5130,7 +5137,8 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::CancelCellOwnerWatch { .. }
         | Syscall::ResolveCellOwnerRecord { .. }
         | Syscall::WatchCellOwnerRecord { .. }
-        | Syscall::ResolveCellImage { .. } => return None,
+        | Syscall::ResolveCellImage { .. }
+        | Syscall::AnonMemory { .. } => return None,
         // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
         Syscall::BlkRead { .. }
         | Syscall::BlkWrite { .. }
@@ -7395,6 +7403,40 @@ fn handle_syscall_inner(
                 return Ok(len);
             }
             Err(SyscallError::BufferTooSmall)
+        }
+        Syscall::AnonMemory {
+            op,
+            addr,
+            len,
+            flags,
+        } => {
+            #[cfg(target_arch = "x86_64")]
+            {
+                let is_domain = {
+                    let guard = super::SCHEDULER.lock();
+                    guard
+                        .as_ref()
+                        .and_then(|sched| sched.tasks.get(&caller_id))
+                        .map(|t| matches!(t.address_space, super::tcb::TaskAddressSpace::Domain(_)))
+                        .unwrap_or(false)
+                };
+                if !is_domain {
+                    return Ok(api::anon_memory::ERR_NOT_SUPPORTED);
+                }
+                match api::anon_memory::decode_anon_request(op, addr, len, flags) {
+                    Ok(api::anon_memory::AnonOp::Map { .. }) => {
+                        Ok(api::anon_memory::ERR_NOT_SUPPORTED)
+                    }
+                    Ok(api::anon_memory::AnonOp::Unmap) => Ok(0),
+                    Ok(api::anon_memory::AnonOp::Protect { .. }) => Ok(0),
+                    Err(err) => Ok(err),
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                let _ = (op, addr, len, flags);
+                Ok(api::anon_memory::ERR_NOT_SUPPORTED)
+            }
         }
         Syscall::Write {
             fd,
@@ -10966,6 +11008,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::Getcwd => Syscall::GetCwd {
             buf_ptr: a0,
             buf_len: a1,
+        },
+        ViSyscall::AnonMemory => Syscall::AnonMemory {
+            op: a0,
+            addr: a1,
+            len: a2,
+            flags: a3,
         },
         _ => match syscall_id {
             3 => Syscall::SetTimer { deadline: a0 },
