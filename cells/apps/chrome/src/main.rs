@@ -754,9 +754,7 @@ fn cell_main() {
                         }
                     }
                 }
-                InputEvent::Key(ke)
-                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) =>
-                {
+                InputEvent::Key(ke) => {
                     // Repeat URL editing without repeating tab actions, submission or fullscreen.
                     if ke.state == KeyState::Repeated
                         && (matches!(ke.keysym, KeySym::Return | KeySym::Escape | KeySym::F11)
@@ -766,11 +764,28 @@ fn cell_main() {
                     {
                         continue;
                     }
-                    if app.handle_key(ke.keysym, ke.char(), ke.modifiers) {
+                    if matches!(ke.state, KeyState::Pressed | KeyState::Repeated)
+                        && app.handle_key(ke.keysym, ke.char(), ke.modifiers)
+                    {
                         need_render = true;
+                    } else if app.vmm_active && app.hv_tid != 0 && ke.scancode != 0 {
+                        let press_val = match ke.state {
+                            KeyState::Pressed => 1,
+                            KeyState::Repeated => 2,
+                            KeyState::Released => 0,
+                        };
+                        let key_req = api::services::vmm_session::VmmInputForwardRequest::new(
+                            app.session_id,
+                            1, // EV_KEY
+                            ke.scancode as u16,
+                            press_val,
+                        );
+                        let mut b = [0u8; 16];
+                        if key_req.encode(&mut b).is_ok() {
+                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
+                        }
                     }
                 }
-                _ => {}
             }
         }
 
