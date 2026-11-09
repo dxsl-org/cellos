@@ -136,7 +136,7 @@
       "signed": true
     },
     "/bin/net": {
-      "sha256": "0be30912fd8ac5337276b384eba73d80eb79e14d4c9c43aaa1d1cea7e9b414d0",
+      "sha256": "828417abefdcc7a0816c032f6ae548b62ac1e9ea2e1ea9834fa9fb1cacd9c434",
       "size": 507888,
       "package": "service-net",
       "binary": "service-net",
@@ -261,7 +261,7 @@
     }
   },
   "kernel_fs_img": {
-    "sha256": "e53a5ffb122222ac1c1c81d4795cbff771008df88474e606e9720010b9f39157",
+    "sha256": "69e2eefc149c95791d90954903a9be96eaa518cc16fe24284d229ede48c5fc90",
     "size": 12582912
   },
   "init": {
@@ -270,9 +270,9 @@
     "package": "app-init"
   },
   "source": {
-    "git_head": "34d4daa0b88183be75f6e4fce44e2c3620f92ae6",
-    "dirty_files": 41,
-    "dirty_digest_sha256": "c6f80e166a8b4fad60791cd44286d71534461240687aeaa0ee3b41cea4c8b3d1",
+    "git_head": "cb3d305e8abca5266718de2b8b624f15fe8ab9ed",
+    "dirty_files": 39,
+    "dirty_digest_sha256": "ea3728ba09540b1a79a0d613b13e9d5cf3e680ed20b2deea261441ff720b186d",
     "cargo": "cargo 1.97.0-nightly (eb9b60f1f 2026-04-24)",
     "rustc": "rustc 1.97.0-nightly (f53b654a8 2026-04-30)",
     "rustflags": "-C relocation-model=pic",
@@ -282,6 +282,6 @@
       "BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none": null
     }
   },
-  "build_started_utc": "2026-11-08T15:03:01+00:00",
-  "build_finished_utc": "2026-11-08T15:03:26+00:00"
+  "build_started_utc": "2026-11-09T01:59:00+00:00",
+  "build_finished_utc": "2026-11-09T01:59:22+00:00"
 }

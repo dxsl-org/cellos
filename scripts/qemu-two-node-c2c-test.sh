@@ -113,6 +113,14 @@ if ! grep -qa "mac=52:54:00:c2:c0:02" "$NODE_B_LOG"; then
     echo "FAIL: Node B did not bind MAC 52:54:00:c2:c0:02" >&2
     FAIL=1
 fi
+if ! grep -qa "169.254.192.1" "$NODE_A_LOG"; then
+    echo "FAIL: Node A did not assign IPv4 Link-Local 169.254.192.1" >&2
+    FAIL=1
+fi
+if ! grep -qa "169.254.192.2" "$NODE_B_LOG"; then
+    echo "FAIL: Node B did not assign IPv4 Link-Local 169.254.192.2" >&2
+    FAIL=1
+fi
 
 if grep -qia "KERNEL PANIC\|\[fault\] Cell" "$NODE_A_LOG"; then
     echo "FAIL: Node A reported kernel panic or cell fault" >&2
@@ -127,7 +135,9 @@ if (( FAIL == 0 )); then
     echo "=========================================================================="
     echo "  PASS: Two-Node C2C Cluster Boot & Layer-2 Link Verified"
     echo "  Node A: $(grep -ai "mac=52:54:00:c2:c0:01" "$NODE_A_LOG" | head -1)"
+    echo "          $(grep -ai "169.254.192.1" "$NODE_A_LOG" | head -1)"
     echo "  Node B: $(grep -ai "mac=52:54:00:c2:c0:02" "$NODE_B_LOG" | head -1)"
+    echo "          $(grep -ai "169.254.192.2" "$NODE_B_LOG" | head -1)"
     echo "  Logs:   $NODE_A_LOG and $NODE_B_LOG"
     echo "=========================================================================="
     exit 0

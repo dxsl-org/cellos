@@ -671,7 +671,8 @@ pub(crate) fn run() {
     let dhcp_handle = add_dhcp_socket(&mut sockets);
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut dhcp_state = DhcpState::Pending;
-
+    let dhcp_start_ticks = sys_get_time();
+    let mut link_local_assigned = false;
     let mut buffer = [0u8; IPC_BUF_SIZE];
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut last_poll_ticks = sys_get_time();
@@ -765,9 +766,38 @@ pub(crate) fn run() {
                         local_ip.copy_from_slice(cidr.address().as_bytes());
                         println(&alloc::format!(
                             "[net] IP address: {}",
-                            crate::service_runtime::dotted_ipv4(local_ip)
+                            dotted_ipv4(local_ip)
                         ));
                     }
+                } else if !link_local_assigned
+                    && sys_get_time().wrapping_sub(dhcp_start_ticks) >= 4_000 * MTIME_TICKS_PER_MS
+                {
+                    let HardwareAddress::Ethernet(addr) = iface.hardware_addr();
+                    let active_mac = addr.0;
+                    let link_local = [169, 254, active_mac[4], active_mac[5]];
+                    iface.update_ip_addrs(|addrs| {
+                        let cidr = IpCidr::new(
+                            IpAddress::v4(
+                                link_local[0],
+                                link_local[1],
+                                link_local[2],
+                                link_local[3],
+                            ),
+                            16,
+                        );
+                        if let Some(slot) = addrs.iter_mut().find(|a| matches!(a, IpCidr::Ipv4(_)))
+                        {
+                            *slot = cidr;
+                        } else {
+                            let _ = addrs.push(cidr);
+                        }
+                    });
+                    local_ip.copy_from_slice(&link_local);
+                    println(&alloc::format!(
+                        "[net] IP address (IPv4 Link-Local RFC 3927): {}",
+                        dotted_ipv4(local_ip)
+                    ));
+                    link_local_assigned = true;
                 }
                 // The lease names the resolver to use from here on (option 6);
                 // without it the DNS socket keeps SLIRP's built-in default.
