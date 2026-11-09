@@ -38,8 +38,7 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 **C2C program (mở, có gate):**
 - [ ] Reconcile one exact Intel machine against the HCL: khảo sát và chọn máy Dell OptiPlex 7080 Micro đã hoàn tất (`docs/roadmap/intel-x86-hcl-procurement-survey.md`); physical bring-up và acquisition gated riêng (chờ máy thật). Kiểm thử đã đạt trên cả 3 môi trường ảo hoá (QEMU TCG, QEMU/KVM, VMware). Kèm: Ginux Phase 03 KVM baseline cần máy vật lý có governor/timer metadata. No AMD/new ARM/RISC-V program.
 - [ ] **Intel VMX/EPT:** VMX vCPU backend đã verified chạy thật dưới KVM hardware acceleration (`VMXON` active, `X86-VMM-SMOKE: PASS (api-path PortOut+Hlt)` qua VMLAUNCH/VMRESUME và VMCS decode). Còn: qualify full guest lifecycle/storage/network trên Intel ([tier3b-x86-vtx P09](260711-1917-tier3b-x86-vtx/plan.md)); C2C Phase 09 guest bridge phụ thuộc mục này.
-- [ ] Qualify two independently verified Intel nodes for LAN C2C after first-node bring-up,
-  including restart, authority denial, disconnect/reconnect and uncertain outcomes.
+- [ ] Qualify two independently verified Intel nodes for LAN C2C: kịch bản ảo hoá 2 node kết nối qua bus multicast và kiểm tra khả năng phục hồi khi nút rời mạng / khởi động lại kết nối lại (peer departure / restart reconnection) đã hoàn tất và PASS trên KVM (`scripts/qemu-c2c-node-restart-test.sh`, `72a0aa4a3`). Còn: đo kiểm trên 2 node vật lý sau khi mua máy.
 - [ ] Close explicit all-tier adapters and relay identity/time/persistence gates;
   measure a bounded workload against Linux on identical hardware/semantics.
 
