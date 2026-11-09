@@ -47,28 +47,32 @@ pub(super) fn run() -> ! {
     if !scheduler.tasks.is_empty() || super::hart_local::ready::total_ready_count() != 0 {
         fail();
     }
-    let b_tid = scheduler.spawn_with_stacks_configured(
-        "x86-idt-cpl3-b",
-        CellId(0x7ff0),
-        alloc::vec::Vec::new(),
-        b_kstack,
-        b_ustack,
-        |task| {
-            task.pku_value = crate::hal::idt::CPL3_PKRU_B;
-            super::prime_user_mode_entry(task, b_entry, 0);
-        },
-    );
-    let a_tid = scheduler.spawn_with_stacks_configured(
-        "x86-idt-cpl3-a",
-        CellId(0x7ff1),
-        alloc::vec::Vec::new(),
-        a_kstack,
-        a_ustack,
-        |task| {
-            task.pku_value = crate::hal::idt::CPL3_PKRU_A;
-            super::prime_user_mode_entry(task, a_entry, 0);
-        },
-    );
+    let b_tid = scheduler
+        .spawn_with_stacks_configured(
+            "x86-idt-cpl3-b",
+            CellId(0x7ff0),
+            alloc::vec::Vec::new(),
+            b_kstack,
+            b_ustack,
+            |task| {
+                task.pku_value = crate::hal::idt::CPL3_PKRU_B;
+                super::prime_user_mode_entry(task, b_entry, 0);
+            },
+        )
+        .unwrap_or_else(|_| fail());
+    let a_tid = scheduler
+        .spawn_with_stacks_configured(
+            "x86-idt-cpl3-a",
+            CellId(0x7ff1),
+            alloc::vec::Vec::new(),
+            a_kstack,
+            a_ustack,
+            |task| {
+                task.pku_value = crate::hal::idt::CPL3_PKRU_A;
+                super::prime_user_mode_entry(task, a_entry, 0);
+            },
+        )
+        .unwrap_or_else(|_| fail());
     B_TID.store(b_tid, Ordering::Release);
     A_TID.store(a_tid, Ordering::Release);
     drop(guard);

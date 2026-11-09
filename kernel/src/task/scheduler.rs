@@ -919,7 +919,7 @@ impl Scheduler {
         let pages = crate::task::stack_pages_for(name);
         let kstack = crate::task::stack::Stack::new_kernel(pages)?;
         let ustack = crate::task::stack::Stack::new_user(pages)?;
-        Ok(self.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack))
+        self.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)
     }
 
     /// Register a task around stacks the caller already owns.
@@ -938,7 +938,7 @@ impl Scheduler {
         allowed_drivers: alloc::vec::Vec<usize>,
         kstack: crate::task::stack::Stack,
         ustack: crate::task::stack::Stack,
-    ) -> usize {
+    ) -> Result<usize, ViError> {
         self.spawn_with_stacks_configured(name, cell_id, allowed_drivers, kstack, ustack, |_| {})
     }
 
@@ -974,11 +974,16 @@ impl Scheduler {
         kstack: crate::task::stack::Stack,
         ustack: crate::task::stack::Stack,
         configure: F,
-    ) -> usize
+    ) -> Result<usize, ViError>
     where
         F: FnOnce(&mut Task),
     {
-        let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
+        let mut task = crate::memory::heap::try_box(Task::new(
+            self.next_task_id,
+            cell_id,
+            name,
+            allowed_drivers,
+        ))?;
         task.state = TaskState::Ready;
         let id = task.id;
 
@@ -1053,7 +1058,7 @@ impl Scheduler {
         }
         self.push_ready(id);
         self.advance_task_id();
-        id
+        Ok(id)
     }
 
     /// Spawn a thread only after resolving the Cell's live root record.

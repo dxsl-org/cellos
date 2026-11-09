@@ -517,13 +517,13 @@ fn run_race_fixture() -> bool {
         let spawned = (|| -> Result<usize, ViError> {
             let kernel_stack = super::stack::Stack::new_kernel(1)?;
             let user_stack = super::stack::Stack::new_user(1)?;
-            Ok(scheduler.spawn_with_stacks(
+            scheduler.spawn_with_stacks(
                 "user-copy-revoker",
                 CellId(RACE_CELL),
                 Vec::new(),
                 kernel_stack,
                 user_stack,
-            ))
+            )
         })();
         let Ok(worker_tid) = spawned else {
             log::error!("S22-RV64-COPY-RACE: FAIL setup spawn");

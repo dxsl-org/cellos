@@ -152,7 +152,7 @@ pub fn observe_heartbeat_terminal_current() {
     let current_cell = super::hart_local::current_cell_id();
     let no_successor = super::hart_local::ready::total_ready_count() == 0;
     let direct_denied = matches!(
-        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0 }),
+        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0, source: 0 }),
         Err(SyscallError::PermissionDenied)
     );
     let mut frame = crate::hal::arch::ViTrapFrame::default();
@@ -515,7 +515,7 @@ fn verify_remote_execution_publication(worker_tid: usize) -> bool {
 
 fn retiring_syscalls_denied(tid: usize) -> bool {
     matches!(
-        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0 }),
+        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0, source: 0 }),
         Err(SyscallError::PermissionDenied)
     ) && matches!(
         handle_syscall(
@@ -772,7 +772,7 @@ pub fn run_primary() {
         // can be selected by hart 1.
         PHASE.store(WAITING_FOR_SELECTION, Ordering::Release);
 
-        let worker_tid = scheduler.spawn_with_stacks_configured(
+        let Ok(worker_tid) = scheduler.spawn_with_stacks_configured(
             "smp-retirement-worker",
             CellId(CELL_RAW),
             vec![],
@@ -784,7 +784,10 @@ pub fn run_primary() {
                 worker.priority = api::TaskPriority::RealTime as u8;
                 worker.context.ra = remote_worker_entry as *const () as usize;
             },
-        );
+        ) else {
+            log::error!("[selftest] SMP-RETIREMENT: FAIL — worker task allocation");
+            return;
+        };
         (root_tid, worker_tid, owner)
     };
     FAULT_WORKER_TID.store(worker_tid, Ordering::Release);

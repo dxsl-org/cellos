@@ -57,7 +57,7 @@ pub fn spawn() -> Result<usize, ViError> {
                 task.context.ra = __trap_exit as *const () as usize;
                 task.context.sstatus = 0x42120;
             },
-        )
+        )?
     };
 
     log::info!(

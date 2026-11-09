@@ -62,13 +62,15 @@ fn spawn_revoker() -> Option<usize> {
     let scheduler = guard.as_mut()?;
     let kernel_stack = Stack::new_kernel(crate::task::STACK_PAGES).ok()?;
     let user_stack = Stack::new_user(1).ok()?;
-    let worker_tid = scheduler.spawn_with_stacks(
-        "getrandom-grant-racer",
-        CellId(WORKER_CELL),
-        Vec::new(),
-        kernel_stack,
-        user_stack,
-    );
+    let worker_tid = scheduler
+        .spawn_with_stacks(
+            "getrandom-grant-racer",
+            CellId(WORKER_CELL),
+            Vec::new(),
+            kernel_stack,
+            user_stack,
+        )
+        .ok()?;
     WORKER_TID.store(worker_tid, Ordering::Release);
     hart_local::ready::remove_from_all(worker_tid);
     let priority = {

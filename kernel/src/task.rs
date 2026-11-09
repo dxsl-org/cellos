@@ -2071,7 +2071,7 @@ pub fn spawn_with_stacks(
     ustack: stack::Stack,
 ) -> Result<usize, ViError> {
     match SCHEDULER.lock().as_mut() {
-        Some(sched) => Ok(sched.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)),
+        Some(sched) => sched.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack),
         None => Err(ViError::Unknown),
     }
 }
