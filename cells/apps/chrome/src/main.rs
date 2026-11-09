@@ -690,24 +690,69 @@ fn cell_main() {
                     let dy = y - cursor_y;
                     cursor_x = x;
                     cursor_y = y;
-                    if app.vmm_active && app.hv_tid != 0 && (dx != 0 || dy != 0) {
-                        let rel_req = api::services::vmm_session::VmmInputForwardRequest::new(
+                    if app.vmm_active && app.hv_tid != 0 {
+                        if dx != 0 {
+                            let rel_x = api::services::vmm_session::VmmInputForwardRequest::new(
+                                app.session_id,
+                                2, // EV_REL
+                                0, // REL_X
+                                dx,
+                            );
+                            let mut b = [0u8; 16];
+                            if rel_x.encode(&mut b).is_ok() {
+                                let _ = ostd::syscall::sys_send(app.hv_tid, &b);
+                            }
+                        }
+                        if dy != 0 {
+                            let rel_y = api::services::vmm_session::VmmInputForwardRequest::new(
+                                app.session_id,
+                                2, // EV_REL
+                                1, // REL_Y
+                                dy,
+                            );
+                            let mut b = [0u8; 16];
+                            if rel_y.encode(&mut b).is_ok() {
+                                let _ = ostd::syscall::sys_send(app.hv_tid, &b);
+                            }
+                        }
+                    }
+                }
+                InputEvent::MouseButton { button, state } => {
+                    if app.handle_click(cursor_x, cursor_y) {
+                        need_render = true;
+                    } else if app.vmm_active && app.hv_tid != 0 {
+                        let btn_code = match button {
+                            MouseButton::Left => 0x110,
+                            MouseButton::Right => 0x111,
+                            MouseButton::Middle => 0x112,
+                            _ => 0x110,
+                        };
+                        let press_val = if state == KeyState::Pressed { 1 } else { 0 };
+                        let btn_req = api::services::vmm_session::VmmInputForwardRequest::new(
                             app.session_id,
-                            2, // EV_REL
-                            0, // REL_X
-                            dx,
+                            1, // EV_KEY
+                            btn_code,
+                            press_val,
                         );
                         let mut b = [0u8; 16];
-                        if rel_req.encode(&mut b).is_ok() {
+                        if btn_req.encode(&mut b).is_ok() {
                             let _ = ostd::syscall::sys_send(app.hv_tid, &b);
                         }
                     }
                 }
-                InputEvent::MouseButton {
-                    button: MouseButton::Left,
-                    state: KeyState::Pressed,
-                } if app.handle_click(cursor_x, cursor_y) => {
-                    need_render = true;
+                InputEvent::MouseScroll { dy, .. } => {
+                    if app.vmm_active && app.hv_tid != 0 && dy != 0 {
+                        let scroll_req = api::services::vmm_session::VmmInputForwardRequest::new(
+                            app.session_id,
+                            2, // EV_REL
+                            8, // REL_WHEEL
+                            dy,
+                        );
+                        let mut b = [0u8; 16];
+                        if scroll_req.encode(&mut b).is_ok() {
+                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
+                        }
+                    }
                 }
                 InputEvent::Key(ke)
                     if matches!(ke.state, KeyState::Pressed | KeyState::Repeated) =>
