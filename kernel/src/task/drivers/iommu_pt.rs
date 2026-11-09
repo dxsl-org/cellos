@@ -632,6 +632,7 @@ impl AppleDartPt {
         false
     }
     #[cfg(any(test, feature = "test-hooks"))]
+    #[allow(dead_code)]
     pub(crate) fn leaf_present(&self, pa: u64) -> bool {
         let l1_idx = ((pa >> 25) & 0x7FF) as usize;
         let l2_idx = ((pa >> 14) & 0x7FF) as usize;
@@ -646,6 +647,7 @@ impl AppleDartPt {
         unsafe { pte_addr.read_volatile() & DART_PTE_VALID != 0 }
     }
     #[cfg(any(test, feature = "test-hooks"))]
+    #[allow(dead_code)]
     pub(crate) fn level1_present(&self, pa: u64) -> bool {
         let l1_idx = ((pa >> 25) & 0x7FF) as usize;
         let l1_entry_ptr = (self.root_virt + l1_idx * 8) as *const u64;
