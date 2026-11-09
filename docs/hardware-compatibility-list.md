@@ -4,7 +4,8 @@
 empty on purpose.
 **Owner:** `x86_64 PC lane` plan, `.agents/261004-1957-x86-pc-lane/` (phase 07
 fills rows; phase 01 defines the model).
-**Read with:** `docs/roadmap/hardware-tracks.md` (gate inventory X86-PC-0..7) and
+**Read with:** `docs/roadmap/hardware-tracks.md` (gate inventory X86-PC-0..7),
+[intel-x86-hcl-procurement-survey.md](roadmap/intel-x86-hcl-procurement-survey.md) (Machine A procurement evaluation), and
 `docs/specs/04-hardware.md` §7 (x86 PC driver order).
 
 **Current direction (2026-10-08):** [ADR-0022](decisions/0022-intel-x86-64-c2c-only-direction.md)
