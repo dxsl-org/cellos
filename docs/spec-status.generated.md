@@ -10,7 +10,7 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | Sections with an anchor | 19 |
 | Ratified/Accepted sections | 292 |
 | …of those, anchored | 18 |
-| Anchor violations | 2 |
+| Anchor violations | 0 |
 | Coverage gaps (ratified, unanchored) | 274 |
 | Status-prose hits | 80 |
 | Plans linked from status docs | 13 |
@@ -26,8 +26,8 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | `docs/specs/19-hardware-isolation-layers.md` | Layer A — Software W^X after relocation (all arches) | `test tests/integration/tests/wx-text-write.rs::text_write_faults_and_terminates_cell` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism, next plan) | `planned .agents/260906-dual-mode-kernel-evolution/phase-02-tier2-paged-domain-engine.md` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer C — Per-arch hardening (opportunistic, G2+) | `design` | OK |
-| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/memory/cell_quota.rs::MAX_CELLS=64` | DRIFTED: spec 64 vs tree 4096 |
-| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512` | DRIFTED: spec 512 vs tree 4096 |
+| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/memory/cell_quota.rs::MAX_CELLS=64` | OK |
+| `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::CELL_VA_STRIDE=0x200_0000` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 4. Rejected alternatives | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 5. Cross-references | `design` | OK |
@@ -64,11 +64,6 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 | `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:208` |
 
 ## Open findings
-
-### Anchor violations
-
-- `docs/specs/19-hardware-isolation-layers.md:104` — const kernel/src/memory/cell_quota.rs::MAX_CELLS=64: spec 64 vs tree 4096
-- `docs/specs/19-hardware-isolation-layers.md:104` — const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512: spec 512 vs tree 4096
 
 ### Coverage gaps (Spec 21 rollout step 2 backfill)
 

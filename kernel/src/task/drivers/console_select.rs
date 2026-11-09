@@ -8,7 +8,7 @@
 
 use crate::acpi::AcpiInfo;
 use hal::x86_64::uart_16550::{
-    probe_uart, set_console_config, ConsoleConfig, UartAddress, DEFAULT_CONSOLE_CONFIG,
+    active_console_config, probe_uart, set_console_config, ConsoleConfig, UartAddress,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -71,8 +71,9 @@ pub fn select_and_apply_console(cmdline: Option<&str>, acpi: &AcpiInfo) -> Conso
     }
 
     // 3. COM1 if probed present
-    if probe_uart(UartAddress::IoPort(0x03F8)) {
-        let choice = ConsoleKind::Uart(DEFAULT_CONSOLE_CONFIG);
+    let early = &hal_soc_x86::X86_EARLY_FACTS;
+    if probe_uart(UartAddress::IoPort(early.com1.base)) {
+        let choice = ConsoleKind::Uart(active_console_config());
         apply_choice(choice, "COM1 probed");
         return choice;
     }
@@ -85,38 +86,40 @@ pub fn select_and_apply_console(cmdline: Option<&str>, acpi: &AcpiInfo) -> Conso
     }
 
     // Final fallback: default COM1 anyway
-    let choice = ConsoleKind::Uart(DEFAULT_CONSOLE_CONFIG);
+    let choice = ConsoleKind::Uart(active_console_config());
     apply_choice(choice, "default fallback");
     choice
 }
 
 pub fn parse_console_cmdline(s: &str) -> Option<ConsoleKind> {
+    let early = &hal_soc_x86::X86_EARLY_FACTS;
+    let ports = early.serial_ports;
     match s {
-        "ttyS0" => Some(ConsoleKind::Uart(ConsoleConfig {
-            addr: UartAddress::IoPort(0x03F8),
-            irq: 4,
-            gsi: 4,
+        "ttyS0" if !ports.is_empty() => Some(ConsoleKind::Uart(ConsoleConfig {
+            addr: UartAddress::IoPort(ports[0].base),
+            irq: ports[0].irq,
+            gsi: ports[0].irq as u32,
             is_gsi: false,
             baud: 115200,
         })),
-        "ttyS1" => Some(ConsoleKind::Uart(ConsoleConfig {
-            addr: UartAddress::IoPort(0x02F8),
-            irq: 3,
-            gsi: 3,
+        "ttyS1" if ports.len() > 1 => Some(ConsoleKind::Uart(ConsoleConfig {
+            addr: UartAddress::IoPort(ports[1].base),
+            irq: ports[1].irq,
+            gsi: ports[1].irq as u32,
             is_gsi: false,
             baud: 115200,
         })),
-        "ttyS2" => Some(ConsoleKind::Uart(ConsoleConfig {
-            addr: UartAddress::IoPort(0x03E8),
-            irq: 4,
-            gsi: 4,
+        "ttyS2" if ports.len() > 2 => Some(ConsoleKind::Uart(ConsoleConfig {
+            addr: UartAddress::IoPort(ports[2].base),
+            irq: ports[2].irq,
+            gsi: ports[2].irq as u32,
             is_gsi: false,
             baud: 115200,
         })),
-        "ttyS3" => Some(ConsoleKind::Uart(ConsoleConfig {
-            addr: UartAddress::IoPort(0x02E8),
-            irq: 3,
-            gsi: 3,
+        "ttyS3" if ports.len() > 3 => Some(ConsoleKind::Uart(ConsoleConfig {
+            addr: UartAddress::IoPort(ports[3].base),
+            irq: ports[3].irq,
+            gsi: ports[3].irq as u32,
             is_gsi: false,
             baud: 115200,
         })),

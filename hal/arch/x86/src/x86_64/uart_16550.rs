@@ -70,20 +70,12 @@ pub struct ConsoleConfig {
     pub baud: u32,
 }
 
-pub const DEFAULT_CONSOLE_CONFIG: ConsoleConfig = ConsoleConfig {
-    addr: UartAddress::IoPort(0x03F8),
-    irq: 4,
-    gsi: 4,
-    is_gsi: false,
-    baud: 115200,
-};
-
-static CONSOLE_PORT: AtomicU16 = AtomicU16::new(0x03F8);
+static CONSOLE_PORT: AtomicU16 = AtomicU16::new(0);
 static CONSOLE_MMIO_PHYS: AtomicU64 = AtomicU64::new(0);
 static CONSOLE_MMIO_VIRT: AtomicUsize = AtomicUsize::new(0);
 static CONSOLE_MMIO_STRIDE: AtomicU8 = AtomicU8::new(1);
 static CONSOLE_IS_MMIO: AtomicBool = AtomicBool::new(false);
-static CONSOLE_GSI: AtomicU32 = AtomicU32::new(4);
+static CONSOLE_GSI: AtomicU32 = AtomicU32::new(0);
 static CONSOLE_IS_GSI: AtomicBool = AtomicBool::new(false);
 static CONSOLE_BAUD: AtomicU32 = AtomicU32::new(115200);
 

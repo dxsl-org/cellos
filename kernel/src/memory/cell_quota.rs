@@ -19,10 +19,10 @@ use types::CellId;
 /// now that the boot memory map is read from the DTB, and at 64 this constant
 /// binds long before memory does — so `cell-scale-experiment` raises it for the
 /// measurement lane (scripts/qemu-cell-scale.sh) only.
-#[cfg(feature = "cell-scale-experiment")]
-pub const MAX_CELLS: usize = 4096;
 #[cfg(not(feature = "cell-scale-experiment"))]
 pub const MAX_CELLS: usize = 64;
+#[cfg(feature = "cell-scale-experiment")]
+pub const MAX_CELLS: usize = 4096;
 
 /// Default heap quota per Cell: 16 MiB.
 ///

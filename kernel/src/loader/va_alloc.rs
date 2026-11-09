@@ -63,10 +63,10 @@ pub(crate) const CELL_VA_STRIDE: usize = 256 * 1024 * 1024;
 /// `cell-scale-experiment` raises this to 4096 slots (4096 × 32 MiB = 128 GiB of
 /// VA, still inside the user half) so the D5 scale measurement measures memory
 /// rather than this constant. See `memory::cell_quota::MAX_CELLS`.
-#[cfg(feature = "cell-scale-experiment")]
-const MAX_SLOTS: usize = 4096;
 #[cfg(not(feature = "cell-scale-experiment"))]
 const MAX_SLOTS: usize = 512;
+#[cfg(feature = "cell-scale-experiment")]
+const MAX_SLOTS: usize = 4096;
 
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= 0x40_0000_0000);
