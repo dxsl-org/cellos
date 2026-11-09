@@ -71,8 +71,7 @@ source/tests/evidence and do not rerun recorded failures just to reconfirm them.
   [report](reports/d5-cell-scale-remeasure-261003.md), `docs/roadmap/beam-parity-backend-roadmap.md` §2.2–2.3). Đòn bẩy/nợ liên quan:
   - chi phí heap ≈9,7 KB/cell, phần lớn là `CellSegments.pages` ⇒ chia sẻ trang immutable của ELF hoặc nén danh sách segment;
   - heap phía cell là arena tĩnh (`ostd::heap`, `declare_custom_heap!`), chưa có syscall grow (`brk`/`mmap`-style);
-  - allocation infallible còn lại trên đường spawn/exit: `BTreeMap::insert`, `queue.clone()` trong `scheduler::exit_task`,
-    `Box::new` trong `spawn_with_stacks_configured`, `to_vec`/`clone` nhỏ trong test-hooks;
+- allocation infallible còn lại trên đường spawn/exit: `BTreeMap::insert`, `queue.clone()` trong `scheduler::exit_task` (`cell_owners` đã chuyển thành sparse `BTreeMap` ở commit `3d6a31617`), `Box::new` trong `spawn_with_stacks_configured`, `to_vec`/`clone` nhỏ trong test-hooks;
   - cell không load khi khách có ≥4 GiB RAM: đã nâng `CELL_VA_START` lên 64 GiB (`0x10_0000_0000`), loại bỏ triệt để va chạm identity-map với RAM vật lý cao.
 - [ ] **Beam-parity B1/B2** (B0 done): B1 concurrency trong cell + cancellation (cần ADR cancellation); B2 cost/scale
   per-request (WIP-limited cùng D5).
