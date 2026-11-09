@@ -77,8 +77,17 @@ pub fn run(
     #[cfg(feature = "hostile-backend-recovery")]
     let mut hostile_preemption_armed = false;
 
+    let mut active_session: Option<(usize, u32, [u8; 32])> = None;
     loop {
         gpu.poll_damage();
+        service_app_session_ipc(
+            &mut gpu,
+            &mut input,
+            &mut input_vmio,
+            vm_id,
+            vcpu_id,
+            &mut active_session,
+        );
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
         if ret == usize::MAX {
             println("[hv-x86] run_vcpu kernel error — aborting");
@@ -121,6 +130,14 @@ pub fn run(
                     ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
                         .unwrap_or(0),
                 );
+                service_app_session_ipc(
+                    &mut gpu,
+                    &mut input,
+                    &mut input_vmio,
+                    vm_id,
+                    vcpu_id,
+                    &mut active_session,
+                );
             }
 
             // ── Host-interrupt preemption — the guest was mid-execution (maybe
@@ -148,6 +165,14 @@ pub fn run(
                 gpu.reconnect_compositor(
                     ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
                         .unwrap_or(0),
+                );
+                service_app_session_ipc(
+                    &mut gpu,
+                    &mut input,
+                    &mut input_vmio,
+                    vm_id,
+                    vcpu_id,
+                    &mut active_session,
                 );
                 ostd::task::yield_now();
             }
@@ -272,6 +297,91 @@ fn forward_input_events(
     }
     if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
         input_vmio.signal_used();
+    }
+}
+fn service_app_session_ipc(
+    gpu: &mut GpuDev,
+    input: &mut InputDev,
+    input_vmio: &mut VirtioMmio,
+    vm_id: usize,
+    vcpu_id: usize,
+    active_session: &mut Option<(usize, u32, [u8; 32])>,
+) {
+    let mut buf = [0u8; 128];
+    while let ostd::syscall::SyscallResult::Ok(sender) = ostd::syscall::sys_try_recv(0, &mut buf) {
+        if sender == 0 {
+            break;
+        }
+        let opcode = buf[0];
+        match opcode {
+            api::services::vmm_session::VMM_OP_LAUNCH_APP => {
+                if let Ok(req) = api::services::vmm_session::VmmLaunchRequest::decode(&buf) {
+                    let name_str = core::str::from_utf8(&req.app_name)
+                        .unwrap_or("unknown")
+                        .trim_matches('\0');
+                    println(&alloc::format!(
+                        "[hv-x86] Tier 3 guest app session launched: app='{}' ({}x{}) from tid={}",
+                        name_str,
+                        req.width,
+                        req.height,
+                        sender
+                    ));
+                    *active_session = Some((sender, 1, req.app_name));
+                    let reply = api::services::vmm_session::VmmLaunchReply {
+                        status: api::services::vmm_session::VMM_STATUS_OK,
+                        session_id: 1,
+                        surface_cap: gpu.surface_cap(),
+                        scanout_width: req.width,
+                        scanout_height: req.height,
+                    };
+                    let mut reply_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
+                    if reply.encode(&mut reply_buf).is_ok() {
+                        let _ = ostd::syscall::sys_send(sender, &reply_buf);
+                    }
+                }
+            }
+            api::services::vmm_session::VMM_OP_FORWARD_INPUT => {
+                if let Ok(req) = api::services::vmm_session::VmmInputForwardRequest::decode(&buf) {
+                    match req.event_type {
+                        crate::virtio_input::EV_KEY => {
+                            input.push_key(req.code, req.value != 0);
+                        }
+                        crate::virtio_input::EV_REL => {
+                            if req.code == crate::virtio_input::REL_X {
+                                input.push_mouse_move(req.value, 0);
+                            } else if req.code == crate::virtio_input::REL_Y {
+                                input.push_mouse_move(0, req.value);
+                            } else if req.code == crate::virtio_input::REL_WHEEL {
+                                input.push_mouse_scroll(req.value);
+                            }
+                        }
+                        _ => {}
+                    }
+                    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
+                        input_vmio.signal_used();
+                    }
+                }
+            }
+            api::services::vmm_session::VMM_OP_QUERY_STATUS => {
+                let (status, app_bytes) = match active_session {
+                    Some((_, _, name)) => (api::services::vmm_session::VMM_STATUS_OK, *name),
+                    None => (api::services::vmm_session::VMM_STATUS_NOT_FOUND, [0u8; 32]),
+                };
+                let mut reply = [0u8; 36];
+                reply[0..4].copy_from_slice(&status.to_le_bytes());
+                reply[4..36].copy_from_slice(&app_bytes);
+                let _ = ostd::syscall::sys_send(sender, &reply);
+            }
+            api::services::vmm_session::VMM_OP_TERMINATE_APP => {
+                println(&alloc::format!(
+                    "[hv-x86] Tier 3 guest app session terminated by tid={}",
+                    sender
+                ));
+                *active_session = None;
+            }
+            _ => {}
+        }
+        buf.fill(0);
     }
 }
 

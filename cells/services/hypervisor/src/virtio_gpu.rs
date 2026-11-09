@@ -51,6 +51,9 @@ impl GpuDev {
     pub fn shutdown(&mut self) {
         self.scanout.reset(&mut self.resources);
     }
+    pub fn surface_cap(&self) -> u32 {
+        self.scanout.surface_cap()
+    }
 }
 
 impl VirtioDevice for GpuDev {

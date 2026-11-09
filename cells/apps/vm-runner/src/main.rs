@@ -176,3 +176,60 @@ fn cell_main() {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_app_name() {
+        assert_eq!(extract_app_name("chrome"), "chrome");
+        assert_eq!(extract_app_name("/apps/chrome"), "chrome");
+        assert_eq!(extract_app_name("apps/nginx"), "nginx");
+        assert_eq!(extract_app_name("python"), "python");
+    }
+
+    #[test]
+    fn test_app_config_convention() {
+        let cfg = AppConfig::from_convention("nginx");
+        assert_eq!(cfg.name, "nginx");
+        assert_eq!(cfg.base_image, "/sys/guests/linux-base.ext4");
+        assert_eq!(cfg.app_image, "/apps/nginx/nginx.ext4");
+        assert_eq!(cfg.mode, "gui");
+        assert_eq!(cfg.ram_mb, 1024);
+        assert_eq!(cfg.entrypoint, "/opt/app/nginx/nginx");
+    }
+
+    #[test]
+    fn test_vmm_launch_round_trip() {
+        let req = api::services::vmm_session::VmmLaunchRequest::new("chrome", 1024, 768);
+        let mut buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
+        assert!(req.encode(&mut buf).is_ok());
+
+        let decoded = api::services::vmm_session::VmmLaunchRequest::decode(&buf).unwrap();
+        assert_eq!(
+            decoded.opcode,
+            api::services::vmm_session::VMM_OP_LAUNCH_APP
+        );
+        assert_eq!(decoded.width, 1024);
+        assert_eq!(decoded.height, 768);
+        assert_eq!(&decoded.app_name[..6], b"chrome");
+
+        let reply = api::services::vmm_session::VmmLaunchReply {
+            status: api::services::vmm_session::VMM_STATUS_OK,
+            session_id: 42,
+            surface_cap: 100,
+            scanout_width: 1024,
+            scanout_height: 768,
+        };
+        let mut rep_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
+        assert!(reply.encode(&mut rep_buf).is_ok());
+
+        let rep_decoded = api::services::vmm_session::VmmLaunchReply::decode(&rep_buf).unwrap();
+        assert_eq!(
+            rep_decoded.status,
+            api::services::vmm_session::VMM_STATUS_OK
+        );
+        assert_eq!(rep_decoded.session_id, 42);
+        assert_eq!(rep_decoded.surface_cap, 100);
+    }
+}

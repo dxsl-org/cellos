@@ -1,0 +1,16 @@
+# /apps/python/python.toml
+# CellOS Tier 3 Linux Guest Application Configuration
+
+name = "Python Runtime"
+version = "3.12"
+description = "CPython 3 runtime environment on CellOS Tier 3 MicroVM"
+icon = "/apps/python/python.png"
+type = "tier3-linux"
+
+[guest]
+base = "/sys/guests/linux-base.ext4"
+app = "/apps/python/python.ext4"
+mode = "headless"
+ram_mb = 512
+script = "/apps/python/python.lua"
+entrypoint = "/usr/bin/python3 -i"

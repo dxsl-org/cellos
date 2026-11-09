@@ -1,0 +1,19 @@
+# /apps/nginx/nginx.toml
+# CellOS Tier 3 Linux Guest Application Configuration
+
+name = "Nginx Web Server"
+version = "1.26"
+description = "Nginx HTTP/Reverse Proxy server running on CellOS Tier 3 MicroVM"
+icon = "/apps/nginx/nginx.png"
+type = "tier3-linux"
+
+[guest]
+base = "/sys/guests/linux-base.ext4"
+app = "/apps/nginx/nginx.ext4"
+mode = "headless"
+ram_mb = 256
+script = "/apps/nginx/nginx.lua"
+entrypoint = "/usr/sbin/nginx -g 'daemon off;'"
+
+[network]
+ports = [80, 443]
