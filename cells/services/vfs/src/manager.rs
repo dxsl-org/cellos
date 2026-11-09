@@ -352,6 +352,7 @@ impl VfsManager {
             "/etc/cellos/system.toml" => return Some((&self.boot_config, path)),
             "/etc/cellos/services.toml" => "/mnt/sd/etc/cellos/services.toml",
             "/etc/cellos/autoload.toml" => "/mnt/sd/etc/cellos/autoload.toml",
+            "/etc/cellos/cluster.key" => "/mnt/sd/etc/cellos/cluster.key",
             _ => return None,
         };
         if let Some(backend) = self.mounts.backend(persistent) {
