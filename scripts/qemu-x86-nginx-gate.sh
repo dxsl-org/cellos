@@ -84,9 +84,10 @@ if [[ "$BUILD_EVIDENCE_IMAGE" == 1 ]]; then
     RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
         EMBEDDED_OVERRIDE="$STAGE" \
         cargo build --release -p cellos-kernel --target x86_64-unknown-none
+    cp target/x86_64-unknown-none/release/cellos-kernel "$WORK_DIR/kernel"
     # X86_ISO_ROOT keeps the lane out of the tracked build/x86-iso-root staging
     # directory (same reason as HV_EMBEDDED_DIR above).
-    X86_ISO_ROOT="$WORK_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
+    X86_KERNEL="$WORK_DIR/kernel" X86_ISO_ROOT="$WORK_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
 elif [[ "$BUILD_EVIDENCE_IMAGE" != 0 ]]; then
     echo "FAIL: BUILD_EVIDENCE_IMAGE must be 0 or 1" >&2
     exit 1
