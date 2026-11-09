@@ -55,7 +55,7 @@ AArch64 QEMU virt nhận interrupt, lane hypervisor-machinery tới guest shell)
 session tabs, taskbar/Spotlight, snap/F11, Files, Quick Look, GUI Terminal và đóng gói desktop x86
 (`scripts/assemble-x86-image.py --profile desktop`, promote S10-5 `8d9c8165c`) đã có trong code.
 Còn mở:
-- [ ] **Tier 3 app thật trong VM:** IPC contract `vmm_session` (`VmmLaunchRequest`, `VmmLaunchReply`, `VmmInputForwardRequest`), `ScanoutBridge` `SurfaceRole::Interactive`, và client wiring trong `chrome` và `vm-runner` đã landed (`c47ccafae`); đã gỡ bỏ chuỗi literal giả lập, thay bằng trạng thái kết nối VMM động và chuyển tiếp input tới VirtIO-Input. Còn: kiểm thử e2e với kernel guest boot chạy thực tế trong QEMU KVM/TCG.
+- [ ] **Tier 3 app thật trong VM:** IPC contract `vmm_session` (`VmmLaunchRequest`, `VmmLaunchReply`, `VmmInputForwardRequest`), `ScanoutBridge` `SurfaceRole::Interactive`, client wiring trong `chrome` và `vm-runner` (`c47ccafae`), và server-side dispatcher trong `hypervisor` (`run_loop_x86.rs:service_app_session_ipc`, `b31d55dba`) đã hoàn tất; smoke test x86 VMM PVH guest boot đạt PASS trên QEMU 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh`). Còn: đo kiểm GUI tương tác trực tiếp qua desktop compositor khi chạy full image.
 - Deferred by approved scope (plan): Files drag-to-group/detach (split-pane và Trash/Undo đã landed).
 
 ## Kiến trúc & nợ kỹ thuật tồn đọng
