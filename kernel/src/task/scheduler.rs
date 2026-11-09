@@ -1646,13 +1646,14 @@ impl Scheduler {
         crate::cell::hotswap::clear_swap_ceiling(tid);
 
         let timer_release = self.tasks.get_mut(&tid).and_then(|task| {
-            let wait = task.completion_wait.take()?;
-            if wait.source != api::completion::source::TIMER {
-                return None;
+            let wait = task.completion_wait.take();
+            let queue = task.completion.take()?;
+            if let Some(wait) = wait {
+                if wait.source == api::completion::source::TIMER {
+                    return Some((tid, queue, wait.slot));
+                }
             }
-            task.completion
-                .as_ref()
-                .map(|queue| (tid, queue.clone(), wait.slot))
+            None
         });
         if let Some(release) = timer_release {
             #[cfg(cellos_p01_trace)]
