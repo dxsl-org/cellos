@@ -475,6 +475,33 @@ impl<F: FileSystem> FilesApp<F> {
             }
         }
     }
+    /// Detach the secondary pane into a standalone path for an independent window session.
+    #[allow(dead_code)]
+    pub fn detach_pane(&mut self) -> Option<String> {
+        if !self.split_pane_enabled {
+            return None;
+        }
+        let secondary = self.secondary_pane.take()?;
+        self.split_pane_enabled = false;
+        self.active_pane = ActivePane::Left;
+        self.status_message = format!("Detached pane {} to new session", secondary.current_path);
+        Some(secondary.current_path)
+    }
+
+    /// Attach a path as a secondary split pane beside the current view.
+    #[allow(dead_code)]
+    pub fn attach_pane(&mut self, path: &str) {
+        let items = self.read_listing(path).unwrap_or_default();
+        let pane = PaneState {
+            current_path: String::from(path),
+            items,
+            selected_index: 0,
+        };
+        self.secondary_pane = Some(pane);
+        self.split_pane_enabled = true;
+        self.active_pane = ActivePane::Left;
+        self.status_message = format!("Attached split pane: {}", path);
+    }
 
     pub fn switch_view_mode(&mut self, mode: ViewMode) {
         self.view_mode = mode;
@@ -841,6 +868,23 @@ mod tests {
 
         // Disable split pane
         app.toggle_split_pane();
+        assert!(!app.split_pane_enabled);
+        assert!(app.secondary_pane.is_none());
+    }
+    #[test]
+    fn detach_and_attach_pane_lifecycle() {
+        let fs = FakeFs::new().dir("/data").dir("/mnt").dir("/docs");
+        let mut app = app_at(fs, "/data");
+        assert!(!app.split_pane_enabled);
+
+        // Attach pane directly
+        app.attach_pane("/docs");
+        assert!(app.split_pane_enabled);
+        assert_eq!(app.secondary_pane.as_ref().unwrap().current_path, "/docs");
+
+        // Detach pane
+        let detached = app.detach_pane();
+        assert_eq!(detached, Some(alloc::string::String::from("/docs")));
         assert!(!app.split_pane_enabled);
         assert!(app.secondary_pane.is_none());
     }
