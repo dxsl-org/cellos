@@ -50,7 +50,6 @@ session tabs, taskbar/Spotlight, snap/F11, Files, Quick Look, GUI Terminal và �
 (`scripts/assemble-x86-image.py --profile desktop`, promote S10-5 `8d9c8165c`) đã có trong code.
 Còn mở:
 - [ ] **Tier 3 app thật trong VM:** IPC contract `vmm_session` (`VmmLaunchRequest`, `VmmLaunchReply`, `VmmInputForwardRequest`), `ScanoutBridge` `SurfaceRole::Interactive`, client wiring trong `chrome` và `vm-runner` (`c47ccafae`), và server-side dispatcher trong `hypervisor` (`run_loop_x86.rs:service_app_session_ipc`, `b31d55dba`) đã hoàn tất; smoke test x86 VMM PVH guest boot đạt PASS trên QEMU 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh`). Còn: đo kiểm GUI tương tác trực tiếp qua desktop compositor khi chạy full image.
-- Deferred by approved scope (plan): Files drag-to-group/detach (split-pane và Trash/Undo đã landed).
 
 ## Kiến trúc & nợ kỹ thuật tồn đọng
 **Kiến trúc (không có fix đơn lẻ, ghi để không quên):** `syscall.rs` 11 863 dòng / `snapshot.rs` 234 KB (x86
