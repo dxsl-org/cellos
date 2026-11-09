@@ -229,7 +229,15 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
     if ostd::ipc::recv_from(net_tid, &mut reply).is_ok() {
         if let Ok(NetResponse::Addr(ip)) = api::ipc::decode::<NetResponse>(&reply) {
             if ip == [0, 0, 0, 0] {
-                crate::executor::shell_println("eth0: link up, waiting for DHCP lease...");
+                crate::executor::shell_println("eth0: link up, waiting for address assignment...");
+            } else if ip[0] == 169 && ip[1] == 254 {
+                crate::executor::shell_println(&alloc::format!(
+                    "eth0: inet {}.{}.{}.{}  netmask 255.255.0.0  (Link-Local RFC 3927)",
+                    ip[0],
+                    ip[1],
+                    ip[2],
+                    ip[3]
+                ));
             } else {
                 crate::executor::shell_println(&alloc::format!(
                     "eth0: inet {}.{}.{}.{}  netmask 255.255.255.0  (DHCP)",
