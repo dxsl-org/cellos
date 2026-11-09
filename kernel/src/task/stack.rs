@@ -506,7 +506,8 @@ pub struct CellSegments {
 }
 
 impl CellSegments {
-    pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, va_slot: usize) -> Self {
+    pub fn new(mut pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, va_slot: usize) -> Self {
+        pages.shrink_to_fit();
         Self {
             pages,
             writable_pages: alloc::vec::Vec::new(),
@@ -517,10 +518,14 @@ impl CellSegments {
     }
 
     pub fn with_writable_pages(
-        pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
-        writable_pages: alloc::vec::Vec<types::VAddr>,
+        mut pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+        mut writable_pages: alloc::vec::Vec<types::VAddr>,
         va_slot: usize,
     ) -> Self {
+        pages.shrink_to_fit();
+        writable_pages.sort_unstable();
+        writable_pages.dedup();
+        writable_pages.shrink_to_fit();
         Self {
             pages,
             writable_pages,
@@ -550,15 +555,15 @@ impl CellSegments {
     }
 
     pub fn is_writable(&self, va: types::VAddr) -> bool {
-        self.writable_pages.contains(&va)
+        self.writable_pages.binary_search(&va).is_ok()
     }
     /// Return the exclusive end of the writable page containing `ptr`.
     pub fn writable_page_end_containing(&self, ptr: usize) -> Option<usize> {
         let page = ptr & !(PAGE_SIZE - 1);
         self.writable_pages
-            .contains(&page)
-            .then(|| page.checked_add(PAGE_SIZE))
-            .flatten()
+            .binary_search(&page)
+            .ok()
+            .and_then(|_| page.checked_add(PAGE_SIZE))
     }
 
     /// Whether every page touched by this range is writable in this Cell image.
@@ -571,7 +576,7 @@ impl CellSegments {
         }
         let mut page = ptr & !(PAGE_SIZE - 1);
         while page < end {
-            if !self.writable_pages.contains(&page) {
+            if self.writable_pages.binary_search(&page).is_err() {
                 return false;
             }
             page = match page.checked_add(PAGE_SIZE) {

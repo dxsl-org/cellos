@@ -141,14 +141,16 @@ pub fn prepare_elf_task(
             #[cfg(cellos_p01_trace)]
             p01_post_load_failure(&seg_pages, load_base, 3);
         })?;
-    // The filtered set has at most one entry per page, so the page count is an
-    // upper bound: reserving it means no growth, hence no infallible reallocation.
+    let writable_count = seg_pages
+        .iter()
+        .filter(|p| p.final_flags.bits() & crate::memory::paging::Flags::WRITE != 0)
+        .count();
     let mut writable_pages = Vec::new();
     crate::loader::atomic_checkpoint("AP-RW")
         .map_err(|_| ViError::OutOfMemory)
         .and_then(|_| {
             writable_pages
-                .try_reserve_exact(seg_pages.len())
+                .try_reserve_exact(writable_count)
                 .map_err(|_| ViError::OutOfMemory)
         })
         .map_err(|_| {

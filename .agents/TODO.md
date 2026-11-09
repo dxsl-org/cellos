@@ -69,7 +69,7 @@ source/tests/evidence and do not rerun recorded failures just to reconfirm them.
   heap 64-bit nay 32 MiB (`1d791550d`, `kernel/src/main.rs` `HEAP_FRAMES`) ⇒ baseline N=64/128/256/512 với M heavy
   phải đo lại (`scripts/qemu-cell-scale.sh --heavy M`,
   [report](reports/d5-cell-scale-remeasure-261003.md), `docs/roadmap/beam-parity-backend-roadmap.md` §2.2–2.3). Đòn bẩy/nợ liên quan:
-  - chi phí heap ≈9,7 KB/cell, phần lớn là `CellSegments.pages` ⇒ chia sẻ trang immutable của ELF hoặc nén danh sách segment;
+  - chi phí heap ≈9,7 KB/cell, phần lớn là `CellSegments.pages`: đã tối ưu hoá dung lượng Vec (shrink_to_fit, reserve chính xác writable_count, binary_search); tiếp tục nghiên cứu nén segment list hoặc chia sẻ trang immutable;
   - heap phía cell là arena tĩnh (`ostd::heap`, `declare_custom_heap!`), chưa có syscall grow (`brk`/`mmap`-style);
 - allocation infallible còn lại trên đường spawn/exit: `BTreeMap::insert`, `queue.clone()` trong `scheduler::exit_task` đã loại bỏ hoàn toàn bằng `task.completion.take()`, `cell_owners` đã chuyển thành sparse `BTreeMap` (commit `3d6a31617`), `Box::new` trong `spawn_with_stacks_configured` đã chuyển sang `try_box` fallible (trả `Result<usize, ViError>`), `to_vec`/`clone` nhỏ trong test-hooks;
   - cell không load khi khách có ≥4 GiB RAM: đã nâng `CELL_VA_START` lên 64 GiB (`0x10_0000_0000`), loại bỏ triệt để va chạm identity-map với RAM vật lý cao.
