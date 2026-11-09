@@ -466,13 +466,9 @@ pub struct Scheduler {
     /// Fixed CellId/generation → root-TID authority. A slot leaves `Live`
     /// before any root resources are released or its CellId is reusable.
     ///
-    /// Heap-backed, never inline: the table is `MAX_CELLS` entries, and
-    /// `cell-scale-experiment` raises `MAX_CELLS` to 4096 — an inline array made
-    /// `Scheduler` 164 064 bytes, so `Scheduler::new()` (built through the stack
-    /// for the `ptr::write` in `task::init`) overflowed the boot hart's stack and
-    /// zeroed the statics above it, `PLATFORM` included; measured 2026-10-03.
-    /// `get`/`get_mut` call sites are unchanged by the switch to `Vec`.
-    cell_owners: alloc::vec::Vec<CellOwnerSlot>,
+    /// Sparse map of CellId -> CellOwnerSlot. Dynamically allocated on demand,
+    /// so an idle scheduler allocates 0 bytes rather than a dense MAX_CELLS array.
+    cell_owners: BTreeMap<u64, CellOwnerSlot>,
     /// Token-indexed root-death subscriptions (registered VFS cell, live
     /// providers of the [`OWNER_WATCH_SERVICES`] serving that principal).
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
@@ -528,7 +524,7 @@ impl Scheduler {
         Self {
             tasks: TaskTable::new(),
             zombies: Vec::new(),
-            cell_owners: alloc::vec![CellOwnerSlot::Empty; crate::memory::cell_quota::MAX_CELLS],
+            cell_owners: BTreeMap::new(),
             cell_owner_watches: BTreeMap::new(),
             next_cell_owner_watch: 1,
             next_task_id: 1,
@@ -548,8 +544,8 @@ impl Scheduler {
     ) -> Result<(), types::ViError> {
         let slot = self
             .cell_owners
-            .get_mut(owner.cell_id as usize)
-            .ok_or(types::ViError::InvalidInput)?;
+            .entry(owner.cell_id)
+            .or_insert(CellOwnerSlot::Empty);
         if !matches!(slot, CellOwnerSlot::Empty) {
             return Err(types::ViError::AlreadyExists);
         }
@@ -558,18 +554,19 @@ impl Scheduler {
         Ok(())
     }
     pub(crate) fn session_owner_reserved(&self, owner: api::cell_owner::CellOwner) -> bool {
-        matches!(self.cell_owners.get(owner.cell_id as usize),
+        matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Reserved(current)) if *current == owner)
     }
     pub(crate) fn abort_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
         if self.session_owner_reserved(owner) {
-            self.cell_owners[owner.cell_id as usize] = CellOwnerSlot::Empty;
+            self.cell_owners.insert(owner.cell_id, CellOwnerSlot::Empty);
             self.tasks.abort_publication();
         }
     }
     pub(crate) fn publish_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
         assert!(self.session_owner_reserved(owner));
-        self.cell_owners[owner.cell_id as usize] = CellOwnerSlot::Live(owner);
+        self.cell_owners
+            .insert(owner.cell_id, CellOwnerSlot::Live(owner));
     }
 
     /// Return the root endpoint only while this exact Cell generation is live.
@@ -578,7 +575,7 @@ impl Scheduler {
         cell_id: CellId,
         generation: u64,
     ) -> Option<api::cell_owner::CellOwner> {
-        let slot = self.cell_owners.get(cell_id.0 as usize)?;
+        let slot = self.cell_owners.get(&cell_id.0)?;
         let CellOwnerSlot::Live(owner) = slot else {
             return None;
         };
@@ -596,9 +593,10 @@ impl Scheduler {
     /// Publish the owner slot during the launch commit, after task initialization
     /// and before the task is made runnable.
     pub(crate) fn publish_live_cell_owner(&mut self, owner: api::cell_owner::CellOwner) -> bool {
-        let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) else {
-            return false;
-        };
+        let slot = self
+            .cell_owners
+            .entry(owner.cell_id)
+            .or_insert(CellOwnerSlot::Empty);
         if !owner.is_live() || !matches!(slot, CellOwnerSlot::Empty) {
             return false;
         }
@@ -620,15 +618,15 @@ impl Scheduler {
 
     pub(crate) fn cell_owner_slot_is_empty(&self, cell_id: CellId) -> bool {
         self.cell_owners
-            .get(cell_id.0 as usize)
-            .is_some_and(|slot| matches!(slot, CellOwnerSlot::Empty))
+            .get(&cell_id.0)
+            .map_or(true, |slot| matches!(slot, CellOwnerSlot::Empty))
     }
 
     pub(crate) fn live_cell_owner_for_id(
         &self,
         cell_id: CellId,
     ) -> Option<api::cell_owner::CellOwner> {
-        let CellOwnerSlot::Live(owner) = self.cell_owners.get(cell_id.0 as usize)? else {
+        let CellOwnerSlot::Live(owner) = self.cell_owners.get(&cell_id.0)? else {
             return None;
         };
         self.resolve_live_cell_owner(cell_id, owner.generation)
@@ -645,16 +643,16 @@ impl Scheduler {
     /// live must match a task or a zombie, and anything else still panics.
     fn generation_is_live(&self, cell_id: usize, generation: u64) -> bool {
         matches!(
-            self.cell_owners.get(cell_id),
+            self.cell_owners.get(&(cell_id as u64)),
             Some(CellOwnerSlot::Live(owner))
-                if owner.cell_id as usize == cell_id && owner.generation == generation
+                if owner.cell_id == cell_id as u64 && owner.generation == generation
         )
     }
 
     fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
         #[cfg(cellos_g1_cpu)]
         super::cpu_accounting::require(super::cpu_accounting::begin_retirement(self, owner));
-        if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
+        if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
             *slot = CellOwnerSlot::Retiring(owner);
         }
     }
@@ -664,7 +662,7 @@ impl Scheduler {
     /// CellId quota unless this exact `Retiring(owner)` slot became `Empty`.
     pub(crate) fn finish_root_retirement(&mut self, owner: api::cell_owner::CellOwner) -> bool {
         #[cfg(cellos_g1_cpu)]
-        if !matches!(self.cell_owners.get(owner.cell_id as usize),
+        if !matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Retiring(current)) if *current == owner)
         {
             return false;
@@ -673,7 +671,7 @@ impl Scheduler {
         if !super::cpu_accounting::require(super::cpu_accounting::finish_retirement(self, owner)) {
             return false;
         }
-        let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) else {
+        let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) else {
             return false;
         };
         if matches!(slot, CellOwnerSlot::Retiring(current) if *current == owner) {
@@ -687,7 +685,7 @@ impl Scheduler {
     }
 
     pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
-        if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
+        if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
             if matches!(slot, CellOwnerSlot::Live(current) if *current == owner) {
                 *slot = CellOwnerSlot::Empty;
             }
@@ -699,7 +697,7 @@ impl Scheduler {
     pub(crate) fn telemetry_cell_owners(
         &self,
     ) -> impl Iterator<Item = (api::cell_owner::CellOwner, bool)> + '_ {
-        self.cell_owners.iter().filter_map(|slot| match slot {
+        self.cell_owners.values().filter_map(|slot| match slot {
             CellOwnerSlot::Live(owner) => Some((*owner, false)),
             CellOwnerSlot::Retiring(owner) => Some((*owner, true)),
             CellOwnerSlot::Empty | CellOwnerSlot::Reserved(_) => None,
@@ -1123,7 +1121,7 @@ impl Scheduler {
         };
         let owner = self
             .cell_owners
-            .get(cell_id.0 as usize)
+            .get(&cell_id.0)
             .and_then(|slot| match slot {
                 CellOwnerSlot::Live(owner) => {
                     self.resolve_live_cell_owner(cell_id, owner.generation)
@@ -1617,7 +1615,7 @@ impl Scheduler {
             .get(&tid)
             .map(|task| {
                 let retiring_member = matches!(
-                    self.cell_owners.get(task.cell_id.0 as usize),
+                    self.cell_owners.get(&task.cell_id.0),
                     Some(CellOwnerSlot::Retiring(owner))
                         if owner.cell_id == task.cell_id.0
                             && owner.generation == task.cell_generation
