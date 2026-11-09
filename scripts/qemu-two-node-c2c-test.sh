@@ -13,6 +13,22 @@ X86_ACCEL="${X86_ACCEL:-kvm}"
 X86_CPU_MODEL="${X86_CPU_MODEL:-host}"
 SMP="${SMP:-1}"
 SOCKET_PORT="${C2C_SOCKET_PORT:-23456}"
+C2C_TRANSPORT="${C2C_TRANSPORT:-mcast}"
+MCAST_GROUP="${C2C_MCAST_GROUP:-239.0.0.1}"
+
+if [[ "$C2C_TRANSPORT" == "mcast" ]]; then
+    NETDEV_A="socket,id=c2clan,mcast=$MCAST_GROUP:$SOCKET_PORT"
+    NETDEV_B="socket,id=c2clan,mcast=$MCAST_GROUP:$SOCKET_PORT"
+    DESC_A="Multicast Peer on $MCAST_GROUP:$SOCKET_PORT"
+    DESC_B="Multicast Peer on $MCAST_GROUP:$SOCKET_PORT"
+    LAUNCH_DELAY=0
+else
+    NETDEV_A="socket,id=c2clan,listen=127.0.0.1:$SOCKET_PORT"
+    NETDEV_B="socket,id=c2clan,connect=127.0.0.1:$SOCKET_PORT"
+    DESC_A="L2 Listener on :$SOCKET_PORT"
+    DESC_B="L2 Connector to :$SOCKET_PORT"
+    LAUNCH_DELAY=1.5
+fi
 WORK_DIR="${C2C_WORK_DIR:-build/two-node-c2c}"
 
 if [[ ! -f "$ISO" ]]; then
@@ -35,7 +51,7 @@ echo "==========================================================================
 echo "  Cellos Two-Node Virtual Cluster C2C Gate"
 echo "  ISO:         $ISO"
 echo "  Accel:       $X86_ACCEL (CPU: $X86_CPU_MODEL, SMP: ${SMP}c/node)"
-echo "  L2 Socket:   127.0.0.1:$SOCKET_PORT"
+echo "  Transport:   $C2C_TRANSPORT ($DESC_A)"
 echo "  Window:      ${BOOT_WINDOW}s"
 echo "=========================================================================="
 
@@ -62,7 +78,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 # ── 1. Launch Node A (Server / Socket Listener) ──────────────────────────────
-echo "[c2c-cluster] Launching Node A (L2 Listener on :$SOCKET_PORT, MAC 52:54:00:c2:c0:01)..."
+echo "[c2c-cluster] Launching Node A ($DESC_A, MAC 52:54:00:c2:c0:01)..."
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
     "${ACCEL_ARGS[@]}" \
@@ -73,16 +89,17 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -cdrom "$ISO" \
     -boot d \
     -no-reboot \
-    -netdev "socket,id=c2clan,listen=127.0.0.1:$SOCKET_PORT" \
+    -netdev "$NETDEV_A" \
     -device "virtio-net-pci,netdev=c2clan,mac=52:54:00:c2:c0:01" \
     < "$FIFO_A" > "$NODE_A_LOG" 2>&1 &
 NODE_A_PID=$!
 
-# Wait briefly for Node A to bind the listener port
-sleep 1.5
+if [[ "$LAUNCH_DELAY" != "0" ]]; then
+    sleep "$LAUNCH_DELAY"
+fi
 
 # ── 2. Launch Node B (Client / Socket Connect) ───────────────────────────────
-echo "[c2c-cluster] Launching Node B (L2 Connector to :$SOCKET_PORT, MAC 52:54:00:c2:c0:02)..."
+echo "[c2c-cluster] Launching Node B ($DESC_B, MAC 52:54:00:c2:c0:02)..."
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
     "${ACCEL_ARGS[@]}" \
@@ -93,7 +110,7 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -cdrom "$ISO" \
     -boot d \
     -no-reboot \
-    -netdev "socket,id=c2clan,connect=127.0.0.1:$SOCKET_PORT" \
+    -netdev "$NETDEV_B" \
     -device "virtio-net-pci,netdev=c2clan,mac=52:54:00:c2:c0:02" \
     < "$FIFO_B" > "$NODE_B_LOG" 2>&1 &
 NODE_B_PID=$!
@@ -155,6 +172,14 @@ if ! grep -qa "eth0: inet 169.254.192.1  netmask 255.255.0.0" "$NODE_A_LOG"; the
 fi
 if ! grep -qa "eth0: inet 169.254.192.2  netmask 255.255.0.0" "$NODE_B_LOG"; then
     echo "FAIL: Node B user-space ifconfig did not report Link-Local address" >&2
+    FAIL=1
+fi
+if ! grep -qa "first e1000 RX" "$NODE_A_LOG"; then
+    echo "FAIL: Node A did not receive L2 Ethernet frames from cluster" >&2
+    FAIL=1
+fi
+if ! grep -qa "first e1000 RX" "$NODE_B_LOG"; then
+    echo "FAIL: Node B did not receive L2 Ethernet frames from cluster" >&2
     FAIL=1
 fi
 if (( SMP > 1 )); then
