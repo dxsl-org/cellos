@@ -14,7 +14,7 @@ use types::{PhysAddr, VAddr};
 ///
 /// Used by the kernel to apply appropriate fault-handling policy (e.g., ElfText
 /// regions are read-only/executable; Stack regions can grow down).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmaKind {
     /// ELF `.text` / read-only executable segment.
     ElfText,
@@ -37,7 +37,7 @@ pub enum VmaKind {
 /// `flags` stores raw architecture PTE flags to install on demand-mapping.
 /// On x86_64 these are the `PTE_*` constants from `hal::paging`; on RISC-V
 /// they are the `PageFlags` bitmask.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VmaRegion {
     /// Inclusive start of the virtual range (page-aligned).
     pub va_start: VAddr,

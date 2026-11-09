@@ -36,7 +36,7 @@ pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
 /// semantics.
 pub const INPUT_EVENT_QUEUE_DEPTH: usize = 512;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
     Ready,
     Running,

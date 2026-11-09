@@ -58,7 +58,7 @@ pub(super) fn snapshot() -> StateSnapshot {
                     id: task.id,
                     cell_id: task.cell_id.0,
                     generation: task.cell_generation,
-                    state: task.state.clone(),
+                    state: task.state,
                     priority: task.priority,
                     cluster: (task.cluster_mode, task.cluster_id),
                     allowlist: task.syscall_allowlist,
@@ -81,7 +81,7 @@ pub(super) fn snapshot() -> StateSnapshot {
                                 mapping.va_end,
                                 mapping.pa_start,
                                 mapping.flags,
-                                mapping.kind.clone(),
+                                mapping.kind,
                             )
                         })
                         .collect(),
@@ -90,7 +90,7 @@ pub(super) fn snapshot() -> StateSnapshot {
             sched
                 .zombies
                 .iter()
-                .map(|task| (task.id, task.cell_id.0, task.state.clone()))
+                .map(|task| (task.id, task.cell_id.0, task.state))
                 .collect(),
             sched.next_task_id,
             sched.publication_snapshot_counters(),
