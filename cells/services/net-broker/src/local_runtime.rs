@@ -1,4 +1,5 @@
 use crate::beacon::{self, BeaconChannel, BeaconPlain, PeerTable};
+extern crate alloc;
 use crate::rng::BrokerRng;
 use crate::transport::StaticKeypair;
 use api::cluster::ClusterId;
@@ -139,7 +140,12 @@ impl BrokerNetworkState {
             return true;
         };
         if self.accepts_beacon(&plain) {
-            self.peers.update(&plain);
+            if self.peers.update(&plain) {
+                ostd::io::println(&alloc::format!(
+                    "[net-broker] discovered peer machine_id=0x{:016x}",
+                    plain.machine_id
+                ));
+            }
         }
         true
     }
