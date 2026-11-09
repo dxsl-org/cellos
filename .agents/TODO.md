@@ -63,16 +63,6 @@ provenance `kernel/src/embedded-*/kernel_fs.img` đã làm rõ: canonical `embed
 Chỉ còn việc chưa xong. Old `[in-progress]`/`next` wording is not permission to resume; preserve
 source/tests/evidence and do not rerun recorded failures just to reconfirm them.
 
-- [ ] **Tier 3 x86 persistent backend — A/C/D cần trace khi tái hiện** (lỗi `seg_max` (B) đã sửa, xem
-  `CHANGELOG.md`). Lane: `scripts/qemu-x86-virtio-e2e.sh`. Không quy chung nguyên nhân khi chưa có trace.
-  (A) **VFS short read**: `[hv-blk] VFS read response: GrantDone { bytes: 15360 }` cho request 64 KiB; fatfs thấy
-  `guest_disk.img` 850944 B trong khi file host 16 777 216 B. Trace đối chiếu kích thước ở mount (`[vfs-fat-mount]`,
-  `[hv-x86] persistent disk ... (size=...)`) và sau `write_at` (`[vfs-fat-write]`, `[vfs] guest_disk write beyond capacity`)
-  đã landed; sẵn sàng thu trace khi lane e2e chạy. Cùng lớp: FAT nhúng (VIFS1) đọc `/bin/bench-probe` 78 760 B so với entry
-  78 824 B — `FatFile` read path đã viết lại ở `81ceceec4` **(verify)** ([report](reports/d5-cell-scale-remeasure-261003.md)).
-  (C) **flush ngắt quãng ở tầng raw**: `[hv-blk] VFS flush failed: Ok(Err(1))` + `[hv-blk-host] request failed
-  type=4 … status=1`; batch gần nhất 5/5 xanh. Thu log cả hai tầng khi tái hiện; không thêm retry khi chưa phân loại.
-  (D) **flaky boot Cellos**: 1/5 run `FAIL: evidence rdinit was not selected in run 1`. Chưa điều tra.
 - [ ] **Tier 3 application evidence:** Python gate (`scripts/qemu-x86-python-gate.sh`, Alpine 256 MiB) PASS trên
   QEMU-TCG; job CI `qemu-x86-tier3-python` chưa có kết quả hosted quan sát được **(verify)**; lần lỗi apk kế tiếp cần
   `QEMU_NET_CAPTURE` để tách CDN/SLIRP/guest. Cổng **browser** còn mở: RAM, virtio-gpu scanout, virtio-input và tương
