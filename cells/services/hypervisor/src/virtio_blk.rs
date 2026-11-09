@@ -30,9 +30,9 @@ const BLK_T_FLUSH: u32 = 4;
 /// that call performs one FAT sector operation per 512 bytes, so the budget
 /// scales with the chunk (see `chunk_timeout_ticks`). A budget that only covers
 /// the round trip turns a slow-but-correct VFS into a poisoned connection.
-const BACKEND_TIMEOUT_TICKS: u64 = 200;
+const BACKEND_TIMEOUT_TICKS: u64 = 2000;
 /// Extra IPC budget per 4 KiB of a batched chunk.
-const BACKEND_TICKS_PER_4K: u64 = 200;
+const BACKEND_TICKS_PER_4K: u64 = 1000;
 
 /// IPC budget for a chunk of `bytes`, never below the base request budget.
 fn chunk_timeout_ticks(bytes: usize) -> u64 {

@@ -2,9 +2,11 @@ use alloc::{collections::BTreeMap, string::String};
 use api::ipc::{self, NetRequest, NetResponse};
 use api::syscall::events::NET_RX;
 use core::sync::atomic::Ordering;
+use ostd::syscall::sys_try_recv_attested;
 #[cfg(any(not(feature = "ipc-wake-oracle"), feature = "hypervisor-bridge"))]
 use ostd::syscall::sys_wait_completion;
-use ostd::syscall::{sys_try_recv_attested, sys_yield};
+#[cfg(not(feature = "hypervisor-bridge"))]
+use ostd::syscall::sys_yield;
 #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
 use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
 use ostd::{io::println, syscall::SyscallResult};
@@ -14,8 +16,9 @@ use smoltcp::{
     wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
 };
 
+#[cfg(not(feature = "hypervisor-bridge"))]
+use crate::dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use crate::{
-    dhcp::{add_dhcp_socket, poll_dhcp, DhcpState},
     dns::Resolver,
     handlers,
     handlers::tcp::{readiness, MAX_INTERESTS},
@@ -26,11 +29,16 @@ use crate::{
 
 const IPC_BUF_SIZE: usize = 4096;
 const MAC: EthernetAddress = EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+#[allow(dead_code)]
 const NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS: u64 = 10;
+#[allow(dead_code)]
 const SCHEDULER_TICK_MS: u64 = 10;
+#[allow(dead_code)]
 const IPC_BURST_GRACE_YIELDS: u8 = 1;
+#[allow(dead_code)]
 const SMOLTCP_MAINTENANCE_INTERVAL_MS: u64 = 100;
 const MTIME_TICKS_PER_MS: u64 = 10_000;
+#[allow(dead_code)]
 const SMOLTCP_MAINTENANCE_TICKS: u64 = SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_TICKS_PER_MS;
 /// How long a socket aborted on owner death may wait for its RST to leave
 /// (nominally 1 s at the assumed 10 MHz tick rate, like the graceful-close
@@ -100,6 +108,7 @@ pub(crate) fn now_instant() -> Instant {
 }
 
 /// Dotted-quad text for log lines (`10.0.2.15`).
+#[allow(dead_code)]
 pub(crate) fn dotted_ipv4(ip: [u8; 4]) -> String {
     let mut text = String::new();
     for (index, octet) in ip.iter().enumerate() {
@@ -124,6 +133,7 @@ pub(crate) fn dotted_ipv4(ip: [u8; 4]) -> String {
     text
 }
 
+#[allow(dead_code)]
 fn consume_ipc_burst_grace(remaining: &mut u8) -> bool {
     if *remaining == 0 {
         return false;
@@ -665,17 +675,21 @@ pub(crate) fn run() {
     let mut watched: BTreeMap<SocketOwner, (usize, u64)> = BTreeMap::new();
     // One DNS socket serves every `NetRequest::Resolve`; the server starts as
     // SLIRP's and is replaced by whatever the DHCP lease names.
+    #[allow(unused_mut)]
     let mut resolver = Resolver::install(&mut sockets);
 
     #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_handle = add_dhcp_socket(&mut sockets);
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut dhcp_state = DhcpState::Pending;
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_start_ticks = sys_get_time();
+    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut link_local_assigned = false;
     let mut buffer = [0u8; IPC_BUF_SIZE];
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut last_poll_ticks = sys_get_time();
+    #[allow(unused_mut)]
     let mut local_ip = [0u8; 4];
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut net_rx_producer_proved = false;

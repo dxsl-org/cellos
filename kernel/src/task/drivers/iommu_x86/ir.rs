@@ -78,6 +78,17 @@ pub struct IrTable {
     pub size_power: u8, // size = 2^(size_power + 1)
 }
 
+#[inline]
+fn virt_to_phys(virt: usize) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        (virt - crate::memory::frame::phys_to_virt(0)) as u64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        virt as u64
+    }
+}
 impl IrTable {
     pub fn new(size_power: u8) -> Self {
         let entries = 1u32 << (size_power + 1);
@@ -88,7 +99,7 @@ impl IrTable {
         if virt == 0 {
             panic!("[vtd] out of memory allocating IR table");
         }
-        let phys = virt as u64;
+        let phys = virt_to_phys(virt);
         Self {
             virt,
             phys,

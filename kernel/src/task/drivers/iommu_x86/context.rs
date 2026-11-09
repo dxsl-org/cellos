@@ -12,6 +12,17 @@ pub struct ContextTable {
     pub phys: u64,
     pub publication_flushed: bool,
 }
+#[inline]
+fn virt_to_phys(virt: usize) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        (virt - crate::memory::frame::phys_to_virt(0)) as u64
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        virt as u64
+    }
+}
 
 pub fn alloc_table(alignment_bits: usize) -> (usize, u64) {
     let size = 4096;
@@ -22,7 +33,7 @@ pub fn alloc_table(alignment_bits: usize) -> (usize, u64) {
     if virt == 0 {
         panic!("[vtd] out of memory allocating table");
     }
-    let phys = virt as u64; // kernel identity-mapped
+    let phys = virt_to_phys(virt);
     (virt, phys)
 }
 
