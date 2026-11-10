@@ -88,16 +88,19 @@ impl SurfaceState {
 
     /// Pixel data for one blit.
     ///
-    /// A Grant is resolved through `resolve(reg_id, owner)` (the owner-checked
-    /// `GrantSlice` syscall in production) on every call and the pointer is used
-    /// only for this blit. Passing the surface owner means a Grant that is no
-    /// longer that client's resolves as unknown, so a blit can only ever read
-    /// the owner's own buffer. A Grant the owner has released, or that now
-    /// resolves smaller than the surface needs, is detached: the surface paints
-    /// nothing until the owner attaches a live buffer again.
+    /// A Grant is resolved through `resolve(reg_id, owner)` (the leased,
+    /// owner-checked `GrantSlice` syscall in production) on every call and the
+    /// pointer is used only for this blit. Passing the surface owner means a
+    /// Grant that is no longer that client's resolves as unknown, so a blit can
+    /// only ever read the owner's own buffer. A Grant the owner has released,
+    /// or that now resolves smaller than the surface needs, is detached: the
+    /// surface paints nothing until the owner attaches a live buffer again.
     ///
-    /// Residual: the owner can still free the Grant between this resolution and
-    /// the copy, because a non-VFS `GrantSlice` installs no pin in the kernel.
+    /// The production resolver publishes a kernel lease with the lookup. The
+    /// owner cannot free or unregister the Grant until the compositor's next
+    /// receive or its next send to that owner, and the owner's death leaves the
+    /// frames withheld until then, so the returned slice stays valid for the
+    /// blit that consumes it.
     pub fn resolve_pixels(
         &mut self,
         resolve: impl FnOnce(usize, usize) -> Option<(*mut u8, usize)>,
@@ -111,8 +114,10 @@ impl SurfaceState {
             });
             match live {
                 // SAFETY: the kernel just resolved `reg_id` for this task to a
-                // mapping of at least `needed` bytes; the slice is consumed by
-                // the caller's blit before the next IPC is served.
+                // mapping of at least `needed` bytes and leased it: the owner
+                // cannot free it before this task's next receive or its next
+                // send to the owner. The caller's blit consumes the slice before
+                // either (the returned borrow of `self` ends with the blit).
                 Some((ptr, needed)) => {
                     return unsafe { core::slice::from_raw_parts(ptr.cast_const(), needed) }
                 }
