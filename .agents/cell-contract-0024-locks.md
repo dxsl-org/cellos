@@ -388,3 +388,5 @@ Every remaining entrypoint from the original glob appears below. **CLOSED** pres
 ## Evidence boundary and handoff
 
 This change edits planning entrypoints and scheduling documents only. No runtime or ABI surface is changed, no tests/build/lint/format are run, and no historical evidence is upgraded. The main integration owner should validate new relative links, machine-readable lock edges/scope, direct-phase precedence and preservation of prior blockers/status. The exact changed plan entrypoints are the 38 rows in “Exact new blocks”; central changes are this inventory, `plan-portfolio.md` and `../docs/roadmap/current-focus.md`.
+
+**Bounded adopted slice — architecture remediation, slice S3 (phase 07, incarnation authority), holds the Intel WIP lane from 2026-11-11** ([request](261110-1703-architecture-remediation/s3-handoff-request.md), [approval](261110-1703-architecture-remediation/s3-handoff-approval.md)). File-bounded exception for exactly request §2. Kernel-internal; no Law-1 delta planned. Commits per step. The iGPU DMA-export slice keeps waiting. Ends when Phase 07 closes.
