@@ -49,7 +49,9 @@ impl NetDev {
     ///
     /// The check is a superset of `push_rx_frame`'s own early failure: if this
     /// returns false, that call would have returned false too, so no frame the
-    /// guest could have received is withheld.
+    /// guest could have received is withheld. Only the aarch64 run loop polls
+    /// RX on idle exits; the x86 dispatch calls `push_rx_frame` directly.
+    #[cfg(target_arch = "aarch64")]
     pub fn rx_available(&self, vm_id: usize, net_vmio: &VirtioMmio) -> bool {
         let qcfg = net_vmio.queue_cfg(0);
         if !qcfg.ready || !qcfg.is_valid() {

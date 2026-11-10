@@ -1,7 +1,7 @@
 //! Bounded Silo VM-exit dispatch.
 
-use crate::vmm;
 use api::hypervisor::ViVmExit;
+use ostd::vmm;
 use service_silo::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 use service_silo::vm_exit::{diagnose_hvc, UnexpectedHvc};
 
@@ -72,7 +72,7 @@ pub enum SiloRunResult {
 pub fn run_until_done(vm_id: usize, vcpu_id: usize) -> SiloRunResult {
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
     for _ in 0..MAX_EXITS_PER_OPERATION {
-        if vmm::run_vcpu(vm_id, vcpu_id, &mut exit) == usize::MAX {
+        if vmm::run_vcpu(vm_id, vcpu_id, vmm::SCHED_TICK_BUDGET_NS, &mut exit) == usize::MAX {
             return SiloRunResult::VmmFault(SiloVmmFault::RunVcpu);
         }
         match exit {
@@ -120,7 +120,7 @@ fn diagnose_unexpected_exit(vm_id: usize, vcpu_id: usize, exit: ViVmExit) -> Sil
         ViVmExit::Shutdown => SiloUnexpectedExit::Shutdown,
         ViVmExit::Unknown { ec, iss } => {
             let mut regs = [0u64; 32];
-            let pc = if vmm::read_vcpu_regs(vm_id, vcpu_id, &mut regs) == 0 {
+            let pc = if vmm::vcpu_regs(vm_id, vcpu_id, &mut regs, false) == 0 {
                 Some(regs[31])
             } else {
                 None

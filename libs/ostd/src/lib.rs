@@ -62,6 +62,8 @@ pub mod session;
 pub mod startup;
 pub mod sync;
 pub mod syscall;
+/// VMM syscall wrappers (220-227) for `HypervisorCap` cells.
+pub mod vmm;
 
 /// The cell's global allocator (bare-metal builds only).
 pub mod heap;

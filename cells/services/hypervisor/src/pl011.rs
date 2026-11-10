@@ -47,12 +47,20 @@ const FR_BUSY: u64 = 1 << 3; // UART busy
 // ARM PrimeCell PL011 peripheral/cell ID (QEMU's standard ARM variant).
 // Linux's AMBA bus reads 0xfe0..0xffc before binding the ttyAMA driver.
 const PL011_ID: [u8; 8] = [0x11, 0x10, 0x14, 0x00, 0x0d, 0xf0, 0x05, 0xb1];
+/// Only the Pi's software GIC raises this line from the model; the QEMU virt
+/// run loop feeds no host input to the guest console, so it never asserts.
+#[cfg(feature = "board-rpi3")]
 pub const PL011_SPI: u32 = 33; // DTB SPI 1 + GIC's SPI base 32
 const INT_RX: u64 = 1 << 4;
 const INT_TX: u64 = 1 << 5;
 const RX_CAPACITY: usize = 256;
 
 /// Minimal PL011 state with a bounded host-to-guest serial RX queue.
+///
+/// Host input reaches the queue only on the Pi, whose run loop drains the
+/// host serial and keyboard into it; on QEMU virt the queue stays empty and
+/// only TX and the register file are live. The RX feeders are also compiled
+/// for the host tests.
 pub struct Pl011 {
     cr: u64,
     lcr: u64,
@@ -66,11 +74,15 @@ pub struct Pl011 {
     tx_hold: [u8; 3],
     tx_hold_len: u8,
     /// RX-side filter state for `ESC [ … R`, the terminal's reply to it.
+    #[cfg(any(test, feature = "board-rpi3"))]
     rx_state: u8,
+    #[cfg(any(test, feature = "board-rpi3"))]
     rx_hold: [u8; 12],
+    #[cfg(any(test, feature = "board-rpi3"))]
     rx_hold_len: u8,
     /// How many queries were suppressed and how many stale replies dropped.
     queries_suppressed: u32,
+    #[cfg(any(test, feature = "board-rpi3"))]
     replies_dropped: u32,
 }
 
@@ -87,14 +99,19 @@ impl Pl011 {
             tx_state: 0,
             tx_hold: [0; 3],
             tx_hold_len: 0,
+            #[cfg(any(test, feature = "board-rpi3"))]
             rx_state: 0,
+            #[cfg(any(test, feature = "board-rpi3"))]
             rx_hold: [0; 12],
+            #[cfg(any(test, feature = "board-rpi3"))]
             rx_hold_len: 0,
             queries_suppressed: 0,
+            #[cfg(any(test, feature = "board-rpi3"))]
             replies_dropped: 0,
         }
     }
 
+    #[cfg(any(test, feature = "board-rpi3"))]
     pub fn push_rx(&mut self, byte: u8) {
         if self.rx_len < RX_CAPACITY {
             self.rx[(self.rx_head + self.rx_len) % RX_CAPACITY] = byte;
@@ -111,6 +128,7 @@ impl Pl011 {
     /// `/bin/sh: [71: not found` for a typed `uname -a`. Anything else (arrow
     /// keys, function keys, plain text) passes through byte-for-byte, and a
     /// sequence that turns out not to be a reply is flushed rather than eaten.
+    #[cfg(any(test, feature = "board-rpi3"))]
     pub fn push_host_rx(&mut self, byte: u8) {
         const MAX_PARAMS: u8 = 12;
         let flush = |s: &mut Self, extra: Option<u8>| {
@@ -231,6 +249,7 @@ impl Pl011 {
         (if self.rx_len != 0 { INT_RX } else { 0 }) | (if self.tx_irq { INT_TX } else { 0 })
     }
 
+    #[cfg(any(test, feature = "board-rpi3"))]
     pub fn irq_pending(&self) -> bool {
         self.raw_interrupts() & self.imsc != 0
     }

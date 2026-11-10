@@ -336,25 +336,6 @@ pub fn read_full_via_grant(path: &str, vfs_tid: usize) -> ViResult<(usize, usize
     Ok((grant_id, bytes))
 }
 
-/// Read up to `buf.len()` bytes from a file cap using the optimal I/O path.
-///
-/// - `buf.len() < 4096`: kernel ReadCap path (no Grant overhead)
-/// - `buf.len() >= 4096`: zero-copy Grant path (one VFS round-trip per 4096 bytes)
-///
-/// # F14 contract
-/// The Grant is freed only AFTER `GrantDone` is received from VFS, ensuring
-/// VFS has finished reading the buffer before the caller reclaims the frames.
-///
-/// # Errors
-/// Returns `ViError::IO` on any transport or permission failure.
-pub fn read_all(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
-    if buf.len() < 4096 {
-        syscall::sys_read_cap(cap_id, buf).map_err(|_| ViError::IO)
-    } else {
-        grant_read(cap_id, buf, vfs_tid)
-    }
-}
-
 /// Write `data` through a VFS-issued file-handle ID.
 ///
 /// Every write uses the same VFS `WriteGrant` authority path. Data is sent in
@@ -376,47 +357,6 @@ pub fn write_all(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
         total = total.checked_add(written).ok_or(ViError::IO)?;
     }
     Ok(total)
-}
-
-fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
-    let size = buf.len().min(4096);
-    let grant_id = syscall::sys_grant_alloc(size).ok_or(ViError::OutOfMemory)?;
-    // Share RW with VFS so it can fill the grant buffer.
-    syscall::sys_grant_share(grant_id, vfs_tid, 2 /* ReadWrite */);
-
-    // Control message fits in 512B IPC buffer.
-    let req = VfsRequest::ReadGrant {
-        cap: cap_id,
-        offset: 0,
-        size,
-        grant: grant_id,
-    };
-    let mut resp_buf = [0u8; 512];
-    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).inspect_err(|_e| {
-        syscall::sys_grant_free(grant_id);
-    })?;
-
-    let bytes = match resp {
-        // F14: GrantDone arrives only AFTER VFS has filled the grant buffer.
-        VfsResponse::GrantDone { bytes } => bytes,
-        _ => {
-            syscall::sys_grant_free(grant_id);
-            return Err(ViError::IO);
-        }
-    };
-
-    // Copy only the byte count acknowledged after VFS released its request
-    // lease. A malformed oversized acknowledgement fails without constructing a
-    // raw slice beyond the registered Grant.
-    if bytes > size || syscall::sys_grant_copy_to_slice(grant_id, &mut buf[..bytes]) != Some(bytes)
-    {
-        syscall::sys_grant_free(grant_id);
-        return Err(ViError::IO);
-    }
-
-    // F14: safe to free — GrantDone already received above.
-    syscall::sys_grant_free(grant_id);
-    Ok(bytes)
 }
 
 fn grant_write(cap_id: u64, offset: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {

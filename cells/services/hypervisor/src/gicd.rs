@@ -30,6 +30,10 @@ pub struct Gicd {
     enabled: [u32; WORDS],
     pending: [u32; WORDS],
     active: [u32; WORDS],
+    /// Line level of level-sensitive inputs. Only the Pi's software GIC
+    /// delivers interrupts from this model; elsewhere the kernel's vGIC
+    /// does, and this distributor only emulates the register file.
+    #[cfg(feature = "board-rpi3")]
     level: [u32; WORDS],
     priority: [u8; MAX_IRQS],
     target: [u8; MAX_IRQS],
@@ -43,6 +47,7 @@ impl Gicd {
             enabled: [0; WORDS],
             pending: [0; WORDS],
             active: [0; WORDS],
+            #[cfg(feature = "board-rpi3")]
             level: [0; WORDS],
             priority: [0xa0; MAX_IRQS],
             target: [1; MAX_IRQS],
@@ -57,6 +62,7 @@ impl Gicd {
         }
     }
 
+    #[cfg(feature = "board-rpi3")]
     pub fn set_level(&mut self, intid: u32, asserted: bool) {
         if let Some((word, bit)) = Self::bit(intid) {
             if asserted {
@@ -71,6 +77,7 @@ impl Gicd {
         }
     }
 
+    #[cfg(feature = "board-rpi3")]
     pub fn highest_pending(&self, pmr: u8, running_priority: u8) -> Option<u32> {
         if self.ctlr & 1 == 0 {
             return None;
@@ -93,10 +100,12 @@ impl Gicd {
         best
     }
 
+    #[cfg(feature = "board-rpi3")]
     pub fn priority(&self, intid: u32) -> u8 {
         self.priority.get(intid as usize).copied().unwrap_or(0xff)
     }
 
+    #[cfg(feature = "board-rpi3")]
     pub fn acknowledge(&mut self, intid: u32) {
         if let Some((word, bit)) = Self::bit(intid) {
             self.pending[word] &= !bit;
@@ -104,6 +113,7 @@ impl Gicd {
         }
     }
 
+    #[cfg(feature = "board-rpi3")]
     pub fn eoi(&mut self, intid: u32) {
         if let Some((word, bit)) = Self::bit(intid) {
             self.active[word] &= !bit;
@@ -113,6 +123,7 @@ impl Gicd {
         }
     }
 
+    #[cfg(feature = "board-rpi3")]
     fn bit(intid: u32) -> Option<(usize, u32)> {
         ((intid as usize) < MAX_IRQS).then(|| {
             let intid = intid as usize;
@@ -143,11 +154,9 @@ impl Gicd {
                     *config = (*config & !mask) | ((val << shift) & mask);
                 }
             }
-            0xf00 => {
-                // SGIR target filter: 0 = explicit CPU mask, 2 = self.
-                if (val >> 24) & 3 == 2 || ((val >> 24) & 3 == 0 && (val >> 16) & 1 != 0) {
-                    self.pending[0] |= 1 << (val & 15);
-                }
+            // SGIR target filter: 0 = explicit CPU mask, 2 = self.
+            0xf00 if (val >> 24) & 3 == 2 || ((val >> 24) & 3 == 0 && (val >> 16) & 1 != 0) => {
+                self.pending[0] |= 1 << (val & 15);
             }
             _ => {}
         }

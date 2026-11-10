@@ -68,6 +68,11 @@ pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: 
     fill_rect(surf, x + w as i32 - 1, y, 1, h, color);
 }
 
+/// Horizontal inset, in pixels, between a left-aligned label's rect and its
+/// first glyph; the text is clipped to the rect, so a rect that must show a
+/// label whole is this inset plus the label's measured width.
+pub const LABEL_TEXT_INSET: u32 = 8;
+
 /// Draw a text label on a ViSurface with clipping and FontFace (left-aligned by default).
 // reason: public drawing primitive used across app crates; its parameter list is its API.
 #[allow(clippy::too_many_arguments)]
@@ -139,7 +144,7 @@ pub fn draw_label_aligned(
         let text_w = fonts.measure(face, text, size);
         x as f32 + (w as f32 - text_w) * 0.5
     } else {
-        x as f32 + 8.0
+        x as f32 + LABEL_TEXT_INSET as f32
     };
 
     let clip = (x, y, x + w as i32, y + h as i32);

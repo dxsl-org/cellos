@@ -99,8 +99,16 @@ pub fn sys_cell_session_v1(request: &[u8], result: &mut [u8]) -> SyscallResult {
     }
 }
 
+/// Issue syscall `id` with four register arguments and return the raw result.
+///
+/// # Safety
+/// Every argument `id` interprets as a cell address must name memory valid for
+/// the kernel's access (read for a source, write for a destination) over the
+/// length that syscall uses, and no live Rust reference other than the
+/// caller's own exclusive borrow may observe bytes the kernel writes, for the
+/// whole call. Register-only arguments carry no obligation.
 #[inline(always)]
-unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
+pub(crate) unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
     let mut ret: isize;
     #[cfg(target_arch = "riscv64")]
     asm!(

@@ -7,16 +7,17 @@
 //!
 //! Compiled for ARM64 only (HypervisorCap requires EL2 boot).
 //!
-//! Note: this crate is allowlisted (class hypervisor) — it performs EL2 world
-//! switching, so `#![forbid(unsafe_code)]` does not apply.
+//! The syscalls go through the shared `ostd::vmm` wrappers, so this crate
+//! holds no `unsafe` and forbids it.
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
 use api::hypervisor::ViVmExit;
-use api::syscall::ViSyscall;
 use ostd::io::println;
+use ostd::vmm;
 
 // Declare manifest: hypervisor = true (grants HypervisorCap at EL2).
 api::declare_manifest!(
@@ -44,33 +45,15 @@ const BLOB_IPA: u64 = 0x4008_0000;
 /// Guest pages allocated for the test VM (512 × 4KiB = 2 MiB).
 const GUEST_PAGES: usize = 512;
 
-/// Raw syscall shim: invoke kernel with 4 arguments, return raw result.
-#[cfg(target_arch = "aarch64")]
-unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> usize {
-    let mut ret: usize;
-    core::arch::asm!(
-        "svc #0",
-        inlateout("x0") id as usize => ret,
-        in("x1") a0,
-        in("x2") a1,
-        in("x3") a2,
-        in("x4") a3,
-        options(nostack, preserves_flags)
-    );
-    ret
-}
+// The macro's expansion carries the loader's `#[no_mangle]`, so this crate's
+// own code stays inside `forbid(unsafe_code)`.
+ostd::cell_main!(extern "C" hv_test_main);
 
-#[cfg(not(target_arch = "aarch64"))]
-unsafe fn syscall4(_id: ViSyscall, _a0: usize, _a1: usize, _a2: usize, _a3: usize) -> usize {
-    usize::MAX // NotSupported on non-ARM64
-}
-
-#[no_mangle]
-pub extern "C" fn main() -> ! {
+fn hv_test_main() -> ! {
     println("[hv-test] Phase 04 hypervisor ABI smoke test");
 
     // ── 1. Create VM ──────────────────────────────────────────────────────────
-    let vm_id = unsafe { syscall4(ViSyscall::CreateVm, GUEST_PAGES, 0, 0, 0) };
+    let vm_id = vmm::create_vm(GUEST_PAGES);
     if vm_id == 0 || vm_id == usize::MAX {
         println("[hv-test] FAIL: sys_create_vm returned error (not at EL2?)");
         ostd::syscall::sys_exit(1);
@@ -78,7 +61,7 @@ pub extern "C" fn main() -> ! {
     println("[hv-test] created vm_id=1 (ok)");
 
     // ── 2. Create vCPU (kernel writes HVC smoke blob at BLOB_IPA) ─────────────
-    let vcpu_id = unsafe { syscall4(ViSyscall::CreateVcpu, vm_id, BLOB_IPA as usize, 0, 0) };
+    let vcpu_id = vmm::create_vcpu(vm_id, BLOB_IPA);
     if vcpu_id == 0 || vcpu_id == usize::MAX {
         println("[hv-test] FAIL: sys_create_vcpu returned error");
         ostd::syscall::sys_exit(1);
@@ -87,17 +70,11 @@ pub extern "C" fn main() -> ! {
 
     // ── 3. Run vCPU ───────────────────────────────────────────────────────────
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
-    let exit_ptr = &mut exit as *mut ViVmExit as usize;
 
-    let ret = unsafe {
-        syscall4(
-            ViSyscall::RunVcpu,
-            vm_id,
-            vcpu_id,
-            0, // budget_ns = 0 (unlimited for this test)
-            exit_ptr,
-        )
-    };
+    let ret = vmm::run_vcpu(
+        vm_id, vcpu_id, 0, // budget_ns = 0 (unlimited for this test)
+        &mut exit,
+    );
     if ret == usize::MAX {
         println("[hv-test] FAIL: sys_run_vcpu returned error");
         ostd::syscall::sys_exit(1);

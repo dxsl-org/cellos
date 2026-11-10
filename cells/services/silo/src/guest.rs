@@ -1,7 +1,8 @@
 //! One-time guest initialization and purpose-bound mailbox execution.
 
-use crate::{run_loop, vmm};
+use crate::run_loop;
 use ostd::syscall::sys_get_random;
+use ostd::vmm;
 use service_silo::{
     layout::{
         decode_fault_response, FaultResponseMetadata, COMMAND_CREATE_ENROLLMENT_KEY,
