@@ -70,13 +70,13 @@ Stop deriving authority from a spawner-chosen basename, and stop handing any uno
 - [x] Negative test, before-result recorded
 - [x] Identity-keyed launch
 - [x] Name gates removed (kernel: 502, argv staging, launch edges)
-- [ ] Supervisor identity — blocked on Law-1 CP1 (`cp1-supervisor-caller-identity.md`)
+- [x] Supervisor identity — CP1 option A ([CP1](cp1-supervisor-caller-identity.md), [CP2 evidence](cp2-supervisor-caller-identity.md))
 - [x] PCIe handout check
 - [x] Docs
 
 ## Success Criteria
 
-Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md). The supervisor half of the power-off criterion is open until CP1.
+Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md). Supervisor half: [CP2 record](cp2-supervisor-caller-identity.md); CP2 confirmation pending.
 
 - [x] The negative test fails to obtain any reviewed edge or the power-off gate after the change (and its before-result is on record).
 - [x] Cross-ID PCI claim is refused; the legitimate driver still binds (x86 NVMe/AHCI and NIC boot lanes).
@@ -103,7 +103,9 @@ Phase 07 replaces per-thread capability copies with one record per incarnation.
 - **Deviation:** hypha caller keys renamed to the signed names `hypha-core` / `hypha-tool-spawn`; every other edge key already equalled its signed name (reviewer verified).
 - **Decision:** trusted-init latch now published inside `publish_prepared` before `push_ready` (review finding 4), so init never runs with an empty identity.
 - **Deviation (PCIe):** the check is on the query (418 class triple / 424 vendor:device) against `catalog::PCI_DRIVERS` keyed by program name, before the BDF search, instead of inside `pcie_usable_by`. Same effect, no ECAM lookup per candidate. `check-catalog.py` now ties each `pcie_driver` row to one PCI row (mutation-tested). No second test cell: the cross-ID refusal is a pure table check covered by `catalog::tests`.
-- **Blocked (step 4):** supervisor identity needs Law-1 CP1 (`cp1-supervisor-caller-identity.md`); the trailer carries no image name and 441 answers only VFS. Kernel half ships.
+- **Decision (step 4):** the supervisor needed Law-1 CP1, because the trailer carries no image name and 441 answered only VFS. The kernel half was committed first (`7dc57d730`). The owner approved option A on 2026-11-11, plus a file-set extension for `libs/ostd/src/app.rs` (opt-in caller attestation in the app loop). 441 answers a `SupervisorCap` holder only for launch-named Cells.
+- **Surprise (step 4):** the attested trailer broke `parse_power_request`, which requires zero bytes after the request, and `power-x86` refused the operator. The ostd payload now excludes the kernel-owned tail.
+- **Deviation:** the supervisor identity rule moved to `cells/services/supervisor/src/sender_identity.rs` (new module in the same crate), which keeps `main.rs` near 200 lines.
 - **Surprise:** `xhci-x86` hub/second-controller tests (3) fail locally on the original HEAD `8a005f998` too (same timeout) — pre-existing, not this phase.
 - **Surprise:** init starts every driver through `SpawnFromElf` with bytes it read from VFS, so "Path route only" left all drivers unnamed and every 424 query was refused (x86 NIC/xhci lanes failed). Children of trusted init are named on any route; init is trusted core and reads `/bin` itself.
 - **Removed:** dead `Spawner::User` (no constructor anywhere).

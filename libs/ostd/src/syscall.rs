@@ -1091,8 +1091,10 @@ pub fn sys_cancel_cell_owner_watch(token: u64) {
 }
 
 /// The kernel-measured image identity of the exact live `(cell_id,
-/// generation)`. Only the registered VFS Cell is answered; `None` for every
-/// other caller, for a stale generation, and for a malformed record.
+/// generation)`. Answered for the registered VFS Cell, and for a
+/// `SupervisorCap` holder when the subject was launched from a kernel-resolved
+/// `/bin` install; `None` for every other caller, for a stale generation, and
+/// for a malformed record.
 pub fn sys_resolve_cell_image(cell_id: u64, generation: u64) -> Option<CellImage> {
     let request = CellOwnerRequest::new(cell_id, generation);
     let mut bytes = [0; CELL_IMAGE_LEN];

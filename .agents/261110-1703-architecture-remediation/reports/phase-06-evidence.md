@@ -61,6 +61,6 @@ Remaining after the second pass, recorded but not fixed:
 - Low (Phase 04): the release lane cannot tell an owner-admission refusal from a signature refusal. The release artifact cannot boot past init until an A/B slot is admitted; that is the owner's decision, recorded earlier.
 - Low: the 418 comment was stale; fixed.
 
-## Open
+## Supervisor half (CP1 option A, 2026-11-11)
 
-- Supervisor `OP_POWER`/`OP_HOTSWAP` still trust the `GetProcs` task name. Fixing this needs Law-1 CP1: `cp1-supervisor-caller-identity.md`, recommended option A (441 for `SupervisorCap` holders).
+See [CP2 record](../cp2-supervisor-caller-identity.md). On a headless image assembled from this tree, these pass: `power-x86` (3/3, operator poweroff and reboot plus the power button), x86 boot, `x86_64-boot` (10/10) and two-node C2C. RV64 and AArch64 boot lanes (cells built from source) pass; the supervisor does not run in them. Kernel: 610 host tests pass. Supervisor: 12 host tests pass. ostd host tests pass. Clippy is clean on 3 architectures.

@@ -22,6 +22,7 @@ mod hostile_backend_recovery;
 mod hotswap;
 mod power;
 mod protocol;
+mod sender_identity;
 mod snapshot;
 mod transfer;
 
@@ -29,30 +30,34 @@ mod transfer;
 use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
-use ostd::syscall::{sys_get_procs, sys_lookup_service, sys_send};
+use ostd::syscall::{sys_lookup_service, sys_resolve_cell_image, sys_send};
 use protocol::{
     encode_status, parse_power_request, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_POWER,
     OP_SNAPSHOT, POWER_STATUS_PHASE, STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER,
     STATUS_SERVICE_NOT_FOUND, STATUS_UNAVAILABLE,
 };
 
-const HOTSWAP_TASK_NAME: &str = "hotswap";
+/// Signed program names (`__ViCell_image`) of the reviewed requesters. The
+/// kernel attests the sender's Cell; 441 answers with its measured image only
+/// when that name is the Cell's launch identity (a kernel-resolved `/bin`
+/// install), so a task merely *named* `shutdown` is refused.
+const HOTSWAP_PROGRAM: &str = "hotswap";
 /// The retained power worker, launched only by the shell (`/bin/shutdown`).
-const SHUTDOWN_TASK_NAME: &str = "shutdown";
+const SHUTDOWN_PROGRAM: &str = "shutdown";
 /// The kernel's sender id; it sends `OP_POWER` only as the ACPI power button.
 const KERNEL_SENDER: usize = 0;
-/// Task names reviewed to request a snapshot. Empty: the suite shell (`cellbox`) no
-/// longer qualifies (S2c-min) and no retained snapshot worker exists, so a snapshot is
-/// unavailable until a `SnapshotTarget` owner is added.
-const SNAPSHOT_CALLER_NAMES: &[&str] = &[];
-const PROCESS_TABLE_ROWS: usize = 64;
+/// Signed programs reviewed to request a snapshot. Empty: the suite shell (`cellbox`)
+/// no longer qualifies (S2c-min) and no retained snapshot worker exists, so a snapshot
+/// is unavailable until a `SnapshotTarget` owner is added.
+const SNAPSHOT_PROGRAMS: &[&str] = &[];
 
-fn handler(_ctx: &mut AppContext, event: AppEvent) {
+fn handler(ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
             // Service registration is handled by init after it spawns us.
             // SupervisorCap is granted by the kernel loader (path-based, see
             // kernel/src/loader.rs) — no self-grant needed here.
+            ctx.attest_callers();
         }
 
         AppEvent::Message { sender_tid, data } => {
@@ -62,7 +67,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_HOTSWAP {
-                if !sender_has_exact_name(sender_tid, HOTSWAP_TASK_NAME) {
+                if !sender_is_program(ctx, sender_tid, HOTSWAP_PROGRAM) {
                     let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }
@@ -90,9 +95,9 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_SNAPSHOT {
-                if !SNAPSHOT_CALLER_NAMES
+                if !SNAPSHOT_PROGRAMS
                     .iter()
-                    .any(|name| sender_has_exact_name(sender_tid, name))
+                    .any(|program| sender_is_program(ctx, sender_tid, program))
                 {
                     let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
                     return;
@@ -106,7 +111,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_POWER {
-                handle_power(sender_tid, data);
+                handle_power(ctx, sender_tid, data);
             }
         }
 
@@ -138,11 +143,11 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 /// `OP_POWER` from the `/bin/shutdown` worker (reboot or poweroff) or from the
 /// kernel's power-button relay (poweroff only). Only a refused operator
 /// request gets a reply; success resets or powers off the machine.
-fn handle_power(sender_tid: usize, data: &[u8]) {
+fn handle_power(ctx: &AppContext, sender_tid: usize, data: &[u8]) {
     use ostd::syscall::SystemPowerAction;
     let origin = if sender_tid == KERNEL_SENDER {
         power::Origin::PowerButton
-    } else if sender_has_exact_name(sender_tid, SHUTDOWN_TASK_NAME) {
+    } else if sender_is_program(ctx, sender_tid, SHUTDOWN_PROGRAM) {
         power::Origin::Operator
     } else {
         reply_power(sender_tid, STATUS_REJECTED_CALLER);
@@ -179,27 +184,10 @@ fn service_id_for_name(name: &str) -> u16 {
     }
 }
 
-fn sender_has_exact_name(sender_tid: usize, expected_name: &str) -> bool {
-    // `GetProcs` snapshots up to the kernel's current 64-row diagnostics bound,
-    // which gives the supervisor a full, bounded inventory for sender attestation.
-    let mut rows = [api::syscall::ProcessInfo::default(); PROCESS_TABLE_ROWS];
-    let Ok(count) = sys_get_procs(&mut rows) else {
-        return false;
-    };
-    rows.iter()
-        .take(count)
-        .find(|info| info.id == sender_tid)
-        .and_then(process_name)
-        == Some(expected_name)
-}
-
-fn process_name(info: &api::syscall::ProcessInfo) -> Option<&str> {
-    let end = info
-        .name
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(info.name.len());
-    core::str::from_utf8(&info.name[..end]).ok()
+/// Whether the kernel attested the sender of the current message and its Cell
+/// runs the signed program `program` from its reviewed install (441).
+fn sender_is_program(ctx: &AppContext, sender_tid: usize, program: &str) -> bool {
+    sender_identity::caller_runs_program(ctx.caller(), sender_tid, program, sys_resolve_cell_image)
 }
 
 ostd::run_app!(handler);

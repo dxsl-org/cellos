@@ -156,6 +156,11 @@ pub struct AppContext {
     input_client: Option<crate::clients::InputClient>,
     /// Armed heartbeat interval in ticks; 0 = no watchdog.
     heartbeat_ticks: u64,
+    /// Opted in with [`Self::attest_callers`]: untimed receives ask the kernel
+    /// for a caller-identity trailer.
+    attest_callers: bool,
+    /// Kernel-attested identity of the sender of the event being handled.
+    caller: Option<api::caller_identity::CallerIdentity>,
 }
 
 impl AppContext {
@@ -167,7 +172,36 @@ impl AppContext {
             net_client: None,
             input_client: None,
             heartbeat_ticks: 0,
+            attest_callers: false,
+            caller: None,
         }
+    }
+
+    /// Ask the kernel to attest the sender of every later event
+    /// (`api::caller_identity`). Call from the `Init` arm, before the first
+    /// receive. The last `CALLER_IDENTITY_LEN` bytes of the receive buffer then
+    /// belong to the kernel and are cut from every event's payload. Only untimed waits are attested: with a heartbeat
+    /// or a timeout armed, [`Self::caller`] is `None`, which a service must treat
+    /// as an unknown caller and refuse.
+    pub fn attest_callers(&mut self) {
+        self.attest_callers = true;
+    }
+
+    /// The receive buffer minus the kernel-owned trailer when attestation is on,
+    /// so a handler never sees trailer bytes as payload.
+    fn payload(&self) -> &[u8] {
+        if self.attest_callers {
+            &self.recv_buf[..RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]
+        } else {
+            &self.recv_buf
+        }
+    }
+
+    /// Kernel-attested identity of the sender of the event being handled, or
+    /// `None` when attestation is off, the wait was timed, or the kernel wrote
+    /// no valid trailer. `None` means "unknown caller": deny.
+    pub fn caller(&self) -> Option<api::caller_identity::CallerIdentity> {
+        self.caller
     }
 
     /// One bounded wait of the event loop: `Some(Some(tid))` an event, `Some(None)`
@@ -187,10 +221,22 @@ impl AppContext {
         if self.heartbeat_ticks > 0 {
             syscall::sys_heartbeat(self.heartbeat_ticks);
         }
+        self.caller = None;
+        let attested = self.attest_callers && wait.is_none();
+        if attested {
+            // A message the kernel does not attest must not inherit the
+            // previous sender's trailer.
+            let tail = RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+            self.recv_buf[tail..].fill(0);
+        }
         let result = match wait {
+            None if attested => syscall::sys_recv_attested(0, &mut self.recv_buf),
             None => syscall::sys_recv(0, &mut self.recv_buf),
             Some(ticks) => syscall::sys_recv_timeout(0, &mut self.recv_buf, ticks),
         };
+        if attested && matches!(result, syscall::SyscallResult::Ok(tid) if tid != 0) {
+            self.caller = api::caller_identity::CallerIdentity::from_recv_buf(&self.recv_buf);
+        }
         match result {
             syscall::SyscallResult::Ok(0) if wait.is_some() => Some(None),
             syscall::SyscallResult::Ok(tid) => Some(Some(tid)),
@@ -215,7 +261,7 @@ impl AppContext {
             };
             // Parse and own the event data before calling handler so there is no
             // outstanding borrow on self.recv_buf when handler runs.
-            let event = Self::parse_event_owned(sender_tid, &self.recv_buf);
+            let event = Self::parse_event_owned(sender_tid, self.payload());
             handler(self, event);
         }
     }
@@ -239,7 +285,7 @@ impl AppContext {
             match self.wait_once(Some(wait)) {
                 Some(Some(tid)) => {
                     remaining = timeout_ticks.max(1);
-                    let event = Self::parse_event_owned(tid, &self.recv_buf);
+                    let event = Self::parse_event_owned(tid, self.payload());
                     handler(self, event);
                 }
                 Some(None) => {

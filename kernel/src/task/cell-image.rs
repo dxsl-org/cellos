@@ -26,13 +26,22 @@ impl super::scheduler::Scheduler {
     }
 }
 
-/// Dispatch rule for 441: answered only for a task of the registered VFS Cell.
+/// Dispatch rule for 441: answered for a task of the registered VFS Cell, or
+/// for a `SupervisorCap` holder (architecture remediation Phase 06, CP1 option
+/// A: `/bin/supervisor` authorises `OP_POWER`/`OP_HOTSWAP` by the sender's signed
+/// program).
 ///
 /// Not tied to the principal VFS is currently receiving from (unlike 247):
 /// VFS re-authorizes deferred work (handle reads, prepared directories) after
 /// its receive context has moved on, and an image identity grants nothing by
-/// itself. The registered-VFS check keeps every other Cell from learning which
-/// program another Cell runs.
+/// itself. Every other Cell is refused, so it cannot learn which program
+/// another Cell runs.
+///
+/// The supervisor gets an answer only for a Cell whose name is its launch
+/// identity (`Task::launch_named`): a signed `shutdown` copied under `/home`, or
+/// bytes another caller supplied, is the same program but not the reviewed
+/// install, and gets `None` (refused) — the rule the kernel's own 502 gate uses.
+/// VFS keeps the unfiltered record (`/srv/sshd` is not a `/bin` install).
 pub(super) fn resolve_for_caller(
     sched: &super::scheduler::Scheduler,
     caller_id: usize,
@@ -40,7 +49,13 @@ pub(super) fn resolve_for_caller(
     is_vfs_cell: impl Fn(usize) -> bool,
 ) -> Option<CellImage> {
     let caller = sched.tasks.get(&caller_id)?;
-    if !is_vfs_cell(caller.cell_id.0 as usize) {
+    if is_vfs_cell(caller.cell_id.0 as usize) {
+        return sched.resolve_cell_image(CellId(request.cell_id), request.generation);
+    }
+    caller.supervisor_cap.as_ref()?;
+    let owner = sched.resolve_live_cell_owner(CellId(request.cell_id), request.generation)?;
+    let root = sched.tasks.get(&(owner.root_tid as usize))?;
+    if !root.launch_named {
         return None;
     }
     sched.resolve_cell_image(CellId(request.cell_id), request.generation)
@@ -132,5 +147,36 @@ mod tests {
         assert!(resolve_for_caller(&sched, 1, request, is_vfs).is_none());
         let stale = CellOwnerRequest::new(CELL, generation + 1);
         assert!(resolve_for_caller(&sched, VFS_TID, stale, is_vfs).is_none());
+    }
+
+    /// CP1 option A: a `SupervisorCap` holder is answered too, but only for a
+    /// Cell whose signed name is its launch identity (`Task::launch_named`).
+    #[test]
+    fn supervisor_is_answered_only_for_named_launches() {
+        const SUPERVISOR_TID: usize = 60_443;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut sched = Scheduler::new();
+        let generation = fixture(&mut sched, Some(sshd()));
+        let mut supervisor = Box::new(Task::new(
+            SUPERVISOR_TID,
+            CellId(64),
+            "supervisor",
+            alloc::vec![],
+        ));
+        supervisor.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
+        sched.tasks.insert(SUPERVISOR_TID, supervisor);
+        let request = CellOwnerRequest::new(CELL, generation);
+        let no_vfs = |_: usize| false;
+
+        // Same bytes, but not a reviewed install (sandbox copy, caller ELF).
+        assert!(resolve_for_caller(&sched, SUPERVISOR_TID, request, no_vfs).is_none());
+        sched.tasks.get_mut(&ROOT).expect("root").launch_named = true;
+        let image = resolve_for_caller(&sched, SUPERVISOR_TID, request, no_vfs)
+            .expect("supervisor answered for a named launch");
+        assert_eq!(image.identity, sshd());
+        // A task without SupervisorCap still learns nothing.
+        assert!(resolve_for_caller(&sched, VFS_TID, request, no_vfs).is_none());
+        let stale = CellOwnerRequest::new(CELL, generation + 1);
+        assert!(resolve_for_caller(&sched, SUPERVISOR_TID, stale, no_vfs).is_none());
     }
 }

@@ -265,15 +265,14 @@ spawner chose — so any capability-free cell launched as `…/cellbox` or `…/
 edges or the raw power-off gate. The key is now the caller Cell's **measured program name** (the
 `__ViCell_image` name inside a verified signature), and only when the kernel itself resolved the Cell's
 `/bin/` install path (boot, Path, Pinned or replacement route, or ELF bytes trusted init read from `/bin`;
-`catalog::names_launch_identity`); or the
-kernel's trusted-init latch, published before init is runnable. Unsigned images, other callers' ELF/Mem
+`catalog::names_launch_identity`); or the kernel's trusted-init latch, published before init is runnable. Unsigned images, other callers' ELF/Mem
 bytes (their path is advisory), sandbox paths and the alias `/bin/cellbox-ssh` (the signed shell file run
 as the SSH client) carry no identity and match no row. The same identity gates shell argv staging and
 raw opcode 502. Holding `PcieDriverCap` is no longer sufficient to claim a PCI function: 418/424 refuse
-a query outside the caller program's row in `catalog::PCI_DRIVERS`. **Remaining gap (open):**
-`/bin/supervisor` still authorises `OP_POWER`/`OP_HOTSWAP` by `GetProcs` task name, so a sandbox cell
-named `shutdown` can still ask it for a reboot; closing it needs Law-1 CP1
-(`.agents/261110-1703-architecture-remediation/cp1-supervisor-caller-identity.md`). Under the dev posture
+a query outside the caller program's row in `catalog::PCI_DRIVERS`. `/bin/supervisor` applies the same
+rule to `OP_POWER`/`OP_HOTSWAP` (2026-11-11, CP1 option A): it receives with a kernel caller trailer and
+asks 441 `ResolveCellImage` for the sender Cell's image, which the kernel answers a `SupervisorCap` holder
+only for a launch-named Cell, so a sandbox cell named `shutdown` is refused. Under the dev posture
 anyone with the public dev seed can sign any program name; the release posture closes that.
 
 ### Boot Trust Chain + Attestation — Partial (measurement + signing shipped)
