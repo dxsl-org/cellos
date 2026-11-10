@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A newer push to the same branch/PR supersedes the running pipeline.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # ⚠ Do NOT add a workflow-level RUSTFLAGS here. The RUSTFLAGS env var REPLACES
 # (does not merge with) per-target rustflags — a global "-D warnings" silently
 # dropped relocation-model=pic (riscv64), code-model=kernel/static (x86_64)
@@ -36,8 +41,9 @@ jobs:
   lint:
     name: Lint (fmt + clippy)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -101,6 +107,22 @@ jobs:
           cargo test --target x86_64-unknown-linux-gnu --manifest-path tools/mutable-globals/Cargo.toml
           cargo run --release --target x86_64-unknown-linux-gnu --manifest-path tools/mutable-globals/Cargo.toml -- --check
 
+      # Every lane script and tests/integration target has a tier in
+      # scripts/lanes.toml (pr / nightly / manual / retired); pr and nightly
+      # rows must be named by a workflow. Every crate with #[test] is listed in
+      # scripts/host-test-crates.txt, and `ci` rows must be run below.
+      - name: Check lane manifest and host-test crate list
+        run: |
+          python3 scripts/check-lanes.py
+          python3 scripts/check-host-test-crates.py
+
+      # The tracked lockfiles must already describe the dependency graph, so no
+      # job below can silently re-resolve and build a different graph.
+      - name: Check lockfiles are current
+        run: |
+          cargo metadata --locked --format-version 1 > /dev/null
+          cargo metadata --locked --format-version 1 --manifest-path tests/integration/Cargo.toml > /dev/null
+
       - name: Validate app-tier acceptance ledger
         run: |
           baseline_dir="$RUNNER_TEMP/app-tier-acceptance-baseline"
@@ -124,12 +146,12 @@ jobs:
           python3 -m unittest discover -s tests/app-tier-acceptance -p 'test_*.py'
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src,rustfmt,clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
 
@@ -172,17 +194,18 @@ jobs:
   board-configs:
     name: Board configuration matrix
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: riscv64gc-unknown-none-elf,aarch64-unknown-none-softfloat,x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: board-configs
@@ -193,6 +216,7 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -237,15 +261,15 @@ jobs:
               -p app-init -p app-cellbox -p service-vfs -p service-config
               -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: ${{ matrix.short }}
@@ -266,7 +290,7 @@ jobs:
       - name: Install Python cryptography (policy blob signing)
         if: matrix.short == 'rv64'
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       # The rv64 artifact feeds the QEMU boot gate, and kernel_fs.img (VIFS1
       # ramdisk, gitignored build artifact) must be real — build.rs otherwise
@@ -336,7 +360,7 @@ jobs:
 
       - name: Upload kernel ELF
         if: matrix.short == 'rv64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kernel-rv64
           path: target/riscv64gc-unknown-none-elf/release/cellos-kernel
@@ -344,7 +368,7 @@ jobs:
 
       - name: Upload aarch64 kernel ELF
         if: matrix.short == 'aarch64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kernel-aarch64
           path: target/aarch64-unknown-none-softfloat/release/cellos-kernel
@@ -352,7 +376,7 @@ jobs:
 
       - name: Upload x86_64 kernel ELF
         if: matrix.short == 'x86_64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: kernel-x86_64
           path: target/x86_64-unknown-none/release/cellos-kernel
@@ -361,16 +385,17 @@ jobs:
   qemu-boot:
     name: QEMU Boot Test (512M RAM)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install QEMU
         timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc
 
       - name: Download kernel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: kernel-rv64
           path: target/riscv64gc-unknown-none-elf/release/
@@ -392,18 +417,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # The lane patches `library/` of the *pinned* toolchain, so it needs
       # rust-src for exactly that nightly (rust-toolchain.toml and the sysroot
       # contract pin `nightly-2026-05-01`, rustc f53b654a8).
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: rust-std-lane
@@ -425,7 +450,7 @@ jobs:
       # scripts/sign-policy.py builds the Ed25519 POLICY.BIN the ramdisk carries.
       - name: Install Python cryptography (policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       # The validator and both approval artifacts are digest-pinned; these tests
       # are the only thing that notices when a covered input drifts.
@@ -472,7 +497,7 @@ jobs:
             printf '[ci] repository checkout starting\n'
           } > "$evidence_dir/single-guest-local-runtime-qemu.log"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Record single-guest local-runtime checkout completion
         shell: bash
@@ -483,7 +508,7 @@ jobs:
           } >> "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Install Rust toolchain for single-guest local-runtime oracle
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
@@ -497,7 +522,7 @@ jobs:
           } >> "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Cache dependencies for single-guest local-runtime oracle
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           cache-targets: false
@@ -526,7 +551,7 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
           printf '[setup] Python cryptography installation starting\n' | tee -a "$log"
-          python3 -m pip install --user --quiet cryptography 2>&1 | tee -a "$log"
+          python3 -m pip install --user --quiet -r requirements-ci.txt 2>&1 | tee -a "$log"
           printf '[setup] Python cryptography installation completed\n' | tee -a "$log"
 
       - name: Run single-guest local-runtime C2C broker QEMU oracle
@@ -542,7 +567,7 @@ jobs:
 
       - name: Upload single-guest local-runtime QEMU oracle log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: c2c-broker-oracle-single-guest-local-runtime-qemu-log-${{ github.run_attempt }}
           path: ${{ runner.temp }}/c2c-oracle-evidence/single-guest-local-runtime-qemu.log
@@ -552,17 +577,18 @@ jobs:
   aarch64-lint:
     name: Clippy (aarch64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src,clippy
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: aarch64-lint
@@ -578,18 +604,19 @@ jobs:
   qemu-aarch64-boot:
     name: QEMU Boot Test (aarch64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: aarch64-boot
@@ -623,7 +650,7 @@ jobs:
       # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Assemble aarch64 kernel_fs.img
         # The cell list must match scripts/build-aarch64-cells.ps1, which is the
@@ -710,6 +737,7 @@ jobs:
   qemu-hypervisor-machinery:
     name: QEMU Hypervisor Machinery Smoke (TCG)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     needs: build
     # Job-level: make-hypervisor-fs.sh runs its own cargo builds, so the
     # littlefs cross-compile env must cover every step, not just the explicit
@@ -719,16 +747,16 @@ jobs:
       CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
       BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: hypervisor-smoke
@@ -740,7 +768,7 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .alpine-cache
           key: alpine-netboot-aarch64-3.21.3
@@ -808,7 +836,7 @@ jobs:
       # complete boot output for regression diagnosis.
       - name: Upload QEMU boot log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hv-machinery-log-${{ github.run_attempt }}
           path: |
@@ -825,22 +853,23 @@ jobs:
     name: QEMU Hypervisor Boot-to-Shell (KVM)
     if: ${{ vars.HV_KVM_RUNNER == 'true' }}
     runs-on: [self-hosted, linux, ARM64, kvm]
+    timeout-minutes: 90
     needs: build
     env:
       CC_aarch64_unknown_none_softfloat: clang
       CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
       BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: hypervisor-boot-kvm
@@ -850,7 +879,7 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .alpine-cache
           key: alpine-netboot-aarch64-3.21.3
@@ -901,7 +930,7 @@ jobs:
 
       - name: Upload QEMU boot log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hv-boot-kvm-log-${{ github.run_attempt }}
           path: |
@@ -913,25 +942,43 @@ jobs:
   x86_64-lint:
     name: Clippy (x86_64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src,clippy
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86_64-lint
 
-      - name: Clippy (x86_64)
+      # Whole workspace, like the RV64 lint job. Excluded: the RV64 job's C-core
+      # crates, plus three crates that only build for riscv64 (ocel-pdf and
+      # ocel-quickjs assert the target in build.rs; posix-shim-test uses
+      # RV64-only api::posix items). Verified clean locally on 2026-11-10.
+      - name: Clippy (x86_64 workspace)
+        env:
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
         run: >
           cargo clippy
-          -p cellos-kernel
+          --locked
+          --workspace
+          --exclude app-mlibc-smoke
+          --exclude doom
+          --exclude tetris-c
+          --exclude lua
+          --exclude tetris-lua
+          --exclude ocel-pdf
+          --exclude ocel-quickjs
+          --exclude app-posix-shim-test
           --target x86_64-unknown-none
           -Z build-std=core,alloc
           -- -D warnings
@@ -939,18 +986,19 @@ jobs:
   qemu-x86_64-boot:
     name: QEMU Boot Test (x86_64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86_64-boot
@@ -964,7 +1012,7 @@ jobs:
       # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Assemble x86_64 kernel_fs.img (headless profile)
         # scripts/assemble-x86-image.py is the single x86 image recipe (also
@@ -1189,6 +1237,93 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+  # Intel C2C gate (ADR-0022, architecture remediation Phase 02). Runs on every
+  # push/PR under TCG: the two-node C2C test (positive, and C2C_NEGATIVE=1 which
+  # must fail), the x86 Tier-2 domain test and the local service lifecycle target.
+  # Images go to isolated dirs; kernel/src/embedded-x86_64 is never written.
+  x86-c2c:
+    name: Intel C2C gate (x86_64 TCG)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      C2C_DIR: ${{ github.workspace }}/target/c2c-gate
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          cache-on-failure: true
+          key: x86-c2c
+
+      - name: Install QEMU and xorriso
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+
+      - name: Install Python packages (cell signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+
+      - name: Build two-node C2C image (headless, isolated)
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/c2c-gate/cells
+        run: python3 scripts/assemble-x86-image.py --profile headless --out-dir "$C2C_DIR/embedded"
+
+      - name: Build two-node C2C kernel and ISO
+        run: |
+          EMBEDDED_OVERRIDE="$C2C_DIR/embedded" CARGO_TARGET_DIR="$C2C_DIR/kernel" \
+            cargo build --locked --release -p cellos-kernel --target x86_64-unknown-none \
+            -Z build-std=core,alloc --features policy-required
+          X86_KERNEL="$C2C_DIR/kernel/x86_64-unknown-none/release/cellos-kernel" \
+            X86_ISO_ROOT="$C2C_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$C2C_DIR/c2c.iso"
+
+      - name: Two-node C2C (TCG)
+        timeout-minutes: 10
+        run: X86_ACCEL=tcg X86_CPU_MODEL=max C2C_WORK_DIR="$C2C_DIR/twonode" bash scripts/qemu-two-node-c2c-test.sh "$C2C_DIR/c2c.iso"
+
+      # Node A alone has no peer evidence; the gate itself must be able to fail.
+      - name: Two-node C2C negative control (must fail)
+        timeout-minutes: 10
+        run: |
+          if C2C_NEGATIVE=1 X86_ACCEL=tcg X86_CPU_MODEL=max C2C_WORK_DIR="$C2C_DIR/twonode-neg" \
+              bash scripts/qemu-two-node-c2c-test.sh "$C2C_DIR/c2c.iso"; then
+            echo "negative control passed: the two-node gate cannot fail" >&2
+            exit 1
+          fi
+
+      - name: x86 Tier-2 domain test (TCG)
+        timeout-minutes: 20
+        run: |
+          bash scripts/build-x86_64-domain-test-ci.sh
+          bash scripts/x86/qemu-domain-test.sh target/x86-domain-test/x86_64-unknown-none/release/cellos-kernel-domain-test
+
+      - name: Local service lifecycle (x86_64)
+        timeout-minutes: 20
+        run: |
+          bash scripts/build-x86_64-c2c-lifecycle-ci.sh
+          cargo test --manifest-path tests/integration/Cargo.toml \
+            --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86
+
+      - name: Upload C2C gate logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: x86-c2c-logs-${{ github.run_attempt }}
+          path: |
+            target/c2c-gate/twonode/*.log
+            target/c2c-gate/twonode-neg/*.log
+          if-no-files-found: ignore
+
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)
     runs-on: ubuntu-24.04
@@ -1202,16 +1337,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-hypervisor-evidence"
           printf '[gate] x86 hypervisor CI started\n' > "$RUNNER_TEMP/x86-hypervisor-evidence/gate.log"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-hypervisor-boot
@@ -1225,11 +1360,11 @@ jobs:
             libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
       - name: Install Python cryptography (policy blob signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1285,7 +1420,7 @@ jobs:
 
       - name: Upload x86 hypervisor boot logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: x86-hypervisor-boot-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-hypervisor-evidence
@@ -1314,16 +1449,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-python-evidence"
           printf '[gate] Tier 3 CPython in-guest gate started\n' > "$RUNNER_TEMP/x86-python-evidence/gate.log"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-tier3-python
@@ -1337,7 +1472,7 @@ jobs:
             libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1388,7 +1523,7 @@ jobs:
 
       - name: Upload Python gate logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: x86-tier3-python-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-python-evidence
@@ -1420,16 +1555,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-virtio-e2e-evidence"
           printf '[gate] x86 VirtIO e2e lane started\n' > "$RUNNER_TEMP/x86-virtio-e2e-evidence/gate.log"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-virtio-e2e
@@ -1446,7 +1581,7 @@ jobs:
             python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1479,7 +1614,7 @@ jobs:
 
       - name: Upload e2e logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: x86-tier3-virtio-e2e-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-virtio-e2e-evidence
@@ -1506,16 +1641,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/x86-hostile-evidence"
           printf '[gate] x86 hostile corpus started\n' > "$RUNNER_TEMP/x86-hostile-evidence/gate.log"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-tier3-hostile
@@ -1530,7 +1665,7 @@ jobs:
             python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.QEMU_X86_PREFIX }}
           key: qemu-x86_64-10.2.0-${{ runner.os }}-${{ runner.arch }}
@@ -1565,7 +1700,7 @@ jobs:
 
       - name: Upload hostile logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: x86-tier3-hostile-${{ github.run_attempt }}
           path: ${{ runner.temp }}/x86-hostile-evidence
@@ -1575,16 +1710,17 @@ jobs:
   vfs-quota:
     name: VFS Quota Integration Test
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: vfs-quota
@@ -1600,7 +1736,7 @@ jobs:
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Build test-hooks kernel
         run: |
@@ -1629,15 +1765,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: ai-inference-oracle-${{ matrix.arch }}
@@ -1653,7 +1789,7 @@ jobs:
       # vfs-quota job separates it: the apt step above can consume its whole budget.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       # Cheap pre-check: the AI interface is frozen under Law 1, so a change to a confirmed
       # item must be an explicit ABI decision rather than an unnoticed edit here.
@@ -1671,7 +1807,7 @@ jobs:
 
       - name: Upload oracle evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ai-inference-oracle-${{ matrix.arch }}-${{ github.run_number }}
           path: .agents/260913-2002-g2-level-a-ai-inference/evidence/ai-oracle-*.log
@@ -1680,16 +1816,17 @@ jobs:
   srv-cellosfs:
     name: CellosFS /srv Integration Test
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: srv-cellosfs
@@ -1706,7 +1843,7 @@ jobs:
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Build srv-test kernel
         run: |
@@ -1740,17 +1877,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: rv64-tier2-disk
@@ -1766,7 +1903,7 @@ jobs:
       # above must not read as a signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Build the RV64 integration disk
         run: |
@@ -1784,16 +1921,17 @@ jobs:
   unit-tests:
     name: Host unit tests (types + api)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
 
@@ -1913,15 +2051,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: kms-ssh-dev-posture
@@ -2011,11 +2149,12 @@ jobs:
     # a missing rustup a failure rather than a silently skipped check.
     name: F1/F5 admission check (cellos-sign --check)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
 
@@ -2030,16 +2169,17 @@ jobs:
   shell-utils:
     name: Shell Utilities Integration Test (Phase E)
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: shell-utils
@@ -2056,7 +2196,7 @@ jobs:
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Build shell-test kernel
         run: |
@@ -2108,15 +2248,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: boot-suite
@@ -2131,7 +2271,7 @@ jobs:
       # Own step — see the note on the other jobs' cryptography step.
       - name: Install Python cryptography (policy blob signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet cryptography
+        run: python3 -m pip install --user --quiet -r requirements-ci.txt
 
       - name: Prepare authenticated software evidence logs
         run: mkdir -p software-evidence
@@ -2350,7 +2490,7 @@ jobs:
       - name: Upload software evidence logs
         id: upload-software-evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: software-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: software-evidence/
@@ -2361,21 +2501,22 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: cargo-deny
         # v1's bundled cargo-deny can't parse CVSS 4.0 entries now present in
         # the RustSec advisory DB ("unsupported CVSS version: 4.0"); v2 ships
         # a current cargo-deny that supports it.
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           arguments: --all-features
 
       - name: cargo-deny advisories (silo-guest workspace)
         # Separate workspace holding long-term P-256 signing keys; its own
         # deny.toml ignores no advisory.
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           manifest-path: cells/guests/silo-guest/Cargo.toml
           command: check advisories
@@ -2384,7 +2525,7 @@ jobs:
         run: scripts/check-copyleft-leaves.sh
 
       - name: cargo-audit
-        uses: rustsec/audit-check@v2
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -2392,15 +2533,16 @@ jobs:
     name: Attest Authenticated Software Evidence
     needs: [lint, boot-suite]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       id-token: write
       contents: read
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download software evidence logs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           artifact-ids: ${{ needs.boot-suite.outputs.evidence-artifact-id }}
           path: .authenticated-evidence/runtime
@@ -2439,7 +2581,7 @@ jobs:
             --environment boot_suite_result="${{ needs.boot-suite.result }}"
 
       - name: Upload immutable evidence bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: authenticated-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: evidence/
@@ -2448,6 +2590,6 @@ jobs:
           retention-days: 90
 
       - name: Attest Authenticated Software Evidence Bundle
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: evidence/manifest.json

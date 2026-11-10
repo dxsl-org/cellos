@@ -173,6 +173,9 @@ For every row: prior status/progress is retained; current scheduling is **BLOCKE
   - **Closed 2026-11-10** ([evidence](261110-1703-architecture-remediation/reports/phase-01-evidence.md)): Phase 01 done. The exception ends. Recorded deviations: the three skeleton crates went to workspace `exclude`, and `Cargo.lock` and `docs/spec-status.generated.md` changed as direct consequences; no other path was edited. S1 needs its own handoff.
 - All 38 relations keep their whole-plan scope.
 
+**Bounded adopted slice — architecture remediation, slice S1 (phases 02–03, build/CI), holds the Intel WIP lane from 2026-11-10** ([request](261110-1703-architecture-remediation/s1-handoff-request.md), [approval](261110-1703-architecture-remediation/s1-handoff-approval.md)). File-bounded exception for exactly request §2 (CI workflows, lane manifest and guards, `kernel/build.rs` + `compile-only` feature, image recipes and disk tools, untracking of embedded/third-party binaries). No Law-1 delta. Ends when Phase 03 closes.
+- All 38 relations keep their whole-plan scope.
+
 **Approved, not yet effective — Intel iGPU compute, kernel DMA-export slice (2026-11-04):** the accountable owner (the user) accepted [ADR-0033](../docs/decisions/0033-x86-intel-igpu-native-compute.md). The owner also approved the [CP1](261104-0801-x86-igpu-compute/cp1-gpu-kernel-abi.md) (Law-1 confirmation 1, D-G0…D-G13 as §10 recommends) and its §9 handoff ([approval](261104-0801-x86-igpu-compute/cp1-approval.md)). The slice serves the `ai` service and Haily local inference on the Intel node.
 - The file-bounded exception covers exactly CP1 §8. It takes effect only when all of these hold:
   1. the owner gives this slice the Intel WIP lane;

@@ -26,7 +26,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 |---|---|---|---|---|---|
 | 00 | [Governance, admission and owner decisions](phase-00-governance-admission.md) — completed 2026-11-10 ([approval](admission-approval.md)) | S0 truth | — | — | |
 | 01 | [Truthful status baseline](phase-01-truthful-status-baseline.md) — completed 2026-11-10 ([evidence](reports/phase-01-evidence.md)); S0 closed | S0 | 00 | — | ✓ |
-| 02 | [x86 C2C gate, lane manifest, reproducible CI](phase-02-ci-x86-gate.md) | S1 build | 01 | — | |
+| 02 | [x86 C2C gate, lane manifest, reproducible CI](phase-02-ci-x86-gate.md) — completed 2026-11-10 ([evidence](reports/phase-02-evidence.md)); first GitHub run pending | S1 build | 01 | — | |
 | 03 | [Explicit build inputs and single image recipe](phase-03-build-inputs.md) | S1 | 02 | — | ✓ |
 | 04 | [One trust posture, guarded copy always on](phase-04-posture-selector.md) | S2 authority | 03 | — | |
 | 05 | [Single cell and driver catalog](phase-05-cell-catalog.md) | S2 | 04 | — | |

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "x86 C2C gate, lane manifest, reproducible CI"
-status: pending
+status: completed
 priority: P1
 effort: "4–6d"
 dependencies: [1]
@@ -66,17 +66,17 @@ Put the stated direction under a per-commit gate before any kernel refactor, and
 
 ## Todo List
 
-- [ ] Local lane timings
-- [ ] `lanes.toml` + guard
-- [ ] `x86-c2c` job green
-- [ ] Reproducibility settings
-- [ ] Spec 10 updated
+- [x] Local lane timings
+- [x] `lanes.toml` + guard
+- [x] `x86-c2c` job green — locally, step for step; first GitHub run pending
+- [x] Reproducibility settings
+- [x] Spec 10 updated
 
 ## Success Criteria
 
-- [ ] `python3 scripts/check-lanes.py` exits 0; adding an unlisted `scripts/qemu-foo.sh` makes it fail (negative control).
-- [ ] The `x86-c2c` job passes on `main` and fails when the two-node test is run with a deliberately broken peer (the script's own `C2C_NEGATIVE=1` path reports FAIL as designed).
-- [ ] No cargo invocation in `ci.yml` resolves without the lockfile.
+- [x] `python3 scripts/check-lanes.py` exits 0; adding an unlisted `scripts/qemu-foo.sh` makes it fail (negative control).
+- [x] The `x86-c2c` job passes on `main` and fails when the two-node test is run with a deliberately broken peer (the script's own `C2C_NEGATIVE=1` path reports FAIL as designed).
+- [x] No cargo invocation in `ci.yml` resolves without the lockfile. (Met by a `cargo metadata --locked` guard on both lockfiles, see deviation.)
 
 ## Risk Assessment
 
@@ -93,4 +93,47 @@ Phase 03 uses the new job to prove the embed-input change.
 
 ## Deviation Log
 
-None.
+- Deviation: "`x86-c2c` passes on `main`" is evidenced by running every job step locally under TCG; the GitHub run happens on the next push.
+  Why: no push in this session.
+  Impact: success criterion 2 carries a local ceiling until the first CI run.
+  Revert: n/a.
+- Deviation: lockfile reproducibility enforced by one guard step (`cargo metadata --locked` for the root and `tests/integration` lockfiles) instead of `--locked` on every cargo call; `--locked` added only to new invocations.
+  Why: resolution is target-independent, so a current lockfile is sufficient; editing ~100 invocations adds churn with no extra guarantee. `CARGO_LOCKED` is not a cargo environment variable.
+  Impact: `ci.yml` lint job.
+  Revert: drop the step.
+- Deviation: the host-test list stays as the curated `ci.yml` block; `scripts/host-test-crates.txt` inventories it (49 `ci`, 50 `untested`) and the guard enforces completeness.
+  Why: several invocations need `--lib`, benches or per-crate comments; moving them out blindly would break the job without a CI run to observe.
+  Impact: new inventory + guard.
+  Revert: delete both files and the step.
+- Deviation: composite setup action not created.
+  Why: deduplicating apt/pip blocks across 27 jobs cannot be verified without CI runs; not needed for any success criterion.
+  Impact: none; left for a later slice.
+  Revert: n/a.
+- Decision: `perf.yml` keeps `continue-on-error` on its x86 benchmark job.
+  Why: it is a report-only TCG benchmark; the functional lifecycle gate now lives in `x86-c2c`.
+  Impact: none.
+  Revert: n/a.
+- Decision: job timeouts set to 90 min (30 for `board-configs`, `security`, `attest-catalog`) without measured runtimes.
+  Why: caps the 360-min default; generous to avoid false failures.
+  Impact: `ci.yml`.
+  Revert: remove the lines.
+- Decision: `cryptography==41.0.7`, the version the local signing runs used.
+  Why: the only version verified against `scripts/cellos_sign` here.
+  Impact: `requirements-ci.txt`.
+  Revert: unpin.
+- Surprise: integration targets are 72 (cargo metadata), not 50 (the review counted `[[test]]` entries only); 25 run in CI including the new one.
+  Why: auto-discovered test files.
+  Impact: `lanes.toml` uses cargo's target list.
+  Revert: n/a.
+- Surprise: x86 workspace clippy is clean with 8 excludes; the three new excludes only build for riscv64.
+  Why: `ocel-pdf`/`ocel-quickjs` assert the target in `build.rs`; `posix-shim-test` uses RV64-only `api::posix` items.
+  Impact: `ci.yml` x86 lint.
+  Revert: restore `-p cellos-kernel`.
+- Surprise: `docs/spec-status.generated.md` regenerated (Spec 10 headings changed).
+  Why: generated projection.
+  Impact: generated file only.
+  Revert: regenerate.
+
+## Evidence
+
+[reports/phase-02-evidence.md](reports/phase-02-evidence.md).

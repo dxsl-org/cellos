@@ -34,25 +34,33 @@ Một Cell đặc biệt được thiết kế để:
 
 ## 5. Integration Test Guide (English)
 
-This section documents the QEMU-driven integration test harness introduced in
-Phase 11 and how to add new tests.
+This section describes how tests are organised and which of them CI runs.
+The lane inventory is [`scripts/lanes.toml`](../../scripts/lanes.toml); the
+host-test crate inventory is [`scripts/host-test-crates.txt`](../../scripts/host-test-crates.txt).
+Both are checked by CI (`scripts/check-lanes.py`, `scripts/check-host-test-crates.py`),
+so this section does not repeat counts that drift.
 
-### Test Pyramid
+### Test layers
 
-```
-   ┌─────────────────────────────────┐
-   │  Integration (QEMU-driven)      │   ~10 tests, ~3 min
-   │  tests/integration/*.rs         │
-   ├─────────────────────────────────┤
-   │  Boot-time kernel tests         │   ~30 tests, invoked at boot
-   │  kernel/src/*/tests.rs          │
-   │  kernel/src/loader/elf_tests.rs │
-   ├─────────────────────────────────┤
-   │  Host unit tests (cargo test)   │   15+ tests, <1 sec
-   │  libs/types/src/lib.rs          │
-   │  libs/api/src/syscall_tests.rs  │
-   └─────────────────────────────────┘
-```
+| Layer | Where | How it runs | Inventory |
+|---|---|---|---|
+| Host unit tests | `#[test]` in workspace crates (kernel included) | `cargo test -p <crate> --target x86_64-unknown-linux-gnu` in the `unit-tests` job | `scripts/host-test-crates.txt` (`ci` / `untested` / `not-host-testable`) |
+| In-kernel self-tests | `kernel/src/**/*_selftest.rs` | at boot; most are behind `test-hooks` | boot-log markers asserted by QEMU lanes |
+| QEMU integration targets | `tests/integration/tests/*.rs` (separate cargo workspace, harness `tests/integration/src/lib.rs`) | `cargo test --manifest-path tests/integration/Cargo.toml --test <name>` | `[[test]]` rows in `scripts/lanes.toml` |
+| Lane scripts | `scripts/{qemu,run}-*`, `scripts/build-*-ci.sh`, `scripts/x86/{qemu,run}-*` | directly from a workflow or by hand | `[[lane]]` rows in `scripts/lanes.toml` |
+| Fuzz | `fuzz/` | by hand (`cargo fuzz`) | not run in CI |
+
+**Tiers.** Every lane and integration target has a tier: `pr` (named by
+`.github/workflows/ci.yml`, runs on every push and pull request), `nightly`
+(named by a scheduled workflow), `manual` (run by hand; the row says why) or
+`retired`. A `pr` or `nightly` row that no workflow names fails CI, and so does
+a new lane script or test target without a row. `manual` is not a judgement
+that a lane passes: rows recorded on 2026-11-10 as "not named by any workflow"
+have unknown current status.
+
+**Intel C2C gate.** The `x86-c2c` job runs on every push and pull request: the
+two-node C2C test under TCG (positive and `C2C_NEGATIVE=1`), the x86 Tier-2 domain
+test, and the `local-service-lifecycle-x86` integration target.
 
 ### Host Unit Tests
 
@@ -90,41 +98,24 @@ Add a new boot-time test:
 
 ### QEMU Integration Tests
 
-Integration tests live in `tests/integration/` and use `QemuRunner` from
-`tests/integration/harness.rs` to spawn QEMU, inject serial input, and assert
-on serial output.
+Integration targets live in `tests/integration/tests/` (a separate cargo
+workspace) and use the helpers in `tests/integration/src/lib.rs` (`QemuRunner`,
+`x86_lane`, `qemu_binary_x86`, `ci_guard`, …) to boot an image, inject serial
+input and assert on serial output. Under CI, `ci_guard` turns a missing
+prerequisite (image, QEMU binary) into a failure instead of a silent skip.
 
-**Canonical pattern:**
+**Adding a new integration target:**
 
-```rust
-// tests/integration/my_scenario.rs
-use super::harness::QemuRunner;
+1. Add `tests/integration/tests/<name>.rs` (and a `[[test]]` entry if the name differs from the file).
+2. Add a `[[test]]` row with `name`, `arch` and `tier` to `scripts/lanes.toml`.
+3. For `pr` or `nightly`, add a workflow step that runs `--test <name>`; for `manual`, give a `reason`.
 
-const KERNEL: &str = "target/riscv64gc-unknown-none-elf/release/kernel";
+Run one target locally:
 
-pub fn test_my_feature() {
-    let mut q = QemuRunner::new_rv64(KERNEL);
-    q.wait_for("[Cellos]", 30).expect("kernel banner not seen");
-    q.wait_for("my-expected-output", 30)
-        .expect("feature output not seen");
-    assert!(!q.output_contains("PANIC"));
-}
+```bash
+cargo test --manifest-path tests/integration/Cargo.toml \
+    --target x86_64-unknown-linux-gnu --test <name>
 ```
-
-**Adding a new integration test:**
-
-1. Create `tests/integration/<name>.rs` using the pattern above
-2. Reference the harness with `use super::harness::QemuRunner;`
-3. Run via a future `Cellos-tests` host-target crate (use `--target x86_64-...`)
-4. Mark QEMU-dependent tests `#[ignore]` in CI until QEMU is available on the runner
-
-**Existing integration test files:**
-
-| File | Covers |
-|------|--------|
-| `tests/integration/harness.rs` | `QemuRunner` helper |
-| `tests/integration/ring3_smoke.rs` | boot banner, Ring-3 hello, shell prompt, no-panic |
-| `tests/integration/multi_cell.rs` | init→config→vfs→shell chain |
 
 ### Coverage Measurement
 

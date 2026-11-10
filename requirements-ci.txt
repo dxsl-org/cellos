@@ -1,0 +1,3 @@
+# Python packages CI installs (cell/policy signing). Pinned: the version
+# verified locally against scripts/cellos_sign on 2026-11-10.
+cryptography==41.0.7

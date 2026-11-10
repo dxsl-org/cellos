@@ -1,0 +1,817 @@
+# Lane manifest: every QEMU/run lane script and every tests/integration target.
+# tier: pr (ci.yml, every push/PR) | nightly (scheduled workflow) | manual (run by hand) | retired
+# arch: x86_64 | aarch64 | riscv64 | default (script/test picks the repo default target)
+# Checked by scripts/check-lanes.py. Add a row when you add a lane; a pr/nightly row
+# must be named by a workflow of that tier.
+
+[[lane]]
+path = "scripts/build-aarch64-prod-refusal-ci.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-aarch64-test-hooks-ci.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-boot-ramdisk-ci.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-native-domain-test-ci.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-native-workload-ci.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-shell-test-ci.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-srv-test-ci.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-test-hooks-ci.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-x86_64-c2c-lifecycle-ci.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-x86_64-c2c-render-ci.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-x86_64-cpp-hosted-ci.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-x86_64-domain-test-ci.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/build-x86_64-idt-test-ci.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-x86_64-mlibc-witness-ci.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/build-x86_64-prod-refusal-ci.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-aarch64-test-hooks.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-aarch64-test.sh"
+arch = "aarch64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-actor-supervisor.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-boot-test.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-c-pthread.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-c-spawn.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-c2c-node-restart-test.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-cell-scale.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-cfi-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-cpp-smoke.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-dev-time.py"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-futex-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-getrandom-sas-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-hypervisor-smoke-x86.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-hypervisor-smoke.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-lua-vnet.py"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-manifest-continuity.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-native-domain-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase02-session-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase03-pipeline-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase04-gui-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase04-terminal-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase09-ssh-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-phase10-canonical-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-pipe-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-rpi3-tier3.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-rpi4-test.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-tetris-c-port.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-tier3-hostile-runner-arm64.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-tier3-hostile-runner-x86.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-tier3-ssh-guest-x86.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-tls-test.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-two-node-c2c-test.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-ubuntu-wide-guest-x86.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-virtio-trace.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-x86-nginx-gate.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-x86-python-gate.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-x86-virtio-e2e.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/qemu-x86_64-idt-test.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/qemu-x86_64-test.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/run-aarch64.sh"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/run-ai-inference-oracle-qemu.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/run-c2c-broker-oracle-qemu.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/run-std-parity-benchmark.sh"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/run-std-smoke-qemu.sh"
+arch = "default"
+tier = "pr"
+
+[[lane]]
+path = "scripts/run-x86-64.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/qemu-cpp-hosted-smoke.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/qemu-domain-test.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
+path = "scripts/x86/qemu-edu-export-test.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/qemu-idt-protection-test.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/qemu-mlibc-witness.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/run-abi-refusal-witness.py"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/run-bench-p04-ab.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/run-bench-x86.sh"
+arch = "x86_64"
+tier = "nightly"
+
+[[lane]]
+path = "scripts/x86/run-c2c-concurrent-input-smoke.py"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[lane]]
+path = "scripts/x86/run-c2c-render-smoke.py"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "aarch64-boot"
+arch = "aarch64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "actor-supervisor"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "ahci-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "atomic-publication"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "authority-provenance"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "base-tray-handoff"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "boot"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "c2c-broker-oracle"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "capacity-observability"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "cluster-boot"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "compositor-cursor"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "console-x86"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "desktop-shell"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "desktop-x86"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "driver-registration-contract"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "e1000-dma-layout"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "fastpath-ipc"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "handoff"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "hotswap-smoke"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "http-concurrency"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "http-infer"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "http-smoke"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "hypha-boot"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "hypha-local-ai"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "hypha-p3-boot"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "igb-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "iommu-dmar-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "iommu-publication"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "iommu-riscv-command"
+arch = "riscv64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "lab-carrier-transfer"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "launch-profile"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "local-service-lifecycle-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "machine-pin-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "manifest-qemu-continuity"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "native-domain-qemu"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "native-workload"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "nic-riscv"
+arch = "riscv64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "nic-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "nvme-dma-addressing"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "nvme-x86"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "ocel-browser"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "ocel-quickjs"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "pcie-bar-window"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "pcie-bdf-ownership"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "pcie-multibus-x86"
+arch = "x86_64"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "periph-can-pwm-adc"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "periph-i2c-spi"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "policy-noentry"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "power-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "provider-recovery"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "pvscsi-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "robot-demo-e2e"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "serial-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "shell-utils"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "srv-cellosfs"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "stationary-assembly"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "tier2-fault-isolation"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "tier3b-virtio-gpu"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "tls-gate"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "vfs-quota"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "vfs-smp"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "virtio-gpu-contract"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "virtio-gpu-resource-rules"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "virtio-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "virtqueue-guard"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "viui-managed-surface"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "vmxnet3-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "window-policy"
+arch = "default"
+tier = "pr"
+
+[[test]]
+name = "wx-cross-hart-tlb"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "wx-text-write"
+arch = "default"
+tier = "manual"
+reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "x86_64-boot"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
+name = "xhci-x86"
+arch = "x86_64"
+tier = "pr"

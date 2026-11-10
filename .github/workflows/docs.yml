@@ -17,13 +17,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with: { cache-on-failure: true }
       # rustdoc executes build scripts: littlefs2-sys compiles its vendored C
       # core, so the cross gcc + freestanding headers are required (same as
@@ -54,7 +54,7 @@ jobs:
       - name: Generate llms.txt
         run: bash scripts/gen-llms-txt.sh
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: target/riscv64gc-unknown-none-elf/doc

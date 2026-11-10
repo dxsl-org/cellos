@@ -180,15 +180,15 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/10-testing.md:22` — 3. Fault Injection Cell (Kẻ phá hoại)
 - `docs/specs/10-testing.md:28` — 4. Hardware-in-the-loop (HITL)
 - `docs/specs/10-testing.md:35` — 5. Integration Test Guide (English)
-- `docs/specs/10-testing.md:40` — Test Pyramid
-- `docs/specs/10-testing.md:57` — Host Unit Tests
-- `docs/specs/10-testing.md:73` — Boot-time Kernel Tests
-- `docs/specs/10-testing.md:91` — QEMU Integration Tests
-- `docs/specs/10-testing.md:129` — Coverage Measurement
-- `docs/specs/10-testing.md:145` — 6. Hardware Security Tests
-- `docs/specs/10-testing.md:164` — Test locations
-- `docs/specs/10-testing.md:172` — Running Layer-2 tests
-- `docs/specs/10-testing.md:205` — Test availability and SKIP behaviour
+- `docs/specs/10-testing.md:43` — Test layers
+- `docs/specs/10-testing.md:65` — Host Unit Tests
+- `docs/specs/10-testing.md:81` — Boot-time Kernel Tests
+- `docs/specs/10-testing.md:99` — QEMU Integration Tests
+- `docs/specs/10-testing.md:120` — Coverage Measurement
+- `docs/specs/10-testing.md:136` — 6. Hardware Security Tests
+- `docs/specs/10-testing.md:155` — Test locations
+- `docs/specs/10-testing.md:163` — Running Layer-2 tests
+- `docs/specs/10-testing.md:196` — Test availability and SKIP behaviour
 - `docs/specs/12-reliability.md:14` — 1. What "Never-Die" Means — Six Independent Axes
 - `docs/specs/12-reliability.md:33` — 2. Isolation Strategy Decision (2026-06-05)
 - `docs/specs/12-reliability.md:78` — 3. Current Status — Scored per Axis

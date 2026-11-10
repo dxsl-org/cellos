@@ -1,0 +1,104 @@
+# Workspace crates that contain #[test], and whether .github/workflows/ci.yml runs them.
+# status: ci (named with -p in ci.yml) | untested (reason required) | not-host-testable (reason required)
+# Checked by scripts/check-host-test-crates.py: a new crate with #[test] must get a row.
+# format: <crate> <status> [reason...]
+
+ai-engine ci
+ai-proto ci
+ai-sdk ci
+ai-tokenizer ci
+api ci
+app-c2c-render untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-cellbox ci
+app-chrome untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-haily-agent untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-init ci
+app-kms-ssh-admin untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-net-tools ci
+app-phase04-terminal-driver untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-s2tw-probe untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-top-load untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+app-wasm ci
+apple-rtkit untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+attestation ci
+authority-protocol ci
+cell-initial-stack untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+cellos-boards ci
+cellos-boot-config untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+cellos-fs ci
+cellos-kernel ci
+desktop untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+dom-arena untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-bcm-display ci
+driver-bcm57xx untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-dwc2-usb ci
+driver-e1000e ci
+driver-hid untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-i2c-bcm ci
+driver-i40e untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-igb untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-igc untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-intel-gpu untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-ixgbe untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-nvme ci
+driver-pvscsi ci
+driver-r8169 untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-spi-bcm ci
+driver-virtio-scsi untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-vmxnet3 ci
+driver-xhci untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+edu-export-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+fb-console untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+files untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+gguf-rs ci
+hal-arm ci
+hal-soc-arm-virt ci
+hal-soc-bcm27xx untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+hal-soc-riscv untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+hal-soc-x86 untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+hal-x86 untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+http-core ci
+hypha-core ci
+hypha-llm-gateway ci
+hypha-tool-fs ci
+hypha-tool-spawn ci
+intel-gpu-core untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+lua ci
+mesa-anv-shim untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+ocel untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+ocel-pdf-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+ocel-quickjs untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+ocel-service-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+ostd ci
+recovery-demo untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+render-core untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+robot-demo ci
+scsi-block untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+service-compositor ci
+service-config ci
+service-httpd ci
+service-hypervisor ci
+service-input ci
+service-kms ci
+service-net ci
+service-net-broker ci
+service-platform ci
+service-silo ci
+service-sshd untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+service-vfs ci
+sunset untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+sunset-sshwire-derive untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+supervisor ci
+tensor-math ci
+terminal untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+terminal-sdk untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+text-engine ci
+types ci
+vigrep untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+vimio untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+vipolling untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+virtio-pci-transport untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+vissh untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+vitui untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+viui ci
+vm-runner untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
