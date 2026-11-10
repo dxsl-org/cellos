@@ -44,7 +44,7 @@ fn checked_windows_and_block_overflow_refuse() {
 fn fresh_p4_p5_reopen_and_existing_verify_preserve_bytes() {
     let f = Fixture::new();
     // Neighbor partitions/config remain byte-for-byte untouched.
-    for offset in [0, 2048 * 512, 526336 * 512, 560000 * 512, 1062144 * 512] {
+    for offset in [0, 2048 * 512, 526336 * 512, 600000 * 512, 1062144 * 512] {
         f.write_at(offset, b"neighbor-config-sentinel");
     }
     run(f.args(800000, Intent::FreshBlank, "p4.json")).unwrap();
@@ -54,7 +54,7 @@ fn fresh_p4_p5_reopen_and_existing_verify_preserve_bytes() {
     run(f.args(931072, Intent::VerifyExisting, "p5-verify.json")).unwrap();
     assert_eq!(f.hash(), before);
     let mut file = File::open(&f.image).unwrap();
-    for offset in [0, 2048 * 512, 526336 * 512, 560000 * 512, 1062144 * 512] {
+    for offset in [0, 2048 * 512, 526336 * 512, 600000 * 512, 1062144 * 512] {
         file.seek(SeekFrom::Start(offset)).unwrap();
         let mut bytes = [0; 24]; file.read_exact(&mut bytes).unwrap();
         assert_eq!(&bytes, b"neighbor-config-sentinel");

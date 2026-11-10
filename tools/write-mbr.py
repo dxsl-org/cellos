@@ -4,8 +4,8 @@
 Layout (must match kernel/src/loader/disk_layout.rs and api::disk):
 
     P1  type 0x0C (FAT32 LBA)  @ LBA   2,048  size 524,288   /mnt/sd interop volume
-    P2  type 0x7F (Cellos)     @ LBA 526,336  size  33,664   cell bootstrap table + ELF blobs
-    P3  type 0x7D (Cellos)     @ LBA 560,000  size 240,000   kernel heap snapshot (Phase 29)
+    P2  type 0x7F (Cellos)     @ LBA 526,336  size  73,664   cell bootstrap table + ELF blobs
+    P3  type 0x7D (Cellos)     @ LBA 600,000  size 200,000   kernel heap snapshot (Phase 29)
     P4  type 0x7E (Cellos)     @ LBA 800,000  size 131,072   littlefs /data (Milestone 2.5 P04)
 
 Total disk: 931,072 sectors (~455 MB). The image is written sparsely by gen_disk.
@@ -25,8 +25,8 @@ SECTOR_SIZE = 512
 # (type, start_lba, sectors) — order defines MBR slots 1-4.
 PARTITIONS = [
     (0x0C,   2_048, 524_288),  # P1 FAT32 (LBA addressing)
-    (0x7F, 526_336,  33_664),  # P2 Cellos cell table
-    (0x7D, 560_000, 240_000),  # P3 Cellos snapshot
+    (0x7F, 526_336,  73_664),  # P2 Cellos cell table
+    (0x7D, 600_000, 200_000),  # P3 Cellos snapshot
     (0x7E, 800_000, 131_072),  # P4 Cellos littlefs
 ]
 

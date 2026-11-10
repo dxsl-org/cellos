@@ -551,7 +551,7 @@ cp "$EMBED_DIR/init" kernel/src/embedded/init
 
 # ── 6. disk_v3.img ───────────────────────────────────────────────────────────
 # MBR layout (tools/write-mbr.py, kernel/src/loader/disk_layout.rs):
-#   P1 FAT32 @2048+524288 · P2 cell table @526336 · P3 snapshot @560000
+#   P1 FAT32 @2048+524288 · P2 cell table @526336+73664 · P3 snapshot @600000
 #   P4 CellosFS @800000 · P5 CellosFS @931072 · P6 FAT cell-store @1062144 +65536
 echo "==> assembling $DISK"
 DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536

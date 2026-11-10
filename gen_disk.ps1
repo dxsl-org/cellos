@@ -11,7 +11,7 @@
 #       Passed to QEMU as a VirtIO block device (-drive file=disk_v3.img).
 #       P1 @2048:   FAT32 interop volume (/mnt/sd)
 #       P2 @526336: Cell bootstrap table read by the early loader.
-#       P3 @560000: kernel heap snapshot region (Phase 29).
+#       P3 @600000: kernel heap snapshot region (Phase 29).
 #       P4 @800000 and P5 @931072: offline-provisioned CellosFS /data and /srv.
 #       SpawnFromPath uses the P2 table to load VFS, config, shell.
 
@@ -723,7 +723,7 @@ if ($kernCode -ne 0) {
 }
 
 # 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
-#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4/P5 CellosFS
+#     P1 FAT32 @2048+524288 · P2 cell-table @526336+73664 · P3 snapshot @600000 · P4/P5 CellosFS
 #     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
 & $python "scripts/generate-boot-config.py" --preserve-persistent "disk_v3.img" `
     --output-dir "$embedded/boot-config"

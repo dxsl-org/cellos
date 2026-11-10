@@ -5,10 +5,12 @@ import sys
 import os
 
 SECTOR_SIZE = 512
-CELL_TABLE_BASE_LBA = 526_336
+CELL_TABLE_BASE_LBA = 526_336  # must match api::disk::PART_CELLTBL_BASE_LBA
+CELL_TABLE_SECTORS = 73_664  # must match api::disk::PART_CELLTBL_SECTORS
+CELL_TABLE_END_LBA = CELL_TABLE_BASE_LBA + CELL_TABLE_SECTORS  # P3 starts here
 CELL_TABLE_MAGIC = 0x5649_4F53_5F43_454C
 CELL_PATH_LEN = 64
-MAX_CELL_ENTRIES = 64
+MAX_CELL_ENTRIES = 128  # must match kernel/src/loader/disk_layout.rs MAX_CELL_ENTRIES
 CELLSTORE_BASE_LBA = 1_062_144
 def pack_header(count: int) -> bytes:
     return struct.pack("<QI", CELL_TABLE_MAGIC, count) + b"\x00" * 500
@@ -67,6 +69,15 @@ def main():
         packed_entries.append(pack_entry(cell_path, current_lba, len(data)))
         data_blobs.append((current_lba, data))
         current_lba += sectors_for(len(data))
+
+    # Everything past P2 is the snapshot partition: refuse rather than append
+    # blobs into it (the kernel probe rejects such a table anyway).
+    if current_lba > CELL_TABLE_END_LBA:
+        print(
+            f"ERROR: cell table needs {current_lba - CELL_TABLE_BASE_LBA} sectors, "
+            f"P2 holds {CELL_TABLE_SECTORS} (ends at LBA {CELL_TABLE_END_LBA})"
+        )
+        sys.exit(1)
 
     total_sectors = current_lba * SECTOR_SIZE
     with open(disk_img, "r+b") as f:

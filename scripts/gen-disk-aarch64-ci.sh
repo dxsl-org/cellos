@@ -394,7 +394,7 @@ fi
 # constants are exactly the ones format-disk-arm.sh and gen-disk-ci.sh use; they
 # are load-bearing (the loader reads the table from a constant address), so a
 # change here must be a change there too.
-#   P1 FAT32 @2048+524288 · P2 cell table @526336 · P3 snapshot @560000
+#   P1 FAT32 @2048+524288 · P2 cell table @526336+73664 · P3 snapshot @600000
 #   P4 CellosFS @800000 · P5 CellosFS @931072 · P6 FAT cell-store @1062144 +65536
 echo "==> assembling $DISK"
 DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536

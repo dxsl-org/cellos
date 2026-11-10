@@ -15,10 +15,12 @@ import sys
 import os
 
 SECTOR_SIZE       = 512
-CELL_TABLE_BASE_LBA = 526_336         # must match disk_layout.rs
+CELL_TABLE_BASE_LBA = 526_336         # must match api::disk::PART_CELLTBL_BASE_LBA
+CELL_TABLE_SECTORS  = 73_664          # must match api::disk::PART_CELLTBL_SECTORS
+CELL_TABLE_END_LBA  = CELL_TABLE_BASE_LBA + CELL_TABLE_SECTORS  # P3 starts here
 CELL_TABLE_MAGIC  = 0x5649_4F53_5F43_454C  # "Cellos_CEL"
 CELL_PATH_LEN     = 64
-MAX_CELL_ENTRIES  = 64
+MAX_CELL_ENTRIES  = 128               # must match disk_layout.rs MAX_CELL_ENTRIES
 
 # ── Layout helpers ────────────────────────────────────────────────────────────
 
@@ -88,6 +90,16 @@ def main():
             data = ef.read()
         elf_data_list.append((cell_path, current_lba, data))
         current_lba += sectors_for(len(data))
+
+    # Everything past P2 is the snapshot partition: refuse rather than append
+    # blobs into it (the kernel probe rejects such a table anyway).
+    if current_lba > CELL_TABLE_END_LBA:
+        print(
+            f"ERROR: cell table needs {current_lba - CELL_TABLE_BASE_LBA} sectors, "
+            f"P2 holds {CELL_TABLE_SECTORS} (ends at LBA {CELL_TABLE_END_LBA})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Write table to disk image.
     total_sectors_needed = current_lba * SECTOR_SIZE
