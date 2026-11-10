@@ -176,10 +176,11 @@ new file mode 100644
 index 0000000..d9aa04e
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/alloc.rs
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,164 @@
 +// SPDX-License-Identifier: MPL-2.0
 +// CellOS Tier 1 SAS Per-Cell Freeing Heap Allocator (4 MiB, align-honouring, coalescing).
 +use crate::alloc::Layout;
++use crate::sync::atomic::{Atomic, AtomicBool, Ordering};
 +
 +const HEAP_SIZE: usize = 4 * 1024 * 1024;
 +const ALIGN: usize = 16;
@@ -189,6 +190,30 @@ index 0000000..d9aa04e
 +struct HeapStorage([u8; HEAP_SIZE]);
 +static mut HEAP_MEM: HeapStorage = HeapStorage([0; HEAP_SIZE]);
 +static mut INITIALIZED: bool = false;
++
++// Threads are concurrent kernel tasks, so the free list is guarded; a
++// contended caller yields its time slice instead of spinning it away.
++static HEAP_LOCK: Atomic<bool> = AtomicBool::new(false);
++
++struct HeapGuard;
++
++impl HeapGuard {
++    fn acquire() -> HeapGuard {
++        while HEAP_LOCK
++            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
++            .is_err()
++        {
++            super::thread::yield_now();
++        }
++        HeapGuard
++    }
++}
++
++impl Drop for HeapGuard {
++    fn drop(&mut self) {
++        HEAP_LOCK.store(false, Ordering::Release);
++    }
++}
 +
 +#[repr(C)]
 +struct BlockHeader {
@@ -214,6 +239,7 @@ index 0000000..d9aa04e
 +    if size == 0 {
 +        return layout.align().max(ALIGN) as *mut u8;
 +    }
++    let _guard = HeapGuard::acquire();
 +    if !INITIALIZED {
 +        init_heap();
 +    }
@@ -271,6 +297,7 @@ index 0000000..d9aa04e
 +    if layout.size() == 0 || ptr.is_null() {
 +        return;
 +    }
++    let _guard = HeapGuard::acquire();
 +    let heap_start = core::ptr::addr_of_mut!(HEAP_MEM.0) as usize;
 +    let heap_end = heap_start + HEAP_SIZE;
 +    let p = ptr as usize;
@@ -324,7 +351,7 @@ index 0000000..eb94fd7
 +
 +pub unsafe fn init(_argc: isize, _argv: *const *const u8, _sigpipe: u8) {
 +    #[cfg(target_thread_local)]
-+    crate::sys::pal::thread::setup_thread_tls();
++    crate::sys::pal::thread::setup_main_thread_tls();
 +}
 +pub unsafe fn cleanup() {}
 +
@@ -353,7 +380,7 @@ new file mode 100644
 index 0000000..f012345
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/futex.rs
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,166 @@
 +use crate::sync::atomic::Atomic;
 +use crate::time::Duration;
 +
@@ -371,18 +398,13 @@ index 0000000..f012345
 +const SYS_FUTEX_WAKE: usize = 18;
 +
 +pub fn futex_wait(futex: &Atomic<u32>, expected: u32, timeout: Option<Duration>) -> bool {
++    // The kernel wakes the waiter once `system_ticks >= now + ticks` (10 ms
++    // ticks) and the wait may begin late in the current tick, so round up and
++    // add one tick: a timed wait must never end before `timeout`. The cap keeps
++    // the kernel's deadline sum from overflowing; a longer wait (~497 days)
++    // reports a timeout early instead.
 +    let ticks = match timeout {
-+        Some(d) => {
-+            let ms = d.as_millis();
-+            let t = (ms + 9) / 10;
-+            if t == 0 {
-+                1
-+            } else if t > usize::MAX as u128 {
-+                usize::MAX
-+            } else {
-+                t as usize
-+            }
-+        }
++        Some(d) => (d.as_nanos().div_ceil(10_000_000) + 1).min(u32::MAX as u128) as usize,
 +        None => 0,
 +    };
 +
@@ -488,7 +510,7 @@ index 0000000..f012345
 +    unsafe {
 +        core::arch::asm!(
 +            "ecall",
-+            in("a0") futex.as_ptr() as usize,
++            inlateout("a0") futex.as_ptr() as usize => _,
 +            in("a1") 0usize,
 +            in("a2") 0usize,
 +            in("a3") 0usize,
@@ -500,7 +522,7 @@ index 0000000..f012345
 +    unsafe {
 +        core::arch::asm!(
 +            "svc #0",
-+            in("x0") SYS_FUTEX_WAKE,
++            inlateout("x0") SYS_FUTEX_WAKE => _,
 +            in("x1") futex.as_ptr() as usize,
 +            in("x2") 0usize,
 +            in("x3") 0usize,
@@ -512,7 +534,7 @@ index 0000000..f012345
 +    unsafe {
 +        core::arch::asm!(
 +            "syscall",
-+            in("rax") SYS_FUTEX_WAKE,
++            inlateout("rax") SYS_FUTEX_WAKE => _,
 +            in("rdi") futex.as_ptr() as usize,
 +            in("rsi") 0usize,
 +            in("rdx") 0usize,
@@ -622,7 +644,7 @@ new file mode 100644
 index 0000000..ac2abcb
 --- /dev/null
 +++ b/library/std/src/sys/pal/cellos/thread.rs
-@@ -0,0 +1,364 @@
+@@ -0,0 +1,439 @@
 +use crate::boxed::Box;
 +use crate::io;
 +use crate::num::NonZero;
@@ -807,39 +829,106 @@ index 0000000..ac2abcb
 +    ret
 +}
 +
-+pub unsafe fn setup_thread_tls() -> *mut u8 {
-+    let layout = match crate::alloc::Layout::from_size_align(4096, 64) {
-+        Ok(l) => l,
-+        Err(_) => return core::ptr::null_mut(),
-+    };
-+    let ptr = crate::sys::pal::alloc::alloc(layout);
-+    if ptr.is_null() {
-+        return core::ptr::null_mut();
-+    }
-+    core::ptr::write_bytes(ptr, 0, 4096);
-+    #[cfg(target_arch = "x86_64")]
-+    {
-+        let tcb = ptr.add(4096 - 64) as *mut usize;
-+        *tcb = tcb as usize;
-+        sys_set_tls_base(tcb as usize);
-+    }
-+    #[cfg(target_arch = "aarch64")]
-+    {
-+        sys_set_tls_base(ptr as usize);
-+    }
-+    #[cfg(target_arch = "riscv64")]
-+    {
-+        sys_set_tls_base(ptr as usize);
-+    }
-+    ptr
++#[cfg(target_thread_local)]
++#[allow(non_upper_case_globals)]
++unsafe extern "C" {
++    // Bounds of the TLS initial image, exported by the cell linker script
++    // (`libs/cell-build/src/cell.ld.in`): `.tdata` bytes up to `__tdata_end`,
++    // `.tbss` zeros up to `__tbss_end`; `__tls_align_mark - __tdata_start` is
++    // the segment alignment.
++    static __tdata_start: u8;
++    static __tdata_end: u8;
++    static __tbss_end: u8;
++    static __tls_align_mark: u8;
 +}
 +
-+pub unsafe fn teardown_thread_tls(ptr: *mut u8) {
-+    if !ptr.is_null() {
-+        if let Ok(layout) = crate::alloc::Layout::from_size_align(4096, 64) {
-+            crate::sys::pal::alloc::dealloc(ptr, layout);
-+        }
++/// Where a thread's TLS block holds the image and the thread pointer. The
++/// offsets are the ones the linker baked into every local-exec access.
++#[cfg(target_thread_local)]
++struct TlsLayout {
++    block: crate::alloc::Layout,
++    image: usize,
++    filesz: usize,
++    tp: usize,
++}
++
++#[cfg(target_thread_local)]
++unsafe fn tls_layout() -> TlsLayout {
++    let start = core::ptr::addr_of!(__tdata_start) as usize;
++    let filesz = core::ptr::addr_of!(__tdata_end) as usize - start;
++    let memsz = core::ptr::addr_of!(__tbss_end) as usize - start;
++    let align = (core::ptr::addr_of!(__tls_align_mark) as usize - start).max(1);
++    // Variant II: the image ends at the thread pointer, which holds a self-pointer.
++    #[cfg(target_arch = "x86_64")]
++    let (image, tp, size) = {
++        let tp = memsz.next_multiple_of(align);
++        (0, tp, tp + size_of::<usize>())
++    };
++    // Variant I: a 16-byte TCB at the thread pointer, then the aligned image.
++    #[cfg(target_arch = "aarch64")]
++    let (image, tp, size) = {
++        let image = 16usize.next_multiple_of(align);
++        (image, 0, image + memsz)
++    };
++    // Variant I without a TCB (riscv64): the thread pointer is the image itself.
++    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
++    let (image, tp, size) = (0, 0, memsz);
++    match crate::alloc::Layout::from_size_align(size.max(1), align.max(16)) {
++        Ok(block) => TlsLayout { block, image, filesz, tp },
++        Err(_) => super::abort_internal(),
 +    }
++}
++
++#[cfg(target_thread_local)]
++pub unsafe fn setup_thread_tls() -> *mut u8 {
++    let layout = tls_layout();
++    let block = crate::sys::pal::alloc::alloc(layout.block);
++    // Without its own block the thread would keep its creator's thread pointer
++    // and share that thread's thread-locals.
++    if block.is_null() {
++        super::abort_internal();
++    }
++    core::ptr::write_bytes(block, 0, layout.block.size());
++    core::ptr::copy_nonoverlapping(
++        core::ptr::addr_of!(__tdata_start),
++        block.add(layout.image),
++        layout.filesz,
++    );
++    let tp = block.add(layout.tp);
++    // A small image need not leave the thread pointer word-aligned.
++    #[cfg(target_arch = "x86_64")]
++    (tp as *mut usize).write_unaligned(tp as usize);
++    sys_set_tls_base(tp as usize);
++    block
++}
++
++#[cfg(target_thread_local)]
++pub unsafe fn teardown_thread_tls(block: *mut u8) {
++    crate::sys::pal::alloc::dealloc(block, tls_layout().block);
++}
++
++#[cfg(target_thread_local)]
++static MAIN_TLS_READY: Atomic<bool> = crate::sync::atomic::AtomicBool::new(false);
++
++/// Gives the root task its TLS block; only the first call allocates.
++#[cfg(target_thread_local)]
++pub unsafe fn setup_main_thread_tls() {
++    if !MAIN_TLS_READY.swap(true, crate::sync::atomic::Ordering::Relaxed) {
++        unsafe { setup_thread_tls() };
++    }
++}
++
++// Cells enter through ostd's `_start`, which runs `.init_array` but never std's
++// `lang_start`; without this hook the root task would address its thread-locals
++// off a null thread pointer.
++#[cfg(target_thread_local)]
++#[used]
++#[unsafe(link_section = ".init_array.00099")]
++static MAIN_TLS_INIT: extern "C" fn() = main_tls_init;
++
++#[cfg(target_thread_local)]
++extern "C" fn main_tls_init() {
++    unsafe { setup_main_thread_tls() }
 +}
 +
 +impl Thread {
@@ -943,8 +1032,16 @@ index 0000000..ac2abcb
 +        yield_now();
 +        return;
 +    }
++    // Nothing wakes this word, so each wait runs to its timeout; one futex
++    // wait is capped (~497 days), so a longer sleep takes several.
++    const MAX_WAIT: Duration = Duration::from_secs(365 * 24 * 60 * 60);
 +    let dummy = <Atomic<u32>>::new(0);
-+    crate::sys::pal::futex::futex_wait(&dummy, 0, Some(dur));
++    let mut remaining = dur;
++    while !remaining.is_zero() {
++        let wait = remaining.min(MAX_WAIT);
++        crate::sys::pal::futex::futex_wait(&dummy, 0, Some(wait));
++        remaining -= wait;
++    }
 +}
 +
 +pub fn yield_now() {
@@ -952,7 +1049,7 @@ index 0000000..ac2abcb
 +    unsafe {
 +        core::arch::asm!(
 +            "ecall",
-+            in("a0") 0usize,
++            inlateout("a0") 0usize => _,
 +            in("a1") 0usize,
 +            in("a2") 0usize,
 +            in("a3") 0usize,
@@ -964,7 +1061,7 @@ index 0000000..ac2abcb
 +    unsafe {
 +        core::arch::asm!(
 +            "svc #0",
-+            in("x0") SYS_YIELD,
++            inlateout("x0") SYS_YIELD => _,
 +            in("x1") 0usize,
 +            in("x2") 0usize,
 +            in("x3") 0usize,
@@ -976,7 +1073,7 @@ index 0000000..ac2abcb
 +    unsafe {
 +        core::arch::asm!(
 +            "syscall",
-+            in("rax") SYS_YIELD,
++            inlateout("rax") SYS_YIELD => _,
 +            in("rdi") 0usize,
 +            in("rsi") 0usize,
 +            in("rdx") 0usize,
@@ -1133,7 +1230,7 @@ index 0000000..7bfd20c
 +    #[cfg(target_arch = "riscv64")]
 +    core::arch::asm!(
 +        "ecall",
-+        in("a0") ptr,
++        inlateout("a0") ptr => _,
 +        in("a1") len,
 +        in("a2") 0usize,
 +        in("a3") 0usize,
@@ -1143,7 +1240,7 @@ index 0000000..7bfd20c
 +    #[cfg(target_arch = "aarch64")]
 +    core::arch::asm!(
 +        "svc #0",
-+        in("x0") SYS_LOG,
++        inlateout("x0") SYS_LOG => _,
 +        in("x1") ptr,
 +        in("x2") len,
 +        in("x3") 0usize,
@@ -1153,7 +1250,7 @@ index 0000000..7bfd20c
 +    #[cfg(target_arch = "x86_64")]
 +    core::arch::asm!(
 +        "syscall",
-+        in("rax") SYS_LOG,
++        inlateout("rax") SYS_LOG => _,
 +        in("rdi") ptr,
 +        in("rsi") len,
 +        in("rdx") 0usize,

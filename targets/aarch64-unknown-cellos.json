@@ -30,5 +30,6 @@
   "stack-probes": {
     "kind": "inline"
   },
-  "target-pointer-width": 64
+  "target-pointer-width": 64,
+  "tls-model": "local-exec"
 }

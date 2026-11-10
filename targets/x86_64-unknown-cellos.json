@@ -21,5 +21,6 @@
   "panic-strategy": "abort",
   "relocation-model": "pic",
   "rustc-abi": "softfloat",
-  "target-pointer-width": 64
+  "target-pointer-width": 64,
+  "tls-model": "local-exec"
 }

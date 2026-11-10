@@ -214,5 +214,15 @@ int cellos_pthread_witness(void) {
     if (pthread_key_delete(test_key) != 0) {
         return 66;
     }
+    /* The recreated key reuses the deleted index; main's stale 0x1234 must not show. */
+    if (pthread_key_create(&test_key, 0) != 0) {
+        return 67;
+    }
+    if (pthread_getspecific(test_key) != 0) {
+        return 68;
+    }
+    if (pthread_key_delete(test_key) != 0) {
+        return 69;
+    }
     return 0;
 }

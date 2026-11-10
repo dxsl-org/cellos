@@ -44,6 +44,22 @@ SECTIONS
         *(.sdata .sdata.*)
     }
 
+    /* Thread-local initial image (PT_TLS). One output section keeps the
+     * segment start at __tdata_start: .tdata bytes up to __tdata_end, then
+     * .tbss zeros up to __tbss_end. __tls_align_mark - __tdata_start is the
+     * segment alignment. A runtime that builds per-thread TLS blocks (Rust
+     * std's cellos PAL) reads these; PROVIDE_HIDDEN leaves every other cell's
+     * symbol table untouched, and a cell without TLS gets no section at all. */
+    .tdata : {
+        PROVIDE_HIDDEN(__tdata_start = .);
+        *(.tdata .tdata.*)
+        PROVIDE_HIDDEN(__tdata_end = .);
+        *(.tbss .tbss.*)
+        *(.tcommon)
+        PROVIDE_HIDDEN(__tbss_end = .);
+        PROVIDE_HIDDEN(__tls_align_mark = __tdata_start + ALIGNOF(.tdata));
+    }
+
     .bss : ALIGN(4096) {
         __bss_start = .;
         *(.bss .bss.*)
