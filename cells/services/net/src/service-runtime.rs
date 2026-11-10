@@ -617,6 +617,86 @@ fn release_owner(
     }
 }
 
+/// Replace the interface's IPv4 address (DHCP and link-local share one slot).
+#[cfg(all(target_os = "none", not(feature = "hypervisor-bridge")))]
+fn set_ipv4(iface: &mut Interface, cidr: IpCidr) {
+    iface.update_ip_addrs(|addrs| {
+        if let Some(slot) = addrs.iter_mut().find(|a| matches!(a, IpCidr::Ipv4(_))) {
+            *slot = cidr;
+        } else {
+            let _ = addrs.push(cidr);
+        }
+    });
+}
+
+/// Apply one RFC 3927 engine step. The address is configured at the claim so
+/// smoltcp answers ARP for it while the announcements go out; `local_ip` (what
+/// `ifconfig` reports) follows at the bind.
+#[cfg(all(target_os = "none", not(feature = "hypervisor-bridge")))]
+fn apply_link_local(
+    event: crate::link_local::Event,
+    iface: &mut Interface,
+    device: &mut VirtioNetDevice,
+    local_ip: &mut [u8; 4],
+) {
+    use crate::arp::mac_text;
+    use crate::link_local::{Event, PeerKind};
+    let line = match event {
+        Event::Send(packet) => {
+            // A full TX queue loses this frame only: probes and announcements
+            // repeat, and a rival that keeps claiming triggers the next defense.
+            let _ = device.send_frame(&packet.encode_frame());
+            return;
+        }
+        Event::Probing { ip, attempt } => alloc::format!(
+            "[net] link-local: probing {} (candidate {attempt})",
+            dotted_ipv4(ip)
+        ),
+        Event::Claim(ip) => {
+            let [a, b, c, d] = ip;
+            set_ipv4(iface, IpCidr::new(IpAddress::v4(a, b, c, d), 16));
+            alloc::format!("[net] link-local: announcing {}", dotted_ipv4(ip))
+        }
+        Event::Bound(ip) => {
+            *local_ip = ip;
+            alloc::format!(
+                "[net] IP address (IPv4 Link-Local RFC 3927): {}",
+                dotted_ipv4(ip)
+            )
+        }
+        Event::Conflict { ip, mac } => alloc::format!(
+            "[net] link-local: conflict on {} with {}; choosing another address",
+            dotted_ipv4(ip),
+            mac_text(mac)
+        ),
+        Event::Defended { ip, mac } => alloc::format!(
+            "[net] link-local: defended {} against {}",
+            dotted_ipv4(ip),
+            mac_text(mac)
+        ),
+        Event::Release { ip, mac } => {
+            set_ipv4(iface, IpCidr::new(IpAddress::v4(0, 0, 0, 0), 0));
+            *local_ip = [0; 4];
+            alloc::format!(
+                "[net] link-local: relinquished {} to {}",
+                dotted_ipv4(ip),
+                mac_text(mac)
+            )
+        }
+        Event::Peer { ip, mac, kind } => alloc::format!(
+            "[net] link-local: peer {} at {} ({})",
+            dotted_ipv4(ip),
+            mac_text(mac),
+            match kind {
+                PeerKind::Announce => "announce",
+                PeerKind::Request => "request",
+                PeerKind::Reply => "reply",
+            }
+        ),
+    };
+    println(&line);
+}
+
 #[cfg(target_os = "none")]
 pub(crate) fn run() {
     println("[net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP");
@@ -684,8 +764,10 @@ pub(crate) fn run() {
     let mut dhcp_state = DhcpState::Pending;
     #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_start_ticks = sys_get_time();
+    // RFC 3927 claim, started once DHCP has had its head start; dropped when a
+    // lease arrives, because a lease outranks a link-local address.
     #[cfg(not(feature = "hypervisor-bridge"))]
-    let mut link_local_assigned = false;
+    let mut link_local: Option<crate::link_local::LinkLocal> = None;
     let mut buffer = [0u8; IPC_BUF_SIZE];
     #[cfg(not(feature = "hypervisor-bridge"))]
     let mut last_poll_ticks = sys_get_time();
@@ -772,6 +854,9 @@ pub(crate) fn run() {
                 );
                 dhcp_state = lease.state;
                 if dhcp_state == DhcpState::Acquired {
+                    // The lease has just overwritten the IPv4 slot, claimed
+                    // link-local address included.
+                    link_local = None;
                     if let Some(IpCidr::Ipv4(cidr)) = iface
                         .ip_addrs()
                         .iter()
@@ -783,35 +868,14 @@ pub(crate) fn run() {
                             dotted_ipv4(local_ip)
                         ));
                     }
-                } else if !link_local_assigned
+                } else if link_local.is_none()
                     && sys_get_time().wrapping_sub(dhcp_start_ticks) >= 4_000 * MTIME_TICKS_PER_MS
                 {
                     let HardwareAddress::Ethernet(addr) = iface.hardware_addr();
-                    let active_mac = addr.0;
-                    let link_local = [169, 254, active_mac[4], active_mac[5]];
-                    iface.update_ip_addrs(|addrs| {
-                        let cidr = IpCidr::new(
-                            IpAddress::v4(
-                                link_local[0],
-                                link_local[1],
-                                link_local[2],
-                                link_local[3],
-                            ),
-                            16,
-                        );
-                        if let Some(slot) = addrs.iter_mut().find(|a| matches!(a, IpCidr::Ipv4(_)))
-                        {
-                            *slot = cidr;
-                        } else {
-                            let _ = addrs.push(cidr);
-                        }
-                    });
-                    local_ip.copy_from_slice(&link_local);
-                    println(&alloc::format!(
-                        "[net] IP address (IPv4 Link-Local RFC 3927): {}",
-                        dotted_ipv4(local_ip)
+                    link_local = Some(crate::link_local::LinkLocal::new(
+                        addr.0,
+                        sys_get_time() / MTIME_TICKS_PER_MS,
                     ));
-                    link_local_assigned = true;
                 }
                 // The lease names the resolver to use from here on (option 6);
                 // without it the DNS socket keeps SLIRP's built-in default.
@@ -821,6 +885,21 @@ pub(crate) fn run() {
                         "[net] DNS server: {}",
                         crate::service_runtime::dotted_ipv4(server)
                     ));
+                }
+            }
+
+            // The ARP tap is drained every turn so it never holds stale
+            // packets; they feed the claim while one runs.
+            let now_ms = sys_get_time() / MTIME_TICKS_PER_MS;
+            while let Some(packet) = device.take_arp() {
+                if let Some(engine) = link_local.as_mut() {
+                    engine.on_arp(packet, now_ms);
+                }
+            }
+            if let Some(engine) = link_local.as_mut() {
+                engine.poll(now_ms);
+                while let Some(event) = engine.next_event() {
+                    apply_link_local(event, &mut iface, &mut device, &mut local_ip);
                 }
             }
 
@@ -959,31 +1038,35 @@ pub(crate) fn run() {
                     // sequential IPC bursts then avoid one timer quantum per call.
                     sys_yield();
                 } else {
-                    let next_poll = iface.poll_at(now_instant(), &sockets);
-                    let wait_ticks = match next_poll {
-                        Some(at) => {
-                            let now = now_instant();
-                            if at <= now {
-                                1
-                            } else {
-                                let diff_ms = (at - now).total_millis();
-                                (diff_ms / SCHEDULER_TICK_MS)
-                                    .clamp(1, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS)
-                            }
-                        }
+                    let now = now_instant();
+                    let wait_ticks = match iface.poll_at(now, &sockets) {
+                        Some(at) if at > now => (at - now)
+                            .total_millis()
+                            .div_ceil(SCHEDULER_TICK_MS)
+                            .clamp(1, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS),
+                        Some(_) => 1,
                         None => NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
                     };
                     #[cfg(feature = "ipc-wake-oracle")]
                     let wait_started_ticks = sys_get_time();
                     #[cfg(feature = "ipc-wake-oracle")]
                     let completion = match sys_wait_completion_detailed(NET_RX, wait_ticks) {
-                        WaitCompletionResult::NoRecord => {
+                        // The proof ceiling assumes the full maintenance
+                        // deadline: a shorter smoltcp deadline returns below it
+                        // with no IPC behind the wake, which would read as PASS.
+                        WaitCompletionResult::NoRecord
+                            if wait_ticks == NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS =>
+                        {
                             idle_ipc_wake_oracle.arm(
                                 wait_started_ticks,
                                 sys_get_time().wrapping_sub(wait_started_ticks),
                                 SMOLTCP_MAINTENANCE_TICKS,
                                 IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
                             );
+                            None
+                        }
+                        WaitCompletionResult::NoRecord => {
+                            idle_ipc_wake_oracle.clear();
                             None
                         }
                         WaitCompletionResult::Completion(completion) => {

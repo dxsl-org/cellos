@@ -15,7 +15,6 @@ use smoltcp::{
 };
 
 /// State of the DHCP boot sequence.
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum DhcpState {
     /// Awaiting DHCP ACK.
@@ -28,7 +27,6 @@ pub enum DhcpState {
 
 /// Outcome of one DHCP poll.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct DhcpPoll {
     pub state: DhcpState,
     /// Option 6 from the lease, when the server sent one. The caller adopts it
@@ -37,7 +35,6 @@ pub struct DhcpPoll {
 }
 
 /// Add a `Dhcpv4Socket` to `sockets` and return its handle.
-#[allow(dead_code)]
 pub fn add_dhcp_socket(sockets: &mut SocketSet<'_>) -> smoltcp::iface::SocketHandle {
     sockets.add(dhcpv4::Socket::new())
 }
@@ -45,7 +42,7 @@ pub fn add_dhcp_socket(sockets: &mut SocketSet<'_>) -> smoltcp::iface::SocketHan
 /// Poll the DHCP socket and apply a lease when one arrives.
 ///
 /// Returns the state-machine step plus the DNS server the lease carried, so a
-#[allow(dead_code)]
+/// lease that names its own resolver overrides the built-in default.
 pub fn poll_dhcp(
     handle: smoltcp::iface::SocketHandle,
     iface: &mut Interface,

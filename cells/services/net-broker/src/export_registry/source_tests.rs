@@ -70,6 +70,29 @@ fn source_flow_reports_clean_absent_and_exact_listing_match() {
 }
 
 #[test]
+fn source_flow_matches_the_vfs_typed_listing_format() {
+    let listed = load_remote_exports(&mut FakeSource {
+        listing: Ok(b"f:cluster.cfg\nf:c2c-exports.cfg\n".to_vec()),
+        stat: Ok((valid_bytes().len() as u64, false)),
+        read: Ok(valid_bytes()),
+    });
+    let prefixed_other = load_remote_exports(&mut FakeSource {
+        listing: Ok(b"f:prefix-c2c-exports.cfg\n".to_vec()),
+        stat: Ok((0, false)),
+        read: Ok(valid_bytes()),
+    });
+
+    assert_eq!(
+        listed.disabled_reason(),
+        RemoteDisabledReason::NoSecureIdentity
+    );
+    assert_eq!(
+        prefixed_other.disabled_reason(),
+        RemoteDisabledReason::RegistryAbsent
+    );
+}
+
+#[test]
 fn source_flow_rejects_prefix_and_suffix_listing_matches() {
     let prefix = load_remote_exports(&mut FakeSource {
         listing: Ok(b"prefix-c2c-exports.cfg\n".to_vec()),

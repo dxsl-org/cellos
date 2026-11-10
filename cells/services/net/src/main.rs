@@ -59,6 +59,9 @@ api::declare_syscalls![
     CancelCellOwnerWatch,
 ];
 
+#[cfg(not(feature = "hypervisor-bridge"))]
+mod arp;
+#[cfg(not(feature = "hypervisor-bridge"))]
 mod dhcp;
 mod dns;
 mod handlers;
@@ -66,6 +69,8 @@ mod handlers;
 #[path = "idle-ipc-wake-oracle.rs"]
 mod idle_ipc_wake_oracle;
 mod interface;
+#[cfg(not(feature = "hypervisor-bridge"))]
+mod link_local;
 mod rights;
 #[path = "service-runtime.rs"]
 mod service_runtime;

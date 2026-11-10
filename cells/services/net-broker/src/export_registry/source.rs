@@ -40,8 +40,14 @@ pub(crate) fn load_remote_exports<S: RegistrySource>(source: &mut S) -> RemoteEx
     RemoteExports::from_registry(registry)
 }
 
+/// VFS `ListDir` names entries `f:<name>` / `d:<name>`; a directory is kept
+/// as "present" so `stat` reports it invalid instead of silently absent.
 fn listing_has_registry_entry(listing: &[u8]) -> bool {
-    listing
-        .split(|&b| b == b'\n')
-        .any(|entry| entry == EXPORT_REGISTRY_BASENAME)
+    listing.split(|&b| b == b'\n').any(|entry| {
+        let name = entry
+            .strip_prefix(b"f:")
+            .or_else(|| entry.strip_prefix(b"d:"))
+            .unwrap_or(entry);
+        name == EXPORT_REGISTRY_BASENAME
+    })
 }

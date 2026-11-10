@@ -1,5 +1,4 @@
 use crate::beacon::{self, BeaconChannel, BeaconPlain, PeerTable};
-extern crate alloc;
 use crate::rng::BrokerRng;
 use crate::transport::StaticKeypair;
 use api::cluster::ClusterId;
@@ -46,23 +45,35 @@ impl RuntimeState {
         }
     }
 }
+const EPOCH_DIR: &str = "/srv/net-broker";
 const EPOCH_FILE: &str = "/srv/net-broker/boot_epoch.bin";
 
-fn load_or_update_boot_epoch() -> Option<u64> {
-    let now_ms = sys_get_time_ms().unwrap_or(1);
+/// A boot epoch strictly above the persisted one, so peers' replay windows
+/// accept this boot's beacons even though the uptime clock restarted.
+fn load_or_update_boot_epoch(now_ms: u64) -> u64 {
     let mut vfs = ostd::clients::VfsClient::new();
-    let stored_epoch = if let Ok(bytes) = vfs.read_file_bounded(EPOCH_FILE, 8) {
-        if bytes.len() == 8 {
-            u64::from_le_bytes(bytes.try_into().unwrap())
-        } else {
-            0
+    let stored_epoch = match vfs.read_file_bounded(EPOCH_FILE, 8) {
+        Ok(bytes) => <[u8; 8]>::try_from(bytes.as_slice()).map_or(0, u64::from_le_bytes),
+        // Larger than an epoch: corrupt, so it is replaced like a short file.
+        Err(ostd::ViError::OutOfMemory) => 0,
+        // Present but unreadable: overwriting it with an uptime-based value
+        // could move the persisted epoch backwards for every later boot.
+        Err(_) if vfs.stat(EPOCH_FILE).is_ok() => {
+            ostd::io::println("[net-broker] boot epoch unreadable; not persisting this boot");
+            return now_ms;
         }
-    } else {
-        0
+        Err(_) => 0,
     };
     let boot_epoch = now_ms.max(stored_epoch.saturating_add(1));
-    let _ = vfs.write_file(EPOCH_FILE, &boot_epoch.to_le_bytes());
-    Some(boot_epoch)
+    // The directory usually exists already; a real failure surfaces in the write.
+    let _ = vfs.mkdir(EPOCH_DIR);
+    if vfs
+        .write_file(EPOCH_FILE, &boot_epoch.to_le_bytes())
+        .is_err()
+    {
+        ostd::io::println("[net-broker] boot epoch not persisted; a reboot may reuse it");
+    }
+    boot_epoch
 }
 
 pub struct BrokerNetworkState {
@@ -90,7 +101,8 @@ impl BrokerNetworkState {
         let gossip_key = beacon::derive_gossip_key(k1);
         let cluster_id = ClusterId::from_name("robots").0;
         let machine_id = beacon::derive_machine_id(&identity.node_id);
-        let boot_epoch = load_or_update_boot_epoch()?;
+        let now_ms = sys_get_time_ms()?;
+        let boot_epoch = load_or_update_boot_epoch(now_ms);
         let mut net = NetRef::new();
         let channel = BeaconChannel::init(&mut net)?;
         Some(Self {
@@ -102,7 +114,8 @@ impl BrokerNetworkState {
             machine_id,
             boot_epoch,
             beacon_counter: 0,
-            next_beacon_at: boot_epoch,
+            // Due at once: the epoch can lie far beyond this boot's uptime clock.
+            next_beacon_at: now_ms,
             channel,
             net,
             peers: PeerTable::new(),
@@ -139,13 +152,11 @@ impl BrokerNetworkState {
         let Some(plain) = beacon::decrypt_beacon(&self.gossip_key, &frame) else {
             return true;
         };
-        if self.accepts_beacon(&plain) {
-            if self.peers.update(&plain) {
-                ostd::io::println(&alloc::format!(
-                    "[net-broker] discovered peer machine_id=0x{:016x}",
-                    plain.machine_id
-                ));
-            }
+        if self.accepts_beacon(&plain) && self.peers.update(&plain) {
+            ostd::io::println(&alloc::format!(
+                "[net-broker] discovered peer machine_id=0x{:016x}",
+                plain.machine_id
+            ));
         }
         true
     }

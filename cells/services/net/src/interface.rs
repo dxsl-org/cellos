@@ -31,6 +31,11 @@ const DRV_ACCEPT_TIMEOUT_TICKS: u64 = 20;
 const DRIVER_TICKS_PER_SCHEDULER_TICK: u64 = 100_000;
 const TX_QUEUE_LIMIT: usize = 32;
 const RX_QUEUE_LIMIT: usize = 32;
+/// ARP packets held for the link-local engine between loop turns. Probing
+/// traffic is a handful of frames; a flood past this bound is dropped from the
+/// tap only, never from smoltcp's own RX path.
+#[cfg(not(feature = "hypervisor-bridge"))]
+const ARP_TAP_LIMIT: usize = 16;
 
 /// Attempts a frame gets after the driver refuses it (`status != 0`).
 ///
@@ -285,10 +290,12 @@ mod tx_queue_retry_tests {
     }
 }
 
-/// smoltcp device with a bounded local TX queue and one async driver command.
-/// A smoltcp transmit token commits to local queue admission, not peer receipt.
+/// Recycled frame buffers kept for reuse; bounds the pool's memory to a few
+/// dozen MTU-sized frames.
 const FRAME_POOL_CAPACITY: usize = 32;
 
+/// smoltcp device with a bounded local TX queue and one async driver command.
+/// A smoltcp transmit token commits to local queue admission, not peer receipt.
 pub struct VirtioNetDevice {
     rx_queue: VecDeque<Box<[u8]>>,
     guest_rx_queue: VecDeque<Box<[u8]>>,
@@ -298,6 +305,9 @@ pub struct VirtioNetDevice {
     l2_replies: VecDeque<(ReplyTo, u8, u64)>,
     tx_burst: u8,
     frame_pool: alloc::vec::Vec<Box<[u8]>>,
+    /// ARP seen on RX, for the RFC 3927 link-local engine.
+    #[cfg(not(feature = "hypervisor-bridge"))]
+    arp_rx: VecDeque<crate::arp::ArpPacket>,
 }
 
 struct OutboundFrame {
@@ -325,29 +335,52 @@ impl VirtioNetDevice {
             l2_replies: VecDeque::new(),
             tx_burst: 0,
             frame_pool: alloc::vec::Vec::new(),
+            #[cfg(not(feature = "hypervisor-bridge"))]
+            arp_rx: VecDeque::new(),
         }
     }
 
-    pub fn alloc_frame(&mut self, len: usize) -> Box<[u8]> {
-        if let Some(buf) = self.frame_pool.pop() {
-            if buf.len() == len {
-                return buf;
+    /// A recycled buffer of exactly `len` bytes. Buffers of other lengths stay
+    /// pooled: frame sizes vary, and dropping a mismatch would empty the pool.
+    fn take_pooled(&mut self, len: usize) -> Option<Box<[u8]>> {
+        let index = self.frame_pool.iter().rposition(|buf| buf.len() == len)?;
+        Some(self.frame_pool.swap_remove(index))
+    }
+
+    /// A zeroed TX buffer. smoltcp is not obliged to write every byte of the
+    /// frame it emits, and a recycled buffer still holds an earlier frame that
+    /// must not leak onto the wire.
+    fn alloc_frame(&mut self, len: usize) -> Box<[u8]> {
+        match self.take_pooled(len) {
+            Some(mut buf) => {
+                buf.fill(0);
+                buf
             }
-        }
-        alloc::vec![0u8; len].into_boxed_slice()
-    }
-
-    pub fn recycle_frame(&mut self, frame: Box<[u8]>) {
-        if self.frame_pool.len() < FRAME_POOL_CAPACITY {
-            self.frame_pool.push(frame);
+            None => alloc::vec![0u8; len].into_boxed_slice(),
         }
     }
 
+    /// Return a sent frame's buffer to the pool, evicting an old buffer when
+    /// full so the pool follows the current frame sizes.
+    fn recycle_frame(&mut self, frame: Box<[u8]>) {
+        if self.frame_pool.len() >= FRAME_POOL_CAPACITY {
+            self.frame_pool.remove(0);
+        }
+        self.frame_pool.push(frame);
+    }
+
+    /// Copy a received frame into a pooled buffer (fully overwritten, so no
+    /// zeroing), or a fresh exact-size allocation.
     fn clone_into_pooled_frame(&mut self, frame: &[u8]) -> Box<[u8]> {
-        let mut buf = self.alloc_frame(frame.len());
-        buf.copy_from_slice(frame);
-        buf
+        match self.take_pooled(frame.len()) {
+            Some(mut buf) => {
+                buf.copy_from_slice(frame);
+                buf
+            }
+            None => Box::from(frame),
+        }
     }
+
     /// Enqueue an inbound frame received from a NIC provider.
     // reason: pump_rx()/pump_rx_split() currently pull frames themselves via
     // the Driver Cell or disabled legacy syscalls; push_rx is the counterpart
@@ -356,6 +389,28 @@ impl VirtioNetDevice {
     pub fn push_rx(&mut self, frame: Box<[u8]>) {
         self.rx_queue.push_back(frame);
     }
+
+    /// Next ARP packet tapped off the RX path. smoltcp still receives the
+    /// frame; the tap exists because it neither exposes ARP nor accepts the
+    /// sender-IP-0 probes RFC 3927 conflict detection depends on.
+    #[cfg(not(feature = "hypervisor-bridge"))]
+    pub(crate) fn take_arp(&mut self) -> Option<crate::arp::ArpPacket> {
+        self.arp_rx.pop_front()
+    }
+
+    /// Queue a frame built outside smoltcp on the same TX path smoltcp uses.
+    /// `false` when the queue is full; the caller's protocol retries.
+    #[cfg(not(feature = "hypervisor-bridge"))]
+    pub(crate) fn send_frame(&mut self, frame: &[u8]) -> bool {
+        if self.tx_queue.len() >= TX_QUEUE_LIMIT {
+            return false;
+        }
+        let mut buf = self.alloc_frame(frame.len());
+        buf.copy_from_slice(frame);
+        self.queue_tx(buf);
+        true
+    }
+
     /// The station address queried from the bound NIC driver, if any.
     #[allow(dead_code)]
     pub fn driver_mac(&self) -> Option<[u8; 6]> {
@@ -668,6 +723,12 @@ impl VirtioNetDevice {
                 "[net-bridge] first e1000 RX len={}",
                 frame.len()
             ));
+        }
+        #[cfg(not(feature = "hypervisor-bridge"))]
+        if self.arp_rx.len() < ARP_TAP_LIMIT {
+            if let Some(packet) = crate::arp::ArpPacket::parse_frame(frame) {
+                self.arp_rx.push_back(packet);
+            }
         }
         match self.guest_mac {
             Some(mac) if frame.len() >= 6 && frame[..6] == mac => {
