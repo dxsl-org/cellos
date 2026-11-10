@@ -74,8 +74,8 @@ cells built+signed ──► target/embed/<arch>-<profile>/{init,kernel_fs.img,m
 
 ## Todo List
 
-- [ ] Explicit embed dir + manifest check (manifest check + deprecation warning done; hard error waits for a CI cycle)
-- [ ] CI switched, chain removed
+- [x] Explicit embed dir + manifest check (manifest check, explicit dirs in every CI kernel build; fallback kept as a warning — owner decision)
+- [x] CI switched (no CI job reads a tracked embed binary); chain kept as a warning for dev scripts — owner decision 2026-11-10
 - [ ] Binaries untracked
 - [x] Disk layout generated
 - [x] One recipe per arch — moved to [Phase 03b](phase-03b-single-image-recipe.md) (owner decision 2026-11-10)
@@ -83,7 +83,7 @@ cells built+signed ──► target/embed/<arch>-<profile>/{init,kernel_fs.img,m
 
 ## Success Criteria
 
-- [ ] Building the kernel without `CELLOS_EMBED_DIR` and without `compile-only` fails with a message naming the variable.
+- [x] Building the kernel without `CELLOS_EMBED_DIR` and without `compile-only` fails with a message naming the variable. — replaced by owner decision: a warning naming `EMBEDDED_OVERRIDE` (dev scripts keep the fallback)
 - [x] A tampered `kernel_fs.img` (one byte) fails the build on manifest mismatch.
 - [x] Old and new RV64 recipes produce identical per-partition SHA-256 for the same inputs. — moved to Phase 03b
 - [ ] Full suite at this checkpoint: all `pr`-tier lanes in `lanes.toml` green; `x86-c2c` job green; evidence in `reports/phase-03-evidence.md`.
@@ -130,6 +130,15 @@ Phase 04 adds a release-posture boot lane on top of this recipe.
   Why: owner answers `split-later`, `regenerate` (2026-11-10).
   Impact: new phase file; generated metrics file (kernel nLOC 87,669 → 91,272).
   Revert: merge 03b back; regenerate.
+
+- Decision (owner, 2026-11-10): the fallback chain stays a warning, not a hard error; untrack waits for a pushed CI cycle; `build/` evidence stays tracked until Phase 19.
+  Why: 35 dev scripts use the fallback and cannot all be run here; after untracking the fallback can only find locally generated images. `build/` files are cited provenance.
+  Impact: success criterion 1 replaced; untrack scope = embedded binaries, `gh_2.55.0_linux_amd64/`, `limine/` intermediates.
+  Revert: n/a.
+- Deviation: `build` job aarch64/x86_64 rows became `compile-only` and stopped uploading kernel ELFs.
+  Why: those rows embedded a stub or a tracked image; no job downloads `kernel-aarch64`/`kernel-x86_64`.
+  Impact: `ci.yml` build job.
+  Revert: restore the two upload steps and drop the feature.
 
 ## Evidence
 

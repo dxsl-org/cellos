@@ -165,7 +165,25 @@ fn main() {
     // (e.g. src/embedded-test-hooks/) without touching committed source files.
     let arch_embedded = PathBuf::from(format!("src/embedded-{}", target_arch));
     println!("cargo:rerun-if-env-changed=EMBEDDED_OVERRIDE");
-    let embedded_src = if let Ok(ov) = std::env::var("EMBEDDED_OVERRIDE") {
+    // An empty value means "not set" (CI matrices pass '' for rows without one).
+    let embed_override = std::env::var("EMBEDDED_OVERRIDE")
+        .ok()
+        .filter(|v| !v.is_empty());
+    let compile_only = std::env::var_os("CARGO_FEATURE_COMPILE_ONLY").is_some();
+    if compile_only && embed_override.is_none() && !p01 && !phase02_profile {
+        // Build-only kernel (clippy, host tests, cargo check): it needs no image,
+        // so it reads nothing from the tree. Empty `init` and VIFS1 stubs make
+        // the include_bytes! sites resolve; such a kernel cannot boot.
+        for stub in ["init", "kernel_fs.img"] {
+            fs::write(embedded_out.join(stub), []).expect("write compile-only stub");
+        }
+        println!(
+            "cargo:rustc-env=EMBEDDED_OUT_DIR={}",
+            embedded_out.display()
+        );
+        return;
+    }
+    let embedded_src = if let Some(ov) = embed_override.clone() {
         // Build scripts run with CWD = kernel/, but callers (CI scripts,
         // run.ps1) usually pass a workspace-root-relative path like
         // "kernel/src/embedded-test-hooks" — try both. A misresolved override
@@ -195,19 +213,18 @@ fn main() {
         } else {
             PathBuf::from("src/embedded")
         };
-        if std::env::var_os("CARGO_FEATURE_COMPILE_ONLY").is_none() {
-            println!(
-                "cargo:warning=EMBEDDED_OVERRIDE not set: embedding the in-tree fallback {} \
-                 (deprecated; pass EMBEDDED_OVERRIDE=<dir with init + kernel_fs.img>)",
-                fallback.display()
-            );
-        }
+        println!(
+            "cargo:warning=EMBEDDED_OVERRIDE not set: embedding the in-tree fallback {} \
+             (deprecated; pass EMBEDDED_OVERRIDE=<dir with init + kernel_fs.img>, or \
+             --features compile-only for a build that never boots)",
+            fallback.display()
+        );
         fallback
     };
     verify_embed_manifest(&embedded_src);
     if phase02_profile {
         assert!(
-            std::env::var_os("EMBEDDED_OVERRIDE").is_some(),
+            embed_override.is_some(),
             "Phase02 requires an explicit private embedded directory"
         );
         let private =

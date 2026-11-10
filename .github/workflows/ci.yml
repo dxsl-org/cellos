@@ -306,16 +306,22 @@ jobs:
         if: matrix.short == 'rv64'
         run: bash scripts/build-boot-ramdisk-ci.sh
 
+      # rv64 embeds the ramdisk and init the step above just built; the aarch64 and
+      # x86_64 rows only prove the kernel compiles (their boot jobs build their own
+      # images), so they are compile-only kernels and are not published.
       - name: Build kernel (release)
         # Kernel codegen flags come from the workflow-level CARGO_TARGET_*
         # mirrors of .cargo/config.toml — do NOT set RUSTFLAGS here, the env
         # var would REPLACE those flags and break the link.
+        env:
+          EMBEDDED_OVERRIDE: ${{ matrix.short == 'rv64' && 'kernel/src/embedded' || '' }}
         run: >
           cargo build
           --release
           -p cellos-kernel
           --target ${{ matrix.target }}
           -Z build-std=core,alloc
+          ${{ matrix.short != 'rv64' && '--features compile-only' || '' }}
 
       - name: Build cells + libs (release)
         env:
@@ -371,22 +377,6 @@ jobs:
         with:
           name: kernel-rv64
           path: target/riscv64gc-unknown-none-elf/release/cellos-kernel
-          if-no-files-found: error
-
-      - name: Upload aarch64 kernel ELF
-        if: matrix.short == 'aarch64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: kernel-aarch64
-          path: target/aarch64-unknown-none-softfloat/release/cellos-kernel
-          if-no-files-found: error
-
-      - name: Upload x86_64 kernel ELF
-        if: matrix.short == 'x86_64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: kernel-x86_64
-          path: target/x86_64-unknown-none/release/cellos-kernel
           if-no-files-found: error
 
   qemu-boot:
@@ -702,6 +692,8 @@ jobs:
           cp "$REL/app-init" kernel/src/embedded-aarch64/init
 
       - name: Build aarch64 kernel
+        env:
+          EMBEDDED_OVERRIDE: kernel/src/embedded-aarch64
         run: >
           cargo build --release
           -p cellos-kernel
@@ -1045,7 +1037,8 @@ jobs:
         # admission is DISABLED, as the boot test below requires.
         run: |
           KERNEL_FEATURES="$(python3 -c 'import json; print(",".join(json.load(open("kernel/src/embedded-x86_64/manifest.json"))["kernel_features"]))')"
-          cargo build --release -p cellos-kernel --target x86_64-unknown-none \
+          EMBEDDED_OVERRIDE=kernel/src/embedded-x86_64 \
+            cargo build --release -p cellos-kernel --target x86_64-unknown-none \
             -Z build-std=core,alloc --features "$KERNEL_FEATURES"
 
       - name: Build Limine ISO
@@ -2093,7 +2086,7 @@ jobs:
             --target x86_64-unknown-none \
             -Z build-std=core,alloc \
             --no-default-features \
-            --features production-relay-image \
+            --features production-relay-image,compile-only \
             -p cellos-kernel
 
       - name: Host tests (ssh-dev-custody, ssh-dev-persist)

@@ -28,3 +28,28 @@
 ## Pre-existing failure observed (not caused here)
 
 `python3 scripts/generate-code-metrics.py --check` fails at `d32492e15` with the working tree stashed ("stale generated metrics"); the lint job's metrics step is already red at HEAD.
+
+## Continuation 2026-11-10 — CI no longer reads tracked embed binaries
+
+Changes (working tree):
+- `kernel/build.rs`: `compile-only` without `EMBEDDED_OVERRIDE` reads nothing from the tree (empty `init` + VIFS1 stubs); an empty `EMBEDDED_OVERRIDE` counts as unset.
+- `ci.yml`: `build` matrix — rv64 passes `EMBEDDED_OVERRIDE=kernel/src/embedded` (the ramdisk/init the job just built); aarch64/x86_64 rows are `compile-only` and no longer upload stub kernels (nothing downloaded them). `qemu-aarch64-boot` and `qemu-x86_64-boot` pass the directory they just assembled. The KSSH posture `cargo check` is `compile-only`. Every other kernel build in `ci.yml` already set `EMBEDDED_OVERRIDE` or used an isolated script.
+
+Untrack simulation: every tracked `kernel/src/embedded*/{init,kernel_fs.img}` moved out of the tree, then (throwaway `/tmp/s1-lanes/untrack-sim.sh`):
+
+| CI step reproduced | Result | s |
+|---|---|---|
+| rv64: `build-boot-ramdisk-ci.sh` | rc 0 | 28 |
+| rv64 kernel, `EMBEDDED_OVERRIDE=kernel/src/embedded` | rc 0 | 23 |
+| rv64 `qemu-boot-test.sh` | PASS "FAT16 mounted — kernel booted" | 55 |
+| x86: `assemble-x86-image.py --profile headless --out-dir kernel/src/embedded-x86_64` | rc 0 | 25 |
+| x86 kernel, manifest features, explicit override | rc 0 | 29 |
+| `make-iso-ci.sh` (incl. `check_default_kernel.py`) | rc 0 | <1 |
+| `qemu-x86_64-test.sh` | PASS "x86_64 shell prompt reached" | 90 |
+| x86 kernel `compile-only`, `EMBEDDED_OVERRIDE=` (empty) | Finished | 29 |
+| KSSH posture `cargo check … production-relay-image,compile-only` | Finished | 12 |
+| kernel host tests `--features compile-only` | 600 passed | — |
+
+Tracked binaries restored afterwards. Not reproduced locally: the aarch64 boot job (its inline step assembles `kernel/src/embedded-aarch64` from source and copies `app-init`, so it does not read a tracked image), the hypervisor jobs (scripts set `EMBEDDED_OVERRIDE` already), and the `boot-suite` `gen_disk.ps1` path (writes `kernel/src/embedded` before its kernel build).
+
+Dev-only scripts still using the fallback chain (35 files, e.g. `run-x86.ps1`, `run.ps1`, `gen_disk.ps1`, `scripts/qemu-*-test.sh` RV64 lanes) keep working: after untracking, the fallback can only find images those scripts generated locally, and the build warns.
