@@ -37,6 +37,17 @@ impl PageFlags {
     /// never consulted by `translate`/`unmap` (which mask the output address).
     pub const NON_GLOBAL: usize = 1 << 9;
 
+    /// AArch64 BTI guarded page: the stage-1 leaf carries `GP` (bit 50), so an
+    /// indirect branch into it must land on a `BTI` landing pad (FEAT_BTI).
+    ///
+    /// Only meaningful together with `EXECUTE`, and only set by the loader for
+    /// executable pages of an image whose `GNU_PROPERTY_AARCH64_FEATURE_1_AND`
+    /// note declares BTI, on a CPU that implements FEAT_BTI (bit 50 is RES0
+    /// without it). x86_64 ignores it (its leaf translator composes only
+    /// `PTE_P`/`PTE_RW`/`PTE_US`/`PTE_NX`); RISC-V clears it, because bit 10
+    /// of an Sv39 leaf is the low bit of the PPN.
+    pub const GUARDED: usize = 1 << 10;
+
     pub const R_W_X: usize = Self::READ | Self::WRITE | Self::EXECUTE;
 
     pub fn from_bits(bits: usize) -> Self {

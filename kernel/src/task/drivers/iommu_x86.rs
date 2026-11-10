@@ -153,6 +153,78 @@ pub fn unit_index_for_bdf(units: &[VtdUnit], bdf: u16, segment: u16) -> Option<u
 }
 
 pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+    publish_for_cell(tid, bdf, phys, |_| true, |slpt| slpt.map_range(phys, size))
+}
+
+/// Map the contiguous frames `[phys, phys + size)` at the export window
+/// `[iova, iova + size)` of Cell `tid`'s domain for `bdf` (ADR-0033 CP1 §5.2,
+/// `MapDmaExport`). `writable` clear publishes `R`-only leaves.
+///
+/// Refused ([`DmaMapResult::Rejected`]) before any change when a leaf in the
+/// window is already present: a window never overwrites an identity or RMRR
+/// translation. Publication and invalidation are exactly `GrantDma`'s.
+pub fn map_window_for_cell(
+    tid: u64,
+    bdf: u32,
+    iova: u64,
+    phys: u64,
+    size: usize,
+    writable: bool,
+) -> DmaMapResult {
+    publish_for_cell(
+        tid,
+        bdf,
+        iova,
+        |slpt| slpt.window_free(iova, size),
+        |slpt| slpt.map_window(iova, phys, size, writable),
+    )
+}
+
+/// Clear export window `[iova, iova + size)` from Cell `tid`'s domain on every
+/// unit and drain that domain's IOTLB (drain-read/drain-write).
+///
+/// Unlike [`unmap_range_for_cell`], the invalidation is issued even when the
+/// leaves are already zero: a retry after a timed-out drain must re-drain, not
+/// conclude "nothing mapped". A unit without a domain for `tid` has nothing to
+/// drain (its teardown was acknowledged, or it never held one). Returns `true`
+/// only when every drain was acknowledged.
+pub fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
+    let units = UNITS.lock();
+    let mut confirmed = true;
+    for u in units.iter() {
+        let domains = u.domains.lock();
+        let Some(domain) = domains.get(&tid) else {
+            continue;
+        };
+        domain.slpt.unmap_range(iova, size);
+        // Publish the zeroed leaves before the invalidation command.
+        fence(Ordering::SeqCst);
+        confirmed &= u.invalidate_iotlb(Scope::Domain(domain.did));
+    }
+    confirmed
+}
+
+/// Whether the unit covering `bdf` (segment in bits 31:16) has DMA
+/// translation enabled.
+pub fn bdf_translating(bdf: u32) -> bool {
+    let (canonical, segment) = split_bdf(bdf);
+    let units = UNITS.lock();
+    unit_index_for_bdf(&units, canonical, segment)
+        .is_some_and(|idx| units[idx].active.load(Ordering::Acquire))
+}
+
+/// Publish leaves into Cell `tid`'s domain for `bdf`: reserve a DID, break
+/// before make on a requester changing domains, run `write` on the domain's
+/// SLPT, then write the context entry and invalidate. `fits` runs first, on an
+/// existing domain only, and refuses before any change. `iova` is reported on
+/// success.
+fn publish_for_cell(
+    tid: u64,
+    bdf: u32,
+    iova: u64,
+    fits: impl Fn(&VtdSlpt) -> bool,
+    write: impl FnOnce(&VtdSlpt),
+) -> DmaMapResult {
     let (canonical, segment) = split_bdf(bdf);
     let bus = (canonical >> 8) as u8;
 
@@ -168,6 +240,13 @@ pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapR
     };
 
     let mut domains = u.domains.lock();
+    if domains.get(&tid).is_some_and(|d| !fits(&d.slpt)) {
+        log::warn!(
+            "[vtd] Cell {} DMA map refused: window already holds a translation",
+            tid
+        );
+        return DmaMapResult::Rejected;
+    }
     // Reserve a bounded DID before any descriptor is touched: exhaustion must
     // refuse the map instead of issuing a colliding DID.
     let new_did = if domains.contains_key(&tid) {
@@ -224,12 +303,13 @@ pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapR
     if domain.bdfs.insert(canonical) {
         apply_rmrr_to_slpt(&domain.slpt, canonical, segment);
     }
-    domain.slpt.map_range(phys, size);
+    write(&domain.slpt);
     let did = domain.did;
+    let slpt_root = domain.slpt.root_phys();
 
     if !owned_here {
         // SAFETY: the slot was cleared and drained above.
-        unsafe { write_ctx_entry(ctx_virt, canonical, domain.slpt.root_phys(), did) };
+        unsafe { write_ctx_entry(ctx_virt, canonical, slpt_root, did) };
         u.sync(slot, 16);
     }
     fence(Ordering::SeqCst);
@@ -241,7 +321,22 @@ pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapR
     if !(context_done && iotlb_done) {
         return DmaMapResult::PublishedUnconfirmed;
     }
-    DmaMapResult::Mapped(phys)
+    // warn, not info: this line is the only record of which requester may DMA
+    // into which domain, and the iommu-dmar-x86 lane checks its `domains=`
+    // count to prove per-Cell domains are live (info-level lines at this site
+    // never reached the serial log on the Tier-3 lane).
+    log::warn!(
+        "[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x} iova={:#x} domains={}",
+        tid,
+        bus,
+        (canonical >> 3) & 0x1f,
+        canonical & 0x7,
+        did,
+        slpt_root,
+        iova,
+        domains.len()
+    );
+    DmaMapResult::Mapped(iova)
 }
 
 /// Clear Cell `tid`'s requester entries on every unit, then invalidate its

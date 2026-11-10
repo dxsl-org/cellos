@@ -1,10 +1,15 @@
 //! AArch64 BTI + PAC-RET Control-Flow Integrity.
 //!
 //! BTI (Branch Target Identification, ARMv8.5) protects forward edges:
-//! every indirect branch must land on a `BTI c` instruction. The compiler
-//! emits a BTI landing pad (GNU note `.note.gnu.property` with BTI feature
-//! bit) when `-C target-feature=+bti` is passed; the hardware enforces it
-//! once BT0/BT1 are set in SCTLR_EL1.
+//! an indirect branch into a *guarded* page (stage-1 descriptor `GP`, bit 50)
+//! must land on a compatible `BTI` instruction, or the PE raises a Branch
+//! Target exception (EC 0x0D). The compiler emits the landing pads and the
+//! `GNU_PROPERTY_AARCH64_FEATURE_1_AND` BTI note with `-Z branch-protection=bti`
+//! (`-mbranch-protection=bti` in C); `+bti` alone only permits the instruction.
+//! Enforcement is therefore per page, not per SCTLR bit: the kernel loader
+//! maps a Cell's executable pages guarded only when its signed image carries
+//! the note and [`detect`] reports FEAT_BTI (kernel `loader::gnu_property`);
+//! every other page is unguarded and runs exactly as without BTI.
 //!
 //! PAC (Pointer Authentication, ARMv8.3) protects backward edges:
 //! return addresses are signed on function entry (PACIASP) and verified on
@@ -19,8 +24,9 @@
 //! - `ID_AA64PFR1_EL1[3:0]`  — BTI:  0 = not impl, ≥1 = BTI
 //! - `ID_AA64ISAR1_EL1[7:4]` — APA:  0 = no PAC, ≥1 = QARMA impl
 //! - `ID_AA64ISAR1_EL1[11:8]`— API:  0 = no PAC, ≥1 = IMPDEF impl
-//! - `SCTLR_EL1[35]` — BT0: BTI enforcement at EL0
-//! - `SCTLR_EL1[36]` — BT1: BTI enforcement at EL1
+//! - `SCTLR_EL1[35]` — BT0: at EL0, PACIASP/PACIBSP are *not* implicit landing
+//!   pads for BTYPE 0b11 (stricter); BTI itself is armed by the page's GP bit
+//! - `SCTLR_EL1[36]` — BT1: the same at EL1
 
 use super::backend::{ArmPlatform, Board};
 

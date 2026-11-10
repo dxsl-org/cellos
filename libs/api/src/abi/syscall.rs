@@ -319,8 +319,8 @@ pub enum ViSyscall {
     GrantShare = 209,
     /// Return the raw pointer to a Grant region the caller has access to.
     /// ABI: a0 = grant_id, a1 = optional `size_out` pointer, a2 =
-    /// `expected_owner_tid` → ptr (usize, same as grant_id for identity-mapped
-    /// SAS) on success.
+    /// `expected_owner_tid`, a3 = `flags` ([`grant_slice`]) → ptr (usize, same
+    /// as grant_id for identity-mapped SAS) on success.
     ///
     /// `size_out` may be null. When non-null it must point to one aligned
     /// `usize` slot fully contained in the caller's own user stack; segment
@@ -332,6 +332,18 @@ pub enum ViSyscall {
     /// registered the Grant returns exactly what an unknown `grant_id` returns
     /// (`usize::MAX`), with no other observable difference; a grantee uses it
     /// to bind a client-named Grant only to that client.
+    ///
+    /// `flags` (approved 2026-11-10): bit 0 [`grant_slice::LEASE`] publishes a
+    /// lease keyed `(caller, owner, grant)` in the same grant-table
+    /// transaction as the lookup and owner check; it requires a nonzero
+    /// `expected_owner_tid`. A second lease on the same key adds a hold. All
+    /// of the caller's leases on that owner end at the caller's next receive
+    /// (any receive form), its next send to the owner (`Send`, `TrySend`,
+    /// `SendGather`, `IpcSubmit`, `Reply`), or its death. Meanwhile the
+    /// owner's `GrantFree`/`GrantUnregister` fails with `PermissionDenied`
+    /// and the owner's death withholds the frames until the lease ends. Bits
+    /// other than 0, `LEASE` with `expected_owner_tid = 0`, and a full lease
+    /// table (64 distinct keys per caller) return `usize::MAX`.
     ///
     /// Returns usize::MAX on permission denied or not found.
     GrantSlice = 210,
@@ -1574,6 +1586,19 @@ impl From<usize> for ViSyscall {
             _ => ViSyscall::Unknown,
         }
     }
+}
+
+/// `GrantSlice` (210) `a3` flag bits (approved 2026-11-10).
+pub mod grant_slice {
+    /// Publish a holder lease keyed `(caller, a2 owner, grant)` with the
+    /// lookup; requires a nonzero `expected_owner_tid`. See
+    /// [`super::ViSyscall::GrantSlice`] for when it ends.
+    pub const LEASE: usize = 1 << 0;
+    /// Every defined bit; any other bit set answers `usize::MAX`.
+    pub const KNOWN_FLAGS: usize = LEASE;
+    /// Distinct `(owner, grant)` leases one holder keeps at once; a new key
+    /// past it answers `usize::MAX`.
+    pub const MAX_LEASES_PER_HOLDER: usize = 64;
 }
 
 /// `SystemPower` (436) actions and error sentinels.

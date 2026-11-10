@@ -120,6 +120,7 @@ fn copy_pinned(
             grant_id: grant,
             size_out_ptr: 0,
             expected_owner_tid: gpu_cell,
+            flags: 0,
         },
     ) == Ok(grant);
     let dst = TaskCopyView::for_task(gpu_cell)

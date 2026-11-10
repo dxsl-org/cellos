@@ -153,6 +153,17 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             net_l2: true,
             ..LEGACY
         },
+        // ADR-0033 CP1 §7 QEMU `edu` lanes, test-hooks images only: the export
+        // holder drives QEMU's `edu` device (PCIe BAR + MSI + export windows);
+        // the client owns Grants and exports them. No production image has them.
+        #[cfg(feature = "test-hooks")]
+        "/bin/edu-holder" => CapSet {
+            pcie_driver: true,
+            mmio_devices: DEV_DISPLAY,
+            ..LEGACY
+        },
+        #[cfg(feature = "test-hooks")]
+        "/bin/export-client" => LEGACY,
         // PCIe driver cells: each claims a BAR/MMIO range and authorises DMA.
         // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
         // to the request before the ceiling intersection.

@@ -5,8 +5,8 @@
 //!
 //! ```text
 //! P1  0x0C  LBA   2,048 + 524,288   FAT32 interop volume (VFS /data today, /mnt/sd later)
-//! P2  0x7F  LBA 526,336 +  33,664   cell bootstrap table + raw ELF blobs
-//! P3  0x7D  LBA 560,000 + 240,000   kernel heap snapshot (Phase 29)
+//! P2  0x7F  LBA 526,336 +  73,664   cell bootstrap table + raw ELF blobs
+//! P3  0x7D  LBA 600,000 + 200,000   kernel heap snapshot (Phase 29)
 //! P4  0x7E  LBA 800,000 + 131,072   littlefs /data (Milestone 2.5 Phase 04)
 //! ```
 //!
@@ -20,12 +20,15 @@
 //! Layout of the cell bootstrap section (inside P2):
 //!
 //! ```text
-//! LBA CELL_TABLE_BASE_LBA + 0   : CellTableHeader  (one sector = 512 bytes)
-//! LBA CELL_TABLE_BASE_LBA + 1   : CellEntry[0..MAX_CELL_ENTRIES]
-//!                                   (one sector per entry, padded to 512 bytes)
-//! LBA CELL_TABLE_BASE_LBA + 1 + MAX_CELL_ENTRIES : raw ELF data, concatenated
-//!                                   (each ELF starts at its entry's `data_lba`)
+//! LBA CELL_TABLE_BASE_LBA + 0         : CellTableHeader  (one sector = 512 bytes)
+//! LBA CELL_TABLE_BASE_LBA + 1         : CellEntry[0..header.count]
+//!                                         (one sector per entry, padded to 512 bytes)
+//! LBA CELL_TABLE_BASE_LBA + 1 + count : raw ELF data, concatenated
+//!                                         (each ELF starts at its entry's `data_lba`)
 //! ```
+//!
+//! `header.count` is bounded by [`MAX_CELL_ENTRIES`]; each entry carries its
+//! own `data_lba`, so the bound is a reader sanity limit, not a layout offset.
 
 // Partition constants live in `api::disk` (the Law-1 contract shared with
 // cells and image tools); re-exported here so kernel code keeps short paths.
@@ -44,7 +47,22 @@ pub const CELL_TABLE_BASE_LBA: u64 = api::disk::PART_CELLTBL_BASE_LBA;
 pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "ViCell_CEL" in ASCII
 
 /// Maximum number of cells that can appear in the bootstrap table.
-pub const MAX_CELL_ENTRIES: usize = 64;
+///
+/// A reader acceptance bound only: entries are addressed by `header.count` and
+/// ELF blobs by each entry's `data_lba`, so raising it changes no on-disk
+/// offset. Must equal `MAX_CELL_ENTRIES` in `tools/write-cell-table.py` and
+/// `tools/add-cell-to-disk.py` (checked by `tools/test_cell_table.py`); a
+/// writer above this bound would build a table the probe rejects whole.
+pub const MAX_CELL_ENTRIES: usize = 128;
+
+/// First LBA past P2: no table sector or ELF blob may reach it (P3 follows).
+pub const CELL_TABLE_END_LBA: u64 = CELL_TABLE_BASE_LBA + PART_CELLTBL_SECTORS;
+
+// The header plus a full entry array must fit inside P2.
+const _: () = assert!((MAX_CELL_ENTRIES as u64) < PART_CELLTBL_SECTORS);
+// P2 and the P6 cell-store are built from the same cell set; raw blobs never
+// take more room than their FAT copies, so a set that fits P6 fits P2.
+const _: () = assert!(MAX_CELL_ENTRIES as u64 + PART_CELLSTORE_SECTORS < PART_CELLTBL_SECTORS);
 
 /// Maximum path length (bytes) for a cell path in the bootstrap table.
 pub const CELL_PATH_LEN: usize = 64;

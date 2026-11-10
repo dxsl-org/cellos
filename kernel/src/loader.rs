@@ -23,6 +23,8 @@ pub mod early;
 pub mod elf;
 pub(crate) mod elf_section;
 pub mod elf_tests;
+/// Forward-edge CFI opt-in (BTI / CET-IBT) from the image's GNU property note.
+pub(crate) mod gnu_property;
 mod governed_spawn;
 #[path = "loader/image-name-section.rs"]
 mod image_name_section;

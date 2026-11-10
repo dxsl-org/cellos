@@ -53,6 +53,14 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
             "init-launch-edge",
             true,
         )),
+        // ADR-0033 CP1 §7 `edu` export lanes (test-hooks images only): init
+        // launches the holder and two clients; each keeps its own boot ceiling.
+        #[cfg(feature = "test-hooks")]
+        "/bin/edu-holder" | "/bin/export-client" => Some(LaunchProfile::new(
+            boot_ceiling::boot_ceiling(target),
+            "init-launch-edge",
+            true,
+        )),
         // Autoload may select applications already reviewed for interactive
         // launch. Reuse their exact ceiling, never init's union of authority;
         // unknown paths still fail closed and lifecycle authority is required.

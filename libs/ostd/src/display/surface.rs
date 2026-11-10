@@ -3,9 +3,7 @@
 use api::display::{compositor_ops, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use types::{ViError, ViResult};
 
-use crate::syscall::{
-    sys_grant_register, sys_grant_share, sys_grant_slice, sys_grant_unregister, sys_send,
-};
+use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice, sys_send};
 
 use super::ipc;
 
@@ -73,15 +71,15 @@ impl ViSurface {
         let reg_id = sys_grant_register(size).ok_or(ViError::OutOfMemory)?;
         sys_grant_share(reg_id, comp_tid, 0 /* ReadOnly */);
         let ptr = sys_grant_slice(reg_id).ok_or_else(|| {
-            sys_grant_unregister(reg_id);
+            ipc::release_grant(reg_id);
             ViError::IO
         })?;
         let cap = ipc::create_surface(comp_tid, width, height, role).inspect_err(|_| {
-            sys_grant_unregister(reg_id);
+            ipc::release_grant(reg_id);
         })?;
         ipc::attach_grant(comp_tid, cap, reg_id, width, height, fmt).inspect_err(|_| {
             let _ = ipc::destroy_surface(comp_tid, cap);
-            sys_grant_unregister(reg_id);
+            ipc::release_grant(reg_id);
         })?;
         Ok(Self {
             comp_tid,

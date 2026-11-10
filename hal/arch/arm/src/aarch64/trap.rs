@@ -71,11 +71,16 @@ pub fn init() {
 }
 
 /// Synchronous trap dispatcher — called from both EL1 and EL2 trampolines.
+///
+/// `lower_kind` is 1 when the exception was taken from a lower EL (an EL0
+/// Cell) and 0 when the kernel itself trapped. The vector entry loads it into
+/// x1 for this exception alone (`vt_sync_el0` / `vt_sync_el2_from_lower`), so
+/// unlike a shared marker no other CPU's entry can change it in between.
 #[no_mangle]
-pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
+pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame, lower_kind: usize) {
     let esr = frame.esr_el1; // field holds ESR_EL2 at EL2; naming is irrelevant here
     let ec = (esr >> 26) & 0x3F;
-    let vector_kind = super::el2::take_lower_vector_kind() as usize;
+    let vector_kind = lower_kind;
     if ec == 0 {
         Board::probe_uncategorized_trap(frame, vector_kind as u8);
     }
@@ -173,9 +178,9 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
             // innocent cell: `ec=0x0 esr=0x2000000 elr=0x400823a4 far=0 spsr=0`
             // (ELR inside `__trap_exit`) terminated the current cell instead of
             // reporting a kernel bug, which is what this arm's own contract asks
-            // for. The lower-EL wrapper's marker is the proof that a cell raised
-            // the trap — it is zero for every host vector, and nonzero (1..4) for
-            // the EL0 ones — so it is what decides here.
+            // for. The vector entry's `lower_kind` argument is the proof that a
+            // cell raised the trap — 0 for every host vector, 1 for the EL0 sync
+            // and SError entries, at EL1 and EL2 alike — so it is what decides here.
             let from_lower_el = vector_kind != 0;
             if from_lower_el && cell_id != 0 {
                 // SAFETY: as above — switches away from this (now dead) cell.
@@ -401,6 +406,11 @@ __vectors:
     .balign 0x80; b vt_fiq_spx
     .balign 0x80; b vt_sync_spx
     // ── Lower EL (AArch64) ───────────────────────────────────────────────────
+    // Sync and SError enter through vt_sync_el0, which hands the dispatcher
+    // `lower_kind = 1` in x1: the per-exception proof that EL0 raised it. It is
+    // what lets an EL0 exception without a lower-EL-only EC (a BTI Branch
+    // Target exception, EC 0x0D; PC alignment, an undefined instruction)
+    // terminate the Cell instead of reading as a kernel trap and panicking.
     .balign 0x80; b vt_sync_el0
     .balign 0x80; b vt_irq_el0
     .balign 0x80; b vt_fiq_el0
@@ -422,9 +432,22 @@ __vectors:
     //   esr_el1  at 272
     .section .text
     .balign 4
+    // Entry stubs: save x0/x1 into the frame first, then load the dispatcher's
+    // second argument (`lower_kind`, 0 = current EL, 1 = lower EL) into x1.
+    // It travels in a register, per exception, so no other CPU's entry can
+    // overwrite it; the shared body below never touches x1 again before the
+    // call. x1's saved user value is in the frame, restored on exit.
+vt_sync_el0:
+    sub  sp, sp, #(36 * 8)
+    stp  x0,  x1,  [sp, #0]
+    mov  x1,  #1
+    b    vt_sync_common
 vt_sync_sp0:
 vt_sync_spx:
-vt_sync_el0:
+    sub  sp, sp, #(36 * 8)
+    stp  x0,  x1,  [sp, #0]
+    mov  x1,  #0
+vt_sync_common:
     // NOTE: NO board-specific probes here. This vector is SHARED by all
     // aarch64 boards; a raw MMIO write to a board-private UART (e.g. the
     // BCM 0x3F215040 mini UART) faults inside the exception vector on any
@@ -432,8 +455,6 @@ vt_sync_el0:
     // bug shipped once (RPi3 bring-up probes broke QEMU virt boot-to-shell).
     // Board debug probes belong behind #[cfg(feature = "board-…")] Rust
     // code, never in this shared assembly.
-    sub  sp, sp, #(36 * 8)
-    stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
     stp  x6,  x7,  [sp, #48]

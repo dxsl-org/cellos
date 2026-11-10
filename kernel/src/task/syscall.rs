@@ -227,6 +227,11 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     frames.len()
 }
 
+// ADR-0033 CP1 §5-§6: client-memory DMA export leases (437/438/439). A child
+// module so its ownership proof reads the grant tables under their own locks.
+#[path = "dma_export.rs"]
+pub(crate) mod dma_export;
+
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
 
 /// Kernel-managed zero-copy memory region.
@@ -1464,12 +1469,13 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
                     continue;
                 }
                 if let Some((grantee, _)) = grant.shared_to {
-                    if crate::memory::pin::vfs_holder_of_owner(
-                        grant.base,
-                        grant_allocated_bytes(grant.size),
-                        tid,
-                    )
-                    .is_some()
+                    // A live VFS request lease or `GrantSlice` holder lease
+                    // keeps the frames: the row is orphaned and its frames go
+                    // to the quarantine instead of passing to the grantee.
+                    let span = grant_allocated_bytes(grant.size);
+                    if crate::memory::pin::vfs_holder_of_owner(grant.base, span, tid).is_some()
+                        || crate::memory::pin::grant_lease_holder_of_owner(grant.base, span, tid)
+                            .is_some()
                     {
                         grant.owner = 0;
                         grant.owner_cell = CellId(0);
@@ -1725,6 +1731,8 @@ pub(crate) fn release_acked_frames(tid: usize) {
     }
 }
 
+/// End every lease `tid` held as a holder: VFS request leases and `GrantSlice`
+/// `LEASE` leases. Runs at holder death, outside every grant/scheduler lock.
 pub(crate) fn release_vfs_holder_leases(tid: usize) {
     for range in crate::memory::pin::release_vfs_holder_leases(tid) {
         let (base, pages) = (range.base, range.pages);
@@ -1733,6 +1741,63 @@ pub(crate) fn release_vfs_holder_leases(tid: usize) {
         );
         free_released_range(range);
     }
+    free_released_grant_lease_frames(tid, crate::memory::pin::release_grant_holder_leases(tid));
+}
+
+/// Free owner-dead frames whose last `GrantSlice` lease `holder` just ended.
+///
+/// Must run with no grant-table, scheduler or pin lock held: the frames go
+/// back through `FRAME_ALLOCATOR` and `KERNEL_ROOT`.
+fn free_released_grant_lease_frames(
+    holder: usize,
+    released: Vec<crate::memory::pin::ReleasedRange>,
+) {
+    for range in released {
+        let (base, pages) = (range.base, range.pages);
+        log::info!(
+            "[grant] GrantSlice lease holder {holder} released {pages} quarantined page(s) at \
+             {base:#x}"
+        );
+        free_released_range(range);
+    }
+}
+
+/// End the caller's `GrantSlice` leases on Grants owned by the task a send
+/// form is addressed to (ABI a3 `LEASE`, approved 2026-11-10).
+///
+/// Runs before the send takes effect, so the owner can never act on the
+/// message while the lease still blocks its `GrantFree`. `Reply` is addressed
+/// to the caller's current IPC caller, not to its a0. `IpcReply` resolves its
+/// destination from an async token and is not a boundary; the holder's next
+/// receive still ends the lease.
+fn end_grant_leases_at_send(caller_id: usize, syscall: &Syscall) {
+    if !crate::memory::pin::grant_leases_live() {
+        return;
+    }
+    let target = match *syscall {
+        Syscall::Send { target, .. }
+        | Syscall::SendGather { target, .. }
+        | Syscall::IpcSubmit { target, .. } => target,
+        // TrySend's target 0 is a self-wake.
+        Syscall::TrySend { target: 0, .. } => caller_id,
+        Syscall::TrySend { target, .. } => target,
+        Syscall::Reply { .. } => {
+            let current_caller = super::SCHEDULER
+                .lock()
+                .as_ref()
+                .and_then(|sched| sched.tasks.get(&caller_id))
+                .and_then(|task| task.current_caller);
+            let Some(target) = current_caller else {
+                return;
+            };
+            target
+        }
+        _ => return,
+    };
+    free_released_grant_lease_frames(
+        caller_id,
+        crate::memory::pin::release_grant_leases_to_owner(caller_id, target),
+    );
 }
 
 /// Release the exact VFS lease whose owner death cleared the holder's caller
@@ -1818,6 +1883,34 @@ fn encode_system_power_result(result: SyscallResult) -> usize {
         Err(SyscallError::NotSupported) => sp::ERR_NOT_SUPPORTED,
         Err(_) => sp::ERR_PERMISSION_DENIED,
     }
+}
+
+/// 437-439 results: each refusal keeps its own `api::dma_export::ERR_*`
+/// sentinel (CP1 §5, E21); an export id is at most `isize::MAX`.
+#[cfg(not(target_arch = "riscv32"))]
+fn encode_dma_export_result(result: SyscallResult) -> usize {
+    use api::dma_export as de;
+    match result {
+        Ok(value) => value,
+        Err(SyscallError::InvalidInput | SyscallError::InvalidCommand) => de::ERR_INVALID_INPUT,
+        Err(SyscallError::FileNotFound) => de::ERR_FILE_NOT_FOUND,
+        Err(SyscallError::NotSupported) => de::ERR_NOT_SUPPORTED,
+        Err(SyscallError::OutOfMemory) => de::ERR_OUT_OF_MEMORY,
+        Err(SyscallError::TryAgain) => de::ERR_TRY_AGAIN,
+        Err(SyscallError::BufferTooSmall) => de::ERR_BUFFER_TOO_SMALL,
+        Err(SyscallError::Unknown) => de::ERR_UNKNOWN,
+        Err(_) => de::ERR_PERMISSION_DENIED,
+    }
+}
+
+#[cfg(not(target_arch = "riscv32"))]
+fn is_dma_export_call(syscall: &Syscall) -> bool {
+    matches!(
+        syscall,
+        Syscall::ExportDmaRange { .. }
+            | Syscall::MapDmaExport { .. }
+            | Syscall::RevokeDmaExport { .. }
+    )
 }
 
 /// Syscalls whose errors use the typed sentinels of [`encode_ipc_result`]
@@ -3679,6 +3772,9 @@ struct GrantSliceRequest {
     grant_id: usize,
     size_out_ptr: usize,
     expected_owner_tid: usize,
+    /// ABI a3 `LEASE`; the handler has already required a nonzero
+    /// `expected_owner_tid`, which keys the lease.
+    lease: bool,
     vfs_context: Option<VfsGrantContext>,
 }
 
@@ -3696,6 +3792,32 @@ struct GrantSliceAccess {
 /// Zero keeps the pre-ABI behavior (no owner expectation).
 fn grant_owner_expected(expected_owner_tid: usize, owner: usize) -> bool {
     expected_owner_tid == 0 || expected_owner_tid == owner
+}
+
+/// Publish the `LEASE` requested by a `GrantSlice` while the caller holds the
+/// grant-table lock that resolved the row.
+///
+/// Lock order grant table → pin `REGISTRY` (leaf), the same edge the VFS lease
+/// uses: the owner's `GrantFree`/`GrantUnregister` and the owner-death reaper
+/// both remove the row under that table lock, so they either run first (the
+/// row is gone and the slice answers as unknown) or observe this lease.
+/// A refusal is reported as the unknown-id sentinel, so it is only logged.
+fn lease_grant_slice_locked(
+    caller_id: usize,
+    grant_id: usize,
+    grant_owner: usize,
+    base: usize,
+    size: usize,
+) -> bool {
+    match crate::memory::pin::lease_grant(base, size, grant_owner, caller_id, grant_id) {
+        Ok(()) => true,
+        Err(error) => {
+            log::warn!(
+                "[grant] GrantSlice {grant_id:#x} lease refused for task {caller_id}: {error:?}"
+            );
+            false
+        }
+    }
 }
 
 fn authorize_grant_slice_locked(
@@ -3739,9 +3861,23 @@ fn authorize_grant_slice_locked(
     // infallible, so a failed GrantSlice cannot strand a pin.
     let size_out =
         super::user_out::resolve_optional_usize_slot(request.caller_id, request.size_out_ptr)?;
+    if request.lease
+        && !lease_grant_slice_locked(request.caller_id, request.grant_id, grant_owner, base, size)
+    {
+        return Ok(None);
+    }
     if request.vfs_context.is_some_and(|context| {
         !install_vfs_lease_if_context_live(request.caller_id, context, base, size, request.grant_id)
     }) {
+        // Still under the resolving table lock: the row (and so the owner) is
+        // alive, so taking the hold back cannot strand a quarantine entry.
+        if request.lease {
+            crate::memory::pin::unlease_grant_hold(
+                request.caller_id,
+                grant_owner,
+                request.grant_id,
+            );
+        }
         return Ok(None);
     }
     Ok(Some(GrantSliceAccess {
@@ -3751,29 +3887,19 @@ fn authorize_grant_slice_locked(
     }))
 }
 
-/// Resolve a grant and publish its matching VFS lease in one table transaction.
+/// Resolve a grant and publish its requested leases in one table transaction.
 ///
 /// This is the GrantSlice/free linearization point. If teardown removes the
-/// entry first, neither table can resolve it. If this lookup wins, a VFS lease
-/// reaches the pin registry before the table lock is released, so GrantFree or
-/// GrantUnregister observes the pin and refuses.
+/// entry first, neither table can resolve it. If this lookup wins, the VFS
+/// request lease and the `LEASE` holder lease reach the pin registry before the
+/// table lock is released, so GrantFree or GrantUnregister observes the pin and
+/// refuses, and an owner-death reap quarantines the frames.
 fn resolve_and_lease_grant(
-    caller_id: usize,
-    grant_id: usize,
-    size_out_ptr: usize,
-    expected_owner_tid: usize,
-    vfs_context: Option<VfsGrantContext>,
+    request: GrantSliceRequest,
 ) -> Result<Option<GrantSliceAccess>, SyscallError> {
-    let request = GrantSliceRequest {
-        caller_id,
-        grant_id,
-        size_out_ptr,
-        expected_owner_tid,
-        vfs_context,
-    };
     {
         let tbl = grant_table_lock().lock();
-        if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
+        if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&request.grant_id)) {
             return authorize_grant_slice_locked(
                 request,
                 grant.owner,
@@ -3785,7 +3911,7 @@ fn resolve_and_lease_grant(
         }
     }
     let tbl = reg_grant_table_lock().lock();
-    let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) else {
+    let Some(grant) = tbl.as_ref().and_then(|map| map.get(&request.grant_id)) else {
         return Ok(None);
     };
     authorize_grant_slice_locked(
@@ -3879,6 +4005,7 @@ fn domain_grant_slice_row(
     expected_owner_tid: usize,
     receiver: &Arc<crate::memory::address_space::AddressSpace>,
     size_out: Option<*mut usize>,
+    lease_grant_id: Option<usize>,
 ) -> Result<usize, SyscallError> {
     // Same sentinel as an id absent from both tables (see `grant_owner_expected`).
     if !grant_owner_expected(expected_owner_tid, owner) {
@@ -3895,6 +4022,11 @@ fn domain_grant_slice_row(
     // The owner resolves its own backing without a second mapping: the owner
     // domain page was published with the record.
     if caller_id == owner {
+        if lease_grant_id.is_some_and(|grant_id| {
+            !lease_grant_slice_locked(caller_id, grant_id, owner, base, size)
+        }) {
+            return Ok(usize::MAX);
+        }
         super::user_out::write_resolved_optional_usize(size_out, size);
         return Ok(base);
     }
@@ -3910,12 +4042,26 @@ fn domain_grant_slice_row(
     let Some((cell, generation)) = live_task_binding(caller_id) else {
         return Ok(usize::MAX);
     };
+    // The lease is published before the receiver mapping and taken back if the
+    // publish fails, all under the resolving table lock, so neither a failed
+    // slice nor a racing GrantFree can observe one without the other. The
+    // lease keeps the frames out of the allocator; at owner death the domain
+    // reaper still revokes this receiver mapping, so a leased domain receiver
+    // faults rather than reads reused memory.
+    if lease_grant_id
+        .is_some_and(|grant_id| !lease_grant_slice_locked(caller_id, grant_id, owner, base, size))
+    {
+        return Ok(usize::MAX);
+    }
     match record.publish(receiver, cell, generation, rights) {
         Ok(()) => {
             super::user_out::write_resolved_optional_usize(size_out, size);
             Ok(base)
         }
         Err(error) => {
+            if let Some(grant_id) = lease_grant_id {
+                crate::memory::pin::unlease_grant_hold(caller_id, owner, grant_id);
+            }
             log::warn!(
                 "[grant] GrantSlice {base:#x} refused for domain task {caller_id}: {error:?}"
             );
@@ -3939,8 +4085,10 @@ fn resolve_domain_grant_slice(
     grant_id: usize,
     size_out_ptr: usize,
     expected_owner_tid: usize,
+    lease: bool,
     receiver: &Arc<crate::memory::address_space::AddressSpace>,
 ) -> Result<usize, SyscallError> {
+    let lease_grant_id = lease.then_some(grant_id);
     let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
     {
         let tbl = grant_table_lock().lock();
@@ -3955,6 +4103,7 @@ fn resolve_domain_grant_slice(
                 expected_owner_tid,
                 receiver,
                 size_out,
+                lease_grant_id,
             );
         }
     }
@@ -3972,6 +4121,7 @@ fn resolve_domain_grant_slice(
         expected_owner_tid,
         receiver,
         size_out,
+        lease_grant_id,
     )
 }
 
@@ -4515,6 +4665,27 @@ pub enum Syscall {
         a2: usize,
         a3: usize,
     },
+    /// 437: ExportDmaRange — lock caller-owned memory for a DMA export lease.
+    ExportDmaRange {
+        va: usize,
+        len: usize,
+        holder_service: usize,
+        flags: usize,
+    },
+    /// 438: MapDmaExport — map a held export into the caller's VT-d domain.
+    MapDmaExport {
+        export_id: usize,
+        bdf: usize,
+        out_ptr: usize,
+        out_len: usize,
+    },
+    /// 439: RevokeDmaExport — owner or holder ends an export lease.
+    RevokeDmaExport {
+        export_id: usize,
+        a1: usize,
+        a2: usize,
+        a3: usize,
+    },
     CellSessionV1 {
         request_ptr: usize,
         request_len: usize,
@@ -4783,11 +4954,13 @@ pub enum Syscall {
         perm: usize,
     },
     /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
-    /// A nonzero `expected_owner_tid` (ABI a2) must equal the Grant's owner.
+    /// A nonzero `expected_owner_tid` (ABI a2) must equal the Grant's owner;
+    /// `flags` (ABI a3) bit 0 `LEASE` also publishes a holder lease on the Grant.
     GrantSlice {
         grant_id: usize,
         size_out_ptr: usize,
         expected_owner_tid: usize,
+        flags: usize,
     },
     /// 211: GrantFree — unmap + deallocate a Grant region.
     GrantFree {
@@ -5099,6 +5272,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::QueryPcieFunction { .. } => V::QueryPcieFunction,
         Syscall::AllocPcieIrq { .. } => V::AllocPcieIrq,
         Syscall::SystemPower { .. } => V::SystemPower,
+        Syscall::MapDmaExport { .. } => V::MapDmaExport,
         Syscall::SerialPortInfo { .. } => V::SerialPortInfo,
         Syscall::SerialWrite { .. } => V::SerialWrite,
         Syscall::SerialRead { .. } => V::SerialRead,
@@ -5153,7 +5327,10 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::ResolveCellOwnerRecord { .. }
         | Syscall::WatchCellOwnerRecord { .. }
         | Syscall::ResolveCellImage { .. }
-        | Syscall::AnonMemory { .. } => return None,
+        | Syscall::AnonMemory { .. }
+        // 437/439: own memory / lease party is the dispatch gate (CP1 D-G9).
+        | Syscall::ExportDmaRange { .. }
+        | Syscall::RevokeDmaExport { .. } => return None,
         // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
         Syscall::BlkRead { .. }
         | Syscall::BlkWrite { .. }
@@ -5367,7 +5544,16 @@ fn handle_syscall_inner(
                 .and_then(|task| task.begin_receive_context(*mask))
         };
         finish_vfs_context_drop(caller_id, dropped);
+        // Every receive form, masked or not, ends the caller's `GrantSlice`
+        // leases: the holder has finished with the pointers it resolved.
+        if crate::memory::pin::grant_leases_live() {
+            free_released_grant_lease_frames(
+                caller_id,
+                crate::memory::pin::release_grant_holder_leases(caller_id),
+            );
+        }
     }
+    end_grant_leases_at_send(caller_id, &syscall);
 
     match syscall {
         Syscall::CellSessionV1 {
@@ -9073,6 +9259,53 @@ fn handle_syscall_inner(
             system_power(caller_id, action)
         }
 
+        // 437-439 (ADR-0033 CP1 §5): client-memory DMA export leases. 437/439
+        // gate on own memory / lease party; 438 also needs bit 48,
+        // PcieDriverCap and BDF ownership (checked in `dma_export::map`).
+        Syscall::ExportDmaRange {
+            va,
+            len,
+            holder_service,
+            flags,
+        } => dma_export::export(caller_id, va, len, holder_service, flags),
+        Syscall::MapDmaExport {
+            export_id,
+            bdf,
+            out_ptr,
+            out_len,
+        } => {
+            if out_len != api::dma_export::DMA_EXPORT_RECORD_LEN {
+                return Err(SyscallError::InvalidInput);
+            }
+            caller_copy_view(caller_id)?
+                .validate_writable(out_ptr, out_len)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            // Same retirement barrier as GrantDma: the holder's root cannot
+            // retire (and tear its domain down) mid-publication.
+            let barrier =
+                crate::memory::cell_quota::try_reserve_dma(0, 0).ok_or(SyscallError::Unknown)?;
+            let publication =
+                reserve_dma_publication(caller_id, barrier).ok_or(SyscallError::TryAgain)?;
+            let record = dma_export::map(caller_id, export_id, bdf);
+            drop(publication);
+            let mut bytes = [0u8; api::dma_export::DMA_EXPORT_RECORD_LEN];
+            record?.encode(&mut bytes);
+            write_user_slice(caller_id, out_ptr, &bytes, bytes.len())
+                .map_err(|_| SyscallError::InvalidInput)?;
+            Ok(0)
+        }
+        Syscall::RevokeDmaExport {
+            export_id,
+            a1,
+            a2,
+            a3,
+        } => {
+            if a1 != 0 || a2 != 0 || a3 != 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            dma_export::revoke(caller_id, export_id)
+        }
+
         // 425-428: the serial-port surface. The kernel owns the 16550 mechanism
         // (it probed and programmed every port at boot); a cell holding the
         // `serial_port` capability drives only the ports that probe accepted, so
@@ -9633,7 +9866,18 @@ fn handle_syscall_inner(
             grant_id,
             size_out_ptr,
             expected_owner_tid,
+            flags,
         } => {
+            // ABI a3 (approved 2026-11-10): unknown flag bits, and a lease with
+            // no owner to key it by, answer exactly as an unknown id — before
+            // any lookup, log or `size_out` validation.
+            if flags & !api::syscall::grant_slice::KNOWN_FLAGS != 0 {
+                return Ok(GRANT_DENY_SLICE);
+            }
+            let lease = flags & api::syscall::grant_slice::LEASE != 0;
+            if lease && expected_owner_tid == 0 {
+                return Ok(GRANT_DENY_SLICE);
+            }
             // A caller that is not a live private root keeps the phase-01 denial
             // (`usize::MAX`): a private root that is retired, unknown or on an
             // unsupported target has no root this path could map into.
@@ -9660,6 +9904,7 @@ fn handle_syscall_inner(
                     grant_id,
                     size_out_ptr,
                     expected_owner_tid,
+                    lease,
                     &receiver,
                 );
             }
@@ -9669,13 +9914,14 @@ fn handle_syscall_inner(
                 VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
                 VfsGrantLookup::Active(context) => Some(context),
             };
-            let Some(access) = resolve_and_lease_grant(
+            let Some(access) = resolve_and_lease_grant(GrantSliceRequest {
                 caller_id,
                 grant_id,
                 size_out_ptr,
                 expected_owner_tid,
+                lease,
                 vfs_context,
-            )?
+            })?
             else {
                 return Ok(usize::MAX);
             };
@@ -10801,6 +11047,24 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             a2,
             a3,
         },
+        ViSyscall::ExportDmaRange => Syscall::ExportDmaRange {
+            va: a0,
+            len: a1,
+            holder_service: a2,
+            flags: a3,
+        },
+        ViSyscall::MapDmaExport => Syscall::MapDmaExport {
+            export_id: a0,
+            bdf: a1,
+            out_ptr: a2,
+            out_len: a3,
+        },
+        ViSyscall::RevokeDmaExport => Syscall::RevokeDmaExport {
+            export_id: a0,
+            a1,
+            a2,
+            a3,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -10952,6 +11216,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             grant_id: a0,
             size_out_ptr: a1,
             expected_owner_tid: a2,
+            flags: a3,
         },
         ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
         ViSyscall::GrantCacheSyncBegin => Syscall::GrantCacheSyncBegin {
@@ -11368,6 +11633,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     let typed_errors = has_typed_errors(&syscall);
     let pcie_function = is_pcie_function_call(&syscall);
     let power_call = matches!(syscall, Syscall::SystemPower { .. });
+    let dma_export_call = is_dma_export_call(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -11379,6 +11645,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         encode_pcie_function_result(result)
     } else if power_call {
         encode_system_power_result(result)
+    } else if dma_export_call {
+        encode_dma_export_result(result)
     } else if typed_errors {
         encode_ipc_result(result)
     } else {
@@ -11456,6 +11724,10 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 #[cfg(test)]
 #[path = "grant-owner-tests.rs"]
 mod grant_owner_tests;
+
+#[cfg(test)]
+#[path = "grant-lease-tests.rs"]
+mod grant_lease_tests;
 
 #[cfg(test)]
 mod tests {

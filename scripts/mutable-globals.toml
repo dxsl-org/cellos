@@ -1912,12 +1912,23 @@ review = "kernel/src/memory/rt_heap.rs:init; kernel/src/memory/rt_heap.rs:alloc;
 key = "kernel::memory::pin::REGISTRY"
 lifetime = "per-thread"
 mutation = "spinlock"
-owner = "memory::pin: pinned regions, cache-sync tokens, VFS leases and quarantine holds keyed by owner/holder tid; mutated by grant/DMA/VFS syscalls and the grant reaper"
+owner = "memory::pin: pinned regions, cache-sync tokens, VFS leases, GrantSlice LEASE holder leases and quarantine holds keyed by owner/holder tid; mutated by grant/DMA/VFS syscalls, the receive/send lease-end hooks and the grant reaper"
 contexts = ["normal", "irq", "exception"]
 seal = "none: pins and leases churn for the whole run"
 retirement = "reap_grants_for_task -> quarantine_task(tid) and release_vfs_holder_leases(tid) in the yield_cpu retirement funnel; Scheduler::exit_task marks VFS leases pending revoke; quarantined frames are freed only by acknowledge(tid), otherwise held for the boot"
 rationale = "Scheduler::pick_next_unaccounted (find_vfs_lease) and exit_task (mark_vfs_lease_pending_revoke) touch it under SCHEDULER inside yield_cpu, which the timer/IPI ISRs and the #PF funnel call; the crate Spinlock masks IRQs and the table is a fixed-size leaf lock, so this is sound."
 review = "kernel/src/memory/pin.rs:quarantine_task; kernel/src/memory/pin.rs:release_vfs_holder_leases; kernel/src/task/scheduler.rs:1651; kernel/src/task/scheduler.rs:2183; kernel/src/task/syscall.rs:reap_grants_for_task"
+
+[[global]]
+key = "kernel::memory::pin::LIVE_GRANT_LEASES"
+lifetime = "global"
+mutation = "atomic"
+owner = "memory::pin: occupancy count of REGISTRY.grant_leases (GrantSlice LEASE holder leases); changed only while REGISTRY is held, by lease_grant, unlease_grant_hold and clear_grant_leases"
+contexts = ["normal", "exception"]
+seal = "none: leases are published and ended for the whole run"
+retirement = "never: lives for the whole run; returns to 0 whenever every holder has received, sent to its owners, or died"
+rationale = "The receive and send hooks in handle_syscall_inner read it lock-free (Acquire) to skip REGISTRY when no task holds a lease; every write is a Release RMW under REGISTRY, so a holder (which published its own leases in an earlier syscall) never reads a stale zero. Holder-death release does not use the shortcut and always takes REGISTRY."
+review = "kernel/src/memory/pin.rs:grant_leases_live; kernel/src/memory/pin.rs:lease_grant; kernel/src/task/syscall.rs:end_grant_leases_at_send"
 
 [[global]]
 key = "kernel::memory::paging::KERNEL_ROOT"
@@ -3053,3 +3064,47 @@ seal = "none: defaults to 115200, set to SPCR baud if redirection occurs"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU32 stores console baud rate used to program divisor latches"
 review = "hal/arch/x86/src/x86_64/uart_16550.rs:CONSOLE_BAUD"
+
+[[global]]
+key = "kernel::task::syscall::dma_export::EXPORTS"
+lifetime = "global"
+mutation = "spinlock"
+owner = "task::syscall::dma_export: the DMA export lease table (437/438/439, ADR-0033 CP1 §5) and per-holder-task IOVA window allocators; mutated by ExportDmaRange/MapDmaExport/RevokeDmaExport, the owner-death step of reap_retired_task_resources, the holder hook in teardown_dma_authority and the scheduler-pass retry"
+contexts = ["normal", "irq"]
+seal = "none: leases are created and dropped for the whole run"
+retirement = "reap_retired_task_resources -> reap_owner(tid) revokes every lease the dead task owns; teardown_dma_authority -> holder_domain_revoked(tid) drops a dead holder's leases after its domain teardown is acknowledged; unacknowledged revokes stay Revoking and retry_pending repeats them each yield_cpu pass"
+rationale = "Outermost lock of the export path (IOMMU_CLEANUP_SERIAL -> EXPORTS -> grant table -> SCHEDULER -> pin REGISTRY / VT-d UNITS -> FRAME_ALLOCATOR); never taken under another lock. The retirement funnel and retry run in yield_cpu, which the timer/IPI ISRs reach, and the crate Spinlock masks IRQs for the guard, so a same-CPU interrupt cannot re-enter it."
+review = "kernel/src/task/dma_export.rs:ExportTable; kernel/src/task/dma_export.rs:reap_owner; kernel/src/task/dma_export.rs:holder_domain_revoked; kernel/src/task/dma_export.rs:retry_pending; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task.rs:teardown_dma_authority"
+
+[[global]]
+key = "kernel::task::syscall::dma_export::NEXT_EXPORT_ID"
+lifetime = "global"
+mutation = "atomic"
+owner = "task::syscall::dma_export: boot-wide export id counter; advanced only by ExportTable::export under EXPORTS"
+contexts = ["normal"]
+seal = "none: one id per accepted 437 for the whole run"
+retirement = "never: ids are never reused within a boot"
+rationale = "fetch_add hands each export a unique id (an id taken by an export refused afterwards is skipped, never reissued); EXPORTS already serializes issuers, the atomic only keeps the counter boot-wide across table instances in host tests."
+review = "kernel/src/task/dma_export.rs:ExportTable::export"
+
+[[global]]
+key = "kernel::task::syscall::dma_export::REVOKING"
+lifetime = "global"
+mutation = "atomic"
+owner = "task::syscall::dma_export: count of leases in Revoking; changed only under EXPORTS by set_state and drop_lease"
+contexts = ["normal", "irq"]
+seal = "none: changes with every unacknowledged revoke for the whole run"
+retirement = "never: returns to 0 when every revoke is acknowledged"
+rationale = "retry_pending reads it Relaxed in yield_cpu to skip EXPORTS when nothing is pending; a stale nonzero only costs one lock round, a stale zero delays the retry by one pass, never a frame release (frames stay locked/quarantined until the acknowledged retry)."
+review = "kernel/src/task/dma_export.rs:retry_pending; kernel/src/task/dma_export.rs:ExportTable::set_state"
+
+[[global]]
+key = "kernel::task::syscall::dma_export::LEASES"
+lifetime = "global"
+mutation = "atomic"
+owner = "task::syscall::dma_export: count of live or revoking leases; changed only under EXPORTS by export and drop_lease; read lock-free only by reap_owner"
+contexts = ["normal", "irq"]
+seal = "none: changes with every export and drop for the whole run"
+retirement = "never: returns to 0 when every lease is dropped"
+rationale = "reap_owner reads it Relaxed to skip EXPORTS on the common death of a task that never exported; a lease the dying owner holds was created by that task's own earlier 437, whose EXPORTS critical section and the scheduler handoffs to the retirement funnel order the increment before the read, so a dying owner never reads a stale zero for its own lease. holder_domain_revoked deliberately does not use it."
+review = "kernel/src/task/dma_export.rs:reap_owner; kernel/src/task/dma_export.rs:holder_domain_revoked"

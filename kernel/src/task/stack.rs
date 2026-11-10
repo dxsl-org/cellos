@@ -501,6 +501,11 @@ pub struct CellSegments {
     /// `va_alloc::reserve_cell_va` for fixed-VA images); `0` for kernel-built
     /// test segments. Returned to the allocator's free list on drop.
     va_slot: usize,
+    /// The image's BTI decision (`loader::gnu_property::arm`): its executable
+    /// pages are guarded (stage-1 GP). Carried here so a Tier-2 private root
+    /// built from these segments (`memory::address_space::create_cell_domain`)
+    /// guards them too, not only the shared-address-space mapping.
+    guarded_code: bool,
     #[cfg(cellos_p01_trace)]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
@@ -511,6 +516,7 @@ impl CellSegments {
             pages,
             writable_pages: alloc::vec::Vec::new(),
             va_slot,
+            guarded_code: false,
             #[cfg(cellos_p01_trace)]
             p01_obligation: None,
         }
@@ -531,10 +537,23 @@ impl CellSegments {
             pages,
             writable_pages,
             va_slot,
+            guarded_code: false,
             #[cfg(cellos_p01_trace)]
             p01_obligation: None,
         }
     }
+
+    /// Record the image's BTI decision (see the `guarded_code` field).
+    pub fn with_guarded_code(mut self, guarded_code: bool) -> Self {
+        self.guarded_code = guarded_code;
+        self
+    }
+
+    /// Whether the image's executable pages are BTI-guarded.
+    pub fn guarded_code(&self) -> bool {
+        self.guarded_code
+    }
+
     pub fn pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
         &self.pages
     }

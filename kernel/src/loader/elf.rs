@@ -91,6 +91,9 @@ impl ElfLoader {
     /// slot claimed by `va_alloc::reserve_cell_va` for a fixed-VA image); every
     /// page must lie inside it.
     ///
+    /// `guarded_code` is the image's BTI decision ([`super::gnu_property::arm`]):
+    /// when set, every executable page's target flags carry `GUARDED`.
+    ///
     /// Returns one [`LoadedPage`] per mapped page so the caller can (a) hand the
     /// frames to `CellSegments` for reclamation and (b) run the W^X lowering pass
     /// once relocations are applied.
@@ -108,6 +111,7 @@ impl ElfLoader {
         frame_allocator: &mut crate::memory::frame::FrameAllocator,
         load_base: usize,
         slot_base: usize,
+        guarded_code: bool,
     ) -> ViResult<alloc::vec::Vec<LoadedPage>> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
         // Record each mapped page so the cell's segment frames can be reclaimed
@@ -216,7 +220,8 @@ impl ElfLoader {
                 // `wx::enforce` a cell's `.text`/`.rodata` are hardware read-only,
                 // which is what stops one cell rewriting another's code in the SAS.
                 use crate::memory::paging::Flags;
-                let final_flags = super::wx::page_flags(ph_flags.is_write(), ph_flags.is_execute());
+                let final_flags =
+                    super::wx::page_flags(ph_flags.is_write(), ph_flags.is_execute(), guarded_code);
                 let flags = Flags::from_bits(final_flags.bits() | Flags::WRITE);
 
                 // Map pages. The invalidation is batched (phase 07b R1): every

@@ -199,6 +199,8 @@ fn lookup_sv39_child(table_virt: usize, idx: usize) -> Option<u64> {
 
 /// VT-d SLPT entry flag: R=1|W=1 required for all valid entries (leaf + non-leaf).
 const VTD_RW: u64 = 0b11;
+/// VT-d SLPT leaf permission for a device-read-only export window (`R` only).
+const VTD_R: u64 = 0b01;
 
 /// Intel VT-d second-level page table (3 levels, 39-bit address width).
 pub struct VtdSlpt {
@@ -253,16 +255,63 @@ impl VtdSlpt {
     }
 
     fn map_page(&self, pa: u64) {
-        let i2 = ((pa >> 30) & 0x1FF) as usize;
-        let i1 = ((pa >> 21) & 0x1FF) as usize;
-        let i0 = ((pa >> 12) & 0x1FF) as usize;
+        self.map_leaf(pa, pa, VTD_RW);
+    }
+
+    /// Whether no leaf is present in `[iova, iova + size)`.
+    ///
+    /// Lookup-only: a missing child table means the whole span under it is
+    /// free, and nothing is allocated. Export windows call this before any
+    /// change so a window never overwrites an identity or RMRR leaf.
+    pub fn window_free(&self, iova: u64, size: usize) -> bool {
+        let end = iova + size as u64;
+        let mut va = iova & !0xFFF;
+        while va < end {
+            if self.leaf_at(va).is_some_and(|leaf| leaf != 0) {
+                return false;
+            }
+            va += 0x1000;
+        }
+        true
+    }
+
+    /// Map the physically contiguous `[phys, phys + size)` at the non-identity
+    /// IOVA window `[iova, iova + size)` (ADR-0033 CP1 D-G3).
+    ///
+    /// `writable` clear publishes `R`-only leaves (D-G10), so the remapper
+    /// itself refuses device writes. Both bounds must be 4 KiB aligned; the
+    /// caller has checked [`Self::window_free`] and invalidates afterwards.
+    pub fn map_window(&self, iova: u64, phys: u64, size: usize, writable: bool) {
+        let rights = if writable { VTD_RW } else { VTD_R };
+        let mut offset = 0u64;
+        while offset < size as u64 {
+            self.map_leaf(iova + offset, phys + offset, rights);
+            offset += 0x1000;
+        }
+    }
+
+    /// Write one leaf `iova → pa` with `rights`, allocating child tables.
+    fn map_leaf(&self, iova: u64, pa: u64, rights: u64) {
+        let i2 = ((iova >> 30) & 0x1FF) as usize;
+        let i1 = ((iova >> 21) & 0x1FF) as usize;
+        let i0 = ((iova >> 12) & 0x1FF) as usize;
         let l1_phys = self.ensure_child(self.root_virt, i2);
         let l0_phys = self.ensure_child(phys_to_virt_inner(l1_phys), i1);
-        let leaf = (pa & !0xFFF) | VTD_RW;
         let ptr = (phys_to_virt_inner(l0_phys) + i0 * 8) as *mut u64;
         // SAFETY: l0 page is a valid 4 KiB allocation; i0 < 512.
-        unsafe { ptr.write_volatile(leaf) };
+        unsafe { ptr.write_volatile((pa & !0xFFF) | rights) };
         self.sync(ptr as usize, 8);
+    }
+
+    /// The raw leaf for `iova`, or `None` when a child table is missing.
+    fn leaf_at(&self, iova: u64) -> Option<u64> {
+        let i2 = ((iova >> 30) & 0x1FF) as usize;
+        let i1 = ((iova >> 21) & 0x1FF) as usize;
+        let i0 = ((iova >> 12) & 0x1FF) as usize;
+        let l1_phys = lookup_vtd_child(self.root_virt, i2)?;
+        let l0_phys = lookup_vtd_child(phys_to_virt_inner(l1_phys), i1)?;
+        // SAFETY: l0 is a valid 4 KiB table reached through valid entries; i0 < 512.
+        Some(unsafe { ((phys_to_virt_inner(l0_phys) + i0 * 8) as *const u64).read_volatile() })
     }
 
     /// Get or allocate a child table at `table_virt[idx]`. Returns child phys.
@@ -748,5 +797,33 @@ mod tests {
             assert_eq!(pt.unmap_range(0x4020_0000, 0x3000), 2);
             assert_eq!(pt.unmap_range(0x4020_0000, 0x2000), 0);
         }
+    }
+
+    /// ADR-0033 CP1 D-G3/D-G10: an export window maps non-identity IOVAs in
+    /// `[2^38, 2^39)`, `R`-only unless the export grants device writes, never
+    /// over a present leaf, and unmaps with the same leaf-only teardown.
+    #[test]
+    fn vtd_slpt_export_window_is_non_identity_and_rights_exact() {
+        const WINDOW: u64 = 1 << 38;
+        const PHYS: u64 = 0x4060_0000;
+        let pt = VtdSlpt::new(true);
+        pt.map_range(PHYS, 0x1000);
+        assert!(pt.window_free(WINDOW, 0x3000));
+        assert!(!pt.window_free(PHYS, 0x1000), "identity leaf is not free");
+
+        pt.map_window(WINDOW, PHYS, 0x2000, false);
+        assert_eq!(pt.leaf_at(WINDOW), Some(PHYS | VTD_R));
+        assert_eq!(pt.leaf_at(WINDOW + 0x1000), Some((PHYS + 0x1000) | VTD_R));
+        assert!(!pt.window_free(WINDOW + 0x1000, 0x1000));
+        assert!(pt.window_free(WINDOW + 0x2000, 0x1000));
+        // The identity leaf of the same frame is untouched.
+        assert_eq!(pt.leaf_at(PHYS), Some(PHYS | VTD_RW));
+
+        pt.map_window(WINDOW + 0x4000, PHYS, 0x1000, true);
+        assert_eq!(pt.leaf_at(WINDOW + 0x4000), Some(PHYS | VTD_RW));
+
+        assert_eq!(pt.unmap_range(WINDOW, 0x5000), 3);
+        assert!(pt.window_free(WINDOW, 0x5000));
+        assert_eq!(pt.leaf_at(PHYS), Some(PHYS | VTD_RW));
     }
 }

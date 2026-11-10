@@ -43,7 +43,9 @@
 //! reap list precisely so `yield_cpu` can drain it after dropping `SCHEDULER`.
 
 use crate::sync::Spinlock;
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 const PAGE_SIZE: usize = 4096;
 
@@ -64,6 +66,16 @@ const MAX_PINS_PER_TASK: usize = 48;
 /// number of grants that can be in flight across all dead cells at once.
 const MAX_QUARANTINED_REGIONS: usize = 64;
 pub(crate) const MAX_VFS_LEASES: usize = 32;
+/// `GrantSlice` leases (`LEASE` flag) tracked at one time across all holders.
+///
+/// Sized so a full per-holder table (the compositor between two receives)
+/// still leaves room for a second holder.
+pub(crate) const MAX_GRANT_LEASES: usize = 128;
+/// Distinct `(owner, grant)` leases one holder may keep at once. A re-lease of
+/// the same key adds a hold instead of a slot, so this bounds the distinct
+/// client buffers one blit pass may touch between two receives.
+pub(crate) const MAX_GRANT_LEASES_PER_HOLDER: usize =
+    api::syscall::grant_slice::MAX_LEASES_PER_HOLDER;
 
 /// Why a region could not be pinned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +97,19 @@ pub enum VfsLeaseError {
     WrongOwner,
     WrongGrantee,
     DuplicateLease,
+}
+
+/// Why a `GrantSlice` lease could not be published. Every variant surfaces to
+/// the caller as the unknown-id sentinel; the split is for host tests and logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GrantLeaseError {
+    /// Zero length, or `base + len` overflows the address space.
+    InvalidRange,
+    /// The holder already keeps [`MAX_GRANT_LEASES_PER_HOLDER`] distinct
+    /// leases, or one key's hold count would overflow.
+    HolderFull,
+    /// No global slot is left.
+    TableFull,
 }
 
 /// Who holds a pin overlapping a queried region.
@@ -152,6 +177,42 @@ struct VfsLeaseEntry {
     pending_revoke: bool,
 }
 
+/// One holder's lease on one Grant, published by `GrantSlice` with `LEASE`.
+///
+/// Keyed by `(holder_tid, grant_owner, grant_id)`. The holder ends it at its
+/// next receive, its next send to `grant_owner`, or its death; until then the
+/// owner cannot free the Grant and the owner's death quarantines the frames
+/// under [`ReleaseKey::GrantLease`].
+#[derive(Clone, Copy)]
+struct GrantLeaseEntry {
+    base: usize,
+    /// Zero marks a free slot.
+    pages: usize,
+    grant_owner: usize,
+    holder_tid: usize,
+    grant_id: usize,
+    /// `GrantSlice` calls folded into this key since the holder's last release.
+    holds: u32,
+    /// The owner died and the frames are withheld under this lease's key.
+    quarantined: bool,
+}
+
+/// The owner-range lock of one client-memory DMA export (`ExportDmaRange =
+/// 437`, ADR-0033 CP1 §5.1, §5.5).
+///
+/// Present from export until the lease is dropped after an acknowledged
+/// revoke. While present the owner cannot free the range, and the owner's
+/// death quarantines its frames under [`ReleaseKey::DmaExport`]: a device in
+/// the holder's VT-d domain may still translate the export window until the
+/// IOTLB drain is acknowledged.
+#[derive(Clone, Copy)]
+struct DmaExportLock {
+    base: usize,
+    pages: usize,
+    owner: usize,
+    holder_cell: u64,
+}
+
 /// Frames the reaper declined to return to the allocator, awaiting an
 /// acknowledgement from `owner`.
 #[derive(Clone, Copy)]
@@ -202,6 +263,19 @@ enum ReleaseKey {
         holder_tid: usize,
         grant_owner: usize,
         request_generation: u64,
+    },
+    /// A `GrantSlice` lease whose owner died while the holder still used it.
+    GrantLease {
+        holder_tid: usize,
+        grant_owner: usize,
+        grant_id: usize,
+    },
+    /// A DMA export whose window invalidation was not yet acknowledged when the
+    /// owner's frames were reclaimed; released only by that export's revoke.
+    DmaExport {
+        owner: usize,
+        holder_cell: u64,
+        export_id: u64,
     },
 }
 /// Result of the reaper's single-transaction pin-to-quarantine transfer.
@@ -257,11 +331,25 @@ const EMPTY_VFS_LEASE: VfsLeaseEntry = VfsLeaseEntry {
     pending_revoke: false,
 };
 
+const EMPTY_GRANT_LEASE: GrantLeaseEntry = GrantLeaseEntry {
+    base: 0,
+    pages: 0,
+    grant_owner: 0,
+    holder_tid: 0,
+    grant_id: 0,
+    holds: 0,
+    quarantined: false,
+};
+
 struct Registry {
     pins: [PinEntry; MAX_PINNED_REGIONS],
     cache_sync: [CacheSyncEntry; MAX_PINNED_REGIONS],
     next_cache_token: usize,
     vfs_leases: [VfsLeaseEntry; MAX_VFS_LEASES],
+    grant_leases: [GrantLeaseEntry; MAX_GRANT_LEASES],
+    /// Export range locks keyed by export id; bounded by the lease table in
+    /// `task::dma_export`, which is the only writer.
+    dma_exports: BTreeMap<u64, DmaExportLock>,
     quarantine: [FrameHold; MAX_QUARANTINED_REGIONS],
 }
 
@@ -272,8 +360,18 @@ static REGISTRY: Spinlock<Registry> = Spinlock::new(Registry {
     cache_sync: [EMPTY_CACHE_SYNC; MAX_PINNED_REGIONS],
     next_cache_token: 1,
     vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
+    grant_leases: [EMPTY_GRANT_LEASE; MAX_GRANT_LEASES],
+    dma_exports: BTreeMap::new(),
     quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
 });
+
+/// Live entries in `Registry::grant_leases`.
+///
+/// Written only while `REGISTRY` is held, so it always equals the table's
+/// occupancy at the last unlock. Every receive and send runs the lease-end
+/// hook; this lock-free read lets those hot paths skip `REGISTRY` entirely
+/// while no holder anywhere has a lease (the common case).
+static LIVE_GRANT_LEASES: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(cellos_p01_trace)]
 pub(crate) fn p01_static_bytes() -> usize {
@@ -297,6 +395,10 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
             .vfs_leases
             .iter()
             .any(|e| e.pages != 0 && (e.grant_owner == tid || e.holder_tid == tid))
+        || registry
+            .grant_leases
+            .iter()
+            .any(|e| e.pages != 0 && (e.grant_owner == tid || e.holder_tid == tid))
         || registry.quarantine.iter().any(|e| {
             e.pages != 0
                 && match e.release {
@@ -306,6 +408,12 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
                         grant_owner,
                         ..
                     } => holder_tid == tid || grant_owner == tid,
+                    ReleaseKey::GrantLease {
+                        holder_tid,
+                        grant_owner,
+                        ..
+                    } => holder_tid == tid || grant_owner == tid,
+                    ReleaseKey::DmaExport { owner, .. } => owner == tid,
                     _ => false,
                 }
         });
@@ -383,6 +491,32 @@ fn same_vfs_lease(
         && entry.request_generation == request_generation
 }
 
+fn pin_holder_from_grant_lease(entry: &GrantLeaseEntry) -> PinHolder {
+    PinHolder {
+        base: entry.base,
+        pages: entry.pages,
+        owner: entry.grant_owner,
+        holds: entry.holds,
+        quarantined: entry.quarantined,
+        // A quarantined lease outlived its owner: only the holder ends it.
+        pending_revoke: entry.quarantined,
+        request_generation: 0,
+        holder_tid: entry.holder_tid,
+    }
+}
+
+fn same_grant_lease(
+    entry: &GrantLeaseEntry,
+    holder_tid: usize,
+    grant_owner: usize,
+    grant_id: usize,
+) -> bool {
+    entry.pages != 0
+        && entry.holder_tid == holder_tid
+        && entry.grant_owner == grant_owner
+        && entry.grant_id == grant_id
+}
+
 fn hold_quarantined_frames(
     reg: &mut Registry,
     base: usize,
@@ -398,6 +532,10 @@ fn hold_quarantined_frames(
         ReleaseKey::VfsLease { grant_owner, .. } => {
             crate::p01_resources::owner_for_tid(grant_owner)
         }
+        ReleaseKey::GrantLease { grant_owner, .. } => {
+            crate::p01_resources::owner_for_tid(grant_owner)
+        }
+        ReleaseKey::DmaExport { owner, .. } => crate::p01_resources::owner_for_tid(owner),
         ReleaseKey::CacheSyncBootLifetime => reg
             .cache_sync
             .iter()
@@ -656,6 +794,27 @@ pub fn holder_of(base: usize, len: usize) -> Option<PinHolder> {
                 .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
                 .map(pin_holder_from_vfs_lease)
         })
+        .or_else(|| {
+            reg.grant_leases
+                .iter()
+                .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
+                .map(pin_holder_from_grant_lease)
+        })
+        .or_else(|| {
+            reg.dma_exports
+                .iter()
+                .find(|(_, e)| overlaps(probe, (e.base, e.pages)))
+                .map(|(&export_id, e)| PinHolder {
+                    base: e.base,
+                    pages: e.pages,
+                    owner: e.owner,
+                    holds: 1,
+                    quarantined: false,
+                    pending_revoke: false,
+                    request_generation: export_id,
+                    holder_tid: 0,
+                })
+        })
 }
 
 /// The overlapping VFS lease for `grant_owner`, if any.
@@ -677,6 +836,31 @@ pub(crate) fn vfs_holder_of_owner(
             e.pages != 0 && e.grant_owner == grant_owner && overlaps(probe, (e.base, e.pages))
         })
         .map(pin_holder_from_vfs_lease)
+}
+
+/// The overlapping `GrantSlice` lease another task holds on `grant_owner`'s
+/// Grant, if any.
+///
+/// The registered-grant reaper calls this under `REG_GRANT_TABLE` (order grant
+/// table → pin leaf): a leased row must not pass to its grantee at owner death,
+/// because the frames then belong to the quarantine until the lease ends. A
+/// dying owner's lease on its own Grant protects nothing and is ignored.
+pub(crate) fn grant_lease_holder_of_owner(
+    base: usize,
+    len: usize,
+    grant_owner: usize,
+) -> Option<PinHolder> {
+    let probe = span(base, len)?;
+    let reg = REGISTRY.lock();
+    reg.grant_leases
+        .iter()
+        .find(|e| {
+            e.pages != 0
+                && e.grant_owner == grant_owner
+                && e.holder_tid != grant_owner
+                && overlaps(probe, (e.base, e.pages))
+        })
+        .map(pin_holder_from_grant_lease)
 }
 
 /// Mark every non-VFS pin owned by `tid` as quarantined and report how many.
@@ -761,6 +945,11 @@ pub fn withhold_vfs_frames(
 /// lease before this function can install its release key, and the reaper then
 /// receives [`FrameTransfer::Free`]. If this function wins, that same exact
 /// release key owns the quarantine entry until the holder releases it.
+///
+/// A `GrantSlice` lease is consulted first: it is the only protector whose
+/// release re-checks for a remaining protector before freeing (see
+/// [`release_orphaned_grant_lease_holds`]), so preferring it never hands the
+/// frames to a key that could free them under a live lease holder.
 pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer {
     let Some(len) = pages.checked_mul(PAGE_SIZE) else {
         return FrameTransfer::Free;
@@ -769,6 +958,43 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         return FrameTransfer::Free;
     };
     let mut reg = REGISTRY.lock();
+
+    if let Some(entry) = reg
+        .grant_leases
+        .iter_mut()
+        .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+    {
+        entry.quarantined = true;
+        let release = ReleaseKey::GrantLease {
+            holder_tid: entry.holder_tid,
+            grant_owner: entry.grant_owner,
+            grant_id: entry.grant_id,
+        };
+        return if hold_quarantined_frames(&mut reg, base, pages, release) {
+            FrameTransfer::Withheld
+        } else {
+            FrameTransfer::Full
+        };
+    }
+
+    // Export locks re-check for a remaining protector on release
+    // (`unlock_dma_export`), so they too precede the keys that do not.
+    if let Some((&export_id, entry)) = reg
+        .dma_exports
+        .iter()
+        .find(|(_, entry)| overlaps(probe, (entry.base, entry.pages)))
+    {
+        let release = ReleaseKey::DmaExport {
+            owner: entry.owner,
+            holder_cell: entry.holder_cell,
+            export_id,
+        };
+        return if hold_quarantined_frames(&mut reg, base, pages, release) {
+            FrameTransfer::Withheld
+        } else {
+            FrameTransfer::Full
+        };
+    }
 
     if let Some(entry) = reg
         .pins
@@ -972,6 +1198,299 @@ pub fn find_vfs_lease(
         .map(|e| (e.base, e.pages, e.grant_id))
 }
 
+/// Publish one `GrantSlice` lease for `holder_tid` on `grant_owner`'s Grant.
+///
+/// The caller holds the grant-table lock that resolved the row (order grant
+/// table → this leaf), so the owner's `GrantFree`/`GrantUnregister` and the
+/// owner-death reaper observe the lease before they can remove the row.
+/// Re-leasing the same `(holder, owner, grant)` key adds a hold rather than a
+/// slot; every hold ends together at the holder's next release boundary.
+///
+/// # Errors
+/// [`GrantLeaseError::InvalidRange`] for an empty or overflowing range,
+/// [`GrantLeaseError::HolderFull`] once the holder keeps
+/// [`MAX_GRANT_LEASES_PER_HOLDER`] distinct keys (or one key's holds would
+/// overflow), [`GrantLeaseError::TableFull`] when no global slot is left.
+pub fn lease_grant(
+    base: usize,
+    len: usize,
+    grant_owner: usize,
+    holder_tid: usize,
+    grant_id: usize,
+) -> Result<(), GrantLeaseError> {
+    let (start, pages) = span(base, len).ok_or(GrantLeaseError::InvalidRange)?;
+    let mut reg = REGISTRY.lock();
+    let mut held = 0usize;
+    let mut free_slot = None;
+    for (i, e) in reg.grant_leases.iter_mut().enumerate() {
+        if e.pages == 0 {
+            free_slot.get_or_insert(i);
+            continue;
+        }
+        if e.holder_tid != holder_tid {
+            continue;
+        }
+        if e.grant_owner == grant_owner && e.grant_id == grant_id {
+            e.holds = e.holds.checked_add(1).ok_or(GrantLeaseError::HolderFull)?;
+            return Ok(());
+        }
+        held += 1;
+    }
+    if held >= MAX_GRANT_LEASES_PER_HOLDER {
+        return Err(GrantLeaseError::HolderFull);
+    }
+    let slot = free_slot.ok_or(GrantLeaseError::TableFull)?;
+    reg.grant_leases[slot] = GrantLeaseEntry {
+        base: start,
+        pages,
+        grant_owner,
+        holder_tid,
+        grant_id,
+        holds: 1,
+        quarantined: false,
+    };
+    LIVE_GRANT_LEASES.fetch_add(1, Ordering::Release);
+    Ok(())
+}
+
+/// Take back the hold a failed `GrantSlice` added with [`lease_grant`].
+///
+/// Only for rollback inside the same grant-table transaction: the row is
+/// still present, so the owner is alive and no quarantine hold can name it.
+pub fn unlease_grant_hold(holder_tid: usize, grant_owner: usize, grant_id: usize) -> bool {
+    let mut reg = REGISTRY.lock();
+    let Some(entry) = reg
+        .grant_leases
+        .iter_mut()
+        .find(|e| same_grant_lease(e, holder_tid, grant_owner, grant_id))
+    else {
+        return false;
+    };
+    entry.holds -= 1;
+    if entry.holds == 0 {
+        *entry = EMPTY_GRANT_LEASE;
+        LIVE_GRANT_LEASES.fetch_sub(1, Ordering::Release);
+    }
+    true
+}
+
+/// Whether any task currently holds a `GrantSlice` lease.
+///
+/// The receive and send hooks call this before [`release_grant_holder_leases`]
+/// or [`release_grant_leases_to_owner`] so a task without leases never takes
+/// `REGISTRY`. A holder only asks about its own leases, which it published in
+/// an earlier syscall of its own, so a `false` here cannot hide one of them.
+pub fn grant_leases_live() -> bool {
+    LIVE_GRANT_LEASES.load(Ordering::Acquire) != 0
+}
+
+/// End every `GrantSlice` lease `holder_tid` holds: its next receive, or its
+/// death. Returns the owner-dead frames that no other protector still covers.
+pub fn release_grant_holder_leases(holder_tid: usize) -> Vec<ReleasedRange> {
+    let mut reg = REGISTRY.lock();
+    clear_grant_leases(&mut reg, |e| e.holder_tid == holder_tid);
+    release_orphaned_grant_lease_holds(&mut reg)
+}
+
+/// End `holder_tid`'s leases on Grants `grant_owner` owns: the holder's next
+/// send to that owner. Leases on other owners' Grants are untouched.
+pub fn release_grant_leases_to_owner(holder_tid: usize, grant_owner: usize) -> Vec<ReleasedRange> {
+    let mut reg = REGISTRY.lock();
+    clear_grant_leases(&mut reg, |e| {
+        e.holder_tid == holder_tid && e.grant_owner == grant_owner
+    });
+    release_orphaned_grant_lease_holds(&mut reg)
+}
+
+fn clear_grant_leases(reg: &mut Registry, matches: impl Fn(&GrantLeaseEntry) -> bool) {
+    for e in reg.grant_leases.iter_mut() {
+        if e.pages != 0 && matches(e) {
+            *e = EMPTY_GRANT_LEASE;
+            LIVE_GRANT_LEASES.fetch_sub(1, Ordering::Release);
+        }
+    }
+}
+
+/// Settle quarantine holds whose `GrantLease` key no longer names a live lease.
+///
+/// Several tasks can protect the same owner-dead frames (two holders, or a
+/// holder plus a DMA pin), but a hold carries one key. When that key's lease
+/// ends, the hold is re-keyed to the next live protector found by
+/// [`live_protector_key`]; only frames nothing protects any more are returned
+/// for the caller to free outside `REGISTRY`.
+fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> {
+    let mut released = Vec::new();
+    for i in 0..MAX_QUARANTINED_REGIONS {
+        let hold = reg.quarantine[i];
+        let ReleaseKey::GrantLease {
+            holder_tid,
+            grant_owner,
+            grant_id,
+        } = hold.release
+        else {
+            continue;
+        };
+        if hold.pages == 0
+            || reg
+                .grant_leases
+                .iter()
+                .any(|e| same_grant_lease(e, holder_tid, grant_owner, grant_id))
+        {
+            continue;
+        }
+        if let Some(key) = live_protector_key(reg, (hold.base, hold.pages)) {
+            reg.quarantine[i].release = key;
+            continue;
+        }
+        released.push(ReleasedRange {
+            base: hold.base,
+            pages: hold.pages,
+            #[cfg(cellos_p01_trace)]
+            p01_range: hold.p01_range,
+            #[cfg(cellos_p01_trace)]
+            p01_obligation: hold.p01_obligation,
+        });
+        reg.quarantine[i] = EMPTY_HOLD;
+    }
+    released
+}
+
+/// The release key of a live protector overlapping `probe`, marking it
+/// quarantined, in [`withhold_pinned_frames`] precedence.
+fn live_protector_key(reg: &mut Registry, probe: (usize, usize)) -> Option<ReleaseKey> {
+    if let Some(e) = reg
+        .grant_leases
+        .iter_mut()
+        .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
+    {
+        e.quarantined = true;
+        return Some(ReleaseKey::GrantLease {
+            holder_tid: e.holder_tid,
+            grant_owner: e.grant_owner,
+            grant_id: e.grant_id,
+        });
+    }
+    if let Some((&export_id, e)) = reg
+        .dma_exports
+        .iter()
+        .find(|(_, e)| overlaps(probe, (e.base, e.pages)))
+    {
+        return Some(ReleaseKey::DmaExport {
+            owner: e.owner,
+            holder_cell: e.holder_cell,
+            export_id,
+        });
+    }
+    if let Some(e) = reg
+        .pins
+        .iter()
+        .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
+    {
+        return Some(ReleaseKey::Owner(e.owner));
+    }
+    if reg
+        .cache_sync
+        .iter()
+        .any(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))
+    {
+        return Some(ReleaseKey::CacheSyncBootLifetime);
+    }
+    let e = reg
+        .vfs_leases
+        .iter_mut()
+        .find(|e| e.pages != 0 && overlaps(probe, (e.base, e.pages)))?;
+    e.quarantined = true;
+    Some(ReleaseKey::VfsLease {
+        holder_tid: e.holder_tid,
+        grant_owner: e.grant_owner,
+        request_generation: e.request_generation,
+    })
+}
+
+/// Lock `[base, base + len)` of task `owner` for DMA export `export_id`, held by
+/// the Cell `holder_cell` (ADR-0033 CP1 §5.1).
+///
+/// The caller proves ownership of the range while holding the grant-table lock
+/// that resolved it (order grant table → this leaf), so the owner cannot free
+/// the range between the check and the lock. Export ids are unique for the boot;
+/// the lease table in `task::dma_export` bounds how many locks exist.
+///
+/// # Errors
+/// [`PinError::InvalidRange`] for an empty or overflowing range;
+/// [`PinError::TableFull`] if `export_id` is already locked (never issued twice).
+pub(crate) fn lock_dma_export(
+    base: usize,
+    len: usize,
+    owner: usize,
+    holder_cell: u64,
+    export_id: u64,
+) -> Result<(), PinError> {
+    let (start, pages) = span(base, len).ok_or(PinError::InvalidRange)?;
+    let mut reg = REGISTRY.lock();
+    if reg.dma_exports.contains_key(&export_id) {
+        return Err(PinError::TableFull);
+    }
+    reg.dma_exports.insert(
+        export_id,
+        DmaExportLock {
+            base: start,
+            pages,
+            owner,
+            holder_cell,
+        },
+    );
+    Ok(())
+}
+
+/// Drop export `export_id`'s range lock after its window invalidation was
+/// acknowledged, and settle every quarantine hold keyed by it.
+///
+/// A hold whose frames another protector still covers (a second export of the
+/// same pages, a grant lease, a DMA pin) is re-keyed to that protector; only
+/// frames nothing protects are returned, for the caller to free outside
+/// `REGISTRY`.
+pub(crate) fn unlock_dma_export(export_id: u64) -> Vec<ReleasedRange> {
+    let mut reg = REGISTRY.lock();
+    reg.dma_exports.remove(&export_id);
+    let mut released = Vec::new();
+    for i in 0..MAX_QUARANTINED_REGIONS {
+        let hold = reg.quarantine[i];
+        if hold.pages == 0
+            || !matches!(hold.release, ReleaseKey::DmaExport { export_id: id, .. } if id == export_id)
+        {
+            continue;
+        }
+        if let Some(key) = live_protector_key(&mut reg, (hold.base, hold.pages)) {
+            reg.quarantine[i].release = key;
+            continue;
+        }
+        released.push(ReleasedRange {
+            base: hold.base,
+            pages: hold.pages,
+            #[cfg(cellos_p01_trace)]
+            p01_range: hold.p01_range,
+            #[cfg(cellos_p01_trace)]
+            p01_obligation: hold.p01_obligation,
+        });
+        reg.quarantine[i] = EMPTY_HOLD;
+    }
+    released
+}
+
+/// Pages withheld under export `export_id`'s release key.
+#[cfg(test)]
+pub(crate) fn dma_export_quarantined_pages(export_id: u64) -> usize {
+    let reg = REGISTRY.lock();
+    reg.quarantine
+        .iter()
+        .filter(|q| {
+            q.pages != 0
+                && matches!(q.release, ReleaseKey::DmaExport { export_id: id, .. } if id == export_id)
+        })
+        .map(|q| q.pages)
+        .sum()
+}
+
 /// Pages currently withheld from the frame allocator.
 pub fn quarantined_pages() -> usize {
     let reg = REGISTRY.lock();
@@ -989,7 +1508,8 @@ pub fn vfs_leases_pending_for_owner(grant_owner: usize) -> usize {
 }
 
 /// Quarantined pages whose release key names one of `tids`: an owner-wide
-/// acknowledgement by a member, or a VFS lease a member granted or held.
+/// acknowledgement by a member, or a VFS or `GrantSlice` lease a member granted
+/// or held.
 /// Boot-lifetime cache-sync holds carry no task and are never attributed.
 pub fn quarantined_pages_attributed(tids: &[usize]) -> usize {
     let reg = REGISTRY.lock();
@@ -1004,6 +1524,12 @@ pub fn quarantined_pages_attributed(tids: &[usize]) -> usize {
                         grant_owner,
                         ..
                     } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
+                    ReleaseKey::GrantLease {
+                        holder_tid,
+                        grant_owner,
+                        ..
+                    } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
+                    ReleaseKey::DmaExport { owner, .. } => tids.contains(&owner),
                     ReleaseKey::None | ReleaseKey::CacheSyncBootLifetime => false,
                 }
         })

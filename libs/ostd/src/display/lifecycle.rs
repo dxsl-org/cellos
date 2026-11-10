@@ -3,9 +3,7 @@
 use api::display::{compositor_ops, SetTitle, SurfaceStateRequest, WindowConfigure};
 use types::{ViError, ViResult};
 
-use crate::syscall::{
-    sys_grant_register, sys_grant_share, sys_grant_slice, sys_grant_unregister, sys_send,
-};
+use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice, sys_send};
 
 use super::ipc::{self, AttachGrantResult};
 use super::surface::ViSurface;
@@ -80,7 +78,7 @@ impl ViSurface {
         let new_ptr = match sys_grant_slice(new_reg_id) {
             Some(pointer) => pointer,
             None => {
-                sys_grant_unregister(new_reg_id);
+                ipc::release_grant(new_reg_id);
                 return Err(ViError::IO);
             }
         };
@@ -97,7 +95,7 @@ impl ViSurface {
             AttachGrantResult::Attached => {}
             AttachGrantResult::Rejected => {
                 self.staged_reg_id = None;
-                sys_grant_unregister(new_reg_id);
+                ipc::release_grant(new_reg_id);
                 return Err(ViError::IO);
             }
             AttachGrantResult::AmbiguousFailure => return Err(ViError::IO),
@@ -105,7 +103,7 @@ impl ViSurface {
         if ipc::configure_ack(self.comp_tid, self.cap, configure.serial).is_err() {
             if ipc::detach_grant(self.comp_tid, self.cap).is_ok() {
                 self.staged_reg_id = None;
-                sys_grant_unregister(new_reg_id);
+                ipc::release_grant(new_reg_id);
             }
             return Err(ViError::IO);
         }
@@ -144,7 +142,9 @@ impl ViSurface {
             return;
         };
         if ipc::detach_replaced_grant(self.comp_tid, self.cap, reg_id).is_ok() {
-            sys_grant_unregister(reg_id);
+            // A lease the compositor took for its last blit of this Grant ends
+            // at its next receive; the detach reply usually already ended it.
+            ipc::release_grant(reg_id);
             self.retired_reg_id = None;
         }
     }
@@ -163,12 +163,12 @@ impl Drop for ViSurface {
         sys_send(self.comp_tid, &detach);
         let _ = ipc::receive_status(self.comp_tid, 0x01);
         let _ = ipc::destroy_surface(self.comp_tid, self.cap);
-        sys_grant_unregister(self.reg_id);
+        ipc::release_grant(self.reg_id);
         if let Some(reg_id) = self.staged_reg_id {
-            sys_grant_unregister(reg_id);
+            ipc::release_grant(reg_id);
         }
         if let Some(reg_id) = self.retired_reg_id {
-            sys_grant_unregister(reg_id);
+            ipc::release_grant(reg_id);
         }
     }
 }

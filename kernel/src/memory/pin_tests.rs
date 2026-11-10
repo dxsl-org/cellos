@@ -341,3 +341,120 @@ fn retirement_attribution_counts_only_named_tasks() {
     assert_eq!(quarantined_pages_attributed(&[930, 931, 939]), 0);
     assert_eq!(vfs_leases_pending_for_owner(931), 0);
 }
+
+// ── GrantSlice leases (`LEASE` flag) ─────────────────────────────────────────
+
+#[test]
+fn grant_lease_reports_its_holder_and_folds_re_leases_into_holds() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(40);
+    assert_eq!(lease_grant(base, PAGE_SIZE, 940, 340, base), Ok(()));
+    assert_eq!(lease_grant(base, PAGE_SIZE, 940, 340, base), Ok(()));
+    assert!(grant_leases_live());
+    let held = holder_of(base, PAGE_SIZE).expect("a leased Grant must report as held");
+    assert_eq!((held.owner, held.holder_tid, held.holds), (940, 340, 2));
+    assert!(!held.quarantined && !held.pending_revoke);
+    // One release boundary ends every hold of the key at once.
+    assert!(release_grant_holder_leases(340).is_empty());
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+    assert!(!grant_leases_live());
+}
+
+#[test]
+fn send_to_one_owner_ends_only_that_owners_grant_leases() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let mine = arena(41);
+    let other = arena(42);
+    assert_eq!(lease_grant(mine, PAGE_SIZE, 941, 341, mine), Ok(()));
+    assert_eq!(lease_grant(other, PAGE_SIZE, 942, 341, other), Ok(()));
+    assert!(release_grant_leases_to_owner(341, 941).is_empty());
+    assert!(holder_of(mine, PAGE_SIZE).is_none());
+    assert!(holder_of(other, PAGE_SIZE).is_some());
+    assert!(release_grant_leases_to_owner(341, 942).is_empty());
+    assert!(holder_of(other, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn owner_death_quarantines_grant_lease_frames_until_the_holder_releases() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(43);
+    let before = quarantined_pages();
+    assert_eq!(lease_grant(base, PAGE_SIZE, 943, 343, base), Ok(()));
+    assert!(grant_lease_holder_of_owner(base, PAGE_SIZE, 943).is_some());
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(quarantined_pages(), before + 1);
+    let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
+    assert!(held.quarantined && held.pending_revoke);
+    assert_eq!(quarantined_pages_attributed(&[943]), 1);
+    assert_eq!(quarantined_pages_attributed(&[343]), 1);
+    // A send to some other owner is not this lease's boundary.
+    assert!(release_grant_leases_to_owner(343, 944).is_empty());
+    assert_eq!(quarantined_pages(), before + 1);
+    assert_eq!(release_grant_holder_leases(343), alloc::vec![(base, 1)]);
+    assert_eq!(quarantined_pages(), before);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn quarantined_grant_frames_pass_to_the_next_live_protector() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(44);
+    let before = quarantined_pages();
+    assert_eq!(lease_grant(base, PAGE_SIZE, 945, 345, base), Ok(()));
+    assert_eq!(lease_grant(base, PAGE_SIZE, 945, 346, base), Ok(()));
+    assert_eq!(pin(base, PAGE_SIZE, 947), Ok(()));
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    // Each release re-keys the hold while any protector remains.
+    assert!(release_grant_holder_leases(345).is_empty());
+    assert!(release_grant_holder_leases(346).is_empty());
+    assert_eq!(quarantined_pages(), before + 1);
+    assert_eq!(acknowledge(947), alloc::vec![(base, 1)]);
+    assert_eq!(quarantined_pages(), before);
+}
+
+#[test]
+fn per_holder_grant_lease_limit_refuses_only_new_keys() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(45);
+    for grant in 0..MAX_GRANT_LEASES_PER_HOLDER {
+        let id = base + grant * PAGE_SIZE;
+        assert_eq!(lease_grant(id, PAGE_SIZE, 948, 348, id), Ok(()), "{grant}");
+    }
+    let next = base + MAX_GRANT_LEASES_PER_HOLDER * PAGE_SIZE;
+    assert_eq!(
+        lease_grant(next, PAGE_SIZE, 948, 348, next),
+        Err(GrantLeaseError::HolderFull)
+    );
+    // An existing key still takes a hold, and another holder is unaffected.
+    assert_eq!(lease_grant(base, PAGE_SIZE, 948, 348, base), Ok(()));
+    assert_eq!(lease_grant(next, PAGE_SIZE, 948, 349, next), Ok(()));
+    assert!(release_grant_holder_leases(348).is_empty());
+    assert!(release_grant_holder_leases(349).is_empty());
+    assert!(holder_of(base, 2 * MAX_GRANT_LEASES_PER_HOLDER * PAGE_SIZE).is_none());
+    assert_eq!(
+        lease_grant(base, 0, 948, 348, base),
+        Err(GrantLeaseError::InvalidRange)
+    );
+}
+
+#[test]
+fn grant_lease_rollback_removes_exactly_one_hold() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(47);
+    assert_eq!(lease_grant(base, PAGE_SIZE, 950, 350, base), Ok(()));
+    assert_eq!(lease_grant(base, PAGE_SIZE, 950, 350, base), Ok(()));
+    assert!(unlease_grant_hold(350, 950, base));
+    assert_eq!(holder_of(base, PAGE_SIZE).map(|held| held.holds), Some(1));
+    assert!(unlease_grant_hold(350, 950, base));
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+    assert!(!unlease_grant_hold(350, 950, base));
+}
+
+#[test]
+fn an_owners_lease_on_its_own_grant_does_not_block_reaper_transfer() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(48);
+    assert_eq!(lease_grant(base, PAGE_SIZE, 951, 951, base), Ok(()));
+    assert!(grant_lease_holder_of_owner(base, PAGE_SIZE, 951).is_none());
+    assert!(release_grant_holder_leases(951).is_empty());
+}

@@ -11,7 +11,7 @@
 //! paths; its host drops to EL1 (`el2_stub`).
 
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use super::backend::{hcr_translates_el0, ArmPlatform, Board};
 
@@ -21,19 +21,6 @@ use super::backend::{hcr_translates_el0, ArmPlatform, Board};
 /// Named exactly `EL2_ACTIVE` because the assembly trampolines reference it by symbol name via ADRP.
 #[no_mangle]
 pub static EL2_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-/// Source slot of the most recent lower-EL AArch64 vector entry.
-///
-/// The assembly wrappers store the architectural vector slot before preserving
-/// the existing dispatch path: 1=sync, 2=IRQ, 3=FIQ, 4=SError.
-#[no_mangle]
-pub static AARCH64_EL2_VECTOR_KIND: AtomicU8 = AtomicU8::new(0);
-
-/// Consume the lower-EL vector marker recorded by the assembly entry wrapper.
-#[inline]
-pub fn take_lower_vector_kind() -> u8 {
-    AARCH64_EL2_VECTOR_KIND.swap(0, Ordering::Relaxed)
-}
 
 /// True only when the *host* kernel executes at EL2 (QEMU virt); not Pi monitor.
 #[inline]
@@ -306,8 +293,10 @@ __vectors_el2:
     .section .text
     .balign 4
 
-    // Preserve the original vector-dispatch behavior while recording which
-    // lower-EL slot fired. x16/x17 are restored before entering the old target.
+    // Lower-EL entries clear PSTATE.PAN before entering the old target.
+    // The lower-EL origin itself is not recorded here: it reaches the
+    // dispatcher as its `lower_kind` argument (x1, set in
+    // `vt_sync_el2_from_lower`), per exception, so no other CPU can overwrite it.
     //
     // With SCTLR_EL2.SPAN = 1 an exception to EL2 leaves PSTATE.PAN as the
     // interrupted context had it, so an exit from a guest that enabled PAN
@@ -316,28 +305,29 @@ __vectors_el2:
     // fault. Clear it first. `msr pan, #0` is emitted as its encoding so it
     // assembles without the `pan` target feature; FEAT_PAN is mandatory
     // wherever FEAT_VHE is, and only the VHE host installs these vectors.
-    .macro mark_lower_vector label, kind, target
+    .macro mark_lower_vector label, target
 \label:
     .inst 0xd500409f            // msr pan, #0
-    sub  sp, sp, #16
-    stp  x16, x17, [sp]
-    adrp x16, AARCH64_EL2_VECTOR_KIND
-    add  x16, x16, :lo12:AARCH64_EL2_VECTOR_KIND
-    mov  w17, #\kind
-    strb w17, [x16]
-    ldp  x16, x17, [sp]
-    add  sp, sp, #16
     b    \target
     .endm
 
-    mark_lower_vector vt_sync_el2_lower_marked,   1, vt_sync_el2_lower
-    mark_lower_vector vt_irq_el2_lower_marked,    2, vt_irq_el2_lower
-    mark_lower_vector vt_fiq_el2_lower_marked,    3, vt_fiq_el2_lower
-    mark_lower_vector vt_serror_el2_lower_marked, 4, vt_sync_el2_lower
+    mark_lower_vector vt_sync_el2_lower_marked,   vt_sync_el2_lower
+    mark_lower_vector vt_irq_el2_lower_marked,    vt_irq_el2_lower
+    mark_lower_vector vt_fiq_el2_lower_marked,    vt_fiq_el2_lower
+    mark_lower_vector vt_serror_el2_lower_marked, vt_sync_el2_lower
 
+    // Host sync entry from a lower EL (a Cell): `lower_kind = 1` in x1.
+vt_sync_el2_from_lower:
+    sub  sp, sp, #(36 * 8)
+    stp  x0,  x1,  [sp, #0]
+    mov  x1,  #1
+    b    vt_sync_el2_common
+    // Host sync entry from EL2 itself: `lower_kind = 0` in x1.
     vt_sync_el2_cur:
     sub  sp, sp, #(36 * 8)
     stp  x0,  x1,  [sp, #0]
+    mov  x1,  #0
+vt_sync_el2_common:
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
     stp  x6,  x7,  [sp, #48]
@@ -398,7 +388,7 @@ vt_sync_el2_lower:
     // Guest not running: restore scratch and fall through to the host SVC handler.
 1:  ldp  x0, x1, [sp]
     add  sp, sp, #16
-    b    vt_sync_el2_cur
+    b    vt_sync_el2_from_lower
 
     // ── Lower-EL IRQ: Cell-preempting tick, or a tick that interrupted the guest ─
     //

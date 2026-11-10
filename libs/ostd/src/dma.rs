@@ -12,8 +12,8 @@
 //! # let _ = iova;
 
 use crate::syscall::{
-    sys_grant_alloc, sys_grant_cache_sync_begin, sys_grant_cache_sync_complete, sys_grant_dma,
-    sys_grant_free, SyscallError,
+    sys_export_dma_range, sys_grant_alloc, sys_grant_cache_sync_begin,
+    sys_grant_cache_sync_complete, sys_grant_dma, sys_grant_free, DmaExportError, SyscallError,
 };
 
 /// A physically-contiguous, page-aligned DMA buffer backed by a Grant region.
@@ -73,10 +73,72 @@ impl DmaBuf {
         sys_grant_cache_sync_complete(token)
     }
 
+    /// Export `[offset, offset + len)` of this buffer to the live provider of
+    /// `holder_service` (`ExportDmaRange = 437`, ADR-0033). The holder maps it
+    /// with [`map_export`] and its device reaches it through a kernel-chosen
+    /// IOVA window; `device_write` false makes the window device-read-only.
+    /// The buffer cannot be freed until the export is revoked ([`revoke_export`]).
+    pub fn export(
+        &self,
+        offset: usize,
+        len: usize,
+        holder_service: u16,
+        device_write: bool,
+    ) -> Result<u64, DmaExportError> {
+        if offset.checked_add(len).is_none_or(|end| end > self.size()) {
+            return Err(DmaExportError::InvalidInput);
+        }
+        let flags = if device_write {
+            api::dma_export::EXPORT_DEVICE_WRITE
+        } else {
+            0
+        };
+        sys_export_dma_range(self.grant_id + offset, len, holder_service, flags)
+    }
+
+    /// Copy `src` into the buffer at `offset`. Returns `false` (and copies
+    /// nothing) when the span does not fit.
+    pub fn write_bytes(&self, offset: usize, src: &[u8]) -> bool {
+        if offset
+            .checked_add(src.len())
+            .is_none_or(|end| end > self.size())
+        {
+            return false;
+        }
+        for (i, byte) in src.iter().enumerate() {
+            // SAFETY: the span lies inside this live, caller-owned Grant, which
+            // is mapped USER RW at `grant_id` for the buffer's whole size.
+            // Volatile: a device may read it through an authorized window.
+            unsafe { self.virt().add(offset + i).write_volatile(*byte) };
+        }
+        true
+    }
+
+    /// Copy `dst.len()` bytes at `offset` out of the buffer. Returns `false`
+    /// (and copies nothing) when the span does not fit.
+    pub fn read_bytes(&self, offset: usize, dst: &mut [u8]) -> bool {
+        if offset
+            .checked_add(dst.len())
+            .is_none_or(|end| end > self.size())
+        {
+            return false;
+        }
+        for (i, byte) in dst.iter_mut().enumerate() {
+            // SAFETY: as in `write_bytes`; volatile because a device may have
+            // written the memory behind the compiler's back.
+            *byte = unsafe { self.virt().add(offset + i).read_volatile() };
+        }
+        true
+    }
+
     /// Release the Grant region and return frames to the kernel.
     pub fn free(self) {
         sys_grant_free(self.grant_id);
     }
 }
 
+/// 438: map a client's export into this Driver Cell's VT-d domain for `bdf`.
+pub use crate::syscall::sys_map_dma_export as map_export;
 pub use crate::syscall::sys_register_nic_driver as register_nic_driver;
+/// 439: revoke an export (owner or holder).
+pub use crate::syscall::sys_revoke_dma_export as revoke_export;

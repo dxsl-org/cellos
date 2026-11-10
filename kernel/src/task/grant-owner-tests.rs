@@ -30,6 +30,7 @@ fn slice(grant_id: usize, size_out_ptr: usize, expected_owner_tid: usize) -> usi
             grant_id,
             size_out_ptr,
             expected_owner_tid,
+            flags: 0,
         },
     )
     .expect("a SAS GrantSlice refusal is the usize::MAX sentinel, never an error")
@@ -102,6 +103,7 @@ fn grant_slice_decodes_a2_as_expected_owner() {
             grant_id: 7,
             size_out_ptr: 0x8000,
             expected_owner_tid: OWNER_TID,
+            flags: 0,
         }) => {}
         other => panic!("GrantSlice decoded as {other:?}"),
     }

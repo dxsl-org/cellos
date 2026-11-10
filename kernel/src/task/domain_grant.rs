@@ -369,6 +369,7 @@ pub(crate) fn run_selftest() {
                 grant_id,
                 size_out_ptr: 0,
                 expected_owner_tid: 0,
+                flags: 0,
             },
         ) {
             Ok(base) if base != usize::MAX => Some(base),
@@ -562,6 +563,7 @@ pub(crate) fn run_selftest() {
                 grant_id: 0,
                 size_out_ptr: 0,
                 expected_owner_tid: 0,
+                flags: 0,
             },
         )
         .is_ok_and(|result| result == usize::MAX);

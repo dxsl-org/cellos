@@ -8,8 +8,8 @@
 //! 2. `EarlyLoader::read_file(path)` — returns an owned `Box<[u8]>` of the ELF.
 
 use super::disk_layout::{
-    CellEntry, CellTableHeader, CELL_PATH_LEN, CELL_TABLE_BASE_LBA, CELL_TABLE_MAGIC,
-    MAX_CELL_ENTRIES, SECTOR_SIZE,
+    CellEntry, CellTableHeader, CELL_PATH_LEN, CELL_TABLE_BASE_LBA, CELL_TABLE_END_LBA,
+    CELL_TABLE_MAGIC, MAX_CELL_ENTRIES, SECTOR_SIZE,
 };
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -111,6 +111,24 @@ impl EarlyLoader {
             crate::task::drivers::block::read_sector(entry_lba, &mut entry_buf)?;
             // SAFETY: entry_buf is SECTOR_SIZE bytes; CellEntry is repr(C) SECTOR_SIZE.
             let entry: CellEntry = unsafe { core::mem::transmute(entry_buf) };
+            // A blob must sit after the entry array and end inside P2: past P2
+            // is the snapshot partition, whose sectors are not cell bytes.
+            let first = CELL_TABLE_BASE_LBA + 1 + count as u64;
+            let sectors = entry.data_size.div_ceil(SECTOR_SIZE as u64);
+            let in_p2 = entry.data_lba >= first
+                && entry
+                    .data_lba
+                    .checked_add(sectors)
+                    .is_some_and(|end| end <= CELL_TABLE_END_LBA);
+            if !in_p2 {
+                log::error!(
+                    "[early] cell table entry {} lies outside P2 (LBA {} + {} bytes)",
+                    i,
+                    entry.data_lba,
+                    entry.data_size
+                );
+                return Err(ViError::InvalidInput);
+            }
             entries.push(entry);
         }
 

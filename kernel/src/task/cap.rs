@@ -149,6 +149,14 @@ pub struct PlatformCap(());
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
+/// The ADR-0033 CP1 §7 `edu` export-lane holder (`cells/tests/edu-holder`). It
+/// exists only in `test-hooks` kernels, whose lane image loads no operator policy,
+/// so it is deliberately not a `with_path_caps` literal: `scripts/sign-policy.py`
+/// requires every literal there in the production policy table, and a production
+/// kernel cannot mint authority for this path at all.
+#[cfg(feature = "test-hooks")]
+const TEST_EXPORT_HOLDER_PATH: &str = "/bin/edu-holder";
+
 /// Singleton latch: held by either the one live reservation or the permanently
 /// committed Platform task. A reservation owns the only transition back to
 /// `false`; once committed, the latch intentionally remains set forever.
@@ -477,6 +485,12 @@ impl CapSet {
                 | "/bin/vmxnet3"
                 | "/bin/pvscsi"
         ) {
+            self.pcie_driver = true;
+            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
+        }
+        // ADR-0033 CP1 §7: the `edu` export-lane holder, test-hooks images only.
+        #[cfg(feature = "test-hooks")]
+        if path == TEST_EXPORT_HOLDER_PATH {
             self.pcie_driver = true;
             self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
         }

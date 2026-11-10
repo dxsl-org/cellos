@@ -1101,6 +1101,7 @@ impl Scheduler {
             parent_caps,
             parent_allowlist,
             parent_pku,
+            parent_user_cet,
             parent_tls,
             parent_allowed_drivers,
         ) = {
@@ -1123,6 +1124,7 @@ impl Scheduler {
                 super::cap::CapSet::of_task(parent),
                 parent.syscall_allowlist,
                 (parent.pku_key, parent.pku_value),
+                parent.user_cet,
                 parent.tls_base,
                 allowed_drivers,
             )
@@ -1170,6 +1172,14 @@ impl Scheduler {
         task.syscall_allowlist = parent_allowlist;
         task.pku_key = parent_pku.0;
         task.pku_value = parent_pku.1;
+        // The parent's CET-IBT configuration, never its saved tracker state:
+        // the new thread has not taken an indirect branch yet.
+        #[cfg(target_arch = "x86_64")]
+        {
+            task.user_cet = parent_user_cet & !crate::hal::cet::USER_CET_STATE_BITS;
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        let _ = parent_user_cet;
         #[cfg(all(
             feature = "native-domains",
             any(
@@ -2691,6 +2701,21 @@ impl Scheduler {
             );
             false
         });
+
+        // x86_64 CET-IBT (per-Cell opt-in): save the outgoing task's
+        // IA32_U_CET (tracker state included) and load the incoming task's,
+        // before the incoming task can reach CPL3. Between two tasks that did
+        // not opt in this is one per-CPU load and no MSR access. A zombie
+        // outgoing task has no slot left to save into; its state is dropped.
+        // Hosted ownership fixtures have no privileged kernel GS base.
+        #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
+        if let Some(nid) = next_id {
+            let incoming = self.tasks.get(&nid).map_or(0, |task| task.user_cet);
+            let outgoing = current_id
+                .and_then(|cid| self.tasks.get_mut(&cid))
+                .map(|task| &mut task.user_cet);
+            crate::hal::cet::switch_user_cet(outgoing, incoming);
+        }
 
         if let Some(nid) = next_id {
             if let Some(next_task) = self.tasks.get_mut(&nid) {

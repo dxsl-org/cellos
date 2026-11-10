@@ -33,6 +33,11 @@ const PTE_AP_EL0: u64 = 1 << 6;
 const PTE_AP_RO: u64 = 1 << 7;
 const PTE_UXN: u64 = 1 << 54;
 const PTE_PXN: u64 = 1 << 53;
+/// GP — BTI guarded page (FEAT_BTI, stage-1 bit 50). An indirect branch into a
+/// guarded page must land on a `BTI` instruction compatible with PSTATE.BTYPE,
+/// or the PE raises a Branch Target exception (EC 0x0D). Set only from
+/// `PageFlags::GUARDED` on an executable leaf.
+const PTE_GP: u64 = 1 << 50;
 /// MAIR index 1 = Normal WB-WA-RA — for RAM regions.
 const ATTR_NORMAL: u64 = 1 << 2;
 /// MAIR index 0 = Device-nGnRnE — for MMIO device registers.
@@ -80,6 +85,10 @@ fn leaf_word(phys: PhysAddr, flags: PageFlags) -> u64 {
     }
     if flags.bits() & PageFlags::EXECUTE == 0 {
         entry |= PTE_UXN | PTE_PXN;
+    } else if flags.bits() & PageFlags::GUARDED != 0 {
+        // GP only matters where instructions can be fetched; a non-executable
+        // page never carries it, so the bit cannot outlive an X removal.
+        entry |= PTE_GP;
     }
     if flags.bits() & PageFlags::NON_GLOBAL != 0 {
         entry |= PTE_NG;

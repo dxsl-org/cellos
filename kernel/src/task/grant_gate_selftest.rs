@@ -139,6 +139,7 @@ fn grant_slice(tid: usize, grant_id: usize) -> Result<usize, SyscallError> {
             grant_id,
             size_out_ptr: 0,
             expected_owner_tid: 0,
+            flags: 0,
         },
     )
 }

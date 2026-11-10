@@ -17,6 +17,8 @@ pub struct PreparedElfTask {
     /// Entry stack pointer: the Cell initial stack block (CP1 AX-2) on 64-bit
     /// targets, the bare user stack top elsewhere.
     user_sp: usize,
+    /// Initial `IA32_U_CET` (x86_64 CET-IBT opt-in); 0 everywhere else.
+    user_cet: u64,
 }
 
 impl PreparedElfTask {
@@ -34,6 +36,7 @@ impl PreparedElfTask {
         task.kernel_stack = Some(self.kstack);
         task.user_stack = Some(self.ustack);
         task.segment_mem = Some(self.segments);
+        task.user_cet = self.user_cet;
         super::prime_user_mode_entry_at(&mut task, self.entry, 0, self.user_sp);
         Ok((task, self.load_base))
     }
@@ -101,6 +104,12 @@ pub fn prepare_elf_task(
 
     let loader = ElfLoader;
     let header = loader.parse_header(elf_data)?;
+    // Forward-edge CFI opt-in, read from the admitted bytes before any mapping
+    // so a malformed property refuses the spawn with nothing to unwind.
+    let cfi = crate::loader::gnu_property::arm(
+        crate::loader::gnu_property::forward_edge_cfi(elf_data)?,
+        name,
+    );
     // Every image owns exactly one VA slot and may map only inside it: a PIE
     // takes any free slot; a fixed-VA image claims the slot it is linked into
     // and is refused when another spawn holds it, so no image page can land
@@ -122,7 +131,7 @@ pub fn prepare_elf_task(
     let seg_pages = {
         let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = frames.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader.load_segments(elf_data, allocator, load_base, slot_base)?
+        loader.load_segments(elf_data, allocator, load_base, slot_base, cfi.guarded_code)?
     };
     let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
     #[cfg(feature = "test-hooks")]
@@ -171,7 +180,8 @@ pub fn prepare_elf_task(
         crate::memory::heap::p01_owner::adopt_vec(&writable_pages);
     }
     let segments =
-        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, slot_base);
+        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, slot_base)
+            .with_guarded_code(cfi.guarded_code);
     // Constructor is infallible: the segment owner now exclusively owns both
     // frame reclamation and PIE release, including every later failure edge.
     mapping_rollback.0 = None;
@@ -216,6 +226,7 @@ pub fn prepare_elf_task(
         entry,
         load_base,
         user_sp,
+        user_cet: cfi.user_cet,
     })
 }
 

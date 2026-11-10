@@ -97,7 +97,7 @@ fn test_pie_slot_admission_precedes_mapping() {
     let allocator = frames.as_mut().expect("ELF selftest needs frame allocator");
     let before = allocator.used_frames();
     assert!(matches!(
-        super::ElfLoader.load_segments(&image, allocator, base, base),
+        super::ElfLoader.load_segments(&image, allocator, base, base, false),
         Err(ViError::PermissionDenied)
     ));
     assert_eq!(

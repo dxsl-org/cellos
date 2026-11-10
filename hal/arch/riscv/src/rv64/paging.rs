@@ -29,8 +29,10 @@ pub fn flush_tlb_page(virt: VAddr) {
 /// `PageFlags::NON_GLOBAL` is an AArch64 `PTE_nG` request, and on RISC-V the
 /// leaf is already address-space-scoped, so it is dropped here rather than
 /// written into a software-reserved bit no other code expects to be set.
+/// `PageFlags::GUARDED` is an AArch64 BTI `GP` request; bit 10 of an Sv39 leaf
+/// is `PPN[0]`, so leaving it set would map the wrong frame.
 fn to_riscv_flags(flags: PageFlags) -> usize {
-    let mut bits = flags.bits() & !PageFlags::NON_GLOBAL;
+    let mut bits = flags.bits() & !(PageFlags::NON_GLOBAL | PageFlags::GUARDED);
 
     // Ensure VALID is set if any other bit is set (safeguard)
     if bits != 0 {

@@ -4621,7 +4621,7 @@ mod tests {
     #[test]
     fn snapshot_capture_capacity_bound_refuses_oversized_inventory() {
         let source = sparse_ram();
-        // One run of frames far beyond the P3 capacity (240_000 sectors = 30_000
+        // One run of frames far beyond the P3 capacity (200_000 sectors = 25_000
         // frames), inside a huge RAM window.
         let big = RamLayout {
             base: BASE,

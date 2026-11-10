@@ -23,13 +23,28 @@ pub const PART_FAT32_SECTORS: u64 = 524_288;
 
 /// P2: first LBA of the cell bootstrap table (header + entries + ELF blobs).
 pub const PART_CELLTBL_BASE_LBA: u64 = 526_336;
-/// P2 size in sectors (16 MiB).
-pub const PART_CELLTBL_SECTORS: u64 = 33_664;
+/// P2 size in sectors (~36 MiB).
+///
+/// P2 carries the same cell set as the P6 cell-store, raw, after a one-sector
+/// header and one sector per entry. It was 33,664 sectors (16 MiB) until
+/// 2026-11-10, when the shipped set had outgrown it and the writers were
+/// appending ELF blobs into P3. Sized so P2 holds at least everything P6 can
+/// (kernel `disk_layout.rs` asserts it); the growth came out of P3, so every
+/// other partition keeps its address.
+pub const PART_CELLTBL_SECTORS: u64 = 73_664;
 
-/// P3: kernel heap snapshot region (raw LBA, no filesystem).
-pub const PART_SNAPSHOT_BASE_LBA: u64 = 560_000;
-/// P3 size in sectors (~117 MB — covers the full 64 MB kernel heap + headers).
-pub const PART_SNAPSHOT_SECTORS: u64 = 240_000;
+/// P3: kernel heap snapshot region (raw LBA, no filesystem). Starts where P2
+/// ends; it was at 560,000 until 2026-11-10.
+pub const PART_SNAPSHOT_BASE_LBA: u64 = 600_000;
+/// P3 size in sectors (~97 MiB — covers the full 64 MB kernel heap + headers).
+pub const PART_SNAPSHOT_SECTORS: u64 = 200_000;
+
+// The partitions are contiguous: growing P2 must move P3's base, never overlap it.
+const _: () = assert!(PART_FAT32_BASE_LBA + PART_FAT32_SECTORS == PART_CELLTBL_BASE_LBA);
+const _: () = assert!(PART_CELLTBL_BASE_LBA + PART_CELLTBL_SECTORS == PART_SNAPSHOT_BASE_LBA);
+const _: () = assert!(PART_SNAPSHOT_BASE_LBA + PART_SNAPSHOT_SECTORS == PART_LFS_BASE_LBA);
+const _: () = assert!(PART_LFS_BASE_LBA + PART_LFS_SECTORS == PART_SRV_BASE_LBA);
+const _: () = assert!(PART_SRV_BASE_LBA + PART_SRV_SECTORS == PART_CELLSTORE_BASE_LBA);
 
 /// P4: CellosFS Native /data store; legacy PART_LFS symbol names preserve ABI.
 pub const PART_LFS_BASE_LBA: u64 = 800_000;

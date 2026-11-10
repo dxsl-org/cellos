@@ -2146,7 +2146,7 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
 /// `GrantSlice` ABI contract: null is allowed, but any non-null pointer must
 /// name one aligned `usize` slot fully inside the caller's own user stack.
 pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
-    grant_slice_with_len(grant_id, 0)
+    grant_slice_with_len(grant_id, 0, 0)
 }
 
 /// [`sys_grant_slice_with_len`] that also requires `owner_tid` to own the Grant.
@@ -2163,10 +2163,34 @@ pub fn sys_grant_slice_with_len_owned_by(
     if owner_tid == 0 {
         return None;
     }
-    grant_slice_with_len(grant_id, owner_tid)
+    grant_slice_with_len(grant_id, owner_tid, 0)
 }
 
-fn grant_slice_with_len(grant_id: usize, expected_owner_tid: usize) -> Option<(*mut u8, usize)> {
+/// [`sys_grant_slice_with_len_owned_by`] that also leases the Grant to the
+/// caller (`GrantSlice` a3 `LEASE`).
+///
+/// The kernel publishes the lease in the same grant-table transaction as the
+/// lookup and owner check. Until the caller's next receive, its next send to
+/// `owner_tid`, or its death, `owner_tid` cannot free or unregister the Grant
+/// (`PermissionDenied`), and if `owner_tid` dies the frames stay withheld from
+/// the allocator. The returned pointer is therefore valid for reads and writes
+/// of `len` bytes up to that boundary, and no longer. A holder that already
+/// keeps 64 distinct leases gets `None`, exactly as for an unknown id.
+pub fn sys_grant_slice_with_len_leased_owned_by(
+    grant_id: usize,
+    owner_tid: usize,
+) -> Option<(*mut u8, usize)> {
+    if owner_tid == 0 {
+        return None;
+    }
+    grant_slice_with_len(grant_id, owner_tid, api::syscall::grant_slice::LEASE)
+}
+
+fn grant_slice_with_len(
+    grant_id: usize,
+    expected_owner_tid: usize,
+    flags: usize,
+) -> Option<(*mut u8, usize)> {
     let mut len = 0usize;
     // SAFETY: `len` is a live writable stack slot for the duration of the call.
     let ret = unsafe {
@@ -2175,7 +2199,7 @@ fn grant_slice_with_len(grant_id: usize, expected_owner_tid: usize) -> Option<(*
             grant_id,
             (&mut len as *mut usize) as usize,
             expected_owner_tid,
-            0,
+            flags,
         )
     };
     if (ret as usize) == usize::MAX || len == 0 {
@@ -3207,6 +3231,127 @@ pub fn sys_system_power(action: SystemPowerAction) -> SystemPowerError {
     system_power_error(ret)
 }
 
+/// Why a DMA export call (437-439) was refused ([`api::dma_export`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DmaExportError {
+    /// Holder not eligible, range not owned, not the lease holder, or no
+    /// `PcieDriverCap` / BDF ownership / allowlist bit 48 (438).
+    PermissionDenied,
+    /// No live provider (437); unknown, revoked or owner-dead export (438/439).
+    NotFound,
+    InvalidInput,
+    /// No translating remapper: exports never fall back to identity DMA.
+    NotSupported,
+    /// Lease table, window space, page tables or the holder's DMA quota.
+    OutOfMemory,
+    /// 439: invalidation unacknowledged; the kernel retries, call again.
+    TryAgain,
+    /// 438: window published but its invalidation unacknowledged.
+    Unconfirmed,
+    /// The kernel wrote a record this v1 decoder refuses.
+    Malformed,
+}
+
+fn dma_export_error(ret: usize) -> DmaExportError {
+    use api::dma_export as de;
+    match ret {
+        de::ERR_FILE_NOT_FOUND => DmaExportError::NotFound,
+        de::ERR_INVALID_INPUT | de::ERR_BUFFER_TOO_SMALL => DmaExportError::InvalidInput,
+        de::ERR_NOT_SUPPORTED => DmaExportError::NotSupported,
+        de::ERR_OUT_OF_MEMORY => DmaExportError::OutOfMemory,
+        de::ERR_TRY_AGAIN => DmaExportError::TryAgain,
+        de::ERR_UNKNOWN => DmaExportError::Unconfirmed,
+        _ => DmaExportError::PermissionDenied,
+    }
+}
+
+/// Decode a 437 return: an export id (`1..=isize::MAX`) or a sentinel.
+fn decode_export_id(ret: usize) -> Result<u64, DmaExportError> {
+    if ret == 0 || ret > isize::MAX as usize {
+        Err(dma_export_error(ret))
+    } else {
+        Ok(ret as u64)
+    }
+}
+
+/// 437: export `[va, va + len)` of this Cell's own memory (inside a Grant it
+/// owns) to the live provider of `holder_service`; `flags` may carry
+/// [`api::dma_export::EXPORT_DEVICE_WRITE`]. The range stays locked (it cannot
+/// be freed) until the lease is revoked. Returns the export id to send to the
+/// holder beside the request it backs.
+pub fn sys_export_dma_range(
+    va: usize,
+    len: usize,
+    holder_service: u16,
+    flags: u16,
+) -> Result<u64, DmaExportError> {
+    // SAFETY: scalar arguments only; the kernel validates the range itself.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ExportDmaRange,
+            va,
+            len,
+            holder_service as usize,
+            flags as usize,
+        )
+    } as usize;
+    decode_export_id(ret)
+}
+
+/// 438: map export `export_id` into the caller's VT-d domain for the owned
+/// function at `bdf` and return its record (window IOVA and owner identity).
+/// The holder must check `owner_cell_id`/`owner_generation` against the client
+/// that sent the id. A repeat call returns the same record.
+pub fn sys_map_dma_export(
+    export_id: u64,
+    bdf: u32,
+) -> Result<api::dma_export::ViDmaExportV1, DmaExportError> {
+    use api::dma_export::{ViDmaExportV1, DMA_EXPORT_RECORD_LEN};
+    let mut buf = [0u8; DMA_EXPORT_RECORD_LEN];
+    sys_map_dma_export_into(export_id, bdf, &mut buf)?;
+    ViDmaExportV1::decode(&buf).map_err(|_| DmaExportError::Malformed)
+}
+
+/// 438 with a caller-chosen output buffer, passed with its own length. The
+/// kernel accepts exactly [`api::dma_export::DMA_EXPORT_RECORD_LEN`] bytes and
+/// refuses any other length with [`DmaExportError::InvalidInput`] before any
+/// effect; prefer [`sys_map_dma_export`], which decodes the record.
+pub fn sys_map_dma_export_into(
+    export_id: u64,
+    bdf: u32,
+    out: &mut [u8],
+) -> Result<(), DmaExportError> {
+    // SAFETY: `out` is a live, exclusively borrowed buffer of exactly the
+    // length passed; the kernel writes at most that many bytes.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::MapDmaExport,
+            export_id as usize,
+            bdf as usize,
+            out.as_mut_ptr() as usize,
+            out.len(),
+        )
+    } as usize;
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(dma_export_error(ret))
+    }
+}
+
+/// 439: revoke export `export_id` (owner or holder). `Ok` once the device can
+/// no longer reach the memory; [`DmaExportError::TryAgain`] while the window
+/// drain is unacknowledged (the range stays locked; the kernel also retries).
+pub fn sys_revoke_dma_export(export_id: u64) -> Result<(), DmaExportError> {
+    // SAFETY: scalar arguments only.
+    let ret = unsafe { syscall(ViSyscall::RevokeDmaExport, export_id as usize, 0, 0, 0) } as usize;
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(dma_export_error(ret))
+    }
+}
+
 /// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
 ///
 /// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,
@@ -3310,5 +3455,27 @@ mod tests {
             SystemPowerError::PermissionDenied
         );
         assert_eq!(system_power_error(0), SystemPowerError::PermissionDenied);
+    }
+
+    /// 437-439: an id is any value in `1..=isize::MAX`; every sentinel decodes
+    /// to its own error.
+    #[test]
+    fn dma_export_decoder_names_each_sentinel() {
+        use super::{decode_export_id, DmaExportError as E};
+        use api::dma_export as de;
+        assert_eq!(decode_export_id(1), Ok(1));
+        assert_eq!(decode_export_id(isize::MAX as usize), Ok(isize::MAX as u64));
+        for (ret, want) in [
+            (de::ERR_PERMISSION_DENIED, E::PermissionDenied),
+            (de::ERR_TRY_AGAIN, E::TryAgain),
+            (de::ERR_FILE_NOT_FOUND, E::NotFound),
+            (de::ERR_INVALID_INPUT, E::InvalidInput),
+            (de::ERR_NOT_SUPPORTED, E::NotSupported),
+            (de::ERR_OUT_OF_MEMORY, E::OutOfMemory),
+            (de::ERR_UNKNOWN, E::Unconfirmed),
+            (0, E::PermissionDenied),
+        ] {
+            assert_eq!(decode_export_id(ret), Err(want), "{ret:#x}");
+        }
     }
 }

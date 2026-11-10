@@ -57,15 +57,23 @@ const BASE: usize = Flags::VALID | Flags::USER | Flags::READ | Flags::ACCESSED |
 
 /// Final page-table flags for a page covered by a PT_LOAD with these `p_flags`.
 ///
-/// `WRITE` and `EXECUTE` are the only bits the ELF gets to influence. OR the
-/// results together when several PT_LOADs share one page.
-pub fn page_flags(write: bool, execute: bool) -> Flags {
+/// `WRITE` and `EXECUTE` are the only bits the ELF's `p_flags` influence. OR
+/// the results together when several PT_LOADs share one page.
+///
+/// `guarded` is the loader's BTI decision for the whole image
+/// ([`super::gnu_property::arm`]): it adds `GUARDED` (AArch64 stage-1 `GP`) to
+/// executable pages only. A data page never carries it, and an image that did
+/// not opt in (or a CPU without FEAT_BTI) gets exactly the flags it always had.
+pub fn page_flags(write: bool, execute: bool, guarded: bool) -> Flags {
     let mut bits = BASE;
     if write {
         bits |= Flags::WRITE;
     }
     if execute {
         bits |= Flags::EXECUTE;
+        if guarded {
+            bits |= Flags::GUARDED;
+        }
     }
     Flags::from_bits(bits)
 }
@@ -226,7 +234,7 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
 /// worse than a failed boot because it silently disables the isolation.
 pub fn run_self_tests() {
     // .text — R-X: must lose WRITE, keep EXECUTE and USER.
-    let text = page_flags(false, true);
+    let text = page_flags(false, true, false);
     assert_eq!(text.bits() & Flags::WRITE, 0, ".text must not be writable");
     assert_ne!(
         text.bits() & Flags::EXECUTE,
@@ -236,7 +244,7 @@ pub fn run_self_tests() {
     assert_ne!(text.bits() & Flags::USER, 0, "cell pages stay user pages");
 
     // .rodata — R--: neither writable nor executable.
-    let rodata = page_flags(false, false);
+    let rodata = page_flags(false, false, false);
     assert_eq!(rodata.bits() & Flags::WRITE, 0, ".rodata must be read-only");
     assert_eq!(
         rodata.bits() & Flags::EXECUTE,
@@ -246,7 +254,7 @@ pub fn run_self_tests() {
     assert_ne!(rodata.bits() & Flags::READ, 0, ".rodata must be readable");
 
     // .data — RW-: keeps WRITE.
-    let data = page_flags(true, false);
+    let data = page_flags(true, false, false);
     assert_ne!(data.bits() & Flags::WRITE, 0, ".data must stay writable");
     assert_eq!(
         data.bits() & Flags::EXECUTE,
@@ -296,5 +304,49 @@ pub fn run_self_tests() {
     assert!(reject_wx_segment(1, 0x2000, false, true).is_ok());
     assert!(reject_wx_segment(2, 0x3000, false, false).is_ok());
 
+    assert_guard_selection();
+
     log::info!("[wx] self-tests PASSED");
+}
+
+/// BTI `GP` selection: only executable pages of an armed image are guarded,
+/// and an image that is not armed gets exactly the unguarded flags.
+///
+/// # Panics
+/// Panics if a data page could be guarded, an armed code page is not, or the
+/// unarmed flags differ from what every cell received before the opt-in.
+pub fn assert_guard_selection() {
+    for write in [false, true] {
+        for execute in [false, true] {
+            let plain = page_flags(write, execute, false);
+            let armed = page_flags(write, execute, true);
+            assert_eq!(
+                plain.bits() & Flags::GUARDED,
+                0,
+                "an unarmed image is never guarded"
+            );
+            assert_eq!(
+                armed.bits() & Flags::GUARDED != 0,
+                execute,
+                "an armed image guards exactly its executable pages"
+            );
+            assert_eq!(
+                armed.bits() & !Flags::GUARDED,
+                plain.bits(),
+                "arming changes nothing but GUARDED"
+            );
+        }
+    }
+    // A boundary page merged from guarded R-X and unguarded R-- keeps the guard:
+    // its instructions still belong to the opted-in image.
+    let merged = page_flags(false, true, true).bits() | page_flags(false, false, true).bits();
+    assert_ne!(merged & Flags::GUARDED, 0);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn guard_selection() {
+        super::assert_guard_selection();
+    }
 }

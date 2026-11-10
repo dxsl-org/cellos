@@ -151,3 +151,82 @@ pub(super) fn destroy_surface(comp_tid: usize, cap: u32) -> ViResult<()> {
     sys_send(comp_tid, &req);
     receive_status(comp_tid, 0x00)
 }
+
+/// Unregister attempts [`release_grant`] makes before leaving the Grant to
+/// task-exit reclamation.
+const GRANT_RELEASE_ATTEMPTS: usize = 64;
+
+/// Unregister `reg_id`, retrying while the compositor still leases it.
+///
+/// The compositor resolves a client Grant with a `GrantSlice` lease for each
+/// blit; the lease ends at the compositor's next receive or its next send to
+/// this client, and until then the kernel refuses `GrantUnregister`
+/// (`PermissionDenied`, which this ABI reports as plain failure). Yielding lets
+/// the compositor reach that boundary. The retry is bounded: a Grant that still
+/// cannot be released (not ours, or a compositor stalled mid-frame) stays
+/// registered and is reclaimed when this task exits.
+pub(super) fn release_grant(reg_id: usize) -> bool {
+    release_grant_with(
+        reg_id,
+        crate::syscall::sys_grant_unregister,
+        crate::task::yield_now,
+    )
+}
+
+fn release_grant_with(
+    reg_id: usize,
+    mut unregister: impl FnMut(usize) -> bool,
+    mut yield_now: impl FnMut(),
+) -> bool {
+    for attempt in 1..=GRANT_RELEASE_ATTEMPTS {
+        if unregister(reg_id) {
+            return true;
+        }
+        if attempt < GRANT_RELEASE_ATTEMPTS {
+            yield_now();
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod release_grant_tests {
+    use super::{release_grant_with, GRANT_RELEASE_ATTEMPTS};
+
+    #[test]
+    fn retries_a_leased_grant_until_the_lease_ends() {
+        let mut refusals = 3;
+        let mut yields = 0;
+        let released = release_grant_with(
+            7,
+            |reg_id| {
+                assert_eq!(reg_id, 7);
+                if refusals == 0 {
+                    return true;
+                }
+                refusals -= 1;
+                false
+            },
+            || yields += 1,
+        );
+        assert!(released);
+        assert_eq!(yields, 3, "one yield between consecutive attempts");
+    }
+
+    #[test]
+    fn gives_up_after_a_bounded_number_of_attempts() {
+        let mut attempts = 0;
+        let mut yields = 0;
+        let released = release_grant_with(
+            7,
+            |_| {
+                attempts += 1;
+                false
+            },
+            || yields += 1,
+        );
+        assert!(!released);
+        assert_eq!(attempts, GRANT_RELEASE_ATTEMPTS);
+        assert_eq!(yields, GRANT_RELEASE_ATTEMPTS - 1);
+    }
+}

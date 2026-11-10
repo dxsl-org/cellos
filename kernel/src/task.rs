@@ -889,6 +889,17 @@ pub fn init() {
 pub extern "Rust" fn vi_terminate_on_user_trap_fault(cause: usize, pc: usize, fault_addr: usize) {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_fault_task_entry();
+    // x86_64 #CP (vector 21) from CPL3. User shadow stacks are never enabled
+    // (IA32_U_CET.SH_STK_EN stays 0), so the only CPL3 source is CET-IBT: an
+    // opted-in Cell's indirect CALL/JMP reached an instruction that is not
+    // ENDBR64 (`hal::cet::switch_user_cet`, `loader::gnu_property`).
+    #[cfg(target_arch = "x86_64")]
+    if cause == 21 {
+        log::error!(
+            "[cet] #CP (vector 21) at CPL3 pc={:#x}: indirect branch target is not an ENDBR64 landing pad (CET-IBT) — terminating the Cell",
+            pc
+        );
+    }
     terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
 }
 
@@ -956,6 +967,16 @@ pub extern "Rust" fn vi_terminate_on_fault_aarch64(
             pc,
             fault_addr
         ),
+    }
+    // EC 0x0D: Branch Target exception — an opted-in Cell's indirect branch
+    // reached a guarded page (`loader::gnu_property`) on an instruction that is
+    // not a BTI landing pad compatible with ISS.BTYPE (bits [1:0]).
+    if ec == 0x0d {
+        log::error!(
+            "[bti] Branch Target exception at EL0 pc={:#x} btype={:#b}: indirect branch target is not a BTI landing pad — terminating the Cell",
+            pc,
+            iss & 0b11
+        );
     }
     terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
 }
@@ -1468,6 +1489,9 @@ pub fn yield_cpu() {
     }
 
     retry_retired_dma_cleanup();
+    // Exports whose window drain was unacknowledged stay Revoking with their
+    // owner range locked; retry each pass (ADR-0033 CP1 §5.3).
+    crate::task::syscall::dma_export::retry_pending();
 
     // The common retirement funnel owns every task-local release. Worker exits
     // contribute one tid; a root contributes its entire quiesced generation.
@@ -1967,6 +1991,9 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     if !crate::task::drivers::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }
+    // The holder's export windows lived in that domain: their leases now drop
+    // (or lose their mapping) before any owner frame can leave quarantine.
+    crate::task::syscall::dma_export::holder_domain_revoked(tid);
     crate::resource_registry::release_bdfs_for(tid);
     crate::task::syscall::release_acked_frames(tid);
     #[cfg(feature = "bench-counters")]
@@ -2033,6 +2060,11 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
     // Driver Cell may claim the BDF or pinned frames may leave quarantine.
     // On timeout both ownership and still-pinned frames remain fail-closed and
     // one deferred teardown is retried on each scheduler pass.
+    //
+    // First, as an export owner (ADR-0033 CP1 §6): revoke every DMA export
+    // `tid` made, so the grant reap below frees only frames no holder window
+    // can still reach, and quarantines the rest under their export's key.
+    crate::task::syscall::dma_export::reap_owner(tid);
     let dma_deferred = !teardown_dma_authority(tid);
     if dma_deferred {
         queue_retired_dma_cleanup(tid);

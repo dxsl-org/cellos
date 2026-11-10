@@ -735,4 +735,14 @@ mod allowlist {
             (1u64 << 0) | (1u64 << 1) | (1u64 << 62) | (1u64 << 63)
         );
     }
+
+    #[test]
+    fn grant_slice_flag_abi_is_pinned() {
+        use crate::syscall::{grant_slice, ViSyscall};
+        // Approved 2026-11-10: a3 bit 0 is LEASE and no other bit is defined.
+        assert_eq!(ViSyscall::GrantSlice as usize, 210);
+        assert_eq!(grant_slice::LEASE, 1);
+        assert_eq!(grant_slice::KNOWN_FLAGS, grant_slice::LEASE);
+        assert_eq!(grant_slice::MAX_LEASES_PER_HOLDER, 64);
+    }
 }

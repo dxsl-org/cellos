@@ -1243,18 +1243,7 @@ pub fn create_cell_domain(
 
     // Map cell ELF segments with User permissions
     for &(va, _frame) in segments.pages() {
-        let is_write = segments.is_writable(va);
-        let (kind, flags) = if is_write {
-            (
-                MappingKind::Private,
-                Flags::from_bits(Flags::READ | Flags::WRITE),
-            )
-        } else {
-            (
-                MappingKind::ImmutableImage,
-                Flags::from_bits(Flags::READ | Flags::EXECUTE),
-            )
-        };
+        let (kind, flags) = domain_image_page(segments.is_writable(va), segments.guarded_code());
         let phys =
             crate::memory::paging::virt_to_phys(va).ok_or(AddressSpaceError::InvalidMapping)?;
         builder.map_existing_user_page(va, phys, kind, flags)?;
@@ -1266,6 +1255,53 @@ pub fn create_cell_domain(
     #[cfg(not(cellos_p01_trace))]
     {
         builder.build()
+    }
+}
+
+/// Mapping kind and flags of one ELF image page in a Tier-2 private root.
+///
+/// Writable pages are private RW; every other image page is the immutable
+/// shared image, R+X. When the image is BTI-armed (`guarded`), those R+X
+/// pages carry `GUARDED` exactly as the shared-address-space mapping does
+/// (`loader::wx::page_flags`), so moving an opted-in Cell into a private root
+/// cannot drop its forward-edge CFI. Writable pages are never guarded.
+pub(crate) fn domain_image_page(writable: bool, guarded: bool) -> (MappingKind, Flags) {
+    if writable {
+        (
+            MappingKind::Private,
+            Flags::from_bits(Flags::READ | Flags::WRITE),
+        )
+    } else {
+        let guard = if guarded { Flags::GUARDED } else { 0 };
+        (
+            MappingKind::ImmutableImage,
+            Flags::from_bits(Flags::READ | Flags::EXECUTE | guard),
+        )
+    }
+}
+
+#[cfg(test)]
+mod domain_image_page_tests {
+    use super::{domain_image_page, Flags, MappingKind};
+
+    #[test]
+    fn armed_image_guards_only_its_immutable_executable_pages() {
+        let (kind, code) = domain_image_page(false, true);
+        assert!(matches!(kind, MappingKind::ImmutableImage));
+        assert_ne!(code.bits() & Flags::GUARDED, 0);
+        assert_ne!(code.bits() & Flags::EXECUTE, 0);
+
+        let (kind, data) = domain_image_page(true, true);
+        assert!(matches!(kind, MappingKind::Private));
+        assert_eq!(data.bits() & (Flags::GUARDED | Flags::EXECUTE), 0);
+    }
+
+    #[test]
+    fn unarmed_image_maps_exactly_as_before() {
+        let (_, code) = domain_image_page(false, false);
+        assert_eq!(code.bits(), Flags::READ | Flags::EXECUTE);
+        let (_, data) = domain_image_page(true, false);
+        assert_eq!(data.bits(), Flags::READ | Flags::WRITE);
     }
 }
 

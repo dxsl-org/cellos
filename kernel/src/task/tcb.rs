@@ -434,6 +434,14 @@ pub struct Task {
     /// Always 0 on non-x86_64 targets (and for trusted-core cells on x86_64).
     pub pku_value: u32,
 
+    /// x86_64 `IA32_U_CET` image for this task: 0 unless the Cell's signed
+    /// image opts into CET-IBT and the CPU enables it (`loader::gnu_property`),
+    /// in which case it starts as `hal::cet::USER_CET_IBT`. The scheduler loads
+    /// it on switch-in and saves the hardware value (tracker state included)
+    /// back on switch-out (`hal::cet::switch_user_cet`); threads inherit it.
+    /// Always 0 on other targets.
+    pub user_cet: u64,
+
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
@@ -715,6 +723,7 @@ impl Task {
             block_regions: 0,
             pku_key: 0,
             pku_value: 0,
+            user_cet: 0,
             priority: api::TaskPriority::Normal as u8,
             cluster_mode: 0,
             cluster_id: 0,

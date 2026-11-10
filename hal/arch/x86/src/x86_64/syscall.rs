@@ -52,6 +52,7 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 ///   gs:0  = kernel RSP (loaded on syscall entry)
 ///   gs:8  = scratch (user RSP saved here during syscall)
 ///   gs:16 = PKU value for the selected task (loaded on every Ring-3 return)
+///   gs:20 = 1 while this CPU's IA32_U_CET is non-zero (CPL3 IBT armed), else 0
 ///   gs:24 = user CR3 saved on IDT entry from user mode (Tier 2 domain isolation)
 ///
 /// Kernel GS selects the current CPU's stable record; SWAPGS selects user GS=0.
@@ -64,19 +65,19 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 pub const MAX_CPUS: usize = 64;
 #[repr(C, align(64))]
 struct CpuLocal {
-    kernel_rsp: u64,   // offset 0  — gs:0
-    user_rsp: u64,     // offset 8  — gs:8
-    pku_value: u32,    // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
-    _pad: u32,         // offset 20 — alignment padding
-    user_cr3: u64,     // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
-    logical_id: usize, // offset 32 — gs:32
+    kernel_rsp: u64,    // offset 0  — gs:0
+    user_rsp: u64,      // offset 8  — gs:8
+    pku_value: u32,     // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
+    user_cet_live: u32, // offset 20 — gs:20 (1 while IA32_U_CET is non-zero; see cet.rs)
+    user_cr3: u64,      // offset 24 — gs:24 (user CR3 saved on IDT user entry; 0 if SAS)
+    logical_id: usize,  // offset 32 — gs:32
 }
 impl CpuLocal {
     const EMPTY: Self = Self {
         kernel_rsp: 0,
         user_rsp: 0,
         pku_value: 0,
-        _pad: 0,
+        user_cet_live: 0,
         user_cr3: 0,
         logical_id: 0,
     };
@@ -88,6 +89,7 @@ const _: () = {
     assert!(offset_of!(CpuLocal, kernel_rsp) == 0);
     assert!(offset_of!(CpuLocal, user_rsp) == 8);
     assert!(offset_of!(CpuLocal, pku_value) == 16);
+    assert!(offset_of!(CpuLocal, user_cet_live) == 20);
     assert!(offset_of!(CpuLocal, user_cr3) == 24);
     assert!(offset_of!(CpuLocal, logical_id) == 32);
     assert!(size_of::<CpuLocal>() == 64);
@@ -192,6 +194,29 @@ pub fn set_kernel_stack(sp: u64) {
 /// Writes only the current CPU's record in kernel GS state.
 pub fn set_task_pku(val: u32) {
     unsafe { asm!("mov gs:[16], {val:e}", val = in(reg) val, options(nostack, preserves_flags)) };
+}
+
+/// Whether this CPU's `IA32_U_CET` currently holds a non-zero (CET-enabled)
+/// value, as last recorded by [`set_user_cet_live`].
+///
+/// A plain per-CPU word rather than an `rdmsr`: the scheduler asks on every
+/// switch, and a task switch between two non-CET tasks must cost no MSR access.
+#[inline(always)]
+pub fn user_cet_live() -> bool {
+    let live: u32;
+    unsafe {
+        asm!("mov {live:e}, gs:[20]", live = out(reg) live, options(nostack, readonly, preserves_flags))
+    };
+    live != 0
+}
+
+/// Record whether this CPU's `IA32_U_CET` is non-zero. Only `cet.rs` calls
+/// this, immediately after its own `wrmsr`, so the word never disagrees with
+/// the MSR while the scheduler can observe it.
+#[inline(always)]
+pub fn set_user_cet_live(live: bool) {
+    let val = u32::from(live);
+    unsafe { asm!("mov gs:[20], {val:e}", val = in(reg) val, options(nostack, preserves_flags)) };
 }
 
 // The syscall_entry stub is written in AT&T syntax. Rust's global_asm!
