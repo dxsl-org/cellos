@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Launch by measured identity, per-device PCIe handout"
-status: in-progress
+status: complete
 priority: P1
 effort: "6–9d"
 dependencies: [5]
@@ -76,7 +76,7 @@ Stop deriving authority from a spawner-chosen basename, and stop handing any uno
 
 ## Success Criteria
 
-Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md). Supervisor half: [CP2 record](cp2-supervisor-caller-identity.md); CP2 confirmation pending.
+Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md). Supervisor half: [CP2 record](cp2-supervisor-caller-identity.md), confirmed by the owner 2026-11-11.
 
 - [x] The negative test fails to obtain any reviewed edge or the power-off gate after the change (and its before-result is on record).
 - [x] Cross-ID PCI claim is refused; the legitimate driver still binds (x86 NVMe/AHCI and NIC boot lanes).

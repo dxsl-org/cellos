@@ -43,3 +43,7 @@ Revert the kernel, ostd and supervisor hunks. Nothing persists.
 ## 4. Question to the owner
 
 Confirm CP2 (Law-1 confirmation 2) for the 441 "who may call" widening as implemented in §1.
+
+## 5. Owner decision
+
+2026-11-11: **CP2 confirmed** (Law-1 confirmation 2). The 441 record in `docs/abi-boundary-records.md` §9 is final as written.
