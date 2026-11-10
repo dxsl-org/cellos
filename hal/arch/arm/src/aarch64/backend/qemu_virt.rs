@@ -79,16 +79,9 @@ impl GicV2Layout for QemuVirt {
 
     #[inline(always)]
     fn enable_board_irqs() {
-        // Enable VirtIO MMIO IRQs: QEMU virt assigns SPI 16..47 (GIC IDs 48..79)
-        // to the 32 VirtIO MMIO slots.  Without this, GICD_ISENABLER bit is 0 and
-        // the GIC never delivers VirtIO interrupts even after claim/complete.
-        // NIC is at slot 30 (SPI 46, GIC ID 78); Block at slot 31 (SPI 47, GIC ID 79).
-        let virtio = QEMU_ARM_VIRT.virtio;
-        let first = ArmVirtProfile::gic_id_for_spi(virtio.first_spi);
-        for i in first..first + virtio.count as u32 {
-            gic::enable_irq::<Self>(i);
+        for irq in board_spis() {
+            gic::enable_irq::<Self>(irq);
         }
-        gic::enable_irq::<Self>(ArmVirtProfile::gic_id_for_spi(QEMU_ARM_VIRT.gpio.spi));
     }
 
     #[inline(always)]
@@ -99,6 +92,19 @@ impl GicV2Layout for QemuVirt {
             vi_handle_virtio_irq(irq - ArmVirtProfile::GIC_SPI_OFFSET);
         }
     }
+}
+
+/// The device interrupts the kernel enables on QEMU `virt`, as GIC IDs: the 32
+/// VirtIO MMIO slots (SPI 16..47, GIC IDs 48..79), then the PL061 GPIO line.
+///
+/// Without the VirtIO enables the distributor never delivers them, even after
+/// claim/complete. NIC is at slot 30 (GIC ID 78); block at slot 31 (GIC ID 79).
+pub(super) fn board_spis() -> impl Iterator<Item = u32> {
+    let virtio = QEMU_ARM_VIRT.virtio;
+    let first = ArmVirtProfile::gic_id_for_spi(virtio.first_spi);
+    (first..first + virtio.count as u32).chain(core::iter::once(ArmVirtProfile::gic_id_for_spi(
+        QEMU_ARM_VIRT.gpio.spi,
+    )))
 }
 
 impl ArmIrqController for QemuVirt {
@@ -159,31 +165,26 @@ impl ArmResources for QemuVirt {
         MmioMap {
             base: QEMU_ARM_VIRT.gic_map.base,
             end: QEMU_ARM_VIRT.gic_map.end(),
-            cell_access: false,
         },
         // Peripheral MMIO (GPIO PL061, UART PL011, RTC): kernel-only at boot.
         // Cells reach these windows through RequestMmio grants.
         MmioMap {
             base: QEMU_ARM_VIRT.peripheral_map.base,
             end: QEMU_ARM_VIRT.peripheral_map.end(),
-            cell_access: false,
         },
         MmioMap {
             base: QEMU_ARM_VIRT.virtio.region().base,
             end: QEMU_ARM_VIRT.virtio.region().end(),
-            cell_access: false,
         },
         MmioMap {
             base: QEMU_ARM_VIRT.platform_bus_map.base,
             end: QEMU_ARM_VIRT.platform_bus_map.end(),
-            cell_access: false,
         },
         // PCIe ECAM bus-0 window (1 MiB at 0x3F00_0000) for ARM64 virt gpex.
         // Required before pcie_ecam::init() accesses config space.
         MmioMap {
             base: QEMU_ARM_VIRT.pcie_ecam_bus0.base,
             end: QEMU_ARM_VIRT.pcie_ecam_bus0.end(),
-            cell_access: false,
         },
     ];
 
@@ -212,16 +213,3 @@ impl ArmResources for QemuVirt {
         },
     ];
 }
-
-// Boot MMIO maps must be kernel-only; cells reach windows only via RequestMmio.
-const _: () = {
-    let maps = <QemuVirt as ArmResources>::KERNEL_MMIO_MAPS;
-    let mut i = 0;
-    while i < maps.len() {
-        assert!(
-            !maps[i].cell_access,
-            "QemuVirt boot MMIO maps must be kernel-only"
-        );
-        i += 1;
-    }
-};

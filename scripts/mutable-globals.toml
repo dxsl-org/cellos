@@ -970,7 +970,7 @@ contexts = ["boot", "normal"]
 seal = "written once in iommu_x86::init_hw at boot on the BSP"
 retirement = "never: lives for the whole run"
 rationale = "Relaxed store at boot before AP start-up and cell dispatch"
-review = "kernel/src/task/drivers/iommu_x86/mod.rs"
+review = "kernel/src/task/drivers/iommu_x86.rs"
 
 [[global]]
 key = "kernel::task::drivers::iommu_x86::UNITS @cfg(target_arch = \"x86_64\")"
@@ -981,7 +981,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "units added at boot during init_hw; unit state mutated per domain/cell"
 retirement = "never: units live for the whole run"
 rationale = "IRQ-safe spinlock protecting multi-unit hardware list and per-unit domains"
-review = "kernel/src/task/drivers/iommu_x86/mod.rs"
+review = "kernel/src/task/drivers/iommu_x86.rs"
 
 [[global]]
 key = "kernel::task::drivers::iommu_x86::ir::IR_ACTIVE @cfg(target_arch = \"x86_64\")"
@@ -992,17 +992,6 @@ contexts = ["boot", "normal", "irq"]
 seal = "set once at boot during activate"
 retirement = "never: lives for the whole run"
 rationale = "Atomic flag indicating hardware interrupt remapping status"
-review = "kernel/src/task/drivers/iommu_x86/ir.rs"
-
-[[global]]
-key = "kernel::task::drivers::iommu_x86::ir::NEXT_IRTE_INDEX @cfg(target_arch = \"x86_64\")"
-lifetime = "global"
-mutation = "atomic"
-owner = "task::drivers::iommu_x86::ir; atomic counter allocating monotonically increasing IRTE indices"
-contexts = ["boot", "normal"]
-seal = "none: allocated on demand for MSI/IOAPIC"
-retirement = "never: entries live for the whole run"
-rationale = "Atomic fetch_add for monotonic IRTE allocation up to 4096"
 review = "kernel/src/task/drivers/iommu_x86/ir.rs"
 
 [[global]]
@@ -2767,6 +2756,28 @@ seal = "stored on BSP after reading IOAPICVER register"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU32 array records number of redirection pins available on each IOAPIC unit"
 review = "hal/arch/x86/src/x86_64/ioapic.rs:UNIT_PINS"
+
+[[global]]
+key = "hal-x86::x86_64::ioapic::ROUTES @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "atomic"
+owner = "hal-x86 ioapic::route_gsi records every programmed redirection; for_each_route, mask_routes and reprogram (kernel iommu_x86::remap::activate) read them to re-emit entries when interrupt remapping turns on"
+contexts = ["boot"]
+seal = "written by route_gsi on the BSP during boot (UART RX IRQ, ACPI SCI) before APs start; re-read once by iommu_x86::remap::activate"
+retirement = "never: lives for the whole run"
+rationale = "Fixed array of packed AtomicU64 route records (MAX_ROUTES = 64); Release store after the slot is chosen, Acquire loads by readers. All writers and readers run on the BSP during boot, so slot claiming needs no CAS."
+review = "hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; hal/arch/x86/src/x86_64/ioapic.rs:reprogram; kernel/src/task/drivers/iommu_x86/remap.rs:activate"
+
+[[global]]
+key = "hal-x86::x86_64::ioapic::REMAPPER @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "atomic"
+owner = "hal-x86 ioapic::set_remapper, called by kernel iommu_x86::remap::activate once VT-d interrupt remapping is on; route_gsi reads it to encode later routes in remappable format"
+contexts = ["boot", "normal"]
+seal = "set at most once on the BSP by iommu_x86::remap::activate before APs start"
+retirement = "never: lives for the whole run"
+rationale = "AtomicUsize holding a fn(&Route) -> Option<u64> address (0 = compatibility format); Release store / Acquire load publish the function before use, mirroring msi::HANDLER"
+review = "hal/arch/x86/src/x86_64/ioapic.rs:set_remapper; hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; kernel/src/task/drivers/iommu_x86/remap.rs:activate"
 
 [[global]]
 key = "hal-x86::x86_64::invept::CAPS @cfg(target_arch = \"x86_64\")"

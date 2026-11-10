@@ -75,7 +75,7 @@ The storage driver enforces **`PartitionGuard`** (`libs/apple-rtkit`), which rej
 
 ## 4. Hardware Interfaces & Isolation
 
-- **Interrupt Controller:** Apple AIC1. Core timer and IPIs are routed as FIQs to the ARM core.
+- **Interrupt Controller:** Apple AIC1. Core timers reach the CPU as FIQs; the kernel's cross-core IPI uses AIC1's IPI registers and arrives as an IRQ (the sysreg "fast IPI" path, also FIQ, is unused).
 - **UART Console:** S5L UART (`apple,s5l-uart`) accessed via USB-C debug adapter or m1n1 vUART.
 - **DMA Isolation:** Apple DART IOMMU (`DmaIsolation::Required`). All PCIe and USB bus masters must translate through 16 KiB DART page tables; bypass mode is strictly rejected by `AppleDartPt`.
 - **Storage DMA:** Filtered by SART (Storage Address Resolution Table) hardware window registers.
@@ -88,3 +88,23 @@ If the machine fails to boot into Cellos:
 1. Hold the power button to return to 1TR Startup Options.
 2. Select your primary **Macintosh HD** volume to boot back into macOS.
 3. Delete or repair the ESP entries without affecting macOS data.
+
+---
+
+## 6. Hosted Guest on macOS (no reinstall)
+
+Cellos also runs as a guest on an Apple Silicon Mac without replacing macOS, through QEMU's `virt` machine with the HVF accelerator. This uses the `aarch64-vm` profile (`boards/vm/aarch64-vm`), not the bare-metal t8103 backend:
+
+```sh
+cargo build --release -p cellos-kernel --features board-aarch64-vm \
+    --target aarch64-unknown-none-softfloat -Z build-std=core,alloc
+bash scripts/build-aarch64-image.sh
+bash tools/apple-host/run-hvf.sh   # -M virt,gic-version=3,highmem=off -accel hvf -cpu host
+```
+
+- **Interrupt controller:** GICv3; distributor and redistributors are read from QEMU's device tree.
+- **Console:** the `virt` PL011 on stdio. **Devices:** virtio-mmio (`virtio-*-device`), not virtio-pci.
+- **vCPUs:** up to 16, started through PSCI.
+- **DMA isolation:** `Optional`; Cells inside the guest are not DMA-isolated from each other.
+- **Virtualization.framework / vfkit is not supported:** its RAM base, console (virtio-console) and device transport (virtio-PCI) differ from the QEMU `virt` map this kernel is linked for. `tools/apple-host/run-vz.sh` exits with that explanation instead of launching.
+- The same profile boots under QEMU TCG on any host: `LANE=virt-gicv3 bash scripts/qemu-aarch64-test.sh <kernel>.Image`.

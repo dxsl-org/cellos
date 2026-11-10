@@ -1,0 +1,35 @@
+/dts-v1/;
+
+/* The map the aarch64-vm backend assumes when firmware passes no tree:
+ * QEMU `virt` with gic-version=3 (hw/arm/virt.c base_memmap). */
+/ {
+    model = "aarch64-vm";
+    compatible = "cellos,aarch64-vm", "linux,dummy-virt";
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    memory@40000000 {
+        device_type = "memory";
+        reg = <0x0 0x40000000 0x0 0x10000000>;
+    };
+
+    intc@8000000 {
+        compatible = "arm,gic-v3";
+        #interrupt-cells = <3>;
+        interrupt-controller;
+        #redistributor-regions = <1>;
+        reg = <0x0 0x08000000 0x0 0x10000>,
+              <0x0 0x080a0000 0x0 0xf60000>;
+    };
+
+    pl011@9000000 {
+        compatible = "arm,pl011";
+        reg = <0x0 0x09000000 0x0 0x1000>;
+        interrupts = <0 1 4>;
+    };
+
+    psci {
+        compatible = "arm,psci-1.0", "arm,psci-0.2";
+        method = "hvc";
+    };
+};

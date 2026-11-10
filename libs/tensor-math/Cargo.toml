@@ -5,7 +5,8 @@ edition = "2021"
 license.workspace = true
 description = "f32 tensor kernels for the Cellos native CPU inference engine (Spec 24 §4)"
 
-# Unsafe allowed for AArch64 NEON SIMD kernels (Phase 08)
+[lints.rust]
+unsafe_code = "deny"
 
 [dependencies]
 libm = "0.2.15"

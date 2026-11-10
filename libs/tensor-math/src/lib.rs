@@ -26,7 +26,8 @@
 
 use core::fmt;
 
-pub mod neon;
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+mod neon;
 pub mod quant;
 
 /// Errors that are the caller's fault (shape mismatch), never arithmetic faults.
@@ -189,13 +190,16 @@ pub fn matvec_q8_0_int8(
             };
             let d_w = quant::f16_to_f32(u16::from_le_bytes([w_lo, w_hi]));
             let d_a = quant::f16_to_f32(u16::from_le_bytes([a_lo, a_hi]));
-            #[cfg(target_arch = "aarch64")]
-            let sum = unsafe {
-                let w_arr: &[u8; 32] = block[2..34].try_into().unwrap();
-                let x_arr: &[u8; 32] = vector[2..34].try_into().unwrap();
-                neon::dot_q8_0_block_neon(w_arr, x_arr)
+            #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+            let sum = {
+                let (Ok(weights), Ok(activations)) =
+                    (block[2..].try_into(), vector[2..].try_into())
+                else {
+                    return Err(MathError::ShapeMismatch);
+                };
+                neon::dot_q8_0_block_neon(weights, activations)
             };
-            #[cfg(not(target_arch = "aarch64"))]
+            #[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
             let sum = {
                 let mut s = 0i32;
                 for (&weight, &activation) in block[2..].iter().zip(&vector[2..]) {
@@ -556,11 +560,11 @@ fn reduce_lanes(acc: [f32; 4]) -> f32 {
 /// Sequential f32 inner product over equally long slices.
 #[inline]
 fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
-    #[cfg(target_arch = "aarch64")]
-    unsafe {
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    {
         neon::dot_f32_neon(a, b)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
     {
         let mut acc = [0.0f32; 4];
         accumulate_products(&mut acc, a, b);

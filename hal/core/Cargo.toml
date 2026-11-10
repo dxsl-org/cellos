@@ -41,6 +41,7 @@ critical-section-impl = [
 board-rpi3 = ["hal-arm?/board-rpi3"]
 board-rpi4 = ["hal-arm?/board-rpi4"]
 board-apple-t8103 = ["hal-arm?/board-apple-t8103"]
+board-aarch64-vm = ["hal-arm?/board-aarch64-vm"]
 test-hooks = ["hal-riscv?/test-hooks", "hal-arm?/test-hooks", "hal-x86?/test-hooks"]
 x86-idt-cpl3-test = ["test-hooks", "hal-x86?/x86-idt-cpl3-test"]
 x86-smep = ["hal-x86?/x86-smep"]

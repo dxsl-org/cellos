@@ -1,3 +1,5 @@
+extern crate std;
+
 use crate::milk_v_pioneer::MILK_V_PIONEER;
 use crate::pc_x86_64::X86_64_PC;
 use crate::qemu_q35_x86_64::QEMU_Q35_X86_64;
@@ -6,6 +8,7 @@ use crate::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
 use crate::raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B;
 use crate::raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B;
 use crate::starfive_visionfive_2::STARFIVE_VISIONFIVE_2;
+use crate::vm_aarch64::AARCH64_VM;
 use crate::{Architecture, DmaIsolation, DriverId, FirmwareInterface, SocId};
 
 #[test]
@@ -91,6 +94,7 @@ fn catalog_covers_every_current_board_selection() {
         RASPBERRY_PI_4_MODEL_B,
         QEMU_Q35_X86_64,
         X86_64_PC,
+        AARCH64_VM,
     ];
     for board in boards {
         assert_eq!(board.validate(), Ok(()), "{}", board.slug);
@@ -213,5 +217,29 @@ fn macmini_m2_descriptor_declares_typed_drivers() {
     assert_eq!(
         crate::find_by_slug(crate::aarch64_catalog(), "macmini-m2").map(|b| b.soc),
         Some(SocId::AppleT8112)
+    );
+}
+
+#[test]
+fn aarch64_vm_descriptor_matches_the_hosted_vm_backend() {
+    let board = AARCH64_VM;
+    assert_eq!(board.validate_for(Architecture::Aarch64), Ok(()));
+    assert_eq!(board.soc, SocId::GenericAArch64Vm);
+    assert!(board.has_driver(DriverId::GicV3));
+    assert!(!board.has_driver(DriverId::GicV2));
+    assert!(board.has_driver(DriverId::UartPl011));
+    // Direct ELF boot passes no tree: the QEMU virt fallback map must hold the
+    // kernel at the QEMU `Image` load address.
+    assert!(!board.boot.requires_firmware_dtb);
+    assert_eq!(board.boot.kernel_load_base, 0x4008_0000);
+    assert_eq!(board.fallback_memory[0].base, 0x4000_0000);
+    let dts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join(board.boot.fallback_dts_path);
+    let dts = std::fs::read_to_string(&dts).expect("aarch64-vm fallback DTS exists");
+    assert!(dts.contains("\"arm,gic-v3\""));
+    assert_eq!(
+        crate::find_by_slug(crate::aarch64_catalog(), "aarch64-vm").map(|b| b.soc),
+        Some(SocId::GenericAArch64Vm)
     );
 }

@@ -209,7 +209,6 @@ impl ArmResources for Bcm2837 {
                 Some(end) => end,
                 None => panic!("BCM2837 peripheral span must not overflow"),
             },
-            cell_access: false,
         },
         // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
         MmioMap {
@@ -218,7 +217,6 @@ impl ArmResources for Bcm2837 {
                 Some(end) => end,
                 None => panic!("BCM2837 local-controller span must not overflow"),
             },
-            cell_access: false,
         },
     ];
 
@@ -262,20 +260,6 @@ impl ArmResources for Bcm2837 {
         },
     ];
 }
-
-// H-18: no boot map gives EL0 any part of the board's MMIO; a Cell reaches a
-// window only through a live `RequestMmio` grant. Fails the build otherwise.
-const _: () = {
-    let maps = <Bcm2837 as ArmResources>::KERNEL_MMIO_MAPS;
-    let mut i = 0;
-    while i < maps.len() {
-        assert!(
-            !maps[i].cell_access,
-            "BCM2837 boot MMIO maps must be kernel-only"
-        );
-        i += 1;
-    }
-};
 
 /// The Pi non-VHE EL2 monitor ([`super::monitor`]): the host and its Cells
 /// stay at EL1/EL0, and Stage-2 and guest runs go through its HVC gateway.

@@ -15,6 +15,8 @@ critical-section = { version = "1", optional = true, features = ["restore-state-
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
+# Firmware device tree, read by board backends (`ArmPlatform::note_firmware_tree`).
+fdt = "0.1"
 hal-soc-bcm27xx = { path = "../../soc/bcm27xx", version = "0.2.0", optional = true }
 
 [features]
@@ -30,3 +32,5 @@ mte = []
 board-rpi3 = ["dep:hal-soc-bcm27xx"]
 board-rpi4 = ["dep:hal-soc-bcm27xx"]
 board-apple-t8103 = []
+# Hosted AArch64 VM (QEMU virt map with GICv3: TCG, Apple HVF, KVM).
+board-aarch64-vm = []

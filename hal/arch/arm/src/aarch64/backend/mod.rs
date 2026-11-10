@@ -5,10 +5,21 @@
 //! existing `hal/soc/*` profile data, so dispatch is static: no `dyn`, no
 //! runtime cost, and no second address table.
 //!
-//! Group 1 boards keep compile-time selection: the `board-rpi*` features pick
-//! a backend type here. `board-rpi3` takes precedence over `board-rpi4` so this
-//! crate still compiles with both, and the kernel's own conflict
-//! `compile_error!` reports the combination.
+//! Group 1 boards keep compile-time selection: the `board-*` features pick a
+//! backend type here. Precedence is `board-apple-t8103`, `board-rpi3`,
+//! `board-rpi4`, then `board-aarch64-vm`, so this crate still compiles with
+//! several, and the kernel's own conflict `compile_error!`s report the
+//! combination.
+
+#[cfg(all(
+    feature = "board-aarch64-vm",
+    not(any(
+        feature = "board-rpi3",
+        feature = "board-rpi4",
+        feature = "board-apple-t8103"
+    ))
+))]
+mod aarch64_vm;
 
 #[cfg(feature = "board-apple-t8103")]
 pub mod apple_t8103;
@@ -19,6 +30,7 @@ pub mod apple_t8103;
 mod bcm2711;
 #[cfg(all(feature = "board-rpi3", not(feature = "board-apple-t8103")))]
 pub mod bcm2837;
+/// QEMU `virt`; also the device map the hosted VM backend reuses.
 #[cfg(not(any(
     feature = "board-rpi3",
     feature = "board-rpi4",
@@ -41,10 +53,20 @@ pub type Board = apple_t8103::AppleT8103;
 pub type Board = bcm2711::Bcm2711;
 #[cfg(all(feature = "board-rpi3", not(feature = "board-apple-t8103")))]
 pub type Board = bcm2837::Bcm2837;
+#[cfg(all(
+    feature = "board-aarch64-vm",
+    not(any(
+        feature = "board-rpi3",
+        feature = "board-rpi4",
+        feature = "board-apple-t8103"
+    ))
+))]
+pub type Board = aarch64_vm::Aarch64Vm;
 #[cfg(not(any(
     feature = "board-rpi3",
     feature = "board-rpi4",
-    feature = "board-apple-t8103"
+    feature = "board-apple-t8103",
+    feature = "board-aarch64-vm"
 )))]
 pub type Board = qemu_virt::QemuVirt;
 
@@ -141,6 +163,11 @@ pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
     /// Board diagnostic for a synchronous exception with EC 0
     /// (uncategorized). No-op on boards without one.
     fn probe_uncategorized_trap(frame: &crate::aarch64::trap::TrapFrame, vector_kind: u8);
+
+    /// Record what the board reads from the firmware device tree. The kernel
+    /// calls it once, on the boot core, before [`ArmIrqController::init`] and
+    /// before anything can reuse the tree's memory. Default: nothing to read.
+    fn note_firmware_tree(_tree: &fdt::Fdt<'_>) {}
 }
 
 /// How a board brings its secondary cores online.
@@ -198,6 +225,11 @@ const _: () = {
 
 /// The board's interrupt controller, as the trap path and SMP use it.
 pub trait ArmIrqController {
+    /// Whether the controller has a GICv3 system-register CPU interface. When
+    /// the boot path drops an EL2 entry to an EL1 host, it then sets
+    /// `ICC_SRE_EL2.{Enable,SRE}` first, or every EL1 `ICC_*` access would trap.
+    const GICV3_CPU_INTERFACE: bool = false;
+
     /// Whether the controller can raise the kernel's cross-hart IPI.
     const HAS_IPI: bool;
 
@@ -284,7 +316,8 @@ pub trait ArmResources {
 
 /// SoC identity of a board backend.
 pub enum ArmSoc {
-    /// QEMU `virt` machine.
+    /// QEMU `virt` machine, with either GICv2 (`qemu_virt`) or GICv3
+    /// (`aarch64_vm`): both drive the same device map.
     QemuArmVirt,
     /// BCM2837 (Raspberry Pi 3).
     Bcm2837,
@@ -316,12 +349,11 @@ pub struct PlatformAnnounce {
     pub peripheral_base: usize,
 }
 
-/// One kernel identity mapping of device MMIO, `[base, end)`.
+/// One kernel-only identity mapping of device MMIO, `[base, end)`; Cells reach
+/// a window only through a live `RequestMmio` grant.
 pub struct MmioMap {
     pub base: usize,
     pub end: usize,
-    /// `true`: Cells may access the window (USER); `false`: kernel-only.
-    pub cell_access: bool,
 }
 
 /// An MMIO window, `[base, base + size)`.

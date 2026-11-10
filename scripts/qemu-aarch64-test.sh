@@ -23,9 +23,14 @@
 #               the EL1 fallback line, EL0 Cell output and, with more than one
 #               CPU, hart 1 online (boot the `Image`: its FDT names the SMC
 #               PSCI conduit; an ELF boot stays single-hart).
-#   QEMU_CPU    override the lane's CPU (virt-vhe: cortex-a76,
+#               virt-gicv3: `virt,gic-version=3` with cortex-a76 and 2 CPUs, the
+#               hosted VM profile. Needs a kernel built with
+#               `--features board-aarch64-vm`. Asserts the GICv3 bring-up line
+#               (`[gicv3] GICD=`), EL0 Cell output and hart 1 online.
+#   QEMU_CPU    override the lane's CPU (virt-vhe, virt-gicv3: cortex-a76,
 #               virt-el2-novhe: cortex-a72)
-#   QEMU_SMP    override the lane's CPU count (virt-vhe, virt-el2-novhe: 2)
+#   QEMU_SMP    override the lane's CPU count (virt-vhe, virt-el2-novhe,
+#               virt-gicv3: 2)
 
 set -euo pipefail
 
@@ -53,8 +58,15 @@ case "$LANE" in
         QEMU_CPU="${QEMU_CPU:-cortex-a72}"
         QEMU_SMP="${QEMU_SMP:-2}"
         ;;
+    virt-gicv3)
+        # Firmware enters at EL1; the backend reads GICD/GICR from the FDT
+        # an `Image` boot receives (an ELF boot uses QEMU virt's fixed map).
+        QEMU_MACHINE="virt,gic-version=3"
+        QEMU_CPU="${QEMU_CPU:-cortex-a76}"
+        QEMU_SMP="${QEMU_SMP:-2}"
+        ;;
     *)
-        echo "FAIL: LANE must be 'virt', 'virt-vhe' or 'virt-el2-novhe' (got '$LANE')" >&2
+        echo "FAIL: LANE must be 'virt', 'virt-vhe', 'virt-el2-novhe' or 'virt-gicv3' (got '$LANE')" >&2
         exit 1
         ;;
 esac
@@ -133,6 +145,9 @@ if grep -q "Cellos >" qemu-aarch64.log; then
             ;;
         virt-el2-novhe)
             LANE_MARKERS=("EL1 fallback host regime:::[INFO] host regime: EL1 (CPU lacks FEAT_VHE")
+            ;;
+        virt-gicv3)
+            LANE_MARKERS=("GICv3 bring-up:::[gicv3] GICD=")
             ;;
         *)
             LANE_MARKERS=()

@@ -14,8 +14,21 @@ mod dtb_memory;
 pub mod limine;
 
 /// Select the firmware DTB once so every early-boot consumer sees the same tree.
+///
+/// AArch64: the board backend reads what it needs from the tree here
+/// (`ArmPlatform::note_firmware_tree`), before its interrupt controller is
+/// brought up and before the allocator can reuse the tree's memory.
 pub fn effective_dtb(entry_dtb: usize) -> usize {
-    limine::get_dtb_ptr().unwrap_or(entry_dtb)
+    let dtb = limine::get_dtb_ptr().unwrap_or(entry_dtb);
+    #[cfg(target_arch = "aarch64")]
+    if dtb != 0 {
+        // SAFETY: firmware passes a mapped FDT pointer in x0; `Fdt` validates
+        // the header before any node traversal.
+        if let Ok(tree) = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) } {
+            <Board as ArmPlatform>::note_firmware_tree(&tree);
+        }
+    }
+    dtb
 }
 
 /// Reserve the warm-snapshot capture's scratch workspace.
@@ -417,7 +430,7 @@ pub fn fallback_dtb_ram_range() -> (usize, usize) {
 /// machine whose firmware never asked for one is an undefined instruction.
 #[cfg(target_arch = "aarch64")]
 pub mod firmware_smp {
-    use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+    use core::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
     /// The instruction the firmware expects for PSCI calls (`/psci/method`).
     ///
@@ -433,8 +446,8 @@ pub mod firmware_smp {
 
     static CONDUIT: AtomicU8 = AtomicU8::new(UNREAD);
     static CPUS: AtomicUsize = AtomicUsize::new(0);
-    static CPU_RELEASE_ADDRS: [core::sync::atomic::AtomicU64; 32] =
-        [const { core::sync::atomic::AtomicU64::new(0) }; 32];
+    /// Spin-table `cpu-release-addr` of each `/cpus` node, in tree order (0 = none).
+    static CPU_RELEASE_ADDRS: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
 
     /// Read `/psci` and the `/cpus` population from the firmware tree.
     pub fn note(tree: &fdt::Fdt) {
@@ -448,24 +461,17 @@ pub mod firmware_smp {
         CONDUIT.store(conduit, Ordering::Relaxed);
         CPUS.store(tree.cpus().count(), Ordering::Relaxed);
 
-        let mut idx = 0;
-        for cpu in tree.cpus() {
-            if idx < 32 {
-                let release_addr = cpu
-                    .property("cpu-release-addr")
-                    .and_then(|prop| {
-                        if prop.value.len() == 8 {
-                            Some(u64::from_be_bytes(prop.value.try_into().unwrap()))
-                        } else if prop.value.len() == 4 {
-                            Some(u32::from_be_bytes(prop.value.try_into().unwrap()) as u64)
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(0);
-                CPU_RELEASE_ADDRS[idx].store(release_addr, Ordering::Relaxed);
-                idx += 1;
-            }
+        for (slot, cpu) in CPU_RELEASE_ADDRS.iter().zip(tree.cpus()) {
+            let release_addr = cpu
+                .property("cpu-release-addr")
+                .and_then(|prop| match <[u8; 8]>::try_from(prop.value) {
+                    Ok(cells) => Some(u64::from_be_bytes(cells)),
+                    Err(_) => <[u8; 4]>::try_from(prop.value)
+                        .ok()
+                        .map(|cell| u64::from(u32::from_be_bytes(cell))),
+                })
+                .unwrap_or(0);
+            slot.store(release_addr, Ordering::Relaxed);
         }
     }
 
@@ -488,17 +494,51 @@ pub mod firmware_smp {
         CONDUIT.load(Ordering::Relaxed) != UNREAD
     }
 
-    /// Return cpu-release-addr for a given hart if present in FDT.
+    /// The spin-table release address of the `hart_id`-th `/cpus` node, if the tree gives one.
     pub fn cpu_release_addr(hart_id: usize) -> Option<u64> {
-        if hart_id < 32 {
-            let addr = CPU_RELEASE_ADDRS[hart_id].load(Ordering::Relaxed);
-            if addr != 0 {
-                return Some(addr);
-            }
-        }
-        None
+        CPU_RELEASE_ADDRS
+            .get(hart_id)
+            .map(|slot| slot.load(Ordering::Relaxed))
+            .filter(|&addr| addr != 0)
     }
 }
+
+/// Bus-0 configuration space (32 devices × 8 functions × 4 KiB), the part of the
+/// ECAM window `pcie_ecam::init` scans on AArch64.
+#[cfg(target_arch = "aarch64")]
+const ECAM_BUS0_BYTES: usize = 1 << 20;
+
+/// Record the firmware tree's generic ECAM host bridge for the PCIe scan, but
+/// only when its bus-0 window lies inside a kernel MMIO identity map: an
+/// unmapped window (e.g. QEMU virt's high ECAM above 256 GiB) would fault on
+/// the first config read.
+#[cfg(target_arch = "aarch64")]
+fn note_pcie_ecam(tree: &fdt::Fdt) {
+    use hal::aarch64::backend::ArmResources;
+
+    let Some(ecam) = tree
+        .find_compatible(&["pci-host-ecam-generic"])
+        .and_then(|node| node.reg())
+        .and_then(|mut reg| reg.next())
+    else {
+        return;
+    };
+    let base = ecam.starting_address as usize;
+    let mapped = base.checked_add(ECAM_BUS0_BYTES).is_some_and(|end| {
+        <Board as ArmResources>::KERNEL_MMIO_MAPS
+            .iter()
+            .any(|map| map.base <= base && end <= map.end)
+    });
+    if mapped {
+        crate::task::drivers::pcie_ecam::record_ecam_base_aarch64(base);
+    } else {
+        log::warn!(
+            "[boot] ECAM at {:#x} is outside the kernel MMIO maps; not scanned",
+            base
+        );
+    }
+}
+
 /// AArch64 boot memory map, by the board backend's [`DtbPolicy`].
 #[cfg(target_arch = "aarch64")]
 pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
@@ -534,17 +574,7 @@ fn optional_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
                 // The tree is only reliably readable here — record what the
                 // firmware says about PSCI and the CPU population now.
                 firmware_smp::note(&tree);
-                for node in tree.all_nodes() {
-                    if let Some(comp) = node.property("compatible").and_then(|c| c.as_str()) {
-                        if comp.contains("pci-host-ecam-generic") {
-                            if let Some(reg) = node.reg().and_then(|mut r| r.next()) {
-                                crate::task::drivers::pcie_ecam::record_ecam_base_aarch64(
-                                    reg.starting_address as usize,
-                                );
-                            }
-                        }
-                    }
-                }
+                note_pcie_ecam(&tree);
                 tree.memory().regions().find_map(|region| {
                     let start = region.starting_address as usize;
                     region

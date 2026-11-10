@@ -26,6 +26,8 @@ pub mod el2_stub;
 pub mod gic;
 #[cfg(target_arch = "aarch64")]
 pub mod gicv3;
+// Window selection and the redistributor walk are pure and host-tested.
+pub mod gicv3_layout;
 #[cfg(target_arch = "aarch64")]
 pub mod id_regs;
 #[cfg(target_arch = "aarch64")]

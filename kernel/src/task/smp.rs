@@ -22,7 +22,8 @@ pub use topology::{CpuTopology, CPU_TOPOLOGY};
 ///   `ViRetirementV1.remote_hart_mask` (plan 261103-2218 H-S2-5).
 /// - x86_64 G1 private lane (`cellos_g1_cpu`): 2, which
 ///   `task::cpu_accounting` asserts equal to its own hart count.
-/// - riscv64 / aarch64 / 32-bit targets: 2 (QEMU virt `-smp 2`, G2 entry).
+/// - aarch64: 32 (spin-table and PSCI boards with more than two cores).
+/// - riscv64 / 32-bit targets: 2 (QEMU virt `-smp 2`, G2 entry).
 #[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
 pub const MAX_HARTS: usize = hal::x86_64::syscall::MAX_CPUS;
 #[cfg(all(target_arch = "aarch64", not(cellos_g1_cpu)))]
@@ -800,6 +801,16 @@ fn start_psci_secondaries() {
         }
     }
 }
+
+/// AArch64 starts a core through the device tree's spin table: the core spins
+/// on its `cpu-release-addr` with the MMU off until that word holds an entry
+/// address. A release passes no argument, so `_spin_table_entry` loads the
+/// context from the single slot [`hal::aarch64::boot::publish_spin_table_context`]
+/// fills — which is why cores are released one at a time and the first one
+/// that does not come online ends the bring-up.
+///
+/// The release word is written through the identity map, as the kernel image
+/// itself is reached by physical address in the entry path.
 #[cfg(target_arch = "aarch64")]
 fn start_spin_table_secondaries() {
     use crate::boot::firmware_smp;
@@ -808,15 +819,30 @@ fn start_spin_table_secondaries() {
 
     let described = firmware_smp::cpu_count();
     if described <= 1 {
-        log::info!("[smp] spin-table: 1 CPU described — single-hart");
+        log::info!(
+            "[smp] spin-table: {} CPU(s) described — single-hart",
+            described
+        );
+        return;
+    }
+    // Release addresses are indexed by `/cpus` node order, with the boot core
+    // as node 0, exactly as the logical hart equals the CPU index.
+    let boot_cpu = crate::task::hart_local::physical_cpu_index();
+    if boot_cpu != 0 {
+        log::warn!(
+            "[smp] boot core reports CPU index {} (expected 0) — keeping Cellos single-hart",
+            boot_cpu
+        );
         return;
     }
     let attempt = MAX_HARTS.min(described);
 
     extern "C" {
-        fn _secondary_entry();
+        /// Spin-table trampoline in hal/arch/arm/src/aarch64/boot.rs: loads
+        /// the published context into x0, then runs `_secondary_entry`.
+        fn _spin_table_entry();
     }
-    let entry = _secondary_entry as *const () as usize;
+    let entry = _spin_table_entry as *const () as usize;
     let kernel_root = match *crate::memory::paging::KERNEL_ROOT.lock() {
         Some(root) => root,
         None => {
@@ -835,6 +861,7 @@ fn start_spin_table_secondaries() {
         };
 
         if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
+            log::warn!("[smp] hart {hart_id} conflicts with the published topology — not started");
             continue;
         }
 
@@ -846,6 +873,7 @@ fn start_spin_table_secondaries() {
             }
         };
         let stack_top = stack.top;
+        // Leaked on purpose: a hart's stack lives as long as the hart does.
         core::mem::forget(stack);
 
         let context = hal::aarch64::boot::SecondaryContext::for_hart(
@@ -853,26 +881,46 @@ fn start_spin_table_secondaries() {
             stack_top as u64,
             kernel_root as u64,
         );
+        // SAFETY: single writer (hart 0, before the core is released), and no
+        // reader until the release word below is written.
         let context_addr = unsafe {
             let slot = core::ptr::addr_of_mut!(SECONDARY_CONTEXT[hart_id]);
             slot.write(context);
             slot as usize
         };
+        // The core reads both with caches off: clean them to the point of
+        // coherency before the release (each clean ends in `dsb sy`).
         hal::aarch64::cache::clean_data_cache_range(
             context_addr,
             core::mem::size_of::<hal::aarch64::boot::SecondaryContext>(),
         );
+        hal::aarch64::boot::publish_spin_table_context(context_addr as u64);
 
+        // SAFETY: `release_addr` is the firmware's spin-table word for this
+        // core, reached through the kernel's identity map.
         unsafe {
             core::ptr::write_volatile(release_addr as *mut u64, entry as u64);
         }
         hal::aarch64::cache::clean_data_cache_range(release_addr, 8);
-        core::sync::atomic::fence(Ordering::SeqCst);
+        // SAFETY: SEV only wakes cores parked in WFE; the preceding `dsb sy`
+        // orders the release word before it.
         unsafe {
             core::arch::asm!("sev", options(nomem, nostack));
         }
+        log::info!("[smp] hart {hart_id} released via spin table at {release_addr:#x}");
 
-        log::info!("[smp] hart {hart_id} spin-table release written to {release_addr:#x}");
+        let timeout_ticks = (hal::aarch64::timer::counter_frequency_hz() / 2).max(1);
+        let start = hal::aarch64::timer::counter_now();
+        while !HART_ONLINE[hart_id].load(Ordering::Acquire) {
+            if hal::aarch64::timer::counter_now().wrapping_sub(start) >= timeout_ticks {
+                // A late core would read the next core's context from the
+                // shared slot, so no further core is released.
+                log::warn!("[smp] hart {hart_id} did not come online in time — stopping bring-up");
+                return;
+            }
+            core::hint::spin_loop();
+        }
+        log::info!("[smp] hart {hart_id} online, parked");
     }
 }
 

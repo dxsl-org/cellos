@@ -2210,6 +2210,7 @@ version = "0.1.0"
 dependencies = [
  "aarch64-cpu",
  "critical-section",
+ "fdt",
  "hal-arch-trait",
  "hal-hypervisor",
  "hal-mte",

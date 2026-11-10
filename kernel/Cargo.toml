@@ -145,6 +145,9 @@ board-rpi3 = ["hal/board-rpi3"]
 board-rpi3-bring-up = ["board-rpi3", "cellos-boards/bring-up-drivers"]
 # Apple Mac mini M1 (t8103, J274): ADR-0032 secondary lane.
 board-apple-t8103 = ["hal/board-apple-t8103"]
+# Hosted AArch64 VM: QEMU virt map with a GICv3 discovered from the firmware
+# tree (QEMU TCG/HVF/KVM `-M virt,gic-version=3`). See boards/vm/aarch64-vm.
+board-aarch64-vm = ["hal/board-aarch64-vm"]
 # Compile the private-root substrate; admission is selected separately at boot.
 native-domains = []
 # Explicit x86 Ocel image opt-in, never a fleet default. Only the reviewed,

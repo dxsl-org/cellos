@@ -40,7 +40,7 @@ On Windows, use `usbipd-win` (open source) to pass the Mac mini's USB endpoints 
 ```powershell
 # 1. On Windows PowerShell (Administrator):
 usbipd list
-# Look for device: 05ac:0223 (Apple Inc. m1n1 proxy bootloader)
+# Look for device: 1209:316d (m1n1 USB CDC-ACM gadget)
 usbipd bind --busid <BUSID>
 usbipd attach --wsl --busid <BUSID>
 ```
@@ -53,10 +53,11 @@ Inside WSL2, verify with `ls -l /dev/ttyACM*`.
 In accordance with [ADR-0032 §7](docs/decisions/0032-apple-silicon-secondary-lane.md) and [ADR-0030](docs/decisions/0030-license-model-and-copyleft-boundary.md), external tools are run unmodified outside the Cellos build tree:
 
 ```bash
-# Clone m1n1 tooling (pinned to permissive MIT tag v1.9.9)
-git clone --depth 1 --branch v1.9.9 https://github.com/AsahiLinux/m1n1.git /tmp/m1n1-tools
+# Clone and build m1n1 (pinned to permissive MIT tag v1.9.9); the build yields
+# the stage-2 build/m1n1.macho the hypervisor runner chainloads.
+git clone --recursive --depth 1 --branch v1.9.9 https://github.com/AsahiLinux/m1n1.git /tmp/m1n1-tools
+make -C /tmp/m1n1-tools
 pip3 install --user construct pyserial
-export PYTHONPATH="/tmp/m1n1-tools/proxy/client:$PYTHONPATH"
 ```
 
 ---
@@ -70,9 +71,9 @@ bash tools/apple-host/dump-m1-facts.sh
 ```
 
 This captures:
-1. `devicetree.dtb`: The exact device tree passed by m1n1 firmware.
+1. `devicetree.dtb`: The device tree the running Linux received (from `/sys/firmware/devicetree/base`).
 2. `pci-ids.txt`: Output of `lspci -nn` (Broadcom Ethernet BCM57762, PCIe root ports).
-3. `nvme-geometry.txt`: Physical sector size and partition bounds.
+3. `cpuinfo.txt`: `/proc/cpuinfo`.
 4. `evidence-sha256.txt`: SHA-256 hashes of all raw artifacts.
 
 ---
@@ -85,9 +86,10 @@ cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat -
 bash scripts/build-aarch64-image.sh target/aarch64-unknown-none-softfloat/release/cellos-kernel build/cellos-apple-t8103.Image
 ```
 
-Push and run under the m1n1 hypervisor:
+Push and run under the m1n1 hypervisor (`M1N1_DTB` is the Linux `apple/t8103-j274.dtb`;
+`M1N1_DIR` defaults to `/tmp/m1n1-tools`, `M1N1_TTY` to `/dev/ttyACM0`):
 ```bash
-bash tools/apple-host/run-m1n1-proxy.sh build/cellos-apple-t8103.Image
+M1N1_DTB=path/to/t8103-j274.dtb bash tools/apple-host/run-m1n1-proxy.sh build/cellos-apple-t8103.Image
 ```
 
 The hypervisor intercepts MMIO accesses, logs instruction faults cleanly to the host, and forwards console output to stdio.

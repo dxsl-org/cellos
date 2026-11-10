@@ -10,8 +10,8 @@
 //! `ticks_per_quantum()` reads CNTFRQ_EL0 at runtime to handle both.
 //!
 //! The host tick source is the board backend's choice ([`ArmTimer`]);
-//! [`init_gic`] and [`reset_generic`] are the generic-timer tick shared by the
-//! GICv2 backends.
+//! [`arm_generic`] and [`reset_generic`] are the generic-timer tick shared by
+//! the GIC backends ([`init_gic`] adds the GICv2 PPI enable).
 
 use super::backend::{ArmTimer, Board};
 use super::gic::{self, GicV2Layout};
@@ -83,10 +83,16 @@ pub fn init() {
 }
 
 /// Arm the ARM generic timer as the host tick, with its PPI enabled at the GIC.
-///
-/// Uses the EL2 hypervisor physical timer (CNTHP) when `el2::is_el2()` is
-/// true, otherwise the EL1 physical timer (CNTP).
 pub fn init_gic<G: GicV2Layout>() {
+    gic::enable_irq::<G>(arm_generic());
+}
+
+/// Arm the ARM generic timer for one quantum and return its PPI; enabling
+/// that PPI is the interrupt controller's job.
+///
+/// Uses the EL2 hypervisor physical timer (CNTHP, PPI 26) when
+/// `el2::is_el2()` is true, otherwise the EL1 physical timer (CNTP, PPI 30).
+pub fn arm_generic() -> u32 {
     let ticks = ticks_per_quantum();
     if super::el2::is_el2() {
         // SAFETY: CNTHP_* are EL2-private hypervisor physical timer registers.
@@ -100,7 +106,7 @@ pub fn init_gic<G: GicV2Layout>() {
                 options(nomem, nostack),
             );
         }
-        gic::enable_irq::<G>(26);
+        26
     } else {
         // SAFETY: CNTP_* system registers; EL1-private.
         unsafe {
@@ -113,7 +119,7 @@ pub fn init_gic<G: GicV2Layout>() {
                 options(nomem, nostack),
             );
         }
-        gic::enable_irq::<G>(30);
+        30
     }
 }
 

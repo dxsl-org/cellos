@@ -7,23 +7,49 @@
 //! starting us at EL1 cannot provide that gateway.
 
 use core::arch::global_asm;
+use core::sync::atomic::{AtomicU64, Ordering};
 
-use super::backend::{ArmPlatform, Board, HostRegime, SecondaryStart};
+use super::backend::{ArmIrqController, ArmPlatform, Board, HostRegime, SecondaryStart};
 
 /// Boot through the Pi EL2 monitor install (`.el2_init`, BSS-clear epilogue).
 const BOARD_BCM: usize = <Board as ArmPlatform>::PI_MONITOR_BOOT as usize;
 
-/// Assemble the `PSCI_CPU_ON` secondary entry only where secondaries start that way.
-const SECONDARY_PSCI: usize = matches!(
+/// Assemble `_secondary_entry` only where secondaries are started by firmware.
+const SECONDARY_ENTRY: usize = matches!(
     <Board as ArmPlatform>::SECONDARY_START,
-    SecondaryStart::Psci
+    SecondaryStart::Psci | SecondaryStart::SpinTable
 ) as usize;
+
+/// Assemble the spin-table trampoline `_spin_table_entry`.
+const SECONDARY_SPIN_TABLE: usize = matches!(
+    <Board as ArmPlatform>::SECONDARY_START,
+    SecondaryStart::SpinTable
+) as usize;
+
+/// `SecondaryContext` address `_spin_table_entry` hands `_secondary_entry` in
+/// x0: a spin-table release carries no argument, unlike `PSCI_CPU_ON`.
+static SPIN_TABLE_CONTEXT: AtomicU64 = AtomicU64::new(0);
+
+/// Publish `context` (the physical address of a cleaned [`SecondaryContext`])
+/// for the next core released through the spin table.
+///
+/// One slot serves every core, so the caller releases cores one at a time and
+/// stops at the first one that does not come online.
+pub fn publish_spin_table_context(context: u64) {
+    SPIN_TABLE_CONTEXT.store(context, Ordering::Relaxed);
+    // The released core reads the slot with its caches off.
+    super::cache::clean_data_cache_range(SPIN_TABLE_CONTEXT.as_ptr() as usize, 8);
+}
 
 /// The EL2 boot path keeps a VHE EL2 host (`HCR_EL2.{E2H,TGE} = {1,1}`).
 const HOST_VHE: usize = matches!(<Board as ArmPlatform>::HOST_REGIME, HostRegime::El2Vhe) as usize;
 
 /// `_start` begins with a Linux arm64 `Image` header.
 const IMAGE_HEADER: usize = <Board as ArmPlatform>::LINUX_IMAGE_HEADER as usize;
+
+/// Leaving EL2 for an EL1 host first opens the GICv3 system-register interface
+/// to EL1 (`ICC_SRE_EL2`); a GICv2-only CPU has no such register.
+const GICV3_SRE: usize = <Board as ArmIrqController>::GICV3_CPU_INTERFACE as usize;
 
 /// `Image` header flags (booting.rst): little-endian (bit 0 = 0), 4 KiB pages
 /// (bits 2:1 = 1), and bit 3 = 0: the image is not relocatable, so the loader
@@ -124,6 +150,12 @@ global_asm!(
     mov \tmp, #3               // EL1PCTEN | EL1PCEN
     msr cnthctl_el2, \tmp
     msr cntvoff_el2, xzr
+    .if {gicv3_sre}
+    // ICC_SRE_EL2 Enable|DIB|DFB|SRE: EL1 may use the ICC_* registers.
+    mrs \tmp, icc_sre_el2
+    orr \tmp, \tmp, #0xf
+    msr icc_sre_el2, \tmp
+    .endif
     mov \tmp, #0x3c5           // EL1h with D/A/I/F masked
     msr spsr_el2, \tmp
     adr \tmp, \target
@@ -343,7 +375,7 @@ _start:
     wfi
     b    .Lsecondary_park
 
-    .if {secondary_psci}
+    .if {secondary_entry}
     // ── Secondary core entry (PSCI_CPU_ON) ───────────────────────────────────
     // x0 = &SecondaryContext, a *physical* address: firmware starts the core
     // with the MMU off, caches off, interrupts masked, at EL1 — or at EL2 on a
@@ -419,10 +451,24 @@ _secondary_entry:
     // hart id to the Rust entry point and never return.
     ldr  x0, [x0, #{ctx_hart}]
     b    smp_aarch64_secondary_main
+
+    .if {secondary_spin_table}
+    // ── Secondary core entry (spin-table release) ────────────────────────────
+    // Firmware branches here with the MMU off and x0 = 0; load the context the
+    // boot core published, then share the PSCI path.
+    .global _spin_table_entry
+    .balign 4
+_spin_table_entry:
+    adrp x0, {spin_ctx}
+    ldr  x0, [x0, :lo12:{spin_ctx}]
+    b    _secondary_entry
+    .endif
     .endif
     "#,
     board_bcm = const BOARD_BCM,
-    secondary_psci = const SECONDARY_PSCI,
+    secondary_entry = const SECONDARY_ENTRY,
+    secondary_spin_table = const SECONDARY_SPIN_TABLE,
+    spin_ctx = sym SPIN_TABLE_CONTEXT,
     host_vhe = const HOST_VHE,
     ctx_el2_host = const CTX_EL2_HOST,
     image_header = const IMAGE_HEADER,
@@ -433,4 +479,5 @@ _secondary_entry:
     ctx_tcr = const CTX_TCR,
     ctx_ttbr0 = const CTX_TTBR0,
     ctx_sctlr = const CTX_SCTLR,
+    gicv3_sre = const GICV3_SRE,
 );

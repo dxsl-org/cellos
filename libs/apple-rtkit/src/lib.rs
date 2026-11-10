@@ -13,101 +13,157 @@ extern crate std;
 
 /// Endpoint numbers defined by RTKit.
 pub mod endpoint {
+    /// Management endpoint: handshake, endpoint map, power states.
     pub const MGMT: u8 = 0;
+    /// Crash-log buffer endpoint.
     pub const CRASHLOG: u8 = 1;
+    /// Syslog buffer endpoint.
     pub const SYSLOG: u8 = 2;
-    pub const IO_STORAGE: u8 = 32;
+    /// Debug endpoint.
+    pub const DEBUG: u8 = 3;
+    /// IOReport buffer endpoint.
+    pub const IOREPORT: u8 = 4;
+    /// OSLog buffer endpoint.
+    pub const OSLOG: u8 = 8;
+    /// First application (coprocessor-specific) endpoint; lower numbers are RTKit system endpoints.
+    pub const APP_START: u8 = 0x20;
 }
 
-/// Management message types on endpoint 0.
+/// Management message types on endpoint 0 (`data0` bits 59..52).
 pub mod mgmt_type {
+    /// Coprocessor → AP: supported protocol version range.
     pub const HELLO: u8 = 1;
-    pub const HELLO_ACK: u8 = 2;
-    pub const RESTART: u8 = 3;
-    pub const SLEEP: u8 = 4;
-    pub const WAKE: u8 = 5;
+    /// AP → coprocessor: chosen protocol version.
+    pub const HELLO_REPLY: u8 = 2;
+    /// AP → coprocessor: start an endpoint.
+    pub const STARTEP: u8 = 5;
+    /// AP → coprocessor: request an IOP power state.
+    pub const SET_IOP_PWR_STATE: u8 = 6;
+    /// Coprocessor → AP: IOP power state reached.
+    pub const SET_IOP_PWR_STATE_ACK: u8 = 7;
+    /// Coprocessor → AP: one 32-endpoint slice of the endpoint bitmap.
+    pub const EPMAP: u8 = 8;
+    /// AP → coprocessor: acknowledgement of one [`EPMAP`] slice (same code).
+    pub const EPMAP_REPLY: u8 = 8;
+    /// AP → coprocessor: AP power state.
+    pub const SET_AP_PWR_STATE: u8 = 0xB;
+    /// Coprocessor → AP: AP power state acknowledged (same code).
+    pub const SET_AP_PWR_STATE_ACK: u8 = 0xB;
 }
 
+/// Lowest RTKit protocol version this client speaks.
+pub const MIN_SUPPORTED_VERSION: u16 = 11;
+/// Highest RTKit protocol version this client speaks.
+pub const MAX_SUPPORTED_VERSION: u16 = 12;
+
+const MGMT_TYPE_SHIFT: u32 = 52;
+const HELLO_MAXVER_SHIFT: u32 = 16;
+const EPMAP_BASE_SHIFT: u32 = 32;
+const EPMAP_BASE_MASK: u64 = 0x7;
+const EPMAP_LAST: u64 = 1 << 51;
+const EPMAP_REPLY_MORE: u64 = 1 << 0;
+
+/// Errors reported by the RTKit protocol layer, SART manager and partition guard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RtKitError {
+    /// A management message arrived on a non-management endpoint.
     InvalidEndpoint,
+    /// A message type that is not valid in the current handshake state.
     InvalidType,
+    /// The coprocessor's protocol version range does not overlap ours.
     HandshakeFailed,
+    /// A malformed message payload.
     InvalidPayload,
+    /// A SART window index beyond the hardware's 16 entries.
     WindowOverflow,
+    /// An I/O request outside the Cellos partition.
     PartitionViolation,
 }
 
-/// An RTKit 128-bit mailbox message (two 64-bit words).
+/// One RTKit message as carried by the ASC mailbox's two 64-bit words.
 ///
-/// In `data0`:
-/// - Bits 0..31: 32-bit payload
-/// - Bits 32..39: 8-bit endpoint ID
-/// - Bits 40..47: 8-bit message type
-/// - Bits 48..63: reserved / sequence flags
+/// The first word is the 64-bit message; the endpoint travels in the low byte of
+/// the second word. Management messages (endpoint 0) put their type in bits
+/// 59..52 of the message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RtKitMessage {
+    /// Endpoint the message is addressed to or came from.
     pub endpoint: u8,
-    pub msg_type: u8,
-    pub payload: u32,
-    pub data1: u64,
+    /// The 64-bit message word.
+    pub msg: u64,
 }
 
 impl RtKitMessage {
-    pub const fn new(endpoint: u8, msg_type: u8, payload: u32, data1: u64) -> Self {
-        Self {
-            endpoint,
-            msg_type,
-            payload,
-            data1,
-        }
+    /// A message `msg` on `endpoint`.
+    pub const fn new(endpoint: u8, msg: u64) -> Self {
+        Self { endpoint, msg }
     }
 
-    /// Pack message into (data0, data1) 64-bit register values.
+    /// A management message of type `msg_type` whose remaining fields are `fields`.
+    pub const fn mgmt(msg_type: u8, fields: u64) -> Self {
+        let msg = (fields & !(0xFFu64 << MGMT_TYPE_SHIFT)) | ((msg_type as u64) << MGMT_TYPE_SHIFT);
+        Self::new(endpoint::MGMT, msg)
+    }
+
+    /// The management type field (bits 59..52); meaningful on endpoint 0 only.
+    pub const fn mgmt_type(&self) -> u8 {
+        ((self.msg >> MGMT_TYPE_SHIFT) & 0xFF) as u8
+    }
+
+    /// Pack into the mailbox's (data0, data1) register values.
     pub const fn to_raw(&self) -> (u64, u64) {
-        let data0 =
-            (self.payload as u64) | ((self.endpoint as u64) << 32) | ((self.msg_type as u64) << 40);
-        (data0, self.data1)
+        (self.msg, self.endpoint as u64)
     }
 
-    /// Unpack message from (data0, data1) 64-bit register values.
+    /// Unpack from the mailbox's (data0, data1) register values.
     pub const fn from_raw(data0: u64, data1: u64) -> Self {
-        let payload = (data0 & 0xFFFF_FFFF) as u32;
-        let endpoint = ((data0 >> 32) & 0xFF) as u8;
-        let msg_type = ((data0 >> 40) & 0xFF) as u8;
-        Self {
-            endpoint,
-            msg_type,
-            payload,
-            data1,
-        }
+        Self::new((data1 & 0xFF) as u8, data0)
     }
 }
 
 /// RTKit handshake state machine for endpoint 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HandshakeState {
+    /// No HELLO received yet.
     Uninitialized,
-    Negotiating,
-    Running { version: u32 },
+    /// HELLO answered; the endpoint map is still arriving.
+    Negotiating { version: u16 },
+    /// The final EPMAP slice was acknowledged; system endpoints can be started.
+    Running { version: u16 },
+    /// The coprocessor's version range was refused.
     Failed,
 }
 
+/// Endpoint-0 management client: version negotiation and endpoint discovery.
 pub struct RtKitClient {
     state: HandshakeState,
-    supported_version: u32,
+    /// One bit per endpoint the coprocessor announced in EPMAP (256 endpoints).
+    endpoints: [u32; 8],
+}
+
+impl Default for RtKitClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RtKitClient {
-    pub const fn new(supported_version: u32) -> Self {
+    /// A client that has not seen HELLO yet.
+    pub const fn new() -> Self {
         Self {
             state: HandshakeState::Uninitialized,
-            supported_version,
+            endpoints: [0; 8],
         }
     }
 
+    /// Current handshake state.
     pub fn state(&self) -> HandshakeState {
         self.state
+    }
+
+    /// Whether the coprocessor announced `ep` in its endpoint map.
+    pub fn endpoint_present(&self, ep: u8) -> bool {
+        self.endpoints[usize::from(ep / 32)] & (1 << (ep % 32)) != 0
     }
 
     /// Handle an incoming message from the coprocessor on endpoint 0.
@@ -119,40 +175,37 @@ impl RtKitClient {
         if msg.endpoint != endpoint::MGMT {
             return Err(RtKitError::InvalidEndpoint);
         }
-        match msg.msg_type {
+        match msg.mgmt_type() {
             mgmt_type::HELLO => {
-                let coproc_version = msg.payload;
-                if coproc_version == 0 {
+                let min_ver = (msg.msg & 0xFFFF) as u16;
+                let max_ver = ((msg.msg >> HELLO_MAXVER_SHIFT) & 0xFFFF) as u16;
+                if min_ver > MAX_SUPPORTED_VERSION || max_ver < MIN_SUPPORTED_VERSION {
                     self.state = HandshakeState::Failed;
                     return Err(RtKitError::HandshakeFailed);
                 }
-                let agreed_version = if coproc_version < self.supported_version {
-                    coproc_version
-                } else {
-                    self.supported_version
-                };
-                self.state = HandshakeState::Running {
-                    version: agreed_version,
-                };
-                Ok(Some(RtKitMessage::new(
-                    endpoint::MGMT,
-                    mgmt_type::HELLO_ACK,
-                    agreed_version,
-                    0,
-                )))
+                let version = max_ver.min(MAX_SUPPORTED_VERSION);
+                self.state = HandshakeState::Negotiating { version };
+                self.endpoints = [0; 8];
+                let fields = u64::from(version) | (u64::from(version) << HELLO_MAXVER_SHIFT);
+                Ok(Some(RtKitMessage::mgmt(mgmt_type::HELLO_REPLY, fields)))
             }
-            mgmt_type::SLEEP => Ok(Some(RtKitMessage::new(
-                endpoint::MGMT,
-                mgmt_type::SLEEP,
-                0,
-                0,
-            ))),
-            mgmt_type::WAKE => Ok(Some(RtKitMessage::new(
-                endpoint::MGMT,
-                mgmt_type::WAKE,
-                0,
-                0,
-            ))),
+            mgmt_type::EPMAP => {
+                let HandshakeState::Negotiating { version } = self.state else {
+                    return Err(RtKitError::InvalidType);
+                };
+                let base = (msg.msg >> EPMAP_BASE_SHIFT) & EPMAP_BASE_MASK;
+                self.endpoints[base as usize] |= msg.msg as u32;
+                let last = msg.msg & EPMAP_LAST != 0;
+                let mut fields = base << EPMAP_BASE_SHIFT;
+                if last {
+                    fields |= EPMAP_LAST;
+                    self.state = HandshakeState::Running { version };
+                } else {
+                    fields |= EPMAP_REPLY_MORE;
+                }
+                Ok(Some(RtKitMessage::mgmt(mgmt_type::EPMAP_REPLY, fields)))
+            }
+            // Power-state acknowledgements (and unknown types) need no reply.
             _ => Ok(None),
         }
     }
@@ -178,11 +231,12 @@ impl SartWindow {
         }
     }
 
+    /// Whether `[addr, addr + len)` lies wholly inside this window; a range or
+    /// window that wraps the address space is never contained.
     pub fn contains(&self, addr: u64, len: u64) -> bool {
-        if let Some(end) = addr.checked_add(len) {
-            addr >= self.base && end <= self.base + self.size
-        } else {
-            false
+        match (addr.checked_add(len), self.base.checked_add(self.size)) {
+            (Some(end), Some(window_end)) => addr >= self.base && end <= window_end,
+            _ => false,
         }
     }
 }
@@ -190,6 +244,12 @@ impl SartWindow {
 /// SART Window Manager holding up to 16 hardware filter windows.
 pub struct SartManager {
     windows: [Option<SartWindow>; 16],
+}
+
+impl Default for SartManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SartManager {
@@ -263,7 +323,9 @@ impl PartitionGuard {
         let Some(end_lba) = lba.checked_add(count) else {
             return Err(RtKitError::PartitionViolation);
         };
-        let partition_end = self.start_lba + self.lba_count;
+        let Some(partition_end) = self.start_lba.checked_add(self.lba_count) else {
+            return Err(RtKitError::PartitionViolation);
+        };
         if lba >= self.start_lba && end_lba <= partition_end {
             Ok(())
         } else {
@@ -278,32 +340,69 @@ mod tests {
 
     #[test]
     fn message_raw_round_trip() {
-        let msg = RtKitMessage::new(endpoint::MGMT, mgmt_type::HELLO, 2, 0x1234_5678_9ABC_DEF0);
+        let msg = RtKitMessage::new(endpoint::APP_START, 0x1234_5678_9ABC_DEF0);
         let (d0, d1) = msg.to_raw();
-        let unpacked = RtKitMessage::from_raw(d0, d1);
-        assert_eq!(msg, unpacked);
-        assert_eq!(unpacked.endpoint, endpoint::MGMT);
-        assert_eq!(unpacked.msg_type, mgmt_type::HELLO);
-        assert_eq!(unpacked.payload, 2);
-        assert_eq!(unpacked.data1, 0x1234_5678_9ABC_DEF0);
+        assert_eq!((d0, d1), (0x1234_5678_9ABC_DEF0, 0x20));
+        assert_eq!(RtKitMessage::from_raw(d0, d1), msg);
     }
 
     #[test]
-    fn handshake_state_machine() {
-        let mut client = RtKitClient::new(2);
+    fn mgmt_type_lives_in_bits_59_to_52() {
+        let msg = RtKitMessage::mgmt(mgmt_type::EPMAP, u64::MAX);
+        assert_eq!(msg.endpoint, endpoint::MGMT);
+        assert_eq!(msg.mgmt_type(), mgmt_type::EPMAP);
+        assert_eq!((msg.msg >> 52) & 0xFF, 8);
+        assert_eq!(msg.msg & !(0xFFu64 << 52), !(0xFFu64 << 52));
+    }
+
+    #[test]
+    fn handshake_negotiates_version_and_acknowledges_epmap() {
+        let mut client = RtKitClient::new();
         assert_eq!(client.state(), HandshakeState::Uninitialized);
 
-        let hello = RtKitMessage::new(endpoint::MGMT, mgmt_type::HELLO, 2, 0);
+        // Firmware offers versions 11..=13; the client picks its own maximum, 12.
+        let hello = RtKitMessage::mgmt(mgmt_type::HELLO, 11 | (13 << 16));
         let reply = client.handle_mgmt_message(&hello).expect("valid hello");
-        assert_eq!(client.state(), HandshakeState::Running { version: 2 });
+        assert_eq!(client.state(), HandshakeState::Negotiating { version: 12 });
         assert_eq!(
             reply,
-            Some(RtKitMessage::new(
-                endpoint::MGMT,
-                mgmt_type::HELLO_ACK,
-                2,
-                0
+            Some(RtKitMessage::mgmt(mgmt_type::HELLO_REPLY, 12 | (12 << 16)))
+        );
+
+        // Slice 0 (endpoints 0, 1, 2) with more to come, then slice 1 (endpoint 0x20) as last.
+        let first = RtKitMessage::mgmt(mgmt_type::EPMAP, 0b111);
+        let reply = client.handle_mgmt_message(&first).expect("epmap");
+        assert_eq!(reply, Some(RtKitMessage::mgmt(mgmt_type::EPMAP_REPLY, 1)));
+        assert_eq!(client.state(), HandshakeState::Negotiating { version: 12 });
+
+        let last = RtKitMessage::mgmt(mgmt_type::EPMAP, (1 << 51) | (1 << 32) | 1);
+        let reply = client.handle_mgmt_message(&last).expect("last epmap");
+        assert_eq!(
+            reply,
+            Some(RtKitMessage::mgmt(
+                mgmt_type::EPMAP_REPLY,
+                (1 << 51) | (1 << 32)
             ))
+        );
+        assert_eq!(client.state(), HandshakeState::Running { version: 12 });
+        assert!(client.endpoint_present(endpoint::SYSLOG));
+        assert!(client.endpoint_present(endpoint::APP_START));
+        assert!(!client.endpoint_present(endpoint::DEBUG));
+    }
+
+    #[test]
+    fn handshake_refuses_disjoint_version_range() {
+        let mut client = RtKitClient::new();
+        let hello = RtKitMessage::mgmt(mgmt_type::HELLO, 2 | (10 << 16));
+        assert_eq!(
+            client.handle_mgmt_message(&hello),
+            Err(RtKitError::HandshakeFailed)
+        );
+        assert_eq!(client.state(), HandshakeState::Failed);
+        let epmap = RtKitMessage::mgmt(mgmt_type::EPMAP, 1 << 51);
+        assert_eq!(
+            client.handle_mgmt_message(&epmap),
+            Err(RtKitError::InvalidType)
         );
     }
 

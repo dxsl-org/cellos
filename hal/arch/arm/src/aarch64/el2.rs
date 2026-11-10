@@ -118,28 +118,17 @@ pub unsafe fn pi_monitor_mmu_init(ttbr0_phys: u64) {
     }
 }
 
-/// VHE `TCR_EL2` (E2H=1: the `TCR_EL1` layout) for the EL2&0 regime that the
-/// kernel and EL0 Cells share: the same 39-bit TTBR0 walk as [`EL2_TCR`], with
-/// TTBR1_EL2 walks disabled. `IPS` stays 0 (32-bit), wide enough for QEMU
-/// virt RAM.
-#[allow(dead_code)]
-const VHE_TCR: u64 = 25
-    | (1 << 8)        // IRGN0 = WB-WA-RA
-    | (1 << 10)       // ORGN0 = WB-WA-RA
-    | (3 << 12)       // SH0 = Inner-shareable
-    | (1 << 23)       // EPD1: no TTBR1_EL2 walks
-    | (2_u64 << 30); // TG1 = 4 KiB (unused while EPD1 = 1, but a valid encoding)
-
 /// `SCTLR_EL2.SPAN` (E2H=1 layout, bit 23): exceptions to EL2 leave
 /// `PSTATE.PAN` unchanged. The kernel reads and writes Cell (EL0-accessible)
 /// pages on syscalls exactly as the EL1 host does without PAN; set
 /// explicitly so a firmware reset value cannot fault those accesses.
 const SCTLR_SPAN: u64 = 1 << 23;
 
-/// Activate the VHE EL2 MMU with the given L1 page table root. `TCR_EL2` takes
-/// the `TCR_EL1` layout ([`VHE_TCR`]); EL0 Cells translate through the same
-/// `TTBR0_EL2` as the kernel. MAIR_EL2 mirrors the EL1 layout (index0=Device,
-/// index1=Normal-WB).
+/// Activate the VHE EL2 MMU with the given page table root. `TCR_EL2` takes
+/// the `TCR_EL1` layout
+/// ([`TranslationConfig::vhe_tcr_value`](super::paging::TranslationConfig::vhe_tcr_value));
+/// EL0 Cells translate through the same `TTBR0_EL2` as the kernel. MAIR_EL2
+/// mirrors the EL1 layout (index0=Device, index1=Normal-WB).
 ///
 /// UART sentinel bytes are written to the supplied PL011 base: `'M'` (0x4D) just
 /// before `SCTLR_EL2.M` is set and `'N'` (0x4E) immediately after. "M" alone

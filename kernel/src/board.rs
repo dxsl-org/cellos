@@ -456,7 +456,11 @@ impl core::fmt::Display for Quoted<'_> {
 ///
 /// The HAL cannot name `cellos_boards` without a manifest change, so the
 /// backend's SoC identity picks the descriptor here (Group 1: one board per SoC).
-#[cfg(target_arch = "aarch64")]
+/// The hosted VM backend shares QEMU virt's SoC identity (same device map and
+/// MMIO authority table), so its feature names the descriptor directly.
+#[cfg(all(target_arch = "aarch64", feature = "board-aarch64-vm"))]
+const AARCH64_BOARD: &BoardDescriptor = &cellos_boards::vm_aarch64::AARCH64_VM;
+#[cfg(all(target_arch = "aarch64", not(feature = "board-aarch64-vm")))]
 const AARCH64_BOARD: &BoardDescriptor =
     match <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SOC {
         hal::aarch64::backend::ArmSoc::QemuArmVirt => {
@@ -470,6 +474,19 @@ const AARCH64_BOARD: &BoardDescriptor =
         }
         hal::aarch64::backend::ArmSoc::AppleT8103 => &cellos_boards::apple_macmini_m1::MACMINI_M1,
     };
+
+#[cfg(all(
+    feature = "board-aarch64-vm",
+    any(
+        feature = "board-rpi3",
+        feature = "board-rpi4",
+        feature = "board-apple-t8103"
+    )
+))]
+compile_error!(
+    "Conflicting AArch64 board features: `board-aarch64-vm` cannot be combined with another \
+     AArch64 board feature."
+);
 
 #[cfg(target_arch = "aarch64")]
 /// Returns the compiled-in AArch64 descriptor used by const fallback boot data.
