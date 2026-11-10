@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Single cell and driver catalog"
-status: pending
+status: completed
 priority: P1
 effort: "7–10d"
 dependencies: [4]
@@ -74,19 +74,19 @@ Row shape: `path`, `role`, `request`, `boot_ceiling`, `edges[] = {route, target}
 
 ## Todo List
 
-- [ ] Before-dump
-- [ ] Catalog transcribed
-- [ ] Kernel lookups switched
-- [ ] Signer switched, byte-identical policy
-- [ ] Cross-check guard
-- [ ] Old tables deleted
+- [x] Before-dump
+- [x] Catalog transcribed
+- [x] Kernel lookups switched
+- [x] Signer switched, byte-identical policy
+- [x] Cross-check guard
+- [x] Old tables deleted
 
 ## Success Criteria
 
-- [ ] Generated tables equal the before-dump for every path (equality test).
-- [ ] `POLICY.BIN` from the new signer is byte-identical to the old one for the same inputs.
-- [ ] `python3 scripts/check-catalog.py` fails when a path is in `config/services.toml` but not in the catalog (negative control).
-- [ ] Kernel compiles for x86_64, riscv64, aarch64; loader host tests pass.
+- [x] Generated tables equal the before-dump for every path (equality test).
+- [x] `POLICY.BIN` from the new signer is byte-identical to the old one for the same inputs.
+- [x] `python3 scripts/check-catalog.py` fails when a path is in `config/services.toml` but not in the catalog (negative control).
+- [x] Kernel compiles for x86_64, riscv64, aarch64; loader host tests pass.
 
 ## Risk Assessment
 
@@ -102,4 +102,31 @@ Phase 06 changes the catalog's key from name to measured identity.
 
 ## Deviation Log
 
-None.
+- Decision (owner, `rust-source-json-export`): the catalog source is `kernel/src/catalog.rs`; `scripts/catalog.generated.json` is exported by the `catalog_export` host test (stale file fails the test); no `catalog/*.toml`, no `build.rs` generation.
+  Why: avoids hand-transcription into TOML and keeps per-row rationale next to the code that enforces it.
+  Impact: `kernel/src/catalog.rs`, `kernel/src/catalog_export.rs`, `scripts/catalog.generated.json`.
+  Revert: revert the phase commit; tables return to their former files.
+- Decision: launch *edges* (caller → target) stay code in `launch_profile/profiles.rs`; only the path-keyed ceilings and requests moved.
+  Why: edges are logic per caller and route, not per-path data; Phase 06 re-keys the caller.
+  Impact: none on behaviour.
+  Revert: n/a.
+- Decision: the five packaged-but-inert NIC drivers and four edge-only/plan-only paths are recorded in `check-catalog.py` `OUTSIDE_CATALOG` with reasons instead of gaining rows.
+  Why: adding rows would add authority; this phase is behaviour-preserving.
+  Impact: `scripts/check-catalog.py`.
+  Revert: n/a.
+- Deviation: the equality harness was deleted after the comparison; its "before" dumps are kept in `reports/`.
+  Why: once the old tables are gone a dump-vs-itself test only tests wiring.
+  Impact: none.
+  Revert: n/a.
+- Deviation: files outside the S2 list touched as consequences: `tests/integration/fixtures/build-incomplete-policy.py` (calls the signer's `ptrust_paths` with the JSON path), `docs/code-metrics.generated.md`; two kernel tests that read source text were changed (`launch_profile` sweep now iterates catalog rows; the policy test no longer greps the signer for path mirrors that no longer exist).
+  Why: direct consequences of removing the scraper and mirrors.
+  Impact: listed files.
+  Revert: with the phase.
+- Surprise: the old P-TRUST scraper also counted `/bin/vfs` and `/bin/bcm-display` (literals in the `with_path_caps` body that mint no P-TRUST cap); the exported `ptrust` flag is exact. Both rows remain in DEV_POLICY, so the signed policy is unchanged.
+  Why: scraper read literals, not semantics.
+  Impact: `assert_ptrust_covered` now checks 17 paths, not 19.
+  Revert: n/a.
+
+## Evidence
+
+[reports/phase-05-evidence.md](reports/phase-05-evidence.md).

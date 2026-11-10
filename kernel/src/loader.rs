@@ -59,24 +59,10 @@ pub struct ElfHeader {
     pub shoff: usize,
 }
 
-/// Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
-///
-/// Only `/bin/` paths gain privilege, still bounded by the launch request.
+/// Legacy path grants for cells lacking a `__ViCell_manifest` (see
+/// [`crate::catalog::legacy_manifestless`]).
 fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
-    let mut c = crate::task::cap::CapSet::EMPTY;
-    if path.starts_with("/bin/") {
-        if path.ends_with("/bin/vfs") {
-            c.block_io = true;
-            c.block_regions = 0b111; // legacy manifest-less fallback: P1 + P4 + SRV
-        }
-        if path.ends_with("/bin/net") {
-            c.network = true;
-        }
-        if path.ends_with("/bin/cellbox") || path.ends_with("/bin/init") {
-            c.spawn = true;
-        }
-    }
-    c
+    crate::catalog::legacy_manifestless(path)
 }
 
 /// Spawn a governed cell from the early filesystem with all route decisions

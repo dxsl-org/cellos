@@ -25,7 +25,7 @@ def main() -> int:
 
     repo = args.repo.resolve()
     signer = load_signer(repo)
-    p_trust_paths = signer.ptrust_paths(repo / "kernel/src/task/cap.rs")
+    p_trust_paths = signer.ptrust_paths(repo / "scripts/catalog.generated.json")
     if args.omit not in p_trust_paths:
         parser.error(f"--omit must name a P-TRUST path, got {args.omit!r}")
 

@@ -1,4 +1,4 @@
-use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
+use crate::resource_registry::{DEV_GPIO, DEV_UART};
 use crate::task::cap::CapSet;
 
 use super::super::boot_ceiling;
@@ -6,9 +6,6 @@ use super::targets::{reviewed_user_target_ceiling, NET_CLIENT};
 use super::{LaunchProfile, LaunchRoute};
 
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
-const GPIO_ONLY_MMIO: u8 = DEV_GPIO;
-const SENSOR_MMIO: u8 = DEV_GPIO | DEV_I2C;
-const SPI_DEMO_MMIO: u8 = DEV_GPIO | DEV_SPI;
 /// The pre-annex X/M/W rights every reviewed non-sandbox edge keeps (annex
 /// S2-T/S2-W §3, D-TW1); "capability-free" below means nothing beyond them.
 const LEGACY: CapSet = CapSet::LEGACY_OBSERVE_MUTATE;
@@ -375,32 +372,4 @@ pub(super) fn pinned_profile(
         _ => return None,
     };
     Some(LaunchProfile::new(ceiling, "pinned-launch-edge", false))
-}
-
-pub(super) const fn console_mmio_capset() -> CapSet {
-    CapSet {
-        mmio_devices: CONSOLE_MMIO,
-        ..LEGACY
-    }
-}
-
-pub(super) const fn gpio_mmio_capset() -> CapSet {
-    CapSet {
-        mmio_devices: GPIO_ONLY_MMIO,
-        ..LEGACY
-    }
-}
-
-pub(super) const fn sensor_mmio_capset() -> CapSet {
-    CapSet {
-        mmio_devices: SENSOR_MMIO,
-        ..LEGACY
-    }
-}
-
-pub(super) const fn spi_demo_mmio_capset() -> CapSet {
-    CapSet {
-        mmio_devices: SPI_DEMO_MMIO,
-        ..LEGACY
-    }
 }

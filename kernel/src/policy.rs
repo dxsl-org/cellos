@@ -1066,10 +1066,7 @@ pub fn lookup(path: &str) -> PolicyDecision {
 /// on the `DenyAll` branch below (malformed blob, or an explicit deny); a valid
 /// policy's own entry for this path is honoured normally through `Permit`.
 fn is_trusted_core(path: &str) -> bool {
-    matches!(
-        path,
-        "/bin/vfs" | "/bin/cellbox" | "/bin/net" | "/bin/platform"
-    )
+    crate::catalog::is_trusted_core(path)
 }
 
 /// Pure narrowing rule: combine spawner-intersected `caps` with a policy
@@ -1722,8 +1719,8 @@ mod tests {
         assert!(!ssh.caps.config_write);
         assert!(ssh.caps.kms_ssh_sign);
         // The signer keeps two literal copies of the stride table (`CAP_BYTES` and
-        // the independent decoder's own); both must have gained v8, and its
-        // request helpers must name the same paths as `with_path_kms_ssh_rights`.
+        // the independent decoder's own); both must have gained v8. Its per-path
+        // requests come from the exported catalog, checked by `catalog_export`.
         let script = std::fs::read_to_string(repo.join("scripts/sign-policy.py"))
             .expect("signer source is readable");
         assert_eq!(
@@ -1731,7 +1728,5 @@ mod tests {
             2,
             "both stride tables"
         );
-        assert!(script.contains("KMS_SSH_SIGN_PATHS = (\"/bin/cellbox-ssh\",)"));
-        assert!(script.contains("KMS_SSH_ADMIN_PATHS = (\"/bin/kms-ssh-admin\",)"));
     }
 }

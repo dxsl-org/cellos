@@ -40,6 +40,7 @@ pub enum Posture {
 }
 
 impl Posture {
+    #[allow(dead_code)] // used by build.rs; the kernel compiles this module for tests only
     pub const fn as_str(self) -> &'static str {
         match self {
             Posture::Dev => "dev",

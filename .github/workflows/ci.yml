@@ -116,6 +116,12 @@ jobs:
           python3 scripts/check-lanes.py
           python3 scripts/check-host-test-crates.py
 
+      # Every /bin path init starts or an image ships has a row in the kernel
+      # catalog (kernel/src/catalog.rs, exported to scripts/catalog.generated.json
+      # and pinned by the `catalog_export` kernel host test) or a stated reason.
+      - name: Check cell catalog coverage
+        run: python3 scripts/check-catalog.py
+
       # The tracked lockfiles must already describe the dependency graph, so no
       # job below can silently re-resolve and build a different graph.
       - name: Check lockfiles are current

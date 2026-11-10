@@ -47,6 +47,9 @@ pub mod audit;
 pub(crate) mod bench_counters; // Measurement-only counters, raw opcode 504
 mod board;
 pub mod boot;
+pub mod catalog;
+#[cfg(test)]
+mod catalog_export;
 pub mod cell;
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)

@@ -1591,7 +1591,7 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         assert_eq!(kept.kms_caller_flags(), 0, "{target}");
     }
 
-    // Sweep every path literal of the reviewed launch and boot tables (plus the
+    // Sweep every catalog row and every path literal of the launch edges (plus the
     // near-miss and sandbox spellings of the two KMS paths) against every caller
     // name, caller capability combination and route.
     fn quoted_paths(src: &str) -> Vec<&str> {
@@ -1608,14 +1608,8 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         }
         found
     }
-    let mut paths: Vec<&str> = Vec::new();
-    for source in [
-        include_str!("targets.rs"),
-        include_str!("profiles.rs"),
-        include_str!("../boot_ceiling.rs"),
-    ] {
-        paths.extend(quoted_paths(source));
-    }
+    let mut paths: Vec<&str> = crate::catalog::rows().map(|row| row.path).collect();
+    paths.extend(quoted_paths(include_str!("profiles.rs")));
     paths.extend([
         "/bin/cellbox-ssh",
         "/bin/cellbox-ssh2",

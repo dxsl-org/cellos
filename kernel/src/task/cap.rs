@@ -149,14 +149,6 @@ pub struct PlatformCap(());
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// The ADR-0033 CP1 §7 `edu` export-lane holder (`cells/tests/edu-holder`). It
-/// exists only in `test-hooks` kernels, whose lane image loads no operator policy,
-/// so it is deliberately not a `with_path_caps` literal: `scripts/sign-policy.py`
-/// requires every literal there in the production policy table, and a production
-/// kernel cannot mint authority for this path at all.
-#[cfg(feature = "test-hooks")]
-const TEST_EXPORT_HOLDER_PATH: &str = "/bin/edu-holder";
-
 /// Singleton latch: held by either the one live reservation or the permanently
 /// committed Platform task. A reservation owns the only transition back to
 /// `false`; once committed, the latch intentionally remains set forever.
@@ -271,19 +263,19 @@ pub struct CapSet {
     /// service-config, not by any kernel syscall: the kernel only carries it from
     /// the bounded spawn grant into the attested caller trailer
     /// (`CALLER_FLAG_CONFIG_WRITE`). No manifest bit; `/bin/cellbox` is the only
-    /// install path that requests it (`with_path_config_rights`). Not P-TRUST.
+    /// install path that requests it (`crate::catalog`). Not P-TRUST.
     pub config_write: bool,
     /// KSSH K3 (2026-10-30): ask service-kms to sign an SSH userauth challenge.
     /// Enforced by service-kms, not by any kernel syscall: the kernel only carries
     /// it from the bounded spawn grant into the attested caller trailer
     /// (`CALLER_FLAG_KMS_SSH_SIGN`). No manifest bit; `/bin/cellbox-ssh` is the
-    /// only install path that requests it (`with_path_kms_ssh_rights`) and the
+    /// only install path that requests it (`crate::catalog`) and the
     /// reviewed `SSH_CLIENT_EDGE` the only launch ceiling that carries it. Not
     /// P-TRUST. Never held together with `kms_ssh_admin`.
     pub kms_ssh_sign: bool,
     /// KSSH K3 (2026-10-30): the service-kms SSH key administration class,
     /// carried as `CALLER_FLAG_KMS_SSH_ADMIN`. No manifest bit; `/bin/kms-ssh-admin`
-    /// is the only install path that requests it (`with_path_kms_ssh_rights`), and
+    /// is the only install path that requests it (`crate::catalog`), and
     /// no launch edge or boot row carries it yet, so nothing can grant it until a
     /// later reviewed slice adds one. Not P-TRUST. Never held together with
     /// `kms_ssh_sign`.
@@ -464,157 +456,11 @@ impl CapSet {
     /// so `sys_spawn_from_elf(bytes, "/bin/nvme")` handed any SpawnCap holder
     /// `PcieDriverCap` regardless of its ceiling → DMA-anywhere.
     ///
-    /// `/bin/vfs` requests the cell-store block region here so the same ceiling and
-    /// operator-policy intersection that bounds every other authority also bounds bit 3.
-    pub fn with_path_caps(mut self, path: &str) -> CapSet {
-        if path == "/bin/vfs" {
-            self.block_regions |= 0b1000;
-        }
-        if matches!(
-            path,
-            "/bin/nvme"
-                | "/bin/e1000"
-                | "/bin/e1000e"
-                | "/bin/igb"
-                | "/bin/virtio-net"
-                | "/bin/block"
-                | "/bin/input"
-                | "/bin/virtio-gpu"
-                | "/bin/ahci"
-                | "/bin/virtio-scsi"
-                | "/bin/vmxnet3"
-                | "/bin/pvscsi"
-        ) {
-            self.pcie_driver = true;
-            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
-        }
-        // ADR-0033 CP1 §7: the `edu` export-lane holder, test-hooks images only.
-        #[cfg(feature = "test-hooks")]
-        if path == TEST_EXPORT_HOLDER_PATH {
-            self.pcie_driver = true;
-            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
-        }
-        if path == "/bin/bcm-display" {
-            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
-        }
-        // The xHCI USB host controller cell: PCIe BAR claim (sys_find_pcie_device
-        // / sys_request_mmio) plus USB-host authority, which the input service
-        // verifies via `sys_lookup_service(service::NIC_DRIVER)` before accepting
-        // this cell's raw key events — the same producer mechanism /bin/dwc2-usb
-        // uses.
-        if path == "/bin/xhci" {
-            self.pcie_driver = true;
-            self.usb_driver = true;
-            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
-        }
-        if path == "/bin/dwc2-usb" {
-            self.usb_driver = true;
-        }
-        // The x86 serial Driver Cell: port-I/O authority over the 16550 ports the
-        // kernel probed. It gets no PCIe/MMIO authority: the ports are legacy I/O
-        // space, and the kernel already proved each one answers.
-        if path == "/bin/serial" {
-            self.serial_port = true;
-        }
-        if path == "/bin/platform" {
-            self.platform = true;
-        }
-        if path == "/bin/supervisor" {
-            self.supervisor = true;
-        }
-        self.with_path_net_rights(path)
-            .with_path_observe_mutate_rights(path)
-            .with_path_config_rights(path)
-            .with_path_kms_ssh_rights(path)
-    }
-
-    /// Request the coarse network rights of the reviewed grant table (Phase 04
-    /// S2-N annex §5) for `path`. Any path not listed requests none — that
-    /// includes the shell, `/bin/lua`, `/bin/python` and the `/apps`, `/data/bin`,
-    /// `/home` sandbox. `/bin/lua-net`, the second install path of the Lua
-    /// runtime (user decision 2026-11-10), requests the client pair. The request
-    /// is still bounded by the launch/boot ceiling and the operator policy like
-    /// every other field.
-    ///
-    /// Kept out of `with_path_caps`' own body on purpose: `scripts/sign-policy.py`
-    /// reads that body as the list of P-TRUST-minting paths, and these rights are
-    /// not P-TRUST.
-    fn with_path_net_rights(mut self, path: &str) -> CapSet {
-        let (resolve, connect, listen, l2) = match path {
-            "/bin/curl"
-            | "/bin/wget"
-            | "/bin/mqtt"
-            | "/bin/ocel"
-            | "/bin/llm-gateway"
-            | "/bin/https-demo"
-            | "/bin/robot-demo"
-            | "/bin/cellbox-ssh"
-            | "/bin/lua-net"
-            | "/bin/posix-shim-test" => (true, true, false, false),
-            "/bin/nc" | "/bin/net-broker" => (true, true, true, false),
-            "/bin/httpd" | "/bin/sshd" => (false, false, true, false),
-            "/bin/hypervisor" => (false, false, false, true),
-            _ => (false, false, false, false),
-        };
-        self.net_resolve |= resolve;
-        self.net_connect |= connect;
-        self.net_listen |= listen;
-        self.net_l2 |= l2;
-        self
-    }
-
-    /// Request the S2-T/S2-W rights (annex §3, decision D-TW1) for `path`: every
-    /// path requests all three **except** the user-app sandbox prefixes, which
-    /// request none. The request is bounded by the launch/boot ceiling and the
-    /// operator policy like every other field, so a restricted row can still
-    /// withhold them. Kept out of `with_path_caps`' body for the same reason as
-    /// the network rights: `scripts/sign-policy.py` reads that body as the
-    /// P-TRUST path list.
-    fn with_path_observe_mutate_rights(mut self, path: &str) -> CapSet {
-        let sandbox = path.starts_with("/apps/")
-            || path.starts_with("/data/bin/")
-            || path.starts_with("/home/");
-        if !sandbox {
-            self.observe_tasks = true;
-            self.observe_memory = true;
-            self.vfs_mutate = true;
-        }
-        self
-    }
-
-    /// Request the Q right (Phase 01 CP1, decision D-Q5) for `path`: only the
-    /// shell, `/bin/cellbox`, asks for it. Its second install path
-    /// `/bin/cellbox-ssh`, every reviewed child row and the sandbox ask for
-    /// nothing. The request is bounded by the launch/boot ceiling and operator
-    /// policy like every other field. Kept out of `with_path_caps`' body for the
-    /// same reason as the network rights: `scripts/sign-policy.py` reads that
-    /// body as the P-TRUST path list.
-    fn with_path_config_rights(mut self, path: &str) -> CapSet {
-        if path == "/bin/cellbox" {
-            self.config_write = true;
-        }
-        self
-    }
-
-    /// Request the KSSH K3 rights (2026-10-30) for `path`: only the genuine
-    /// `cellbox ssh` install path, `/bin/cellbox-ssh`, asks for `kms_ssh_sign`, and
-    /// only `/bin/kms-ssh-admin` asks for `kms_ssh_admin`. Exact string match: no
-    /// prefix, no suffix, no sandbox path, not `/bin/cellbox` itself. The two
-    /// paths are disjoint, so no single request carries both classes. The request
-    /// is bounded by the launch/boot ceiling and operator policy like every other
-    /// field; no launch edge or boot row carries `kms_ssh_admin` yet, so that
-    /// request is always refused until a later slice adds one. Kept out of
-    /// `with_path_caps`' body for the same reason as the network rights:
-    /// `scripts/sign-policy.py` reads that body as the P-TRUST path list. Mirrored
-    /// by `KMS_SSH_SIGN_PATHS` / `KMS_SSH_ADMIN_PATHS` in that script.
-    fn with_path_kms_ssh_rights(mut self, path: &str) -> CapSet {
-        if path == "/bin/cellbox-ssh" {
-            self.kms_ssh_sign = true;
-        }
-        if path == "/bin/kms-ssh-admin" {
-            self.kms_ssh_admin = true;
-        }
-        self
+    /// The per-path request lives in `crate::catalog` (one row per install path);
+    /// `/bin/vfs`, for example, requests the cell-store block region there so the
+    /// same ceiling and operator-policy intersection also bounds bit 3.
+    pub fn with_path_caps(self, path: &str) -> CapSet {
+        crate::catalog::union(self, crate::catalog::request(path))
     }
 
     /// Whether `with_path_caps` layers any privileged (P-TRUST) authority onto a

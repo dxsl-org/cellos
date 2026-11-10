@@ -8,7 +8,8 @@
 //! every boot, so a wrong expectation here must print the offending row, not
 //! panic the kernel before anything has started.
 
-use super::{boot_ceiling, lookup, VFS_REGIONS};
+use super::{boot_ceiling, lookup};
+use crate::catalog::VFS_REGIONS;
 use crate::loader::launch_profile::{authorize, CallerLaunchState, LaunchRoute};
 use crate::task::cap::CapSet;
 
