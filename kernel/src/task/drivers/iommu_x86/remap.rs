@@ -11,11 +11,19 @@
 //!    format (a level-triggered message blocked by the unit would leave the
 //!    pin's Remote IRR set forever);
 //! 4. per unit: set IRE and wait for IRES;
-//! 5. rewrite every route in remappable format, unmasked.
+//! 5. rewrite every route in remappable format, unmasked;
+//! 6. deliver every edge-triggered route's vector once by IPI.
+//!
+//! Step 6 closes the masked window: the I/O APIC discards an edge on a masked
+//! pin, and a source that holds its line until serviced (a 16550 with unread
+//! data) would then never edge again. Level-triggered pins re-assert on
+//! unmask. Leaving edge pins unmasked would not keep them deliverable: from
+//! IRE until an entry is rewritten the unit blocks its compatibility-format
+//! message, and a remappable entry is only decoded once IRE is set.
 //!
 //! No MSI exists before this runs (pcie_msi starts after activation). Any
 //! failure leaves the unit, or for step 5 every unit, with IRE clear and
-//! compatibility-format interrupts.
+//! compatibility-format interrupts; step 6 runs on that path too.
 
 use super::context::canonical_bdf;
 use super::gcmd::{disable, issue_gcmd, wait_status};
@@ -158,6 +166,91 @@ fn ioapic_sources(units: &[VtdUnit]) -> Option<alloc::vec::Vec<(u64, IoapicSourc
     Some(sources)
 }
 
+/// Steps 3-6 of the switch as hardware actions, split from the register work
+/// so [`switch`]'s order is host-testable.
+trait Switch {
+    /// Step 3: mask every recorded I/O APIC route.
+    fn mask_routes(&mut self);
+    /// Step 4: set IRE on every prepared unit; `true` when at least one remaps.
+    fn enable_remapping(&mut self) -> bool;
+    /// Step 5: rewrite every route in remappable format, unmasked.
+    fn emit_remappable(&mut self) -> bool;
+    /// Clear IRE everywhere and rewrite every route in compatibility format,
+    /// unmasked.
+    fn fall_back(&mut self);
+    /// Step 6: deliver each edge-triggered route's vector once.
+    fn resignal_edges(&mut self);
+}
+
+/// Run steps 3-6; `true` when interrupt remapping is on. The re-signal comes
+/// after the last write that unmasks a route, whichever format it ends in,
+/// so every edge discarded while masked is replaced by one that is delivered.
+fn switch(hw: &mut impl Switch) -> bool {
+    hw.mask_routes();
+    let remapped = hw.enable_remapping() && hw.emit_remappable();
+    if !remapped {
+        hw.fall_back();
+    }
+    hw.resignal_edges();
+    remapped
+}
+
+/// [`Switch`] over the real units, with the tables `prepare_ir` built.
+struct Hardware<'a> {
+    units: &'a mut [VtdUnit],
+    tables: alloc::vec::Vec<Option<IrTable>>,
+}
+
+impl Switch for Hardware<'_> {
+    fn mask_routes(&mut self) {
+        ioapic::mask_routes();
+    }
+
+    fn enable_remapping(&mut self) -> bool {
+        let mut any = false;
+        for (u, table) in self.units.iter_mut().zip(self.tables.iter_mut()) {
+            let Some(table) = table.take() else { continue };
+            issue_gcmd(u.base, VTD_GCMD_IRE);
+            if wait_status(u.base, VTD_GSTS_IRES, true, "IRES") {
+                u.ir_table = Some(table);
+                any = true;
+            } else {
+                disable(u.base, VTD_GCMD_IRE, "IRES");
+            }
+        }
+        any
+    }
+
+    fn emit_remappable(&mut self) -> bool {
+        let units = &mut *self.units;
+        if !ioapic::reprogram(|route| ioapic_entry(units, route)) {
+            return false;
+        }
+        ioapic::set_remapper(Some(remap_route));
+        true
+    }
+
+    fn fall_back(&mut self) {
+        for u in self.units.iter_mut().filter(|u| u.ir_table.is_some()) {
+            disable(u.base, VTD_GCMD_IRE, "IRES");
+            u.ir_table = None;
+        }
+        let restored = ioapic::reprogram(|route| Some(ioapic::compat_entry(route)));
+        log::warn!(
+            "[vtd] interrupt remapping not enabled; I/O APIC routes restored={}",
+            restored
+        );
+    }
+
+    fn resignal_edges(&mut self) {
+        let sent = ioapic::resignal_edge_routes();
+        log::info!(
+            "[vtd] re-signalled {} edge-triggered I/O APIC route(s)",
+            sent
+        );
+    }
+}
+
 /// Enable interrupt remapping on every capable unit and move the I/O APIC
 /// routes onto it. `true` when at least one unit remaps.
 pub fn activate(units: &mut [VtdUnit]) -> bool {
@@ -172,7 +265,7 @@ pub fn activate(units: &mut [VtdUnit]) -> bool {
     let Some(sources) = ioapic_sources(units) else {
         return false;
     };
-    let mut tables: alloc::vec::Vec<Option<IrTable>> = units
+    let tables: alloc::vec::Vec<Option<IrTable>> = units
         .iter()
         .enumerate()
         .map(|(index, u)| capable(u).then(|| u.prepare_ir(index, &sources)).flatten())
@@ -181,34 +274,83 @@ pub fn activate(units: &mut [VtdUnit]) -> bool {
         return false;
     }
 
-    ioapic::mask_routes();
-    let mut any = false;
-    for (u, table) in units.iter_mut().zip(tables.iter_mut()) {
-        let Some(table) = table.take() else { continue };
-        issue_gcmd(u.base, VTD_GCMD_IRE);
-        if wait_status(u.base, VTD_GSTS_IRES, true, "IRES") {
-            u.ir_table = Some(table);
-            any = true;
-        } else {
-            disable(u.base, VTD_GCMD_IRE, "IRES");
+    let mut hw = Hardware { units, tables };
+    if !switch(&mut hw) {
+        return false;
+    }
+    for u in hw.units.iter().filter(|u| u.ir_table.is_some()) {
+        log::info!("[vtd] unit {:#x} interrupt remapping enabled", u.base);
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{switch, Switch};
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Step {
+        Mask,
+        Enable,
+        Emit,
+        FallBack,
+        Resignal,
+    }
+
+    struct Recorder {
+        enable_ok: bool,
+        emit_ok: bool,
+        steps: alloc::vec::Vec<Step>,
+    }
+
+    impl Switch for Recorder {
+        fn mask_routes(&mut self) {
+            self.steps.push(Step::Mask);
+        }
+        fn enable_remapping(&mut self) -> bool {
+            self.steps.push(Step::Enable);
+            self.enable_ok
+        }
+        fn emit_remappable(&mut self) -> bool {
+            self.steps.push(Step::Emit);
+            self.emit_ok
+        }
+        fn fall_back(&mut self) {
+            self.steps.push(Step::FallBack);
+        }
+        fn resignal_edges(&mut self) {
+            self.steps.push(Step::Resignal);
         }
     }
-    if any && ioapic::reprogram(|route| ioapic_entry(units, route)) {
-        ioapic::set_remapper(Some(remap_route));
-        for u in units.iter().filter(|u| u.ir_table.is_some()) {
-            log::info!("[vtd] unit {:#x} interrupt remapping enabled", u.base);
-        }
-        return true;
+
+    fn run(enable_ok: bool, emit_ok: bool) -> (bool, alloc::vec::Vec<Step>) {
+        let mut hw = Recorder {
+            enable_ok,
+            emit_ok,
+            steps: alloc::vec::Vec::new(),
+        };
+        (switch(&mut hw), hw.steps)
     }
-    // Fall back to compatibility format everywhere.
-    for u in units.iter_mut().filter(|u| u.ir_table.is_some()) {
-        disable(u.base, VTD_GCMD_IRE, "IRES");
-        u.ir_table = None;
+
+    #[test]
+    fn edges_are_resignalled_after_the_remappable_rewrite() {
+        use Step::*;
+        assert_eq!(
+            run(true, true),
+            (true, alloc::vec![Mask, Enable, Emit, Resignal])
+        );
     }
-    let restored = ioapic::reprogram(|route| Some(ioapic::compat_entry(route)));
-    log::warn!(
-        "[vtd] interrupt remapping not enabled; I/O APIC routes restored={}",
-        restored
-    );
-    false
+
+    #[test]
+    fn every_fallback_restores_then_resignals() {
+        use Step::*;
+        assert_eq!(
+            run(false, true),
+            (false, alloc::vec![Mask, Enable, FallBack, Resignal])
+        );
+        assert_eq!(
+            run(true, false),
+            (false, alloc::vec![Mask, Enable, Emit, FallBack, Resignal])
+        );
+    }
 }

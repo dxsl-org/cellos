@@ -186,6 +186,10 @@ fn entry_for(route: &Route) -> Option<u64> {
 }
 
 /// Route `gsi` to `vector` on the CPU with APIC ID `destination`.
+///
+/// An edge-triggered route's handler must tolerate an invocation with nothing
+/// pending (it polls its device's status): [`resignal_edge_routes`] delivers
+/// the vector once after a format switch that could have dropped an edge.
 pub fn route_gsi(gsi: u32, vector: u8, destination: u32, flags: u16) -> bool {
     let Ok(destination) = u8::try_from(destination) else {
         return false;
@@ -256,7 +260,11 @@ pub fn set_remapper(remapper: Option<Remapper>) {
 
 /// Mask every recorded route (bit 16 of the low dword), leaving the rest of
 /// each entry intact, ahead of a format switch. A level-triggered source stays
-/// pending at the I/O APIC until [`reprogram`] unmasks it.
+/// pending at the I/O APIC until [`reprogram`] unmasks it. An edge signalled
+/// on a masked pin is discarded by the I/O APIC (QEMU's model keeps it, real
+/// parts do not), and a source whose line stays asserted until serviced, such
+/// as a 16550 with unread data, never edges again; the caller follows the
+/// unmask with [`resignal_edge_routes`].
 pub fn mask_routes() {
     for_each_route(|route| {
         let index = 0x10 + route.pin as u32 * 2;
@@ -265,9 +273,31 @@ pub fn mask_routes() {
     });
 }
 
+/// `(destination APIC ID, vector)` to re-signal for `route`: edge-triggered
+/// routes only. A level-triggered pin still asserted is delivered by the I/O
+/// APIC itself on unmask, so it needs none.
+fn resignal_target(route: &Route) -> Option<(u32, u8)> {
+    (!route.level_triggered()).then_some((route.destination as u32, route.vector))
+}
+
+/// Deliver every edge-triggered route's vector once, as a fixed IPI to its
+/// destination, after [`mask_routes`] and the unmasking [`reprogram`]. The
+/// handler then services whatever the device raised while its pin was masked;
+/// an edge-triggered handler tolerates finding nothing (see [`route_gsi`]).
+/// Returns how many were sent.
+pub fn resignal_edge_routes() -> usize {
+    let mut sent = 0;
+    for_each_route(|route| {
+        if let Some((destination, vector)) = resignal_target(route) {
+            sent += super::apic::send_fixed_ipi(destination, vector) as usize;
+        }
+    });
+    sent
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{compat_entry, locate, rte_low, Route};
+    use super::{compat_entry, locate, resignal_target, rte_low, Route};
 
     #[test]
     fn gsis_resolve_to_the_owning_unit_and_pin() {
@@ -296,5 +326,20 @@ mod tests {
         };
         assert!(route.active_low() && route.level_triggered());
         assert_eq!(compat_entry(&route), 3u64 << 56 | 0x2E | 1 << 13 | 1 << 15);
+    }
+
+    #[test]
+    fn only_edge_routes_are_resignalled() {
+        let route = |flags| Route {
+            ioapic_phys: 0xFEC0_0000,
+            pin: 4,
+            vector: 0x24,
+            destination: 2,
+            flags,
+        };
+        assert_eq!(resignal_target(&route(0)), Some((2, 0x24))); // ISA default: edge
+        assert_eq!(resignal_target(&route(0b0111)), Some((2, 0x24))); // explicit edge, low
+        assert_eq!(resignal_target(&route(0b1111)), None); // level, low
+        assert_eq!(resignal_target(&route(0b1101)), None); // level, high
     }
 }

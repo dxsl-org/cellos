@@ -2761,7 +2761,7 @@ review = "hal/arch/x86/src/x86_64/ioapic.rs:UNIT_PINS"
 key = "hal-x86::x86_64::ioapic::ROUTES @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "hal-x86 ioapic::route_gsi records every programmed redirection; for_each_route, mask_routes and reprogram (kernel iommu_x86::remap::activate) read them to re-emit entries when interrupt remapping turns on"
+owner = "hal-x86 ioapic::route_gsi records every programmed redirection; for_each_route, mask_routes, reprogram and resignal_edge_routes (kernel iommu_x86::remap::activate) read them to re-emit entries when interrupt remapping turns on and re-signal edges lost while masked"
 contexts = ["boot"]
 seal = "written by route_gsi on the BSP during boot (UART RX IRQ, ACPI SCI) before APs start; re-read once by iommu_x86::remap::activate"
 retirement = "never: lives for the whole run"

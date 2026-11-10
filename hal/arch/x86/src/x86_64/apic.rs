@@ -176,14 +176,18 @@ pub(super) fn icr_fixed(x2apic: bool, destination: u32, vector: u8) -> (u32, u32
 
 /// Send a directed fixed IPI. Delivery status is not an invalidate acknowledgement.
 pub fn send_ipi(logical: usize) -> bool {
-    let Some(id) = cpu_apic_id(logical) else {
-        return false;
-    };
+    cpu_apic_id(logical).is_some_and(|id| send_fixed_ipi(id, IPI_VECTOR))
+}
+
+/// Send a fixed-delivery interrupt with `vector` to the CPU with APIC ID
+/// `apic_id` (this CPU included: a self-IPI). `false` when the LAPIC is not
+/// set up yet or the xAPIC reports a send error.
+pub fn send_fixed_ipi(apic_id: u32, vector: u8) -> bool {
     if LAPIC_PHYS.load(Ordering::Acquire) == 0 {
         return false;
     }
     let x2 = x2apic_active();
-    let (high, low, wide) = icr_fixed(x2, id, IPI_VECTOR);
+    let (high, low, wide) = icr_fixed(x2, apic_id, vector);
     let flags = super::context::save_and_disable_interrupts();
     let sent = if wait_icr_idle() {
         lw(0x280, 0);
