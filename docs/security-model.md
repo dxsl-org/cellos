@@ -212,11 +212,16 @@ Forward-edge CFI closes the gap where a corrupted indirect branch jumps anywhere
 hardware-supplement implementation plan delivered the following components, but their enforcement status differs:
 
 - **ARM64 BTI + PAC-RET** — `SCTLR_EL1.BT0/BT1` + `APIAKEY_EL1` init, compiled with `+bti,+paca,+pacg`,
-  runtime-detected via `ID_AA64PFR1_EL1` / `ID_AA64ISAR1_EL1`. Covers both forward edge (BTI) and backward
-  edge (PAC-RET return addresses).
+  runtime-detected via `ID_AA64PFR1_EL1` / `ID_AA64ISAR1_EL1`. PAC-RET covers the backward edge. BTI is
+  enforced **per Cell, opt-in** (2026-11-10): a Cell whose signed image carries the
+  `GNU_PROPERTY_AARCH64_FEATURE_1_AND` BTI note gets its executable pages mapped guarded (stage-1 GP) on
+  FEAT_BTI hardware, and a branch to a non-landing-pad faults (EC 0x0D) and terminates that Cell only.
+  Cells without the note (all shipped cells today) have no guarded page; the kernel's own pages are unguarded.
 - **ARM64 MTE** — `ViMte` trait, `SCTLR_EL1.ATA/TCF` config, `STGP` tag writes, sync/async fault modes; hardware-gated and unavailable on RK3588's Armv8.2-A Cortex-A76/A55 cores.
-- **x86 CET-IBT** — `CR4.CET` + `MSR_IA32_S_CET` ENDBR_EN, `ENDBR64` landing pads on all ring-3 stubs, `#CP`
-  (IDT vector 21) handler.
+- **x86 CET-IBT** — `CR4.CET` + `MSR_IA32_S_CET` ENDBR_EN (kernel), `ENDBR64` landing pads on all ring-3 stubs, `#CP`
+  (IDT vector 21) handler. CPL3 IBT is **per Cell, opt-in** (2026-11-10): a Cell whose signed image carries
+  the `GNU_PROPERTY_X86_FEATURE_1_AND` IBT note runs with `IA32_U_CET.ENDBR_EN` (switched per task); a CPL3
+  `#CP` terminates that Cell. Not yet observed on hardware: no available test host exposes IBT to a guest.
 - **x86 PKU plumbing** — `CR4.PKE`, task PKRU values, and `WRPKRU` guards on `iretq`/`sysretq`,
   with CET-IBT enforced as a hard prerequisite. This is not yet page isolation.
 
@@ -434,7 +439,7 @@ Bước 4: Kernel unsafe blocks
 | CI | `cellos-sign --check --strict` (F1/F5 admission), `cargo-audit`, `cargo-deny` on every PR |
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
 | HW — spatial | MTE hardening is available on Armv8.5+/QEMU, **not RK3588**; x86 PKU register/return-path plumbing exists but keys remain all-zero and enforcement is absent; PMP needs a future M-mode owner |
-| HW — control-flow | ✅ **Shipped**: BTI+PAC-RET (ARM), CET-IBT (x86); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
+| HW — control-flow | ✅ **Shipped**: PAC-RET (ARM), kernel CET-IBT (x86); Cell forward-edge BTI (ARM) / CPL3 IBT (x86) **per Cell via the GNU property opt-in** (no shipped cell opts in yet); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
 | HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell with per-bus context tables) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
 | HW — VM-grade _(roadmap)_ | Stage-2/EPT (Tier 3); TDX/SEV-SNP/ARM CCA for attested multi-tenant |
 
