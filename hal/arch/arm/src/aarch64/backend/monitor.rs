@@ -27,7 +27,7 @@ const PI_RAM_END: u64 = 0x3f00_0000;
 #[inline]
 fn next_table(desc: u64) -> Option<*const u64> {
     let pa = desc & 0x0000_ffff_ffff_f000;
-    if desc & 3 == 3 && pa >= 0x1000 && pa < PI_RAM_END {
+    if desc & 3 == 3 && (0x1000..PI_RAM_END).contains(&pa) {
         Some(pa as *const u64)
     } else {
         None
@@ -63,7 +63,7 @@ unsafe fn probe_stage2(root_pa: u64, ipa: u64, guest_pa: u64, entry: u64) -> (u6
 /// its code/stack leaves lack identity or WB/shareable attributes, or sampled
 /// register pages in either physical MMIO aperture are not Device mappings.
 fn identity_leaf(root: u64, va: u64) -> Option<u64> {
-    if root & 0xfff != 0 || root < 0x1000 || root >= PI_RAM_END {
+    if root & 0xfff != 0 || !(0x1000..PI_RAM_END).contains(&root) {
         return None;
     }
     let l1 = unsafe {
@@ -212,6 +212,11 @@ pub(crate) fn gateway(op: u64, a: u64, b: u64, c: u64, d: u64) -> u64 {
 
 /// Enter a guest using its own Stage-2 root. Returns with the vCPU's exit state
 /// populated, and HCR_EL2.VM/VI cleared before restoring the EL1 host.
+///
+/// # Safety
+/// `root_pa` must identify the live, 8 KiB Stage-2 root built for `vmid`, and
+/// every page it maps must remain allocated until the HVC returns: EL2 enters
+/// the guest through it and writes the exit state back into `vcpu`.
 pub unsafe fn run(vcpu: &mut AArch64Vcpu, vmid: u16, root_pa: u64, vi: bool) {
     assert!(is_ready(), "Pi EL2 monitor not initialized");
     // Keep the host's physical C1 timer routed: HCR.IMO makes each 10 ms

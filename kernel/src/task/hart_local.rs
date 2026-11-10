@@ -11,13 +11,14 @@
 //! ready queues and the work-stealing scheduler.
 //!
 //! AArch64 has no `tp` register to spare — `TPIDR_EL1` carries the kernel stack
-//! top the trap path needs — so the calling CPU is derived from
-//! `MPIDR_EL1.Aff0` (the CPU index on every platform this kernel supports:
-//! QEMU `virt` and the BCM2711/BCM2837 clusters) through
-//! [`smp::CPU_TOPOLOGY`](crate::task::smp::CPU_TOPOLOGY), published before a
-//! secondary is started.  A hart therefore only ever reads a mapping that
-//! already exists, and an unpublished CPU resolves to slot 0 — the same answer
-//! as "before `install()`" on RISC-V.
+//! top the trap path needs — so the calling CPU is derived from its full
+//! `MPIDR_EL1` affinity, mapped to a CPU index by `smp::CPU_MPIDRS` (the
+//! firmware tree's `/cpus` order; `Aff0` alone repeats across clusters) and
+//! from there to a logical hart through
+//! [`smp::CPU_TOPOLOGY`](crate::task::smp::CPU_TOPOLOGY),
+//! published before a secondary is started. A hart therefore only ever reads a
+//! mapping that already exists, and an unpublished CPU resolves to slot 0 — the
+//! same answer as "before `install()`" on RISC-V.
 
 pub mod ready;
 
@@ -30,18 +31,19 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use portable_atomic::AtomicU64;
 
 #[cfg(target_arch = "aarch64")]
-use crate::task::smp::CPU_TOPOLOGY;
+use crate::task::smp::{CPU_MPIDRS, CPU_TOPOLOGY};
 
-/// The physical CPU index this hart is running on (`MPIDR_EL1.Aff0`).
+/// The CPU index this hart is running on: its `MPIDR_EL1` affinity looked up
+/// in [`CPU_MPIDRS`]. `None` for a core the firmware tree does not describe.
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
-pub fn physical_cpu_index() -> usize {
-    let mpidr: usize;
+pub fn physical_cpu_index() -> Option<usize> {
+    let mpidr: u64;
     // SAFETY: `MPIDR_EL1` is readable from EL1 and modifies nothing.
     unsafe {
         core::arch::asm!("mrs {}, mpidr_el1", out(reg) mpidr, options(nomem, nostack));
     }
-    mpidr & 0xFF
+    CPU_MPIDRS.cpu_index(mpidr)
 }
 
 /// Publish `cpu_index -> logical_hart` before `cpu_index` starts executing.
@@ -66,7 +68,9 @@ pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
 fn owned_slot_index() -> usize {
     #[cfg(target_arch = "aarch64")]
     {
-        CPU_TOPOLOGY.logical(physical_cpu_index()).unwrap_or(0)
+        physical_cpu_index()
+            .and_then(|cpu| CPU_TOPOLOGY.logical(cpu))
+            .unwrap_or(0)
     }
     #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
     {
@@ -355,10 +359,13 @@ pub fn install(hart_id: usize) {
     // cells receive `kernel_tp_for_cells` (not this pointer) on context switch.
     unsafe { write_tp(hl_addr) };
 
-    // A refused pair leaves this CPU resolving to slot 0, as an unpublished one
-    // always did; the boot path that started it already reported the conflict.
+    // A refused pair (or a core the firmware tree does not describe) leaves
+    // this CPU resolving to slot 0, as an unpublished one always did; the boot
+    // path that started it already reported the conflict.
     #[cfg(target_arch = "aarch64")]
-    let _ = publish_physical_cpu(physical_cpu_index(), hart_id);
+    if let Some(cpu) = physical_cpu_index() {
+        let _ = publish_physical_cpu(cpu, hart_id);
+    }
 
     #[cfg(target_arch = "riscv64")]
     crate::hal::trap::init_for_hart(hart_id);

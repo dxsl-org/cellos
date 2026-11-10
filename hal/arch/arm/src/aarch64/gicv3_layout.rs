@@ -101,6 +101,32 @@ pub const fn irouter_for(mpidr: u64) -> u64 {
     mpidr & 0xFF_00FF_FFFF
 }
 
+/// The `ICC_SGI1R_EL1` value that raises SGI `sgi` on exactly the core with
+/// `mpidr` (GICv3 §12.2.13): Aff3/Aff2/Aff1 name its cluster and the target
+/// list holds one bit for its Aff0.
+///
+/// The target list covers 16 Aff0 values; Aff0 ≥ 16 is reached through the
+/// range selector, which exists only when `ICC_CTLR_EL1.RSS` says the CPU
+/// interface implements it (`range_selector`). Without it such a core cannot
+/// be addressed and the answer is `None` — never a bit for a different core.
+pub const fn sgi1r_for(mpidr: u64, sgi: u32, range_selector: bool) -> Option<u64> {
+    let aff0 = mpidr & 0xFF;
+    if aff0 >= 16 && !range_selector {
+        return None;
+    }
+    let aff1 = (mpidr >> 8) & 0xFF;
+    let aff2 = (mpidr >> 16) & 0xFF;
+    let aff3 = (mpidr >> 32) & 0xFF;
+    Some(
+        (aff3 << 48)
+            | ((aff0 >> 4) << 44)
+            | (aff2 << 32)
+            | (((sgi & 0xF) as u64) << 24)
+            | (aff1 << 16)
+            | (1 << (aff0 & 0xF)),
+    )
+}
+
 /// Find the RD_base of the redistributor whose `GICR_TYPER` affinity is
 /// `affinity`, walking the first region frame by frame (GICv3 §9.6).
 ///

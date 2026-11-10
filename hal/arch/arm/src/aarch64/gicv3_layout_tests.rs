@@ -97,6 +97,25 @@ fn unmapped_or_wrapping_windows_are_refused() {
 }
 
 #[test]
+fn sgi1r_addresses_one_core_by_full_affinity() {
+    // QEMU virt CPU 3 and CPU 16 (Aff1 = 1, Aff0 = 0); RES1 bit 31 ignored.
+    assert_eq!(sgi1r_for(0x8000_0003, 7, false), Some((7 << 24) | (1 << 3)));
+    assert_eq!(
+        sgi1r_for(0x8000_0100, 7, false),
+        Some((7 << 24) | (1 << 16) | 1)
+    );
+    // Aff3 at 55:48, Aff2 at 39:32, Aff1 at 23:16.
+    let mpidr = (0x12u64 << 32) | 0x03_02_05;
+    assert_eq!(
+        sgi1r_for(mpidr, 1, false),
+        Some((0x12 << 48) | (0x03 << 32) | (1 << 24) | (0x02 << 16) | (1 << 5))
+    );
+    // Aff0 = 0x23 needs the range selector (RS = 2, list bit 3).
+    assert_eq!(sgi1r_for(0x23, 0, false), None);
+    assert_eq!(sgi1r_for(0x23, 0, true), Some((2 << 44) | (1 << 3)));
+}
+
+#[test]
 fn affinity_packs_aff3_above_aff2_aff1_aff0() {
     // MPIDR: Aff3 = 0x12 (bits 39:32), U/MT bits 30/24 ignored outside Aff0-2.
     let mpidr = (0x12u64 << 32) | (1 << 31) | 0x00_03_02_01;

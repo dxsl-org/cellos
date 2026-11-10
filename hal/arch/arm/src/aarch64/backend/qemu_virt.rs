@@ -122,7 +122,7 @@ impl ArmIrqController for QemuVirt {
     }
 
     #[inline(always)]
-    fn send_ipi(target_cpu: u32) {
+    fn send_ipi(target_cpu: u32, _target_mpidr: u64) {
         gic::send_sgi::<Self>(target_cpu, gic::SGI_IPI);
     }
 

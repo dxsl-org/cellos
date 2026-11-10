@@ -127,8 +127,8 @@ impl ArmIrqController for Aarch64Vm {
     }
 
     #[inline(always)]
-    fn send_ipi(target_cpu: u32) {
-        gicv3::send_sgi(target_cpu, gicv3::SGI_IPI);
+    fn send_ipi(_target_cpu: u32, target_mpidr: u64) {
+        gicv3::send_sgi(target_mpidr, gicv3::SGI_IPI);
     }
 
     #[inline(always)]

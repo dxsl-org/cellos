@@ -3,7 +3,8 @@
 //! A *logical* hart is the dense index every per-hart array is sized by
 //! (`0..MAX_HARTS`, 0 = boot hart, [`super::HART_RT`] = the RealTime hart). A
 //! *physical* id is what the hardware or firmware names the CPU by: the LAPIC ID
-//! on x86_64, the SBI hart id on RISC-V, `MPIDR_EL1.Aff0` on AArch64.
+//! on x86_64, the SBI hart id on RISC-V, the CPU index on AArch64 (its `/cpus`
+//! position, which `smp::mpidr` maps to and from `MPIDR_EL1`).
 //!
 //! Contract:
 //! - Each pair is published by the boot hart **before** the CPU it names is

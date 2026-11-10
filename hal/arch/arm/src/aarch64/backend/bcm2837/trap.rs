@@ -204,7 +204,6 @@ pub fn handle_irq() {
             unsafe {
                 vi_gpio_notify_irq();
             }
-            return;
         }
         // Other GPU sources (UART, SPI, I2C) — fall through to spurious.
     }

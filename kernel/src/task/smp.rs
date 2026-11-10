@@ -10,8 +10,15 @@
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(any(target_arch = "aarch64", test))]
+pub mod mpidr;
 mod topology;
 pub use topology::{CpuTopology, CPU_TOPOLOGY};
+
+/// AArch64 CPU index ↔ `MPIDR_EL1` affinity, described from the firmware tree
+/// by [`crate::boot::firmware_smp::note`] (flat until then; see [`mpidr`]).
+#[cfg(target_arch = "aarch64")]
+pub static CPU_MPIDRS: mpidr::MpidrTable<MAX_HARTS> = mpidr::MpidrTable::new();
 
 /// Maximum number of logical harts this kernel tracks. Every per-hart static
 /// is sized by it, so no heap allocation happens on the boot critical path.
@@ -56,6 +63,23 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [const { AtomicBool::new(false
 static TLB_FLUSH_REQUEST: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
 static TLB_FLUSH_COMPLETE: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
 
+/// IPIs each hart has taken through its interrupt controller. The timer tick
+/// also services flush requests, so only this count tells [`run_ipi_selftest`]
+/// that the SGI itself — not the next tick — reached the hart.
+#[cfg(target_arch = "aarch64")]
+static IPI_TAKEN: [AtomicUsize; MAX_HARTS] = [const { AtomicUsize::new(0) }; MAX_HARTS];
+
+/// Record that `hart_id` took the kernel's IPI. Called by the IPI handler
+/// (`vi_ipi_service`) on the hart itself, before it services the request, so
+/// the requester's Acquire of that completion also makes this count visible.
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub(crate) fn note_ipi_taken(hart_id: usize) {
+    if let Some(taken) = IPI_TAKEN.get(hart_id) {
+        taken.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
 /// Deliver the kernel's cross-hart IPI to `hart_id`.
 ///
 /// The requester only records an epoch; what makes the target *act* is this
@@ -78,12 +102,15 @@ fn send_ipi(hart_id: usize) {
         if let Some((mask, base)) = logical_sbi_target(hart_id) {
             let _ = hal::common::sbi::sbi_send_ipi(mask, base);
         }
-        // AArch64: the board's interrupt controller raises the IPI (a GIC SGI).
+        // AArch64: the board's interrupt controller raises the IPI (a GIC SGI),
+        // addressed by CPU index or by affinity, whichever it uses.
         #[cfg(target_arch = "aarch64")]
         if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
-            <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::send_ipi(
-                cpu as u32,
-            );
+            if let Some(mpidr) = CPU_MPIDRS.mpidr(cpu) {
+                <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::send_ipi(
+                    cpu as u32, mpidr,
+                );
+            }
         }
     }
     #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
@@ -655,13 +682,13 @@ fn start_psci_secondaries() {
         conduit,
         if at_el2 { "EL2" } else { "EL1" }
     );
-    // The logical hart equals the physical CPU index on every AArch64 platform
-    // this kernel supports, so the boot core has to *be* CPU 0 for the mapping
-    // to hold; anything else is reported rather than half-applied.
+    // Logical hart N runs CPU index N (the N-th `/cpus` node), so the boot core
+    // has to *be* CPU 0 for the mapping to hold; anything else is reported
+    // rather than half-applied.
     let boot_cpu = crate::task::hart_local::physical_cpu_index();
-    if boot_cpu != 0 {
+    if boot_cpu != Some(0) {
         log::warn!(
-            "[smp] boot core reports CPU index {} (expected 0) — keeping Cellos single-hart",
+            "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
             boot_cpu
         );
         return;
@@ -709,6 +736,16 @@ fn start_psci_secondaries() {
     };
 
     for hart_id in 1..attempt {
+        // PSCI names the core by its full affinity, which only the firmware
+        // tree knows once a machine has more than one cluster.
+        let Some(mpidr) = CPU_MPIDRS.mpidr(hart_id) else {
+            log::info!(
+                "[smp] hart {}: no CPU {} described — done",
+                hart_id,
+                hart_id
+            );
+            break;
+        };
         // The core is still off: this mapping has to exist before it reads it.
         if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
             log::warn!(
@@ -748,14 +785,12 @@ fn start_psci_secondaries() {
         );
         core::sync::atomic::fence(Ordering::SeqCst);
 
-        // Aff0 is the CPU index on every supported platform; the firmware call
-        // takes the full MPIDR, which those platforms build from it alone.
-        let mpidr = hart_id as u64;
         match hal::aarch64::psci::cpu_on(conduit, mpidr, entry, context_addr as u64) {
             Ok(()) => log::info!(
-                "[smp] hart {} start requested (cpu={} entry={:#x})",
+                "[smp] hart {} start requested (cpu={} mpidr={:#x} entry={:#x})",
                 hart_id,
                 hart_id,
+                mpidr,
                 entry
             ),
             Err(status) => {
@@ -828,9 +863,9 @@ fn start_spin_table_secondaries() {
     // Release addresses are indexed by `/cpus` node order, with the boot core
     // as node 0, exactly as the logical hart equals the CPU index.
     let boot_cpu = crate::task::hart_local::physical_cpu_index();
-    if boot_cpu != 0 {
+    if boot_cpu != Some(0) {
         log::warn!(
-            "[smp] boot core reports CPU index {} (expected 0) — keeping Cellos single-hart",
+            "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
             boot_cpu
         );
         return;
@@ -924,39 +959,53 @@ fn start_spin_table_secondaries() {
     }
 }
 
-/// Prove the hart that just came online actually takes the kernel's IPI.
+/// Prove every hart that came online actually takes the kernel's IPI.
 ///
 /// The one cross-hart path a boot log cannot witness on its own: the request is
 /// delivered by a GIC SGI, the target answers from *its* trap path, and this
 /// hart's bounded wait ends only when that epoch lands. Without it, a hart that
 /// came online but is deaf to the IPI looks exactly like a healthy one — and
 /// every later remote invalidation would silently fall back to the retained-frame
-/// path. Bounded and non-fatal: a failed probe is reported, it does not stop the
-/// boot.
+/// path. Every remote hart is probed because the SGI target is per core: a
+/// wrong affinity (another cluster, Aff0 ≥ 16) fails only for the cores it
+/// names. Bounded and non-fatal: a failed probe is reported, it does not stop
+/// the boot.
 #[cfg(target_arch = "aarch64")]
 pub fn run_ipi_selftest() {
-    let Some(remote) = online_harts().find(|hart| *hart != 0) else {
-        log::info!("[selftest] SMP-IPI: skipped, no remote hart online");
-        return;
-    };
-    let epoch = request_tlb_flush(remote);
-    let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
-    let mut acknowledged = false;
-    while crate::task::system_ticks() < deadline {
-        if tlb_flush_completed(remote, epoch) {
-            acknowledged = true;
-            break;
+    let mut probed = 0;
+    for remote in online_harts().filter(|hart| *hart != 0) {
+        probed += 1;
+        let taken_before = IPI_TAKEN[remote].load(Ordering::Relaxed);
+        let epoch = request_tlb_flush(remote);
+        let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
+        let (mut acknowledged, mut sgi_taken) = (false, false);
+        while crate::task::system_ticks() < deadline {
+            acknowledged = tlb_flush_completed(remote, epoch);
+            sgi_taken = IPI_TAKEN[remote].load(Ordering::Relaxed) != taken_before;
+            if acknowledged && sgi_taken {
+                break;
+            }
+            core::hint::spin_loop();
         }
-        core::hint::spin_loop();
+        match (acknowledged, sgi_taken) {
+            (true, true) => {
+                log::info!("[selftest] SMP-IPI: PASS hart={} epoch={}", remote, epoch)
+            }
+            // Its timer tick serviced the request; the IPI never arrived.
+            (true, false) => log::error!(
+                "[selftest] SMP-IPI: FAIL hart={} epoch={} (acknowledged by tick, no IPI taken)",
+                remote,
+                epoch
+            ),
+            _ => log::error!(
+                "[selftest] SMP-IPI: FAIL hart={} epoch={} (no acknowledgement)",
+                remote,
+                epoch
+            ),
+        }
     }
-    if acknowledged {
-        log::info!("[selftest] SMP-IPI: PASS hart={} epoch={}", remote, epoch);
-    } else {
-        log::error!(
-            "[selftest] SMP-IPI: FAIL hart={} epoch={} (no acknowledgement)",
-            remote,
-            epoch
-        );
+    if probed == 0 {
+        log::info!("[selftest] SMP-IPI: skipped, no remote hart online");
     }
 }
 

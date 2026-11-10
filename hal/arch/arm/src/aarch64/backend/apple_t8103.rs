@@ -194,7 +194,7 @@ impl ArmIrqController for AppleT8103 {
     }
 
     #[inline(always)]
-    fn send_ipi(target_cpu: u32) {
+    fn send_ipi(target_cpu: u32, _target_mpidr: u64) {
         // AIC1 addresses at most 32 cores, one IPI_SEND bit each.
         if target_cpu < 32 {
             Self::aic_write(AIC1_IPI_SEND, 1 << target_cpu);

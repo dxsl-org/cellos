@@ -243,9 +243,12 @@ pub trait ArmIrqController {
     /// Bring up this core's banked controller state on a secondary core.
     fn init_cpu();
 
-    /// Raise the cross-hart IPI on `target_cpu`. Only called when
+    /// Raise the cross-hart IPI on the core with CPU index `target_cpu` (its
+    /// `/cpus` position) and `MPIDR_EL1` affinity `target_mpidr`. Each
+    /// controller addresses cores its own way: a GICv2 target list and AIC by
+    /// CPU index, GICv3 by affinity. Only called when
     /// [`HAS_IPI`](Self::HAS_IPI) is `true`.
-    fn send_ipi(target_cpu: u32);
+    fn send_ipi(target_cpu: u32, target_mpidr: u64);
 
     /// Re-enable [`USB_ONE_SHOT_IRQ`](Self::USB_ONE_SHOT_IRQ). Only called
     /// when it is `Some`.

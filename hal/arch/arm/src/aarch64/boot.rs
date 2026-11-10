@@ -187,10 +187,15 @@ _start:
     // QEMU raspi3b boots all 4 Cortex-A53 cores simultaneously; without this gate
     // they all execute kmain in parallel, corrupting BSS, frame allocator, paging,
     // SDHCI probe state, and UART output.
-    // BCM2836 MPIDR_EL1[7:0] = Aff0 = core index (0–3).  Only core 0 proceeds.
+    // BCM2836 MPIDR_EL1[7:0] = Aff0 = core index (0–3).  Only the core whose
+    // whole affinity (Aff3 at 39:32, Aff2..Aff0 at 23:0) is zero proceeds:
+    // Aff0 alone repeats in every cluster, so a cluster-1 core 0 would pass.
+    // Two TSTs because 0xFF_00FF_FFFF is not a logical immediate.
     mrs  x1, mpidr_el1
-    and  x1, x1, #0xFF          // extract Aff0 (CPU index within cluster)
-    cbnz x1, .Lsecondary_park   // non-zero → secondary core → park forever
+    tst  x1, #0xFFFFFF          // Aff2..Aff0
+    b.ne .Lsecondary_park       // non-zero → secondary core → park forever
+    tst  x1, #0xFF00000000      // Aff3
+    b.ne .Lsecondary_park
 
     // Disable all interrupts (DAIF = 0b1111).
     msr daifset, #0xf

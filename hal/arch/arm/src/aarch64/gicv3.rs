@@ -9,7 +9,8 @@
 use hal_arch_trait::{vi_gpio_notify_irq, vi_ipi_service, vi_timer_tick};
 
 use super::gicv3_layout::{
-    find_redistributor, irouter_for, mpidr_affinity, GicV3Windows, GICR_FRAME_SIZE, GICR_TYPER,
+    find_redistributor, irouter_for, mpidr_affinity, sgi1r_for, GicV3Windows, GICR_FRAME_SIZE,
+    GICR_TYPER,
 };
 
 /// One board's GICv3 wiring.
@@ -283,14 +284,25 @@ pub fn complete_fiq(intid: u32) {
     }
 }
 
-/// Send cross-hart IPI via GICv3 `ICC_SGI1R_EL1`.
+/// Send cross-hart IPI via GICv3 `ICC_SGI1R_EL1` to the core whose
+/// `MPIDR_EL1` is `target_mpidr` (encoding: [`sgi1r_for`]).
 ///
-/// `target_cpu` is split as Aff1 = `target_cpu / 16`, Aff0 = `target_cpu % 16`:
-/// the SGI target list only addresses 16 Aff0 values per Aff1 cluster.
-pub fn send_sgi(target_cpu: u32, sgi_id: u32) {
-    let aff1 = u64::from((target_cpu >> 4) & 0xFF);
-    let target_list = 1u64 << (target_cpu & 0xF);
-    let sgi_val = ((u64::from(sgi_id) & 0xF) << 24) | (aff1 << 16) | target_list;
+/// A core with Aff0 ≥ 16 on a CPU interface without range-selector support
+/// (`ICC_CTLR_EL1.RSS`) cannot be addressed; the SGI is not sent, so the
+/// requester's epoch stays outstanding rather than waking another core.
+pub fn send_sgi(target_mpidr: u64, sgi_id: u32) {
+    let range_selector = target_mpidr & 0xF0 != 0 && {
+        let ctlr: u64;
+        // SAFETY: reading ICC_CTLR_EL1 has no side effects; the system
+        // register interface is enabled by `init_cpu` before any IPI.
+        unsafe {
+            core::arch::asm!("mrs {}, icc_ctlr_el1", out(reg) ctlr, options(nomem, nostack));
+        }
+        ctlr & (1 << 18) != 0
+    };
+    let Some(sgi_val) = sgi1r_for(target_mpidr, sgi_id, range_selector) else {
+        return;
+    };
     unsafe {
         core::arch::asm!("msr icc_sgi1r_el1, {}", in(reg) sgi_val, options(nomem, nostack));
         core::arch::asm!("isb", options(nostack));

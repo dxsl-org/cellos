@@ -449,7 +449,8 @@ pub mod firmware_smp {
     /// Spin-table `cpu-release-addr` of each `/cpus` node, in tree order (0 = none).
     static CPU_RELEASE_ADDRS: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
 
-    /// Read `/psci` and the `/cpus` population from the firmware tree.
+    /// Read `/psci` and the `/cpus` population — each CPU's `MPIDR_EL1`
+    /// affinity included — from the firmware tree.
     pub fn note(tree: &fdt::Fdt) {
         let conduit = tree.find_node("/psci").map_or(NO_PSCI, |node| {
             match node.property("method").and_then(|method| method.as_str()) {
@@ -460,6 +461,23 @@ pub mod firmware_smp {
         });
         CONDUIT.store(conduit, Ordering::Relaxed);
         CPUS.store(tree.cpus().count(), Ordering::Relaxed);
+
+        // Devicetree default when `/cpus` omits `#address-cells`.
+        let address_cells = tree
+            .find_node("/cpus")
+            .and_then(|cpus| cpus.property("#address-cells"))
+            .and_then(|cells| cells.as_usize())
+            .unwrap_or(2);
+        let ids = tree.cpus().map(|cpu| {
+            cpu.property("reg")
+                .and_then(|reg| crate::task::smp::mpidr::reg_affinity(reg.value, address_cells))
+        });
+        if let Err(error) = crate::task::smp::CPU_MPIDRS.describe(ids) {
+            log::warn!(
+                "[boot] /cpus affinities unusable ({:?}) — CPU index = MPIDR Aff0",
+                error
+            );
+        }
 
         for (slot, cpu) in CPU_RELEASE_ADDRS.iter().zip(tree.cpus()) {
             let release_addr = cpu

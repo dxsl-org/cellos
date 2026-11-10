@@ -153,7 +153,7 @@ impl ArmIrqController for Bcm2837 {
 
     /// Never called: [`HAS_IPI`](Self::HAS_IPI) is `false`.
     #[inline(always)]
-    fn send_ipi(_target_cpu: u32) {}
+    fn send_ipi(_target_cpu: u32, _target_mpidr: u64) {}
 
     #[inline(always)]
     fn unmask_usb_irq() {

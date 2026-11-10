@@ -1002,6 +1002,8 @@ const _: crate::hal::CurrentCellId = vi_current_cell_id;
 #[no_mangle]
 pub extern "Rust" fn vi_ipi_service() {
     let hart = hart_local::current_hart_id();
+    #[cfg(target_arch = "aarch64")]
+    smp::note_ipi_taken(hart);
     smp::service_tlb_flush(hart);
     #[cfg(feature = "native-domains")]
     if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0 {
