@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn shows_read_text_bounded_and_reports_failures() {
         let mut ql = QuickLookState::new();
-        let long: String = core::iter::repeat('x').take(PREVIEW_COLS + 10).collect();
+        let long = "x".repeat(PREVIEW_COLS + 10);
         let mut text = alloc::format!("first\n{long}\n");
         for i in 0..PREVIEW_LINES {
             text.push_str(&alloc::format!("l{i}\n"));

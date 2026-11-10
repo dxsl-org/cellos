@@ -52,6 +52,7 @@ mod tests {
             Some(MimeType::ImagePpm)
         );
         assert_eq!(MimeType::from_magic(b"hello world"), None);
+        assert_eq!(MimeType::from_magic(b"P3rd quarter notes"), None);
     }
 
     #[test]

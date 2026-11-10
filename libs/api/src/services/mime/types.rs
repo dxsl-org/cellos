@@ -113,7 +113,13 @@ impl MimeType {
             Some(Self::ImagePng)
         } else if bytes.len() >= 3 && &bytes[0..3] == b"\xff\xd8\xff" {
             Some(Self::ImageJpeg)
-        } else if bytes.len() >= 2 && (bytes[0] == b'P' && (bytes[1] == b'6' || bytes[1] == b'3')) {
+        } else if bytes.len() >= 3
+            && bytes[0] == b'P'
+            && matches!(bytes[1], b'3' | b'6')
+            && bytes[2].is_ascii_whitespace()
+        {
+            // Netpbm requires whitespace after the magic; text that merely starts
+            // with "P3"/"P6" is not an image.
             Some(Self::ImagePpm)
         } else {
             None

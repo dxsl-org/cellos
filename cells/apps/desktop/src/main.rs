@@ -16,7 +16,8 @@ use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_spawn_from_path, sys_yield, SyscallResult,
+    sys_get_resolution, sys_get_time, sys_spawn_from_path, sys_spawn_from_path_raw, sys_yield,
+    SyscallResult,
 };
 use ostd::typography::TextFonts;
 
@@ -38,7 +39,9 @@ api::declare_syscalls![
     TryRecv,
     LookupService,
     GpuGetResolution,
-    GetTime
+    GetTime,
+    // Stages the LaunchIntent target as the handler's argv.
+    StateStash
 ];
 
 ostd::cell_main!(cell_main);
@@ -159,13 +162,7 @@ fn cell_main() {
                                     need_tb_render = true;
                                 }
                                 SpotlightAction::LaunchIntent(intent) => {
-                                    ostd::io::print("[desktop] Spotlight: Launching intent ");
-                                    ostd::io::print(intent.action.as_str());
-                                    ostd::io::print(" target=");
-                                    ostd::io::print(&intent.target_path);
-                                    ostd::io::print(" with app=");
-                                    ostd::io::println(intent.app_binary);
-                                    launch_application(intent.app_binary);
+                                    launch_intent(&intent);
                                     sp_state.close();
                                     sp_surf.move_to(-2000, -2000);
                                     need_tb_render = true;
@@ -284,13 +281,7 @@ fn cell_main() {
                                 need_tb_render = true;
                             }
                             SpotlightAction::LaunchIntent(intent) => {
-                                ostd::io::print("[desktop] Spotlight: Launching intent ");
-                                ostd::io::print(intent.action.as_str());
-                                ostd::io::print(" target=");
-                                ostd::io::print(&intent.target_path);
-                                ostd::io::print(" with app=");
-                                ostd::io::println(intent.app_binary);
-                                launch_application(intent.app_binary);
+                                launch_intent(&intent);
                                 sp_state.close();
                                 sp_surf.move_to(-2000, -2000);
                                 need_tb_render = true;
@@ -341,10 +332,43 @@ fn cell_main() {
     }
 }
 
-fn launch_application(path: &'static str) {
+/// Spawn the handler for a Spotlight path intent. A `Run` of a `/bin` program
+/// spawns that program; any other action hands the handler the target as argv[0].
+fn launch_intent(intent: &api::services::mime::LaunchIntent) {
+    ostd::io::print("[desktop] Spotlight: Launching intent ");
+    ostd::io::print(intent.action.as_str());
+    ostd::io::print(" target=");
+    ostd::io::print(&intent.target_path);
+    ostd::io::print(" with app=");
+    ostd::io::println(intent.app_binary);
+    if intent.action == api::services::mime::FileAction::Run
+        && intent.target_path.starts_with("/bin/")
+    {
+        launch_application(&intent.target_path);
+        return;
+    }
+    let argv = core::slice::from_ref(&intent.target_path);
+    // A rejected spawn discards the staged argv, so stage it again before the
+    // VFS-route fallback (the same order cellbox uses).
+    if !ostd::set_spawn_argv(argv) {
+        ostd::io::println("[desktop] ERROR: launch target exceeds the argv transport limit.");
+        return;
+    }
+    let mut spawned = sys_spawn_from_path_raw(intent.app_binary);
+    if matches!(spawned, SyscallResult::Err(_)) && ostd::set_spawn_argv(argv) {
+        spawned = sys_spawn_from_path(intent.app_binary);
+    }
+    report_spawn(spawned);
+}
+
+fn launch_application(path: &str) {
     ostd::io::print("[desktop] Launching application: ");
     ostd::io::println(path);
-    match sys_spawn_from_path(path) {
+    report_spawn(sys_spawn_from_path(path));
+}
+
+fn report_spawn(spawned: SyscallResult) {
+    match spawned {
         SyscallResult::Ok(tid) => {
             ostd::io::print("[desktop] Spawned PID ");
             let mut buf = [0u8; 16];

@@ -54,6 +54,11 @@ impl GpuDev {
     pub fn surface_cap(&self) -> u32 {
         self.scanout.surface_cap()
     }
+
+    /// Scanout dimensions the guest framebuffer is presented at.
+    pub fn scanout_size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
 }
 
 impl VirtioDevice for GpuDev {

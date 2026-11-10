@@ -36,6 +36,25 @@ pub const REL_WHEEL: u16 = 0x08;
 pub const BTN_LEFT: u16 = 0x110;
 pub const BTN_RIGHT: u16 = 0x111;
 pub const BTN_MIDDLE: u16 = 0x112;
+pub const BTN_SIDE: u16 = 0x113;
+pub const BTN_EXTRA: u16 = 0x114;
+
+/// Queued events cap: a guest that never posts eventq buffers must not grow
+/// host memory without bound.
+const MAX_PENDING_EVENTS: usize = 256;
+
+/// Linux evdev code for a host mouse button; side buttons map the way Linux
+/// HID does so guest browsers see them as back/forward, not as a left click.
+pub fn button_code(button: api::input::MouseButton) -> u16 {
+    match button {
+        api::input::MouseButton::Left => BTN_LEFT,
+        api::input::MouseButton::Right => BTN_RIGHT,
+        api::input::MouseButton::Middle => BTN_MIDDLE,
+        api::input::MouseButton::Back => BTN_SIDE,
+        api::input::MouseButton::Forward => BTN_EXTRA,
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct VirtioInputEvent {
@@ -75,69 +94,69 @@ impl InputDev {
         }
     }
 
-    /// Push a key event (press or release) followed by a SYN_REPORT.
-    pub fn push_key(&mut self, linux_key_code: u16, pressed: bool) {
-        self.pending_events.push_back(VirtioInputEvent {
-            event_type: EV_KEY,
-            code: linux_key_code,
-            value: if pressed { 1 } else { 0 },
-        });
+    /// Queue `events` plus a trailing SYN_REPORT. When the queue is full the
+    /// oldest whole reports are dropped, keeping the newest state (e.g. a key
+    /// release) and SYN-terminated report boundaries.
+    fn push_report(&mut self, events: &[VirtioInputEvent]) {
+        let needed = events.len() + 1;
+        while !self.pending_events.is_empty()
+            && self.pending_events.len() + needed > MAX_PENDING_EVENTS
+        {
+            while let Some(ev) = self.pending_events.pop_front() {
+                if ev.event_type == EV_SYN {
+                    break;
+                }
+            }
+        }
+        self.pending_events.extend(events.iter().copied());
         self.pending_events.push_back(VirtioInputEvent {
             event_type: EV_SYN,
             code: SYN_REPORT,
             value: 0,
         });
+    }
+
+    /// Push a key event (press or release) followed by a SYN_REPORT.
+    pub fn push_key(&mut self, linux_key_code: u16, pressed: bool) {
+        self.push_report(&[VirtioInputEvent {
+            event_type: EV_KEY,
+            code: linux_key_code,
+            value: u32::from(pressed),
+        }]);
     }
 
     /// Push relative mouse movement followed by a SYN_REPORT.
     pub fn push_mouse_move(&mut self, dx: i32, dy: i32) {
-        if dx != 0 {
-            self.pending_events.push_back(VirtioInputEvent {
-                event_type: EV_REL,
-                code: REL_X,
-                value: dx as u32,
-            });
+        let x = VirtioInputEvent {
+            event_type: EV_REL,
+            code: REL_X,
+            value: dx as u32,
+        };
+        let y = VirtioInputEvent {
+            event_type: EV_REL,
+            code: REL_Y,
+            value: dy as u32,
+        };
+        match (dx != 0, dy != 0) {
+            (true, true) => self.push_report(&[x, y]),
+            (true, false) => self.push_report(&[x]),
+            (false, true) => self.push_report(&[y]),
+            (false, false) => self.push_report(&[]),
         }
-        if dy != 0 {
-            self.pending_events.push_back(VirtioInputEvent {
-                event_type: EV_REL,
-                code: REL_Y,
-                value: dy as u32,
-            });
-        }
-        self.pending_events.push_back(VirtioInputEvent {
-            event_type: EV_SYN,
-            code: SYN_REPORT,
-            value: 0,
-        });
     }
 
     /// Push mouse button press or release followed by a SYN_REPORT.
     pub fn push_mouse_button(&mut self, button: u16, pressed: bool) {
-        self.pending_events.push_back(VirtioInputEvent {
-            event_type: EV_KEY,
-            code: button,
-            value: if pressed { 1 } else { 0 },
-        });
-        self.pending_events.push_back(VirtioInputEvent {
-            event_type: EV_SYN,
-            code: SYN_REPORT,
-            value: 0,
-        });
+        self.push_key(button, pressed);
     }
 
     /// Push mouse wheel scroll followed by a SYN_REPORT.
     pub fn push_mouse_scroll(&mut self, dy: i32) {
-        self.pending_events.push_back(VirtioInputEvent {
+        self.push_report(&[VirtioInputEvent {
             event_type: EV_REL,
             code: REL_WHEEL,
             value: dy as u32,
-        });
-        self.pending_events.push_back(VirtioInputEvent {
-            event_type: EV_SYN,
-            code: SYN_REPORT,
-            value: 0,
-        });
+        }]);
     }
 
     /// Flush pending input events into guest eventq buffers.
@@ -234,6 +253,27 @@ impl InputDev {
             false
         }
     }
+
+    /// Payload byte `byte_idx` of the currently selected config item.
+    fn config_payload_byte(&self, byte_idx: usize) -> u8 {
+        match self.select {
+            VIRTIO_INPUT_CFG_ID_NAME => {
+                b"CellOS VirtIO Input\0".get(byte_idx).copied().unwrap_or(0)
+            }
+            VIRTIO_INPUT_CFG_ID_SERIAL => b"CELLOS-0001\0".get(byte_idx).copied().unwrap_or(0),
+            VIRTIO_INPUT_CFG_EV_BITS => match (self.subsel, byte_idx) {
+                (0, 0) => 1,
+                // EV_KEY: keys 0..127, then BTN_LEFT..BTN_EXTRA at 0x110 / 8.
+                (1, 0..=15) => 0xFF,
+                (1, 34) => 0x1F,
+                // EV_REL: REL_X | REL_Y, then REL_WHEEL (8).
+                (2, 0) => 0x03,
+                (2, 1) => 0x01,
+                _ => 0,
+            },
+            _ => 0,
+        }
+    }
 }
 
 impl VirtioDevice for InputDev {
@@ -265,7 +305,7 @@ impl VirtioDevice for InputDev {
                     VIRTIO_INPUT_CFG_ID_DEVIDS => 8,
                     VIRTIO_INPUT_CFG_EV_BITS => match self.subsel {
                         0 => 1,  // EV_SYN
-                        1 => 32, // EV_KEY (keyboard & mouse buttons)
+                        1 => 35, // EV_KEY: keys + the button byte at 0x110 / 8
                         2 => 2,  // EV_REL (X, Y, Wheel)
                         _ => 0,
                     },
@@ -273,55 +313,16 @@ impl VirtioDevice for InputDev {
                 };
                 (self.select as u32) | ((self.subsel as u32) << 8) | ((size as u32) << 16)
             }
-            // 0x08..0x88: payload data (128 bytes)
+            // 0x08..0x88: payload. The MMIO layer reads one aligned word and
+            // shifts out the requested byte, so pack four payload bytes per word.
             o if (8..136).contains(&o) => {
-                let byte_idx = o - 8;
-                match self.select {
-                    VIRTIO_INPUT_CFG_ID_NAME => {
-                        let name = b"CellOS VirtIO Input\0";
-                        if byte_idx < name.len() {
-                            name[byte_idx] as u32
-                        } else {
-                            0
-                        }
-                    }
-                    VIRTIO_INPUT_CFG_ID_SERIAL => {
-                        let sn = b"CELLOS-0001\0";
-                        if byte_idx < sn.len() {
-                            sn[byte_idx] as u32
-                        } else {
-                            0
-                        }
-                    }
-                    VIRTIO_INPUT_CFG_EV_BITS => {
-                        match self.subsel {
-                            0 => u32::from(byte_idx == 0),
-                            1 => {
-                                // EV_KEY: enable standard key range (1..128) + mouse buttons
-                                if byte_idx < 16 {
-                                    0xFF // keys 0..127
-                                } else if byte_idx == 34 {
-                                    // BTN_MOUSE / BTN_LEFT (0x110)
-                                    0x07 // BTN_LEFT, BTN_RIGHT, BTN_MIDDLE
-                                } else {
-                                    0
-                                }
-                            }
-                            2 => {
-                                // EV_REL: REL_X (0), REL_Y (1), REL_WHEEL (8)
-                                if byte_idx == 0 {
-                                    0x03 // REL_X | REL_Y
-                                } else if byte_idx == 1 {
-                                    0x01 // REL_WHEEL
-                                } else {
-                                    0
-                                }
-                            }
-                            _ => 0,
-                        }
-                    }
-                    _ => 0,
-                }
+                let b = o - 8;
+                u32::from_le_bytes([
+                    self.config_payload_byte(b),
+                    self.config_payload_byte(b + 1),
+                    self.config_payload_byte(b + 2),
+                    self.config_payload_byte(b + 3),
+                ])
             }
             _ => 0,
         }
@@ -346,5 +347,50 @@ impl VirtioDevice for InputDev {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One config byte as the MMIO layer reads it: the aligned word, shifted.
+    fn cfg_byte(dev: &InputDev, byte: usize) -> u8 {
+        (dev.config_read(byte & !3) >> ((byte & 3) * 8)) as u8
+    }
+
+    #[test]
+    fn ev_key_bitmap_is_byte_addressable_and_advertises_buttons() {
+        let mut dev = InputDev::new(None);
+        dev.config_write(
+            0,
+            u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_KEY) << 8),
+        );
+        assert!(usize::from(cfg_byte(&dev, 2)) > 34);
+        assert_eq!(cfg_byte(&dev, 8 + 1), 0xFF);
+        assert_eq!(cfg_byte(&dev, 8 + 15), 0xFF);
+        assert_eq!(cfg_byte(&dev, 8 + 34), 0x1F);
+    }
+
+    #[test]
+    fn name_reads_back_every_byte() {
+        let mut dev = InputDev::new(None);
+        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_ID_NAME));
+        let name: alloc::vec::Vec<u8> = (0..6).map(|i| cfg_byte(&dev, 8 + i)).collect();
+        assert_eq!(name, b"CellOS");
+    }
+
+    #[test]
+    fn full_queue_drops_oldest_reports_and_keeps_newest() {
+        let mut dev = InputDev::new(None);
+        for _ in 0..MAX_PENDING_EVENTS {
+            dev.push_key(30, true);
+        }
+        dev.push_key(30, false);
+        let n = dev.pending_events.len();
+        assert!(n <= MAX_PENDING_EVENTS);
+        assert_eq!(dev.pending_events[0].event_type, EV_KEY);
+        assert_eq!(dev.pending_events[n - 2].value, 0);
+        assert_eq!(dev.pending_events[n - 1].event_type, EV_SYN);
     }
 }

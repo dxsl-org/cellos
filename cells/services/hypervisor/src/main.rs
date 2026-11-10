@@ -37,6 +37,8 @@ api::declare_syscalls![
     // IPC / service discovery
     Send,
     TrySend,
+    // `sys_post`: app-session replies queue without parking the vCPU loop.
+    SendGather,
     TryRecv,
     Recv,
     RecvTimeout,

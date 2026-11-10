@@ -197,6 +197,11 @@ if [[ -n "$X86_STORAGE_IMAGE" ]]; then
                 grep -ai "ahci" qemu-x86_64.log | head -5
                 exit 1
             fi
+            if ! grep -qa "\[ahci\] IDENTIFY DEVICE ok" qemu-x86_64.log; then
+                echo "FAIL: AHCI Driver Cell did not complete IDENTIFY DEVICE" >&2
+                grep -ai "ahci" qemu-x86_64.log | head -10
+                exit 1
+            fi
             if ! grep -qa "\[driver_cell\] ahci storage driver ready" qemu-x86_64.log; then
                 echo "FAIL: AHCI Driver Cell did not report ready" >&2
                 exit 1

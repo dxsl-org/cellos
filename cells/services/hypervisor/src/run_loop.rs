@@ -404,13 +404,7 @@ fn forward_input_events(
             }
             api::input::InputEvent::MouseButton { button, state } => {
                 let pressed = state == api::input::KeyState::Pressed;
-                let btn = match button {
-                    api::input::MouseButton::Left => crate::virtio_input::BTN_LEFT,
-                    api::input::MouseButton::Right => crate::virtio_input::BTN_RIGHT,
-                    api::input::MouseButton::Middle => crate::virtio_input::BTN_MIDDLE,
-                    _ => crate::virtio_input::BTN_LEFT,
-                };
-                input.push_mouse_button(btn, pressed);
+                input.push_mouse_button(crate::virtio_input::button_code(button), pressed);
             }
             api::input::InputEvent::MouseScroll { dy, .. } => {
                 input.push_mouse_scroll(dy);

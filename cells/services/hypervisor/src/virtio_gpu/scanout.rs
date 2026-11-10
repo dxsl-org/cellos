@@ -11,7 +11,6 @@ pub struct ScanoutBridge {
     width: u32,
     height: u32,
     pending_damage: Option<command::Rect>,
-    role: SurfaceRole,
 }
 
 impl ScanoutBridge {
@@ -23,24 +22,7 @@ impl ScanoutBridge {
             width,
             height,
             pending_damage: None,
-            role: SurfaceRole::Background,
         }
-    }
-
-    pub const fn new_interactive(compositor_tid: usize, width: u32, height: u32) -> Self {
-        Self {
-            compositor_tid,
-            surface_cap: 0,
-            pending_destroy_cap: 0,
-            width,
-            height,
-            pending_damage: None,
-            role: SurfaceRole::Interactive,
-        }
-    }
-
-    pub fn set_role(&mut self, role: SurfaceRole) {
-        self.role = role;
     }
 
     pub fn surface_cap(&self) -> u32 {
@@ -75,7 +57,7 @@ impl ScanoutBridge {
         create[0] = compositor_ops::CREATE_SURFACE;
         create[1..5].copy_from_slice(&self.width.to_le_bytes());
         create[5..9].copy_from_slice(&self.height.to_le_bytes());
-        create[9] = self.role as u8;
+        create[9] = SurfaceRole::Background as u8;
         let Some(reply) = self.request(&create) else {
             return;
         };

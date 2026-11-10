@@ -5,10 +5,10 @@
 //! (`cells/apps/chrome`, `cells/apps/vm-runner`) and the Hypervisor Service
 //! (`service 14`, `/bin/hypervisor`).
 //!
-//! Enables zero-Linux-desktop single-app kiosk sessions: the host desktop launches
-//! a sandboxed guest application inside a MicroVM, maps its VirtIO-GPU scanout into
-//! an interactive `SurfaceRole::Application` window, and forwards pointer/keyboard
-//! events to the guest kernel via VirtIO-Input.
+//! Enables zero-Linux-desktop single-app kiosk sessions: an app runner binds
+//! itself to the running MicroVM's session, and the hypervisor injects the
+//! runner's pointer/keyboard events into the guest kernel via VirtIO-Input.
+//! Only the runner that sent the latest launch may forward input or terminate.
 
 use types::{ViError, ViResult};
 
@@ -25,6 +25,18 @@ pub const VMM_STATUS_BUSY: u32 = 3;
 pub const VMM_STATUS_FAILED: u32 = 4;
 pub const VMM_STATUS_UNSUPPORTED: u32 = 5;
 
+/// Linux evdev event types and codes carried by [`VmmInputForwardRequest`].
+pub const EV_KEY: u16 = 0x01;
+pub const EV_REL: u16 = 0x02;
+pub const REL_X: u16 = 0x00;
+pub const REL_Y: u16 = 0x01;
+pub const REL_WHEEL: u16 = 0x08;
+pub const BTN_LEFT: u16 = 0x110;
+pub const BTN_RIGHT: u16 = 0x111;
+pub const BTN_MIDDLE: u16 = 0x112;
+pub const BTN_SIDE: u16 = 0x113;
+pub const BTN_EXTRA: u16 = 0x114;
+
 /// Request payload sent by app runner to start a single-app guest container.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,11 +51,15 @@ pub struct VmmLaunchRequest {
 impl VmmLaunchRequest {
     pub const LEN: usize = 44;
 
+    /// Build a launch request; `name` is truncated to 31 bytes on a UTF-8
+    /// boundary so the NUL-terminated field always decodes as text.
     pub fn new(name: &str, width: u32, height: u32) -> Self {
         let mut app_name = [0u8; 32];
-        let bytes = name.as_bytes();
-        let copy_len = bytes.len().min(31);
-        app_name[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        let mut copy_len = name.len().min(31);
+        while !name.is_char_boundary(copy_len) {
+            copy_len -= 1;
+        }
+        app_name[..copy_len].copy_from_slice(&name.as_bytes()[..copy_len]);
 
         Self {
             opcode: VMM_OP_LAUNCH_APP,
@@ -227,5 +243,14 @@ mod tests {
 
         let decoded = VmmInputForwardRequest::decode(&buf[..len]).unwrap();
         assert_eq!(decoded, req);
+    }
+
+    #[test]
+    fn launch_request_truncates_name_on_char_boundary() {
+        // 16 two-byte chars = 32 bytes; a byte cut at 31 would split the last one.
+        let req = VmmLaunchRequest::new("éééééééééééééééé", 1, 1);
+        let len = req.app_name.iter().position(|&b| b == 0).unwrap();
+        assert_eq!(len, 30);
+        assert!(core::str::from_utf8(&req.app_name[..len]).is_ok());
     }
 }

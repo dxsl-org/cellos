@@ -25,8 +25,13 @@ api::declare_manifest!(block_io = true, network = true, spawn = true);
 api::declare_syscalls![
     Log,
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
+    OpenCap,
+    CloseCap,
+    // `ostd::args()` reads the spawner's argv out of the state stash.
+    StateRestore,
     LookupService,
     Spawn,
     Yield,
@@ -77,11 +82,11 @@ fn extract_app_name(arg: &str) -> String {
 fn cell_main() {
     println("[vm-runner] CellOS Universal Linux App Runner v0.1");
 
+    // `ostd::args()` carries no program-name entry: the app is the first argument.
     let args = ostd::args();
-    let target_arg = if args.len() > 1 && !args[1].is_empty() {
-        &args[1]
-    } else {
-        "chrome"
+    let target_arg = match args.first() {
+        Some(arg) if !arg.is_empty() => arg.as_str(),
+        _ => "chrome",
     };
 
     let app_name = extract_app_name(target_arg);
@@ -136,20 +141,21 @@ fn cell_main() {
         sys_exit(1);
     }
 
+    // Posted: the hypervisor only polls between vCPU exits, and a blocking send
+    // would hang here forever (instead of timing out below) if it never polls.
     if !matches!(
-        ostd::syscall::sys_send(hv_tid, &req_buf),
-        ostd::syscall::SyscallResult::Ok(_)
+        ostd::syscall::sys_post(hv_tid, &req_buf),
+        ostd::syscall::SyscallResult::Ok(0)
     ) {
         println("[vm-runner] ERROR: Failed to send VmmLaunchRequest to Hypervisor.");
         sys_exit(1);
     }
 
-    let mut reply_buf = [0u8; 64];
+    let mut reply_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
+    // RecvTimeout returns the sender tid (0 on timeout), not a byte count.
     match ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 200) {
-        ostd::syscall::SyscallResult::Ok(n)
-            if n >= api::services::vmm_session::VmmLaunchReply::LEN =>
-        {
-            match api::services::vmm_session::VmmLaunchReply::decode(&reply_buf[..n]) {
+        ostd::syscall::SyscallResult::Ok(sender) if sender == hv_tid => {
+            match api::services::vmm_session::VmmLaunchReply::decode(&reply_buf) {
                 Ok(reply) if reply.status == api::services::vmm_session::VMM_STATUS_OK => {
                     println(&format!(
                         "[vm-runner] MicroVM active (session_id={}). Session ready.",

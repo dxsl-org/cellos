@@ -13,11 +13,14 @@ use crate::model::{
     resolve_conflict_name, FileItem, PlacesItem, TrashRecord, ViewMode, DEFAULT_PLACES,
 };
 use crate::preview::{PreviewKind, QuickLookState};
+use crate::split::{ActivePane, PaneState};
 
 /// Longest text the path/name prompt accepts (one FAT long name).
 pub const MAX_INPUT_LEN: usize = 255;
 /// Name of the synthetic parent entry at the top of every folder except `/`.
 pub const PARENT_ENTRY: &str = "..";
+/// Folder that Delete moves entries into and Undo restores them from.
+pub const TRASH_DIR: &str = "/data/.trash";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Clip {
@@ -50,19 +53,6 @@ pub struct Prompt {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ActivePane {
-    #[default]
-    Left,
-    Right,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PaneState {
-    pub current_path: String,
-    pub items: Vec<FileItem>,
-    pub selected_index: usize,
-}
 pub struct FilesApp<F: FileSystem> {
     pub fs: F,
     pub current_path: String,
@@ -78,7 +68,6 @@ pub struct FilesApp<F: FileSystem> {
     pub quick_look: QuickLookState,
     pub pending_intent: Option<api::services::mime::LaunchIntent>,
     pub trash_stack: Vec<TrashRecord>,
-    pub split_pane_enabled: bool,
     pub active_pane: ActivePane,
     pub secondary_pane: Option<PaneState>,
 }
@@ -100,7 +89,6 @@ impl<F: FileSystem> FilesApp<F> {
             quick_look: QuickLookState::new(),
             pending_intent: None,
             trash_stack: Vec::new(),
-            split_pane_enabled: false,
             active_pane: ActivePane::Left,
             secondary_pane: None,
         };
@@ -108,7 +96,7 @@ impl<F: FileSystem> FilesApp<F> {
         app
     }
 
-    fn read_listing(&mut self, path: &str) -> FsResult<Vec<FileItem>> {
+    pub(crate) fn read_listing(&mut self, path: &str) -> FsResult<Vec<FileItem>> {
         let mut entries = self.fs.list_dir(path)?;
         // Folders first; the VFS order is kept within each group.
         entries.sort_by_key(|entry| !entry.is_dir);
@@ -156,8 +144,10 @@ impl<F: FileSystem> FilesApp<F> {
     }
 
     /// List the current folder again after a change, select `select` (or keep the old row
-    /// index) and report `status`.
-    fn refresh(&mut self, select: Option<&str>, status: String) {
+    /// index) and report `status`. The other split pane is listed again too: the change
+    /// may have touched the folder it shows.
+    pub(crate) fn refresh(&mut self, select: Option<&str>, status: String) {
+        self.reload_secondary_pane();
         let previous = self.selected_index;
         let path = self.current_path.clone();
         if !self.load_directory(&path) {
@@ -170,7 +160,7 @@ impl<F: FileSystem> FilesApp<F> {
         self.status_message = status;
     }
 
-    fn selected_entry(&self) -> Option<FileItem> {
+    pub(crate) fn selected_entry(&self) -> Option<FileItem> {
         self.items
             .get(self.selected_index)
             .filter(|item| item.name != PARENT_ENTRY)
@@ -301,39 +291,54 @@ impl<F: FileSystem> FilesApp<F> {
             }
         }
     }
+
+    /// Names in `dir`, straight from the VFS. `write` replaces an existing file, so a
+    /// free name must never be picked from a stale or failed listing.
+    pub(crate) fn names_in(&mut self, dir: &str) -> FsResult<Vec<String>> {
+        Ok(self
+            .fs
+            .list_dir(dir)?
+            .into_iter()
+            .map(|entry| entry.name)
+            .collect())
+    }
+
     /// Move the selected entry to Trash (`/data/.trash`), preserving it for Undo.
     pub fn trash_selected(&mut self) {
         let Some(item) = self.selected_entry() else {
             return;
         };
-        // If already in the trash, perform permanent deletion
-        if self.current_path.starts_with("/data/.trash") {
+        // Inside the trash (not merely a sibling such as `.trash-old`) Delete is permanent.
+        if self.current_path == TRASH_DIR
+            || self
+                .current_path
+                .strip_prefix(TRASH_DIR)
+                .is_some_and(|rest| rest.starts_with('/'))
+        {
             self.delete_selected();
             return;
         }
-        // Ensure trash directory exists
-        let _ = self.fs.mkdir("/data/.trash");
-        let trash_existing: Vec<String> = self
-            .fs
-            .list_dir("/data/.trash")
-            .unwrap_or_default()
-            .into_iter()
-            .map(|e| e.name)
-            .collect();
+        let _ = self.fs.mkdir(TRASH_DIR);
+        let trash_existing = match self.names_in(TRASH_DIR) {
+            Ok(names) => names,
+            Err(e) => {
+                self.status_message =
+                    format!("Cannot move {} to Trash: {}", item.name, e.describe());
+                return;
+            }
+        };
         let target_name = resolve_conflict_name(&item.name, &trash_existing);
-        let trashed_path = fs::join("/data/.trash", &target_name);
+        let trashed_path = fs::join(TRASH_DIR, &target_name);
         match fs::move_entry(&mut self.fs, &item.path, &trashed_path, item.is_dir) {
             Ok(()) => {
+                let status = format!("Moved {} to Trash (Ctrl+Z to Undo)", item.name);
                 self.trash_stack.push(TrashRecord {
-                    name: item.name.clone(),
-                    original_path: item.path.clone(),
+                    name: item.name,
+                    original_path: item.path,
                     trashed_path,
                     is_dir: item.is_dir,
                 });
-                self.refresh(
-                    None,
-                    format!("Moved {} to Trash (Ctrl+Z to Undo)", item.name),
-                );
+                self.refresh(None, status);
             }
             Err(e) => {
                 self.status_message =
@@ -348,14 +353,21 @@ impl<F: FileSystem> FilesApp<F> {
             self.status_message = String::from("Nothing to undo in Trash");
             return;
         };
+        // Purged or renamed in Trash since: this record can never be restored and must
+        // not block every older one.
+        if self.fs.stat(&record.trashed_path).is_err() {
+            self.status_message = format!("{} is no longer in Trash", record.name);
+            return;
+        }
         let parent = fs::parent(&record.original_path);
-        let dest_existing: Vec<String> = self
-            .fs
-            .list_dir(parent)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|e| e.name)
-            .collect();
+        let dest_existing = match self.names_in(parent) {
+            Ok(names) => names,
+            Err(e) => {
+                self.status_message = format!("Cannot restore {}: {}", record.name, e.describe());
+                self.trash_stack.push(record);
+                return;
+            }
+        };
         let restored_name = resolve_conflict_name(&record.name, &dest_existing);
         let restored_path = fs::join(parent, &restored_name);
         match fs::move_entry(
@@ -381,126 +393,6 @@ impl<F: FileSystem> FilesApp<F> {
     #[allow(dead_code)]
     pub fn can_undo_trash(&self) -> bool {
         !self.trash_stack.is_empty()
-    }
-
-    pub fn toggle_split_pane(&mut self) {
-        if self.split_pane_enabled {
-            self.split_pane_enabled = false;
-            self.secondary_pane = None;
-            self.active_pane = ActivePane::Left;
-            self.status_message = String::from("Split pane disabled");
-        } else {
-            let secondary_path = if self.current_path != "/data" {
-                "/data"
-            } else {
-                "/"
-            };
-            let secondary_items = self.read_listing(secondary_path).unwrap_or_default();
-            self.secondary_pane = Some(PaneState {
-                current_path: String::from(secondary_path),
-                items: secondary_items,
-                selected_index: 0,
-            });
-            self.split_pane_enabled = true;
-            self.active_pane = ActivePane::Left;
-            self.status_message =
-                String::from("Split pane enabled (Tab: switch pane, F5: copy across)");
-        }
-    }
-
-    pub fn switch_active_pane(&mut self) {
-        if !self.split_pane_enabled {
-            return;
-        }
-        let Some(secondary) = self.secondary_pane.take() else {
-            return;
-        };
-        let primary = PaneState {
-            current_path: core::mem::replace(&mut self.current_path, secondary.current_path),
-            items: core::mem::replace(&mut self.items, secondary.items),
-            selected_index: core::mem::replace(&mut self.selected_index, secondary.selected_index),
-        };
-        self.secondary_pane = Some(primary);
-        self.active_pane = match self.active_pane {
-            ActivePane::Left => ActivePane::Right,
-            ActivePane::Right => ActivePane::Left,
-        };
-        self.status_message = format!(
-            "Active pane: {:?} ({})",
-            self.active_pane, self.current_path
-        );
-    }
-
-    /// Copy or move the selected item in the active pane to the target pane directly.
-    pub fn copy_to_other_pane(&mut self, cut: bool) {
-        if !self.split_pane_enabled {
-            return;
-        }
-        let Some(item) = self.selected_entry() else {
-            return;
-        };
-        let Some(secondary) = &self.secondary_pane else {
-            return;
-        };
-        let target_dir = secondary.current_path.clone();
-        let existing: Vec<String> = secondary
-            .items
-            .iter()
-            .filter(|i| i.name != PARENT_ENTRY)
-            .map(|i| i.name.clone())
-            .collect();
-        let final_name = resolve_conflict_name(&item.name, &existing);
-        let dst = fs::join(&target_dir, &final_name);
-        let result = if cut {
-            fs::move_entry(&mut self.fs, &item.path, &dst, item.is_dir)
-        } else {
-            fs::copy_entry(&mut self.fs, &item.path, &dst, item.is_dir)
-        };
-        match result {
-            Ok(()) => {
-                let verb = if cut { "Moved" } else { "Copied" };
-                let status = format!("{} {} -> {}", verb, item.name, dst);
-                self.refresh(None, status);
-                let sec_path = self.secondary_pane.as_ref().map(|s| s.current_path.clone());
-                if let Some(sec_path) = sec_path {
-                    if let Ok(new_items) = self.read_listing(&sec_path) {
-                        if let Some(sec) = &mut self.secondary_pane {
-                            sec.items = new_items;
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                self.status_message = format!("Operation failed: {}", e.describe());
-            }
-        }
-    }
-    /// Detach the secondary pane into a standalone path for an independent window session.
-    #[allow(dead_code)]
-    pub fn detach_pane(&mut self) -> Option<String> {
-        if !self.split_pane_enabled {
-            return None;
-        }
-        let secondary = self.secondary_pane.take()?;
-        self.split_pane_enabled = false;
-        self.active_pane = ActivePane::Left;
-        self.status_message = format!("Detached pane {} to new session", secondary.current_path);
-        Some(secondary.current_path)
-    }
-
-    /// Attach a path as a secondary split pane beside the current view.
-    #[allow(dead_code)]
-    pub fn attach_pane(&mut self, path: &str) {
-        let items = self.read_listing(path).unwrap_or_default();
-        let pane = PaneState {
-            current_path: String::from(path),
-            items,
-            selected_index: 0,
-        };
-        self.secondary_pane = Some(pane);
-        self.split_pane_enabled = true;
-        self.active_pane = ActivePane::Left;
-        self.status_message = format!("Attached split pane: {}", path);
     }
 
     pub fn switch_view_mode(&mut self, mode: ViewMode) {
@@ -839,53 +731,38 @@ mod tests {
     }
 
     #[test]
-    fn split_pane_toggles_and_copies_across() {
+    fn undo_skips_entry_purged_from_trash() {
         let fs = FakeFs::new()
             .dir("/data")
-            .file("/data/item.txt", b"payload\n")
-            .dir("/mnt");
+            .file("/data/old.txt", b"old\n")
+            .file("/data/new.txt", b"new\n");
         let mut app = app_at(fs, "/data");
-        assert!(!app.split_pane_enabled);
-
-        // Enable split pane
-        app.toggle_split_pane();
-        assert!(app.split_pane_enabled);
-        assert_eq!(app.active_pane, ActivePane::Left);
-        assert!(app.secondary_pane.is_some());
-
-        // Switch active pane to Right
-        app.switch_active_pane();
-        assert_eq!(app.active_pane, ActivePane::Right);
-
-        // Switch back to Left
-        app.switch_active_pane();
-        assert_eq!(app.active_pane, ActivePane::Left);
-
-        // Copy item.txt from /data to secondary pane
         app.selected_index = 1;
-        app.copy_to_other_pane(false);
-        assert!(app.status_message.contains("Copied item.txt"));
+        app.trash_selected();
+        // Folders first: "..", ".trash", "old.txt".
+        app.selected_index = 2;
+        app.trash_selected();
+        assert_eq!(app.trash_stack.len(), 2);
+        let purged = app.trash_stack[1].trashed_path.clone();
+        app.fs.unlink(&purged).unwrap();
 
-        // Disable split pane
-        app.toggle_split_pane();
-        assert!(!app.split_pane_enabled);
-        assert!(app.secondary_pane.is_none());
+        app.undo_last_trash();
+        assert!(app.status_message.contains("no longer in Trash"));
+        app.undo_last_trash();
+        assert!(app.status_message.contains("Restored"));
+        assert!(!app.can_undo_trash());
     }
+
     #[test]
-    fn detach_and_attach_pane_lifecycle() {
-        let fs = FakeFs::new().dir("/data").dir("/mnt").dir("/docs");
-        let mut app = app_at(fs, "/data");
-        assert!(!app.split_pane_enabled);
-
-        // Attach pane directly
-        app.attach_pane("/docs");
-        assert!(app.split_pane_enabled);
-        assert_eq!(app.secondary_pane.as_ref().unwrap().current_path, "/docs");
-
-        // Detach pane
-        let detached = app.detach_pane();
-        assert_eq!(detached, Some(alloc::string::String::from("/docs")));
-        assert!(!app.split_pane_enabled);
-        assert!(app.secondary_pane.is_none());
+    fn delete_in_trash_lookalike_folder_still_trashes() {
+        let fs = FakeFs::new()
+            .dir("/data")
+            .dir("/data/.trash-old")
+            .file("/data/.trash-old/keep.txt", b"keep\n");
+        let mut app = app_at(fs, "/data/.trash-old");
+        app.selected_index = 1;
+        app.trash_selected();
+        assert!(app.can_undo_trash());
+        assert!(app.fs.stat("/data/.trash/keep.txt").is_ok());
     }
 }

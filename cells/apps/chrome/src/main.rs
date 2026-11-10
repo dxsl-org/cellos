@@ -18,6 +18,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use api::display::PixelFormat;
+use api::services::vmm_session;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_exit, sys_get_resolution, sys_yield};
@@ -33,7 +34,8 @@ api::declare_syscalls![
     GrantShare,
     GrantSlice,
     GrantUnregister,
-    Call,
+    RecvTimeout,
+    SendGather,
     Send,
     Recv,
     TryRecv,
@@ -105,6 +107,21 @@ impl ChromeApp {
             hv_tid: 0,
             session_id: 0,
             vmm_active: false,
+        }
+    }
+
+    /// Forward one evdev event to the bound Tier 3 session; a no-op while offline.
+    fn forward_to_guest(&self, event_type: u16, code: u16, value: i32) {
+        if !self.vmm_active || self.hv_tid == 0 {
+            return;
+        }
+        let req =
+            vmm_session::VmmInputForwardRequest::new(self.session_id, event_type, code, value);
+        let mut buf = [0u8; vmm_session::VmmInputForwardRequest::LEN];
+        if req.encode(&mut buf).is_ok() {
+            // The hypervisor only polls between vCPU exits; a blocking send would
+            // stall this UI loop once per input event.
+            let _ = ostd::syscall::sys_post(self.hv_tid, &buf);
         }
     }
 
@@ -633,35 +650,31 @@ fn cell_main() {
     let hv_tid =
         ostd::syscall::sys_lookup_service(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
     if hv_tid != 0 {
-        let launch_req = api::services::vmm_session::VmmLaunchRequest::new("chrome", win_w, win_h);
-        let mut req_buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
-        if launch_req.encode(&mut req_buf).is_ok() {
-            if matches!(
-                ostd::syscall::sys_send(hv_tid, &req_buf),
-                ostd::syscall::SyscallResult::Ok(_)
-            ) {
-                let mut reply_buf = [0u8; 64];
-                if let ostd::syscall::SyscallResult::Ok(n) =
-                    ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 100)
-                {
-                    if n > 0 {
-                        if let Ok(reply) =
-                            api::services::vmm_session::VmmLaunchReply::decode(&reply_buf[..n])
-                        {
-                            if reply.status == api::services::vmm_session::VMM_STATUS_OK {
-                                app.hv_tid = hv_tid;
-                                app.session_id = reply.session_id;
-                                app.vmm_active = true;
-                                app.guest_status = String::from(
-                                    "Connected: Tier 3 MicroVM | Scanout Active | VirtIO-Input",
-                                );
-                                ostd::io::println(
-                                    "[chrome] Connected to Tier 3 MicroVM via Hypervisor service",
-                                );
-                            }
-                        }
-                    }
-                }
+        let launch_req = vmm_session::VmmLaunchRequest::new("chrome", win_w, win_h);
+        let mut req_buf = [0u8; vmm_session::VmmLaunchRequest::LEN];
+        if launch_req.encode(&mut req_buf).is_ok()
+            && matches!(
+                ostd::syscall::sys_post(hv_tid, &req_buf),
+                ostd::syscall::SyscallResult::Ok(0)
+            )
+        {
+            let mut reply_buf = [0u8; vmm_session::VmmLaunchReply::LEN];
+            // RecvTimeout returns the sender tid, not a byte count.
+            let replied = matches!(
+                ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 100),
+                ostd::syscall::SyscallResult::Ok(sender) if sender == hv_tid
+            );
+            if let Some(reply) = replied
+                .then(|| vmm_session::VmmLaunchReply::decode(&reply_buf).ok())
+                .flatten()
+                .filter(|reply| reply.status == vmm_session::VMM_STATUS_OK)
+            {
+                app.hv_tid = hv_tid;
+                app.session_id = reply.session_id;
+                app.vmm_active = true;
+                app.guest_status =
+                    String::from("Connected: Tier 3 MicroVM | Scanout Active | VirtIO-Input");
+                ostd::io::println("[chrome] Connected to Tier 3 MicroVM via Hypervisor service");
             }
         }
     }
@@ -677,81 +690,49 @@ fn cell_main() {
         if app.should_close {
             ostd::io::println("[chrome] User requested window close. Terminating guest container.");
             if app.vmm_active && app.hv_tid != 0 {
-                let term = [api::services::vmm_session::VMM_OP_TERMINATE_APP, 0, 0, 0];
-                let _ = ostd::syscall::sys_send(app.hv_tid, &term);
+                let term = [vmm_session::VMM_OP_TERMINATE_APP, 0, 0, 0];
+                let _ = ostd::syscall::sys_post(app.hv_tid, &term);
             }
             break;
         }
         let mut need_render = false;
         for ev in ostd::input::poll_events(16) {
             match ev {
-                InputEvent::MouseMove { x, y, .. } => {
-                    let dx = x - cursor_x;
-                    let dy = y - cursor_y;
+                InputEvent::MouseMove { x, y, dx, dy } => {
                     cursor_x = x;
                     cursor_y = y;
-                    if app.vmm_active && app.hv_tid != 0 {
-                        if dx != 0 {
-                            let rel_x = api::services::vmm_session::VmmInputForwardRequest::new(
-                                app.session_id,
-                                2, // EV_REL
-                                0, // REL_X
-                                dx,
-                            );
-                            let mut b = [0u8; 16];
-                            if rel_x.encode(&mut b).is_ok() {
-                                let _ = ostd::syscall::sys_send(app.hv_tid, &b);
-                            }
-                        }
-                        if dy != 0 {
-                            let rel_y = api::services::vmm_session::VmmInputForwardRequest::new(
-                                app.session_id,
-                                2, // EV_REL
-                                1, // REL_Y
-                                dy,
-                            );
-                            let mut b = [0u8; 16];
-                            if rel_y.encode(&mut b).is_ok() {
-                                let _ = ostd::syscall::sys_send(app.hv_tid, &b);
-                            }
-                        }
+                    // The event's own deltas: differencing window-local positions
+                    // jumps on the first event and stalls at window edges.
+                    if dx != 0 {
+                        app.forward_to_guest(vmm_session::EV_REL, vmm_session::REL_X, dx);
+                    }
+                    if dy != 0 {
+                        app.forward_to_guest(vmm_session::EV_REL, vmm_session::REL_Y, dy);
                     }
                 }
                 InputEvent::MouseButton { button, state } => {
-                    if app.handle_click(cursor_x, cursor_y) {
+                    // Only a left press activates chrome UI; a release or another
+                    // button re-running `handle_click` would act twice per click.
+                    if button == MouseButton::Left
+                        && state == KeyState::Pressed
+                        && app.handle_click(cursor_x, cursor_y)
+                    {
                         need_render = true;
-                    } else if app.vmm_active && app.hv_tid != 0 {
-                        let btn_code = match button {
-                            MouseButton::Left => 0x110,
-                            MouseButton::Right => 0x111,
-                            MouseButton::Middle => 0x112,
-                            _ => 0x110,
+                    } else {
+                        let code = match button {
+                            MouseButton::Left => vmm_session::BTN_LEFT,
+                            MouseButton::Right => vmm_session::BTN_RIGHT,
+                            MouseButton::Middle => vmm_session::BTN_MIDDLE,
+                            MouseButton::Back => vmm_session::BTN_SIDE,
+                            MouseButton::Forward => vmm_session::BTN_EXTRA,
                         };
-                        let press_val = if state == KeyState::Pressed { 1 } else { 0 };
-                        let btn_req = api::services::vmm_session::VmmInputForwardRequest::new(
-                            app.session_id,
-                            1, // EV_KEY
-                            btn_code,
-                            press_val,
-                        );
-                        let mut b = [0u8; 16];
-                        if btn_req.encode(&mut b).is_ok() {
-                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
-                        }
+                        let pressed = i32::from(state == KeyState::Pressed);
+                        app.forward_to_guest(vmm_session::EV_KEY, code, pressed);
                     }
                 }
                 InputEvent::MouseScroll { dy, .. } => {
-                    if app.vmm_active && app.hv_tid != 0 && dy != 0 {
-                        let scroll_req = api::services::vmm_session::VmmInputForwardRequest::new(
-                            app.session_id,
-                            2, // EV_REL
-                            8, // REL_WHEEL
-                            dy,
-                        );
-                        let mut b = [0u8; 16];
-                        if scroll_req.encode(&mut b).is_ok() {
-                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
-                        }
+                    if dy != 0 {
+                        app.forward_to_guest(vmm_session::EV_REL, vmm_session::REL_WHEEL, dy);
                     }
                 }
                 InputEvent::Key(ke) => {
@@ -768,22 +749,13 @@ fn cell_main() {
                         && app.handle_key(ke.keysym, ke.char(), ke.modifiers)
                     {
                         need_render = true;
-                    } else if app.vmm_active && app.hv_tid != 0 && ke.scancode != 0 {
-                        let press_val = match ke.state {
+                    } else if ke.scancode != 0 {
+                        let value = match ke.state {
                             KeyState::Pressed => 1,
                             KeyState::Repeated => 2,
                             KeyState::Released => 0,
                         };
-                        let key_req = api::services::vmm_session::VmmInputForwardRequest::new(
-                            app.session_id,
-                            1, // EV_KEY
-                            ke.scancode as u16,
-                            press_val,
-                        );
-                        let mut b = [0u8; 16];
-                        if key_req.encode(&mut b).is_ok() {
-                            let _ = ostd::syscall::sys_send(app.hv_tid, &b);
-                        }
+                        app.forward_to_guest(vmm_session::EV_KEY, ke.scancode as u16, value);
                     }
                 }
             }

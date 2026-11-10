@@ -77,17 +77,9 @@ pub fn run(
     #[cfg(feature = "hostile-backend-recovery")]
     let mut hostile_preemption_armed = false;
 
-    let mut active_session: Option<(usize, u32, [u8; 32])> = None;
+    let mut active_session: Option<AppSession> = None;
     loop {
         gpu.poll_damage();
-        service_app_session_ipc(
-            &mut gpu,
-            &mut input,
-            &mut input_vmio,
-            vm_id,
-            vcpu_id,
-            &mut active_session,
-        );
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
         if ret == usize::MAX {
             println("[hv-x86] run_vcpu kernel error — aborting");
@@ -131,7 +123,7 @@ pub fn run(
                         .unwrap_or(0),
                 );
                 service_app_session_ipc(
-                    &mut gpu,
+                    &gpu,
                     &mut input,
                     &mut input_vmio,
                     vm_id,
@@ -167,7 +159,7 @@ pub fn run(
                         .unwrap_or(0),
                 );
                 service_app_session_ipc(
-                    &mut gpu,
+                    &gpu,
                     &mut input,
                     &mut input_vmio,
                     vm_id,
@@ -266,113 +258,156 @@ fn forward_input_events(
     vcpu_id: usize,
 ) {
     for ev in ostd::input::poll_events(16) {
-        match ev {
-            api::input::InputEvent::Key(ke) => {
-                let pressed = ke.state == api::input::KeyState::Pressed
-                    || ke.state == api::input::KeyState::Repeated;
-                let code = if ke.scancode > 0 {
-                    ke.scancode as u16
-                } else {
-                    ke.keysym as u16
-                };
-                input.push_key(code, pressed);
-            }
-            api::input::InputEvent::MouseMove { dx, dy, .. } => {
-                input.push_mouse_move(dx, dy);
-            }
-            api::input::InputEvent::MouseButton { button, state } => {
-                let pressed = state == api::input::KeyState::Pressed;
-                let btn = match button {
-                    api::input::MouseButton::Left => crate::virtio_input::BTN_LEFT,
-                    api::input::MouseButton::Right => crate::virtio_input::BTN_RIGHT,
-                    api::input::MouseButton::Middle => crate::virtio_input::BTN_MIDDLE,
-                    _ => crate::virtio_input::BTN_LEFT,
-                };
-                input.push_mouse_button(btn, pressed);
-            }
-            api::input::InputEvent::MouseScroll { dy, .. } => {
-                input.push_mouse_scroll(dy);
-            }
-        }
+        push_host_event(input, ev);
     }
     if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
         input_vmio.signal_used();
     }
 }
+
+fn push_host_event(input: &mut InputDev, ev: api::input::InputEvent) {
+    match ev {
+        api::input::InputEvent::Key(ke) => {
+            let pressed = ke.state == api::input::KeyState::Pressed
+                || ke.state == api::input::KeyState::Repeated;
+            let code = if ke.scancode > 0 {
+                ke.scancode as u16
+            } else {
+                ke.keysym as u16
+            };
+            input.push_key(code, pressed);
+        }
+        api::input::InputEvent::MouseMove { dx, dy, .. } => {
+            input.push_mouse_move(dx, dy);
+        }
+        api::input::InputEvent::MouseButton { button, state } => {
+            let pressed = state == api::input::KeyState::Pressed;
+            input.push_mouse_button(crate::virtio_input::button_code(button), pressed);
+        }
+        api::input::InputEvent::MouseScroll { dy, .. } => {
+            input.push_mouse_scroll(dy);
+        }
+    }
+}
+
+/// Session messages handled per poll, so a flooding client cannot starve the vCPU.
+const SESSION_MSGS_PER_POLL: usize = 32;
+/// Only one app session exists per VM, so its id is fixed.
+const APP_SESSION_ID: u32 = 1;
+
+/// The app-runner client currently bound to this VM's session.
+struct AppSession {
+    client_tid: usize,
+    app_name: [u8; 32],
+}
+
 fn service_app_session_ipc(
-    gpu: &mut GpuDev,
+    gpu: &GpuDev,
     input: &mut InputDev,
     input_vmio: &mut VirtioMmio,
     vm_id: usize,
     vcpu_id: usize,
-    active_session: &mut Option<(usize, u32, [u8; 32])>,
+    active_session: &mut Option<AppSession>,
 ) {
+    use api::services::vmm_session as vmm_ipc;
+    let mut host_tids: Option<(Option<usize>, Option<usize>)> = None;
     let mut buf = [0u8; 128];
-    while let ostd::syscall::SyscallResult::Ok(sender) = ostd::syscall::sys_try_recv(0, &mut buf) {
-        if sender == 0 {
+    for _ in 0..SESSION_MSGS_PER_POLL {
+        // TryRecv reports neither the payload length nor kernel errors
+        // distinctly: zero the buffer so short frames decode as zero-padded,
+        // and treat 0 / negative returns as an empty queue.
+        buf.fill(0);
+        let ostd::syscall::SyscallResult::Ok(sender) = ostd::syscall::sys_try_recv(0, &mut buf)
+        else {
+            break;
+        };
+        if sender as isize <= 0 {
             break;
         }
-        let opcode = buf[0];
-        match opcode {
-            api::services::vmm_session::VMM_OP_LAUNCH_APP => {
-                if let Ok(req) = api::services::vmm_session::VmmLaunchRequest::decode(&buf) {
-                    let name_str = core::str::from_utf8(&req.app_name)
-                        .unwrap_or("unknown")
-                        .trim_matches('\0');
-                    println(&alloc::format!(
-                        "[hv-x86] Tier 3 guest app session launched: app='{}' ({}x{}) from tid={}",
-                        name_str,
-                        req.width,
-                        req.height,
-                        sender
-                    ));
-                    *active_session = Some((sender, 1, req.app_name));
-                    let reply = api::services::vmm_session::VmmLaunchReply {
-                        status: api::services::vmm_session::VMM_STATUS_OK,
-                        session_id: 1,
-                        surface_cap: gpu.surface_cap(),
-                        scanout_width: req.width,
-                        scanout_height: req.height,
-                    };
-                    let mut reply_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
-                    if reply.encode(&mut reply_buf).is_ok() {
-                        let _ = ostd::syscall::sys_send(sender, &reply_buf);
-                    }
+        // The wildcard receive also dequeues host input frames meant for
+        // `forward_input_events`; feed them to the guest instead of dropping them.
+        let (input_tid, comp_tid) = *host_tids.get_or_insert_with(|| {
+            (
+                ostd::syscall::sys_lookup_service(api::syscall::service::INPUT),
+                ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR),
+            )
+        });
+        if Some(sender) == input_tid || Some(sender) == comp_tid {
+            if buf[0] == api::input::INPUT_EVENT_OPCODE {
+                if let Some(ev) = api::input::decode_event(&buf[1..]) {
+                    push_host_event(input, ev);
                 }
             }
-            api::services::vmm_session::VMM_OP_FORWARD_INPUT => {
-                if let Ok(req) = api::services::vmm_session::VmmInputForwardRequest::decode(&buf) {
-                    match req.event_type {
-                        crate::virtio_input::EV_KEY => {
-                            input.push_key(req.code, req.value != 0);
-                        }
-                        crate::virtio_input::EV_REL => {
-                            if req.code == crate::virtio_input::REL_X {
-                                input.push_mouse_move(req.value, 0);
-                            } else if req.code == crate::virtio_input::REL_Y {
-                                input.push_mouse_move(0, req.value);
-                            } else if req.code == crate::virtio_input::REL_WHEEL {
-                                input.push_mouse_scroll(req.value);
-                            }
-                        }
-                        _ => {}
-                    }
-                    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
-                        input_vmio.signal_used();
-                    }
+            continue;
+        }
+        let bound = active_session
+            .as_ref()
+            .is_some_and(|session| session.client_tid == sender);
+        match buf[0] {
+            vmm_ipc::VMM_OP_LAUNCH_APP => {
+                let Ok(req) = vmm_ipc::VmmLaunchRequest::decode(&buf) else {
+                    continue;
+                };
+                let name_len = req.app_name.iter().position(|&b| b == 0).unwrap_or(32);
+                println(&alloc::format!(
+                    "[hv-x86] Tier 3 guest app session launched: app='{}' ({}x{}) from tid={}",
+                    core::str::from_utf8(&req.app_name[..name_len]).unwrap_or("?"),
+                    req.width,
+                    req.height,
+                    sender
+                ));
+                *active_session = Some(AppSession {
+                    client_tid: sender,
+                    app_name: req.app_name,
+                });
+                let (scanout_width, scanout_height) = gpu.scanout_size();
+                let reply = vmm_ipc::VmmLaunchReply {
+                    status: vmm_ipc::VMM_STATUS_OK,
+                    session_id: APP_SESSION_ID,
+                    surface_cap: gpu.surface_cap(),
+                    scanout_width,
+                    scanout_height,
+                };
+                let mut reply_buf = [0u8; vmm_ipc::VmmLaunchReply::LEN];
+                if reply.encode(&mut reply_buf).is_ok() {
+                    // Posted, never sent: a client that stops receiving must not
+                    // park the vCPU loop.
+                    let _ = ostd::syscall::sys_post(sender, &reply_buf);
                 }
             }
-            api::services::vmm_session::VMM_OP_QUERY_STATUS => {
+            vmm_ipc::VMM_OP_FORWARD_INPUT => {
+                // Only the bound client may drive the guest's keyboard and pointer.
+                let Ok(req) = vmm_ipc::VmmInputForwardRequest::decode(&buf) else {
+                    continue;
+                };
+                if !bound || req.session_id != APP_SESSION_ID {
+                    continue;
+                }
+                match (req.event_type, req.code) {
+                    (crate::virtio_input::EV_KEY, code) => input.push_key(code, req.value != 0),
+                    (crate::virtio_input::EV_REL, crate::virtio_input::REL_X) => {
+                        input.push_mouse_move(req.value, 0)
+                    }
+                    (crate::virtio_input::EV_REL, crate::virtio_input::REL_Y) => {
+                        input.push_mouse_move(0, req.value)
+                    }
+                    (crate::virtio_input::EV_REL, crate::virtio_input::REL_WHEEL) => {
+                        input.push_mouse_scroll(req.value)
+                    }
+                    _ => {}
+                }
+            }
+            vmm_ipc::VMM_OP_QUERY_STATUS => {
                 let (status, app_bytes) = match active_session {
-                    Some((_, _, name)) => (api::services::vmm_session::VMM_STATUS_OK, *name),
-                    None => (api::services::vmm_session::VMM_STATUS_NOT_FOUND, [0u8; 32]),
+                    Some(session) => (vmm_ipc::VMM_STATUS_OK, session.app_name),
+                    None => (vmm_ipc::VMM_STATUS_NOT_FOUND, [0u8; 32]),
                 };
                 let mut reply = [0u8; 36];
                 reply[0..4].copy_from_slice(&status.to_le_bytes());
                 reply[4..36].copy_from_slice(&app_bytes);
-                let _ = ostd::syscall::sys_send(sender, &reply);
+                let _ = ostd::syscall::sys_post(sender, &reply);
             }
-            api::services::vmm_session::VMM_OP_TERMINATE_APP => {
+            vmm_ipc::VMM_OP_TERMINATE_APP if bound => {
                 println(&alloc::format!(
                     "[hv-x86] Tier 3 guest app session terminated by tid={}",
                     sender
@@ -381,7 +416,9 @@ fn service_app_session_ipc(
             }
             _ => {}
         }
-        buf.fill(0);
+    }
+    if input.flush_events(&input_vmio.queue_cfg(0), vm_id, vcpu_id) {
+        input_vmio.signal_used();
     }
 }
 

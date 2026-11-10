@@ -2,8 +2,11 @@
 //! CellOS Standalone Files Manager Application (List, Grid, Miller Columns) on the VFS service.
 //!
 //! Keys: arrows select, Enter opens (folder) or previews (file), Backspace goes up, Space
-//! toggles Quick Look, 1/2/3 switch views, Ctrl+C/X/V copy/cut/paste, Delete removes,
-//! Ctrl+L goes to a path, Ctrl+N creates a folder and Ctrl+Shift+N an empty file.
+//! toggles Quick Look, 1/2/3 switch views, Ctrl+C/X/V copy/cut/paste, Delete trashes
+//! (Shift+Delete deletes for good), Ctrl+Z restores from Trash, Ctrl+L goes to a path,
+//! Ctrl+N creates a folder and Ctrl+Shift+N an empty file. F3 or Ctrl+E (or the toolbar
+//! Split button) shows/hides a second pane; while split, Tab moves focus between panes
+//! and F5/F6 copy/move the selection into the other pane's folder.
 
 #![no_std]
 #![cfg_attr(not(test), no_main)]
@@ -14,29 +17,26 @@ extern crate std;
 
 extern crate alloc;
 use alloc::format;
-use alloc::string::String;
-use alloc::vec::Vec;
 
 mod app;
 mod draw;
 mod fs;
+mod layout;
 mod model;
 mod preview;
+mod render;
+mod split;
 mod views;
 use crate::app::{FilesApp, PromptKind};
 use crate::fs::FileSystem;
 use crate::model::ViewMode;
-use crate::views::places::PLACES_WIDTH;
 use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
-use ostd::syscall::{sys_get_resolution, sys_spawn_from_path, sys_yield, SyscallResult};
-use ostd::typography::TextFonts;
-use viui::surface::components::{
-    GridItemDef, GridView, ListView, ListViewItemDef, PlacesItemDef, PlacesSidebar,
-    SegmentedControl, StatusBar, Toolbar,
+use ostd::syscall::{
+    sys_get_resolution, sys_spawn_from_path, sys_spawn_from_path_raw, sys_yield, SyscallResult,
 };
-use viui::theme::{ViTheme, LIGHT_THEME};
+use ostd::typography::TextFonts;
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 api::declare_syscalls![
     Log,
@@ -53,159 +53,15 @@ api::declare_syscalls![
     GpuGetResolution,
     GetTime,
     // Mkdir/Write/Append/Rename/Unlink/Rmdir through the VFS service (path policy applies).
-    VfsMutate
+    VfsMutate,
+    // Stages a LaunchIntent target as the handler's argv.
+    StateStash
 ];
 
 ostd::cell_main!(cell_main);
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(4 * 1024 * 1024);
-
-const TOOLBAR_HEIGHT: u32 = 44;
-const STATUS_HEIGHT: u32 = 24;
-
-impl<F: FileSystem> FilesApp<F> {
-    pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
-        let sw = self.width;
-        let sh = self.height;
-        let theme = &LIGHT_THEME;
-
-        // 1. Toolbar Component (Top 44 DIP)
-        let path_title = format!("Files: {}", self.current_path);
-        Toolbar::render(surf, fonts, theme, sw, TOOLBAR_HEIGHT, "[F]", &path_title);
-
-        // View Mode SegmentedControl: [List] [Grid] [Cols]
-        let btn_start_x = sw as i32 - 180;
-        let cur_mode_idx = match self.view_mode {
-            ViewMode::List => 0,
-            ViewMode::Grid => 1,
-            ViewMode::Columns => 2,
-        };
-        SegmentedControl::render(
-            surf,
-            fonts,
-            theme,
-            btn_start_x,
-            8,
-            54,
-            28,
-            &["List", "Grid", "Cols"],
-            cur_mode_idx,
-        );
-
-        // 2. Sidebar: Places Component
-        let content_y = TOOLBAR_HEIGHT as i32;
-        let content_h = sh.saturating_sub(TOOLBAR_HEIGHT + STATUS_HEIGHT);
-        let places_defs: Vec<PlacesItemDef> = self
-            .places
-            .iter()
-            .map(|p| PlacesItemDef {
-                name: String::from(p.name),
-                path: String::from(p.path),
-                icon: String::from(p.icon),
-            })
-            .collect();
-        PlacesSidebar::render(
-            surf,
-            fonts,
-            theme,
-            0,
-            content_y,
-            PLACES_WIDTH,
-            content_h,
-            "PLACES",
-            &places_defs,
-            &self.current_path,
-        );
-
-        // 3. Main Content View
-        let content_x = PLACES_WIDTH as i32;
-        let content_w = sw.saturating_sub(PLACES_WIDTH);
-
-        match self.view_mode {
-            ViewMode::List => {
-                let list_defs: Vec<ListViewItemDef> = self
-                    .items
-                    .iter()
-                    .map(|item| ListViewItemDef {
-                        icon: String::from(item.icon),
-                        name: item.name.clone(),
-                        size_str: item.formatted_size(),
-                        kind_str: String::from(if item.is_dir { "Folder" } else { "File" }),
-                        is_dir: item.is_dir,
-                    })
-                    .collect();
-                ListView::render(
-                    surf,
-                    fonts,
-                    theme,
-                    content_x,
-                    content_y,
-                    content_w,
-                    content_h,
-                    &list_defs,
-                    Some(self.selected_index),
-                );
-            }
-            ViewMode::Grid => {
-                let grid_defs: Vec<GridItemDef> = self
-                    .items
-                    .iter()
-                    .map(|item| GridItemDef {
-                        icon: String::from(item.icon),
-                        name: item.name.clone(),
-                        is_dir: item.is_dir,
-                    })
-                    .collect();
-                GridView::render(
-                    surf,
-                    fonts,
-                    theme,
-                    content_x,
-                    content_y,
-                    content_w,
-                    content_h,
-                    &grid_defs,
-                    Some(self.selected_index),
-                );
-            }
-            ViewMode::Columns => {
-                views::columns::render(
-                    surf,
-                    fonts,
-                    &self.items,
-                    self.selected_index,
-                    views::ContentRect {
-                        x: content_x,
-                        y: content_y,
-                        w: content_w,
-                        h: content_h,
-                    },
-                    views::ViewPalette {
-                        bg: theme.bg(),
-                        fg: theme.text_primary(),
-                        accent: theme.accent(),
-                        border: theme.border(),
-                    },
-                );
-            }
-        }
-
-        // 4. Status Bar Component (Bottom 24 DIP): listing summary, prompt or operation result.
-        let status_y = sh as i32 - STATUS_HEIGHT as i32;
-        StatusBar::render(
-            surf,
-            fonts,
-            theme,
-            status_y,
-            sw,
-            STATUS_HEIGHT,
-            &self.status_message,
-        );
-        preview::render(surf, fonts, &self.quick_look, sw, sh);
-        surf.damage_all();
-    }
-}
 
 /// Keys while the path/name prompt is open. Returns whether the prompt consumed the key.
 fn prompt_key<F: FileSystem>(
@@ -372,57 +228,25 @@ fn cell_main() {
                     ) {
                         continue;
                     }
-                    // Check toolbar view mode SegmentedControl
-                    let btn_start_x = app.width as i32 - 180;
-                    if let Some(idx) =
-                        SegmentedControl::hit_test(cursor_x, cursor_y, btn_start_x, 8, 54, 28, 3)
-                    {
+                    if let Some(idx) = layout::view_switch(app.width).hit(cursor_x, cursor_y) {
                         let new_mode = match idx {
                             0 => ViewMode::List,
                             1 => ViewMode::Grid,
                             _ => ViewMode::Columns,
                         };
                         app.switch_view_mode(new_mode);
-                    }
-
-                    // Check Places sidebar
-                    if let Some(target_path) =
+                    } else if layout::split_button(app.width)
+                        .hit(cursor_x, cursor_y)
+                        .is_some()
+                    {
+                        app.toggle_split_pane();
+                    } else if let Some(target_path) =
                         views::places::handle_click(&app.places, cursor_x, cursor_y)
                     {
+                        // Places open in the focused pane.
                         app.load_directory(target_path);
-                    }
-
-                    // Check Main Content Area
-                    let content_x = PLACES_WIDTH as i32;
-                    let content_y = TOOLBAR_HEIGHT as i32;
-                    let content_w = app.width.saturating_sub(PLACES_WIDTH);
-                    let clicked_idx = match app.view_mode {
-                        ViewMode::List => ListView::hit_test(
-                            cursor_x,
-                            cursor_y,
-                            content_x,
-                            content_y,
-                            content_w,
-                            app.items.len(),
-                        ),
-                        ViewMode::Grid => GridView::hit_test(
-                            cursor_x,
-                            cursor_y,
-                            content_x,
-                            content_y,
-                            content_w,
-                            app.items.len(),
-                        ),
-                        ViewMode::Columns => views::columns::handle_click(
-                            app.items.len(),
-                            content_x,
-                            content_y,
-                            cursor_x,
-                            cursor_y,
-                        ),
-                    };
-                    if let Some(idx) = clicked_idx {
-                        app.selected_index = idx;
+                    } else {
+                        app.click_listing(cursor_x, cursor_y);
                     }
                 }
                 _ => {}
@@ -451,15 +275,25 @@ fn dispatch_launch_intent(intent: &api::services::mime::LaunchIntent) {
     ostd::io::print(" app=");
     ostd::io::println(intent.app_binary);
 
-    let spawn_target = if intent.action == api::services::mime::FileAction::Run
+    let spawned = if intent.action == api::services::mime::FileAction::Run
         && intent.target_path.starts_with("/bin/")
     {
-        &intent.target_path
+        sys_spawn_from_path(&intent.target_path)
     } else {
-        intent.app_binary
+        // The handler gets the target as argv[0]. A rejected spawn discards the
+        // staged argv, so stage it again before the VFS-route fallback.
+        let argv = core::slice::from_ref(&intent.target_path);
+        if !ostd::set_spawn_argv(argv) {
+            ostd::io::println("[files] ERROR: launch target exceeds the argv transport limit.");
+            return;
+        }
+        let mut spawned = sys_spawn_from_path_raw(intent.app_binary);
+        if matches!(spawned, SyscallResult::Err(_)) && ostd::set_spawn_argv(argv) {
+            spawned = sys_spawn_from_path(intent.app_binary);
+        }
+        spawned
     };
-
-    match sys_spawn_from_path(spawn_target) {
+    match spawned {
         SyscallResult::Ok(tid) => {
             ostd::io::println(&format!("[files] Spawned application PID {}", tid));
         }
@@ -530,7 +364,7 @@ mod tests {
 
     #[test]
     fn test_mouse_click_hit_testing() {
-        let app = sample();
+        let mut app = sample();
 
         // Click on Places item (e.g. Applications /bin at y=104)
         let place_clicked = views::places::handle_click(&app.places, 50, 110);
@@ -540,39 +374,22 @@ mod tests {
         let place_miss = views::places::handle_click(&app.places, 200, 110);
         assert_eq!(place_miss, None);
 
-        // Click on List row 0
-        let content_x = PLACES_WIDTH as i32;
-        let content_y = TOOLBAR_HEIGHT as i32;
-        let content_w = 800 - PLACES_WIDTH;
-        let list_clicked = views::list::handle_click(
-            app.items.len(),
-            content_x,
-            content_y,
-            content_w,
-            content_x + 50,
-            content_y + 35,
-        );
-        assert_eq!(list_clicked, Some(0));
+        // The second listing entry (after "..") in each view mode, unsplit: the content
+        // area starts right of Places (x 160) and under the toolbar (y 44).
+        let content = layout::content_rect(800, 600);
+        for (mode, x, y) in [
+            (ViewMode::List, 50, 28 + 32 + 5),
+            (ViewMode::Grid, 12 + 116 + 5, 12 + 5),
+            (ViewMode::Columns, 30, 28 + 5),
+        ] {
+            app.switch_view_mode(mode);
+            app.selected_index = 0;
+            assert!(app.click_listing(content.x + x, content.y + y));
+            assert_eq!(app.selected_index, 1, "{mode:?}");
+        }
 
-        // Click on Grid item 0
-        let grid_clicked = views::grid::handle_click(
-            app.items.len(),
-            content_x,
-            content_y,
-            content_w,
-            content_x + 30,
-            content_y + 30,
-        );
-        assert_eq!(grid_clicked, Some(0));
-
-        // Click on Columns item 0
-        let col_clicked = views::columns::handle_click(
-            app.items.len(),
-            content_x,
-            content_y,
-            content_x + 30,
-            content_y + 10,
-        );
-        assert_eq!(col_clicked, Some(0));
+        // Toolbar buttons are found where they are drawn.
+        assert_eq!(layout::view_switch(800).hit(800 - 180 + 60, 20), Some(1));
+        assert_eq!(layout::split_button(800).hit(800 - 180 - 30, 20), Some(0));
     }
 }
