@@ -1,8 +1,8 @@
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
 use ostd::syscall::sys_send;
 use smoltcp::{
-    iface::{Interface, SocketSet},
-    socket::udp,
+    iface::{Interface, SocketHandle, SocketSet},
+    socket::{udp, Socket},
     wire::{IpAddress, IpEndpoint},
 };
 
@@ -14,6 +14,38 @@ use crate::{
     socket_table::{SocketOwner, SocketTable},
     stack_entropy::next_ephemeral_port,
 };
+
+/// Cursor draws an unbound-port search may spend before it gives up. Every draw
+/// advances the cursor by at least one port, so this covers over a thousand
+/// distinct ports of the dynamic range.
+const EPHEMERAL_PORT_DRAWS: usize = 1024;
+
+/// A port from `draw` (the service's dynamic-range cursor, never a well-known
+/// port) that no UDP socket in `sockets` is bound to, or `None` when every draw
+/// was taken.
+pub(super) fn unbound_udp_port(
+    sockets: &SocketSet<'_>,
+    mut draw: impl FnMut() -> u16,
+) -> Option<u16> {
+    (0..EPHEMERAL_PORT_DRAWS).map(|_| draw()).find(|&port| {
+        !sockets
+            .iter()
+            .any(|(_, socket)| matches!(socket, Socket::Udp(s) if s.endpoint().port == port))
+    })
+}
+
+/// Standard UDP client behaviour (annex S2-N, amendment 2026-11-10): the first
+/// send on an unbound socket binds it to an unused ephemeral port, so replies to
+/// that port reach this socket. This needs only the Connect right `UdpSend` was
+/// admitted with; choosing a port, a well-known one included, stays the
+/// Listen-gated `UdpBind`.
+fn ensure_client_bound(sockets: &mut SocketSet<'_>, handle: SocketHandle) -> bool {
+    if sockets.get::<udp::Socket>(handle).is_open() {
+        return true;
+    }
+    unbound_udp_port(sockets, next_ephemeral_port)
+        .is_some_and(|port| sockets.get_mut::<udp::Socket>(handle).bind(port).is_ok())
+}
 
 pub(crate) fn handle_udp_request(
     req: &NetRequest<'_>,
@@ -56,14 +88,13 @@ pub(crate) fn handle_udp_request(
         NetRequest::UdpBind { cap_id, port } => {
             let cap = *cap_id as u64;
             let port = if *port == 0 {
-                next_ephemeral_port()
+                unbound_udp_port(sockets, next_ephemeral_port)
             } else {
-                *port
+                Some(*port)
             };
-            let ok = if let Some(h) = table.get(cap, owner) {
-                sockets.get_mut::<udp::Socket>(h).bind(port).is_ok()
-            } else {
-                false
+            let ok = match (table.get(cap, owner), port) {
+                (Some(h), Some(port)) => sockets.get_mut::<udp::Socket>(h).bind(port).is_ok(),
+                _ => false,
             };
             if ok {
                 table.set_state(cap, SocketState::Listening);
@@ -81,19 +112,18 @@ pub(crate) fn handle_udp_request(
         } => {
             let cap = *cap_id as u64;
             let ep = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), *port);
-            let n = if let Some(h) = table.get(cap, owner) {
-                if sockets
-                    .get_mut::<udp::Socket>(h)
-                    .send_slice(data, ep)
-                    .is_ok()
+            let n = match table.get(cap, owner) {
+                Some(h)
+                    if ensure_client_bound(sockets, h)
+                        && sockets
+                            .get_mut::<udp::Socket>(h)
+                            .send_slice(data, ep)
+                            .is_ok() =>
                 {
                     iface.poll(now_instant(), device, sockets);
                     data.len()
-                } else {
-                    0
                 }
-            } else {
-                0
+                _ => 0,
             };
             send_typed(sender, R::Data(&(n as u32).to_le_bytes()));
             true

@@ -584,6 +584,11 @@ if (Test-Path $mqtt_bin)            { $kfs_args += @($mqtt_bin,            "/bin
 if (Test-Path $httpd_bin)           { $kfs_args += @($httpd_bin,           "/bin/httpd") }
 if (Test-Path $tier2_smoke_bin)     { $kfs_args += @($tier2_smoke_bin,     "/bin/tier2-smoke") }
 if (Test-Path $tier2_exploit_bin)   { $kfs_args += @($tier2_exploit_bin,   "/bin/tier2-exploit") }
+# `/bin/lua-net` is the same signed file as `/bin/lua` at a second path: its
+# reviewed launch edge carries NET_CLIENT, while `/bin/lua` keeps no network right
+# (D-N3; user decision 2026-11-10). Like httpd, the ELF-route fallback refuses a
+# network edge, so VIFS1 is its only source.
+if ($lua_bin)                       { $kfs_args += @($lua_bin,             "/bin/lua-net") }
 if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
     $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
 }

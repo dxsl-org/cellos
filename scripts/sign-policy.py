@@ -203,6 +203,9 @@ DEV_POLICY = [
     ("/bin/mqtt",        0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
+    # User decision 2026-11-10: the Lua runtime's second install path (same signed
+    # file as /bin/lua, which has no row and no network right, D-N3).
+    ("/bin/lua-net",     0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/desktop",     0, 0, 0, 0, 0, 0,     0, 0, 0),

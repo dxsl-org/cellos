@@ -88,7 +88,12 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         "/bin/curl" | "/bin/wget" | "/bin/mqtt" | "/bin/ocel" | "/bin/llm-gateway"
         | "/bin/https-demo"
         // The POSIX ledger's network witness (`socket`/`connect`/`gethostbyname`).
-        | "/bin/posix-shim-test" => NET_CLIENT,
+        | "/bin/posix-shim-test"
+        // The Lua runtime installed a second time (user decision 2026-11-10, annex
+        // S2-N §5 amendment): the same signed binary as `/bin/lua`, whose own row
+        // below keeps no network right (D-N3). Path route only, like every other
+        // network client: the caller-owned ELF route refuses a network ceiling.
+        | "/bin/lua-net" => NET_CLIENT,
         "/bin/nc" => NET_PEER,
         "/bin/httpd" => NET_LISTENER,
         "/bin/net-broker" => CapSet {

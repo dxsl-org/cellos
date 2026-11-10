@@ -816,6 +816,8 @@ pub enum NetRequest<'a> {
         cap_id: u32,
     },
     UdpCreate,
+    /// Send one datagram. Needs the connect right; an unbound socket is first
+    /// bound to a free ephemeral port (49152–65535) so replies reach it.
     UdpSend {
         cap_id: u32,
         addr: [u8; 4],
@@ -832,7 +834,8 @@ pub enum NetRequest<'a> {
     SocketState {
         cap_id: u32,
     },
-    /// Bind a UDP socket to a local port.  Port 0 = auto-assign ephemeral.
+    /// Bind a UDP socket to a local port; needs the listen right (any port,
+    /// 0 included). Port 0 = auto-assign ephemeral.
     UdpBind {
         cap_id: u32,
         port: u16,

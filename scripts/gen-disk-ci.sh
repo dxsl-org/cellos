@@ -388,6 +388,11 @@ add_kfs "$REL/service-httpd"        "/bin/httpd"
 # from the shell as session domain children (ADR-0019 §2.1 amendment).
 add_kfs "$REL/tier2-smoke"          "/bin/tier2-smoke"
 add_kfs "$REL/tier2-exploit"        "/bin/tier2-exploit"
+# Same signed file as /bin/lua at a second path: its reviewed edge carries
+# NET_CLIENT while /bin/lua keeps none (D-N3; user decision 2026-11-10). Like
+# httpd, the ELF-route fallback refuses a network edge, so VIFS1 is its only
+# source. Omitted with /bin/lua when the optional Lua cell did not build.
+add_kfs "$REL/lua"                  "/bin/lua-net"
 if [[ "${CELLOS_INCLUDE_CAPACITY_PROBE:-0}" == "1" ]]; then
     add_kfs "$REL/capacity-probe"   "/bin/capacity-probe"
     # Heavy cells for the D5 gate's M-resident baselines; same guard as the probe

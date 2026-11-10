@@ -88,3 +88,43 @@ fn test_handlers_cross_owner_tcp_and_udp_rejection() {
     );
     assert_eq!(table.get(udp_cap, owner_b), None);
 }
+
+fn small_udp_socket() -> smoltcp_udp::Socket<'static> {
+    smoltcp_udp::Socket::new(
+        smoltcp_udp::PacketBuffer::new(
+            alloc::vec![smoltcp_udp::PacketMetadata::EMPTY; 2],
+            alloc::vec![0u8; 128],
+        ),
+        smoltcp_udp::PacketBuffer::new(
+            alloc::vec![smoltcp_udp::PacketMetadata::EMPTY; 2],
+            alloc::vec![0u8; 128],
+        ),
+    )
+}
+
+/// The UDP auto-bind picker skips every port a UDP socket already holds and
+/// gives up, rather than sharing a port, when every draw is taken.
+#[test]
+fn unbound_udp_port_skips_ports_already_bound() {
+    let mut storage = [SocketStorage::EMPTY; 4];
+    let mut sockets = SocketSet::new(&mut storage[..]);
+    let mut held = small_udp_socket();
+    held.bind(50000).expect("bind");
+    sockets.add(held);
+    sockets.add(small_udp_socket()); // unbound: holds no port
+
+    let mut draws = [50000u16, 50000, 50001].into_iter();
+    assert_eq!(
+        super::udp::unbound_udp_port(&sockets, || draws.next().unwrap_or(50000)),
+        Some(50001)
+    );
+    let mut calls = 0usize;
+    assert_eq!(
+        super::udp::unbound_udp_port(&sockets, || {
+            calls += 1;
+            50000
+        }),
+        None
+    );
+    assert!(calls > 1, "the search is bounded but retries");
+}

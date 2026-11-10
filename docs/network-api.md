@@ -144,12 +144,19 @@ SOCKET_TCP → CapId (N)
 ```
 SOCKET_UDP → CapId (N)
      │
-     ├─ BIND(N, port)           → 0x00 ok (optional, assigns ephemeral port if port=0)
+     ├─ BIND(N, port)           → 0x00 ok (optional, assigns ephemeral port if port=0; needs the Listen right)
      ├─ SENDTO(N, addr, port, data) → bytes_sent (u32 LE)
      ├─ RECVFROM(N, buf_len)    → [src_addr:4][src_port:2 LE][data]
      │
      └─ CLOSE(N)                → ok
 ```
+
+The first SENDTO on an unbound socket binds it to an unused port from the
+dynamic range (49152–65535; never a well-known port, never one another UDP
+socket holds), and datagrams addressed to that port are delivered to it. This is
+ordinary UDP client behaviour and needs only the Connect right SENDTO is admitted
+with; choosing a port with BIND stays Listen-gated (annex S2-N, amendment
+2026-11-10).
 
 **CapId Allocation**: CapId 0 is reserved for errors. Maximum 16 concurrent user
 sockets; the socket set additionally holds the DHCP and DNS management sockets
@@ -279,7 +286,9 @@ never silently read as an address.
 `vnet.connect/send/recv/close` and `vnet.udp_socket/udp_bind/udp_send/udp_recv`
 also use typed net-service IPC. Replies are sender-checked by `NetRef`, and
 TCP/UDP receive data is binary-safe (no NUL scanning). Lua has no direct
-network device access.
+network device access. `/bin/lua` holds no network right (D-N3); the same
+binary installed as `/bin/lua-net` holds the client pair (resolve + connect: DNS,
+TCP connect, UDP send and the replies to its auto-bound port; no `udp_bind`).
 
 **Python status**: native MicroPython network bindings are historical only; Python workloads belong in the Tier 3 Linux VM path.
 

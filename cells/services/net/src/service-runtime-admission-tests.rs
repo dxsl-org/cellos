@@ -410,3 +410,164 @@ fn ungated_requests_on_a_foreign_cap_keep_their_existing_error() {
         assert_eq!(net.table.get(udp_cap, OWNER), Some(udp_handle));
     }
 }
+
+/// The dynamic range (RFC 6335) the auto-bind draws from.
+const DYNAMIC_PORTS: core::ops::RangeInclusive<u16> = 49152..=u16::MAX;
+
+/// An Ethernet/IPv4/UDP frame from 10.0.2.2:`src_port` to the service's address.
+fn udp_frame_to_service(src_port: u16, dst_port: u16, payload: &[u8]) -> alloc::boxed::Box<[u8]> {
+    use smoltcp::phy::ChecksumCapabilities;
+    use smoltcp::wire::{
+        EthernetFrame, EthernetProtocol, EthernetRepr, IpProtocol, Ipv4Address, Ipv4Packet,
+        Ipv4Repr, UdpPacket, UdpRepr,
+    };
+    let src = Ipv4Address::new(10, 0, 2, 2);
+    let dst = Ipv4Address::from_bytes(&LOCAL_IP);
+    let udp = UdpRepr { src_port, dst_port };
+    let ip = Ipv4Repr {
+        src_addr: src,
+        dst_addr: dst,
+        next_header: IpProtocol::Udp,
+        payload_len: udp.header_len() + payload.len(),
+        hop_limit: 64,
+    };
+    let eth = EthernetRepr {
+        src_addr: EthernetAddress([0x52, 0x55, 10, 0, 2, 2]),
+        dst_addr: MAC,
+        ethertype: EthernetProtocol::Ipv4,
+    };
+    let mut buf = alloc::vec![0u8; eth.buffer_len() + ip.buffer_len() + ip.payload_len];
+    let mut frame = EthernetFrame::new_unchecked(&mut buf[..]);
+    eth.emit(&mut frame);
+    let mut packet = Ipv4Packet::new_unchecked(frame.payload_mut());
+    ip.emit(&mut packet, &ChecksumCapabilities::default());
+    let mut datagram = UdpPacket::new_unchecked(packet.payload_mut());
+    udp.emit(
+        &mut datagram,
+        &src.into(),
+        &dst.into(),
+        payload.len(),
+        |out| out.copy_from_slice(payload),
+        &ChecksumCapabilities::default(),
+    );
+    buf.into_boxed_slice()
+}
+
+/// Annex S2-N amendment (2026-11-10): a Connect-only client's first UdpSend on
+/// an unbound socket binds it to an unused dynamic-range port, and a second send
+/// keeps that port. Choosing a port with UdpBind still needs Listen.
+#[test]
+fn udp_send_auto_binds_a_connect_only_client_to_an_ephemeral_port() {
+    let mut net = Net::new();
+    let (cap, handle) = net.own_udp(OWNER);
+    assert!(!net.sockets.get::<udp::Socket>(handle).is_open());
+
+    let send = NetRequest::UdpSend {
+        cap_id: cap as u32,
+        addr: [10, 0, 2, 2],
+        port: 9,
+        data: b"ping",
+    };
+    net.settle();
+    let frames = net.device.tx_queue_len();
+    assert!(net.typed(OWNER, CALLER_FLAG_NET_CONNECT, &send));
+    let socket = net.sockets.get::<udp::Socket>(handle);
+    assert!(socket.is_open(), "the first send binds the socket");
+    let port = socket.endpoint().port;
+    assert!(DYNAMIC_PORTS.contains(&port), "auto-bound port {port}");
+    assert!(
+        socket.endpoint().addr.is_none(),
+        "bound to every local address"
+    );
+    assert!(
+        net.device.tx_queue_len() > frames,
+        "the datagram reaches the wire"
+    );
+    assert_ne!(
+        net.table.get_state(cap, OWNER),
+        Some(SocketState::Listening),
+        "an auto-bound client is not a listener"
+    );
+
+    assert!(net.typed(OWNER, CALLER_FLAG_NET_CONNECT, &send));
+    assert_eq!(net.sockets.get::<udp::Socket>(handle).endpoint().port, port);
+
+    // An explicit bind, a well-known port or port 0 alike, is still Listen-gated.
+    let (other_cap, other) = net.own_udp(OWNER);
+    for bind_port in [53, 0, port] {
+        let bind = NetRequest::UdpBind {
+            cap_id: other_cap as u32,
+            port: bind_port,
+        };
+        assert_denied_without_effect(&mut net, &bind, CALLER_FLAG_NET_LISTEN);
+        assert!(!net.typed(OWNER, CALLER_FLAG_NET_CONNECT, &bind));
+        assert!(!net.sockets.get::<udp::Socket>(other).is_open());
+    }
+}
+
+/// The reply a peer sends to the auto-bound port is delivered to that socket,
+/// and the ungated UdpRecv drains it for its owner.
+#[test]
+fn reply_to_the_auto_bound_port_reaches_the_client_socket() {
+    let mut net = Net::new();
+    let (cap, handle) = net.own_udp(OWNER);
+    assert!(net.typed(
+        OWNER,
+        CALLER_FLAG_NET_CONNECT,
+        &NetRequest::UdpSend {
+            cap_id: cap as u32,
+            addr: [10, 0, 2, 2],
+            port: 7000,
+            data: b"C\0D",
+        }
+    ));
+    let port = net.sockets.get::<udp::Socket>(handle).endpoint().port;
+
+    net.device
+        .push_rx(udp_frame_to_service(7000, port, b"S\0T"));
+    net.settle();
+    let socket = net.sockets.get_mut::<udp::Socket>(handle);
+    assert!(socket.can_recv(), "the reply was delivered to the socket");
+    let mut peeked = [0u8; 8];
+    let (n, meta) = socket.peek_slice(&mut peeked).expect("queued reply");
+    assert_eq!(&peeked[..n], b"S\0T");
+    assert_eq!(meta.endpoint.port, 7000);
+
+    assert!(net.typed(
+        OWNER,
+        0,
+        &NetRequest::UdpRecv {
+            cap_id: cap as u32,
+            buf_len: 8,
+        }
+    ));
+    assert!(
+        !net.sockets.get::<udp::Socket>(handle).can_recv(),
+        "UdpRecv handed the datagram to its owner"
+    );
+}
+
+/// Auto-bind never hands out a port another UDP socket holds: every client gets
+/// its own port (the picker's skip rule is pinned in `handlers::tests`).
+#[test]
+fn auto_bind_never_reuses_a_bound_port() {
+    let mut net = Net::new();
+    let mut bound = alloc::vec::Vec::new();
+    for _ in 0..4 {
+        let (cap, handle) = net.own_udp(OWNER);
+        assert!(net.typed(
+            OWNER,
+            CALLER_FLAG_NET_CONNECT,
+            &NetRequest::UdpSend {
+                cap_id: cap as u32,
+                addr: [10, 0, 2, 2],
+                port: 9,
+                data: b"x",
+            }
+        ));
+        let port = net.sockets.get::<udp::Socket>(handle).endpoint().port;
+        assert!(DYNAMIC_PORTS.contains(&port));
+        assert!(!bound.contains(&port), "port {port} handed out twice");
+        bound.push(port);
+    }
+}

@@ -531,8 +531,10 @@ impl CapSet {
     /// Request the coarse network rights of the reviewed grant table (Phase 04
     /// S2-N annex §5) for `path`. Any path not listed requests none — that
     /// includes the shell, `/bin/lua`, `/bin/python` and the `/apps`, `/data/bin`,
-    /// `/home` sandbox. The request is still bounded by the launch/boot ceiling
-    /// and the operator policy like every other field.
+    /// `/home` sandbox. `/bin/lua-net`, the second install path of the Lua
+    /// runtime (user decision 2026-11-10), requests the client pair. The request
+    /// is still bounded by the launch/boot ceiling and the operator policy like
+    /// every other field.
     ///
     /// Kept out of `with_path_caps`' own body on purpose: `scripts/sign-policy.py`
     /// reads that body as the list of P-TRUST-minting paths, and these rights are
@@ -547,6 +549,7 @@ impl CapSet {
             | "/bin/https-demo"
             | "/bin/robot-demo"
             | "/bin/cellbox-ssh"
+            | "/bin/lua-net"
             | "/bin/posix-shim-test" => (true, true, false, false),
             "/bin/nc" | "/bin/net-broker" => (true, true, true, false),
             "/bin/httpd" | "/bin/sshd" => (false, false, true, false),
@@ -1046,6 +1049,7 @@ mod tests {
             "/bin/llm-gateway",
             "/bin/https-demo",
             "/bin/robot-demo",
+            "/bin/lua-net",
         ] {
             assert_eq!(net_rights(CapSet::EMPTY.with_path_caps(path)), rc, "{path}");
         }
@@ -1072,6 +1076,12 @@ mod tests {
             "/bin/cellbox",
             "/bin/lua",
             "/bin/python",
+            // `/bin/lua-net` is matched exactly: no prefix, suffix or sandbox copy.
+            "/bin/lua-net2",
+            "/bin/lua-net/",
+            "/apps/lua-net",
+            "/data/bin/lua-net",
+            "/home/user/lua-net",
             "/bin/net",
             "/bin/e1000",
             "/bin/e1000e",
@@ -1331,6 +1341,7 @@ mod tests {
             "/bin/config",
             "/bin/init",
             "/bin/lua",
+            "/bin/lua-net",
             "/bin/python",
             "/bin/terminal",
             "/bin/curl",

@@ -90,6 +90,7 @@ fn network_worker_edges_carry_only_their_grant() {
         ("/bin/https-demo", client),
         ("/bin/robot-demo", client),
         ("/bin/posix-shim-test", client),
+        ("/bin/lua-net", client),
         ("/bin/nc", (true, true, true, false)),
         ("/bin/net-broker", (true, true, true, false)),
         ("/bin/httpd", (false, false, true, false)),
@@ -149,6 +150,70 @@ fn network_worker_edges_carry_only_their_grant() {
             ..LEGACY
         }
     );
+}
+
+/// User decision 2026-11-10 (annex S2-N §5 amendment): `/bin/lua-net` is the
+/// same Lua binary installed a second time, and its reviewed ceiling is exactly
+/// `NET_CLIENT` (resolve + connect, no listen, no L2) on the kernel-resolved path
+/// route. The caller-owned ELF route is refused like every network client, so
+/// bytes labelled `/bin/lua-net` borrow nothing; `/bin/lua` keeps no network
+/// right on either route (D-N3 stays the default).
+#[test]
+fn lua_net_edge_is_exactly_net_client() {
+    let net_client = CapSet {
+        net_resolve: true,
+        net_connect: true,
+        ..LEGACY
+    };
+    let path = shell_edge(LaunchRoute::Path, "/bin/lua-net");
+    assert_eq!(path.child_ceiling, net_client);
+    let request = CapSet::EMPTY.with_path_caps("/bin/lua-net");
+    assert_eq!(request.intersect(path.child_ceiling), net_client);
+    assert_eq!(
+        authorize(
+            caller("cellbox", false, false),
+            LaunchRoute::Elf,
+            "/bin/lua-net"
+        ),
+        None,
+        "caller-owned ELF must not borrow the /bin/lua-net network right"
+    );
+    // The same bytes under the default name keep only the legacy rights.
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        let lua = shell_edge(route, "/bin/lua");
+        assert_eq!(lua.child_ceiling, LEGACY, "{route:?}");
+        assert_eq!(
+            net_rights(
+                CapSet::EMPTY
+                    .with_path_caps("/bin/lua")
+                    .intersect(lua.child_ceiling)
+            ),
+            (false, false, false, false),
+            "{route:?}"
+        );
+    }
+    // Every other caller that reaches the reviewed table sees the same row.
+    for name in ["desktop", "tool-spawn"] {
+        let edge = authorize(caller(name, true, false), LaunchRoute::Path, "/bin/lua-net")
+            .expect("reviewed table row");
+        assert_eq!(edge.child_ceiling, net_client, "{name}");
+    }
+    // Look-alike paths get no network row.
+    for target in ["/bin/lua-net2", "/bin/lua-net/", "/bin/luanet"] {
+        assert!(
+            authorize(caller("cellbox", false, false), LaunchRoute::Path, target).is_none(),
+            "{target}"
+        );
+    }
+    for target in ["/apps/lua-net", "/data/bin/lua-net", "/home/user/lua-net"] {
+        assert_eq!(
+            shell_edge(LaunchRoute::Path, target).child_ceiling,
+            CapSet::EMPTY
+        );
+    }
+    // A kernel-started copy has no boot row, exactly like `/bin/lua`.
+    assert_eq!(boot_ceiling::lookup("/bin/lua-net"), None);
+    assert_eq!(boot_ceiling::lookup("/bin/lua"), None);
 }
 
 /// Phase 09 D79-9 + KSSH K3: the second install path of the cellbox ELF is the
@@ -1037,6 +1102,7 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
         "/bin/llm-gateway",
         "/bin/https-demo",
         "/bin/posix-shim-test",
+        "/bin/lua-net",
     ] {
         rows.push((path, client));
     }

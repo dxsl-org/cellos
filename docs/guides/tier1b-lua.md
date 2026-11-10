@@ -93,15 +93,24 @@ All VFS operations return `nil` on error (no exceptions). Always check return va
 
 ---
 
-## Network (Not Available)
+## Network (`lua-net` only)
 
-The Lua Cell has **no network socket syscalls**. To send/receive data:
+`lua` holds **no network right** (annex S2-N decision D-N3): its `vnet` calls
+(`resolve`, `connect`, `udp_socket`, …) are refused by the net service and
+return `nil`. The same signed binary is also installed as `/bin/lua-net`, whose
+reviewed launch edge carries the outbound client rights (DNS + TCP/UDP connect,
+no listen, no raw frames; user decision 2026-11-10). Run a script that needs the
+network with:
 
-1. Write to VFS (files)
-2. Let another Cell read and forward via network
-3. Or use a named pipe / socket file (future)
+```bash
+lua-net /path/to/script.lua
+```
 
-This is the **no-network constraint** — it protects against malicious scripts.
+The right comes from the install path the kernel resolves, not from the script,
+so `lua` cannot gain it. `lua-net` cannot listen: `vnet.udp_bind` is refused,
+and the first `vnet.udp_send` on a socket binds it to an ephemeral port that
+receives the replies (`vnet.udp_recv`). `scripts/qemu-lua-vnet.py` runs one
+script under both names on RV64 QEMU.
 
 ---
 

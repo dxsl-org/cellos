@@ -286,7 +286,7 @@ pub fn run() -> bool {
             );
         }
     }
-    for path in ["/bin/cellbox-ssh", "/bin/kms-ssh-admin"] {
+    for path in ["/bin/cellbox-ssh", "/bin/kms-ssh-admin", "/bin/lua-net"] {
         if lookup(path).is_some() {
             ok = false;
             log::error!("[selftest] boot-ceiling: {} must have no boot row", path);
@@ -355,6 +355,42 @@ pub fn run() -> bool {
         log::error!(
             "[selftest] launch-profile: caller-owned ELF borrowed /bin/cellbox-ssh network right"
         );
+    }
+    // User decision 2026-11-10: the Lua runtime's second install path carries
+    // exactly the outbound client pair on the kernel-resolved route and nothing on
+    // the caller-owned ELF route, while `/bin/lua` keeps no network right (D-N3).
+    match authorize(SHELL, LaunchRoute::Path, "/bin/lua-net") {
+        Some(profile)
+            if profile.child_ceiling
+                == (CapSet {
+                    net_resolve: true,
+                    net_connect: true,
+                    ..CapSet::LEGACY_OBSERVE_MUTATE
+                }) => {}
+        _ => {
+            ok = false;
+            log::error!(
+                "[selftest] launch-profile: shell lost exact client-only /bin/lua-net edge"
+            );
+        }
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/lua-net").is_some() {
+        ok = false;
+        log::error!(
+            "[selftest] launch-profile: caller-owned ELF borrowed /bin/lua-net network right"
+        );
+    }
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        if !matches!(
+            authorize(SHELL, route, "/bin/lua"),
+            Some(profile) if profile.child_ceiling == CapSet::LEGACY_OBSERVE_MUTATE
+        ) {
+            ok = false;
+            log::error!(
+                "[selftest] launch-profile: /bin/lua edge is not exactly the legacy rights on {:?}",
+                route
+            );
+        }
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs-test").is_none() {
         ok = false;
