@@ -98,26 +98,35 @@ impl<S: TableStore> ClientVm<S> {
         pat: PatIndex,
     ) -> ViResult<()> {
         if range == 0
-            || range % PAGE_SIZE_4K != 0
-            || addr % PAGE_SIZE_4K != 0
-            || phys % PAGE_SIZE_4K != 0
+            || !range.is_multiple_of(PAGE_SIZE_4K)
+            || !addr.is_multiple_of(PAGE_SIZE_4K)
+            || !phys.is_multiple_of(PAGE_SIZE_4K)
+            || addr.checked_add(range).is_none()
+            || phys.checked_add(range).is_none()
         {
             return Err(ViError::InvalidArgument);
         }
 
         let pages = range / PAGE_SIZE_4K;
         for i in 0..pages {
-            let page_va = addr + i * PAGE_SIZE_4K;
-            let page_phys = phys + i * PAGE_SIZE_4K;
-
-            self.ppgtt
-                .map_4k(&mut self.store, page_va, page_phys, pat, writable)
-                .map_err(|e| match e {
+            let offset = i * PAGE_SIZE_4K;
+            let mapped =
+                self.ppgtt
+                    .map_4k(&mut self.store, addr + offset, phys + offset, pat, writable);
+            if let Err(e) = mapped {
+                // Undo this call's pages so a refused bind leaves no untracked leaves behind.
+                for done in 0..i {
+                    let _ = self
+                        .ppgtt
+                        .unmap_4k(&mut self.store, addr + done * PAGE_SIZE_4K);
+                }
+                return Err(match e {
                     MapError::BadVirtual => ViError::InvalidArgument,
                     MapError::AlreadyMapped => ViError::AlreadyExists,
                     MapError::OutOfTables => ViError::OutOfMemory,
                     _ => ViError::InvalidInput,
-                })?;
+                });
+            }
         }
 
         self.mappings.push(ClientMapping {
@@ -133,9 +142,10 @@ impl<S: TableStore> ClientVm<S> {
 
     /// Unbind a mapped range from the GPU virtual address space.
     pub fn unbind_range(&mut self, addr: u64, range: u64) -> ViResult<()> {
-        if range == 0 || range % PAGE_SIZE_4K != 0 || addr % PAGE_SIZE_4K != 0 {
+        if range == 0 || !range.is_multiple_of(PAGE_SIZE_4K) || !addr.is_multiple_of(PAGE_SIZE_4K) {
             return Err(ViError::InvalidArgument);
         }
+        let end = addr.checked_add(range).ok_or(ViError::InvalidArgument)?;
 
         let pages = range / PAGE_SIZE_4K;
         for i in 0..pages {
@@ -143,8 +153,32 @@ impl<S: TableStore> ClientVm<S> {
             let _ = self.ppgtt.unmap_4k(&mut self.store, page_va);
         }
 
-        self.mappings
-            .retain(|m| !(m.addr == addr && m.range == range));
+        // Keep the metadata in step with the leaves when only part of a binding is removed.
+        let mut i = 0;
+        while i < self.mappings.len() {
+            let m = &mut self.mappings[i];
+            let m_end = m.addr + m.range;
+            if m_end <= addr || m.addr >= end {
+                i += 1;
+            } else if m.addr < addr {
+                let tail = (m_end > end).then(|| ClientMapping {
+                    addr: end,
+                    phys: m.phys + (end - m.addr),
+                    range: m_end - end,
+                    ..m.clone()
+                });
+                m.range = addr - m.addr;
+                self.mappings.extend(tail);
+                i += 1;
+            } else if m_end > end {
+                m.phys += end - m.addr;
+                m.range = m_end - end;
+                m.addr = end;
+                i += 1;
+            } else {
+                self.mappings.swap_remove(i);
+            }
+        }
         Ok(())
     }
 

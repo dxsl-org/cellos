@@ -176,7 +176,6 @@ pub struct BindOp {
 }
 
 /// A simulated xe backend session representing one client's connection.
-#[derive(Default)]
 pub struct XeSession {
     next_gem_handle: u32,
     next_vm_id: u32,
@@ -185,6 +184,13 @@ pub struct XeSession {
     pub gem_objects: BTreeMap<u32, GemObject>,
     pub vms: BTreeMap<u32, GpuVm>,
     pub exec_queues: BTreeMap<u32, ExecQueue>,
+}
+
+// Not derived: ids start at 1 because 0 means "no object" in the uAPI (e.g. a NULL binding).
+impl Default for XeSession {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl XeSession {
@@ -208,7 +214,7 @@ impl XeSession {
         vm_id: u32,
         cpu_caching: u16,
     ) -> Result<u32, XeError> {
-        if size == 0 || size % PAGE_SIZE_4K != 0 {
+        if size == 0 || !size.is_multiple_of(PAGE_SIZE_4K) {
             return Err(XeError::Invalid);
         }
         if vm_id != 0 && !self.vms.contains_key(&vm_id) {
@@ -244,8 +250,15 @@ impl XeSession {
     }
 
     /// `DRM_IOCTL_GEM_CLOSE`
+    ///
+    /// Nothing outside the handle table keeps the object (or its export lease) alive here, so
+    /// its mappings are revoked with the handle; otherwise the GPU could keep reaching a lease
+    /// that [`Self::on_client_death`] no longer reports.
     pub fn gem_close(&mut self, handle: u32) -> Result<(), XeError> {
         self.gem_objects.remove(&handle).ok_or(XeError::NoEntry)?;
+        for vm in self.vms.values_mut() {
+            vm.mappings.retain(|m| m.gem_handle != handle);
+        }
         Ok(())
     }
 
@@ -266,46 +279,20 @@ impl XeSession {
     }
 
     /// `DRM_IOCTL_XE_VM_BIND`
+    ///
+    /// Every op is validated before any is applied, so a refused array leaves the VM unchanged.
     pub fn vm_bind(&mut self, vm_id: u32, ops: &[BindOp]) -> Result<(), XeError> {
+        if !self.vms.contains_key(&vm_id) {
+            return Err(XeError::NoEntry);
+        }
+        for op in ops {
+            self.validate_bind_op(vm_id, op)?;
+        }
         let vm = self.vms.get_mut(&vm_id).ok_or(XeError::NoEntry)?;
-
         for op in ops {
             match op.op {
                 XE_VM_BIND_OP_MAP => {
-                    if op.range == 0
-                        || op.range % PAGE_SIZE_4K as u64 != 0
-                        || op.addr % PAGE_SIZE_4K as u64 != 0
-                    {
-                        return Err(XeError::Invalid);
-                    }
-                    let end = op.addr.checked_add(op.range).ok_or(XeError::Invalid)?;
-                    if end > MAX_VA {
-                        return Err(XeError::Invalid);
-                    }
-
-                    if op.flags & XE_VM_BIND_FLAG_NULL == 0 {
-                        let bo = self
-                            .gem_objects
-                            .get(&op.gem_handle)
-                            .ok_or(XeError::NoEntry)?;
-                        if bo.vm_id != 0 && bo.vm_id != vm_id {
-                            return Err(XeError::Invalid);
-                        }
-                        let bo_end = op
-                            .obj_offset
-                            .checked_add(op.range)
-                            .ok_or(XeError::Invalid)?;
-                        if bo_end > bo.size as u64 {
-                            return Err(XeError::Invalid);
-                        }
-                    }
-
-                    // Remove overlapping mappings
-                    vm.mappings.retain(|m| {
-                        let m_end = m.addr.saturating_add(m.range);
-                        !(op.addr < m_end && end > m.addr)
-                    });
-
+                    punch_hole(&mut vm.mappings, op.addr, op.addr + op.range);
                     vm.mappings.push(VmMapping {
                         addr: op.addr,
                         range: op.range,
@@ -315,27 +302,71 @@ impl XeSession {
                         flags: op.flags,
                     });
                 }
-                XE_VM_BIND_OP_UNMAP => {
-                    if op.range == 0
-                        || op.range % PAGE_SIZE_4K as u64 != 0
-                        || op.addr % PAGE_SIZE_4K as u64 != 0
-                    {
-                        return Err(XeError::Invalid);
-                    }
-                    vm.mappings
-                        .retain(|m| !(m.addr == op.addr && m.range == op.range));
-                }
-                XE_VM_BIND_OP_UNMAP_ALL => {
-                    if op.gem_handle != 0 {
-                        vm.mappings.retain(|m| m.gem_handle != op.gem_handle);
-                    } else {
-                        vm.mappings.clear();
-                    }
-                }
-                _ => return Err(XeError::NotSupported),
+                XE_VM_BIND_OP_UNMAP => punch_hole(&mut vm.mappings, op.addr, op.addr + op.range),
+                _ => vm.mappings.retain(|m| m.gem_handle != op.gem_handle),
             }
         }
         Ok(())
+    }
+
+    /// Argument rules of `vm_bind_ioctl_check_args` in `xe_vm.c` for the supported ops.
+    fn validate_bind_op(&self, vm_id: u32, op: &BindOp) -> Result<(), XeError> {
+        const SUPPORTED_FLAGS: u32 = XE_VM_BIND_FLAG_READONLY
+            | XE_VM_BIND_FLAG_IMMEDIATE
+            | XE_VM_BIND_FLAG_NULL
+            | XE_VM_BIND_FLAG_DUMPABLE;
+        let is_null = op.flags & XE_VM_BIND_FLAG_NULL != 0;
+        if op.flags & !SUPPORTED_FLAGS != 0 || (is_null && op.op != XE_VM_BIND_OP_MAP) {
+            return Err(XeError::Invalid);
+        }
+        match op.op {
+            XE_VM_BIND_OP_MAP | XE_VM_BIND_OP_UNMAP => {
+                let page = PAGE_SIZE_4K as u64;
+                if op.range == 0
+                    || !op.range.is_multiple_of(page)
+                    || !op.addr.is_multiple_of(page)
+                    || !op.obj_offset.is_multiple_of(page)
+                {
+                    return Err(XeError::Invalid);
+                }
+                // `end` is exclusive: the last page below 2^48 is mappable.
+                let end = op.addr.checked_add(op.range).ok_or(XeError::Invalid)?;
+                if end - 1 > MAX_VA {
+                    return Err(XeError::Invalid);
+                }
+                if is_null && (op.gem_handle != 0 || op.obj_offset != 0) {
+                    return Err(XeError::Invalid);
+                }
+                if op.op == XE_VM_BIND_OP_UNMAP || is_null {
+                    return Ok(());
+                }
+                let bo = self
+                    .gem_objects
+                    .get(&op.gem_handle)
+                    .ok_or(XeError::NoEntry)?;
+                if bo.vm_id != 0 && bo.vm_id != vm_id {
+                    return Err(XeError::Invalid);
+                }
+                let bo_end = op
+                    .obj_offset
+                    .checked_add(op.range)
+                    .ok_or(XeError::Invalid)?;
+                if bo_end > bo.size as u64 {
+                    return Err(XeError::Invalid);
+                }
+                Ok(())
+            }
+            XE_VM_BIND_OP_UNMAP_ALL => {
+                if op.gem_handle == 0 || op.addr != 0 || op.range != 0 {
+                    return Err(XeError::Invalid);
+                }
+                if !self.gem_objects.contains_key(&op.gem_handle) {
+                    return Err(XeError::NoEntry);
+                }
+                Ok(())
+            }
+            _ => Err(XeError::NotSupported),
+        }
     }
 
     /// `DRM_IOCTL_XE_EXEC_QUEUE_CREATE`
@@ -347,6 +378,9 @@ impl XeSession {
     ) -> Result<u32, XeError> {
         if !self.vms.contains_key(&vm_id) {
             return Err(XeError::NoEntry);
+        }
+        if engine_class > XE_ENGINE_CLASS_VM_BIND {
+            return Err(XeError::Invalid);
         }
         if priority > XE_EXEC_QUEUE_PRIORITY_HIGH {
             return Err(XeError::Invalid);
@@ -395,12 +429,10 @@ impl XeSession {
             return Err(XeError::Canceled);
         }
 
-        // Validate batch buffer is mapped in the queue's VM (if batch_addr is nonzero)
-        if batch_addr != 0 {
-            let vm = self.vms.get(&q.vm_id).ok_or(XeError::NoEntry)?;
-            if !vm.is_mapped(batch_addr, PAGE_SIZE_4K as u64) {
-                return Err(XeError::Invalid);
-            }
+        // Address 0 is a valid VA, so it gets no exemption from the mapping check.
+        let vm = self.vms.get(&q.vm_id).ok_or(XeError::NoEntry)?;
+        if !vm.is_mapped(batch_addr, PAGE_SIZE_4K as u64) {
+            return Err(XeError::Invalid);
         }
 
         let job_id = self.next_job_id;
@@ -490,6 +522,37 @@ impl XeSession {
 
         self.gem_objects.clear();
         revoked_exports
+    }
+}
+
+/// Remove `[start, end)` from `mappings`, trimming or splitting partially covered ones the way
+/// GPUVA remap does, so a partial unmap never leaves the covered pages reachable.
+fn punch_hole(mappings: &mut Vec<VmMapping>, start: u64, end: u64) {
+    let mut i = 0;
+    while i < mappings.len() {
+        let m = &mut mappings[i];
+        let m_end = m.addr + m.range;
+        if m_end <= start || m.addr >= end {
+            i += 1;
+        } else if m.addr < start {
+            let tail = (m_end > end).then(|| VmMapping {
+                addr: end,
+                range: m_end - end,
+                obj_offset: m.obj_offset + (end - m.addr),
+                ..m.clone()
+            });
+            m.range = start - m.addr;
+            // A tail lies past `end`, so the scan skips it when it reaches it.
+            mappings.extend(tail);
+            i += 1;
+        } else if m_end > end {
+            m.obj_offset += end - m.addr;
+            m.range = m_end - end;
+            m.addr = end;
+            i += 1;
+        } else {
+            mappings.swap_remove(i);
+        }
     }
 }
 

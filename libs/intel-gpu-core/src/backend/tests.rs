@@ -280,3 +280,94 @@ fn client_death_revokes_gpu_mappings_before_frame_release() {
     // All GEM objects cleared
     assert_eq!(session.gem_objects.len(), 0);
 }
+
+fn map_op(gem_handle: u32, obj_offset: u64, addr: u64, range: u64) -> BindOp {
+    BindOp {
+        op: XE_VM_BIND_OP_MAP,
+        flags: 0,
+        gem_handle,
+        obj_offset,
+        addr,
+        range,
+        pat_index: 0,
+    }
+}
+
+#[test]
+fn partial_unmap_splits_mapping_and_keeps_object_offsets() {
+    let mut session = XeSession::new();
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4 * 4096, 1, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+    session
+        .vm_bind(vm_id, &[map_op(bo, 0, 0x10000, 4 * 4096)])
+        .unwrap();
+
+    let unmap = BindOp {
+        op: XE_VM_BIND_OP_UNMAP,
+        ..map_op(0, 0, 0x11000, 2 * 4096)
+    };
+    session.vm_bind(vm_id, &[unmap]).unwrap();
+
+    let vm = &session.vms[&vm_id];
+    assert!(vm.is_mapped(0x10000, 4096));
+    assert!(!vm.is_mapped(0x11000, 4096));
+    assert!(!vm.is_mapped(0x12000, 4096));
+    assert!(vm.is_mapped(0x13000, 4096));
+    let tail = vm.mappings.iter().find(|m| m.addr == 0x13000).unwrap();
+    assert_eq!((tail.range, tail.obj_offset), (4096, 3 * 4096));
+}
+
+#[test]
+fn refused_bind_array_leaves_vm_unchanged() {
+    let mut session = XeSession::new();
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4096, 1, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+    let bad = map_op(bo, 4096, 0x20000, 4096); // past the end of the object
+    assert_eq!(
+        session.vm_bind(vm_id, &[map_op(bo, 0, 0x10000, 4096), bad]),
+        Err(XeError::Invalid)
+    );
+    assert!(session.vms[&vm_id].mappings.is_empty());
+}
+
+#[test]
+fn last_page_below_48_bits_is_mappable() {
+    let mut session = XeSession::new();
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4096, 1, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+    assert_eq!(
+        session.vm_bind(vm_id, &[map_op(bo, 0, MAX_VA + 1 - 4096, 4096)]),
+        Ok(())
+    );
+}
+
+#[test]
+fn gem_close_revokes_its_mappings() {
+    let mut session = XeSession::new();
+    let vm_id = session.vm_create(0).unwrap();
+    let bo = session
+        .gem_create(4096, 7, 0, XE_GEM_CPU_CACHING_WB)
+        .unwrap();
+    session
+        .vm_bind(vm_id, &[map_op(bo, 0, 0x10000, 4096)])
+        .unwrap();
+    session.gem_close(bo).unwrap();
+    assert!(!session.vms[&vm_id].is_mapped(0x10000, 4096));
+}
+
+#[test]
+fn unmap_all_requires_an_object() {
+    let mut session = XeSession::new();
+    let vm_id = session.vm_create(0).unwrap();
+    let unmap_all = BindOp {
+        op: XE_VM_BIND_OP_UNMAP_ALL,
+        ..map_op(0, 0, 0, 0)
+    };
+    assert_eq!(session.vm_bind(vm_id, &[unmap_all]), Err(XeError::Invalid));
+}

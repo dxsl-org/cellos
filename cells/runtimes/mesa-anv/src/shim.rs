@@ -1,224 +1,165 @@
-//! DRM transport shim for Mesa `anv` running on Cellos (ADR-0033).
+//! DRM transport shim for Mesa `anv` running on Cellos (ADR-0033 G1/G3).
 //!
-//! Intercepts `open("/dev/dri/renderD128")`, `ioctl`, `mmap`, and `close`.
-//! Routes requests to the underlying [`XeSession`] and [`Syncobjs`].
+//! Intercepts `open("/dev/dri/renderD128")`, `ioctl` and `close` and forwards each, unchanged,
+//! to the Intel GPU driver Cell as one `XE_GPU` request ([`intel_gpu_core::wire`]). The driver
+//! cannot follow the user pointers inside an ioctl struct, so the shim declares the ranges each
+//! served request points at: bytes the driver reads travel with the request, and the driver's
+//! writes come back in the reply and are applied here, only inside the declared ranges.
 
-use crate::ioctl_defs::*;
-use crate::query::handle_device_query;
+use crate::transport::Transport;
 use alloc::collections::BTreeMap;
-use alloc::string::String;
 use alloc::vec::Vec;
-use intel_gpu_core::backend::{BindOp, XeError, XeSession, XE_GEM_CPU_CACHING_WB};
-use intel_gpu_core::syncobj::{FenceId, Syncobjs, WaitState, WAIT_ALL};
+use intel_gpu_core::uapi::ioctl::*;
+use intel_gpu_core::uapi::{u16_at, u32_at, u64_at, UserMemory};
+use intel_gpu_core::wire::{
+    self, Segment, MAX_REPLY_LEN, MAX_REQUEST_LEN, OP_CLOSE, OP_IOCTL, OP_OPEN, SEG_IN, SEG_OUT,
+};
 
-pub struct DrmFile {
-    pub session: XeSession,
-    pub syncobjs: Syncobjs,
-}
-
-impl DrmFile {
-    pub fn new() -> Self {
-        Self {
-            session: XeSession::new(),
-            syncobjs: Syncobjs::new(),
-        }
-    }
-}
-
-pub struct DrmShim {
+/// Open render nodes of one process, each backed by one driver-side DRM file.
+pub struct DrmShim<T: Transport> {
+    transport: T,
     next_fd: i32,
-    pub files: BTreeMap<i32, DrmFile>,
+    /// fd → driver file id.
+    files: BTreeMap<i32, u32>,
 }
 
-impl DrmShim {
-    pub fn new() -> Self {
+impl<T: Transport> DrmShim<T> {
+    pub fn new(transport: T) -> Self {
         Self {
+            transport,
             next_fd: 10, // Start above standard stdio descriptors
             files: BTreeMap::new(),
         }
+    }
+
+    /// The transport, e.g. to inspect a host-test server.
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
     }
 
     pub fn open(&mut self, path: &str) -> Result<i32, i32> {
         if path != "/dev/dri/renderD128" && path != "renderD128" {
             return Err(ENOENT);
         }
-
         let fd = self.next_fd;
-        self.next_fd += 1;
-        self.files.insert(fd, DrmFile::new());
+        let next = fd.checked_add(1).ok_or(EMFILE)?;
+        let file = self.call(OP_OPEN, 0, 0, &mut [], &[], &mut NoMemory)?;
+        self.next_fd = next;
+        self.files.insert(fd, file);
         Ok(fd)
     }
 
+    /// Like `close(2)`, the descriptor is gone even when the driver reports an error.
     pub fn close(&mut self, fd: i32) -> Result<(), i32> {
-        self.files.remove(&fd).ok_or(EBADF)?;
-        Ok(())
+        let file = self.files.remove(&fd).ok_or(EBADF)?;
+        self.call(OP_CLOSE, file, 0, &mut [], &[], &mut NoMemory)
+            .map(|_| ())
     }
 
-    pub fn ioctl(&mut self, fd: i32, request: u32, arg: &mut [u8]) -> Result<(), i32> {
-        let file = self.files.get_mut(&fd).ok_or(EBADF)?;
-        let nr = ioctl_nr(request);
+    /// Serve one ioctl. `arg` is the request's struct, exactly `ioctl_size(request)` bytes.
+    pub fn ioctl(
+        &mut self,
+        fd: i32,
+        request: u32,
+        arg: &mut [u8],
+        mem: &mut impl UserMemory,
+    ) -> Result<(), i32> {
+        let file = *self.files.get(&fd).ok_or(EBADF)?;
+        if arg.len() != ioctl_size(request) {
+            return Err(EINVAL);
+        }
+        let segments = user_segments(request, arg)?;
+        self.call(OP_IOCTL, file, request, arg, &segments, mem)
+            .map(|_| ())
+    }
 
-        match nr {
-            DRM_IOCTL_NR_VERSION => {
-                // struct drm_version: name, date, desc
-                // Write driver name "xe" into name buffer if non-null
-                if arg.len() >= 40 {
-                    // name_len at offset 8, name ptr at 16
-                    // For host simulation, we set the name length and copy string
-                    arg[0..4].copy_from_slice(&1i32.to_le_bytes()); // version_major = 1
-                    arg[4..8].copy_from_slice(&0i32.to_le_bytes()); // version_minor = 0
-                }
-                Ok(())
+    fn call(
+        &mut self,
+        op: u8,
+        file: u32,
+        request: u32,
+        arg: &mut [u8],
+        segments: &[Segment],
+        mem: &mut impl UserMemory,
+    ) -> Result<u32, i32> {
+        let mut frame = [0u8; MAX_REQUEST_LEN];
+        let len = wire::encode_request(&mut frame, op, file, request, arg, segments, mem)?;
+        let mut reply = [0u8; MAX_REPLY_LEN];
+        let reply_len = self.transport.call(&frame[..len], &mut reply)?;
+        let reply =
+            wire::decode_reply(reply.get(..reply_len).ok_or(EIO)?, segments).map_err(|_| EIO)?;
+        // `drm_ioctl` copies the struct out (for `_IOR`/`_IOWR`) and user writes land even
+        // when the handler fails.
+        if !reply.arg.is_empty() {
+            if reply.arg.len() != arg.len() {
+                return Err(EIO);
             }
-            DRM_IOCTL_NR_GET_CAP => {
-                // struct drm_get_cap: capability (u64), value (u64)
-                if arg.len() < 16 {
-                    return Err(EINVAL);
-                }
-                let cap = u64::from_le_bytes([
-                    arg[0], arg[1], arg[2], arg[3], arg[4], arg[5], arg[6], arg[7],
-                ]);
-                if cap == DRM_CAP_SYNCOBJ_TIMELINE {
-                    arg[8..16].copy_from_slice(&1u64.to_le_bytes());
-                    Ok(())
-                } else {
-                    Err(EINVAL)
-                }
+            if ioctl_dir(request) & IOC_READ != 0 {
+                arg.copy_from_slice(reply.arg);
             }
-            DRM_XE_DEVICE_QUERY => {
-                // struct drm_xe_device_query: extensions (u64), query (u32), size (u32), data (u64)
-                if arg.len() < 24 {
-                    return Err(EINVAL);
-                }
-                let query_id = u32::from_le_bytes([arg[8], arg[9], arg[10], arg[11]]);
-                let mut size = u32::from_le_bytes([arg[12], arg[13], arg[14], arg[15]]);
-
-                handle_device_query(query_id, &mut size, None)?;
-                arg[12..16].copy_from_slice(&size.to_le_bytes());
-                Ok(())
-            }
-            DRM_XE_GEM_CREATE => {
-                // struct drm_xe_gem_create: vm_id (u32), handle (u32), size (u64), cpu_caching (u16), ...
-                if arg.len() < 24 {
-                    return Err(EINVAL);
-                }
-                let vm_id = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                let size = u64::from_le_bytes([
-                    arg[8], arg[9], arg[10], arg[11], arg[12], arg[13], arg[14], arg[15],
-                ]) as usize;
-
-                let handle = file
-                    .session
-                    .gem_create(size, 0, vm_id, XE_GEM_CPU_CACHING_WB)
-                    .map_err(xe_to_errno)?;
-
-                arg[4..8].copy_from_slice(&handle.to_le_bytes());
-                Ok(())
-            }
-            DRM_XE_GEM_MMAP_OFFSET => {
-                if arg.len() < 16 {
-                    return Err(EINVAL);
-                }
-                let handle = u32::from_le_bytes([arg[4], arg[5], arg[6], arg[7]]);
-                let offset = file.session.gem_mmap_offset(handle).map_err(xe_to_errno)?;
-                arg[8..16].copy_from_slice(&offset.to_le_bytes());
-                Ok(())
-            }
-            DRM_IOCTL_NR_GEM_CLOSE => {
-                if arg.len() < 4 {
-                    return Err(EINVAL);
-                }
-                let handle = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                file.session.gem_close(handle).map_err(xe_to_errno)?;
-                Ok(())
-            }
-            DRM_XE_VM_CREATE => {
-                if arg.len() < 8 {
-                    return Err(EINVAL);
-                }
-                let flags = u32::from_le_bytes([arg[4], arg[5], arg[6], arg[7]]);
-                let vm_id = file.session.vm_create(flags).map_err(xe_to_errno)?;
-                arg[0..4].copy_from_slice(&vm_id.to_le_bytes());
-                Ok(())
-            }
-            DRM_XE_VM_DESTROY => {
-                if arg.len() < 4 {
-                    return Err(EINVAL);
-                }
-                let vm_id = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                file.session.vm_destroy(vm_id).map_err(xe_to_errno)?;
-                Ok(())
-            }
-            DRM_XE_EXEC_QUEUE_CREATE => {
-                if arg.len() < 16 {
-                    return Err(EINVAL);
-                }
-                let vm_id = u32::from_le_bytes([arg[4], arg[5], arg[6], arg[7]]);
-                let q_id = file
-                    .session
-                    .exec_queue_create(vm_id, 0, 1) // RENDER, NORMAL
-                    .map_err(xe_to_errno)?;
-                arg[0..4].copy_from_slice(&q_id.to_le_bytes());
-                Ok(())
-            }
-            DRM_XE_EXEC_QUEUE_DESTROY => {
-                if arg.len() < 4 {
-                    return Err(EINVAL);
-                }
-                let q_id = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                file.session.exec_queue_destroy(q_id).map_err(xe_to_errno)?;
-                Ok(())
-            }
-            DRM_XE_EXEC_QUEUE_GET_PROPERTY => {
-                if arg.len() < 16 {
-                    return Err(EINVAL);
-                }
-                let q_id = u32::from_le_bytes([arg[4], arg[5], arg[6], arg[7]]);
-                let ban = file
-                    .session
-                    .exec_queue_get_property_ban(q_id)
-                    .map_err(xe_to_errno)?;
-                arg[8..16].copy_from_slice(&(ban as u64).to_le_bytes());
-                Ok(())
-            }
-            DRM_XE_EXEC => {
-                if arg.len() < 16 {
-                    return Err(EINVAL);
-                }
-                let q_id = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                let _job_id = file.session.exec(q_id, 0, 0, None).map_err(xe_to_errno)?;
-                Ok(())
-            }
-            DRM_IOCTL_NR_SYNCOBJ_CREATE => {
-                if arg.len() < 8 {
-                    return Err(EINVAL);
-                }
-                let flags = u32::from_le_bytes([arg[4], arg[5], arg[6], arg[7]]);
-                let handle = file.syncobjs.create(flags).map_err(|_| EINVAL)?;
-                arg[0..4].copy_from_slice(&handle.to_le_bytes());
-                Ok(())
-            }
-            DRM_IOCTL_NR_SYNCOBJ_DESTROY => {
-                if arg.len() < 4 {
-                    return Err(EINVAL);
-                }
-                let handle = u32::from_le_bytes([arg[0], arg[1], arg[2], arg[3]]);
-                file.syncobjs.destroy(handle).map_err(|_| ENOENT)?;
-                Ok(())
-            }
-            _ => Err(EINVAL),
+        }
+        reply.apply_writes(mem)?;
+        match reply.errno {
+            0 => Ok(reply.value),
+            errno => Err(errno),
         }
     }
 }
 
-fn xe_to_errno(err: XeError) -> i32 {
-    match err {
-        XeError::Invalid => EINVAL,
-        XeError::NoEntry => ENOENT,
-        XeError::OutOfMemory => ENOMEM,
-        XeError::Canceled => ECANCELED,
-        XeError::PermissionDenied => EPERM,
-        XeError::NotSupported => EOPNOTSUPP,
-        XeError::TryAgain => 11, // EAGAIN
+/// The user ranges `request` points at, from its (already size-checked) struct.
+fn user_segments(request: u32, arg: &[u8]) -> Result<Vec<Segment>, i32> {
+    let mut segments = Vec::new();
+    match request {
+        // `drm_version`: name, date and desc buffers, each `{len u64, ptr u64}`.
+        DRM_IOCTL_VERSION => {
+            for len_at in [16, 32, 48] {
+                let (len, ptr) = (u64_at(arg, len_at), u64_at(arg, len_at + 8));
+                if len != 0 && ptr != 0 {
+                    // The driver truncates to the buffer, so a huge buffer needs no more.
+                    let len = u32::try_from(len).unwrap_or(u32::MAX);
+                    segments.push(out(ptr, len));
+                }
+            }
+        }
+        // `drm_xe_device_query`: `size` bytes at `data` once the caller sized the query.
+        DRM_IOCTL_XE_DEVICE_QUERY if u32_at(arg, 12) != 0 => {
+            segments.push(out(u64_at(arg, 16), u32_at(arg, 12)));
+        }
+        // `drm_xe_exec_queue_create.instances`: `width * num_placements` engine instances.
+        DRM_IOCTL_XE_EXEC_QUEUE_CREATE => {
+            let count = usize::from(u16_at(arg, 8)) * usize::from(u16_at(arg, 10));
+            let len = count
+                .checked_mul(EXEC_QUEUE_INSTANCE_SIZE)
+                .filter(|&len| len <= MAX_REQUEST_LEN)
+                .ok_or(EINVAL)?;
+            segments.push(Segment {
+                addr: u64_at(arg, 24),
+                len: len as u32,
+                flags: SEG_IN,
+            });
+        }
+        _ => {}
+    }
+    Ok(segments)
+}
+
+fn out(addr: u64, len: u32) -> Segment {
+    Segment {
+        addr,
+        len,
+        flags: SEG_OUT,
+    }
+}
+
+/// Memory for operations that carry no user pointer.
+struct NoMemory;
+
+impl UserMemory for NoMemory {
+    fn read(&self, _: u64, _: &mut [u8]) -> Result<(), i32> {
+        Err(EFAULT)
+    }
+
+    fn write(&mut self, _: u64, _: &[u8]) -> Result<(), i32> {
+        Err(EFAULT)
     }
 }

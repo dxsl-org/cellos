@@ -28,7 +28,7 @@ extern crate ostd;
 
 use ai_engine::{Engine, EngineError, SamplingParams};
 use ai_proto::{
-    self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason, GpuKind,
+    self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
     MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
 };
 use alloc::vec::Vec;
@@ -237,29 +237,15 @@ impl AiService {
         }
     }
 
-    fn select_backend(&self, device: DeviceTarget) -> Result<u32, AiError> {
+    /// The engine runs only on the CPU: no GPU inference path exists yet, so an explicit GPU
+    /// target is refused instead of being acknowledged and silently executed on the CPU.
+    fn select_backend(device: DeviceTarget) -> Result<u32, AiError> {
         match device {
-            DeviceTarget::Auto => {
-                if ostd::syscall::sys_lookup_service(api::syscall::service::XE_GPU).is_some() {
-                    ostd::io::println("[ai] backend selected: Vulkan GPU (service 21)");
-                    Ok(backend::GPU)
-                } else {
-                    Ok(backend::CPU)
-                }
-            }
-            DeviceTarget::Cpu => Ok(backend::CPU),
-            DeviceTarget::Gpu(GpuKind::Vulkan) => {
-                if ostd::syscall::sys_lookup_service(api::syscall::service::XE_GPU).is_some() {
-                    ostd::io::println("[ai] backend selected: Vulkan GPU (explicit target)");
-                    Ok(backend::GPU)
-                } else {
-                    ostd::io::println("[ai] Vulkan GPU requested but XE_GPU service not available");
-                    Err(AiError::NotSupported)
-                }
-            }
+            DeviceTarget::Auto | DeviceTarget::Cpu => Ok(backend::CPU),
             _ => Err(AiError::NotSupported),
         }
     }
+
     /// Answer one request. `None` when the request must be ignored (nothing can be replied to it).
     fn handle<'r>(&mut self, sender: usize, buf: &[u8], reply: &'r mut [u8]) -> Option<&'r [u8]> {
         let request = match ai_proto::decode::<AiRequest<'_>>(buf) {
@@ -278,18 +264,14 @@ impl AiService {
         match request {
             AiRequest::Describe => match self.engine.as_ref() {
                 Some(engine) => {
-                    let mut desc = engine.describe();
-                    if ostd::syscall::sys_lookup_service(api::syscall::service::XE_GPU).is_some() {
-                        desc.backends |= backend::GPU;
-                    }
-                    ai_proto::encode(&AiResponse::Description(desc), reply)
+                    ai_proto::encode(&AiResponse::Description(engine.describe()), reply)
                         .ok()
                         .map(|encoded| &*encoded)
                 }
                 None => Some(encode_failure(reply, 0, self.unavailable)),
             },
             AiRequest::InferSubmit(submit) => {
-                let chosen_backend = match self.select_backend(submit.device) {
+                let chosen_backend = match Self::select_backend(submit.device) {
                     Ok(b) => b,
                     Err(error) => {
                         log_refusal("submit device", error);
@@ -351,7 +333,7 @@ impl AiService {
                 .map(|encoded| &*encoded)
             }
             AiRequest::InferEmbed { text, device } => {
-                if let Err(error) = self.select_backend(device) {
+                if let Err(error) = Self::select_backend(device) {
                     log_refusal("embed device", error);
                     return Some(encode_failure(reply, 0, error));
                 }

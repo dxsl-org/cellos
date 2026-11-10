@@ -35,7 +35,7 @@ fn forcewake_timeout_when_unresponsive() {
 
 #[test]
 fn gmd_id_decoding_panther_lake() {
-    let raw = (30 << 22) | (0 << 14) | (2 << 6);
+    let raw = (30 << 22) | 2;
     let (arch, major, minor, rev) = parse_gmd_id(raw).unwrap();
     assert_eq!(arch, GfxArch::Xe3);
     assert_eq!((major, minor, rev), (30, 0, 2));
@@ -43,7 +43,7 @@ fn gmd_id_decoding_panther_lake() {
 
 #[test]
 fn gmd_id_decoding_lunar_lake() {
-    let raw = (20 << 22) | (4 << 14) | (0 << 6);
+    let raw = (20 << 22) | (4 << 14);
     let (arch, major, minor, rev) = parse_gmd_id(raw).unwrap();
     assert_eq!(arch, GfxArch::Xe2);
     assert_eq!((major, minor, rev), (20, 4, 0));
@@ -51,7 +51,7 @@ fn gmd_id_decoding_lunar_lake() {
 
 #[test]
 fn gmd_id_unsupported_version_refused() {
-    let raw = (12 << 22) | (0 << 14) | (0 << 6); // Xe-LP
+    let raw = 12 << 22; // Xe-LP
     assert_eq!(parse_gmd_id(raw), Err(ViError::NotSupported));
 }
 
@@ -87,14 +87,18 @@ fn ggtt_pte_encoding() {
     use crate::ggtt::encode_ggtt_pte;
     use intel_gpu_core::pte::PatIndex;
 
-    // 4K aligned address with writeable and WB PAT
-    let pte = encode_ggtt_pte(0x1000, true, PatIndex::WB).unwrap();
-    assert_eq!(pte & 0xFFF, 0x013); // PRESENT (1) | RW (2) | PAT1 (16)
-    assert_eq!(pte & !0xFFF, 0x1000);
+    // WB is PAT index 2: only GGTT PAT1 (bit 53); bit 1 is device-memory, never set here.
+    let pte = encode_ggtt_pte(0x1000, PatIndex::WB).unwrap();
+    assert_eq!(pte, 0x1000 | 1 | (1 << 53));
 
     // Misaligned address rejected
     assert_eq!(
-        encode_ggtt_pte(0x1001, true, PatIndex::WB),
+        encode_ggtt_pte(0x1001, PatIndex::WB),
+        Err(ViError::InvalidArgument)
+    );
+    // PAT indices above 3 have no GGTT encoding
+    assert_eq!(
+        encode_ggtt_pte(0x1000, PatIndex::WT),
         Err(ViError::InvalidArgument)
     );
 }
@@ -112,23 +116,6 @@ fn ggtt_allocator_bump_and_alignment() {
 
     // Oversize allocation rejected
     assert_eq!(alloc.allocate(0x100000), Err(ViError::OutOfMemory));
-}
-
-#[test]
-fn guc_bootloader_and_firmware_upload() {
-    use crate::guc::bring_up_guc;
-
-    let mut regs = FakeRegs::for_panther_lake();
-    let fw_phys = 0x200000;
-    let fw_size = 64 * 1024; // 64 KiB
-
-    assert_eq!(bring_up_guc(&mut regs, fw_phys, fw_size), Ok(()));
-
-    // Verify registers updated after DMA transfer
-    assert_eq!(
-        regs.get(crate::guc::GUC_STATUS),
-        crate::guc::GUC_STATUS_UKERNEL_READY
-    );
 }
 
 #[test]
@@ -293,7 +280,7 @@ fn stress_10000_submits_with_fences_without_loss() {
         .unwrap();
 
     // 10,000 submit and complete cycle
-    for i in 0..10_000 {
+    for _ in 0..10_000 {
         let fence = syncobjs.new_fence();
         let sync_h = syncobjs.create(0).unwrap();
         syncobjs.attach(sync_h, 0, fence).unwrap();
@@ -364,4 +351,82 @@ fn injected_hang_reset_and_client_error() {
         session.complete_job(q_id, job1, &mut syncobjs),
         Err(XeError::NoEntry)
     );
+}
+
+#[test]
+fn ref_clock_and_dss_mask_decode_upstream_fields() {
+    use crate::identity::{read_ref_clock, read_topology};
+    use crate::regs::{RPM_CONFIG0, XE2_GT_GEOMETRY_DSS_2};
+
+    let regs = FakeRegs::for_lunar_lake();
+    regs.set(RPM_CONFIG0, 3 << 3);
+    assert_eq!(read_ref_clock(&regs), Ok(25_000_000));
+    regs.set(RPM_CONFIG0, 4 << 3);
+    assert_eq!(read_ref_clock(&regs), Err(ViError::NotSupported));
+
+    regs.set(XE2_GT_GEOMETRY_DSS_2, 1);
+    let topology = read_topology(&regs).unwrap();
+    assert_eq!(topology.dss_geometry, (1u128 << 64) | 0xFF);
+    // The compute mask comes from its own fuse registers.
+    assert_eq!(topology.dss_compute, 0x3F);
+}
+
+#[test]
+fn forcewake_all_ones_ack_is_not_an_ack() {
+    let mut regs = FakeRegs::new();
+    regs.auto_ack_forcewake = false;
+    regs.set(FORCEWAKE_ACK_GT, u32::MAX);
+    assert_eq!(forcewake_gt_acquire(&mut regs), Err(ViError::IO));
+}
+
+#[test]
+fn guc_load_failure_code_fails_fast() {
+    use crate::guc::{wait_guc_ukernel_running, GUC_STATUS};
+
+    let regs = FakeRegs::for_panther_lake();
+    regs.set(GUC_STATUS, 0x70 << 8); // XE_GUC_LOAD_STATUS_EXCEPTION
+    assert_eq!(wait_guc_ukernel_running(&regs), Err(ViError::IO));
+    regs.set(GUC_STATUS, 0x50 << 1); // XE_BOOTROM_STATUS_RSA_FAILED
+    assert_eq!(wait_guc_ukernel_running(&regs), Err(ViError::IO));
+}
+
+#[test]
+fn refused_ppgtt_bind_rolls_back_its_pages() {
+    use crate::ppgtt_store::ClientVm;
+    use intel_gpu_core::pte::PatIndex;
+
+    let mut vm = ClientVm::new_ptl(3).unwrap();
+    vm.bind_range(0x3000, 0x9000, 4096, true, PatIndex::WB)
+        .unwrap();
+    // Pages 0x1000 and 0x2000 map, 0x3000 collides: the first two must be undone.
+    assert_eq!(
+        vm.bind_range(0x1000, 0x20000, 3 * 4096, true, PatIndex::WB),
+        Err(ViError::AlreadyExists)
+    );
+    assert_eq!(vm.translate(0x1000), Ok(None));
+    assert_eq!(vm.translate(0x2000), Ok(None));
+    assert_eq!(vm.translate(0x3000), Ok(Some(0x9000)));
+    assert_eq!(vm.mappings.len(), 1);
+}
+
+#[test]
+fn partial_ppgtt_unbind_splits_metadata() {
+    use crate::ppgtt_store::ClientVm;
+    use intel_gpu_core::pte::PatIndex;
+
+    let mut vm = ClientVm::new_ptl(4).unwrap();
+    vm.bind_range(0x10000, 0x40000, 4 * 4096, true, PatIndex::WB)
+        .unwrap();
+    vm.unbind_range(0x11000, 2 * 4096).unwrap();
+
+    assert_eq!(vm.translate(0x10000), Ok(Some(0x40000)));
+    assert_eq!(vm.translate(0x11000), Ok(None));
+    assert_eq!(vm.translate(0x13000), Ok(Some(0x43000)));
+    let mut spans: alloc::vec::Vec<_> = vm
+        .mappings
+        .iter()
+        .map(|m| (m.addr, m.phys, m.range))
+        .collect();
+    spans.sort_unstable();
+    assert_eq!(spans, [(0x10000, 0x40000, 4096), (0x13000, 0x43000, 4096)]);
 }

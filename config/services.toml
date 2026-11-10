@@ -46,6 +46,14 @@ path = "/bin/xhci"
 restart = "never"
 
 [[cells]]
+name = "intel-gpu"
+path = "/bin/intel-gpu"
+# `XE_GPU` (21) is below the private range, so init registers it (CP1 D-G8). Opt-in: the
+# row reaches an image only when it packages /bin/intel-gpu, which no x86 profile does yet.
+service_id = 21
+restart = "never"
+
+[[cells]]
 name = "config"
 path = "/bin/config"
 service_id = 4
