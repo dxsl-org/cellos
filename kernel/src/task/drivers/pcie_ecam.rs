@@ -1045,28 +1045,28 @@ unsafe fn quiesce_in_window(
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Initialise the ECAM scanner.
-///
-/// Must be called after paging is active (ECAM window mapped) and before
-/// Driver Cells are spawned (they call sys_find_pcie_device to discover their
-/// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
+/// ECAM base of the FDT `pci-host-ecam-generic` node; 0 until recorded.
 #[cfg(target_arch = "aarch64")]
 static AARCH64_ECAM_BASE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
+/// Record the FDT-reported ECAM base (boot DTB walk).
 #[cfg(target_arch = "aarch64")]
 pub fn record_ecam_base_aarch64(base: usize) {
     AARCH64_ECAM_BASE.store(base, core::sync::atomic::Ordering::Release);
 }
 
+/// The recorded ECAM base, or 0 when the FDT named none. No guessed default:
+/// on QEMU `virt` the low addresses are the PCIe MMIO window or unbacked.
 #[cfg(target_arch = "aarch64")]
 pub fn ecam_base_aarch64() -> usize {
-    let base = AARCH64_ECAM_BASE.load(core::sync::atomic::Ordering::Acquire);
-    if base != 0 {
-        base
-    } else {
-        0x1000_0000
-    }
+    AARCH64_ECAM_BASE.load(core::sync::atomic::Ordering::Acquire)
 }
+
+/// Initialise the ECAM scanner.
+///
+/// Must be called after paging is active (ECAM window mapped) and before
+/// Driver Cells are spawned (they call sys_find_pcie_device to discover their
+/// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
 pub fn init() {
     // Determine ECAM base for the current architecture.
     // x86_64: use only the runtime value from validated ACPI MCFG.

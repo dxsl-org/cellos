@@ -3,16 +3,55 @@
 //! Units are registered once on the BSP (`add_unit`) before any route is
 //! programmed. Each unit owns GSIs `[gsi_base, gsi_base + pins)`. Routes use
 //! physical destination mode with an 8-bit APIC ID; destinations above 255
-//! need interrupt remapping (plan 261103-2218 phase 12) and are refused.
+//! need x2APIC-format interrupt remapping and are refused.
+//!
+//! Every programmed route is recorded so the kernel can re-emit it once
+//! interrupt remapping turns on: compatibility-format entries are blocked by a
+//! remapping unit (`GCMD.CFI` stays clear), so each route must be rewritten in
+//! remappable format through the kernel's [`Remapper`].
 
 use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 pub const MAX_UNITS: usize = 16;
+/// Routes remembered for re-emission. A route that cannot be recorded is
+/// refused: it could not follow a later switch to remappable format.
+pub const MAX_ROUTES: usize = 64;
 
 static UNIT_COUNT: AtomicUsize = AtomicUsize::new(0);
 static UNIT_PHYS: [AtomicU64; MAX_UNITS] = [const { AtomicU64::new(0) }; MAX_UNITS];
 static UNIT_GSI_BASE: [AtomicU32; MAX_UNITS] = [const { AtomicU32::new(0) }; MAX_UNITS];
 static UNIT_PINS: [AtomicU32; MAX_UNITS] = [const { AtomicU32::new(0) }; MAX_UNITS];
+/// Packed [`Route`] records (see `pack`); 0 is a free slot.
+static ROUTES: [AtomicU64; MAX_ROUTES] = [const { AtomicU64::new(0) }; MAX_ROUTES];
+/// `fn(&Route) -> Option<u64>` stored as an address; 0 = compatibility format.
+static REMAPPER: AtomicUsize = AtomicUsize::new(0);
+
+/// One programmed redirection, with everything needed to re-emit its entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Route {
+    /// MMIO base of the owning I/O APIC (identifies it to ACPI MADT/DMAR).
+    pub ioapic_phys: u64,
+    pub pin: u8,
+    pub vector: u8,
+    /// Physical APIC ID of the target CPU.
+    pub destination: u8,
+    /// MPS INTI flags: polarity bits 0-1, trigger bits 2-3.
+    pub flags: u16,
+}
+
+impl Route {
+    pub fn active_low(&self) -> bool {
+        self.flags & 0b11 == 0b11
+    }
+
+    pub fn level_triggered(&self) -> bool {
+        (self.flags >> 2) & 0b11 == 0b11
+    }
+}
+
+/// Builds the redirection entry for a route while interrupt remapping is on;
+/// `None` refuses the route (no interrupt-remapping entry could be installed).
+pub type Remapper = fn(&Route) -> Option<u64>;
 
 fn window(phys: u64) -> usize {
     super::apic::mmio_virt(phys as usize)
@@ -34,6 +73,15 @@ fn write(phys: u64, index: u32, value: u32) {
         core::ptr::write_volatile(base as *mut u32, index);
         core::ptr::write_volatile((base + 0x10) as *mut u32, value);
     }
+}
+
+/// Program redirection entry `pin` of the unit at `phys`. High dword first:
+/// the vector and format-independent low fields land last, and the
+/// intermediate entry (new high, old low) still names a valid target.
+fn write_entry(phys: u64, pin: u8, entry: u64) {
+    let index = 0x10 + pin as u32 * 2;
+    write(phys, index + 1, (entry >> 32) as u32);
+    write(phys, index, entry as u32);
 }
 
 /// Register an I/O APIC whose MMIO page is already mapped. Reads its
@@ -59,6 +107,11 @@ pub fn unit_count() -> usize {
     UNIT_COUNT.load(Ordering::Acquire)
 }
 
+/// MMIO base of registered unit `index`.
+pub fn unit_phys(index: usize) -> Option<u64> {
+    (index < unit_count()).then(|| UNIT_PHYS[index].load(Ordering::Relaxed))
+}
+
 /// `(unit index, pin)` serving `gsi` among `(gsi_base, pins)` units.
 pub(super) fn locate(units: &[(u32, u32)], gsi: u32) -> Option<(usize, u32)> {
     units.iter().enumerate().find_map(|(index, &(base, pins))| {
@@ -76,11 +129,67 @@ pub(super) fn rte_low(vector: u8, flags: u16) -> u32 {
     vector as u32 | (active_low as u32) << 13 | (level as u32) << 15
 }
 
+/// Compatibility-format entry for `route`: destination in bits 63:56.
+pub fn compat_entry(route: &Route) -> u64 {
+    (route.destination as u64) << 56 | rte_low(route.vector, route.flags) as u64
+}
+
+/// Record layout: valid 63, unit 59:56, pin 55:48, vector 47:40,
+/// destination 39:32, flags 15:0.
+fn pack(unit: usize, route: &Route) -> u64 {
+    1 << 63
+        | (unit as u64 & 0xF) << 56
+        | (route.pin as u64) << 48
+        | (route.vector as u64) << 40
+        | (route.destination as u64) << 32
+        | route.flags as u64
+}
+
+fn unpack(record: u64) -> Option<(usize, Route)> {
+    if record >> 63 == 0 {
+        return None;
+    }
+    let unit = ((record >> 56) & 0xF) as usize;
+    Some((
+        unit,
+        Route {
+            ioapic_phys: unit_phys(unit)?,
+            pin: (record >> 48) as u8,
+            vector: (record >> 40) as u8,
+            destination: (record >> 32) as u8,
+            flags: record as u16,
+        },
+    ))
+}
+
+/// Slot holding `(unit, pin)`, else the first free slot.
+fn route_slot(unit: usize, pin: u8) -> Option<&'static AtomicU64> {
+    let same = |record: u64| unpack(record).is_some_and(|(u, r)| u == unit && r.pin == pin);
+    ROUTES
+        .iter()
+        .find(|slot| same(slot.load(Ordering::Acquire)))
+        .or_else(|| ROUTES.iter().find(|slot| slot.load(Ordering::Acquire) == 0))
+}
+
+fn remapper() -> Option<Remapper> {
+    let raw = REMAPPER.load(Ordering::Acquire);
+    // SAFETY: a non-zero value was stored from a `Remapper` by `set_remapper`.
+    (raw != 0).then(|| unsafe { core::mem::transmute::<usize, Remapper>(raw) })
+}
+
+/// Entry for `route` in the current format; `None` when the remapper refuses.
+fn entry_for(route: &Route) -> Option<u64> {
+    match remapper() {
+        Some(remap) => remap(route),
+        None => Some(compat_entry(route)),
+    }
+}
+
 /// Route `gsi` to `vector` on the CPU with APIC ID `destination`.
 pub fn route_gsi(gsi: u32, vector: u8, destination: u32, flags: u16) -> bool {
-    if destination > 0xFF {
+    let Ok(destination) = u8::try_from(destination) else {
         return false;
-    }
+    };
     let count = unit_count();
     let mut units = [(0u32, 0u32); MAX_UNITS];
     for (index, slot) in units.iter_mut().enumerate().take(count) {
@@ -92,17 +201,73 @@ pub fn route_gsi(gsi: u32, vector: u8, destination: u32, flags: u16) -> bool {
     let Some((unit, pin)) = locate(&units[..count], gsi) else {
         return false;
     };
-    let phys = UNIT_PHYS[unit].load(Ordering::Relaxed);
-    // High dword first: the entry is still masked or unchanged until the low
-    // dword (with the vector) is written.
-    write(phys, 0x10 + pin * 2 + 1, destination << 24);
-    write(phys, 0x10 + pin * 2, rte_low(vector, flags));
+    let route = Route {
+        ioapic_phys: UNIT_PHYS[unit].load(Ordering::Relaxed),
+        pin: pin as u8,
+        vector,
+        destination,
+        flags,
+    };
+    let Some(slot) = route_slot(unit, route.pin) else {
+        return false;
+    };
+    let Some(entry) = entry_for(&route) else {
+        return false;
+    };
+    slot.store(pack(unit, &route), Ordering::Release);
+    write_entry(route.ioapic_phys, route.pin, entry);
     true
+}
+
+/// Visit every recorded route.
+pub fn for_each_route(mut visit: impl FnMut(&Route)) {
+    for slot in ROUTES.iter() {
+        if let Some((_, route)) = unpack(slot.load(Ordering::Acquire)) {
+            visit(&route);
+        }
+    }
+}
+
+/// Rewrite every recorded route with the entry `build` returns. Every entry is
+/// built before any is written, so a refusal leaves all entries unchanged and
+/// returns `false`.
+pub fn reprogram(mut build: impl FnMut(&Route) -> Option<u64>) -> bool {
+    let mut entries = [None; MAX_ROUTES];
+    for (slot, entry) in ROUTES.iter().zip(entries.iter_mut()) {
+        if let Some((_, route)) = unpack(slot.load(Ordering::Acquire)) {
+            let Some(value) = build(&route) else {
+                return false;
+            };
+            *entry = Some((route, value));
+        }
+    }
+    for (route, entry) in entries.into_iter().flatten() {
+        write_entry(route.ioapic_phys, route.pin, entry);
+    }
+    true
+}
+
+/// Select how later routes are encoded: `Some` while interrupt remapping is
+/// on, `None` for compatibility format. Existing routes are not touched; the
+/// caller re-emits them with [`reprogram`].
+pub fn set_remapper(remapper: Option<Remapper>) {
+    REMAPPER.store(remapper.map_or(0, |f| f as usize), Ordering::Release);
+}
+
+/// Mask every recorded route (bit 16 of the low dword), leaving the rest of
+/// each entry intact, ahead of a format switch. A level-triggered source stays
+/// pending at the I/O APIC until [`reprogram`] unmasks it.
+pub fn mask_routes() {
+    for_each_route(|route| {
+        let index = 0x10 + route.pin as u32 * 2;
+        let low = read(route.ioapic_phys, index);
+        write(route.ioapic_phys, index, low | 1 << 16);
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{locate, rte_low};
+    use super::{compat_entry, locate, rte_low, Route};
 
     #[test]
     fn gsis_resolve_to_the_owning_unit_and_pin() {
@@ -118,5 +283,18 @@ mod tests {
         assert_eq!(rte_low(0x24, 0), 0x24); // ISA default: high, edge
         assert_eq!(rte_low(0x30, 0b1111), 0x30 | 1 << 13 | 1 << 15); // low, level
         assert_eq!(rte_low(0x30, 0b0101), 0x30); // explicit high, edge
+    }
+
+    #[test]
+    fn compat_entry_places_the_destination_in_the_high_byte() {
+        let route = Route {
+            ioapic_phys: 0xFEC0_0000,
+            pin: 9,
+            vector: 0x2E,
+            destination: 3,
+            flags: 0b1111,
+        };
+        assert!(route.active_low() && route.level_triggered());
+        assert_eq!(compat_entry(&route), 3u64 << 56 | 0x2E | 1 << 13 | 1 << 15);
     }
 }

@@ -5,20 +5,20 @@ use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use super::context::{alloc_table, write_root_entry, ContextTable};
+use super::cache::sync_for;
+use super::context::{
+    alloc_table, write_root_entry, ContextTable, TABLE_KIND_CONTEXT, TABLE_KIND_ROOT,
+};
 use super::domain::{did_limit, DidAllocator, VtdDomain};
-use super::invalidate::{
-    ctx_global_command, flush_context, flush_iotlb, iotlb_global_command, POLL_MAX,
-};
-use super::ir::{
-    IrTable, DMAR_IRTA_REG, IRTA_EIM, VTD_GCMD_IRE, VTD_GCMD_SIRTP, VTD_GSTS_IRES, VTD_GSTS_IRTPS,
-};
+use super::gcmd::{issue_gcmd, wait_status};
+use super::invalidate::Scope;
+use super::ir::table::IrTable;
+use super::ir::ECAP_IR;
+use super::qi::{InvQueue, ECAP_QI};
 use super::rmrr::device_matches_scope;
 
 pub const VTD_GCAP: usize = 0x00;
 pub const VTD_ECAP: usize = 0x10;
-pub const VTD_GCMD: usize = 0x18;
-pub const VTD_GSTS: usize = 0x1C;
 pub const VTD_RTADDR: usize = 0x20;
 
 pub const TE: u32 = 1 << 31;
@@ -38,8 +38,13 @@ pub struct VtdUnit {
     pub contexts: Spinlock<BTreeMap<u8, ContextTable>>,
     pub domains: Spinlock<BTreeMap<u64, VtdDomain>>,
     pub dids: Spinlock<DidAllocator>,
+    /// `ECAP.IR` and the platform (DMAR `INTR_REMAP`) allow remapping.
     pub ir_supported: bool,
+    /// Present only while `GSTS.IRES` is latched.
     pub ir_table: Option<IrTable>,
+    /// The invalidation queue once `GSTS.QIES` latched; register-based
+    /// invalidation is used only while this is `None`.
+    pub qi: Spinlock<Option<InvQueue>>,
     pub active: AtomicBool,
 }
 
@@ -51,7 +56,8 @@ impl VtdUnit {
         }
 
         crate::memory::paging::map_mmio_x86(base, 0x1000);
-        let gcap = unsafe { core::ptr::read_volatile(base as *const u64) };
+        // SAFETY: the register page was just identity-mapped.
+        let gcap = unsafe { core::ptr::read_volatile((base + VTD_GCAP) as *const u64) };
         if gcap == 0 || gcap == u64::MAX {
             log::warn!("[vtd] unit at {:#x} GCAP={:#x} invalid", base, gcap);
             return None;
@@ -61,12 +67,14 @@ impl VtdUnit {
         let mut did_alloc = DidAllocator::new();
         did_alloc.set_limit(max_did);
 
+        // SAFETY: as above.
         let ecap = unsafe { core::ptr::read_volatile((base + VTD_ECAP) as *const u64) };
         let iro = ((ecap >> 8) & 0x3FF) as usize;
         let iva_off = iro * 16;
-        let ir_supported = (ecap & (1 << 24)) != 0;
+        let ir_supported = ecap & ECAP_IR != 0;
 
-        let (root_virt, root_phys) = alloc_table(12);
+        let (root_virt, root_phys) = alloc_table(TABLE_KIND_ROOT);
+        sync_for(ecap, root_virt, 4096);
 
         let mut scopes = BoundedVec::new(DeviceScope::ZERO);
         for s in drhd.scopes.as_slice() {
@@ -74,11 +82,13 @@ impl VtdUnit {
         }
 
         log::info!(
-            "[vtd] probed unit {:#x} seg={} all={} ir={}",
+            "[vtd] probed unit {:#x} seg={} all={} ir={} qi={} coherent={}",
             base,
             drhd.segment,
             drhd.include_pci_all(),
-            ir_supported
+            ir_supported,
+            ecap & ECAP_QI != 0,
+            ecap & super::cache::ECAP_C != 0
         );
 
         Some(Self {
@@ -97,6 +107,7 @@ impl VtdUnit {
             dids: Spinlock::new(did_alloc),
             ir_supported,
             ir_table: None,
+            qi: Spinlock::new(None),
             active: AtomicBool::new(false),
         })
     }
@@ -113,22 +124,53 @@ impl VtdUnit {
         self.include_pci_all
     }
 
+    /// Write `[virt, virt + len)` back to memory if this unit does not snoop.
+    pub fn sync(&self, virt: usize, len: usize) {
+        sync_for(self.ecap, virt, len);
+    }
+
+    /// The bus's context table, published in the root table and globally
+    /// invalidated (caching-mode hardware may hold the not-present root).
+    /// `None` when that invalidation timed out; the next call retries it.
     pub fn ensure_context_table(&self, bus: u8) -> Option<usize> {
         let mut contexts = self.contexts.lock();
-        if let Some(table) = contexts.get(&bus) {
-            return Some(table.virt);
-        }
-        let (virt, phys) = alloc_table(12);
-        unsafe { write_root_entry(self.root_virt, bus, phys) };
-        contexts.insert(
-            bus,
+        let table = contexts.entry(bus).or_insert_with(|| {
+            let (virt, phys) = alloc_table(TABLE_KIND_CONTEXT);
+            sync_for(self.ecap, virt, 4096);
             ContextTable {
                 virt,
                 phys,
                 publication_flushed: false,
-            },
-        );
-        Some(virt)
+            }
+        });
+        if !table.publication_flushed {
+            // SAFETY: both tables are 4 KiB pages allocated by alloc_table().
+            unsafe { write_root_entry(self.root_virt, bus, table.phys) };
+            self.sync(self.root_virt + bus as usize * 16, 16);
+            let context_done = self.invalidate_context(Scope::Global);
+            let iotlb_done = self.invalidate_iotlb(Scope::Global);
+            if !(context_done && iotlb_done) {
+                return None;
+            }
+            table.publication_flushed = true;
+        }
+        Some(table.virt)
+    }
+
+    /// Turn on queued invalidation when the unit supports it. Without it the
+    /// unit keeps register-based invalidation and cannot remap interrupts.
+    pub fn enable_qi(&self) {
+        if self.ecap & ECAP_QI == 0 {
+            return;
+        }
+        let queue = InvQueue::enable(self.base);
+        if queue.is_none() {
+            log::warn!(
+                "[vtd] unit {:#x} queued invalidation did not enable",
+                self.base
+            );
+        }
+        *self.qi.lock() = queue;
     }
 
     pub fn activate_translation(&mut self) -> bool {
@@ -137,39 +179,27 @@ impl VtdUnit {
         }
         let base = self.base;
 
-        // Invalidate stale caches before enabling
-        flush_context(base, ctx_global_command());
-        flush_iotlb(base, self.iva_off, iotlb_global_command());
-
-        // Step 1: Program root table address
+        // SAFETY: the register page is identity-mapped; root_phys is 4 KiB aligned.
         unsafe {
             core::ptr::write_volatile((base + VTD_RTADDR) as *mut u64, self.root_phys);
-            core::ptr::write_volatile((base + VTD_GCMD) as *mut u32, SRTP);
+        }
+        issue_gcmd(base, SRTP);
+        if !wait_status(base, SRTP, true, "RTPS") {
+            return false;
         }
 
-        // Wait for RTPS
-        let mut n = 0u64;
-        while unsafe { core::ptr::read_volatile((base + VTD_GSTS) as *const u32) } & SRTP == 0 {
-            n += 1;
-            if n >= POLL_MAX {
-                log::warn!("[vtd] unit {:#x} GSTS.RTPS timeout", base);
-                return false;
-            }
-            core::hint::spin_loop();
+        // A new root pointer requires global context then IOTLB invalidation
+        // before translation is enabled.
+        let context_done = self.invalidate_context(Scope::Global);
+        let iotlb_done = self.invalidate_iotlb(Scope::Global);
+        if !(context_done && iotlb_done) {
+            log::warn!("[vtd] unit {:#x} root-table invalidation incomplete", base);
+            return false;
         }
 
-        // Step 2: Enable Translation
-        unsafe {
-            core::ptr::write_volatile((base + VTD_GCMD) as *mut u32, TE | SRTP);
-        }
-        n = 0;
-        while unsafe { core::ptr::read_volatile((base + VTD_GSTS) as *const u32) } & TE == 0 {
-            n += 1;
-            if n >= POLL_MAX {
-                log::warn!("[vtd] unit {:#x} GSTS.TES timeout", base);
-                return false;
-            }
-            core::hint::spin_loop();
+        issue_gcmd(base, TE);
+        if !wait_status(base, TE, true, "TES") {
+            return false;
         }
 
         self.active.store(true, Ordering::Release);
@@ -177,54 +207,6 @@ impl VtdUnit {
             "[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT) unit={:#x}",
             base
         );
-        true
-    }
-
-    pub fn activate_ir(&mut self) -> bool {
-        if !self.ir_supported {
-            return false;
-        }
-        let base = self.base;
-        let ir_table = IrTable::new(7); // 256 entries
-
-        // Program IRTA register: base address | size power | EIM if x2apic
-        let val = (ir_table.phys & !0xFFF) | (ir_table.size_power as u64) | IRTA_EIM;
-        unsafe {
-            core::ptr::write_volatile((base + DMAR_IRTA_REG) as *mut u64, val);
-            core::ptr::write_volatile((base + VTD_GCMD) as *mut u32, VTD_GCMD_SIRTP);
-        }
-
-        let mut n = 0u64;
-        while unsafe { core::ptr::read_volatile((base + VTD_GSTS) as *const u32) } & VTD_GSTS_IRTPS
-            == 0
-        {
-            n += 1;
-            if n >= POLL_MAX {
-                log::warn!("[vtd] unit {:#x} IRTPS timeout", base);
-                return false;
-            }
-            core::hint::spin_loop();
-        }
-
-        // Enable IR (and leave CFI = 0 to block compatibility interrupts)
-        unsafe {
-            let cur_gcmd = core::ptr::read_volatile((base + VTD_GSTS) as *const u32);
-            core::ptr::write_volatile((base + VTD_GCMD) as *mut u32, cur_gcmd | VTD_GCMD_IRE);
-        }
-        n = 0;
-        while unsafe { core::ptr::read_volatile((base + VTD_GSTS) as *const u32) } & VTD_GSTS_IRES
-            == 0
-        {
-            n += 1;
-            if n >= POLL_MAX {
-                log::warn!("[vtd] unit {:#x} IRES timeout", base);
-                return false;
-            }
-            core::hint::spin_loop();
-        }
-
-        self.ir_table = Some(ir_table);
-        log::info!("[vtd] unit {:#x} interrupt remapping enabled", base);
         true
     }
 }

@@ -1,7 +1,8 @@
 //! Device-side MSI / MSI-X programming for an allocated vector block.
 //!
-//! Every message targets the BSP with fixed delivery and edge trigger
-//! (`hal::x86_64::msi::bsp_message`); the vector doubles as the logical IRQ.
+//! Every message targets the BSP with fixed delivery and edge trigger; the
+//! vector doubles as the logical IRQ. Under interrupt remapping the message
+//! names IRTEs at the VT-d unit covering the function instead.
 
 use super::config::{Config, CFG_COMMAND, CMD_BUS_MASTER, CMD_INTX_DISABLE, CMD_MEM_SPACE};
 use super::layout::MsixLayout;
@@ -37,15 +38,21 @@ fn enable_function(cfg: &Config, extra: u16) -> Option<()> {
         command | CMD_MEM_SPACE | CMD_BUS_MASTER | extra,
     )
 }
-fn msi_message_for_vector(vector: u8) -> Option<(u64, u32)> {
-    if crate::task::drivers::iommu_x86::ir::is_ir_active() {
-        let bsp_id = hal::x86_64::apic::cpu_apic_id(0)?;
-        let idx = crate::task::drivers::iommu_x86::program_ir_entry(vector, bsp_id, 0, false)?;
-        let addr = crate::task::drivers::iommu_x86::ir::remappable_msi_address(idx);
-        let data = crate::task::drivers::iommu_x86::ir::remappable_msi_data();
-        Some((addr, data))
-    } else {
-        hal::x86_64::msi::bsp_message(vector)
+/// Message for `count` vectors from `first` raised by function `bdf`.
+/// `None` when no message can reach the BSP, so the caller fails the block
+/// rather than hand out vectors that never fire.
+fn msi_message(bdf: u32, first: u8, count: usize) -> Option<(u64, u32)> {
+    use crate::task::drivers::iommu_x86::{ir, remap_msi, MsiRemap};
+    if !ir::is_ir_active() {
+        return hal::x86_64::msi::bsp_message(first);
+    }
+    let bsp_id = u8::try_from(hal::x86_64::apic::cpu_apic_id(0)?).ok()?;
+    match remap_msi(bdf, first, count, bsp_id)? {
+        MsiRemap::Compatible => hal::x86_64::msi::bsp_message(first),
+        MsiRemap::Handle(handle) => Some((
+            ir::remappable_msi_address(handle, count > 1),
+            ir::remappable_msi_data(),
+        )),
     }
 }
 
@@ -69,9 +76,13 @@ pub fn program_msix(
     let entries = layout.table_size as usize;
     for index in 0..entries {
         let entry = (table_phys + index * MSIX_ENTRY_BYTES) as *mut u32;
-        let message = (index < count)
-            .then(|| msi_message_for_vector(first + index as u8))
-            .flatten();
+        // A vector without a deliverable message fails the whole block; the
+        // function stays masked.
+        let message = if index < count {
+            Some(msi_message(cfg.bdf(), first + index as u8, 1)?)
+        } else {
+            None
+        };
         // SAFETY: the table lies inside the function's BAR (checked by the carve
         // rule) and the caller identity-mapped it kernel-only.
         unsafe {
@@ -92,7 +103,7 @@ pub fn program_msix(
 pub fn program_msi(cfg: &Config, cap: u8, first: u8, count: usize) -> Option<()> {
     let base = cap as usize;
     let control = cfg.read16(base + 2)?;
-    let (address, data) = msi_message_for_vector(first)?;
+    let (address, data) = msi_message(cfg.bdf(), first, count)?;
     cfg.write16(base + 2, control & !MSI_ENABLE)?;
     cfg.write32(base + 4, address as u32)?;
     let (data_at, mask_at) = if control & MSI_64BIT != 0 {

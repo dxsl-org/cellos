@@ -33,6 +33,11 @@ impl Config {
         Self { bdf }
     }
 
+    /// Canonical `bus:dev.func` of this function.
+    pub fn bdf(&self) -> u32 {
+        self.bdf
+    }
+
     pub fn read8(&self, off: usize) -> Option<u8> {
         let ptr = config_ptr(self.bdf, off)?;
         // SAFETY: `config_ptr` returns an address inside the identity-mapped ECAM window.

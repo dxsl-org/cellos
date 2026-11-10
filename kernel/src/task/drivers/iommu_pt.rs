@@ -25,8 +25,9 @@ fn alloc_page() -> (usize, u64) {
     (ptr, virt_to_phys(ptr))
 }
 
+/// Physical address of a kernel-heap pointer (HHDM on x86_64, identity elsewhere).
 #[inline]
-fn virt_to_phys(virt: usize) -> u64 {
+pub(super) fn virt_to_phys(virt: usize) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
         (virt - crate::memory::frame::phys_to_virt(0)) as u64
@@ -203,28 +204,41 @@ const VTD_RW: u64 = 0b11;
 pub struct VtdSlpt {
     root_phys: u64,
     root_virt: usize,
+    /// The owning unit snoops CPU caches (`ECAP.C`). When it does not, every
+    /// table store must be written back before the unit can see it.
+    coherent: bool,
 }
 
 // SAFETY: pointers are into kernel-owned 4 KiB pages never aliased externally.
 unsafe impl Send for VtdSlpt {}
 
-impl Default for VtdSlpt {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl VtdSlpt {
-    pub fn new() -> Self {
+    /// An empty table for a unit whose walks do (`coherent`) or do not snoop
+    /// the CPU caches.
+    pub fn new(coherent: bool) -> Self {
         #[cfg(cellos_p01_trace)]
         let _p01_activity = crate::p01_noncpu::activity();
         let (v, p) = alloc_page();
         #[cfg(cellos_p01_trace)]
         crate::p01_noncpu::created_heap(p, 4, v);
-        Self {
+        let slpt = Self {
             root_phys: p,
             root_virt: v,
+            coherent,
+        };
+        slpt.sync(v, 4096);
+        slpt
+    }
+
+    /// Write `[virt, virt + len)` back to memory for a non-snooping unit.
+    fn sync(&self, virt: usize, len: usize) {
+        #[cfg(target_arch = "x86_64")]
+        if !self.coherent {
+            super::iommu_x86::cache::flush(virt, len);
         }
+        // VT-d exists only on x86_64; elsewhere the table is a host-side probe.
+        #[cfg(not(target_arch = "x86_64"))]
+        let _ = (virt, len, self.coherent);
     }
 
     /// Add an identity mapping (IOVA == PA) for [phys, phys+size). Idempotent.
@@ -242,14 +256,30 @@ impl VtdSlpt {
         let i2 = ((pa >> 30) & 0x1FF) as usize;
         let i1 = ((pa >> 21) & 0x1FF) as usize;
         let i0 = ((pa >> 12) & 0x1FF) as usize;
-        let l1_phys = ensure_vtd_child(self.root_virt, i2);
-        let l0_phys = ensure_vtd_child(phys_to_virt_inner(l1_phys), i1);
+        let l1_phys = self.ensure_child(self.root_virt, i2);
+        let l0_phys = self.ensure_child(phys_to_virt_inner(l1_phys), i1);
         let leaf = (pa & !0xFFF) | VTD_RW;
+        let ptr = (phys_to_virt_inner(l0_phys) + i0 * 8) as *mut u64;
         // SAFETY: l0 page is a valid 4 KiB allocation; i0 < 512.
-        unsafe {
-            let ptr = (phys_to_virt_inner(l0_phys) + i0 * 8) as *mut u64;
-            ptr.write_volatile(leaf);
+        unsafe { ptr.write_volatile(leaf) };
+        self.sync(ptr as usize, 8);
+    }
+
+    /// Get or allocate a child table at `table_virt[idx]`. Returns child phys.
+    /// A new child is written back (zeroed) before the entry naming it.
+    fn ensure_child(&self, table_virt: usize, idx: usize) -> u64 {
+        // SAFETY: table_virt is a 512-entry 4 KiB page; idx < 512.
+        let slot = (table_virt + idx * 8) as *mut u64;
+        let e = unsafe { slot.read_volatile() };
+        if e & VTD_RW != 0 {
+            return e & !0xFFF; // extract physical address from non-leaf entry
         }
+        let (child_virt, child_phys) = alloc_page();
+        self.sync(child_virt, 4096);
+        // SAFETY: as above.
+        unsafe { slot.write_volatile((child_phys & !0xFFF) | VTD_RW) };
+        self.sync(slot as usize, 8);
+        child_phys
     }
 
     /// Remove the identity mapping for `[phys, phys+size)`. Idempotent.
@@ -295,6 +325,7 @@ impl VtdSlpt {
             }
             slot.write_volatile(0);
         }
+        self.sync(slot as usize, 8);
         true
     }
 
@@ -303,21 +334,6 @@ impl VtdSlpt {
     pub fn root_phys(&self) -> u64 {
         self.root_phys
     }
-}
-
-/// Get or allocate a child table at `table_virt[idx]`. Returns child phys.
-fn ensure_vtd_child(table_virt: usize, idx: usize) -> u64 {
-    // SAFETY: table_virt is a 512-entry 4 KiB page; idx < 512.
-    let slot = (table_virt + idx * 8) as *mut u64;
-    let e = unsafe { slot.read_volatile() };
-    if e & VTD_RW != 0 {
-        return e & !0xFFF; // extract physical address from non-leaf entry
-    }
-    let (_, child_phys) = alloc_page();
-    unsafe {
-        slot.write_volatile((child_phys & !0xFFF) | VTD_RW);
-    }
-    child_phys
 }
 
 /// Child table at `table_virt[idx]`, or `None` when the entry is not present.
@@ -455,7 +471,8 @@ pub(crate) fn run_selftest() {
         |pa| sv39.level2_present(pa),
     );
 
-    let vtd = VtdSlpt::new();
+    // No unit walks this table; coherent skips the write-back.
+    let vtd = VtdSlpt::new(true);
     let vtd = probe_teardown(
         |phys, size| vtd.map_range(phys, size),
         |phys, size| vtd.unmap_range(phys, size),
@@ -492,15 +509,28 @@ fn report(marker: &str, ok: bool) {
 pub const DART_PAGE_SIZE: usize = 16384;
 pub const DART_PAGE_MASK: u64 = 0x3FFF;
 pub const DART_PTE_VALID: u64 = 1 << 0;
-pub const DART_PTE_READ: u64 = 1 << 1;
-pub const DART_PTE_WRITE: u64 = 1 << 2;
+/// DART1 (t8103-format) leaf: subpage protection disabled. Read/write access
+/// is granted by leaving the negative NO_WRITE (bit 7) / NO_READ (bit 8) clear.
+pub const DART1_PTE_SP_DIS: u64 = 1 << 1;
+/// Subpage window `[0, 0xFFF]`: the whole 16 KiB page, as Linux programs it.
+pub const DART_PTE_SUBPAGE_FULL: u64 = 0xFFF << 40;
 pub const DART_PTE_ADDR_MASK: u64 = 0x0000_FFFF_FFFF_C000;
 pub const DART_ENTRIES_PER_TABLE: usize = 2048; // 16 KiB / 8 bytes
+/// Two 11-bit levels over 16 KiB pages reach 2^36; a wider IOVA would alias
+/// into a lower L1 slot.
+pub const DART_IOVA_LIMIT: u64 = 1 << 36;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DartError {
     BypassForbidden,
-    Misaligned,
+    /// The range ends beyond [`DART_IOVA_LIMIT`] (or overflows).
+    OutOfRange,
+}
+
+/// 16 KiB-padded `[start, end)` of `[phys, phys+size)`, or `None` on overflow.
+fn dart_span(phys: u64, size: usize) -> Option<(u64, u64)> {
+    let end = phys.checked_add(size as u64)?.checked_add(DART_PAGE_MASK)? & !DART_PAGE_MASK;
+    Some((phys & !DART_PAGE_MASK, end))
 }
 
 fn alloc_dart_page() -> (usize, u64) {
@@ -545,14 +575,19 @@ impl AppleDartPt {
     }
 
     /// Add an identity mapping (IOVA == PA) for [phys, phys+size), padded to 16 KiB pages. Idempotent.
-    pub fn map_range(&self, phys: u64, size: usize) {
-        let start = phys & !DART_PAGE_MASK;
-        let end = (phys + size as u64 + DART_PAGE_MASK) & !DART_PAGE_MASK;
+    ///
+    /// Refused as a whole when any page lies at or beyond [`DART_IOVA_LIMIT`].
+    pub fn map_range(&self, phys: u64, size: usize) -> Result<(), DartError> {
+        let (start, end) = dart_span(phys, size).ok_or(DartError::OutOfRange)?;
+        if end > DART_IOVA_LIMIT {
+            return Err(DartError::OutOfRange);
+        }
         let mut pa = start;
         while pa < end {
             self.map_page(pa);
             pa += DART_PAGE_SIZE as u64;
         }
+        Ok(())
     }
 
     fn map_page(&self, pa: u64) {
@@ -561,7 +596,7 @@ impl AppleDartPt {
         let l2_table_phys = self.get_or_alloc_l2(l1_idx);
         let l2_virt = phys_to_virt_inner(l2_table_phys);
         let pte_addr = (l2_virt + l2_idx * 8) as *mut u64;
-        let pte = (pa & DART_PTE_ADDR_MASK) | DART_PTE_VALID | DART_PTE_READ | DART_PTE_WRITE;
+        let pte = pa | DART_PTE_VALID | DART1_PTE_SP_DIS | DART_PTE_SUBPAGE_FULL;
         unsafe {
             pte_addr.write_volatile(pte);
         }
@@ -584,8 +619,11 @@ impl AppleDartPt {
 
     /// Clear identity mappings for [phys, phys+size), returning the number of 16 KiB pages unmapped.
     pub fn unmap_range(&self, phys: u64, size: usize) -> usize {
-        let start = phys & !DART_PAGE_MASK;
-        let end = (phys + size as u64 + DART_PAGE_MASK) & !DART_PAGE_MASK;
+        let Some((start, end)) = dart_span(phys, size) else {
+            return 0;
+        };
+        // Pages at or beyond the limit were never mappable.
+        let end = end.min(DART_IOVA_LIMIT);
         let mut pa = start;
         let mut count = 0;
         while pa < end {
@@ -669,7 +707,7 @@ mod tests {
         const PAGE_16K: usize = 16384;
 
         // Map 3 pages (48 KiB)
-        pt.map_range(BASE, 3 * PAGE_16K);
+        assert_eq!(pt.map_range(BASE, 3 * PAGE_16K), Ok(()));
         assert!(pt.leaf_present(BASE));
         assert!(pt.leaf_present(BASE + PAGE_16K as u64));
         assert!(pt.leaf_present(BASE + 2 * PAGE_16K as u64));
@@ -686,7 +724,29 @@ mod tests {
         assert_eq!(pt.unmap_range(BASE + PAGE_16K as u64, PAGE_16K), 0);
 
         // Remap middle page
-        pt.map_range(BASE + PAGE_16K as u64, PAGE_16K);
+        assert_eq!(pt.map_range(BASE + PAGE_16K as u64, PAGE_16K), Ok(()));
         assert!(pt.leaf_present(BASE + PAGE_16K as u64));
+
+        // A range crossing the 36-bit table reach is refused whole instead of
+        // aliasing into a low L1 slot.
+        let last = DART_IOVA_LIMIT - PAGE_16K as u64;
+        assert_eq!(pt.map_range(last, 2 * PAGE_16K), Err(DartError::OutOfRange));
+        assert!(!pt.level1_present(last));
+        assert_eq!(
+            pt.map_range(u64::MAX - 1, PAGE_16K),
+            Err(DartError::OutOfRange)
+        );
+        assert_eq!(pt.unmap_range(DART_IOVA_LIMIT, PAGE_16K), 0);
+    }
+
+    #[test]
+    fn vtd_slpt_maps_and_unmaps_for_a_non_snooping_unit() {
+        // coherent=false writes every table store back with CLFLUSH.
+        for coherent in [false, true] {
+            let pt = VtdSlpt::new(coherent);
+            pt.map_range(0x4020_0000, 0x2000);
+            assert_eq!(pt.unmap_range(0x4020_0000, 0x3000), 2);
+            assert_eq!(pt.unmap_range(0x4020_0000, 0x2000), 0);
+        }
     }
 }

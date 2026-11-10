@@ -55,9 +55,9 @@ static READY: AtomicBool = AtomicBool::new(false);
 static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 
 /// ISR: the pending flag first, then the early-sweep hint (one atomic store
-/// each, no lock), so a sweep that takes the hint sees the flag.
-/// If the vector belongs to the registered NIC driver, signal NET_RX for
-/// WaitCompletion(NET_RX) / WaitForEvent(NET_RX).
+/// each), so a sweep that takes the hint sees the flag. A vector held by the
+/// registered NIC driver also signals NET_RX; that check takes the NIC and
+/// allocation locks, and only once a NIC driver is registered.
 pub(crate) fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
     irq_wait::hint_msi_wake();
@@ -73,10 +73,11 @@ pub fn init(firmware_forbids_msi: bool) {
     hal::x86_64::msi::set_handler(on_msi);
     READY.store(true, Ordering::Release);
     log::info!(
-        "[msi] vectors={:#x}-{:#x} firmware_forbids={} no interrupt remapping",
+        "[msi] vectors={:#x}-{:#x} firmware_forbids={} interrupt_remapping={}",
         hal::x86_64::msi::VECTOR_FIRST,
         hal::x86_64::msi::VECTOR_LAST,
-        firmware_forbids_msi as u8
+        firmware_forbids_msi as u8,
+        crate::task::drivers::iommu_x86::ir::is_ir_active() as u8
     );
 }
 

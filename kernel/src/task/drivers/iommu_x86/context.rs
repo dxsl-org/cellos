@@ -1,39 +1,46 @@
 //! VT-d root and context table encoding (Intel VT-d spec §9.3).
 
+use super::super::iommu_pt::virt_to_phys;
 use alloc::alloc::{alloc_zeroed, Layout};
 use core::sync::atomic::{fence, Ordering};
 
 pub const CTX_AW_39BIT_HI: u64 = 0b001; // hi[2:0]
 pub const CTX_PRESENT: u64 = 1;
 
+/// P01 lifetime kind of a root table.
+pub const TABLE_KIND_ROOT: u64 = 5;
+/// P01 lifetime kind of a per-bus context table.
+pub const TABLE_KIND_CONTEXT: u64 = 6;
+
 #[derive(Clone, Copy, Debug)]
 pub struct ContextTable {
     pub virt: usize,
     pub phys: u64,
+    /// The root entry naming this table was globally invalidated; until then
+    /// the table is not handed out, so a timeout stays retryable.
     pub publication_flushed: bool,
 }
-#[inline]
-fn virt_to_phys(virt: usize) -> u64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        (virt - crate::memory::frame::phys_to_virt(0)) as u64
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        virt as u64
-    }
-}
 
-pub fn alloc_table(alignment_bits: usize) -> (usize, u64) {
-    let size = 4096;
-    let align = 1usize << alignment_bits.max(12);
-    let layout = Layout::from_size_align(size, align).expect("table layout");
-    // SAFETY: layout is 4 KiB aligned and zero-initialized.
-    let virt = unsafe { alloc_zeroed(layout) as usize };
+/// Allocate a zeroed 4 KiB table page of P01 lifetime `_kind`. Panics on OOM.
+pub fn alloc_table(_kind: u64) -> (usize, u64) {
+    #[cfg(cellos_p01_trace)]
+    let _p01_activity = crate::p01_noncpu::activity();
+    let layout = Layout::from_size_align(4096, 4096).expect("table layout");
+    // SAFETY: layout is non-zero and 4 KiB aligned.
+    let virt = {
+        #[cfg(cellos_p01_trace)]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
+        unsafe { alloc_zeroed(layout) as usize }
+    };
     if virt == 0 {
         panic!("[vtd] out of memory allocating table");
     }
     let phys = virt_to_phys(virt);
+    #[cfg(cellos_p01_trace)]
+    crate::p01_noncpu::created_heap(phys, _kind, virt);
     (virt, phys)
 }
 
@@ -54,6 +61,28 @@ pub fn context_slot(ctx_virt: usize, bdf: u16) -> usize {
     ctx_virt + context_slot_offset(dev, func)
 }
 
+/// `[lo, hi]` of a present legacy context entry: untranslated requests walk
+/// `slpt_phys` (3-level, 39-bit AW) under domain `did`.
+#[inline]
+pub fn context_entry(slpt_phys: u64, did: u16) -> [u64; 2] {
+    [
+        (slpt_phys & !0xFFF) | CTX_PRESENT,
+        ((did as u64) << 8) | CTX_AW_39BIT_HI,
+    ]
+}
+
+/// # Safety
+/// Caller must ensure `slot` points to a valid context entry slot.
+pub unsafe fn read_ctx_slot(slot: usize) -> [u64; 2] {
+    // SAFETY: the caller guarantees both 8-byte words lie in the entry.
+    unsafe {
+        [
+            core::ptr::read_volatile(slot as *const u64),
+            core::ptr::read_volatile((slot + 8) as *const u64),
+        ]
+    }
+}
+
 /// # Safety
 /// Caller must ensure `root_virt` points to an allocated root table page.
 pub unsafe fn write_root_entry(root_virt: usize, bus: u8, ctx_phys: u64) {
@@ -66,11 +95,12 @@ pub unsafe fn write_root_entry(root_virt: usize, bus: u8, ctx_phys: u64) {
 }
 
 /// # Safety
-/// Caller must ensure `ctx_virt` points to an allocated context table page.
+/// Caller must ensure `ctx_virt` points to an allocated context table page
+/// and that the entry for `bdf` is not present (hardware never sees a torn
+/// present entry).
 pub unsafe fn write_ctx_entry(ctx_virt: usize, bdf: u16, slpt_phys: u64, did: u16) {
     let slot = context_slot(ctx_virt, bdf);
-    let lo = (slpt_phys & !0xFFF) | CTX_PRESENT;
-    let hi = ((did as u64) << 8) | CTX_AW_39BIT_HI;
+    let [lo, hi] = context_entry(slpt_phys, did);
     unsafe {
         core::ptr::write_volatile((slot + 8) as *mut u64, hi);
         fence(Ordering::Release);
@@ -112,8 +142,13 @@ mod tests {
         }
         assert_eq!(&root[510..], &[0x2001, 0]);
         assert_eq!(&context[510..], &[0x3001, 0x00FF_FF01]);
+        let slot = context_slot(ctx_virt, bdf);
+        assert_eq!(
+            unsafe { read_ctx_slot(slot) },
+            context_entry(0x3000, 0xFFFF)
+        );
         unsafe {
-            clear_ctx_slot(context_slot(ctx_virt, bdf));
+            clear_ctx_slot(slot);
         }
         assert_eq!(&context[510..], &[0, 0]);
     }
