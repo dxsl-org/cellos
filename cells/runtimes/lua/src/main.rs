@@ -18,15 +18,24 @@ api::declare_manifest!(
     spawn = false,
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
+// Read + RecvTimeout: console input for the interactive REPL (`ostd::repl::Repl`).
+// Read is fd 0 (a terminal session's stdin stream, or the legacy console
+// ring); RecvTimeout waits for the input service's key events once the REPL
+// claims console focus (Send), which is how serial bytes reach a foreground
+// child of a shell outside a terminal session. Without them the REPL hears
+// nothing. Read on any other fd needs a descriptor this cell cannot obtain
+// (no Open), so the grant is console input only.
 api::declare_syscalls![
     Send,
     Recv,
+    RecvTimeout,
     Log,
     Heartbeat,
     LookupService,
     GetTime,
     StateRestore,
-    VfsMutate
+    VfsMutate,
+    Read
 ];
 
 // When no ELF-capable C compiler is available (e.g. Windows + MSVC without
