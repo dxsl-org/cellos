@@ -1303,6 +1303,13 @@ jobs:
             exit 1
           fi
 
+      # Release posture (architecture remediation Phase 04): throwaway anchors,
+      # dev-signed image; the kernel must refuse every Cell and stop at the VFS
+      # bootstrap instead of booting code its anchors never signed.
+      - name: Release-posture kernel fails closed (x86_64)
+        timeout-minutes: 15
+        run: bash scripts/x86/qemu-release-posture-test.sh "$C2C_DIR/embedded" "$C2C_DIR/release-posture"
+
       - name: x86 Tier-2 domain test (TCG)
         timeout-minutes: 20
         run: |
@@ -2080,9 +2087,14 @@ jobs:
           # The toolchain step installs rust-src, not the x86_64-unknown-none
           # target, so core/alloc are built from source as in every other
           # bare-metal step of this job.
-          anchor="$RUNNER_TEMP/release-cell-public-key.bin"
-          python3 -c 'import sys; sys.stdout.buffer.write(bytes([0x42]*32))' > "$anchor"
-          CELLOS_RELEASE_CELL_PUBLIC_KEY="$anchor" cargo check \
+          # A release posture needs all three anchors; placeholder keys suffice
+          # for a compile-only check (build.rs refuses only zero or dev keys).
+          for k in cell:42 policy:44 owner:45; do
+            python3 -c "import sys; sys.stdout.buffer.write(bytes([0x${k#*:}]*32))" > "$RUNNER_TEMP/release-${k%%:*}.pub"
+          done
+          CELLOS_RELEASE_CELL_PUBLIC_KEY="$RUNNER_TEMP/release-cell.pub" \
+          CELLOS_RELEASE_POLICY_PUBLIC_KEY="$RUNNER_TEMP/release-policy.pub" \
+          CELLOS_RELEASE_OWNER_PUBLIC_KEY="$RUNNER_TEMP/release-owner.pub" cargo check \
             --target x86_64-unknown-none \
             -Z build-std=core,alloc \
             --no-default-features \

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Backend-neutral admission state core.
 //!
-//! This module is intentionally not connected to loader or boot admission. It
-//! models the fail-closed decision that a future qualified backend may consume.
+//! `gate::evaluate_owner_admission` runs on every governed spawn. Dev and test
+//! kernels are permissive; release kernels enforce it, and until a qualified
+//! backend installs an admitted A/B slot (`OwnerAdmissionRegistry::update` has no
+//! production caller yet) every release spawn is refused — fail-closed by design.
 
 pub mod gate;
 #[cfg(feature = "test-hooks")]

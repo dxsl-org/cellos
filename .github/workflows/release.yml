@@ -30,28 +30,31 @@ jobs:
           targets: riscv64gc-unknown-none-elf
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with: { cache-on-failure: true }
-      # The release kernel's only cell trust anchor. The secret holds the 32-byte
-      # Ed25519 public key as 64 hex characters; kernel/build.rs reads the raw
-      # bytes from the file named by CELLOS_RELEASE_CELL_PUBLIC_KEY and refuses a
-      # missing, short, zero or dev key, so never fall back to a default.
-      - name: Provision release cell public key
+      # All three anchors (cell signing, fleet policy, owner admission) come from
+      # secrets as 64 hex characters; build.rs refuses a missing, zero or dev key.
+      - name: Provision release public keys
         env:
-          RELEASE_CELL_PUBLIC_KEY_HEX: ${{ secrets.CELLOS_RELEASE_CELL_PUBLIC_KEY }}
+          CELL_HEX: ${{ secrets.CELLOS_RELEASE_CELL_PUBLIC_KEY }}
+          POLICY_HEX: ${{ secrets.CELLOS_RELEASE_POLICY_PUBLIC_KEY }}
+          OWNER_HEX: ${{ secrets.CELLOS_RELEASE_OWNER_PUBLIC_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "$RELEASE_CELL_PUBLIC_KEY_HEX" ]; then
-            echo "::error::secret CELLOS_RELEASE_CELL_PUBLIC_KEY is empty; a release kernel needs its trust anchor"
-            exit 1
-          fi
-          key_file="$RUNNER_TEMP/release-cell-signing.pub"
-          printf '%s' "$RELEASE_CELL_PUBLIC_KEY_HEX" | python3 -c '
+          for pair in CELL:"$CELL_HEX" POLICY:"$POLICY_HEX" OWNER:"$OWNER_HEX"; do
+            name="${pair%%:*}"; hex="${pair#*:}"
+            if [ -z "$hex" ]; then
+              echo "::error::secret CELLOS_RELEASE_${name}_PUBLIC_KEY is empty; a release kernel needs every trust anchor"
+              exit 1
+            fi
+            key_file="$RUNNER_TEMP/release-${name,,}.pub"
+            printf '%s' "$hex" | python3 -c '
           import sys
           key = bytes.fromhex(sys.stdin.read().strip())
           if len(key) != 32:
-              sys.exit("CELLOS_RELEASE_CELL_PUBLIC_KEY must be 64 hex characters (32 bytes)")
+              sys.exit("release public key must be 64 hex characters (32 bytes)")
           open(sys.argv[1], "wb").write(key)
           ' "$key_file"
-          echo "CELLOS_RELEASE_CELL_PUBLIC_KEY=$key_file" >> "$GITHUB_ENV"
+            echo "CELLOS_RELEASE_${name}_PUBLIC_KEY=$key_file" >> "$GITHUB_ENV"
+          done
       # release-posture = release-signing-key + signing-required + policy-required.
       # --no-default-features drops dev-policy-key, dev-signing-key and dev-weak-rng.
       - name: Build kernel (RV64, release posture)

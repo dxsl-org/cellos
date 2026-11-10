@@ -21,7 +21,10 @@ impl OwnerAdmissionRegistry {
             floor_port: FloorPortOutcome::Missing,
             slots: [None, None],
             active_admitted_slot: None,
-            production_enforced: false,
+            // Release kernels enforce owner admission (owner decision 2026-11-10,
+            // architecture remediation Phase 04): with no admitted A/B slot every
+            // spawn is refused. Dev/test kernels stay permissive.
+            production_enforced: cfg!(cellos_posture = "release"),
         }
     }
 

@@ -107,15 +107,20 @@ const DEV_FLEET_PUBKEY: [u8; 32] = [
 ];
 
 /// Fleet root Ed25519 **public** key (trust anchor; lives in the kernel TCB, not
-/// in mutable VIFS1 data). `dev-policy-key` feature → the dev key (so a dev-signed
-/// `/POLICY.BIN` verifies); otherwise a placeholder the production provisioning
-/// replaces. A zero/placeholder key fails every verify → any present policy is
-/// `Invalid` (fail-closed), the safe direction; absent policy still boots
-/// (dev-permissive).
-#[cfg(feature = "dev-policy-key")]
+/// in mutable VIFS1 data).
+/// - release posture → the key build.rs copied from `CELLOS_RELEASE_POLICY_PUBLIC_KEY`
+///   (refused there if missing, zero or the dev key);
+/// - `dev-policy-key` → the dev key, so a dev-signed `/POLICY.BIN` verifies;
+/// - otherwise (dev/test without the dev key) a zero placeholder that fails every
+///   verify: any present policy is `Invalid` (fail-closed); an absent policy still
+///   boots dev-permissive.
+#[cfg(cellos_posture = "release")]
+const FLEET_ROOT_PUBKEY: [u8; 32] =
+    *include_bytes!(concat!(env!("OUT_DIR"), "/release-policy.pub"));
+#[cfg(all(not(cellos_posture = "release"), feature = "dev-policy-key"))]
 const FLEET_ROOT_PUBKEY: [u8; 32] = DEV_FLEET_PUBKEY;
-#[cfg(not(feature = "dev-policy-key"))]
-const FLEET_ROOT_PUBKEY: [u8; 32] = [0u8; 32]; // TODO(prod): provisioned fleet key
+#[cfg(all(not(cellos_posture = "release"), not(feature = "dev-policy-key")))]
+const FLEET_ROOT_PUBKEY: [u8; 32] = [0u8; 32];
 
 /// Result of a policy lookup for a given cell path. Plain data (`Copy`) so a
 /// caller can both inspect a decision and pass it to the narrowing rule.

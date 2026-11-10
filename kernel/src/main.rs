@@ -72,6 +72,8 @@ pub(crate) mod p01_topology;
 #[cfg(cellos_p01_trace)]
 pub(crate) mod p01_vtd_topology;
 pub mod policy; // Signed operator policy (P5b) — headless consent
+#[cfg(test)]
+mod posture;
 pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time

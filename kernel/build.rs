@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 #[allow(dead_code)]
 mod sha256;
 
+#[path = "src/posture.rs"]
+#[allow(dead_code)]
+mod posture;
+
 fn main() {
     // Emit the Git short SHA as the snapshot invalidation key.
     // Any git commit changes this value, causing warm-boot snapshots taken before
@@ -148,12 +152,35 @@ fn main() {
             "the dev key cannot be the release key"
         );
         fs::write(out_dir.join("release-cell-signing.pub"), key).expect("copy release public key");
-    } else {
-        assert!(
-            std::env::var_os("CELLOS_RELEASE_CELL_PUBLIC_KEY").is_none(),
-            "CELLOS_RELEASE_CELL_PUBLIC_KEY requires the release-signing-key feature"
+        // The other two trust anchors are provisioned the same way; a release
+        // kernel never compiles a zero placeholder or a dev key for them.
+        provision_release_anchor(
+            &out_dir,
+            "CELLOS_RELEASE_POLICY_PUBLIC_KEY",
+            "release-policy.pub",
+            &DEV_FLEET_POLICY_PUBKEY,
         );
+        provision_release_anchor(
+            &out_dir,
+            "CELLOS_RELEASE_OWNER_PUBLIC_KEY",
+            "release-owner.pub",
+            &DEV_OWNER_PUBKEY,
+        );
+    } else {
+        for var in [
+            "CELLOS_RELEASE_CELL_PUBLIC_KEY",
+            "CELLOS_RELEASE_POLICY_PUBLIC_KEY",
+            "CELLOS_RELEASE_OWNER_PUBLIC_KEY",
+        ] {
+            assert!(
+                std::env::var_os(var).is_none(),
+                "{var} requires the release-signing-key feature"
+            );
+        }
     }
+    let posture = derive_posture(&target_arch);
+    println!("cargo:rustc-check-cfg=cfg(cellos_posture, values(\"dev\", \"test\", \"release\"))");
+    println!("cargo:rustc-cfg=cellos_posture=\"{posture}\"");
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");
@@ -347,6 +374,52 @@ fn manifest_digest(manifest: &str, key: &str) -> Option<String> {
     let digest = object.split("\"sha256\": \"").nth(1)?;
     let digest = &digest[..digest.find('"')?];
     (digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit())).then(|| digest.to_owned())
+}
+
+/// Dev policy root (`scripts/sign-policy.py` fixed seed); see `kernel/src/policy.rs`.
+const DEV_FLEET_POLICY_PUBKEY: [u8; 32] = [
+    0x21, 0x52, 0xf8, 0xd1, 0x9b, 0x79, 0x1d, 0x24, 0x45, 0x32, 0x42, 0xe1, 0x5f, 0x2e, 0xab, 0x6c,
+    0xb7, 0xcf, 0xfa, 0x7b, 0x6a, 0x5e, 0xd3, 0x00, 0x97, 0x96, 0x0e, 0x06, 0x98, 0x81, 0xdb, 0x12,
+];
+
+/// Dev owner admission key (seed `[0x4F; 32]`); see `kernel/src/admission/owner_key.rs`.
+const DEV_OWNER_PUBKEY: [u8; 32] = [
+    0x00, 0xe3, 0xc5, 0x6b, 0x91, 0xab, 0x0a, 0x01, 0x71, 0x74, 0xb9, 0x66, 0x45, 0xea, 0xf9, 0x28,
+    0x36, 0x6c, 0xdb, 0xae, 0x1e, 0x87, 0xfd, 0x21, 0xbf, 0x86, 0x66, 0x1d, 0x86, 0xf3, 0xe7, 0xef,
+];
+
+/// Copy the 32-byte public key named by `var` into `OUT_DIR/out_name`.
+///
+/// Panics when the variable is missing, the key is not 32 bytes, all zero, or
+/// equal to the matching dev key: a release kernel must not trust a placeholder
+/// or a key whose private half is in the repository.
+fn provision_release_anchor(out_dir: &Path, var: &str, out_name: &str, dev_key: &[u8; 32]) {
+    println!("cargo:rerun-if-env-changed={var}");
+    let path = std::env::var_os(var)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("release-signing-key requires {var} (32 raw bytes)"));
+    println!("cargo:rerun-if-changed={}", path.display());
+    let key = fs::read(&path).unwrap_or_else(|e| panic!("read {var} ({}): {e}", path.display()));
+    assert_eq!(key.len(), 32, "{var} must name a 32-byte raw public key");
+    assert!(key.iter().any(|b| *b != 0), "{var}: zero key refused");
+    assert_ne!(
+        key.as_slice(),
+        dev_key,
+        "{var}: the dev key cannot be a release anchor"
+    );
+    fs::write(out_dir.join(out_name), key).expect("copy release anchor");
+}
+
+/// Enforce the single trust posture (`kernel/src/posture.rs`) and return its name.
+fn derive_posture(target_arch: &str) -> &'static str {
+    let on = |feature: &str| {
+        let var = format!("CARGO_FEATURE_{}", feature.to_uppercase().replace('-', "_"));
+        std::env::var_os(var).is_some()
+    };
+    match posture::derive(target_arch, &on) {
+        Ok(posture) => posture.as_str(),
+        Err(reason) => panic!("kernel feature set refused: {reason}"),
+    }
 }
 
 /// Emit the git short SHA via cargo:rustc-env for snapshot invalidation.

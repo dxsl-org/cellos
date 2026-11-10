@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "One trust posture, guarded copy always on"
-status: pending
+status: completed
 priority: P1
 effort: "5–7d"
 dependencies: [3]
@@ -67,19 +67,19 @@ Replace additive posture features with exactly one derived posture, make the gua
 
 ## Todo List
 
-- [ ] Derivation table reviewed
-- [ ] Mix rejection + tests
-- [ ] Policy key provisioning
-- [ ] Owner gate decision applied
-- [ ] Guarded copy unconditional
-- [ ] Release posture boot lane
+- [x] Derivation table reviewed
+- [x] Mix rejection + tests
+- [x] Policy key provisioning
+- [x] Owner gate decision applied
+- [x] Guarded copy unconditional
+- [x] Release posture boot lane
 
 ## Success Criteria
 
-- [ ] `cargo check -p cellos-kernel --no-default-features --features release-posture,test-hooks` fails with the posture error (repeat for `dev-policy-key`, `maintenance-mode`).
-- [ ] Host tests for the derivation table pass.
-- [ ] x86 release-posture image boots to the shell marker in QEMU, or the lane records the exact refusal as input to Phase 05.
-- [ ] RV64 baseline and an AArch64 boot lane still pass with default features.
+- [x] `cargo check -p cellos-kernel --no-default-features --features release-posture,test-hooks` fails with the posture error (repeat for `dev-policy-key`, `maintenance-mode`).
+- [x] Host tests for the derivation table pass.
+- [x] x86 release-posture image boots to the shell marker in QEMU, or the lane records the exact refusal as input to Phase 05. (Records the refusal: every Cell refused, init stops at the VFS bootstrap.)
+- [x] RV64 baseline and an AArch64 boot lane still pass with default features.
 
 ## Risk Assessment
 
@@ -96,4 +96,31 @@ Phase 05 consumes the posture cfg for fixture rows.
 
 ## Deviation Log
 
-None.
+- Decision: posture is a `cfg(cellos_posture)` derived from the existing features by `kernel/src/posture.rs` (shared by `build.rs` and host tests); feature names stay the inputs.
+  Why: one tested definition for both enforcement and code.
+  Impact: `kernel/build.rs`, `kernel/src/posture.rs`.
+  Revert: drop the cfg; restore placeholders.
+- Decision: owner gate enforced under release (owner `enforce-release`); the owner and policy anchors are provisioned like the cell anchor.
+  Why: owner answer; a zero placeholder in a release kernel was the finding.
+  Impact: release kernels now refuse every governed spawn until release-signed cells and an admitted owner slot exist.
+  Revert: `production_enforced: false`.
+- Deviation: the raw-memcpy copy path is not deleted; the build refuses a bootable 64-bit kernel without `native-domains`.
+  Why: 32-bit targets still use it (owner decision D4).
+  Impact: none on 64-bit.
+  Revert: n/a.
+- Deviation: `validate_user_buf` kept.
+  Why: all 43 sites reviewed — each precedes copy-view access; it is an argument pre-check, not a boundary.
+  Impact: none.
+  Revert: n/a.
+- Deviation: files outside the S2 list touched as direct consequences: `.github/workflows/release.yml` (provision the two new anchors; S1 file), `scripts/qemu-getrandom-sas-test.sh` (its production tuple now needs three anchors and is compile-only), new lane `scripts/x86/qemu-release-posture-test.sh`, `docs/code-metrics.generated.md`.
+  Why: without them release and the getrandom lane break on the new key requirement.
+  Impact: listed files.
+  Revert: revert with the phase.
+- Surprise: the embedded `init` is published as trusted without passing the governed spawn, so a release kernel starts init and refuses everything init asks for.
+  Why: observed in the release boot log.
+  Impact: the lane asserts that exact shape; whether init itself should pass the signature/owner gate is input for Phase 06.
+  Revert: n/a.
+
+## Evidence
+
+[reports/phase-04-evidence.md](reports/phase-04-evidence.md).

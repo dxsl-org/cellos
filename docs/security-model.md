@@ -265,22 +265,24 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 - **Per-Cell SHA-256 measurement (2026-06-21)** — every ELF is hashed at `spawn_from_path()` and extended
   into an append-only kernel measurement log (Linux IMA model) *before* the Cell is scheduled
   (`kernel/src/sha256.rs`, `kernel/src/measurement_log.rs`; emitted as a `CellMeasure` audit event).
-- **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31; postures 2026-11-05)** —
+- **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31; postures 2026-11-05; single derived posture 2026-11-10)** —
   the loader extracts the `__ViCell_sig` section and verifies it against the kernel's single trust anchor.
 
-  | Posture (kernel features) | Cell trust anchor | Unsigned cell | Bad signature | Absent policy |
-  |---|---|---|---|---|
-  | `default` (dev/test: `dev-signing-key`, `dev-policy-key`, `dev-weak-rng`) | public dev seed `0x43*32` | Tier 2 | denied | dev-permissive |
-  | `release-posture` = `release-signing-key` + `signing-required` + `policy-required` | `CELLOS_RELEASE_CELL_PUBLIC_KEY` (private key a CI secret) | **denied** | denied | fail-closed |
-  | `production-relay-image` = `release-signing-key` + `signing-required` + `policy-required` | same release key | **denied** | denied | fail-closed |
+  | Posture (derived by `kernel/build.rs` from the features, `kernel/src/posture.rs`) | Cell / policy / owner anchors | Unsigned cell | Bad signature | Absent policy | Owner admission |
+  |---|---|---|---|---|---|
+  | `dev` — `default` (`dev-signing-key`, `dev-policy-key`, `dev-weak-rng`) | public dev seeds | Tier 2 | denied | dev-permissive | permissive |
+  | `test` — any set with `test-hooks` (no release anchor) | as dev | Tier 2 | denied | dev-permissive | permissive |
+  | `release` — `release-posture` or `production-relay-image` | `CELLOS_RELEASE_{CELL,POLICY,OWNER}_PUBLIC_KEY` (private halves held outside the repository) | **denied** | denied | fail-closed | **enforced** |
 
-  `release-signing-key` cannot be combined with `dev-signing-key` (build error), so a dev-signed artifact
-  is refused by a release kernel; both release postures build with `--no-default-features`.
-  `signing-required` without any anchor feature (`dev-signing-key`, `release-signing-key`,
-  `phase02-terminal-profile`) is a build error: the zero placeholder anchor would refuse every signed
-  cell while still admitting unsigned ones. `.github/workflows/release.yml` builds `release-posture` and
-  fails when the release-key secret is empty; `scripts/check-production-relay-image.py` requires
-  `release-signing-key` for relay candidates.
+  The build refuses any mix: a release kernel cannot also carry `dev-*` keys, `dev-weak-rng`,
+  `test-hooks`, `maintenance-mode`, `qemu-dev-https`, private fixture profiles or measurement-only
+  features, and must keep `signing-required` and `policy-required`. All three release anchors must be
+  provisioned; a missing, zero or dev key is a build error. Every bootable 64-bit kernel requires
+  `native-domains` (the guarded user-copy boundary); only `compile-only` builds are exempt.
+  Owner admission is enforced in the release posture, and no qualified backend installs an admitted
+  A/B slot yet, so a release kernel refuses every spawn (fail-closed) until that backend exists.
+  `.github/workflows/release.yml` fails when any of the three release-key secrets is empty;
+  `scripts/check-production-relay-image.py` requires `release-signing-key` for relay candidates.
 
   Images from caller memory (`SpawnFromElf`, `CellSessionV1` route 2, `SpawnFromMem`) are copied into a
   kernel-owned buffer before hashing, verification, manifest classification and loading (2026-11-05).

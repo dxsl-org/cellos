@@ -12,21 +12,24 @@ mkdir -p "$LOG_DIR"
 PRODUCTION_TARGET="$TARGET_BASE/production-relay"
 
 build_production_tuple() {
-    # production-relay-image now requires the release cell anchor. This build only
-    # checks the GetRandom posture compiles, so a throwaway public key suffices.
-    local anchor
-    anchor="$(mktemp)"
-    head -c 32 /dev/urandom >"$anchor"
-    CELLOS_RELEASE_CELL_PUBLIC_KEY="$anchor" \
+    # A release posture needs all three anchors (cell, policy, owner). This build
+    # only checks that the GetRandom posture compiles, so throwaway public keys
+    # suffice and the kernel is compile-only (it is never booted).
+    local dir
+    dir="$(mktemp -d)"
+    for anchor in cell policy owner; do head -c 32 /dev/urandom >"$dir/$anchor.pub"; done
+    CELLOS_RELEASE_CELL_PUBLIC_KEY="$dir/cell.pub" \
+    CELLOS_RELEASE_POLICY_PUBLIC_KEY="$dir/policy.pub" \
+    CELLOS_RELEASE_OWNER_PUBLIC_KEY="$dir/owner.pub" \
     CARGO_TARGET_DIR="$PRODUCTION_TARGET" \
     RUSTFLAGS="-C relocation-model=pic" \
     cargo build --release \
         --target riscv64gc-unknown-none-elf \
         -Z build-std=core,alloc \
         --no-default-features \
-        --features production-relay-image \
+        --features production-relay-image,compile-only \
         -p cellos-kernel
-    rm -f "$anchor"
+    rm -rf "$dir"
     echo "PASS: GetRandom production tuple built without default features"
 }
 

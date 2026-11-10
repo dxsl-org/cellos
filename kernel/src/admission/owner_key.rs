@@ -14,8 +14,14 @@ const DEV_OWNER_SIGNER_PUBKEY: [u8; 32] = [
 #[cfg(feature = "dev-signing-key")]
 const OWNER_SIGNER_PUBKEY: [u8; 32] = DEV_OWNER_SIGNER_PUBKEY;
 
-#[cfg(not(feature = "dev-signing-key"))]
-const OWNER_SIGNER_PUBKEY: [u8; 32] = [0u8; 32]; // TODO(prod): provisioned owner key
+/// Release posture: the key build.rs copied from `CELLOS_RELEASE_OWNER_PUBLIC_KEY`.
+#[cfg(cellos_posture = "release")]
+const OWNER_SIGNER_PUBKEY: [u8; 32] =
+    *include_bytes!(concat!(env!("OUT_DIR"), "/release-owner.pub"));
+
+/// Dev/test without the dev key: a zero placeholder that verifies nothing.
+#[cfg(all(not(cellos_posture = "release"), not(feature = "dev-signing-key")))]
+const OWNER_SIGNER_PUBKEY: [u8; 32] = [0u8; 32];
 #[allow(dead_code)]
 pub fn owner_signer_pubkey() -> &'static [u8; 32] {
     &OWNER_SIGNER_PUBKEY
