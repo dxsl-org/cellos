@@ -1,5 +1,8 @@
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", no_main)]
+// F1 (Spec 16 §6): grant copies go through ostd's leased safe adapters, so the
+// VFS cell holds no `unsafe` of its own.
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate driver_disk;
@@ -36,7 +39,6 @@ mod fast_handler;
 mod file_handles;
 mod grant_read;
 mod grant_write;
-mod handle_table;
 mod manager;
 mod mount;
 mod namespace;
@@ -127,9 +129,13 @@ pub(crate) const VFS_HEAP_BYTES: usize = 16 * 1024 * 1024;
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(VFS_HEAP_BYTES);
 
-#[no_mangle]
+// The macro's expansion carries the loader's `#[no_mangle]`, so this crate can
+// stay under `forbid(unsafe_code)`.
 #[cfg(target_os = "none")]
-pub fn main() {
+ostd::cell_main!(vfs_main);
+
+#[cfg(target_os = "none")]
+fn vfs_main() {
     init_custom_heap();
     println("VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC (typed postcard)");
     // VfsManager::new() mounts all backends, including the FAT volume on the

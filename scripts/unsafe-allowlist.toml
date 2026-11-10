@@ -10,7 +10,11 @@
 # Every entry needs `class`, `reason`, `approver`, `date`. Entries that are meant
 # to expire also carry `review_by` and `tracking`; `--check` reports any entry
 # past `review_by`, or older than `max_age_days` when it has none, so a temporary
-# exemption cannot quietly become permanent.
+# exemption cannot quietly become permanent. Permanent classes may also carry
+# `review_by` (with `tracking`) as the date of their next re-review: a re-review
+# rewrites `reason` with what was checked and sets a new `review_by`, while
+# `approver` and `date` keep recording the original approval. Moving a date
+# without that review is not a re-review.
 #
 # Review an addition the way you would review the unsafe itself: this file *is*
 # the hole. It never loosens by accident — `--check` also reports entries whose
@@ -24,8 +28,9 @@
 version = 1
 
 # Days after which an entry without an explicit `review_by` is reported as
-# overdue. Reporting only — the ratchet never loosens itself on a timer.
-max_age_days = 180
+# overdue. Under `--strict` (always used by signing) an overdue entry is a
+# violation, so expiry is enforced, never loosened by a timer.
+max_age_days = 90
 
 # ── File exemptions from the token rule ──────────────────────────────────────
 
@@ -68,72 +73,92 @@ date = "2026-11-01"
 [[file]]
 path = "cells/demos/doom/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): exports doomgeneric's C platform hooks (DG_Init/DrawFrame/GetKey, an `_sbrk` arena over a static heap) and drives doomgeneric_Create/Tick. Re-reviewed 2026-11-10 (10 sites, 0 with SAFETY comments): sound only because every hook runs on the one cell task inside the C call chain, with no re-entry into the `static mut` state. Open: main.rs:63-65 forms `&mut` to the whole DOOM_C_HEAP while C holds pointers into it (use addr_of_mut!), main.rs:68 `(-incr) as usize` overflows at i32::MIN, DG_ScreenBuffer is not null-checked before from_raw_parts, and five exports need no unsafe at all."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — doom _sbrk aliasing and i32::MIN overflow"
 
 [[file]]
 path = "cells/demos/tetris-c/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): starts the Tetris-OS C core and exports its platform callbacks, one of which hands C the surface pointer. Re-reviewed 2026-11-10 (7 sites, 0 with SAFETY comments, 5 with `# Safety` docs): sound because all callbacks run on the single cell task under tetris_cell_run, and C bounds every surface write to 1024x768 — which holds only while vicell_platform.c's hardcoded SURF_W/SURF_H keep matching api::display::FALLBACK_*."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/demos/tetris-lua/src/ffi.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): declares the Lua 5.4 C API subset and the lua_CFunction pointer type; every call needs a live lua_State from luaL_newstate and stack indices valid for it. Re-reviewed 2026-11-10 (3 sites). Open: `lua_pop` (ffi.rs:139-143) has no caller and its comment names modules that do not exist in this crate; deleting it removes 2 of the 3 sites."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/demos/tetris-lua/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): registers Rust functions as Lua C callbacks over a `static mut` key queue and surface, and drives the Lua state. Re-reviewed 2026-11-10 (11 sites, 0 with SAFETY comments): sound because Lua invokes callbacks only on the single cell task during lua_pcallk with a valid L, and lua_tolstring pointers are read only while the value stays on the stack. Open: fill_rect (main.rs:104-107) casts a negative clamp to usize and the x + i*8*scale sum (main.rs:182) can overflow — bounds-checked indexing turns both into an abort inside an extern C callback, not UB."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/runtimes/lua/src/bindings_io.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): exports Lua C functions and the C glue's console sink (lua_console_write). Re-reviewed 2026-11-10 (11 sites, 7/8 blocks with SAFETY comments): relies on Lua passing a non-null state and on lua_tolstring (or the C caller) providing `len` readable bytes for the duration of the call. Open: ViCell_os_execute (bindings_io.rs:72-110) is dead — unregistered, os.execute stripped by the prelude, spawn=false — and should be deleted; from_utf8_unchecked (:35) is replaceable by the safe utf8_chunks; :24 lacks a SAFETY comment."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/runtimes/lua/src/bindings_net.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): the vnet.* Lua C functions read arguments from and push results onto the Lua stack. Re-reviewed 2026-11-10 (26 sites, 0/16 blocks with SAFETY comments): relies on the Lua-supplied state being valid and on argument strings borrowed through lua_tolstring staying anchored on the stack until return; no Drop value is live across a raising call. Open: socket_id/port/recv_len/push_bytes/push_nil/push_count (bindings_net.rs:56-102) are safe fns that dereference any *mut LuaState — unreachable misuse today (private, always given Lua's L) but they must become `unsafe fn` with `# Safety` docs."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/runtimes/lua/src/bindings_vfs.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): the vfs.* Lua C functions read path/content arguments, call VFS over IPC and push results. Re-reviewed 2026-11-10 (45 sites, 3/36 blocks with SAFETY comments): relies on a valid Lua-supplied state and lua_tolstring slices anchored on the stack across the IPC call. Open soundness defect: vfs_read (bindings_vfs.rs:131-137) and vfs_listdir (:241-253) keep a Vec alive across lua_pushlstring/createtable/rawseti, which raise LUA_ERRMEM by longjmp and skip its destructor (UB + leak); copy into Lua before any raising call or hold the bytes outside Rust ownership."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — longjmp over a live Vec in vfs_read/vfs_listdir"
 
 [[file]]
 path = "cells/runtimes/lua/src/ffi.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): declares the Lua 5.4 C API (signatures checked against lua.h for 64-bit) and the text-only loader `load_text`, which pins mode `t` with a NUL-terminated name so the unverified bytecode undumper is unreachable. Re-reviewed 2026-11-10 (5 sites, 2/2 blocks with SAFETY comments). Open: `lua_pop` (ffi.rs:157-162) has no caller and its allow(dead_code) reason is false; delete it."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/runtimes/lua/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): creates the single lua_State, registers Rust lua_CFunctions and runs the prelude and scripts through the Lua 5.4 C API. Re-reviewed 2026-11-10 (16 sites, 13/15 blocks with SAFETY comments; :157 and :240 lack one): relies on L being null-checked after luaL_newstate, used only on this thread, kept within LUA_MINSTACK and closed exactly once."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/runtimes/lua/src/repl_session.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): extern \"C\" calls across the Lua 5.4 C boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): drives the REPL against the one live lua_State, compiling input text-only and reading error strings. Re-reviewed 2026-11-10 (15 sites, 6/10 blocks with SAFETY comments): relies on L being valid and on each lua_tolstring pointer being used only while its value is still on the stack. Open: run_repl calls is_incomplete after try_eval/print_error already popped the error (repl_session.rs:41/:44, :141), violating its documented precondition — lua_tolstring(L,-1) on an empty stack; multi-line continuation never triggers. Unsafe-fn calls at :41/:44/:90/:99 have no SAFETY comment."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — is_incomplete reads a popped stack slot"
 
 [[file]]
 path = "cells/services/ocel-quickjs/src/engine.rs"
@@ -180,16 +205,20 @@ date = "2026-09-22"
 [[file]]
 path = "cells/tests/c-math-smoke/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): calls the posix shim's libm, printf, _write and setjmp/longjmp to prove they link. Re-reviewed 2026-11-10 (11 sites, 0 with SAFETY comments): the math and _write calls are sound given the declared C signatures. Open soundness defect: setjmp is called from Rust (main.rs:133-136); rustc does not model it as returns-twice, so the `landed` check may be miscompiled — move the setjmp/longjmp probe into a C shim."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — setjmp called from Rust"
 
 [[file]]
 path = "cells/tests/mlibc-smoke/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): calls mlibc's malloc/free, variadic printf and clock_gettime to prove Tier B linkage. Re-reviewed 2026-11-10 (4 blocks, 0 with SAFETY comments; no defect): the malloc pointer is null-checked and freed exactly once, printf conversions match their arguments (%d = i32, %lld = i64), and TimeSpec is a #[repr(C)] stack value."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/tests/mlibc-posix-x86/src/main.rs"
@@ -215,9 +244,11 @@ date = "2026-11-05"
 [[file]]
 path = "cells/tests/posix-shim-test/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 1b): calls the posix shim's socket, entropy, DNS and porting-smoke C ABI. Re-reviewed 2026-11-10 (11 sites, 5 with SAFETY comments; no defect): every pointer names a valid, correctly sized stack buffer, and the returned hostent is read only after it is non-null, h_length == 4 and both address-list pointers are non-null (main.rs:165-175)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/tests/posix-shim-test/src/fstat.rs"
@@ -257,23 +288,29 @@ date = "2026-11-06"
 [[file]]
 path = "cells/drivers/nvme/src/controller.rs"
 class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell (NVMe): raw-pointer access to the cell's own GrantDma-authorized DmaBuf pages — Identify page reads, SQ entry writes, CQ phase polling with read_volatile plus an Acquire fence; register MMIO already goes through the safe ostd::mmio::MmioRegion. Re-reviewed 2026-11-10 (7 sites, 6 with SAFETY comments): relies on queue indices staying below depth and Identify offsets below 4096 (max 380). Open (low): controller.rs:444/:445/:565 create `&u16` to device-written CQ memory; use addr_of!."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/drivers/nvme/src/dispatch.rs"
 class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell (NVMe): two 512-byte copy_nonoverlapping moves between the IPC buffer and the 4 KiB GrantDma-authorized bounce page. Re-reviewed 2026-11-10 (2 sites, 2 with SAFETY comments): relies on the length checks (reply buffer 513 bytes, request data at least 10 + SECTOR_SIZE, dispatch.rs:101) and on timed-out pages being quarantined (bounce.rs) so no DMA is in flight. The :103-105 comment states intent rather than that invariant."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/drivers/nvme/src/queue.rs"
 class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell (NVMe): zero-fills and indexes the SQ/CQ rings in the cell's page-aligned GrantDma-authorized DmaBufs (depth x 64 and depth x 16 bytes, div_ceil-sized) and polls CQ phase/cid with read_volatile plus an Acquire fence. Re-reviewed 2026-11-10 (6 sites, 3 with SAFETY comments): relies on every index staying below depth. Open (low): the module doc claims all accesses are volatile but SQ writes are plain; :201/:207 form `&` to device-written memory (use addr_of!); the :139 zero-fill is redundant because the kernel zeroes every grant."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/drivers/ahci/src/controller.rs"
@@ -453,9 +490,11 @@ date = "2026-11-04"
 [[file]]
 path = "cells/drivers/virtio-gpu/src/display.rs"
 class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell (virtio-gpu, virtio-mmio): `unsafe impl virtio_drivers::Hal` over kernel-zeroed sys_grant_alloc pages with per-share bounce copies (SAS phys == virt), MmioTransport::new over the request_region-claimed header, the one setup_framebuffer DMA slice, `unsafe impl Send` for the static device Mutex, and source_bytes over compositor flush/cursor payloads. Re-reviewed 2026-11-10 (14 sites, 9/10 needing one have SAFETY comments). Open soundness defect: source_bytes (display.rs:50) forms an unbounded-lifetime `&[u8]` over another cell's memory that the kernel only probed readable before posting the pointer by non-blocking IPC — a time-of-check/time-of-use gap and data race, and not MMIO/DMA at all; NonNull::new_unchecked at :65/:75/:226 can be the safe NonNull::new."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — display.rs source_bytes reads compositor memory after async handoff"
 
 [[file]]
 path = "cells/drivers/virtio-net/src/mmio.rs"
@@ -509,9 +548,11 @@ date = "2026-11-06"
 [[file]]
 path = "cells/services/input/src/virtio_device.rs"
 class = "driver-mmio"
-reason = "Driver Cell: volatile MMIO register access and DMA descriptor setup. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell (virtio-input, virtio-mmio): `unsafe impl virtio_drivers::Hal` over kernel-zeroed sys_grant_alloc pages (phys == virt, each share bounced through a fresh grant) and MmioTransport::new over the sys_request_mmio-claimed slot header. Re-reviewed 2026-11-10 (11 sites, 6/7 needing one have SAFETY comments; no defect): relies on the kernel-identified slot being owned exclusively by this cell. NonNull::new_unchecked at :46/:56/:202 can be the safe NonNull::new."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/drivers/dwc2-usb/src/usb_channel.rs"
@@ -544,73 +585,93 @@ date = "2026-08-23"
 [[file]]
 path = "cells/guests/silo-guest/src/mailbox.rs"
 class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+reason = "Silo guest (bare metal, MMU off): volatile reads/writes of the stage-2 mailbox page at MAILBOX_IPA and the `hvc #0` signal. Re-reviewed 2026-11-10 (7 sites, 3 `# Safety` docs): offsets are constant-bounded within PAGE_LEN, responses are at most 65 bytes (crypto.rs:18), and the single-vCPU silo host touches the page only while the guest is exited. Open (low): publish_response (mailbox.rs:93) does not state or check output.len() <= PAGE_LEN - DATA_OFFSET; the hvc asm declares only x0/x1 clobbered, which holds because the host never writes guest registers on HVC resume."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/guests/silo-guest/src/main.rs"
 class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+reason = "Silo guest entry: bare `wfi` asm and the mailbox primitives driven in strict wfi -> read -> publish -> hvc order, plus the panic-handler hvc. Re-reviewed 2026-11-10 (5 sites, 0 with SAFETY comments; no defect): the guest owns the mailbox exclusively from host resume until its next HVC, and only declared Silo HVC IDs are signalled."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/hypervisor/src/timer.rs"
 class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+reason = "Hypervisor service (Pi guest timer emulation): one memory-free `mrs cntpct_el0`. Re-reviewed 2026-11-10 (1 site, no SAFETY comment; no defect): relies on Pi boot setting CNTKCTL_EL1.EL0PCTEN (hal/arch/arm/src/aarch64/boot.rs:305-312) so EL0 reads do not trap, and CNTVOFF_EL2 = 0 so the value equals the guest's virtual count. Not a world switch; the class is the crate's."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/hypervisor/src/virtio_gpu/resource.rs"
 class = "hypervisor"
-reason = "virtio-gpu backend: blits guest scanout pixels into the compositor Grant obtained from sys_grant_slice. The raw pointer is the Grant base and every write is bounds-checked against scanout.len before the slice is formed."
+reason = "virtio-gpu backend: blits guest scanout pixels into the compositor Grant obtained from sys_grant_slice. The raw pointer is the Grant base and every write is bounds-checked against scanout.len before the slice is formed. Re-reviewed 2026-11-10 (1 site, commented): blend_cursor forms a 4-byte `&mut [u8]` after checking dst_off + 4 <= scanout.len, and the Grant is unregistered only by release_scanout, which needs `&mut self`. Note: the compositor reads the scanout concurrently (tearing, not UB on this side); ostd::grant::with_shared_bytes_mut could replace the raw slice."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/hypervisor/src/virtio_gpu/resource/render.rs"
 class = "hypervisor"
-reason = "virtio-gpu backend render path — same Grant-base contract as resource.rs."
+reason = "virtio-gpu backend render path — same Grant-base contract as resource.rs. Re-reviewed 2026-11-10 (1 site, commented; no defect): one row-length `&mut [u8]` per copied row, with overflow-checked offsets and dst_off + row_len <= scanout.len checked first; the Grant cannot be unregistered while copy_rect holds `&mut self`."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/hypervisor/src/vmm.rs"
 class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+reason = "Hypervisor service VMM syscall shim (220-227): raw `svc #0` / `syscall` asm plus ten call sites; the register save/restore itself is kernel code. Re-reviewed 2026-11-10 (11 sites, 0 with SAFETY comments): the kernel side holds — every pointer is checked by validate_user_buf and copied only through the caller copy view, guest ranges by check_guest_range, and RunVcpu writes only valid 80-byte ViVmExit images — and each cell pointer is a live exclusive borrow sized as the kernel accesses it. Open: per-block SAFETY comments are missing; the contracts written for cells/services/silo/src/vmm.rs apply verbatim (same shim, also copied into hypervisor-test)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10; follow-up: one VMM wrapper module in ostd for all three copies"
 
 [[file]]
 path = "cells/tests/hypervisor-test/src/main.rs"
-class = "hypervisor"
-reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
+class = "test-harness"
+reason = "VMM ABI smoke test: its own raw `svc #0` shim issuing CreateVm/CreateVcpu/RunVcpu; the only pointer passed is `&mut exit` (an 80-byte ViVmExit), which the kernel checks with validate_user_buf and fills through the caller copy view with a valid exit image during the synchronous call. Re-reviewed 2026-11-10 (5 sites, 0 with SAFETY comments; no defect) and reclassified from hypervisor: it performs no world switch itself (the doc at main.rs:10-11 overstates it)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 
 [[file]]
 path = "cells/demos/audio-demo/src/main.rs"
 class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+reason = "A `static mut` PCM tone buffer filled and lent to sys_audio_play from the cell's only task. Re-reviewed 2026-11-10 (3 sites, 0 with SAFETY comments): sound only because nothing runs concurrently or re-enters, so no other reference to TONE is live while `&TONE` is passed. Removable: an `alloc::vec![0u8; BUF_LEN]` on the ostd heap needs no unsafe, after which the crate can forbid unsafe and both entries go."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: removable debt — heap-allocate TONE"
 
 [[file]]
 path = "cells/demos/cfi-test/src/main.rs"
-class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+class = "test-violation"
+reason = "Deliberate CFI violation: transmutes a static data address into an `extern \"C\" fn` and calls it, so the indirect branch lands without a BTI/ENDBR64 landing pad; the test passes only if the CPU faults before anything at the target runs. Re-reviewed 2026-11-10 (6 sites, 4/4 blocks commented) and reclassified from legacy-raw-ptr. Open: PAYLOAD is a plain static, likely in a non-executable segment, so the fault may be the NX bit rather than BTI/IBT and the SKIP path unreachable; on aarch64 PAYLOAD is one possibly misaligned byte; nothing in tests/ or scripts/ checks the output the doc says a harness greps for."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — cfi-test may prove NX instead of BTI/IBT"
 
 [[file]]
 path = "cells/tests/wx-test/src/main.rs"
 class = "test-violation"
-reason = "Deliberate W^X violation — the cell writes its own .text to prove the loader's post-relocation lowering pass (kernel/src/loader/wx.rs) actually revokes WRITE. A cell honouring forbid(unsafe_code) cannot exercise a hardware page-permission bit, so the unsafe IS the test. Pass is decided by the kernel log, not by this cell."
+reason = "Deliberate W^X violation — the cell writes its own .text to prove the loader's post-relocation lowering pass (kernel/src/loader/wx.rs) actually revokes WRITE. A cell honouring forbid(unsafe_code) cannot exercise a hardware page-permission bit, so the unsafe IS the test. Pass is decided by the kernel log, not by this cell. Re-reviewed 2026-11-10 (1 write_volatile, commented; no defect): if the write succeeds nothing calls the corrupted function and the cell exits immediately."
 approver = "cellos-maintainers"
 date = "2026-07-30"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/compositor/src/surface_table/pixels.rs"
@@ -629,52 +690,29 @@ date = "2026-10-08"
 [[file]]
 path = "cells/services/net/src/tls/socket.rs"
 class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+reason = "Turns the two Box-owned 16 KiB TLS record buffers into `&'static mut` slices for embedded-tls. Re-reviewed 2026-11-10 (2 sites, commented): relies on stable heap addresses and on `conn` being dropped before `_buffers` on every path, including a dropped suspended future. Open: the Boxes are moved after the slices are derived (into Self at socket.rs:144 and through futures in dispatch.rs), which Stacked/Tree Borrows treat as a unique access — UB at the model level; hold them as Box::into_raw/NonNull and free in Drop after `conn`."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open defect — Box moved after deriving &'static mut buffers"
 
 [[file]]
 path = "cells/services/net/src/tls/transport.rs"
 class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+reason = "Dereferences the Interface/VirtioNetDevice/SocketSet pointers that dispatch.rs poll_future installs for exactly one synchronous Future::poll and then clears. Re-reviewed 2026-11-10 (7 sites, 2 with SAFETY comments): sound only because every TLS future is polled through poll_future (dispatch.rs:338/356/360, no other poll site) and the dispatcher's own `&mut` borrows go unused meanwhile. Open: sockets()/poll_network() (transport.rs:56-64) lack `# Safety` docs and null checks, and each call mints a fresh `&'static mut SocketSet<'static>`."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[file]]
 path = "cells/services/silo/src/vmm.rs"
-class = "temporary-audit"
-reason = "Silo VMM guest world switch. Temporary: audited as part of the hypervisor group but not yet given a per-block SAFETY contract naming the guest-memory invariant it relies on. Re-review or split out by review_by."
+class = "hypervisor"
+reason = "Silo VMM syscall shim (220-227): the `svc #0` instruction and its seven call sites. Reviewed 2026-11-10 and given a per-block SAFETY contract (vmm.rs). Guest-memory invariant: guest RAM is a kernel-carved frame run (Stage2Table::carve_guest_ram) that stage 2 alone maps, so no byte of this cell is guest-visible and the cell never holds a guest pointer; every cell buffer is a live borrow sized exactly as the kernel accesses it, checked by validate_user_buf and copied only through the caller copy view, with the guest side bounded by check_guest_range; RunVcpu writes only an all-zero then an encode_exit image, both valid 80-byte ViVmExit values. Reclassified from temporary-audit."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[file]]
-path = "cells/services/vfs/kernel-fs-legacy.rs"
-class = "temporary-audit"
-reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[file]]
-path = "cells/services/vfs/src/grant_read.rs"
-class = "temporary-audit"
-reason = "The two \"caller blocks\" copy_nonoverlapping writes into the caller's grant (dispatch.rs:195 ReadGrant, dispatch.rs:249 ReadFileGrant). Their whole soundness argument is \"the caller's ipc_call blocks until we reply, so it cannot free the grant\" — exactly the assumption phase 07 must audit. This entry legitimises nothing beyond that audit window."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 — audit the two caller-blocks assumptions"
-
-[[file]]
-path = "cells/services/vfs/src/fast_handler.rs"
-class = "temporary-audit"
-reason = "VFS raw-pointer I/O awaiting the grant/pointer audit. Temporary — do not treat as settled."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10; follow-up: one VMM wrapper module in ostd for all three copies"
 
 [[file]]
 path = "cells/tests/c-pthread/src/main.rs"
@@ -728,16 +766,20 @@ date = "2026-09-22"
 [[crate]]
 name = "app-c-math-smoke"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/c-math-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/c-math-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the single root src/main.rs is the extern-C linkage smoke test itself, so forbid cannot apply; no unlisted unsafe in the crate (open setjmp defect tracked on the file entry)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "app-mlibc-smoke"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/mlibc-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/mlibc-smoke/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the single root src/main.rs makes the mlibc calls under test, so forbid cannot apply; no unlisted unsafe in the crate."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "app-mlibc-posix-x86"
@@ -763,23 +805,29 @@ date = "2026-11-05"
 [[crate]]
 name = "app-posix-shim-test"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/posix-shim-test/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/posix-shim-test/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the root and its fstat module call the posix shim's C ABI directly (both allowlisted); fixture.rs and the build script hold no unsafe."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "doom"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/demos/doom/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/demos/doom/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the single root is the doomgeneric C platform backend and `_sbrk` arena, so forbid cannot apply; no unlisted unsafe (open defects tracked on the file entry)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "lua"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/runtimes/lua/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/runtimes/lua/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the root cannot forbid unsafe because its modules bind the vendored Lua 5.4 interpreter (built as C, so errors are raised by longjmp); all six unsafe-holding files are allowlisted, bindings_vfs_handle_read{,_tests}.rs and build.rs hold none (open defects tracked on the file entries)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "ocel-quickjs"
@@ -798,16 +846,20 @@ date = "2026-10-06"
 [[crate]]
 name = "tetris-c"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/demos/tetris-c/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/demos/tetris-c/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the single root exports the C callbacks the Tetris-OS core calls into, so forbid cannot apply; no unlisted unsafe."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "tetris-lua"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/demos/tetris-lua/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/demos/tetris-lua/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-10: the root and its ffi module bind and drive the Lua C API (both allowlisted); no unlisted unsafe."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "driver-e1000"
@@ -826,9 +878,11 @@ date = "2026-11-06"
 [[crate]]
 name = "driver-nvme"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/nvme/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/nvme/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-10: main.rs cannot forbid unsafe because controller.rs, queue.rs and dispatch.rs reach the cell's GrantDma-authorized queue, Identify and bounce pages through raw pointers; register MMIO already uses the safe ostd::mmio::MmioRegion (main.rs:11-12 still says the unsafe is for MMIO register access)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "driver-ahci"
@@ -889,23 +943,29 @@ date = "2026-11-07"
 [[crate]]
 name = "driver-virtio-blk"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/virtio-blk/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-blk/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-10: main.rs cannot forbid unsafe because mmio.rs and hal_x86.rs implement the unsafe virtio_drivers::Hal over kernel-granted DMA/MMIO and io_x86.rs calls the unsafe non-blocking block-request functions (all allowlisted); every other module is unsafe-free."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "driver-virtio-gpu"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/virtio-gpu/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-gpu/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-10: main.rs cannot forbid unsafe because display.rs implements virtio_drivers::Hal, wraps the claimed MMIO header and re-forms the framebuffer DMA slice; cursor.rs and main.rs are unsafe-free (open source_bytes defect tracked on the file entry)."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "driver-virtio-net"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/virtio-net/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/virtio-net/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-10: main.rs cannot forbid unsafe because mmio.rs and pci_x86/hal.rs implement virtio_drivers::Hal over granted DMA/BAR memory and pci_x86/raw_net.rs calls the unsafe raw-queue begin/complete functions (all allowlisted); all other modules are unsafe-free."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "driver-virtio-scsi"
@@ -931,9 +991,11 @@ date = "2026-11-06"
 [[crate]]
 name = "service-input"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/services/input/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/services/input/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-10: main.rs cannot forbid unsafe because virtio_device.rs implements virtio_drivers::Hal and wraps the claimed MMIO header, and the cfg(test)-only session_zeroize_tests.rs reads back wiped allocations (both allowlisted); all other modules are unsafe-free."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 
 [[crate]]
@@ -952,45 +1014,57 @@ date = "2026-08-23"
 
 [[crate]]
 name = "hypervisor-test"
-class = "hypervisor"
-reason = "Owns allowlisted unsafe under cells/tests/hypervisor-test/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+class = "test-harness"
+reason = "Owns allowlisted unsafe under cells/tests/hypervisor-test/ — see its [[file]] entry. Re-reviewed 2026-11-10 and reclassified from hypervisor with that entry: the single-file test crate cannot forbid unsafe because it contains its own `svc #0` VMM syscall shim."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "service-hypervisor"
 class = "hypervisor"
-reason = "Owns allowlisted unsafe under cells/services/hypervisor/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+reason = "Owns allowlisted unsafe under cells/services/hypervisor/ — see the [[file]] entries of class \"hypervisor\" for the justification. Re-reviewed 2026-11-10: the root cannot forbid unsafe because vmm.rs (syscall asm), timer.rs (counter mrs) and the two virtio-gpu Grant blit files hold allowlisted unsafe; every other module has none. The hand-written `#[no_mangle] main` (main.rs:154) is a second blocker that ostd::cell_main! would remove."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "silo-guest"
 class = "hypervisor"
-reason = "Owns allowlisted unsafe under cells/guests/silo-guest/ — see the [[file]] entries of class \"hypervisor\" for the justification."
+reason = "Owns allowlisted unsafe under cells/guests/silo-guest/ — see the [[file]] entries of class \"hypervisor\" for the justification. Re-reviewed 2026-11-10: a bare-metal guest with no ostd, whose root holds the wfi/HVC loop and the `#[no_mangle] silo_main` arch/entry.s jumps to, and whose mailbox.rs holds the volatile mailbox and hvc primitives; crypto.rs and layout.rs have no unsafe."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "audio-demo"
 class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/demos/audio-demo/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+reason = "Owns allowlisted unsafe under cells/demos/audio-demo/ — see the [[file]] entry of class \"legacy-raw-ptr\". Re-reviewed 2026-11-10: the only unsafe is the `static mut` tone buffer, which a heap Vec would remove, letting the root forbid unsafe and both entries go."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: removable debt — heap-allocate TONE"
 
 [[crate]]
 name = "cfi-test"
-class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/demos/cfi-test/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+class = "test-violation"
+reason = "Owns the deliberate CFI violation under cells/demos/cfi-test/ — see its [[file]] entry. Re-reviewed 2026-11-10 and reclassified from legacy-raw-ptr with that entry: the crate exists to make a CFI-violating indirect call, so forbid(unsafe_code) is impossible by design; the root carries #![allow(unsafe_code)]."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "wx-test"
 class = "test-violation"
-reason = "Owns the deliberate W^X violation under cells/tests/wx-test/ — see the [[file]] entry of class \"test-violation\". The crate root carries #![allow(unsafe_code)] with the carve-out stated in its module docs."
+reason = "Owns the deliberate W^X violation under cells/tests/wx-test/ — see the [[file]] entry of class \"test-violation\". The crate root carries #![allow(unsafe_code)] with the carve-out stated in its module docs. Re-reviewed 2026-11-10: single root, no other unsafe."
 approver = "cellos-maintainers"
 date = "2026-07-30"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "tier2-exploit"
@@ -1023,43 +1097,38 @@ date = "2026-10-09"
 [[crate]]
 name = "service-compositor"
 class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/services/compositor/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+reason = "Owns allowlisted unsafe under cells/services/compositor/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification. Re-reviewed 2026-11-10: the root cannot forbid unsafe because surface_table/pixels.rs forms a slice over a just-resolved client Grant per blit; the hand-written `#[no_mangle] main` (and its stale main.rs:3 comment) is a second blocker ostd::cell_main! would remove. Open: pixels.rs:117 leaves a window in which the owner can free the Grant between resolve and blit, which its [[file]] reason does not mention."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist re-review 2026-11-10: open question — pixels.rs owner-free window between GrantSlice and blit"
 
 [[crate]]
 name = "service-net"
 class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/services/net/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
+reason = "Owns allowlisted unsafe under cells/services/net/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification. Re-reviewed 2026-11-10: the root cannot forbid unsafe because tls/dispatch.rs, tls/socket.rs and tls/transport.rs hold the allowlisted lifetime-erasing poll context and record-buffer plumbing (dispatch.rs:525 set_tls_context lacks a SAFETY comment); all other modules have none."
 approver = "cellos-maintainers"
 date = "2026-07-14"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "app-cellbox"
-class = "temporary-audit"
-reason = "Owns allowlisted unsafe under cells/tools/cellbox/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
+class = "test-harness"
+reason = "The crate root cannot carry #![forbid(unsafe_code)] only because the host-only `heap` module in rg/tests.rs (its own test-harness [[file]] entry) must implement the unsafe GlobalAlloc trait, and forbid cannot be overridden by that module's #[allow]. Reviewed 2026-11-10: the root now carries #![deny(unsafe_code)], so rustc rejects unsafe anywhere else, and the entry symbol comes from ostd::cell_main!; the Cell code holds no unsafe (the former static mut / UnsafeCell shell state is spin::Mutex and atomics). Reclassified from temporary-audit."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 06 (DataPtr removal)"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "service-silo"
-class = "temporary-audit"
-reason = "Owns allowlisted unsafe under cells/services/silo/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
+class = "hypervisor"
+reason = "The binary root (main.rs) cannot carry #![forbid(unsafe_code)] because vmm.rs — its own hypervisor [[file]] entry — re-allows unsafe_code for the svc instruction. Reviewed 2026-11-10: main.rs now carries #![deny(unsafe_code)] (entry symbol via ostd::cell_main!), so no other module can add unsafe, and the library root lib.rs forbids it. Reclassified from temporary-audit."
 approver = "cellos-maintainers"
 date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[crate]]
-name = "service-vfs"
-class = "temporary-audit"
-reason = "Owns allowlisted unsafe under cells/services/vfs/ — see the [[file]] entries of class \"temporary-audit\" for the justification."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-12-31"
-tracking = "midori-lessons phase 07 (grant/pointer audit)"
+review_by = "2027-02-08"
+tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 [[crate]]
 name = "c-pthread"

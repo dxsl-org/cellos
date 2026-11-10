@@ -1,55 +1,87 @@
 //! Serving grant read operations (ReadGrant and ReadFileGrant).
+//!
+//! Both write file bytes into a grant the caller owns and shared to this cell.
+//! The copy goes through `ostd::syscall::sys_grant_copy_from_slice`, never a raw
+//! pointer held here. That adapter's single `GrantSlice` resolves the grant and
+//! publishes this request's kernel lease in one grant-table transaction
+//! (`resolve_and_lease_grant`): while the lease stands, the owner's `GrantFree`
+//! and `GrantUnregister` refuse and an owner death quarantines the frames rather
+//! than freeing them. The lease ends only at the reply to the owner or at this
+//! cell's next wildcard receive. The grant is therefore resolved *after* the file
+//! is read, immediately before the copy, so no backend I/O sits between the
+//! lease and the write. A second `GrantSlice` in one request is refused as a
+//! duplicate lease, so each path resolves the grant exactly once.
+
+use alloc::string::ToString;
+use alloc::vec;
 
 use api::ipc::VfsResponse;
+use api::vfs_file_handles::ViVfsFileHandle;
+use ostd::syscall::sys_grant_copy_from_slice;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
 use crate::paths::{ERR_DENIED, ERR_IO};
 
+/// Largest `ReadGrant` transfer: the one page `ostd::fs` allocates per call.
+const MAX_GRANT_READ: usize = 4096;
+
+/// `ReadGrant`: up to `size` bytes at `offset` of the file behind the
+/// VFS-issued handle `cap`, into `grant`.
+///
+/// Same authority as `WriteGrant`: only an open entry in `FileHandleTable`
+/// names a path. An unknown handle and one held by another caller are the same
+/// answer — zero bytes — so sweeping handle values reveals nothing.
 pub(crate) fn read_grant<'a>(
-    vfs: &mut VfsManager,
+    vfs: &VfsManager,
     caller: Caller,
     cap: u64,
     offset: u64,
     size: usize,
     grant: usize,
 ) -> VfsResponse<'a> {
-    match vfs.handles.path_of(caller, api::cap::CapId(cap)) {
-        Some(path) if !vfs.access.can_read(caller, path) => {
-            return VfsResponse::Err(ERR_DENIED);
-        }
-        Some(path) if !vfs.healthy(path) => return VfsResponse::Err(ERR_IO),
-        _ => {}
+    let Some(path) = vfs
+        .files
+        .path_of(caller, ViVfsFileHandle(cap))
+        .map(ToString::to_string)
+    else {
+        return VfsResponse::GrantDone { bytes: 0 };
+    };
+    if !vfs.access.can_read(caller, &path) {
+        return VfsResponse::Err(ERR_DENIED);
     }
-    match ostd::syscall::sys_grant_slice_with_len(grant) {
-        None => VfsResponse::Err(ERR_IO),
-        Some((ptr, grant_len)) => {
-            let bytes = if let Some(entry) = vfs.handles.get_mut(caller, api::cap::CapId(cap)) {
-                match usize::try_from(offset) {
-                    Ok(offset) if offset < entry.data_len => {
-                        let avail = entry.data_len - offset;
-                        let n = size.min(avail).min(grant_len).min(4096);
-                        if n == 0 {
-                            0
-                        } else if let Some(src) = entry.data_ptr.checked_add(offset) {
-                            // SAFETY: `src` stays within the in-memory file image because
-                            // `offset < data_len` and `n <= data_len - offset`; `ptr` is a
-                            // kernel-validated grant buffer of at least `n` bytes.
-                            unsafe {
-                                core::ptr::copy_nonoverlapping(src as *const u8, ptr, n);
-                            }
-                            n
-                        } else {
-                            0
-                        }
-                    }
-                    Ok(_) | Err(_) => 0,
-                }
-            } else {
-                0
-            };
-            VfsResponse::GrantDone { bytes }
+    if !vfs.healthy(&path) {
+        return VfsResponse::Err(ERR_IO);
+    }
+    let Some((file_len, false)) = vfs.stat(&path) else {
+        return VfsResponse::Err(ERR_IO);
+    };
+    let file_len = usize::try_from(file_len).unwrap_or(usize::MAX);
+    let start = match usize::try_from(offset) {
+        Ok(start) if start < file_len => start,
+        Ok(_) | Err(_) => return VfsResponse::GrantDone { bytes: 0 },
+    };
+    let n = size.min(file_len - start).min(MAX_GRANT_READ);
+    if n == 0 {
+        return VfsResponse::GrantDone { bytes: 0 };
+    }
+    let mut buf = vec![0u8; n];
+    let mut read = vfs.read_at(&path, offset, &mut buf);
+    if read == 0 {
+        // A backend without ranged reads returns nothing; the whole-file copy
+        // keeps it correct instead of silently answering zero bytes.
+        let data = vfs.read_to_vec(&path);
+        if let Some(tail) = data.get(start..) {
+            read = n.min(tail.len());
+            buf[..read].copy_from_slice(&tail[..read]);
         }
+    }
+    if !vfs.healthy(&path) {
+        return VfsResponse::Err(ERR_IO);
+    }
+    match sys_grant_copy_from_slice(grant, &buf[..read]) {
+        Some(bytes) => VfsResponse::GrantDone { bytes },
+        None => VfsResponse::Err(ERR_IO),
     }
 }
 
@@ -70,19 +102,14 @@ pub(crate) fn read_file_grant<'a>(
     if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
         return VfsResponse::Err(ERR_IO);
     }
-    match ostd::syscall::sys_grant_slice_with_len(grant) {
+    let data = vfs.read_to_vec(path);
+    if !vfs.healthy(path) {
+        return VfsResponse::Err(ERR_IO);
+    }
+    // The adapter also caps the copy at the kernel-registered grant length.
+    match sys_grant_copy_from_slice(grant, &data[..data.len().min(max)]) {
+        Some(bytes) => VfsResponse::GrantDone { bytes },
         None => VfsResponse::Err(ERR_IO),
-        Some((ptr, grant_len)) => {
-            let data = vfs.read_to_vec(path);
-            if !vfs.healthy(path) {
-                return VfsResponse::Err(ERR_IO);
-            }
-            let n = data.len().min(max).min(grant_len);
-            unsafe {
-                core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
-            }
-            VfsResponse::GrantDone { bytes: n }
-        }
     }
 }
 

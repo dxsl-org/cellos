@@ -270,6 +270,7 @@ class ScannerLiteralTests(unittest.TestCase):
             self.assertEqual(len(strict_res.stale_entries), 1)
             self.assertEqual(len(strict_res.violations), 1)
             self.assertEqual(strict_res.violations[0].layer, "stale")
+            self.assertEqual(strict_res.violations[0].crate, "old-crate")
 
 
 class ToolchainTests(unittest.TestCase):

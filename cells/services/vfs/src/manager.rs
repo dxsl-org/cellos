@@ -28,7 +28,6 @@ use crate::backend_ramfs::RamFsBackend;
 use crate::caller::Caller;
 use crate::dirs::DirTable;
 use crate::file_handles::FileHandleTable;
-use crate::handle_table::HandleTable;
 use crate::mount::MountTable;
 use crate::namespace::NamespaceLedger;
 use crate::pending::PendingTable;
@@ -44,7 +43,6 @@ pub struct VfsManager {
     /// Boot-image configuration fallback; runtime files may override only
     /// services/autoload, never the kernel's already-applied system config.
     boot_config: BootFsProxy,
-    pub handles: HandleTable,
     pub quota: QuotaTracker,
     pub access: AccessTable,
     pub pending: PendingTable,
@@ -78,7 +76,6 @@ impl VfsManager {
         Self {
             mounts,
             boot_config: BootFsProxy::new(),
-            handles: HandleTable::new(),
             // test-hooks: 1.1 KiB quota so vfs-test can hit the limit with
             // 400-byte chunks (must fit within the 512-byte IPC buffer).
             #[cfg(feature = "test-hooks")]
@@ -155,7 +152,13 @@ impl VfsManager {
         let configured: &[&str] = match path.trim_end_matches('/') {
             "" => &["etc"],
             "/etc" => &["cellos"],
-            "/etc/cellos" => &["system.toml", "services.toml", "autoload.toml"],
+            "/etc/cellos" => &[
+                "system.toml",
+                "services.toml",
+                "autoload.toml",
+                "cluster.cfg",
+                "c2c-exports.cfg",
+            ],
             _ => &[],
         };
         for name in configured {
@@ -345,16 +348,18 @@ impl VfsManager {
         ok
     }
 
-    /// Only the three public configuration paths use this source rule. Secrets
-    /// and C2C configuration elsewhere in /etc keep their existing routing.
+    /// A runtime file under `/mnt/sd/etc/cellos` overrides its public
+    /// `/etc/cellos` path when present. The boot TOML files otherwise come from
+    /// the boot image; the C2C files keep their existing mount routing, which is
+    /// where the K1 oracle fixture lives (RamFS), so `None` selects it.
     fn config_source<'a>(&'a self, path: &'a str) -> Option<(&'a dyn FsBackend, &'a str)> {
-        let persistent = match path {
+        let (persistent, boot_image_default) = match path {
             "/etc/cellos/system.toml" => return Some((&self.boot_config, path)),
-            "/etc/cellos/services.toml" => "/mnt/sd/etc/cellos/services.toml",
-            "/etc/cellos/autoload.toml" => "/mnt/sd/etc/cellos/autoload.toml",
-            "/etc/cellos/cluster.key" => "/mnt/sd/etc/cellos/cluster.key",
-            "/etc/cellos/cluster.cfg" => "/mnt/sd/etc/cellos/cluster.cfg",
-            "/etc/cellos/c2c-exports.cfg" => "/mnt/sd/etc/cellos/c2c-exports.cfg",
+            "/etc/cellos/services.toml" => ("/mnt/sd/etc/cellos/services.toml", true),
+            "/etc/cellos/autoload.toml" => ("/mnt/sd/etc/cellos/autoload.toml", true),
+            "/etc/cellos/cluster.key" => ("/mnt/sd/etc/cellos/cluster.key", false),
+            "/etc/cellos/cluster.cfg" => ("/mnt/sd/etc/cellos/cluster.cfg", false),
+            "/etc/cellos/c2c-exports.cfg" => ("/mnt/sd/etc/cellos/c2c-exports.cfg", false),
             _ => return None,
         };
         if let Some(backend) = self.mounts.backend(persistent) {
@@ -364,6 +369,6 @@ impl VfsManager {
                 return Some((backend, persistent));
             }
         }
-        Some((&self.boot_config, path))
+        boot_image_default.then_some((&self.boot_config as &dyn FsBackend, path))
     }
 }

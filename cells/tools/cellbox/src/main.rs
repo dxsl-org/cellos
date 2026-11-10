@@ -1,5 +1,10 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
+// Not `forbid`: the host-only heap counter in `rg/tests.rs` must re-allow
+// `unsafe_code` to implement the unsafe `GlobalAlloc` trait (allowlisted as
+// test-harness in scripts/unsafe-allowlist.toml). `deny` keeps all Cell code
+// unsafe-free and is checked by rustc.
+#![deny(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -123,12 +128,16 @@ mod shell_test;
 #[cfg(not(feature = "shell_test"))]
 use shell::ViShell;
 
+// The macro's expansion carries the loader's `#[no_mangle]`, so this crate's
+// own code stays inside `deny(unsafe_code)`.
+#[cfg(not(test))]
+ostd::cell_main!(cellbox_main);
+
 /// Entry: the launch context is read once and classified (`oneshot::classify`, S10-0):
 /// the ssh client child, the Cellos shell session (`cellbox sh`) or one catalog command
 /// (`/bin/cellbox <command>`).
 #[cfg(not(test))]
-#[no_mangle]
-pub fn main() {
+fn cellbox_main() {
     #[cfg(target_os = "none")]
     init_custom_heap();
     #[cfg(feature = "shell_test")]

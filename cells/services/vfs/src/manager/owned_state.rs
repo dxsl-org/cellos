@@ -68,8 +68,7 @@ impl VfsManager {
         let dirs = self.dirs.purge_owner(caller);
         let revoked_files = self.files.revoke_by_parent_dirs(&dirs.revoked_ids);
         let files = self.files.purge_owner(caller);
-        let handles = self.handles.purge_owner(caller);
         let pending = self.pending.purge_owner(caller);
-        dirs.count + revoked_files + files + handles + pending
+        dirs.count + revoked_files + files + pending
     }
 }

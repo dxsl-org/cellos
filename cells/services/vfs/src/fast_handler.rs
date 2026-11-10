@@ -20,9 +20,12 @@ pub static GLOBAL_VFS: Mutex<Option<VfsManager>> = Mutex::new(None);
 /// zero-length reply, which `call_vfs` callers treat as "fast path unavailable"
 /// and retry as an ordinary syscall.
 ///
-/// # Safety
-/// Called with S-mode interrupts disabled (guaranteed by `ostd::fast_ipc::call_vfs`).
-pub unsafe fn vfs_fast_handler(
+/// `ostd::fast_ipc::call_vfs` invokes this with S-mode interrupts disabled so
+/// the timer cannot preempt it while `GLOBAL_VFS` is locked. That is a deadlock
+/// precondition, not a memory-safety one: the body performs no unsafe
+/// operation, so the function is safe and coerces to the `unsafe fn`
+/// `VfsFastHandler` pointer type at registration.
+pub fn vfs_fast_handler(
     caller: Option<api::caller_identity::CallerIdentity>,
     req: &api::ipc::VfsRequest<'_>,
     out: &mut [u8; api::ipc::IPC_BUF_SIZE],

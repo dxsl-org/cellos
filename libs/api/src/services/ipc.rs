@@ -62,7 +62,8 @@ pub enum VfsRequest<'a> {
     /// Poll a pending read for completion.
     Poll { handle: u32 },
     /// Zero-copy large read: VFS reads `size` bytes at `offset` from the file
-    /// identified by `cap` directly into the caller's pre-allocated grant buffer.
+    /// named by the VFS-issued file-handle ID in `cap` (as for `WriteGrant`)
+    /// directly into the caller's pre-allocated grant buffer.
     /// The caller allocates the grant, GrantShare's it RW to VFS, and then waits
     /// for `GrantDone`. VFS copies at most `min(size, grant_len, 4096, data_len -
     /// offset)` bytes and replies only after the copy completes.

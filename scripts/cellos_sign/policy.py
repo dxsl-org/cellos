@@ -48,7 +48,7 @@ CELL_ROOTS = ["cells"]
 class Violation:
     """One F1 failure, addressed to the developer who must fix it."""
 
-    layer: str  # "attribute" | "token"
+    layer: str  # "attribute" | "token" | "stale" (strict only)
     crate: str
     path: str
     detail: str
@@ -148,8 +148,9 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
             )
     result.unsafe_files = sorted(seen_unsafe)
 
-    # ── Ratchet hygiene (reported, never fatal — the ratchet never loosens
-    # itself, but a shrinking list must be visible so it can be tightened) ────
+    # ── Ratchet hygiene (reported, fatal only under --strict for stale entries —
+    # the ratchet never loosens itself, but a shrinking list must be visible so
+    # it can be tightened) ────
     result.unused_file_entries = sorted(set(allow.files) - seen_unsafe)
     result.unused_crate_entries = sorted(set(allow.crates) - used_crate_entries)
     for e in allow.stale(today):
@@ -164,7 +165,9 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
             result.violations.append(
                 Violation(
                     layer="stale",
-                    crate=_crate_of(e.key, owners),
+                    # A [[crate]] key is already the crate name; a [[file]] key
+                    # is a path owned by some crate.
+                    crate=e.key if e.key in allow.crates else _crate_of(e.key, owners),
                     path=e.key,
                     detail=f"overdue for re-review: {desc}",
                 )

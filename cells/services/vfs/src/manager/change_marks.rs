@@ -20,7 +20,7 @@ use crate::paths::{may_alias, may_alias_within, parent_of};
 
 /// Runtime configuration files and the public paths whose content they supply
 /// (see `VfsManager::config_source`).
-const CONFIG_ALIASES: [(&str, &str); 2] = [
+const CONFIG_ALIASES: [(&str, &str); 5] = [
     (
         "/mnt/sd/etc/cellos/services.toml",
         "/etc/cellos/services.toml",
@@ -28,6 +28,12 @@ const CONFIG_ALIASES: [(&str, &str); 2] = [
     (
         "/mnt/sd/etc/cellos/autoload.toml",
         "/etc/cellos/autoload.toml",
+    ),
+    ("/mnt/sd/etc/cellos/cluster.key", "/etc/cellos/cluster.key"),
+    ("/mnt/sd/etc/cellos/cluster.cfg", "/etc/cellos/cluster.cfg"),
+    (
+        "/mnt/sd/etc/cellos/c2c-exports.cfg",
+        "/etc/cellos/c2c-exports.cfg",
     ),
 ];
 

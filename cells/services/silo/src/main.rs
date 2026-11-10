@@ -1,5 +1,9 @@
 #![no_std]
 #![no_main]
+// Not `forbid`: `vmm.rs` must re-allow `unsafe_code` for the `svc` instruction
+// (allowlisted in scripts/unsafe-allowlist.toml). `deny` keeps every other
+// module of the binary unsafe-free and is checked by rustc.
+#![deny(unsafe_code)]
 
 extern crate alloc;
 
@@ -44,8 +48,11 @@ use service_silo::{
     layout::{GUEST_IPA_BASE, GUEST_RAM_BYTES, GUEST_RAM_PAGES},
 };
 
-#[no_mangle]
-pub fn main() {
+// The macro's expansion carries the loader's `#[no_mangle]`, so this crate's
+// own code stays inside `deny(unsafe_code)`.
+ostd::cell_main!(silo_main);
+
+fn silo_main() {
     println("[silo] development/reference provider starting");
     let guest_binary = match artifact::admitted_guest() {
         Ok(bytes) => bytes,

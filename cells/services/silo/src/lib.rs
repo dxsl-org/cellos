@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! Host-testable implementation shared with the Silo service binary.
 

@@ -1736,6 +1736,10 @@ fn a_take_on_a_stream_stops_the_producer() {
 
 // ── heap: the cellbox arena (DV7-10, D76-3 M2) ──
 
+// The crate root denies `unsafe_code`; this host-only module alone re-allows it,
+// because `GlobalAlloc` is an unsafe trait (test-harness entry in
+// scripts/unsafe-allowlist.toml).
+#[allow(unsafe_code)]
 mod heap {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
@@ -1757,9 +1761,14 @@ mod heap {
         });
     }
 
-    // SAFETY: forwards every call to the system allocator unchanged; only counts.
+    // SAFETY: every method forwards its arguments unchanged to `System` and
+    // returns `System`'s result, so `Counting` inherits `System`'s satisfaction
+    // of the `GlobalAlloc` contract; the counting itself touches only const
+    // thread-locals, which never allocate (no re-entry).
     unsafe impl GlobalAlloc for Counting {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            // SAFETY: the caller upholds `GlobalAlloc::alloc`'s contract for
+            // `layout`, which is forwarded unchanged.
             let ptr = unsafe { System.alloc(layout) };
             if !ptr.is_null() {
                 add(layout.size() as isize);
@@ -1768,11 +1777,15 @@ mod heap {
         }
 
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            // SAFETY: `ptr` came from this allocator, i.e. from `System`, with
+            // `layout` — the caller's `dealloc` contract, forwarded unchanged.
             unsafe { System.dealloc(ptr, layout) };
             add(-(layout.size() as isize));
         }
 
         unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            // SAFETY: `ptr`/`layout`/`new_size` satisfy `realloc`'s contract
+            // for this allocator, i.e. for `System`; forwarded unchanged.
             let new = unsafe { System.realloc(ptr, layout, new_size) };
             if !new.is_null() {
                 add(new_size as isize - layout.size() as isize);

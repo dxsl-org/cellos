@@ -485,19 +485,9 @@ impl FsBackend for FatBackend {
         if file.seek(fatfs::SeekFrom::Start(offset)).is_err() {
             return false;
         }
-        let ok = file.write_all(content).is_ok();
-        if ok && (path.contains("guest_disk.img") || path.contains("guest.img")) {
-            let end_pos = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(u64::MAX);
-            println(&alloc::format!(
-                "[vfs-fat-write] path={} offset={} bytes={} post_write_size={}",
-                path,
-                offset,
-                content.len(),
-                end_pos
-            ));
-        }
-        ok
+        file.write_all(content).is_ok()
     }
+
     /// Append; creates the file (and parents) if absent — first append behaves
     /// like a write. `fatfs::File::seek(End(0))` translates to
     /// `disk.seek(Start(abs_end))` internally, so the `End` arm of

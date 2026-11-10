@@ -99,7 +99,13 @@ impl VfsManager {
         let configured: &[&'static str] = match path {
             "/" => &["etc"],
             "/etc" => &["cellos"],
-            "/etc/cellos" => &["system.toml", "services.toml", "autoload.toml"],
+            "/etc/cellos" => &[
+                "system.toml",
+                "services.toml",
+                "autoload.toml",
+                "cluster.cfg",
+                "c2c-exports.cfg",
+            ],
             _ => &[],
         };
         for name in configured {
