@@ -2,6 +2,8 @@
 //!
 //! Calls the `#[no_mangle] extern "C"` symbols from libs/api/src/posix/ via
 //! Rust extern declarations — if any symbol is missing the linker will fail.
+//! setjmp/longjmp are the exception: they are exercised by the C helper in
+//! src/setjmp_probe.c, because a returns-twice call must not be made from Rust.
 //! Expected output (integration test marker):
 //!   "C-MATH-SMOKE: 7/7 pass"
 //!   "C-MATH-SMOKE: setjmp OK"
@@ -33,17 +35,14 @@ extern "C" {
 }
 
 // ---------------------------------------------------------------------------
-// setjmp/longjmp — arch asm in posix/setjmp.rs
+// setjmp/longjmp — arch asm in posix/setjmp.rs, exercised from C
 // ---------------------------------------------------------------------------
 
-const JMP_BUF_WORDS: usize = 22; // enough for both riscv64 (16) and aarch64 (22)
-
-#[repr(C)]
-struct JmpBuf([u64; JMP_BUF_WORDS]);
-
+// The setjmp/longjmp pair runs entirely inside src/setjmp_probe.c: setjmp
+// returns twice and rustc cannot model a returns-twice call, so it must never
+// be called from Rust. The C helper returns 0 on a correct round trip.
 extern "C" {
-    fn setjmp(env: *mut JmpBuf) -> i32;
-    fn longjmp(env: *const JmpBuf, val: i32) -> !;
+    fn c_math_smoke_setjmp_probe() -> i32;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,15 +127,11 @@ pub fn main() {
         printf(c"C-MATH-SMOKE: %d/%d pass\n".as_ptr().cast(), pass, total);
     }
 
-    // Test setjmp/longjmp
-    let mut buf = JmpBuf([0u64; JMP_BUF_WORDS]);
-    let landed = unsafe { setjmp(&mut buf as *mut JmpBuf) };
-    if landed == 0 {
-        // First call — jump back to this point with val=42
-        unsafe { longjmp(&buf as *const JmpBuf, 42) };
-    }
-    // landed == 42 here (longjmp returned us here)
-    if landed == 42 {
+    // Test setjmp/longjmp (round trip runs in C; see c_math_smoke_setjmp_probe).
+    // SAFETY: the helper takes no arguments and touches only its own stack frame;
+    // its setjmp and longjmp both happen inside that frame, which is still live
+    // when longjmp unwinds to it, so no Rust frame is skipped.
+    if unsafe { c_math_smoke_setjmp_probe() } == 0 {
         write_bytes(b"C-MATH-SMOKE: setjmp OK\n");
     } else {
         write_bytes(b"C-MATH-SMOKE: setjmp FAIL\n");

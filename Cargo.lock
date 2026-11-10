@@ -276,6 +276,7 @@ name = "app-c-math-smoke"
 version = "0.1.0"
 dependencies = [
  "api",
+ "cc",
  "cell-build",
  "ostd",
 ]

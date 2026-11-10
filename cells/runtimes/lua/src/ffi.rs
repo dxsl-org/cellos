@@ -60,6 +60,13 @@ extern "C" {
         k: *mut core::ffi::c_void,
     ) -> c_int;
 
+    /// Raise the value at the stack top as a Lua error.
+    ///
+    /// Never returns: it longjmps to the innermost protected call, skipping
+    /// every Rust frame in between without running destructors. Use
+    /// [`raise_or_return`] from a frame that owns nothing.
+    pub fn lua_error(L: *mut LuaState) -> !;
+
     // ── Stack inspection ─────────────────────────────────────────────────────
 
     /// Return the string at stack index `idx` (negative = from top).
@@ -155,8 +162,92 @@ pub unsafe fn load_text(L: *mut LuaState, src: &[u8], name: &CStr) -> c_int {
 /// # Safety
 /// `L` must be a valid, non-null Lua state.
 #[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
-#[allow(dead_code)] // reason: called by repl_session and bindings_io when stack cleanup is needed
 pub unsafe fn lua_pop(L: *mut LuaState, n: c_int) {
     // SAFETY: caller guarantees L is valid; settop(-n-1) is the canonical pop.
     unsafe { lua_settop(L, -(n) - 1) }
 }
+
+/// A protected call failed and left its error object on the stack top.
+///
+/// Bindings carry it out of the frames that own destructor-bearing values;
+/// [`raise_or_return`] re-raises the error once those frames are gone.
+pub struct LuaRaised;
+
+/// Run `push` under `lua_pcall`, so a Lua error it raises (chiefly
+/// `LUA_ERRMEM` while allocating a string or table) unwinds only the
+/// trampoline instead of longjmp-ing over the caller and skipping the
+/// destructors of the values it still owns (a leaked `Vec` per failed call).
+///
+/// On `Ok` the values `push` left are on the caller's stack; on `Err` the
+/// error object is, and the caller must drop what it owns and then hand the
+/// error to [`raise_or_return`]. Values `push` captures by reference live in
+/// the shielded caller frame; `push` itself must not own a destructor-bearing
+/// value across a Lua API call, because its own frame is still unwound.
+///
+/// # Safety
+/// `L` must be the state of a running `lua_CFunction` (`LUA_MINSTACK` then
+/// guarantees the two slots the call needs), and `push` must use only the
+/// stack slots `LUA_MINSTACK` guarantees a fresh C function.
+#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+pub unsafe fn pcall_push<F: Fn(*mut LuaState)>(
+    L: *mut LuaState,
+    push: &F,
+) -> Result<(), LuaRaised> {
+    // SAFETY: L is valid per the contract. A zero-upvalue C closure and a light
+    // userdata are stored inline and never allocate, so neither push can raise
+    // outside the protected call. The pointer stays valid for the whole call:
+    // `push` is borrowed by this frame, which blocks in lua_pcallk until the
+    // trampoline has returned or unwound.
+    let status = unsafe {
+        lua_pushcclosure(L, push_trampoline::<F>, 0);
+        lua_pushlightuserdata(L, core::ptr::from_ref(push).cast_mut().cast());
+        lua_pcallk(L, 1, LUA_MULTRET, 0, 0, core::ptr::null_mut())
+    };
+    if status == LUA_OK {
+        Ok(())
+    } else {
+        Err(LuaRaised)
+    }
+}
+
+/// `lua_CFunction` run by [`pcall_push`]; argument 1 is a light userdata
+/// pointing at the `F` its caller borrows. Returns every value `F` pushed.
+///
+/// # Safety
+/// Only called by Lua from [`pcall_push`], with that light userdata as the
+/// sole argument.
+#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+unsafe extern "C" fn push_trampoline<F: Fn(*mut LuaState)>(L: *mut LuaState) -> c_int {
+    // SAFETY: argument 1 was pushed by pcall_push from a `&F` that outlives
+    // this call (see there). Clearing the frame leaves `push` an empty stack.
+    unsafe {
+        let push = &*lua_touserdata(L, 1).cast::<F>();
+        lua_settop(L, 0);
+        push(L);
+        lua_gettop(L)
+    }
+}
+
+/// Return `nresults` from a binding, or re-raise the error a [`pcall_push`]
+/// left on the stack top.
+///
+/// Call it in the binding's outermost frame on the result of an inner
+/// function that owned the binding's destructor-bearing values: by then they
+/// are dropped, so the `lua_error` longjmp skips nothing. A memory error keeps
+/// its `LUA_ERRMEM` status (`lua_error` recognises the preallocated message).
+///
+/// # Safety
+/// `L` must be the state of the running `lua_CFunction`; on `Err` its stack
+/// top must still be the error object `pcall_push` left.
+#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+pub unsafe fn raise_or_return(L: *mut LuaState, result: Result<c_int, LuaRaised>) -> c_int {
+    match result {
+        Ok(nresults) => nresults,
+        // SAFETY: L is valid and the error object is on top (contract).
+        Err(LuaRaised) => unsafe { lua_error(L) },
+    }
+}
+
+#[cfg(test)]
+#[path = "ffi_tests.rs"]
+mod tests;

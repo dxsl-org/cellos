@@ -104,7 +104,7 @@ unsafe fn lua_arg_bytes<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a [u8]> {
         return None;
     }
     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-    Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
+    Some(unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) })
 }
 
 /// Extract a path `&str` from Lua arg at `idx`. Returns `None` on error.
@@ -121,21 +121,35 @@ unsafe fn lua_arg_path<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a str> {
 /// the file is missing or empty. Reads are bounded at 64 KiB with no DataPtr fallback.
 #[no_mangle]
 pub unsafe extern "C" fn vfs_read(L: *mut LuaState) -> c_int {
-    let path = match unsafe { lua_arg_path(L, 1) } {
-        Some(p) => p,
-        None => {
-            unsafe { ffi::lua_pushnil(L) };
-            return 1;
-        }
+    // SAFETY: L is the running state; read_to_lua has returned, so the file
+    // buffer it owned is already dropped if the error is re-raised.
+    unsafe { ffi::raise_or_return(L, read_to_lua(L)) }
+}
+
+/// Body of [`vfs_read`]. Owns the file buffer, so the only Lua call that can
+/// raise while it is alive runs under [`ffi::pcall_push`].
+///
+/// # Safety
+/// `L` must be the state of the running `vfs_read` call.
+unsafe fn read_to_lua(L: *mut LuaState) -> Result<c_int, ffi::LuaRaised> {
+    let Some(path) = (unsafe { lua_arg_path(L, 1) }) else {
+        unsafe { ffi::lua_pushnil(L) };
+        return Ok(1);
     };
     let data = vfs_get_file_vec(path);
     if data.is_empty() {
+        // lua_pushnil never allocates, so it cannot raise over `data`.
         unsafe { ffi::lua_pushnil(L) };
-        return 1;
+        return Ok(1);
     }
-    // SAFETY: L valid; data contains the initialised file content.
-    unsafe { ffi::lua_pushlstring(L, data.as_ptr() as *const c_char, data.len()) };
-    1
+    // SAFETY: L is valid; the string copy can raise LUA_ERRMEM, which the
+    // protected call stops before it reaches this frame and `data`.
+    unsafe {
+        ffi::pcall_push(L, &|L| {
+            ffi::lua_pushlstring(L, data.as_ptr().cast::<c_char>(), data.len());
+        })
+    }?;
+    Ok(1)
 }
 
 /// `vfs.write(path, content)` → bool
@@ -185,8 +199,7 @@ pub unsafe extern "C" fn vfs_mkdir(L: *mut LuaState) -> c_int {
             return 1;
         }
     };
-    let mut vfs = VfsRef::new();
-    let ok = vfs_ok(&mut vfs, &api::ipc::VfsRequest::Mkdir(path));
+    let ok = vfs_ok(&mut VfsRef::new(), &api::ipc::VfsRequest::Mkdir(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };
     1
 }
@@ -205,8 +218,10 @@ pub unsafe extern "C" fn vfs_stat(L: *mut LuaState) -> c_int {
             return 1;
         }
     };
-    let mut vfs = VfsClient::new();
-    match vfs.stat(path) {
+    // Bound by `let` so the client temporary is gone before the table pushes
+    // below (which can raise LUA_ERRMEM); only plain values cross them.
+    let stat = VfsClient::new().stat(path);
+    match stat {
         Ok((size, is_dir)) => {
             unsafe { ffi::lua_createtable(L, 0, 2) };
             let t = unsafe { ffi::lua_gettop(L) };
@@ -230,37 +245,39 @@ pub unsafe extern "C" fn vfs_stat(L: *mut LuaState) -> c_int {
 /// by the 512-byte VFS reply limit.
 #[no_mangle]
 pub unsafe extern "C" fn vfs_listdir(L: *mut LuaState) -> c_int {
-    let path = match unsafe { lua_arg_path(L, 1) } {
-        Some(p) => p,
-        None => {
-            unsafe { ffi::lua_pushnil(L) };
-            return 1;
-        }
+    // SAFETY: L is the running state; listdir_to_lua has returned, so the
+    // listing it owned is already dropped if the error is re-raised.
+    unsafe { ffi::raise_or_return(L, listdir_to_lua(L)) }
+}
+
+/// Body of [`vfs_listdir`]. Owns the listing buffer, so the table and string
+/// pushes (each can raise LUA_ERRMEM) run under [`ffi::pcall_push`].
+///
+/// # Safety
+/// `L` must be the state of the running `vfs_listdir` call.
+unsafe fn listdir_to_lua(L: *mut LuaState) -> Result<c_int, ffi::LuaRaised> {
+    let Some(path) = (unsafe { lua_arg_path(L, 1) }) else {
+        unsafe { ffi::lua_pushnil(L) };
+        return Ok(1);
     };
-    let mut vfs = VfsClient::new();
-    match vfs.list_dir(path) {
-        Ok(entries) => {
-            let text = core::str::from_utf8(&entries).unwrap_or("");
-            unsafe { ffi::lua_createtable(L, 0, 0) };
-            let t = unsafe { ffi::lua_gettop(L) };
-            let mut i = 1i64;
-            for line in text.lines() {
-                if line.is_empty() {
-                    continue;
-                }
-                unsafe {
-                    ffi::lua_pushlstring(L, line.as_ptr() as *const c_char, line.len());
-                    ffi::lua_rawseti(L, t, i);
-                }
-                i += 1;
+    let Ok(entries) = VfsClient::new().list_dir(path) else {
+        unsafe { ffi::lua_pushnil(L) };
+        return Ok(1);
+    };
+    let text = core::str::from_utf8(&entries).unwrap_or("");
+    // SAFETY: L is valid; the closure owns nothing and keeps at most the table
+    // and one string on the stack, well within LUA_MINSTACK.
+    unsafe {
+        ffi::pcall_push(L, &|L| {
+            ffi::lua_createtable(L, 0, 0);
+            let t = ffi::lua_gettop(L);
+            for (i, line) in (1i64..).zip(text.lines().filter(|line| !line.is_empty())) {
+                ffi::lua_pushlstring(L, line.as_ptr().cast::<c_char>(), line.len());
+                ffi::lua_rawseti(L, t, i);
             }
-            1
-        }
-        Err(_) => {
-            unsafe { ffi::lua_pushnil(L) };
-            1
-        }
-    }
+        })
+    }?;
+    Ok(1)
 }
 
 /// `vfs.remove(path)` → bool
@@ -275,8 +292,7 @@ pub unsafe extern "C" fn vfs_remove(L: *mut LuaState) -> c_int {
             return 1;
         }
     };
-    let mut vfs = VfsRef::new();
-    let ok = vfs_ok(&mut vfs, &api::ipc::VfsRequest::Unlink(path));
+    let ok = vfs_ok(&mut VfsRef::new(), &api::ipc::VfsRequest::Unlink(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };
     1
 }

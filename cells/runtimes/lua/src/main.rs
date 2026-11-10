@@ -1,5 +1,7 @@
 #![no_std]
-#![no_main]
+// Host unit tests (`cargo test --target <host>`) need the harness's own
+// `main`; the cell entry below is then an ordinary, unexported function.
+#![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
 extern crate api;
@@ -32,7 +34,7 @@ api::declare_syscalls![
 // library is not compiled. The cell still links as a stub that prints an
 // informative error rather than silently crashing at link time.
 #[cfg(lua_c_unavailable)]
-#[no_mangle]
+#[cfg_attr(not(test), no_mangle)]
 extern "C" fn main() -> usize {
     ostd::io::println("[lua] not available: compiled without an ELF C compiler.");
     ostd::io::println("[lua] Install LLVM/Clang and rebuild with a cross-compiler.");
@@ -106,7 +108,7 @@ unsafe fn inject_io_setup(L: *mut ffi::LuaState) -> bool {
 }
 
 #[cfg(not(lua_c_unavailable))]
-#[no_mangle]
+#[cfg_attr(not(test), no_mangle)]
 #[allow(non_snake_case)] // reason: L is the Lua API convention
 extern "C" fn main() -> usize {
     // Read spawn args immediately before any heavy initialisation so that the

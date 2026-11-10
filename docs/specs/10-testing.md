@@ -150,10 +150,10 @@ faults; an "enabled" log or register round-trip is insufficient.
 
 | Feature | Arch | Mechanism | Expected result | QEMU flag |
 |---------|------|-----------|-----------------|-----------|
-| BTI | aarch64 | `cfi-test` cell: indirect branch to non-BTI address | EC=0x0D synchronous fault | `-cpu max` |
+| BTI | aarch64 | `cfi-test` cell: `BLR` to the instruction after a `BTI c` pad in the cell's executable `.text` | Today: `cfi-test: SKIP` (kernel sets no stage-1 GP bit on cell pages). Once armed: `[fault-probe] a64 ... ec=0xd` at the printed target | `-cpu max` |
 | PAC-RET | aarch64 | Boot log `CFI: PAC-RET enabled` | No fault on normal return | `-cpu max` |
 | MTE | aarch64 | Kernel self-test (tag/re-tag round-trip via STG/LDG) | `MTE-SELFTEST: PASS` | `-cpu max,+mte` |
-| CET-IBT | x86_64 | `cfi-test` cell: indirect call to non-ENDBR64 address | `#CP` fault (vector 21) | `-cpu max` |
+| CET-IBT | x86_64 | `cfi-test` cell: `CALL reg` to the instruction after an `ENDBR64` in the cell's executable `.text` | Today: `cfi-test: SKIP` (kernel never writes `IA32_U_CET`). Once armed: CPL3 `#CP` (vector 21) termination | `-cpu max` |
 | PKU plumbing | x86_64 | Kernel self-test (PKRU constants + kernel RDPKRU verification) | `PKU-SELFTEST: PASS`; does **not** prove page isolation | `-cpu max` |
 
 Current PKU pages all retain PTE key 0 because the loader does not stamp bits `[62:59]`.
@@ -204,13 +204,31 @@ cargo build --release -p cellos-kernel `
 
 ### Test availability and SKIP behaviour
 
-Each test prints `SKIP` (never `FAIL`) when the feature is absent from
+The kernel self-tests print `SKIP` (never `FAIL`) when the feature is absent from
 the hardware or QEMU CPU model:
 
 - `MTE-SELFTEST: SKIP` — QEMU does not emulate MTE without `+mte` flag
 - `PKU-SELFTEST: SKIP` — CPU lacks PKU (CPUID leaf 7 ECX[3] = 0)
-- `cfi-test: SKIP: BTI/CET-IBT not enforced` — feature not enabled at EL1/CR4
 
-This lets CI run on baseline QEMU (without `-cpu max`) without producing false failures.
-Explicit `-cpu max` is necessary to exercise supported instructions, but PKU enforcement
-still requires the missing denied-page-access test described above.
+`cfi-test` runs a control call first, then the violation, and reports one of:
+
+- `cfi-test: control OK: ...` — an indirect call to the landing pad ran, so the
+  target page is executable and a later fault cannot be NX.
+- **Kernel fault log, no further cell output** — enforcement works: aarch64
+  `[fault-probe] a64 ... ec=0xd ... pc=<non-landing-pad target>`; x86_64 a CPL3
+  vector-21 (`#CP`) termination. The cell cannot print a PASS after dying.
+- `cfi-test: SKIP: BTI not enforced for EL0: ...` / `cfi-test: SKIP: CET-IBT not
+  enforced at CPL3: ...` followed by a `cfi-test: reason:` line, exit 0 — the
+  violating call returned. This is the current result on every CPU model,
+  including `-cpu max` with `CFI: BTI enabled`: BTI only checks branches into
+  guarded pages and no cell page carries the GP bit; x86 enables supervisor IBT
+  only (`IA32_S_CET`), never user IBT (`IA32_U_CET`).
+- `cfi-test: SKIP: riscv64 forward-edge CFI (Zicfilp landing pads) is not enabled
+  by the kernel; nothing to probe` — riscv64 does not probe.
+- `cfi-test: FAIL: ...`, exit 1 — the control call (or the returned value) was
+  wrong; the test itself is broken.
+
+The `SKIP` outputs let CI run on baseline QEMU (without `-cpu max`) without producing
+false failures. Explicit `-cpu max` is necessary to exercise supported instructions, but
+PKU enforcement still requires the missing denied-page-access test described above, and
+BTI/IBT enforcement for cells requires the kernel gaps above to be closed.

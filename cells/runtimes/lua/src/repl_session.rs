@@ -37,20 +37,18 @@ pub unsafe fn run_repl(L: *mut LuaState) {
                 }
                 buf.push_str(&line);
 
-                // Try to compile as a complete chunk.
-                if !try_eval(L, &buf) {
-                    // If incomplete (multi-line), keep accumulating.
-                    // If an actual error, clear the buffer.
-                    if !is_incomplete(L) {
-                        buf.clear();
-                    }
-                } else {
+                // Compile and run; an incomplete chunk keeps accumulating,
+                // anything else (success or a reported error) starts afresh.
+                // SAFETY: L is the valid state run_repl's caller guarantees.
+                if unsafe { try_eval(L, &buf, true) } != Outcome::Incomplete {
                     buf.clear();
                 }
 
-                // Pop any leftover values.
+                // Pop any leftover values (a chunk's results).
+                // SAFETY: L is valid (run_repl's contract).
                 let top = unsafe { crate::ffi::lua_gettop(L) };
                 if top > 0 {
+                    // SAFETY: L is valid; settop(0) only shrinks the stack.
                     unsafe { crate::ffi::lua_settop(L, 0) };
                 }
             }
@@ -66,43 +64,73 @@ pub unsafe fn run_repl(L: *mut LuaState) {
 #[allow(non_snake_case)]
 pub unsafe fn eval(L: *mut LuaState, code: &str) -> bool {
     // SAFETY: forwarded to try_eval which upholds the same contract on L.
-    unsafe { try_eval(L, code) }
+    // Without continuation lines an incomplete chunk is an ordinary error.
+    unsafe { try_eval(L, code, false) == Outcome::Ok }
 }
 
-/// Returns `true` if `code` compiled and ran successfully.
+/// How [`try_eval`] ended. Every outcome leaves the stack as it found it
+/// apart from the chunk's own results on `Ok`.
+#[derive(Debug, PartialEq, Eq)]
+enum Outcome {
+    /// The chunk compiled and ran.
+    Ok,
+    /// The chunk ends mid-statement; more input may complete it. Nothing was printed.
+    Incomplete,
+    /// Compilation or execution failed; the error was printed.
+    Failed,
+}
+
+/// Compile and run `code`. With `continuation`, a chunk that only failed to
+/// compile because it ends early is reported as [`Outcome::Incomplete`]
+/// instead of printed, so the REPL can ask for more lines.
 ///
 /// # Safety
 /// `L` must be a valid, non-null Lua state.
 #[allow(non_snake_case)]
-unsafe fn try_eval(L: *mut LuaState, code: &str) -> bool {
+unsafe fn try_eval(L: *mut LuaState, code: &str, continuation: bool) -> Outcome {
     let mut nul_buf = alloc::vec![0u8; code.len() + 1];
     nul_buf[..code.len()].copy_from_slice(code.as_bytes());
     // Same chunk text and name `luaL_loadstring` used (source up to the first
     // NUL), but compiled text-only: console and `-e` input never reach the
     // bytecode undumper.
     let Ok(source) = CStr::from_bytes_until_nul(&nul_buf) else {
-        return false; // unreachable: nul_buf always ends with NUL
+        return Outcome::Failed; // unreachable: nul_buf always ends with NUL
     };
 
     // SAFETY: L is non-null; `source` is NUL-terminated and outlives the call.
     let rc = unsafe { crate::ffi::load_text(L, source.to_bytes(), source) };
     if rc != LUA_OK {
-        print_error(L);
-        return false;
+        // Classify while the message is still on the stack: once popped, the
+        // string is unanchored and its bytes may be collected or the slot
+        // reused by the next push.
+        // SAFETY: the failed load left its error message on top.
+        if continuation && unsafe { is_incomplete(L) } {
+            // SAFETY: drops that message; nothing borrows it any more.
+            unsafe { crate::ffi::lua_pop(L, 1) };
+            return Outcome::Incomplete;
+        }
+        // SAFETY: the load error is still on top.
+        unsafe { print_error(L) };
+        return Outcome::Failed;
     }
 
     // lua_pcall(L,0,MULTRET,0) == lua_pcallk(L,0,MULTRET,0, 0, NULL)
+    // SAFETY: L is valid and the compiled chunk is on top.
     let rc = unsafe {
         crate::ffi::lua_pcallk(L, 0, crate::ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut())
     };
     if rc != LUA_OK {
-        print_error(L);
-        return false;
+        // SAFETY: the failed call left its error object on top.
+        unsafe { print_error(L) };
+        return Outcome::Failed;
     }
-    true
+    Outcome::Ok
 }
 
-/// Check if the last compile error looks like an incomplete chunk.
+/// Check if the compile error at the stack top marks an incomplete chunk.
+///
+/// Reads the message in place and does not pop it; the borrowed bytes are
+/// only valid while the message stays on the stack.
 ///
 /// # Safety
 /// `L` must be a valid, non-null Lua state; the top of the stack must hold
@@ -115,7 +143,7 @@ unsafe fn is_incomplete(L: *mut LuaState) -> bool {
     if ptr.is_null() {
         return false;
     }
-    // SAFETY: ptr points to `len` valid bytes (Lua-managed string).
+    // SAFETY: ptr points to `len` valid bytes of the string still on the stack.
     let bytes = unsafe { core::slice::from_raw_parts(ptr.cast::<u8>(), len) };
     // Lua reports incomplete chunks with "<eof>" in the error message.
     bytes.windows(5).any(|w| w == b"<eof>")
@@ -137,6 +165,11 @@ pub(crate) unsafe fn print_error(L: *mut LuaState) {
             ostd::io::println(s);
         }
     }
-    // Pop the error.
+    // SAFETY: L is valid and the error is on top. Pop only now: `bytes`
+    // borrowed the message, which the pop unanchors.
     unsafe { crate::ffi::lua_settop(L, -2) };
 }
+
+#[cfg(test)]
+#[path = "repl_session_tests.rs"]
+mod tests;

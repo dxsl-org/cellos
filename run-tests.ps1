@@ -31,7 +31,13 @@
 #   Expected output:
 #     [SELFTEST] MTE-SELFTEST: PASS   (or SKIP if QEMU version < 6.2 without MTE)
 #     [SELFTEST] PKU-SELFTEST: PASS   (or SKIP if CPU lacks PKU)
-#     cfi-test: SKIP: BTI/CET-IBT not enforced  (on baseline QEMU without -cpu max)
+#     cfi-test: control OK: indirect call to the landing pad ran from executable .text
+#     cfi-test: SKIP: BTI not enforced for EL0: ...   (aarch64, any -cpu: no GP bit on cell pages)
+#     cfi-test: SKIP: CET-IBT not enforced at CPL3: ... (x86_64: IA32_U_CET never written)
+#       each SKIP is followed by a "cfi-test: reason: ..." line; exit 0
+#     A kernel fault log instead of SKIP (aarch64 "[fault-probe] a64 ... ec=0xd",
+#     x86_64 CPL3 #CP vector 21) means enforcement works; "cfi-test: FAIL" means
+#     the control call broke (test bug). See docs/specs/10-testing.md section 6.
 
 param(
     [string]$Suite = "",

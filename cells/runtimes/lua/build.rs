@@ -24,6 +24,13 @@ fn main() {
 
     let target = std::env::var("TARGET").unwrap_or_default();
 
+    // Host unit tests (`cargo test --target <host triple>`) drive a real
+    // lua_State, so they need Lua compiled for the host and nothing else.
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os != "none") {
+        compile_lua_c_host();
+        return;
+    }
+
     // For x86_64 and aarch64 we need an ELF-capable C compiler.
     // On Windows + MSVC the cc crate defaults to cl.exe (COFF output) which is
     // incompatible with rust-lld for bare-metal ELF targets. Detect and handle
@@ -56,49 +63,73 @@ fn main() {
     }
 }
 
+/// Lua 5.4.x core and stdlib sources (excludes lua.c / luac.c, which define main).
+const LUA_SRC: &[&str] = &[
+    "lapi.c",
+    "lcode.c",
+    "lctype.c",
+    "ldebug.c",
+    "ldo.c",
+    "ldump.c",
+    "lfunc.c",
+    "lgc.c",
+    "llex.c",
+    "lmem.c",
+    "lobject.c",
+    "lopcodes.c",
+    "lparser.c",
+    "lstate.c",
+    "lstring.c",
+    "ltable.c",
+    "ltm.c",
+    "lundump.c",
+    "lvm.c",
+    "lzio.c",
+    "lauxlib.c",
+    "lbaselib.c",
+    "lcorolib.c",
+    "ldblib.c",
+    // liolib.c / loslib.c are EXCLUDED: they pull FILE* stdio and
+    // strftime/localtime from picolibc, whose locale.o/timelocal.o carry
+    // non-PIC R_RISCV_64 relocations that a -pie cell link rejects.
+    // glue/lua_stdlib_stubs.c registers empty io/os tables instead; the
+    // sandbox prelude (inject_io_setup) rebuilds io.* over VFS bindings.
+    "lmathlib.c",
+    "loadlib.c",
+    "lstrlib.c",
+    "ltablib.c",
+    "lutf8lib.c",
+    "linit.c",
+];
+
+/// Vendored Lua sources.
+const SRC_DIR: &str = "src/c/src";
+/// ViOS glue: the config header and the C stubs the cell links.
+const GLUE_DIR: &str = "glue";
+
+/// Build Lua for the host against the host libc, for unit tests only.
+///
+/// No zig wrapper, newlib headers, ViOS config or `lua_vios_glue.c`: the glue
+/// redefines libc functions (`getenv`, `strerror`, ...) and routes output
+/// through a CellOS syscall, neither of which a host process may use. The io/os
+/// opener stubs stay so `linit.c` links exactly as in the cell.
+fn compile_lua_c_host() {
+    let mut build = cc::Build::new();
+    build.warnings(false);
+    build.flag_if_supported("-std=c99");
+    build.include(SRC_DIR);
+    build.define("LUA_USE_C89", None);
+    for file in LUA_SRC {
+        build.file(format!("{SRC_DIR}/{file}"));
+    }
+    build.file(format!("{GLUE_DIR}/lua_stdlib_stubs.c"));
+    build.compile("lua54");
+
+    println!("cargo:rerun-if-changed={SRC_DIR}");
+    println!("cargo:rerun-if-changed={GLUE_DIR}");
+}
+
 fn compile_lua_c(target: &str) {
-    // List all Lua 5.4.x C source files (excludes lua.c / luac.c which define main).
-    let lua_src = [
-        "lapi.c",
-        "lcode.c",
-        "lctype.c",
-        "ldebug.c",
-        "ldo.c",
-        "ldump.c",
-        "lfunc.c",
-        "lgc.c",
-        "llex.c",
-        "lmem.c",
-        "lobject.c",
-        "lopcodes.c",
-        "lparser.c",
-        "lstate.c",
-        "lstring.c",
-        "ltable.c",
-        "ltm.c",
-        "lundump.c",
-        "lvm.c",
-        "lzio.c",
-        "lauxlib.c",
-        "lbaselib.c",
-        "lcorolib.c",
-        "ldblib.c",
-        // liolib.c / loslib.c are EXCLUDED: they pull FILE* stdio and
-        // strftime/localtime from picolibc, whose locale.o/timelocal.o carry
-        // non-PIC R_RISCV_64 relocations that a -pie cell link rejects.
-        // glue/lua_stdlib_stubs.c registers empty io/os tables instead; the
-        // sandbox prelude (inject_io_setup) rebuilds io.* over VFS bindings.
-        "lmathlib.c",
-        "loadlib.c",
-        "lstrlib.c",
-        "ltablib.c",
-        "lutf8lib.c",
-        "linit.c",
-    ];
-
-    let src_dir = "src/c/src";
-    let glue_dir = "glue";
-
     let mut build = cc::Build::new();
 
     let use_zig = std::env::var("CELLOS_USE_ZIG")
@@ -143,8 +174,8 @@ fn compile_lua_c(target: &str) {
     build.flag_if_supported("-std=c99");
 
     // Use the portable glue config instead of Lua's default luaconf.h macros.
-    build.include(src_dir);
-    build.include(glue_dir);
+    build.include(SRC_DIR);
+    build.include(GLUE_DIR);
     for inc in [
         "/mnt/c/RISCV/xpack-riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
         "/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/riscv-none-elf/include",
@@ -159,19 +190,19 @@ fn compile_lua_c(target: &str) {
     // `-include` and its filename must be passed together. Probing either flag
     // in isolation rejects both, leaving Lua's default fwrite(stdout) path.
     build.flag("-include").flag("lua_vios_config.h");
-    for file in &lua_src {
-        build.file(format!("{src_dir}/{file}"));
+    for file in LUA_SRC {
+        build.file(format!("{SRC_DIR}/{file}"));
     }
 
     // ViOS glue: vios_write/abort + safe POSIX stubs (system/getenv/tmpnam).
-    build.file(format!("{glue_dir}/lua_vios_glue.c"));
+    build.file(format!("{GLUE_DIR}/lua_vios_glue.c"));
     // Empty io/os openers replacing the excluded liolib/loslib (see above).
-    build.file(format!("{glue_dir}/lua_stdlib_stubs.c"));
+    build.file(format!("{GLUE_DIR}/lua_stdlib_stubs.c"));
 
     build.compile("lua54");
 
-    println!("cargo:rerun-if-changed={src_dir}");
-    println!("cargo:rerun-if-changed={glue_dir}");
+    println!("cargo:rerun-if-changed={SRC_DIR}");
+    println!("cargo:rerun-if-changed={GLUE_DIR}");
 }
 
 /// Returns true if an ELF-capable C compiler is available for `target`.

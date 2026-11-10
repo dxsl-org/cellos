@@ -2,6 +2,12 @@
 //!
 //! The record buffers are owned alongside the connection, not leaked on close,
 //! timeout, or owner death. The connection is always dropped before its buffers.
+//!
+//! `embedded-tls` needs the buffers as `&'static mut [u8]`. They are therefore
+//! held as raw heap pointers, never as `Box`es: moving a `Box` asserts unique
+//! ownership of its allocation, which under Stacked/Tree Borrows invalidates
+//! every slice derived from it earlier. A raw pointer makes no such claim, so
+//! the entry (and the futures that carry it) may move while `conn` uses them.
 
 extern crate alloc;
 
@@ -28,9 +34,47 @@ compile_error!(
 
 const TLS_BUF: usize = 16640;
 
+/// The two TLS record buffers a connection borrows, freed when this is dropped.
+///
+/// Invariant: each pointer came from `Box::into_raw` of a `Box<[u8; TLS_BUF]>`,
+/// is owned solely by this value, and is freed exactly once, in `Drop`.
 pub(super) struct RecordBuffers {
-    read: Box<[u8; TLS_BUF]>,
-    write: Box<[u8; TLS_BUF]>,
+    read: *mut [u8; TLS_BUF],
+    write: *mut [u8; TLS_BUF],
+}
+
+impl RecordBuffers {
+    fn new() -> Self {
+        Self {
+            read: Box::into_raw(Box::new([0u8; TLS_BUF])),
+            write: Box::into_raw(Box::new([0u8; TLS_BUF])),
+        }
+    }
+
+    /// The `(read, write)` record slices for one `TlsConnection`.
+    ///
+    /// # Safety
+    /// Call at most once per value (the slices are exclusive), and drop every
+    /// returned slice — i.e. the connection that borrows them — before `self`.
+    unsafe fn record_slices(&mut self) -> (&'static mut [u8], &'static mut [u8]) {
+        // SAFETY: both pointers are live, distinct, unaliased allocations (type
+        // invariant). The caller takes them once and ends their use before
+        // `Drop` frees the allocations; moving `self` meanwhile copies only the
+        // raw pointers and leaves the derived slices valid.
+        unsafe { (&mut *self.read, &mut *self.write) }
+    }
+}
+
+impl Drop for RecordBuffers {
+    fn drop(&mut self) {
+        // SAFETY: each pointer is the unique `Box::into_raw` result of its
+        // allocation and is freed only here, once; every slice derived from it
+        // belonged to a connection that is dropped first.
+        unsafe {
+            drop(Box::from_raw(self.read));
+            drop(Box::from_raw(self.write));
+        }
+    }
 }
 
 fn authenticated_time_preflight() -> Result<(), TlsError> {
@@ -43,9 +87,7 @@ pub(super) fn prepare_handshake_buffers() -> Result<RecordBuffers, TlsError> {
     authenticated_time_preflight()?;
     #[cfg(test)]
     super::authenticated_time_precheck_tests::record_buffer_allocation();
-    let read = Box::new([0u8; TLS_BUF]);
-    let write = Box::new([0u8; TLS_BUF]);
-    Ok(RecordBuffers { read, write })
+    Ok(RecordBuffers::new())
 }
 
 pub struct TlsSocketEntry {
@@ -88,11 +130,11 @@ impl TlsSocketEntry {
                 return Err(e);
             }
         };
-        // SAFETY: both allocations live at stable heap addresses. `conn` is
-        // destroyed before `buffers` on every path (including future drop while
-        // suspended); the completed entry likewise declares conn first.
-        let read = unsafe { core::slice::from_raw_parts_mut(buffers.read.as_mut_ptr(), TLS_BUF) };
-        let write = unsafe { core::slice::from_raw_parts_mut(buffers.write.as_mut_ptr(), TLS_BUF) };
+        // SAFETY: the slices are taken once from these buffers. `conn` is
+        // destroyed before `buffers` on every path: as a later local here
+        // (including a future dropped while suspended) and as the earlier
+        // field of the completed entry.
+        let (read, write) = unsafe { buffers.record_slices() };
         let transport = SmoltcpTlsTransport::new(handle);
         let mut conn = TlsConnection::new(transport, read, write);
         let config = if hostname.is_empty() {

@@ -47,17 +47,21 @@ impl VfsReadOps for MockOps {
 
 #[test]
 fn reads_more_than_512_bytes() {
+    // Root, `tmp`, the file; a short chunk ends the read; then close the file
+    // and both directories.
     let mut ops = MockOps::new(vec![
         TestReply::Dir(1),
+        TestReply::Dir(2),
         TestReply::File(9),
         TestReply::Data(vec![b'x'; 600]),
-        TestReply::Data(vec![]),
+        TestReply::Ok,
         TestReply::Ok,
         TestReply::Ok,
     ]);
     let bytes = read_file(&mut ops, "/tmp/big.lua", 64 * 1024).expect("read");
     assert_eq!(bytes.len(), 600);
-    assert!(ops.calls[2].contains("max: 4000"));
+    assert!(ops.calls[3].contains("max: 4000"));
+    assert!(ops.replies.is_empty(), "every handle closed");
 }
 
 #[test]
@@ -71,9 +75,11 @@ fn maps_missing_file_to_io() {
 fn allows_exact_cap_then_eof() {
     let mut ops = MockOps::new(vec![
         TestReply::Dir(1),
+        TestReply::Dir(2),
         TestReply::File(9),
         TestReply::Data(vec![b'a'; 8]),
         TestReply::Data(vec![]),
+        TestReply::Ok,
         TestReply::Ok,
         TestReply::Ok,
     ]);
@@ -85,9 +91,11 @@ fn allows_exact_cap_then_eof() {
 fn rejects_bytes_beyond_cap() {
     let mut ops = MockOps::new(vec![
         TestReply::Dir(1),
+        TestReply::Dir(2),
         TestReply::File(9),
         TestReply::Data(vec![b'a'; 8]),
         TestReply::Data(vec![b'b']),
+        TestReply::Ok,
         TestReply::Ok,
         TestReply::Ok,
     ]);

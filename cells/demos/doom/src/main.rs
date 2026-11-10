@@ -26,6 +26,9 @@ use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
 
+use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 // DOOM internal framebuffer — must match DOOMGENERIC_RESX/RESY in build.rs.
 const DOOM_W: u32 = 320;
 const DOOM_H: u32 = 200;
@@ -49,31 +52,57 @@ declare_manifest!(
     tier = api::manifest::PROTECTION_CLASS_FFI
 );
 
-// 10 MiB static C heap — serves picolibc malloc via _sbrk.
-// Without this, _sbrk (from sysio.rs) returns NULL → malloc always fails →
-// DOOM's Z_Init("couldn't allocate zone heap") exits immediately.
-// --allow-multiple-definition (doom/build.rs) means this binary-crate
-// definition wins over sysio.rs's NULL stub in the link.
-static mut DOOM_C_HEAP: [u8; 10 * 1024 * 1024] = [0; 10 * 1024 * 1024];
-static mut DOOM_C_HEAP_END: usize = 0;
+/// Size of the static arena behind picolibc's `_sbrk` (10 MiB).
+const DOOM_C_HEAP_SIZE: usize = 10 * 1024 * 1024;
 
-// --wrap=_sbrk redirects picolibc malloc's _sbrk calls here.
-// Name convention: __wrap_ + "_sbrk" = __wrap__sbrk (double underscore).
+/// Static C heap — serves picolibc malloc via `_sbrk`.
+///
+/// Without it, `_sbrk` (from sysio.rs) returns NULL → malloc always fails →
+/// DOOM's Z_Init("couldn't allocate zone heap") exits immediately.
+///
+/// Interior-mutable instead of `static mut`: C keeps raw pointers into this
+/// array for the life of the cell, so Rust must never form a reference (shared
+/// or `&mut`) to the array — that would assert exclusive/frozen access over
+/// bytes C is concurrently using. `UnsafeCell::get` yields a raw pointer with
+/// no such claim, and it is the only way this module touches the arena.
+#[repr(transparent)]
+struct CHeap(UnsafeCell<[u8; DOOM_C_HEAP_SIZE]>);
+
+// SAFETY: Rust never reads or writes the arena's bytes; it only computes raw
+// pointers into it. All accesses happen in C through those pointers, on the
+// cell's single task, so sharing the static across threads adds no data race.
+unsafe impl Sync for CHeap {}
+
+static DOOM_C_HEAP: CHeap = CHeap(UnsafeCell::new([0; DOOM_C_HEAP_SIZE]));
+
+/// Current program break as a byte offset into [`DOOM_C_HEAP`], always in
+/// `0..=DOOM_C_HEAP_SIZE`.
+static DOOM_C_HEAP_BREAK: AtomicUsize = AtomicUsize::new(0);
+
+/// `_sbrk` for picolibc malloc: moves the break by `incr` bytes and returns the
+/// previous break, or `(void *)-1` (ENOMEM) when the new break would leave the
+/// arena in either direction.
+///
+/// `--wrap=_sbrk` (doom/build.rs) redirects picolibc's `_sbrk` calls here.
+/// Name convention: `__wrap_` + `_sbrk` = `__wrap__sbrk` (double underscore).
+/// `--allow-multiple-definition` lets this win over sysio.rs's NULL stub.
 #[no_mangle]
-pub unsafe extern "C" fn __wrap__sbrk(incr: i32) -> *mut u8 {
-    let start = DOOM_C_HEAP.as_mut_ptr() as usize;
-    let limit = DOOM_C_HEAP.len();
-    let cur = DOOM_C_HEAP_END;
-    let new = if incr < 0 {
-        cur.saturating_sub((-incr) as usize)
-    } else {
-        cur + incr as usize
-    };
-    if new > limit {
-        return usize::MAX as *mut u8; // ENOMEM sentinel
+pub extern "C" fn __wrap__sbrk(incr: i32) -> *mut u8 {
+    // checked_add_signed rejects a shrink past the arena start (including
+    // incr == i32::MIN) instead of wrapping; the filter rejects growth past
+    // the end. The atomic update keeps the break consistent even if a second
+    // task ever called malloc, though DOOM runs on one task today.
+    let moved = DOOM_C_HEAP_BREAK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+        cur.checked_add_signed(incr as isize)
+            .filter(|&new| new <= DOOM_C_HEAP_SIZE)
+    });
+    match moved {
+        // `prev <= DOOM_C_HEAP_SIZE`, so the result stays inside the arena (or
+        // one past its end) and keeps the arena's provenance; wrapping_add only
+        // avoids an unsafe `add` whose bound is already checked above.
+        Ok(prev) => DOOM_C_HEAP.0.get().cast::<u8>().wrapping_add(prev),
+        Err(_) => core::ptr::without_provenance_mut(usize::MAX),
     }
-    DOOM_C_HEAP_END = new;
-    (start + cur) as *mut u8
 }
 
 // ─── doomgeneric public API ────────────────────────────────────────────────────
@@ -269,16 +298,6 @@ pub unsafe extern "C" fn DG_Quit() {
 /// No-op: ViCell surfaces don't have a title bar.
 #[no_mangle]
 pub unsafe extern "C" fn DG_SetWindowTitle(_title: *const u8) {}
-
-// ─── mkdir stub ───────────────────────────────────────────────────────────────
-
-/// DOOM calls mkdir() to create save-game directories. We have no real FS
-/// directory creation yet — return 0 (success) so DOOM continues; actual
-/// save files will fail gracefully when opened.
-#[no_mangle]
-pub unsafe extern "C" fn mkdir(_path: *const u8, _mode: u32) -> i32 {
-    0
-}
 
 // ─── Key translation ─────────────────────────────────────────────────────────
 
