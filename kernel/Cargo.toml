@@ -60,6 +60,11 @@ hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-f
 [build-dependencies]
 vergen-gitcl = { version = "1", default-features = false, features = ["build", "cargo"] }
 
+# Host tests run real firmware trees (tests/fixtures/dtb) through the aarch64
+# boot parser (`boot::firmware_cpus`, `boot::fdt_nops`).
+[dev-dependencies]
+fdt = "0.1"
+
 
 
 

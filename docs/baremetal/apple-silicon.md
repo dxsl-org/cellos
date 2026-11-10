@@ -79,6 +79,7 @@ The storage driver enforces **`PartitionGuard`** (`libs/apple-rtkit`), which rej
 - **UART Console:** S5L UART (`apple,s5l-uart`) accessed via USB-C debug adapter or m1n1 vUART.
 - **DMA Isolation:** Apple DART IOMMU (`DmaIsolation::Required`). All PCIe and USB bus masters must translate through 16 KiB DART page tables; bypass mode is strictly rejected by `AppleDartPt`.
 - **Storage DMA:** Filtered by SART (Storage Address Resolution Table) hardware window registers.
+- **CPU topology & SMP:** the m1n1-supplied DTB is the only source (`DtbPolicy::Required`). Boot reads `/cpus` once (`boot::firmware_cpus`, recorded by `firmware_smp::note`): the four Icestorm E-cores are MPIDR `0x0`–`0x3` (Aff1 = 0) and the four Firestorm P-cores `0x10100`–`0x10103` (Aff2 = Aff1 = 1). Secondaries start by spin table: m1n1 fills each node's `cpu-release-addr` (upstream Linux trees carry `<0 0>`), and a core whose word is still 0 is reported (`no cpu-release-addr in FDT`) and skipped. There is no QEMU model; the parser is pinned by host tests against the Linux v7.3 `t8103-j274` tree and an m1n1-filled copy (`tests/fixtures/dtb/`, `cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu -- boot::firmware_tree_tests`). Bringing a P-core online on hardware is unverified.
 
 ---
 

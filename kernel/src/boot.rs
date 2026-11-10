@@ -10,18 +10,36 @@ use hal::aarch64::backend::{ArmPlatform, Board, DtbPolicy};
 
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 mod dtb_memory;
+#[cfg(any(target_arch = "aarch64", test))]
+pub mod fdt_nops;
+#[cfg(test)]
+mod firmware_tree_tests;
 
 pub mod limine;
 
 /// Select the firmware DTB once so every early-boot consumer sees the same tree.
 ///
-/// AArch64: the board backend reads what it needs from the tree here
+/// AArch64: `FDT_NOP` holes are compacted out first ([`fdt_nops`]), then the
+/// board backend reads what it needs from the tree here
 /// (`ArmPlatform::note_firmware_tree`), before its interrupt controller is
 /// brought up and before the allocator can reuse the tree's memory.
 pub fn effective_dtb(entry_dtb: usize) -> usize {
     let dtb = limine::get_dtb_ptr().unwrap_or(entry_dtb);
     #[cfg(target_arch = "aarch64")]
     if dtb != 0 {
+        // SAFETY: firmware passes a mapped FDT pointer in x0; the header is
+        // read before `totalsize` is trusted.
+        let header = unsafe { core::slice::from_raw_parts(dtb as *const u8, 8) };
+        if let Some(size) = fdt_nops::total_size(header) {
+            // SAFETY: the firmware hands the kernel its tree's `totalsize`
+            // bytes; nothing else references them on the single boot hart.
+            let blob = unsafe { core::slice::from_raw_parts_mut(dtb as *mut u8, size) };
+            match fdt_nops::strip(blob) {
+                Ok(0) => {}
+                Ok(removed) => log::info!("[boot] DTB: {removed} bytes of FDT_NOP compacted"),
+                Err(error) => log::warn!("[boot] DTB left as is: {error:?}"),
+            }
+        }
         // SAFETY: firmware passes a mapped FDT pointer in x0; `Fdt` validates
         // the header before any node traversal.
         if let Ok(tree) = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) } {
@@ -417,19 +435,70 @@ pub fn fallback_dtb_ram_range() -> (usize, usize) {
     )
 }
 
-/// Fallback boot info with the kernel region sized from the linker end symbol.
-///
-/// # Panics
-/// Never — falls back to a 32 MB span only if `__stack_top` resolves below the
-/// RAM base (impossible with the current linker script).
+/// The firmware tree's CPU description, as plain data: what
+/// [`firmware_smp::note`] records, kept free of boot state so host tests can
+/// run real firmware trees (`tests/fixtures/dtb/`) through the same parser.
+#[cfg(any(target_arch = "aarch64", test))]
+pub mod firmware_cpus {
+    use crate::task::smp::mpidr;
+
+    /// One `/cpus/cpu@…` node, in tree order.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct CpuNode {
+        /// The CPU's `MPIDR_EL1` affinity, from `reg` (`None`: missing or
+        /// malformed; see [`mpidr::reg_affinity`]).
+        pub affinity: Option<u64>,
+        /// Spin-table `cpu-release-addr` (`None`: absent, malformed, or the 0
+        /// a tree carries until its loader fills the address in).
+        pub release_addr: Option<u64>,
+    }
+
+    /// `/psci/method` (`"smc"` / `"hvc"`), or `None` when the tree has no PSCI.
+    pub fn psci_method<'a>(tree: &fdt::Fdt<'a>) -> Option<&'a str> {
+        tree.find_node("/psci")?
+            .property("method")
+            .and_then(|method| method.as_str())
+    }
+
+    /// The `/cpus/cpu@…` nodes in tree order; none when `/cpus` is missing
+    /// (`fdt::Fdt::cpus` would panic on such a tree).
+    pub fn cpus<'t>(tree: &'t fdt::Fdt<'_>) -> impl Iterator<Item = CpuNode> + 't {
+        let cpus = tree.find_node("/cpus");
+        // Devicetree default when `/cpus` omits `#address-cells`.
+        let address_cells = cpus
+            .and_then(|cpus| cpus.property("#address-cells"))
+            .and_then(|cells| cells.as_usize())
+            .unwrap_or(2);
+        cpus.into_iter()
+            .flat_map(|cpus| cpus.children())
+            .filter(|node| node.name.split('@').next() == Some("cpu"))
+            .map(move |cpu| CpuNode {
+                affinity: cpu
+                    .property("reg")
+                    .and_then(|reg| mpidr::reg_affinity(reg.value, address_cells)),
+                release_addr: cpu
+                    .property("cpu-release-addr")
+                    .and_then(|prop| match <[u8; 8]>::try_from(prop.value) {
+                        Ok(cells) => Some(u64::from_be_bytes(cells)),
+                        Err(_) => <[u8; 4]>::try_from(prop.value)
+                            .ok()
+                            .map(|cell| u64::from(u32::from_be_bytes(cell))),
+                    })
+                    .filter(|&addr| addr != 0),
+            })
+    }
+}
+
 /// Firmware SMP facts, read once from the device tree during boot.
 ///
 /// The kernel starts secondary cores through firmware (`PSCI_CPU_ON` over the
-/// conduit the tree declares) and must not guess either fact later: the tree is
-/// only reliably readable while boot code is still running, and an SMC on a
-/// machine whose firmware never asked for one is an undefined instruction.
+/// conduit the tree declares, or the tree's spin-table release words) and must
+/// not guess either fact later: the tree is only reliably readable while boot
+/// code is still running, and an SMC on a machine whose firmware never asked
+/// for one is an undefined instruction.
 #[cfg(target_arch = "aarch64")]
 pub mod firmware_smp {
+    use super::firmware_cpus;
     use core::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
     /// The instruction the firmware expects for PSCI calls (`/psci/method`).
@@ -450,28 +519,18 @@ pub mod firmware_smp {
     static CPU_RELEASE_ADDRS: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
 
     /// Read `/psci` and the `/cpus` population — each CPU's `MPIDR_EL1`
-    /// affinity included — from the firmware tree.
+    /// affinity and spin-table release address included — from the firmware
+    /// tree ([`firmware_cpus`] does the parsing).
     pub fn note(tree: &fdt::Fdt) {
-        let conduit = tree.find_node("/psci").map_or(NO_PSCI, |node| {
-            match node.property("method").and_then(|method| method.as_str()) {
-                Some("smc") => SMC,
-                Some("hvc") => HVC,
-                _ => NO_PSCI,
-            }
-        });
+        let conduit = match firmware_cpus::psci_method(tree) {
+            Some("smc") => SMC,
+            Some("hvc") => HVC,
+            _ => NO_PSCI,
+        };
         CONDUIT.store(conduit, Ordering::Relaxed);
-        CPUS.store(tree.cpus().count(), Ordering::Relaxed);
+        CPUS.store(firmware_cpus::cpus(tree).count(), Ordering::Relaxed);
 
-        // Devicetree default when `/cpus` omits `#address-cells`.
-        let address_cells = tree
-            .find_node("/cpus")
-            .and_then(|cpus| cpus.property("#address-cells"))
-            .and_then(|cells| cells.as_usize())
-            .unwrap_or(2);
-        let ids = tree.cpus().map(|cpu| {
-            cpu.property("reg")
-                .and_then(|reg| crate::task::smp::mpidr::reg_affinity(reg.value, address_cells))
-        });
+        let ids = firmware_cpus::cpus(tree).map(|cpu| cpu.affinity);
         if let Err(error) = crate::task::smp::CPU_MPIDRS.describe(ids) {
             log::warn!(
                 "[boot] /cpus affinities unusable ({:?}) — CPU index = MPIDR Aff0",
@@ -479,17 +538,8 @@ pub mod firmware_smp {
             );
         }
 
-        for (slot, cpu) in CPU_RELEASE_ADDRS.iter().zip(tree.cpus()) {
-            let release_addr = cpu
-                .property("cpu-release-addr")
-                .and_then(|prop| match <[u8; 8]>::try_from(prop.value) {
-                    Ok(cells) => Some(u64::from_be_bytes(cells)),
-                    Err(_) => <[u8; 4]>::try_from(prop.value)
-                        .ok()
-                        .map(|cell| u64::from(u32::from_be_bytes(cell))),
-                })
-                .unwrap_or(0);
-            slot.store(release_addr, Ordering::Relaxed);
+        for (slot, cpu) in CPU_RELEASE_ADDRS.iter().zip(firmware_cpus::cpus(tree)) {
+            slot.store(cpu.release_addr.unwrap_or(0), Ordering::Relaxed);
         }
     }
 
@@ -778,17 +828,33 @@ pub fn fallback_boot_info(_dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO
 }
 
-/// `DtbPolicy::Required` (RPi4): a valid firmware DTB must be present; the
-/// memory map is the descriptor's static fallback.
+/// `DtbPolicy::Required` (RPi4, Apple t8103): a valid firmware DTB must be
+/// present; the memory map is the descriptor's static fallback.
+///
+/// The tree is still the only source of the CPU topology — the `/cpus`
+/// affinities (t8103's P-cores are a second cluster) and the spin-table
+/// release words both boards start their secondaries through — so it is read
+/// here, while it is intact, exactly as the `Optional` path does.
 #[cfg(target_arch = "aarch64")]
 fn required_dtb_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     if dtb == 0 {
-        panic!("[boot] Raspberry Pi 4 requires a firmware DTB");
+        panic!(
+            "[boot] {} {} requires a firmware DTB",
+            AARCH64_BOARD.vendor, AARCH64_BOARD.model
+        );
     }
-    // SAFETY: VideoCore supplies the DTB pointer; the parser validates its header.
-    if unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }.is_err() {
-        panic!("[boot] Raspberry Pi 4 firmware DTB is invalid");
-    }
+    // SAFETY: the firmware (VideoCore, m1n1) supplies the DTB pointer; the
+    // parser validates its header before any node traversal.
+    let Ok(tree) = (unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }) else {
+        panic!(
+            "[boot] {} {} firmware DTB is invalid",
+            AARCH64_BOARD.vendor, AARCH64_BOARD.model
+        );
+    };
+    firmware_smp::note(&tree);
+    // Records only a generic ECAM bridge inside a kernel MMIO map; neither
+    // board's PCIe root complex is one, so this is a no-op on their trees.
+    note_pcie_ecam(&tree);
     &FALLBACK_BOOT_INFO
 }
 

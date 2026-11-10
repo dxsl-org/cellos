@@ -427,6 +427,25 @@ _secondary_entry:
     msr  vbar_el2, x9
     cellos_el2_to_el1 x9, 8f
 8:
+    .else
+    // An EL1 host (the Pi monitor boot): firmware may start the core at EL2
+    // (the Pi armstub's spin table, TF-A's PSCI). Leave EL2 as `.Lel2_no_vhe`
+    // does, with only the SMCCC stub behind it — the Pi monitor serves the
+    // boot core alone.
+    mrs  x9, CurrentEL
+    cmp  x9, #(2 << 2)
+    b.ne 8f
+    adrp x9, __el2_stub_vectors
+    add  x9, x9, :lo12:__el2_stub_vectors
+    msr  vbar_el2, x9
+    cellos_el2_to_el1 x9, 8f
+8:
+    .endif
+    .if {board_bcm}
+    // As `.el1_entry`: EL0 Cells on this core read the architected counters.
+    mov  x9, #0x101
+    msr  cntkctl_el1, x9
+    isb
     .endif
     // Exceptions to EL1 use SP_EL1 (SP_EL2 on a VHE host at EL2); set that
     // before touching SP.

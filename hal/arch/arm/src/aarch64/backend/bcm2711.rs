@@ -1,5 +1,5 @@
 //! BCM2711 (Raspberry Pi 4) backend: PL011 console at the profile's UART0,
-//! GIC-400, generic-timer tick, and PSCI secondaries.
+//! GIC-400, generic-timer tick, and spin-table secondaries.
 
 use hal_soc_bcm27xx::BCM2711;
 
@@ -19,7 +19,11 @@ impl ArmPlatform for Bcm2711 {
     type Iommu = NoIommu;
 
     const PL011_BASE: usize = BCM2711.mmio.uart_base;
-    const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
+    /// The VideoCore firmware's armstub (and QEMU `raspi4b`) parks cores 1–3
+    /// on the DTB's `cpu-release-addr` words (0xd8/0xe0/0xe8/0xf0,
+    /// `enable-method = "spin-table"`); its tree has no `/psci` node, and an
+    /// SMC into that armstub has no handler.
+    const SECONDARY_START: SecondaryStart = SecondaryStart::SpinTable;
     const CONSOLE_RX_IRQ: bool = false;
     /// Boot installs the Pi EL2 monitor, but this backend never initialises
     /// or uses it ([`NoEl2Monitor`]).

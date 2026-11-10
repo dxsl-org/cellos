@@ -794,3 +794,31 @@ real-board storage durability remain unverified.
 Keep the existing Section 7 TFTP card for recovery; flashing the new SD
 image replaces that bootstrap and requires explicit selection of the
 target card.
+
+## 9. Raspberry Pi 4 on QEMU `raspi4b`
+
+`board-rpi4` builds link at 0x80000 (`kernel/linker-rpi3.ld`), where VideoCore
+and QEMU load `kernel8.img`. The firmware DTB is required and is the only CPU
+description: boot reads `/cpus` once (`boot::firmware_cpus`), and cores 1–3 are
+released through the DTB's spin table (`cpu-release-addr` 0xd8/0xe0/0xe8/0xf0,
+`enable-method = "spin-table"`; the firmware tree has no `/psci`). The release
+words sit in page 0, which the kernel keeps unmapped as its null guard, so each
+word's page is mapped only for the write. The armstub starts secondaries at EL2;
+`_secondary_entry` drops them to the EL1 host (SMCCC stub at EL2, as on a
+non-VHE `virt` CPU).
+
+Opt-in lane (QEMU ≥ 9.0; it builds cells and the kernel into `/tmp/cellos-rpi4`):
+
+```bash
+bash scripts/qemu-rpi4-test.sh            # or: scripts/qemu-rpi4-test.sh <kernel8.img>
+```
+
+It passes on 4 CPUs online via spin table, `SMP-IPI: PASS` for harts 1–3,
+`Init: OS ready.` and the `Cellos >` prompt. The DTB is the Raspberry Pi
+firmware's `bcm2711-rpi-4-b.dtb` (`tests/fixtures/dtb/`, provenance in
+`SOURCES.txt`). QEMU's `raspi4b` does not model PCIe (no VL805 xHCI/USB),
+GENET, RNG200 or the thermal sensor — it replaces those nodes with `FDT_NOP`,
+which boot compacts out before parsing (`boot::fdt_nops`; the `fdt` crate
+panics `bad node` on them). No SD card is attached, so `[mmc] no card found`
+is expected and the shell runs from the embedded VIFS1. A pass does not
+qualify physical Raspberry Pi 4 hardware.

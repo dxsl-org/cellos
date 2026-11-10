@@ -477,8 +477,9 @@ pub(crate) fn online_hart_count() -> usize {
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
 /// logging a warning and continuing single-hart.  500 ms is generous for QEMU
-/// and for a firmware PSCI call that has to power a core up.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+/// and for an SBI `hart_start` that has to power a core up. (AArch64 waits
+/// on the architected counter instead, which runs with IRQs masked.)
+#[cfg(target_arch = "riscv64")]
 const SECONDARY_BOOT_TIMEOUT_TICKS: usize = 50;
 
 /// Called by hart 0 **after** `task::init()` to bring secondary harts online.
@@ -844,8 +845,8 @@ fn start_psci_secondaries() {
 /// fills — which is why cores are released one at a time and the first one
 /// that does not come online ends the bring-up.
 ///
-/// The release word is written through the identity map, as the kernel image
-/// itself is reached by physical address in the entry path.
+/// The release word is written by physical address ([`write_release_word`]),
+/// as the kernel image itself is reached by physical address in the entry path.
 #[cfg(target_arch = "aarch64")]
 fn start_spin_table_secondaries() {
     use crate::boot::firmware_smp;
@@ -931,12 +932,13 @@ fn start_spin_table_secondaries() {
         );
         hal::aarch64::boot::publish_spin_table_context(context_addr as u64);
 
-        // SAFETY: `release_addr` is the firmware's spin-table word for this
-        // core, reached through the kernel's identity map.
-        unsafe {
-            core::ptr::write_volatile(release_addr as *mut u64, entry as u64);
+        if !write_release_word(release_addr, entry as u64) {
+            log::warn!(
+                "[smp] hart {hart_id}: release word {release_addr:#x} is unaligned or cannot be \
+                 mapped — stopping bring-up"
+            );
+            return;
         }
-        hal::aarch64::cache::clean_data_cache_range(release_addr, 8);
         // SAFETY: SEV only wakes cores parked in WFE; the preceding `dsb sy`
         // orders the release word before it.
         unsafe {
@@ -959,6 +961,48 @@ fn start_spin_table_secondaries() {
     }
 }
 
+/// Write a spin-table release word and clean it to the point of coherency.
+///
+/// The word is firmware memory the kernel's identity map need not cover: on
+/// the Raspberry Pi it sits in page 0 (0xd8–0xf0, beside the armstub), below
+/// the kernel image and unmapped as the null guard. Such a page is mapped
+/// kernel-only for the write and unmapped again, so the guard is back before
+/// the next core is released. `false` when the word is not 8-byte aligned (the
+/// binding requires it) or its page cannot be mapped.
+#[cfg(target_arch = "aarch64")]
+fn write_release_word(release_addr: usize, entry: u64) -> bool {
+    use crate::memory::paging::{self, Flags, PAGE_SIZE};
+
+    if !release_addr.is_multiple_of(8) {
+        return false;
+    }
+    let page = release_addr & !(PAGE_SIZE - 1);
+    let transient = paging::virt_to_phys(page).is_none();
+    if transient {
+        let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+        let Some(allocator) = frames.as_mut() else {
+            return false;
+        };
+        let flags = Flags::from_bits(
+            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+        );
+        if paging::map_page(allocator, page, page, flags).is_err() {
+            return false;
+        }
+    }
+    // SAFETY: `release_addr` is the firmware's aligned spin-table word for
+    // this core, identity-mapped (permanently or just above) for the write.
+    unsafe {
+        core::ptr::write_volatile(release_addr as *mut u64, entry);
+    }
+    hal::aarch64::cache::clean_data_cache_range(release_addr, 8);
+    if transient {
+        // Never fails for a mapped page; it ends in a broadcast TLB invalidate.
+        let _ = paging::unmap_page(page);
+    }
+    true
+}
+
 /// Prove every hart that came online actually takes the kernel's IPI.
 ///
 /// The one cross-hart path a boot log cannot witness on its own: the request is
@@ -977,9 +1021,12 @@ pub fn run_ipi_selftest() {
         probed += 1;
         let taken_before = IPI_TAKEN[remote].load(Ordering::Relaxed);
         let epoch = request_tlb_flush(remote);
-        let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
+        // The architected counter, not the tick: the boot hart runs this with
+        // IRQs masked, so `system_ticks` would never reach a deadline.
+        let timeout_ticks = (hal::aarch64::timer::counter_frequency_hz() / 2).max(1);
+        let start = hal::aarch64::timer::counter_now();
         let (mut acknowledged, mut sgi_taken) = (false, false);
-        while crate::task::system_ticks() < deadline {
+        while hal::aarch64::timer::counter_now().wrapping_sub(start) < timeout_ticks {
             acknowledged = tlb_flush_completed(remote, epoch);
             sgi_taken = IPI_TAKEN[remote].load(Ordering::Relaxed) != taken_before;
             if acknowledged && sgi_taken {
