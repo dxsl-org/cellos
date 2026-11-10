@@ -22,17 +22,19 @@
 //! [0]      = 0x10  (OP_FLUSH)
 //! [1..5]   = xy    (u32 LE: x<<16 | y)
 //! [5..9]   = wh    (u32 LE: w<<16 | h)
-//! [9..17]  = data_ptr (u64 LE: compositor pixel buffer, kernel-probed readable)
+//! [9..17]  = data_ptr (u64 LE: staged Grant id == base, owned by this cell)
 //! [17..21] = data_len (u32 LE: byte count, exactly w*h*4 from the kernel)
 //! ```
 //!
-//! Only the registered compositor may issue `GpuFlush`/`GpuCursor`; the kernel
-//! checks the source range through the compositor's copy view first. The cell
-//! still refuses a null, wrapping or non-user pointer instead of faulting.
+//! Only the registered compositor may issue `GpuFlush`/`GpuCursor`. The kernel
+//! copies the source through the compositor's copy view into a fresh Grant it
+//! allocates for this cell, so the compositor may reuse or free its buffer the
+//! moment its syscall returns. This cell adopts that Grant per request
+//! ([`display::StagedSource`]) and frees it once handled, on every path.
 //!
 //! # IPC message format (from kernel GpuCursor forward)
 //! ```text
-//! op=0 set sprite  [0]=0x11, [1..9]=data_ptr u64 LE, [9..13]=xy u32 LE, [13..17]=hot u32 LE
+//! op=0 set sprite  [0]=0x11, [1..9]=staged Grant id u64 LE, [9..13]=xy u32 LE, [13..17]=hot u32 LE
 //! op=1 move cursor [0]=0x12, [1..5]=xy u32 LE
 //! ```
 
@@ -44,7 +46,7 @@ extern crate alloc;
 mod cursor;
 mod display;
 
-use display::GpuDevice;
+use display::{GpuDevice, StagedSource};
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
 use ostd::syscall::sys_register_gpu_driver;
@@ -110,8 +112,11 @@ fn dispatch(buf: &[u8]) {
                 buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15], buf[16],
             ]) as usize;
             let data_len = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]) as usize;
+            // Adopted before the device lock so the Grant is freed even when
+            // no device is installed.
+            let source = StagedSource::adopt(data_ptr);
             if let Some(dev) = STATE.lock().as_mut() {
-                dev.flush_rect(data_ptr, data_len, xy, wh);
+                dev.flush_rect(&source, data_len, xy, wh);
             }
         }
 
@@ -121,8 +126,9 @@ fn dispatch(buf: &[u8]) {
             ]) as usize;
             let xy = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let hot = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
+            let sprite = StagedSource::adopt(data_ptr);
             if let Some(dev) = STATE.lock().as_mut() {
-                cursor::set_sprite(dev, data_ptr, xy, hot);
+                cursor::set_sprite(dev, &sprite, xy, hot);
             }
         }
 

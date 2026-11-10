@@ -3,7 +3,7 @@
 //! These functions are called from `main::dispatch` when the kernel forwards a
 //! `GpuCursor` syscall to this cell.  Both operate on the owned `GpuDevice`.
 
-use crate::display::{source_bytes, GpuDevice};
+use crate::display::{GpuDevice, StagedSource};
 use ostd::io::println;
 
 /// Byte length required by `VirtIOGpu::setup_cursor` (64×64 BGRA8888).
@@ -13,15 +13,15 @@ const SPRITE_LEN: usize = 64 * 64 * 4;
 ///
 /// `xy` packs `(x << 16) | y` (initial screen position).
 /// `hot` packs `(hot_x << 16) | hot_y` (hotspot within sprite).
-/// `data_ptr` points to the sprite bytes in the compositor's SAS address space;
-/// a null or non-user pointer is ignored rather than dereferenced.
-pub fn set_sprite(dev: &mut GpuDevice, data_ptr: usize, xy: u32, hot: u32) {
+/// `sprite` is the kernel-staged copy of the compositor's sprite; one that
+/// does not hold a full sprite is ignored.
+pub fn set_sprite(dev: &mut GpuDevice, sprite: &StagedSource, xy: u32, hot: u32) {
     let x = (xy >> 16) & 0xFFFF;
     let y = xy & 0xFFFF;
     let hot_x = (hot >> 16) & 0xFFFF;
     let hot_y = hot & 0xFFFF;
-    let Some(image) = source_bytes(data_ptr, SPRITE_LEN) else {
-        println("[virtio-gpu] cursor sprite pointer refused");
+    let Some(image) = sprite.bytes(SPRITE_LEN) else {
+        println("[virtio-gpu] cursor sprite not staged");
         return;
     };
     if dev.gpu.setup_cursor(image, x, y, hot_x, hot_y).is_err() {

@@ -8599,9 +8599,10 @@ fn handle_syscall_inner(
             log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
             Err(SyscallError::Unknown)
         }
-        // Compositor-only; the source range is validated through the caller's
-        // copy view before the GPU Cell reads it, and the framebuffer fallback
-        // stages it through the view (H-26).
+        // Compositor-only; the source is copied through the caller's copy view
+        // into a GPU-Cell-owned Grant before the hand-off, so the GPU Cell never
+        // reads compositor memory; the framebuffer fallback stages it the same
+        // way (H-26).
         Syscall::GpuFlush {
             data_ptr,
             data_len,

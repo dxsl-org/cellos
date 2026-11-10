@@ -1,19 +1,23 @@
 //! `GpuFlush` / `GpuCursor` (300/301): the registered compositor's scanout path.
 //!
-//! The pixel source is a caller pointer. Before the GPU Driver Cell is told to
-//! read it, every page of the exact range it will read is checked readable
-//! through the caller's copy view (so a kernel or unmapped address is refused,
-//! not painted or faulted on). The kernel framebuffer fallback copies through
+//! The pixel source is a caller pointer, and the GPU Driver Cell consumes the
+//! request asynchronously, after this syscall has returned and the compositor
+//! has moved on: the next flush rewrites the same staging rows, and the cursor
+//! sprite is freed as soon as `GpuCursor` returns. The cell therefore never
+//! sees the caller's pointer. Before the request is posted, the exact source
+//! range is copied through the caller's copy view (so a kernel or unmapped
+//! address is refused, not painted or faulted on) into a fresh Grant owned by
+//! the GPU Driver Cell; the message names that Grant (`id == base`) and the
+//! cell frees it once consumed. The kernel framebuffer fallback copies through
 //! the same view in bounded chunks and never dereferences the user pointer.
 
 use super::copy_glue::TaskCopyView;
-use super::syscall::SyscallError;
+use super::syscall::{handle_syscall, Syscall, SyscallError};
 use core::sync::atomic::{AtomicBool, Ordering};
 
-const PAGE_SIZE: usize = 4096;
 /// One 64×64 BGRA8888 sprite, the only size `VirtIOGpu::setup_cursor` takes.
 const CURSOR_SPRITE_LEN: usize = 64 * 64 * 4;
-/// Kernel staging chunk for the framebuffer fallback (stack, not heap).
+/// Kernel bounce chunk for every copy below (stack, not heap).
 const STAGING_CHUNK: usize = 4096;
 
 /// GPU Driver Cell opcodes after the AppContext `[0xAC, 0x00]` envelope.
@@ -48,20 +52,104 @@ fn require_compositor(caller_id: usize) -> Result<(), SyscallError> {
     }
 }
 
-/// Every page of `[ptr, ptr + len)` is readable through `view`.
-fn probe_readable(view: &TaskCopyView, ptr: usize, len: usize) -> Result<(), SyscallError> {
-    let end = ptr.checked_add(len).ok_or(SyscallError::InvalidInput)?;
-    if ptr == 0 || len == 0 {
+/// Copy `len` caller bytes at `ptr` into a new Grant owned by `gpu_cell` and
+/// return its id (its base: Grant ids are bases in SAS).
+///
+/// On any failure the Grant is released again and nothing is posted:
+/// `InvalidInput` when the source is not readable through `src`, `Unknown`
+/// when no Grant could be staged for the GPU Cell.
+fn stage_for_gpu(
+    caller_id: usize,
+    gpu_cell: usize,
+    src: &TaskCopyView,
+    ptr: usize,
+    len: usize,
+) -> Result<usize, SyscallError> {
+    if ptr == 0 || len == 0 || ptr.checked_add(len).is_none() {
         return Err(SyscallError::InvalidInput);
     }
-    let mut byte = [0u8; 1];
-    let mut at = ptr;
-    while at < end {
-        view.read_into(at, &mut byte)
+    let grant = match handle_syscall(gpu_cell, Syscall::GrantAlloc { size: len }) {
+        Ok(base) if base != 0 => base,
+        _ => return Err(SyscallError::Unknown),
+    };
+    match copy_into_staged(caller_id, gpu_cell, src, ptr, grant, len) {
+        Ok(()) => Ok(grant),
+        Err(error) => {
+            release_staged(gpu_cell, grant);
+            Err(error)
+        }
+    }
+}
+
+/// Copy the source into the GPU Cell's freshly allocated Grant `grant`.
+///
+/// The GPU Cell's Grants can be reclaimed concurrently (cell teardown, or a
+/// revoked driver capability), and a write into reclaimed frames would corrupt
+/// whoever reuses them. So the region is pinned first and only then confirmed
+/// still owned by `gpu_cell`: a reclaim that removed the row before the check
+/// fails it here (nothing is written), and one that removes it afterwards sees
+/// the pin and withholds the frames in quarantine (kept, never reused: the
+/// safe direction) instead of freeing them. The pin is held by `caller_id`
+/// only for the copy.
+fn copy_into_staged(
+    caller_id: usize,
+    gpu_cell: usize,
+    src: &TaskCopyView,
+    ptr: usize,
+    grant: usize,
+    len: usize,
+) -> Result<(), SyscallError> {
+    crate::memory::pin::pin(grant, len, caller_id).map_err(|_| SyscallError::Unknown)?;
+    let copied = copy_pinned(gpu_cell, src, ptr, grant, len);
+    crate::memory::pin::rollback_pin(grant, len, caller_id);
+    copied
+}
+
+/// [`copy_into_staged`] under its pin: confirm `grant` is still `gpu_cell`'s,
+/// then move the source through a stack bounce chunk.
+fn copy_pinned(
+    gpu_cell: usize,
+    src: &TaskCopyView,
+    ptr: usize,
+    grant: usize,
+    len: usize,
+) -> Result<(), SyscallError> {
+    let still_owned = handle_syscall(
+        gpu_cell,
+        Syscall::GrantSlice {
+            grant_id: grant,
+            size_out_ptr: 0,
+            expected_owner_tid: gpu_cell,
+        },
+    ) == Ok(grant);
+    let dst = TaskCopyView::for_task(gpu_cell)
+        .filter(|_| still_owned)
+        .ok_or(SyscallError::Unknown)?;
+    let mut staging = [0u8; STAGING_CHUNK];
+    let mut done = 0;
+    while done < len {
+        let chunk = &mut staging[..(len - done).min(STAGING_CHUNK)];
+        src.read_into(ptr + done, chunk)
             .map_err(|_| SyscallError::InvalidInput)?;
-        at = (at & !(PAGE_SIZE - 1)) + PAGE_SIZE;
+        dst.write_bytes(grant + done, chunk)
+            .map_err(|_| SyscallError::Unknown)?;
+        done += chunk.len();
     }
     Ok(())
+}
+
+/// Return a staged Grant that will not reach the GPU Cell. A row a concurrent
+/// reclaim already removed is simply not found.
+fn release_staged(gpu_cell: usize, grant: usize) {
+    let _ = handle_syscall(gpu_cell, Syscall::GrantFree { grant_id: grant });
+}
+
+/// Post `msg`, which names the staged Grant `grant`, to the GPU Cell; a post
+/// that cannot be queued releases the Grant, since the cell will never see it.
+fn post_staged(gpu_cell: usize, grant: usize, msg: &[u8]) {
+    if super::ipc_post_nonblock(0, gpu_cell, msg).is_err() {
+        release_staged(gpu_cell, grant);
+    }
 }
 
 fn gpu_cell() -> usize {
@@ -98,14 +186,14 @@ pub(super) fn flush(
 
     let gpu_cell = gpu_cell();
     if gpu_cell != 0 {
-        probe_readable(&view, data_ptr, needed)?;
+        let staged = stage_for_gpu(caller_id, gpu_cell, &view, data_ptr, needed)?;
         let mut msg = [0u8; 23];
         msg[..3].copy_from_slice(&[0xAC, 0x00, OP_FLUSH]);
         msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
         msg[7..11].copy_from_slice(&(wh as u32).to_le_bytes());
-        msg[11..19].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+        msg[11..19].copy_from_slice(&(staged as u64).to_le_bytes());
         msg[19..23].copy_from_slice(&(needed as u32).to_le_bytes());
-        let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
+        post_staged(gpu_cell, staged, &msg);
         return Ok(0);
     }
 
@@ -172,13 +260,13 @@ pub(super) fn cursor(
     match op {
         0 => {
             let view = super::syscall::caller_copy_view_for(caller_id)?;
-            probe_readable(&view, data_ptr, CURSOR_SPRITE_LEN)?;
+            let staged = stage_for_gpu(caller_id, gpu_cell, &view, data_ptr, CURSOR_SPRITE_LEN)?;
             let mut msg = [0u8; 19];
             msg[..3].copy_from_slice(&[0xAC, 0x00, OP_CUR_SET]);
-            msg[3..11].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+            msg[3..11].copy_from_slice(&(staged as u64).to_le_bytes());
             msg[11..15].copy_from_slice(&(xy as u32).to_le_bytes());
             msg[15..19].copy_from_slice(&(hot as u32).to_le_bytes());
-            let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
+            post_staged(gpu_cell, staged, &msg);
         }
         1 => {
             let mut msg = [0u8; 7];

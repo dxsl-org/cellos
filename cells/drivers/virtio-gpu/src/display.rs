@@ -6,6 +6,7 @@
 //!      which the kernel identified (`sys_probe_virtio_mmio`) before the claim.
 //!   2. `virtio_drivers::Hal` requires `unsafe impl`.
 //!   3. Direct framebuffer pointer from `setup_framebuffer()`.
+//!   4. The bytes of a [`StagedSource`]: a Grant this cell owns.
 
 #![allow(unsafe_code)]
 
@@ -13,7 +14,9 @@ extern crate alloc;
 
 use core::ptr::NonNull;
 use ostd::mmio::request_region;
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio};
+use ostd::syscall::{
+    sys_grant_alloc, sys_grant_free, sys_grant_slice_with_len, sys_probe_virtio_mmio,
+};
 use virtio_drivers::{
     device::gpu::VirtIOGpu,
     transport::mmio::{MmioTransport, VirtIOHeader},
@@ -34,20 +37,52 @@ pub const MMIO_SLOT_SIZE: usize = 0x1000;
 #[cfg(not(target_arch = "riscv64"))]
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
-/// Exclusive top of the user half the kernel's copy view admits.
-const USER_LIMIT: usize = 1 << 38;
+/// Source bytes the kernel staged for one flush or cursor request.
+///
+/// The compositor's own buffers are never read here: the cell handles a
+/// request after the compositor's syscall has returned, when those buffers may
+/// already be rewritten or freed. The kernel instead copies the source into a
+/// fresh Grant owned by this cell before posting the request, and names it by
+/// id (`id == base` in SAS). This value takes ownership of that Grant and frees
+/// it on drop, so every dispatch path releases it exactly once.
+pub(crate) struct StagedSource {
+    grant: usize,
+    /// Mapping and registered length, or `None` if `grant` is not a Grant this
+    /// cell can resolve (then there is nothing to read or free).
+    mapping: Option<(*const u8, usize)>,
+}
 
-/// The `len` source bytes at `ptr`, or `None` for a null, wrapping or non-user
-/// range. The kernel forwards only ranges it probed readable in the
-/// compositor's mappings; this keeps a malformed message from faulting the cell.
-pub(crate) fn source_bytes<'a>(ptr: usize, len: usize) -> Option<&'a [u8]> {
-    let end = ptr.checked_add(len)?;
-    if ptr == 0 || len == 0 || end > USER_LIMIT {
-        return None;
+impl StagedSource {
+    /// Take ownership of the staged Grant `grant` named by a kernel request.
+    ///
+    /// Requests are accepted only from the kernel (`sender_tid == 0`), which
+    /// names only Grants it allocated for this cell, so a resolvable id here is
+    /// this cell's own Grant: no other task can free or rewrite it.
+    pub(crate) fn adopt(grant: usize) -> Self {
+        let mapping = sys_grant_slice_with_len(grant).map(|(ptr, len)| (ptr.cast_const(), len));
+        Self { grant, mapping }
     }
-    // SAFETY: non-null, non-wrapping user range the kernel verified readable for
-    // the compositor (`GpuFlush`/`GpuCursor`) in the shared address space.
-    Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
+
+    /// The first `len` staged bytes, or `None` for an empty request or a Grant
+    /// that does not resolve or is shorter than `len`.
+    pub(crate) fn bytes(&self, len: usize) -> Option<&[u8]> {
+        let (ptr, size) = self.mapping?;
+        if len == 0 || len > size {
+            return None;
+        }
+        // SAFETY: `ptr` maps this cell's own Grant of `size >= len` registered
+        // bytes (see `adopt`). Only `Drop` frees it, after every borrow of
+        // `self` has ended, and nothing else writes it once the kernel posted.
+        Some(unsafe { core::slice::from_raw_parts(ptr, len) })
+    }
+}
+
+impl Drop for StagedSource {
+    fn drop(&mut self) {
+        if self.mapping.is_some() {
+            sys_grant_free(self.grant);
+        }
+    }
 }
 
 // ─── CellHal ─────────────────────────────────────────────────────────────────
@@ -61,8 +96,8 @@ pub(crate) struct CellHal;
 unsafe impl Hal for CellHal {
     fn dma_alloc(pages: usize, _dir: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let base = sys_grant_alloc(pages * 4096).expect("[virtio-gpu] DMA OOM");
-        // SAFETY: base is non-null page-aligned address from the kernel frame allocator.
-        (base, unsafe { NonNull::new_unchecked(base as *mut u8) })
+        let ptr = NonNull::new(base as *mut u8).expect("[virtio-gpu] DMA grant at address 0");
+        (base, ptr)
     }
 
     unsafe fn dma_dealloc(paddr: PhysAddr, _vaddr: NonNull<u8>, _pages: usize) -> i32 {
@@ -71,8 +106,7 @@ unsafe impl Hal for CellHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: PhysAddr, _size: usize) -> NonNull<u8> {
-        // SAFETY: SAS identity mapping — phys == virt.
-        unsafe { NonNull::new_unchecked(paddr as *mut u8) }
+        NonNull::new(paddr as *mut u8).expect("[virtio-gpu] MMIO at address 0")
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, dir: BufferDirection) -> PhysAddr {
@@ -134,13 +168,13 @@ impl GpuDevice {
         unsafe { core::slice::from_raw_parts_mut(self.fb_ptr, self.fb_len) }
     }
 
-    /// Copy a pixel rect from `src_ptr` (SAS-accessible compositor buffer) into
-    /// the VirtIO framebuffer and flush the dirty rect to the display.
+    /// Copy a pixel rect from the kernel-staged `src` into the VirtIO
+    /// framebuffer and flush the dirty rect to the display.
     ///
     /// `xy` packs `(x << 16) | y`; `wh` packs `(w << 16) | h`.
-    /// `data_len` is the compositor's byte count; if it's smaller than `w*h*4`,
-    /// or the source range is null or outside the user half, the call is ignored.
-    pub fn flush_rect(&mut self, src_ptr: usize, data_len: usize, xy: u32, wh: u32) {
+    /// `data_len` is the staged byte count; if it's smaller than `w*h*4`, or
+    /// `src` does not hold that many bytes, the call is ignored.
+    pub(crate) fn flush_rect(&mut self, src: &StagedSource, data_len: usize, xy: u32, wh: u32) {
         let x = (xy >> 16) & 0xFFFF;
         let y = xy & 0xFFFF;
         let w = (wh >> 16) & 0xFFFF;
@@ -153,7 +187,7 @@ impl GpuDevice {
         if data_len < expected {
             return;
         }
-        let Some(src) = source_bytes(src_ptr, expected) else {
+        let Some(src) = src.bytes(expected) else {
             return;
         };
         let x = x.min(self.width);
@@ -220,10 +254,8 @@ pub fn find_and_init_gpu() -> Option<GpuDevice> {
             continue;
         }
 
-        // SAFETY: the kernel identified a VirtIO GPU transport at `base` and
-        // granted this Cell the slot above, so the header is live device memory
-        // this Cell may access.
-        let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
+        let header =
+            NonNull::new(base as *mut VirtIOHeader).expect("[virtio-gpu] VirtIO slot at address 0");
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::GPU => t,
             Ok(t) => {
