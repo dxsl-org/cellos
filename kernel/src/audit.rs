@@ -14,8 +14,9 @@
 //! the same advanced `head`, so one record is silently overwritten.
 //!
 //! # Overflow
-//! When the ring is full, new writes are dropped and `DROPPED` is incremented.
-//! No blocking, no corruption.
+//! When the ring is full the oldest whole records are evicted, counted in
+//! [`dropped_count`], and reported in-band by a `RecordsDropped` record written
+//! just ahead of the record that forced the eviction. No blocking, no corruption.
 //!
 //! # Record format
 //! ```
@@ -158,6 +159,9 @@ static RING: AuditRing = AuditRing {
     dropped: AtomicUsize::new(0),
 };
 
+/// Bytes of the synthetic `RecordsDropped` record: header plus `encode_u32x2`.
+const DROP_RECORD_LEN: usize = 10 + 8;
+
 /// Write a kernel audit event to the ring.
 ///
 /// Disables interrupts for the duration of the write so a same-hart ISR cannot
@@ -166,46 +170,65 @@ static RING: AuditRing = AuditRing {
 /// recent events: without a consumer, drop-on-full would keep only the first
 /// 256 KiB after boot and lose everything since.
 pub fn log_event(event: AuditEvent, payload: &[u8]) {
-    let plen = payload.len().min(255) as u8;
-    let record_len = 10 + plen as usize;
-
     // Capture the outgoing interrupt state and mask interrupts on this hart.
+    // Two reasons: a same-hart ISR must not re-enter the write and wait on the
+    // lock below, and the record's bytes must be ordered before its publication.
     let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
 
-    let _serialised = WRITE.lock();
-    let mut head = RING.head.load(Ordering::Relaxed);
-    let tail = RING.tail.load(Ordering::Relaxed);
-    let buf = unsafe { &mut *RING.buf.get() };
+    // The guard drops before interrupts return: a same-hart ISR logging in the
+    // gap would otherwise spin on a lock its own hart holds.
+    {
+        let _serialised = WRITE.lock();
+        let head = RING.head.load(Ordering::Relaxed);
+        let tail = RING.tail.load(Ordering::Relaxed);
+        let dropped = RING.dropped.load(Ordering::Relaxed);
+        // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
+        let buf = unsafe { &mut *RING.buf.get() };
 
-    let is_drop_event = matches!(event, AuditEvent::RecordsDropped);
-    let needed = if !is_drop_event {
-        record_len + 18
-    } else {
-        record_len
-    };
-
-    // Evict whole records from the tail until the new one fits.
-    let (new_tail, evicted) = evict_for(buf, head, tail, needed);
-    if evicted != 0 {
-        RING.tail.store(new_tail, Ordering::Release);
-        let total = RING.dropped.fetch_add(evicted, Ordering::Relaxed) + evicted;
-        if !is_drop_event {
-            let drop_payload = encode_u32x2(evicted as u32, total as u32);
-            let drop_len =
-                write_record_bytes(buf, head, AuditEvent::RecordsDropped as u8, &drop_payload);
-            head = head.wrapping_add(drop_len);
+        let (head, tail, evicted) = push_record(buf, head, tail, event as u8, payload, dropped);
+        if evicted != 0 {
+            RING.tail.store(tail, Ordering::Release);
+            RING.dropped.fetch_add(evicted, Ordering::Relaxed);
         }
+
+        // Publish the write — consumer sees it only after this Release store.
+        RING.head.store(head, Ordering::Release);
     }
 
-    let written = write_record_bytes(buf, head, event as u8, &payload[..plen as usize]);
-    RING.head
-        .store(head.wrapping_add(written), Ordering::Release);
-
+    // SAFETY: `saved_interrupts` was captured on this hart by the call above.
     unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
 }
 
+/// Evict for, then write, one record at `head`; returns the new head, the new
+/// tail and how many records were evicted. `dropped` is the cumulative eviction
+/// count before this call. An eviction is reported by a `RecordsDropped` record
+/// (evicted, cumulative) ahead of the event, so a consumer sees the gap where it
+/// happened; room for it is reserved up front so it never evicts on its own.
+fn push_record(
+    buf: &mut [u8; BUF_SIZE],
+    mut head: usize,
+    tail: usize,
+    event: u8,
+    payload: &[u8],
+    dropped: usize,
+) -> (usize, usize, usize) {
+    let payload = &payload[..payload.len().min(255)];
+    let is_drop_event = event == AuditEvent::RecordsDropped as u8;
+    let reserve = if is_drop_event { 0 } else { DROP_RECORD_LEN };
+    let (tail, evicted) = evict_for(buf, head, tail, 10 + payload.len() + reserve);
+    if evicted != 0 && !is_drop_event {
+        let total = dropped.wrapping_add(evicted);
+        let drop_payload = encode_u32x2(evicted as u32, total as u32);
+        head = write_record_bytes(buf, head, AuditEvent::RecordsDropped as u8, &drop_payload);
+    }
+    (write_record_bytes(buf, head, event, payload), tail, evicted)
+}
+
+/// Write one record (payload at most 255 bytes) at `pos`; returns the position
+/// just past it.
 fn write_record_bytes(buf: &mut [u8; BUF_SIZE], pos: usize, event: u8, payload: &[u8]) -> usize {
-    let plen = payload.len().min(255) as u8;
+    debug_assert!(payload.len() <= 255);
+    let plen = payload.len() as u8;
     #[cfg(target_arch = "riscv64")]
     let mtime = hal::common::timer::read_mtime().to_le_bytes();
     #[cfg(not(target_arch = "riscv64"))]
@@ -220,7 +243,7 @@ fn write_record_bytes(buf: &mut [u8; BUF_SIZE], pos: usize, event: u8, payload: 
         buf[curr & MASK] = b;
         curr = curr.wrapping_add(1);
     }
-    10 + plen as usize
+    curr
 }
 
 /// Length of the record starting at ring position `at`: the 8-byte timestamp,
@@ -231,8 +254,9 @@ fn record_len_at(buf: &[u8; BUF_SIZE], at: usize) -> usize {
 
 /// Advance `tail` by whole records until `record_len` more bytes fit; returns
 /// the new tail and how many records were evicted. `tail` is always a record
-/// boundary (only this and `copy_whole_records` move it, by whole records), and
-/// a record (at most 265 bytes) always fits an empty ring.
+/// boundary (only this and [`consume`] move it, by whole records), and a
+/// record plus its `RecordsDropped` notice (at most 283 bytes) always fits an
+/// empty ring.
 fn evict_for(
     buf: &[u8; BUF_SIZE],
     head: usize,
@@ -264,28 +288,48 @@ fn copy_whole_records(buf: &[u8; BUF_SIZE], head: usize, tail: usize, out: &mut 
     copied
 }
 
-/// Drain whole records, up to `out.len()` bytes, from the ring. Returns bytes
-/// copied; a record that does not fit in the remaining space is left for the
-/// next call.
-///
-/// For the future log-flusher consumer; it has no caller today. Serialised with
-/// producers because they may advance `tail` when they evict.
-pub fn drain(out: &mut [u8]) -> usize {
+/// Copy whole records, up to `out.len()` bytes, from the oldest one without
+/// removing them. Returns the ring position the copy started at and the bytes
+/// copied; hand both to [`consume`] once the copy has reached its reader, so a
+/// failed delivery loses no audit record.
+pub fn peek(out: &mut [u8]) -> (usize, usize) {
     let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
-    let copied = {
+    let peeked = {
         let _serialised = WRITE.lock();
         let head = RING.head.load(Ordering::Relaxed);
         let tail = RING.tail.load(Ordering::Relaxed);
         // SAFETY: `WRITE` is held with interrupts masked (see `impl Sync`).
         let buf = unsafe { &*RING.buf.get() };
-        let copied = copy_whole_records(buf, head, tail, out);
-        RING.tail
-            .store(tail.wrapping_add(copied), Ordering::Release);
-        copied
+        (tail, copy_whole_records(buf, head, tail, out))
     };
     // SAFETY: `saved_interrupts` was captured on this hart by the call above.
     unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
-    copied
+    peeked
+}
+
+/// Remove the `copied` bytes that a [`peek`] starting at `start` delivered.
+/// Serialised with producers because they may advance `tail` when they evict.
+pub fn consume(start: usize, copied: usize) {
+    let saved_interrupts = crate::hal::arch::save_and_disable_interrupts();
+    {
+        let _serialised = WRITE.lock();
+        let tail = RING.tail.load(Ordering::Relaxed);
+        RING.tail
+            .store(tail_after_consume(tail, start, copied), Ordering::Release);
+    }
+    // SAFETY: `saved_interrupts` was captured on this hart by the call above.
+    unsafe { crate::hal::arch::restore_sstatus(saved_interrupts) };
+}
+
+/// New tail once `[start, start + copied)` is consumed. Producers evict along
+/// the same whole-record chain the peek copied, so a tail they moved is either
+/// inside that range (finish at its end, a record boundary) or past it (keep).
+fn tail_after_consume(tail: usize, start: usize, copied: usize) -> usize {
+    if tail.wrapping_sub(start) < copied {
+        start.wrapping_add(copied)
+    } else {
+        tail
+    }
 }
 
 /// Number of records evicted to make room for newer ones since boot.
@@ -316,47 +360,33 @@ pub fn encode_u32x2(a: u32, b: u32) -> [u8; 8] {
 mod tests {
     use super::*;
 
-    /// The producer path of `log_event` over a local ring (the real one masks
-    /// interrupts, which a host test cannot do): evict, write, advance head.
-    fn put(
-        buf: &mut [u8; BUF_SIZE],
-        head: &mut usize,
-        tail: &mut usize,
-        event: u8,
-        payload: &[u8],
-    ) -> usize {
-        let record_len = 10 + payload.len();
-        let (new_tail, evicted) = evict_for(buf, *head, *tail, record_len);
-        *tail = new_tail;
-        let mut pos = *head;
-        for &b in [0u8; 8]
-            .iter()
-            .chain(&[event, payload.len() as u8])
-            .chain(payload)
-        {
-            buf[pos & MASK] = b;
-            pos = pos.wrapping_add(1);
-        }
-        *head = pos;
-        evicted
-    }
+    const EVENT: u8 = AuditEvent::CellSpawn as u8;
+    const DROPPED: u8 = AuditEvent::RecordsDropped as u8;
 
     /// Overfilling the ring evicts only the oldest whole records: the newest
-    /// survive, every drained byte parses as whole records, and a short read
-    /// stops at a record boundary instead of splitting one.
+    /// survive, every eviction is announced by a `RecordsDropped` record just
+    /// ahead of the record that caused it, every drained byte parses as whole
+    /// records, and a short read stops at a record boundary.
     #[test]
     fn full_ring_evicts_oldest_whole_records_and_drains_whole_records() {
         let mut buf = alloc::boxed::Box::new([0u8; BUF_SIZE]);
         // Start near usize::MAX so positions wrap during the test.
         let (mut head, mut tail) = (usize::MAX - 1000, usize::MAX - 1000);
         let mut evicted = 0;
+        let mut notices = 0u32;
         let mut written = 0u32;
         // Varying lengths so record boundaries never line up with the ring size.
         while written < 4000 {
             let len = 1 + (written as usize * 37) % 200;
             let mut payload = alloc::vec![0u8; len];
             payload[..4.min(len)].copy_from_slice(&written.to_le_bytes()[..4.min(len)]);
-            evicted += put(&mut buf, &mut head, &mut tail, 7, &payload);
+            let (new_head, new_tail, n) =
+                push_record(&mut buf, head, tail, EVENT, &payload, evicted);
+            (head, tail) = (new_head, new_tail);
+            if n != 0 {
+                notices += 1;
+            }
+            evicted += n;
             written += 1;
             assert!(head.wrapping_sub(tail) <= BUF_SIZE);
         }
@@ -386,18 +416,40 @@ mod tests {
         );
         let mut at = 0;
         let mut survivors = 0u32;
+        let mut seen_notices = 0;
+        let mut last_total = 0u32;
         let mut ids = alloc::vec::Vec::new();
         while at < n {
             let len = 10 + out[at + 9] as usize;
             assert!(at + len <= n, "partial record");
-            assert_eq!(out[at + 8], 7);
             let p = &out[at + 10..at + len];
-            if p.len() >= 4 {
-                ids.push(u32::from_le_bytes(p[..4].try_into().unwrap()));
+            if out[at + 8] == DROPPED {
+                let count = u32::from_le_bytes(p[..4].try_into().unwrap());
+                let total = u32::from_le_bytes(p[4..8].try_into().unwrap());
+                assert!(count > 0, "a notice reports at least one eviction");
+                assert!(total > last_total, "cumulative count only grows");
+                assert!(total as usize <= evicted);
+                assert!(
+                    at + len < n,
+                    "a notice precedes the record it made room for"
+                );
+                assert_eq!(out[at + len + 8], EVENT);
+                last_total = total;
+                seen_notices += 1;
+            } else {
+                assert_eq!(out[at + 8], EVENT);
+                if p.len() >= 4 {
+                    ids.push(u32::from_le_bytes(p[..4].try_into().unwrap()));
+                }
             }
             survivors += 1;
             at += len;
         }
+        assert!(
+            seen_notices > 0,
+            "surviving evictions are announced in-band"
+        );
+        assert_eq!(last_total as usize, evicted, "the newest notice is current");
         assert_eq!(ids.last(), Some(&3999), "the newest record survives");
         assert!(
             ids.windows(2).all(|w| w[1] > w[0]),
@@ -405,8 +457,21 @@ mod tests {
         );
         assert_eq!(
             evicted as u32 + survivors,
-            4000,
+            4000 + notices,
             "every record is either evicted or still in the ring"
         );
+    }
+
+    /// Consuming a peek moves `tail` to the end of what was delivered, unless
+    /// producers already evicted past it meanwhile.
+    #[test]
+    fn consume_finishes_a_peek_without_rewinding_tail() {
+        let start = usize::MAX - 5;
+        assert_eq!(tail_after_consume(start, start, 20), start.wrapping_add(20));
+        let mid = start.wrapping_add(8);
+        assert_eq!(tail_after_consume(mid, start, 20), start.wrapping_add(20));
+        let past = start.wrapping_add(30);
+        assert_eq!(tail_after_consume(past, start, 20), past);
+        assert_eq!(tail_after_consume(start, start, 0), start);
     }
 }

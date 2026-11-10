@@ -726,8 +726,8 @@ impl AddressSpace {
         drop(pending);
         if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8
             || ledger
-                .iter()
-                .any(|entry| entry.virtual_address == virtual_address)
+                .binary_search_by_key(&virtual_address, |entry| entry.virtual_address)
+                .is_ok()
         {
             return Err(AddressSpaceError::Dying);
         }
@@ -844,7 +844,11 @@ impl AddressSpace {
         }
         if (user_stack.usable_start()..user_stack.top)
             .step_by(PAGE_SIZE)
-            .any(|address| ledger.iter().any(|entry| entry.virtual_address == address))
+            .any(|address| {
+                ledger
+                    .binary_search_by_key(&address, |entry| entry.virtual_address)
+                    .is_ok()
+            })
         {
             return Err(AddressSpaceError::InvalidMapping);
         }
@@ -882,12 +886,17 @@ impl AddressSpace {
                     physical_address,
                     user_flags(user_stack_flags),
                 )?;
-                ledger.push(MappingEntry {
-                    virtual_address: address,
-                    physical_address,
-                    kind: MappingKind::Private,
-                    flags: user_flags(user_stack_flags),
-                });
+                // Sorted insert: `page_proof_for` binary-searches this ledger,
+                // and capacity was reserved above, so this never reallocates.
+                Self::insert_ledger_entry(
+                    &mut ledger,
+                    MappingEntry {
+                        virtual_address: address,
+                        physical_address,
+                        kind: MappingKind::Private,
+                        flags: user_flags(user_stack_flags),
+                    },
+                );
                 mapped.push(address);
             }
             Ok(())
@@ -1115,8 +1124,8 @@ impl AddressSpace {
         drop(pending);
         if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8
             || ledger
-                .iter()
-                .any(|entry| entry.virtual_address == virtual_address)
+                .binary_search_by_key(&virtual_address, |entry| entry.virtual_address)
+                .is_ok()
         {
             return Err(AddressSpaceError::Dying);
         }

@@ -87,6 +87,7 @@ mod tests {
         (439, ViSyscall::RevokeDmaExport),
         (440, ViSyscall::AnonMemory),
         (441, ViSyscall::ResolveCellImage),
+        (442, ViSyscall::ProbeVirtioMmio),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -388,9 +389,49 @@ mod tests {
     fn resolve_cell_image_is_441_and_gated_at_dispatch() {
         assert_eq!(ViSyscall::ResolveCellImage as usize, 441);
         assert_eq!(ViSyscall::from(441), ViSyscall::ResolveCellImage);
-        assert_eq!(ViSyscall::from(442), ViSyscall::Unknown);
         assert_eq!(ViSyscall::ResolveCellImage.allowlist_bit(), None);
         assert!(SyscallSet::EMPTY.permits(ViSyscall::ResolveCellImage));
+    }
+
+    /// 442 is ProbeVirtioMmio. It shares bit 40 with RequestMmio, so every
+    /// Cell that already claims VirtIO slots may probe them.
+    #[test]
+    fn probe_virtio_mmio_is_442_and_shares_the_request_mmio_bit() {
+        assert_eq!(ViSyscall::from(442), ViSyscall::ProbeVirtioMmio);
+        assert_eq!(ViSyscall::ProbeVirtioMmio as usize, 442);
+        assert_eq!(ViSyscall::from(443), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::ProbeVirtioMmio.allowlist_bit(), Some(40));
+        assert!(SyscallSet::EMPTY
+            .with(ViSyscall::RequestMmio)
+            .permits(ViSyscall::ProbeVirtioMmio));
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::ProbeVirtioMmio));
+    }
+
+    /// The packed identity round-trips, and no success value can be mistaken
+    /// for an error sentinel (or the reverse) on 64- or 32-bit targets.
+    #[test]
+    fn virtio_probe_encoding_round_trips_and_avoids_sentinels() {
+        use crate::syscall::virtio_probe::{
+            decode, encode, SlotIdentity, ERR_INVALID_INPUT, ERR_NOT_FOUND,
+        };
+        for (device_id, status) in [(0, 0), (1, 0x0F), (2, 0x04), (18, 0xFF), (0xFFFF, 0x80)] {
+            let packed = encode(device_id, status).expect("16-bit device id encodes");
+            assert_eq!(
+                decode(packed),
+                Some(SlotIdentity {
+                    device_id: device_id as u16,
+                    status: status as u8,
+                })
+            );
+            assert!(packed < u32::MAX as usize - 4);
+        }
+        // Only the 8-bit device-status field is carried.
+        assert_eq!(decode(encode(1, 0x1234).unwrap()).unwrap().status, 0x34);
+        assert_eq!(encode(0x1_0000, 0), None);
+        for sentinel in [ERR_NOT_FOUND, ERR_INVALID_INPUT, usize::MAX] {
+            assert_eq!(decode(sentinel), None);
+            assert_eq!(decode(sentinel & u32::MAX as usize), None);
+        }
     }
 
     /// 437-440 are the ADR-0033 GPU DMA export and AnonMemory syscalls.

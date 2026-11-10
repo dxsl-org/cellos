@@ -2,7 +2,8 @@
 //!
 //! # Unsafe island
 //! This module is the ONLY place with `unsafe` code in the cell:
-//!   1. MMIO probe reads (`read_volatile`) before kernel claim.
+//!   1. `MmioTransport::new` takes a raw header pointer to the claimed slot,
+//!      which the kernel identified (`sys_probe_virtio_mmio`) before the claim.
 //!   2. `virtio_drivers::Hal` requires `unsafe impl`.
 //!   3. Direct framebuffer pointer from `setup_framebuffer()`.
 
@@ -12,7 +13,7 @@ extern crate alloc;
 
 use core::ptr::NonNull;
 use ostd::mmio::request_region;
-use ostd::syscall::{sys_grant_alloc, sys_grant_free};
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio};
 use virtio_drivers::{
     device::gpu::VirtIOGpu,
     transport::mmio::{MmioTransport, VirtIOHeader},
@@ -22,13 +23,15 @@ use virtio_drivers::{
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/// VirtIO MMIO magic value ("virt" in little-endian ASCII).
-const VIRTIO_MAGIC: u32 = 0x7472_6976;
-
 /// VirtIO device type: GPU (16).
-const VIRTIO_DEV_GPU: u32 = 16;
+const VIRTIO_DEV_GPU: u16 = 16;
 
-/// VirtIO MMIO register area size per slot.
+/// Window claimed per slot. RISC-V spaces slots a page apart and the kernel
+/// registers each as its page, so the claim maps it for U-mode; AArch64 packs
+/// eight 0x200 slots per page, whose accesses the kernel mediates.
+#[cfg(target_arch = "riscv64")]
+pub const MMIO_SLOT_SIZE: usize = 0x1000;
+#[cfg(not(target_arch = "riscv64"))]
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
 /// Exclusive top of the user half the kernel's copy view admits.
@@ -207,14 +210,9 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 /// Returns `None` if no VirtIO GPU is present.
 pub fn find_and_init_gpu() -> Option<GpuDevice> {
     for (base, _irq) in virtio_slot_iter() {
-        // SAFETY: base is within the arch MMIO window mapped USER-accessible by paging init.
-        let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC {
-            continue;
-        }
-        let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_GPU {
-            continue;
+        match sys_probe_virtio_mmio(base) {
+            Ok(identity) if identity.device_id == VIRTIO_DEV_GPU => {}
+            _ => continue,
         }
 
         // Claim exclusive MMIO ownership.  Prevents kernel from double-initialising the slot.
@@ -222,7 +220,9 @@ pub fn find_and_init_gpu() -> Option<GpuDevice> {
             continue;
         }
 
-        // SAFETY: base was validated (magic + device type) and exclusively claimed above.
+        // SAFETY: the kernel identified a VirtIO GPU transport at `base` and
+        // granted this Cell the slot above, so the header is live device memory
+        // this Cell may access.
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::GPU => t,

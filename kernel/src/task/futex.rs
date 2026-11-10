@@ -154,7 +154,7 @@ pub(crate) fn wait(
     let deadline = if timeout_ticks == 0 {
         None
     } else {
-        Some(super::system_ticks() as u64 + timeout_ticks)
+        Some((super::system_ticks() as u64).saturating_add(timeout_ticks))
     };
 
     // Decide and park under one lock: the word is re-read here, so a wake that

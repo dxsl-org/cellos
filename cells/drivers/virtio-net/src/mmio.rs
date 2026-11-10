@@ -3,14 +3,16 @@
 //! # Unsafe island
 //! `unsafe` here serves two purposes:
 //!   1. `virtio_drivers::Hal` requires `unsafe impl` (trait is `unsafe trait`).
-//!   2. MMIO probe reads (`read_volatile`) must happen before the kernel resource
-//!      registry accepts the claim — we read magic/device_id, THEN claim.
+//!   2. `MmioTransport::new` takes a raw header pointer to the claimed slot.
+//!
+//! Slots are identified by the kernel (`sys_probe_virtio_mmio`): the VirtIO
+//! window is kernel-only until a claim grants it.
 
 #![allow(unsafe_code)]
 
 use crate::device::{CellNet, NetDevice, NET_QUEUE_SIZE, RX_BUF_LEN};
 use core::ptr::NonNull;
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_wait_irq};
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio, sys_wait_irq};
 use virtio_drivers::{
     device::net::VirtIONet,
     transport::mmio::{MmioTransport, VirtIOHeader},
@@ -20,13 +22,15 @@ use virtio_drivers::{
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/// VirtIO MMIO magic value ("virt" in little-endian ASCII).
-const VIRTIO_MAGIC: u32 = 0x7472_6976;
-
 /// VirtIO device type: Network (1).
-const VIRTIO_DEV_NET: u32 = 1;
+const VIRTIO_DEV_NET: u16 = 1;
 
-/// VirtIO MMIO register area size per slot — 0x200 on both QEMU virt boards.
+/// Window claimed per slot. RISC-V spaces slots a page apart and the kernel
+/// registers each as its page, so the claim maps it for U-mode; AArch64 packs
+/// eight 0x200 slots per page, whose accesses the kernel mediates.
+#[cfg(target_arch = "riscv64")]
+pub const MMIO_SLOT_SIZE: usize = 0x1000;
+#[cfg(not(target_arch = "riscv64"))]
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
 // ─── CellHal ─────────────────────────────────────────────────────────────────
@@ -140,31 +144,23 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 /// Returns `None` if no VirtIO NIC is present (graceful exit on non-VirtIO platforms).
 pub fn find_and_init_net() -> Option<NetDevice> {
     for (base, irq) in virtio_slot_iter() {
-        // Safety probe: read VirtIO magic directly (U-mode, identity-mapped after paging fix).
-        // SAFETY: base is within the arch MMIO window mapped USER-accessible by init_kernel_paging.
-        let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC {
-            continue;
-        }
-
-        // Check VirtIO device type at offset 8.
-        // SAFETY: same invariant as above; base + 8 is within the same 0x200-byte slot.
-        let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_NET {
-            // VirtIO device of another type — do NOT create MmioTransport (would reset it).
-            continue;
+        // VirtIO device of another type — never claim it (the claim is
+        // exclusive) nor create an MmioTransport on it (that resets it).
+        match sys_probe_virtio_mmio(base) {
+            Ok(identity) if identity.device_id == VIRTIO_DEV_NET => {}
+            _ => continue,
         }
 
         // Claim exclusive MMIO ownership via the kernel resource registry.
-        // On RISC-V the slot size in PCIE_BARS is 0x200 (registered by drivers::init()).
         if ostd::mmio::request_region(base, MMIO_SLOT_SIZE).is_err() {
-            // Already owned or not in allowlist — skip.
+            // Already owned by another Cell — skip.
             continue;
         }
 
         // Create VirtIO transport.
-        // SAFETY: base was validated (magic check) and claimed above; it is a live
-        // VirtIO MMIO header within the USER-accessible identity-mapped window.
+        // SAFETY: the kernel identified a VirtIO network transport at `base` and
+        // granted this Cell the slot above, so the header is live device memory
+        // this Cell may access.
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Network => t,

@@ -153,12 +153,12 @@ fn scheduler_snapshot() -> SchedulerSnapshot {
         tasks: scheduler
             .tasks
             .iter()
-            .map(|(key, task)| (*key, task.id, task.cell_id, task.state.clone()))
+            .map(|(key, task)| (*key, task.id, task.cell_id, task.state))
             .collect(),
         zombies: scheduler
             .zombies
             .iter()
-            .map(|task| (task.id, task.cell_id, task.state.clone()))
+            .map(|task| (task.id, task.cell_id, task.state))
             .collect(),
         next_task_id: scheduler.next_task_id,
         last_global_sweep_tick: scheduler.last_global_sweep_tick,

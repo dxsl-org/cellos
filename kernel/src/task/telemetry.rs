@@ -74,7 +74,9 @@ struct ExitedCpu {
 pub(crate) struct CpuLedger {
     /// Monotonic ns of each hart's previous scheduler pass; 0 = never stamped.
     dispatch_ns: [u64; MAX_HARTS],
-    /// Indexed by CellId; heap-backed for the same reason as `cell_owners`.
+    /// Indexed by CellId; heap-backed because an inline `MAX_CELLS` array
+    /// (4096 under `cell-scale-experiment`) overflows the boot hart's stack
+    /// when `Scheduler::new()` is built on it.
     exited: Vec<ExitedCpu>,
     last_sample_id: u64,
 }

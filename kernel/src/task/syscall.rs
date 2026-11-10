@@ -1835,6 +1835,7 @@ fn has_typed_errors(syscall: &Syscall) -> bool {
             | Syscall::LookupBlockRoute { .. }
             | Syscall::QueryMachineFacts { .. }
             | Syscall::RegisterBlockDriver { .. }
+            | Syscall::ProbeVirtioMmio { .. }
     )
 }
 
@@ -3160,11 +3161,19 @@ fn read_cell_owner_request(
     api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
 }
 
+/// Receive-side staging copy of a queued payload: inline up to
+/// [`MSG_PAYLOAD_INLINE`] bytes, so small receives never touch the heap.
 #[derive(Clone, Debug)]
 pub(super) enum MsgPayload {
-    Inline { len: u8, bytes: [u8; 32] },
+    Inline {
+        len: u8,
+        bytes: [u8; MSG_PAYLOAD_INLINE],
+    },
     Heap(alloc::vec::Vec<u8>),
 }
+
+/// Largest payload [`MsgPayload`] stores without allocating.
+const MSG_PAYLOAD_INLINE: usize = 32;
 
 impl MsgPayload {
     #[inline]
@@ -3190,8 +3199,8 @@ impl MsgPayload {
     }
 
     pub fn from_slice(slice: &[u8]) -> Result<Self, ()> {
-        if slice.len() <= 32 {
-            let mut bytes = [0u8; 32];
+        if slice.len() <= MSG_PAYLOAD_INLINE {
+            let mut bytes = [0u8; MSG_PAYLOAD_INLINE];
             bytes[..slice.len()].copy_from_slice(slice);
             Ok(Self::Inline {
                 len: slice.len() as u8,
@@ -4794,6 +4803,11 @@ pub enum Syscall {
         base: usize,
         len: usize,
     },
+    /// 442: ProbeVirtioMmio — read one VirtIO MMIO slot's identity unclaimed.
+    ProbeVirtioMmio {
+        base: usize,
+        reserved: (usize, usize, usize),
+    },
     /// 214: GetRandom — fill a caller buffer with VirtIO-RNG entropy bytes.
     GetRandom {
         buf_ptr: usize,
@@ -5099,6 +5113,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GrantFree { .. } => V::GrantFree,
         Syscall::BlkReadAsync { .. } => V::BlkReadAsync,
         Syscall::RequestMmio { .. } => V::RequestMmio,
+        Syscall::ProbeVirtioMmio { .. } => V::ProbeVirtioMmio,
         Syscall::GetRandom { .. } => V::GetRandom,
         Syscall::GrantRegister { .. } => V::GrantRegister,
         Syscall::GrantUnregister { .. } => V::GrantUnregister,
@@ -5588,7 +5603,10 @@ fn handle_syscall_inner(
                     let wire_header = msg.wire_header();
                     // Allocation failure is a real error, not "no message":
                     // encoding it as None would block despite queued data.
-                    let data = MsgPayload::from_slice(msg.payload()).map_err(|_| ())?;
+                    // Stage only what fits the caller's buffer; the record is
+                    // removed whole, so the rest would be copied for nothing.
+                    let payload = msg.payload();
+                    let data = MsgPayload::from_slice(&payload[..payload.len().min(buf_len)])?;
                     let caller_view = TaskCopyView::of(t);
                     let (sender_cell_id, sender_generation) = match wire_header {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
@@ -5889,7 +5907,9 @@ fn handle_syscall_inner(
                     let record = &t.pending_msgs.as_slice()[pos];
                     let sender_tid = record.sender_tid;
                     let wire_header = record.wire_header();
-                    let tmp = MsgPayload::from_slice(record.payload()).map_err(|_| ())?;
+                    let payload = record.payload();
+                    // Stage only what the iovecs can take (see `Recv`).
+                    let tmp = MsgPayload::from_slice(&payload[..payload.len().min(total)])?;
                     if let Some(header) = wire_header {
                         super::async_ipc::dispatch(sched, caller_id, header);
                     }
@@ -5965,7 +5985,9 @@ fn handle_syscall_inner(
                     // Fallible snapshot: allocation failure must not be
                     // mistaken for "no message" (the receiver would block
                     // despite queued data).
-                    let data = MsgPayload::from_slice(record.payload()).map_err(|_| ())?;
+                    let payload = record.payload();
+                    // Stage only what fits the caller's buffer (see `Recv`).
+                    let data = MsgPayload::from_slice(&payload[..payload.len().min(buf_len)])?;
                     let caller_view = TaskCopyView::of(t);
                     let (sender_cell_id, sender_generation) = match wire_header {
                         Some(header) => (header.sender_cell_id, header.sender_generation),
@@ -6192,7 +6214,9 @@ fn handle_syscall_inner(
                         .as_ref()
                         .map(|h| (h.sender_cell_id, h.sender_generation));
                     let caller_view = TaskCopyView::of(t);
-                    let data = MsgPayload::from_slice(msg.payload()).map_err(|_| ())?;
+                    let payload = msg.payload();
+                    // Stage only what fits the caller's buffer (see `Recv`).
+                    let data = MsgPayload::from_slice(&payload[..payload.len().min(buf_len)])?;
                     // t is no longer borrowed here.
                     let (sender_cell_id, sender_generation) = inline_cell_context
                         .unwrap_or_else(|| sender_cell_context_in_sched(sched, sender_tid));
@@ -7423,12 +7447,12 @@ fn handle_syscall_inner(
                 if !is_domain {
                     return Ok(api::anon_memory::ERR_NOT_SUPPORTED);
                 }
+                // No anonymous page can exist yet (no budget source, CP1 D-M4
+                // default 0 = `NotSupported`), so every valid op is refused:
+                // a 0 from UNMAP or PROTECT would claim a release or a guard
+                // page that never took effect.
                 match api::anon_memory::decode_anon_request(op, addr, len, flags) {
-                    Ok(api::anon_memory::AnonOp::Map { .. }) => {
-                        Ok(api::anon_memory::ERR_NOT_SUPPORTED)
-                    }
-                    Ok(api::anon_memory::AnonOp::Unmap) => Ok(0),
-                    Ok(api::anon_memory::AnonOp::Protect { .. }) => Ok(0),
+                    Ok(_) => Ok(api::anon_memory::ERR_NOT_SUPPORTED),
                     Err(err) => Ok(err),
                 }
             }
@@ -9223,37 +9247,51 @@ fn handle_syscall_inner(
             }
         }
 
-        // 237: ReadLog — drain the user-log ring buffer into a cell-provided buffer.
-        // The caller must have allowlist bit 54 (ReadLog) set in its manifest.
+        // 237: ReadLog — drain the user-log (source 0) or audit (source 1) ring
+        // into a cell-provided buffer. The caller must have allowlist bit 54
+        // (ReadLog) set in its manifest; the audit ring also needs SupervisorCap.
         // Returns the number of bytes actually copied (0 when nothing available).
         Syscall::ReadLog {
             buf_ptr,
             max,
             source,
         } => {
+            // Per-call staging cap: the user-log ring holds 8 KiB, so more is
+            // zeroed heap that can never be filled.
+            let cap = match source {
+                0 => 8192,
+                1 => {
+                    if !caller_has_supervisor(caller_id) {
+                        return Err(SyscallError::PermissionDenied);
+                    }
+                    65536
+                }
+                _ => return Err(SyscallError::InvalidInput),
+            };
             if max == 0 {
                 return Ok(0);
             }
             if buf_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            let max = max.min(65536);
+            let max = max.min(cap);
             let mut kbuf = alloc::vec::Vec::new();
             kbuf.try_reserve_exact(max)
                 .map_err(|_| SyscallError::OutOfMemory)?;
             kbuf.resize(max, 0);
-            let n = match source {
-                0 => crate::task::read_log_ring(&mut kbuf),
-                1 => {
-                    if !caller_has_supervisor(caller_id) {
-                        return Err(SyscallError::PermissionDenied);
-                    }
-                    crate::audit::drain(&mut kbuf)
+            if source == 0 {
+                let n = crate::task::read_log_ring(&mut kbuf);
+                if n > 0 {
+                    write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
                 }
-                _ => return Err(SyscallError::InvalidInput),
-            };
+                return Ok(n);
+            }
+            // Audit records leave the ring only once delivered: a faulting
+            // buffer must not destroy the evidence it was meant to receive.
+            let (start, n) = crate::audit::peek(&mut kbuf);
             if n > 0 {
                 write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+                crate::audit::consume(start, n);
             }
             Ok(n)
         }
@@ -10027,7 +10065,7 @@ fn handle_syscall_inner(
             // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
             // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
             // it. BAR windows may not be mapped at all yet — this also creates
-            // the identity mapping. riscv/aarch64 map cell MMIO user at boot.
+            // the identity mapping.
             #[cfg(target_arch = "x86_64")]
             fn user_map(base: usize, len: usize) {
                 crate::memory::paging::map_mmio_user_x86(base, len);
@@ -10133,6 +10171,34 @@ fn handle_syscall_inner(
                 }
                 Err(types::ViError::AlreadyExists) => Ok(2),
                 Err(_) => Ok(3),
+            }
+        }
+
+        // 442: ProbeVirtioMmio — the kernel reads a slot's identity registers so
+        // a Driver Cell can pick its slot before claiming it; a claim is
+        // exclusive and never released, so probing by claiming would lock
+        // sibling drivers out of their slots.
+        Syscall::ProbeVirtioMmio { base, reserved } => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if reserved != (0, 0, 0) {
+                return Err(SyscallError::InvalidInput);
+            }
+            #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+            {
+                use crate::task::drivers::virtio_common::{probe_slot, SlotProbe};
+                match probe_slot(base) {
+                    SlotProbe::Identity(identity) => Ok(identity),
+                    SlotProbe::NoTransport => Err(SyscallError::FileNotFound),
+                    SlotProbe::NotASlot => Err(SyscallError::InvalidInput),
+                }
+            }
+            // x86_64 reaches VirtIO over PCI: there is no MMIO slot to probe.
+            #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+            {
+                let _ = base;
+                Err(SyscallError::NotSupported)
             }
         }
 
@@ -10904,6 +10970,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             grant_id: a1,
         },
         ViSyscall::RequestMmio => Syscall::RequestMmio { base: a0, len: a1 },
+        ViSyscall::ProbeVirtioMmio => Syscall::ProbeVirtioMmio {
+            base: a0,
+            reserved: (a1, a2, a3),
+        },
         ViSyscall::GetRandom => Syscall::GetRandom {
             buf_ptr: a0,
             len: a1,
@@ -12476,6 +12546,52 @@ mod tests {
         assert_eq!(encode(SyscallError::InvalidInput), pf::ERR_INVALID_INPUT);
     }
 
+    /// 442 decodes with its reserved words, uses the typed sentinels, refuses a
+    /// caller without PcieDriverCap, and on a host (no VirtIO MMIO) answers a
+    /// PcieDriverCap holder `NotSupported` once the arguments are well formed.
+    #[test]
+    fn probe_virtio_mmio_is_gated_and_typed() {
+        use api::syscall::virtio_probe as vp;
+        let decoded = super::map_syscall(442, 0x1000_1000, 0, 0, 7);
+        assert!(matches!(
+            decoded,
+            Some(Syscall::ProbeVirtioMmio {
+                base: 0x1000_1000,
+                reserved: (0, 0, 7)
+            })
+        ));
+        assert_eq!(
+            decoded.as_ref().and_then(super::syscall_to_vi),
+            Some(api::syscall::ViSyscall::ProbeVirtioMmio)
+        );
+        let call = |reserved| Syscall::ProbeVirtioMmio {
+            base: 0x1000_1000,
+            reserved,
+        };
+        assert!(super::has_typed_errors(&call((0, 0, 0))));
+        assert!(matches!(
+            super::handle_syscall(0x9abc, call((0, 0, 0))),
+            Err(SyscallError::PermissionDenied)
+        ));
+        let encode = |e| super::encode_ipc_result(Err(e));
+        assert_eq!(encode(SyscallError::FileNotFound), vp::ERR_NOT_FOUND);
+        assert_eq!(encode(SyscallError::InvalidInput), vp::ERR_INVALID_INPUT);
+        let driver = CapSet {
+            pcie_driver: true,
+            ..CapSet::EMPTY
+        };
+        with_scheduler_task_caps(u64::MAX, driver, |tid| {
+            assert!(matches!(
+                super::handle_syscall(tid, call((0, 1, 0))),
+                Err(SyscallError::InvalidInput)
+            ));
+            assert!(matches!(
+                super::handle_syscall(tid, call((0, 0, 0))),
+                Err(SyscallError::NotSupported)
+            ));
+        });
+    }
+
     /// CP1 §5 (D-4): 436 decodes to `SystemPower` with bit 49 and is refused
     /// with `PermissionDenied` to any caller without `SupervisorCap`, before
     /// the action is looked at, including holders of other authority.
@@ -13380,7 +13496,8 @@ mod tests {
             crate::task::scheduler::OWNER_WATCH_SERVICES,
             [
                 api::syscall::service::NET,
-                api::syscall::service::COMPOSITOR
+                api::syscall::service::COMPOSITOR,
+                api::syscall::service::XE_GPU
             ]
         );
     }

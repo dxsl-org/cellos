@@ -16,21 +16,34 @@ pub const PROT_WRITE: usize = 1 << 1;
 /// MAP flag: map at exact fixed address.
 pub const ANON_FIXED: usize = 1 << 8;
 
-/// Maximum bytes that can be eagerly committed in one MAP call: 64 MiB.
+/// Maximum bytes one MAP may eagerly commit (`prot != 0`): 64 MiB. A
+/// reservation (`prot == 0`) commits nothing and is bounded by the window only.
 pub const ANON_COMMIT_MAX_BYTES: usize = 64 * 1024 * 1024;
 
-/// Error sentinels for `AnonMemory` (syscall 440).
+/// Error sentinel for `AnonMemory` (syscall 440): range touches a
+/// non-anonymous mapping.
 pub const ERR_PERMISSION_DENIED: usize = usize::MAX;
+/// Error sentinel: page export-locked or VA pending invalidation.
 pub const ERR_TRY_AGAIN: usize = usize::MAX - 1;
+/// Error sentinel: malformed op, range, or flags.
 pub const ERR_INVALID_INPUT: usize = usize::MAX - 3;
+/// Error sentinel: caller not an x86_64 private root, root dying, or no budget.
 pub const ERR_NOT_SUPPORTED: usize = usize::MAX - 5;
+/// Error sentinel: budget, frames, window space, or extent table exhausted.
 pub const ERR_OUT_OF_MEMORY: usize = usize::MAX - 6;
 
 /// Decoded request operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnonOp {
-    Map { fixed: bool, read: bool, write: bool },
+    /// Reserve (`read == false`) or reserve and commit; `fixed` places it at `addr`.
+    Map {
+        fixed: bool,
+        read: bool,
+        write: bool,
+    },
+    /// Release the caller's anonymous pages in range.
     Unmap,
+    /// Change protection of the caller's anonymous pages in range.
     Protect { read: bool, write: bool },
 }
 
@@ -45,7 +58,7 @@ pub fn decode_anon_request(
     if len == 0 || !len.is_multiple_of(PAGE_SIZE) {
         return Err(ERR_INVALID_INPUT);
     }
-    if !addr.is_multiple_of(PAGE_SIZE) {
+    if !addr.is_multiple_of(PAGE_SIZE) || addr.checked_add(len).is_none() {
         return Err(ERR_INVALID_INPUT);
     }
     match op {
@@ -60,7 +73,7 @@ pub fn decode_anon_request(
             if !fixed && addr != 0 {
                 return Err(ERR_INVALID_INPUT);
             }
-            if len > ANON_COMMIT_MAX_BYTES {
+            if read && len > ANON_COMMIT_MAX_BYTES {
                 return Err(ERR_INVALID_INPUT);
             }
             Ok(AnonOp::Map { fixed, read, write })
@@ -92,11 +105,19 @@ mod tests {
     fn test_anon_map_decode() {
         assert_eq!(
             decode_anon_request(ANON_MAP, 0, 4096, PROT_READ | PROT_WRITE),
-            Ok(AnonOp::Map { fixed: false, read: true, write: true })
+            Ok(AnonOp::Map {
+                fixed: false,
+                read: true,
+                write: true
+            })
         );
         assert_eq!(
             decode_anon_request(ANON_MAP, 0x1000, 4096, PROT_READ | ANON_FIXED),
-            Ok(AnonOp::Map { fixed: true, read: true, write: false })
+            Ok(AnonOp::Map {
+                fixed: true,
+                read: true,
+                write: false
+            })
         );
         assert_eq!(
             decode_anon_request(ANON_MAP, 0, 4096, PROT_WRITE),
@@ -126,6 +147,31 @@ mod tests {
             decode_anon_request(ANON_MAP, 0, ANON_COMMIT_MAX_BYTES + 4096, PROT_READ),
             Err(ERR_INVALID_INPUT)
         );
+        // A reservation commits nothing, so the per-op commit cap does not apply.
+        assert_eq!(
+            decode_anon_request(ANON_MAP, 0, ANON_COMMIT_MAX_BYTES + 4096, 0),
+            Ok(AnonOp::Map {
+                fixed: false,
+                read: false,
+                write: false
+            })
+        );
+    }
+
+    #[test]
+    fn test_anon_overflowing_range_refused() {
+        let top = usize::MAX - 4095;
+        for op in [ANON_MAP, ANON_UNMAP, ANON_PROTECT] {
+            let flags = if op == ANON_MAP { ANON_FIXED } else { 0 };
+            assert_eq!(
+                decode_anon_request(op, top, 8192, flags),
+                Err(ERR_INVALID_INPUT)
+            );
+        }
+        assert_eq!(
+            decode_anon_request(ANON_UNMAP, top - 4096, 4096, 0),
+            Ok(AnonOp::Unmap)
+        );
     }
 
     #[test]
@@ -144,11 +190,17 @@ mod tests {
     fn test_anon_protect_decode() {
         assert_eq!(
             decode_anon_request(ANON_PROTECT, 0x2000, 4096, PROT_READ),
-            Ok(AnonOp::Protect { read: true, write: false })
+            Ok(AnonOp::Protect {
+                read: true,
+                write: false
+            })
         );
         assert_eq!(
             decode_anon_request(ANON_PROTECT, 0x2000, 4096, PROT_READ | PROT_WRITE),
-            Ok(AnonOp::Protect { read: true, write: true })
+            Ok(AnonOp::Protect {
+                read: true,
+                write: true
+            })
         );
         assert_eq!(
             decode_anon_request(ANON_PROTECT, 0x2000, 4096, PROT_WRITE),
@@ -158,9 +210,6 @@ mod tests {
 
     #[test]
     fn test_anon_invalid_op() {
-        assert_eq!(
-            decode_anon_request(99, 0, 4096, 0),
-            Err(ERR_INVALID_INPUT)
-        );
+        assert_eq!(decode_anon_request(99, 0, 4096, 0), Err(ERR_INVALID_INPUT));
     }
 }

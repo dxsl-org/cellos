@@ -107,7 +107,7 @@ fn report_post_origin_completion(worker_tid: usize) {
         .lock()
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&worker_tid))
-        .map(|worker| worker.state.clone());
+        .map(|worker| worker.state);
     let hart = super::smp::HART_RT;
     log::info!(
         "[selftest] SMP-CONTEXT-HANDOFF: stage=h0-post-origin-completion worker={} state={:?} h0-queued={} h0-reservation={} h1-reservation={} h1-current={} h1-selected={} h1-executing={} h1-outgoing-save={}",

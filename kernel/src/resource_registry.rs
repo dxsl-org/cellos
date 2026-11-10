@@ -701,12 +701,12 @@ fn bcm2837_self_test() -> bool {
 /// Release all MMIO regions owned by task `tid`.
 ///
 /// Retirement calls this for every member task of the retiring incarnation.
-/// On AArch64 the released windows' USER pages go back to the boot posture
-/// (kernel-only on the Pi boards): `RequestMmio` installed them, so without
-/// this a dead Cell's window would stay EL0-reachable for every other Cell.
+/// On RISC-V and AArch64 the released windows' USER pages go back to the boot
+/// posture (kernel-only): `RequestMmio` installed them, so without this a dead
+/// Cell's window would stay U-mode/EL0-reachable for every other Cell.
 pub fn release_mmio_for(tid: usize) {
     let mut registry = REGISTRY.lock();
-    #[cfg(all(target_arch = "aarch64", not(test)))]
+    #[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
     let released: alloc::vec::Vec<(usize, usize)> = registry
         .iter()
         .filter(|(_, region)| region.owner_tid == tid)
@@ -716,7 +716,7 @@ pub fn release_mmio_for(tid: usize) {
     // REGISTRY stays held so no new owner can claim a page between the check
     // below and its PTE update; a page a live region still covers (a window
     // handed over from a Terminated owner before this reap) keeps USER.
-    #[cfg(all(target_arch = "aarch64", not(test)))]
+    #[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
     for (base, len) in released {
         const PAGE: usize = 4096;
         for page in user_pages(base, len).step_by(PAGE) {

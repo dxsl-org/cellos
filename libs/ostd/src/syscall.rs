@@ -252,26 +252,36 @@ pub fn sys_log(msg: &str) -> SyscallResult {
     }
 }
 
+/// `ReadLog` (237) source selecting the kernel user-log ring.
 pub const READ_LOG_USER: usize = 0;
+/// `ReadLog` (237) source selecting the kernel audit event ring.
 pub const READ_LOG_AUDIT: usize = 1;
 
 /// Drain up to `buf.len()` bytes from the kernel user-log ring buffer.
 ///
-/// Returns the number of bytes actually copied (0 when no new output is available).
+/// Returns the number of bytes actually copied (0 when no new output is
+/// available, and on any error rather than a sentinel posing as a length).
 /// Requires the `ReadLog` capability declared in the cell manifest.
 pub fn sys_read_log(buf: &mut [u8]) -> usize {
-    sys_read_log_source(buf, READ_LOG_USER)
+    match sys_read_log_source(buf, READ_LOG_USER) {
+        SyscallResult::Ok(n) => n,
+        SyscallResult::Err(_) => 0,
+    }
 }
 
-/// Drain up to `buf.len()` bytes from the kernel audit event ring buffer.
+/// Drain whole audit records, up to `buf.len()` bytes, from the kernel audit
+/// event ring buffer; records stay queued unless the copy succeeds.
 ///
-/// Returns bytes copied. Requires the `ReadLog` capability and supervisor privilege.
-pub fn sys_read_audit_log(buf: &mut [u8]) -> usize {
+/// Returns bytes copied, or `PermissionDenied` without the `ReadLog`
+/// capability and supervisor privilege.
+pub fn sys_read_audit_log(buf: &mut [u8]) -> SyscallResult {
     sys_read_log_source(buf, READ_LOG_AUDIT)
 }
 
-fn sys_read_log_source(buf: &mut [u8], source: usize) -> usize {
-    let n = unsafe {
+fn sys_read_log_source(buf: &mut [u8], source: usize) -> SyscallResult {
+    // SAFETY: `buf` stays exclusively borrowed for the call; the kernel
+    // validates the whole range before writing at most `buf.len()` bytes.
+    let ret = unsafe {
         syscall(
             ViSyscall::ReadLog,
             buf.as_mut_ptr() as usize,
@@ -280,7 +290,7 @@ fn sys_read_log_source(buf: &mut [u8], source: usize) -> usize {
             0,
         )
     };
-    n as usize
+    decode_snapshot_result(ret)
 }
 
 pub fn sys_yield() {
@@ -2326,6 +2336,38 @@ pub fn sys_blk_read_async(sector: u64, grant_id: usize) -> bool {
 pub fn sys_request_mmio(base: usize, len: usize) -> usize {
     let ret = unsafe { syscall(ViSyscall::RequestMmio, base, len, 0, 0) };
     ret as usize
+}
+
+/// Read the identity of the VirtIO MMIO slot at `base` without claiming it.
+///
+/// The kernel reads the slot's MagicValue, DeviceID and Status registers, so a
+/// Driver Cell can pick the slot holding its device type and claim only that
+/// one with [`sys_request_mmio`]. The VirtIO window is kernel-only until a claim
+/// grants it, and a claim is exclusive for the Cell's lifetime, so probing by
+/// claiming would lock sibling drivers out of their own slots.
+///
+/// `base` must be exactly one of the board's VirtIO MMIO slot bases.
+///
+/// # Errors
+/// - `FileNotFound`: no VirtIO transport answers at `base`.
+/// - `InvalidCommand`: `base` is not a VirtIO MMIO slot base.
+/// - `PermissionDenied`: the caller holds no `PcieDriverCap`, did not declare
+///   `RequestMmio` (allowlist bit 40), or the architecture has no VirtIO MMIO
+///   (x86_64).
+pub fn sys_probe_virtio_mmio(
+    base: usize,
+) -> Result<api::syscall::virtio_probe::SlotIdentity, SyscallError> {
+    // SAFETY: no pointer crosses the boundary; the kernel validates `base`
+    // against its own slot list and the caller's capability at dispatch.
+    let ret = unsafe { syscall(ViSyscall::ProbeVirtioMmio, base, 0, 0, 0) };
+    match ret {
+        // Typed sentinels: `usize::MAX - 2` no transport, `usize::MAX - 3` not a slot.
+        -3 => Err(SyscallError::FileNotFound),
+        -4 => Err(SyscallError::InvalidCommand),
+        ret => {
+            api::syscall::virtio_probe::decode(ret as usize).ok_or(SyscallError::PermissionDenied)
+        }
+    }
 }
 
 /// Block the calling Driver Cell until hardware IRQ `irq_num` fires.

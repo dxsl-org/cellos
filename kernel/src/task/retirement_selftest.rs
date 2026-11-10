@@ -152,7 +152,14 @@ pub fn observe_heartbeat_terminal_current() {
     let current_cell = super::hart_local::current_cell_id();
     let no_successor = super::hart_local::ready::total_ready_count() == 0;
     let direct_denied = matches!(
-        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0, source: 0 }),
+        handle_syscall(
+            tid,
+            Syscall::ReadLog {
+                buf_ptr: 0,
+                max: 0,
+                source: 0
+            }
+        ),
         Err(SyscallError::PermissionDenied)
     );
     let mut frame = crate::hal::arch::ViTrapFrame::default();
@@ -515,7 +522,14 @@ fn verify_remote_execution_publication(worker_tid: usize) -> bool {
 
 fn retiring_syscalls_denied(tid: usize) -> bool {
     matches!(
-        handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0, source: 0 }),
+        handle_syscall(
+            tid,
+            Syscall::ReadLog {
+                buf_ptr: 0,
+                max: 0,
+                source: 0
+            }
+        ),
         Err(SyscallError::PermissionDenied)
     ) && matches!(
         handle_syscall(

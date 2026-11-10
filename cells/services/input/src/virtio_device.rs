@@ -2,7 +2,8 @@
 //!
 //! # Unsafe island
 //! This module is the ONLY place with `unsafe` code in the cell.
-//!   1. MMIO probe reads (`read_volatile`) to detect magic + device type.
+//!   1. `MmioTransport::new` takes a raw header pointer to a claimed slot,
+//!      which the kernel identified (`sys_probe_virtio_mmio`) before the claim.
 //!   2. `virtio_drivers::Hal` requires `unsafe impl`.
 //!
 //! All other modules in this cell are unsafe-free.
@@ -12,7 +13,7 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_request_mmio};
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio, sys_request_mmio};
 use virtio_drivers::{
     device::input::VirtIOInput,
     transport::mmio::{MmioTransport, VirtIOHeader},
@@ -22,8 +23,14 @@ use virtio_drivers::{
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const VIRTIO_MAGIC: u32 = 0x7472_6976;
-const VIRTIO_DEV_INPUT: u32 = 18; // VirtIO device type: Input (18)
+const VIRTIO_DEV_INPUT: u16 = 18; // VirtIO device type: Input (18)
+
+/// Window claimed per slot. RISC-V spaces slots a page apart and the kernel
+/// registers each as its page, so the claim maps it for U-mode; AArch64 packs
+/// eight 0x200 slots per page, whose accesses the kernel mediates.
+#[cfg(target_arch = "riscv64")]
+pub const MMIO_SLOT_SIZE: usize = 0x1000;
+#[cfg(not(target_arch = "riscv64"))]
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
 // ─── CellHal ─────────────────────────────────────────────────────────────────
@@ -176,26 +183,22 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 pub fn find_and_init_inputs() -> alloc::vec::Vec<InputDevice> {
     let mut devices = alloc::vec::Vec::new();
     for (base, irq) in virtio_slot_iter() {
-        // SAFETY: base is within the arch MMIO window mapped USER-accessible by paging init.
-        let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC {
-            continue;
-        }
-
-        let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_INPUT {
-            continue;
+        match sys_probe_virtio_mmio(base) {
+            Ok(identity) if identity.device_id == VIRTIO_DEV_INPUT => {}
+            _ => continue,
         }
 
         // Claim exclusive MMIO ownership.  This also gates the kernel poll path:
         // `virtio_input::poll_events` checks `lookup_mmio_owner(base)` and skips
         // if any cell owns it — preventing double-drain of the virtqueue.
         if sys_request_mmio(base, MMIO_SLOT_SIZE) != 0 {
-            // Already claimed or not in allowlist — skip.
+            // Already claimed by another Cell — skip.
             continue;
         }
 
-        // SAFETY: base validated (magic) and claimed above.
+        // SAFETY: the kernel identified a VirtIO input transport at `base` and
+        // granted this Cell the slot above, so the header is live device memory
+        // this Cell may access.
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Input => t,

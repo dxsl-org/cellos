@@ -309,6 +309,16 @@ pub fn console_addr() -> UartAddress {
     }
 }
 
+/// Console address once the platform configured one. Before `configure`, the
+/// port is 0: polling `0 + LSR` would hit the ISA DMA controller and may never
+/// report THR-empty, so early output is dropped instead.
+fn configured_console_addr() -> Option<UartAddress> {
+    match console_addr() {
+        UartAddress::IoPort(0) => None,
+        addr => Some(addr),
+    }
+}
+
 pub fn baud_divisor(baud: u32) -> u16 {
     match baud {
         9600 => 12,
@@ -365,7 +375,9 @@ pub fn init_input_irq() -> bool {
 
 pub fn putchar(byte: u8) {
     let _guard = lock_uart();
-    let addr = console_addr();
+    let Some(addr) = configured_console_addr() else {
+        return;
+    };
     while reg_read(addr, 5) & 0x20 == 0 {
         core::hint::spin_loop();
     }
@@ -413,7 +425,9 @@ pub fn configure_baud(index: usize, baud: u32) -> bool {
 
 pub fn puts(s: &str) {
     let _guard = lock_uart();
-    let addr = console_addr();
+    let Some(addr) = configured_console_addr() else {
+        return;
+    };
     for b in s.bytes() {
         if b == b'\n' {
             while reg_read(addr, 5) & 0x20 == 0 {

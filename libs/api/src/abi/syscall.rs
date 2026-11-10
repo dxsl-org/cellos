@@ -762,6 +762,24 @@ pub enum ViSyscall {
     /// Allowlist: none; the VFS-provider check at dispatch is the gate, as for
     /// `ResolveCellOwnerRecord`.
     ResolveCellImage = 441,
+    /// 442: Read the identity of one VirtIO MMIO slot before claiming it
+    /// ([`virtio_probe`]).
+    ///
+    /// ABI: a0 = slot base (exactly one of the board's VirtIO MMIO slot bases),
+    /// a1..a3 = 0 → [`virtio_probe::encode`]d `DeviceID` and `Status` byte.
+    /// The kernel reads MagicValue, DeviceID and Status itself, so a Driver
+    /// Cell picks its slot without touching MMIO it does not own — boot maps
+    /// the VirtIO window kernel-only, and a claim (`RequestMmio`) is exclusive
+    /// with no release, so claiming to probe would starve sibling drivers.
+    /// Errors: [`virtio_probe::ERR_NOT_FOUND`] (no VirtIO transport answers),
+    /// [`virtio_probe::ERR_INVALID_INPUT`] (not a slot base or a non-zero
+    /// a1..a3), `usize::MAX` (no `PcieDriverCap`, or no VirtIO MMIO on this
+    /// architecture).
+    ///
+    /// Allowlist: shares bit 40 with `RequestMmio`. Every caller probes in
+    /// order to claim, so it already declares that bit, and the `u64`
+    /// allowlist has no free bit; `PcieDriverCap` at dispatch is the gate.
+    ProbeVirtioMmio = 442,
     ///
     /// Allowlist: all four share the DriverRegistration bit (50) with
     /// `RegisterBlockDriver`/`FindPcieDevice`/`FindPcieDeviceByVendor`, exactly
@@ -1245,7 +1263,9 @@ impl ViSyscall {
             // RequestMmio: gated by GPIO (bit 40) or UART (bit 41) manifest flags.
             // The kernel re-checks the manifest and allowlist at dispatch; here we
             // assign bit 40 as the generic "peripheral MMIO" allowlist bit.
-            Self::RequestMmio => Some(40),
+            // ProbeVirtioMmio shares it: a Driver Cell probes a slot only to claim
+            // it, and the u64 allowlist has no free bit.
+            Self::RequestMmio | Self::ProbeVirtioMmio => Some(40),
             // GetRandom: any cell that needs entropy (TLS, crypto) declares this.
             // Bit 41 was previously allocated as a UART MMIO alias; repurposing for entropy
             // is safe because UART MMIO is enforced at dispatch by resource-registry check,
@@ -1397,11 +1417,13 @@ impl ViSyscall {
             | Self::PipeShare
             // GetCpuCount returns scalar online hart count; carries no authority
             | Self::GetCpuCount
+            // 437/439/440: no bit (ADR-0033 D-G9, D-M11); the dispatch gate
+            // (lease owner / x86_64 private root) is the authority.
             | Self::ExportDmaRange
             | Self::RevokeDmaExport
             | Self::AnonMemory
             | Self::Unknown => None,
-         }
+        }
     }
 }
 
@@ -1548,6 +1570,7 @@ impl From<usize> for ViSyscall {
             439 => ViSyscall::RevokeDmaExport,
             440 => ViSyscall::AnonMemory,
             441 => ViSyscall::ResolveCellImage,
+            442 => ViSyscall::ProbeVirtioMmio,
             _ => ViSyscall::Unknown,
         }
     }
@@ -1566,6 +1589,60 @@ pub mod system_power {
     /// Not x86_64; poweroff without a static `\_S5_` or a usable PM1 control
     /// block; or the machine still runs after the sleep write.
     pub const ERR_NOT_SUPPORTED: usize = usize::MAX - 5;
+}
+
+/// `ProbeVirtioMmio` (442) result encoding.
+///
+/// Success packs the slot's VirtIO `DeviceID` (bits 0..16) and the low byte
+/// of its `Status` register (bits 16..24) into one word. Both fit: assigned
+/// device IDs are far below 2^16 and device status is an 8-bit field. The
+/// packed value stays below every error sentinel on RV32 as well.
+pub mod virtio_probe {
+    /// MagicValue is not "virt", or DeviceID does not fit 16 bits: no VirtIO
+    /// transport a Driver Cell can name answers at this slot.
+    pub const ERR_NOT_FOUND: usize = usize::MAX - 2;
+    /// `base` is not one of the board's VirtIO MMIO slot bases, or a1..a3 are
+    /// non-zero.
+    pub const ERR_INVALID_INPUT: usize = usize::MAX - 3;
+
+    /// VirtIO MMIO MagicValue ("virt", little-endian).
+    pub const MAGIC: u32 = 0x7472_6976;
+    /// Register offsets the kernel reads to answer a probe.
+    pub const MAGIC_OFFSET: usize = 0x000;
+    pub const DEVICE_ID_OFFSET: usize = 0x008;
+    pub const STATUS_OFFSET: usize = 0x070;
+    /// Status bit: the driver finished initialisation and the device is live.
+    pub const STATUS_DRIVER_OK: u8 = 0x04;
+
+    /// What a slot reports before any Driver Cell claims it.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct SlotIdentity {
+        /// VirtIO DeviceID; `0` is an empty transport (no device attached).
+        pub device_id: u16,
+        /// Low byte of the device Status register.
+        pub status: u8,
+    }
+
+    /// Pack the identity read from a slot whose MagicValue matched; `None`
+    /// when the DeviceID does not fit the encoding (reported as not found).
+    pub const fn encode(device_id: u32, status: u32) -> Option<usize> {
+        if device_id > u16::MAX as u32 {
+            return None;
+        }
+        Some(device_id as usize | ((status & 0xFF) as usize) << 16)
+    }
+
+    /// Unpack a successful return; `None` for any value `encode` cannot
+    /// produce, which includes every error sentinel.
+    pub const fn decode(ret: usize) -> Option<SlotIdentity> {
+        if ret > 0x00FF_FFFF {
+            return None;
+        }
+        Some(SlotIdentity {
+            device_id: ret as u16,
+            status: (ret >> 16) as u8,
+        })
+    }
 }
 
 /// Kernel event bit masks for `WaitForEvent` / `signal_event`.

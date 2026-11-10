@@ -91,10 +91,17 @@ pub fn init() {
             mmc::init_driver();
         }
         // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so Driver Cells
-        // can request only slots enabled by the active board contract.
+        // can request only slots enabled by the active board contract. A slot
+        // alone in its page is registered as that page so its claim maps it for
+        // U-mode (a sub-page window is never user-mapped, and RISC-V has no
+        // kernel mediation of sub-page accesses).
         if board.has_driver(cellos_boards::DriverId::VirtioMmio) {
             for slot in virtio_common::virtio_slots() {
-                crate::resource_registry::register_pcie_bar(slot.base, 0x200);
+                let window = virtio_common::slot_window(
+                    slot.base,
+                    virtio_common::virtio_slots().map(|other| other.base),
+                );
+                crate::resource_registry::register_pcie_bar(slot.base, window);
             }
         }
     }

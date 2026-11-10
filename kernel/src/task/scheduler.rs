@@ -238,11 +238,10 @@ impl core::ops::Index<&usize> for TaskTable {
 
 /// Scheduler-owned lifetime record for a bounded reusable CellId slot.
 ///
-/// This is intentionally an array, not a task-table lookup: CellIds are quota
-/// slots and task IDs are monotonic transport identities.
+/// Keyed by CellId, not a task-table lookup: CellIds are quota slots and task
+/// IDs are monotonic transport identities. An absent key is the Empty slot.
 #[derive(Clone, Copy)]
 enum CellOwnerSlot {
-    Empty,
     Reserved(api::cell_owner::CellOwner),
     Live(api::cell_owner::CellOwner),
     Retiring(api::cell_owner::CellOwner),
@@ -290,9 +289,11 @@ const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 /// death of the principal it is serving (in addition to the registered VFS
 /// cell). Explicit on purpose: being a registered service is not the right, and
 /// each entry is an owner decision with its own reclaim consumer.
-pub(crate) const OWNER_WATCH_SERVICES: [u16; 2] = [
+pub(crate) const OWNER_WATCH_SERVICES: [u16; 3] = [
     api::syscall::service::NET,
     api::syscall::service::COMPOSITOR,
+    // CP1 D-G7: the GPU driver tears down a dead client's contexts and VMs.
+    api::syscall::service::XE_GPU,
 ];
 
 /// Who may subscribe to the root death of the principal it is serving: the
@@ -466,8 +467,8 @@ pub struct Scheduler {
     /// Fixed CellId/generation → root-TID authority. A slot leaves `Live`
     /// before any root resources are released or its CellId is reusable.
     ///
-    /// Sparse map of CellId -> CellOwnerSlot. Dynamically allocated on demand,
-    /// so an idle scheduler allocates 0 bytes rather than a dense MAX_CELLS array.
+    /// Sparse map of CellId -> occupied slot, bounded by `MAX_CELLS`; a slot
+    /// that returns to Empty is removed, so only occupied CellIds hold nodes.
     cell_owners: BTreeMap<u64, CellOwnerSlot>,
     /// Token-indexed root-death subscriptions (registered VFS cell, live
     /// providers of the [`OWNER_WATCH_SERVICES`] serving that principal).
@@ -538,19 +539,26 @@ impl Scheduler {
             cpu_telemetry: super::telemetry::CpuLedger::new(),
         }
     }
+    /// Occupy an absent in-range owner slot. Absence is the Empty state, so a
+    /// retired or aborted CellId leaves no map node behind.
+    fn insert_cell_owner_slot(&mut self, cell_id: u64, slot: CellOwnerSlot) {
+        // The directory is scheduler bookkeeping, not an object of the Cell
+        // whose launch happens to grow it.
+        let _kernel = KernelAllocationContext::enter();
+        self.cell_owners.insert(cell_id, slot);
+    }
     pub(crate) fn reserve_session_owner(
         &mut self,
         owner: api::cell_owner::CellOwner,
     ) -> Result<(), types::ViError> {
-        let slot = self
-            .cell_owners
-            .entry(owner.cell_id)
-            .or_insert(CellOwnerSlot::Empty);
-        if !matches!(slot, CellOwnerSlot::Empty) {
+        if owner.cell_id as usize >= crate::memory::cell_quota::MAX_CELLS {
+            return Err(types::ViError::InvalidInput);
+        }
+        if self.cell_owners.contains_key(&owner.cell_id) {
             return Err(types::ViError::AlreadyExists);
         }
         self.tasks.reserve_publication()?;
-        *slot = CellOwnerSlot::Reserved(owner);
+        self.insert_cell_owner_slot(owner.cell_id, CellOwnerSlot::Reserved(owner));
         Ok(())
     }
     pub(crate) fn session_owner_reserved(&self, owner: api::cell_owner::CellOwner) -> bool {
@@ -559,14 +567,15 @@ impl Scheduler {
     }
     pub(crate) fn abort_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
         if self.session_owner_reserved(owner) {
-            self.cell_owners.insert(owner.cell_id, CellOwnerSlot::Empty);
+            self.cell_owners.remove(&owner.cell_id);
             self.tasks.abort_publication();
         }
     }
     pub(crate) fn publish_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
         assert!(self.session_owner_reserved(owner));
-        self.cell_owners
-            .insert(owner.cell_id, CellOwnerSlot::Live(owner));
+        if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
+            *slot = CellOwnerSlot::Live(owner);
+        }
     }
 
     /// Return the root endpoint only while this exact Cell generation is live.
@@ -593,11 +602,7 @@ impl Scheduler {
     /// Publish the owner slot during the launch commit, after task initialization
     /// and before the task is made runnable.
     pub(crate) fn publish_live_cell_owner(&mut self, owner: api::cell_owner::CellOwner) -> bool {
-        let slot = self
-            .cell_owners
-            .entry(owner.cell_id)
-            .or_insert(CellOwnerSlot::Empty);
-        if !owner.is_live() || !matches!(slot, CellOwnerSlot::Empty) {
+        if !owner.is_live() || !self.cell_owner_slot_is_empty(CellId(owner.cell_id)) {
             return false;
         }
         let caps = self
@@ -612,14 +617,14 @@ impl Scheduler {
         ) {
             return false;
         }
-        *slot = CellOwnerSlot::Live(owner);
+        self.insert_cell_owner_slot(owner.cell_id, CellOwnerSlot::Live(owner));
         true
     }
 
+    /// An out-of-range CellId has no slot, so it is never Empty (admissible).
     pub(crate) fn cell_owner_slot_is_empty(&self, cell_id: CellId) -> bool {
-        self.cell_owners
-            .get(&cell_id.0)
-            .map_or(true, |slot| matches!(slot, CellOwnerSlot::Empty))
+        (cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS
+            && !self.cell_owners.contains_key(&cell_id.0)
     }
 
     pub(crate) fn live_cell_owner_for_id(
@@ -671,24 +676,22 @@ impl Scheduler {
         if !super::cpu_accounting::require(super::cpu_accounting::finish_retirement(self, owner)) {
             return false;
         }
-        let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) else {
+        if !matches!(self.cell_owners.get(&owner.cell_id),
+            Some(CellOwnerSlot::Retiring(current)) if *current == owner)
+        {
             return false;
-        };
-        if matches!(slot, CellOwnerSlot::Retiring(current) if *current == owner) {
-            *slot = CellOwnerSlot::Empty;
-            crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
-            super::cell_session::retired(self, owner);
-            true
-        } else {
-            false
         }
+        self.cell_owners.remove(&owner.cell_id);
+        crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
+        super::cell_session::retired(self, owner);
+        true
     }
 
     pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
-        if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
-            if matches!(slot, CellOwnerSlot::Live(current) if *current == owner) {
-                *slot = CellOwnerSlot::Empty;
-            }
+        if matches!(self.cell_owners.get(&owner.cell_id),
+            Some(CellOwnerSlot::Live(current)) if *current == owner)
+        {
+            self.cell_owners.remove(&owner.cell_id);
         }
     }
 
@@ -700,7 +703,7 @@ impl Scheduler {
         self.cell_owners.values().filter_map(|slot| match slot {
             CellOwnerSlot::Live(owner) => Some((*owner, false)),
             CellOwnerSlot::Retiring(owner) => Some((*owner, true)),
-            CellOwnerSlot::Empty | CellOwnerSlot::Reserved(_) => None,
+            CellOwnerSlot::Reserved(_) => None,
         })
     }
 
@@ -1650,15 +1653,17 @@ impl Scheduler {
         // this preserves the global SCHEDULER -> SWAP_CEILINGS lock order.
         crate::cell::hotswap::clear_swap_ceiling(tid);
 
+        // The task keeps its queue handle until reap, like the rest of its state:
+        // the queue is shared by the Cell's threads and p01 accounting checks it
+        // at `prepare_drop`. Only the rare TIMER-wait exit pays a clone.
         let timer_release = self.tasks.get_mut(&tid).and_then(|task| {
-            let wait = task.completion_wait.take();
-            let queue = task.completion.take()?;
-            if let Some(wait) = wait {
-                if wait.source == api::completion::source::TIMER {
-                    return Some((tid, queue, wait.slot));
-                }
+            let wait = task.completion_wait.take()?;
+            if wait.source != api::completion::source::TIMER {
+                return None;
             }
-            None
+            task.completion
+                .as_ref()
+                .map(|queue| (tid, queue.clone(), wait.slot))
         });
         if let Some(release) = timer_release {
             #[cfg(cellos_p01_trace)]

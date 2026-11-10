@@ -65,6 +65,7 @@ api::declare_syscalls![
     Heartbeat,
     GetTime,
     RequestMmio,
+    ProbeVirtioMmio,
     GrantAlloc,
     GrantFree,
     LookupService,

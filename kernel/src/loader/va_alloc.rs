@@ -58,7 +58,7 @@ pub(crate) const CELL_VA_STRIDE: usize = 32 * 1024 * 1024;
 pub(crate) const CELL_VA_STRIDE: usize = 256 * 1024 * 1024;
 
 /// Maximum simultaneous PIE cell slots: normally 512 (16 GiB embedded or
-/// 128 GiB desktop). Both regions, starting at 4 GiB, fit SV39's user half.
+/// 128 GiB desktop). Both regions, starting at 64 GiB, fit SV39's user half.
 ///
 /// `cell-scale-experiment` raises this to 4096 slots (4096 × 32 MiB = 128 GiB of
 /// VA, still inside the user half) so the D5 scale measurement measures memory

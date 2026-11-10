@@ -85,11 +85,18 @@ pub fn init_kernel_paging(
 ) -> PagingResult<PhysAddr> {
     #[cfg(target_arch = "aarch64")]
     {
+        use hal::aarch64::backend::{ArmResources, Board};
+        // The table depth must cover every identity-mapped window, not just
+        // RAM: a device map above the RAM ceiling would otherwise fall outside
+        // a 3-level walk.
         let parange = hal::aarch64::paging::read_hardware_parange();
-        let mut max_pa: u64 = 0;
-        for entry in mmap.iter() {
-            max_pa = max_pa.max((entry.base + entry.length) as u64);
-        }
+        let ram_ends = mmap
+            .iter()
+            .map(|entry| (entry.base as u64).saturating_add(entry.length as u64));
+        let mmio_ends = <Board as ArmResources>::KERNEL_MMIO_MAPS
+            .iter()
+            .map(|map| map.end as u64);
+        let max_pa = ram_ends.chain(mmio_ends).max().unwrap_or(0);
         let config = hal::aarch64::paging::TranslationConfig::derive(parange, max_pa);
         hal::aarch64::paging::set_translation_config(config);
     }
@@ -789,10 +796,10 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
 
 /// Remove *user* accessibility from `[base, base+len)`.
 ///
-/// The frame cannot be unmapped — the kernel still uses the window. On
-/// riscv64/aarch64 the single SAS page table boot-maps MMIO USER for every
-/// Cell; on x86_64 a claimed window is user-mapped on demand. Either way the
-/// page's permissions are lowered, and the Cell's next access faults.
+/// The frame cannot be unmapped — the kernel still uses the window. Boot maps
+/// every MMIO window kernel-only; a window is user-mapped only while a
+/// `RequestMmio` grant holds it. Lowering the page's permissions makes the
+/// Cell's next access fault.
 /// Pages that are not mapped are skipped; a mapped page that cannot be
 /// re-protected is an error, because that page would stay user-reachable.
 #[cfg(any(
@@ -850,10 +857,8 @@ pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
 /// Return the whole pages of `[base, base+len)` to the access the boot map
 /// gave them, once no Cell holds the window any more.
 ///
-/// AArch64: USER only inside a board map marked `cell_access` (QEMU virt's
-/// documented peripheral/VirtIO windows), kernel-only everywhere else — on
-/// the Pi boards that is every peripheral page. RISC-V boot-maps its Cell
-/// MMIO windows (VirtIO, ECAM) USER, so restoring is granting.
+/// Every boot MMIO window is kernel-only on RISC-V and AArch64, so restoring
+/// is clearing USER.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn restore_mmio_boot_posture(base: usize, len: usize) -> PagingResult<usize> {
     clear_mmio_user(base, len)

@@ -98,10 +98,7 @@ mod tombstone_target {
     #[test]
     fn only_retiring_and_terminated_are_tombstones() {
         for state in [TaskState::Retiring, TaskState::Terminated] {
-            assert!(
-                ipc_target_is_tombstone(&task(TARGET, state.clone())),
-                "{state:?}"
-            );
+            assert!(ipc_target_is_tombstone(&task(TARGET, state)), "{state:?}");
         }
         for state in [
             TaskState::Ready,
@@ -113,10 +110,7 @@ mod tombstone_target {
             },
             TaskState::Frozen { swap_id: 1 },
         ] {
-            assert!(
-                !ipc_target_is_tombstone(&task(TARGET, state.clone())),
-                "{state:?}"
-            );
+            assert!(!ipc_target_is_tombstone(&task(TARGET, state)), "{state:?}");
         }
     }
 
@@ -136,7 +130,7 @@ mod tombstone_target {
         let result = ipc_send_kernel(CALLER, TARGET, b"reply");
         let sched = SCHEDULER.lock();
         let sched = sched.as_ref().expect("scheduler");
-        let caller_state = sched.tasks[&CALLER].state.clone();
+        let caller_state = sched.tasks[&CALLER].state;
         let queued = sched.tasks[&TARGET].pending_msgs.len();
         (result, caller_state, queued)
     }
@@ -144,7 +138,7 @@ mod tombstone_target {
     #[test]
     fn send_to_a_tombstone_fails_without_parking_or_queueing() {
         for state in [TaskState::Retiring, TaskState::Terminated] {
-            let (result, caller, queued) = send_to(state.clone());
+            let (result, caller, queued) = send_to(state);
             assert_eq!(result, Err(IpcSendError::TargetGone), "{state:?}");
             assert_eq!(caller, TaskState::Ready, "{state:?}: caller must not park");
             assert_eq!(queued, 0, "{state:?}: nothing may reach the dead mailbox");

@@ -506,8 +506,7 @@ pub struct CellSegments {
 }
 
 impl CellSegments {
-    pub fn new(mut pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, va_slot: usize) -> Self {
-        pages.shrink_to_fit();
+    pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, va_slot: usize) -> Self {
         Self {
             pages,
             writable_pages: alloc::vec::Vec::new(),
@@ -517,15 +516,17 @@ impl CellSegments {
         }
     }
 
+    /// Callers size both vectors exactly (`try_reserve_exact`), so construction
+    /// never reallocates: a shrink here would be an infallible allocation on the
+    /// path documented as infallible, and would move buffers p01 already adopted.
     pub fn with_writable_pages(
-        mut pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+        pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
         mut writable_pages: alloc::vec::Vec<types::VAddr>,
         va_slot: usize,
     ) -> Self {
-        pages.shrink_to_fit();
+        // Sorted for the binary searches below; in place, so no allocation.
         writable_pages.sort_unstable();
         writable_pages.dedup();
-        writable_pages.shrink_to_fit();
         Self {
             pages,
             writable_pages,

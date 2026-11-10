@@ -3,14 +3,17 @@
 //! # Unsafe island
 //! `unsafe` is confined here (and to the x86_64 counterparts) for two reasons:
 //!   1. `virtio_drivers::Hal` requires `unsafe impl` (the trait is `unsafe trait`).
-//!   2. MMIO probe reads (`read_volatile` of magic / device-id / status) must
-//!      happen before we claim the slot.
+//!   2. `MmioTransport::new` takes a raw header pointer to the claimed slot.
+//!
+//! Slots are identified by the kernel (`sys_probe_virtio_mmio`): the VirtIO
+//! window is kernel-only until a claim grants it.
 
 #![allow(unsafe_code)]
 
 use crate::device::BlkDevice;
+use api::syscall::virtio_probe::STATUS_DRIVER_OK;
 use core::ptr::NonNull;
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, BlockDevice};
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio, BlockDevice};
 use virtio_drivers::{
     device::blk::VirtIOBlk,
     transport::mmio::{MmioTransport, VirtIOHeader},
@@ -23,21 +26,16 @@ pub(crate) type CellTransport = MmioTransport;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/// VirtIO MMIO magic value ("virt" in little-endian ASCII).
-const VIRTIO_MAGIC: u32 = 0x7472_6976;
-
 /// VirtIO device type: Block (2).
-const VIRTIO_DEV_BLK: u32 = 2;
+const VIRTIO_DEV_BLK: u16 = 2;
 
-/// VirtIO MMIO register area size per slot — 0x200 on both QEMU virt boards.
+/// Window claimed per slot. RISC-V spaces slots a page apart and the kernel
+/// registers each as its page, so the claim maps it for U-mode; AArch64 packs
+/// eight 0x200 slots per page, whose accesses the kernel mediates.
+#[cfg(target_arch = "riscv64")]
+pub const MMIO_SLOT_SIZE: usize = 0x1000;
+#[cfg(not(target_arch = "riscv64"))]
 pub const MMIO_SLOT_SIZE: usize = 0x200;
-
-/// VirtIO MMIO `Status` register offset (virtio-mmio spec §4.2.2).
-const VIRTIO_STATUS_OFFSET: usize = 0x070;
-
-/// `DRIVER_OK` status bit. When set, another driver (the in-kernel virtio_blk)
-/// has already brought this device up — we must NOT touch it.
-const VIRTIO_STATUS_DRIVER_OK: u32 = 0x04;
 
 // ─── CellHal ─────────────────────────────────────────────────────────────────
 
@@ -139,29 +137,16 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 /// free block device is present (graceful exit).
 pub fn find_and_init_blk() -> Option<BlkDevice> {
     for (base, _irq) in virtio_slot_iter() {
-        // Probe magic directly (U-mode, identity-mapped MMIO window).
-        // SAFETY: base is within the arch MMIO window mapped USER-accessible by init_kernel_paging.
-        let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC {
+        let Ok(identity) = sys_probe_virtio_mmio(base) else {
+            continue;
+        };
+        if identity.device_id != VIRTIO_DEV_BLK {
             continue;
         }
 
-        // Device type at offset 8.
-        // SAFETY: same invariant; base + 8 is within the same 0x200-byte slot.
-        let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_BLK {
-            continue;
-        }
-
-        // Coexistence guard: skip a block device the kernel already owns
-        // (DRIVER_OK set). Creating a transport on it would reset the live boot
-        // disk. Reading Status is a plain register read — it does not disturb the
-        // device. Once the kernel relinquishes the device (phase 06), Status is
-        // clear here and the claim proceeds.
-        // SAFETY: same MMIO window; Status register at a fixed offset.
-        let status =
-            unsafe { core::ptr::read_volatile((base + VIRTIO_STATUS_OFFSET) as *const u32) };
-        if status & VIRTIO_STATUS_DRIVER_OK != 0 {
+        // Coexistence guard: skip a block device another driver already brought
+        // up (DRIVER_OK set). Creating a transport on it would reset a live disk.
+        if identity.status & STATUS_DRIVER_OK != 0 {
             continue;
         }
 
@@ -171,8 +156,9 @@ pub fn find_and_init_blk() -> Option<BlkDevice> {
         }
 
         // Create the VirtIO transport.
-        // SAFETY: base was validated (magic + type) and claimed above; it is a live
-        // VirtIO MMIO header within the USER-accessible identity-mapped window.
+        // SAFETY: the kernel identified a VirtIO block transport at `base` and
+        // granted this Cell the slot above, so the header is live device memory
+        // this Cell may access.
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Block => t,

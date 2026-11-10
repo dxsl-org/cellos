@@ -114,7 +114,7 @@ pub(crate) fn mediates(base: usize, len: usize, far: usize, size: usize) -> bool
     else {
         return false;
     };
-    far % size == 0
+    far.is_multiple_of(size)
         && far >= base
         && access_end <= window_end
         && !user_pages(base, len).contains(&(far & !(PAGE - 1)))
