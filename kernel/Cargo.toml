@@ -75,6 +75,10 @@ fdt = "0.1"
 # `--no-default-features --features release-posture`, and a fleet must still provision
 # the real policy root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
 default = ["dev-policy-key", "dev-signing-key", "dev-weak-rng", "signing-required", "native-domains"]
+# Build-only kernels (clippy, cargo check, docs): no embed directory is required and
+# a missing kernel_fs.img silently becomes an empty VIFS1 stub. Such a kernel cannot
+# boot its bootstrap Cells; never package it.
+compile-only = []
 # Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
 # only, NEVER a release build. Without it the prod placeholder key is used.
 dev-policy-key = []

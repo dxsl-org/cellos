@@ -1,5 +1,10 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+// Same audited FIPS 180-4 code the kernel uses for ELF measurement.
+#[path = "src/sha256.rs"]
+#[allow(dead_code)]
+mod sha256;
 
 fn main() {
     // Emit the Git short SHA as the snapshot invalidation key.
@@ -178,13 +183,28 @@ fn main() {
                  kernel/ and the workspace root)"
             );
         }
-    } else if board_rpi3 && PathBuf::from("../target/rpi3-embedded").exists() {
-        PathBuf::from("../target/rpi3-embedded")
-    } else if arch_embedded.exists() {
-        arch_embedded
     } else {
-        PathBuf::from("src/embedded")
+        // Fallback chain (deprecated, architecture remediation Phase 03): the
+        // kernel then embeds whatever image is lying in the tree, so the binary is
+        // not a function of the build inputs. Callers must pass EMBEDDED_OVERRIDE;
+        // this becomes a hard error once every lane does.
+        let fallback = if board_rpi3 && PathBuf::from("../target/rpi3-embedded").exists() {
+            PathBuf::from("../target/rpi3-embedded")
+        } else if arch_embedded.exists() {
+            arch_embedded
+        } else {
+            PathBuf::from("src/embedded")
+        };
+        if std::env::var_os("CARGO_FEATURE_COMPILE_ONLY").is_none() {
+            println!(
+                "cargo:warning=EMBEDDED_OVERRIDE not set: embedding the in-tree fallback {} \
+                 (deprecated; pass EMBEDDED_OVERRIDE=<dir with init + kernel_fs.img>)",
+                fallback.display()
+            );
+        }
+        fallback
     };
+    verify_embed_manifest(&embedded_src);
     if phase02_profile {
         assert!(
             std::env::var_os("EMBEDDED_OVERRIDE").is_some(),
@@ -235,12 +255,15 @@ fn main() {
             // a kernel built from the stub compiles but has no VIFS1.
             if *cell == "kernel_fs.img" {
                 fs::write(embedded_out.join(cell), []).expect("write kernel_fs.img stub");
-                println!(
-                    "cargo:warning={} missing — embedded an EMPTY VIFS1 stub. \
-                     This kernel is compile-only; assemble the real image \
-                     (gen_disk.ps1 / scripts/build-*-ci.sh) before booting.",
-                    src.display()
-                );
+                if std::env::var_os("CARGO_FEATURE_COMPILE_ONLY").is_none() {
+                    println!(
+                        "cargo:warning={} missing — embedded an EMPTY VIFS1 stub. \
+                         This kernel is compile-only; assemble the real image \
+                         (scripts/assemble-x86-image.py / scripts/gen-disk*-ci.sh) or \
+                         build with --features compile-only. This becomes an error.",
+                        src.display()
+                    );
+                }
             }
             continue;
         }
@@ -259,6 +282,54 @@ fn main() {
         "cargo:rustc-env=EMBEDDED_OUT_DIR={}",
         embedded_out.display()
     );
+}
+
+/// Refuse to embed `init` / `kernel_fs.img` whose bytes differ from the
+/// directory's `manifest.json` (written by `scripts/assemble-x86-image.py`,
+/// schema `cellos-x86-image-manifest/1`). Directories without a manifest
+/// (RV64/AArch64 recipes, compile-only stubs) are not checked yet.
+///
+/// Panics with the mismatching artifact named, so a stale or swapped image
+/// cannot be embedded into a kernel that claims the manifest's provenance.
+fn verify_embed_manifest(dir: &Path) {
+    let manifest_path = dir.join("manifest.json");
+    println!("cargo:rerun-if-changed={}", manifest_path.display());
+    let Ok(manifest) = fs::read_to_string(&manifest_path) else {
+        return;
+    };
+    if !manifest.contains("\"cellos-x86-image-manifest/1\"") {
+        return;
+    }
+    for (key, file) in [("kernel_fs_img", "kernel_fs.img"), ("init", "init")] {
+        let expected = manifest_digest(&manifest, key)
+            .unwrap_or_else(|| panic!("{}: no \"{key}\".sha256 entry", manifest_path.display()));
+        let path = dir.join(file);
+        let bytes = fs::read(&path).unwrap_or_else(|e| {
+            panic!("{} listed in manifest but unreadable: {e}", path.display())
+        });
+        let actual: String = sha256::sha256(&bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            actual,
+            expected,
+            "{} does not match {} (stale or swapped embed input; re-run the image assembler)",
+            path.display(),
+            manifest_path.display()
+        );
+    }
+}
+
+/// The `sha256` string of the top-level object `"<key>": { … "sha256": "<hex>" … }`.
+/// Top-level keys of this schema appear once and precede their own digest.
+fn manifest_digest(manifest: &str, key: &str) -> Option<String> {
+    let start = manifest.find(&format!("\n  \"{key}\": {{"))?;
+    let object = &manifest[start..];
+    let object = &object[..object.find("\n  }")?];
+    let digest = object.split("\"sha256\": \"").nth(1)?;
+    let digest = &digest[..digest.find('"')?];
+    (digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit())).then(|| digest.to_owned())
 }
 
 /// Emit the git short SHA via cargo:rustc-env for snapshot invalidation.

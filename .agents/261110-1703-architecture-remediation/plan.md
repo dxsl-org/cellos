@@ -27,7 +27,8 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 00 | [Governance, admission and owner decisions](phase-00-governance-admission.md) — completed 2026-11-10 ([approval](admission-approval.md)) | S0 truth | — | — | |
 | 01 | [Truthful status baseline](phase-01-truthful-status-baseline.md) — completed 2026-11-10 ([evidence](reports/phase-01-evidence.md)); S0 closed | S0 | 00 | — | ✓ |
 | 02 | [x86 C2C gate, lane manifest, reproducible CI](phase-02-ci-x86-gate.md) — completed 2026-11-10 ([evidence](reports/phase-02-evidence.md)); first GitHub run pending | S1 build | 01 | — | |
-| 03 | [Explicit build inputs and single image recipe](phase-03-build-inputs.md) | S1 | 02 | — | ✓ |
+| 03 | [Explicit build inputs and single image recipe](phase-03-build-inputs.md) — in progress ([evidence](reports/phase-03-evidence.md)): manifest check + disk-layout guard done; untrack/hard error wait for a CI cycle; release blocked on signing | S1 | 02 | — | ✓ |
+| 03b | [Single image recipe per architecture](phase-03b-single-image-recipe.md) — split from 03 (owner, 2026-11-10) | S1b | 03 | — | |
 | 04 | [One trust posture, guarded copy always on](phase-04-posture-selector.md) | S2 authority | 03 | — | |
 | 05 | [Single cell and driver catalog](phase-05-cell-catalog.md) | S2 | 04 | — | |
 | 06 | [Launch by measured identity, per-device PCIe handout](phase-06-launch-identity.md) | S2 | 05 | CP1/CP2 if trailer changes | ✓ |

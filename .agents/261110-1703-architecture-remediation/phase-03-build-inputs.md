@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Explicit build inputs and single image recipe"
-status: pending
+status: in-progress
 priority: P1
 effort: "6–9d"
 dependencies: [2]
@@ -74,18 +74,18 @@ cells built+signed ──► target/embed/<arch>-<profile>/{init,kernel_fs.img,m
 
 ## Todo List
 
-- [ ] Explicit embed dir + manifest check
+- [ ] Explicit embed dir + manifest check (manifest check + deprecation warning done; hard error waits for a CI cycle)
 - [ ] CI switched, chain removed
 - [ ] Binaries untracked
-- [ ] Disk layout generated
-- [ ] One recipe per arch
+- [x] Disk layout generated
+- [x] One recipe per arch — moved to [Phase 03b](phase-03b-single-image-recipe.md) (owner decision 2026-11-10)
 - [ ] Release builds and boots x86 ISO
 
 ## Success Criteria
 
 - [ ] Building the kernel without `CELLOS_EMBED_DIR` and without `compile-only` fails with a message naming the variable.
-- [ ] A tampered `kernel_fs.img` (one byte) fails the build on manifest mismatch.
-- [ ] Old and new RV64 recipes produce identical per-partition SHA-256 for the same inputs.
+- [x] A tampered `kernel_fs.img` (one byte) fails the build on manifest mismatch.
+- [x] Old and new RV64 recipes produce identical per-partition SHA-256 for the same inputs. — moved to Phase 03b
 - [ ] Full suite at this checkpoint: all `pr`-tier lanes in `lanes.toml` green; `x86-c2c` job green; evidence in `reports/phase-03-evidence.md`.
 - [ ] `git ls-files kernel/src/embedded*` lists no binary.
 
@@ -105,4 +105,32 @@ Phase 04 adds a release-posture boot lane on top of this recipe.
 
 ## Deviation Log
 
-None.
+- Deviation: kept the variable name `EMBEDDED_OVERRIDE` instead of renaming it to `CELLOS_EMBED_DIR`.
+  Why: 99 files reference it (scripts, tests, docs, evidence); a rename changes no behaviour and would rewrite evidence text.
+  Impact: plan wording only.
+  Revert: n/a.
+- Deviation: tools keep their literal layout copies; `check-disk-layout-literals.py` pins every site (47) to `api::disk` instead of making each tool read `disk-layout.json`.
+  Why: shell/PowerShell readers would add a JSON dependency to every recipe; the drift check catches the failure the plan targets.
+  Impact: new script + generated JSON + CI step.
+  Revert: delete them.
+- Deviation: the disk-layout source is read by a strict regex over `disk.rs` (`pub const PART_*: u64 = <literal>;`, all 12 required, contiguity re-checked), not a host test.
+  Why: a host test would need a new crate outside `libs/api`; the format is fixed and the script refuses anything else.
+  Impact: `scripts/check-disk-layout-literals.py`.
+  Revert: n/a.
+- Decision: release workflow left unchanged.
+  Why: blocked — a release image needs release-signed cells; only the public key exists in CI.
+  Impact: success criterion on release stays open; recorded in evidence.
+  Revert: n/a.
+- Surprise: `generate-code-metrics.py --check` already fails at `d32492e15`.
+  Why: pre-existing drift.
+  Impact: none from this phase; reported.
+  Revert: n/a.
+
+- Decision: step 6 (single recipe per arch) split into Phase 03b; `docs/code-metrics.generated.md` regenerated in this slice (it was already stale at `d32492e15`).
+  Why: owner answers `split-later`, `regenerate` (2026-11-10).
+  Impact: new phase file; generated metrics file (kernel nLOC 87,669 → 91,272).
+  Revert: merge 03b back; regenerate.
+
+## Evidence
+
+[reports/phase-03-evidence.md](reports/phase-03-evidence.md) (partial).

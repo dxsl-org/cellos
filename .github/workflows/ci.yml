@@ -123,6 +123,12 @@ jobs:
           cargo metadata --locked --format-version 1 > /dev/null
           cargo metadata --locked --format-version 1 --manifest-path tests/integration/Cargo.toml > /dev/null
 
+      # libs/api/src/abi/disk.rs is the partition layout; every image/provisioning
+      # tool's literal copy must equal it, and scripts/disk-layout.json is its
+      # generated projection.
+      - name: Check disk layout literals
+        run: python3 scripts/check-disk-layout-literals.py
+
       - name: Validate app-tier acceptance ledger
         run: |
           baseline_dir="$RUNNER_TEMP/app-tier-acceptance-baseline"
@@ -188,6 +194,7 @@ jobs:
           --exclude lua
           --exclude tetris-lua
           --target riscv64gc-unknown-none-elf
+          --features cellos-kernel/compile-only
           -Z build-std=core,alloc
           -- -D warnings
 
@@ -598,6 +605,7 @@ jobs:
           cargo clippy
           -p cellos-kernel
           --target aarch64-unknown-none-softfloat
+          --features compile-only
           -Z build-std=core,alloc
           -- -D warnings
 
@@ -980,6 +988,7 @@ jobs:
           --exclude ocel-quickjs
           --exclude app-posix-shim-test
           --target x86_64-unknown-none
+          --features cellos-kernel/compile-only
           -Z build-std=core,alloc
           -- -D warnings
 
@@ -1967,7 +1976,7 @@ jobs:
           # was enough to keep the whole harness from building, so the entry
           # describing the fix could not be verified by running it. Keep them
           # running: a pin that cannot execute is prose.
-          cargo test -p cellos-kernel --target x86_64-unknown-linux-gnu
+          cargo test -p cellos-kernel --features compile-only --target x86_64-unknown-linux-gnu
           # `ostd`'s VFS read session is host-testable for the same reason (its
           # `ostd`-only items are cfg'd out under test). Six of its chunking
           # tests had drifted from the session — they predate the stat that

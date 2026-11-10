@@ -8,7 +8,8 @@ Layout (must match kernel/src/loader/disk_layout.rs and api::disk):
     P3  type 0x7D (Cellos)     @ LBA 600,000  size 200,000   kernel heap snapshot (Phase 29)
     P4  type 0x7E (Cellos)     @ LBA 800,000  size 131,072   littlefs /data (Milestone 2.5 P04)
 
-Total disk: 931,072 sectors (~455 MB). The image is written sparsely by gen_disk.
+Total disk: 1,127,680 sectors (~551 MB): P5 /srv and P6 cell-store follow P4 and
+have no MBR slot (api::disk). The image is written sparsely by gen_disk.
 
 Only the partition table bytes (446..510) and the 0x55AA signature are written —
 the rest of LBA 0 is left untouched so this is safe to run before or after the
