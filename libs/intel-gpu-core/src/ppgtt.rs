@@ -4,9 +4,10 @@
 //!
 //! Table memory is owned by the caller through [`TableStore`]; this module never
 //! allocates. Unmapping leaves empty intermediate tables in place: they are
-//! reclaimed when the whole VM is destroyed, matching the lifetime of a client.
+//! reclaimed by [`Ppgtt::destroy`] with the whole VM, matching the lifetime of a client.
 
 use crate::pte::{self, EncodeError, PatIndex, ADDR_MASK_4K, PAGE_PRESENT, PDE_PS_LEAF};
+use alloc::vec::Vec;
 
 pub const ENTRIES: usize = 512;
 
@@ -16,6 +17,8 @@ pub trait TableStore {
     fn alloc_table(&mut self) -> Option<u64>;
     fn read(&self, table: u64, index: usize) -> u64;
     fn write(&mut self, table: u64, index: usize, value: u64);
+    /// Return a table [`Self::alloc_table`] handed out; no entry of it is referenced.
+    fn free_table(&mut self, table: u64);
 }
 
 /// Address-space shape of one platform.
@@ -123,9 +126,28 @@ impl Ppgtt {
         pat: PatIndex,
         writable: bool,
     ) -> Result<(), MapError> {
-        self.check_va(va)?;
         let leaf = pte::encode_leaf(phys, 0, pat, writable, self.layout.dma_bits)
             .map_err(MapError::Encode)?;
+        self.install_4k(store, va, leaf)
+    }
+
+    /// Map `va` to a `NULL` leaf ([`pte::encode_null_leaf`]).
+    pub fn map_null_4k(
+        &mut self,
+        store: &mut impl TableStore,
+        va: u64,
+        pat: PatIndex,
+    ) -> Result<(), MapError> {
+        self.install_4k(store, va, pte::encode_null_leaf(pat))
+    }
+
+    fn install_4k(
+        &mut self,
+        store: &mut impl TableStore,
+        va: u64,
+        leaf: u64,
+    ) -> Result<(), MapError> {
+        self.check_va(va)?;
         let table = self
             .leaf_table(store, va, true)?
             .expect("created on demand");
@@ -162,6 +184,32 @@ impl Ppgtt {
         };
         let entry = store.read(table, index(page, 0));
         Ok((entry & PAGE_PRESENT != 0).then_some((entry & ADDR_MASK_4K) | (va & 0xfff)))
+    }
+
+    /// Free every table of this address space, root last. The caller has cleared the
+    /// leaves and invalidated the GPU TLBs, and no context still points at the root.
+    pub fn destroy(self, store: &mut impl TableStore) {
+        // (table, level) pairs still to visit; a level-1+ entry without the PS bit
+        // points at a child table.
+        let mut pending = Vec::from([(self.root, self.layout.max_level)]);
+        let mut order = Vec::new();
+        while let Some((table, level)) = pending.pop() {
+            order.push(table);
+            if level == 0 {
+                continue;
+            }
+            for slot in 0..ENTRIES {
+                let entry = store.read(table, slot);
+                let huge_leaf = level <= 2 && entry & PDE_PS_LEAF != 0;
+                if entry & PAGE_PRESENT != 0 && !huge_leaf {
+                    pending.push((entry & ADDR_MASK_4K, level - 1));
+                }
+            }
+        }
+        // Children before parents, so no freed table is ever read again.
+        for table in order.into_iter().rev() {
+            store.free_table(table);
+        }
     }
 }
 

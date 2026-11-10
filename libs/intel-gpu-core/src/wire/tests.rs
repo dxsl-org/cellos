@@ -100,7 +100,7 @@ fn malformed_requests_are_refused() {
     assert_eq!(decode_request(&bad[..len]).unwrap_err(), EINVAL);
     // Unknown segment flag, and a segment with no direction.
     let mut bad = frame;
-    bad[HEADER_LEN + 12] = 4;
+    bad[HEADER_LEN + 12] = 8;
     assert_eq!(decode_request(&bad[..len]).unwrap_err(), EINVAL);
     let mut bad = frame;
     bad[HEADER_LEN + DESCRIPTOR_LEN + 12] = 0;
@@ -119,6 +119,51 @@ fn malformed_requests_are_refused() {
     assert_eq!(
         encode_request(&mut frame, OP_IOCTL, 1, 0, &[], &far, &client),
         Err(EFAULT)
+    );
+}
+
+#[test]
+fn export_attachments_round_trip_and_malformed_ones_are_refused() {
+    let client = Mem(vec![0u8; 0x200]);
+    let mut frame = [0u8; MAX_REQUEST_LEN];
+    let segments = [segments()[0], Segment::export(0x1234)];
+    let len = encode_request(&mut frame, OP_IOCTL, 1, 7, &[9; 8], &segments, &client).unwrap();
+    // The descriptor is `{addr = id, len = 0, flags = SEG_EXPORT}` and carries no bytes.
+    let at = HEADER_LEN + DESCRIPTOR_LEN;
+    assert_eq!(&frame[at..at + 8], &0x1234u64.to_le_bytes());
+    assert_eq!(&frame[at + 8..at + 16], &[0, 0, 0, 0, 4, 0, 0, 0]);
+    let request = decode_request(&frame[..len]).unwrap();
+    assert_eq!(request.exports(), [0x1234]);
+    assert_eq!(request.arg, &[9; 8]);
+
+    // A length, an extra direction flag, id 0, or an id above isize::MAX.
+    for (offset, byte) in [(8, 1u8), (12, 4 | SEG_IN as u8)] {
+        let mut bad = frame;
+        bad[at + offset] = byte;
+        assert_eq!(
+            decode_request(&bad[..len]).unwrap_err(),
+            EINVAL,
+            "byte {offset}"
+        );
+    }
+    for id in [0u64, 1 << 63] {
+        let mut bad = frame;
+        bad[at..at + 8].copy_from_slice(&id.to_le_bytes());
+        assert_eq!(
+            decode_request(&bad[..len]).unwrap_err(),
+            EINVAL,
+            "id {id:#x}"
+        );
+    }
+    // The client side refuses to build one either.
+    let bad = [Segment {
+        addr: 5,
+        len: 4,
+        flags: SEG_EXPORT,
+    }];
+    assert_eq!(
+        encode_request(&mut frame, OP_IOCTL, 1, 0, &[], &bad, &client),
+        Err(EINVAL)
     );
 }
 

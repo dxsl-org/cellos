@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 
+pub mod memory;
 pub mod shim;
 pub mod transport;
 

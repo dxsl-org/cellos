@@ -1,28 +1,14 @@
 //! The `XE_GPU` IPC service: one received message in, one reply or client release out.
 //!
-//! Syscall-free so host tests drive it with real request frames; `main.rs` owns the
-//! receive loop and supplies the kernel watch calls.
+//! Syscall-free so host tests drive it with real request frames over a GPU on fake MMIO;
+//! `cell.rs` owns the receive loop and supplies the kernel watch calls.
 
 use crate::owner_watch::{OwnerWatches, WatchSys};
 use api::caller_identity::CallerIdentity;
+use intel_gpu_core::hw::GpuHw;
 use intel_gpu_core::server::{Caller, XeServer};
-use intel_gpu_core::uapi::ioctl::{
-    DRM_IOCTL_XE_EXEC, DRM_IOCTL_XE_EXEC_QUEUE_CREATE, DRM_IOCTL_XE_GEM_CREATE,
-};
 use intel_gpu_core::uapi::query::DeviceInfo;
 use intel_gpu_core::wire::{MAX_REQUEST_LEN, OP_OPEN};
-
-/// Requests this driver answers `EOPNOTSUPP` rather than pretend to perform:
-/// - `GEM_CREATE`: a buffer is client memory exported to the driver (CP1 D-G1 option B), and
-///   the export syscalls (437/438) do not exist in the kernel yet, so there is no memory to
-///   back an object;
-/// - `EXEC_QUEUE_CREATE`, `EXEC`: queues are GuC contexts and submission goes through the
-///   GuC CT channel, neither of which this driver drives yet.
-pub const UNSERVED: [u32; 3] = [
-    DRM_IOCTL_XE_GEM_CREATE,
-    DRM_IOCTL_XE_EXEC_QUEUE_CREATE,
-    DRM_IOCTL_XE_EXEC,
-];
 
 /// What the receive loop does with one message.
 #[derive(Debug, PartialEq, Eq)]
@@ -30,23 +16,27 @@ pub enum Outcome {
     /// Send `len` reply bytes to the sender. `watch_unavailable` is set the first time a
     /// client could not be watched for death (log once).
     Reply { len: usize, watch_unavailable: bool },
-    /// The kernel reported a watched client Cell dead; `files` DRM files were released.
+    /// The kernel reported a watched client Cell dead; `files` DRM files were released
+    /// (contexts stopped, mappings cleared, export leases revoked).
     Released { files: usize },
     /// Not attributable to a client and not a watched death: no reply.
     Dropped,
 }
 
-/// Client sessions and their death watches.
-pub struct Service {
+/// Client sessions, their death watches, and the device that serves them.
+pub struct Service<H: GpuHw> {
     server: XeServer,
     watches: OwnerWatches,
+    /// The device every request's effects go to.
+    pub gpu: H,
 }
 
-impl Service {
-    pub fn new(device: DeviceInfo) -> Self {
+impl<H: GpuHw> Service<H> {
+    pub fn new(device: DeviceInfo, gpu: H) -> Self {
         Self {
-            server: XeServer::new(device, &UNSERVED),
+            server: XeServer::new(device),
             watches: OwnerWatches::default(),
+            gpu,
         }
     }
 
@@ -68,7 +58,7 @@ impl Service {
                 Some(tids) => Outcome::Released {
                     files: tids
                         .iter()
-                        .map(|&tid| self.server.release_client(tid))
+                        .map(|&tid| self.server.release_client(tid, &mut self.gpu))
                         .sum(),
                 },
                 None => Outcome::Dropped,
@@ -80,7 +70,7 @@ impl Service {
         if buf.first() == Some(&OP_OPEN) {
             let admission = self.watches.admit(&identity, sender, sys);
             for tid in admission.stale {
-                self.server.release_client(tid);
+                self.server.release_client(tid, &mut self.gpu);
             }
             watch_unavailable = admission.unavailable;
         }
@@ -91,7 +81,7 @@ impl Service {
         };
         let request = &buf[..buf.len().min(MAX_REQUEST_LEN)];
         Outcome::Reply {
-            len: self.server.handle(caller, request, reply),
+            len: self.server.handle(caller, request, reply, &mut self.gpu),
             watch_unavailable,
         }
     }

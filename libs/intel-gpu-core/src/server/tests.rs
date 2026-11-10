@@ -1,4 +1,5 @@
 use super::*;
+use crate::hw::fake::{Event, RecordingHw};
 use crate::uapi::ioctl::*;
 use crate::uapi::u32_at;
 use crate::uapi::UserMemory;
@@ -41,167 +42,214 @@ impl UserMemory for NoMem {
     }
 }
 
-/// Send one frame and return `(errno, value, arg)`.
-fn call(
-    server: &mut XeServer,
-    caller: Caller,
-    op: u8,
-    file: u32,
-    request: u32,
-    arg: &[u8],
-) -> (i32, u32, Vec<u8>) {
-    let mut frame = [0u8; MAX_REQUEST_LEN];
-    let len = encode_request(&mut frame, op, file, request, arg, &[], &NoMem).unwrap();
-    let mut reply = [0u8; MAX_REPLY_LEN];
-    let reply_len = server.handle(caller, &frame[..len], &mut reply);
-    let decoded = decode_reply(&reply[..reply_len], &[] as &[Segment]).unwrap();
-    (decoded.errno, decoded.value, decoded.arg.to_vec())
+struct Rig {
+    server: XeServer,
+    hw: RecordingHw,
 }
 
-fn open(server: &mut XeServer, caller: Caller) -> u32 {
-    let (errno, file, _) = call(server, caller, OP_OPEN, 0, 0, &[]);
-    assert_eq!(errno, 0);
-    file
-}
+impl Rig {
+    fn new() -> Self {
+        Self {
+            server: XeServer::new(DEVICE),
+            hw: RecordingHw::default(),
+        }
+    }
 
-fn vm_create(server: &mut XeServer, caller: Caller, file: u32) -> u32 {
-    let (errno, _, arg) = call(
-        server,
-        caller,
-        OP_IOCTL,
-        file,
-        DRM_IOCTL_XE_VM_CREATE,
-        &[0; 32],
-    );
-    assert_eq!(errno, 0);
-    u32_at(&arg, 12)
-}
+    /// Send one frame and return `(errno, value, arg)`.
+    fn call(
+        &mut self,
+        caller: Caller,
+        op: u8,
+        file: u32,
+        request: u32,
+        arg: &[u8],
+    ) -> (i32, u32, Vec<u8>) {
+        self.call_with(caller, op, file, request, arg, &[])
+    }
 
-fn vm_destroy(server: &mut XeServer, caller: Caller, file: u32, vm: u32) -> i32 {
-    let mut arg = [0u8; 24];
-    arg[..4].copy_from_slice(&vm.to_le_bytes());
-    call(
-        server,
-        caller,
-        OP_IOCTL,
-        file,
-        DRM_IOCTL_XE_VM_DESTROY,
-        &arg,
-    )
-    .0
+    fn call_with(
+        &mut self,
+        caller: Caller,
+        op: u8,
+        file: u32,
+        request: u32,
+        arg: &[u8],
+        segments: &[Segment],
+    ) -> (i32, u32, Vec<u8>) {
+        let mut frame = [0u8; MAX_REQUEST_LEN];
+        let len = encode_request(&mut frame, op, file, request, arg, segments, &NoMem).unwrap();
+        let mut reply = [0u8; MAX_REPLY_LEN];
+        let reply_len = self
+            .server
+            .handle(caller, &frame[..len], &mut reply, &mut self.hw);
+        let decoded = decode_reply(&reply[..reply_len], segments).unwrap();
+        (decoded.errno, decoded.value, decoded.arg.to_vec())
+    }
+
+    fn open(&mut self, caller: Caller) -> u32 {
+        let (errno, file, _) = self.call(caller, OP_OPEN, 0, 0, &[]);
+        assert_eq!(errno, 0);
+        file
+    }
+
+    fn vm_create(&mut self, caller: Caller, file: u32) -> u32 {
+        let (errno, _, arg) = self.call(caller, OP_IOCTL, file, DRM_IOCTL_XE_VM_CREATE, &[0; 32]);
+        assert_eq!(errno, 0);
+        u32_at(&arg, 12)
+    }
+
+    fn vm_destroy(&mut self, caller: Caller, file: u32, vm: u32) -> i32 {
+        let mut arg = [0u8; 24];
+        arg[..4].copy_from_slice(&vm.to_le_bytes());
+        self.call(caller, OP_IOCTL, file, DRM_IOCTL_XE_VM_DESTROY, &arg)
+            .0
+    }
+
+    fn gem_create(&mut self, caller: Caller, file: u32, export: u64) -> (i32, u32) {
+        let mut arg = [0u8; 56];
+        arg[8..16].copy_from_slice(&4096u64.to_le_bytes());
+        arg[16..20].copy_from_slice(&1u32.to_le_bytes());
+        arg[32..34].copy_from_slice(&1u16.to_le_bytes());
+        let (errno, _, arg) = self.call_with(
+            caller,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_GEM_CREATE,
+            &arg,
+            &[Segment::export(export)],
+        );
+        (errno, u32_at(&arg, 28))
+    }
 }
 
 #[test]
 fn clients_see_only_their_own_files_and_objects() {
-    let mut server = XeServer::new(DEVICE, &[]);
-    let file_a = open(&mut server, A);
-    let file_b = open(&mut server, B);
+    let mut rig = Rig::new();
+    let file_a = rig.open(A);
+    let file_b = rig.open(B);
     // Same ids on both sides; neither names the other's object.
     assert_eq!((file_a, file_b), (1, 1));
-    assert_eq!(vm_create(&mut server, A, file_a), 1);
-    assert_eq!(vm_create(&mut server, A, file_a), 2);
-    assert_eq!(vm_destroy(&mut server, B, file_b, 2), ENOENT);
-    assert_eq!(vm_create(&mut server, B, file_b), 1);
-    assert_eq!(vm_destroy(&mut server, A, file_a, 2), 0);
-    assert_eq!(vm_destroy(&mut server, B, file_b, 1), 0);
-    assert_eq!(vm_destroy(&mut server, A, file_a, 1), 0);
+    assert_eq!(rig.vm_create(A, file_a), 1);
+    assert_eq!(rig.vm_create(A, file_a), 2);
+    assert_eq!(rig.vm_destroy(B, file_b, 2), ENOENT);
+    assert_eq!(rig.vm_create(B, file_b), 1);
+    assert_eq!(rig.vm_destroy(A, file_a, 2), 0);
+    assert_eq!(rig.vm_destroy(B, file_b, 1), 0);
+    assert_eq!(rig.vm_destroy(A, file_a, 1), 0);
     // A file id is only meaningful to the tid that opened it.
-    let file_a2 = open(&mut server, A);
+    let file_a2 = rig.open(A);
     assert_eq!(file_a2, 2);
-    assert_eq!(call(&mut server, B, OP_CLOSE, file_a2, 0, &[]).0, EBADF);
-    assert_eq!(call(&mut server, A, OP_CLOSE, file_a2, 0, &[]).0, 0);
+    assert_eq!(rig.call(B, OP_CLOSE, file_a2, 0, &[]).0, EBADF);
+    assert_eq!(rig.call(A, OP_CLOSE, file_a2, 0, &[]).0, 0);
+}
+
+#[test]
+fn export_attachment_is_checked_against_the_attested_sender() {
+    let mut rig = Rig::new();
+    rig.hw
+        .add_export(41, A.cell_id, A.generation, 1 << 38, 4096, true);
+    let file_a = rig.open(A);
+    let file_b = rig.open(B);
+    // B carries A's export id: refused, the confused-deputy case.
+    assert_eq!(rig.gem_create(B, file_b, 41).0, EPERM);
+    let (errno, handle) = rig.gem_create(A, file_a, 41);
+    assert_eq!((errno, handle), (0, 1));
+    // Attachments ride only on ioctls.
+    let mut frame = [0u8; MAX_REQUEST_LEN];
+    let len = encode_request(
+        &mut frame,
+        OP_OPEN,
+        0,
+        0,
+        &[],
+        &[Segment::export(41)],
+        &NoMem,
+    )
+    .unwrap();
+    let mut reply = [0u8; MAX_REPLY_LEN];
+    let n = rig.server.handle(A, &frame[..len], &mut reply, &mut rig.hw);
+    assert_eq!(decode_reply(&reply[..n], &[]).unwrap().errno, EINVAL);
 }
 
 #[test]
 fn reused_tid_of_another_incarnation_inherits_nothing() {
-    let mut server = XeServer::new(DEVICE, &[]);
-    let file = open(&mut server, A);
-    vm_create(&mut server, A, file);
+    let mut rig = Rig::new();
+    rig.hw
+        .add_export(41, A.cell_id, A.generation, 1 << 38, 4096, true);
+    let file = rig.open(A);
+    rig.vm_create(A, file);
+    rig.gem_create(A, file, 41);
     let reborn = Caller { generation: 2, ..A };
-    assert_eq!(vm_destroy(&mut server, reborn, file, 1), EBADF);
-    assert_eq!(server.client_count(), 0);
-    let fresh = open(&mut server, reborn);
+    assert_eq!(rig.vm_destroy(reborn, file, 1), EBADF);
+    assert_eq!(rig.server.client_count(), 0);
+    // The old incarnation's lease went with its files.
+    assert!(rig.hw.events.contains(&Event::Revoke(41)));
+    let fresh = rig.open(reborn);
     assert_eq!(fresh, 1);
-    assert_eq!(vm_destroy(&mut server, reborn, fresh, 1), ENOENT);
+    assert_eq!(rig.vm_destroy(reborn, fresh, 1), ENOENT);
 }
 
 #[test]
 fn release_and_close_drop_client_state() {
-    let mut server = XeServer::new(DEVICE, &[]);
-    let file = open(&mut server, A);
-    open(&mut server, B);
-    vm_create(&mut server, A, file);
-    assert_eq!(server.release_client(A.tid), 1);
-    assert_eq!(server.release_client(A.tid), 0);
-    assert_eq!(vm_destroy(&mut server, A, file, 1), EBADF);
-    assert_eq!(server.client_count(), 1);
-    assert_eq!(call(&mut server, B, OP_CLOSE, 1, 0, &[]).0, 0);
-    assert_eq!(server.client_count(), 0);
-    assert_eq!(call(&mut server, B, OP_CLOSE, 1, 0, &[]).0, EBADF);
+    let mut rig = Rig::new();
+    rig.hw
+        .add_export(41, A.cell_id, A.generation, 1 << 38, 4096, true);
+    rig.hw
+        .add_export(42, B.cell_id, B.generation, 2 << 38, 4096, true);
+    let file = rig.open(A);
+    let file_b = rig.open(B);
+    rig.vm_create(A, file);
+    assert_eq!(rig.gem_create(A, file, 41).0, 0);
+    assert_eq!(rig.gem_create(B, file_b, 42).0, 0);
+    assert_eq!(rig.server.release_client(A.tid, &mut rig.hw), 1);
+    assert_eq!(rig.hw.events.last(), Some(&Event::Revoke(41)));
+    assert_eq!(rig.server.release_client(A.tid, &mut rig.hw), 0);
+    assert_eq!(rig.vm_destroy(A, file, 1), EBADF);
+    assert_eq!(rig.server.client_count(), 1);
+    assert_eq!(rig.call(B, OP_CLOSE, 1, 0, &[]).0, 0);
+    assert_eq!(rig.hw.events.last(), Some(&Event::Revoke(42)));
+    assert_eq!(rig.server.client_count(), 0);
+    assert_eq!(rig.call(B, OP_CLOSE, 1, 0, &[]).0, EBADF);
 }
 
 #[test]
-fn unserved_requests_and_bad_ops_are_refused() {
-    static UNSERVED: [u32; 1] = [DRM_IOCTL_XE_VM_CREATE];
-    let mut server = XeServer::new(DEVICE, &UNSERVED);
-    let file = open(&mut server, A);
-    let (errno, _, arg) = call(
-        &mut server,
-        A,
-        OP_IOCTL,
-        file,
-        DRM_IOCTL_XE_VM_CREATE,
-        &[0; 32],
-    );
-    assert_eq!((errno, arg.len()), (EOPNOTSUPP, 0));
-    assert_eq!(call(&mut server, A, 9, file, 0, &[]).0, EINVAL);
+fn bad_ops_files_and_sizes_are_refused() {
+    let mut rig = Rig::new();
+    let file = rig.open(A);
+    assert_eq!(rig.call(A, 9, file, 0, &[]).0, EINVAL);
     assert_eq!(
-        call(
-            &mut server,
-            A,
-            OP_IOCTL,
-            99,
-            DRM_IOCTL_XE_VM_CREATE,
-            &[0; 32]
-        )
-        .0,
+        rig.call(A, OP_IOCTL, 99, DRM_IOCTL_XE_VM_CREATE, &[0; 32])
+            .0,
         EBADF
     );
     // A wrong struct size is refused by the decoder, not misread.
     assert_eq!(
-        call(
-            &mut server,
-            A,
-            OP_IOCTL,
-            file,
-            DRM_IOCTL_XE_VM_DESTROY,
-            &[0; 8]
-        )
-        .0,
+        rig.call(A, OP_IOCTL, file, DRM_IOCTL_XE_VM_DESTROY, &[0; 8])
+            .0,
         EINVAL
     );
     let mut reply = [0u8; MAX_REPLY_LEN];
-    let len = server.handle(A, &[1, 0], &mut reply);
+    let len = rig.server.handle(A, &[1, 0], &mut reply, &mut rig.hw);
     assert_eq!(decode_reply(&reply[..len], &[]).unwrap().errno, EINVAL);
 }
 
 #[test]
 fn file_and_client_tables_are_bounded() {
-    let mut server = XeServer::new(DEVICE, &[]);
+    let mut rig = Rig::new();
     for _ in 0..MAX_FILES_PER_CLIENT {
-        open(&mut server, A);
+        rig.open(A);
     }
-    assert_eq!(call(&mut server, A, OP_OPEN, 0, 0, &[]).0, EMFILE);
+    assert_eq!(rig.call(A, OP_OPEN, 0, 0, &[]).0, EMFILE);
     for tid in 1..MAX_CLIENTS {
         let caller = Caller {
             tid: 1000 + tid,
             cell_id: 50 + tid as u64,
             generation: 1,
         };
-        open(&mut server, caller);
+        rig.open(caller);
     }
-    assert_eq!(call(&mut server, B, OP_OPEN, 0, 0, &[]).0, ENFILE);
+    assert_eq!(rig.call(B, OP_OPEN, 0, 0, &[]).0, ENFILE);
     // An existing client may still open within its own limit.
-    assert_eq!(call(&mut server, A, OP_CLOSE, 1, 0, &[]).0, 0);
-    assert_eq!(call(&mut server, A, OP_OPEN, 0, 0, &[]).0, 0);
+    assert_eq!(rig.call(A, OP_CLOSE, 1, 0, &[]).0, 0);
+    assert_eq!(rig.call(A, OP_OPEN, 0, 0, &[]).0, 0);
 }

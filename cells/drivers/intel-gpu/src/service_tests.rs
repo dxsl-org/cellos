@@ -2,8 +2,7 @@
 //! attested receive buffers carrying real request frames, two isolated clients, and
 //! release of a client's files when the kernel reports its Cell dead.
 
-use crate::bring_up::{bring_up, Platform, PINNED_GUC};
-use crate::fake::FakeRegs;
+use crate::gpu_tests::{test_gpu, TestGpu};
 use crate::owner_watch::WatchSys;
 use crate::service::{Outcome, Service};
 use alloc::vec;
@@ -16,7 +15,6 @@ use intel_gpu_core::wire::{
     decode_reply, encode_request, Segment, MAX_REPLY_LEN, MAX_REQUEST_LEN, OP_CLOSE, OP_IOCTL,
     OP_OPEN, SEG_OUT,
 };
-use types::ViError;
 
 /// Kernel stand-in: the root tid of cell `c` is `c * 1000`.
 #[derive(Default)]
@@ -89,33 +87,28 @@ fn attested(frame: &[u8], sender: usize, cell: u64, generation: u64) -> Vec<u8> 
     buf
 }
 
-/// A GPU brought up on the fake Lunar Lake MMIO, serving `XE_GPU`.
-fn service() -> Service {
-    struct Firmware(Vec<u8>);
-    impl Platform for Firmware {
-        fn read_firmware(&mut self, _: &str) -> Result<Option<usize>, ViError> {
-            Ok(Some(self.0.len()))
-        }
-        fn with_firmware<T>(&mut self, f: impl FnOnce(&[u8]) -> T) -> T {
-            f(&self.0)
-        }
-        fn map_firmware(&mut self) -> Result<u64, ViError> {
-            Ok(0x4000_0000)
-        }
-    }
-    let mut blob = vec![0u8; 128 + (16 + 64) * 4];
-    for (off, v) in [(4, 96u32), (24, 112), (28, 64)] {
-        blob[off..off + 4].copy_from_slice(&v.to_le_bytes());
-    }
-    let sw = (70 << 16) | (u32::from(PINNED_GUC.minor) << 8) | u32::from(PINNED_GUC.patch);
-    blob[64..68].copy_from_slice(&sw.to_le_bytes());
-    let ready = bring_up(FakeRegs::for_lunar_lake(), &mut Firmware(blob)).expect("ready");
-    Service::new(ready.controller.identity.device_info(0))
+/// A GPU brought up on the fake Lunar Lake MMIO and GuC, serving `XE_GPU`.
+fn service() -> Service<TestGpu> {
+    let gpu = test_gpu();
+    let device = intel_gpu_core::uapi::query::DeviceInfo {
+        name: "Intel Xe2 (LNL)",
+        ip_ver_major: 20,
+        ip_ver_minor: 4,
+        ip_ver_rev: 0,
+        reference_clock_hz: 38_400_000,
+        dss_geometry: 0xFF,
+        dss_compute: 0x3F,
+        eu_per_dss: 0xFF,
+        sysmem_bytes: 1 << 38,
+    };
+    Service::new(device, gpu)
 }
 
-/// Send one operation as `c`; returns `(errno, value, arg)` after applying user writes.
+/// Send one operation as `c`; returns `(errno, value)` after applying user writes.
+// One parameter per field of a request frame plus the session it goes through.
+#[allow(clippy::too_many_arguments)]
 fn call(
-    svc: &mut Service,
+    svc: &mut Service<TestGpu>,
     watch: &mut ScriptedWatch,
     c: &mut Client,
     op: u8,
@@ -139,13 +132,13 @@ fn call(
     (decoded.errno, decoded.value)
 }
 
-fn open(svc: &mut Service, watch: &mut ScriptedWatch, c: &mut Client) -> u32 {
+fn open(svc: &mut Service<TestGpu>, watch: &mut ScriptedWatch, c: &mut Client) -> u32 {
     let (errno, file) = call(svc, watch, c, OP_OPEN, 0, 0, &mut [], &[]);
     assert_eq!(errno, 0);
     file
 }
 
-fn vm_create(svc: &mut Service, w: &mut ScriptedWatch, c: &mut Client, file: u32) -> u32 {
+fn vm_create(svc: &mut Service<TestGpu>, w: &mut ScriptedWatch, c: &mut Client, file: u32) -> u32 {
     let mut arg = [0u8; 32];
     assert_eq!(
         call(
@@ -164,7 +157,13 @@ fn vm_create(svc: &mut Service, w: &mut ScriptedWatch, c: &mut Client, file: u32
     u32_at(&arg, 12)
 }
 
-fn vm_destroy(svc: &mut Service, w: &mut ScriptedWatch, c: &mut Client, file: u32, vm: u32) -> i32 {
+fn vm_destroy(
+    svc: &mut Service<TestGpu>,
+    w: &mut ScriptedWatch,
+    c: &mut Client,
+    file: u32,
+    vm: u32,
+) -> i32 {
     let mut arg = [0u8; 24];
     arg[..4].copy_from_slice(&vm.to_le_bytes());
     call(
@@ -181,7 +180,13 @@ fn vm_destroy(svc: &mut Service, w: &mut ScriptedWatch, c: &mut Client, file: u3
 }
 
 /// `DEVICE_QUERY` the way libdrm does it: size first, then copy into user memory.
-fn query(svc: &mut Service, w: &mut ScriptedWatch, c: &mut Client, file: u32, id: u32) -> Vec<u8> {
+fn query(
+    svc: &mut Service<TestGpu>,
+    w: &mut ScriptedWatch,
+    c: &mut Client,
+    file: u32,
+    id: u32,
+) -> Vec<u8> {
     let mut arg = [0u8; 40];
     arg[8..12].copy_from_slice(&id.to_le_bytes());
     assert_eq!(
@@ -345,24 +350,153 @@ fn spoofed_or_missing_identity_is_never_served() {
 }
 
 #[test]
-fn unbacked_requests_are_refused_not_faked() {
+fn gem_create_needs_the_senders_export_and_death_zaps_before_revoking() {
     let (mut svc, mut w) = (service(), ScriptedWatch::default());
-    let mut a = client(101, 1, 1);
+    let mut a = client(3000, 3, 1);
+    let mut b = client(4000, 4, 1);
+    svc.gpu.exports.add(7, 3, 1, 1 << 38, 0x2000, false);
     let file = open(&mut svc, &mut w, &mut a);
+    let file_b = open(&mut svc, &mut w, &mut b);
     let mut gem = [0u8; 56];
-    gem[8..16].copy_from_slice(&4096u64.to_le_bytes());
+    gem[8..16].copy_from_slice(&0x2000u64.to_le_bytes());
     gem[16..20].copy_from_slice(&1u32.to_le_bytes());
     gem[32..34].copy_from_slice(&1u16.to_le_bytes());
-    for (request, arg) in [
-        (DRM_IOCTL_XE_GEM_CREATE, &mut gem[..]),
-        (DRM_IOCTL_XE_EXEC_QUEUE_CREATE, &mut [0u8; 48][..]),
-        (DRM_IOCTL_XE_EXEC, &mut [0u8; 56][..]),
-    ] {
-        assert_eq!(
-            call(&mut svc, &mut w, &mut a, OP_IOCTL, file, request, arg, &[]).0,
-            EOPNOTSUPP
-        );
-    }
+    let export = [Segment::export(7)];
+    // No attachment: no memory to place the object in.
+    let mut arg = gem;
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut a,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_GEM_CREATE,
+            &mut arg,
+            &[]
+        )
+        .0,
+        EINVAL
+    );
+    // Another Cell carrying A's export id: the confused deputy is refused.
+    let mut arg = gem;
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut b,
+            OP_IOCTL,
+            file_b,
+            DRM_IOCTL_XE_GEM_CREATE,
+            &mut arg,
+            &export
+        )
+        .0,
+        EPERM
+    );
+    let mut arg = gem;
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut a,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_GEM_CREATE,
+            &mut arg,
+            &export
+        )
+        .0,
+        0
+    );
+    let handle = u32_at(&arg, 28);
+
+    // Bind it (read-only export: read-only leaves) and run a queue on it.
+    let vm = vm_create(&mut svc, &mut w, &mut a, file);
+    let mut bind = [0u8; 136];
+    bind[8..12].copy_from_slice(&vm.to_le_bytes());
+    bind[20..24].copy_from_slice(&1u32.to_le_bytes());
+    bind[24 + 8..24 + 12].copy_from_slice(&handle.to_le_bytes());
+    bind[24 + 12..24 + 14].copy_from_slice(&2u16.to_le_bytes());
+    bind[24 + 24..24 + 32].copy_from_slice(&0x2000u64.to_le_bytes());
+    bind[24 + 32..24 + 40].copy_from_slice(&0x10_0000u64.to_le_bytes());
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut a,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_VM_BIND,
+            &mut bind,
+            &[]
+        )
+        .0,
+        0
+    );
+    assert_eq!(
+        svc.gpu
+            .leaf(intel_gpu_core::hw::HwVm(1), 0x10_0000)
+            .unwrap()
+            & 2,
+        0
+    );
+    a.mem.0[..8].fill(0);
+    let mut q = [0u8; 48];
+    q[8..10].copy_from_slice(&1u16.to_le_bytes());
+    q[10..12].copy_from_slice(&1u16.to_le_bytes());
+    q[12..16].copy_from_slice(&vm.to_le_bytes());
+    q[24..32].copy_from_slice(&BASE.to_le_bytes());
+    let instance = [Segment {
+        addr: BASE,
+        len: 8,
+        flags: intel_gpu_core::wire::SEG_IN,
+    }];
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut a,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_EXEC_QUEUE_CREATE,
+            &mut q,
+            &instance
+        )
+        .0,
+        0
+    );
+    let mut exec = [0u8; 56];
+    exec[8..12].copy_from_slice(&u32_at(&q, 20).to_le_bytes());
+    exec[24..32].copy_from_slice(&0x10_0000u64.to_le_bytes());
+    exec[32..34].copy_from_slice(&1u16.to_le_bytes());
+    assert_eq!(
+        call(
+            &mut svc,
+            &mut w,
+            &mut a,
+            OP_IOCTL,
+            file,
+            DRM_IOCTL_XE_EXEC,
+            &mut exec,
+            &[]
+        )
+        .0,
+        0
+    );
+
+    // The kernel reports cell 3 dead: contexts stopped, leaves cleared, then the revoke,
+    // which finds no leaf into its window.
+    let mut reply = [0u8; MAX_REPLY_LEN];
+    let zero = vec![0u8; api::ipc::IPC_BUF_SIZE];
+    assert_eq!(
+        svc.handle(&zero, 3000, &mut reply, &mut w),
+        Outcome::Released { files: 1 }
+    );
+    assert_eq!(svc.gpu.exports.revoked, [7]);
+    assert!(svc.gpu.exports.violations.is_empty());
+    assert_eq!(svc.gpu.queue_count(), 0);
+    assert_eq!(svc.gpu.vm_count(), 0);
 }
 
 #[test]

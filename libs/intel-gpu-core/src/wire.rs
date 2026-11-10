@@ -8,6 +8,12 @@
 //! - an `IN` segment carries its bytes to the driver, which may read only inside it;
 //! - an `OUT` segment is a range the driver may write; the reply returns every write and the
 //!   client applies it only inside a range it declared.
+//! - an `EXPORT` segment is not memory at all: it attaches one client-memory export lease
+//!   (`ExportDmaRange`, syscall 437) to the request, the way an fd rides beside an ioctl.
+//!   Its descriptor is `{addr = export id, len = 0, flags = SEG_EXPORT}` and nothing else;
+//!   the driver maps it with `MapDmaExport` (438) and checks that the lease's owner is the
+//!   request's attested sender. `GEM_CREATE` carries exactly one (CP1 D-G1 option B); every
+//!   other request carries none.
 //!
 //! Anything outside the declared segments fails with `EFAULT`, as a bad user pointer does.
 //!
@@ -29,7 +35,8 @@ pub use request::{decode_request, encode_request, Request, SegmentMemory};
 pub const HEADER_LEN: usize = 16;
 /// One segment (request) or write (reply) descriptor.
 pub const DESCRIPTOR_LEN: usize = 16;
-/// Segments one request may declare. `VERSION` needs three; no served ioctl needs more.
+/// Segments one request may declare. `VERSION` needs three (`VM_BIND` and `EXEC` two at
+/// most, `GEM_CREATE` one attachment); no served ioctl needs more.
 pub const MAX_SEGMENTS: usize = 4;
 /// Writes one reply may carry.
 pub const MAX_WRITES: usize = 8;
@@ -50,6 +57,10 @@ pub const OP_IOCTL: u8 = 3;
 pub const SEG_IN: u32 = 1 << 0;
 /// The driver may write the segment.
 pub const SEG_OUT: u32 = 1 << 1;
+/// The descriptor attaches export lease `addr`; `len` is 0 and no other flag is set.
+pub const SEG_EXPORT: u32 = 1 << 2;
+/// Largest export id the kernel hands out (`1..=isize::MAX`, CP1 §5.1).
+pub const MAX_EXPORT_ID: u64 = i64::MAX as u64;
 
 /// A user range a request may touch.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -60,6 +71,26 @@ pub struct Segment {
 }
 
 impl Segment {
+    /// An attachment of export lease `export_id`.
+    pub const fn export(export_id: u64) -> Self {
+        Self {
+            addr: export_id,
+            len: 0,
+            flags: SEG_EXPORT,
+        }
+    }
+
+    /// Whether this descriptor is well formed: a non-empty mix of `IN`/`OUT`, or an export
+    /// attachment with a valid id, zero length and no other flag.
+    fn is_valid(&self) -> bool {
+        if self.flags & SEG_EXPORT != 0 {
+            return self.flags == SEG_EXPORT
+                && self.len == 0
+                && (1..=MAX_EXPORT_ID).contains(&self.addr);
+        }
+        self.flags != 0 && self.flags & !(SEG_IN | SEG_OUT) == 0
+    }
+
     fn covers(&self, addr: u64, len: usize, flag: u32) -> bool {
         let Some(offset) = addr.checked_sub(self.addr) else {
             return false;

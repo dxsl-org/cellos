@@ -3,7 +3,7 @@
 
 use super::{
     Segment, DESCRIPTOR_LEN, HEADER_LEN, MAX_REPLY_LEN, MAX_REQUEST_LEN, MAX_SEGMENTS, MAX_WRITES,
-    SEG_IN, SEG_OUT,
+    SEG_EXPORT, SEG_IN, SEG_OUT,
 };
 use crate::uapi::ioctl::{EFAULT, EINVAL, ENOMEM};
 use crate::uapi::{u16_at, u32_at, u64_at, UserMemory};
@@ -31,8 +31,7 @@ pub fn encode_request(
     segments: &[Segment],
     mem: &impl UserMemory,
 ) -> Result<usize, i32> {
-    if segments.len() > MAX_SEGMENTS || segments.iter().any(|s| s.flags & !(SEG_IN | SEG_OUT) != 0)
-    {
+    if segments.len() > MAX_SEGMENTS || !segments.iter().all(Segment::is_valid) {
         return Err(EINVAL);
     }
     let arg_len = u16::try_from(arg.len()).map_err(|_| EINVAL)?;
@@ -90,7 +89,7 @@ pub fn decode_request(buf: &[u8]) -> Result<Request<'_>, i32> {
             len: u32_at(frame, at + 8),
             flags: u32_at(frame, at + 12),
         };
-        if segment.flags & !(SEG_IN | SEG_OUT) != 0 || segment.flags == 0 {
+        if !segment.is_valid() {
             return Err(EINVAL);
         }
         if segment.flags & SEG_IN != 0 {
@@ -126,6 +125,15 @@ impl Request<'_> {
             // header and the echoed arg.
             budget: MAX_REPLY_LEN.saturating_sub(HEADER_LEN + self.arg.len()),
         }
+    }
+
+    /// The export ids attached to this request, in declaration order.
+    pub fn exports(&self) -> Vec<u64> {
+        self.segments
+            .iter()
+            .filter(|s| s.flags == SEG_EXPORT)
+            .map(|s| s.addr)
+            .collect()
     }
 }
 

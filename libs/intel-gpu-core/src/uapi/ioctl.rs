@@ -84,6 +84,7 @@ pub const DRM_IOCTL_XE_GEM_CREATE: u32 = drm_iowr(DRM_XE_GEM_CREATE, 56);
 pub const DRM_IOCTL_XE_GEM_MMAP_OFFSET: u32 = drm_iowr(DRM_XE_GEM_MMAP_OFFSET, 40);
 pub const DRM_IOCTL_XE_VM_CREATE: u32 = drm_iowr(DRM_XE_VM_CREATE, 32);
 pub const DRM_IOCTL_XE_VM_DESTROY: u32 = drm_iow(DRM_XE_VM_DESTROY, 24);
+pub const DRM_IOCTL_XE_VM_BIND: u32 = drm_iow(DRM_XE_VM_BIND, VM_BIND_SIZE);
 pub const DRM_IOCTL_XE_EXEC_QUEUE_CREATE: u32 = drm_iowr(DRM_XE_EXEC_QUEUE_CREATE, 48);
 pub const DRM_IOCTL_XE_EXEC_QUEUE_DESTROY: u32 = drm_iow(DRM_XE_EXEC_QUEUE_DESTROY, 24);
 pub const DRM_IOCTL_XE_EXEC_QUEUE_GET_PROPERTY: u32 = drm_iowr(DRM_XE_EXEC_QUEUE_GET_PROPERTY, 40);
@@ -92,6 +93,13 @@ pub const DRM_IOCTL_XE_EXEC: u32 = drm_iow(DRM_XE_EXEC, 56);
 /// `sizeof(struct drm_xe_engine_class_instance)`, the element `EXEC_QUEUE_CREATE.instances`
 /// points at.
 pub const EXEC_QUEUE_INSTANCE_SIZE: usize = 8;
+/// `sizeof(struct drm_xe_vm_bind)`.
+pub const VM_BIND_SIZE: usize = 136;
+/// `sizeof(struct drm_xe_vm_bind_op)`, the element `drm_xe_vm_bind.vector_of_binds`
+/// points at when `num_binds > 1`.
+pub const VM_BIND_OP_SIZE: usize = 80;
+/// `sizeof(struct drm_xe_sync)`, the element `syncs` points at in `VM_BIND` and `EXEC`.
+pub const XE_SYNC_SIZE: usize = 48;
 
 // ── DRM Caps ─────────────────────────────────────────────────────────────────
 

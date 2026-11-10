@@ -1,10 +1,11 @@
-#![allow(dead_code)]
 //! MMIO register map and abstraction for Intel Xe2/Xe3 integrated GPUs.
 //!
-//! Upstream reference: `drivers/gpu/drm/xe/regs/xe_gt_regs.h`, `xe_regs.h` (MIT).
+//! Upstream reference: `drivers/gpu/drm/xe/regs/xe_gt_regs.h`, `regs/xe_guc_regs.h`,
+//! `xe_mmio.c` (MIT).
 
+use crate::clock::Clock;
 use ostd::mmio::MmioRegion;
-use types::{ViError, ViResult};
+use types::ViResult;
 
 // ── Register Offsets ──────────────────────────────────────────────────────────
 
@@ -19,8 +20,6 @@ pub const GMD_ID: usize = 0x000D8C;
 /// Timestamp and reference clock configuration.
 pub const RPM_CONFIG0: usize = 0x000D00;
 
-/// Fuse status for L3 and DSS.
-pub const MIRROR_FUSE3: usize = 0x009118;
 /// Geometry DSS enable, bits 31:0 of the Xe2/Xe3 geometry mask.
 pub const XELP_GT_GEOMETRY_DSS_ENABLE: usize = 0x00913C;
 /// Xe2/Xe3 geometry DSS mask, bits 63:32.
@@ -41,10 +40,10 @@ pub const GDRST: usize = 0x00941C;
 /// `GRDOM_GUC`: reset the GuC.
 pub const GRDOM_GUC: u32 = 1 << 3;
 
-/// GuC status register.
-pub const GUC_STATUS: usize = 0x00C000;
-/// GuC scratch registers.
-pub const SOFT_SCRATCH_0: usize = 0x00C180;
+/// `PMINTRMSK` (`regs/xe_gt_regs.h`).
+pub const PMINTRMSK: usize = 0x00A168;
+/// `ARAT_EXPIRED_INTRMSK`: masks the always-running-timer interrupt the GuC needs.
+pub const ARAT_EXPIRED_INTRMSK: u32 = 1 << 9;
 
 // ── Bits and Masks ───────────────────────────────────────────────────────────
 
@@ -63,21 +62,10 @@ pub const FORCEWAKE_ACK_BIT: u32 = 1 << 0;
 
 // ── Register File Trait ──────────────────────────────────────────────────────
 
+/// 32-bit MMIO access to the GT registers (BAR0).
 pub trait RegisterFile {
     fn read32(&self, offset: usize) -> ViResult<u32>;
     fn write32(&mut self, offset: usize, value: u32) -> ViResult<()>;
-
-    /// Poll for a bit to reach the expected state (with bounded spin).
-    fn poll_bit(&self, offset: usize, mask: u32, expected: bool, max_tries: usize) -> ViResult<()> {
-        for _ in 0..max_tries {
-            let val = self.read32(offset)?;
-            if (val & mask != 0) == expected {
-                return Ok(());
-            }
-            core::hint::spin_loop();
-        }
-        Err(ViError::IO)
-    }
 
     /// 64-bit write (GGTT entries). The default writes the high dword first, so an entry
     /// whose present bit sits in the low dword becomes valid only with its final value.
@@ -102,5 +90,50 @@ impl RegisterFile for MmioRegion {
     #[inline]
     fn write64(&mut self, offset: usize, value: u64) -> ViResult<()> {
         self.write::<u64>(offset, value)
+    }
+}
+
+/// Why a [`wait32`] ended without a match.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitError {
+    /// The register never matched within the timeout; the last value read.
+    TimedOut(u32),
+    /// The register could not be read.
+    Mmio,
+}
+
+/// Longest pause between two reads (`__XE_MMIO_WAIT_MAX_BACKOFF_100MS`).
+pub const WAIT_MAX_BACKOFF_US: u64 = 100_000;
+
+/// `xe_mmio_wait32`: poll `offset` until `value & mask == expected` for at least
+/// `timeout_us`, backing off exponentially from 10 µs, with one last read after the
+/// deadline. Returns the matching value.
+pub fn wait32(
+    regs: &impl RegisterFile,
+    clock: &mut impl Clock,
+    offset: usize,
+    mask: u32,
+    expected: u32,
+    timeout_us: u64,
+) -> Result<u32, WaitError> {
+    let end = clock.now_us().saturating_add(timeout_us);
+    let mut wait = 10u64;
+    loop {
+        let read = regs.read32(offset).map_err(|_| WaitError::Mmio)?;
+        if read & mask == expected {
+            return Ok(read);
+        }
+        let now = clock.now_us();
+        if now >= end {
+            break;
+        }
+        clock.relax(wait.min(end - now));
+        wait = (wait * 2).min(WAIT_MAX_BACKOFF_US);
+    }
+    let read = regs.read32(offset).map_err(|_| WaitError::Mmio)?;
+    if read & mask == expected {
+        Ok(read)
+    } else {
+        Err(WaitError::TimedOut(read))
     }
 }

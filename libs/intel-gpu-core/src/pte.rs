@@ -11,6 +11,8 @@ pub const PPGTT_PTE_PAT2: u64 = 1 << 7;
 /// Page-size bit: 2 MiB leaf at level 1, 1 GiB leaf at level 2 (same bit).
 pub const PDE_PS_LEAF: u64 = 1 << 7;
 pub const PTE_PS64: u64 = 1 << 8;
+/// `XE_PTE_NULL`: a present leaf with no backing page; reads return zero, writes drop.
+pub const XE_PTE_NULL: u64 = 1 << 9;
 /// Device-memory bit; never set for an integrated GPU's system memory.
 pub const PPGTT_PTE_DM: u64 = 1 << 11;
 /// PAT bit 2 in a level-1/level-2 leaf.
@@ -92,6 +94,12 @@ pub fn encode_leaf(
         pte |= PDE_PS_LEAF;
     }
     Ok(pte)
+}
+
+/// Encode a 4 KiB `NULL` leaf the way `xelp_pte_encode_vma` does for a NULL VMA: address
+/// 0, present, writable (writes are dropped by the hardware), the PAT bits, `XE_PTE_NULL`.
+pub fn encode_null_leaf(pat: PatIndex) -> u64 {
+    PAGE_PRESENT | PAGE_RW | pat_bits(pat.get(), 0) | XE_PTE_NULL
 }
 
 /// Encode a non-leaf entry pointing at the next-level table at `table_phys`.

@@ -2,10 +2,17 @@
 //! layouts and full request codes rather than the shim's own decoding. Every request
 //! crosses the real `XE_GPU` frames into the driver's request server.
 
+use crate::memory::{ClientBuffer, ClientMemory, RevokeError};
 use crate::shim::DrmShim;
 use crate::transport::Transport;
+use alloc::collections::BTreeMap;
+use alloc::rc::Rc;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::RefCell;
+use intel_gpu_core::backend::XeError;
+use intel_gpu_core::hw::{ExportError, ExportMapper, ExportRecord, GpuHw, HwQueue, HwVm};
+use intel_gpu_core::pte::PatIndex;
 use intel_gpu_core::server::{Caller, XeServer};
 use intel_gpu_core::uapi::ioctl::*;
 use intel_gpu_core::uapi::query::*;
@@ -21,25 +28,186 @@ const DEVICE: DeviceInfo = DeviceInfo {
     dss_geometry: 0x0FFF,
     dss_compute: 0x0FFF,
     eu_per_dss: 0xFF,
-    sysmem_bytes: 16 << 30,
+    sysmem_bytes: 1 << 38,
 };
 
+const CELL: u64 = 9;
+const GENERATION: u64 = 1;
+
+/// The kernel's export table, shared by the client's allocator and the driver's mapper.
+#[derive(Default)]
+struct Kernel {
+    leases: BTreeMap<u64, ExportRecord>,
+    next_id: u64,
+    /// Revokes answer "drain pending" while set.
+    drain_pending: bool,
+    revoked: Vec<u64>,
+    /// Live leaf mappings the driver wrote, by window address.
+    leaves: BTreeMap<u64, u64>,
+}
+
+/// Client memory from a byte arena; exports land in the shared [`Kernel`].
+struct FakeMemory {
+    kernel: Rc<RefCell<Kernel>>,
+    next_addr: u64,
+    live: BTreeMap<usize, ClientBuffer>,
+    /// Allocations beyond this many bytes fail, like a Cell that cannot back them.
+    limit: usize,
+    /// Exports are refused, as for a Tier-2 private-root Cell.
+    refuse_export: bool,
+}
+
+impl ClientMemory for FakeMemory {
+    fn alloc(&mut self, size: usize) -> Option<ClientBuffer> {
+        if size > self.limit {
+            return None;
+        }
+        let buf = ClientBuffer {
+            id: self.next_addr as usize,
+            addr: self.next_addr,
+            size,
+        };
+        self.next_addr += size as u64 + 4096;
+        self.live.insert(buf.id, buf);
+        Some(buf)
+    }
+
+    fn export(&mut self, buf: &ClientBuffer, device_write: bool) -> Option<u64> {
+        if self.refuse_export {
+            return None;
+        }
+        let mut k = self.kernel.borrow_mut();
+        k.next_id += 1;
+        let id = k.next_id;
+        k.leases.insert(
+            id,
+            ExportRecord {
+                export_id: id,
+                owner_cell_id: CELL,
+                owner_generation: GENERATION,
+                iova: (1 << 38) + (id << 24),
+                len: buf.size as u64,
+                device_write,
+            },
+        );
+        Some(id)
+    }
+
+    fn revoke(&mut self, export_id: u64) -> Result<(), RevokeError> {
+        let mut k = self.kernel.borrow_mut();
+        if k.drain_pending {
+            return Err(RevokeError::Pending);
+        }
+        k.leases.remove(&export_id);
+        k.revoked.push(export_id);
+        Ok(())
+    }
+
+    fn free(&mut self, buf: ClientBuffer) {
+        assert!(self.live.remove(&buf.id).is_some(), "double free");
+    }
+}
+
+/// The driver's device half, recording only what the shim tests look at.
+struct FakeHw(Rc<RefCell<Kernel>>);
+
+impl ExportMapper for FakeHw {
+    fn map_export(&mut self, export_id: u64) -> Result<ExportRecord, ExportError> {
+        self.0
+            .borrow()
+            .leases
+            .get(&export_id)
+            .copied()
+            .ok_or(ExportError::NotFound)
+    }
+    fn revoke_export(&mut self, export_id: u64) -> Result<(), ExportError> {
+        let mut k = self.0.borrow_mut();
+        let record = k
+            .leases
+            .get(&export_id)
+            .copied()
+            .ok_or(ExportError::NotFound)?;
+        // The driver revokes only after clearing every leaf into the window.
+        assert!(!k
+            .leaves
+            .keys()
+            .any(|&a| a >= record.iova && a < record.iova + record.len));
+        k.leases.remove(&export_id);
+        k.revoked.push(export_id);
+        Ok(())
+    }
+}
+
+impl GpuHw for FakeHw {
+    fn vm_create(&mut self) -> Result<HwVm, XeError> {
+        Ok(HwVm(1))
+    }
+    fn vm_map(
+        &mut self,
+        _: HwVm,
+        va: u64,
+        dma: u64,
+        len: u64,
+        _: PatIndex,
+        _: bool,
+    ) -> Result<(), XeError> {
+        for page in (0..len).step_by(4096) {
+            self.0.borrow_mut().leaves.insert(dma + page, va + page);
+        }
+        Ok(())
+    }
+    fn vm_map_null(&mut self, _: HwVm, _: u64, _: u64, _: PatIndex) -> Result<(), XeError> {
+        Ok(())
+    }
+    fn vm_unmap(&mut self, _: HwVm, va: u64, len: u64) {
+        self.0
+            .borrow_mut()
+            .leaves
+            .retain(|_, v| *v < va || *v >= va + len);
+    }
+    fn vm_destroy(&mut self, _: HwVm) {}
+    fn queue_create(&mut self, _: HwVm, _: u16) -> Result<HwQueue, XeError> {
+        Ok(HwQueue(1))
+    }
+    fn queue_submit(&mut self, _: HwQueue, _: u64) -> Result<(), XeError> {
+        Ok(())
+    }
+    fn queue_ban(&mut self, _: HwQueue) -> u32 {
+        0
+    }
+    fn queue_destroy(&mut self, _: HwQueue) {}
+}
+
 /// The driver's request server in-process, answering as one client tid.
-struct Loopback(XeServer);
+struct Loopback(XeServer, FakeHw);
 
 impl Transport for Loopback {
     fn call(&mut self, request: &[u8], reply: &mut [u8]) -> Result<usize, i32> {
         let caller = Caller {
             tid: 42,
-            cell_id: 9,
-            generation: 1,
+            cell_id: CELL,
+            generation: GENERATION,
         };
-        Ok(self.0.handle(caller, request, reply))
+        Ok(self.0.handle(caller, request, reply, &mut self.1))
     }
 }
 
-fn shim() -> DrmShim<Loopback> {
-    DrmShim::new(Loopback(XeServer::new(DEVICE, &[])))
+type Shim = DrmShim<Loopback, FakeMemory>;
+
+fn shim() -> Shim {
+    let kernel = Rc::new(RefCell::new(Kernel::default()));
+    let memory = FakeMemory {
+        kernel: kernel.clone(),
+        next_addr: 0x8000_0000,
+        live: BTreeMap::new(),
+        limit: 1 << 24,
+        refuse_export: false,
+    };
+    DrmShim::new(Loopback(XeServer::new(DEVICE), FakeHw(kernel)), memory)
+}
+
+fn kernel(shim: &mut Shim) -> Rc<RefCell<Kernel>> {
+    shim.memory_mut().kernel.clone()
 }
 
 /// User memory backed by one buffer starting at `BASE`.
@@ -87,10 +255,19 @@ fn u64_at(buf: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap())
 }
 
-fn open() -> (DrmShim<Loopback>, i32, FakeMem) {
+fn open() -> (Shim, i32, FakeMem) {
     let mut shim = shim();
     let fd = shim.open("/dev/dri/renderD128").unwrap();
     (shim, fd, FakeMem(vec![0u8; 4096]))
+}
+
+fn gem_create(shim: &mut Shim, fd: i32, mem: &mut FakeMem, size: u64) -> Result<u32, i32> {
+    let mut create = arg(DRM_IOCTL_XE_GEM_CREATE);
+    put(&mut create, 8, &size.to_le_bytes());
+    put(&mut create, 16, &1u32.to_le_bytes()); // placement: sysmem
+    put(&mut create, 32, &2u16.to_le_bytes()); // DRM_XE_GEM_CPU_CACHING_WC
+    shim.ioctl(fd, DRM_IOCTL_XE_GEM_CREATE, &mut create, mem)
+        .map(|()| u32_at(&create, 28))
 }
 
 #[test]
@@ -193,32 +370,145 @@ fn topology_entries_use_uapi_type_ids() {
 }
 
 #[test]
-fn gem_lifecycle() {
+fn gem_create_exports_local_memory_and_mmap_resolves_to_it() {
     let (mut shim, fd, mut mem) = open();
-    let mut create = arg(DRM_IOCTL_XE_GEM_CREATE);
-    put(&mut create, 8, &8192u64.to_le_bytes());
-    put(&mut create, 16, &1u32.to_le_bytes()); // placement: sysmem
-    put(&mut create, 32, &2u16.to_le_bytes()); // DRM_XE_GEM_CPU_CACHING_WC
-    assert_eq!(
-        shim.ioctl(fd, DRM_IOCTL_XE_GEM_CREATE, &mut create, &mut mem),
-        Ok(())
-    );
-    let handle = u32_at(&create, 28);
+    let handle = gem_create(&mut shim, fd, &mut mem, 8192).unwrap();
     assert_eq!(handle, 1);
+    let k = kernel(&mut shim);
+    assert_eq!(k.borrow().leases.len(), 1);
+    assert!(k.borrow().leases[&1].device_write);
 
     let mut mmap = arg(DRM_IOCTL_XE_GEM_MMAP_OFFSET);
     put(&mut mmap, 8, &handle.to_le_bytes());
-    assert_eq!(
-        shim.ioctl(fd, DRM_IOCTL_XE_GEM_MMAP_OFFSET, &mut mmap, &mut mem),
-        Ok(())
-    );
-    assert_eq!(u64_at(&mmap, 16), 1u64 << 32);
+    shim.ioctl(fd, DRM_IOCTL_XE_GEM_MMAP_OFFSET, &mut mmap, &mut mem)
+        .unwrap();
+    let offset = u64_at(&mmap, 16);
+    assert_eq!(offset, 1u64 << 32);
+    // The object's own pages, at any offset inside it; nothing past it.
+    let addr = shim.mmap(fd, offset, 8192).unwrap();
+    assert_eq!(addr, shim.memory_mut().live.values().next().unwrap().addr);
+    assert_eq!(shim.mmap(fd, offset + 4096, 4096), Ok(addr + 4096));
+    assert_eq!(shim.mmap(fd, offset + 4096, 8192), Err(EINVAL));
+    assert_eq!(shim.mmap(fd, 7 << 32, 4096), Err(EINVAL));
 
+    // GEM_CLOSE: the driver drops the object, the export is revoked, but the memory stays
+    // while a CPU mapping holds it (as a VMA keeps a GEM object alive).
     let mut close = arg(DRM_IOCTL_GEM_CLOSE);
     put(&mut close, 0, &handle.to_le_bytes());
+    shim.ioctl(fd, DRM_IOCTL_GEM_CLOSE, &mut close, &mut mem)
+        .unwrap();
+    assert!(k.borrow().leases.is_empty());
+    // The driver revoked as holder after unbinding, then the shim as owner (idempotent).
+    assert_eq!(k.borrow().revoked, [1, 1]);
+    assert_eq!(shim.orphan_count(), 1);
+    // Both maps name the object's pages; unmapping the head leaves the tail mapped.
+    assert_eq!(shim.munmap(addr, 4096), Ok(()));
+    assert_eq!(shim.orphan_count(), 1);
+    assert_eq!(shim.munmap(addr + 4096, 4096), Ok(()));
+    assert_eq!(shim.orphan_count(), 0);
+    assert!(shim.memory_mut().live.is_empty());
+    assert_eq!(shim.munmap(addr, 4096), Err(EINVAL));
+}
+
+#[test]
+fn allocations_this_cell_cannot_back_are_enomem_never_faked() {
+    let (mut shim, fd, mut mem) = open();
+    shim.memory_mut().limit = 4096;
+    assert_eq!(gem_create(&mut shim, fd, &mut mem, 8192), Err(ENOMEM));
+    // A refused export (Tier-2 private root, D-G0) frees the buffer and is ENOMEM too.
+    shim.memory_mut().refuse_export = true;
+    assert_eq!(gem_create(&mut shim, fd, &mut mem, 4096), Err(ENOMEM));
+    assert!(shim.memory_mut().live.is_empty());
+    // Invalid sizes are what xe answers for them.
+    shim.memory_mut().refuse_export = false;
+    assert_eq!(gem_create(&mut shim, fd, &mut mem, 0), Err(EINVAL));
+    assert_eq!(gem_create(&mut shim, fd, &mut mem, 100), Err(EINVAL));
+    // Nothing reached the driver's tables.
+    assert!(kernel(&mut shim).borrow().leases.is_empty());
+}
+
+#[test]
+fn driver_refusal_revokes_and_frees_the_export() {
+    let (mut shim, fd, mut mem) = open();
+    let mut create = arg(DRM_IOCTL_XE_GEM_CREATE);
+    put(&mut create, 8, &4096u64.to_le_bytes());
+    put(&mut create, 16, &1u32.to_le_bytes());
+    put(&mut create, 32, &99u16.to_le_bytes()); // unknown CPU caching
     assert_eq!(
-        shim.ioctl(fd, DRM_IOCTL_GEM_CLOSE, &mut close, &mut mem),
-        Ok(())
+        shim.ioctl(fd, DRM_IOCTL_XE_GEM_CREATE, &mut create, &mut mem),
+        Err(EINVAL)
+    );
+    let k = kernel(&mut shim);
+    assert_eq!(k.borrow().revoked, [1]);
+    assert!(shim.memory_mut().live.is_empty());
+}
+
+#[test]
+fn close_revokes_after_the_driver_zapped_and_waits_for_pending_drains() {
+    let (mut shim, fd, mut mem) = open();
+    let mut vm = arg(DRM_IOCTL_XE_VM_CREATE);
+    shim.ioctl(fd, DRM_IOCTL_XE_VM_CREATE, &mut vm, &mut mem)
+        .unwrap();
+    let handle = gem_create(&mut shim, fd, &mut mem, 4096).unwrap();
+    let mut bind = arg(DRM_IOCTL_XE_VM_BIND);
+    put(&mut bind, 8, &u32_at(&vm, 12).to_le_bytes());
+    put(&mut bind, 20, &1u32.to_le_bytes());
+    put(&mut bind, 24 + 8, &handle.to_le_bytes());
+    put(&mut bind, 24 + 12, &2u16.to_le_bytes());
+    put(&mut bind, 24 + 24, &4096u64.to_le_bytes());
+    put(&mut bind, 24 + 32, &0x10_0000u64.to_le_bytes());
+    shim.ioctl(fd, DRM_IOCTL_XE_VM_BIND, &mut bind, &mut mem)
+        .unwrap();
+    let k = kernel(&mut shim);
+    assert_eq!(k.borrow().leaves.len(), 1);
+
+    // The kernel has not finished the drain when the shim revokes: memory stays locked.
+    k.borrow_mut().drain_pending = true;
+    assert_eq!(shim.close(fd), Ok(()));
+    // The driver's own revoke (as holder, after clearing the leaf) ended the lease.
+    assert!(k.borrow().leaves.is_empty());
+    assert_eq!(shim.orphan_count(), 1);
+    k.borrow_mut().drain_pending = false;
+    shim.open("/dev/dri/renderD128").unwrap();
+    assert_eq!(shim.orphan_count(), 0);
+    assert!(shim.memory_mut().live.is_empty());
+}
+
+#[test]
+fn vm_bind_vector_and_exec_syncs_are_declared() {
+    let (mut shim, fd, mut mem) = open();
+    let mut vm = arg(DRM_IOCTL_XE_VM_CREATE);
+    shim.ioctl(fd, DRM_IOCTL_XE_VM_CREATE, &mut vm, &mut mem)
+        .unwrap();
+    let handle = gem_create(&mut shim, fd, &mut mem, 8192).unwrap();
+    // Two ops in user memory through `vector_of_binds`.
+    for (i, va) in [0x10_0000u64, 0x20_0000].iter().enumerate() {
+        let op = &mut mem.0[i * 80..(i + 1) * 80];
+        op[8..12].copy_from_slice(&handle.to_le_bytes());
+        op[12..14].copy_from_slice(&2u16.to_le_bytes());
+        op[16..24].copy_from_slice(&(i as u64 * 4096).to_le_bytes());
+        op[24..32].copy_from_slice(&4096u64.to_le_bytes());
+        op[32..40].copy_from_slice(&va.to_le_bytes());
+    }
+    let mut bind = arg(DRM_IOCTL_XE_VM_BIND);
+    put(&mut bind, 8, &u32_at(&vm, 12).to_le_bytes());
+    put(&mut bind, 20, &2u32.to_le_bytes());
+    put(&mut bind, 24, &BASE.to_le_bytes());
+    shim.ioctl(fd, DRM_IOCTL_XE_VM_BIND, &mut bind, &mut mem)
+        .unwrap();
+    assert_eq!(kernel(&mut shim).borrow().leaves.len(), 2);
+    // With a sync array the driver reads it and refuses: completion is not wired.
+    put(&mut bind, 108, &1u32.to_le_bytes());
+    put(&mut bind, 112, &(BASE + 0x800).to_le_bytes());
+    assert_eq!(
+        shim.ioctl(fd, DRM_IOCTL_XE_VM_BIND, &mut bind, &mut mem),
+        Err(EOPNOTSUPP)
+    );
+    // A sync array outside this process's memory faults on the client side.
+    put(&mut bind, 112, &0x20u64.to_le_bytes());
+    assert_eq!(
+        shim.ioctl(fd, DRM_IOCTL_XE_VM_BIND, &mut bind, &mut mem),
+        Err(EFAULT)
     );
 }
 

@@ -26,6 +26,33 @@ impl TableStore for Store {
     fn write(&mut self, table: u64, index: usize, value: u64) {
         self.tables.get_mut(&table).unwrap()[index] = value;
     }
+    fn free_table(&mut self, table: u64) {
+        assert!(self.tables.remove(&table).is_some(), "double free");
+    }
+}
+
+#[test]
+fn destroy_frees_every_table_once() {
+    let (mut s, mut vm) = vm();
+    vm.map_4k(&mut s, 0x1000, 0x2000, PatIndex::WB, true)
+        .unwrap();
+    vm.map_4k(&mut s, 1 << 40, 0x3000, PatIndex::WB, true)
+        .unwrap();
+    vm.map_null_4k(&mut s, 0x5000, PatIndex::WB).unwrap();
+    assert!(s.tables.len() > 5);
+    vm.destroy(&mut s);
+    assert!(s.tables.is_empty());
+}
+
+#[test]
+fn null_leaf_carries_the_null_bit() {
+    let (mut s, mut vm) = vm();
+    vm.map_null_4k(&mut s, 0x5000, PatIndex::WB).unwrap();
+    assert_eq!(vm.translate(&mut s, 0x5004).unwrap(), Some(4));
+    assert_eq!(
+        crate::pte::encode_null_leaf(PatIndex::WB),
+        1 | PAGE_RW | PPGTT_PTE_PAT1 | crate::pte::XE_PTE_NULL
+    );
 }
 
 fn vm() -> (Store, Ppgtt) {

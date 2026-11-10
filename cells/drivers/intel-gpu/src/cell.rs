@@ -1,15 +1,19 @@
-//! The Cell's syscall half: PCIe probe, firmware and DMA through the kernel, and the
-//! `XE_GPU` receive loop.
+//! The Cell's syscall half: PCIe probe, firmware and DMA through the kernel, client
+//! export leases (438/439), and the `XE_GPU` receive loop.
 
-use crate::bring_up::{bring_up, Platform};
+use crate::bring_up::{bring_up, PciIdentity, Platform};
+use crate::clock::KernelClock;
+use crate::devmem::KernelDma;
+use crate::gpu::Gpu;
 use crate::identity::VENDOR_INTEL;
 use crate::owner_watch::WatchSys;
 use crate::service::{Outcome, Service};
+use intel_gpu_core::hw::{ExportError, ExportMapper, ExportRecord};
 use intel_gpu_core::wire::{MAX_REPLY_LEN, MAX_REQUEST_LEN};
 use ostd::grant::GrantHandle;
 use ostd::io::print_fmt;
 use ostd::mmio;
-use ostd::syscall::{self, PcieDeviceInfo, SyscallResult};
+use ostd::syscall::{self, DmaExportError, PcieDeviceInfo, SyscallResult};
 use types::{ViError, ViResult};
 
 /// BAR0 (`GTTMMADR`) span the driver maps: 8 MiB of registers, then the 8 MiB GSM.
@@ -17,9 +21,11 @@ const BAR0_LEN: usize = 0x100_0000;
 const FIND_ATTEMPTS: usize = 200;
 /// Largest GuC image accepted; the pinned ones are 365,376 (PTL) and 348,992 (LNL) bytes.
 const FIRMWARE_MAX: usize = 512 * 1024;
-/// GPU-visible client memory reported by `DEVICE_QUERY`: none until client buffers can be
-/// exported to the driver (CP1 437/438, not yet in the kernel).
-const CLIENT_SYSMEM_BYTES: u64 = 0;
+/// `DEVICE_QUERY(MEM_REGIONS).total_size`: the GPU-visible window space the kernel can map
+/// for exports to this driver, `[2^38, 2^39)` (CP1 D-G3). This bounds what clients can make
+/// GPU-visible through this driver; it is not RAM. Each object is the client's own memory,
+/// so an allocation the client cannot back fails in the client with `ENOMEM`.
+const CLIENT_SYSMEM_BYTES: u64 = 1 << 38;
 
 // A request and the kernel's caller-identity trailer must share one receive buffer.
 const _: () =
@@ -35,7 +41,8 @@ pub const QUERY_DEVICE_IDS: &[u16] = &[
 
 /// Probe, bring the GPU up, then serve `XE_GPU`. Any bring-up failure exits the Cell.
 pub fn cell_main() {
-    let info = find_gpu().unwrap_or_else(|| fail("probe: no matching Intel GPU found on PCIe"));
+    let (info, device_id) =
+        find_gpu().unwrap_or_else(|| fail("probe: no matching Intel GPU found on PCIe"));
     let bar0_len = match info.bar0_len as usize {
         0 => BAR0_LEN,
         len => len.min(BAR0_LEN),
@@ -45,20 +52,26 @@ pub fn cell_main() {
     }
     let mmio = mmio::request_region(info.bar0_base as usize, bar0_len)
         .unwrap_or_else(|_| fail("probe: failed to map BAR0"));
+    let clock = KernelClock::new().unwrap_or_else(|| fail("probe: no kernel timer frequency"));
     let mut platform = CellPlatform {
         bdf: info.bdf,
         firmware: None,
     };
-    let ready = match bring_up(mmio, &mut platform) {
+    let pci = PciIdentity {
+        device_id,
+        revision: 0,
+    };
+    let ready = match bring_up(mmio, clock, KernelDma::new(info.bdf), pci, &mut platform) {
         Ok(ready) => ready,
         Err(error) => {
             log(format_args!("[intel-gpu] bring-up failed: {:?}\n", error));
             syscall::sys_exit(1);
         }
     };
-    let identity = &ready.controller.identity;
+    let identity = ready.controller.identity.clone();
     log(format_args!(
-        "[intel-gpu] ready: {} (ver {}.{:02}.{}) clock={}MHz dss=0x{:x} guc@ggtt=0x{:x}\n",
+        "[intel-gpu] ready: {} (ver {}.{:02}.{}) clock={}MHz dss=0x{:x} guc@ggtt=0x{:x} \
+         wopcm=0x{:x}+0x{:x} guc load {}us\n",
         identity.name(),
         identity.ip_ver_major,
         identity.ip_ver_minor,
@@ -66,18 +79,33 @@ pub fn cell_main() {
         identity.ref_clock_hz / 1_000_000,
         identity.dss_geometry_mask,
         ready.guc_ggtt,
+        ready.wopcm.base,
+        ready.wopcm.size,
+        ready.load_us,
     ));
+    if ready.load_us > crate::guc::LOAD_WARN_US {
+        log(format_args!("[intel-gpu] GuC load: excessive init time\n"));
+    }
+    let gpu = Gpu::new(
+        ready.controller.regs,
+        ready.controller.clock,
+        ready.mem,
+        KernelExports { bdf: info.bdf },
+        ready.ggtt,
+        ready.pool,
+        ready.ct,
+    );
     // `service::XE_GPU` (21) is below PRIVATE_ID_BASE: init registers this Cell for it from
     // its services.toml row (CP1 D-G8); the kernel refuses a self-registration.
-    serve(Service::new(identity.device_info(CLIENT_SYSMEM_BYTES)));
+    serve(Service::new(identity.device_info(CLIENT_SYSMEM_BYTES), gpu));
 }
 
-fn find_gpu() -> Option<PcieDeviceInfo> {
+fn find_gpu() -> Option<(PcieDeviceInfo, u16)> {
     let mut info = PcieDeviceInfo::zeroed();
     for _ in 0..FIND_ATTEMPTS {
         for &dev_id in QUERY_DEVICE_IDS {
             if syscall::sys_find_pcie_device_by_vendor(VENDOR_INTEL, dev_id, &mut info).is_ok() {
-                return Some(info);
+                return Some((info, dev_id));
             }
         }
         syscall::sys_yield();
@@ -85,10 +113,13 @@ fn find_gpu() -> Option<PcieDeviceInfo> {
     None
 }
 
-fn serve(mut service: Service) -> ! {
+type CellGpu = Gpu<mmio::MmioRegion, KernelClock, KernelDma, KernelExports>;
+
+fn serve(mut service: Service<CellGpu>) -> ! {
     let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
     let mut reply = [0u8; MAX_REPLY_LEN];
     let mut unavailable_logged = false;
+    let mut faults = service.gpu.faults;
     loop {
         // Zeroed so a death record (no trailer) never shows an earlier sender's identity.
         buf.fill(0);
@@ -130,6 +161,10 @@ fn serve(mut service: Service) -> ! {
             }
             Outcome::Dropped => {}
         }
+        if service.gpu.faults != faults {
+            faults = service.gpu.faults;
+            log(format_args!("[intel-gpu] device faults: {:?}\n", faults));
+        }
     }
 }
 
@@ -145,6 +180,43 @@ impl WatchSys for KernelWatch {
 
     fn cancel(&mut self, token: u64) {
         syscall::sys_cancel_cell_owner_watch(token);
+    }
+}
+
+/// The holder side of client exports: `MapDmaExport` (438) for the GPU's function and
+/// `RevokeDmaExport` (439).
+struct KernelExports {
+    bdf: u32,
+}
+
+fn export_error(e: DmaExportError) -> ExportError {
+    match e {
+        DmaExportError::PermissionDenied => ExportError::PermissionDenied,
+        DmaExportError::NotFound => ExportError::NotFound,
+        DmaExportError::InvalidInput => ExportError::InvalidInput,
+        DmaExportError::NotSupported => ExportError::NotSupported,
+        DmaExportError::OutOfMemory => ExportError::OutOfMemory,
+        DmaExportError::TryAgain => ExportError::TryAgain,
+        DmaExportError::Unconfirmed => ExportError::Unconfirmed,
+        DmaExportError::Malformed => ExportError::Malformed,
+    }
+}
+
+impl ExportMapper for KernelExports {
+    fn map_export(&mut self, export_id: u64) -> Result<ExportRecord, ExportError> {
+        let record = ostd::dma::map_export(export_id, self.bdf).map_err(export_error)?;
+        Ok(ExportRecord {
+            export_id: record.export_id,
+            owner_cell_id: record.owner_cell_id,
+            owner_generation: record.owner_generation,
+            iova: record.iova,
+            len: record.len,
+            device_write: record.flags & api::dma_export::EXPORT_DEVICE_WRITE != 0,
+        })
+    }
+
+    fn revoke_export(&mut self, export_id: u64) -> Result<(), ExportError> {
+        ostd::dma::revoke_export(export_id).map_err(export_error)
     }
 }
 
