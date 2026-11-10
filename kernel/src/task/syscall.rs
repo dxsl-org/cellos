@@ -2150,11 +2150,12 @@ fn staged_spawn_argv_cleanup(
 
 fn governed_spawn_request(
     caller_id: usize,
+    route: crate::loader::launch_profile::LaunchRoute,
     child_ceiling: super::cap::CapSet,
     priority: u8,
     #[cfg(cellos_p01_trace)] trace: Option<crate::p01_measurement::Attempt>,
 ) -> Result<crate::loader::SpawnRequest, SyscallError> {
-    let (generation, caller_authority) = super::SCHEDULER
+    let (generation, caller_authority, caller_root) = super::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
@@ -2163,7 +2164,11 @@ fn governed_spawn_request(
             if trace.is_some_and(|a| a.parent != crate::p01_measurement::Owner::of(task)) {
                 crate::p01_measurement::invalidate(crate::p01_measurement::IDENTITY);
             }
-            (task.cell_generation, super::cap::CapSet::of_task(task))
+            (
+                task.cell_generation,
+                super::cap::CapSet::of_task(task),
+                task.root_tid,
+            )
         })
         .ok_or(SyscallError::PermissionDenied)?;
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
@@ -2174,7 +2179,17 @@ fn governed_spawn_request(
         child_ceiling,
         priority,
         argv,
+        names_child(caller_root, route),
     ))
+}
+
+/// Whether the child may be named by its signed image (`Task::launch_named`):
+/// the kernel resolved the path (Path, Pinned), or trusted init supplied the
+/// bytes it read from its own `/bin` (init starts drivers from VFS grants).
+/// Any other caller's ELF/Mem bytes carry an advisory path only.
+fn names_child(caller_root: usize, route: crate::loader::launch_profile::LaunchRoute) -> bool {
+    use crate::loader::launch_profile::LaunchRoute;
+    matches!(route, LaunchRoute::Path | LaunchRoute::Pinned) || caller_is_trusted_init(caller_root)
 }
 
 fn governed_replacement_request(
@@ -2199,23 +2214,41 @@ fn governed_replacement_request(
     ))
 }
 
+/// The caller's launch identity, spawn and supervisor flags.
+///
+/// The identity is **never the task name** (the basename of a spawner-chosen
+/// path, architecture review C-1). It is `"init"` for any task of the Cell
+/// whose root the kernel published as trusted init, otherwise the program name
+/// from the verified `__ViCell_image` section of the caller's Cell root
+/// (`Task::image`) when the kernel itself resolved that root's install path
+/// (`Task::launch_named`), and empty otherwise — unsigned or unnamed images,
+/// caller-supplied ELF/Mem bytes, sandbox paths and aliases match no launch row. Threads share their Cell root's identity.
 fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
-    super::SCHEDULER
-        .lock()
-        .as_ref()
-        .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| {
-            (
-                task.name.clone(),
-                task.spawn_cap.is_some(),
-                task.supervisor_cap.is_some(),
-            )
-        })
+    let init_tid = TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire);
+    super::SCHEDULER.lock().as_ref().and_then(|sched| {
+        let task = sched.tasks.get(&caller_id)?;
+        let identity = if init_tid != 0 && task.root_tid == init_tid {
+            String::from("init")
+        } else {
+            sched
+                .tasks
+                .get(&task.root_tid)
+                .filter(|root| root.launch_named)
+                .and_then(|root| root.image())
+                .filter(|image| image.is_signed())
+                .and_then(|image| core::str::from_utf8(image.name()).ok().map(String::from))
+                .unwrap_or_default()
+        };
+        Some((
+            identity,
+            task.spawn_cap.is_some(),
+            task.supervisor_cap.is_some(),
+        ))
+    })
 }
 
-/// Reviewed task names allowed to execute raw opcode 502 (platform power-off).
-/// Same name-keyed mechanism as the launch rows; the set is fixed and has one
-/// member, the retained `/bin/shutdown` worker.
+/// Measured program names allowed to execute raw opcode 502 (platform
+/// power-off): the signed `/bin/shutdown` worker only.
 const RAW_SHUTDOWN_CALLERS: &[&str] = &["shutdown"];
 
 fn raw_shutdown_permitted(name: &str) -> bool {
@@ -2321,6 +2354,7 @@ pub(super) fn session_launch_request(
         profile.child_ceiling,
         api::TaskPriority::Normal as u8,
         None,
+        names_child(task.root_tid, route),
     ))
 }
 
@@ -2608,6 +2642,24 @@ fn caller_has_platform(caller_id: usize) -> bool {
 /// ADR-0031 CP1 §6: 418/424 offer a function that is unowned or already the
 /// caller's, and skip one a live task owns, so a second instance of one driver
 /// reaches the next identical function.
+/// H-3: a PCI query (418/424) must fall inside the caller's catalog row,
+/// keyed by the caller Cell's measured program name (`catalog::PCI_DRIVERS`).
+/// Logs the refused query so a missing row is visible in the boot log.
+fn caller_pci_query_allowed(caller_id: usize, allowed: impl Fn(&str) -> bool) -> bool {
+    let program = caller_launch_state(caller_id)
+        .map(|(name, _, _)| name)
+        .unwrap_or_default();
+    let ok = allowed(&program);
+    if !ok {
+        log::warn!(
+            "[pcie] DENY query from caller={} program={:?}: outside its catalog::PCI_DRIVERS row",
+            caller_id,
+            program
+        );
+    }
+    ok
+}
+
 fn pcie_usable_by(caller_id: usize, bdf: u32) -> bool {
     crate::resource_registry::owner_of_bdf(bdf).is_none_or(|owner| owner == caller_id)
 }
@@ -7687,6 +7739,7 @@ fn handle_syscall_inner(
             )?;
             let request = match governed_spawn_request(
                 caller_id,
+                crate::loader::launch_profile::LaunchRoute::Path,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
                 #[cfg(cellos_p01_trace)]
@@ -7959,6 +8012,7 @@ fn handle_syscall_inner(
             );
             let request = match governed_spawn_request(
                 caller_id,
+                crate::loader::launch_profile::LaunchRoute::Elf,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
                 #[cfg(cellos_p01_trace)]
@@ -8026,6 +8080,7 @@ fn handle_syscall_inner(
             )?;
             let request = match governed_spawn_request(
                 caller_id,
+                crate::loader::launch_profile::LaunchRoute::Pinned,
                 profile.child_ceiling,
                 priority,
                 #[cfg(cellos_p01_trace)]
@@ -8486,6 +8541,7 @@ fn handle_syscall_inner(
             )?;
             let request = match governed_spawn_request(
                 caller_id,
+                crate::loader::launch_profile::LaunchRoute::Mem,
                 profile.child_ceiling,
                 api::TaskPriority::Normal as u8,
                 #[cfg(cellos_p01_trace)]
@@ -9171,12 +9227,9 @@ fn handle_syscall_inner(
 
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
         // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.
-        // Requires PcieDriverCap; also records BDF ownership in resource_registry.
-        //
-        // On x86 the Ethernet class triple is served by `find_class` only for the
-        // family that still owns it (the 82540EM `/bin/e1000`); the other
-        // Ethernet family (`/bin/igb`) claims its controller through 424 instead,
-        // so neither cell depends on the other declining and releasing first.
+        // Requires PcieDriverCap and a class row for the caller's measured
+        // program in `catalog::PCI_DRIVERS`; also records BDF ownership in
+        // resource_registry. Every Ethernet driver claims through 424.
         Syscall::FindPcieDevice {
             class,
             subclass,
@@ -9184,6 +9237,11 @@ fn handle_syscall_inner(
             out_ptr,
         } => {
             if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if !caller_pci_query_allowed(caller_id, |program| {
+                crate::catalog::pci_class_allowed(program, class, subclass, prog_if)
+            }) {
                 return Err(SyscallError::PermissionDenied);
             }
             let usable = |bdf| pcie_usable_by(caller_id, bdf);
@@ -9206,6 +9264,11 @@ fn handle_syscall_inner(
             out_ptr,
         } => {
             if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if !caller_pci_query_allowed(caller_id, |program| {
+                crate::catalog::pci_id_allowed(program, vendor_id, device_id)
+            }) {
                 return Err(SyscallError::PermissionDenied);
             }
             let usable = |bdf| pcie_usable_by(caller_id, bdf);
@@ -12072,41 +12135,63 @@ mod tests {
         }
     }
 
-    /// Raw opcode 502 (power-off) is accepted only from the reviewed task name
-    /// `shutdown`; every other caller is denied before any platform code runs.
+    /// Raw opcode 502 (power-off) is accepted only from a Cell whose root image
+    /// is signed with the program name `shutdown`. A task merely *named*
+    /// `shutdown` (the basename of a spawner-chosen path, e.g. `/home/x/shutdown`)
+    /// is denied: this is the architecture review C-1 regression check.
     #[test]
-    fn raw_shutdown_is_accepted_only_for_the_reviewed_task_name() {
+    fn raw_shutdown_is_accepted_only_for_the_signed_shutdown_image() {
+        use api::cell_image::{ImageIdentity, ANCHOR_DEV};
         let _guard = crate::TEST_STATE_LOCK.lock();
         let mut previous = SCHEDULER.lock();
         let saved = previous.take();
         let mut scheduler = Scheduler::new();
-        for (tid, name) in [
-            (1usize, "shutdown"),
-            (2, "cellbox"),
-            (3, "init"),
-            (4, "supervisor"),
+        // tids ≥ 100: other tests latch tid 1 as trusted init for the process.
+        // (tid, task name, signed image name, kernel-resolved install path)
+        for (tid, name, image, named) in [
+            (101usize, "shutdown", Some("shutdown"), true),
+            (102, "shutdown", None, true), // unsigned bytes at …/shutdown
+            (103, "shutdown", Some("cellbox"), true), // another signed program
+            (104, "cellbox", Some("cellbox"), true),
+            (105, "shutdown", Some("shutdown"), false), // caller-supplied ELF / sandbox / alias
+            (106, "supervisor", Some("supervisor"), true),
         ] {
-            scheduler.tasks.insert(
-                tid,
-                alloc::boxed::Box::new(Task::new(tid, CellId(7), name, alloc::vec::Vec::new())),
-            );
+            let mut task = Task::new(tid, CellId(7), name, alloc::vec::Vec::new());
+            match image {
+                Some(program) => {
+                    let signed =
+                        ImageIdentity::signed([tid as u8; 32], ANCHOR_DEV, program.as_bytes())
+                            .expect("valid image");
+                    assert!(task.bind_image(signed));
+                }
+                None => assert!(task.bind_image(ImageIdentity::unsigned([tid as u8; 32]))),
+            }
+            task.launch_named = named;
+            scheduler.tasks.insert(tid, alloc::boxed::Box::new(task));
         }
         *previous = Some(scheduler);
         drop(previous);
 
-        assert_eq!(super::authorize_raw_shutdown(1), Ok(()));
-        for tid in [2usize, 3, 4, 99] {
+        assert_eq!(super::authorize_raw_shutdown(101), Ok(()));
+        for tid in [102usize, 103, 104, 105, 106, 199] {
             assert_eq!(
                 super::authorize_raw_shutdown(tid),
-                Err(SyscallError::PermissionDenied)
+                Err(SyscallError::PermissionDenied),
+                "tid {tid}"
             );
         }
         // The dispatcher refuses the denied callers itself, before any platform code.
-        for tid in [2usize, 3, 4] {
+        for tid in [102usize, 103, 104, 105, 106] {
             assert_eq!(
                 super::handle_syscall(tid, Syscall::Shutdown),
                 Err(SyscallError::PermissionDenied)
             );
+        }
+        // The same identity keys the launch edges: a task's own name never
+        // counts, and a signed image counts only from a kernel-resolved path.
+        for (tid, expected) in [(102usize, ""), (103, "cellbox"), (105, "")] {
+            let (identity, _, _) = super::caller_launch_state(tid).expect("live task");
+            assert_eq!(identity, expected, "tid {tid}");
         }
 
         let mut restore = SCHEDULER.lock();

@@ -193,7 +193,7 @@ fn lua_net_edge_is_exactly_net_client() {
         );
     }
     // Every other caller that reaches the reviewed table sees the same row.
-    for name in ["desktop", "tool-spawn"] {
+    for name in ["desktop", "hypha-tool-spawn"] {
         let edge = authorize(caller(name, true, false), LaunchRoute::Path, "/bin/lua-net")
             .expect("reviewed table row");
         assert_eq!(edge.child_ceiling, net_client, "{name}");
@@ -313,8 +313,8 @@ fn kms_ssh_admin_edge_is_shell_only_path_only_admin() {
         "kms",
         "cellbox-ssh",
         "kms-ssh-admin",
-        "hypha",
-        "tool-spawn",
+        "hypha-core",
+        "hypha-tool-spawn",
     ] {
         for route in [
             LaunchRoute::Path,
@@ -548,7 +548,12 @@ fn hardware_bus_demo_edges_are_class_scoped() {
 fn hotswap_cli_is_shell_only() {
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         assert!(
-            authorize(caller("tool-spawn", true, false), route, "/bin/hotswap").is_none(),
+            authorize(
+                caller("hypha-tool-spawn", true, false),
+                route,
+                "/bin/hotswap"
+            )
+            .is_none(),
             "tool-spawn must not reach the shell-only hotswap CLI on {route:?}"
         );
         assert!(
@@ -576,7 +581,13 @@ fn shutdown_worker_edge_is_shell_path_only_and_capability_free() {
         );
     }
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
-        for name in ["tool-spawn", "supervisor", "init", "desktop", "shutdown"] {
+        for name in [
+            "hypha-tool-spawn",
+            "supervisor",
+            "init",
+            "desktop",
+            "shutdown",
+        ] {
             assert!(
                 authorize(
                     caller(name, true, name == "supervisor"),
@@ -600,7 +611,7 @@ fn capability_bearing_elf_route_requires_lifecycle_authority() {
     );
     assert!(
         authorize(
-            caller("tool-spawn", true, false),
+            caller("hypha-tool-spawn", true, false),
             LaunchRoute::Elf,
             "/bin/tool-spawn"
         )
@@ -641,7 +652,7 @@ fn init_can_launch_bcm_display_with_its_boot_ceiling() {
 
 #[test]
 fn hypha_fixed_edges_remain_exact() {
-    let hypha = caller("hypha", true, false);
+    let hypha = caller("hypha-core", true, false);
     let gateway = authorize(hypha, LaunchRoute::Path, "/bin/llm-gateway")
         .expect("hypha llm-gateway edge exists");
     assert_eq!(
@@ -1638,8 +1649,8 @@ fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
         "desktop",
         "pipe-test",
         "c-spawn",
-        "hypha",
-        "tool-spawn",
+        "hypha-core",
+        "hypha-tool-spawn",
         "dwc2-usb",
         "backend-supervisor",
         "recovery-authority",

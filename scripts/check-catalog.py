@@ -7,7 +7,8 @@ under `kernel/src/embedded*/manifest.json` (what an image ships).
 
 Each `/bin/` path there must have a catalog row, or be listed in
 `OUTSIDE_CATALOG` below with the reason it may run without one. Every Ethernet
-ID the kernel hands out must name a catalog row that requests PCIe authority.
+ID the kernel hands out must name a catalog row that requests PCIe authority,
+and every `pcie_driver` row must map to one `catalog::PCI_DRIVERS` program.
 Exit 0 when consistent, 1 otherwise.
 """
 
@@ -32,6 +33,23 @@ OUTSIDE_CATALOG = {
     "/bin/igc": "packaged but inert: no catalog row and no Ethernet ID (x86 breadth S5)",
     "/bin/ixgbe": "packaged but inert: no catalog row and no Ethernet ID (x86 breadth S5)",
     "/bin/r8169": "packaged but inert: no catalog row and no Ethernet ID (x86 breadth S5)",
+}
+
+
+# Signed program name of an install path whose basename differs from it
+# (`scripts/sign-cell.py` names the artifact; images rename only the file).
+PROGRAM_NAMES = {"/bin/block": "virtio-blk"}
+
+# `pcie_driver` holders that never query 418/424, so they need no
+# `pci_drivers` row; each entry needs a reason.
+PCIE_WITHOUT_QUERY = {
+    "/bin/virtio-gpu": "uses virtio MMIO / boot framebuffer; never calls 418/424",
+    "/bin/input": "virtio-input over MMIO; never calls 418/424",
+}
+
+# `pci_drivers` programs with no `pcie_driver` catalog row, each with a reason.
+PCI_ROW_WITHOUT_CATALOG = {
+    "edu-holder": "test-hooks fixture; its row is in TEST_HOOK_CELLS",
 }
 
 
@@ -67,6 +85,21 @@ def main() -> int:
         if row is None or not row["request"]["pcie_driver"]:
             errors.append(f"Ethernet ID {entry['vendor']:#06x}:{entry['device']:#06x} names "
                           f"{entry['path']}, which does not request pcie_driver in the catalog")
+
+    pci_programs = set(catalog["pci_drivers"])
+    pcie_rows = sorted(p for p, row in rows.items() if row["request"]["pcie_driver"])
+    claimed = set()
+    for path in pcie_rows:
+        program = PROGRAM_NAMES.get(path, path.rsplit("/", 1)[-1])
+        if program in pci_programs:
+            claimed.add(program)
+            if path in PCIE_WITHOUT_QUERY:
+                errors.append(f"PCIE_WITHOUT_QUERY lists {path}, but {program} has a pci_drivers row")
+        elif path not in PCIE_WITHOUT_QUERY:
+            errors.append(f"{path} requests pcie_driver but program {program!r} has no "
+                          "catalog::PCI_DRIVERS row (418/424 would refuse every query)")
+    for program in sorted(pci_programs - claimed - set(PCI_ROW_WITHOUT_CATALOG)):
+        errors.append(f"catalog::PCI_DRIVERS row {program!r} matches no pcie_driver catalog row")
 
     for error in errors:
         print(f"FAIL {error}")

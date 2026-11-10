@@ -658,6 +658,21 @@ pub fn user_target(path: &str) -> Option<CapSet> {
     }
 }
 
+/// Install paths whose bytes are another program's signed image, so the image
+/// name would claim that program's launch edges. `/bin/cellbox-ssh` is the
+/// signed `cellbox` file run as the network-facing SSH client; it must not act
+/// as the operator shell (KSSH K7: the sign holder never reaches the admin Cell).
+pub const IDENTITY_ALIASES: &[&str] = &["/bin/cellbox-ssh"];
+
+/// Whether a Cell launched by the kernel from `path` may be named by its signed
+/// image (Phase 06): a `/bin/` install path (the same rule that admits a
+/// privileged manifest, `governed_spawn`) that is not an alias. Callers must
+/// also have resolved `path` in the kernel (Path, Pinned or boot route); a
+/// caller-supplied ELF's advisory path never qualifies.
+pub fn names_launch_identity(path: &str) -> bool {
+    path.starts_with("/bin/") && !IDENTITY_ALIASES.contains(&path)
+}
+
 pub fn is_trusted_core(path: &str) -> bool {
     find(path).is_some_and(|row| row.trusted_core)
 }
@@ -679,4 +694,143 @@ pub fn legacy_manifestless(path: &str) -> CapSet {
         }
     }
     c
+}
+
+// ── PCI functions each driver program may claim (H-3) ───────────────────────
+
+/// One PCI match a driver program may query with 418 (class triple) or 424
+/// (vendor:device). `prog_if: None` admits every programming interface.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum PciMatch {
+    Class {
+        class: u8,
+        subclass: u8,
+        prog_if: Option<u8>,
+    },
+    Id {
+        vendor: u16,
+        device: u16,
+    },
+}
+
+const fn id(vendor: u16, device: u16) -> PciMatch {
+    PciMatch::Id { vendor, device }
+}
+
+const VIRTIO: u16 = 0x1AF4;
+const VMWARE: u16 = 0x15AD;
+const INTEL: u16 = 0x8086;
+
+/// PCI functions per **measured program name** (`__ViCell_image`, the name the
+/// kernel attests for the caller's Cell — never an install path or task name).
+/// Holding `pcie_driver` is necessary but no longer sufficient: 418/424 also
+/// refuse a query outside the caller's row, so one driver cannot claim another
+/// driver's controller by asking first. A program with no row claims nothing.
+pub const PCI_DRIVERS: &[(&str, &[PciMatch])] = &[
+    (
+        "nvme",
+        &[PciMatch::Class {
+            class: 0x01,
+            subclass: 0x08,
+            prog_if: Some(0x02),
+        }],
+    ),
+    // AHCI, plus the two non-AHCI SATA prog-ifs it probes only to log a refusal.
+    (
+        "ahci",
+        &[PciMatch::Class {
+            class: 0x01,
+            subclass: 0x06,
+            prog_if: None,
+        }],
+    ),
+    (
+        "xhci",
+        &[PciMatch::Class {
+            class: 0x0C,
+            subclass: 0x03,
+            prog_if: Some(0x30),
+        }],
+    ),
+    ("virtio-blk", &[id(VIRTIO, 0x1042), id(VIRTIO, 0x1001)]),
+    ("virtio-scsi", &[id(VIRTIO, 0x1048), id(VIRTIO, 0x1004)]),
+    ("virtio-net", &[id(VIRTIO, 0x1041), id(VIRTIO, 0x1000)]),
+    ("vmxnet3", &[id(VMWARE, 0x07B0)]),
+    ("pvscsi", &[id(VMWARE, 0x07C0)]),
+    ("e1000", &[id(INTEL, 0x100E), id(INTEL, 0x100F)]),
+    ("e1000e", &[id(INTEL, 0x10D3)]),
+    (
+        "igb",
+        &[id(INTEL, 0x10C9), id(INTEL, 0x1533), id(INTEL, 0x1521)],
+    ),
+    // ADR-0033 CP1 §7 QEMU `edu` holder; only test-hooks kernels give it
+    // `pcie_driver`, so the row is inert elsewhere.
+    ("edu-holder", &[id(0x1234, 0x11E8)]),
+];
+
+fn pci_row(program: &str) -> &'static [PciMatch] {
+    PCI_DRIVERS
+        .iter()
+        .find(|(name, _)| *name == program)
+        .map_or(&[], |(_, matches)| *matches)
+}
+
+/// Whether `program` may query the class triple with 418.
+pub fn pci_class_allowed(program: &str, class: u8, subclass: u8, prog_if: u8) -> bool {
+    pci_row(program).iter().any(|m| {
+        matches!(*m, PciMatch::Class { class: c, subclass: s, prog_if: p }
+            if c == class && s == subclass && p.is_none_or(|p| p == prog_if))
+    })
+}
+
+/// Whether `program` may query `vendor:device` with 424.
+pub fn pci_id_allowed(program: &str, vendor: u16, device: u16) -> bool {
+    pci_row(program).contains(&PciMatch::Id { vendor, device })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every Ethernet ID the kernel hands out is claimable by the program
+    /// installed at the path the table names, and by no other NIC program.
+    #[test]
+    fn ethernet_ids_belong_to_their_driver_program_only() {
+        use crate::task::drivers::pcie_ecam::ETHERNET_DRIVER_IDS;
+        for (vendor, device, path) in ETHERNET_DRIVER_IDS {
+            let owner = path.trim_start_matches("/bin/");
+            assert!(
+                pci_id_allowed(owner, vendor, device),
+                "{owner} {vendor:#x}:{device:#x}"
+            );
+            for (other, _) in PCI_DRIVERS.iter().filter(|(name, _)| *name != owner) {
+                assert!(
+                    !pci_id_allowed(other, vendor, device),
+                    "{other} may claim {path}'s device"
+                );
+            }
+        }
+    }
+
+    /// Only kernel install paths name a Cell; the SSH alias of the shell and
+    /// sandbox copies of a signed program do not.
+    #[test]
+    fn launch_identity_needs_a_non_alias_install_path() {
+        assert!(names_launch_identity("/bin/cellbox"));
+        assert!(names_launch_identity("/bin/shutdown"));
+        assert!(!names_launch_identity("/bin/cellbox-ssh"));
+        assert!(!names_launch_identity("/home/x/shutdown"));
+        assert!(!names_launch_identity("/apps/cellbox"));
+        assert!(!names_launch_identity("/srv/sshd"));
+    }
+
+    #[test]
+    fn class_drivers_cannot_claim_each_other() {
+        assert!(pci_class_allowed("nvme", 0x01, 0x08, 0x02));
+        assert!(!pci_class_allowed("ahci", 0x01, 0x08, 0x02));
+        assert!(pci_class_allowed("ahci", 0x01, 0x06, 0x00));
+        assert!(!pci_class_allowed("xhci", 0x01, 0x06, 0x01));
+        assert!(!pci_class_allowed("", 0x01, 0x08, 0x02));
+        assert!(!pci_id_allowed("input", VIRTIO, 0x1042));
+    }
 }

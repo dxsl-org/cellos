@@ -258,6 +258,24 @@ for G2 HMI (sensitive caps only). Hard invariant: the manifest is a **ceiling, n
 kernel enforces** (consent feeds the syscall-boundary check). LBI already closes the TCC "permission-laundering
 via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 
+**Launch and device authority key on measured identity (2026-11-10, architecture remediation Phase 06).**
+A child's ceiling on a reviewed launch edge comes from the edge row, not from the caller's own caps,
+so the edge key is load-bearing. It used to be the caller's **task name** — the basename of a path its
+spawner chose — so any capability-free cell launched as `…/cellbox` or `…/shutdown` inherited the shell's
+edges or the raw power-off gate. The key is now the caller Cell's **measured program name** (the
+`__ViCell_image` name inside a verified signature), and only when the kernel itself resolved the Cell's
+`/bin/` install path (boot, Path, Pinned or replacement route, or ELF bytes trusted init read from `/bin`;
+`catalog::names_launch_identity`); or the
+kernel's trusted-init latch, published before init is runnable. Unsigned images, other callers' ELF/Mem
+bytes (their path is advisory), sandbox paths and the alias `/bin/cellbox-ssh` (the signed shell file run
+as the SSH client) carry no identity and match no row. The same identity gates shell argv staging and
+raw opcode 502. Holding `PcieDriverCap` is no longer sufficient to claim a PCI function: 418/424 refuse
+a query outside the caller program's row in `catalog::PCI_DRIVERS`. **Remaining gap (open):**
+`/bin/supervisor` still authorises `OP_POWER`/`OP_HOTSWAP` by `GetProcs` task name, so a sandbox cell
+named `shutdown` can still ask it for a reboot; closing it needs Law-1 CP1
+(`.agents/261110-1703-architecture-remediation/cp1-supervisor-caller-identity.md`). Under the dev posture
+anyone with the public dev seed can sign any program name; the release posture closes that.
+
 ### Boot Trust Chain + Attestation — Partial (measurement + signing shipped)
 **Severity: Medium (High for fleet deployment)**
 

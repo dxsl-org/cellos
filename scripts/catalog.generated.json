@@ -943,5 +943,19 @@
     {"vendor": 6900, "device": 4161, "path": "/bin/virtio-net"},
     {"vendor": 6900, "device": 4096, "path": "/bin/virtio-net"},
     {"vendor": 5549, "device": 1968, "path": "/bin/vmxnet3"}
-  ]
+  ],
+  "pci_drivers": {
+    "nvme": [{"class": 1, "subclass": 8, "prog_if": 2}],
+    "ahci": [{"class": 1, "subclass": 6, "prog_if": null}],
+    "xhci": [{"class": 12, "subclass": 3, "prog_if": 48}],
+    "virtio-blk": [{"vendor": 6900, "device": 4162}, {"vendor": 6900, "device": 4097}],
+    "virtio-scsi": [{"vendor": 6900, "device": 4168}, {"vendor": 6900, "device": 4100}],
+    "virtio-net": [{"vendor": 6900, "device": 4161}, {"vendor": 6900, "device": 4096}],
+    "vmxnet3": [{"vendor": 5549, "device": 1968}],
+    "pvscsi": [{"vendor": 5549, "device": 1984}],
+    "e1000": [{"vendor": 32902, "device": 4110}, {"vendor": 32902, "device": 4111}],
+    "e1000e": [{"vendor": 32902, "device": 4307}],
+    "igb": [{"vendor": 32902, "device": 4297}, {"vendor": 32902, "device": 5427}, {"vendor": 32902, "device": 5409}],
+    "edu-holder": [{"vendor": 4660, "device": 4584}]
+  }
 }

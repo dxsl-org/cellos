@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Launch by measured identity, per-device PCIe handout"
-status: pending
+status: in-progress
 priority: P1
 effort: "6–9d"
 dependencies: [5]
@@ -67,18 +67,20 @@ Stop deriving authority from a spawner-chosen basename, and stop handing any uno
 
 ## Todo List
 
-- [ ] Negative test, before-result recorded
-- [ ] Identity-keyed launch
-- [ ] Name gates removed
-- [ ] Supervisor identity
-- [ ] PCIe handout check
-- [ ] Docs
+- [x] Negative test, before-result recorded
+- [x] Identity-keyed launch
+- [x] Name gates removed (kernel: 502, argv staging, launch edges)
+- [ ] Supervisor identity — blocked on Law-1 CP1 (`cp1-supervisor-caller-identity.md`)
+- [x] PCIe handout check
+- [x] Docs
 
 ## Success Criteria
 
-- [ ] The negative test fails to obtain any reviewed edge or the power-off gate after the change (and its before-result is on record).
-- [ ] Cross-ID PCI claim is refused; the legitimate driver still binds (x86 NVMe/AHCI and NIC boot lanes).
-- [ ] Checkpoint: full `pr`-tier suite, `x86-c2c`, release-posture boot lane, RV64 baseline, AArch64 boot; independent review of the authority diff (haily-reviewer) recorded in the evidence file.
+Evidence: [reports/phase-06-evidence.md](reports/phase-06-evidence.md). The supervisor half of the power-off criterion is open until CP1.
+
+- [x] The negative test fails to obtain any reviewed edge or the power-off gate after the change (and its before-result is on record).
+- [x] Cross-ID PCI claim is refused; the legitimate driver still binds (x86 NVMe/AHCI and NIC boot lanes).
+- [x] Checkpoint: full `pr`-tier suite, `x86-c2c`, release-posture boot lane, RV64 baseline, AArch64 boot; independent review of the authority diff (haily-reviewer) recorded in the evidence file.
 
 ## Risk Assessment
 
@@ -95,4 +97,13 @@ Phase 07 replaces per-thread capability copies with one record per incarnation.
 
 ## Deviation Log
 
-None.
+- **Decision (step 1):** the negative control is a kernel unit test, not a QEMU cell. Before-result recorded with a throwaway probe on the unmodified tree: a caller named `cellbox` with no spawn right got `/bin/curl` (net ceiling) and `/bin/hypervisor` (hypervisor ceiling); a task named `shutdown` from `/home/x/shutdown` passed the raw-502 gate. After: `raw_shutdown_is_accepted_only_for_the_signed_shutdown_image` (unsigned, other-signed, ELF-route and correctly signed callers) and `catalog::tests::launch_identity_needs_a_non_alias_install_path`. Claim "C-1 reachable" upgraded from low to confirmed.
+- **Decision (identity shape):** the key is the signed program name, honoured only when the kernel resolved a `/bin/` install path (boot, Path, Pinned, replacement) or trusted init supplied the bytes (`Task::launch_named`). Not "catalog row exists": `/bin/shutdown`, `/bin/kill`, `/bin/ai` have no row. ELF/Mem bytes carry no identity (review finding 2: signed `cellbox` bytes under an advisory path would otherwise gain shell edges).
+- **Surprise:** `/bin/cellbox-ssh` is the signed `cellbox` file; by image name alone it gained every shell edge (review finding 1, High). `catalog::IDENTITY_ALIASES` gives it no identity, preserving its old "no edges" behaviour.
+- **Deviation:** hypha caller keys renamed to the signed names `hypha-core` / `hypha-tool-spawn`; every other edge key already equalled its signed name (reviewer verified).
+- **Decision:** trusted-init latch now published inside `publish_prepared` before `push_ready` (review finding 4), so init never runs with an empty identity.
+- **Deviation (PCIe):** the check is on the query (418 class triple / 424 vendor:device) against `catalog::PCI_DRIVERS` keyed by program name, before the BDF search, instead of inside `pcie_usable_by`. Same effect, no ECAM lookup per candidate. `check-catalog.py` now ties each `pcie_driver` row to one PCI row (mutation-tested). No second test cell: the cross-ID refusal is a pure table check covered by `catalog::tests`.
+- **Blocked (step 4):** supervisor identity needs Law-1 CP1 (`cp1-supervisor-caller-identity.md`); the trailer carries no image name and 441 answers only VFS. Kernel half ships.
+- **Surprise:** `xhci-x86` hub/second-controller tests (3) fail locally on the original HEAD `8a005f998` too (same timeout) — pre-existing, not this phase.
+- **Surprise:** init starts every driver through `SpawnFromElf` with bytes it read from VFS, so "Path route only" left all drivers unnamed and every 424 query was refused (x86 NIC/xhci lanes failed). Children of trusted init are named on any route; init is trusted core and reads `/bin` itself.
+- **Removed:** dead `Spawner::User` (no constructor anywhere).

@@ -690,8 +690,6 @@ pub fn granted_tier(granted: &CapSet, requested_tier: u8) -> u8 {
 pub enum Spawner {
     /// Kernel/boot-initiated (only `init`). No intersection — grant full manifest.
     Root,
-    /// User-cell-initiated via syscall. Child caps = `manifest ∩ caps_of(tid)`.
-    User(usize),
     /// Kernel-internal re-spawn (HotSwap) bounded by an explicit ceiling
     /// (the replaced cell's caps) — NOT the `Root` exemption.
     Ceiling(CapSet),

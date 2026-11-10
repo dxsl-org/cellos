@@ -9,6 +9,10 @@ pub struct SpawnRequest {
     pub(crate) replacement: Option<crate::cell::hotswap::ReplacementReservation>,
     pub(crate) inherit_from: usize,
     pub(crate) argv: Option<Vec<u8>>,
+    /// The kernel resolved the launch path (boot, Path or Pinned route), so the
+    /// child may be named by its signed image. False for ELF/Mem bytes, whose
+    /// path is advisory.
+    pub(crate) kernel_resolved_path: bool,
     #[cfg(cellos_p01_trace)]
     pub(crate) trace: Option<crate::p01_measurement::Attempt>,
 }
@@ -23,6 +27,7 @@ impl SpawnRequest {
             replacement: None,
             inherit_from: 0,
             argv: None,
+            kernel_resolved_path: true,
             #[cfg(cellos_p01_trace)]
             trace: None,
         }
@@ -43,6 +48,7 @@ impl SpawnRequest {
         child_ceiling: crate::task::cap::CapSet,
         priority: u8,
         argv: Option<Vec<u8>>,
+        kernel_resolved_path: bool,
     ) -> Self {
         Self {
             spawner: crate::task::cap::Spawner::Ceiling(child_ceiling),
@@ -55,6 +61,7 @@ impl SpawnRequest {
             replacement: None,
             inherit_from: tid,
             argv,
+            kernel_resolved_path,
             #[cfg(cellos_p01_trace)]
             trace: None,
         }
@@ -82,6 +89,8 @@ impl SpawnRequest {
             replacement: Some(replacement),
             inherit_from: tid,
             argv,
+            // Replacements always load through `spawn_from_path`.
+            kernel_resolved_path: true,
             #[cfg(cellos_p01_trace)]
             trace: None,
         }
@@ -107,6 +116,7 @@ mod tests {
             CapSet::EMPTY,
             api::TaskPriority::Normal as u8,
             None,
+            false,
         );
 
         assert!(matches!(request.spawner, Spawner::Ceiling(CapSet::EMPTY)));

@@ -146,15 +146,6 @@ fn prepare_gated(
             bounded
         }
         Spawner::Ceiling(ceiling) => requested.intersect(ceiling),
-        Spawner::User(tid) => {
-            let ceiling = crate::task::SCHEDULER
-                .lock()
-                .as_ref()
-                .and_then(|sched| sched.tasks.get(&tid))
-                .map(CapSet::of_task)
-                .unwrap_or(CapSet::EMPTY);
-            requested.intersect(ceiling)
-        }
     };
     let granted = match request.spawner {
         Spawner::Root if !crate::policy::is_resolved() => bounded,
@@ -233,6 +224,8 @@ fn prepare_gated(
             path: path.to_string(),
             digest: elf_digest,
             image,
+            launch_named: request.kernel_resolved_path
+                && crate::catalog::names_launch_identity(path),
         }),
         is_domain,
     );
@@ -333,9 +326,13 @@ fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViRe
             // Trusted init is embedded in the kernel image, not admitted
             // through signature verification, so it states a digest only.
             image: api::cell_image::ImageIdentity::unsigned(init_digest),
+            // Init is named by the trusted-init latch, not by an image.
+            launch_named: false,
         }),
         false,
     );
+    let mut state = state;
+    state.trusted_init = true;
     #[cfg(cellos_p01_trace)]
     let state = {
         let mut state = state;
@@ -343,7 +340,5 @@ fn spawn_init(elf: &[u8], #[cfg(cellos_p01_trace)] bootstrap_init: bool) -> ViRe
         state
     };
     let tid = crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)?;
-    // Init's tid keys the `MACHINE_PIN` registration restriction (ADR-0029 §3).
-    crate::task::syscall::publish_trusted_init(tid);
     Ok(tid)
 }

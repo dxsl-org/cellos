@@ -31,7 +31,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 03b | [Single image recipe per architecture](phase-03b-single-image-recipe.md) — split from 03 (owner, 2026-11-10) | S1b | 03 | — | |
 | 04 | [One trust posture, guarded copy always on](phase-04-posture-selector.md) — completed 2026-11-10 ([evidence](reports/phase-04-evidence.md)) | S2 authority | 03 | — | |
 | 05 | [Single cell and driver catalog](phase-05-cell-catalog.md) — completed 2026-11-10 ([evidence](reports/phase-05-evidence.md)) | S2 | 04 | — | |
-| 06 | [Launch by measured identity, per-device PCIe handout](phase-06-launch-identity.md) | S2 | 05 | CP1/CP2 if trailer changes | ✓ |
+| 06 | [Launch by measured identity, per-device PCIe handout](phase-06-launch-identity.md) — kernel half done 2026-11-10 ([evidence](reports/phase-06-evidence.md)); supervisor half waits for Law-1 CP1 ([request](cp1-supervisor-caller-identity.md)) | S2 | 05 | CP1/CP2 if trailer changes | ✓ |
 | 07 | [One authority record per Cell incarnation](phase-07-incarnation-authority.md) | S3 | 06 | — | ✓ |
 | 08 | [Generated syscall table and split dispatcher](phase-08-syscall-table.md) | S4 kernel shape | 07 | CP1/CP2 | |
 | 09 | [Kernel residents, selftests and module layout](phase-09-kernel-residents.md) | S4 | 08 | — | ✓ |

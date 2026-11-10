@@ -271,6 +271,10 @@ pub struct Task {
     /// [`Task::bind_image`], which refuses a second binding: the record is the
     /// image of this incarnation for as long as the root lives.
     image: Option<api::cell_image::ImageIdentity>,
+    /// The root was launched by the kernel from a catalogued install path, so
+    /// its signed image name is its launch identity (`caller_launch_state`).
+    /// False for caller-supplied ELF/Mem bytes, sandbox paths and aliases.
+    pub(crate) launch_named: bool,
     /// Canonical context retained for this committed root lifetime.
     pub(crate) child_context: Option<Vec<u8>>,
     pub(crate) child_stdio: [api::cell_session::ObjectRefV1; 4],
@@ -671,6 +675,7 @@ impl Task {
             staged_argv: None,
             inherited_argv: None,
             image: None,
+            launch_named: false,
             child_context: None,
             child_stdio: [api::cell_session::ObjectRefV1::ZERO; 4],
             allowed_drivers,

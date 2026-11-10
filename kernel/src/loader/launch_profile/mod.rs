@@ -1,6 +1,8 @@
 //! Exact launch-edge profiles for kernel-authorized spawns.
 //!
-//! Authorization is by the exact `(caller identity, route, target path)` edge.
+//! Authorization is by the exact `(caller identity, route, target path)` edge,
+//! where the caller identity is the kernel-measured program name (see
+//! [`CallerLaunchState::name`]), never a spawner-chosen task name.
 //! This is deliberately narrower than ambient `SpawnCap`: callers keep their
 //! own lifecycle authority model, while child ceilings come from reviewed rows.
 
@@ -22,6 +24,9 @@ pub enum LaunchRoute {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CallerLaunchState<'a> {
+    /// Kernel-measured launch identity: `"init"` for the trusted init Cell, else
+    /// the signed `__ViCell_image` program name of the caller's Cell, else empty.
+    /// Never the task name (spawner-chosen path basename).
     pub name: &'a str,
     pub has_spawn: bool,
     pub has_supervisor: bool,
@@ -82,8 +87,10 @@ pub fn authorize(
         "desktop" => profiles::desktop_profile(route, target),
         "pipe-test" => profiles::pipe_test_profile(route, target),
         "c-spawn" => profiles::c_spawn_profile(route, target),
-        "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
-        "tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
+        // Hypha binaries are signed as `hypha-core` / `hypha-tool-spawn` (the signer
+        // strips only `service-`/`app-`/`driver-` from the artifact name).
+        "hypha-core" if caller.has_spawn => profiles::hypha_profile(route, target),
+        "hypha-tool-spawn" if caller.has_spawn => profiles::tool_spawn_profile(route, target),
         "dwc2-usb" if caller.has_spawn => profiles::dwc2_function_worker_profile(route, target),
         "backend-supervisor" if caller.has_spawn => {
             profiles::backend_supervisor_profile(route, target)

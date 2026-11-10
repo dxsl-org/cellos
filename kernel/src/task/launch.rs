@@ -24,6 +24,9 @@ pub struct StagedMeasurement {
     /// Identity bound to the published root (`Task::bind_image`); its digest
     /// is `digest`, plus the signing anchor and vouched name if verified.
     pub image: api::cell_image::ImageIdentity,
+    /// The kernel resolved `path` itself and it may name its Cell
+    /// (`catalog::names_launch_identity`); copied to `Task::launch_named`.
+    pub launch_named: bool,
 }
 
 /// Security-complete data and reservations for one unpublished ELF task.
@@ -48,6 +51,9 @@ pub struct TaskLaunchState {
     pub(crate) trace: Option<crate::p01_measurement::Attempt>,
     #[cfg(cellos_p01_trace)]
     pub(crate) bootstrap_init: bool,
+    /// This is the kernel's trusted init: the latch is published before the
+    /// task becomes runnable, so init never runs with an unnamed identity.
+    pub(crate) trusted_init: bool,
     #[allow(dead_code)]
     pub(crate) is_domain: bool,
 }
@@ -94,6 +100,7 @@ impl TaskLaunchState {
             trace: None,
             #[cfg(cellos_p01_trace)]
             bootstrap_init: false,
+            trusted_init: false,
             is_domain,
         }
     }
@@ -186,6 +193,7 @@ pub fn publish_prepared(
     if let Some(measurement) = state.measurement.as_ref() {
         // A fresh task from `into_task`, so the first binding always lands.
         task.bind_image(measurement.image);
+        task.launch_named = measurement.launch_named;
     }
     let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
     state.granted.apply_to(&mut task);
@@ -288,6 +296,11 @@ pub fn publish_prepared(
         &crate::audit::encode_u32x2(tid as u32, 0),
     );
     crate::loader::observe_pre_ready(sched, tid);
+    if state.trusted_init {
+        // Init's tid keys its launch identity and the `MACHINE_PIN`
+        // registration restriction (ADR-0029 §3); publish before it can run.
+        crate::task::syscall::publish_trusted_init(tid);
+    }
     sched.push_ready(tid);
     Ok((tid, load_base))
 }
@@ -548,6 +561,7 @@ impl SessionPublication {
         state.granted.apply_to(&mut task);
         if let Some(measurement) = state.measurement.as_ref() {
             task.bind_image(measurement.image);
+            task.launch_named = measurement.launch_named;
         }
         let domain_lease = if state.is_domain {
             let path = state.measurement.as_ref().map_or("", |m| m.path.as_str());
