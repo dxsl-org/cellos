@@ -1880,6 +1880,10 @@ jobs:
           # the entry gated on the target (see the cell's header) rather than a
           # --lib flag; `driver-disk` ships a staticlib and links std on hosts.
           cargo test -p service-vfs --target x86_64-unknown-linux-gnu
+          # The Lua runtime builds its C core with the host cc/libc on the host
+          # (see its build.rs); these tests pin the longjmp-safe push helpers
+          # and the REPL's incomplete-chunk detection.
+          cargo test -p lua --target x86_64-unknown-linux-gnu
 
   # KSSH (KMS SSH key custody): `ssh-dev-custody` and `ssh-dev-persist` are opt-in
   # DEV_POSTURE features that are OFF in every other job, so no other job compiles their
