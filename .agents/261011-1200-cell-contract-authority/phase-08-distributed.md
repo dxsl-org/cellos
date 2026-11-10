@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Protected distribution, lifecycle and placement/autoscaling"
-status: complete
+status: pending
 priority: P1
 tier: thinking
 dependencies: [4, 5, 6]
@@ -108,3 +108,5 @@ Correction 2026-10-16: prior checkmarks and cited standalone-model/storage-boot 
 ## Risk / rollback and assumptions
 
 Availability yields to authority/fences and durable budgets. No federation, full consensus, timeout promotion, multiwriter, DSM or transparent migration. Remote effects/epochs/ledger transactions are irreversible by binary revert: close admission, preserve outcomes/unknown charges and reconcile under policy. Public RemoteEndpoint currently refuses; fixtures/proposed service paths are not implementation evidence. Missing protected Intel/physical prerequisites leave profiles disabled and gates unpassed. Ten pending phases, unchanged dependencies, 38 locks and checkpoint/Intel gates remain intact.
+
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `pending` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

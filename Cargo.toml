@@ -20,6 +20,11 @@ exclude = [
     "cells/apps/vove",
     # std-smoke is a Tier 1 std cell built with custom sysroot and json-target-spec
     "cells/demos/std-smoke",
+    # Spec 26 design skeletons (owner decision D1, 2026-11-10): not wired, fail-open,
+    # no consumer. Source is kept for P08; never package them as an enforcing TCB.
+    "cells/services/budget-authority",
+    "cells/services/workload-router",
+    "cells/services/placement-controller",
 ]
 members = [
     "kernel",
@@ -140,9 +145,6 @@ members = [
     "cells/services/ocel-js",
     "cells/services/ocel-quickjs",
     "cells/services/ocel-pdf",
-    "cells/services/budget-authority",
-    "cells/services/workload-router",
-    "cells/services/placement-controller",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",

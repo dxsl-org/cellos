@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Qualified Intel VMX and explicit guest C2C adapter"
-status: complete
+status: pending
 priority: P1
 tier: thinking
 dependencies: [4, 5, 7, 8]
@@ -47,3 +47,5 @@ Guest is not a native Cell principal and must not receive host root authority th
 ## Assumptions and deviation log
 
 Qualified Intel VMX environment may be unavailable; availability must be established before runtime qualification. The detailed VMX implementation checklist stays in the adopted legacy sub-slice, with this phase owning its release and contract mapping rather than duplicating architecture claims. Deviation log: none.
+
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `pending` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Exact contract deltas and legacy-work adoption"
-status: complete
+status: in-progress
 priority: P1
 tier: thinking
 dependencies: []
@@ -85,3 +85,4 @@ Existing scope metadata may be stale; resolve through source/runtime evidence an
 
 The user selected preparation of [native development handoff r1](native-development-handoff-r1.md), not its implementation. Controlling P01 owns the proposed exact cspace.rs/actual-module harness invariant tranche; current phase criteria and CP1/CP2 remain pending. The lock register, portfolio and P02 record the same conditional disposition. Only an explicit later decision naming the reviewed packet revision/digest activates it; WIP is one tranche and no successor opens automatically. Exact allowed paths/output records and host/native evidence ceilings are in the packet. Public/persistent/SDK changes and missing D05/D07, issuer/backend/physical gates remain blocked.
 
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `in-progress` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

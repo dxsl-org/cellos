@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Multithreading, SMP lifetime and aggregate budgets"
-status: complete
+status: pending
 priority: P1
 tier: thinking
 dependencies: [2]
@@ -58,3 +58,5 @@ Rollback is a cold boot to known-safe scheduling/authority image; never live-mig
 ## Assumptions and deviation log
 
 Current tests include deterministic two-hart kernel witnesses, but new shared authority/CPU quota and actual x86 language TLS/FPU behavior need fresh evidence. Runtime support gaps are implementation work in this phase, not a reason to mark AC-07 skipped. Deviation log: none.
+
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `pending` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

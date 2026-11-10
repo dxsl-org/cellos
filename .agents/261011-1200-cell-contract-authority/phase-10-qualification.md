@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "End-to-end profile qualification and fair Linux comparison"
-status: complete
+status: pending
 priority: P1
 tier: thinking
 dependencies: [2, 3, 4, 5, 6, 7, 8, 9]
@@ -58,3 +58,5 @@ Do not let performance pressure convert revocation into eventual best-effort, re
 ## Assumptions and deviation log
 
 No blanket speed/security superiority to Linux or CPU/throughput capacity is assumed. Physical Intel, genuine VMX and production approval remain external gates. Qualification covers all 50 criteria, including actual balanced load-driven spawn; ten phases/dependencies and 38 locks stay unchanged. Binary rollback cannot undo external effects or durable fence advancement; restore/forward migration is required.
+
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `pending` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

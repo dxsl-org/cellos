@@ -3614,16 +3614,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "service-budget-authority"
-version = "0.1.0"
-dependencies = [
- "api",
- "cell-build",
- "ostd",
- "types",
-]
-
-[[package]]
 name = "service-compositor"
 version = "0.1.0"
 dependencies = [
@@ -3739,16 +3729,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "service-placement-controller"
-version = "0.1.0"
-dependencies = [
- "api",
- "cell-build",
- "ostd",
- "types",
-]
-
-[[package]]
 name = "service-platform"
 version = "0.1.0"
 dependencies = [
@@ -3807,16 +3787,6 @@ dependencies = [
  "fatfs",
  "ostd",
  "sha2 0.10.9",
- "types",
-]
-
-[[package]]
-name = "service-workload-router"
-version = "0.1.0"
-dependencies = [
- "api",
- "cell-build",
- "ostd",
  "types",
 ]
 

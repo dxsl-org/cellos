@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Kernel Cell and shared object-capability authority"
-status: complete
+status: in-progress
 priority: P1
 tier: thinking
 dependencies: [1]
@@ -58,3 +58,4 @@ Existing registry/cap state is uneven (CellId-only cap ownership versus generati
 
 P02 hands only the internal per-authority arena invariant prerequisite to controlling P01 under [native development handoff r1](native-development-handoff-r1.md), conditional on later explicit reviewed revision/digest approval and decision record. Allowed implementation is limited to the existing cspace.rs module/actual-module harness; scheduler/cap/cell consumers are read-only. No public byte/API cutover, global registry bound, native dispatcher execution, device/Gone qualification or full P02 acceptance follows. WIP is one tranche; N02-B and all later successors require separate exact handoffs. All 38 legacy locks stay effective.
 
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `in-progress` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.

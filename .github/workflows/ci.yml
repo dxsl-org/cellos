@@ -76,6 +76,12 @@ jobs:
           python3 -m unittest scripts/test_check_spec_anchors.py
           python3 scripts/check-spec-anchors.py --check
 
+      # A plan or phase may not claim `status: complete` while its success
+      # criteria / todo checkboxes are unchecked (architecture review C-2).
+      # Plans created before 261110-1703 are reported, not enforced.
+      - name: Check plan completion claims
+        run: python3 scripts/check-plan-status.py --quiet-legacy
+
       # POSIX ledger (ADR-0018, docs/posix-ledger.md): every Tier-A export and
       # mlibc sysdep is listed exactly once with a closed-vocabulary status, and
       # a behavioural status needs a behavioural evidence anchor.

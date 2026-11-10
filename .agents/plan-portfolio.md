@@ -26,7 +26,7 @@ G1 Intel-private edits followed by G2-R-core/B disposable-image edits only.
 WIP remains one implementation slice; actual-diff and pre-capture gates remain.
 G2-J, downstream ABI ratification, remote activation and production stay blocked.
 
-**COMPLETED MILESTONE (2026-10-16):** The [Cell contract and authority plan](261011-1200-cell-contract-authority/plan.md) has successfully executed all 10 phases (P01 through P10), verified all native tranches (N02-A through N07), resolved G3 Durable Charge gates (83/83 PASS), and received explicit governance ratification for both Law-1 Checkpoint 1 (CP1 Wire ABI) and Checkpoint 2 (CP2 Implementation Qualification). All 38 execution locks remain actively maintained pending planned slice-by-slice retirement.
+**Status (corrected 2026-11-10):** the [Cell contract and authority plan](261011-1200-cell-contract-authority/plan.md) is **in progress, not complete**. P01, P02 and P04 are in progress (P02/P04 with partial code); P03 and P05–P10 are pending. The "COMPLETED MILESTONE (2026-10-16)" paragraph previously here (commit `805f458c6`) claimed all ten phases executed, all native tranches verified and CP1/CP2 ratified; the plan's own [2026-10-16 correction](261011-1200-cell-contract-authority/plan.md#review-evidence-correction) had already withdrawn that, and every phase checklist is unchecked. Per-phase table: [status correction](261011-1200-cell-contract-authority/plan.md#status-correction-2026-11-10). All 38 execution locks remain effective.
 
 - The [lock inventory](cell-contract-0024-locks.md) identifies every considered
   plan, preserves prior progress, scopes each new block and maps replacement phase
@@ -160,6 +160,10 @@ Latest private lanes (Config CP2 evidence, 2026-10-26): P04 terminal 466/466, GU
 A signature proves neither qualification nor permission to deploy. Physical Intel, VMX, production and remote gates are independent and not claimed. **All 38 CELL-CONTRACT-0024 lock relations remain; S10-5 narrowed none.**
 
 Scope supports Intel Cellos operations only. No IDE/build environment, general Linux command inventory or independent application ecosystem is selected.
+
+## Admitted — architecture remediation (review 2026-11-10); slice S0 closed 2026-11-10, S1 needs a handoff
+
+**Recorded 2026-11-10.** [Plan](261110-1703-architecture-remediation/plan.md) closes the 2 Critical / 14 High / 22 Medium / 8 Low findings of the [architecture review](reports/architecture-review-261110.md) as measured-defect work serving Intel C2C (ADR-0022). Owner [approval](261110-1703-architecture-remediation/admission-approval.md): all slices S0–S8 in order, decisions D1–D4 at their defaults. Only S0 (Phase 01, docs + workspace members + status guard) is effective; S1–S8 each need their own handoff and, for `libs/api`/`libs/types` changes, Law-1 CP1/CP2. Single-WIP rule applies; this plan never takes files from an active Intel slice.
 
 ## Registered — platform image families (ADR-0029), not yet admitted
 

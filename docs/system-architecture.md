@@ -1,7 +1,7 @@
 # Cellos System Architecture
 
 **Audience:** developers integrating Cells, services and C2C consumers  
-**Updated:** 2026-10-11  
+**Updated:** 2026-11-10  
 **Scope:** operational architecture, ownership and implementation boundaries
 
 ## 1. Read this guide with the contracts
@@ -563,7 +563,7 @@ check performed by this documentation change.
 | Intel platform | QEMU controller and boot evidence retained in the portfolio and board records | Physical HCL row, exact NIC/storage qualification or two identified Intel-node acceptance |
 | Intel Tier 3 | Existing ARM guest and AMD SVM/QEMU reference evidence retained | Intel VMX/EPT guest execution/qualification and complete guest bridge target |
 | Broker/relay | Local broker/oracle and protected-authority software records retained | Protected two-node relay runtime, qualified direct LAN or public/production export |
-| Workload control | Spec 26 selected design only | Shipped router/controller, cluster runtime, load balancing or automatic scaling |
+| Workload control | Spec 26 selected design only; the `budget-authority`/`workload-router`/`placement-controller` crates are heartbeat-only, fail-open skeletons excluded from the workspace and images (owner decision D1, 2026-11-10) | Shipped router/controller, cluster runtime, load balancing or automatic scaling |
 | Recovery/performance | Existing supervision/state mechanisms and scoped measurements retained | Complete committed-state recovery, qualified warm snapshot, hard-RT bound or faster-than-Linux result |
 
 The October x86 Tier-2/runtime records supersede this guide's former September
@@ -653,3 +653,5 @@ releases locks, enables a feature or promotes evidence.
 with this bounded guide; aligned identity/ownership with Spec 25 v1.3 and workload
 policy with Spec 26; retained access to existing historical evidence without
 creating an archive or changing implementation/qualification status.
+
+**Revision note — 2026-11-10:** the controlling plan header, phase table, phase frontmatter and portfolio had claimed all ten phases complete since 2026-10-16; they now match this guide (P01/P02/P04 in progress, others pending). §11 records that the Spec 26 skeleton crates are excluded from the workspace. No implementation or qualification status changed.

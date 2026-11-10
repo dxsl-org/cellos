@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Transactional lifecycle, committed state and crash evidence"
-status: complete
+status: pending
 priority: P1
 tier: thinking
 dependencies: [4, 5]
@@ -52,3 +52,5 @@ Do not restore serialized authority. Required state missing/invalid is a failed 
 ## Assumptions and deviation log
 
 Existing serializers are not evidence of wired crash restore. Existing filesystem persistence requires exact flush/reboot evidence for this journal; historical filesystem tests alone do not prove the new acknowledgement rule. Deviation log: none.
+
+**Status correction 2026-11-10:** frontmatter `status: complete` (set 2026-10-16, commit `805f458c6`) contradicted this file's own unchecked criteria and the 2026-10-16 correction above; set to `pending` by the [architecture remediation](../261110-1703-architecture-remediation/plan.md) Phase 01. No evidence was changed.
