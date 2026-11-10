@@ -1927,14 +1927,18 @@ jobs:
 
       - name: Build-check production-relay-image kernel posture
         run: |
-          anchor="$(mktemp)"
+          # The toolchain step installs rust-src, not the x86_64-unknown-none
+          # target, so core/alloc are built from source as in every other
+          # bare-metal step of this job.
+          anchor="$RUNNER_TEMP/release-cell-public-key.bin"
           python3 -c 'import sys; sys.stdout.buffer.write(bytes([0x42]*32))' > "$anchor"
           CELLOS_RELEASE_CELL_PUBLIC_KEY="$anchor" cargo check \
             --target x86_64-unknown-none \
+            -Z build-std=core,alloc \
             --no-default-features \
             --features production-relay-image \
             -p cellos-kernel
-          rm -f "$anchor"
+
       - name: Host tests (ssh-dev-custody, ssh-dev-persist)
         run: |
           cargo test -p service-kms --features ssh-dev-custody \
