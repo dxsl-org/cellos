@@ -221,6 +221,10 @@ members = [
     "cells/tests/tier2-rpc-proto",
     "cells/tests/tier2-rpc-provider",
     "cells/tests/tier2-rpc-driver",
+    # ADR-0033 CP1 §7 QEMU `edu` DMA-export lanes (test-hooks image only).
+    "cells/tests/edu-export-proto",
+    "cells/tests/edu-holder",
+    "cells/tests/export-client",
     "cells/tests/tier2-grant-owner",
     "cells/tests/tier2-grant-receiver",
     "cells/tests/ai-test",

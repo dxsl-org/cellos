@@ -29,6 +29,11 @@ tier2-entry = []
 # argv stash). Opted into only by scripts/build-x86_64-domain-test-ci.sh: those
 # two cells are packaged only in that image.
 tier2-rpc-entry = []
+# When enabled, init launches the ADR-0033 CP1 §7 DMA-export lane: /bin/edu-holder
+# (registered as the test-only export holder service 0x7AE0) and two
+# /bin/export-client instances. Opted into only by scripts/x86/qemu-edu-export-test.sh,
+# whose image alone packages those cells (with a test-hooks kernel).
+edu-export-entry = []
 # When enabled, init launches the phase-03 step-5 Tier-2 grant pair
 # (/bin/silo = owner, /bin/net-broker = receiver) from the boot order and drives
 # its five receiver generations to their deliberate store faults, so the pair runs

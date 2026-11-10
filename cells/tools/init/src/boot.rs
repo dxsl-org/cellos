@@ -658,6 +658,12 @@ mod block_wait_tests {
 #[cfg(feature = "tier2-rpc-entry")]
 const TIER2_RPC_FIXTURE_SERVICE: u16 = 0x7A01;
 
+/// The DMA-export lane's holder service (`edu-export-proto::SERVICE_ID`, admitted
+/// by `test-hooks` kernels as `dma_export::TEST_EXPORT_SERVICE`). A literal for
+/// the same reason as above.
+#[cfg(feature = "edu-export-entry")]
+const EDU_EXPORT_HOLDER_SERVICE: u16 = 0x7AE0;
+
 pub(crate) fn spawn_test_fixtures() {
     // Tier-2 entry fixtures (phase 02). Only the AArch64 test-hooks image can
     // admit a domain-class cell, and it is also the one image whose boot ends
@@ -710,6 +716,31 @@ pub(crate) fn spawn_test_fixtures() {
                 }
             }
             SyscallResult::Err(_) => ostd::io::println("Init: tier2-rpc-provider spawn failed."),
+        }
+    }
+
+    // ADR-0033 CP1 §7 DMA-export lane: the holder must be registered before a
+    // client resolves it, and `RegisterService` is init's (SpawnCap) to make.
+    #[cfg(feature = "edu-export-entry")]
+    {
+        match sys_spawn_from_path("/bin/edu-holder") {
+            SyscallResult::Ok(holder) => {
+                match ostd::syscall::sys_register_service(EDU_EXPORT_HOLDER_SERVICE, holder) {
+                    SyscallResult::Ok(_) => ostd::io::println("Init: edu-holder registered."),
+                    SyscallResult::Err(_) => {
+                        ostd::io::println("Init: edu-holder registration failed.")
+                    }
+                }
+                for _ in 0..2 {
+                    match sys_spawn_from_path("/bin/export-client") {
+                        SyscallResult::Ok(_) => ostd::io::println("Init: export-client launched."),
+                        SyscallResult::Err(_) => {
+                            ostd::io::println("Init: export-client spawn failed.")
+                        }
+                    }
+                }
+            }
+            SyscallResult::Err(_) => ostd::io::println("Init: edu-holder spawn failed."),
         }
     }
 
