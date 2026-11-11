@@ -10,7 +10,7 @@ struct MappingProbe {
 }
 
 static AP02_MAPPINGS: crate::sync::Spinlock<Option<Vec<MappingProbe>>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::AP02_MAPPINGS);
 
 pub(super) fn arm_ap02() {
     *AP02_MAPPINGS.lock() = None;

@@ -46,7 +46,8 @@ static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// Serializes every mutation of `VFS_HANDLER_PTR`/`VFS_HANDLER_CELL` so the
 /// owner compare and the paired clear in `clear_vfs_if_cell` are one step.
 /// Never held across a handler call.
-static VFS_HANDLER_WRITE: crate::sync::Spinlock<()> = crate::sync::Spinlock::new(());
+static VFS_HANDLER_WRITE: crate::sync::Spinlock<()> =
+    crate::sync::Spinlock::ranked((), crate::sync::rank::VFS_HANDLER_WRITE);
 
 /// Register the kernel-side VFS fast-IPC handler for the future Tier-1 bridge.
 /// No Cell import resolves here today.

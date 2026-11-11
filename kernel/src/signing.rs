@@ -25,7 +25,8 @@ use types::{ViError, ViResult};
 /// (measured 2026-10-03: 289 KiB free, no 78 KiB hole — the refusal that ended the
 /// capacity sweep). One shared buffer, grown once and never shrunk, removes that
 /// per-spawn churn; verification itself is unchanged (same bytes, same order).
-static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> = crate::sync::Spinlock::new(Vec::new());
+static PAYLOAD_SCRATCH: crate::sync::Spinlock<Vec<u8>> =
+    crate::sync::Spinlock::ranked(Vec::new(), crate::sync::rank::PAYLOAD_SCRATCH);
 
 /// Dev Ed25519 **public** key — derived from the fixed dev seed in
 /// `scripts/sign-cell.py` (seed `[0x43]*32`, reproducible; never shipped in release).

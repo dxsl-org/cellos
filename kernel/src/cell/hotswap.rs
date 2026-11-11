@@ -27,8 +27,9 @@ enum CeilingState {
     },
 }
 
-static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> = Spinlock::new(BTreeMap::new());
-static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::new(1);
+static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SWAP_CEILINGS);
+static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::ranked(1, crate::sync::rank::NEXT_FREEZE_NONCE);
 
 /// Force-release this module's locks during fault teardown.
 ///

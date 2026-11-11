@@ -14,7 +14,8 @@ static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 /// allocator: a hart that still resolves the retired translation could walk into
 /// them, and "leaked" is the only safe end state for that. Drained only by an
 /// explicit audit, and counted so the leak is visible rather than silent.
-static QUARANTINED_FRAMES: Spinlock<Vec<OwnedFrame>> = Spinlock::new(Vec::new());
+static QUARANTINED_FRAMES: Spinlock<Vec<OwnedFrame>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::QUARANTINED_FRAMES);
 
 /// Retain frames whose invalidation was not acknowledged and that no deferred
 /// release can complete — the loud, counted end state for a leak by design.
@@ -1379,7 +1380,7 @@ struct AsidTagOwner {
 }
 
 static LIVE_ASIDS: Spinlock<[Option<AsidTagOwner>; MAX_LIVE_ASIDS]> =
-    Spinlock::new([None; MAX_LIVE_ASIDS]);
+    Spinlock::ranked([None; MAX_LIVE_ASIDS], crate::sync::rank::LIVE_ASIDS);
 
 /// Test-hooks view: which domain currently holds tag `value`, or `None` when the
 /// tag is free. The lease contract test uses it to prove a released tag is

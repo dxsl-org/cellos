@@ -97,7 +97,8 @@ impl Lifetimes {
         }
     }
 }
-static LIFETIMES: Spinlock<Lifetimes> = Spinlock::new(Lifetimes::new());
+static LIFETIMES: Spinlock<Lifetimes> =
+    Spinlock::ranked(Lifetimes::new(), crate::sync::rank::P01_LIFETIMES);
 static ACTIVITIES: AtomicU64 = AtomicU64::new(0);
 pub(crate) struct Activity {
     _not_send: core::marker::PhantomData<*mut ()>,
@@ -189,7 +190,10 @@ impl Snapshot {
         Ok(())
     }
 }
-static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::new([const { Snapshot::new() }; 6]);
+static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::ranked(
+    [const { Snapshot::new() }; 6],
+    crate::sync::rank::P01_NONCPU_SNAPSHOTS,
+);
 pub(crate) fn static_bytes() -> usize {
     core::mem::size_of_val(&LIFETIMES)
         + core::mem::size_of_val(&ACTIVITIES)

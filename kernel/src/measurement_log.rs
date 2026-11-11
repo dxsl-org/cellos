@@ -65,12 +65,15 @@ struct Log {
     shares: Vec<Share>,
 }
 
-static LOG: Spinlock<Log> = Spinlock::new(Log {
-    entries: Vec::new(),
-    aggregate: [0u8; 32],
-    promises: 0,
-    shares: Vec::new(),
-});
+static LOG: Spinlock<Log> = Spinlock::ranked(
+    Log {
+        entries: Vec::new(),
+        aggregate: [0u8; 32],
+        promises: 0,
+        shares: Vec::new(),
+    },
+    crate::sync::rank::MEASUREMENT_LOG,
+);
 
 /// Force-release this module's lock during fault teardown.
 ///

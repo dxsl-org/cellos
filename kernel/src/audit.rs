@@ -32,7 +32,8 @@ const MASK: usize = BUF_SIZE - 1;
 
 /// Serialises producers. Taken with S-mode interrupts already disabled, so a
 /// same-hart ISR can never wait on it and a holder never blocks an interrupt.
-static WRITE: crate::sync::Spinlock<()> = crate::sync::Spinlock::new(());
+static WRITE: crate::sync::Spinlock<()> =
+    crate::sync::Spinlock::ranked((), crate::sync::rank::AUDIT_WRITE);
 
 /// Kernel audit event type byte.
 #[repr(u8)]

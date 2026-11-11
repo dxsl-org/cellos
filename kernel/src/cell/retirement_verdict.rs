@@ -73,10 +73,13 @@ struct Table {
     next_seq: u64,
 }
 
-static TABLE: Spinlock<Table> = Spinlock::new(Table {
-    slots: [None; MAX_RECORDS],
-    next_seq: 0,
-});
+static TABLE: Spinlock<Table> = Spinlock::ranked(
+    Table {
+        slots: [None; MAX_RECORDS],
+        next_seq: 0,
+    },
+    crate::sync::rank::RETIREMENT_VERDICTS,
+);
 
 /// State and reason bits for a final tally. Untracked SHM or a quarantine
 /// overflow is `Unproven`; else deferred DMA or any bounded quarantine is

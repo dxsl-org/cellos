@@ -134,7 +134,8 @@ impl Default for AcpiInfo {
 /// Written once by [`parse`] on the BSP, before any other CPU starts and
 /// before any reader runs. Leaf lock: nothing else is acquired while held,
 /// except the caller's mapper during [`parse`] itself.
-static TOPOLOGY: Spinlock<AcpiTopology> = Spinlock::new(AcpiTopology::EMPTY);
+static TOPOLOGY: Spinlock<AcpiTopology> =
+    Spinlock::ranked(AcpiTopology::EMPTY, crate::sync::rank::ACPI_TOPOLOGY);
 
 /// Run `f` over the topology recorded by the last [`parse`].
 pub fn with_topology<R>(f: impl FnOnce(&AcpiTopology) -> R) -> R {

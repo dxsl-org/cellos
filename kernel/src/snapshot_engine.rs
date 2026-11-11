@@ -1312,7 +1312,8 @@ fn assert_scratch_outside_runs(
 // ── The reserved capture workspace ───────────────────────────────────────────
 
 /// The capture's reserved scratch region, published by the boot reservation.
-static SNAPSHOT_SCRATCH: Spinlock<Option<ScratchRegion>> = Spinlock::new(None);
+static SNAPSHOT_SCRATCH: Spinlock<Option<ScratchRegion>> =
+    Spinlock::ranked(None, crate::sync::rank::SNAPSHOT_SCRATCH);
 
 /// The scratch region this boot reserved, if any.
 pub fn scratch_region() -> Option<ScratchRegion> {

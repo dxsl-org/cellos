@@ -18,7 +18,8 @@ use types::{ViError, ViResult};
 /// Cached cell table loaded from disk at boot.
 ///
 /// `None` until `EarlyLoader::probe()` is called successfully.
-static CELL_TABLE: crate::sync::Spinlock<Option<EarlyTable>> = crate::sync::Spinlock::new(None);
+static CELL_TABLE: crate::sync::Spinlock<Option<EarlyTable>> =
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::CELL_TABLE);
 
 struct EarlyTable {
     entries: Vec<CellEntry>,

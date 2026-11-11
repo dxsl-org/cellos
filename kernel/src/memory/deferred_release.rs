@@ -80,12 +80,14 @@ struct DeferredRelease {
     p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 
-static DEFERRED: Spinlock<Vec<DeferredRelease>> = Spinlock::new(Vec::new());
+static DEFERRED: Spinlock<Vec<DeferredRelease>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::DEFERRED_RELEASE);
 /// Tags whose invalidation was given up on. They never become confirmed again,
 /// because the only proof — an acknowledgement published after the PTE teardown
 /// — is not coming. Kept separately from the queue so an abandoned tag does not
 /// hold a queue slot the reaper can still use.
-static ABANDONED_TAGS: Spinlock<Vec<usize>> = Spinlock::new(Vec::new());
+static ABANDONED_TAGS: Spinlock<Vec<usize>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::ABANDONED_TAGS);
 static ABANDONED_SATURATED: AtomicBool = AtomicBool::new(false);
 static ATTEMPTS_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static ABANDONED_ENTRIES: AtomicUsize = AtomicUsize::new(0);

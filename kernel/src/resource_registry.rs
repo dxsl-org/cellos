@@ -227,7 +227,8 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 // ---------------------------------------------------------------------------
 
 /// Maps MMIO base address → the window's ownership record.
-static REGISTRY: Spinlock<BTreeMap<usize, MmioRegion>> = Spinlock::new(BTreeMap::new());
+static REGISTRY: Spinlock<BTreeMap<usize, MmioRegion>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::RESOURCE_REGISTRY);
 
 /// One owned MMIO window. `owner_tid` is the claiming task: every query
 /// (`lookup_mmio_owner`, WaitIrq, block-route ownership) compares task ids.
@@ -259,13 +260,16 @@ enum DisplayFramebufferState {
     Active(DisplayFramebuffer),
 }
 
-static DISPLAY_FRAMEBUFFER: Spinlock<DisplayFramebufferState> =
-    Spinlock::new(DisplayFramebufferState::Empty);
+static DISPLAY_FRAMEBUFFER: Spinlock<DisplayFramebufferState> = Spinlock::ranked(
+    DisplayFramebufferState::Empty,
+    crate::sync::rank::DISPLAY_FRAMEBUFFER,
+);
 
 /// Dynamically discovered PCIe BAR windows (base → len).
 /// Populated by `pcie_ecam::init()` after the ECAM scan; consumed by
 /// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
-static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
+static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::PCIE_BARS);
 
 /// Test-hooks only: register a window with an explicit class, so a boot
 /// self-test can prove class-selective revocation on boards whose allowlist
@@ -959,8 +963,10 @@ mod display_tests {
 /// and call `iommu::map_dma_for_cell(0, bdf, ...)` directly during init.
 /// Only userspace Driver Cells that receive PCIe device ownership via capability
 /// delegation need to register here.
-static BDF_OWNERS: Spinlock<alloc::collections::BTreeMap<u32, usize>> =
-    Spinlock::new(alloc::collections::BTreeMap::new());
+static BDF_OWNERS: Spinlock<alloc::collections::BTreeMap<u32, usize>> = Spinlock::ranked(
+    alloc::collections::BTreeMap::new(),
+    crate::sync::rank::BDF_OWNERS,
+);
 
 /// Atomically claim an unowned PCIe BDF for task `tid`.
 ///

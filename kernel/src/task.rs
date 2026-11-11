@@ -523,11 +523,13 @@ pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTr
 const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 
 // Global Scheduler Instance
-pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
+pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> =
+    Spinlock::ranked(None, crate::sync::rank::SCHEDULER);
 /// Dead tasks whose IOMMU teardown has not yet been hardware-acknowledged.
 /// One entry is retried per scheduler pass to bound teardown latency.
 #[cfg(not(feature = "p01-trace"))]
-static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<usize>> = Spinlock::new(VecDeque::new());
+static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<usize>> =
+    Spinlock::ranked(VecDeque::new(), crate::sync::rank::IOMMU_CLEANUP_RETRIES);
 #[cfg(feature = "p01-trace")]
 struct RetiredDmaCleanup {
     tid: usize,
@@ -536,9 +538,10 @@ struct RetiredDmaCleanup {
 }
 #[cfg(feature = "p01-trace")]
 static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<RetiredDmaCleanup>> =
-    Spinlock::new(VecDeque::new());
+    Spinlock::ranked(VecDeque::new(), crate::sync::rank::IOMMU_CLEANUP_RETRIES);
 /// Prevents duplicate retirement paths from observing an in-progress domain as absent.
-static IOMMU_CLEANUP_SERIAL: Spinlock<()> = Spinlock::new(());
+static IOMMU_CLEANUP_SERIAL: Spinlock<()> =
+    Spinlock::ranked((), crate::sync::rank::IOMMU_CLEANUP_SERIAL);
 
 // Global Tick Counter
 static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
@@ -824,6 +827,12 @@ pub fn init() {
     // Install hart-local state for hart 0 BEFORE the scheduler or timer start,
     // so current_cell_id() works correctly once interrupts are enabled.
     crate::sched::hart_local::install(0);
+    // From here every lock spin answers peers' TLB-flush requests, and the
+    // test-posture rank check keeps its held set per hart.
+    crate::sync::install_hart_hooks(
+        crate::sched::hart_local::current_hart_id,
+        crate::sched::smp::answer_tlb_flush_in_spin,
+    );
     // Hart 0 is online from here on, on every architecture, so every later
     // remote shootdown or flush-epoch set names it.
     crate::sched::smp::publish_boot_hart_online();
@@ -3033,7 +3042,8 @@ impl LogRing {
     }
 }
 
-static LOG_RING: crate::sync::Spinlock<LogRing> = crate::sync::Spinlock::new(LogRing::new());
+static LOG_RING: crate::sync::Spinlock<LogRing> =
+    crate::sync::Spinlock::ranked(LogRing::new(), crate::sync::rank::LOG_RING);
 
 /// Drain up to `buf.len()` bytes from the user-log ring into `buf`.
 /// Called by the `ReadLog = 237` syscall handler.

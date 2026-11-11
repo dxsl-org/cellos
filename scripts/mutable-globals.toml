@@ -1242,6 +1242,39 @@ rationale = "fetch_add(Relaxed) only needs RMW uniqueness and publishes no other
 review = "kernel/src/task.rs:next_delivery_id; kernel/src/task.rs:ipc_post_nonblock; kernel/src/dev/console_drv.rs:259; kernel/src/task.rs:vi_timer_tick"
 
 [[global]]
+key = "kernel::sync::SPIN_HOOK"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::sync: install_hart_hooks (task::init on the boot hart) stores the TLB-flush answer fn once; Spinlock::lock loads it on every spin iteration"
+contexts = ["boot", "normal", "irq", "exception", "ap"]
+seal = "written once in task::init, after hart_local::install(0) and before start_secondaries; 0 (no hook) until then, when no peer can owe a flush"
+retirement = "never: the hook lives for the whole run"
+rationale = "A fn pointer in an AtomicUsize (Release store, Acquire load), so sync.rs no longer names sched:: (Phase 10 step 3). Called with interrupts masked; the hook takes no lock, allocates nothing and never logs."
+review = "kernel/src/sync.rs:install_hart_hooks; kernel/src/sync.rs:Spinlock::lock; kernel/src/task.rs:init; kernel/src/sched/smp.rs:answer_tlb_flush_in_spin"
+
+[[global]]
+key = "kernel::sync::HART_ID_HOOK"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::sync: install_hart_hooks stores sched::hart_local::current_hart_id once; read by the spin hook call and the test-posture held-rank mask"
+contexts = ["boot", "normal", "irq", "exception", "ap"]
+seal = "written once in task::init before any secondary starts; hart 0 is assumed until then (single hart)"
+retirement = "never: lives for the whole run"
+rationale = "A fn pointer in an AtomicUsize (Release/Acquire); the reader is lock-free and reads only the hart's own tp/GS."
+review = "kernel/src/sync.rs:hart_id; kernel/src/sync.rs:install_hart_hooks; kernel/src/sched/hart_local.rs:current_hart_id"
+
+[[global]]
+key = "kernel::sync::rank::lock_ranks!#1"
+lifetime = "global"
+mutation = "none"
+owner = "kernel::sync::rank: the lock rank table"
+contexts = ["none"]
+seal = "no storage: the macro emits a fieldless enum, `pub const` ranks and the `NAMES` string slice"
+retirement = "no storage: constants only"
+rationale = "Expands to constants: `Rank(u16)` values and a `&[&str]` name table; no static, no interior mutability."
+review = "kernel/src/sync/rank.rs:lock_ranks"
+
+[[global]]
 key = "kernel::task::SCHEDULER"
 lifetime = "global"
 mutation = "spinlock"

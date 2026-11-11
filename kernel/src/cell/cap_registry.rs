@@ -11,7 +11,7 @@ use alloc::collections::BTreeMap;
 type TicketFile = alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>;
 
 static CSPACE_FILES: Spinlock<BTreeMap<(u64, u64, u64), Option<TicketFile>>> =
-    Spinlock::new(BTreeMap::new());
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::CSPACE_FILES);
 
 pub fn attach_file_to_ticket(key: (u64, u64, u64), file: TicketFile) {
     CSPACE_FILES.lock().insert(key, Some(file));

@@ -67,7 +67,8 @@ pub(crate) fn key_for(addr: VAddr) -> FutexKey {
 /// The queue is bounded by the per-cell thread cap (`MAX_THREADS_PER_CELL`): only a
 /// task that is parked can be enqueued, and a cell cannot have more parked tasks
 /// than it has threads. It never grows without bound.
-static WAITERS: Spinlock<BTreeMap<FutexKey, VecDeque<usize>>> = Spinlock::new(BTreeMap::new());
+static WAITERS: Spinlock<BTreeMap<FutexKey, VecDeque<usize>>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::FUTEX_WAITERS);
 
 fn enqueue(key: FutexKey, tid: usize) {
     let mut waiters = WAITERS.lock();

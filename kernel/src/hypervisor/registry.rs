@@ -100,7 +100,8 @@ struct Vm {
 // VM_REGISTRY is keyed by (owner_tid, vm_id).
 // vm_id is assigned sequentially per owner; starts at 1.
 #[cfg(target_arch = "aarch64")]
-static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), Vm>>> = Spinlock::new(None);
+static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), Vm>>> =
+    Spinlock::ranked(None, crate::sync::rank::VM_REGISTRY);
 
 #[cfg(target_arch = "aarch64")]
 static NEXT_VMID: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(1);

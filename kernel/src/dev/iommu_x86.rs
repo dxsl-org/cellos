@@ -29,7 +29,7 @@ use unit::VtdUnit;
 const VTD_BASE: usize = 0xFED9_0000;
 static PRIMARY_BASE: AtomicUsize = AtomicUsize::new(VTD_BASE);
 
-static UNITS: Spinlock<Vec<VtdUnit>> = Spinlock::new(Vec::new());
+static UNITS: Spinlock<Vec<VtdUnit>> = Spinlock::ranked(Vec::new(), crate::sync::rank::UNITS);
 pub fn is_present() -> bool {
     !UNITS.lock().is_empty()
 }

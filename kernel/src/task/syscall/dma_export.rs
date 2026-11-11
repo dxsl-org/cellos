@@ -240,7 +240,8 @@ pub(crate) struct ExportTable {
     windows: BTreeMap<usize, Windows>,
 }
 
-static EXPORTS: Spinlock<ExportTable> = Spinlock::new(ExportTable::new());
+static EXPORTS: Spinlock<ExportTable> =
+    Spinlock::ranked(ExportTable::new(), crate::sync::rank::DMA_EXPORTS);
 /// Next export id; boot-wide, never reused. An id taken by an export whose
 /// range proof then fails is skipped, never reissued.
 static NEXT_EXPORT_ID: AtomicU64 = AtomicU64::new(1);

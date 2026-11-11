@@ -223,11 +223,13 @@ pub(crate) fn route_for(input_online: bool, byte: u8, from_rx_ring: bool) -> Rou
 
 /// One failed serial delivery. No further hardware bytes are consumed until it
 /// posts successfully; a fixed slot suffices and never allocates.
-static PENDING_ASCII: Spinlock<Option<u8>> = Spinlock::new(None);
+static PENDING_ASCII: Spinlock<Option<u8>> =
+    Spinlock::ranked(None, crate::sync::rank::PENDING_ASCII);
 
 /// One failed typed delivery, including releases and individual motion axes.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-static PENDING_PS2: Spinlock<Option<crate::dev::ps2_keyboard::Ps2Event>> = Spinlock::new(None);
+static PENDING_PS2: Spinlock<Option<crate::dev::ps2_keyboard::Ps2Event>> =
+    Spinlock::ranked(None, crate::sync::rank::PENDING_PS2);
 
 /// Relay a UART byte to the input service as one EV_ASCII press event.
 ///
@@ -268,9 +270,12 @@ fn relay_evdev_to_input(input_tid: usize, opcode: u8, code: u32, value: i32) -> 
     crate::task::ipc_post_nonblock(KERNEL_SENDER, input_tid, &msg[..9]).is_ok()
 }
 
-pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {
-    buffer: VecDeque::new(),
-});
+pub static CONSOLE: Spinlock<viConsole> = Spinlock::ranked(
+    viConsole {
+        buffer: VecDeque::new(),
+    },
+    crate::sync::rank::CONSOLE_DRV,
+);
 
 pub fn init() {
     // Nothing special to init for SBI Console so far

@@ -44,7 +44,8 @@ impl DriverRegistry {
     }
 }
 
-pub static DRIVER_REGISTRY: Spinlock<Option<DriverRegistry>> = Spinlock::new(None);
+pub static DRIVER_REGISTRY: Spinlock<Option<DriverRegistry>> =
+    Spinlock::ranked(None, crate::sync::rank::DRIVER_REGISTRY);
 
 pub fn init() {
     let mut reg = DRIVER_REGISTRY.lock();

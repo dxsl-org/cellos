@@ -15,7 +15,8 @@ use types::{ViError, ViResult};
 ///
 /// Naming note: the spec term "viFS1" (a planned RedoxFS fork) was dropped
 /// 2026-06-10 — this static is unrelated to it despite the shared name.
-pub static VIFS1: Spinlock<Option<Box<dyn ViFileSystem>>> = Spinlock::new(None);
+pub static VIFS1: Spinlock<Option<Box<dyn ViFileSystem>>> =
+    Spinlock::ranked(None, crate::sync::rank::VIFS1);
 
 /// Read a complete file from the embedded FAT filesystem into a heap buffer.
 ///

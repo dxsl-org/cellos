@@ -199,7 +199,10 @@ pub(crate) fn walk(
     }
 }
 
-static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::new([const { Snapshot::new() }; 6]);
+static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::ranked(
+    [const { Snapshot::new() }; 6],
+    crate::sync::rank::P01_VTD_SNAPSHOTS,
+);
 pub(crate) fn static_bytes() -> usize {
     core::mem::size_of_val(&SNAPSHOTS)
 }
@@ -304,7 +307,8 @@ pub(crate) fn edge(sample: usize, index: usize) -> Option<[u64; 8]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    static TEST_SNAPSHOT: Spinlock<Snapshot> = Spinlock::new(Snapshot::new());
+    static TEST_SNAPSHOT: Spinlock<Snapshot> =
+        Spinlock::ranked(Snapshot::new(), crate::sync::rank::P01_VTD_TEST_SNAPSHOT);
     fn row(token: u64, pa: u64, kind: u64) -> [u64; 8] {
         [token, pa, kind, 9, 2, pa + 0x100000, 7, 0]
     }

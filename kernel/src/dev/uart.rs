@@ -79,7 +79,10 @@ impl viUART {
 // impl fmt::Write for viUART { ... }
 
 // Global Serial Instance protected by Spinlock
-pub static SERIAL: Spinlock<viUART> = Spinlock::new(unsafe { viUART::new(0x10_000_000) });
+pub static SERIAL: Spinlock<viUART> = Spinlock::ranked(
+    unsafe { viUART::new(0x10_000_000) },
+    crate::sync::rank::UART_SERIAL,
+);
 
 // Direct writer to avoid stack buffering issues
 struct DirectWriter;
@@ -170,7 +173,8 @@ impl ConsoleLine {
 
 /// Console owner state, guarded together with the UART write so the owner a
 /// record sees cannot change between its line-break decision and its first byte.
-static CONSOLE: Spinlock<ConsoleLine> = Spinlock::new(ConsoleLine::new());
+static CONSOLE: Spinlock<ConsoleLine> =
+    Spinlock::ranked(ConsoleLine::new(), crate::sync::rank::UART_CONSOLE);
 
 /// Line tags of one writer: `prefix` starts each line it begins, `continuation`
 /// starts the line resuming its own line that a kernel record interrupted.
@@ -326,7 +330,8 @@ pub fn init() {
 use alloc::collections::VecDeque;
 
 // Global RX Buffer (Initialized late)
-pub static RX_BUFFER: Spinlock<Option<VecDeque<u8>>> = Spinlock::new(None);
+pub static RX_BUFFER: Spinlock<Option<VecDeque<u8>>> =
+    Spinlock::ranked(None, crate::sync::rank::UART_RX_BUFFER);
 const MAX_RX_BUFFERED: usize = 4096;
 
 /// Initialize Input Buffer (Must be called after Heap Init)

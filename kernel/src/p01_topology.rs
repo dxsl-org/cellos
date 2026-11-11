@@ -53,7 +53,10 @@ impl Snapshot {
         self.source[12] |= reason;
     }
 }
-static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::new([const { Snapshot::new() }; 6]);
+static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::ranked(
+    [const { Snapshot::new() }; 6],
+    crate::sync::rank::P01_TOPOLOGY_SNAPSHOTS,
+);
 pub(crate) fn static_bytes() -> usize {
     core::mem::size_of_val(&SNAPSHOTS)
 }

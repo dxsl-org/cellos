@@ -84,8 +84,10 @@ impl OwnerAdmissionRegistry {
     }
 }
 
-pub(crate) static ADMISSION_REGISTRY: Spinlock<OwnerAdmissionRegistry> =
-    Spinlock::new(OwnerAdmissionRegistry::new());
+pub(crate) static ADMISSION_REGISTRY: Spinlock<OwnerAdmissionRegistry> = Spinlock::ranked(
+    OwnerAdmissionRegistry::new(),
+    crate::sync::rank::ADMISSION_REGISTRY,
+);
 
 /// Evaluate owner admission for an ELF binary before task creation.
 pub fn evaluate_owner_admission(elf_sha256: &[u8; 32]) -> ViResult<()> {

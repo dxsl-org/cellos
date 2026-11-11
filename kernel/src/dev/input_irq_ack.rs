@@ -22,7 +22,8 @@ struct InputAckDriver {
     inner: VirtIOInput<VirtioHal, MmioTransport>,
 }
 
-static KEYBOARD_ACK: Spinlock<Option<InputAckDriver>> = Spinlock::new(None);
+static KEYBOARD_ACK: Spinlock<Option<InputAckDriver>> =
+    Spinlock::ranked(None, crate::sync::rank::KEYBOARD_ACK);
 
 /// Probe VirtIO MMIO slots for an input device and cache it for IRQ ACK.
 pub fn init_driver() {

@@ -570,7 +570,8 @@ pub fn discover(
 }
 
 /// Written once by [`record`] before any reader; leaf lock.
-static FACTS: Spinlock<Option<PowerFacts>> = Spinlock::new(None);
+static FACTS: Spinlock<Option<PowerFacts>> =
+    Spinlock::ranked(None, crate::sync::rank::ACPI_POWER_FACTS);
 
 /// Publish the facts 436 acts on. Called once, from `sci::init`.
 pub fn record(facts: PowerFacts) {

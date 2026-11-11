@@ -18,7 +18,10 @@ enum Reservation {
     },
 }
 
-static RESERVATION: Spinlock<Reservation> = Spinlock::new(Reservation::Idle(None));
+static RESERVATION: Spinlock<Reservation> = Spinlock::ranked(
+    Reservation::Idle(None),
+    crate::sync::rank::NET_RX_RESERVATION,
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisarmResult {

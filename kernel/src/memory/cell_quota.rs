@@ -46,7 +46,8 @@ pub(crate) fn set_default_quota_bytes(bytes: usize) {
 
 /// Limit store — BTreeMap keyed by CellId raw value, stores the byte limit.
 /// Locked only in `register`/`deregister` — NOT inside the allocator hot path.
-static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
+static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::QUOTA_LIMITS);
 
 /// Live byte counters — one AtomicUsize per Cell slot, zero-initialized.
 /// Updated lock-free inside `charge`/`refund` to avoid alloc-inside-alloc deadlock.

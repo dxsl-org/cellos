@@ -596,7 +596,8 @@ pub struct CompletionWait {
 /// "generation not attested on this path".
 /// A real spinlock keeps allocation unique across harts, including RV32 where
 /// the portable 64-bit atomic fallback only masks local interrupts.
-static NEXT_CELL_GENERATION: crate::sync::Spinlock<u64> = crate::sync::Spinlock::new(1);
+static NEXT_CELL_GENERATION: crate::sync::Spinlock<u64> =
+    crate::sync::Spinlock::ranked(1, crate::sync::rank::NEXT_CELL_GENERATION);
 
 fn next_cell_generation() -> u64 {
     let mut next = NEXT_CELL_GENERATION.lock();

@@ -732,11 +732,13 @@ impl AuthorityTable {
         (self.rows.len(), self.rows.capacity(), self.reservations)
     }
 }
-pub static CELL_AUTHORITIES: crate::sync::Spinlock<AuthorityTable> =
-    crate::sync::Spinlock::new(AuthorityTable {
+pub static CELL_AUTHORITIES: crate::sync::Spinlock<AuthorityTable> = crate::sync::Spinlock::ranked(
+    AuthorityTable {
         rows: Vec::new(),
         reservations: 0,
-    });
+    },
+    crate::sync::rank::CELL_AUTHORITIES,
+);
 
 pub(crate) struct AuthorityReservation(Option<CellAuthority>);
 impl AuthorityReservation {

@@ -87,7 +87,8 @@ impl MmcDevice {
 // Global state
 // ---------------------------------------------------------------------------
 
-static MMC_DEVICE: Spinlock<Option<MmcDevice>> = Spinlock::new(None);
+static MMC_DEVICE: Spinlock<Option<MmcDevice>> =
+    Spinlock::ranked(None, crate::sync::rank::MMC_DEVICE);
 
 /// Zero-sized struct; implements [`ViBlockDevice`] by locking [`MMC_DEVICE`].
 pub struct MmcBlock;

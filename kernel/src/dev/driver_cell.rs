@@ -36,7 +36,7 @@ struct BlockRouteSlot {
 /// `SCHEDULER -> ROLE_PUBLICATION -> BLOCK_ROUTES` (leaf); no allocation,
 /// because exit teardown may run in ISR context.
 static BLOCK_ROUTES: Spinlock<[Option<BlockRouteSlot>; MAX_BLOCK_ROUTES]> =
-    Spinlock::new([None; MAX_BLOCK_ROUTES]);
+    Spinlock::ranked([None; MAX_BLOCK_ROUTES], crate::sync::rank::BLOCK_ROUTES);
 
 /// Log name of a block device: `pci-BB-DD-F` or `mmio-<base hex>`.
 struct BlockDeviceName(DeviceKey);
@@ -74,7 +74,8 @@ impl NicDriverState {
 }
 
 /// Registered NIC owner paired with the proven VirtIO IRQ, if any.
-static NIC_DRIVER_STATE: Spinlock<NicDriverState> = Spinlock::new(NicDriverState::empty());
+static NIC_DRIVER_STATE: Spinlock<NicDriverState> =
+    Spinlock::ranked(NicDriverState::empty(), crate::sync::rank::NIC_DRIVER_STATE);
 
 /// TID of the registered GPU Driver Cell (0 = none; no kernel GPU fallback).
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
@@ -88,7 +89,7 @@ pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// `service::USB_HID_PRODUCER` to this TID.
 pub static USB_HID_PRODUCER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// Serializes role state with its matching service-registry publication.
-static ROLE_PUBLICATION: Spinlock<()> = Spinlock::new(());
+static ROLE_PUBLICATION: Spinlock<()> = Spinlock::ranked((), crate::sync::rank::ROLE_PUBLICATION);
 
 const VIRTIO_DEVICE_ID_OFFSET: usize = 0x8;
 const VIRTIO_DEVICE_ID_NETWORK: u32 = 1;

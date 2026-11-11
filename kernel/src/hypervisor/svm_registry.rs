@@ -152,7 +152,8 @@ impl Drop for SvmVm {
     }
 }
 
-static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> = Spinlock::new(None);
+static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> =
+    Spinlock::ranked(None, crate::sync::rank::SVM_VM_REGISTRY);
 
 /// Registry references do not reconstruct root birth or exclusive ownership.
 #[cfg(feature = "p01-trace")]

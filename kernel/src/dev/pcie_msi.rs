@@ -47,10 +47,13 @@ struct State {
     allocations: Vec<Allocation>,
 }
 
-static STATE: Spinlock<State> = Spinlock::new(State {
-    pool: VectorPool::new(),
-    allocations: Vec::new(),
-});
+static STATE: Spinlock<State> = Spinlock::ranked(
+    State {
+        pool: VectorPool::new(),
+        allocations: Vec::new(),
+    },
+    crate::sync::rank::PCIE_MSI_STATE,
+);
 static READY: AtomicBool = AtomicBool::new(false);
 static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 

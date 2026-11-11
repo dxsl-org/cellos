@@ -259,7 +259,8 @@ impl PciDevice {
 
 // ── Global device list ────────────────────────────────────────────────────────
 
-static PCI_DEVICES: Spinlock<Vec<PciDevice>> = Spinlock::new(Vec::new());
+static PCI_DEVICES: Spinlock<Vec<PciDevice>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::PCI_DEVICES);
 
 /// Set to `true` once the Platform Cell has completed its ECAM scan and called
 /// `sys_register_pcie_bar` for all discovered BARs. Phase 08 uses this flag to

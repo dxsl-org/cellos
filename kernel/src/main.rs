@@ -115,7 +115,8 @@ mod cpu_features;
 pub mod platform;
 mod sync;
 #[cfg(test)]
-pub(crate) static TEST_STATE_LOCK: sync::Spinlock<()> = sync::Spinlock::new(());
+pub(crate) static TEST_STATE_LOCK: sync::Spinlock<()> =
+    sync::Spinlock::ranked((), crate::sync::rank::TEST_STATE_LOCK);
 
 /// Signal QEMU to exit with a success (0) or failure (1) code.
 ///

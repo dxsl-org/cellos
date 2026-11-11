@@ -613,7 +613,7 @@ impl FrameAllocator {
 
 /// Global frame allocator
 pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::FRAME_ALLOCATOR);
 
 /// A non-copyable allocation lease returned to the bitmap only on drop.
 pub struct OwnedFrame {

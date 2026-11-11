@@ -296,6 +296,7 @@
 
 # ---- sync ----
 "kernel/src/sync.rs" = { category = "A", owner = "sync" }
+"kernel/src/sync/rank.rs" = { category = "A", owner = "sync" }
 
 # ---- system_config ----
 "kernel/src/system_config.rs" = { category = "C", owner = "system_config" }

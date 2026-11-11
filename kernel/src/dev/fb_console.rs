@@ -158,7 +158,8 @@ impl FbConsoleState {
     }
 }
 
-static FB_STATE: Spinlock<FbConsoleState> = Spinlock::new(FbConsoleState::empty());
+static FB_STATE: Spinlock<FbConsoleState> =
+    Spinlock::ranked(FbConsoleState::empty(), crate::sync::rank::FB_STATE);
 
 /// Initialize the framebuffer console with the provided geometry and virtual address.
 pub fn init(virt_base: usize, width: usize, height: usize, pitch: usize) {

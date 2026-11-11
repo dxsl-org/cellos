@@ -78,11 +78,13 @@ impl ServiceEntry {
     }
 }
 
-static REGISTRY: Spinlock<BTreeMap<u16, ServiceEntry>> = Spinlock::new(BTreeMap::new());
+static REGISTRY: Spinlock<BTreeMap<u16, ServiceEntry>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SERVICE_REGISTRY);
 
 /// Private id → tid of the spawn-only registrar that owns it. Lock order:
 /// `OWNERS → REGISTRY`; nothing takes `OWNERS` while holding `REGISTRY`.
-static OWNERS: Spinlock<BTreeMap<u16, usize>> = Spinlock::new(BTreeMap::new());
+static OWNERS: Spinlock<BTreeMap<u16, usize>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::OWNERS);
 
 /// Ids below this are the well-known namespace of [`api::syscall::service`];
 /// ids at or above it are private ids a lifecycle parent publishes for its own

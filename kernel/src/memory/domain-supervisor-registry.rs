@@ -42,7 +42,8 @@ pub(crate) struct SupervisorRange {
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
-static RANGES: Spinlock<Vec<SupervisorRange>> = Spinlock::new(Vec::new());
+static RANGES: Spinlock<Vec<SupervisorRange>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::SUPERVISOR_RANGES);
 
 unsafe extern "C" {
     static __domain_text_start: u8;

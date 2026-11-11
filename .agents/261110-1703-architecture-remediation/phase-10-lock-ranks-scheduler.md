@@ -70,9 +70,9 @@ Turn lock order from comments into a checked property, and remove the O(tasks) w
 
 ## Todo List
 
-- [ ] Rank graph, no cycles
+- [x] Rank graph, no cycles
 - [ ] Rank assert on, violations fixed
-- [ ] Spin hook injected
+- [x] Spin hook injected
 - [ ] Token index
 - [ ] Deadline heap
 - [ ] RT set / affinity
@@ -99,4 +99,36 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
 
 ## Deviation Log
 
-None.
+- **Step 1: rank graph (`3f1dd7078` tree).** The 50 "lock order" comments in 27 files yield these nesting edges between static locks:
+  - `*_GRANT_TABLE → SCHEDULER`
+  - `SCHEDULER → {SWAP_CEILINGS, RETIREMENT_VERDICTS, DEATH_SUBSCRIBERS, ROLE_PUBLICATION, SERVICE_REGISTRY, QUOTA_LIMITS, ACCOUNTING, PIPES, per-hart ready}`
+  - `DEATH_SUBSCRIBERS → RETIREMENT_VERDICTS`
+  - `ROLE_PUBLICATION → {BLOCK_ROUTES, NIC_DRIVER_STATE, service/role leaves}`
+  - `OWNERS → SERVICE_REGISTRY`
+  - `CELL_AUTHORITIES → CSPACE_FILES`
+  - `RISCV_DOMAINS → CQ_TRANSACTION`
+  - `VM_REGISTRY → FRAME_ALLOCATOR → KERNEL_ROOT`
+  - `FRAME_ALLOCATOR → stack registry`
+  - grant tables `→ gate → receiver slot → KERNEL_ROOT`
+  - grant table `→ PIN_REGISTRY`
+
+  Leaves taken alone: completion ring, `NET_RX_WAIT`, pin `REGISTRY` (never across FRAME_ALLOCATOR, KERNEL_ROOT or SCHEDULER). **No cycle**, so no stop is needed.
+
+  The comments cover only part of the 87 static locks. The remaining order is learned. Host tests, with the check active, report each violation, and the table is re-sorted topologically until clean (26 edges, all consistent). Then the test-hooks QEMU lanes run in a temporary record-only mode that logs every observed `held → acquired` pair. The host-only `TEST_STATE_LOCK` (test serialization) ranks first.
+- **Steps 2 and 3, one commit (deviation).** The spin hook and the rank check are both new state in `Spinlock::lock`, so they land together.
+  - **Form:** `Spinlock::ranked(data, rank::NAME)`, with a `rank` field compiled only under `any(test-hooks, test)`. Dev and release kernels store and do nothing.
+  - **Edits:** the 88 static initializers. Instance locks keep `Spinlock::new`, which means unranked.
+  - **Held set:** a 128-bit per-hart mask, or a per-thread mask in host tests. Release order is free. `try_lock` records without checking, and `force_unlock` clears.
+  - **Hooks:** `sync::install_hart_hooks` (from `task::init`, before any secondary) sets the hart-id reader and the TLB-flush spin answer. `sync.rs` no longer names `sched::`.
+  - **Order:** 87 ranks satisfy 125 edges.
+    - 26 come from host tests and 33 from the first assert run.
+    - 61 more come from a temporary record-all run of the x86 domain (1/2/4 CPU), RV64 native-domain and AArch64 test-hooks lanes.
+    - The documented edges from step 1 are included.
+    - No cycle. Locks with no observed or documented successor go innermost.
+  - **Generated output:** `tools/mutable-globals` now records each static's rank and fails on an unranked static spinlock or an unknown rank. It also writes `docs/generated/lock-ranks.md`, checked by its `--check`.
+- **Assert-mode lanes.** These pass with the check on and no `[lockrank]` report: x86 domain 1/2/4 CPU, `pcie-bar-window`, `local-service-lifecycle-x86` and the host tests (both feature sets).
+  - **Pre-existing failures** (identical on `c2776928b` source, rebuilt and run as the baseline):
+    - `vfs-quota`: missing the `[stack-baseline] name=shell` marker.
+    - `qemu-native-domain-test --harts 2`: RV64 "kernel stack overflow: trap entry could not save a frame" after `S22-RV64-SWITCH: PASS`.
+    - `qemu-aarch64-test-hooks`: `S22-AARCH64-DOMAIN-LIVE: FAIL asid=0`.
+  - All three are manual-tier, except `vfs-quota`, which is `pr`.

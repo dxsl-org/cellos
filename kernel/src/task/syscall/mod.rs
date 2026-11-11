@@ -106,10 +106,13 @@ static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
 static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
-static SHM_HANDLES: Spinlock<BTreeMap<usize, ShmRecord>> = Spinlock::new(BTreeMap::new());
+static SHM_HANDLES: Spinlock<BTreeMap<usize, ShmRecord>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SHM_HANDLES);
 
-static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> =
-    Spinlock::new([0; MAX_IN_FLIGHT_DMA_PUBLICATIONS]);
+static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> = Spinlock::ranked(
+    [0; MAX_IN_FLIGHT_DMA_PUBLICATIONS],
+    crate::sync::rank::DMA_PUBLICATIONS,
+);
 
 impl DmaPublicationGuard {
     fn commit(mut self) {
@@ -135,7 +138,8 @@ pub(crate) mod dma_export;
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
 
-static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock::new(None);
+static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> =
+    Spinlock::ranked(None, crate::sync::rank::PAGE_GRANT_TABLE);
 
 #[cfg(all(
     feature = "native-domains",
@@ -333,7 +337,8 @@ fn residual_domain_record(
 
 // ── Registered Grant Table (GrantRegister / GrantUnregister, syscalls 215/216) ──
 
-static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> = Spinlock::new(None);
+static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> =
+    Spinlock::ranked(None, crate::sync::rank::REG_GRANT_TABLE);
 
 // ── Shared allocation/deallocation helpers ────────────────────────────────────
 

@@ -91,7 +91,7 @@ const WATCHDOG_FAULT_CAUSE: u32 = 0x0000_DEAD;
 /// Lock order: only ever locked while already holding (or after releasing)
 /// SCHEDULER — never SUBSCRIBERS-then-SCHEDULER — to avoid deadlock.
 static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
-    crate::sync::Spinlock::new(BTreeMap::new());
+    crate::sync::Spinlock::ranked(BTreeMap::new(), crate::sync::rank::DEATH_SUBSCRIBERS);
 
 /// Lexically pins heap accounting to the kernel for scheduler-owned containers.
 ///

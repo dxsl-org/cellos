@@ -146,14 +146,17 @@ struct Accounting {
     retired_count: u64,
 }
 const _: [(); 41304] = [(); core::mem::size_of::<Accounting>()];
-static ACCOUNTING: Spinlock<Accounting> = Spinlock::new(Accounting {
-    groups: [Group::ZERO; N],
-    harts: [Hart::ZERO; M],
-    header: Header::ZERO,
-    events: [Event::ZERO; EVENTS],
-    retired: [Group::ZERO; N],
-    retired_count: 0,
-});
+static ACCOUNTING: Spinlock<Accounting> = Spinlock::ranked(
+    Accounting {
+        groups: [Group::ZERO; N],
+        harts: [Hart::ZERO; M],
+        header: Header::ZERO,
+        events: [Event::ZERO; EVENTS],
+        retired: [Group::ZERO; N],
+        retired_count: 0,
+    },
+    crate::sync::rank::ACCOUNTING,
+);
 
 #[derive(Clone, Copy)]
 pub(crate) struct Gate {

@@ -118,7 +118,7 @@ static BOUND_X86_PROFILE: ProfileCell = ProfileCell::new();
 /// [`x86_machine_inputs`].
 #[cfg(target_arch = "x86_64")]
 static X86_MACHINE_FACTS: crate::sync::Spinlock<Option<X86BootFacts>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::X86_MACHINE_FACTS);
 
 /// The bound profile and the boot facts recorded with it, or `None` before
 /// binding. Never panics: syscall 433 may be asked before or without a profile.

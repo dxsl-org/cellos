@@ -355,15 +355,18 @@ struct Registry {
 
 /// One lock covers both tables: they are only ever consulted together, and a
 /// single leaf lock removes any ordering question between them.
-static REGISTRY: Spinlock<Registry> = Spinlock::new(Registry {
-    pins: [EMPTY_PIN; MAX_PINNED_REGIONS],
-    cache_sync: [EMPTY_CACHE_SYNC; MAX_PINNED_REGIONS],
-    next_cache_token: 1,
-    vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
-    grant_leases: [EMPTY_GRANT_LEASE; MAX_GRANT_LEASES],
-    dma_exports: BTreeMap::new(),
-    quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
-});
+static REGISTRY: Spinlock<Registry> = Spinlock::ranked(
+    Registry {
+        pins: [EMPTY_PIN; MAX_PINNED_REGIONS],
+        cache_sync: [EMPTY_CACHE_SYNC; MAX_PINNED_REGIONS],
+        next_cache_token: 1,
+        vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
+        grant_leases: [EMPTY_GRANT_LEASE; MAX_GRANT_LEASES],
+        dma_exports: BTreeMap::new(),
+        quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
+    },
+    crate::sync::rank::PIN_REGISTRY,
+);
 
 /// Live entries in `Registry::grant_leases`.
 ///

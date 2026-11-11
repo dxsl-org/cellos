@@ -103,8 +103,9 @@ impl Pipe {
     }
 }
 
-static PIPES: Spinlock<BTreeMap<usize, Pipe>> = Spinlock::new(BTreeMap::new());
-static NEXT_PIPE_ID: Spinlock<usize> = Spinlock::new(1);
+static PIPES: Spinlock<BTreeMap<usize, Pipe>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::PIPES);
+static NEXT_PIPE_ID: Spinlock<usize> = Spinlock::ranked(1, crate::sync::rank::NEXT_PIPE_ID);
 
 /// Pipe rings are kernel objects. Charge their capacity explicitly to the
 /// creating cell, but allocate and free their storage as kernel memory so the

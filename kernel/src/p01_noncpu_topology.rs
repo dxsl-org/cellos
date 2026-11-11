@@ -258,7 +258,10 @@ pub(crate) fn walk(
         snapshot.refuse(reason);
     }
 }
-static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::new([const { Snapshot::new() }; 6]);
+static SNAPSHOTS: Spinlock<[Snapshot; 6]> = Spinlock::ranked(
+    [const { Snapshot::new() }; 6],
+    crate::sync::rank::P01_NONCPU_TOPOLOGY_SNAPSHOTS,
+);
 pub(crate) fn static_bytes() -> usize {
     core::mem::size_of_val(&SNAPSHOTS)
 }
@@ -354,7 +357,10 @@ pub(crate) fn edge(sample: usize, index: usize) -> Option<[u64; 7]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    static TEST_SNAPSHOT: Spinlock<Snapshot> = Spinlock::new(Snapshot::new());
+    static TEST_SNAPSHOT: Spinlock<Snapshot> = Spinlock::ranked(
+        Snapshot::new(),
+        crate::sync::rank::P01_NONCPU_TOPOLOGY_TEST_SNAPSHOT,
+    );
     #[test]
     fn independent_vtd_structure_roots_never_seed_or_multiply_slpt_trees() {
         let mut snapshot = TEST_SNAPSHOT.lock();

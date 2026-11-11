@@ -59,17 +59,24 @@ fn main() -> ExitCode {
         eprintln!("mutable-globals: {p}");
         failed = true;
     }
-    if mode == "--write" {
-        if let Some(dir) = report_path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+    let ranks_path = report_path.with_file_name("lock-ranks.md");
+    let mut outputs = vec![(report_path.clone(), out.report.clone())];
+    if let Some(ranks) = &out.lock_ranks {
+        outputs.push((ranks_path, ranks.clone()));
+    }
+    for (path, text) in &outputs {
+        if mode == "--write" {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Err(e) = std::fs::write(path, text) {
+                eprintln!("{}: {e}", path.display());
+                return ExitCode::from(2);
+            }
+        } else if std::fs::read_to_string(path).ok().as_deref() != Some(text.as_str()) {
+            eprintln!("mutable-globals: {} is not current; rerun with --write", path.display());
+            failed = true;
         }
-        if let Err(e) = std::fs::write(&report_path, &out.report) {
-            eprintln!("{}: {e}", report_path.display());
-            return ExitCode::from(2);
-        }
-    } else if std::fs::read_to_string(&report_path).ok().as_deref() != Some(out.report.as_str()) {
-        eprintln!("mutable-globals: {} is not current; rerun with --write", report_path.display());
-        failed = true;
     }
     let required = out.discovery.decls.iter().filter(|d| d.required()).count();
     eprintln!(

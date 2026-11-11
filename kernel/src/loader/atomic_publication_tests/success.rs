@@ -12,9 +12,9 @@ const GOVERNED_SMP: u8 = 2;
 static GOVERNED_CASE: core::sync::atomic::AtomicU8 =
     core::sync::atomic::AtomicU8::new(GOVERNED_IDLE);
 static GOVERNED_PENDING: crate::sync::Spinlock<Option<StateSnapshot>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::GOVERNED_PENDING);
 static TRUSTED_PENDING: crate::sync::Spinlock<Option<StateSnapshot>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::TRUSTED_PENDING);
 static TRUSTED_ARMED: AtomicBool = AtomicBool::new(false);
 
 fn ready_contains(state: &StateSnapshot, tid: usize) -> bool {

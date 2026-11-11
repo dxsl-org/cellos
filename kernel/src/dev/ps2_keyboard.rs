@@ -42,23 +42,26 @@ struct Ps2State {
     event_len: usize,
 }
 
-static STATE: Spinlock<Ps2State> = Spinlock::new(Ps2State {
-    extended: false,
-    pause_idx: 0,
-    pressed: [false; 144],
-    caps_lock: false,
-    buf: [0; 8],
-    buf_len: 0,
-    buf_pos: 0,
-    mouse_enabled: false,
-    mouse_buf: [0; 3],
-    mouse_idx: 0,
-    mouse_buttons: 0,
-    absolute_mouse: false,
-    events: [None; 8],
-    event_head: 0,
-    event_len: 0,
-});
+static STATE: Spinlock<Ps2State> = Spinlock::ranked(
+    Ps2State {
+        extended: false,
+        pause_idx: 0,
+        pressed: [false; 144],
+        caps_lock: false,
+        buf: [0; 8],
+        buf_len: 0,
+        buf_pos: 0,
+        mouse_enabled: false,
+        mouse_buf: [0; 3],
+        mouse_idx: 0,
+        mouse_buttons: 0,
+        absolute_mouse: false,
+        events: [None; 8],
+        event_head: 0,
+        event_len: 0,
+    },
+    crate::sync::rank::PS2_STATE,
+);
 
 #[inline]
 fn inb(port: u16) -> u8 {

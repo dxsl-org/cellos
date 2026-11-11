@@ -68,7 +68,7 @@ static DDT_VIRT: AtomicUsize = AtomicUsize::new(0); // L1 table virtual address
 static DDT_PHYS: AtomicU64 = AtomicU64::new(0); // L1 table physical address (identity)
 static CQ_VIRT: AtomicUsize = AtomicUsize::new(0);
 /// Serializes each invalidation batch through its acknowledging IOFENCE.
-static CQ_TRANSACTION: Spinlock<()> = Spinlock::new(());
+static CQ_TRANSACTION: Spinlock<()> = Spinlock::ranked((), crate::sync::rank::CQ_TRANSACTION);
 
 struct RiscvDomain {
     pt: Sv39IommuPt,
@@ -77,11 +77,13 @@ struct RiscvDomain {
 }
 
 // Key = Tid as u64; kernel domain = tid 0.
-static RISCV_DOMAINS: Spinlock<BTreeMap<u64, RiscvDomain>> = Spinlock::new(BTreeMap::new());
+static RISCV_DOMAINS: Spinlock<BTreeMap<u64, RiscvDomain>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::RISCV_DOMAINS);
 
 // Free-list prevents 16-bit PSCID exhaustion on long-running servers with Cell restarts.
 // PSCID 0 is reserved (invalid); first real PSCID = 1.
-static PSCID_FREE_LIST: Spinlock<Vec<u16>> = Spinlock::new(Vec::new());
+static PSCID_FREE_LIST: Spinlock<Vec<u16>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::PSCID_FREE_LIST);
 static PSCID_NEXT: AtomicU16 = AtomicU16::new(1);
 
 // ── MMIO helpers ─────────────────────────────────────────────────────────────

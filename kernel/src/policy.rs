@@ -168,7 +168,7 @@ enum PolicyState {
     Invalid,
 }
 
-static POLICY: Spinlock<Option<PolicyState>> = Spinlock::new(None);
+static POLICY: Spinlock<Option<PolicyState>> = Spinlock::ranked(None, crate::sync::rank::POLICY);
 
 /// Force-release this module's lock during fault teardown.
 ///

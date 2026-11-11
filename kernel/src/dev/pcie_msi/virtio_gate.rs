@@ -95,7 +95,8 @@ fn bypass_reason(
     }
 }
 
-static REFUSED: Spinlock<Vec<u32>> = Spinlock::new(Vec::new());
+static REFUSED: Spinlock<Vec<u32>> =
+    Spinlock::ranked(Vec::new(), crate::sync::rank::VIRTIO_GATE_REFUSED);
 
 fn probe_bypasses(dev: &PciDevice) -> bool {
     let cfg = Config::new(dev.canonical_bdf());

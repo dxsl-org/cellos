@@ -436,7 +436,7 @@ const RACE_VA_B: usize = RACE_VA_A + PAGE_SIZE;
 const RACE_CELL: u64 = 91_201;
 
 static RACE_SPACE: crate::sync::Spinlock<Option<Arc<AddressSpace>>> =
-    crate::sync::Spinlock::new(None);
+    crate::sync::Spinlock::ranked(None, crate::sync::rank::RACE_SPACE);
 static RACE_GO: AtomicUsize = AtomicUsize::new(0);
 static RACE_DONE: AtomicUsize = AtomicUsize::new(0);
 static RACE_READERS_SEEN: AtomicUsize = AtomicUsize::new(0);

@@ -35,7 +35,8 @@ pub use super::page_protect::{protect_page, protect_pages, protect_range};
 use crate::sync::Spinlock;
 
 /// Global Kernel Root Page Table Address (physical).
-pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> = Spinlock::new(None);
+pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> =
+    Spinlock::ranked(None, crate::sync::rank::KERNEL_ROOT);
 
 /// No-op paging init for bare physical addressing (RV32 Nano, SATP=0).
 ///

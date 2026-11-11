@@ -50,10 +50,13 @@ pub(crate) fn test_tag_ack_withheld() -> bool {
 static TEST_FLUSH_TRACKING: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "test-hooks")]
 static TEST_FLUSHED_PAGES: crate::sync::Spinlock<alloc::vec::Vec<VAddr>> =
-    crate::sync::Spinlock::new(alloc::vec::Vec::new());
+    crate::sync::Spinlock::ranked(
+        alloc::vec::Vec::new(),
+        crate::sync::rank::TEST_FLUSHED_PAGES,
+    );
 #[cfg(feature = "test-hooks")]
 static TEST_FLUSHED_TAGS: crate::sync::Spinlock<alloc::vec::Vec<usize>> =
-    crate::sync::Spinlock::new(alloc::vec::Vec::new());
+    crate::sync::Spinlock::ranked(alloc::vec::Vec::new(), crate::sync::rank::TEST_FLUSHED_TAGS);
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn begin_test_flush_observation() {

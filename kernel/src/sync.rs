@@ -4,11 +4,41 @@
 use crate::hal::Arch;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+pub mod rank;
+pub use rank::Rank;
+
+/// Spin hook: answers a peer's pending TLB-flush request while this hart spins
+/// with interrupts masked. Set once by SMP bring-up ([`install_hart_hooks`]);
+/// until then there are no peers and nothing is owed.
+static SPIN_HOOK: AtomicUsize = AtomicUsize::new(0);
+/// Current hart id, for the per-hart held-rank mask. Hart 0 until installed.
+static HART_ID_HOOK: AtomicUsize = AtomicUsize::new(0);
+
+/// Installs the hart-id reader and the spin hook. Called once on the boot hart
+/// before any secondary starts; the hooks are plain functions that take no lock,
+/// allocate nothing and never log.
+pub fn install_hart_hooks(hart_id: fn() -> usize, spin: fn(usize)) {
+    HART_ID_HOOK.store(hart_id as usize, Ordering::Release);
+    SPIN_HOOK.store(spin as usize, Ordering::Release);
+}
+
+// Host tests neither spin-answer nor keep per-hart masks (they use a thread-local).
+#[cfg_attr(all(test, not(target_os = "none")), allow(dead_code))]
+fn hart_id() -> usize {
+    match HART_ID_HOOK.load(Ordering::Acquire) {
+        0 => 0,
+        // SAFETY: only `install_hart_hooks` stores here, always a `fn() -> usize`.
+        hook => unsafe { core::mem::transmute::<usize, fn() -> usize>(hook)() },
+    }
+}
 
 /// Simple spinlock.
 pub struct Spinlock<T> {
     lock: AtomicBool,
+    #[cfg(any(feature = "test-hooks", test))]
+    rank: Rank,
     data: UnsafeCell<T>,
 }
 
@@ -16,9 +46,19 @@ unsafe impl<T: Send> Sync for Spinlock<T> {}
 unsafe impl<T: Send> Send for Spinlock<T> {}
 
 impl<T> Spinlock<T> {
+    /// An unranked lock: instance locks inside per-object structs.
     pub const fn new(data: T) -> Self {
+        Self::ranked(data, Rank::UNRANKED)
+    }
+
+    /// A lock with a place in the global order ([`rank`]); every `static`
+    /// lock is built this way. The rank is checked only in the test posture.
+    #[cfg_attr(not(any(feature = "test-hooks", test)), allow(unused_variables))]
+    pub const fn ranked(data: T, rank: Rank) -> Self {
         Self {
             lock: AtomicBool::new(false),
+            #[cfg(any(feature = "test-hooks", test))]
+            rank,
             data: UnsafeCell::new(data),
         }
     }
@@ -31,6 +71,8 @@ impl<T> Spinlock<T> {
         let saved_int = crate::hal::ARCH.interrupts_enabled();
         #[cfg(not(all(test, not(target_os = "none"))))]
         crate::hal::ARCH.disable_interrupts();
+        #[cfg(any(feature = "test-hooks", test))]
+        rank::before_acquire(self.rank);
 
         loop {
             // Every acquisition, not only a contended one, answers an
@@ -52,7 +94,11 @@ impl<T> Spinlock<T> {
                 ),
                 not(all(test, not(target_os = "none")))
             ))]
-            crate::sched::smp::answer_tlb_flush_in_spin(crate::sched::hart_local::current_hart_id());
+            match SPIN_HOOK.load(Ordering::Acquire) {
+                0 => {}
+                // SAFETY: only `install_hart_hooks` stores here, always a `fn(usize)`.
+                hook => unsafe { core::mem::transmute::<usize, fn(usize)>(hook)(hart_id()) },
+            }
             if self
                 .lock
                 .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -62,6 +108,8 @@ impl<T> Spinlock<T> {
             }
             core::hint::spin_loop();
         }
+        #[cfg(any(feature = "test-hooks", test))]
+        rank::acquired(self.rank);
         SpinlockGuard {
             lock: self,
             #[cfg(not(all(test, not(target_os = "none"))))]
@@ -91,6 +139,8 @@ impl<T> Spinlock<T> {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
+            #[cfg(any(feature = "test-hooks", test))]
+            rank::acquired(self.rank);
             Some(SpinlockGuard {
                 lock: self,
                 #[cfg(not(all(test, not(target_os = "none"))))]
@@ -113,6 +163,8 @@ impl<T> Spinlock<T> {
     /// This is unsafe because it bypasses the lock guard.
     /// Should only be used in context switching or panic handlers.
     pub unsafe fn force_unlock(&self) {
+        #[cfg(any(feature = "test-hooks", test))]
+        rank::released(self.rank);
         self.lock.store(false, Ordering::Release);
     }
 }
@@ -138,6 +190,8 @@ impl<'a, T> DerefMut for SpinlockGuard<'a, T> {
 
 impl<'a, T> Drop for SpinlockGuard<'a, T> {
     fn drop(&mut self) {
+        #[cfg(any(feature = "test-hooks", test))]
+        rank::released(self.lock.rank);
         self.lock.lock.store(false, Ordering::Release);
         // Restore interrupt state
         #[cfg(not(all(test, not(target_os = "none"))))]

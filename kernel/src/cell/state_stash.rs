@@ -57,7 +57,8 @@ impl Entry {
     }
 }
 
-static STASH: Spinlock<BTreeMap<u64, Entry>> = Spinlock::new(BTreeMap::new());
+static STASH: Spinlock<BTreeMap<u64, Entry>> =
+    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::STATE_STASH);
 
 /// Upper bound for a command line carried by one launch transaction.
 pub(crate) const MAX_SPAWN_ARGV_LEN: usize = 512;
