@@ -10,3 +10,5 @@ The owner approved S5b **staged**:
 - **Commits:** one per step, split per directory inside migration steps. Nothing is pushed.
 - **Lane:** the Intel WIP lane moves to S5b; the iGPU DMA-export slice keeps waiting.
 - **Ends** when Phase 11 closes.
+
+**CP1 confirmed 2026-11-11** ([cp1-ipc-model.md §8](cp1-ipc-model.md)). Steps 2–8 are open under the [request](s5b-handoff-request.md) §3 file set.

@@ -150,3 +150,11 @@ Each step is one or more commits and leaves the tree shippable:
 1. Confirm D1–D7 as the Law-1 delta of Phase 11.
 2. **D5:** retire `LookupService` (206) after migration (irreversible), or keep it as a deprecated alias for one more release?
 3. **Blocking path:** confirm that `post_blocking` is limited to input registration and HID events (the census lists 2 sites).
+
+## 8. Owner confirmation 1 — 2026-11-11
+
+The owner confirmed D1–D7 as the Law-1 delta of Phase 11.
+
+- **D5:** `LookupService` (206) is retired after every in-tree caller is migrated. This is irreversible; out-of-tree callers cannot be checked.
+- **Blocking path:** `post_blocking` is limited to input registration and HID events.
+- **Next:** steps 2–8 open, in the §5 order, under the request §3 file set.
