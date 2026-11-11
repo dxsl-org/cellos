@@ -9,6 +9,14 @@
 > and [Spec 25](25-cell-kernel-authority-contract.md) define Kernel Cell and target shared
 > Cell authority while retaining this minimality/enforcement boundary. CapSet-to-CSpace
 > migration is gated; policy delegation is not delegation of kernel enforcement.
+>
+> **2026-11-11 amendment (architecture remediation Phase 09, owner decision):** Category A
+> admits the kernel IPC objects — pipes, futex wait queues and Cell sessions — next to IPC
+> itself; every kernel source file is now listed with its category in
+> [`kernel/residents.toml`](../../kernel/residents.toml) and checked by
+> `scripts/check-kernel-residents.py`; residents this spec forbids are recorded there as
+> `exception` with their migration target (§2.5); §3.5 names the release posture as the
+> line test code never crosses.
 
 ---
 
@@ -137,6 +145,8 @@ These cannot leave the kernel on any ISA Cellos supports (RISC-V, ARM64, x86).
 | Page table management (HHDM, cell VA mapping) | MMU hardware requires EL1 |
 | Preemptive scheduler + context switch | Timer IRQ arrives at EL1; only kernel can preempt a running Cell (**note: seL4 also keeps this as "the one necessary exception"**) |
 | HAL / arch (trap handlers, SBI/PSCI calls, GIC/PLIC) | Wraps privileged CPU instructions |
+| Syscall entry, decode and dispatch | The trap from U-mode lands in the kernel; the dispatcher is the only door |
+| IPC and the kernel IPC objects: request/reply, pipes, futex wait queues, Cell sessions (`kernel/src/ipc/`, amended 2026-11-11) | Each blocks or wakes a task under the scheduler lock; a Cell cannot park or wake another Cell's thread |
 
 ### Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
 
@@ -187,6 +197,16 @@ isolation to be safe (if the platform driver is compromised, it can map any DMA 
 In Cellos's SAS, there is no MMU isolation between the platform driver and the kernel.
 Keeping IOMMU in the kernel is the correct choice until per-Cell address spaces exist.
 
+### 2.5 Resident manifest
+
+[`kernel/residents.toml`](../../kernel/residents.toml) lists every Rust file under
+`kernel/src` with its category (A–D above), `exception` for a resident §3 forbids, or
+`test` for fixture, self-test and measurement code that never reaches a release kernel.
+An `exception` must name its migration target. `scripts/check-kernel-residents.py`
+(CI) fails on an unlisted file, a stale entry or an exception without a target, so a new
+kernel file is a recorded review decision. The manifest — not a hand-kept table in this
+spec — is the authoritative list of current exceptions.
+
 ---
 
 ## 3. Kernel Blacklist — What MUST NOT be in the Kernel
@@ -215,12 +235,18 @@ categories to `kernel/src/` must be rejected at review.
 VirtIO MMIO IRQ router moved to `virtio_common.rs`. Kernel-embedded BootFS (VIFS1) is the
 remaining bootstrap RAM image, not a device driver.
 
-**Remaining genuine exceptions (tech debt — G2):**
+**Remaining genuine exceptions (tech debt — G2).** The authoritative list, with each
+target, is the `exception` rows of [`kernel/residents.toml`](../../kernel/residents.toml)
+(§2.5); the device ones as of 2026-11-11:
 
 | Driver | Migration target |
 |--------|-----------------|
-| `kernel/src/task/drivers/mmc.rs` + subs | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
-| `kernel/src/task/drivers/pcie_ecam.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
+| `kernel/src/dev/mmc.rs` + `dev/mmc/`, `dev/bcm_pinmux.rs` | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
+| `kernel/src/dev/pcie_ecam.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
+| `kernel/src/dev/ps2_keyboard.rs` | input Driver Cell |
+| `kernel/src/dev/fb_console.rs`, `dev/fb_font.rs` (in-kernel text console) | GPU Cell + compositor |
+| `kernel/src/dev/input_irq_ack.rs`, `dev/virtio_hal.rs` | input Driver Cell acknowledges its own IRQ |
+| `kernel/src/dev/block.rs` (null block device) | removed once the boot-time readers use a block route |
 
 **Migrated (kernel-boundary-cleanup plan, 2026-06-24):**
 
@@ -232,7 +258,7 @@ remaining bootstrap RAM image, not a device driver.
 | `virtio_input.rs`, `input_map.rs` | input service Cell ✅ |
 | `virtio_net.rs` | `cells/drivers/virtio-net/` ✅ |
 | `virtio_sound.rs` | deleted (no consumer, YAGNI) ✅ |
-| `fb_console.rs` | GPU Cell + compositor ✅ |
+| `fb_console.rs` (GPU path) | GPU Cell + compositor ✅ — the in-kernel text console remains an exception (above) |
 
 **"We need it early" is not justification.** This reasoning is how Linux became a
 monolith. The correct solution is: (1) design init spawn ordering so Driver Cells start
@@ -246,7 +272,7 @@ freeze/resume/kill primitives.
 | Code | Current boundary | Correct home |
 |------|------------------|--------------|
 | `kernel/src/cell/hotswap.rs` | Supervisor-owned cutover orchestration; kernel retains only the live mechanism helpers (401/413-415/419/421) and bit-32 readiness bookkeeping | Supervisory Cell policy; legacy syscall 400 is retired/reserved |
-| `kernel/src/snapshot.rs` | Snapshot state machine remains in kernel; trigger/authority moved to Supervisor policy | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
+| `kernel/src/snapshot_engine.rs` | Snapshot state machine remains in kernel source but is compiled only with `snapshot-qualified`; every other kernel links the gate-closed `snapshot_disabled.rs`. Trigger/authority moved to Supervisor policy | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
 
 Migration is **partial**, not complete. Exact source sizes are generated status and must
 not be hand-maintained in this specification.
@@ -279,9 +305,15 @@ returns priority decisions. The kernel executes the decision atomically.
 
 ### 3.5 Test/Debug Code
 
-All test, self-test, and debug instrumentation code must be behind
-`#[cfg(feature = "test-hooks")]` or `#[cfg(test)]`. Never ships in production binary.
-(Already enforced in `layer2_selftest.rs` — maintain this invariant.)
+All test, self-test, fixture and debug instrumentation code must be behind
+`#[cfg(feature = "test-hooks")]`, `#[cfg(test)]`, a measurement feature listed in
+`kernel/src/posture.rs` `FORBIDDEN_IN_RELEASE`, or `#[cfg(not(cellos_posture = "release"))]`.
+It never ships in a release-posture kernel: `scripts/x86/qemu-release-posture-test.sh` fails
+if the release kernel carries a `selftest`/`self_test` symbol, and every such file is a `test`
+row in `kernel/residents.toml`. Development images keep their boot fixtures so the existing
+lanes still read their markers. The crypto power-on known-answer tests (ed25519, signed
+policy, cell signing) are not fixtures: they decide whether the code-admission crypto may be
+trusted, and they stay.
 
 ---
 

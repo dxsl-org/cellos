@@ -69,7 +69,7 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 
 - [x] Selftests gated
 - [x] Snapshot gated
-- [ ] Resident manifest + guard + Spec 15 amendment
+- [x] Resident manifest + guard + Spec 15 amendment
 - [x] Directory hoist
 - [ ] Raw cfgs → features
 - [ ] Metric corrected
@@ -141,3 +141,14 @@ Phases 10 and 14 both build on the new layout.
   - The uncalled `virtio_rng::init_driver` no-op. The module's misleading "NIC selector" comment is corrected.
   - The unused `async-trait` dependency, with its `Cargo.lock` entry.
   - The never-compiled `intrinsics.rs` and `prelude.rs`, together with their `[[unreached]]` acknowledgements in the inventory.
+- **Residents (step 4).** `kernel/residents.toml` lists all 297 kernel files: A=82, B=27, C=41, D=28, exception=28, test=91. The manifest is per file and covers all of `kernel/src`, not only `{dev,acpi,fs}`, so every new kernel file needs an entry.
+  - The guard is `scripts/check-kernel-residents.py`. CI runs it together with `--negative-control`, which injects a synthetic unlisted `kernel/src/dev/` file.
+  - A real unlisted `kernel/src/dev/zz_unlisted.rs` also failed (rc=1) when tried locally.
+  - None of the 91 `test` modules has a symbol in the x86 release kernel. Checked with `nm`; module paths are derived from file paths.
+- **Surprise → fix.** `bench-counters` (measurement-only) was not in `FORBIDDEN_IN_RELEASE`. It is added in its own commit, and the build refuses `release-posture,bench-counters`.
+- **Spec 15 amendment (owner decision on pipes/futex/sessions).** The amendment note covers:
+  - §2 A gains rows for syscall entry and for IPC with its kernel objects.
+  - New §2.5 points to the manifest as the authoritative exception list.
+  - §3.1 exceptions are updated to the `dev/` paths and now list the real remaining device residents: ps2, the in-kernel text console, the input IRQ shim and the null block device. The `fb_console ✅` row was wrong and is corrected.
+  - §3.2 records the snapshot gate.
+  - §3.5 states the release-posture rule and the crypto known-answer-test carve-out.

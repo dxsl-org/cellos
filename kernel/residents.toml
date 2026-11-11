@@ -1,0 +1,388 @@
+# Kernel residents (architecture remediation Phase 09; Spec 15 §2–§3).
+#
+# Every Rust source file under kernel/src, and why it is in the kernel.
+# `scripts/check-kernel-residents.py` fails on an unlisted file, a listed file
+# that no longer exists, an unknown category, or an exception without a
+# migration target.
+#
+# category:
+#   A          hardware-mandated mechanism (Spec 15 §2 A, incl. the amended
+#              IPC/futex/pipe/session row)
+#   B          security root of trust (Spec 15 §2 B)
+#   C          bootstrap chicken-and-egg (Spec 15 §2 C)
+#   D          hardware exclusivity arbiter (Spec 15 §2 D)
+#   exception  a resident Spec 15 §3 forbids; `target` names where it goes
+#   test       fixture, self-test or measurement-only code; never compiled into
+#              a release kernel
+#
+# owner: the top-level kernel module that owns the file.
+
+[residents]
+# ---- acpi ----
+"kernel/src/acpi/bytes.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/dmar.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/fadt.rs" = { category = "exception", owner = "acpi", target = "Platform Cell (Spec 15 §3.3)" }
+"kernel/src/acpi/hpet.rs" = { category = "exception", owner = "acpi", target = "Platform Cell (Spec 15 §3.3)" }
+"kernel/src/acpi/madt.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/mcfg.rs" = { category = "exception", owner = "acpi", target = "Platform Cell with PCIe ECAM enumeration (Spec 15 §3.3)" }
+"kernel/src/acpi/mod.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/acpi/records.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/acpi/sdt.rs" = { category = "C", owner = "acpi" }
+"kernel/src/acpi/spcr.rs" = { category = "exception", owner = "acpi", target = "Platform Cell (Spec 15 §3.3)" }
+"kernel/src/acpi/tests.rs" = { category = "test", owner = "acpi" }
+"kernel/src/acpi/tests/tables.rs" = { category = "test", owner = "acpi" }
+
+# ---- admission ----
+"kernel/src/admission/gate.rs" = { category = "B", owner = "admission" }
+"kernel/src/admission/hostile.rs" = { category = "test", owner = "admission" }
+"kernel/src/admission/mod.rs" = { category = "B", owner = "admission" }
+"kernel/src/admission/owner_key.rs" = { category = "B", owner = "admission" }
+"kernel/src/admission/slot_format.rs" = { category = "B", owner = "admission" }
+"kernel/src/admission/slot_selftest.rs" = { category = "test", owner = "admission" }
+"kernel/src/admission/state_selftest.rs" = { category = "test", owner = "admission" }
+"kernel/src/admission/transaction_selftest.rs" = { category = "test", owner = "admission" }
+
+# ---- audit ----
+"kernel/src/audit.rs" = { category = "B", owner = "audit" }
+
+# ---- bench_counters ----
+"kernel/src/bench_counters.rs" = { category = "test", owner = "bench_counters" }
+
+# ---- board ----
+"kernel/src/board.rs" = { category = "C", owner = "board" }
+
+# ---- boot ----
+"kernel/src/boot.rs" = { category = "A", owner = "boot" }
+"kernel/src/boot/dtb_memory.rs" = { category = "A", owner = "boot" }
+"kernel/src/boot/dtb_memory_ranges.rs" = { category = "A", owner = "boot" }
+"kernel/src/boot/fdt_nops.rs" = { category = "A", owner = "boot" }
+"kernel/src/boot/firmware_tree_tests.rs" = { category = "test", owner = "boot" }
+"kernel/src/boot/limine.rs" = { category = "A", owner = "boot" }
+
+# ---- catalog ----
+"kernel/src/catalog.rs" = { category = "B", owner = "catalog" }
+
+# ---- catalog_export ----
+"kernel/src/catalog_export.rs" = { category = "test", owner = "catalog_export" }
+
+# ---- cell ----
+"kernel/src/cell.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/cap_registry.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/cspace.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/hotswap.rs" = { category = "exception", owner = "cell", target = "Supervisor Cell policy; kernel keeps freeze/resume/kill (Spec 15 §3.2)" }
+"kernel/src/cell/metadata.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
+"kernel/src/cell/retirement_verdict.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/retirement_verdict_tests.rs" = { category = "test", owner = "cell" }
+"kernel/src/cell/service_registry.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/state_stash.rs" = { category = "exception", owner = "cell", target = "Supervisor Cell policy (Spec 15 §3.2)" }
+
+# ---- cpu_features ----
+"kernel/src/cpu_features.rs" = { category = "C", owner = "cpu_features" }
+
+# ---- dev ----
+"kernel/src/dev.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
+"kernel/src/dev/block.rs" = { category = "exception", owner = "dev", target = "deleted once snapshot restore, verify_mbr and EarlyLoader read through a block route" }
+"kernel/src/dev/console_drv.rs" = { category = "C", owner = "dev" }
+"kernel/src/dev/console_select.rs" = { category = "C", owner = "dev" }
+"kernel/src/dev/driver_cell.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/fb_console.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
+"kernel/src/dev/fb_font.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
+"kernel/src/dev/gpio_irq.rs" = { category = "A", owner = "dev" }
+"kernel/src/dev/input_irq_ack.rs" = { category = "exception", owner = "dev", target = "input Driver Cell acknowledges its own IRQ (Spec 15 §3.1)" }
+"kernel/src/dev/iommu.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_pt.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/cache.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/context.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/domain.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/gcmd.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/invalidate.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/ir.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/ir/table.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/qi.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/remap.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/rmrr.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/iommu_x86/unit.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
+"kernel/src/dev/irq_wait.rs" = { category = "A", owner = "dev" }
+"kernel/src/dev/mmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/core.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/emmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/pinmux_bcm.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/regs.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/sd.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/mmc/sdhci.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/pcie_ecam.rs" = { category = "exception", owner = "dev", target = "Platform Cell (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/dev/pcie_msi.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/config.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/layout.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/program.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/record.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/vectors.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/pcie_msi/virtio_gate.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/ps2_keyboard.rs" = { category = "exception", owner = "dev", target = "input Driver Cell (Spec 15 §3.1)" }
+"kernel/src/dev/ramdisk.rs" = { category = "C", owner = "dev" }
+"kernel/src/dev/registry.rs" = { category = "D", owner = "dev" }
+"kernel/src/dev/uart.rs" = { category = "C", owner = "dev" }
+"kernel/src/dev/virtio_common.rs" = { category = "A", owner = "dev" }
+"kernel/src/dev/virtio_hal.rs" = { category = "exception", owner = "dev", target = "deleted with the input IRQ ACK shim when the input Cell acks its own IRQ" }
+"kernel/src/dev/virtio_rng.rs" = { category = "B", owner = "dev" }
+
+# ---- ed25519 ----
+"kernel/src/ed25519.rs" = { category = "B", owner = "ed25519" }
+
+# ---- fast_ipc ----
+"kernel/src/fast_ipc.rs" = { category = "A", owner = "fast_ipc" }
+
+# ---- fs ----
+"kernel/src/fs.rs" = { category = "C", owner = "fs" }
+"kernel/src/fs/fat.rs" = { category = "C", owner = "fs" }
+"kernel/src/fs/fat/runs.rs" = { category = "C", owner = "fs" }
+
+# ---- fsapi ----
+"kernel/src/fsapi.rs" = { category = "exception", owner = "fsapi", target = "VFS Cell serving BootFS (Spec 15 §2 C, BootFS row)" }
+
+# ---- hypervisor ----
+"kernel/src/hypervisor.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/hypervisor/registry.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
+"kernel/src/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/hypervisor/vmm_wire.rs" = { category = "A", owner = "hypervisor" }
+
+# ---- ipc ----
+"kernel/src/ipc.rs" = { category = "A", owner = "ipc" }
+"kernel/src/ipc/cell_session.rs" = { category = "A", owner = "ipc" }
+"kernel/src/ipc/futex.rs" = { category = "A", owner = "ipc" }
+"kernel/src/ipc/ipc_wire.rs" = { category = "A", owner = "ipc" }
+"kernel/src/ipc/ipc_wire_tests.rs" = { category = "test", owner = "ipc" }
+"kernel/src/ipc/pending_mailbox.rs" = { category = "A", owner = "ipc" }
+"kernel/src/ipc/pipe.rs" = { category = "A", owner = "ipc" }
+
+# ---- layer2 ----
+"kernel/src/layer2_selftest.rs" = { category = "test", owner = "layer2" }
+
+# ---- loader ----
+"kernel/src/loader.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/aligned_elf.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/baseline.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/cases.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/denials.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/harness.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/probe.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/snapshot.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/atomic_publication_tests/success.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/boot_ceiling.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/boot_ceiling/selftest.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/disk_layout.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/domain_admission.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/early.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/elf.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/elf_section.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/elf_tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/gnu_property.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/governed_spawn.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/image-name-section.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/image-va-tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/image-va.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/launch_profile/mod.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/launch_profile/profiles.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/launch_profile/targets.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/launch_profile/tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/manifest_section.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/manifest_section_tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/mem_spawn_gate.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/reloc.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/reloc_target.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/spawn_request.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/va-alloc-tests.rs" = { category = "test", owner = "loader" }
+"kernel/src/loader/va_alloc.rs" = { category = "C", owner = "loader" }
+"kernel/src/loader/wx.rs" = { category = "C", owner = "loader" }
+
+# ---- machine_facts ----
+"kernel/src/machine_facts.rs" = { category = "C", owner = "machine_facts" }
+"kernel/src/machine_facts_tests.rs" = { category = "test", owner = "machine_facts" }
+
+# ---- main ----
+"kernel/src/main.rs" = { category = "A", owner = "main" }
+
+# ---- measurement_log ----
+"kernel/src/measurement_log.rs" = { category = "B", owner = "measurement_log" }
+
+# ---- memory ----
+"kernel/src/memory.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/address_space.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/address_space_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/cell_quota.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/deferred_release.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/domain-supervisor-registry.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/ept.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/ept_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/frame.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/heap.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/heap/p01_owner.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/kaslr.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/page_protect.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/paging.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/pin.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/pin_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/rt_heap.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/stage2.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/stage2_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/tlb_shootdown.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/tlb_shootdown_selftest.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/vma.rs" = { category = "A", owner = "memory" }
+
+# ---- p01 ----
+"kernel/src/p01_measurement.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_noncpu.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_noncpu_topology.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_resources.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_retained.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_topology.rs" = { category = "test", owner = "p01" }
+"kernel/src/p01_vtd_topology.rs" = { category = "test", owner = "p01" }
+
+# ---- platform ----
+"kernel/src/platform.rs" = { category = "exception", owner = "platform", target = "Platform Cell / bootloader-passed tree (Spec 15 §3.3)" }
+"kernel/src/platform/boot_once.rs" = { category = "A", owner = "platform" }
+
+# ---- policy ----
+"kernel/src/policy.rs" = { category = "B", owner = "policy" }
+
+# ---- posture ----
+"kernel/src/posture.rs" = { category = "B", owner = "posture" }
+
+# ---- resource_registry ----
+"kernel/src/resource_registry.rs" = { category = "D", owner = "resource_registry" }
+"kernel/src/resource_registry_mediation.rs" = { category = "D", owner = "resource_registry" }
+"kernel/src/resource_registry_mediation_tests.rs" = { category = "test", owner = "resource_registry" }
+"kernel/src/resource_registry_selftest.rs" = { category = "test", owner = "resource_registry" }
+"kernel/src/resource_registry_tests.rs" = { category = "test", owner = "resource_registry" }
+
+# ---- sched ----
+"kernel/src/sched.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/cpu_accounting.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/domain_switch.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/domain_switch_tests.rs" = { category = "test", owner = "sched" }
+"kernel/src/sched/hart_local.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/hart_local/ready.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/quiesce.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/scheduler.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/smp.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/smp/mpidr.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/smp/topology.rs" = { category = "A", owner = "sched" }
+
+# ---- sha256 ----
+"kernel/src/sha256.rs" = { category = "B", owner = "sha256" }
+
+# ---- signing ----
+"kernel/src/signing.rs" = { category = "B", owner = "signing" }
+
+# ---- smbios ----
+"kernel/src/smbios.rs" = { category = "exception", owner = "smbios", target = "Platform Cell (Spec 15 §3.3)" }
+
+# ---- snapshot ----
+"kernel/src/snapshot_disabled.rs" = { category = "C", owner = "snapshot" }
+"kernel/src/snapshot_engine.rs" = { category = "exception", owner = "snapshot", target = "Supervisor Cell policy; compiled only with snapshot-qualified (Spec 15 §3.2)" }
+"kernel/src/snapshot_format.rs" = { category = "C", owner = "snapshot" }
+
+# ---- sync ----
+"kernel/src/sync.rs" = { category = "A", owner = "sync" }
+
+# ---- system_config ----
+"kernel/src/system_config.rs" = { category = "C", owner = "system_config" }
+
+# ---- task ----
+"kernel/src/task.rs" = { category = "A", owner = "task" }
+"kernel/src/task/async_ipc.rs" = { category = "A", owner = "task" }
+"kernel/src/task/cap.rs" = { category = "B", owner = "task" }
+"kernel/src/task/cap_file_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/cell-image.rs" = { category = "B", owner = "task" }
+"kernel/src/task/child_context.rs" = { category = "B", owner = "task" }
+"kernel/src/task/completion.rs" = { category = "A", owner = "task" }
+"kernel/src/task/completion_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/completion_wait.rs" = { category = "A", owner = "task" }
+"kernel/src/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/copy_glue/mod.rs" = { category = "A", owner = "task" }
+"kernel/src/task/copy_glue/scatter.rs" = { category = "A", owner = "task" }
+"kernel/src/task/dir_inherit.rs" = { category = "B", owner = "task" }
+"kernel/src/task/domain-grant-gate-tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/domain-grant-gate.rs" = { category = "B", owner = "task" }
+"kernel/src/task/domain_grant.rs" = { category = "B", owner = "task" }
+"kernel/src/task/elf_prepare.rs" = { category = "B", owner = "task" }
+"kernel/src/task/fstat_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/fstat_selftest/dispatch.rs" = { category = "test", owner = "task" }
+"kernel/src/task/fstat_selftest/fixture.rs" = { category = "test", owner = "task" }
+"kernel/src/task/fstat_selftest/metadata.rs" = { category = "test", owner = "task" }
+"kernel/src/task/getrandom-sas-grant-cases.rs" = { category = "test", owner = "task" }
+"kernel/src/task/getrandom-sas-race-actions.rs" = { category = "test", owner = "task" }
+"kernel/src/task/getrandom-sas-revoke-race.rs" = { category = "test", owner = "task" }
+"kernel/src/task/getrandom-sas-tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/gpu-scanout-tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/gpu-scanout.rs" = { category = "exception", owner = "task", target = "GPU Driver Cell scanout service (Spec 15 §3.1)" }
+"kernel/src/task/grant_gate_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/grant_reclaim_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_guardrail_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_pending_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_test.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_wire_selftest/copy_case.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_wire_selftest/mod.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_wire_selftest/race_case.rs" = { category = "test", owner = "task" }
+"kernel/src/task/ipc_wire_selftest/scatter_case.rs" = { category = "test", owner = "task" }
+"kernel/src/task/launch.rs" = { category = "B", owner = "task" }
+"kernel/src/task/manifest_v2_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/mmio_revoke_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/net_rx_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/p_trust_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/path_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/retirement_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/rt_wake_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/stack-reservations.rs" = { category = "A", owner = "task" }
+"kernel/src/task/stack.rs" = { category = "A", owner = "task" }
+"kernel/src/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/authority.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/decode.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/dev.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/dma_export.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/dma_export_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/fs.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/golden_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/grant.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/grant_lease_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/grant_owner_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/ipc.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/misc.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/mod.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/spawn.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/vm.rs" = { category = "A", owner = "task" }
+"kernel/src/task/task_id_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/tcb.rs" = { category = "A", owner = "task" }
+"kernel/src/task/telemetry.rs" = { category = "A", owner = "task" }
+"kernel/src/task/thread_cap_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/thread_quota_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/thread_user_entry_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/tls.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/copy.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/guard.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/mod.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/range.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/sas-lease-tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/user_copy/sas-lease.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/scatter.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/sv39_probe.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/user_hello.rs" = { category = "test", owner = "task" }
+"kernel/src/task/user_out.rs" = { category = "A", owner = "task" }
+"kernel/src/task/vfs_lifecycle_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/waker.rs" = { category = "A", owner = "task" }
+"kernel/src/task/waker/net_rx_reservation.rs" = { category = "A", owner = "task" }
+"kernel/src/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
