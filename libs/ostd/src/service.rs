@@ -8,11 +8,14 @@
 //!   for cells that talk to the same service repeatedly.
 //!
 //! [`ServiceRef`] resolves the provider's **binding** (`{tid, cell_id, generation}`) from
-//! the kernel's registry rather than a bare tid, and reports a failed exchange against a
-//! provider that has since been replaced as [`CallFailure::StaleBinding`] instead of
-//! quietly re-targeting the call. Staleness does not establish non-execution:
-//! an accepted operation may have had side effects before the provider died.
+//! the kernel's registry rather than a bare tid. A call returns a [`CallOutcome`]: a reply,
+//! a refusal (the request never ran) or an uncertain result (it may have run). A failed
+//! exchange against a provider that has since been replaced is reported as
+//! [`Uncertainty::ProviderReplaced`] instead of quietly re-targeting the call.
 
+#[cfg(doc)]
+use crate::call_outcome::Uncertainty;
+use crate::call_outcome::{self, CallOutcome, Refusal};
 use crate::{syscall, ViError, ViResult};
 use api::ipc::IPC_BUF_SIZE;
 use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
@@ -68,8 +71,9 @@ pub fn register(service_id: u16, tid: usize) -> ViResult<()> {
 /// # fn stat() -> ViResult<()> {
 /// let mut vfs: ServiceRef<{ service::VFS }> = ServiceRef::new();
 /// let mut response_buffer = [0u8; IPC_BUF_SIZE];
-/// let response: VfsResponse =
-///     vfs.call(&VfsRequest::Stat("/tmp"), &mut response_buffer)?;
+/// let response: VfsResponse = vfs
+///     .call(&VfsRequest::Stat("/tmp"), &mut response_buffer)
+///     .into_result()?;
 /// # let _ = response;
 /// # Ok(())
 /// # }
@@ -154,27 +158,24 @@ impl<const ID: u16> ServiceRef<ID> {
     /// The decoded `Resp` may borrow bytes from `resp_buf` (e.g. `VfsResponse::Data(&[u8])`).
     /// Keep `resp_buf` alive as long as you use the returned value.
     ///
-    /// Lifecycle failures are classified against the registry: if the provider this
-    /// call named is no longer live, return `NotFound` and drop the cached descriptor;
-    /// otherwise return `IO`. Neither verdict proves that an accepted request had no
-    /// side effects, and this method never retries a request after acceptance.
-    ///
-    /// # Errors
-    /// - `ViError::NotFound` — service not registered after 8 retries, or the provider
-    ///   incarnation this call named is no longer the live one.
-    /// - `ViError::InvalidArgument` — `req` could not be encoded (message too large).
-    /// - `ViError::IO` — admission was busy, the operation failed or expired, or the
-    ///   response was malformed, against a provider that is still the live one.
+    /// The outcome says whether the request may have run: [`Refused`][CallOutcome::Refused]
+    /// never executed, [`Uncertain`][CallOutcome::Uncertain] might have. Lifecycle failures
+    /// are classified against the registry, so a provider that was replaced is reported as
+    /// such, and the cached descriptor is dropped on every lifecycle failure. This method
+    /// never retries a request after acceptance. Use [`CallOutcome::into_result`] when only
+    /// an error code is needed.
     pub fn call<'b, Req, Resp>(
         &mut self,
         req: &Req,
         resp_buf: &'b mut [u8; IPC_BUF_SIZE],
-    ) -> ViResult<Resp>
+    ) -> CallOutcome<Resp>
     where
         Req: serde::Serialize,
         Resp: serde::Deserialize<'b>,
     {
-        let held = self.binding().ok_or(ViError::NotFound)?;
+        let Some(held) = self.binding() else {
+            return CallOutcome::Refused(Refusal::NoBinding);
+        };
         let mut send_buf = [0u8; IPC_BUF_SIZE];
         match crate::ipc::service_call_typed::<Req, Resp>(
             held.tid as usize,
@@ -182,28 +183,15 @@ impl<const ID: u16> ServiceRef<ID> {
             &mut send_buf,
             resp_buf,
         ) {
-            Ok(resp) => Ok(resp),
-            Err(crate::ipc::IpcError::Encode) => Err(ViError::InvalidArgument),
-            Err(crate::ipc::IpcError::Decode)
-            | Err(crate::ipc::IpcError::InvalidOperation)
-            | Err(crate::ipc::IpcError::BufferTooSmall)
-            | Err(crate::ipc::IpcError::Busy) => Err(ViError::IO),
-            Err(crate::ipc::IpcError::Send)
-            | Err(crate::ipc::IpcError::Recv)
-            | Err(crate::ipc::IpcError::WrongSender)
-            | Err(crate::ipc::IpcError::PeerGone)
-            | Err(crate::ipc::IpcError::PreDispatchTimeout)
-            | Err(crate::ipc::IpcError::Indeterminate)
-            | Err(crate::ipc::IpcError::Cancelled) => {
+            Ok(resp) => CallOutcome::Reply(resp),
+            Err(error) if call_outcome::needs_binding_check(error) => {
                 let mut record = [0u8; SERVICE_BINDING_LEN];
                 let live = syscall::sys_lookup_service_bound(ID, &mut record);
-                let verdict = classify_call_failure(held, live);
+                let stale = classify_call_failure(held, live) == CallFailure::StaleBinding;
                 self.invalidate();
-                match verdict {
-                    CallFailure::StaleBinding => Err(ViError::NotFound),
-                    CallFailure::ProviderError => Err(ViError::IO),
-                }
+                call_outcome::classify(error, stale).into()
             }
+            Err(error) => call_outcome::classify(error, false).into(),
         }
     }
 }

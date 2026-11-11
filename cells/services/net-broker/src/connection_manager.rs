@@ -104,6 +104,7 @@ impl<'a> ConnectionManager<'a> {
         sys_heartbeat(HEARTBEAT_MS);
         let cap = match net
             .call::<NetRequest, NetResponse>(&NetRequest::TcpConnect { addr, port }, &mut resp)
+            .into_result()
             .map_err(|_| ViError::IO)?
         {
             NetResponse::CapId(id) => id,

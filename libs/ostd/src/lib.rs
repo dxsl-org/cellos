@@ -107,6 +107,9 @@ pub mod font_atlas;
 /// Bundled GUI/terminal fonts and measured, Unicode-normalized text drawing.
 pub mod typography;
 
+/// Typed outcome of one request/reply exchange: reply, refused, or uncertain.
+pub mod call_outcome;
+
 /// Service discovery helpers (lookup / register well-known services).
 pub mod service;
 
@@ -131,9 +134,6 @@ pub mod cluster_endpoint;
 /// [`actor::Tree`] with restart policy, intensity, backoff, and strategies.
 /// See ADR-0021; userspace-only, no ABI change.
 pub mod actor;
-
-/// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
-pub mod dispatch;
 
 /// DMA buffer helpers for Tier-1 Driver Cells (contiguous allocation + IOMMU authorisation).
 pub mod dma;

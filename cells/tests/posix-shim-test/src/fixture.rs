@@ -7,6 +7,7 @@
 
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use ostd::call_outcome::CallOutcome;
 use ostd::service::VfsRef;
 
 /// Give the shim this cell's granted working directory, if it was launched
@@ -50,10 +51,13 @@ pub(super) fn create(path: &str, content: &[u8]) -> bool {
         let mut reply = [0u8; IPC_BUF_SIZE];
         if names.peek().is_none() {
             let req = VfsRequest::WriteAt { dir, name, content };
-            break matches!(vfs.call(&req, &mut reply), Ok(VfsResponse::Ok));
+            break matches!(
+                vfs.call(&req, &mut reply),
+                CallOutcome::Reply(VfsResponse::Ok)
+            );
         }
         match vfs.call(&VfsRequest::OpenDir { dir, name }, &mut reply) {
-            Ok(VfsResponse::DirHandle(sub)) => {
+            CallOutcome::Reply(VfsResponse::DirHandle(sub)) => {
                 derived.get_or_insert(sub);
                 dir = sub;
             }

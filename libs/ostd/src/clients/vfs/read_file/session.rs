@@ -22,7 +22,7 @@ impl VfsReadOps for VfsRef {
         req: &VfsRequest<'_>,
         resp_buf: &'a mut [u8; IPC_BUF_SIZE],
     ) -> ViResult<VfsResponse<'a>> {
-        VfsRef::call::<VfsRequest, VfsResponse>(self, req, resp_buf)
+        VfsRef::call::<VfsRequest, VfsResponse>(self, req, resp_buf).into_result()
     }
 }
 

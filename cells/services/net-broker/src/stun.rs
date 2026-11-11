@@ -40,6 +40,7 @@ pub fn query_reflexive_addr(
     // 1. Create UDP socket.
     let cap_id = match net
         .call::<NetRequest, NetResponse>(&NetRequest::UdpCreate, &mut resp)
+        .into_result()
         .map_err(|_| ViError::IO)?
     {
         NetResponse::CapId(id) => id,
@@ -79,6 +80,7 @@ fn do_stun_query(
         },
         resp,
     )
+    .into_result()
     .map_err(|_| ViError::IO)?;
 
     // 4. Receive (up to 512B; account for 6-byte src-addr header).
@@ -91,6 +93,7 @@ fn do_stun_query(
             },
             resp,
         )
+        .into_result()
         .map_err(|_| ViError::IO)?
     {
         NetResponse::Data(d) => d,

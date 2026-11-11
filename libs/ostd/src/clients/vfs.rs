@@ -117,7 +117,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -131,7 +132,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -145,7 +147,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Stat { size, is_dir } => Ok((size, is_dir)),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -161,7 +164,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Data(data) => Ok(data.to_vec()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -175,7 +179,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -189,7 +194,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -220,7 +226,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&VfsRequest::Observe { path }, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::Observe { path }, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Observed(observation) => Ok(observation),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -234,7 +241,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         let id = match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&VfsRequest::SaveBegin { dst }, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::SaveBegin { dst }, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::SaveId(id) => id,
             VfsResponse::Err(code) => return Err(vfs_err_from_code(code)),
@@ -301,7 +309,8 @@ impl VfsClient {
         };
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Trust(code) => Ok(code),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -333,7 +342,8 @@ impl VfsClient {
         };
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::TrustChallenged {
                 confirmation,
@@ -349,10 +359,11 @@ impl VfsClient {
     /// (`PENDING` until the confirmation is decided).
     pub fn trust_commit(&mut self, challenge: ObjectRefV1) -> ViResult<u8> {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(
-            &VfsRequest::TrustCommit { challenge },
-            &mut resp_buf,
-        )? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::TrustCommit { challenge }, &mut resp_buf)
+            .into_result()?
+        {
             VfsResponse::Trust(code) => Ok(code),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
@@ -363,7 +374,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::SaveOutcome(outcome) => Ok(outcome),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
@@ -375,7 +387,8 @@ impl VfsClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<VfsRequest, VfsResponse>(req, &mut resp_buf)?
+            .call::<VfsRequest, VfsResponse>(req, &mut resp_buf)
+            .into_result()?
         {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vfs_err_from_code(code)),

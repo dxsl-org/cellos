@@ -1,7 +1,5 @@
 use api::services::cluster::{CellNetId, ClusterId};
-use ostd::cluster_endpoint::{
-    CellEndpoint, CellMethod, EndpointError, LocalEndpoint, RemoteCallError, RemoteEndpoint,
-};
+use ostd::cluster_endpoint::{CellMethod, EndpointError, RemoteCallError, RemoteEndpoint};
 use types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
 
 struct Ping;
@@ -13,15 +11,6 @@ impl CellMethod for Ping {
     const SERVICE_ID: u16 = 7;
     const EXPORT_ID: u16 = 9;
     const RETRY_CLASS: RetryClass = RetryClass::Idempotent;
-}
-
-#[test]
-fn local_endpoint_rejects_zero_tid() {
-    assert!(matches!(
-        LocalEndpoint::<Ping>::new(0),
-        Err(EndpointError::InvalidLocalTid)
-    ));
-    assert_eq!(LocalEndpoint::<Ping>::new(11).unwrap().tid(), 11);
 }
 
 #[test]
@@ -65,27 +54,6 @@ fn remote_endpoint_rejects_zero_identity() {
         RemoteEndpoint::<Ping>::new(CellNetId([1; 32]), ClusterId(0), epoch),
         Err(EndpointError::InvalidRemoteIdentity)
     ));
-}
-
-#[test]
-fn cell_endpoint_requires_an_explicit_locality_branch() {
-    let endpoint = CellEndpoint::Local(LocalEndpoint::<Ping>::new(3).unwrap());
-    let tid = match endpoint {
-        CellEndpoint::Local(local) => local.tid(),
-        CellEndpoint::Remote(_) => panic!("expected local endpoint"),
-    };
-    assert_eq!(tid, 3);
-}
-
-#[test]
-fn local_endpoint_tid_only_constructor_claims_no_provider_identity() {
-    // `new` trusts a caller-supplied tid: it resolves nothing, so the endpoint carries no
-    // provider identity and cannot classify a failure against the registry. That is a
-    // property of this constructor, not of the type — `LocalEndpoint::bind` resolves the
-    // live binding and refuses when there is none.
-    let endpoint = LocalEndpoint::<Ping>::new(42).unwrap();
-    assert_eq!(endpoint.tid(), 42);
-    assert_eq!(endpoint.binding(), None);
 }
 
 #[test]

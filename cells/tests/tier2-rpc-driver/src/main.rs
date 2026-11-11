@@ -97,7 +97,9 @@ fn cell_main() {
         nonce,
         payload: &payload,
     };
-    let response = match provider.call::<EchoRequest, EchoResponse>(&request, &mut response_buffer)
+    let response = match provider
+        .call::<EchoRequest, EchoResponse>(&request, &mut response_buffer)
+        .into_result()
     {
         Ok(response) => response,
         Err(error) => {
@@ -153,7 +155,10 @@ fn cell_main() {
         nonce,
         payload: &[],
     };
-    match provider.call::<EchoRequest, EchoResponse>(&denied, &mut response_buffer) {
+    match provider
+        .call::<EchoRequest, EchoResponse>(&denied, &mut response_buffer)
+        .into_result()
+    {
         Ok(response) if response.error == Some(UNAUTHORIZED) => {
             println("[tier2-rpc] UNAUTHORIZED-METHOD=REFUSED")
         }
@@ -193,7 +198,10 @@ fn cell_main() {
         fail("the provider did not retire its registry entry within the 5 s bound");
     }
     println("[tier2-rpc] PROVIDER-GONE=none");
-    match provider.call::<EchoRequest, EchoResponse>(&denied, &mut response_buffer) {
+    match provider
+        .call::<EchoRequest, EchoResponse>(&denied, &mut response_buffer)
+        .into_result()
+    {
         Err(ViError::NotFound) => println("[tier2-rpc] STALE-BINDING=REFUSED"),
         Ok(response) => {
             println(&format!("[tier2-rpc] STALE-BINDING=SERVED {response:?}"));

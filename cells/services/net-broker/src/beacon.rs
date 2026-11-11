@@ -299,6 +299,7 @@ impl BeaconChannel {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         let cap_id = match net
             .call::<NetRequest, NetResponse>(&NetRequest::UdpCreate, &mut resp)
+            .into_result()
             .ok()?
         {
             NetResponse::CapId(id) => id,
@@ -312,6 +313,7 @@ impl BeaconChannel {
                 },
                 &mut resp,
             )
+            .into_result()
             .ok()?;
         if !response_is_ok(bind) {
             return None;
@@ -324,6 +326,7 @@ impl BeaconChannel {
                 },
                 &mut resp,
             )
+            .into_result()
             .ok()?;
         if !response_is_ok(join) {
             return None;

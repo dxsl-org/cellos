@@ -37,7 +37,8 @@ impl InputClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<InputRequest, InputResponse>(&req, &mut resp_buf)?
+            .call::<InputRequest, InputResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             InputResponse::Focus(tid) => Ok(tid),
             InputResponse::Err(code) => Err(vierr_from_code(code)),
@@ -51,7 +52,8 @@ impl InputClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<InputRequest, InputResponse>(&req, &mut resp_buf)?
+            .call::<InputRequest, InputResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             InputResponse::Ok => Ok(()),
             InputResponse::Err(code) => Err(vierr_from_code(code)),

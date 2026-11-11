@@ -51,7 +51,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::CapId(id) => Ok(id),
             NetResponse::Err(code) => Err(net_error(code)),
@@ -71,7 +72,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Data(b) => {
                 let n = if b.len() >= 4 {
@@ -101,7 +103,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Data(b) if b.len() >= 4 => {
                 let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize;
@@ -126,7 +129,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Data(data) => Ok(data.to_vec()),
             NetResponse::Ok => Ok(alloc::vec![]),
@@ -143,7 +147,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::State(state) => Ok(state),
             NetResponse::Err(code) => Err(net_error(code)),
@@ -158,7 +163,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Ok => Ok(()),
             NetResponse::Err(code) => Err(net_error(code)),
@@ -174,7 +180,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Ok => Ok(()),
             NetResponse::Err(code) => Err(net_error(code)),
@@ -188,7 +195,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Addr(addr) => Ok(addr),
             NetResponse::Err(code) => Err(net_error(code)),
@@ -202,7 +210,8 @@ impl NetClient {
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
         match self
             .svc
-            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)
+            .into_result()?
         {
             NetResponse::Addr(addr) => Ok(addr),
             NetResponse::Err(code) => Err(net_error(code)),

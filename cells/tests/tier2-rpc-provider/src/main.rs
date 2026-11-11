@@ -145,7 +145,10 @@ fn cell_main() {
 fn stat_root_through_sdk() -> (bool, bool) {
     let mut vfs: ServiceRef<{ service::VFS }> = ServiceRef::new();
     let mut response_buffer = [0u8; IPC_BUF_SIZE];
-    match vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response_buffer) {
+    match vfs
+        .call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response_buffer)
+        .into_result()
+    {
         Ok(VfsResponse::Stat { is_dir, .. }) => {
             println(&format!("[tier2-rpc] provider-vfs-stat ok is_dir={is_dir}"));
             (true, is_dir)

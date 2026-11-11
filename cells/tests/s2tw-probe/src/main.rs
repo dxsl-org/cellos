@@ -238,7 +238,10 @@ fn vfs_write(context: &ChildContext, tag: &str) -> String {
     let mut dir = ViDirHandle(cwd_grant.id);
     for name in components {
         let mut reply = [0u8; IPC_BUF_SIZE];
-        match vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::OpenDir { dir, name }, &mut reply) {
+        match vfs
+            .call::<VfsRequest, VfsResponse>(&VfsRequest::OpenDir { dir, name }, &mut reply)
+            .into_result()
+        {
             Ok(VfsResponse::DirHandle(handle)) => dir = handle,
             Ok(other) => return format!("other:opendir-{}", vfs_detail(&other)),
             Err(error) => return format!("other:opendir-ipc-{error:?}"),
@@ -252,7 +255,10 @@ fn vfs_write(context: &ChildContext, tag: &str) -> String {
         content: content.as_bytes(),
     };
     let mut reply = [0u8; IPC_BUF_SIZE];
-    match vfs.call::<VfsRequest, VfsResponse>(&request, &mut reply) {
+    match vfs
+        .call::<VfsRequest, VfsResponse>(&request, &mut reply)
+        .into_result()
+    {
         Ok(VfsResponse::Err(VFS_ERR_DENIED)) => String::from("denied"),
         Ok(other) => format!("other:{}", vfs_detail(&other)),
         Err(error) => format!("other:ipc-{error:?}"),

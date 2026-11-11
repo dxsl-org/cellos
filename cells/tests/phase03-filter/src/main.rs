@@ -293,7 +293,10 @@ const PROBE_FRAME: [u8; 60] = {
 /// hide (any socket it created is owner-scoped and reclaimed when this Cell exits).
 fn probe(net: &mut NetRef, request: &NetRequest) -> String {
     let mut reply = [0u8; IPC_BUF_SIZE];
-    match net.call::<NetRequest, NetResponse>(request, &mut reply) {
+    match net
+        .call::<NetRequest, NetResponse>(request, &mut reply)
+        .into_result()
+    {
         Ok(NetResponse::Err(NET_ERR_DENIED)) => String::from("denied"),
         Ok(NetResponse::Err(code)) => format!("other:err-0x{code:02x}"),
         Ok(NetResponse::CapId(id)) => format!("other:cap-{id}"),
@@ -364,7 +367,9 @@ fn config_probe(context: &ChildContext) -> i32 {
         _ => return USAGE,
     };
     let mut reply = [0u8; IPC_BUF_SIZE];
-    let result = match ConfigRef::new().call::<ConfigRequest, ConfigResponse>(&request, &mut reply)
+    let result = match ConfigRef::new()
+        .call::<ConfigRequest, ConfigResponse>(&request, &mut reply)
+        .into_result()
     {
         Ok(ConfigResponse::Ok) => String::from("ok"),
         Ok(ConfigResponse::Err(CONFIG_ERR_DENIED)) => String::from("denied"),

@@ -13,6 +13,7 @@ pub(super) fn write_message(net: &mut NetRef, cap_id: u32, message: &[u8]) -> Vi
         },
         &mut response,
     )
+    .into_result()
     .map_err(|_| ViError::IO)?;
     net.call::<NetRequest, NetResponse>(
         &NetRequest::TcpSend {
@@ -21,6 +22,7 @@ pub(super) fn write_message(net: &mut NetRef, cap_id: u32, message: &[u8]) -> Vi
         },
         &mut response,
     )
+    .into_result()
     .map_err(|_| ViError::IO)?;
     Ok(())
 }
@@ -30,6 +32,7 @@ pub(super) fn read_message(net: &mut NetRef, cap_id: u32, buffer: &mut [u8]) -> 
     let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
     let header = match net
         .call::<NetRequest, NetResponse>(&NetRequest::TcpRecv { cap_id, buf_len: 2 }, &mut response)
+        .into_result()
         .map_err(|_| ViError::IO)?
     {
         NetResponse::Data(data) => data,
@@ -50,6 +53,7 @@ pub(super) fn read_message(net: &mut NetRef, cap_id: u32, buffer: &mut [u8]) -> 
             },
             &mut response,
         )
+        .into_result()
         .map_err(|_| ViError::IO)?
     {
         NetResponse::Data(data) => data,

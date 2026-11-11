@@ -195,7 +195,8 @@ pub fn run_nested_provider() -> ! {
     let mut vfs = ServiceRef::<{ api::syscall::service::VFS }>::new();
     let mut response = [0u8; IPC_BUF_SIZE];
     if !matches!(
-        vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response),
+        vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response)
+            .into_result(),
         Ok(VfsResponse::Stat { .. })
     ) {
         fail("nested VFS RPC");
@@ -1510,7 +1511,10 @@ fn sdk_leg() {
         ),
         None => (VfsRequest::Stat("/"), "Stat(/)"),
     };
-    match vfs.call::<VfsRequest, VfsResponse>(&request, &mut response_buffer) {
+    match vfs
+        .call::<VfsRequest, VfsResponse>(&request, &mut response_buffer)
+        .into_result()
+    {
         Ok(VfsResponse::DirPage { .. }) if cwd.is_some() => {
             println(&format!("[local-lifecycle] SDK-VFS-CALL=OK {label}"))
         }
