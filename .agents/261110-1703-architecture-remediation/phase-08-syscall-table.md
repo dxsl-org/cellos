@@ -77,9 +77,9 @@ Raw opcodes outside the enum (3/100/110/111/255/500–504) become table rows fla
 - [x] CP1 approved
 - [x] Golden dump
 - [x] Generated `api` side
-- [ ] Generated kernel side, single gate
+- [x] Generated kernel side, single gate
 - [ ] File split
-- [ ] Generated headers
+- [x] Generated headers
 - [ ] CP2 approved
 
 ## Success Criteria
@@ -122,3 +122,8 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
   - The variant-path bit check in `handle_syscall_inner` is deleted; its liveness check stays.
   - `gpu-scanout` uses the explicit `handle_syscall_kernel_origin` (kernel origin, documented as trusted, never reachable from a trap).
 - **Evidence.** The golden diff is only `kernel_vi` for those 23 rows; `gate_bits`, `typed_oom` and every api field are unchanged. New test `in_kernel_gate_matches_the_trap_gate`: for every decodable opcode and 66 allowlists, the in-kernel entry admits exactly what the trap admits. The one exception is raw 100: the raw `ServiceLookup` alias shares its variant with the gated `Call` row, so in-kernel is stricter. Tests pinning `syscall_to_vi == None` for QueryRetirement, LookupBlockRoute and QueryMachineFacts now pin the intent (no allowlist bit) instead of the map's shape.
+- **Step 6 (headers), done before the split:**
+  - **Generator.** `scripts/gen-syscall-headers.py` rewrites only the marked block of each header, from that header's own `(constant, ViSyscall name)` list. The three headers are `libs/port-platform/include/cellos_syscall.h`, `libs/zig-syscall/src/syscall.zig` and the vendored `third_party/mlibc/sysdeps/vicell/include/vicell/syscall.h`. `third_party/mlibc-src` is gitignored and fetched, so it is not one of them.
+  - **Values.** Byte-identical. The only diff is whitespace alignment and the markers.
+  - **CI.** A new step, "Check generated syscall headers", runs `--check`.
+  - **Negative control.** Hand-editing `VI_SYS_YIELD` to 105 fails `--check`.

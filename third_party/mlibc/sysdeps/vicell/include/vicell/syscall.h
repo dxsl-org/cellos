@@ -9,24 +9,26 @@
 
 #include <stddef.h>
 
-// ViCell syscall opcode constants (from libs/api/src/syscall.rs — must stay in sync)
-#define VI_SYS_EXIT       60
-#define VI_SYS_SPAWN       5
+// BEGIN generated syscall numbers (scripts/gen-syscall-headers.py)
+// Source: libs/api/abi/syscalls.toml. Do not edit by hand.
+#define VI_SYS_EXIT 60
+#define VI_SYS_SPAWN 5
 #define VI_SYS_SET_TLS_BASE 9
 #define VI_SYS_FUTEX_WAIT 17
 #define VI_SYS_FUTEX_WAKE 18
-#define VI_SYS_YIELD     104
+#define VI_SYS_YIELD 104
 #define VI_SYS_GET_RANDOM 214
-#define VI_SYS_MEM_INFO  243
-#define VI_SYS_LOG        11
-#define VI_SYS_OPEN      101
-#define VI_SYS_READ      102
-#define VI_SYS_CLOSE     103
-#define VI_SYS_SEEK      106
-#define VI_SYS_FILEOP    107
-#define VI_SYS_WRITE     109
-#define VI_SYS_GETTIME   120
-#define VI_SYS_FSTAT     254
+#define VI_SYS_MEM_INFO 243
+#define VI_SYS_LOG 11
+#define VI_SYS_OPEN 101
+#define VI_SYS_READ 102
+#define VI_SYS_CLOSE 103
+#define VI_SYS_SEEK 106
+#define VI_SYS_FILEOP 107
+#define VI_SYS_WRITE 109
+#define VI_SYS_GETTIME 120
+#define VI_SYS_FSTAT 254
+// END generated syscall numbers
 
 // GetTime op-selectors (kernel/src/task/syscall.rs handler)
 #define VI_GETTIME_TICKS  0   // monotonic 10MHz ticks since boot

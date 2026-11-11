@@ -122,6 +122,11 @@ jobs:
       - name: Check cell catalog coverage
         run: python3 scripts/check-catalog.py
 
+      # The C and Zig syscall numbers are generated from the syscall table
+      # (libs/api/abi/syscalls.toml); a hand edit to either side fails here.
+      - name: Check generated syscall headers
+        run: python3 scripts/gen-syscall-headers.py --check
+
       # The tracked lockfiles must already describe the dependency graph, so no
       # job below can silently re-resolve and build a different graph.
       - name: Check lockfiles are current

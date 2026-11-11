@@ -14,8 +14,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Kernel ABI opcodes (libs/api/src/abi/syscall.rs). */
+/* BEGIN generated syscall numbers (scripts/gen-syscall-headers.py) */
+/* Source: libs/api/abi/syscalls.toml. Do not edit by hand. */
 #define CELLOS_SYSCALL_LOG 11u
+/* END generated syscall numbers */
 
 #define CELLOS_DENIED ((intptr_t)-1)
 

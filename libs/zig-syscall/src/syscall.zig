@@ -9,15 +9,17 @@
 
 const builtin = @import("builtin");
 
-// Syscall opcodes — must stay in sync with libs/api/src/syscall.rs
-pub const SYS_EXIT: usize    = 60;
-pub const SYS_LOG: usize     = 11;
-pub const SYS_WRITE: usize   = 109;
-pub const SYS_READ: usize    = 102;
-pub const SYS_OPEN: usize    = 101;
-pub const SYS_CLOSE: usize   = 103;
-pub const SYS_SEEK: usize    = 106;
+// BEGIN generated syscall numbers (scripts/gen-syscall-headers.py)
+// Source: libs/api/abi/syscalls.toml. Do not edit by hand.
+pub const SYS_EXIT: usize = 60;
+pub const SYS_LOG: usize = 11;
+pub const SYS_WRITE: usize = 109;
+pub const SYS_READ: usize = 102;
+pub const SYS_OPEN: usize = 101;
+pub const SYS_CLOSE: usize = 103;
+pub const SYS_SEEK: usize = 106;
 pub const SYS_GETTIME: usize = 120;
+// END generated syscall numbers
 
 pub fn raw(nr: usize, a0: usize, a1: usize, a2: usize, a3: usize) usize {
     return switch (builtin.cpu.arch) {
