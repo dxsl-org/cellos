@@ -38,7 +38,11 @@ K_WAIT="kernel/src/task/completion_wait.rs"
 K_ASYNC="kernel/src/task/async_ipc.rs"
 K_TASK="kernel/src/task.rs"
 K_SCHED="kernel/src/task/scheduler.rs"
-K_SYSCALL="kernel/src/task/syscall.rs"
+# The dispatcher and its helpers live in kernel/src/task/syscall/ (split in
+# architecture remediation Phase 08); the items are checked across the module.
+K_SYSCALL="$(mktemp)"
+trap 'rm -f "$K_SYSCALL"' EXIT
+cat kernel/src/task/syscall/*.rs > "$K_SYSCALL"
 K_MSI="kernel/src/task/drivers/pcie_msi.rs"
 
 failures=0

@@ -212,7 +212,7 @@ KERNEL="$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel"
 
 # Line tables belong only to this private kernel. Resolve the actual shutdown
 # HLT/back-edge instructions before boot; an idle-loop HLT is never sufficient.
-"$PYTHON_BIN" - "$KERNEL" "$ROOT/kernel/src/task/syscall.rs" "$EVIDENCE" <<'PY'
+"$PYTHON_BIN" - "$KERNEL" "$ROOT/kernel/src/task/syscall/mod.rs" "$EVIDENCE" <<'PY'
 import hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 kernel, source, evidence = map(Path, sys.argv[1:])
@@ -273,10 +273,10 @@ for hlt, resume, symbol in candidates:
     matched = hlt in mapped_hlts
     if matched:
         accepted.append({
-            "symbol": symbol, "source": f"kernel/src/task/syscall.rs:{halt_line}",
+            "symbol": symbol, "source": f"kernel/src/task/syscall/mod.rs:{halt_line}",
             "hlt_rip": hex(hlt), "post_hlt_rip": hex(resume),
             "instructions": [f"{hlt:#x}: hlt", f"{resume:#x}: jmp {hlt:#x}"],
-            "line_table_row": {"source": f"kernel/src/task/syscall.rs:{halt_line}", "address": hex(hlt)},
+            "line_table_row": {"source": f"kernel/src/task/syscall/mod.rs:{halt_line}", "address": hex(hlt)},
         })
 if not accepted:
     raise SystemExit("FAIL: no symbolized accepted shutdown HLT/back-edge in the private kernel")

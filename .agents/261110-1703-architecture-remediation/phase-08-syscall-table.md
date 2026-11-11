@@ -78,7 +78,7 @@ Raw opcodes outside the enum (3/100/110/111/255/500–504) become table rows fla
 - [x] Golden dump
 - [x] Generated `api` side
 - [x] Generated kernel side, single gate
-- [ ] File split
+- [x] File split (move-only; arm extraction moved to Phase 09 by owner decision)
 - [x] Generated headers
 - [ ] CP2 approved
 
@@ -128,3 +128,15 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
   - **CI.** A new step, "Check generated syscall headers", runs `--check`.
   - **Negative control.** Hand-editing `VI_SYS_YIELD` to 105 fails `--check`.
 - **Step 7 (shared encoding):** new `api::syscall::result_sentinel` (`GENERIC = 0`, `OUT_OF_MEMORY = 1`, `BROKEN_PIPE = 2`, as offsets below the all-ones error value). The kernel `encode_syscall_result` and the `ostd` decoder constants (`-1`, `-2`, `-3`) are now derived from it, with the same values. The kernel enum stays richer than `ostd`'s; only the wire sentinels are shared. (`api` does not check on `riscv32imac` because `ring_channel.rs` uses `AtomicU64`. That fails the same way on the tree before this step, so it is pre-existing.)
+- **Step 5 (file split), owner decision 2026-11-11 "move-only".**
+  - **Layout.** `task/syscall.rs` became `task/syscall/` with these modules: `mod.rs` (the dispatcher match, entries, gate, `SyscallError`, statics, impls), `decode.rs` (the `Syscall` enum and `map_syscall`), `ipc`, `grant`, `spawn`, `fs`, `dev`, `vm`, `authority`, `misc` and `tests.rs`. `dma_export.rs`, its tests and the two grant test files moved under `syscall/` with `git mv`, which removed their `#[path = "../…"]`.
+  - **Mechanics.** Two scripted passes moved only whole top-level items. Each moved item was re-anchored the same way:
+    - private → `pub(super)`;
+    - originally `pub(super)`, i.e. task-visible → `pub(crate)`, the only visibility the parent glob can re-export (11 + 4 items);
+    - fields of moved structs → `pub(super)`;
+    - `super::` → `crate::task::`.
+    Glue: sibling glob imports, plus `pub(crate) use` re-exports in `mod.rs`.
+  - **Proof.** After stripping those rewrites and whitespace, the source is the same character multiset as before the split, except for the one `}` that closed the inline `mod tests {}`. Host tests 613 pass on both feature sets. Clippy is clean on 3 arches, and `test-hooks`, `bench-counters` and `getrandom-sas-test` all check.
+  - **Size.** `mod.rs` is now 6 635 lines, 5 212 of them the dispatcher match; that match is Phase 09's job.
+  - **Tooling.** The digest scripts now check across `syscall/*.rs`. `mutable-globals` needed a new `include!` row, which had been missing since step 4, and its paths updated. The `qemu-phase03-pipeline-test.sh` source path is updated.
+  - **Not done.** The pinned sha of `kernel/src/task/syscall.rs` in the manual lane `qemu-tier3-ssh-guest-x86.sh` was already stale from Phases 06–07 and is left alone. The `cellos_p01_trace` build could not be checked locally: it needs the P01 embed manifest.

@@ -28,7 +28,11 @@ RECORD="libs/api/src/abi/service_binding.rs"
 TESTS="libs/api/src/abi/syscall_tests.rs"
 ABI_MOD="libs/api/src/abi.rs"
 OSTD="libs/ostd/src/syscall.rs"
-K_SYSCALL="kernel/src/task/syscall.rs"
+# The dispatcher and its helpers live in kernel/src/task/syscall/ (split in
+# architecture remediation Phase 08); the items are checked across the module.
+K_SYSCALL="$(mktemp)"
+trap 'rm -f "$K_SYSCALL"' EXIT
+cat kernel/src/task/syscall/*.rs > "$K_SYSCALL"
 K_REGISTRY="kernel/src/cell/service_registry.rs"
 
 failures=0

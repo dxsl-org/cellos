@@ -386,7 +386,7 @@ contexts = ["boot", "normal"]
 seal = "compare_exchange from 0 (AcqRel); only the first publication counts, later ones are ignored"
 retirement = "never: lives for the whole run; tids are never reused, so a dead init's tid cannot be taken over"
 rationale = "Write-once AtomicUsize keyed by tid rather than a spawner-chosen task name; Acquire loads in caller_is_trusted_init."
-review = "kernel/src/task/syscall.rs:publish_trusted_init; kernel/src/task/syscall.rs:caller_is_trusted_init; kernel/src/loader/governed_spawn.rs:spawn_init"
+review = "kernel/src/task/syscall/mod.rs:publish_trusted_init; kernel/src/task/syscall/mod.rs:caller_is_trusted_init; kernel/src/loader/governed_spawn.rs:spawn_init"
 
 [[global]]
 key = "hal-x86::critical_section::x86_64_impl::set_impl!#1 @cfg(feature = \"critical-section-impl\" & target_arch = \"x86_64\")"
@@ -463,7 +463,7 @@ contexts = ["boot", "normal"]
 seal = "each slot Relaxed-stored at most once in configure_all at kmain:192, before the IDT and before start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "Write-once per slot before any second CPU exists, then read-only; Relaxed is enough because AP start provides the happens-before. The atomics protect only the slot value: port I/O on a slot is unsynchronized across CPUs (byte interleaving, not memory unsafety)."
-review = "hal/arch/x86/src/x86_64/uart_16550.rs:configure_all; hal/arch/x86/src/x86_64/uart_16550.rs:port_base_at; kernel/src/task/syscall.rs:2014-2056; kernel/src/main.rs:192"
+review = "hal/arch/x86/src/x86_64/uart_16550.rs:configure_all; hal/arch/x86/src/x86_64/uart_16550.rs:port_base_at; kernel/src/task/syscall/mod.rs:2014-2056; kernel/src/main.rs:192"
 
 [[global]]
 key = "hal-x86::x86_64::uart_16550::PORT_COUNT @cfg(target_arch = \"x86_64\")"
@@ -554,6 +554,17 @@ rationale = "Slots are indexed by current_cpu_id in gdt::init, so CPUs never sha
 review = "hal/arch/x86/src/x86_64/ist.rs:install_guards; hal/arch/x86/src/x86_64/gdt.rs:init; hal/arch/x86/src/x86_64/idt.rs:ist_for_vector; hal/arch/x86/src/x86_64/idt/fatal.rs:halt"
 
 [[global]]
+key = "kernel::task::syscall::include!#1"
+lifetime = "global"
+mutation = "none"
+owner = "kernel syscall dispatcher: kernel/build.rs-generated opcode map (syscall_opcodes.rs)"
+contexts = ["none"]
+seal = "no storage: include! emits only `fn opcode_of` and `const RAW_OPCODES`"
+retirement = "no storage: compile-time items"
+rationale = "The included file is written by kernel/build.rs from libs/api/abi/syscalls.toml and contains one function and one const slice, no static, so no runtime storage or accessor exists."
+review = "kernel/src/task/syscall/mod.rs:syscall_to_vi; kernel/build.rs:emit_syscall_opcodes"
+
+[[global]]
 key = "hal-x86::x86_64::idt::include!#1 @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "none"
@@ -628,7 +639,7 @@ contexts = ["boot", "normal"]
 seal = "Relaxed-stored once by hpet::init during init_timers (kmain:576) on the BSP, before start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "Relaxed store with Relaxed (read64) and Acquire (checked_sample) loads; no Release pairs with that Acquire, so cross-CPU visibility relies on the AP-start happens-before rather than on this atomic. now_ns tests HPET_PERIOD_FS then loads HPET_BASE separately; the pair is consistent only because both are sealed before APs start."
-review = "hal/arch/x86/src/x86_64/hpet.rs:init; hal/arch/x86/src/x86_64/hpet.rs:now_ns; hal/arch/x86/src/x86_64/hpet.rs:checked_sample; kernel/src/task/syscall.rs:7290; kernel/src/task/telemetry.rs:monotonic_ns"
+review = "hal/arch/x86/src/x86_64/hpet.rs:init; hal/arch/x86/src/x86_64/hpet.rs:now_ns; hal/arch/x86/src/x86_64/hpet.rs:checked_sample; kernel/src/task/syscall/mod.rs:7290; kernel/src/task/telemetry.rs:monotonic_ns"
 
 [[global]]
 key = "hal-x86::x86_64::hpet::HPET_PERIOD_FS @cfg(target_arch = \"x86_64\")"
@@ -805,7 +816,7 @@ contexts = ["normal", "irq"]
 seal = "none: claimed/cleared per WaitIrq round for the whole run"
 retirement = "release_waiters_for(tid) from task.rs:reap_retired_task_resources (yield_cpu retirement funnel) CASes the dead tid back to 0; otherwise clear_waiter on wake"
 rationale = "Claim is a SeqCst CAS (single waiter per line) and every clear is an atomic store/CAS, so the syscall, the pick_next sweep and the retirement funnel need no lock even though the latter two run inside the x86_64 timer/IPI ISR via yield_cpu. On x86_64 no interrupt handler reads it: has_waiter/signal_irq are reached only from vi_handle_virtio_irq, whose callers are the aarch64 trap and riscv64 PLIC dispatch (x86 IDT routes only timer/IPI/UART), so an x86 WaitIrq waiter can never be woken; no x86 cell issues WaitIrq today."
-review = "kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:clear_waiter; kernel/src/task/drivers/irq_wait.rs:release_waiters_for; kernel/src/task/syscall.rs:7990 (WaitIrq); kernel/src/task/scheduler.rs:2158; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
+review = "kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:clear_waiter; kernel/src/task/drivers/irq_wait.rs:release_waiters_for; kernel/src/task/syscall/mod.rs:7990 (WaitIrq); kernel/src/task/scheduler.rs:2158; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
 
 [[global]]
 key = "kernel::task::drivers::irq_wait::IRQ_PENDING"
@@ -827,7 +838,7 @@ contexts = ["normal", "irq"]
 seal = "none: rewritten on every WaitIrq registration"
 retirement = "release_waiters_for(tid) clears the base before releasing the slot, so the ISR stops acking the dead owner's device"
 rationale = "Release/Acquire stores and loads order the base against the waiter CAS adequately for the ISR reader, and the clear-before-release order in release_waiters_for is correct. A nonzero base is accepted only if it is the exact base of an MMIO window the caller claimed (wait_irq_base_permitted -> resource_registry::lookup_mmio_owner), else WaitIrq returns PermissionDenied (CP1 p02-debt-semantic #4), so the riscv64/aarch64 ISR only touches the caller's own device. On x86_64 the value is stored and cleared but never dereferenced."
-review = "kernel/src/task/syscall.rs:wait_irq_base_permitted; kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status"
+review = "kernel/src/task/syscall/mod.rs:wait_irq_base_permitted; kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::BLOCK_ROUTES"
@@ -838,7 +849,7 @@ contexts = ["normal", "irq"]
 seal = "none: append-only for the boot; a slot's key is fixed at its first bind and only its provider is rebound by the device's owner"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) clears the provider of every slot naming exactly the dead tid and keeps the key"
 rationale = "Fixed array of MAX_BLOCK_ROUTES slots under one IRQ-masking spinlock, no allocation; lock order SCHEDULER -> ROLE_PUBLICATION -> BLOCK_ROUTES (leaf), shared by publication and teardown, so a provider is never published for a task already torn down. exit_task may run inside the timer/IPI ISR via yield_cpu and only touches this spinlock."
-review = "kernel/src/task/drivers/driver_cell.rs:publish_block_route; kernel/src/task/drivers/driver_cell.rs:block_route_record; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall.rs:register_block_device_route; kernel/src/task/scheduler.rs:exit_task"
+review = "kernel/src/task/drivers/driver_cell.rs:publish_block_route; kernel/src/task/drivers/driver_cell.rs:block_route_record; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall/mod.rs:register_block_device_route; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::NIC_DRIVER_STATE"
@@ -860,7 +871,7 @@ contexts = ["normal", "irq"]
 seal = "none: overwritten by each GPU self-registration"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
 rationale = "Release store / Acquire load / exact-tid CAS are sufficient for a single tid value. Role and service route publish together through driver_cell::publish_role_or_rollback under ROLE_PUBLICATION, the same transaction as block/NIC, so deregister_all_for cannot interleave and a rejected route rolls the role back."
-review = "kernel/src/task/syscall.rs (GPU self-registration -> publish_role_or_rollback); kernel/src/task/drivers/driver_cell.rs:publish_role_or_rollback; kernel/src/task/drivers/driver_cell.rs:deregister_all_for"
+review = "kernel/src/task/syscall/mod.rs (GPU self-registration -> publish_role_or_rollback); kernel/src/task/drivers/driver_cell.rs:publish_role_or_rollback; kernel/src/task/drivers/driver_cell.rs:deregister_all_for"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::USB_HID_PRODUCER_CELL"
@@ -871,7 +882,7 @@ contexts = ["normal", "irq"]
 seal = "none: overwritten by each registration"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
 rationale = "Release store and exact-tid AcqRel CAS under ROLE_PUBLICATION keep role and service publication atomic with respect to teardown; teardown may run in the timer/IPI ISR via yield_cpu and touches only the atomic."
-review = "kernel/src/task/drivers/driver_cell.rs:register_usb_hid_producer; kernel/src/task/drivers/driver_cell.rs:deregister_usb_hid_producer; kernel/src/task/syscall.rs:register_usb_hid_producer_role; kernel/src/task/scheduler.rs:exit_task"
+review = "kernel/src/task/drivers/driver_cell.rs:register_usb_hid_producer; kernel/src/task/drivers/driver_cell.rs:deregister_usb_hid_producer; kernel/src/task/syscall/mod.rs:register_usb_hid_producer_role; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
 key = "kernel::task::drivers::driver_cell::ROLE_PUBLICATION"
@@ -904,7 +915,7 @@ contexts = ["normal"]
 seal = "written on the first get_random call (init_driver is never called on x86_64); idempotent thereafter"
 retirement = "never: lives for the whole run"
 rationale = "The cached byte is the entire state, so Relaxed load/store publishes nothing dependent and concurrent first probes store the same value. Assumes every CPU reports the same RDRAND/RDSEED CPUID bits, since the cache is global while CPUID is per-CPU. No ISR path calls get_random."
-review = "kernel/src/task/drivers/virtio_rng.rs:x86_rng::features; kernel/src/task/drivers/virtio_rng.rs:get_random; kernel/src/task/syscall.rs:8939; kernel/src/task/telemetry.rs:draw_epoch"
+review = "kernel/src/task/drivers/virtio_rng.rs:x86_rng::features; kernel/src/task/drivers/virtio_rng.rs:get_random; kernel/src/task/syscall/mod.rs:8939; kernel/src/task/telemetry.rs:draw_epoch"
 
 [[global]]
 key = "kernel::task::drivers::pcie_ecam::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
@@ -948,7 +959,7 @@ contexts = ["boot", "normal"]
 seal = "none: boot scan seeds it, then the Platform Cell appends at runtime"
 retirement = "never: entries describe hardware and are never removed; BDF ownership lives in resource_registry and is released by teardown_dma_authority"
 rationale = "IRQ-masking spinlock with no ISR accessor; the boot scan runs on the BSP before APs. register_device does a check-then-unlock-then-push with two separate acquisitions, so two concurrent registrations of the same BDF can both append (benign duplicate today because only the Platform Cell registers)."
-review = "kernel/src/task/drivers/pcie_ecam.rs:scan; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/drivers/pcie_ecam.rs:register_device; kernel/src/task/drivers/pcie_ecam.rs:find_class; kernel/src/task/syscall.rs:8046"
+review = "kernel/src/task/drivers/pcie_ecam.rs:scan; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/drivers/pcie_ecam.rs:register_device; kernel/src/task/drivers/pcie_ecam.rs:find_class; kernel/src/task/syscall/mod.rs:8046"
 
 [[global]]
 key = "kernel::task::drivers::pcie_ecam::PLATFORM_REGISTERED"
@@ -959,7 +970,7 @@ contexts = ["normal"]
 seal = "set to true by the first Platform Cell BAR/device registration; never cleared"
 retirement = "never: survives Platform Cell death (not reset by the retirement funnel)"
 rationale = "Monotonic false->true flag with Release store / Acquire load and no reader in the image, so no ordering or IRQ hazard exists; no ISR touches it."
-review = "kernel/src/task/drivers/pcie_ecam.rs:mark_platform_registered; kernel/src/task/drivers/pcie_ecam.rs:is_platform_registered; kernel/src/task/syscall.rs:8030; kernel/src/task/syscall.rs:8047"
+review = "kernel/src/task/drivers/pcie_ecam.rs:mark_platform_registered; kernel/src/task/drivers/pcie_ecam.rs:is_platform_registered; kernel/src/task/syscall/mod.rs:8030; kernel/src/task/syscall/mod.rs:8047"
 
 [[global]]
 key = "kernel::task::drivers::iommu_x86::PRIMARY_BASE @cfg(target_arch = \"x86_64\")"
@@ -1035,7 +1046,7 @@ contexts = ["normal"]
 seal = "set on the first identity-DMA grant; never cleared"
 retirement = "never: lives for the whole run"
 rationale = "swap(true, Relaxed) only deduplicates a warning and publishes no data; the sole caller is the GrantDma syscall path, never an ISR."
-review = "kernel/src/task/drivers/iommu.rs:map_dma_for_cell; kernel/src/task/syscall.rs:7023"
+review = "kernel/src/task/drivers/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
 
 [[global]]
 key = "kernel::task::drivers::iommu::IOMMU_ISOLATED"
@@ -1057,7 +1068,7 @@ contexts = ["normal"]
 seal = "never stored on x86_64 (set_deferred_init_pending call is cfg riscv64); stays false for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "On x86_64 it is a constant-false gate read with Relaxed by a syscall, so try_deferred_init returns immediately; no ISR touches it."
-review = "kernel/src/task/drivers/iommu.rs:set_deferred_init_pending; kernel/src/task/drivers/iommu.rs:try_deferred_init; kernel/src/main.rs:869; kernel/src/task/syscall.rs:8048"
+review = "kernel/src/task/drivers/iommu.rs:set_deferred_init_pending; kernel/src/task/drivers/iommu.rs:try_deferred_init; kernel/src/main.rs:869; kernel/src/task/syscall/mod.rs:8048"
 
 [[global]]
 key = "kernel::task::drivers::input_irq_ack::INPUT_IRQ"
@@ -1090,7 +1101,7 @@ contexts = ["boot", "normal"]
 seal = "never written on x86_64: mmc::init_driver is reached only from task::drivers::init (cfg riscv64|aarch64), so it stays None for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "On x86_64 only is_present() locks it (boot-time loader/early and disk_layout reads, BlkRead/BlkWrite/flush syscalls) and always sees None, routing to NullBlock; the IRQ-masking spinlock has no ISR accessor."
-review = "kernel/src/task/drivers/mmc.rs:is_present; kernel/src/task/drivers/mmc.rs:init_driver; kernel/src/task/drivers/block.rs:block_device; kernel/src/task/drivers.rs:init; kernel/src/task/syscall.rs:8156"
+review = "kernel/src/task/drivers/mmc.rs:is_present; kernel/src/task/drivers/mmc.rs:init_driver; kernel/src/task/drivers/block.rs:block_device; kernel/src/task/drivers.rs:init; kernel/src/task/syscall/mod.rs:8156"
 
 [[global]]
 key = "kernel::task::drivers::console_drv::PENDING_ASCII"
@@ -1267,7 +1278,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: taken for the whole run"
 retirement = "never: lives for the whole run (guards no data)"
 rationale = "Callers are the CapRevoke(PCIE_DRIVER) syscall and yield_cpu's reap/retry (timer ISR, user-fault path, AP idle loop). The lock masks IF and is held across pcie_ecam::quiesce_function, iommu::revoke_dma_for_cell (bounded invalidation wait), resource_registry/frame release and logging: a long IF-off section (latency, not correctness). Lock order under it, verified 2026-11-01: IOMMU_CLEANUP_SERIAL -> BDF_OWNERS, then x86 VTD_DOMAINS -> VTD_CONTEXTS (riscv64 RISCV_DOMAINS -> CQ_TRANSACTION), then the pin registry and FRAME_ALLOCATOR. It is acquired only in teardown_dma_authority and no path takes any of those locks and then this one, so there is no inversion."
-review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/task/drivers/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall.rs:1531-1540"
+review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/task/drivers/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540"
 
 [[global]]
 key = "kernel::task::TICKS"
@@ -1311,7 +1322,7 @@ contexts = ["normal"]
 seal = "none: mutated for the whole run"
 retirement = "never: lives for the whole run; ring overwrites oldest bytes"
 rationale = "Writers are sys_log/file_write(stdout) syscalls and the reader is ReadLog=237, all syscall context with IF already cleared by SYSCALL FMASK; Spinlock additionally masks IF. No timer-IRQ or AP bring-up access."
-review = "kernel/src/task.rs:print_user_log; kernel/src/task.rs:read_log_ring; kernel/src/task/syscall.rs:5742; kernel/src/task/syscall.rs:8067"
+review = "kernel/src/task.rs:print_user_log; kernel/src/task.rs:read_log_ring; kernel/src/task/syscall/mod.rs:5742; kernel/src/task/syscall/mod.rs:8067"
 
 [[global]]
 key = "kernel::task::waker::NET_RX_PENDING"
@@ -1344,7 +1355,7 @@ contexts = ["normal"]
 seal = "first provider_epoch() call wins compare_exchange(0, drawn) and the value never changes afterwards"
 retirement = "never: lives for the whole run"
 rationale = "Lazy once-init via Acquire load + AcqRel CAS; a racing loser adopts the winner, so the value is stable. Only caller is the telemetry syscall (syscall.rs:7226), outside SCHEDULER; no timer-IRQ or AP access."
-review = "kernel/src/task/telemetry.rs:provider_epoch; kernel/src/task/syscall.rs:7226"
+review = "kernel/src/task/telemetry.rs:provider_epoch; kernel/src/task/syscall/mod.rs:7226"
 
 [[global]]
 key = "kernel::task::scheduler::DUMMY_VTABLE"
@@ -1366,7 +1377,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "entries drained one-shot when the watched task exits; a dead watcher is purged from every list in drain_death_subscribers"
 rationale = "Leaf lock taken under SCHEDULER (order SCHEDULER -> DEATH_SUBSCRIBERS) with IF masked. exit_task runs from retire_deferred_fault/exit and the pick_next watchdog inside yield_cpu, so the map is mutated and its Vecs freed from timer-ISR, user-fault and AP-idle contexts; KernelAllocationContext keeps attribution on the kernel."
-review = "kernel/src/task/scheduler.rs:subscribe_death; kernel/src/task/scheduler.rs:drain_death_subscribers; kernel/src/task/scheduler.rs:exit_task; kernel/src/task/syscall.rs:6031"
+review = "kernel/src/task/scheduler.rs:subscribe_death; kernel/src/task/scheduler.rs:drain_death_subscribers; kernel/src/task/scheduler.rs:exit_task; kernel/src/task/syscall/mod.rs:6031"
 
 [[global]]
 key = "kernel::task::async_ipc::NEXT_OPERATION"
@@ -1377,7 +1388,7 @@ contexts = ["normal"]
 seal = "none: mutated for the whole run"
 retirement = "never: tokens are not recycled; allocation fails with Busy once isize::MAX is reached"
 rationale = "fetch_update(Relaxed) is an atomic RMW so tokens are unique; it publishes no other data. Only caller is async_ipc::submit from the syscall path; no timer-IRQ or AP access."
-review = "kernel/src/task/async_ipc.rs:new_token; kernel/src/task/syscall.rs:4526"
+review = "kernel/src/task/async_ipc.rs:new_token; kernel/src/task/syscall/mod.rs:4526"
 
 [[global]]
 key = "kernel::task::tcb::NEXT_CELL_GENERATION"
@@ -1399,7 +1410,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: records come and go for the whole run"
 retirement = "release_shm_for(cell, generation) in the root-retirement funnel (after resource_registry::release_for): removes the dead incarnation's frames, unmaps each identity VA if it still maps that frame (restoring the kernel RW mapping where RAM is identity-reached), flushes on all harts, then frees the frame"
 rationale = "Spinlock<BTreeMap<frame, Incarnation>>; held alone and released before FRAME_ALLOCATOR/KERNEL_ROOT are taken. ShmAlloc records the caller's live (cell, generation); ShmMap succeeds only for that exact incarnation, else PermissionDenied (CP1 p02-debt-semantic #10). The reclaim runs only at the post-quiescence funnel, so no task of the dead incarnation is mid-syscall."
-review = "kernel/src/task/syscall.rs:shm_owned_by; kernel/src/task/syscall.rs:release_shm_for; kernel/src/task.rs (retirement funnel call); tests shm_frame_is_owned_by_exactly_the_allocating_incarnation, shm_reclaim_takes_only_the_dead_incarnations_records"
+review = "kernel/src/task/syscall/mod.rs:shm_owned_by; kernel/src/task/syscall/mod.rs:release_shm_for; kernel/src/task.rs (retirement funnel call); tests shm_frame_is_owned_by_exactly_the_allocating_incarnation, shm_reclaim_takes_only_the_dead_incarnations_records"
 
 [[global]]
 key = "kernel::task::syscall::DMA_PUBLICATIONS"
@@ -1410,7 +1421,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "slot cleared by DmaPublicationGuard::drop; retirement waits while dma_publication_in_flight(tid)"
 rationale = "Fixed array under a Spinlock, so no allocation. Written only on the GrantDma syscall path; read by dma_publication_in_flight from Scheduler::take_quiescent_root_retirements under SCHEDULER (order SCHEDULER -> DMA_PUBLICATIONS), which yield_cpu reaches from the timer ISR, user faults and the AP idle loop."
-review = "kernel/src/task/syscall.rs:reserve_dma_publication; kernel/src/task/syscall.rs:DmaPublicationGuard; kernel/src/task/scheduler.rs:1910"
+review = "kernel/src/task/syscall/mod.rs:reserve_dma_publication; kernel/src/task/syscall/mod.rs:DmaPublicationGuard; kernel/src/task/scheduler.rs:1910"
 
 [[global]]
 key = "kernel::task::syscall::LEAKED_PAGES"
@@ -1421,7 +1432,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: monotonic count for the whole run"
 retirement = "never: a boot-wide counter; retirement reads a delta across its own reclaim window"
 rationale = "A single Relaxed fetch_add/load counter with no ordering obligation: the tally takes a before/after delta that may over-report concurrent leaks and never under-reports. Lock-free, so the grant reap paths reached from yield_cpu (timer ISR, user faults, AP idle loop) cannot deadlock on it."
-review = "kernel/src/task/syscall.rs:withhold_or_free; kernel/src/task/syscall.rs:leaked_pages; kernel/src/task.rs:yield_cpu"
+review = "kernel/src/task/syscall/mod.rs:withhold_or_free; kernel/src/task/syscall/mod.rs:leaked_pages; kernel/src/task.rs:yield_cpu"
 
 [[global]]
 key = "kernel::task::syscall::PAGE_GRANT_TABLE"
@@ -1432,7 +1443,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run (lazily Some on first insert)"
 retirement = "rows of a dead tid reclaimed/unshared in reap_grants_for_task (clear_grantee_refs, reclaim_owned_grants, sweep_deferred_domain_grants) during root/worker retirement"
 rationale = "Spinlock with documented order PAGE_GRANT_TABLE -> REG_GRANT_TABLE -> SCHEDULER -> pin. Syscalls touch it in normal context, and reap_retired_task_resources calls reap_grants_for_task outside SCHEDULER from yield_cpu, i.e. from timer-ISR, user-fault and AP-idle contexts, where it frees grant pages."
-review = "kernel/src/task/syscall.rs:grant_table_lock; kernel/src/task/syscall.rs:reap_grants_for_task; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task/syscall.rs:3090"
+review = "kernel/src/task/syscall/mod.rs:grant_table_lock; kernel/src/task/syscall/mod.rs:reap_grants_for_task; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task/syscall/mod.rs:3090"
 
 [[global]]
 key = "kernel::task::syscall::REG_GRANT_TABLE"
@@ -1443,7 +1454,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run (lazily Some on first insert)"
 retirement = "rows of a dead tid cleared in reap_grants_for_task (clear_grantee_refs, reclaim_owned_grants, sweep_orphan_reg_grants)"
 rationale = "Spinlock ordered after PAGE_GRANT_TABLE and before SCHEDULER; release_deferred_domain_row takes the two tables in separate branches, never nested in reverse. Reached from syscalls and from yield_cpu's retirement funnel (timer ISR, user faults, AP idle loop)."
-review = "kernel/src/task/syscall.rs:reg_grant_table_lock; kernel/src/task/syscall.rs:release_deferred_domain_row; kernel/src/task/syscall.rs:reap_grants_for_task"
+review = "kernel/src/task/syscall/mod.rs:reg_grant_table_lock; kernel/src/task/syscall/mod.rs:release_deferred_domain_row; kernel/src/task/syscall/mod.rs:reap_grants_for_task"
 
 [[global]]
 key = "kernel::task::syscall::handle_syscall_inner()::WEAK_RNG_WARNED"
@@ -1454,7 +1465,7 @@ contexts = ["normal"]
 seal = "set once on the first GetRandom served without hardware entropy"
 retirement = "never: lives for the whole run"
 rationale = "swap(true, Relaxed) one-shot guarding only a warning; only the GetRandom syscall arm touches it, no timer-IRQ or AP access."
-review = "kernel/src/task/syscall.rs:8948"
+review = "kernel/src/task/syscall/mod.rs:8948"
 
 [[global]]
 key = "kernel::task::smp::HART_ONLINE"
@@ -1641,7 +1652,7 @@ contexts = ["normal"]
 seal = "none: toggled per capture attempt"
 retirement = "in_flight cleared by Guard::release (on drop or on refusal)"
 rationale = "compare_exchange(AcqRel) admits one capture at a time and Release store clears it. Only caller is serialize_snapshot from the snapshot syscall (and only with feature snapshot-qualified, else GateClosed first); no timer-IRQ or AP access."
-review = "kernel/src/task/quiesce.rs:QuiesceState::acquire; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall.rs:8204"
+review = "kernel/src/task/quiesce.rs:QuiesceState::acquire; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall/mod.rs:8204"
 
 [[global]]
 key = "kernel::task::quiesce::KERNEL_HARTS"
@@ -1740,7 +1751,7 @@ contexts = ["normal"]
 seal = "none: set for the duration of one CapRevoke syscall, cleared by the guard's Drop on every exit"
 retirement = "never retired; false whenever no CapRevoke is running"
 rationale = "Acquire compare_exchange admits one CapRevoke at a time so the single-word Task::revoke_pending mask is never cleared by an overlapping revoke; a concurrent caller gets TryAgain. Release store in Drop. Syscall context only, no IRQ or AP access."
-review = "kernel/src/task/syscall.rs:RevokeSerial; kernel/src/task/syscall.rs:PendingRevoke"
+review = "kernel/src/task/syscall/mod.rs:RevokeSerial; kernel/src/task/syscall/mod.rs:PendingRevoke"
 
 [[global]]
 key = "kernel::task::cap::PLATFORM_CAP_GRANTED"
@@ -1796,7 +1807,7 @@ contexts = ["boot", "normal"]
 seal = "written at most once by snapshot::reserve_scratch_region_at_boot (main.rs:776, before start_secondaries at main.rs:1075); a no-op unless feature snapshot-qualified"
 retirement = "never: the reserved frames stay allocated for the kernel's lifetime and the Option is never cleared"
 rationale = "Set-once Option<ScratchRegion> (Copy) published under the crate Spinlock (which masks IRQs) before APs exist, then only copied out by the capture syscall; no IRQ/exception path touches it, so the lock is uncontended and correct."
-review = "kernel/src/snapshot.rs:reserve_scratch_region_at_boot; kernel/src/snapshot.rs:scratch_region; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall.rs:8204"
+review = "kernel/src/snapshot.rs:reserve_scratch_region_at_boot; kernel/src/snapshot.rs:scratch_region; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall/mod.rs:8204"
 
 [[global]]
 key = "kernel::snapshot::global_asm!#1 @cfg(target_arch = \"x86_64\")"
@@ -1873,7 +1884,7 @@ contexts = ["boot", "normal"]
 seal = "none: syscall 235 can add BAR windows for the whole run"
 retirement = "never: no removal path; windows announced by a Platform Cell outlive that cell"
 rationale = "Only boot enumeration and syscall handlers touch it, none from trap context; Spinlock is adequate. Entries are global device facts rather than per-cell grants, so not retiring them is consistent, though nothing re-validates them after the announcing cell dies."
-review = "kernel/src/resource_registry.rs:register_pcie_bar; kernel/src/resource_registry.rs:is_pcie_bar; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/syscall.rs:8023"
+review = "kernel/src/resource_registry.rs:register_pcie_bar; kernel/src/resource_registry.rs:is_pcie_bar; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/syscall/mod.rs:8023"
 
 [[global]]
 key = "kernel::resource_registry::BDF_OWNERS"
@@ -1928,7 +1939,7 @@ contexts = ["normal", "irq", "exception"]
 seal = "none: pins and leases churn for the whole run"
 retirement = "reap_grants_for_task -> quarantine_task(tid) and release_vfs_holder_leases(tid) in the yield_cpu retirement funnel; Scheduler::exit_task marks VFS leases pending revoke; quarantined frames are freed only by acknowledge(tid), otherwise held for the boot"
 rationale = "Scheduler::pick_next_unaccounted (find_vfs_lease) and exit_task (mark_vfs_lease_pending_revoke) touch it under SCHEDULER inside yield_cpu, which the timer/IPI ISRs and the #PF funnel call; the crate Spinlock masks IRQs and the table is a fixed-size leaf lock, so this is sound."
-review = "kernel/src/memory/pin.rs:quarantine_task; kernel/src/memory/pin.rs:release_vfs_holder_leases; kernel/src/task/scheduler.rs:1651; kernel/src/task/scheduler.rs:2183; kernel/src/task/syscall.rs:reap_grants_for_task"
+review = "kernel/src/memory/pin.rs:quarantine_task; kernel/src/memory/pin.rs:release_vfs_holder_leases; kernel/src/task/scheduler.rs:1651; kernel/src/task/scheduler.rs:2183; kernel/src/task/syscall/mod.rs:reap_grants_for_task"
 
 [[global]]
 key = "kernel::memory::pin::LIVE_GRANT_LEASES"
@@ -1939,7 +1950,7 @@ contexts = ["normal", "exception"]
 seal = "none: leases are published and ended for the whole run"
 retirement = "never: lives for the whole run; returns to 0 whenever every holder has received, sent to its owners, or died"
 rationale = "The receive and send hooks in handle_syscall_inner read it lock-free (Acquire) to skip REGISTRY when no task holds a lease; every write is a Release RMW under REGISTRY, so a holder (which published its own leases in an earlier syscall) never reads a stale zero. Holder-death release does not use the shortcut and always takes REGISTRY."
-review = "kernel/src/memory/pin.rs:grant_leases_live; kernel/src/memory/pin.rs:lease_grant; kernel/src/task/syscall.rs:end_grant_leases_at_send"
+review = "kernel/src/memory/pin.rs:grant_leases_live; kernel/src/memory/pin.rs:lease_grant; kernel/src/task/syscall/mod.rs:end_grant_leases_at_send"
 
 [[global]]
 key = "kernel::memory::paging::KERNEL_ROOT"
@@ -2346,7 +2357,7 @@ contexts = ["boot", "normal"]
 seal = "Option<Box<dyn ViFileSystem>> installed once by fs::init (main.rs:911); filesystem operations through the lock continue for the whole run"
 retirement = "never: lives for the whole run; per-cell open files are separate ViFile objects"
 rationale = "Only boot code and syscall handlers touch it; the Spinlock serialises the trait object and is held across open/lookup only, not across file reads."
-review = "kernel/src/fs.rs:init; kernel/src/fs.rs:read_file_from_vifs1; kernel/src/task/syscall.rs:6757; kernel/src/task.rs:file_open"
+review = "kernel/src/fs.rs:init; kernel/src/fs.rs:read_file_from_vifs1; kernel/src/task/syscall/mod.rs:6757; kernel/src/task.rs:file_open"
 
 [[global]]
 key = "kernel::cell::state_stash::STASH"
@@ -2357,7 +2368,7 @@ contexts = ["boot", "normal"]
 seal = "none: entries come and go for the whole run"
 retirement = "no hook on cell retirement: Open entries of dead owners and Sealed entries of dead destinations are dropped lazily by reclaim_dead_owners when the table is full; otherwise the destination's clear() consumes them"
 rationale = "Syscall paths plus the boot self_test (main.rs:932) only; the Spinlock is never held across the liveness callback, and restore copies into a kernel buffer."
-review = "kernel/src/cell/state_stash.rs:stash; kernel/src/cell/state_stash.rs:reclaim_dead_owners; kernel/src/cell/state_stash.rs:clear; kernel/src/task/syscall.rs:7622"
+review = "kernel/src/cell/state_stash.rs:stash; kernel/src/cell/state_stash.rs:reclaim_dead_owners; kernel/src/cell/state_stash.rs:clear; kernel/src/task/syscall/mod.rs:7622"
 
 [[global]]
 key = "kernel::cell::retirement_verdict::TABLE"
@@ -2412,7 +2423,7 @@ contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: rows added per incarnation for the whole run"
 retirement = "retire_cell_authority (from Scheduler::finish_root_retirement, after quiescence) purges the incarnation's ticket files and removes the exact (cell_id, generation) row"
 rationale = "Retirement runs inside yield_cpu under SCHEDULER, reachable from timer/IPI ISRs and the #PF funnel; the IRQ-masking Spinlock covers that. Order SCHEDULER -> CELL_AUTHORITIES -> CSPACE_FILES everywhere, including sys_cap_revoke since 2026-11-01. A lookup of a removed row returns Stale, and no task of the retired incarnation remains to issue one."
-review = "kernel/src/cell/cspace.rs:retire_cell_authority; kernel/src/task/scheduler.rs:finish_root_retirement; kernel/src/task/syscall.rs:sys_cap_revoke; test retirement_removes_exact_row_and_ticket_files"
+review = "kernel/src/cell/cspace.rs:retire_cell_authority; kernel/src/task/scheduler.rs:finish_root_retirement; kernel/src/task/syscall/mod.rs:sys_cap_revoke; test retirement_removes_exact_row_and_ticket_files"
 
 [[global]]
 key = "kernel::cell::cap_registry::CSPACE_FILES"
@@ -3074,7 +3085,7 @@ contexts = ["normal", "irq"]
 seal = "none: leases are created and dropped for the whole run"
 retirement = "reap_retired_task_resources -> reap_owner(tid) revokes every lease the dead task owns; teardown_dma_authority -> holder_domain_revoked(tid) drops a dead holder's leases after its domain teardown is acknowledged; unacknowledged revokes stay Revoking and retry_pending repeats them each yield_cpu pass"
 rationale = "Outermost lock of the export path (IOMMU_CLEANUP_SERIAL -> EXPORTS -> grant table -> SCHEDULER -> pin REGISTRY / VT-d UNITS -> FRAME_ALLOCATOR); never taken under another lock. The retirement funnel and retry run in yield_cpu, which the timer/IPI ISRs reach, and the crate Spinlock masks IRQs for the guard, so a same-CPU interrupt cannot re-enter it."
-review = "kernel/src/task/dma_export.rs:ExportTable; kernel/src/task/dma_export.rs:reap_owner; kernel/src/task/dma_export.rs:holder_domain_revoked; kernel/src/task/dma_export.rs:retry_pending; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task.rs:teardown_dma_authority"
+review = "kernel/src/task/syscall/dma_export.rs:ExportTable; kernel/src/task/syscall/dma_export.rs:reap_owner; kernel/src/task/syscall/dma_export.rs:holder_domain_revoked; kernel/src/task/syscall/dma_export.rs:retry_pending; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task.rs:teardown_dma_authority"
 
 [[global]]
 key = "kernel::task::syscall::dma_export::NEXT_EXPORT_ID"
@@ -3085,7 +3096,7 @@ contexts = ["normal"]
 seal = "none: one id per accepted 437 for the whole run"
 retirement = "never: ids are never reused within a boot"
 rationale = "fetch_add hands each export a unique id (an id taken by an export refused afterwards is skipped, never reissued); EXPORTS already serializes issuers, the atomic only keeps the counter boot-wide across table instances in host tests."
-review = "kernel/src/task/dma_export.rs:ExportTable::export"
+review = "kernel/src/task/syscall/dma_export.rs:ExportTable::export"
 
 [[global]]
 key = "kernel::task::syscall::dma_export::REVOKING"
@@ -3096,7 +3107,7 @@ contexts = ["normal", "irq"]
 seal = "none: changes with every unacknowledged revoke for the whole run"
 retirement = "never: returns to 0 when every revoke is acknowledged"
 rationale = "retry_pending reads it Relaxed in yield_cpu to skip EXPORTS when nothing is pending; a stale nonzero only costs one lock round, a stale zero delays the retry by one pass, never a frame release (frames stay locked/quarantined until the acknowledged retry)."
-review = "kernel/src/task/dma_export.rs:retry_pending; kernel/src/task/dma_export.rs:ExportTable::set_state"
+review = "kernel/src/task/syscall/dma_export.rs:retry_pending; kernel/src/task/syscall/dma_export.rs:ExportTable::set_state"
 
 [[global]]
 key = "kernel::task::syscall::dma_export::LEASES"
@@ -3107,4 +3118,4 @@ contexts = ["normal", "irq"]
 seal = "none: changes with every export and drop for the whole run"
 retirement = "never: returns to 0 when every lease is dropped"
 rationale = "reap_owner reads it Relaxed to skip EXPORTS on the common death of a task that never exported; a lease the dying owner holds was created by that task's own earlier 437, whose EXPORTS critical section and the scheduler handoffs to the retirement funnel order the increment before the read, so a dying owner never reads a stale zero for its own lease. holder_domain_revoked deliberately does not use it."
-review = "kernel/src/task/dma_export.rs:reap_owner; kernel/src/task/dma_export.rs:holder_domain_revoked"
+review = "kernel/src/task/syscall/dma_export.rs:reap_owner; kernel/src/task/syscall/dma_export.rs:holder_domain_revoked"
