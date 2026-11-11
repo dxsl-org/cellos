@@ -1647,3 +1647,787 @@ pub(super) fn resolve_and_lease_grant(
         grant.domain.is_some(),
     )
 }
+
+/// Handler for `Syscall::ShmAlloc` (extracted from the dispatcher).
+pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
+    let Some((cell, generation)) = live_cell_identity(caller_id) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    let owner = crate::cell::state_stash::Incarnation { cell, generation };
+    let page_size = crate::memory::paging::PAGE_SIZE;
+    let bytes = if size == 0 {
+        page_size
+    } else {
+        size.div_ceil(page_size) * page_size
+    };
+
+    if !crate::memory::cell_quota::charge(cell as usize, bytes) {
+        return Err(SyscallError::BufferTooSmall);
+    }
+
+    let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    if let Some(allocator) = frame_guard.as_mut() {
+        if let Some(frame) = allocator.allocate_frame() {
+            drop(frame_guard);
+            shm_register(frame, owner, bytes, None, 0x3);
+            return Ok(frame);
+        }
+    }
+    crate::memory::cell_quota::refund(cell as usize, bytes);
+    Err(SyscallError::BufferTooSmall)
+}
+
+/// Handler for `Syscall::ShmMap` (extracted from the dispatcher).
+pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> SyscallResult {
+    let Some((caller_cell, caller_gen)) = live_cell_identity(caller_id) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    let Some(record) = shm_accessible_by(handle, caller_cell, caller_gen) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+
+    if target_pid != 0 && record.owner.cell == caller_cell {
+        if let Some((target_cell, _)) = live_cell_identity(target_pid) {
+            if let Some(r) = SHM_HANDLES.lock().get_mut(&handle) {
+                r.recipient = Some(target_cell);
+            }
+        }
+    }
+
+    let frame = handle;
+    let vaddr = frame; // Identity map for SAS simplicity
+
+    use crate::memory::paging::Flags;
+    let flags =
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
+
+    let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    if let Some(allocator) = frame_guard.as_mut() {
+        if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags)).is_ok()
+        {
+            return Ok(vaddr);
+        }
+    }
+    Err(SyscallError::Unknown)
+}
+
+/// Handler for `Syscall::Grant` (extracted from the dispatcher).
+pub(super) fn grant(
+    caller_id: usize,
+    target: usize,
+    ptr: usize,
+    len: usize,
+    flags: usize,
+) -> SyscallResult {
+    crate::task::ipc_grant(caller_id, target, ptr, len, flags as u32)
+        .map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::Map` (extracted from the dispatcher).
+pub(super) fn map(caller_id: usize, grant_id: usize) -> SyscallResult {
+    crate::task::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::Lend` (extracted from the dispatcher).
+pub(super) fn lend(
+    caller_id: usize,
+    target: usize,
+    ptr: usize,
+    len: usize,
+    flags: usize,
+) -> SyscallResult {
+    crate::task::ipc_lend(caller_id, target, ptr, len, flags as u32)
+        .map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::BorrowRead` (extracted from the dispatcher).
+pub(super) fn borrow_read(
+    caller_id: usize,
+    lease_id: usize,
+    offset: usize,
+    ptr: usize,
+    len: usize,
+) -> SyscallResult {
+    crate::task::ipc_borrow_read(caller_id, lease_id, offset, ptr, len)
+        .map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::BorrowWrite` (extracted from the dispatcher).
+pub(super) fn borrow_write(
+    caller_id: usize,
+    lease_id: usize,
+    offset: usize,
+    ptr: usize,
+    len: usize,
+) -> SyscallResult {
+    crate::task::ipc_borrow_write(caller_id, lease_id, offset, ptr, len)
+        .map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::AnonMemory` (extracted from the dispatcher).
+pub(super) fn anon_memory(
+    caller_id: usize,
+    op: usize,
+    addr: usize,
+    len: usize,
+    flags: usize,
+) -> SyscallResult {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let is_domain = {
+            let guard = crate::task::SCHEDULER.lock();
+            guard
+                .as_ref()
+                .and_then(|sched| sched.tasks.get(&caller_id))
+                .map(|t| {
+                    matches!(
+                        t.address_space,
+                        crate::task::tcb::TaskAddressSpace::Domain(_)
+                    )
+                })
+                .unwrap_or(false)
+        };
+        if !is_domain {
+            return Ok(api::anon_memory::ERR_NOT_SUPPORTED);
+        }
+        // No anonymous page can exist yet (no budget source, CP1 D-M4
+        // default 0 = `NotSupported`), so every valid op is refused:
+        // a 0 from UNMAP or PROTECT would claim a release or a guard
+        // page that never took effect.
+        match api::anon_memory::decode_anon_request(op, addr, len, flags) {
+            Ok(_) => Ok(api::anon_memory::ERR_NOT_SUPPORTED),
+            Err(err) => Ok(err),
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = (caller_id, op, addr, len, flags);
+        Ok(api::anon_memory::ERR_NOT_SUPPORTED)
+    }
+}
+
+/// Handler for `Syscall::GrantDma` (extracted from the dispatcher).
+pub(super) fn grant_dma(caller_id: usize, bdf: u32, phys: u64, size: usize) -> SyscallResult {
+    // Phase-01 containment: DMA authority is bounded at admission for
+    // domain-class cells, so this is the second lock on the same door —
+    // a private-root caller must not publish an IOMMU mapping for a
+    // record whose receiver PTEs this kernel does not revoke.
+    if domain_grant_task(caller_id) {
+        log::warn!(
+            "[iommu] Cell {caller_id} DMA grant denied: private-root domain \
+                     (phase-01 containment)"
+        );
+        return Err(SyscallError::PermissionDenied);
+    }
+    #[cfg(target_arch = "aarch64")]
+    let granule = hal::dma_granule();
+    #[cfg(not(target_arch = "aarch64"))]
+    let granule = 4096usize;
+
+    let mask = (granule - 1) as u64;
+    if phys & mask != 0 || (size as u64) & mask != 0 || size == 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    let Some(phys_end) = phys.checked_add(size as u64) else {
+        return Err(SyscallError::InvalidInput);
+    };
+    let Ok(phys_base) = usize::try_from(phys) else {
+        return Err(SyscallError::InvalidInput);
+    };
+    if usize::try_from(phys_end).is_err() {
+        return Err(SyscallError::InvalidInput);
+    }
+    let publication = match reserve_caller_owned_dma_range(caller_id, bdf, phys_base, size) {
+        Ok(publication) => publication,
+        Err(DmaGrantError::NotOwned) => {
+            log::warn!(
+                "[iommu] Cell {caller_id} DMA grant denied: {phys:#x}+{size} is not \
+                             contained in a live caller-owned Grant"
+            );
+            return Err(SyscallError::PermissionDenied);
+        }
+        Err(DmaGrantError::BdfNotOwned) => {
+            log::warn!("[iommu] Cell {caller_id} DMA grant denied: BDF {bdf:08x} is not owned");
+            return Err(SyscallError::PermissionDenied);
+        }
+        Err(DmaGrantError::QuotaExceeded) => {
+            log::warn!("[iommu] Cell {caller_id} DMA quota exceeded (size={size})");
+            return Err(SyscallError::PermissionDenied);
+        }
+        Err(DmaGrantError::Pin(error)) => {
+            log::warn!(
+                "[iommu] Cell {caller_id} DMA grant denied: cannot pin \
+                             {phys:#x}+{size} ({error:?})"
+            );
+            return Err(SyscallError::PermissionDenied);
+        }
+        Err(DmaGrantError::PublicationBusy) => {
+            log::warn!("[iommu] Cell {caller_id} DMA grant denied: publication already in flight");
+            return Err(SyscallError::Unknown);
+        }
+    };
+    let iova =
+        match crate::task::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size) {
+            crate::task::drivers::iommu::DmaMapResult::Mapped(iova) => iova,
+            crate::task::drivers::iommu::DmaMapResult::Rejected => {
+                let rolled_back = crate::memory::pin::rollback_pin(phys_base, size, caller_id);
+                debug_assert!(rolled_back, "rejected DMA map must release its exact pin");
+                drop(publication);
+                log::warn!("[iommu] Cell {caller_id} DMA grant denied: no active mapping backend");
+                return Err(SyscallError::Unknown);
+            }
+            crate::task::drivers::iommu::DmaMapResult::PublishedUnconfirmed => {
+                // A context/SLPT entry is already hardware-visible. Keep
+                // the pin and quota until task teardown clears and drains
+                // that exact requester; do not enable bus mastering.
+                publication.commit();
+                log::warn!(
+                    "[iommu] Cell {caller_id} DMA mapping unconfirmed: \
+                             retaining pin for BDF {bdf:08x}"
+                );
+                return Err(SyscallError::Unknown);
+            }
+        };
+    crate::task::drivers::pcie_ecam::enable_bus_master(bdf);
+    publication.commit();
+    // warn, not info: the only record of what this device may DMA to
+    // (see the matching line in `iommu_x86.rs`); at info level it does
+    // not survive to the serial log on the Tier-3 x86 lane.
+    log::warn!(
+        "[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
+        caller_id,
+        (bdf >> 8) & 0xFF,
+        (bdf >> 3) & 0x1F,
+        bdf & 0x7,
+        phys,
+        size
+    );
+    Ok(iova as usize)
+}
+
+/// Handler for `Syscall::ExportDmaRange` (extracted from the dispatcher).
+pub(super) fn export_dma_range(
+    caller_id: usize,
+    va: usize,
+    len: usize,
+    holder_service: usize,
+    flags: usize,
+) -> SyscallResult {
+    dma_export::export(caller_id, va, len, holder_service, flags)
+}
+
+/// Handler for `Syscall::MapDmaExport` (extracted from the dispatcher).
+pub(super) fn map_dma_export(
+    caller_id: usize,
+    export_id: usize,
+    bdf: usize,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    if out_len != api::dma_export::DMA_EXPORT_RECORD_LEN {
+        return Err(SyscallError::InvalidInput);
+    }
+    caller_copy_view(caller_id)?
+        .validate_writable(out_ptr, out_len)
+        .map_err(|_| SyscallError::InvalidInput)?;
+    // Same retirement barrier as GrantDma: the holder's root cannot
+    // retire (and tear its domain down) mid-publication.
+    let barrier = crate::memory::cell_quota::try_reserve_dma(0, 0).ok_or(SyscallError::Unknown)?;
+    let publication = reserve_dma_publication(caller_id, barrier).ok_or(SyscallError::TryAgain)?;
+    let record = dma_export::map(caller_id, export_id, bdf);
+    drop(publication);
+    let mut bytes = [0u8; api::dma_export::DMA_EXPORT_RECORD_LEN];
+    record?.encode(&mut bytes);
+    write_user_slice(caller_id, out_ptr, &bytes, bytes.len())
+        .map_err(|_| SyscallError::InvalidInput)?;
+    Ok(0)
+}
+
+/// Handler for `Syscall::RevokeDmaExport` (extracted from the dispatcher).
+pub(super) fn revoke_dma_export(
+    caller_id: usize,
+    export_id: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+) -> SyscallResult {
+    if a1 != 0 || a2 != 0 || a3 != 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    dma_export::revoke(caller_id, export_id)
+}
+
+/// Handler for `Syscall::GrantAlloc` (extracted from the dispatcher).
+pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
+    const PAGE_SIZE: usize = 4096;
+    if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
+        return Ok(0);
+    }
+    // A private root whose lifecycle is unavailable (non-RV64, unknown or
+    // retired tid, a root already dying) keeps the phase-01 denial before
+    // a frame exists. `Ok(0)` is the alloc-safe sentinel: a cell-side
+    // wrapper reads any nonzero return as a grant id.
+    if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
+        log::warn!(
+            "[grant] GrantAlloc denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
+        );
+        return Ok(GRANT_DENY_ALLOC);
+    }
+    let owner_space = live_domain_space(caller_id);
+    let n_pages = size.div_ceil(PAGE_SIZE);
+    let paddr = match &owner_space {
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                all(target_arch = "aarch64", feature = "test-hooks")
+            )
+        ))]
+        Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
+            Some(paddr) => paddr,
+            None => return Ok(0),
+        },
+        #[cfg(not(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                all(target_arch = "aarch64", feature = "test-hooks")
+            )
+        )))]
+        Some(_) => return Ok(0),
+        None => match alloc_grant_pages(n_pages) {
+            Some(paddr) => paddr,
+            None => return Ok(0),
+        },
+    };
+    // A domain owner's backing is mapped only in its own root, RW+NX, and
+    // stays supervisor-only in the SAS root. Every page is undone if any
+    // one fails, so no raw pointer is ever published for a partial map.
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    ))]
+    if let Some(space) = &owner_space {
+        if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
+            log::warn!("[grant] GrantAlloc owner mapping failed for task {caller_id}: {error:?}");
+            free_grant_pages(paddr, n_pages);
+            return Ok(0);
+        }
+    }
+    let domain = owner_space
+        .as_ref()
+        .and_then(|space| new_domain_record(space, paddr, size));
+    let mut table = grant_table_lock().lock();
+    let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
+        Some(binding) => binding,
+        None => {
+            drop(table);
+            free_grant_pages(paddr, n_pages);
+            return Err(SyscallError::PermissionDenied);
+        }
+    };
+    if table.is_none() {
+        *table = Some(BTreeMap::new());
+    }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::GRANT_SHARED,
+    );
+    table.as_mut().unwrap().insert(
+        paddr,
+        PageGrant {
+            base: paddr,
+            size,
+            owner: caller_id,
+            owner_cell,
+            owner_generation,
+            shared_to: None,
+            domain,
+        },
+    );
+    Ok(paddr)
+}
+
+/// Handler for `Syscall::GrantShare` (extracted from the dispatcher).
+pub(super) fn grant_share(
+    caller_id: usize,
+    grant_id: usize,
+    target_cell: usize,
+    perm: usize,
+) -> SyscallResult {
+    let perm = match GrantPerm::try_from(perm as u8) {
+        Ok(p) => p,
+        Err(_) => return Err(SyscallError::InvalidInput),
+    };
+    // A private-root pair is the only shape the lifecycle can publish:
+    // both endpoints must be live private roots on the one architecture
+    // whose lifecycle is implemented. SAS-only shares keep today's path;
+    // a mixed pair, a non-RV64 target and a dead or unknown peer keep the
+    // phase-01 denial.
+    let owner_is_domain = domain_grant_task(caller_id);
+    let target_is_domain = domain_grant_task(target_cell);
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    ))]
+    if owner_is_domain || target_is_domain {
+        let owner_space = live_domain_space(caller_id);
+        let target_space = live_domain_space(target_cell);
+        let (Some(_owner_space), Some(target_space)) = (owner_space, target_space) else {
+            log::warn!(
+                "[grant] GrantShare denied: caller {caller_id} or target {target_cell} is \
+                         not a live private root"
+            );
+            return Err(SyscallError::PermissionDenied);
+        };
+        {
+            let mut tbl = grant_table_lock().lock();
+            if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+                return domain_grant_share_row(
+                    grant.owner,
+                    grant.base,
+                    grant.domain.as_ref(),
+                    &mut grant.shared_to,
+                    caller_id,
+                    target_cell,
+                    &target_space,
+                    perm,
+                )
+                .map(|()| 0);
+            }
+        }
+        let mut rtbl = reg_grant_table_lock().lock();
+        return match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+            None => Err(SyscallError::InvalidInput),
+            Some(grant) => domain_grant_share_row(
+                grant.owner,
+                grant.base,
+                grant.domain.as_ref(),
+                &mut grant.shared_to,
+                caller_id,
+                target_cell,
+                &target_space,
+                perm,
+            )
+            .map(|()| 0),
+        };
+    }
+    // Without a private-root backend no task is a domain, so the residual
+    // branch below is the SAS-only path.
+    let _ = (owner_is_domain, target_is_domain);
+    // Check PAGE_GRANT_TABLE first, then fall back to REG_GRANT_TABLE.
+    {
+        let mut tbl = grant_table_lock().lock();
+        if tbl.is_none() {
+            *tbl = Some(BTreeMap::new());
+        }
+        if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+            if grant.owner != caller_id {
+                return Err(SyscallError::PermissionDenied);
+            }
+            grant.shared_to = Some((target_cell, perm));
+            return Ok(0);
+        }
+    }
+    // Not in PAGE_GRANT_TABLE — try REG_GRANT_TABLE.
+    let mut rtbl = reg_grant_table_lock().lock();
+    match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+        None => Err(SyscallError::InvalidInput),
+        Some(grant) if grant.owner != caller_id => Err(SyscallError::PermissionDenied),
+        Some(grant) => {
+            grant.shared_to = Some((target_cell, perm));
+            Ok(0)
+        }
+    }
+}
+
+/// Handler for `Syscall::GrantSlice` (extracted from the dispatcher).
+pub(super) fn grant_slice(
+    caller_id: usize,
+    grant_id: usize,
+    size_out_ptr: usize,
+    expected_owner_tid: usize,
+    flags: usize,
+) -> SyscallResult {
+    // ABI a3 (approved 2026-11-10): unknown flag bits, and a lease with
+    // no owner to key it by, answer exactly as an unknown id — before
+    // any lookup, log or `size_out` validation.
+    if flags & !api::syscall::grant_slice::KNOWN_FLAGS != 0 {
+        return Ok(GRANT_DENY_SLICE);
+    }
+    let lease = flags & api::syscall::grant_slice::LEASE != 0;
+    if lease && expected_owner_tid == 0 {
+        return Ok(GRANT_DENY_SLICE);
+    }
+    // A caller that is not a live private root keeps the phase-01 denial
+    // (`usize::MAX`): a private root that is retired, unknown or on an
+    // unsupported target has no root this path could map into.
+    if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
+        log::warn!(
+            "[grant] GrantSlice denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
+        );
+        return Ok(GRANT_DENY_SLICE);
+    }
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    ))]
+    if let Some(receiver) = live_domain_space(caller_id) {
+        // A private-root receiver resolves the owner's exact rights and
+        // publishes the receiver mapping transactionally; a VFS context
+        // cannot exist for it, and no SAS record may be resolved.
+        return resolve_domain_grant_slice(
+            caller_id,
+            grant_id,
+            size_out_ptr,
+            expected_owner_tid,
+            lease,
+            &receiver,
+        );
+    }
+    let vfs_context = match current_vfs_grant_lookup(caller_id) {
+        VfsGrantLookup::NotVfs => None,
+        VfsGrantLookup::MissingContext => return Ok(usize::MAX),
+        VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
+        VfsGrantLookup::Active(context) => Some(context),
+    };
+    let Some(access) = resolve_and_lease_grant(GrantSliceRequest {
+        caller_id,
+        grant_id,
+        size_out_ptr,
+        expected_owner_tid,
+        lease,
+        vfs_context,
+    })?
+    else {
+        return Ok(usize::MAX);
+    };
+    crate::task::user_out::write_resolved_optional_usize(access.size_out, access.size);
+    Ok(access.base)
+}
+
+/// Handler for `Syscall::GrantFree` (extracted from the dispatcher).
+pub(super) fn grant_free(caller_id: usize, grant_id: usize) -> SyscallResult {
+    // A private root whose lifecycle is unavailable keeps the phase-01
+    // denial: releasing its record would return frames whose receiver PTE
+    // this path cannot revoke.
+    if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
+        log::warn!(
+            "[grant] GrantFree denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
+        );
+        return Err(GRANT_DENY_ERROR);
+    }
+    // Owner-only, and only while no in-flight operation holds the region.
+    // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
+    // pin REGISTRY, a leaf), so a concurrent VFS GrantSlice or GrantDma
+    // cannot publish a pin between the check and removal.
+    let entry = {
+        let mut tbl = grant_table_lock().lock();
+        let owned = tbl
+            .as_ref()
+            .and_then(|m| m.get(&grant_id))
+            .filter(|g| g.owner == caller_id)
+            .map(|g| (g.base, g.size, clone_domain_record(&g.domain)));
+        match owned {
+            None => None,
+            Some((base, size, domain)) => {
+                refuse_if_pinned("GrantFree", grant_id, base, size)?;
+                if domain.is_some() {
+                    // The row stays while the revoke drains so a retry is
+                    // idempotent; a `Revoking` row refuses new slices.
+                    Some((base, size, domain))
+                } else {
+                    tbl.as_mut()
+                        .and_then(|m| m.remove(&grant_id))
+                        .map(|g| (g.base, g.size, None))
+                }
+            }
+        }
+    };
+    let Some((base, size, domain)) = entry else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    if let Some(record) = &domain {
+        if !revoke_domain_record(record, grant_id, "GrantFree") {
+            // Bounded existing error: the frames stay retained and the
+            // record stays `Revoking` for an idempotent retry.
+            return Err(SyscallError::PermissionDenied);
+        }
+        let mut tbl = grant_table_lock().lock();
+        tbl.as_mut().and_then(|m| m.remove(&grant_id));
+    }
+    free_grant_pages(base, grant_pages_for_size(size));
+    Ok(0)
+}
+
+/// Handler for `Syscall::GrantCacheSyncBegin` (extracted from the dispatcher).
+pub(super) fn grant_cache_sync_begin(
+    caller_id: usize,
+    grant_id: usize,
+    offset: usize,
+    len: usize,
+) -> SyscallResult {
+    let (token, base) = {
+        let table = grant_table_lock().lock();
+        let grant = table
+            .as_ref()
+            .and_then(|entries| entries.get(&grant_id))
+            .ok_or(SyscallError::InvalidInput)?;
+        if grant.owner != caller_id {
+            return Err(SyscallError::PermissionDenied);
+        }
+        if len == 0 || offset > grant.size || len > grant.size.saturating_sub(offset) {
+            return Err(SyscallError::InvalidInput);
+        }
+        let base = grant
+            .base
+            .checked_add(offset)
+            .ok_or(SyscallError::InvalidInput)?;
+        let token = crate::memory::pin::begin_cache_sync(base, len, caller_id)
+            .map_err(|_| SyscallError::InvalidInput)?;
+        (token, base)
+    };
+    #[cfg(target_arch = "aarch64")]
+    {
+        hal::cache::clean_invalidate_data_cache_range(base, len);
+        Ok(token)
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = base;
+        let _ = crate::memory::pin::cancel_cache_sync(token, caller_id);
+        Err(SyscallError::Unknown)
+    }
+}
+
+/// Handler for `Syscall::GrantCacheSyncComplete` (extracted from the dispatcher).
+pub(super) fn grant_cache_sync_complete(caller_id: usize, token: usize) -> SyscallResult {
+    let (base, len) = crate::memory::pin::begin_cache_sync_completion(token, caller_id)
+        .ok_or(SyscallError::PermissionDenied)?;
+    #[cfg(target_arch = "aarch64")]
+    {
+        hal::cache::invalidate_data_cache_range(base, len);
+        if !crate::memory::pin::complete_cache_sync(token, caller_id) {
+            return Err(SyscallError::PermissionDenied);
+        }
+        Ok(0)
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        let _ = (base, len);
+        Err(SyscallError::Unknown)
+    }
+}
+
+/// Handler for `Syscall::GrantRegister` (extracted from the dispatcher).
+pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
+    const PAGE_SIZE: usize = 4096;
+    if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
+        return Ok(0);
+    }
+    // A private root whose lifecycle is unavailable keeps the phase-01
+    // denial: its buffer would be mapped into a root this path cannot
+    // revoke a receiver from, so no frame or PTE may exist.
+    if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
+        log::warn!(
+            "[grant] GrantRegister denied: task {caller_id} is not a live private root \
+                     (phase-01 denial)"
+        );
+        return Ok(GRANT_DENY_ALLOC);
+    }
+    let owner_space = live_domain_space(caller_id);
+    let n_pages = size.div_ceil(PAGE_SIZE);
+    let paddr = match &owner_space {
+        #[cfg(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                all(target_arch = "aarch64", feature = "test-hooks")
+            )
+        ))]
+        Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
+            Some(paddr) => paddr,
+            None => return Ok(0),
+        },
+        #[cfg(not(all(
+            feature = "native-domains",
+            any(
+                target_arch = "riscv64",
+                all(target_arch = "aarch64", feature = "test-hooks")
+            )
+        )))]
+        Some(_) => return Ok(0),
+        None => match alloc_grant_pages(n_pages) {
+            Some(paddr) => paddr,
+            None => return Ok(0),
+        },
+    };
+    #[cfg(all(
+        feature = "native-domains",
+        any(
+            target_arch = "riscv64",
+            all(target_arch = "aarch64", feature = "test-hooks")
+        )
+    ))]
+    if let Some(space) = &owner_space {
+        if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
+            log::warn!(
+                "[grant] GrantRegister owner mapping failed for task {caller_id}: {error:?}"
+            );
+            free_grant_pages(paddr, n_pages);
+            return Ok(0);
+        }
+    }
+    let domain = owner_space
+        .as_ref()
+        .and_then(|space| new_domain_record(space, paddr, size));
+    let mut table = reg_grant_table_lock().lock();
+    let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
+        Some(binding) => binding,
+        None => {
+            drop(table);
+            free_grant_pages(paddr, n_pages);
+            return Err(SyscallError::PermissionDenied);
+        }
+    };
+    if table.is_none() {
+        *table = Some(BTreeMap::new());
+    }
+    #[cfg(cellos_p01_trace)]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::GRANT_SHARED,
+    );
+    table.as_mut().unwrap().insert(
+        paddr,
+        RegGrant {
+            base: paddr,
+            size,
+            owner: caller_id,
+            owner_cell,
+            owner_generation,
+            shared_to: None,
+            domain,
+        },
+    );
+    Ok(paddr)
+}
+
+/// Handler for `Syscall::GrantUnregister` (extracted from the dispatcher).
+pub(super) fn grant_unregister(caller_id: usize, reg_id: usize) -> SyscallResult {
+    unregister_registered_grant(caller_id, reg_id)?;
+    Ok(0)
+}

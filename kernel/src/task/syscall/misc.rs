@@ -537,3 +537,57 @@ pub(super) fn collect_process_rows<T>(
     }
     rows
 }
+
+#[cfg(feature = "bench-counters")]
+/// Handler for `Syscall::BenchCounters` (extracted from the dispatcher).
+pub(super) fn bench_counters(caller_id: usize, out_ptr: usize, out_len: usize) -> SyscallResult {
+    // Gated like MemInfo at dispatch (bit 56 + observe_memory).
+    let len = crate::bench_counters::RECORD_BYTES;
+    if out_len < len {
+        return Err(SyscallError::InvalidInput);
+    }
+    validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+    let record = crate::bench_counters::snapshot_bytes();
+    write_user_slice(caller_id, out_ptr, &record, MAX_USER_BUF)?;
+    Ok(len)
+}
+
+/// Handler for `Syscall::AudioPlay` (extracted from the dispatcher).
+pub(super) fn audio_play() -> SyscallResult {
+    // No Sound Cell registered; virtio_sound.rs removed (kernel boundary law).
+    // Syscall 218 is reserved — do not reuse. A VirtIO Sound Driver Cell
+    // will handle audio in G2 via direct MMIO + IPC, no kernel driver needed.
+    log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
+    Err(SyscallError::Unknown)
+}
+
+/// Handler for `Syscall::NetTx` (extracted from the dispatcher).
+pub(super) fn net_tx(caller_id: usize, frame_ptr: usize, frame_len: usize) -> SyscallResult {
+    if !caller_has_network(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    crate::audit::log_event(
+        crate::audit::AuditEvent::NetTx,
+        &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
+    );
+    let frame = read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
+    let ok = crate::task::drivers::nic::send_frame(&frame);
+    Ok(if ok { 1 } else { 0 })
+}
+
+/// Handler for `Syscall::NetRx` (extracted from the dispatcher).
+pub(super) fn net_rx(caller_id: usize, buf_ptr: usize, buf_len: usize) -> SyscallResult {
+    if !caller_has_network(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
+    let mut kbuf = alloc::vec::Vec::new();
+    kbuf.try_reserve_exact(buf_len)
+        .map_err(|_| SyscallError::OutOfMemory)?;
+    kbuf.resize(buf_len, 0);
+    let n = crate::task::drivers::nic::recv_frame(&mut kbuf);
+    if n > 0 {
+        write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
+    }
+    Ok(n)
+}

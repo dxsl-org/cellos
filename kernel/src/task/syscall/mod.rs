@@ -2415,70 +2415,8 @@ fn handle_syscall_inner(
             }
             Ok(0)
         }
-        Syscall::ShmAlloc { size } => {
-            let Some((cell, generation)) = live_cell_identity(caller_id) else {
-                return Err(SyscallError::PermissionDenied);
-            };
-            let owner = crate::cell::state_stash::Incarnation { cell, generation };
-            let page_size = crate::memory::paging::PAGE_SIZE;
-            let bytes = if size == 0 {
-                page_size
-            } else {
-                size.div_ceil(page_size) * page_size
-            };
-
-            if !crate::memory::cell_quota::charge(cell as usize, bytes) {
-                return Err(SyscallError::BufferTooSmall);
-            }
-
-            let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            if let Some(allocator) = frame_guard.as_mut() {
-                if let Some(frame) = allocator.allocate_frame() {
-                    drop(frame_guard);
-                    shm_register(frame, owner, bytes, None, 0x3);
-                    return Ok(frame);
-                }
-            }
-            crate::memory::cell_quota::refund(cell as usize, bytes);
-            Err(SyscallError::BufferTooSmall)
-        }
-        Syscall::ShmMap { handle, target_pid } => {
-            let Some((caller_cell, caller_gen)) = live_cell_identity(caller_id) else {
-                return Err(SyscallError::PermissionDenied);
-            };
-            let Some(record) = shm_accessible_by(handle, caller_cell, caller_gen) else {
-                return Err(SyscallError::PermissionDenied);
-            };
-
-            if target_pid != 0 && record.owner.cell == caller_cell {
-                if let Some((target_cell, _)) = live_cell_identity(target_pid) {
-                    if let Some(r) = SHM_HANDLES.lock().get_mut(&handle) {
-                        r.recipient = Some(target_cell);
-                    }
-                }
-            }
-
-            let frame = handle;
-            let vaddr = frame; // Identity map for SAS simplicity
-
-            use crate::memory::paging::Flags;
-            let flags = Flags::VALID
-                | Flags::READ
-                | Flags::WRITE
-                | Flags::USER
-                | Flags::ACCESSED
-                | Flags::DIRTY;
-
-            let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            if let Some(allocator) = frame_guard.as_mut() {
-                if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags))
-                    .is_ok()
-                {
-                    return Ok(vaddr);
-                }
-            }
-            Err(SyscallError::Unknown)
-        }
+        Syscall::ShmAlloc { size } => grant::shm_alloc(caller_id, size),
+        Syscall::ShmMap { handle, target_pid } => grant::shm_map(caller_id, handle, target_pid),
         Syscall::FutexWait {
             addr,
             expected,
@@ -2534,11 +2472,8 @@ fn handle_syscall_inner(
             ptr,
             len,
             flags,
-        } => super::ipc_grant(caller_id, target, ptr, len, flags as u32)
-            .map_err(|_| SyscallError::PermissionDenied),
-        Syscall::Map { grant_id } => {
-            super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
-        }
+        } => grant::grant(caller_id, target, ptr, len, flags),
+        Syscall::Map { grant_id } => grant::map(caller_id, grant_id),
         Syscall::Exit { code } => {
             // TID zero is the explicit kernel-context sentinel. It has no Cell
             // generation to retire; a kernel scheduling point remains explicit
@@ -2642,148 +2577,7 @@ fn handle_syscall_inner(
         Syscall::CapRevoke {
             target_tid,
             cap_mask,
-        } => {
-            use api::syscall::cap_mask as CM;
-
-            if target_tid == caller_id {
-                return Err(SyscallError::InvalidCommand);
-            }
-
-            let _serial = RevokeSerial::acquire().ok_or(SyscallError::TryAgain)?;
-
-            // Gates, then the facts the teardown needs. The teardown itself runs
-            // with SCHEDULER released: the grant reclaim reaches
-            // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
-            // this spinlock is not reentrant. Both passes re-run the gates, so
-            // nothing is revoked on authority withdrawn while it ran. The mask is
-            // published as pending on the root first, so no task of the Cell —
-            // including one spawned during the teardown — can re-claim what is
-            // being torn down.
-            let (members, pending) = {
-                let mut sched_opt = super::SCHEDULER.lock();
-                let sched = match sched_opt.as_mut() {
-                    Some(s) => s,
-                    None => return Err(SyscallError::InvalidCommand),
-                };
-                cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
-                let target = sched
-                    .tasks
-                    .get(&target_tid)
-                    .ok_or(SyscallError::InvalidCommand)?;
-                let incarnation = (target.cell_id, target.cell_generation);
-                // Rights are per Cell incarnation, so revoking a sibling thread
-                // is revoking oneself — refused like `target_tid == caller_id`.
-                if sched
-                    .tasks
-                    .get(&caller_id)
-                    .is_some_and(|c| (c.cell_id, c.cell_generation) == incarnation)
-                {
-                    return Err(SyscallError::InvalidCommand);
-                }
-                let root_tid = target.root_tid;
-                // Same incarnation guard as the commit and `PendingRevoke::drop`,
-                // so the bits set here are exactly the bits cleared there.
-                if let Some(root) = sched.tasks.get_mut(&root_tid) {
-                    if (root.cell_id, root.cell_generation) == incarnation {
-                        root.revoke_pending |= cap_mask;
-                    }
-                }
-                (
-                    incarnation_members(sched, target_tid),
-                    PendingRevoke {
-                        root_tid,
-                        incarnation,
-                        mask: cap_mask,
-                    },
-                )
-            };
-
-            // ── Class-2 teardown, BEFORE the record changes ──────────────────
-            // Ambient authority — a mapped MMIO window, an already-shared grant —
-            // is exercised without a per-use syscall re-check, so clearing the
-            // record alone would leave it live. Resources are owned by the tid
-            // that claimed them, so every thread of the incarnation is torn down.
-            // Fail-closed: a teardown that cannot finish returns with the
-            // capability still in the record (the pending mask is withdrawn on
-            // return). Members torn down before the failure stay torn down; a
-            // retry of the same revoke is idempotent.
-            let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
-            for &tid in members.iter() {
-                if mmio_revoke != 0 {
-                    revoke_mmio_classes(tid, mmio_revoke as crate::resource_registry::MmioClass)?;
-                    // A revoked device class can be the authority behind a grant
-                    // the target owns (grants carry no source-cap tag), so its
-                    // owned grants are reclaimed with it. Frames a live pin still
-                    // protects are quarantined rather than freed.
-                    reclaim_owned_grants(tid);
-                }
-
-                if cap_mask & CM::PCIE_DRIVER != 0 {
-                    // The DMA-anywhere surface: the whole domain, its requester
-                    // entries, and the BAR windows the Cell claimed. Exactly the
-                    // teardown a dying driver Cell gets.
-                    if !crate::task::teardown_dma_authority(tid) {
-                        log::error!(
-                            "[kernel] CapRevoke: DMA teardown for task {tid} was not \
-                             acknowledged; capability left in the record, retry the revoke"
-                        );
-                        return Err(SyscallError::NotSupported);
-                    }
-                    revoke_mmio_classes(
-                        tid,
-                        crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
-                    )?;
-                    reclaim_owned_grants(tid);
-                }
-
-                if cap_mask & CM::PLATFORM != 0 {
-                    // The Platform Cell's ECAM config-space window.
-                    revoke_mmio_classes(tid, crate::resource_registry::CLASS_ECAM)?;
-                }
-            }
-
-            let target_present = commit_cap_revoke(
-                caller_id,
-                target_tid,
-                pending.root_tid,
-                pending.incarnation,
-                cap_mask,
-            )?;
-            let root_tid = pending.root_tid;
-            drop(pending);
-
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CapRevoked,
-                &crate::audit::encode_subject(
-                    audit_subject(caller_id),
-                    target_tid as u32,
-                    cap_mask,
-                ),
-            );
-            log::info!(
-                "[kernel] CapRevoke: task {} revoked mask={:#010x} from task {}",
-                caller_id,
-                cap_mask,
-                target_tid
-            );
-
-            // Courtesy notification, last and best-effort: the teardown above is
-            // what enforces the revocation, so a target that is gone or whose
-            // mailbox is full does not fail the call. The Cell's root (its app
-            // loop) is told too, since the revoke applied to the whole Cell.
-            if target_present && !send_cap_revoked_event(target_tid, cap_mask) {
-                log::warn!(
-                    "[kernel] CapRevoke: task {target_tid} not notified (exited or mailbox full)"
-                );
-            }
-            if root_tid != target_tid && !send_cap_revoked_event(root_tid, cap_mask) {
-                log::warn!(
-                    "[kernel] CapRevoke: Cell root {root_tid} not notified (exited or mailbox full)"
-                );
-            }
-
-            Ok(0)
-        }
+        } => authority::cap_revoke(caller_id, target_tid, cap_mask),
 
         Syscall::NotifyOnExit { watched } => {
             // Privileged: only SpawnCap holders (supervisors like init) may watch
@@ -2888,147 +2682,14 @@ fn handle_syscall_inner(
         }
 
         Syscall::RegisterService { service_id, tid } => {
-            // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
-            // so no caller may publish the singleton service.
-            if service_id == api::syscall::service::BLOCK_DRIVER {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // The machine pin endpoint is init's own: only trusted init may
-            // register it, and only naming itself (ADR-0029 §3). The VFS admits
-            // the live provider to the pin store, so a hijacked registration
-            // would hand over pin write access.
-            if service_id == api::syscall::service::MACHINE_PIN
-                && !(tid == caller_id && caller_is_trusted_init(caller_id))
-            {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // Development Silo readiness is self-published only after artifact,
-            // VM, entropy, guest READY, and public-key validation. The dedicated
-            // non-delegable cap is minted solely for the governed `/bin/silo`
-            // root task in test-hooks kernels; HypervisorCap alone is insufficient.
-            #[cfg(feature = "test-hooks")]
-            if service_id == api::syscall::service::SILO
-                && tid == 0
-                && caller_has_development_silo_registration(caller_id)
-            {
-                let Some((cell_id, generation)) = live_cell_identity(caller_id) else {
-                    return Err(SyscallError::InvalidInput);
-                };
-                return if crate::cell::service_registry::register(
-                    service_id, caller_id, cell_id, generation,
-                ) {
-                    Ok(0)
-                } else {
-                    Err(SyscallError::InvalidInput)
-                };
-            }
-            // The state-transfer demo owns one non-production service ID and may
-            // self-register (`tid=0`) so QEMU can exercise the real Supervisor path.
-            if service_id == api::syscall::service::HOTSWAP_DEMO
-                && tid == 0
-                && caller_has_spawn(caller_id)
-            {
-                // The caller is executing, so its identity is present. If it were
-                // somehow absent, the entry records 0/0 and the legacy `lookup`
-                // path keeps working while `LookupServiceBound` correctly reports
-                // that no binding exists for it.
-                let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
-                crate::cell::service_registry::register(service_id, caller_id, cell_id, generation);
-                return Ok(0);
-            }
-            // Driver Cell self-registration path: a PCIe GPU driver or the
-            // display-only BCM mailbox driver may register itself with tid=0.
-            if (caller_has_pcie_driver(caller_id)
-                || caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY))
-                && tid == 0
-                && service_id == api::syscall::service::GPU_DRIVER
-            {
-                let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
-                // Role and route publish as one transaction against exact-TID
-                // teardown. This path has always answered 0 once authorized, so
-                // a rejected route only rolls the role back; it adds no refusal.
-                crate::task::drivers::driver_cell::publish_role_or_rollback(
-                    caller_id,
-                    crate::task::drivers::driver_cell::register_gpu_driver,
-                    || {
-                        crate::cell::service_registry::register(
-                            service_id, caller_id, cell_id, generation,
-                        )
-                    },
-                    crate::task::drivers::driver_cell::deregister_gpu_driver,
-                );
-                return Ok(0);
-            }
-            // Privileged: SpawnCap is necessary but not sufficient. Well-known ids
-            // belong to trusted init and SupervisorCap holders; a spawn-only cell
-            // (e.g. a USB host driver with a protocol child) may publish only a
-            // private id it owns, so it cannot hijack VFS/NET/KMS/SUPERVISOR.
-            if !caller_has_spawn(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            let registrar = if caller_is_trusted_init(caller_id) || caller_has_supervisor(caller_id)
-            {
-                crate::cell::service_registry::Registrar::Namespace
-            } else {
-                crate::cell::service_registry::Registrar::Spawner(caller_id)
-            };
-            // The liveness check and the identity capture share one scheduler lock,
-            // so a provider cannot be recorded with a binding that was already stale
-            // when it was written.
-            let provider = super::SCHEDULER.lock().as_ref().and_then(|scheduler| {
-                scheduler.tasks.get(&tid).and_then(|task| {
-                    (!matches!(task.state, TaskState::Retiring | TaskState::Terminated))
-                        .then_some((task.cell_id.0, task.cell_generation))
-                })
-            });
-            let Some((cell_id, generation)) = provider else {
-                return Err(SyscallError::InvalidInput);
-            };
-            match crate::cell::service_registry::register_as(
-                registrar, service_id, tid, cell_id, generation,
-            ) {
-                Ok(()) => Ok(0),
-                Err(crate::cell::service_registry::Refusal::NotOwner) => {
-                    Err(SyscallError::PermissionDenied)
-                }
-                Err(crate::cell::service_registry::Refusal::Rejected) => {
-                    Err(SyscallError::InvalidInput)
-                }
-            }
+            authority::register_service(caller_id, service_id, tid)
         }
-        Syscall::LookupService { service_id } => {
-            // Open to all cells: resolve the live provider tid (0 = none registered),
-            // so a client reconnects transparently after the supervisor respawns a
-            // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
-            Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
-        }
+        Syscall::LookupService { service_id } => authority::lookup_service(service_id),
         Syscall::LookupServiceBound {
             service_id,
             out_ptr,
             out_len,
-        } => {
-            // Open to all cells, same allowlist bit as `LookupService`: this answers
-            // the same question with the provider's identity instead of a bare tid.
-            //
-            // The record is written whole or not at all. A short buffer is refused
-            // with the same `BufferTooSmall` error the other fixed-record writers
-            // use (`QueryDirHandles`, `ResolveCellOwner`) rather than partially
-            // filled; an absent, paused or identity-less provider returns the `0`
-            // absence sentinel `LookupService` uses — never a binding the kernel
-            // cannot stand behind.
-            if out_len < api::service_binding::SERVICE_BINDING_LEN {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let Some((tid, cell_id, generation)) =
-                crate::cell::service_registry::lookup_bound(service_id)
-            else {
-                return Ok(0);
-            };
-            let binding =
-                api::service_binding::ServiceBinding::new(tid as u64, cell_id, generation);
-            write_user_slice(caller_id, out_ptr, &binding.to_bytes(), MAX_USER_BUF)?;
-            Ok(api::service_binding::SERVICE_BINDING_LEN)
-        }
+        } => authority::lookup_service_bound(caller_id, service_id, out_ptr, out_len),
         Syscall::Heartbeat { interval } => {
             // Open: a cell asserts its own liveness. Arms a deadline `interval` ticks
             // ahead; `pick_next` terminates the cell as HUNG if it lapses. interval=0
@@ -3054,23 +2715,20 @@ fn handle_syscall_inner(
             ptr,
             len,
             flags,
-        } => super::ipc_lend(caller_id, target, ptr, len, flags as u32)
-            .map_err(|_| SyscallError::PermissionDenied),
+        } => grant::lend(caller_id, target, ptr, len, flags),
 
         Syscall::BorrowRead {
             lease_id,
             offset,
             ptr,
             len,
-        } => super::ipc_borrow_read(caller_id, lease_id, offset, ptr, len)
-            .map_err(|_| SyscallError::PermissionDenied),
+        } => grant::borrow_read(caller_id, lease_id, offset, ptr, len),
         Syscall::BorrowWrite {
             lease_id,
             offset,
             ptr,
             len,
-        } => super::ipc_borrow_write(caller_id, lease_id, offset, ptr, len)
-            .map_err(|_| SyscallError::PermissionDenied),
+        } => grant::borrow_write(caller_id, lease_id, offset, ptr, len),
 
         // --- Legacy Implementation ---
         Syscall::Yield => {
@@ -3078,17 +2736,7 @@ fn handle_syscall_inner(
             Ok(0)
         }
         Syscall::ServiceLookup { name_ptr, name_len } => {
-            let name = read_user_string(caller_id, name_ptr, name_len, MAX_LOG_MSG)?;
-            let id: usize = match name.as_str() {
-                "vfs" => 3,
-                "config" => 4,
-                "input" => 5,
-                "net" => 6,
-                "compositor" => 7,
-                "shell" => 8,
-                _ => return Err(SyscallError::FileNotFound),
-            };
-            Ok(id)
+            authority::service_lookup(caller_id, name_ptr, name_len)
         }
         Syscall::Open { path_ptr, path_len } => {
             let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
@@ -3226,35 +2874,7 @@ fn handle_syscall_inner(
             addr,
             len,
             flags,
-        } => {
-            #[cfg(target_arch = "x86_64")]
-            {
-                let is_domain = {
-                    let guard = super::SCHEDULER.lock();
-                    guard
-                        .as_ref()
-                        .and_then(|sched| sched.tasks.get(&caller_id))
-                        .map(|t| matches!(t.address_space, super::tcb::TaskAddressSpace::Domain(_)))
-                        .unwrap_or(false)
-                };
-                if !is_domain {
-                    return Ok(api::anon_memory::ERR_NOT_SUPPORTED);
-                }
-                // No anonymous page can exist yet (no budget source, CP1 D-M4
-                // default 0 = `NotSupported`), so every valid op is refused:
-                // a 0 from UNMAP or PROTECT would claim a release or a guard
-                // page that never took effect.
-                match api::anon_memory::decode_anon_request(op, addr, len, flags) {
-                    Ok(_) => Ok(api::anon_memory::ERR_NOT_SUPPORTED),
-                    Err(err) => Ok(err),
-                }
-            }
-            #[cfg(not(target_arch = "x86_64"))]
-            {
-                let _ = (op, addr, len, flags);
-                Ok(api::anon_memory::ERR_NOT_SUPPORTED)
-            }
-        }
+        } => grant::anon_memory(caller_id, op, addr, len, flags),
         Syscall::Write {
             fd,
             buf_ptr,
@@ -3396,145 +3016,50 @@ fn handle_syscall_inner(
             generation,
             out_ptr,
             out_len,
-        } => {
-            let len = api::cell_owner::CELL_OWNER_LEN;
-            if out_len < len {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let owner = {
-                let guard = super::SCHEDULER.lock();
-                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
-                let owner = sched
-                    .resolve_live_cell_owner(types::CellId(cell_id), generation)
-                    .ok_or(SyscallError::PermissionDenied)?;
-                let vfs_principal = sched.tasks.get(&caller_id).is_some_and(|task| {
-                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                        && task.current_caller_cell_id == cell_id
-                        && task.current_caller_cell_generation == generation
-                });
-                let registered_service =
-                    crate::cell::service_registry::is_registered_tid(owner.root_tid as usize);
-                if !vfs_principal && !registered_service {
-                    return Err(SyscallError::PermissionDenied);
-                }
-                owner
-            };
-            let bytes = owner.to_bytes();
-            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
-            Ok(len)
-        }
+        } => authority::resolve_cell_owner(caller_id, cell_id, generation, out_ptr, out_len),
 
         Syscall::WatchCellOwner {
             cell_id,
             generation,
             out_ptr,
             out_len,
-        } => {
-            let len = api::cell_owner::CELL_OWNER_LEN;
-            if out_len < len {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let (owner, token) = super::SCHEDULER
-                .lock()
-                .as_mut()
-                .and_then(|sched| {
-                    sched.watch_live_cell_owner(caller_id, types::CellId(cell_id), generation)
-                })
-                .ok_or(SyscallError::PermissionDenied)?;
-            let bytes = owner.to_bytes();
-            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
-            usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
-        }
+        } => authority::watch_cell_owner(caller_id, cell_id, generation, out_ptr, out_len),
 
         Syscall::ResolveCellOwnerRecord {
             request_ptr,
             request_len,
             out_ptr,
             out_len,
-        } => {
-            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-            let len = api::cell_owner::CELL_OWNER_LEN;
-            if out_len < len {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let owner = {
-                let guard = super::SCHEDULER.lock();
-                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
-                let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
-                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                        && task.current_caller_cell_id == request.cell_id
-                        && task.current_caller_cell_generation == request.generation
-                });
-                if !allowed {
-                    return Err(SyscallError::PermissionDenied);
-                }
-                sched
-                    .resolve_live_cell_owner(types::CellId(request.cell_id), request.generation)
-                    .ok_or(SyscallError::PermissionDenied)?
-            };
-            let bytes = owner.to_bytes();
-            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
-            Ok(len)
-        }
+        } => authority::resolve_cell_owner_record(
+            caller_id,
+            request_ptr,
+            request_len,
+            out_ptr,
+            out_len,
+        ),
 
         Syscall::ResolveCellImage {
             request_ptr,
             request_len,
             out_ptr,
             out_len,
-        } => {
-            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-            let len = api::cell_image::CELL_IMAGE_LEN;
-            if out_len < len {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let image = {
-                let guard = super::SCHEDULER.lock();
-                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
-                super::cell_image::resolve_for_caller(
-                    sched,
-                    caller_id,
-                    request,
-                    crate::fast_ipc::is_registered_vfs_cell,
-                )
-                .ok_or(SyscallError::PermissionDenied)?
-            };
-            write_user_slice(caller_id, out_ptr, &image.to_bytes(), MAX_USER_BUF)?;
-            Ok(len)
-        }
+        } => authority::resolve_cell_image(caller_id, request_ptr, request_len, out_ptr, out_len),
 
         Syscall::WatchCellOwnerRecord {
             request_ptr,
             request_len,
             out_ptr,
             out_len,
-        } => {
-            let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-            let len = api::cell_owner::CELL_OWNER_LEN;
-            if out_len < len {
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let (owner, token) = super::SCHEDULER
-                .lock()
-                .as_mut()
-                .and_then(|sched| {
-                    sched.watch_live_cell_owner(
-                        caller_id,
-                        types::CellId(request.cell_id),
-                        request.generation,
-                    )
-                })
-                .ok_or(SyscallError::PermissionDenied)?;
-            let bytes = owner.to_bytes();
-            write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
-            usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
-        }
+        } => authority::watch_cell_owner_record(
+            caller_id,
+            request_ptr,
+            request_len,
+            out_ptr,
+            out_len,
+        ),
 
         Syscall::CancelCellOwnerWatch { token } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                sched.cancel_cell_owner_watch(caller_id, token);
-            }
-            Ok(0)
+            authority::cancel_cell_owner_watch(caller_id, token)
         }
 
         Syscall::SpawnFromElf {
@@ -3945,111 +3470,7 @@ fn handle_syscall_inner(
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
 
-        Syscall::GrantDma { bdf, phys, size } => {
-            // Phase-01 containment: DMA authority is bounded at admission for
-            // domain-class cells, so this is the second lock on the same door —
-            // a private-root caller must not publish an IOMMU mapping for a
-            // record whose receiver PTEs this kernel does not revoke.
-            if domain_grant_task(caller_id) {
-                log::warn!(
-                    "[iommu] Cell {caller_id} DMA grant denied: private-root domain \
-                     (phase-01 containment)"
-                );
-                return Err(SyscallError::PermissionDenied);
-            }
-            #[cfg(target_arch = "aarch64")]
-            let granule = hal::dma_granule();
-            #[cfg(not(target_arch = "aarch64"))]
-            let granule = 4096usize;
-
-            let mask = (granule - 1) as u64;
-            if phys & mask != 0 || (size as u64) & mask != 0 || size == 0 {
-                return Err(SyscallError::InvalidInput);
-            }
-            let Some(phys_end) = phys.checked_add(size as u64) else {
-                return Err(SyscallError::InvalidInput);
-            };
-            let Ok(phys_base) = usize::try_from(phys) else {
-                return Err(SyscallError::InvalidInput);
-            };
-            if usize::try_from(phys_end).is_err() {
-                return Err(SyscallError::InvalidInput);
-            }
-            let publication = match reserve_caller_owned_dma_range(caller_id, bdf, phys_base, size)
-            {
-                Ok(publication) => publication,
-                Err(DmaGrantError::NotOwned) => {
-                    log::warn!(
-                        "[iommu] Cell {caller_id} DMA grant denied: {phys:#x}+{size} is not \
-                             contained in a live caller-owned Grant"
-                    );
-                    return Err(SyscallError::PermissionDenied);
-                }
-                Err(DmaGrantError::BdfNotOwned) => {
-                    log::warn!(
-                        "[iommu] Cell {caller_id} DMA grant denied: BDF {bdf:08x} is not owned"
-                    );
-                    return Err(SyscallError::PermissionDenied);
-                }
-                Err(DmaGrantError::QuotaExceeded) => {
-                    log::warn!("[iommu] Cell {caller_id} DMA quota exceeded (size={size})");
-                    return Err(SyscallError::PermissionDenied);
-                }
-                Err(DmaGrantError::Pin(error)) => {
-                    log::warn!(
-                        "[iommu] Cell {caller_id} DMA grant denied: cannot pin \
-                             {phys:#x}+{size} ({error:?})"
-                    );
-                    return Err(SyscallError::PermissionDenied);
-                }
-                Err(DmaGrantError::PublicationBusy) => {
-                    log::warn!(
-                        "[iommu] Cell {caller_id} DMA grant denied: publication already in flight"
-                    );
-                    return Err(SyscallError::Unknown);
-                }
-            };
-            let iova =
-                match super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size) {
-                    super::drivers::iommu::DmaMapResult::Mapped(iova) => iova,
-                    super::drivers::iommu::DmaMapResult::Rejected => {
-                        let rolled_back =
-                            crate::memory::pin::rollback_pin(phys_base, size, caller_id);
-                        debug_assert!(rolled_back, "rejected DMA map must release its exact pin");
-                        drop(publication);
-                        log::warn!(
-                            "[iommu] Cell {caller_id} DMA grant denied: no active mapping backend"
-                        );
-                        return Err(SyscallError::Unknown);
-                    }
-                    super::drivers::iommu::DmaMapResult::PublishedUnconfirmed => {
-                        // A context/SLPT entry is already hardware-visible. Keep
-                        // the pin and quota until task teardown clears and drains
-                        // that exact requester; do not enable bus mastering.
-                        publication.commit();
-                        log::warn!(
-                            "[iommu] Cell {caller_id} DMA mapping unconfirmed: \
-                             retaining pin for BDF {bdf:08x}"
-                        );
-                        return Err(SyscallError::Unknown);
-                    }
-                };
-            super::drivers::pcie_ecam::enable_bus_master(bdf);
-            publication.commit();
-            // warn, not info: the only record of what this device may DMA to
-            // (see the matching line in `iommu_x86.rs`); at info level it does
-            // not survive to the serial log on the Tier-3 x86 lane.
-            log::warn!(
-                "[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
-                caller_id,
-                (bdf >> 8) & 0xFF,
-                (bdf >> 3) & 0x1F,
-                bdf & 0x7,
-                phys,
-                size
-            );
-            Ok(iova as usize)
-        }
+        Syscall::GrantDma { bdf, phys, size } => grant::grant_dma(caller_id, bdf, phys, size),
 
         Syscall::CloseCap { cap_id } => {
             let (cell_id, cell_gen) = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
@@ -4210,15 +3631,7 @@ fn handle_syscall_inner(
 
         #[cfg(feature = "bench-counters")]
         Syscall::BenchCounters { out_ptr, out_len } => {
-            // Gated like MemInfo at dispatch (bit 56 + observe_memory).
-            let len = crate::bench_counters::RECORD_BYTES;
-            if out_len < len {
-                return Err(SyscallError::InvalidInput);
-            }
-            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
-            let record = crate::bench_counters::snapshot_bytes();
-            write_user_slice(caller_id, out_ptr, &record, MAX_USER_BUF)?;
-            Ok(len)
+            misc::bench_counters(caller_id, out_ptr, out_len)
         }
 
         Syscall::TelemetrySnapshot {
@@ -4389,13 +3802,7 @@ fn handle_syscall_inner(
             }
         }
         Syscall::GetCpuCount => Ok(crate::task::smp::online_hart_count()),
-        Syscall::AudioPlay { .. } => {
-            // No Sound Cell registered; virtio_sound.rs removed (kernel boundary law).
-            // Syscall 218 is reserved — do not reuse. A VirtIO Sound Driver Cell
-            // will handle audio in G2 via direct MMIO + IPC, no kernel driver needed.
-            log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
-            Err(SyscallError::Unknown)
-        }
+        Syscall::AudioPlay { .. } => misc::audio_play(),
         // Compositor-only; the source is copied through the caller's copy view
         // into a GPU-Cell-owned Grant before the hand-off, so the GPU Cell never
         // reads compositor memory; the framebuffer fallback stages it the same
@@ -4435,33 +3842,8 @@ fn handle_syscall_inner(
         Syscall::NetTx {
             frame_ptr,
             frame_len,
-        } => {
-            if !caller_has_network(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            crate::audit::log_event(
-                crate::audit::AuditEvent::NetTx,
-                &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
-            );
-            let frame = read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
-            let ok = crate::task::drivers::nic::send_frame(&frame);
-            Ok(if ok { 1 } else { 0 })
-        }
-        Syscall::NetRx { buf_ptr, buf_len } => {
-            if !caller_has_network(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            let mut kbuf = alloc::vec::Vec::new();
-            kbuf.try_reserve_exact(buf_len)
-                .map_err(|_| SyscallError::OutOfMemory)?;
-            kbuf.resize(buf_len, 0);
-            let n = crate::task::drivers::nic::recv_frame(&mut kbuf);
-            if n > 0 {
-                write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
-            }
-            Ok(n)
-        }
+        } => misc::net_tx(caller_id, frame_ptr, frame_len),
+        Syscall::NetRx { buf_ptr, buf_len } => misc::net_rx(caller_id, buf_ptr, buf_len),
         Syscall::StateStash {
             key,
             buf_ptr,
@@ -4571,46 +3953,14 @@ fn handle_syscall_inner(
 
         // 413: FreezeCell — stop a running Cell from being scheduled.
         // The frozen cell still exists; its queued IPC is preserved.
-        Syscall::FreezeCell { target_tid } => {
-            if !caller_has_supervisor(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // Refuse to freeze the kernel (tid 0) or the caller itself.
-            if target_tid == 0 || target_tid == caller_id {
-                return Err(SyscallError::InvalidInput);
-            }
-            // swap_id u64::MAX = admin freeze (not a hotswap sequence).
-            crate::cell::hotswap::freeze_task_with_ceiling(target_tid, u64::MAX)
-                .map(|_| 0)
-                .map_err(|error| {
-                    if error == types::ViError::NotFound {
-                        SyscallError::FileNotFound
-                    } else {
-                        SyscallError::PermissionDenied
-                    }
-                })
-        }
+        Syscall::FreezeCell { target_tid } => authority::freeze_cell(caller_id, target_tid),
 
         // 422: PauseService — atomically hide the expected provider from new
         // lookups without stopping it, so it can process Snapshot IPC.
         Syscall::PauseService {
             service_id,
             expected_tid,
-        } => {
-            if !caller_has_supervisor(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            if expected_tid == 0 {
-                return Err(SyscallError::InvalidInput);
-            }
-            if !crate::cell::service_registry::pause(service_id, expected_tid) {
-                return Err(SyscallError::TryAgain);
-            }
-            if !super::inbound_ipc_drained(expected_tid) {
-                return Err(SyscallError::TryAgain);
-            }
-            Ok(0)
-        }
+        } => authority::pause_service(caller_id, service_id, expected_tid),
 
         // 414: plain resume or atomic old-provider -> replacement cutover.
         Syscall::ResumeCell {
@@ -4618,61 +3968,13 @@ fn handle_syscall_inner(
             source_tid,
             service_id,
             reserved,
-        } => {
-            if !caller_has_supervisor(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            if target_tid == 0 || reserved != 0 {
-                return Err(SyscallError::InvalidInput);
-            }
-            if source_tid == 0 {
-                if service_id != 0 {
-                    return Err(SyscallError::InvalidInput);
-                }
-                crate::cell::hotswap::unfreeze_task(target_tid);
-                return Ok(0);
-            }
-            if source_tid == target_tid || service_id > u16::MAX as usize {
-                return Err(SyscallError::InvalidInput);
-            }
-            crate::cell::hotswap::commit_hotswap_barrier(source_tid, target_tid, service_id as u16)
-                .map(|()| 0)
-                .map_err(|error| match error {
-                    ViError::NotFound => SyscallError::FileNotFound,
-                    ViError::PermissionDenied => SyscallError::PermissionDenied,
-                    ViError::WouldBlock | ViError::OutOfMemory => SyscallError::TryAgain,
-                    ViError::InvalidArgument | ViError::InvalidInput => SyscallError::InvalidInput,
-                    _ => SyscallError::Unknown,
-                })
-        }
+        } => authority::resume_cell(caller_id, target_tid, source_tid, service_id, reserved),
 
         // 415: KillCell — terminate a Cell and reclaim its resources.
         Syscall::KillCell {
             target_tid,
             exit_code,
-        } => {
-            if !caller_has_supervisor(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // Never kill kernel (tid 0) or the caller itself.
-            if target_tid == 0 || target_tid == caller_id {
-                return Err(SyscallError::InvalidInput);
-            }
-            // Never kill critical cells (init) — would collapse the restart tree.
-            // Single lock acquisition to get both is_critical and cell_id.
-            let (is_crit, cell_id) = {
-                let guard = super::SCHEDULER.lock();
-                match guard.as_ref().and_then(|s| s.tasks.get(&target_tid)) {
-                    None => return Err(SyscallError::FileNotFound),
-                    Some(t) => (t.is_critical, t.cell_id),
-                }
-            };
-            if is_crit {
-                return Err(SyscallError::PermissionDenied);
-            }
-            crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
-            Ok(exit_code as usize)
-        }
+        } => authority::kill_cell(caller_id, target_tid, exit_code),
 
         // 419: QueryHotswapReady — non-blocking check of a cell's hotswap_ready flag.
         // Returns 1 if the cell has called sys_hotswap_ready(), 0 if not yet,
@@ -4885,44 +4187,19 @@ fn handle_syscall_inner(
             len,
             holder_service,
             flags,
-        } => dma_export::export(caller_id, va, len, holder_service, flags),
+        } => grant::export_dma_range(caller_id, va, len, holder_service, flags),
         Syscall::MapDmaExport {
             export_id,
             bdf,
             out_ptr,
             out_len,
-        } => {
-            if out_len != api::dma_export::DMA_EXPORT_RECORD_LEN {
-                return Err(SyscallError::InvalidInput);
-            }
-            caller_copy_view(caller_id)?
-                .validate_writable(out_ptr, out_len)
-                .map_err(|_| SyscallError::InvalidInput)?;
-            // Same retirement barrier as GrantDma: the holder's root cannot
-            // retire (and tear its domain down) mid-publication.
-            let barrier =
-                crate::memory::cell_quota::try_reserve_dma(0, 0).ok_or(SyscallError::Unknown)?;
-            let publication =
-                reserve_dma_publication(caller_id, barrier).ok_or(SyscallError::TryAgain)?;
-            let record = dma_export::map(caller_id, export_id, bdf);
-            drop(publication);
-            let mut bytes = [0u8; api::dma_export::DMA_EXPORT_RECORD_LEN];
-            record?.encode(&mut bytes);
-            write_user_slice(caller_id, out_ptr, &bytes, bytes.len())
-                .map_err(|_| SyscallError::InvalidInput)?;
-            Ok(0)
-        }
+        } => grant::map_dma_export(caller_id, export_id, bdf, out_ptr, out_len),
         Syscall::RevokeDmaExport {
             export_id,
             a1,
             a2,
             a3,
-        } => {
-            if a1 != 0 || a2 != 0 || a3 != 0 {
-                return Err(SyscallError::InvalidInput);
-            }
-            dma_export::revoke(caller_id, export_id)
-        }
+        } => grant::revoke_dma_export(caller_id, export_id, a1, a2, a3),
 
         // 425-428: the serial-port surface. The kernel owns the 16550 mechanism
         // (it probed and programmed every port at boot); a cell holding the
@@ -5290,371 +4567,30 @@ fn handle_syscall_inner(
         }
 
         // ── Zero-Copy Grant Syscalls (Phase 01, Storage 2.0) ─────────────────
-        Syscall::GrantAlloc { size } => {
-            const PAGE_SIZE: usize = 4096;
-            if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
-                return Ok(0);
-            }
-            // A private root whose lifecycle is unavailable (non-RV64, unknown or
-            // retired tid, a root already dying) keeps the phase-01 denial before
-            // a frame exists. `Ok(0)` is the alloc-safe sentinel: a cell-side
-            // wrapper reads any nonzero return as a grant id.
-            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
-                log::warn!(
-                    "[grant] GrantAlloc denied: task {caller_id} is not a live private root \
-                     (phase-01 denial)"
-                );
-                return Ok(GRANT_DENY_ALLOC);
-            }
-            let owner_space = live_domain_space(caller_id);
-            let n_pages = size.div_ceil(PAGE_SIZE);
-            let paddr = match &owner_space {
-                #[cfg(all(
-                    feature = "native-domains",
-                    any(
-                        target_arch = "riscv64",
-                        all(target_arch = "aarch64", feature = "test-hooks")
-                    )
-                ))]
-                Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
-                    Some(paddr) => paddr,
-                    None => return Ok(0),
-                },
-                #[cfg(not(all(
-                    feature = "native-domains",
-                    any(
-                        target_arch = "riscv64",
-                        all(target_arch = "aarch64", feature = "test-hooks")
-                    )
-                )))]
-                Some(_) => return Ok(0),
-                None => match alloc_grant_pages(n_pages) {
-                    Some(paddr) => paddr,
-                    None => return Ok(0),
-                },
-            };
-            // A domain owner's backing is mapped only in its own root, RW+NX, and
-            // stays supervisor-only in the SAS root. Every page is undone if any
-            // one fails, so no raw pointer is ever published for a partial map.
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    all(target_arch = "aarch64", feature = "test-hooks")
-                )
-            ))]
-            if let Some(space) = &owner_space {
-                if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
-                    log::warn!(
-                        "[grant] GrantAlloc owner mapping failed for task {caller_id}: {error:?}"
-                    );
-                    free_grant_pages(paddr, n_pages);
-                    return Ok(0);
-                }
-            }
-            let domain = owner_space
-                .as_ref()
-                .and_then(|space| new_domain_record(space, paddr, size));
-            let mut table = grant_table_lock().lock();
-            let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
-                Some(binding) => binding,
-                None => {
-                    drop(table);
-                    free_grant_pages(paddr, n_pages);
-                    return Err(SyscallError::PermissionDenied);
-                }
-            };
-            if table.is_none() {
-                *table = Some(BTreeMap::new());
-            }
-            #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(
-                None,
-                crate::memory::heap::p01_owner::GRANT_SHARED,
-            );
-            table.as_mut().unwrap().insert(
-                paddr,
-                PageGrant {
-                    base: paddr,
-                    size,
-                    owner: caller_id,
-                    owner_cell,
-                    owner_generation,
-                    shared_to: None,
-                    domain,
-                },
-            );
-            Ok(paddr)
-        }
+        Syscall::GrantAlloc { size } => grant::grant_alloc(caller_id, size),
         Syscall::GrantShare {
             grant_id,
             target_cell,
             perm,
-        } => {
-            let perm = match GrantPerm::try_from(perm as u8) {
-                Ok(p) => p,
-                Err(_) => return Err(SyscallError::InvalidInput),
-            };
-            // A private-root pair is the only shape the lifecycle can publish:
-            // both endpoints must be live private roots on the one architecture
-            // whose lifecycle is implemented. SAS-only shares keep today's path;
-            // a mixed pair, a non-RV64 target and a dead or unknown peer keep the
-            // phase-01 denial.
-            let owner_is_domain = domain_grant_task(caller_id);
-            let target_is_domain = domain_grant_task(target_cell);
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    all(target_arch = "aarch64", feature = "test-hooks")
-                )
-            ))]
-            if owner_is_domain || target_is_domain {
-                let owner_space = live_domain_space(caller_id);
-                let target_space = live_domain_space(target_cell);
-                let (Some(_owner_space), Some(target_space)) = (owner_space, target_space) else {
-                    log::warn!(
-                        "[grant] GrantShare denied: caller {caller_id} or target {target_cell} is \
-                         not a live private root"
-                    );
-                    return Err(SyscallError::PermissionDenied);
-                };
-                {
-                    let mut tbl = grant_table_lock().lock();
-                    if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                        return domain_grant_share_row(
-                            grant.owner,
-                            grant.base,
-                            grant.domain.as_ref(),
-                            &mut grant.shared_to,
-                            caller_id,
-                            target_cell,
-                            &target_space,
-                            perm,
-                        )
-                        .map(|()| 0);
-                    }
-                }
-                let mut rtbl = reg_grant_table_lock().lock();
-                return match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                    None => Err(SyscallError::InvalidInput),
-                    Some(grant) => domain_grant_share_row(
-                        grant.owner,
-                        grant.base,
-                        grant.domain.as_ref(),
-                        &mut grant.shared_to,
-                        caller_id,
-                        target_cell,
-                        &target_space,
-                        perm,
-                    )
-                    .map(|()| 0),
-                };
-            }
-            // Without a private-root backend no task is a domain, so the residual
-            // branch below is the SAS-only path.
-            let _ = (owner_is_domain, target_is_domain);
-            // Check PAGE_GRANT_TABLE first, then fall back to REG_GRANT_TABLE.
-            {
-                let mut tbl = grant_table_lock().lock();
-                if tbl.is_none() {
-                    *tbl = Some(BTreeMap::new());
-                }
-                if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                    if grant.owner != caller_id {
-                        return Err(SyscallError::PermissionDenied);
-                    }
-                    grant.shared_to = Some((target_cell, perm));
-                    return Ok(0);
-                }
-            }
-            // Not in PAGE_GRANT_TABLE — try REG_GRANT_TABLE.
-            let mut rtbl = reg_grant_table_lock().lock();
-            match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                None => Err(SyscallError::InvalidInput),
-                Some(grant) if grant.owner != caller_id => Err(SyscallError::PermissionDenied),
-                Some(grant) => {
-                    grant.shared_to = Some((target_cell, perm));
-                    Ok(0)
-                }
-            }
-        }
+        } => grant::grant_share(caller_id, grant_id, target_cell, perm),
 
         Syscall::GrantSlice {
             grant_id,
             size_out_ptr,
             expected_owner_tid,
             flags,
-        } => {
-            // ABI a3 (approved 2026-11-10): unknown flag bits, and a lease with
-            // no owner to key it by, answer exactly as an unknown id — before
-            // any lookup, log or `size_out` validation.
-            if flags & !api::syscall::grant_slice::KNOWN_FLAGS != 0 {
-                return Ok(GRANT_DENY_SLICE);
-            }
-            let lease = flags & api::syscall::grant_slice::LEASE != 0;
-            if lease && expected_owner_tid == 0 {
-                return Ok(GRANT_DENY_SLICE);
-            }
-            // A caller that is not a live private root keeps the phase-01 denial
-            // (`usize::MAX`): a private root that is retired, unknown or on an
-            // unsupported target has no root this path could map into.
-            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
-                log::warn!(
-                    "[grant] GrantSlice denied: task {caller_id} is not a live private root \
-                     (phase-01 denial)"
-                );
-                return Ok(GRANT_DENY_SLICE);
-            }
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    all(target_arch = "aarch64", feature = "test-hooks")
-                )
-            ))]
-            if let Some(receiver) = live_domain_space(caller_id) {
-                // A private-root receiver resolves the owner's exact rights and
-                // publishes the receiver mapping transactionally; a VFS context
-                // cannot exist for it, and no SAS record may be resolved.
-                return resolve_domain_grant_slice(
-                    caller_id,
-                    grant_id,
-                    size_out_ptr,
-                    expected_owner_tid,
-                    lease,
-                    &receiver,
-                );
-            }
-            let vfs_context = match current_vfs_grant_lookup(caller_id) {
-                VfsGrantLookup::NotVfs => None,
-                VfsGrantLookup::MissingContext => return Ok(usize::MAX),
-                VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
-                VfsGrantLookup::Active(context) => Some(context),
-            };
-            let Some(access) = resolve_and_lease_grant(GrantSliceRequest {
-                caller_id,
-                grant_id,
-                size_out_ptr,
-                expected_owner_tid,
-                lease,
-                vfs_context,
-            })?
-            else {
-                return Ok(usize::MAX);
-            };
-            super::user_out::write_resolved_optional_usize(access.size_out, access.size);
-            Ok(access.base)
-        }
+        } => grant::grant_slice(caller_id, grant_id, size_out_ptr, expected_owner_tid, flags),
 
-        Syscall::GrantFree { grant_id } => {
-            // A private root whose lifecycle is unavailable keeps the phase-01
-            // denial: releasing its record would return frames whose receiver PTE
-            // this path cannot revoke.
-            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
-                log::warn!(
-                    "[grant] GrantFree denied: task {caller_id} is not a live private root \
-                     (phase-01 denial)"
-                );
-                return Err(GRANT_DENY_ERROR);
-            }
-            // Owner-only, and only while no in-flight operation holds the region.
-            // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
-            // pin REGISTRY, a leaf), so a concurrent VFS GrantSlice or GrantDma
-            // cannot publish a pin between the check and removal.
-            let entry = {
-                let mut tbl = grant_table_lock().lock();
-                let owned = tbl
-                    .as_ref()
-                    .and_then(|m| m.get(&grant_id))
-                    .filter(|g| g.owner == caller_id)
-                    .map(|g| (g.base, g.size, clone_domain_record(&g.domain)));
-                match owned {
-                    None => None,
-                    Some((base, size, domain)) => {
-                        refuse_if_pinned("GrantFree", grant_id, base, size)?;
-                        if domain.is_some() {
-                            // The row stays while the revoke drains so a retry is
-                            // idempotent; a `Revoking` row refuses new slices.
-                            Some((base, size, domain))
-                        } else {
-                            tbl.as_mut()
-                                .and_then(|m| m.remove(&grant_id))
-                                .map(|g| (g.base, g.size, None))
-                        }
-                    }
-                }
-            };
-            let Some((base, size, domain)) = entry else {
-                return Err(SyscallError::PermissionDenied);
-            };
-            if let Some(record) = &domain {
-                if !revoke_domain_record(record, grant_id, "GrantFree") {
-                    // Bounded existing error: the frames stay retained and the
-                    // record stays `Revoking` for an idempotent retry.
-                    return Err(SyscallError::PermissionDenied);
-                }
-                let mut tbl = grant_table_lock().lock();
-                tbl.as_mut().and_then(|m| m.remove(&grant_id));
-            }
-            free_grant_pages(base, grant_pages_for_size(size));
-            Ok(0)
-        }
+        Syscall::GrantFree { grant_id } => grant::grant_free(caller_id, grant_id),
 
         Syscall::GrantCacheSyncBegin {
             grant_id,
             offset,
             len,
-        } => {
-            let (token, base) = {
-                let table = grant_table_lock().lock();
-                let grant = table
-                    .as_ref()
-                    .and_then(|entries| entries.get(&grant_id))
-                    .ok_or(SyscallError::InvalidInput)?;
-                if grant.owner != caller_id {
-                    return Err(SyscallError::PermissionDenied);
-                }
-                if len == 0 || offset > grant.size || len > grant.size.saturating_sub(offset) {
-                    return Err(SyscallError::InvalidInput);
-                }
-                let base = grant
-                    .base
-                    .checked_add(offset)
-                    .ok_or(SyscallError::InvalidInput)?;
-                let token = crate::memory::pin::begin_cache_sync(base, len, caller_id)
-                    .map_err(|_| SyscallError::InvalidInput)?;
-                (token, base)
-            };
-            #[cfg(target_arch = "aarch64")]
-            {
-                hal::cache::clean_invalidate_data_cache_range(base, len);
-                Ok(token)
-            }
-            #[cfg(not(target_arch = "aarch64"))]
-            {
-                let _ = base;
-                let _ = crate::memory::pin::cancel_cache_sync(token, caller_id);
-                Err(SyscallError::Unknown)
-            }
-        }
+        } => grant::grant_cache_sync_begin(caller_id, grant_id, offset, len),
 
         Syscall::GrantCacheSyncComplete { token } => {
-            let (base, len) = crate::memory::pin::begin_cache_sync_completion(token, caller_id)
-                .ok_or(SyscallError::PermissionDenied)?;
-            #[cfg(target_arch = "aarch64")]
-            {
-                hal::cache::invalidate_data_cache_range(base, len);
-                if !crate::memory::pin::complete_cache_sync(token, caller_id) {
-                    return Err(SyscallError::PermissionDenied);
-                }
-                Ok(0)
-            }
-            #[cfg(not(target_arch = "aarch64"))]
-            {
-                let _ = (base, len);
-                Err(SyscallError::Unknown)
-            }
+            grant::grant_cache_sync_complete(caller_id, token)
         }
 
         Syscall::RegisterDisplayFramebuffer {
@@ -5793,102 +4729,8 @@ fn handle_syscall_inner(
             }
         }
 
-        Syscall::GrantRegister { size } => {
-            const PAGE_SIZE: usize = 4096;
-            if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
-                return Ok(0);
-            }
-            // A private root whose lifecycle is unavailable keeps the phase-01
-            // denial: its buffer would be mapped into a root this path cannot
-            // revoke a receiver from, so no frame or PTE may exist.
-            if domain_grant_task(caller_id) && !domain_grant_capable(caller_id) {
-                log::warn!(
-                    "[grant] GrantRegister denied: task {caller_id} is not a live private root \
-                     (phase-01 denial)"
-                );
-                return Ok(GRANT_DENY_ALLOC);
-            }
-            let owner_space = live_domain_space(caller_id);
-            let n_pages = size.div_ceil(PAGE_SIZE);
-            let paddr = match &owner_space {
-                #[cfg(all(
-                    feature = "native-domains",
-                    any(
-                        target_arch = "riscv64",
-                        all(target_arch = "aarch64", feature = "test-hooks")
-                    )
-                ))]
-                Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
-                    Some(paddr) => paddr,
-                    None => return Ok(0),
-                },
-                #[cfg(not(all(
-                    feature = "native-domains",
-                    any(
-                        target_arch = "riscv64",
-                        all(target_arch = "aarch64", feature = "test-hooks")
-                    )
-                )))]
-                Some(_) => return Ok(0),
-                None => match alloc_grant_pages(n_pages) {
-                    Some(paddr) => paddr,
-                    None => return Ok(0),
-                },
-            };
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    all(target_arch = "aarch64", feature = "test-hooks")
-                )
-            ))]
-            if let Some(space) = &owner_space {
-                if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
-                    log::warn!(
-                        "[grant] GrantRegister owner mapping failed for task {caller_id}: {error:?}"
-                    );
-                    free_grant_pages(paddr, n_pages);
-                    return Ok(0);
-                }
-            }
-            let domain = owner_space
-                .as_ref()
-                .and_then(|space| new_domain_record(space, paddr, size));
-            let mut table = reg_grant_table_lock().lock();
-            let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
-                Some(binding) => binding,
-                None => {
-                    drop(table);
-                    free_grant_pages(paddr, n_pages);
-                    return Err(SyscallError::PermissionDenied);
-                }
-            };
-            if table.is_none() {
-                *table = Some(BTreeMap::new());
-            }
-            #[cfg(cellos_p01_trace)]
-            let _semantic = crate::memory::heap::p01_owner::creation(
-                None,
-                crate::memory::heap::p01_owner::GRANT_SHARED,
-            );
-            table.as_mut().unwrap().insert(
-                paddr,
-                RegGrant {
-                    base: paddr,
-                    size,
-                    owner: caller_id,
-                    owner_cell,
-                    owner_generation,
-                    shared_to: None,
-                    domain,
-                },
-            );
-            Ok(paddr)
-        }
-        Syscall::GrantUnregister { reg_id } => {
-            unregister_registered_grant(caller_id, reg_id)?;
-            Ok(0)
-        }
+        Syscall::GrantRegister { size } => grant::grant_register(caller_id, size),
+        Syscall::GrantUnregister { reg_id } => grant::grant_unregister(caller_id, reg_id),
 
         Syscall::WaitForEvent { mask, deadline } => {
             // Lost-wakeup guard: check pending events BEFORE parking.

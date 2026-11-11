@@ -394,3 +394,556 @@ pub(super) fn revoke_mmio_classes(
     }
     Ok(())
 }
+
+/// Handler for `Syscall::CapRevoke` (extracted from the dispatcher).
+pub(super) fn cap_revoke(caller_id: usize, target_tid: usize, cap_mask: u32) -> SyscallResult {
+    use api::syscall::cap_mask as CM;
+
+    if target_tid == caller_id {
+        return Err(SyscallError::InvalidCommand);
+    }
+
+    let _serial = RevokeSerial::acquire().ok_or(SyscallError::TryAgain)?;
+
+    // Gates, then the facts the teardown needs. The teardown itself runs
+    // with SCHEDULER released: the grant reclaim reaches
+    // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
+    // this spinlock is not reentrant. Both passes re-run the gates, so
+    // nothing is revoked on authority withdrawn while it ran. The mask is
+    // published as pending on the root first, so no task of the Cell —
+    // including one spawned during the teardown — can re-claim what is
+    // being torn down.
+    let (members, pending) = {
+        let mut sched_opt = crate::task::SCHEDULER.lock();
+        let sched = match sched_opt.as_mut() {
+            Some(s) => s,
+            None => return Err(SyscallError::InvalidCommand),
+        };
+        cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
+        let target = sched
+            .tasks
+            .get(&target_tid)
+            .ok_or(SyscallError::InvalidCommand)?;
+        let incarnation = (target.cell_id, target.cell_generation);
+        // Rights are per Cell incarnation, so revoking a sibling thread
+        // is revoking oneself — refused like `target_tid == caller_id`.
+        if sched
+            .tasks
+            .get(&caller_id)
+            .is_some_and(|c| (c.cell_id, c.cell_generation) == incarnation)
+        {
+            return Err(SyscallError::InvalidCommand);
+        }
+        let root_tid = target.root_tid;
+        // Same incarnation guard as the commit and `PendingRevoke::drop`,
+        // so the bits set here are exactly the bits cleared there.
+        if let Some(root) = sched.tasks.get_mut(&root_tid) {
+            if (root.cell_id, root.cell_generation) == incarnation {
+                root.revoke_pending |= cap_mask;
+            }
+        }
+        (
+            incarnation_members(sched, target_tid),
+            PendingRevoke {
+                root_tid,
+                incarnation,
+                mask: cap_mask,
+            },
+        )
+    };
+
+    // ── Class-2 teardown, BEFORE the record changes ──────────────────
+    // Ambient authority — a mapped MMIO window, an already-shared grant —
+    // is exercised without a per-use syscall re-check, so clearing the
+    // record alone would leave it live. Resources are owned by the tid
+    // that claimed them, so every thread of the incarnation is torn down.
+    // Fail-closed: a teardown that cannot finish returns with the
+    // capability still in the record (the pending mask is withdrawn on
+    // return). Members torn down before the failure stay torn down; a
+    // retry of the same revoke is idempotent.
+    let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
+    for &tid in members.iter() {
+        if mmio_revoke != 0 {
+            revoke_mmio_classes(tid, mmio_revoke as crate::resource_registry::MmioClass)?;
+            // A revoked device class can be the authority behind a grant
+            // the target owns (grants carry no source-cap tag), so its
+            // owned grants are reclaimed with it. Frames a live pin still
+            // protects are quarantined rather than freed.
+            reclaim_owned_grants(tid);
+        }
+
+        if cap_mask & CM::PCIE_DRIVER != 0 {
+            // The DMA-anywhere surface: the whole domain, its requester
+            // entries, and the BAR windows the Cell claimed. Exactly the
+            // teardown a dying driver Cell gets.
+            if !crate::task::teardown_dma_authority(tid) {
+                log::error!(
+                    "[kernel] CapRevoke: DMA teardown for task {tid} was not \
+                             acknowledged; capability left in the record, retry the revoke"
+                );
+                return Err(SyscallError::NotSupported);
+            }
+            revoke_mmio_classes(
+                tid,
+                crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
+            )?;
+            reclaim_owned_grants(tid);
+        }
+
+        if cap_mask & CM::PLATFORM != 0 {
+            // The Platform Cell's ECAM config-space window.
+            revoke_mmio_classes(tid, crate::resource_registry::CLASS_ECAM)?;
+        }
+    }
+
+    let target_present = commit_cap_revoke(
+        caller_id,
+        target_tid,
+        pending.root_tid,
+        pending.incarnation,
+        cap_mask,
+    )?;
+    let root_tid = pending.root_tid;
+    drop(pending);
+
+    crate::audit::log_event(
+        crate::audit::AuditEvent::CapRevoked,
+        &crate::audit::encode_subject(audit_subject(caller_id), target_tid as u32, cap_mask),
+    );
+    log::info!(
+        "[kernel] CapRevoke: task {} revoked mask={:#010x} from task {}",
+        caller_id,
+        cap_mask,
+        target_tid
+    );
+
+    // Courtesy notification, last and best-effort: the teardown above is
+    // what enforces the revocation, so a target that is gone or whose
+    // mailbox is full does not fail the call. The Cell's root (its app
+    // loop) is told too, since the revoke applied to the whole Cell.
+    if target_present && !send_cap_revoked_event(target_tid, cap_mask) {
+        log::warn!("[kernel] CapRevoke: task {target_tid} not notified (exited or mailbox full)");
+    }
+    if root_tid != target_tid && !send_cap_revoked_event(root_tid, cap_mask) {
+        log::warn!(
+            "[kernel] CapRevoke: Cell root {root_tid} not notified (exited or mailbox full)"
+        );
+    }
+
+    Ok(0)
+}
+
+/// Handler for `Syscall::RegisterService` (extracted from the dispatcher).
+pub(super) fn register_service(caller_id: usize, service_id: u16, tid: usize) -> SyscallResult {
+    // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
+    // so no caller may publish the singleton service.
+    if service_id == api::syscall::service::BLOCK_DRIVER {
+        return Err(SyscallError::PermissionDenied);
+    }
+    // The machine pin endpoint is init's own: only trusted init may
+    // register it, and only naming itself (ADR-0029 §3). The VFS admits
+    // the live provider to the pin store, so a hijacked registration
+    // would hand over pin write access.
+    if service_id == api::syscall::service::MACHINE_PIN
+        && !(tid == caller_id && caller_is_trusted_init(caller_id))
+    {
+        return Err(SyscallError::PermissionDenied);
+    }
+    // Development Silo readiness is self-published only after artifact,
+    // VM, entropy, guest READY, and public-key validation. The dedicated
+    // non-delegable cap is minted solely for the governed `/bin/silo`
+    // root task in test-hooks kernels; HypervisorCap alone is insufficient.
+    #[cfg(feature = "test-hooks")]
+    if service_id == api::syscall::service::SILO
+        && tid == 0
+        && caller_has_development_silo_registration(caller_id)
+    {
+        let Some((cell_id, generation)) = live_cell_identity(caller_id) else {
+            return Err(SyscallError::InvalidInput);
+        };
+        return if crate::cell::service_registry::register(
+            service_id, caller_id, cell_id, generation,
+        ) {
+            Ok(0)
+        } else {
+            Err(SyscallError::InvalidInput)
+        };
+    }
+    // The state-transfer demo owns one non-production service ID and may
+    // self-register (`tid=0`) so QEMU can exercise the real Supervisor path.
+    if service_id == api::syscall::service::HOTSWAP_DEMO && tid == 0 && caller_has_spawn(caller_id)
+    {
+        // The caller is executing, so its identity is present. If it were
+        // somehow absent, the entry records 0/0 and the legacy `lookup`
+        // path keeps working while `LookupServiceBound` correctly reports
+        // that no binding exists for it.
+        let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
+        crate::cell::service_registry::register(service_id, caller_id, cell_id, generation);
+        return Ok(0);
+    }
+    // Driver Cell self-registration path: a PCIe GPU driver or the
+    // display-only BCM mailbox driver may register itself with tid=0.
+    if (caller_has_pcie_driver(caller_id)
+        || caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY))
+        && tid == 0
+        && service_id == api::syscall::service::GPU_DRIVER
+    {
+        let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
+        // Role and route publish as one transaction against exact-TID
+        // teardown. This path has always answered 0 once authorized, so
+        // a rejected route only rolls the role back; it adds no refusal.
+        crate::task::drivers::driver_cell::publish_role_or_rollback(
+            caller_id,
+            crate::task::drivers::driver_cell::register_gpu_driver,
+            || crate::cell::service_registry::register(service_id, caller_id, cell_id, generation),
+            crate::task::drivers::driver_cell::deregister_gpu_driver,
+        );
+        return Ok(0);
+    }
+    // Privileged: SpawnCap is necessary but not sufficient. Well-known ids
+    // belong to trusted init and SupervisorCap holders; a spawn-only cell
+    // (e.g. a USB host driver with a protocol child) may publish only a
+    // private id it owns, so it cannot hijack VFS/NET/KMS/SUPERVISOR.
+    if !caller_has_spawn(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    let registrar = if caller_is_trusted_init(caller_id) || caller_has_supervisor(caller_id) {
+        crate::cell::service_registry::Registrar::Namespace
+    } else {
+        crate::cell::service_registry::Registrar::Spawner(caller_id)
+    };
+    // The liveness check and the identity capture share one scheduler lock,
+    // so a provider cannot be recorded with a binding that was already stale
+    // when it was written.
+    let provider = crate::task::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|scheduler| {
+            scheduler.tasks.get(&tid).and_then(|task| {
+                (!matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+                    .then_some((task.cell_id.0, task.cell_generation))
+            })
+        });
+    let Some((cell_id, generation)) = provider else {
+        return Err(SyscallError::InvalidInput);
+    };
+    match crate::cell::service_registry::register_as(
+        registrar, service_id, tid, cell_id, generation,
+    ) {
+        Ok(()) => Ok(0),
+        Err(crate::cell::service_registry::Refusal::NotOwner) => {
+            Err(SyscallError::PermissionDenied)
+        }
+        Err(crate::cell::service_registry::Refusal::Rejected) => Err(SyscallError::InvalidInput),
+    }
+}
+
+/// Handler for `Syscall::LookupService` (extracted from the dispatcher).
+pub(super) fn lookup_service(service_id: u16) -> SyscallResult {
+    // Open to all cells: resolve the live provider tid (0 = none registered),
+    // so a client reconnects transparently after the supervisor respawns a
+    // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
+    Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
+}
+
+/// Handler for `Syscall::LookupServiceBound` (extracted from the dispatcher).
+pub(super) fn lookup_service_bound(
+    caller_id: usize,
+    service_id: u16,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    // Open to all cells, same allowlist bit as `LookupService`: this answers
+    // the same question with the provider's identity instead of a bare tid.
+    //
+    // The record is written whole or not at all. A short buffer is refused
+    // with the same `BufferTooSmall` error the other fixed-record writers
+    // use (`QueryDirHandles`, `ResolveCellOwner`) rather than partially
+    // filled; an absent, paused or identity-less provider returns the `0`
+    // absence sentinel `LookupService` uses — never a binding the kernel
+    // cannot stand behind.
+    if out_len < api::service_binding::SERVICE_BINDING_LEN {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let Some((tid, cell_id, generation)) = crate::cell::service_registry::lookup_bound(service_id)
+    else {
+        return Ok(0);
+    };
+    let binding = api::service_binding::ServiceBinding::new(tid as u64, cell_id, generation);
+    write_user_slice(caller_id, out_ptr, &binding.to_bytes(), MAX_USER_BUF)?;
+    Ok(api::service_binding::SERVICE_BINDING_LEN)
+}
+
+/// Handler for `Syscall::ServiceLookup` (extracted from the dispatcher).
+pub(super) fn service_lookup(caller_id: usize, name_ptr: usize, name_len: usize) -> SyscallResult {
+    let name = read_user_string(caller_id, name_ptr, name_len, MAX_LOG_MSG)?;
+    let id: usize = match name.as_str() {
+        "vfs" => 3,
+        "config" => 4,
+        "input" => 5,
+        "net" => 6,
+        "compositor" => 7,
+        "shell" => 8,
+        _ => return Err(SyscallError::FileNotFound),
+    };
+    Ok(id)
+}
+
+/// Handler for `Syscall::ResolveCellOwner` (extracted from the dispatcher).
+pub(super) fn resolve_cell_owner(
+    caller_id: usize,
+    cell_id: u64,
+    generation: u64,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    let len = api::cell_owner::CELL_OWNER_LEN;
+    if out_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let owner = {
+        let guard = crate::task::SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+        let owner = sched
+            .resolve_live_cell_owner(types::CellId(cell_id), generation)
+            .ok_or(SyscallError::PermissionDenied)?;
+        let vfs_principal = sched.tasks.get(&caller_id).is_some_and(|task| {
+            crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
+                && task.current_caller_cell_id == cell_id
+                && task.current_caller_cell_generation == generation
+        });
+        let registered_service =
+            crate::cell::service_registry::is_registered_tid(owner.root_tid as usize);
+        if !vfs_principal && !registered_service {
+            return Err(SyscallError::PermissionDenied);
+        }
+        owner
+    };
+    let bytes = owner.to_bytes();
+    write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+    Ok(len)
+}
+
+/// Handler for `Syscall::WatchCellOwner` (extracted from the dispatcher).
+pub(super) fn watch_cell_owner(
+    caller_id: usize,
+    cell_id: u64,
+    generation: u64,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    let len = api::cell_owner::CELL_OWNER_LEN;
+    if out_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let (owner, token) = crate::task::SCHEDULER
+        .lock()
+        .as_mut()
+        .and_then(|sched| {
+            sched.watch_live_cell_owner(caller_id, types::CellId(cell_id), generation)
+        })
+        .ok_or(SyscallError::PermissionDenied)?;
+    let bytes = owner.to_bytes();
+    write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+    usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::ResolveCellOwnerRecord` (extracted from the dispatcher).
+pub(super) fn resolve_cell_owner_record(
+    caller_id: usize,
+    request_ptr: usize,
+    request_len: usize,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
+    let len = api::cell_owner::CELL_OWNER_LEN;
+    if out_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let owner = {
+        let guard = crate::task::SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+        let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
+            crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
+                && task.current_caller_cell_id == request.cell_id
+                && task.current_caller_cell_generation == request.generation
+        });
+        if !allowed {
+            return Err(SyscallError::PermissionDenied);
+        }
+        sched
+            .resolve_live_cell_owner(types::CellId(request.cell_id), request.generation)
+            .ok_or(SyscallError::PermissionDenied)?
+    };
+    let bytes = owner.to_bytes();
+    write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+    Ok(len)
+}
+
+/// Handler for `Syscall::ResolveCellImage` (extracted from the dispatcher).
+pub(super) fn resolve_cell_image(
+    caller_id: usize,
+    request_ptr: usize,
+    request_len: usize,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
+    let len = api::cell_image::CELL_IMAGE_LEN;
+    if out_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let image = {
+        let guard = crate::task::SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+        crate::task::cell_image::resolve_for_caller(
+            sched,
+            caller_id,
+            request,
+            crate::fast_ipc::is_registered_vfs_cell,
+        )
+        .ok_or(SyscallError::PermissionDenied)?
+    };
+    write_user_slice(caller_id, out_ptr, &image.to_bytes(), MAX_USER_BUF)?;
+    Ok(len)
+}
+
+/// Handler for `Syscall::WatchCellOwnerRecord` (extracted from the dispatcher).
+pub(super) fn watch_cell_owner_record(
+    caller_id: usize,
+    request_ptr: usize,
+    request_len: usize,
+    out_ptr: usize,
+    out_len: usize,
+) -> SyscallResult {
+    let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
+    let len = api::cell_owner::CELL_OWNER_LEN;
+    if out_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    let (owner, token) = crate::task::SCHEDULER
+        .lock()
+        .as_mut()
+        .and_then(|sched| {
+            sched.watch_live_cell_owner(
+                caller_id,
+                types::CellId(request.cell_id),
+                request.generation,
+            )
+        })
+        .ok_or(SyscallError::PermissionDenied)?;
+    let bytes = owner.to_bytes();
+    write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
+    usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Handler for `Syscall::CancelCellOwnerWatch` (extracted from the dispatcher).
+pub(super) fn cancel_cell_owner_watch(caller_id: usize, token: u64) -> SyscallResult {
+    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        sched.cancel_cell_owner_watch(caller_id, token);
+    }
+    Ok(0)
+}
+
+/// Handler for `Syscall::FreezeCell` (extracted from the dispatcher).
+pub(super) fn freeze_cell(caller_id: usize, target_tid: usize) -> SyscallResult {
+    if !caller_has_supervisor(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    // Refuse to freeze the kernel (tid 0) or the caller itself.
+    if target_tid == 0 || target_tid == caller_id {
+        return Err(SyscallError::InvalidInput);
+    }
+    // swap_id u64::MAX = admin freeze (not a hotswap sequence).
+    crate::cell::hotswap::freeze_task_with_ceiling(target_tid, u64::MAX)
+        .map(|_| 0)
+        .map_err(|error| {
+            if error == types::ViError::NotFound {
+                SyscallError::FileNotFound
+            } else {
+                SyscallError::PermissionDenied
+            }
+        })
+}
+
+/// Handler for `Syscall::PauseService` (extracted from the dispatcher).
+pub(super) fn pause_service(
+    caller_id: usize,
+    service_id: u16,
+    expected_tid: usize,
+) -> SyscallResult {
+    if !caller_has_supervisor(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    if expected_tid == 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    if !crate::cell::service_registry::pause(service_id, expected_tid) {
+        return Err(SyscallError::TryAgain);
+    }
+    if !crate::task::inbound_ipc_drained(expected_tid) {
+        return Err(SyscallError::TryAgain);
+    }
+    Ok(0)
+}
+
+/// Handler for `Syscall::ResumeCell` (extracted from the dispatcher).
+pub(super) fn resume_cell(
+    caller_id: usize,
+    target_tid: usize,
+    source_tid: usize,
+    service_id: usize,
+    reserved: usize,
+) -> SyscallResult {
+    if !caller_has_supervisor(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    if target_tid == 0 || reserved != 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    if source_tid == 0 {
+        if service_id != 0 {
+            return Err(SyscallError::InvalidInput);
+        }
+        crate::cell::hotswap::unfreeze_task(target_tid);
+        return Ok(0);
+    }
+    if source_tid == target_tid || service_id > u16::MAX as usize {
+        return Err(SyscallError::InvalidInput);
+    }
+    crate::cell::hotswap::commit_hotswap_barrier(source_tid, target_tid, service_id as u16)
+        .map(|()| 0)
+        .map_err(|error| match error {
+            ViError::NotFound => SyscallError::FileNotFound,
+            ViError::PermissionDenied => SyscallError::PermissionDenied,
+            ViError::WouldBlock | ViError::OutOfMemory => SyscallError::TryAgain,
+            ViError::InvalidArgument | ViError::InvalidInput => SyscallError::InvalidInput,
+            _ => SyscallError::Unknown,
+        })
+}
+
+/// Handler for `Syscall::KillCell` (extracted from the dispatcher).
+pub(super) fn kill_cell(caller_id: usize, target_tid: usize, exit_code: u32) -> SyscallResult {
+    if !caller_has_supervisor(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
+    // Never kill kernel (tid 0) or the caller itself.
+    if target_tid == 0 || target_tid == caller_id {
+        return Err(SyscallError::InvalidInput);
+    }
+    // Never kill critical cells (init) — would collapse the restart tree.
+    // Single lock acquisition to get both is_critical and cell_id.
+    let (is_crit, cell_id) = {
+        let guard = crate::task::SCHEDULER.lock();
+        match guard.as_ref().and_then(|s| s.tasks.get(&target_tid)) {
+            None => return Err(SyscallError::FileNotFound),
+            Some(t) => (t.is_critical, t.cell_id),
+        }
+    };
+    if is_crit {
+        return Err(SyscallError::PermissionDenied);
+    }
+    crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
+    Ok(exit_code as usize)
+}
