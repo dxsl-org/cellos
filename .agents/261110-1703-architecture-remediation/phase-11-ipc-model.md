@@ -73,7 +73,7 @@ events (input, IRQ, notifications): bounded post, never a reply channel
 
 ## Todo List
 
-- [ ] Call-site census, CP1
+- [x] Call-site census, CP1 *(CP1 drafted; owner confirmation pending)*
 - [ ] Typed outcome surface
 - [ ] Bounded send, `IpcReply` replies
 - [ ] Registration flags, `fast_ipc` removed
@@ -104,4 +104,9 @@ Phase 12 builds the shared service loop on this surface.
 
 ## Deviation Log
 
-None.
+- **Census and CP1** (2026-11-11). The census was run by 3 read-only `Explore` agents and is versioned in `research/p11-census-*.md`. It changed the plan in three ways (CP1 §1):
+  - **The hazard is narrower.** The 155 service reply sites already complete exact operations through the kernel's implicit bridge. The non-receiving-client hazard is limited to replies to raw-`Send` callers and to events a service sends while serving.
+  - **Possible live misdelivery:** compositor `window.rs:151` may turn its state event into the CONFIGURE_ACK reply.
+  - **Requirement (g) moves to `ServiceRef::call`.** Its suggested target, `LocalEndpoint::call`, has no production callers.
+- `ProcessInfo` keeps its encoding (no Law-1 change for requirement f).
+- No new opcode or allowlist bit: the bounded default is an SDK `post` over `TrySend`.
