@@ -35,8 +35,20 @@ Sources:
 - Clicking the icon opens a menu organized into session actions, grouping/detaching and window placement. Keep closing a group distinct from closing one tab.
 - Primary click on `+` creates a session of the selected application. An adjacent menu offers Spotlight to choose another application and open its view as a tab in this frame. Applications without session creation open Spotlight instead.
 - Spotlight invoked from `+` explicitly identifies the destination frame. A failed or cancelled launch leaves no dead placeholder tab and does not disturb existing sessions.
-- Grouping and detaching initially use explicit menu commands. Drag-to-group and drag-to-detach are deferred.
+- Grouping and detaching initially use explicit menu commands. Drag-to-group and drag-to-detach followed (see *Stack & Tile*, 2026-11-11 amendment).
 - Closing a tab requests closure of its view, not unconditional process termination. Group closure respects every application's unsaved-data handling.
+
+### Stack & Tile (amendment, 2026-11-11)
+
+Implemented in the compositor (`stacking.rs`, `tiling.rs`, `surface_table/frame/`), following Haiku's Stack & Tile:
+
+- **Every window is in a Cell Frame.** A frame of several windows (a *stack*) shows one of them; its tabs share the frame's width, the shown tab in the focus colours, the others in the palette's stacked-tab fill. Clicking a tab shows its window; the other windows stay `Normal` but take no input and are not painted.
+- **The shown window is the frame.** There is no separate frame geometry: the other tabs sit at its origin and are asked, one configure at a time, for its size and maximized state. An app that never answers a configure keeps its own size (it is shown at that size when picked) and blocks nothing but its own next configure; close and minimize no longer wait for an unanswered configure.
+- **Window menu** (icon on the shown tab): Maximize/Restore, Minimize | Close or Close tab, Close all tabs (each tab asked in turn), Close group | Stack onto ‹nearby window› (up to five, nearest first, not fully covered), Detach tab, Untile. Close stays the third row.
+- **Gestures** (Haiku's Option key is the Win/Meta key): Win+drag a tab onto another window's tabs stacks it there; onto nothing, out of its stack (a lone window just moves); within 16px of another window's parallel edge (overlapping at least half), it snaps flush and tiles. A ghost outline and a highlighted target follow the pointer; Esc cancels. Shift+drag slides a lone tab along the top edge. The input service sends modifier transitions on its pointer channel, which reaches only the compositor; apps still see modifiers only as flags on other keys.
+- **Tile groups** move, rise and minimize as one; a member restored after the user minimized the group brings the windows minimized with it back (not windows their own apps minimized). The edge two glued windows share is a tabstop: dragging it resizes every window on it, never below 64x48 content. Maximizing a tiled window untiles it first; an app's own maximize request on a tiled window is refused, and an app that moves, snaps or fullscreens its tiled window takes it out of the group.
+- **Authority.** These are user gestures, so a stack or group may mix apps. A frame holding several apps' windows belongs to the compositor: owner-gated IPC view ops (`SELECT_VIEW`, `SNAP_FRAME`, `TOGGLE_FULLSCREEN`, `CREATE_VIEW` into it, `GROUP_VIEW` into it) are refused on it, and so are its shown app's own MINIMIZE/MAXIMIZE/RESTORE-from-maximized (they would change the other apps' windows; RESTORE from minimized stays allowed). A client may still destroy or detach its own view; a hidden tab's own MOVE_SURFACE is ignored. Membership grants no access to pixels, input or Grants.
+- **Deviation from the unified-desktop contract (contracts.md, group configure transaction):** a group resize is committed immediately per window rather than as one all-or-nothing transaction; windows that have not answered yet keep their old size until they do.
 
 ### Tier 3 applications
 

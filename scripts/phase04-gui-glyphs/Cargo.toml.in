@@ -10,5 +10,6 @@ publish = false
 
 [dependencies]
 ostd = { path = "@ROOT@/libs/ostd" }
+viui = { path = "@ROOT@/libs/viui" }
 
 [workspace]

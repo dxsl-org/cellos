@@ -1,33 +1,105 @@
 use api::display::{
-    compositor_ops, CloseResponse, ConfigureAck, Rect, SetTitle, SurfaceStateRequest,
+    compositor_ops, CloseResponse, ConfigureAck, Rect, SetIcon, SetTitle, SurfaceStateRequest,
+    WindowState,
 };
 use ostd::syscall::{sys_send, sys_try_send, SyscallResult};
 
+use super::MessageContext;
 use crate::input_handler::InputState;
-use crate::surface_table::{StateTransition, SurfaceTable};
+use crate::stacking;
+use crate::surface_table::{FrameRegistry, StateTransition, SurfaceTable};
 use crate::window_decoration;
 
-pub(super) fn handle(
-    buf: &[u8; 512],
-    sender: usize,
-    screen_w: u32,
-    screen_h: u32,
-    input: &mut InputState,
-    table: &mut SurfaceTable,
-    pending_dirty: &mut Option<Rect>,
-) {
+pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>) {
+    let MessageContext {
+        screen_w,
+        screen_h,
+        input,
+        table,
+        frames,
+        z_order,
+        pending_dirty,
+        ..
+    } = context;
     match buf[0] {
-        compositor_ops::SET_TITLE => set_title(buf, sender, table, pending_dirty),
-        compositor_ops::CONFIGURE_ACK => acknowledge_configure(buf, sender, table, pending_dirty),
-        compositor_ops::CLOSE_RESPONSE => close_response(buf, sender, table, pending_dirty),
+        compositor_ops::SET_TITLE => set_title(buf, sender, table, frames, pending_dirty),
+        compositor_ops::SET_ICON => set_icon(buf, sender, table, frames, pending_dirty),
+        compositor_ops::CONFIGURE_ACK => {
+            if let Some(cap) = acknowledge_configure(buf, sender, table, pending_dirty) {
+                // The shown tab sets the frame's size; the others catch up.
+                if let Some(area) = frames
+                    .frame_of(cap)
+                    .and_then(|frame| stacking::sync(frames, table, frame))
+                {
+                    add_dirty(pending_dirty, area);
+                }
+                stacking::reconcile_frame_of(frames, table, cap, (screen_w, screen_h));
+                // Glued neighbours follow the edges this frame now has.
+                crate::tiling::settle(frames, table, cap);
+            }
+        }
+        compositor_ops::CLOSE_RESPONSE => {
+            if let Some(cap) = close_response(buf, sender, table, pending_dirty) {
+                // "Close all tabs" asks the next tab once this one answered.
+                if let Some(frame) = frames
+                    .frame_of(cap)
+                    .filter(|&frame| frames.is_closing_all(frame))
+                {
+                    if let Some(area) = stacking::advance_close(frames, table, z_order, frame) {
+                        add_dirty(pending_dirty, area);
+                    }
+                }
+                stacking::reconcile_frame_of(frames, table, cap, (screen_w, screen_h));
+            }
+        }
         compositor_ops::MINIMIZE | compositor_ops::MAXIMIZE | compositor_ops::RESTORE => {
-            request_state(buf, sender, screen_w, screen_h, input, table, pending_dirty)
+            request_state(
+                buf,
+                sender,
+                (screen_w, screen_h),
+                input,
+                table,
+                frames,
+                pending_dirty,
+            )
         }
         _ => {}
     }
 }
 
-fn set_title(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable, dirty: &mut Option<Rect>) {
+/// Owner-only; an icon value this build does not know is refused whole.
+fn set_icon(
+    buf: &[u8; 512],
+    sender: usize,
+    table: &mut SurfaceTable,
+    frames: &FrameRegistry,
+    dirty: &mut Option<Rect>,
+) {
+    let Ok(frame) = SetIcon::decode(buf) else {
+        return;
+    };
+    let Some(icon) = ostd::display::linear::icons::LineIcon::from_u8(frame.icon) else {
+        return;
+    };
+    let Some(surface) = table
+        .get_mut(u64::from(frame.cap))
+        .filter(|surface| surface.owner == sender)
+    else {
+        return;
+    };
+    surface.set_icon(icon);
+    if let Some(area) = stacking::frame_bounds(frames, table, u64::from(frame.cap)) {
+        add_dirty(dirty, area);
+    }
+}
+
+fn set_title(
+    buf: &[u8; 512],
+    sender: usize,
+    table: &mut SurfaceTable,
+    frames: &FrameRegistry,
+    dirty: &mut Option<Rect>,
+) {
     let Ok(frame) = SetTitle::decode(&buf[..72]) else {
         return;
     };
@@ -40,40 +112,39 @@ fn set_title(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable, dirty: &m
     let Ok(title) = frame.title_str() else {
         return;
     };
-    let decoration = window_decoration::bounds(surface.screen_rect());
     surface.set_title(title);
-    *dirty = Some(match dirty.take() {
-        Some(current) => current.union(&decoration),
-        None => decoration,
-    });
+    if let Some(area) = stacking::frame_bounds(frames, table, frame.cap as u64) {
+        add_dirty(dirty, area);
+    }
 }
 
+/// Returns the cap whose configure committed.
 fn acknowledge_configure(
     buf: &[u8; 512],
     sender: usize,
     table: &mut SurfaceTable,
     dirty: &mut Option<Rect>,
-) {
+) -> Option<u64> {
     let Some(frame) = buf.get(..12) else {
         sys_send(sender, b"\x00");
-        return;
+        return None;
     };
     let Ok(frame) = ConfigureAck::decode(frame) else {
         sys_send(sender, b"\x00");
-        return;
+        return None;
     };
     let Some(surface) = table.get_mut(frame.cap as u64) else {
         sys_send(sender, b"\x00");
-        return;
+        return None;
     };
     if surface.owner != sender {
         sys_send(sender, b"\x00");
-        return;
+        return None;
     }
     let Some((old_rect, new_rect, state)) = surface.acknowledge_configure(frame.cap, frame.serial)
     else {
         sys_send(sender, b"\x00");
-        return;
+        return None;
     };
     // The client consumes this asynchronous state while waiting for the reply.
     if let Ok(event) = state.encode() {
@@ -81,6 +152,7 @@ fn acknowledge_configure(
     }
     sys_send(sender, b"\x01");
     mark_dirty(dirty, old_rect, new_rect);
+    Some(frame.cap as u64)
 }
 
 fn close_response(
@@ -88,58 +160,72 @@ fn close_response(
     sender: usize,
     table: &mut SurfaceTable,
     dirty: &mut Option<Rect>,
-) {
-    let Ok(frame) = CloseResponse::decode(&buf[..12]) else {
-        return;
-    };
-    let Some(surface) = table.get_mut(frame.cap as u64) else {
-        return;
-    };
-    if surface.owner != sender {
-        return;
-    }
+) -> Option<u64> {
+    let frame = CloseResponse::decode(&buf[..12]).ok()?;
+    let surface = table
+        .get_mut(frame.cap as u64)
+        .filter(|surface| surface.owner == sender)?;
     let old_rect = surface.screen_rect();
-    let Some(state) = surface.close_response(frame.cap, frame.serial, frame.accept) else {
-        return;
-    };
-    surface.damage = Some(Rect {
-        x: 0,
-        y: 0,
-        w: surface.w,
-        h: surface.h,
-    });
-    if let Ok(event) = state.encode() {
-        let _ = sys_try_send(sender, &event);
+    let awaited = surface.awaits_close_answer();
+    // A refusal restores the window; an acceptance leaves it closing until
+    // its owner destroys it.
+    if let Some(state) = surface.close_response(frame.cap, frame.serial, frame.accept) {
+        surface.damage = Some(Rect {
+            x: 0,
+            y: 0,
+            w: surface.w,
+            h: surface.h,
+        });
+        if let Ok(event) = state.encode() {
+            let _ = sys_try_send(sender, &event);
+        }
+        mark_dirty(dirty, old_rect, surface.screen_rect());
     }
-    mark_dirty(dirty, old_rect, surface.screen_rect());
+    (awaited && !surface.awaits_close_answer()).then_some(frame.cap as u64)
 }
 
+/// An owner's own minimize/maximize/restore. The shown tab of a stack
+/// speaks for the whole frame (the other tabs follow it); a tab behind it has
+/// no state of its own to change.
 fn request_state(
     buf: &[u8; 512],
     sender: usize,
-    screen_w: u32,
-    screen_h: u32,
+    (screen_w, screen_h): (u32, u32),
     input: &mut InputState,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     dirty: &mut Option<Rect>,
 ) {
     let Ok(frame) = SurfaceStateRequest::decode(&buf[..8]) else {
         return;
     };
-    let Some(surface) = table.get_mut(frame.cap as u64) else {
+    let cap = frame.cap as u64;
+    // A tiled window maximizes only once the user untiles it. The shown tab
+    // of a frame shared with other apps speaks for their windows too, so it
+    // may only come back from minimized; the user drives the rest.
+    let tiled = frames.frame_of(cap).is_some_and(|f| frames.is_tiled(f));
+    let shared = frames.is_shared(cap);
+    let from_minimized = table
+        .get(cap)
+        .is_some_and(|s| s.state() == WindowState::Minimized);
+    let refused = (tiled && frame.opcode == compositor_ops::MAXIMIZE)
+        || (shared && !(frame.opcode == compositor_ops::RESTORE && from_minimized));
+    if frames.is_hidden(cap) || refused {
+        return;
+    }
+    let Some(surface) = table.get_mut(cap) else {
         return;
     };
     if surface.owner != sender {
         return;
     }
     let old_rect = surface.screen_rect();
-    let maximum_rect = Rect {
-        x: window_decoration::FRAME,
-        y: window_decoration::FRAME + window_decoration::TITLE,
-        w: screen_w.saturating_sub((window_decoration::FRAME * 2) as u32),
-        h: screen_h
-            .saturating_sub((window_decoration::FRAME * 2 + window_decoration::TITLE) as u32),
-    };
+    let maximum_rect = window_decoration::content_within(Rect {
+        x: 0,
+        y: 0,
+        w: screen_w,
+        h: screen_h,
+    });
     let prior_state = surface.state();
     match surface.request_state(frame.cap, frame.opcode, maximum_rect) {
         Some(StateTransition::Configure(configure)) => {
@@ -169,7 +255,12 @@ fn request_state(
             }
             mark_dirty(dirty, old_rect, surface.screen_rect());
             if !visible {
-                input.deactivate_surface(frame.cap as u64);
+                input.deactivate_surface(cap);
+            } else if prior_state == WindowState::Minimized {
+                // Its tile group went down with it and comes back with it.
+                if let Some(area) = crate::tiling::restore_group(frames, table, cap) {
+                    add_dirty(dirty, area);
+                }
             }
         }
         None => {}
@@ -183,4 +274,8 @@ fn mark_dirty(dirty: &mut Option<Rect>, old: Rect, new: Rect) {
         Some(acc) => acc.union(&old).union(&new),
         None => old.union(&new),
     });
+}
+
+fn add_dirty(dirty: &mut Option<Rect>, area: Rect) {
+    *dirty = Some(dirty.map_or(area, |acc| acc.union(&area)));
 }

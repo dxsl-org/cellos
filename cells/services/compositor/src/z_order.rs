@@ -34,6 +34,15 @@ impl ZOrder {
         self.caps.push(cap);
     }
 
+    /// Exchange the places of `a` and `b`: a tab shown in place of another
+    /// takes its window's place in the stack.
+    pub fn swap(&mut self, a: u64, b: u64) {
+        let position = |cap| self.caps.iter().position(|&c| c == cap);
+        if let (Some(i), Some(j)) = (position(a), position(b)) {
+            self.caps.swap(i, j);
+        }
+    }
+
     /// Iterate from bottom to top (paint order).
     pub fn iter_bottom_to_top(&self) -> impl Iterator<Item = u64> + '_ {
         self.caps.iter().copied()

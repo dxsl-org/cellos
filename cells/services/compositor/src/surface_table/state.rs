@@ -31,6 +31,8 @@ pub struct SurfaceState {
     pub role: SurfaceRole,
     /// UTF-8 window title, kept separate from client pixel storage.
     title: alloc::string::String,
+    /// Icon on the Cell Tab (`SET_ICON`); generic until the owner names one.
+    icon: ostd::display::linear::icons::LineIcon,
     pub(super) state: api::display::WindowState,
     pub(super) normal_rect: Rect,
     pub(super) minimized_from: api::display::WindowState,
@@ -38,6 +40,9 @@ pub struct SurfaceState {
     pub(super) retired_grant_id: Option<usize>,
     pub(super) pending_close: Option<PendingClose>,
     pub(super) serial: u32,
+    /// Behind another Cell Tab of its frame: kept `Normal` so it can still be
+    /// configured to the frame's size, but neither painted nor given input.
+    behind_tab: bool,
 }
 
 impl SurfaceState {
@@ -55,6 +60,7 @@ impl SurfaceState {
             owner,
             role,
             title: alloc::string::String::new(),
+            icon: ostd::display::linear::icons::LineIcon::Application,
             state: api::display::WindowState::Normal,
             minimized_from: api::display::WindowState::Normal,
             normal_rect: rect,
@@ -62,6 +68,33 @@ impl SurfaceState {
             retired_grant_id: None,
             pending_close: None,
             serial: 0,
+            behind_tab: false,
+        }
+    }
+
+    /// UTF-8 title shown on the Cell Tab.
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub const fn icon(&self) -> ostd::display::linear::icons::LineIcon {
+        self.icon
+    }
+
+    pub fn set_icon(&mut self, icon: ostd::display::linear::icons::LineIcon) {
+        self.icon = icon;
+    }
+
+    /// Everything this surface may paint on screen: content plus compositor
+    /// chrome (window frame and margin, or a panel's shadow margin).
+    pub fn paint_region(&self) -> api::display::Rect {
+        let rect = self.screen_rect();
+        if self.is_window_managed() {
+            crate::window_decoration::bounds(rect)
+        } else if self.role == api::display::SurfaceRole::Panel {
+            crate::window_decoration::panel_region(rect)
+        } else {
+            rect
         }
     }
 
@@ -84,10 +117,26 @@ impl SurfaceState {
         )
     }
 
-    /// True only for a visible interactive surface.
+    /// True while the surface is on screen: visible and not behind another tab.
+    pub const fn is_shown(&self) -> bool {
+        self.is_visible_for_paint() && !self.behind_tab
+    }
+
+    /// Hide or show the surface behind the shown tab of its frame. Only
+    /// `crate::stacking` decides this, from the frame registry.
+    pub fn set_behind_tab(&mut self, behind: bool) {
+        self.behind_tab = behind;
+    }
+
+    /// Whether a configure or a replaced grant still blocks the next proposal.
+    pub const fn is_configuring(&self) -> bool {
+        self.pending_configure.is_some() || self.retired_grant_id.is_some()
+    }
+
+    /// True only for a shown interactive surface.
     pub fn accepts_input(&self) -> bool {
         (self.role == SurfaceRole::Interactive || self.role == SurfaceRole::Panel)
-            && self.is_visible_for_paint()
+            && self.is_shown()
     }
 
     /// Background surfaces are deliberately outside the window-manager state machine.

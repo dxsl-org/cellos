@@ -1,12 +1,13 @@
 //! Authenticated session view and frame IPC dispatch.
 
 use api::display::{
-    compositor_ops, CreateViewRequest, FrameRef, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
-    ViewRef, CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
+    compositor_ops, CreateViewRequest, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
+    CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
 };
 use ostd::syscall::sys_send;
 
-use super::MessageContext;
+use super::{view_frame, MessageContext};
+use crate::stacking;
 
 pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>) {
     let MessageContext {
@@ -17,6 +18,7 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
         frames,
         z_order,
         pending_dirty,
+        ..
     } = context;
     match buf[0] {
         compositor_ops::CREATE_VIEW => {
@@ -63,12 +65,11 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             // `recipient_incarnation`, `file_grant_id` and `launch_token` are
             // carried for clients but confer no authority: only the frame's
             // owner may add a view to an existing frame (`FrameRegistry`).
-            // Allocate backing surface in SurfaceTable
-            let (fx, fy) = if frame_id != 0 {
-                frames.frame_position(frame_id).unwrap_or((100, 100))
-            } else {
-                (100, 100)
-            };
+            // Allocate backing surface in SurfaceTable, behind the frame's shown tab.
+            let (fx, fy) = frames
+                .selected_cap(frame_id)
+                .and_then(|shown| table.get(shown))
+                .map_or((100, 100), |shown| (shown.x, shown.y));
             let cap = match table.create(fx, fy, w, h, sender, role) {
                 Ok(c) => c,
                 Err(_) => {
@@ -84,6 +85,7 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             match frames.create_view(&req, sender, cap) {
                 Ok(resp) => {
                     z_order.push(cap);
+                    stacking::sync(frames, table, resp.frame_id);
                     // The table may have downgraded a refused Panel request.
                     if table
                         .get(cap)
@@ -113,8 +115,11 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             let view_id = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let view_inc = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
 
+            let was_shown = frames
+                .surface_for_view(view_id)
+                .is_some_and(|cap| !frames.is_hidden(cap));
             match frames.destroy_view(frame_id, frame_gen, view_id, view_inc, sender) {
-                Ok((resp, surface_cap)) => {
+                Ok((resp, surface_cap, reselected)) => {
                     let freed = if let Some(s) = table.get(surface_cap) {
                         crate::window_decoration::bounds(s.screen_rect())
                     } else {
@@ -125,14 +130,19 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
                             h: 600,
                         })
                     };
+                    if was_shown {
+                        stacking::reselected(frames, table, z_order, surface_cap, reselected);
+                    }
                     input.remove_surface(surface_cap);
                     table.remove(surface_cap);
                     z_order.remove(surface_cap);
-                    if let Some(next_v) = frames.selected_view_for_frame(frame_id) {
-                        if let Some(next_cap) = frames.surface_for_view(next_v.view_id) {
-                            input.request_focus(sender, next_cap);
-                            z_order.raise(next_cap);
-                        }
+                    // Focus follows only to the caller's own next tab.
+                    if let Some(next_cap) = reselected
+                        .selected
+                        .filter(|&next| table.get(next).is_some_and(|s| s.owner == sender))
+                    {
+                        input.request_focus(sender, next_cap);
+                        z_order.raise(next_cap);
                     }
                     *pending_dirty = Some(match pending_dirty.take() {
                         Some(acc) => acc.union(&freed),
@@ -159,9 +169,14 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             let view_id = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let view_inc = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
 
+            let previous = frames.selected_cap(frame_id);
             match frames.select_view(frame_id, frame_gen, view_id, view_inc, sender) {
                 Ok(resp) => {
                     if let Some(cap) = frames.surface_for_view(view_id) {
+                        if let Some(previous) = previous {
+                            z_order.swap(previous, cap);
+                        }
+                        stacking::sync(frames, table, frame_id);
                         z_order.raise(cap);
                         input.request_focus(sender, cap);
                         if let Some(s) = table.get(cap) {
@@ -180,193 +195,32 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, context: MessageContext<'_>
             }
         }
         compositor_ops::GROUP_VIEW => {
-            if buf.len() < 25 {
-                send_error(
-                    sender,
-                    compositor_ops::GROUP_VIEW,
-                    ViewOpResult::InvalidToken,
-                );
-                return;
-            }
-            let target_frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let target_frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            let source_frame_id = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
-            let source_frame_gen = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            let view_id = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
-            let view_inc = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-
-            match frames.group_view(
-                FrameRef {
-                    frame_id: target_frame_id,
-                    generation: target_frame_gen,
-                },
-                FrameRef {
-                    frame_id: source_frame_id,
-                    generation: source_frame_gen,
-                },
-                ViewRef {
-                    view_id,
-                    incarnation: view_inc,
-                },
-                sender,
-            ) {
-                Ok(resp) => {
-                    if let Some(cap) = frames.surface_for_view(view_id) {
-                        if let Some((tx, ty)) = frames.frame_position(target_frame_id) {
-                            if let Some(s) = table.get_mut(cap) {
-                                s.move_to(tx, ty);
-                                let rect = crate::window_decoration::bounds(s.screen_rect());
-                                *pending_dirty = Some(match pending_dirty.take() {
-                                    Some(acc) => acc.union(&rect),
-                                    None => rect,
-                                });
-                            }
-                        }
-                        z_order.raise(cap);
-                    }
-                    send_response(sender, &resp);
-                }
-                Err(err) => {
-                    send_error(sender, compositor_ops::GROUP_VIEW, err);
-                }
-            }
+            view_frame::group(buf, sender, table, frames, z_order, pending_dirty)
         }
         compositor_ops::DETACH_VIEW => {
-            if buf.len() < 25 {
-                send_error(
-                    sender,
-                    compositor_ops::DETACH_VIEW,
-                    ViewOpResult::InvalidToken,
-                );
-                return;
-            }
-            let source_frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let source_frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            let view_id = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
-            let view_inc = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            let x = i32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
-            let y = i32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-
-            match frames.detach_view(
-                FrameRef {
-                    frame_id: source_frame_id,
-                    generation: source_frame_gen,
-                },
-                ViewRef {
-                    view_id,
-                    incarnation: view_inc,
-                },
-                x,
-                y,
-                sender,
-            ) {
-                Ok(resp) => {
-                    if let Some(cap) = frames.surface_for_view(view_id) {
-                        if let Some(s) = table.get_mut(cap) {
-                            s.move_to(x, y);
-                            let rect = crate::window_decoration::bounds(s.screen_rect());
-                            *pending_dirty = Some(match pending_dirty.take() {
-                                Some(acc) => acc.union(&rect),
-                                None => rect,
-                            });
-                        }
-                        z_order.raise(cap);
-                    }
-                    send_response(sender, &resp);
-                }
-                Err(err) => {
-                    send_error(sender, compositor_ops::DETACH_VIEW, err);
-                }
-            }
+            view_frame::detach(buf, sender, table, frames, z_order, pending_dirty)
         }
-        compositor_ops::SNAP_FRAME => {
-            if buf.len() < 12 {
-                send_error(
-                    sender,
-                    compositor_ops::SNAP_FRAME,
-                    ViewOpResult::InvalidToken,
-                );
-                return;
-            }
-            let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            let zone_byte = buf[9];
-            let Some(zone) = api::display::SnapZone::from_u8(zone_byte) else {
-                send_error(
-                    sender,
-                    compositor_ops::SNAP_FRAME,
-                    ViewOpResult::InvalidToken,
-                );
-                return;
-            };
-
-            // Work area excludes bottom taskbar (36 DIP)
-            let work_area = Rect {
-                x: 0,
-                y: 0,
-                w: screen_w,
-                h: screen_h.saturating_sub(36),
-            };
-
-            match frames.snap_frame(frame_id, frame_gen, zone, work_area, sender) {
-                Ok((resp, rect)) => {
-                    if let Some(v) = frames.selected_view_for_frame(frame_id) {
-                        if let Some(cap) = frames.surface_for_view(v.view_id) {
-                            if let Some(s) = table.get_mut(cap) {
-                                s.move_to(rect.x, rect.y);
-                                *pending_dirty = Some(match pending_dirty.take() {
-                                    Some(acc) => acc.union(&rect),
-                                    None => rect,
-                                });
-                            }
-                        }
-                    }
-                    send_response(sender, &resp);
-                }
-                Err(err) => {
-                    send_error(sender, compositor_ops::SNAP_FRAME, err);
-                }
-            }
-        }
-        compositor_ops::TOGGLE_FULLSCREEN => {
-            if buf.len() < 12 {
-                send_error(
-                    sender,
-                    compositor_ops::TOGGLE_FULLSCREEN,
-                    ViewOpResult::InvalidToken,
-                );
-                return;
-            }
-            let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
-            let enable = buf[9] != 0;
-
-            match frames.toggle_fullscreen(frame_id, frame_gen, enable, screen_w, screen_h, sender)
-            {
-                Ok((resp, rect)) => {
-                    if let Some(v) = frames.selected_view_for_frame(frame_id) {
-                        if let Some(cap) = frames.surface_for_view(v.view_id) {
-                            if let Some(s) = table.get_mut(cap) {
-                                s.move_to(rect.x, rect.y);
-                                *pending_dirty = Some(match pending_dirty.take() {
-                                    Some(acc) => acc.union(&rect),
-                                    None => rect,
-                                });
-                            }
-                        }
-                    }
-                    send_response(sender, &resp);
-                }
-                Err(err) => {
-                    send_error(sender, compositor_ops::TOGGLE_FULLSCREEN, err);
-                }
-            }
-        }
+        compositor_ops::SNAP_FRAME => view_frame::snap(
+            buf,
+            sender,
+            (screen_w, screen_h),
+            table,
+            frames,
+            pending_dirty,
+        ),
+        compositor_ops::TOGGLE_FULLSCREEN => view_frame::fullscreen(
+            buf,
+            sender,
+            (screen_w, screen_h),
+            table,
+            frames,
+            pending_dirty,
+        ),
         _ => {}
     }
 }
 
-fn send_response(recipient: usize, resp: &ViewOpResponse) {
+pub(super) fn send_response(recipient: usize, resp: &ViewOpResponse) {
     let mut reply = [0u8; VIEW_OP_RESPONSE_WIRE_SIZE];
     reply[0] = resp.opcode;
     reply[1] = resp.result as u8;
@@ -378,7 +232,7 @@ fn send_response(recipient: usize, resp: &ViewOpResponse) {
     sys_send(recipient, &reply);
 }
 
-fn send_error(recipient: usize, opcode: u8, err: ViewOpResult) {
+pub(super) fn send_error(recipient: usize, opcode: u8, err: ViewOpResult) {
     let mut reply = [0u8; VIEW_OP_RESPONSE_WIRE_SIZE];
     reply[0] = opcode;
     reply[1] = err as u8;

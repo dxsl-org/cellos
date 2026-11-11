@@ -87,10 +87,15 @@ impl SurfaceTable {
     pub fn has_damage(&self) -> bool {
         self.entries
             .values()
-            .any(|surface| surface.is_visible_for_paint() && surface.damage.is_some())
+            .any(|surface| surface.is_shown() && surface.damage.is_some())
     }
 
     /// Find all surfaces owned by `tid` and return their caps.
+    /// Owner tid of every surface (with repeats).
+    pub fn owners(&self) -> alloc::vec::Vec<usize> {
+        self.entries.values().map(|surface| surface.owner).collect()
+    }
+
     pub fn caps_owned_by(&self, tid: usize) -> alloc::vec::Vec<u64> {
         self.entries
             .iter()

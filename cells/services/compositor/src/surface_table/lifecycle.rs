@@ -14,10 +14,10 @@ impl SurfaceState {
         &mut self,
         cap: u32,
     ) -> Option<(Rect, WindowCloseRequest, WindowStateChanged)> {
-        if !self.is_window_managed()
-            || self.state == api::display::WindowState::Closing
-            || self.pending_configure.is_some()
-        {
+        // A configure the owner never answers must not keep its window from
+        // closing; if it lands while the close is asked, the restore state
+        // takes its outcome (`acknowledge_configure`).
+        if !self.is_window_managed() || self.state == api::display::WindowState::Closing {
             return None;
         }
         let old_rect = self.screen_rect();
@@ -36,6 +36,17 @@ impl SurfaceState {
         };
         let state = self.state_changed(cap);
         Some((old_rect, close, state))
+    }
+
+    /// Whether a close request still waits for the owner's answer.
+    pub const fn awaits_close_answer(&self) -> bool {
+        self.pending_close.is_some()
+    }
+
+    /// Serial of the close request awaiting an answer.
+    #[cfg(test)]
+    pub fn close_serial(&self) -> Option<u32> {
+        self.pending_close.as_ref().map(|pending| pending.serial)
     }
 
     /// Restore the state before an undeliverable close request.

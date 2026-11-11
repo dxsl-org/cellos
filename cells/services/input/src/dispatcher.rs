@@ -32,6 +32,10 @@ const DROP_REPORT_EVERY: u64 = 64;
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 
 /// Routes translated events to the currently focused cell.
+/// Pointer-channel events one raw batch can leave undelivered: three mouse
+/// buttons plus eight modifier keys (compositor gesture modifiers).
+const POINTER_STASH: usize = 3 + 8;
+
 pub struct Dispatcher {
     /// Physical-keyboard and serial-console targets (0 = no focus, events dropped).
     routes: FocusRoutes,
@@ -47,9 +51,10 @@ pub struct Dispatcher {
     /// Cached compositor TID for mouse routing (0 = not yet resolved).
     /// Re-resolved lazily; reset to 0 when a send fails (compositor respawned).
     compositor_tid: usize,
-    // One raw input event emits one pointer event, except HID disconnect,
-    // which can release all three recognised mouse buttons in one batch.
-    pending_mouse: [Option<InputEvent>; 3],
+    // One raw input event emits one pointer-channel event, except HID
+    // disconnect, which can release all three recognised mouse buttons and
+    // every held modifier key (eight, left and right) in one batch.
+    pending_mouse: [Option<InputEvent>; POINTER_STASH],
     mouse_head: usize,
     mouse_len: usize,
     pub(crate) repeat: crate::key_repeat::KeyRepeat,
@@ -64,7 +69,7 @@ impl Dispatcher {
             dropped: 0,
             fallback_tid: 0,
             compositor_tid: 0,
-            pending_mouse: [None; 3],
+            pending_mouse: [None; POINTER_STASH],
             mouse_head: 0,
             mouse_len: 0,
             repeat: crate::key_repeat::KeyRepeat::default(),
@@ -182,7 +187,7 @@ impl Dispatcher {
             }
         }
         // Main stops consuming raw events as soon as this batch is stashed.
-        // The only multi-event batch is a HID disconnect (three mouse buttons).
+        // The only multi-event batch is a HID disconnect (`POINTER_STASH`).
         assert!(self.mouse_len < self.pending_mouse.len());
         let tail = (self.mouse_head + self.mouse_len) % self.pending_mouse.len();
         self.pending_mouse[tail] = Some(*event);
@@ -205,7 +210,7 @@ impl Dispatcher {
                 // A dead compositor has no windows to deliver these events to.
                 // Do not prevent keyboard/console input during graphical restart.
                 self.compositor_tid = 0;
-                self.pending_mouse = [None; 3];
+                self.pending_mouse = [None; POINTER_STASH];
                 self.mouse_head = 0;
                 self.mouse_len = 0;
                 return true;

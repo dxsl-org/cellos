@@ -3,11 +3,13 @@
 mod grant;
 mod surface;
 mod view;
+mod view_frame;
 mod window;
 use api::display::Rect;
 use api::syscall::service;
 use ostd::syscall::{sys_grant_unregister, sys_lookup_service};
 
+use crate::appearance::Appearance;
 use crate::input_handler::InputState;
 use crate::surface_table::SurfaceTable;
 use crate::z_order::ZOrder;
@@ -22,6 +24,7 @@ pub(crate) struct MessageContext<'a> {
     frames: &'a mut crate::surface_table::FrameRegistry,
     z_order: &'a mut ZOrder,
     pending_dirty: &'a mut Option<Rect>,
+    appearance: &'a mut Appearance,
 }
 impl<'a> MessageContext<'a> {
     pub(crate) fn new(
@@ -32,6 +35,7 @@ impl<'a> MessageContext<'a> {
         frames: &'a mut crate::surface_table::FrameRegistry,
         z_order: &'a mut ZOrder,
         pending_dirty: &'a mut Option<Rect>,
+        appearance: &'a mut Appearance,
     ) -> Self {
         Self {
             screen_w,
@@ -41,6 +45,7 @@ impl<'a> MessageContext<'a> {
             frames,
             z_order,
             pending_dirty,
+            appearance,
         }
     }
 }
@@ -55,6 +60,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         frames,
         z_order,
         pending_dirty,
+        appearance,
     } = context;
     if buf.is_empty() {
         return;
@@ -79,21 +85,35 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
         | api::display::compositor_ops::MOVE_SURFACE
         | api::display::compositor_ops::RAISE_SURFACE
         | api::display::compositor_ops::DESTROY_SURFACE => {
-            surface::handle(buf, sender, input, table, z_order, pending_dirty)
+            surface::handle(buf, sender, input, table, frames, z_order, pending_dirty)
         }
         api::display::compositor_ops::SET_TITLE
+        | api::display::compositor_ops::SET_ICON
         | api::display::compositor_ops::CONFIGURE_ACK
         | api::display::compositor_ops::CLOSE_RESPONSE
         | api::display::compositor_ops::MINIMIZE
         | api::display::compositor_ops::MAXIMIZE
-        | api::display::compositor_ops::RESTORE => {
-            window::handle(buf, sender, screen_w, screen_h, input, table, pending_dirty)
-        }
+        | api::display::compositor_ops::RESTORE => window::handle(
+            buf,
+            sender,
+            MessageContext {
+                screen_w,
+                screen_h,
+                input,
+                table,
+                frames,
+                z_order,
+                pending_dirty,
+                appearance,
+            },
+        ),
         api::display::compositor_ops::ATTACH_GRANT
         | api::display::compositor_ops::DETACH_REPLACED_GRANT
         | api::display::compositor_ops::DAMAGE_NOTIFY
         | api::display::compositor_ops::DETACH_GRANT
-        | api::display::compositor_ops::GET_SCREEN_SIZE => grant::handle(buf, sender, table),
+        | api::display::compositor_ops::GET_SCREEN_SIZE => {
+            grant::handle(buf, sender, table, frames, appearance, (screen_w, screen_h))
+        }
         api::display::compositor_ops::CREATE_VIEW
         | api::display::compositor_ops::DESTROY_VIEW
         | api::display::compositor_ops::SELECT_VIEW
@@ -111,8 +131,25 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 frames,
                 z_order,
                 pending_dirty,
+                appearance,
             },
         ),
+        api::display::compositor_ops::SET_APPEARANCE => {
+            let frame = &buf[..api::display::SET_APPEARANCE_WIRE_SIZE];
+            let changed = api::display::SetAppearance::decode(frame)
+                .is_ok_and(|request| appearance.apply(&request, sender, table));
+            if changed {
+                // Every frame and panel shadow on screen changes colour, and
+                // every client toolkit repaints in the new palette.
+                *pending_dirty = Some(Rect {
+                    x: 0,
+                    y: 0,
+                    w: screen_w,
+                    h: screen_h,
+                });
+                appearance.broadcast(table);
+            }
+        }
         _ => {}
     }
 }
@@ -129,13 +166,17 @@ pub(crate) fn cleanup_owner(
     pending_dirty: &mut Option<Rect>,
 ) -> usize {
     let mut removed = 0;
-    let _ = frames.cleanup_owner(dead_tid);
     for cap in table.caps_owned_by(dead_tid) {
         let Some(surface) = table.get(cap) else {
             continue;
         };
         let freed_rect = crate::window_decoration::bounds(surface.screen_rect());
         let grant_ids = surface.grant_ids();
+        // A tab of the dead app that another app's stack showed gives way to
+        // the tab beside it.
+        if let Some(area) = crate::stacking::forget(frames, table, z_order, cap) {
+            *pending_dirty = Some(pending_dirty.map_or(area, |acc| acc.union(&area)));
+        }
         input.remove_surface(cap);
         z_order.remove(cap);
         let _ = table.remove(cap);
@@ -153,5 +194,7 @@ pub(crate) fn cleanup_owner(
             None => freed_rect,
         });
     }
+    // Views whose surface is already gone.
+    frames.cleanup_owner(dead_tid);
     removed
 }

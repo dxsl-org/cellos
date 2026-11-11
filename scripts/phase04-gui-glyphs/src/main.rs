@@ -28,32 +28,42 @@
 //!     Cells no span covers are blank with default colours.
 //!
 //! * ViUI surface ops: replays `libs/viui/src/surface.rs` `fill_rect`, `stroke_rect`,
-//!   `draw_label_aligned` and `draw_button` (the primitives every Desktop/Files component
-//!   is built from) on a `width x height` BGRA surface, at the same surface coordinates the
-//!   guest uses, so float glyph placement is bit-identical.
+//!   `fill_round_rect`, `stroke_round_rect`, `draw_icon_centered`, `draw_label_aligned` and
+//!   `draw_button` (the primitives every Desktop/Files component is built from) on a
+//!   `width x height` BGRA surface, at the same surface coordinates the guest uses. Shapes
+//!   and icons go through the same `ostd::display::linear` canvas and `viui::surface::paint_icon`
+//!   as the guest, and float glyph placement is bit-identical.
 //!     usage: phase04-gui-glyphs ops <width> <height> <ops.txt>
 //!     ops.txt: one op per line, tab-separated, colours as RRGGBBAA hex:
 //!       fill    x y w h colour
 //!       stroke  x y w h colour
+//!       rfill   x y w h radius colour
+//!       rstroke x y w h radius colour
+//!       icon    x y w h name colour       (16px LineIcon centred in the box)
 //!       label   x y w h face size colour center(0|1) text
 //!       button  x y w h bg border fg text
 //!     face: UiRegular | UiSemibold | MonoRegular.
+//!     name: a `viui::surface::LineIcon` variant, e.g. Folder, Document, Appearance.
 //!
 //! * Font metrics: `phase04-gui-glyphs lineheight <face> <size>` prints
 //!   `TextFonts::line_height` and `(line_height + 1.0) as u32` (Desktop's row geometry).
 //!
 //! stdout (render modes): width*height*3 bytes, RGB, row-major.
 
+use ostd::display::linear::{Canvas, Radii, RoundRect};
 use ostd::typography::{FontFace, TextFonts};
 use std::io::Write;
+use viui::surface::{paint_icon, LineIcon, CONTROL_RADIUS, ICON_SIZE};
 
 const CELL_W: f32 = 9.0;
 const CELL_H: f32 = 18.0;
 const PAD_X: f32 = 8.0;
 const PAD_Y: f32 = 6.0;
 const FONT_PX: f32 = 14.0;
-const BG: [u8; 3] = [18, 20, 26];
-const FG: [u8; 3] = [220, 225, 235];
+/// Terminal DEFAULT_BG / DEFAULT_FG: the guest takes them from the session palette
+/// (`bg` / `text_primary`), and the runner boots at the Light palette (`LightTheme`).
+const BG: [u8; 3] = [245, 245, 248];
+const FG: [u8; 3] = [20, 20, 28];
 // Same bounds and math as `terminal::grid_dims` (cells/apps/terminal/src/main.rs).
 const MIN_COLS: usize = 40;
 const MAX_COLS: usize = 512;
@@ -229,7 +239,7 @@ fn styled_grid(width: u32, height: u32, spec: &str) -> Vec<u8> {
     }
 
     let mut s = Surface { w: width, h: height, px: vec![0u8; width as usize * height as usize * 4], fonts: TextFonts::new() };
-    s.fill(0, 0, width, height, [BG[2], BG[1], BG[0], 255]);
+    s.fill(0, 0, width, height, 0, [BG[2], BG[1], BG[0], 255]);
     let stride = width as usize * 4;
     // Pass 0: backgrounds; pass 1: glyphs (same loops and breaks as the guest).
     for pass in 0..2 {
@@ -251,7 +261,7 @@ fn styled_grid(width: u32, height: u32, spec: &str) -> Vec<u8> {
                 if pass == 0 {
                     if cell.bg != BG {
                         let bgra = [cell.bg[2], cell.bg[1], cell.bg[0], 255];
-                        s.fill(col_x as i32, row_y as i32, (CELL_W * span) as u32, CELL_H as u32, bgra);
+                        s.fill(col_x as i32, row_y as i32, (CELL_W * span) as u32, CELL_H as u32, 0, bgra);
                     }
                 } else if cell.ch != ' ' || cell.mark.is_some() {
                     let mut text = String::from(cell.ch);
@@ -293,39 +303,25 @@ struct Surface {
 }
 
 impl Surface {
-    /// `viui::surface::fill_rect`.
-    fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, c: [u8; 4]) {
-        let (sw, sh, stride) = (self.w as i32, self.h as i32, self.w as usize * 4);
-        let x0 = x.clamp(0, sw);
-        let y0 = y.clamp(0, sh);
-        let x1 = x.saturating_add(w as i32).clamp(0, sw);
-        let y1 = y.saturating_add(h as i32).clamp(0, sh);
-        if x0 >= x1 || y0 >= y1 || c[3] == 0 {
-            return;
-        }
-        let sa = c[3] as u32;
-        let inv = 255 - sa;
-        for cy in y0..y1 {
-            for cx in x0..x1 {
-                let o = cy as usize * stride + cx as usize * 4;
-                if sa == 255 {
-                    self.px[o..o + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
-                } else {
-                    for i in 0..3 {
-                        self.px[o + i] = ((c[i] as u32 * sa + self.px[o + i] as u32 * inv + 127) / 255) as u8;
-                    }
-                    self.px[o + 3] = 255;
-                }
-            }
-        }
+    fn canvas(&mut self) -> Canvas<'_> {
+        Canvas::new(&mut self.px, self.w, self.h, self.w as usize * 4)
     }
 
-    /// `viui::surface::stroke_rect`.
-    fn stroke(&mut self, x: i32, y: i32, w: u32, h: u32, c: [u8; 4]) {
-        self.fill(x, y, w, 1, c);
-        self.fill(x, y + h as i32 - 1, w, 1, c);
-        self.fill(x, y, 1, h, c);
-        self.fill(x + w as i32 - 1, y, 1, h, c);
+    /// `viui::surface::fill_round_rect` (`fill_rect` is radius 0).
+    fn fill(&mut self, x: i32, y: i32, w: u32, h: u32, r: u32, c: [u8; 4]) {
+        self.canvas().fill_round(&RoundRect::new(x, y, w, h, Radii::all(r)), c);
+    }
+
+    /// `viui::surface::stroke_round_rect` (`stroke_rect` is radius 0).
+    fn stroke(&mut self, x: i32, y: i32, w: u32, h: u32, r: u32, c: [u8; 4]) {
+        self.canvas().stroke_round(&RoundRect::new(x, y, w, h, Radii::all(r)), c);
+    }
+
+    /// `viui::surface::draw_icon_centered`.
+    fn icon(&mut self, x: i32, y: i32, w: u32, h: u32, icon: LineIcon, c: [u8; 4]) {
+        let left = x + (w.saturating_sub(ICON_SIZE) / 2) as i32;
+        let top = y + (h.saturating_sub(ICON_SIZE) / 2) as i32;
+        paint_icon(&mut self.canvas(), icon, left, top, c);
     }
 
     /// `viui::surface::draw_label_aligned`.
@@ -345,6 +341,25 @@ impl Surface {
     }
 }
 
+fn line_icon(name: &str) -> LineIcon {
+    match name {
+        "Application" => LineIcon::Application,
+        "Appearance" => LineIcon::Appearance,
+        "Blocks" => LineIcon::Blocks,
+        "Code" => LineIcon::Code,
+        "Counter" => LineIcon::Counter,
+        "Dashboard" => LineIcon::Dashboard,
+        "Document" => LineIcon::Document,
+        "Folder" => LineIcon::Folder,
+        "Globe" => LineIcon::Globe,
+        "Image" => LineIcon::Image,
+        "Pulse" => LineIcon::Pulse,
+        "Search" => LineIcon::Search,
+        "Terminal" => LineIcon::Terminal,
+        other => panic!("unknown LineIcon {other:?}"),
+    }
+}
+
 fn surface_ops(w: u32, h: u32, ops: &str) -> Vec<u8> {
     let mut s = Surface { w, h, px: vec![0u8; w as usize * h as usize * 4], fonts: TextFonts::new() };
     for (n, line) in ops.lines().enumerate().filter(|(_, l)| !l.is_empty()) {
@@ -352,16 +367,19 @@ fn surface_ops(w: u32, h: u32, ops: &str) -> Vec<u8> {
         let int = |i: usize| -> i32 { f[i].parse().unwrap_or_else(|_| panic!("op line {n}: field {i}")) };
         let (x, y, bw, bh) = (int(1), int(2), int(3) as u32, int(4) as u32);
         match (f[0], f.len()) {
-            ("fill", 6) => s.fill(x, y, bw, bh, colour(f[5])),
-            ("stroke", 6) => s.stroke(x, y, bw, bh, colour(f[5])),
+            ("fill", 6) => s.fill(x, y, bw, bh, 0, colour(f[5])),
+            ("stroke", 6) => s.stroke(x, y, bw, bh, 0, colour(f[5])),
+            ("rfill", 7) => s.fill(x, y, bw, bh, int(5) as u32, colour(f[6])),
+            ("rstroke", 7) => s.stroke(x, y, bw, bh, int(5) as u32, colour(f[6])),
+            ("icon", 7) => s.icon(x, y, bw, bh, line_icon(f[5]), colour(f[6])),
             ("label", 10) => {
                 let size: f32 = f[6].parse().expect("size");
                 s.label(x, y, bw, bh, f[9], face(f[5]), size, colour(f[7]), f[8] == "1");
             }
             ("button", 9) => {
                 // `viui::surface::draw_button`.
-                s.fill(x, y, bw, bh, colour(f[5]));
-                s.stroke(x, y, bw, bh, colour(f[6]));
+                s.fill(x, y, bw, bh, CONTROL_RADIUS, colour(f[5]));
+                s.stroke(x, y, bw, bh, CONTROL_RADIUS, colour(f[6]));
                 s.label(x, y, bw, bh, f[8], FontFace::UiSemibold, 13.0, colour(f[7]), true);
             }
             _ => panic!("op line {n}: malformed {line:?}"),

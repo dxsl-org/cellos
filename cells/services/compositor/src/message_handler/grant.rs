@@ -1,13 +1,34 @@
 use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
 use ostd::syscall::{sys_grant_slice_with_len_owned_by, sys_send};
 
+use crate::appearance::Appearance;
 use crate::framebuffer;
-use crate::surface_table::{SurfaceTable, MAX_SURFACE_DIM};
+use crate::stacking;
+use crate::surface_table::{FrameRegistry, SurfaceTable, MAX_SURFACE_DIM};
 
-pub(super) fn handle(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
+/// A window's buffer size settles on attach and when its replaced buffer is
+/// released; either may let the other tabs of its stack catch up in size.
+pub(super) fn handle(
+    buf: &[u8; 512],
+    sender: usize,
+    table: &mut SurfaceTable,
+    frames: &FrameRegistry,
+    appearance: &Appearance,
+    screen: (u32, u32),
+) {
+    // ATTACH_GRANT and DETACH_REPLACED_GRANT both carry the cap at bytes 4..8.
+    let cap = u64::from(u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]));
     match buf[0] {
-        compositor_ops::ATTACH_GRANT => attach_grant(buf, sender, table),
-        compositor_ops::DETACH_REPLACED_GRANT => detach_replaced_grant(buf, sender, table),
+        compositor_ops::ATTACH_GRANT => {
+            if attach_grant(buf, sender, table, appearance) {
+                stacking::reconcile_frame_of(frames, table, cap, screen);
+            }
+        }
+        compositor_ops::DETACH_REPLACED_GRANT => {
+            if detach_replaced_grant(buf, sender, table) {
+                stacking::reconcile_frame_of(frames, table, cap, screen);
+            }
+        }
         compositor_ops::DAMAGE_NOTIFY => damage_notify(buf, sender, table),
         compositor_ops::DETACH_GRANT => detach_grant(buf, sender, table),
         compositor_ops::GET_SCREEN_SIZE => screen_size(sender),
@@ -23,14 +44,25 @@ pub(super) fn handle(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
 /// registered by anyone else exactly as an unknown id. A Grant another owner's
 /// surface already presents, stages or is retiring is refused before asking.
 /// Every refusal gets the same `\x00` reply as an id that does not resolve, so
-/// probing ids reveals nothing.
-fn attach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
+/// probing ids reveals nothing. After a successful reply the owner is told the
+/// current palette, so a new window paints in it from its first frame.
+/// Returns whether the Grant was attached (to the sender's own surface).
+fn attach_grant(
+    buf: &[u8; 512],
+    sender: usize,
+    table: &mut SurfaceTable,
+    appearance: &Appearance,
+) -> bool {
     let Ok(frame) = <&[u8; 24]>::try_from(&buf[..24]) else {
-        return;
+        return false;
     };
     let grant = AttachGrant::decode(frame);
     let attached = admit_grant(&grant, sender, table, sys_grant_slice_with_len_owned_by);
     sys_send(sender, if attached { b"\x01" } else { b"\x00" });
+    if attached {
+        appearance.announce_to(sender);
+    }
+    attached
 }
 
 /// Attach decision for [`attach_grant`]; `resolve(reg_id, owner_tid)` is the
@@ -63,20 +95,22 @@ fn admit_grant(
             .is_some_and(|surface| surface.attach_grant(reg_id, grant.width, grant.height, fmt))
 }
 
-fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
+/// Returns whether the sender's own surface released its retired Grant.
+fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) -> bool {
     let Ok(frame) = DetachReplacedGrant::decode(&buf[..16]) else {
         sys_send(sender, b"\x00");
-        return;
+        return false;
     };
     let Ok(reg_id) = usize::try_from(frame.reg_id) else {
         sys_send(sender, b"\x00");
-        return;
+        return false;
     };
     let acknowledged = table
         .get_mut(frame.cap as u64)
         .filter(|surface| surface.owner == sender)
         .is_some_and(|surface| surface.detach_replaced_grant(reg_id));
     sys_send(sender, if acknowledged { b"\x01" } else { b"\x00" });
+    acknowledged
 }
 
 fn damage_notify(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {

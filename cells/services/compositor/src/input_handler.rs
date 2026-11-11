@@ -16,7 +16,7 @@ use ostd::syscall::{sys_lookup_service, sys_try_send};
 
 use crate::cursor_state;
 use crate::pointer_router::{PointerRouter, RouteContext};
-use crate::surface_table::SurfaceTable;
+use crate::surface_table::{FrameRegistry, SurfaceTable};
 use crate::z_order::ZOrder;
 
 /// Total IPC frame size for one input event (opcode byte + fixed payload).
@@ -56,6 +56,23 @@ impl InputState {
         }
     }
 
+    pub const fn menu_button_hover(&self) -> Option<crate::pointer_router::MenuButtonHover> {
+        self.pointer.menu_button_hover()
+    }
+
+    pub const fn open_menu(&self) -> Option<crate::pointer_router::OpenMenu> {
+        self.pointer.open_menu()
+    }
+
+    pub const fn drag_feedback(&self) -> Option<crate::pointer_router::DragFeedback> {
+        self.pointer.drag_feedback()
+    }
+
+    /// Screen area left stale by a window menu whose window went away.
+    pub fn take_stale(&mut self) -> Option<Rect> {
+        self.pointer.take_stale()
+    }
+
     pub const fn selected_cap(&self) -> Option<u64> {
         self.pointer.selected_cap()
     }
@@ -75,12 +92,18 @@ impl InputState {
     /// so a surface may still take focus then; it is on top and the user sees
     /// where keys go.
     pub fn request_focus(&mut self, owner: usize, cap: u64) -> bool {
-        let holder = self.pointer.focused_owner();
-        if holder != 0 && holder != owner {
+        if !self.may_focus(owner) {
             return false;
         }
         self.pointer.set_focus(owner, Some(cap));
         true
+    }
+
+    /// Whether a client request from `owner` may move keyboard focus: it holds
+    /// the keyboard already, or nobody does.
+    pub fn may_focus(&self, owner: usize) -> bool {
+        let holder = self.pointer.focused_owner();
+        holder == 0 || holder == owner
     }
 
     /// Focus rule for a newly created window: [`Self::request_focus`], plus one
@@ -163,6 +186,8 @@ pub struct ScreenBounds {
     pub height: u32,
     /// Area available to maximized windows.
     pub maximum: Rect,
+    /// Monotonic milliseconds when the event was handled (double clicks).
+    pub now_ms: u64,
 }
 
 /// Dispatch a raw IPC buffer received from the input service.
@@ -174,6 +199,7 @@ pub fn handle_input_event(
     state: &mut InputState,
     screen: ScreenBounds,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
@@ -181,7 +207,13 @@ pub fn handle_input_event(
         width: screen_w,
         height: screen_h,
         maximum,
+        now_ms,
     } = screen;
+    let pointer_screen = PointerScreen {
+        maximum,
+        size: (screen_w, screen_h),
+        now_ms,
+    };
     if buf[0] != INPUT_EVENT_OPCODE {
         return;
     }
@@ -189,7 +221,33 @@ pub fn handle_input_event(
         return;
     };
     match event {
-        InputEvent::Key(_) => forward_key(buf, state, table, screen_w, screen_h),
+        InputEvent::Key(key) => {
+            state.pointer.note_key(&key);
+            // A modifier key on its own arrives only for the compositor's
+            // gestures (input service pointer channel); apps never saw them.
+            if crate::pointer_router::is_modifier_key(&key) {
+                return;
+            }
+            // Esc abandons a Win+drag of a tab instead of reaching the app.
+            if key.keysym == api::input::KeySym::Escape
+                && key.state == api::input::KeyState::Pressed
+            {
+                if let Some(area) = state.pointer.cancel_stack_drag() {
+                    queue_dirty(pending_dirty, area);
+                    return;
+                }
+            }
+            // Esc closes an open window menu instead of reaching the app.
+            if key.keysym == api::input::KeySym::Escape && state.pointer.open_menu().is_some() {
+                if key.state == api::input::KeyState::Pressed {
+                    if let Some(area) = state.pointer.close_menu() {
+                        queue_dirty(pending_dirty, area);
+                    }
+                }
+                return;
+            }
+            forward_key(buf, state, table, screen_w, screen_h)
+        }
         InputEvent::MouseMove { x, y, dx, dy } => {
             // Mouse pointer can move across the ENTIRE physical screen (0..width-1, 0..height-1),
             // including into the bottom taskbar panel.
@@ -204,19 +262,51 @@ pub fn handle_input_event(
                 &mut state.mouse_y,
                 pending_dirty,
             );
-            route_pointer(event, state, maximum, table, z_order, pending_dirty);
+            route_pointer(
+                event,
+                state,
+                pointer_screen,
+                table,
+                frames,
+                z_order,
+                pending_dirty,
+            );
         }
         InputEvent::MouseButton { .. } | InputEvent::MouseScroll { .. } => {
-            route_pointer(event, state, maximum, table, z_order, pending_dirty);
+            route_pointer(
+                event,
+                state,
+                pointer_screen,
+                table,
+                frames,
+                z_order,
+                pending_dirty,
+            );
         }
     }
+    if let Some(area) =
+        state
+            .pointer
+            .update_hover(state.mouse_x, state.mouse_y, table, frames, z_order)
+    {
+        queue_dirty(pending_dirty, area);
+    }
+}
+
+/// Screen facts the pointer router needs for one event.
+#[derive(Clone, Copy)]
+struct PointerScreen {
+    maximum: Rect,
+    size: (u32, u32),
+    now_ms: u64,
 }
 
 fn route_pointer(
     event: InputEvent,
     state: &mut InputState,
-    maximum: Rect,
+    screen: PointerScreen,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
@@ -230,13 +320,21 @@ fn route_pointer(
         event,
         state.mouse_x,
         state.mouse_y,
-        RouteContext::new(maximum, table, z_order, |decoration| {
-            queue_dirty(
-                pending_dirty,
-                old_decoration.map_or(decoration, |old| old.union(&decoration)),
-            );
-            set_input_focus(input_tid, compositor_tid);
-        }),
+        RouteContext::new(
+            screen.maximum,
+            screen.size,
+            screen.now_ms,
+            table,
+            frames,
+            z_order,
+            |decoration| {
+                queue_dirty(
+                    pending_dirty,
+                    old_decoration.map_or(decoration, |old| old.union(&decoration)),
+                );
+                set_input_focus(input_tid, compositor_tid);
+            },
+        ),
     );
     if let InputEvent::MouseButton {
         button,

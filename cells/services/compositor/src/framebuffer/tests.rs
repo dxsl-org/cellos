@@ -42,6 +42,7 @@ fn clipped_blit_copies_the_matching_source_pixels() {
             w: 1,
             h: 2,
         },
+        |_| (0, 0),
     );
 
     assert_eq!(pixel_at(&fb, 2, 1), [20, 0, 0, 255]);
@@ -62,6 +63,7 @@ fn clipped_blit_preserves_pixels_outside_damage() {
             w: 2,
             h: 1,
         },
+        |_| (0, 0),
     );
 
     for y in 0..3 {
@@ -99,6 +101,7 @@ fn clipped_blit_translates_negative_surface_coordinates_at_screen_edge() {
             w: 3,
             h: 3,
         },
+        |_| (0, 0),
     );
 
     assert_eq!(pixel_at(&fb, 0, 0), [4, 0, 0, 255]);

@@ -9,12 +9,14 @@ extern crate alloc;
 mod configure;
 pub mod frame;
 mod lifecycle;
+#[cfg(test)]
+mod lifecycle_tests;
 mod pixels;
 mod state;
 mod storage;
 
 pub use configure::StateTransition;
-pub use frame::FrameRegistry;
+pub use frame::{FrameRegistry, Reselected};
 pub use state::SurfaceState;
 pub use storage::SurfaceTable;
 

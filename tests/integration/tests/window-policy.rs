@@ -11,12 +11,17 @@ const OVERLAP_Y: usize = 140;
 const BACK: [u8; 3] = [0xFF, 0x00, 0x00];
 const FRONT: [u8; 3] = [0x00, 0x00, 0xFF];
 const BACKGROUND: [u8; 3] = [0x00, 0xFF, 0x00];
-const FRAME: [u8; 3] = [0x2D, 0x34, 0x3B];
-const TITLE_INACTIVE: [u8; 3] = [0x42, 0x4D, 0x56];
-const TITLE_ACTIVE: [u8; 3] = [0x31, 0x65, 0x83];
-const MINIMIZE: [u8; 3] = [0xD6, 0xA4, 0x53];
-const MAXIMIZE: [u8; 3] = [0x36, 0xA4, 0x53];
-const CLOSE: [u8; 3] = [0xCB, 0x45, 0x45];
+// CellOS Linear chrome (compositor window_decoration). Probe surfaces are
+// 160x160, so each Cell Tab spans its frame: tab = content - (1, 28). The tab
+// holds only the app icon (20px box at tab + (4, 3), the 16px icon at
+// box + (2, 2); probes send no SET_ICON, so it is the generic Application icon)
+// and the title. The icon opens the window menu, 4px below the box:
+// items 28px tall from menu + (4, 4) — Maximize/Restore, Minimize, then a 9px
+// separator and Close.
+const FRAME: [u8; 3] = [0xC3, 0xC7, 0xD0];
+const TITLE_INACTIVE: [u8; 3] = [0xEB, 0xED, 0xF2];
+const TITLE_ACTIVE: [u8; 3] = [0xFF, 0xFF, 0xFF];
+const GLYPH_INACTIVE: [u8; 3] = [0x6E, 0x73, 0x83];
 const PRIMARY: [u8; 3] = [0xFF, 0x00, 0xFF];
 const SILENT: [u8; 3] = [0x00, 0xFF, 0xFF];
 fn repo_root() -> PathBuf {
@@ -72,6 +77,15 @@ fn capture_settled(qemu: &mut QemuRunner, path: &str) {
         std::thread::sleep(Duration::from_millis(100));
     }
     panic!("screen never settled: {path}");
+}
+
+/// Open a window's menu from its tab icon at `icon`, then choose the item at `item`.
+fn window_menu(qemu: &mut QemuRunner, icon: (u32, u32), item: (u32, u32)) {
+    qemu.send_qemu_mouse_abs(icon.0, icon.1);
+    qemu.send_qemu_mouse_click();
+    std::thread::sleep(Duration::from_millis(200));
+    qemu.send_qemu_mouse_abs(item.0, item.1);
+    qemu.send_qemu_mouse_click();
 }
 
 #[test]
@@ -200,33 +214,31 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
 
     capture_settled(&mut qemu, "/tmp/cellos-window-policy-decor.ppm");
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-decor.ppm", 397, 110),
+        color_at("/tmp/cellos-window-policy-decor.ppm", 399, 110),
         FRAME
     );
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-decor.ppm", 420, 90),
+        // Tab right of the "Primary" title; no controls sit on the tab any more.
+        color_at("/tmp/cellos-window-policy-decor.ppm", 545, 90),
         TITLE_INACTIVE
     );
-    assert_eq!(
-        color_at("/tmp/cellos-window-policy-decor.ppm", 518, 84),
-        MINIMIZE
-    );
-    assert_eq!(
-        color_at("/tmp/cellos-window-policy-decor.ppm", 534, 84),
-        MAXIMIZE
-    );
-    assert_eq!(
-        color_at("/tmp/cellos-window-policy-decor.ppm", 550, 84),
-        CLOSE
-    );
+    // Generic app icon of the tab at 399,72 (icon at 405,77): top, left and
+    // bottom edges of its window outline.
+    for (x, y) in [(412, 78), (405, 84), (412, 91)] {
+        assert_eq!(
+            color_at("/tmp/cellos-window-policy-decor.ppm", x, y),
+            GLYPH_INACTIVE,
+            "icon stroke at {x},{y}"
+        );
+    }
     assert_eq!(
         color_at("/tmp/cellos-window-policy-decor.ppm", 410, 110),
         PRIMARY
     );
 
-    qemu.send_qemu_mouse_abs(420, 90);
+    qemu.send_qemu_mouse_abs(460, 90);
     qemu.send_qemu_mouse_button(true);
-    qemu.send_qemu_mouse_abs(460, 130);
+    qemu.send_qemu_mouse_abs(500, 130);
     qemu.send_qemu_mouse_button(false);
     std::thread::sleep(Duration::from_millis(100));
     capture_settled(&mut qemu, "/tmp/cellos-window-policy-drag.ppm");
@@ -243,7 +255,8 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         PRIMARY
     );
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-drag.ppm", 470, 130),
+        // Right of the "Primary" title text on the moved tab.
+        color_at("/tmp/cellos-window-policy-drag.ppm", 545, 130),
         TITLE_ACTIVE
     );
     assert!(
@@ -272,8 +285,9 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
     qemu.wait_for("[window-policy-probe wm-primary] configured serial", 15)
         .unwrap_or_else(|error| panic!("resize did not commit: {error}\n{}", qemu.dump()));
 
-    qemu.send_qemu_mouse_abs(598, 130);
-    qemu.send_qemu_mouse_click();
+    // Resized to 180x180 at 440,140: tab at 439,112, icon box 443..463 x 115..135,
+    // window menu at 443,139 with Maximize at y 143..171.
+    window_menu(&mut qemu, (453, 125), (500, 157));
     qemu.wait_for("[window-policy-probe wm-primary] configure Maximize", 15)
         .unwrap_or_else(|error| panic!("maximize configure missing: {error}\n{}", qemu.dump()));
     qemu.wait_for("[window-policy-probe wm-primary] state Maximized", 15)
@@ -284,15 +298,16 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         PRIMARY
     );
 
-    qemu.send_qemu_mouse_abs(1254, 10);
-    qemu.send_qemu_mouse_click();
+    // Maximized: the tab starts at the screen origin; icon box 4..24 x 3..23,
+    // menu at 4,27 with Restore at y 31..59.
+    window_menu(&mut qemu, (14, 13), (60, 45));
     qemu.wait_for("[window-policy-probe wm-primary] configure Restore", 15)
         .unwrap_or_else(|error| panic!("restore configure missing: {error}\n{}", qemu.dump()));
     qemu.wait_for("[window-policy-probe wm-primary] state Normal", 15)
         .unwrap_or_else(|error| panic!("restore state missing: {error}\n{}", qemu.dump()));
 
-    qemu.send_qemu_mouse_abs(582, 130);
-    qemu.send_qemu_mouse_click();
+    // Restored at 440,140 again: Minimize is the second item, y 171..199.
+    window_menu(&mut qemu, (453, 125), (500, 185));
     qemu.wait_for("[window-policy-probe wm-primary] state Minimized", 15)
         .unwrap_or_else(|error| panic!("minimize state missing: {error}\n{}", qemu.dump()));
     qemu.wait_for("[window-policy-probe wm-primary] restore request", 15)
@@ -324,9 +339,10 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         "silent owner must not commit a configure without applying its replacement Grant"
     );
 
+    // wm-close at 600,100: icon box 603..623 x 75..95, menu at 603,99,
+    // Close after the separator at y 168..196.
     for expected in ["reject", "accept"] {
-        qemu.send_qemu_mouse_abs(754, 90);
-        qemu.send_qemu_mouse_click();
+        window_menu(&mut qemu, (613, 85), (650, 182));
         qemu.wait_for(
             &format!("[window-policy-probe wm-close] close {expected}"),
             15,

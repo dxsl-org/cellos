@@ -18,8 +18,10 @@ pub enum StateTransition {
 }
 
 impl SurfaceState {
-    /// Begin a window-manager state request. Background caps and closing/pending
-    /// windows reject every request without mutating the active presentation.
+    /// Begin a window-manager state request. Background caps and closing
+    /// windows reject every request; a window with a pending configure may
+    /// still be minimized (or restored from minimized), but not start another
+    /// configure.
     pub fn request_state(
         &mut self,
         cap: u32,
@@ -28,10 +30,7 @@ impl SurfaceState {
     ) -> Option<StateTransition> {
         use api::display::compositor_ops;
 
-        if !self.is_window_managed()
-            || self.state == WindowState::Closing
-            || self.pending_configure.is_some()
-        {
+        if !self.is_window_managed() || self.state == WindowState::Closing {
             return None;
         }
         match opcode {
@@ -90,6 +89,13 @@ impl SurfaceState {
         })
     }
 
+    /// Geometry the window is heading for: its pending configure's, else its own.
+    pub fn intended_rect(&self) -> Rect {
+        self.pending_configure
+            .as_ref()
+            .map_or(self.screen_rect(), |pending| pending.rect)
+    }
+
     /// Discard an undeliverable configure so a later proposal can proceed.
     pub fn cancel_configure(&mut self, serial: u32) {
         if self
@@ -139,12 +145,23 @@ impl SurfaceState {
         self.h = pending.rect.h;
         self.fmt = fmt;
         self.source = source;
-        match pending.kind {
-            ConfigureKind::Maximize => self.state = WindowState::Maximized,
+        let committed = match pending.kind {
+            ConfigureKind::Maximize => WindowState::Maximized,
             ConfigureKind::Restore | ConfigureKind::Resize => {
-                self.state = WindowState::Normal;
                 self.normal_rect = pending.rect;
+                WindowState::Normal
             }
+        };
+        // A window minimized or asked to close meanwhile stays so; the
+        // configure's state is where it returns to.
+        match self.state {
+            WindowState::Minimized => self.minimized_from = committed,
+            WindowState::Closing => {
+                if let Some(close) = self.pending_close.as_mut() {
+                    close.restore_state = committed;
+                }
+            }
+            _ => self.state = committed,
         }
         self.damage = Some(Rect {
             x: 0,

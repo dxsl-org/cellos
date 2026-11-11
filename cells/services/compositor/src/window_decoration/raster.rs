@@ -1,326 +1,191 @@
 use api::display::Rect;
+use ostd::display::linear::icons::{paint_icon, LineIcon, ICON_SIZE};
+use ostd::display::linear::{Bgra, Canvas, Radii, RoundRect, CONTROL_RADIUS};
 
-use super::{clip_to_screen, control_rect, end, Control};
+use super::palette::ChromePalette;
+use super::title::TitleFont;
+use super::{end, icon_box, shapes, tab_slot, Control, Tabs, RADIUS, TITLE};
 
-const FRAME_COLOR: [u8; 4] = [0x20, 0x20, 0x24, 0xff];
-const TAB_ACTIVE: [u8; 4] = [0x20, 0xd2, 0xfd, 0xff]; // Haiku Golden Yellow (BGRA: R=253, G=210, B=32)
-const TAB_ACTIVE_HL: [u8; 4] = [0x60, 0xe8, 0xff, 0xff]; // Lighter gold highlight
-const TAB_INACTIVE: [u8; 4] = [0xc4, 0xbf, 0xb8, 0xff]; // Haiku Inactive Muted Slate
-const TAB_INACTIVE_HL: [u8; 4] = [0xdc, 0xd8, 0xd4, 0xff];
-const BTN_BORDER: [u8; 4] = [0x24, 0x20, 0x1c, 0xff];
-const BTN_ACTIVE_BG: [u8; 4] = [0x18, 0xb8, 0xe0, 0xff];
-const BTN_INACTIVE_BG: [u8; 4] = [0xa8, 0xa4, 0xa0, 0xff];
-const GLYPH: [u8; 4] = [0x20, 0x20, 0x20, 0xff];
+/// Glyph box side. Odd, so the close diagonals cross on a single pixel
+/// instead of a 2x2 blob.
+const GLYPH: i32 = 9;
+/// Space between the app icon box and the title, and after the title.
+const TITLE_GAP: i32 = 6;
 
+/// One Cell Tab: the window's app icon and title.
+#[derive(Clone, Copy)]
+pub struct TabLabel<'a> {
+    pub icon: LineIcon,
+    pub title: &'a str,
+    /// The window is closing: its tab stays, faded, until it is gone.
+    pub dimmed: bool,
+}
+
+/// What a frame's chrome shows this frame.
+pub struct Style<'a> {
+    pub active: bool,
+    pub palette: &'static ChromePalette,
+    /// The frame's tabs in order; at least one.
+    pub tabs: &'a [TabLabel<'a>],
+    /// Index into `tabs` of the shown window.
+    pub selected: usize,
+    /// A lone tab's slide along the top edge ([`Tabs::offset`]).
+    pub offset: u32,
+    /// `Some(open)` while the pointer is over the shown tab's app icon;
+    /// `open` while its window menu is showing.
+    pub menu_button: Option<bool>,
+}
+
+impl Style<'_> {
+    fn strip(&self) -> Tabs {
+        Tabs {
+            count: self.tabs.len().max(1),
+            selected: self.selected,
+            offset: self.offset,
+        }
+    }
+}
+
+/// Paint shadow, tab fills, hairlines, app icons and titles inside `dirty`.
+/// The shown tab takes the frame's focus colours; the other tabs of a stack
+/// sit back in the palette's stacked-tab fill.
+///
+/// Content pixels are not touched except where the body outline covers them;
+/// callers blit content afterwards with [`super::content_row_insets`].
 pub(super) fn paint(
     pixels: &mut [u8],
     width: u32,
     height: u32,
     content: Rect,
     dirty: Rect,
-    active: bool,
+    style: &Style<'_>,
+    font: &mut TitleFont,
 ) {
-    let outer = super::bounds(content);
-    let content_right = end(content.x, content.w);
-    let content_bottom = end(content.y, content.h);
-    let tab = super::tab_rect(content);
-    let tab_end = end(tab.x, tab.w);
-    let frame_right = end(outer.x, outer.w);
-
-    // 1. Left border
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: outer.x,
-            y: content.y,
-            w: content.x.saturating_sub(outer.x) as u32,
-            h: content.h,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-
-    // 2. Right border
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: content_right,
-            y: content.y,
-            w: frame_right.saturating_sub(content_right) as u32,
-            h: content.h,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-
-    // 3. Bottom border
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: outer.x,
-            y: content_bottom,
-            w: outer.w,
-            h: end(outer.y, outer.h).saturating_sub(content_bottom) as u32,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-
-    // 4. Top border to the right of the tab (thin frame border only; space above is empty)
-    if frame_right > tab_end {
-        paint_rect(
-            pixels,
-            width,
-            height,
-            Rect {
-                x: tab_end,
-                y: content.y.saturating_sub(super::FRAME),
-                w: (frame_right - tab_end) as u32,
-                h: super::FRAME as u32,
-            },
-            dirty,
-            FRAME_COLOR,
-        );
-    }
-
-    // 5. Paint Haiku Tab sitting on top of the window frame
-    let tab_bg = if active { TAB_ACTIVE } else { TAB_INACTIVE };
-    let tab_hl = if active {
-        TAB_ACTIVE_HL
+    let colors = if style.active {
+        &style.palette.active
     } else {
-        TAB_INACTIVE_HL
+        &style.palette.inactive
     };
-    paint_rect(pixels, width, height, tab, dirty, tab_bg);
-
-    // Tab top highlight line (1px)
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: tab.x,
-            y: tab.y,
-            w: tab.w,
-            h: 1,
-        },
-        dirty,
-        tab_hl,
-    );
-    // Tab left border (1px)
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: tab.x,
-            y: tab.y,
-            w: 1,
-            h: tab.h,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-    // Tab right border (1px)
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: tab_end.saturating_sub(1),
-            y: tab.y,
-            w: 1,
-            h: tab.h,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-    // Tab top line (1px)
-    paint_rect(
-        pixels,
-        width,
-        height,
-        Rect {
-            x: tab.x,
-            y: tab.y,
-            w: tab.w,
-            h: 1,
-        },
-        dirty,
-        FRAME_COLOR,
-    );
-
-    // 6. Paint BeOS/Haiku close box and zoom box on tab
-    for control in [Control::Close, Control::Maximize] {
-        let rect = control_rect(content, control);
-        // Button border
-        paint_rect(pixels, width, height, rect, dirty, BTN_BORDER);
-        // Button interior
-        if rect.w > 2 && rect.h > 2 {
-            paint_rect(
-                pixels,
-                width,
-                height,
-                Rect {
-                    x: rect.x + 1,
-                    y: rect.y + 1,
-                    w: rect.w - 2,
-                    h: rect.h - 2,
+    let tabs = style.strip();
+    let [strip, body] = shapes(content, tabs);
+    {
+        let mut canvas = Canvas::new(pixels, width, height, width as usize * 4)
+            .clip_to(dirty.x, dirty.y, dirty.w, dirty.h);
+        canvas.drop_shadow(&[strip, body], &style.palette.shadow);
+        canvas.stroke_round(&body, colors.outline);
+        for (index, label) in style.tabs.iter().enumerate() {
+            let shown = index == style.selected;
+            let slot = slot_shape(content, tabs, index);
+            let fill = if shown {
+                colors.tab
+            } else {
+                style.palette.stacked
+            };
+            canvas.fill_round(
+                &RoundRect {
+                    h: slot.h.saturating_sub(1),
+                    ..slot
                 },
-                dirty,
-                if active {
-                    BTN_ACTIVE_BG
+                fill,
+            );
+            canvas.stroke_round(&slot, colors.outline);
+            let button = icon_box(tab_slot(content, tabs, index));
+            let mut ink = if shown {
+                colors.glyph
+            } else {
+                style.palette.inactive.glyph
+            };
+            if let (true, Some(open)) = (shown, style.menu_button) {
+                let fill = if open {
+                    style.palette.pressed
                 } else {
-                    BTN_INACTIVE_BG
-                },
+                    style.palette.hover
+                };
+                let shape = RoundRect::new(
+                    button.x,
+                    button.y,
+                    button.w,
+                    button.h,
+                    Radii::all(CONTROL_RADIUS),
+                );
+                canvas.fill_round(&shape, fill);
+                ink = style.palette.active.glyph;
+            }
+            let inset = (button.w.saturating_sub(ICON_SIZE) / 2) as i32;
+            paint_icon(
+                &mut canvas,
+                label.icon,
+                button.x + inset,
+                button.y + inset,
+                ink,
             );
         }
-        paint_symbol(pixels, width, height, rect, dirty, control);
+    }
+    for (index, label) in style.tabs.iter().enumerate() {
+        let slot = tab_slot(content, tabs, index);
+        let button = icon_box(slot);
+        let left = end(button.x, button.w) + TITLE_GAP;
+        let right = end(slot.x, slot.w) - TITLE_GAP;
+        if right <= left {
+            continue;
+        }
+        let area = Rect {
+            x: left,
+            y: slot.y + 1,
+            w: (right - left) as u32,
+            h: (TITLE - 2) as u32,
+        };
+        let ink = if label.dimmed {
+            style.palette.inactive.glyph
+        } else if index == style.selected {
+            colors.title
+        } else {
+            style.palette.inactive.title
+        };
+        font.draw(pixels, width, height, area, dirty, label.title, ink);
     }
 }
-fn paint_symbol(
-    pixels: &mut [u8],
-    width: u32,
-    height: u32,
-    rect: Rect,
-    dirty: Rect,
+
+/// Outline of tab `index`: only the strip's outer top corners are rounded.
+fn slot_shape(content: Rect, tabs: Tabs, index: usize) -> RoundRect {
+    let slot = tab_slot(content, tabs, index);
+    let first = index == 0;
+    let last = index + 1 >= tabs.count;
+    let radii = Radii {
+        top_left: if first { RADIUS } else { 0 },
+        top_right: if last { RADIUS } else { 0 },
+        ..Radii::default()
+    };
+    RoundRect::new(slot.x, slot.y, slot.w, slot.h, radii)
+}
+
+/// 1px glyph for a window-menu item, centred in the square `cell`.
+pub(super) fn paint_glyph(
+    canvas: &mut Canvas<'_>,
+    cell: Rect,
     control: Control,
+    restore: bool,
+    color: Bgra,
 ) {
-    let mid_x = rect.x.saturating_add(super::CONTROL / 2);
-    let mid_y = rect.y.saturating_add(super::CONTROL / 2);
+    let x = cell.x + (cell.w as i32 - GLYPH) / 2;
+    let y = cell.y + (cell.h as i32 - GLYPH) / 2;
+    let last = GLYPH - 1;
     match control {
         Control::Close => {
-            // BeOS classic inner square
-            paint_rect(
-                pixels,
-                width,
-                height,
-                Rect {
-                    x: mid_x - 3,
-                    y: mid_y - 3,
-                    w: 6,
-                    h: 6,
-                },
-                dirty,
-                GLYPH,
-            );
+            canvas.line(x, y, x + last, y + last, color);
+            canvas.line(x + last, y, x, y + last, color);
+        }
+        Control::Maximize if restore => {
+            // A front frame with the back frame's top and right edges peeking
+            // out: the classic "restore down" glyph.
+            canvas.hline(x + 2, y, 7, color);
+            canvas.vline(x + 8, y, 7, color);
+            canvas.stroke_rect(x, y + 2, 7, 7, color);
         }
         Control::Maximize => {
-            // BeOS zoom glyph (two horizontal bars)
-            paint_rect(
-                pixels,
-                width,
-                height,
-                Rect {
-                    x: mid_x - 3,
-                    y: mid_y - 3,
-                    w: 6,
-                    h: 2,
-                },
-                dirty,
-                GLYPH,
-            );
-            paint_rect(
-                pixels,
-                width,
-                height,
-                Rect {
-                    x: mid_x - 3,
-                    y: mid_y + 1,
-                    w: 6,
-                    h: 2,
-                },
-                dirty,
-                GLYPH,
-            );
+            let frame = RoundRect::new(x, y, GLYPH as u32, GLYPH as u32, Radii::all(2));
+            canvas.stroke_round(&frame, color);
         }
-        Control::Minimize => {}
-    }
-}
-
-fn paint_rect(pixels: &mut [u8], width: u32, height: u32, rect: Rect, dirty: Rect, color: [u8; 4]) {
-    let Some(rect) = intersect(rect, dirty).and_then(|r| clip_to_screen(r, width, height)) else {
-        return;
-    };
-    let stride = width as usize * 4;
-    for y in rect.y as usize..rect.y.saturating_add(rect.h as i32) as usize {
-        let start = y.saturating_mul(stride).saturating_add(rect.x as usize * 4);
-        let end = start.saturating_add(rect.w as usize * 4).min(pixels.len());
-        for pixel in pixels[start..end].chunks_exact_mut(4) {
-            pixel.copy_from_slice(&color);
-        }
-    }
-}
-
-fn intersect(a: Rect, b: Rect) -> Option<Rect> {
-    let x = a.x.max(b.x);
-    let y = a.y.max(b.y);
-    let right = end(a.x, a.w).min(end(b.x, b.w));
-    let bottom = end(a.y, a.h).min(end(b.y, b.h));
-    if right <= x || bottom <= y {
-        None
-    } else {
-        Some(Rect {
-            x,
-            y,
-            w: (right - x) as u32,
-            h: (bottom - y) as u32,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn disjoint_rects_never_underflow_to_bogus_decorations() {
-        let title = Rect {
-            x: 124,
-            y: 32,
-            w: 1032,
-            h: 28,
-        };
-        let cursor_dirty = Rect {
-            x: 200,
-            y: 150,
-            w: 16,
-            h: 16,
-        };
-        assert_eq!(intersect(title, cursor_dirty), None);
-
-        let mut pixels = alloc::vec![0u8; 1280 * 800 * 4];
-        paint_rect(&mut pixels, 1280, 800, title, cursor_dirty, TAB_ACTIVE);
-        assert!(pixels.iter().all(|&byte| byte == 0));
-    }
-
-    #[test]
-    fn overlapping_rects_compute_exact_intersection() {
-        let a = Rect {
-            x: 10,
-            y: 20,
-            w: 100,
-            h: 50,
-        };
-        let b = Rect {
-            x: 50,
-            y: 40,
-            w: 100,
-            h: 50,
-        };
-        assert_eq!(
-            intersect(a, b),
-            Some(Rect {
-                x: 50,
-                y: 40,
-                w: 60,
-                h: 30
-            })
-        );
+        Control::Minimize => canvas.hline(x, y + GLYPH / 2, GLYPH as u32, color),
     }
 }

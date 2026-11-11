@@ -15,6 +15,7 @@
 
 extern crate alloc;
 
+mod appearance;
 mod cursor_sprite;
 mod cursor_state;
 mod framebuffer;
@@ -23,7 +24,9 @@ mod message_handler;
 mod owner_watch;
 mod pointer_router;
 mod render;
+mod stacking;
 mod surface_table;
+mod tiling;
 mod window_decoration;
 mod z_order;
 
@@ -94,6 +97,7 @@ pub fn main() {
     let mut frames = crate::surface_table::FrameRegistry::new();
     let mut z_order = ZOrder::new();
     let mut input = InputState::new();
+    let mut appearance = appearance::Appearance::new();
     // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
     // Consumed (taken) on each render_frame call.
     let mut pending_dirty: Option<Rect> = None;
@@ -163,14 +167,13 @@ pub fn main() {
                                     ScreenBounds {
                                         width: fb.width,
                                         height: fb.height,
-                                        maximum: Rect {
-                                            x: 0,
-                                            y: 0,
-                                            w: fb.width,
-                                            h: fb.height.saturating_sub(36),
-                                        },
+                                        maximum: window_decoration::maximized_content(
+                                            fb.width, fb.height,
+                                        ),
+                                        now_ms: sys_get_time(),
                                     },
                                     &mut table,
+                                    &mut frames,
                                     &mut z_order,
                                     &mut pending_dirty,
                                 );
@@ -211,6 +214,7 @@ pub fn main() {
                                         &mut frames,
                                         &mut z_order,
                                         &mut pending_dirty,
+                                        &mut appearance,
                                     ),
                                 );
                             }
@@ -221,14 +225,24 @@ pub fn main() {
             _ => ostd::task::yield_now(),
         }
 
+        if let Some(stale) = input.take_stale() {
+            pending_dirty = Some(pending_dirty.map_or(stale, |dirty| dirty.union(&stale)));
+        }
         // Damage-driven: render when a surface reports damage or cursor/compositor dirty.
         if table.has_damage() || pending_dirty.is_some() {
             let _ = render_frame(
                 &mut fb,
                 &mut table,
+                &frames,
                 &z_order,
                 pending_dirty.take(),
-                input.selected_cap(),
+                &render::ChromeState {
+                    selected: input.selected_cap(),
+                    menu_button: input.menu_button_hover(),
+                    menu: input.open_menu(),
+                    drag: input.drag_feedback(),
+                    palette: appearance.palette(),
+                },
                 input.mouse_x,
                 input.mouse_y,
             );

@@ -2,7 +2,8 @@ use api::display::{compositor_ops, Rect, SurfaceRole};
 use ostd::syscall::sys_send;
 
 use crate::input_handler::InputState;
-use crate::surface_table::SurfaceTable;
+use crate::stacking;
+use crate::surface_table::{FrameRegistry, SurfaceTable};
 use crate::window_decoration;
 use crate::z_order::ZOrder;
 
@@ -12,6 +13,7 @@ pub(super) fn handle(
     sender: usize,
     input: &mut InputState,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     z_order: &mut ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
@@ -31,6 +33,7 @@ pub(super) fn handle(
                         .get(cap)
                         .is_some_and(|surface| surface.role == SurfaceRole::Interactive)
                     {
+                        frames.adopt(cap, sender);
                         input.focus_new_window(sender, cap);
                     }
                     sys_send(sender, &cap.to_le_bytes());
@@ -70,21 +73,23 @@ pub(super) fn handle(
                 });
             }
         }
-        compositor_ops::MOVE_SURFACE => move_surface(buf, sender, table, pending_dirty),
+        compositor_ops::MOVE_SURFACE => move_surface(buf, sender, table, frames, pending_dirty),
         compositor_ops::RAISE_SURFACE => {
-            raise_surface(buf, sender, input, table, z_order, pending_dirty)
+            raise_surface(buf, sender, input, table, frames, z_order, pending_dirty)
         }
         compositor_ops::DESTROY_SURFACE => {
-            destroy_surface(buf, sender, input, table, z_order, pending_dirty)
+            destroy_surface(buf, sender, input, table, frames, z_order, pending_dirty)
         }
         _ => {}
     }
 }
 
+/// A window in a stack moves its whole frame with it.
 fn move_surface(
     buf: &[u8; 512],
     sender: usize,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     dirty: &mut Option<Rect>,
 ) {
     if buf.len() < 17 {
@@ -93,34 +98,41 @@ fn move_surface(
     let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap());
     let x = i32::from_le_bytes(buf[9..13].try_into().unwrap());
     let y = i32::from_le_bytes(buf[13..17].try_into().unwrap());
-    if let Some(surface) = table.get_mut(cap).filter(|surface| surface.owner == sender) {
-        let old_rect = surface.screen_rect();
-        surface.move_to(x, y);
-        surface.damage = Some(Rect {
-            x: 0,
-            y: 0,
-            w: surface.w,
-            h: surface.h,
-        });
-        let old_region = if surface.is_window_managed() {
-            window_decoration::bounds(old_rect)
-        } else {
-            old_rect
-        };
-        let new_region = if surface.is_window_managed() {
-            window_decoration::bounds(surface.screen_rect())
-        } else {
-            surface.screen_rect()
-        };
-        mark_dirty(dirty, old_region, new_region);
+    // A tab behind another sits where its frame is; only the shown window
+    // places the frame.
+    if frames.is_hidden(cap) {
+        return;
+    }
+    let Some(surface) = table.get_mut(cap).filter(|surface| surface.owner == sender) else {
+        return;
+    };
+    let old_region = surface.paint_region();
+    surface.move_to(x, y);
+    surface.damage = Some(Rect {
+        x: 0,
+        y: 0,
+        w: surface.w,
+        h: surface.h,
+    });
+    mark_dirty(dirty, old_region, surface.paint_region());
+    // A window its app moves on its own leaves its tile group.
+    if let Some(frame) = frames.frame_of(cap) {
+        frames.untile(frame);
+    }
+    if let Some(moved) = stacking::follow(frames, table, cap) {
+        mark_dirty(dirty, moved, moved);
     }
 }
 
+/// Raise the caller's own window. A window behind another tab of its stack
+/// is shown only when the caller may take focus anyway (it holds the
+/// keyboard, or nobody does), so a hidden tab cannot cover another app's tab.
 fn raise_surface(
     buf: &[u8; 512],
     sender: usize,
     input: &mut InputState,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     z_order: &mut ZOrder,
     dirty: &mut Option<Rect>,
 ) {
@@ -132,6 +144,14 @@ fn raise_surface(
         s.owner == sender && (s.role == SurfaceRole::Interactive || s.role == SurfaceRole::Panel)
     }) {
         return;
+    }
+    if frames.is_hidden(cap) {
+        if !input.may_focus(sender) {
+            return;
+        }
+        if let Some(area) = stacking::select(frames, table, z_order, cap) {
+            mark_dirty(dirty, area, area);
+        }
     }
     z_order.raise(cap);
     input.request_focus(sender, cap);
@@ -146,11 +166,7 @@ fn raise_surface(
             Some(damage) => damage.union(&full),
             None => full,
         });
-        let region = if surface.is_window_managed() {
-            window_decoration::bounds(surface.screen_rect())
-        } else {
-            surface.screen_rect()
-        };
+        let region = surface.paint_region();
         *dirty = Some(match dirty.take() {
             Some(acc) => acc.union(&region),
             None => region,
@@ -163,6 +179,7 @@ fn destroy_surface(
     sender: usize,
     input: &mut InputState,
     table: &mut SurfaceTable,
+    frames: &mut FrameRegistry,
     z_order: &mut ZOrder,
     dirty: &mut Option<Rect>,
 ) {
@@ -180,6 +197,9 @@ fn destroy_surface(
     let freed_rect = table
         .get(cap)
         .map(|surface| window_decoration::bounds(surface.screen_rect()));
+    if let Some(area) = stacking::forget(frames, table, z_order, cap) {
+        mark_dirty(dirty, area, area);
+    }
     input.remove_surface(cap);
     z_order.remove(cap);
     let _ = table.remove(cap);

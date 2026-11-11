@@ -48,11 +48,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phase05_vt_hostile import PATH as VT_HOSTILE, VISIBLE as VT_HOSTILE_ROWS  # noqa: E402
 
 WIN_W, WIN_H = 720, 480
+# Compositor window_decoration::content_row_insets (frame RADIUS 6, 1px border): the
+# content rows next to a rounded frame corner lose this many pixels at that corner,
+# counted from the edge row. Bottom corners are always rounded; the top-right one too
+# while the Cell Tab is narrower than the frame (true for the 720 and 800 wide windows
+# here); the top-left sits under the tab and stays square. Those pixels belong to the
+# frame, so comparisons put the expected content colour back before diffing.
+CORNER_INSETS = (3, 1, 1)
+
+
+def clipped_corner_pixels(w, h):
+    for i, n in enumerate(CORNER_INSETS):
+        for x in range(n):
+            yield from ((x, h - 1 - i), (w - 1 - x, h - 1 - i), (w - 1 - x, i))
+
+
+def unclip_corners(seen, expected):
+    """`seen` (a window-sized crop) with its frame-clipped corner pixels taken from `expected`."""
+    out = seen.copy()
+    for p in clipped_corner_pixels(*out.size):
+        out.putpixel(p, expected.getpixel(p) if isinstance(expected, Image.Image) else expected)
+    return out
 CELL_W, CELL_H, PAD_X, PAD_Y = 9, 18, 8, 6
 # The Terminal's grid (terminal::grid_dims): whole cells right of PAD_X and below PAD_Y,
 # 79 x 26 at 720x480. Every cell of it is inside the window.
 COLS, ROWS = (WIN_W - PAD_X) // CELL_W, (WIN_H - PAD_Y) // CELL_H
-BG = (18, 20, 26)
+BG = (245, 245, 248)  # DEFAULT_BG = system theme bg; the run boots at the Light palette
 PROMPT = "Cellos > "
 BANNER = "=== Cellos shell ready \u2014 type 'help' for commands ==="
 STDERR_ITERATIONS = 10
@@ -69,9 +90,10 @@ FILES_ORG, FILES_W, FILES_H = (100, 100), 800, 600  # files/src/main.rs: 800x600
 SPOT_ORG, SPOT_W, SPOT_H = (400, 100), 480, 320     # desktop main.rs ((1280-480)/2, 100); spotlight.rs
 FILES_TASKBAR = (448 + 74, 800 - 36 + 4 + 14)       # third pinned app (taskbar.rs: apps_x 140, step 154)
 SPOT_BUTTON = (8 + 42, 800 - 36 + 4 + 14)           # taskbar "CellOS" button opens Spotlight
-# Visible strip of the Terminal's title tab (137..377 x 73..100), right of the Files tab
-# (97..337, transparent beyond it) and above both tab controls (y 79..93): a raise, nothing else.
-TERM_TAB = (355, 75)
+# Visible strip of the Terminal's title tab (139..379 x 72..99), right of the Files tab
+# (99..339, transparent beyond it). The tab holds only the app icon (at its leading edge,
+# under Files here) and the title, so the whole strip drags/raises; (355, 85) is its middle.
+TERM_TAB = (355, 85)
 # Files status bar below the Terminal frame (Terminal ends at y 583): no hit target in Files.
 FILES_FOCUS = (500, 690)
 PARK = (1200, 40)                                   # pointer parked over no checked region
@@ -81,21 +103,25 @@ def rgba(r, g, b, a=255):
     return "%02x%02x%02x%02x" % (r, g, b, a)
 
 
-# viui::theme::LIGHT_THEME (Files)
+# viui::theme::LightTheme tokens Files paints with (system theme; boot palette: Light)
 L_BG, L_SURFACE, L_BORDER = rgba(245, 245, 248), rgba(255, 255, 255), rgba(215, 218, 224)
 L_TEXT, L_TEXT2, L_ACCENT = rgba(20, 20, 28), rgba(95, 100, 115), rgba(35, 90, 215)
 L_SELECTED = rgba(35, 90, 215, 60)                  # list_selected_bg = accent.with_alpha(60)
-# desktop/src/draw.rs theme (Spotlight)
-D_MODAL_BG, D_MODAL_BORDER, D_TASKBAR_BORDER = rgba(22, 24, 30), rgba(65, 70, 85), rgba(50, 54, 66)
-D_BTN_NORMAL, D_BTN_HOVER, D_BTN_ACTIVE = rgba(38, 41, 52), rgba(52, 57, 72), rgba(68, 75, 96)
-D_CYAN, D_BLUE, D_TEXT, D_MUTED = rgba(0, 200, 220), rgba(70, 130, 245), rgba(240, 242, 248), rgba(140, 145, 160)
+# viui::theme::LightTheme tokens desktop/src/spotlight.rs paints with (boot palette: Light)
+D_SPOT_BG, D_BORDER, D_ACCENT = rgba(255, 255, 255), rgba(215, 218, 224), rgba(35, 90, 215)
+D_BTN_NORMAL, D_BTN_PRESSED = rgba(230, 232, 238), rgba(200, 205, 218)
+D_TEXT, D_TEXT2 = rgba(20, 20, 28), rgba(95, 100, 115)
 # Judged regions, in surface coordinates (x0, y0, x1, y1): the toolbar path label, the whole
 # ListView pane (header + every row slot) and the status bar; Spotlight's results area.
-FILES_REGIONS = {"title": (48, 10, 600, 34), "list": (160, 44, 800, 576), "status": (0, 576, 800, 600)}
+# The title region stops left of the toolbar buttons: Split (layout::split_button, 60 px
+# wide, 8 px left of the view switch at width - 180) starts at x = 552.
+FILES_REGIONS = {"title": (48, 10, 548, 34), "list": (160, 44, 800, 576), "status": (0, 576, 800, 600)}
 SPOT_REGIONS = {"results": (1, 77, 479, 292)}
-SYSTEM_ACTIONS = [("[T]", "Appearance Theme", "Cycle Light / Dark / Paper", "Cycle")]
-REMOVED_POWER_ACTIONS = [("[R]", "Reboot System", "Authorized restart after session consent", "Reboot"),
-                         ("[P]", "Power Off", "Safely shut down the computer", "Shut Down")]
+# spotlight.rs SYSTEM_ACTIONS; the theme row is prefixed with the palette in use
+# (system_description), Light from boot until Cycle is pressed.
+SYSTEM_ACTIONS = [("Appearance", "Appearance Theme", "Current: Light \u2014 cycle Light / Dark / Paper", "Cycle")]
+REMOVED_POWER_ACTIONS = [("Application", "Reboot System", "Authorized restart after session consent", "Reboot"),
+                         ("Application", "Power Off", "Safely shut down the computer", "Shut Down")]
 
 # ---- S5-2 (cellos-vt1 screen): fixtures built by the runner; expected screens authored
 # here from the emulator contract (CUP absolute, ED/EL with the current background, LF
@@ -140,10 +166,18 @@ EDIT_BG = (0x1e, 0x1e, 0x2e)
 
 
 def file_icon(name, is_dir):
-    """files/src/model.rs FileItem::new icon rule (only the kinds this proof lists)."""
+    """files/src/model.rs FileItem::new icon rule, LineIcon::for_mime(MimeType::from_path), as the
+    LineIcon name; this proof lists nothing under /bin, so the name alone decides."""
     if is_dir:
-        return "[D]"
-    return "[M]" if name.endswith((".md", ".txt")) else "[?]"
+        return "Folder"
+    ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+    if ext in ("png", "jpg", "jpeg", "ppm"):
+        return "Image"
+    if ext in ("rs", "c", "h", "toml", "json", "lua", "sh"):
+        return "Code"
+    if ext in ("html", "htm"):
+        return "Globe"
+    return "Application" if ext == "elf" else "Document"
 
 
 class StepFailed(Exception):
@@ -380,12 +414,41 @@ class Proof:
 
     # ---- pixel judgement ----------------------------------------------------------
     def locate(self, img):
-        """Window origin: the exact bounding box of every pixel equal to the Terminal bg."""
+        """Window origin: the WIN_W x WIN_H rectangle whose padding ring (PAD_Y rows on top,
+        PAD_X columns on the left, the rows below the last grid row and the columns right of
+        the last grid column) is all Terminal bg. The Light bg is a theme colour other
+        surfaces (Files) paint too, so a bounding box of every bg pixel does not isolate the
+        window; the ring, inside the compositor's window outline, does."""
         mask = ImageChops.difference(img, Image.new("RGB", img.size, BG)).convert("L").point(lambda v: 0 if v else 255)
-        box = mask.getbbox()
-        if box is None or (box[2] - box[0], box[3] - box[1]) != (WIN_W, WIN_H):
-            return None
-        return box[0], box[1]
+        grid_right, grid_bottom = PAD_X + COLS * CELL_W, PAD_Y + ROWS * CELL_H
+
+        c = max(CORNER_INSETS)  # frame-clipped corners are not part of the ring
+
+        def ring(x, y):
+            if x < 0 or y < 0 or x + WIN_W > img.width or y + WIN_H > img.height:
+                return False
+            boxes = [(x, y, x + WIN_W - c, y + PAD_Y), (x, y, x + PAD_X, y + WIN_H - c),
+                     (x + c, y + grid_bottom, x + WIN_W - c, y + WIN_H),
+                     (x + grid_right, y + c, x + WIN_W, y + WIN_H - c)]
+            return all(mask.crop(b).getextrema()[0] == 255 for b in boxes if b[0] < b[2] and b[1] < b[3])
+
+        if self.org is not None and ring(*self.org):
+            return self.org
+        data, width, run = mask.tobytes(), img.width, b"\xff" * (WIN_W - c)
+        for y in range(img.height - WIN_H + 1):
+            row = data[y * width:(y + 1) * width]
+            x = row.find(run)
+            while x != -1:
+                end = x + WIN_W
+                while end < width and row[end] == 255:
+                    end += 1
+                # A bg run wider than the window: its left or its right end is the window's
+                # (the top row's right end stops `c` short at the rounded corner).
+                for cand in (x, end - WIN_W, end - WIN_W + c):
+                    if ring(cand, y):
+                        return cand, y
+                x = row.find(run, end)
+        return None
 
     def window(self, img):
         org = self.locate(img)
@@ -393,16 +456,17 @@ class Proof:
             return None, None
         if self.org is None:
             self.org = org
-        return org, img.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H))
+        return org, unclip_corners(img.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H)), BG)
 
     @staticmethod
     def cursor_of(win):
-        """Cursor block = the only cyan pixels (G - R large). Returns (col, row) or None."""
+        """Cursor block = the only strongly blue pixels (B - R large): the translucent accent
+        block over the Light bg or a glyph. Returns (col, row) or None."""
         px, xs, ys = win.load(), [], []
         for y in range(WIN_H):
             for x in range(WIN_W):
-                r, g, _ = px[x, y]
-                if g - r > 60:
+                r, _, b = px[x, y]
+                if b - r > 60:
                     xs.append(x)
                     ys.append(y)
         if not xs:
@@ -669,7 +733,7 @@ class Proof:
             dalt, _ = self.diff(win, self.pad(altered), 0, ROWS - 1, self.mcursor(final))
             self.chk(f"{name}-control-one-char-change-differs", dalt >= MIN_NEGATIVE_DIFF, f"{dalt} differing pixels")
             dc = self.window(after)[1]
-            ch = ImageChops.difference(before.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H)), dc).convert("L").histogram()
+            ch = ImageChops.difference(unclip_corners(before.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H)), BG), dc).convert("L").histogram()
             self.chk(f"{name}-before-after-window-pixels-changed", sum(ch[1:]) >= MIN_NEGATIVE_DIFF, f"{sum(ch[1:])} pixels changed")
             model[:] = final
             state["img"] = after
@@ -798,9 +862,14 @@ class Proof:
         command("S53C-cd", "cd /tmp", [[]])
         command("S53C-pwd-before-close", "pwd", [["/tmp"]])
         org = self.org
-        # Close control: tab = content - (3, 27); close box 14x14 at tab + (6, 6) (compositor
-        # window_decoration::control_rect), clicked in its centre. The Terminal is on top.
-        self.click_px(org[0] - 3 + 6 + 7, org[1] - 27 + 6 + 7)
+        # Close through the window menu: tab = content - (1, 28); the app icon box (20x20,
+        # window_decoration::menu_button_rect) at tab + (4, 3) opens the menu 4px below it;
+        # Close is the third item after a 9px separator: menu + (4, 4 + 2*28 + 9), 28 tall.
+        # The Terminal is on top.
+        icon_x, icon_y = org[0] - 1 + 4, org[1] - 28 + 3
+        self.click_px(icon_x + 10, icon_y + 10)
+        menu_y = icon_y + 20 + 4
+        self.click_px(icon_x + 4 + 40, menu_y + 4 + 2 * 28 + 9 + 14)
         self.park()
         for needle, what in (
             ("[terminal] window closed; frontend released, shell detached", "frontend released on window close"),
@@ -901,7 +970,7 @@ class Proof:
             d, _ = self.diff_styled(win, other, cursor)
             self.chk(f"{name}-control-{label}-differs", d >= MIN_NEGATIVE_DIFF, f"{d} differing pixels")
         org = self.org
-        ch = ImageChops.difference(before.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H)), win).convert("L").histogram()
+        ch = ImageChops.difference(unclip_corners(before.crop((org[0], org[1], org[0] + WIN_W, org[1] + WIN_H)), BG), win).convert("L").histogram()
         self.chk(f"{name}-before-after-window-pixels-changed", sum(ch[1:]) >= MIN_NEGATIVE_DIFF, f"{sum(ch[1:])} pixels changed")
         state["img"] = got
 
@@ -1224,7 +1293,7 @@ class Proof:
         `rows` are (name, is_dir, size label) in display order."""
         path, rows, selected, status = view
         x, y, w, h = 160, 44, FILES_W - 160, FILES_H - 44 - 24
-        ops = [("fill", 0, 0, FILES_W, 44, L_SURFACE),
+        ops = [("fill", 0, 0, FILES_W, 44, L_SURFACE), ("icon", 12, 10, 32, 24, "Folder", L_ACCENT),
                ("label", 48, 10, FILES_W - 248, 24, "UiSemibold", 15.0, L_TEXT, 0, "Files: " + path),
                ("fill", x, y, w, h, L_BG), ("fill", x, y, w, 28, L_SURFACE), ("fill", x, y + 27, w, 1, L_BORDER),
                ("label", x + 36, y + 4, w - 220, 20, "UiSemibold", 12.0, L_TEXT2, 0, "Name"),
@@ -1233,9 +1302,9 @@ class Proof:
         for i, (name, is_dir, size) in enumerate(rows):
             ry = y + 28 + i * 32
             if i == selected:
-                ops += [("fill", x, ry, w, 32, L_SELECTED), ("fill", x, ry, 3, 32, L_ACCENT)]
-            ops += [("label", x + 8, ry + 6, 24, 20, "UiSemibold", 14.0, L_ACCENT if is_dir else L_TEXT, 0,
-                     file_icon(name, is_dir)),
+                # ListView: square full-width selection fill + 1px accent indicator.
+                ops += [("fill", x, ry, w, 32, L_SELECTED), ("fill", x, ry, 1, 32, L_ACCENT)]
+            ops += [("icon", x + 8, ry + 6, 24, 20, file_icon(name, is_dir), L_ACCENT if is_dir else L_TEXT),
                     ("label", x + 36, ry + 6, w - 220, 20, "UiRegular", 14.0, L_TEXT, 0, name),
                     ("label", x + w - 170, ry + 6, 80, 20, "UiRegular", 13.0, L_TEXT2, 0, size),
                     ("label", x + w - 70, ry + 6, 60, 20, "UiRegular", 13.0, L_TEXT2, 0, "Folder" if is_dir else "File"),
@@ -1249,24 +1318,24 @@ class Proof:
         (spotlight.rs render_system, row 0 selected), "system-with-power" = the removed rows too.
         `alter` changes one character of the first label."""
         change = (lambda s: s[:-1] + ("x" if s[-1] != "x" else "y")) if alter else (lambda s: s)
-        ops = [("fill", 0, 0, SPOT_W, SPOT_H, D_MODAL_BG), ("stroke", 0, 0, SPOT_W, SPOT_H, D_MODAL_BORDER)]
+        # spotlight.rs render: floating panel, rounded to PANEL_RADIUS 6 with a 1px border.
+        ops = [("rfill", 0, 0, SPOT_W, SPOT_H, 6, D_SPOT_BG), ("rstroke", 0, 0, SPOT_W, SPOT_H, 6, D_BORDER)]
         if kind == "none":
-            ops.append(("label", 24, 108, SPOT_W - 48, 32, "UiRegular", 15.0, D_MUTED, 1, change("No matching cells found")))
+            ops.append(("label", 24, 108, SPOT_W - 48, 32, "UiRegular", 15.0, D_TEXT2, 1, change("No matching cells found")))
             return ops
         actions = SYSTEM_ACTIONS + (REMOVED_POWER_ACTIONS if kind == "system-with-power" else [])
         nh, dh = self.text_row_height("UiSemibold", 15.0), self.text_row_height("UiRegular", 13.0)
         text_w = (SPOT_W - 92) - 10 - 70  # run_x - 10 - text_x
         for i, (icon, name, desc, button) in enumerate(actions):
             ry, selected = 80 + i * 62, i == 0
-            ops.append(("fill", 14, ry, SPOT_W - 28, 56, D_BTN_ACTIVE if selected else D_BTN_NORMAL))
-            if selected:
-                ops.append(("fill", 14, ry, 4, 56, D_CYAN))
+            # spotlight.rs paint_row: rounded fill + 1px rounded outline (CONTROL_RADIUS 4).
+            ops.append(("rfill", 14, ry, SPOT_W - 28, 56, 4, D_BTN_PRESSED if selected else D_BTN_NORMAL))
             ty = ry + (56 - nh - dh - 4) // 2
-            ops += [("stroke", 14, ry, SPOT_W - 28, 56, D_BLUE if selected else D_TASKBAR_BORDER),
-                    ("label", 24, ry, 34, 56, "UiRegular", 14.0, D_CYAN, 1, icon),
+            ops += [("rstroke", 14, ry, SPOT_W - 28, 56, 4, D_ACCENT if selected else D_BORDER),
+                    ("icon", 24, ry, 34, 56, icon, D_ACCENT),
                     ("label", 70, ty, text_w, nh, "UiSemibold", 15.0, D_TEXT, 0, change(name) if selected else name),
-                    ("label", 70, ty + nh + 4, text_w, dh, "UiRegular", 13.0, D_MUTED, 0, desc),
-                    ("button", SPOT_W - 92, ry + 14, 64, 28, D_BTN_NORMAL, D_BTN_HOVER, D_TEXT, button)]
+                    ("label", 70, ty + nh + 4, text_w, dh, "UiRegular", 13.0, D_TEXT2, 0, desc),
+                    ("button", SPOT_W - 92, ry + 14, 64, 28, D_BTN_NORMAL, D_BORDER, D_TEXT, button)]
         return ops
 
     @staticmethod
@@ -1278,7 +1347,10 @@ class Proof:
         return out
 
     def files_diffs(self, img, view):
-        return self.region_diffs(img, FILES_ORG, self.render_ops(FILES_W, FILES_H, self.files_ops(view)), FILES_REGIONS)
+        expected = self.render_ops(FILES_W, FILES_H, self.files_ops(view))
+        x, y = FILES_ORG
+        seen = unclip_corners(img.crop((x, y, x + FILES_W, y + FILES_H)), expected)
+        return self.region_diffs(seen, (0, 0), expected, FILES_REGIONS)
 
     def spot_diffs(self, img, kind, alter=False):
         return self.region_diffs(img, SPOT_ORG, self.render_ops(SPOT_W, SPOT_H, self.spot_ops(kind, alter)), SPOT_REGIONS)
@@ -1365,11 +1437,17 @@ class Proof:
         # 4. Files deletes the copy, then the folder; the CLI no longer lists either.
         #    kp_decimal is the keypad Del key (Num Lock is off): the input layout maps evdev
         #    KEY_DELETE (111) to Unknown, so the dedicated Delete key never reaches a cell.
+        #    Delete moves to Trash (/data/.trash); this image has no /data volume, so Files
+        #    keeps the file and says so. Shift+Delete is the permanent delete.
+        trash_off = "Trash unavailable (I/O error (VFS ERR_IO)): {} kept; Shift+Delete deletes permanently"
         self.focus_files()
         before = self.grab()
         self.tap("kp_decimal")
+        cur = self.expect_files("C5-4-files-trash-unavailable", "/tmp/c5dir/c5new", [up, txt], 1,
+                                trash_off.format("a.txt"), before)
+        self.combo("shift", "kp_decimal")
         self.expect_files("C5-4-files-delete-file", "/tmp/c5dir/c5new", [up], 0,
-                          "Permanently deleted a.txt (irreversible)", before)
+                          "Permanently deleted a.txt (irreversible)", cur)
         self.raise_terminal()
         command("C5-4-cli-ls-file-gone", "ls /tmp/c5dir/c5new", [[]])
         self.focus_files()
@@ -1377,7 +1455,7 @@ class Proof:
         self.tap("backspace")
         cur = self.expect_files("C5-4-files-up", "/tmp/c5dir", [up, c5new, txt], 0, "/tmp/c5dir: 2 item(s)", before)
         self.tap("down")
-        self.tap("kp_decimal")
+        self.combo("shift", "kp_decimal")
         self.expect_files("C5-4-files-delete-folder", "/tmp/c5dir", [up, txt], 1,
                           "Permanently deleted c5new (irreversible)", cur)
         self.raise_terminal()

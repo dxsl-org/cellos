@@ -540,6 +540,21 @@ fn handle_kernel_event(
                 return;
             }
             if modifiers.update(code, state) {
+                // The compositor reads held modifiers for its own pointer
+                // gestures (Win/Shift + drag of a Cell Tab). The pointer
+                // channel reaches only it; apps still see modifiers only as
+                // flags on other keys.
+                if modifier_for_scancode(code).is_some() && state != KeyState::Repeated {
+                    dispatcher.dispatch_mouse(&InputEvent::Key(KeyEvent {
+                        timestamp_ticks: sys_get_time(),
+                        scancode: code,
+                        keysym: KeySym::Unknown,
+                        character: 0,
+                        modifiers: modifiers.snapshot(),
+                        state,
+                        _pad: [0; 2],
+                    }));
+                }
                 return;
             }
             let (keysym, character) = translate(code, modifiers.snapshot());

@@ -1,7 +1,8 @@
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use ostd::syscall::sys_try_send;
 
-use crate::surface_table::SurfaceTable;
+use crate::stacking;
+use crate::surface_table::{FrameRegistry, SurfaceTable};
 use crate::window_decoration::{self, Hit};
 use crate::z_order::ZOrder;
 
@@ -14,16 +15,27 @@ pub(super) struct PointerTarget {
     pub(super) hit: Hit,
 }
 
-pub(super) fn at(x: i32, y: i32, table: &SurfaceTable, z_order: &ZOrder) -> Option<PointerTarget> {
+/// The frontmost shown surface under `(x, y)`; tabs behind a stack's shown
+/// tab take no input of their own, they are part of the shown tab's chrome.
+pub(super) fn at(
+    x: i32,
+    y: i32,
+    table: &SurfaceTable,
+    frames: &FrameRegistry,
+    z_order: &ZOrder,
+) -> Option<PointerTarget> {
     z_order.iter_top_to_bottom().find_map(|cap| {
         let surface = table.get(cap).filter(|surface| surface.accepts_input())?;
         if surface.is_window_managed() {
-            window_decoration::hit_test(surface.screen_rect(), x, y).map(|hit| PointerTarget {
-                cap,
-                owner: surface.owner,
-                origin_x: surface.x,
-                origin_y: surface.y,
-                hit,
+            let tabs = stacking::tabs_of(frames, cap);
+            window_decoration::hit_test(surface.screen_rect(), tabs, x, y).map(|hit| {
+                PointerTarget {
+                    cap,
+                    owner: surface.owner,
+                    origin_x: surface.x,
+                    origin_y: surface.y,
+                    hit,
+                }
             })
         } else if surface.screen_rect().contains_point(x, y) {
             Some(PointerTarget {
