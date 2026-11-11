@@ -81,7 +81,7 @@ impl ReplacementReservation {
 
     /// Consume the ceiling and install the source binding on an unpublished TCB.
     pub(crate) fn commit_into(mut self, task: &mut crate::task::Task) {
-        task.hotswap_source_tid = Some(self.source_tid);
+        task.hotswap.source_tid = Some(self.source_tid);
         self.ceiling = None;
         let removed = SWAP_CEILINGS.lock().remove(&self.source_tid);
         debug_assert!(matches!(
@@ -221,14 +221,14 @@ pub fn set_task_hotswap_ready(tid: usize) {
     let Some(task) = sched.tasks.get_mut(&tid) else {
         return;
     };
-    task.hotswap_ready = true;
+    task.hotswap.ready = true;
     log::info!("[hotswap] task {} signalled HotSwapReady", tid);
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 fn enter_frozen_state(task: &mut crate::task::Task, swap_id: u64) {
-    task.hotswap_ingress_closed = false;
+    task.hotswap.ingress_closed = false;
     task.state = crate::task::tcb::TaskState::Frozen { swap_id };
 }
 
@@ -284,13 +284,13 @@ pub(crate) fn unfreeze_task(tid: usize) {
     clear_swap_ceiling(tid);
     if let Some(sched) = scheduler.as_mut() {
         for task in sched.tasks.values_mut() {
-            if task.hotswap_source_tid == Some(tid) {
-                task.hotswap_source_tid = None;
+            if task.hotswap.source_tid == Some(tid) {
+                task.hotswap.source_tid = None;
             }
         }
         if let Some(task) = sched.tasks.get_mut(&tid) {
             if matches!(task.state, TaskState::Frozen { .. }) {
-                task.hotswap_ingress_closed = false;
+                task.hotswap.ingress_closed = false;
                 task.state = TaskState::Ready;
                 sched.push_ready(tid);
             }
@@ -315,15 +315,15 @@ pub(crate) fn commit_hotswap_barrier(
     let sched = scheduler.as_mut().ok_or(ViError::NotFound)?;
     let (source_len, target_start, target_cell, wake_sender) = {
         let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
-        if !matches!(source.state, TaskState::Frozen { .. }) || source.hotswap_ingress_closed {
+        if !matches!(source.state, TaskState::Frozen { .. }) || source.hotswap.ingress_closed {
             return Err(ViError::PermissionDenied);
         }
         let target = sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?;
         if matches!(
             target.state,
             TaskState::Frozen { .. } | TaskState::Terminated
-        ) || !target.hotswap_ready
-            || target.hotswap_source_tid != Some(source_tid)
+        ) || !target.hotswap.ready
+            || target.hotswap.source_tid != Some(source_tid)
         {
             return Err(ViError::PermissionDenied);
         }
@@ -411,7 +411,7 @@ pub(crate) fn commit_hotswap_barrier(
 
     let mut source_mailbox = {
         let source = sched.tasks.get_mut(&source_tid).ok_or(ViError::NotFound)?;
-        source.hotswap_ingress_closed = true;
+        source.hotswap.ingress_closed = true;
         core::mem::take(&mut source.pending_msgs)
     };
 
@@ -424,7 +424,7 @@ pub(crate) fn commit_hotswap_barrier(
     ) {
         if let Some(source) = sched.tasks.get_mut(&source_tid) {
             source.pending_msgs = core::mem::take(&mut source_mailbox);
-            source.hotswap_ingress_closed = false;
+            source.hotswap.ingress_closed = false;
         }
         rollback_mailbox_appends(sched, target_tid, target_start);
         return Err(ViError::WouldBlock);
@@ -440,7 +440,7 @@ pub(crate) fn commit_hotswap_barrier(
     };
     crate::task::async_ipc::cutover_peer(sched, source_tid, source_cell, source_generation);
     if let Some(target) = sched.tasks.get_mut(&target_tid) {
-        target.hotswap_source_tid = None;
+        target.hotswap.source_tid = None;
     }
     if let Some(sender_tid) = wake_sender {
         let sender_context = sched

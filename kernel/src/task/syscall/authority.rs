@@ -709,8 +709,8 @@ pub(super) fn resolve_cell_owner(
             .ok_or(SyscallError::PermissionDenied)?;
         let vfs_principal = sched.tasks.get(&caller_id).is_some_and(|task| {
             crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                && task.current_caller_cell_id == cell_id
-                && task.current_caller_cell_generation == generation
+                && task.caller.cell_id == cell_id
+                && task.caller.cell_generation == generation
         });
         let registered_service =
             crate::cell::service_registry::is_registered_tid(owner.root_tid as usize);
@@ -766,8 +766,8 @@ pub(super) fn resolve_cell_owner_record(
         let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
         let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
             crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                && task.current_caller_cell_id == request.cell_id
-                && task.current_caller_cell_generation == request.generation
+                && task.caller.cell_id == request.cell_id
+                && task.caller.cell_generation == request.generation
         });
         if !allowed {
             return Err(SyscallError::PermissionDenied);

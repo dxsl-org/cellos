@@ -68,7 +68,7 @@ pub(super) fn snapshot() -> StateSnapshot {
                     protection: (task.pku_key, task.pku_value),
                     caps: task.rights,
                     critical: task.is_critical,
-                    replacement: task.hotswap_source_tid,
+                    replacement: task.hotswap.source_tid,
                     dirs: (
                         task.inherited_dirs.spawner_cell_id,
                         task.inherited_dirs.spawner_generation,

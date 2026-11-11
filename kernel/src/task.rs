@@ -415,7 +415,7 @@ fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) 
     let Some(target) = sched.tasks.get(&target_id) else {
         return false;
     };
-    if target.hotswap_ingress_closed {
+    if target.hotswap.ingress_closed {
         return true;
     }
     crate::cell::service_registry::is_paused_tid(target_id)
@@ -2865,7 +2865,7 @@ pub fn ipc_try_send(
 
 pub fn ipc_reply(caller_id: usize, result: usize) -> core::result::Result<usize, ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
-        let target_id = sched.tasks.get(&caller_id).and_then(|t| t.current_caller);
+        let target_id = sched.tasks.get(&caller_id).and_then(|t| t.caller.current);
         if let Some(tid) = target_id {
             if let Some(t) = sched.tasks.get_mut(&tid) {
                 t.state = TaskState::Ready;

@@ -731,9 +731,9 @@ impl Scheduler {
             return;
         }
         if let Some(task) = self.tasks.get_mut(&tid) {
-            task.cpu_ns = task.cpu_ns.saturating_add(delta);
+            task.sched_stats.cpu_ns = task.sched_stats.cpu_ns.saturating_add(delta);
         } else if let Some(zombie) = self.zombies.iter_mut().find(|task| task.id == tid) {
-            zombie.cpu_ns = zombie.cpu_ns.saturating_add(delta);
+            zombie.sched_stats.cpu_ns = zombie.sched_stats.cpu_ns.saturating_add(delta);
             let (cell_id, generation) = (zombie.cell_id.0, zombie.cell_generation);
             self.cpu_telemetry.retain_exited(cell_id, generation, delta);
         }
@@ -785,8 +785,8 @@ impl Scheduler {
     ) -> Option<(api::cell_owner::CellOwner, u64)> {
         let watcher = self.tasks.get(&watcher_tid)?;
         if !may_watch_owner_deaths(watcher)
-            || watcher.current_caller_cell_id != cell_id.0
-            || watcher.current_caller_cell_generation != generation
+            || watcher.caller.cell_id != cell_id.0
+            || watcher.caller.cell_generation != generation
         {
             return None;
         }
@@ -1593,7 +1593,7 @@ impl Scheduler {
         if let Some(task) = self.tasks.get(&tid) {
             crate::p01_resources::terminal(task);
             let owner = crate::p01_resources::owner(task);
-            if task.current_caller.is_some() || task.current_async_op != 0 {
+            if task.caller.current.is_some() || task.current_async_op != 0 {
                 crate::p01_resources::unknown(owner, 4);
             } else {
                 crate::p01_resources::checked(owner, 4);
@@ -1751,8 +1751,11 @@ impl Scheduler {
                     None,
                     crate::memory::heap::p01_owner::SCHEDULER_SHARED,
                 );
-                self.cpu_telemetry
-                    .retain_exited(task.cell_id.0, task.cell_generation, task.cpu_ns);
+                self.cpu_telemetry.retain_exited(
+                    task.cell_id.0,
+                    task.cell_generation,
+                    task.sched_stats.cpu_ns,
+                );
                 self.zombies.push(task);
             }
         }
@@ -1788,11 +1791,8 @@ impl Scheduler {
                     to_wake.push(*id);
                 }
             }
-            if task.current_caller == Some(tid)
-                && (
-                    task.current_caller_cell_id,
-                    task.current_caller_cell_generation,
-                ) == dead_caller
+            if task.caller.current == Some(tid)
+                && (task.caller.cell_id, task.caller.cell_generation) == dead_caller
             {
                 // A live VFS holder may still be using the raw GrantSlice
                 // pointer. Mark precisely its holder+owner+generation lease
@@ -1801,7 +1801,7 @@ impl Scheduler {
                 let release = VfsLeaseRelease {
                     holder_tid: *id,
                     grant_owner: tid,
-                    request_generation: task.current_caller_request_generation,
+                    request_generation: task.caller.request_generation,
                 };
                 if crate::memory::pin::mark_vfs_lease_pending_revoke(
                     release.holder_tid,
@@ -2089,7 +2089,7 @@ impl Scheduler {
                         self.cpu_telemetry.retain_exited(
                             task.cell_id.0,
                             task.cell_generation,
-                            task.cpu_ns,
+                            task.sched_stats.cpu_ns,
                         );
                         retirement
                             .waiter_wakes
@@ -2412,7 +2412,8 @@ impl Scheduler {
                         } else {
                             task.clear_current_caller_context();
                         }
-                        task.deadline_misses = task.deadline_misses.saturating_add(1);
+                        task.sched_stats.deadline_misses =
+                            task.sched_stats.deadline_misses.saturating_add(1);
                         // Observability: an RT cell whose awaited message missed its deadline
                         // is a missed control-loop cycle — record it (no enforcement). Gated to
                         // RT priority so the safety-timeout use on Normal cells stays quiet.
@@ -2421,7 +2422,7 @@ impl Scheduler {
                                 crate::audit::AuditEvent::RtDeadlineMiss,
                                 &crate::audit::encode_u32x2(
                                     task.cell_id.0 as u32,
-                                    task.deadline_misses,
+                                    task.sched_stats.deadline_misses,
                                 ),
                             );
                         }
@@ -2604,18 +2605,24 @@ impl Scheduler {
             let mut action = WdAction::None;
             if let Some(task) = self.tasks.get_mut(&cid) {
                 if task.state == TaskState::Running {
-                    task.cpu_run_ticks = task.cpu_run_ticks.saturating_add(1);
+                    task.sched_stats.cpu_run_ticks =
+                        task.sched_stats.cpu_run_ticks.saturating_add(1);
                     // Only RealTime-priority tasks can livelock the system.
                     if task.priority >= api::TaskPriority::RealTime as u8 {
-                        task.run_ticks = task.run_ticks.saturating_add(1);
-                        if task.run_ticks >= WATCHDOG_WARN_TICKS && !task.rt_overrun_warned {
-                            task.rt_overrun_warned = true;
+                        task.sched_stats.run_ticks = task.sched_stats.run_ticks.saturating_add(1);
+                        if task.sched_stats.run_ticks >= WATCHDOG_WARN_TICKS
+                            && !task.sched_stats.rt_overrun_warned
+                        {
+                            task.sched_stats.rt_overrun_warned = true;
                             crate::audit::log_event(
                                 crate::audit::AuditEvent::RtCpuOverrun,
-                                &crate::audit::encode_u32x2(task.cell_id.0 as u32, task.run_ticks),
+                                &crate::audit::encode_u32x2(
+                                    task.cell_id.0 as u32,
+                                    task.sched_stats.run_ticks,
+                                ),
                             );
                         }
-                        if task.run_ticks > WATCHDOG_BUDGET_TICKS {
+                        if task.sched_stats.run_ticks > WATCHDOG_BUDGET_TICKS {
                             action = WdAction::Kill(task.cell_id.0);
                         } else {
                             task.state = TaskState::Ready;
@@ -2626,8 +2633,8 @@ impl Scheduler {
                         action = WdAction::Requeue;
                     }
                 } else {
-                    task.run_ticks = 0;
-                    task.rt_overrun_warned = false;
+                    task.sched_stats.run_ticks = 0;
+                    task.sched_stats.rt_overrun_warned = false;
                 }
             }
             match action {

@@ -2070,8 +2070,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         if cid > 0 {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&cid) {
-                    t.run_ticks = 0;
-                    t.rt_overrun_warned = false;
+                    t.sched_stats.run_ticks = 0;
+                    t.sched_stats.rt_overrun_warned = false;
                 }
             }
         }
@@ -2146,8 +2146,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
         if cid > 0 {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&cid) {
-                    t.run_ticks = 0;
-                    t.rt_overrun_warned = false;
+                    t.sched_stats.run_ticks = 0;
+                    t.sched_stats.rt_overrun_warned = false;
                 }
             }
         }

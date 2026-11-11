@@ -858,7 +858,7 @@ pub(super) fn end_grant_leases_at_send(caller_id: usize, syscall: &Syscall) {
                 .lock()
                 .as_ref()
                 .and_then(|sched| sched.tasks.get(&caller_id))
-                .and_then(|task| task.current_caller);
+                .and_then(|task| task.caller.current);
             let Some(target) = current_caller else {
                 return;
             };
@@ -945,16 +945,16 @@ pub(in crate::task) fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLoo
     if !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize) {
         return VfsGrantLookup::NotVfs;
     }
-    match task.current_caller {
+    match task.caller.current {
         Some(grant_owner) => VfsGrantLookup::Active(VfsGrantContext {
             grant_owner,
-            grant_owner_cell_id: task.current_caller_cell_id,
-            grant_owner_cell_generation: task.current_caller_cell_generation,
-            request_generation: task.current_caller_request_generation,
+            grant_owner_cell_id: task.caller.cell_id,
+            grant_owner_cell_generation: task.caller.cell_generation,
+            request_generation: task.caller.request_generation,
             pending_revoke: crate::memory::pin::vfs_lease_pending_revoke(
                 caller_id,
                 grant_owner,
-                task.current_caller_request_generation,
+                task.caller.request_generation,
             ),
         }),
         None => VfsGrantLookup::MissingContext,
@@ -1479,10 +1479,10 @@ pub(super) fn install_vfs_lease_if_context_live(
         return false;
     };
     if !crate::fast_ipc::is_registered_vfs_cell(holder.cell_id.0 as usize)
-        || holder.current_caller != Some(context.grant_owner)
-        || holder.current_caller_cell_id != context.grant_owner_cell_id
-        || holder.current_caller_cell_generation != context.grant_owner_cell_generation
-        || holder.current_caller_request_generation != context.request_generation
+        || holder.caller.current != Some(context.grant_owner)
+        || holder.caller.cell_id != context.grant_owner_cell_id
+        || holder.caller.cell_generation != context.grant_owner_cell_generation
+        || holder.caller.request_generation != context.request_generation
     {
         return false;
     }

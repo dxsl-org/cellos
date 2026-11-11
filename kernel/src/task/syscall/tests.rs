@@ -1829,8 +1829,8 @@ fn owner_watch_scheduler() -> Scheduler {
     ));
     watcher.cell_generation = NET_GEN;
     watcher.root_tid = NET_TID;
-    watcher.current_caller_cell_id = CLIENT_CELL;
-    watcher.current_caller_cell_generation = CLIENT_GEN;
+    watcher.caller.cell_id = CLIENT_CELL;
+    watcher.caller.cell_generation = CLIENT_GEN;
     sched.tasks.insert(NET_TID, watcher);
     for (tid, cell, generation) in [
         (CLIENT_TID, CLIENT_CELL, CLIENT_GEN),
@@ -2031,7 +2031,8 @@ fn assert_owner_watch_grant_for(service: u16) {
                 .tasks
                 .get_mut(&NET_TID)
                 .expect("watcher")
-                .current_caller_cell_id = OTHER_CELL;
+                .caller
+                .cell_id = OTHER_CELL;
         },
         CLIENT_CELL,
         CLIENT_GEN,
@@ -2080,7 +2081,8 @@ fn assert_owner_watch_grant_for(service: u16) {
                 .tasks
                 .get_mut(&NET_TID)
                 .expect("watcher")
-                .current_caller_cell_generation = CLIENT_GEN + 1;
+                .caller
+                .cell_generation = CLIENT_GEN + 1;
         },
         CLIENT_CELL,
         CLIENT_GEN + 1,

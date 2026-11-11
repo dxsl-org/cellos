@@ -470,7 +470,7 @@ pub(in crate::task) fn take_resume_delivery(
     }
     if let Some(reason) = task.pending_exit_reason.take() {
         return ResumeDelivery::Death {
-            sender_tid: task.current_caller.unwrap_or(0),
+            sender_tid: task.caller.current.unwrap_or(0),
             reason,
         };
     }

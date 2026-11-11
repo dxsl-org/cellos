@@ -580,7 +580,7 @@ fn full_mailbox_refuses_without_wake() -> bool {
             .and_then(|sched| sched.tasks.get(&RECEIVER))
             .is_some_and(|task| {
                 matches!(task.state, TaskState::Recv { .. })
-                    && task.current_caller.is_none()
+                    && task.caller.current.is_none()
                     && task.pending_msgs.len() == HOTSWAP_MSG_QUEUE_DEPTH
             })
     };
@@ -629,7 +629,7 @@ fn heap_payload_refunds_receiver_quota() -> bool {
 
 fn death_wake_precedes_later_message() -> bool {
     let mut task = Task::new(9332, CellId(1), "ipc-death-selftest", Vec::new());
-    task.current_caller = Some(77);
+    task.caller.current = Some(77);
     task.pending_exit_reason = Some(9);
     let _ = super::queue_pending_msg(&mut task, SENDER, b"later", HOTSWAP_MSG_QUEUE_DEPTH);
     let first = super::syscall::take_resume_delivery(&mut task, 0);
@@ -697,9 +697,9 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
             .as_ref()
             .and_then(|sched| sched.tasks.get(&RECEIVER))
             .is_some_and(|task| {
-                task.current_caller == Some(SENDER)
-                    && task.current_caller_cell_id == TEST_CELL
-                    && task.current_caller_cell_generation == sender_generation
+                task.caller.current == Some(SENDER)
+                    && task.caller.cell_id == TEST_CELL
+                    && task.caller.cell_generation == sender_generation
                     && task.pending_msgs.is_empty()
             })
     };

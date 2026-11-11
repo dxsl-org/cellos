@@ -170,8 +170,8 @@ fn vfs_send_release_is_exact() -> bool {
     }
     let wrong_target_preserved = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
-            task.current_caller == Some(CLIENT_WORKER_TID)
-                && task.current_caller_cell_id == CLIENT_OWNER_TID as u64
+            task.caller.current == Some(CLIENT_WORKER_TID)
+                && task.caller.cell_id == CLIENT_OWNER_TID as u64
         })
     });
     if !wrong_target_preserved || crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_none() {
@@ -205,10 +205,10 @@ fn vfs_send_release_is_exact() -> bool {
     }
     let cleared = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
-            task.current_caller.is_none()
-                && task.current_caller_cell_id == 0
-                && task.current_caller_cell_generation == 0
-                && task.current_caller_request_generation == 0
+            task.caller.current.is_none()
+                && task.caller.cell_id == 0
+                && task.caller.cell_generation == 0
+                && task.caller.request_generation == 0
         })
     });
 
@@ -288,7 +288,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&VFS_WORKER_TID))
-        .map(|task| task.current_caller_request_generation)
+        .map(|task| task.caller.request_generation)
         .unwrap_or(0);
     let slice_result = handle_syscall(
         VFS_WORKER_TID,
@@ -319,8 +319,8 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
     let holder = crate::memory::pin::holder_of(grant_id, PAGE_SIZE);
     let preserved = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
-            task.current_caller == Some(CLIENT_WORKER_TID)
-                && task.current_caller_request_generation == request_generation
+            task.caller.current == Some(CLIENT_WORKER_TID)
+                && task.caller.request_generation == request_generation
         })
     });
     let blocked_new_slice = handle_syscall(
@@ -491,7 +491,7 @@ fn renew_vfs_grant_context() -> Option<u64> {
         let holder = sched.tasks.get_mut(&VFS_WORKER_TID)?;
         holder.clear_current_caller_context();
         holder.set_current_caller_context(CLIENT_WORKER_TID, CLIENT_CELL_ID, owner_generation);
-        Some(holder.current_caller_request_generation)
+        Some(holder.caller.request_generation)
     })
 }
 
@@ -672,7 +672,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
             .map(|task| task.cell_generation)?;
         let holder = sched.tasks.get_mut(&VFS_WORKER_TID)?;
         holder.set_current_caller_context(CLIENT_WORKER_TID, CLIENT_CELL_ID, owner_generation);
-        Some(holder.current_caller_request_generation)
+        Some(holder.caller.request_generation)
     });
     let Some(request_generation) = request_generation else {
         crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
@@ -951,9 +951,9 @@ fn vfs_owner_watch() -> bool {
     );
     let outer_context_preserved = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
         sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
-            task.current_caller == Some(CLIENT_WORKER_TID)
-                && task.current_caller_cell_id == CLIENT_CELL_ID
-                && task.current_caller_cell_generation == owner_generation
+            task.caller.current == Some(CLIENT_WORKER_TID)
+                && task.caller.cell_id == CLIENT_CELL_ID
+                && task.caller.cell_generation == owner_generation
         })
     });
 
@@ -984,7 +984,7 @@ fn vfs_owner_watch() -> bool {
         let worker_exit_clean = sched
             .tasks
             .get(&VFS_WORKER_TID)
-            .is_some_and(|task| task.current_caller.is_none());
+            .is_some_and(|task| task.caller.current.is_none());
         sched.exit_task(CLIENT_OWNER_TID, 9);
         let (masked_backend_preserved, owner_death_delivered) = sched
             .tasks

@@ -219,6 +219,79 @@ pub enum SyscallFuture {
                                                             // Add other syscall futures here (FileWrite, Connect, etc.)
 }
 
+/// The request a service task is currently serving (Task field group).
+pub struct CallerSlot {
+    /// The Task ID that this task is currently handling a request FROM (for Reply).
+    pub current: Option<usize>,
+    /// Owning cell task of `current`, captured when the request is delivered so
+    /// service-side lifecycle checks do not depend on the sender still being
+    /// alive when they run.
+    pub cell_id: u64,
+    /// Cell generation of `current`, captured with the request.
+    pub cell_generation: u64,
+    /// Monotonic per-task generation for the request currently in `current`.
+    /// Lets the kernel reject stale completion paths.
+    pub request_generation: u64,
+    /// Next request generation to assign when this task accepts a sender.
+    next_request_generation: u64,
+}
+
+impl CallerSlot {
+    const fn new() -> Self {
+        Self {
+            current: None,
+            cell_id: 0,
+            cell_generation: 0,
+            request_generation: 0,
+            next_request_generation: 1,
+        }
+    }
+}
+
+/// Scheduler accounting kept per task (Task field group).
+#[derive(Default)]
+pub struct SchedStats {
+    /// Watchdog: consecutive 10 ms scheduler ticks this task has been Running
+    /// WITHOUT voluntarily blocking. Incremented each tick it is found Running in
+    /// `pick_next`, reset to 0 the moment it blocks (Recv/Send/Sleep/etc). A
+    /// runaway (infinite loop, never yields) climbs until it crosses the watchdog
+    /// budget and is terminated — preventing livelock ("alive but paralyzed").
+    pub run_ticks: u32,
+    /// Cumulative scheduler ticks charged to this task while it was the running
+    /// task at a scheduler accounting point. This is the kernel-exported CPU
+    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
+    pub cpu_run_ticks: u64,
+    /// Exact on-CPU nanoseconds on the `GetTime(0)` monotonic clock (Phase 06
+    /// S6-1, K1). Charged at every scheduler pass on this task's hart for the
+    /// interval since that hart's previous pass; never reset within the task's
+    /// lifetime. `TelemetrySnapshot` adds the still-running interval in its row.
+    pub cpu_ns: u64,
+    /// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
+    /// message did not arrive in time). For an RT control loop this is its missed-cycle
+    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
+    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
+    pub deadline_misses: u32,
+    /// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
+    /// for the current non-yielding episode, so the early-warning audit fires once per
+    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
+    pub rt_overrun_warned: bool,
+}
+
+/// Hot-swap replacement state (Task field group).
+#[derive(Default)]
+pub struct HotswapState {
+    /// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
+    /// finished deserializing state and is ready to receive IPC.
+    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
+    pub ready: bool,
+    /// Frozen source task this replacement was minted from. Set by the
+    /// SpawnReplacement syscall and consumed only by the atomic cutover.
+    pub source_tid: Option<usize>,
+    /// Permanently rejects non-supervisor IPC to an old provider after its
+    /// mailbox and service identity have moved to a replacement.
+    pub ingress_closed: bool,
+}
+
 /// Task Control Block (TCB)
 #[allow(dead_code)]
 pub struct Task {
@@ -291,19 +364,8 @@ pub struct Task {
 
     // Maps FD -> FileHandle
     pub open_files: alloc::collections::BTreeMap<usize, FileHandle>,
-    // The Task ID that this task is currently handling a request FROM (for Reply).
-    pub current_caller: Option<usize>,
-    /// Owning cell task of `current_caller`, captured when the request is
-    /// delivered so service-side lifecycle checks do not depend on the sender
-    /// still being alive when they run.
-    pub current_caller_cell_id: u64,
-    /// Cell generation of `current_caller`, captured with the request.
-    pub current_caller_cell_generation: u64,
-    /// Monotonic per-task generation for the request currently in
-    /// `current_caller`. Lets the kernel reject stale completion paths.
-    pub current_caller_request_generation: u64,
-    /// Next request generation to assign when this task accepts a sender.
-    next_caller_request_generation: u64,
+    /// The request this task is currently serving, for `Reply`.
+    pub caller: CallerSlot,
     /// Exact request token last received, zero for a legacy request.
     pub current_async_op: usize,
     /// Kernel-owned bounded async RPC storage; no borrowed user pointers.
@@ -415,34 +477,8 @@ pub struct Task {
     /// used when the Cell ELF does not embed a `__ViCell_syscalls` section).
     pub syscall_allowlist: u64,
 
-    /// Watchdog: consecutive 10 ms scheduler ticks this task has been Running
-    /// WITHOUT voluntarily blocking. Incremented each tick it is found Running in
-    /// `pick_next`, reset to 0 the moment it blocks (Recv/Send/Sleep/etc). A
-    /// runaway (infinite loop, never yields) climbs until it crosses the watchdog
-    /// budget and is terminated — preventing livelock ("alive but paralyzed").
-    pub run_ticks: u32,
-
-    /// Cumulative scheduler ticks charged to this task while it was the running
-    /// task at a scheduler accounting point. This is the kernel-exported CPU
-    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
-    pub cpu_run_ticks: u64,
-
-    /// Exact on-CPU nanoseconds on the `GetTime(0)` monotonic clock (Phase 06
-    /// S6-1, K1). Charged at every scheduler pass on this task's hart for the
-    /// interval since that hart's previous pass; never reset within the task's
-    /// lifetime. `TelemetrySnapshot` adds the still-running interval in its row.
-    pub cpu_ns: u64,
-
-    /// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
-    /// message did not arrive in time). For an RT control loop this is its missed-cycle
-    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
-    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
-    pub deadline_misses: u32,
-
-    /// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
-    /// for the current non-yielding episode, so the early-warning audit fires once per
-    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
-    pub rt_overrun_warned: bool,
+    /// Scheduler accounting: watchdog, CPU telemetry and RT observability.
+    pub sched_stats: SchedStats,
 
     /// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
     /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
@@ -459,18 +495,8 @@ pub struct Task {
     /// (those arches use identity-mapped segments today).
     pub vma: crate::memory::vma::VmaList,
 
-    /// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
-    /// finished deserializing state and is ready to receive IPC.
-    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
-    pub hotswap_ready: bool,
-
-    /// Frozen source task this replacement was minted from. Set by the
-    /// SpawnReplacement syscall and consumed only by the atomic cutover.
-    pub hotswap_source_tid: Option<usize>,
-
-    /// Permanently rejects non-supervisor IPC to an old provider after its
-    /// mailbox and service identity have moved to a replacement.
-    pub hotswap_ingress_closed: bool,
+    /// Hot-swap replacement state.
+    pub hotswap: HotswapState,
 
     /// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
     /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
@@ -633,11 +659,7 @@ impl Task {
             grant_table: alloc::collections::BTreeMap::new(),
             next_grant_id: 1,
             open_files: alloc::collections::BTreeMap::new(),
-            current_caller: None,
-            current_caller_cell_id: 0,
-            current_caller_cell_generation: 0,
-            current_caller_request_generation: 0,
-            next_caller_request_generation: 1,
+            caller: CallerSlot::new(),
             current_async_op: 0,
             async_operations: super::async_ipc::Operations::new(),
             reply_value: None,
@@ -663,16 +685,10 @@ impl Task {
             cluster_mode: 0,
             cluster_id: 0,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
-            run_ticks: 0,
-            cpu_run_ticks: 0,
-            cpu_ns: 0,
-            deadline_misses: 0,
-            rt_overrun_warned: false,
+            sched_stats: SchedStats::default(),
             heartbeat_deadline: None,
             vma: crate::memory::vma::VmaList::new(),
-            hotswap_ready: false,
-            hotswap_source_tid: None,
-            hotswap_ingress_closed: false,
+            hotswap: HotswapState::default(),
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
             cell_generation: next_cell_generation(),
@@ -827,11 +843,11 @@ impl Task {
         sender_cell_id: u64,
         sender_generation: u64,
     ) {
-        self.current_caller = Some(sender_tid);
-        self.current_caller_cell_id = sender_cell_id;
-        self.current_caller_cell_generation = sender_generation;
-        self.current_caller_request_generation = self.next_caller_request_generation;
-        self.next_caller_request_generation = self.next_caller_request_generation.saturating_add(1);
+        self.caller.current = Some(sender_tid);
+        self.caller.cell_id = sender_cell_id;
+        self.caller.cell_generation = sender_generation;
+        self.caller.request_generation = self.caller.next_request_generation;
+        self.caller.next_request_generation = self.caller.next_request_generation.saturating_add(1);
         self.current_async_op = 0;
     }
 
@@ -858,7 +874,7 @@ impl Task {
         // remains the authority for grants and owner-death watches until VFS
         // sends that caller's response; a storage reply must not replace it.
         if crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize)
-            && self.current_caller.is_some()
+            && self.caller.current.is_some()
         {
             return;
         }
@@ -873,8 +889,9 @@ impl Task {
         // receives are nested dependency replies and keep the outer authority.
         if mask == 0 && crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize) {
             let dropped = self
-                .current_caller
-                .map(|grant_owner| (grant_owner, self.current_caller_request_generation));
+                .caller
+                .current
+                .map(|grant_owner| (grant_owner, self.caller.request_generation));
             self.clear_current_caller_context();
             return dropped;
         }
@@ -893,10 +910,10 @@ impl Task {
     }
 
     pub fn clear_current_caller_context(&mut self) {
-        self.current_caller = None;
-        self.current_caller_cell_id = 0;
-        self.current_caller_cell_generation = 0;
-        self.current_caller_request_generation = 0;
+        self.caller.current = None;
+        self.caller.cell_id = 0;
+        self.caller.cell_generation = 0;
+        self.caller.request_generation = 0;
         self.current_async_op = 0;
     }
 
@@ -905,8 +922,8 @@ impl Task {
         sender_tid: usize,
         request_generation: u64,
     ) -> bool {
-        if self.current_caller == Some(sender_tid)
-            && self.current_caller_request_generation == request_generation
+        if self.caller.current == Some(sender_tid)
+            && self.caller.request_generation == request_generation
         {
             self.clear_current_caller_context();
             return true;

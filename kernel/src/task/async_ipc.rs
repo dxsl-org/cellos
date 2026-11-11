@@ -570,13 +570,10 @@ fn reply_current_in_sched(
 ) -> Option<Result<(), Failure>> {
     let provider = sched.tasks.get(&peer).filter(|task| live(task))?;
     let token = provider.current_async_op;
-    if token == 0 || provider.current_caller != Some(destination) {
+    if token == 0 || provider.caller.current != Some(destination) {
         return None;
     }
-    let owner_binding = (
-        provider.current_caller_cell_id,
-        provider.current_caller_cell_generation,
-    );
+    let owner_binding = (provider.caller.cell_id, provider.caller.cell_generation);
     let owner_matches = sched
         .tasks
         .get(&destination)
@@ -1261,7 +1258,7 @@ mod tests {
         assert_eq!(remaining.len(), 2);
         assert_eq!(remaining[0].wire_header().unwrap().async_op, 0);
         assert_eq!(remaining[1].wire_header().unwrap().async_op, 13);
-        assert_eq!(sched.tasks[&PROVIDER].current_caller, Some(OWNER));
+        assert_eq!(sched.tasks[&PROVIDER].caller.current, Some(OWNER));
         assert_eq!(
             sched.tasks[&PROVIDER].current_async_op, 12,
             "expiry cannot release a dispatched service context"
@@ -1593,7 +1590,7 @@ mod tests {
         serve(&mut sched, PROVIDER, OWNER, 11);
         add_operation(&mut sched, PROVIDER, WORKER, 21, Phase::Dispatched);
         cancel_in_sched(&mut sched, PROVIDER, 21).unwrap();
-        assert_eq!(sched.tasks[&PROVIDER].current_caller, Some(OWNER));
+        assert_eq!(sched.tasks[&PROVIDER].caller.current, Some(OWNER));
         assert_eq!(sched.tasks[&PROVIDER].current_async_op, 11);
         assert_eq!(
             reply_current_in_sched(&mut sched, PROVIDER, OWNER, 0, 0),
@@ -2274,10 +2271,10 @@ mod tests {
         ));
         let context = |task: &Task| {
             (
-                task.current_caller,
-                task.current_caller_cell_id,
-                task.current_caller_cell_generation,
-                task.current_caller_request_generation,
+                task.caller.current,
+                task.caller.cell_id,
+                task.caller.cell_generation,
+                task.caller.request_generation,
                 task.current_async_op,
             )
         };

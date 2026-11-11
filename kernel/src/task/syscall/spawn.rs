@@ -161,7 +161,7 @@ pub(in crate::task) fn snapshot_resume(
     }
     if let Some(reason) = task.pending_exit_reason {
         return Ok(ResumeSnapshot::Death {
-            sender_tid: task.current_caller.unwrap_or(0),
+            sender_tid: task.caller.current.unwrap_or(0),
             reason,
             is_owner_death: false,
         });
@@ -194,7 +194,7 @@ pub(in crate::task) fn snapshot_resume(
         });
     }
     Ok(ResumeSnapshot::Wake {
-        sender_tid: task.current_caller.unwrap_or(0),
+        sender_tid: task.caller.current.unwrap_or(0),
     })
 }
 
@@ -422,7 +422,7 @@ pub(super) fn snapshot_process_info_v2(
         reserved0: 0,
         name: encode_task_name(&task.name),
         sample_ticks,
-        cpu_run_ticks: task.cpu_run_ticks,
+        cpu_run_ticks: task.sched_stats.cpu_run_ticks,
         heap_bytes: task_heap_bytes(task),
         owned_bytes: task_owned_bytes(task),
     }
@@ -1206,7 +1206,7 @@ pub(super) fn query_hotswap_ready(caller_id: usize, target_tid: usize) -> Syscal
     let ready = crate::task::SCHEDULER
         .lock()
         .as_ref()
-        .and_then(|s| s.tasks.get(&target_tid).map(|t| t.hotswap_ready));
+        .and_then(|s| s.tasks.get(&target_tid).map(|t| t.hotswap.ready));
     match ready {
         Some(true) => Ok(1),
         Some(false) => Ok(0),

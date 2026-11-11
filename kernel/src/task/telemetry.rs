@@ -344,7 +344,7 @@ pub(crate) fn capture(
             .map_err(|_| ViError::OutOfMemory)?;
     }
     for task in sched.tasks.values() {
-        let cpu_ns = task.cpu_ns.saturating_add(in_flight(task.id));
+        let cpu_ns = task.sched_stats.cpu_ns.saturating_add(in_flight(task.id));
         if let Some(index) = member(&cells, task.cell_id.0, task.cell_generation) {
             let cell = &mut cells[index];
             cell.cpu_ns = cell.cpu_ns.saturating_add(cpu_ns);
@@ -623,7 +623,10 @@ mod tests {
             .expect("root row")
             .has(task_flags::STACK_IN_QUOTA));
         // The in-flight interval is reported, never written back.
-        assert_eq!(sched.tasks.get(&101).map(|t| t.cpu_ns), Some(500));
+        assert_eq!(
+            sched.tasks.get(&101).map(|t| t.sched_stats.cpu_ns),
+            Some(500)
+        );
 
         let again = take(&mut sched, Some(2_700), 1 << 16, false);
         let again = TelemetrySnapshot::parse(&again).expect("cells only");
@@ -702,7 +705,7 @@ mod tests {
         sched
             .tasks
             .insert(200, task(200, CELL_A, next, 200, "a-again"));
-        sched.tasks.get_mut(&200).expect("root").cpu_ns = 50;
+        sched.tasks.get_mut(&200).expect("root").sched_stats.cpu_ns = 50;
         live(&mut sched, CELL_A, next, 200);
         let bytes = take(&mut sched, Some(5_000), 1 << 16, true);
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("decode");
