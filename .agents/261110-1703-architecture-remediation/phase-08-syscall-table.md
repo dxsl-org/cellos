@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Generated syscall table and split dispatcher"
-status: pending
+status: in-progress
 priority: P1
 effort: "8–12d"
 dependencies: [7]
@@ -74,8 +74,8 @@ Raw opcodes outside the enum (3/100/110/111/255/500–504) become table rows fla
 
 ## Todo List
 
-- [ ] CP1 approved
-- [ ] Golden dump
+- [x] CP1 approved
+- [x] Golden dump
 - [ ] Generated `api` side
 - [ ] Generated kernel side, single gate
 - [ ] File split
@@ -104,4 +104,5 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
 
 ## Deviation Log
 
-None.
+- **Step 2 (golden dump):** `kernel/src/task/syscall/golden_tests.rs` (host, `syscall_golden`) writes `libs/api/abi/syscalls.golden.json`. It has 148 rows: 141 api opcodes plus the raw aliases 100/110/111/500–503. Each row records the api decode and bit, the kernel decode, the variant→`ViSyscall` map, the result encoder (6 typed-OOM syscalls), and the bits that actually gate the opcode at `check_allowlist`, found by probing all 64 bits against a task holding every right.
+- **Finding from the dump:** for every api opcode, the effective raw-id gate bit equals `allowlist_bit`. `syscall_to_vi` (the variant-side map) returns `None` for 27 syscalls, among them `Call`, `Exit`, `Yield`, `CapRevoke`, `RegisterService`, `CellSessionV1`, `ResolveCellImage` and the 244–248 owner calls. The variant-path allowlist check therefore never covers them, which is the split-gate gap H-5 names. In-kernel `handle_syscall` callers pass only through that variant path.

@@ -11910,6 +11910,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 
 #[cfg(test)]
+mod golden_tests;
+
+#[cfg(test)]
 #[path = "grant-owner-tests.rs"]
 mod grant_owner_tests;
 
