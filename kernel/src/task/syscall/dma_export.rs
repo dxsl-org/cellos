@@ -835,7 +835,7 @@ impl Platform for KernelPlatform {
     fn exports_enabled(&self) -> bool {
         #[cfg(target_arch = "x86_64")]
         {
-            if !crate::task::drivers::iommu::is_active() {
+            if !crate::dev::iommu::is_active() {
                 return false;
             }
             let top = crate::memory::frame::FRAME_ALLOCATOR
@@ -885,7 +885,7 @@ impl Platform for KernelPlatform {
     fn translating(&self, bdf: u32) -> bool {
         #[cfg(target_arch = "x86_64")]
         {
-            crate::task::drivers::iommu_x86::bdf_translating(bdf)
+            crate::dev::iommu_x86::bdf_translating(bdf)
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
@@ -911,8 +911,8 @@ impl Platform for KernelPlatform {
     fn map_window(&mut self, w: &WindowMap) -> MapOutcome {
         #[cfg(target_arch = "x86_64")]
         {
-            use crate::task::drivers::iommu::DmaMapResult;
-            match crate::task::drivers::iommu_x86::map_window_for_cell(
+            use crate::dev::iommu::DmaMapResult;
+            match crate::dev::iommu_x86::map_window_for_cell(
                 w.holder_tid as u64,
                 w.bdf,
                 w.iova,
@@ -935,7 +935,7 @@ impl Platform for KernelPlatform {
     fn unmap_window(&mut self, holder_tid: usize, iova: u64, len: usize) -> bool {
         #[cfg(target_arch = "x86_64")]
         {
-            crate::task::drivers::iommu_x86::unmap_window_for_cell(holder_tid as u64, iova, len)
+            crate::dev::iommu_x86::unmap_window_for_cell(holder_tid as u64, iova, len)
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
@@ -945,7 +945,7 @@ impl Platform for KernelPlatform {
     }
 
     fn enable_bus_master(&mut self, bdf: u32) {
-        crate::task::drivers::pcie_ecam::enable_bus_master(bdf);
+        crate::dev::pcie_ecam::enable_bus_master(bdf);
     }
 }
 

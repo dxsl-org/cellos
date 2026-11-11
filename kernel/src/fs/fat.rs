@@ -10,8 +10,8 @@ use alloc::sync::Arc;
 use core::cmp;
 
 use self::runs::RunMap;
+use crate::dev::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use crate::sync::Spinlock;
-use crate::task::drivers::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use api::block::ViBlockDevice;
 use api::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
 use types::{ViError, ViResult}; // Using Spinlock for kernel level sync

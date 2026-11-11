@@ -51,6 +51,7 @@ pub mod catalog;
 #[cfg(test)]
 mod catalog_export;
 pub mod cell;
+pub mod dev; // Kernel-resident device mechanisms (IRQ, IOMMU, MSI, early console)
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
@@ -181,7 +182,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::platform::with(|p| hal::common::plic::set_plic_base(p.plic_base));
     // 0. Initialize UART immediately for early logging
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    task::drivers::uart::init();
+    crate::dev::uart::init();
     #[cfg(target_arch = "aarch64")]
     crate::hal::backend::Board::console_init();
     #[cfg(target_arch = "arm")]
@@ -223,7 +224,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // neither the logger nor its console lock allocates. Registering it at
         // step 6 dropped every `log` record of the boot path before the heap
         // (allocator ranges, firmware-range rejections, ACPI table findings).
-        task::drivers::uart::init();
+        crate::dev::uart::init();
     }
     #[cfg(target_arch = "x86")]
     crate::hal::uart_16550::init();
@@ -510,8 +511,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             Err(error) => panic!("[board] {}", error),
         }
         let console_opt = crate::board::console_option(cmdline).unwrap_or(None);
-        let _ =
-            crate::task::drivers::console_select::select_and_apply_console(console_opt, &acpi_info);
+        let _ = crate::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -542,11 +542,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let x86_ecam_len = if x86_ecam_base == 0 {
         0
     } else {
-        crate::task::drivers::pcie_ecam::ecam_window_size(
-            acpi_info.ecam_bus_start,
-            acpi_info.ecam_bus_end,
-        )
-        .expect("validated ACPI MCFG range has a bounded ECAM window")
+        crate::dev::pcie_ecam::ecam_window_size(acpi_info.ecam_bus_start, acpi_info.ecam_bus_end)
+            .expect("validated ACPI MCFG range has a bounded ECAM window")
     };
     // The timer gate opens only after `init_timers` finds a clocksource
     // (phase 02 of plan 261103-2218); HPET is one candidate, not a requirement.
@@ -606,8 +603,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         // Set runtime ECAM base from validated ACPI before PCIe scan. Zero
         // keeps PCIe closed; there is no implicit q35 fallback.
-        crate::task::drivers::pcie_ecam::set_ecam_base_x86(x86_ecam_base as usize);
-        crate::task::drivers::pcie_ecam::set_ecam_bus_range_x86(
+        crate::dev::pcie_ecam::set_ecam_base_x86(x86_ecam_base as usize);
+        crate::dev::pcie_ecam::set_ecam_bus_range_x86(
             acpi_info.ecam_bus_start,
             acpi_info.ecam_bus_end,
         );
@@ -825,7 +822,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 6. Logger & Drivers & FS
     // Registers the log backend on AArch64/ARM; RV64 and x86_64 registered it
     // at entry, so the call is a no-op there.
-    task::drivers::uart::init();
+    crate::dev::uart::init();
     #[cfg(target_arch = "aarch64")]
     {
         use hal::backend::{ArmEl2Monitor, El2Monitor};
@@ -868,23 +865,23 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);
     }
     #[cfg(target_arch = "riscv64")]
-    task::drivers::uart::init_input();
+    crate::dev::uart::init_input();
     #[cfg(target_arch = "aarch64")]
     if crate::hal::backend::Board::CONSOLE_RX_IRQ {
         // IRQ delivery must start only after the heap-backed queue exists.
-        task::drivers::uart::init_input();
+        crate::dev::uart::init_input();
         crate::hal::backend::Board::console_enable_rx_irq();
     }
     // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).
     // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-    task::drivers::init();
+    crate::dev::init();
     // x86_64: load embedded kernel_fs.img into RAM so EarlyLoader can serve ELFs from it.
     // VirtIO devices on q35 are on PCIe — probed via virtio_pci::init() after ECAM scan.
     #[cfg(target_arch = "x86_64")]
     {
-        task::drivers::ramdisk::init_driver();
-        task::drivers::ps2_keyboard::init();
+        crate::dev::ramdisk::init_driver();
+        crate::dev::ps2_keyboard::init();
         // COM1 TX remains available without ACPI. RX IRQ requires the timer
         // gate (validated MADT plus a clocksource) and an I/O APIC that serves
         // the UART's GSI, because it is routed through IOAPIC/LAPIC.
@@ -894,7 +891,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log::warn!("[x86-gate] configured UART IRQ CLOSED: no I/O APIC serves its GSI");
         }
         // Initialise the RX buffer that vi_handle_uart_irq() writes into.
-        task::drivers::uart::init_input();
+        crate::dev::uart::init_input();
         // Phase 06: name every declared serial port and whether the machine
         // actually answered the 16550 probe. The console is slot 0; the extras
         // are polled, so an absent one is a refusal, never a silent write.
@@ -940,15 +937,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             // activate VT-d before any DMA-capable Driver Cell can run. The
             // Platform Cell receives the full validated MCFG range via argv
             // later and performs authoritative multi-bus enumeration.
-            task::drivers::pcie_ecam::init();
-            task::drivers::iommu::init(task::drivers::iommu::DmaIsolationInput {
+            crate::dev::pcie_ecam::init();
+            crate::dev::iommu::init(crate::dev::iommu::DmaIsolationInput {
                 vtd_base: acpi_info.dmar_base,
                 vtd_units: acpi_info.dmar_units,
                 vtd_include_pci_all: acpi_info.dmar_include_pci_all,
             });
-            task::drivers::iommu::activate_isolation();
+            crate::dev::iommu::activate_isolation();
             // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.
-            task::drivers::pcie_msi::init(
+            crate::dev::pcie_msi::init(
                 acpi_info
                     .fadt
                     .as_ref()
@@ -958,14 +955,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
         }
         #[cfg(target_arch = "riscv64")]
-        task::drivers::iommu::set_deferred_init_pending();
+        crate::dev::iommu::set_deferred_init_pending();
         // VirtIO PCI block init removed (G2 loader redesign phase 06). x86 block I/O
         // is served by the NVMe Driver Cell (F4); the kernel drives no block hardware.
         // activate_isolation() is now called inside iommu::try_deferred_init() once the
         // IOMMU device has been registered by the Platform Cell. The call below is a no-op
         // (IOMMU not yet initialized at this point in boot).
         #[cfg(target_arch = "riscv64")]
-        task::drivers::iommu::activate_isolation();
+        crate::dev::iommu::activate_isolation();
     }
 
     // Attempt warm boot from snapshot before any cell initialization.
@@ -1418,7 +1415,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // P01). The tables are plain kernel-heap memory, so this needs no IOMMU
     // hardware and runs on every arch whose lane enables hooks.
     #[cfg(feature = "test-hooks")]
-    crate::task::drivers::iommu_pt::run_selftest();
+    crate::dev::iommu_pt::run_selftest();
 
     // Phase 07 step 3: the all-hart park hook, driven on the real harts of this
     // boot. The fixture requests, verifies and releases a park through the same
@@ -1573,12 +1570,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                         owner, phys_addr, size, width, height, pitch,
                     );
                     log_info("[boot] x86_64 Limine linear framebuffer mapped and registered");
-                    crate::task::drivers::fb_console::init(
-                        fb.addr,
-                        width as usize,
-                        height as usize,
-                        pitch,
-                    );
+                    crate::dev::fb_console::init(fb.addr, width as usize, height as usize, pitch);
                     unsafe {
                         let ptr = fb.addr as *mut u32;
                         let stride = pitch / 4;

@@ -598,7 +598,7 @@ fn note_pcie_ecam(tree: &fdt::Fdt) {
             .any(|map| map.base <= base && end <= map.end)
     });
     if mapped {
-        crate::task::drivers::pcie_ecam::record_ecam_base_aarch64(base);
+        crate::dev::pcie_ecam::record_ecam_base_aarch64(base);
     } else {
         log::warn!(
             "[boot] ECAM at {:#x} is outside the kernel MMIO maps; not scanned",

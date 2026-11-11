@@ -796,7 +796,7 @@ mod tests {
     /// installed at the path the table names, and by no other NIC program.
     #[test]
     fn ethernet_ids_belong_to_their_driver_program_only() {
-        use crate::task::drivers::pcie_ecam::ETHERNET_DRIVER_IDS;
+        use crate::dev::pcie_ecam::ETHERNET_DRIVER_IDS;
         for (vendor, device, path) in ETHERNET_DRIVER_IDS {
             let owner = path.trim_start_matches("/bin/");
             assert!(

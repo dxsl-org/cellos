@@ -563,7 +563,7 @@ pub struct CompletionWait {
     /// line the task held at entry (refreshed when a take finds one revoked).
     /// Empty for every other mask. The scheduler sweep reads it under
     /// `SCHEDULER` without taking the allocation lock.
-    pub irq_lines: crate::task::drivers::irq_wait::IrqLineSet,
+    pub irq_lines: crate::dev::irq_wait::IrqLineSet,
 }
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as

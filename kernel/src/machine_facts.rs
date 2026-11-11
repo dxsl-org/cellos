@@ -21,8 +21,8 @@ pub(crate) fn query() -> Option<Vec<u8>> {
         encode(
             board.slug,
             &facts,
-            crate::task::drivers::iommu::is_active(),
-            crate::task::drivers::pcie_ecam::fingerprint_functions(),
+            crate::dev::iommu::is_active(),
+            crate::dev::pcie_ecam::fingerprint_functions(),
         )
     }
     #[cfg(not(target_arch = "x86_64"))]

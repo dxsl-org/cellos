@@ -243,9 +243,9 @@
 //! all host-observable.  Every fake lives in `#[cfg(test)]` (host lane only) and
 //! is never linked into a kernel image.
 
+use crate::dev::block;
 use crate::memory::frame::{phys_to_virt, FrameAllocator, FRAME_ALLOCATOR};
 use crate::sync::Spinlock;
-use crate::task::drivers::block;
 use crate::task::quiesce;
 use alloc::vec::Vec;
 use core::fmt;
@@ -2971,7 +2971,7 @@ pub fn try_restore() -> bool {
             // Re-run driver init: device registers were reset by the power
             // cycle, so descriptor-ring state inside the restored driver
             // structs no longer matches device-side state.
-            crate::task::drivers::init();
+            crate::dev::init();
 
             // Re-arm the scheduler timer.
             #[cfg(target_arch = "riscv64")]

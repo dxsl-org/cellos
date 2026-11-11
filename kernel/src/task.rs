@@ -129,7 +129,6 @@ mod cell_image;
 pub mod context_handoff_selftest;
 #[cfg(cellos_g1_cpu)]
 pub(crate) mod cpu_accounting;
-pub mod drivers;
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 #[path = "task/getrandom-sas-tests.rs"]
 pub(crate) mod getrandom_sas_tests;
@@ -1148,12 +1147,12 @@ pub extern "Rust" fn vi_timer_tick() {
     // above, so the VirtIO section of poll() is a no-op here.
     #[cfg(target_arch = "x86_64")]
     if hart_local::current_hart_id() == 0 {
-        crate::task::drivers::console_drv::CONSOLE.lock().poll();
+        crate::dev::console_drv::CONSOLE.lock().poll();
         // ACPI power button: same hart, same no-lock point as the byte relay.
         crate::acpi::sci::relay_pending();
     }
     #[cfg(not(target_arch = "x86_64"))]
-    crate::task::drivers::console_drv::CONSOLE.lock().poll();
+    crate::dev::console_drv::CONSOLE.lock().poll();
 
     // Run the scheduler.  If a higher-priority (or simply next round-robin)
     // task is ready, this performs a context switch.  Safe to call from the
@@ -1969,7 +1968,7 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     #[cfg(feature = "bench-counters")]
     let owned_any = !owned.is_empty();
     for bdf in owned {
-        match crate::task::drivers::pcie_ecam::quiesce_function(bdf) {
+        match crate::dev::pcie_ecam::quiesce_function(bdf) {
             Ok(quiesced) if quiesced.changed => log::info!(
                 "[pcie] quiesced {:02x}:{:02x}.{} for tid {}: cmd=0x{:04x} bme=0 intx_disable=1 msi={} msix={}",
                 (bdf >> 8) & 0xFF,
@@ -1997,8 +1996,8 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     // Every owned function is quiescent (MSI off, MSI-X masked), so none can
     // fire into a vector handed to the next owner.
     #[cfg(target_arch = "x86_64")]
-    crate::task::drivers::pcie_msi::release_for(tid);
-    if !crate::task::drivers::iommu::revoke_dma_for_cell(tid as u64) {
+    crate::dev::pcie_msi::release_for(tid);
+    if !crate::dev::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }
     // The holder's export windows lived in that domain: their leases now drop
@@ -2083,7 +2082,7 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
         // is acknowledged; the deferred retry releases it on success.
         crate::resource_registry::release_mmio_for(tid);
     }
-    crate::task::drivers::irq_wait::release_waiters_for(tid);
+    crate::dev::irq_wait::release_waiters_for(tid);
     let grants = crate::task::syscall::reap_grants_for_task(tid);
     crate::hypervisor::registry::reap_vms_for_task(tid);
     MemberReap {
@@ -2310,7 +2309,7 @@ pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
             return 0;
         }
 
-        let mut cons = crate::task::drivers::console_drv::CONSOLE.lock();
+        let mut cons = crate::dev::console_drv::CONSOLE.lock();
         cons.poll();
         let b = cons.read_byte();
         if let Some(byte) = b {
@@ -2993,8 +2992,8 @@ pub(crate) fn wake_sender_token(
     }
 }
 fn is_trusted_input_sender(caller_id: usize) -> bool {
-    let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
-        .load(core::sync::atomic::Ordering::Acquire);
+    let input_tid =
+        crate::dev::driver_cell::INPUT_CELL_TID.load(core::sync::atomic::Ordering::Acquire);
     let compositor_tid =
         crate::cell::service_registry::lookup(api::syscall::service::COMPOSITOR).unwrap_or(0);
     (caller_id == input_tid && input_tid != 0)
@@ -3391,7 +3390,7 @@ pub fn read_log_ring(buf: &mut [u8]) -> usize {
 /// Write one Cell record to the console, owned by `writer`.
 ///
 /// `writer` is the calling task's id, handed to
-/// [`drivers::uart::write_user_record`](crate::task::drivers::uart::write_user_record)
+/// [`crate::dev::uart::write_user_record`](crate::dev::uart::write_user_record)
 /// as the console line's owner. The guest's shell echo is the case that matters:
 /// it arrives one `sys_log` per keypress from the hypervisor, so a diagnostic
 /// from another cell used to be spliced into the middle of the command being
@@ -3411,7 +3410,7 @@ pub fn print_user_log(msg: &str, writer: usize) {
     // them via ReadLog without reconstructing the UART prefix logic.
     LOG_RING.lock().push(msg.as_bytes());
 
-    crate::task::drivers::uart::write_user_record(writer, msg);
+    crate::dev::uart::write_user_record(writer, msg);
 }
 
 /// Spawns a synthetic task for testing User Mode without filesystem

@@ -32,7 +32,7 @@ impl viConsole {
     /// Polls input sources and pushes available characters to the buffer.
     /// Returns true if a character was received.
     pub fn poll(&mut self) -> bool {
-        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Relaxed);
+        let input_tid = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Relaxed);
 
         // When input service is online, bytes are relayed via IPC — never buffered.
         // Only apply the buffer-full early-out when operating in fallback buffered mode.
@@ -99,7 +99,7 @@ impl viConsole {
         // returns garbage (0xFF), causing continuous `?` spam.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::poll_rhr() else {
+            let Some(c) = crate::dev::uart::poll_rhr() else {
                 break;
             };
             route_byte!(c, false);
@@ -110,7 +110,7 @@ impl viConsole {
         // chars come through the PL011 path below.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::getchar() else {
+            let Some(c) = crate::dev::uart::getchar() else {
                 break;
             };
             route_byte!(c, true);
@@ -121,7 +121,7 @@ impl viConsole {
         #[cfg(target_arch = "aarch64")]
         if crate::hal::backend::Board::CONSOLE_RX_IRQ {
             while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-                let Some(c) = crate::task::drivers::uart::getchar() else {
+                let Some(c) = crate::dev::uart::getchar() else {
                     break;
                 };
                 route_byte!(c, true);
@@ -146,7 +146,7 @@ impl viConsole {
         // so the blocking file_read(fd=0) loop eventually finds a byte.
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::getchar() else {
+            let Some(c) = crate::dev::uart::getchar() else {
                 break;
             };
             route_byte!(c, true);
@@ -157,7 +157,7 @@ impl viConsole {
         if input_tid != 0 {
             // Bound work per tick even when the device continuously reports.
             for _ in 0..64 {
-                let Some(event) = crate::task::drivers::ps2_keyboard::poll_event() else {
+                let Some(event) = crate::dev::ps2_keyboard::poll_event() else {
                     break;
                 };
                 if !relay_evdev_to_input(input_tid, event.opcode, event.code, event.value) {
@@ -168,7 +168,7 @@ impl viConsole {
             }
         } else {
             while self.buffer.len() < Self::MAX_BUFFERED {
-                let Some(c) = crate::task::drivers::ps2_keyboard::poll() else {
+                let Some(c) = crate::dev::ps2_keyboard::poll() else {
                     break;
                 };
                 route_byte!(c, false);
@@ -227,8 +227,7 @@ static PENDING_ASCII: Spinlock<Option<u8>> = Spinlock::new(None);
 
 /// One failed typed delivery, including releases and individual motion axes.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-static PENDING_PS2: Spinlock<Option<crate::task::drivers::ps2_keyboard::Ps2Event>> =
-    Spinlock::new(None);
+static PENDING_PS2: Spinlock<Option<crate::dev::ps2_keyboard::Ps2Event>> = Spinlock::new(None);
 
 /// Relay a UART byte to the input service as one EV_ASCII press event.
 ///

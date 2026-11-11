@@ -804,15 +804,15 @@ fn insert_block_route_task(tid: usize, cell: u64, generation: u64, caps: CapSet)
 
 fn block_routes_snapshot(
 ) -> [Option<api::block_route::ViBlockRouteV1>; api::block_route::MAX_BLOCK_ROUTES] {
-    core::array::from_fn(crate::task::drivers::driver_cell::block_route_record)
+    core::array::from_fn(crate::dev::driver_cell::block_route_record)
 }
 
 /// Phase 09C D4: `RegisterBlockDriver` (416) decodes a0..a3 with typed
 /// errors, and binds only the route of the device the caller owns.
 #[test]
 fn register_block_driver_binds_only_the_callers_owned_device_route() {
+    use crate::dev::driver_cell::{deregister_all_for, reset_block_routes};
     use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
-    use crate::task::drivers::driver_cell::{deregister_all_for, reset_block_routes};
     use api::block_route::MAX_BLOCK_ROUTES;
     const BDF: usize = 0x4160;
     const FOREIGN_BDF: usize = 0x4161;
@@ -1002,7 +1002,7 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
 /// gated on BlockIoCap or SpawnCap, and its refusals are typed.
 #[test]
 fn lookup_block_route_is_gated_on_block_io_or_spawn_with_typed_errors() {
-    use crate::task::drivers::driver_cell::{
+    use crate::dev::driver_cell::{
         block_route_record, deregister_all_for, publish_block_route, reset_block_routes,
     };
     use api::block_route::{DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN};
@@ -1197,8 +1197,8 @@ fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
 /// owner's re-query still reaches its own function.
 #[test]
 fn vendor_lookup_skips_functions_owned_by_another_driver() {
+    use crate::dev::pcie_ecam::{self, Bar, PciDevice};
     use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
-    use crate::task::drivers::pcie_ecam::{self, Bar, PciDevice};
     const VENDOR: u16 = 0x1b36;
     const DEVICE: u16 = 0xfa04;
     let function = |fun| PciDevice {

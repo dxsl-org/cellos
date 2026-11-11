@@ -572,7 +572,7 @@ pub(super) fn net_tx(caller_id: usize, frame_ptr: usize, frame_len: usize) -> Sy
         &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
     );
     let frame = read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
-    let ok = crate::task::drivers::nic::send_frame(&frame);
+    let ok = crate::dev::nic::send_frame(&frame);
     Ok(if ok { 1 } else { 0 })
 }
 
@@ -586,7 +586,7 @@ pub(super) fn net_rx(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Syscal
     kbuf.try_reserve_exact(buf_len)
         .map_err(|_| SyscallError::OutOfMemory)?;
     kbuf.resize(buf_len, 0);
-    let n = crate::task::drivers::nic::recv_frame(&mut kbuf);
+    let n = crate::dev::nic::recv_frame(&mut kbuf);
     if n > 0 {
         write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
     }

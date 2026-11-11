@@ -59,7 +59,7 @@ pub extern "Rust" fn vi_signal_usb_irq() {
     if let Some(usb_irq) =
         <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::USB_ONE_SHOT_IRQ
     {
-        crate::task::drivers::irq_wait::signal_irq(usb_irq as u8);
+        crate::dev::irq_wait::signal_irq(usb_irq as u8);
     }
 }
 

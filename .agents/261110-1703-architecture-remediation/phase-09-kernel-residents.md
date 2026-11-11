@@ -117,3 +117,10 @@ Phases 10 and 14 both build on the new layout.
   - The four engine statics were removed from `mutable-globals.toml`, because the tool requires entries only for declarations linked in its profile. A note there asks for re-review when the qualified profile ships.
   - No lane exercised the qualified profile before this change, and none does now. Clippy is clean with `snapshot-qualified` on all 3 arches.
 - **Fix:** the `WEAK_RNG_WARNED` inventory key had gone stale in commit `1e0d135ab` (the dispatcher extraction moved it into `ipc::get_random`). It is re-keyed here.
+- **Hoist 1/4 (`task/drivers` → `dev/`).** The files moved and the module path changed from `crate::task::drivers` to `crate::dev`.
+  - Visibility scoped to `crate::task` inside the moved files became `pub(crate)`. That is required now that `dev` is no longer under `task`, and it changes no behaviour.
+  - Also updated: the inventory keys, the `check-hal-boundaries` path, the law-1 source pin, the metric script (it now excludes `dev/**`), and the two `#[path]`/`include_str!` integration tests.
+- **Surprise (my Phase 08 regression).** The manual-tier integration tests `pcie-bdf-ownership` and `driver-registration-contract` used `include_str!` on `kernel/src/task/syscall.rs`. That file was deleted by the Phase 08 split, so neither test has compiled since. No workflow ran them.
+  - Both tests only pin dispatcher source text (`// 417: …` arm markers and `contains` checks). Under the test policy, such tests are deleted, not re-pinned. They are deleted together with their `Cargo.toml` and `lanes.toml` entries.
+- **Pre-existing failure (not mine).** `tests/rust-std-promotion` fails 2/33: frozen `.agents/260821-…` artifact digests no longer match the live sources. The same 2 tests fail on `8a005f998`.
+- **Surprise.** `docs/code-metrics.generated.md` had gone stale over the earlier Phase 09 commits; it is regenerated here. Every later commit now runs `generate-code-metrics.py --check`.

@@ -1443,7 +1443,7 @@ fn session_query_child_contract() -> bool {
 /// stays CR, Ctrl-J stays LF), while the legacy no-input-service `sys_read(fd=0)`
 /// fallback still sees CR from the UART RX ring as LF and nothing else changed.
 fn serial_raw_relay_contract() -> bool {
-    use crate::task::drivers::console_drv::{route_for, Route};
+    use crate::dev::console_drv::{route_for, Route};
     (0..=u8::MAX).all(|byte| {
         // Relay: raw for every byte and every source, with the input service online.
         route_for(true, byte, true) == Route::Relay(byte)

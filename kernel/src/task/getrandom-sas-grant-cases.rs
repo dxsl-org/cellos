@@ -21,12 +21,12 @@ pub(super) fn run(caller_id: usize, caller_generation: u64) -> bool {
         };
         caller.cell_generation = caller_generation.wrapping_add(1);
     }
-    let entropy_before_stale = crate::task::drivers::virtio_rng::test_entropy_requests();
+    let entropy_before_stale = crate::dev::virtio_rng::test_entropy_requests();
     let stale_rejected =
         syscall::dispatch_raw_for_test(caller_id, RAW_GETRANDOM, grant_base + 32, 65, 0, 0)
             == Err(syscall::SyscallError::InvalidInput);
     let stale_skipped_entropy =
-        crate::task::drivers::virtio_rng::test_entropy_requests() == entropy_before_stale;
+        crate::dev::virtio_rng::test_entropy_requests() == entropy_before_stale;
     if let Some(caller) = SCHEDULER
         .lock()
         .as_mut()
@@ -38,7 +38,7 @@ pub(super) fn run(caller_id: usize, caller_generation: u64) -> bool {
     let grant_ok =
         syscall::dispatch_raw_for_test(caller_id, RAW_GETRANDOM, grant_base + 32, 65, 0, 0)
             == Ok(64);
-    let retire_entropy_before = crate::task::drivers::virtio_rng::test_entropy_requests();
+    let retire_entropy_before = crate::dev::virtio_rng::test_entropy_requests();
     {
         let mut scheduler = SCHEDULER.lock();
         let caller = scheduler
@@ -52,7 +52,7 @@ pub(super) fn run(caller_id: usize, caller_generation: u64) -> bool {
     let retiring_rejected =
         syscall::dispatch_raw_for_test(caller_id, RAW_GETRANDOM, grant_base + 32, 65, 0, 0)
             == Err(syscall::SyscallError::PermissionDenied);
-    let retire_entropy_after = crate::task::drivers::virtio_rng::test_entropy_requests();
+    let retire_entropy_after = crate::dev::virtio_rng::test_entropy_requests();
     if let Some(caller) = SCHEDULER
         .lock()
         .as_mut()

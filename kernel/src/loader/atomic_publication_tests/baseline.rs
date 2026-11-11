@@ -106,7 +106,7 @@ impl SharedStateBaseline {
         let block_io_registered = crate::loader::block_io_registered_snapshot();
         let vfs_tid = crate::fast_ipc::vfs_handler_cell_snapshot();
         let vfs_handler = crate::fast_ipc::vfs_handler_pointer_snapshot();
-        let input_tid = crate::task::drivers::driver_cell::input_cell_snapshot();
+        let input_tid = crate::dev::driver_cell::input_cell_snapshot();
         let (service_cell, service_generation) = {
             let mut scheduler = crate::task::SCHEDULER.lock();
             let sched = scheduler.as_mut().expect("atomic corpus needs scheduler");
@@ -153,7 +153,7 @@ impl SharedStateBaseline {
         );
         crate::fast_ipc::register_vfs(fixture_vfs_handler);
         crate::fast_ipc::set_vfs_handler_cell(VFS_CELL.0 as usize);
-        crate::task::drivers::driver_cell::set_input_cell(INPUT_TID);
+        crate::dev::driver_cell::set_input_cell(INPUT_TID);
         assert!(crate::cell::service_registry::register(
             SERVICE_ID,
             SERVICE_TID,
@@ -200,7 +200,7 @@ impl SharedStateBaseline {
             && crate::fast_ipc::vfs_handler_cell_snapshot() == VFS_CELL.0 as usize
             && crate::fast_ipc::vfs_handler_pointer_snapshot()
                 == (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize
-            && crate::task::drivers::driver_cell::input_cell_snapshot() == INPUT_TID
+            && crate::dev::driver_cell::input_cell_snapshot() == INPUT_TID
             && crate::cell::service_registry::snapshot()
                 .iter()
                 .any(|&(service, tid, _)| service == SERVICE_ID && tid == SERVICE_TID)
@@ -217,9 +217,9 @@ impl Drop for SharedStateBaseline {
         crate::fast_ipc::clear_vfs_if_cell(VFS_CELL.0 as usize);
         crate::fast_ipc::restore_vfs_handler_pointer_for_test(self.vfs_handler);
         crate::fast_ipc::set_vfs_handler_cell(self.vfs_tid);
-        crate::task::drivers::driver_cell::clear_input_cell_if(INPUT_TID);
+        crate::dev::driver_cell::clear_input_cell_if(INPUT_TID);
         if self.input_tid != 0 {
-            crate::task::drivers::driver_cell::set_input_cell(self.input_tid);
+            crate::dev::driver_cell::set_input_cell(self.input_tid);
         }
         crate::loader::restore_block_io_registration_for_test(self.block_io_registered);
         crate::memory::cell_quota::deregister(QUOTA_CELL);

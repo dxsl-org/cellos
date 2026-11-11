@@ -592,11 +592,11 @@ pub(super) fn register_service(caller_id: usize, service_id: u16, tid: usize) ->
         // Role and route publish as one transaction against exact-TID
         // teardown. This path has always answered 0 once authorized, so
         // a rejected route only rolls the role back; it adds no refusal.
-        crate::task::drivers::driver_cell::publish_role_or_rollback(
+        crate::dev::driver_cell::publish_role_or_rollback(
             caller_id,
-            crate::task::drivers::driver_cell::register_gpu_driver,
+            crate::dev::driver_cell::register_gpu_driver,
             || crate::cell::service_registry::register(service_id, caller_id, cell_id, generation),
-            crate::task::drivers::driver_cell::deregister_gpu_driver,
+            crate::dev::driver_cell::deregister_gpu_driver,
         );
         return Ok(0);
     }

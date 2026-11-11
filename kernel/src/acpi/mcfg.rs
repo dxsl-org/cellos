@@ -46,7 +46,7 @@ pub(super) fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo, topo: 
         let segment = unsafe { core::ptr::read_unaligned((entry + 8) as *const u16) };
         let bus_start = unsafe { core::ptr::read_volatile((entry + 10) as *const u8) };
         let bus_end = unsafe { core::ptr::read_volatile((entry + 11) as *const u8) };
-        let window_len = crate::task::drivers::pcie_ecam::ecam_window_size(bus_start, bus_end);
+        let window_len = crate::dev::pcie_ecam::ecam_window_size(bus_start, bus_end);
         let window_base = base_addr.checked_add((bus_start as u64) << 20);
         if segment == 0
             && base_addr != 0

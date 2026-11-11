@@ -175,13 +175,7 @@ path = "tests/e1000-dma-layout.rs"
 name = "nvme-dma-addressing"
 path = "tests/nvme-dma-addressing.rs"
 
-[[test]]
-name = "driver-registration-contract"
-path = "tests/driver-registration-contract.rs"
 
-[[test]]
-name = "pcie-bdf-ownership"
-path = "tests/pcie-bdf-ownership.rs"
 
 [[test]]
 name = "iommu-riscv-command"

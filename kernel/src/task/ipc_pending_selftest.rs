@@ -239,11 +239,11 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
 
     prepare_completion_wait_receiver();
     let ready_before = super::hart_local::ready::total_ready_count();
-    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
-    super::drivers::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
+    let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
     let sent =
         super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_ok();
-    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
     if !sent || !verify_completion_wait_wake(payload, ready_before, false) {
         ok = fail("trusted ipc_try_send did not wake NET_RX completion wait");
     }
@@ -251,11 +251,11 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
 
     prepare_completion_wait_receiver();
     let ready_before = super::hart_local::ready::total_ready_count();
-    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
-    super::drivers::driver_cell::INPUT_CELL_TID.store(0, Ordering::Release);
+    let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(0, Ordering::Release);
     let rejected =
         super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_err();
-    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
     let unchanged = {
         let guard = super::SCHEDULER.lock();
         guard
@@ -421,11 +421,11 @@ fn full_completion_wait_mailbox_never_wakes() -> bool {
         return fail("could not fill TrySend completion-wait mailbox");
     }
     let ready_before = super::hart_local::ready::total_ready_count();
-    let saved_input = super::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
-    super::drivers::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
+    let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
     let refused =
         super::ipc_try_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()).is_err();
-    super::drivers::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
+    crate::dev::driver_cell::INPUT_CELL_TID.store(saved_input, Ordering::Release);
     if !refused || !completion_wait_mailbox_is_unchanged(INPUT_EVENT_QUEUE_DEPTH, ready_before) {
         ok = fail("full mailbox TrySend mutated or woke completion waiter");
     }

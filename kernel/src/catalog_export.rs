@@ -9,8 +9,8 @@
 //! fixture features so only production rows are exported.
 
 use crate::catalog::{self, Cell};
+use crate::dev::pcie_ecam::ETHERNET_DRIVER_IDS;
 use crate::task::cap::CapSet;
-use crate::task::drivers::pcie_ecam::ETHERNET_DRIVER_IDS;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

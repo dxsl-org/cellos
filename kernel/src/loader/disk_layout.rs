@@ -123,7 +123,7 @@ const EXPECTED_PARTS: [(usize, u8, u64, u64); 4] = [
 /// Called once from kernel init after the VirtIO block driver is up.
 pub fn verify_mbr() {
     let mut sector = [0u8; SECTOR_SIZE];
-    if crate::task::drivers::block::read_sector(0, &mut sector).is_err() {
+    if crate::dev::block::read_sector(0, &mut sector).is_err() {
         log::warn!("[mbr] LBA 0 unreadable — skipping partition verification");
         return;
     }

@@ -154,7 +154,7 @@ fn post_staged(gpu_cell: usize, grant: usize, msg: &[u8]) {
 }
 
 fn gpu_cell() -> usize {
-    crate::task::drivers::driver_cell::GPU_DRIVER_CELL.load(Ordering::Acquire)
+    crate::dev::driver_cell::GPU_DRIVER_CELL.load(Ordering::Acquire)
 }
 
 fn warn_once(flag: &AtomicBool, message: &str) {

@@ -1760,7 +1760,7 @@ impl Scheduler {
         // Clear service routes and Driver Cell roles under the publication
         // transaction lock. A racing registration therefore completes before
         // exact-TID teardown, never leaving a dead service route behind.
-        crate::task::drivers::driver_cell::deregister_all_for(tid);
+        crate::dev::driver_cell::deregister_all_for(tid);
 
         // Remove from every hart's ready queue if present.
         super::hart_local::ready::remove_from_all(tid);
@@ -2250,8 +2250,8 @@ impl Scheduler {
         let time_advanced = now > self.last_global_sweep_tick;
         // The MSI wake hint is swapped on every pass (non-short-circuit `|`), so
         // an idle BSP woken from `hlt` by an MSI sweeps now, not at the next tick.
-        let events_pending = crate::task::waker::has_any_pending()
-            | crate::task::drivers::irq_wait::take_wake_hint();
+        let events_pending =
+            crate::task::waker::has_any_pending() | crate::dev::irq_wait::take_wake_hint();
 
         if time_advanced || events_pending {
             if time_advanced {
@@ -2348,10 +2348,8 @@ impl Scheduler {
                     // WaitIrq: IRQ-only wake — no deadline, no timeout.
                     // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).
                     // This sweep is the only place that transitions WaitIrq → Ready.
-                    TaskState::WaitIrq { irq }
-                        if crate::task::drivers::irq_wait::take_pending(*irq) =>
-                    {
-                        crate::task::drivers::irq_wait::clear_waiter(*irq);
+                    TaskState::WaitIrq { irq } if crate::dev::irq_wait::take_pending(*irq) => {
+                        crate::dev::irq_wait::clear_waiter(*irq);
                         should_wake = true;
                     }
                     _ => {}

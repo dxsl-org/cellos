@@ -132,7 +132,7 @@ pub(super) fn snapshot() -> StateSnapshot {
         block_io_registered: crate::loader::block_io_registered_snapshot(),
         vfs_tid: crate::fast_ipc::vfs_handler_cell_snapshot(),
         vfs_handler: crate::fast_ipc::vfs_handler_pointer_snapshot(),
-        input_tid: crate::task::drivers::driver_cell::input_cell_snapshot(),
+        input_tid: crate::dev::driver_cell::input_cell_snapshot(),
         service_routes: crate::cell::service_registry::snapshot(),
         argv_and_stash: crate::cell::state_stash::snapshot(),
         audit: crate::audit::snapshot(),

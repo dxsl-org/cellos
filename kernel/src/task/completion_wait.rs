@@ -18,10 +18,10 @@
 //! comes back, and the queue is the cell's bound on outstanding work.
 
 use super::completion::{self, Completion, CompletionQueue};
-use super::drivers::irq_wait::{self, IrqLineSet};
 use super::syscall::{validate_user_buf, SyscallError};
 use super::tcb::{CompletionWait, Task, TaskState};
 use super::waker;
+use crate::dev::irq_wait::{self, IrqLineSet};
 use api::completion::{ViCompletion, COMPLETION_LEN};
 
 /// Removes this waiter's registration on every return path without erasing a
@@ -618,17 +618,17 @@ fn irq_lines_after_revoke(
 /// Every `AllocPcieIrq` line `tid` holds. Takes the allocation lock alone.
 #[cfg(target_arch = "x86_64")]
 fn owned_irq_lines(tid: usize) -> IrqLineSet {
-    super::drivers::pcie_msi::lines_owned_by(tid)
+    crate::dev::pcie_msi::lines_owned_by(tid)
 }
 
 #[cfg(target_arch = "x86_64")]
 fn take_owned_line(tid: usize, line: u8) -> bool {
-    super::drivers::pcie_msi::take_owned(tid, line)
+    crate::dev::pcie_msi::take_owned(tid, line)
 }
 
 #[cfg(target_arch = "x86_64")]
 fn repend_owned_line(tid: usize, line: u8) {
-    super::drivers::pcie_msi::repend_owned(tid, line)
+    crate::dev::pcie_msi::repend_owned(tid, line)
 }
 
 // Off x86_64 `source_is_valid` refuses `IRQ`, so no wait ever holds a line.
@@ -1074,7 +1074,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn a_take_after_revoke_fails_and_an_empty_refresh_releases_the_slot() {
-        use crate::task::drivers::pcie_msi;
+        use crate::dev::pcie_msi;
         const OWNER: usize = 72_301;
         let _guard = crate::TEST_STATE_LOCK.lock();
         let queue = queue();
@@ -1101,7 +1101,7 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn a_failed_copy_out_re_pends_the_irq_line() {
-        use crate::task::drivers::pcie_msi;
+        use crate::dev::pcie_msi;
         const OWNER: usize = 72_303;
         let _guard = crate::TEST_STATE_LOCK.lock();
         let queue = queue();

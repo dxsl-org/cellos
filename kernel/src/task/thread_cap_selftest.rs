@@ -419,7 +419,7 @@ pub fn self_test() -> bool {
         // Without config space the owned function cannot be shown quiescent, so the
         // revoke must fail closed: error, BDF still owned, every capability intact.
         // The claim is then dropped so the rest of the teardown is still proven.
-        if bdf_claimed && !crate::task::drivers::pcie_ecam::config_space_admitted() {
+        if bdf_claimed && !crate::dev::pcie_ecam::config_space_admitted() {
             let refused = handle_syscall(
                 PARENT_TID,
                 Syscall::CapRevoke {

@@ -9,8 +9,8 @@
 //! - a boot never restores, and clears a header an older image may have left
 //!   behind, so that image cannot replay it after a downgrade.
 
+use crate::dev::block;
 use crate::snapshot_format::{SECTOR_SIZE, SNAPSHOT_BASE_LBA, SNAPSHOT_MAGIC};
-use crate::task::drivers::block;
 
 /// Why a capture was refused. Only the gate exists on this kernel.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

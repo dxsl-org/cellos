@@ -130,9 +130,9 @@ pub(super) fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, 
         return Err(SyscallError::InvalidInput);
     };
 
-    let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
+    let published = crate::dev::driver_cell::publish_role_or_rollback(
         caller_id,
-        crate::task::drivers::driver_cell::register_usb_hid_producer,
+        crate::dev::driver_cell::register_usb_hid_producer,
         || {
             crate::cell::service_registry::register(
                 api::syscall::service::USB_HID_PRODUCER,
@@ -141,7 +141,7 @@ pub(super) fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, 
                 generation,
             )
         },
-        crate::task::drivers::driver_cell::deregister_usb_hid_producer,
+        crate::dev::driver_cell::deregister_usb_hid_producer,
     );
     drop(scheduler);
     if published {
@@ -160,10 +160,8 @@ pub(super) fn pcie_usable_by(caller_id: usize, bdf: u32) -> bool {
 }
 
 #[cfg(target_arch = "x86_64")]
-pub(super) fn pcie_function_error(
-    error: crate::task::drivers::pcie_msi::PcieFunctionError,
-) -> SyscallError {
-    use crate::task::drivers::pcie_msi::PcieFunctionError as E;
+pub(super) fn pcie_function_error(error: crate::dev::pcie_msi::PcieFunctionError) -> SyscallError {
+    use crate::dev::pcie_msi::PcieFunctionError as E;
     match error {
         E::InvalidInput => SyscallError::InvalidInput,
         E::PermissionDenied => SyscallError::PermissionDenied,
@@ -182,7 +180,7 @@ pub(super) fn alloc_pcie_irq(
     mode: usize,
 ) -> SyscallResult {
     let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
-    crate::task::drivers::pcie_msi::allocate(caller_id, bdf, want, mode)
+    crate::dev::pcie_msi::allocate(caller_id, bdf, want, mode)
         .map(|irq| irq.pack())
         .map_err(pcie_function_error)
 }
@@ -269,7 +267,7 @@ pub(super) fn register_driver_service(
         return Err(SyscallError::InvalidInput);
     };
 
-    let published = crate::task::drivers::driver_cell::publish_role_or_rollback(
+    let published = crate::dev::driver_cell::publish_role_or_rollback(
         caller_id,
         publish_role,
         || crate::cell::service_registry::register(service_id, caller_id, cell_id, generation),
@@ -340,10 +338,8 @@ pub(super) fn register_block_device_route(
     let Some((cell_id, generation)) = live_driver(&scheduler) else {
         return Err(SyscallError::PermissionDenied);
     };
-    let published = crate::task::drivers::driver_cell::publish_block_route(
-        key,
-        (caller_id, cell_id, generation),
-    );
+    let published =
+        crate::dev::driver_cell::publish_block_route(key, (caller_id, cell_id, generation));
     drop(scheduler);
     published.map(|_| 0).ok_or(SyscallError::PermissionDenied)
 }
@@ -355,7 +351,7 @@ pub(super) fn query_pcie_function(
     bdf: usize,
 ) -> Result<[u8; api::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
     let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
-    crate::task::drivers::pcie_msi::query(caller_id, bdf)
+    crate::dev::pcie_msi::query(caller_id, bdf)
         .map(|record| record.encode())
         .map_err(pcie_function_error)
 }
@@ -380,13 +376,13 @@ pub(super) fn query_pcie_function(
 pub(super) fn offer_pcie_device(
     caller_id: usize,
     out_ptr: usize,
-    dev: crate::task::drivers::pcie_ecam::PciDevice,
+    dev: crate::dev::pcie_ecam::PciDevice,
 ) -> Result<usize, SyscallError> {
     let bdf = dev.canonical_bdf();
     let bar0_base = dev.bars[0].base_addr();
     let bar0_len: u64 = match dev.bars[0] {
-        crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
-        crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
+        crate::dev::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
+        crate::dev::pcie_ecam::Bar::Memory64 { size, .. } => size,
         _ => 0x4000, // fallback 16 KiB
     };
     // First *memory* BAR with a non-zero base, for devices whose BAR0 is I/O or
@@ -397,7 +393,7 @@ pub(super) fn offer_pcie_device(
     // existing first-BAR meaning; NVMe/e1000 are unaffected because their BAR0
     // is memory.
     let (bar_mem_base, bar_mem_len): (u64, u64) =
-        crate::task::drivers::pcie_ecam::first_memory_bar(&dev.bars)
+        crate::dev::pcie_ecam::first_memory_bar(&dev.bars)
             .map(|(base, size)| (base, if size == 0 { 0x4000 } else { size }))
             .unwrap_or((bar0_base, bar0_len));
     // Under VT-d, a virtio function without ACCESS_PLATFORM or a PVSCSI
@@ -407,7 +403,7 @@ pub(super) fn offer_pcie_device(
     // happen under a live owner's mapping.
     #[cfg(target_arch = "x86_64")]
     if crate::resource_registry::owner_of_bdf(bdf).is_none()
-        && crate::task::drivers::pcie_msi::dma_bypasses_iommu(&dev)
+        && crate::dev::pcie_msi::dma_bypasses_iommu(&dev)
     {
         return Ok(0);
     }
@@ -420,8 +416,8 @@ pub(super) fn offer_pcie_device(
     // still off until its first GrantDma, after the cell has reset the device.
     // Only when firmware placed every memory BAR: an unassigned one would
     // decode at address 0 (the cell then fails closed on base 0, as before).
-    if crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
-        crate::task::drivers::pcie_ecam::enable_memory_decode(bdf);
+    if crate::dev::pcie_ecam::memory_bars_assigned(&dev.bars) {
+        crate::dev::pcie_ecam::enable_memory_decode(bdf);
     }
     if out_ptr != 0 {
         let mut dev_bytes = [0u8; 48];
@@ -455,8 +451,8 @@ pub(super) fn lookup_block_route(
     if out_len != len || reserved != 0 {
         return Err(SyscallError::InvalidInput);
     }
-    let record = crate::task::drivers::driver_cell::block_route_record(index)
-        .ok_or(SyscallError::FileNotFound)?;
+    let record =
+        crate::dev::driver_cell::block_route_record(index).ok_or(SyscallError::FileNotFound)?;
     write_user_slice(caller_id, out_ptr, &record.encode(), len)?;
     Ok(len)
 }
@@ -543,8 +539,8 @@ pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
     register_driver_service(
         caller_id,
         api::syscall::service::NIC_DRIVER,
-        crate::task::drivers::driver_cell::register_nic_driver,
-        crate::task::drivers::driver_cell::deregister_nic_driver,
+        crate::dev::driver_cell::register_nic_driver,
+        crate::dev::driver_cell::deregister_nic_driver,
     )
 }
 
@@ -570,7 +566,7 @@ pub(super) fn find_pcie_device(
         return Err(SyscallError::PermissionDenied);
     }
     let usable = |bdf| pcie_usable_by(caller_id, bdf);
-    match crate::task::drivers::pcie_ecam::find_class_where(class, subclass, prog_if, usable) {
+    match crate::dev::pcie_ecam::find_class_where(class, subclass, prog_if, usable) {
         None => Ok(0), // device not present → VirtIO fallback
         Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
     }
@@ -592,7 +588,7 @@ pub(super) fn find_pcie_device_by_vendor(
         return Err(SyscallError::PermissionDenied);
     }
     let usable = |bdf| pcie_usable_by(caller_id, bdf);
-    match crate::task::drivers::pcie_ecam::find_vendor_device(vendor_id, device_id, usable) {
+    match crate::dev::pcie_ecam::find_vendor_device(vendor_id, device_id, usable) {
         None => Ok(0),
         Some(dev) => offer_pcie_device(caller_id, out_ptr, dev),
     }
@@ -764,15 +760,15 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
     // x86 IRQ numbers are MSI vectors from 435; a cell waits only on its
     // own, so it can neither steal nor drain another driver's interrupts.
     #[cfg(target_arch = "x86_64")]
-    if !crate::task::drivers::pcie_msi::irq_owned_by(irq, caller_id) {
+    if !crate::dev::pcie_msi::irq_owned_by(irq, caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
     // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
-    if crate::task::drivers::irq_wait::take_pending(irq) {
+    if crate::dev::irq_wait::take_pending(irq) {
         return Ok(0);
     }
     // Single-waiter policy: second caller on same IRQ gets TryAgain.
-    if !crate::task::drivers::irq_wait::register_waiter(irq, caller_id, mmio_base) {
+    if !crate::dev::irq_wait::register_waiter(irq, caller_id, mmio_base) {
         return Err(SyscallError::TryAgain);
     }
     // Park the task — scheduler sweep will wake it when IRQ_PENDING[irq] is set.
@@ -793,7 +789,7 @@ pub(super) fn register_pcie_bar(caller_id: usize, base: usize, len: usize) -> Sy
     crate::resource_registry::register_pcie_bar(base, len);
     // Any RegisterPcieBar call from the Platform Cell marks it as active;
     // Phase 08 uses this to gate out the kernel ECAM scan.
-    crate::task::drivers::pcie_ecam::mark_platform_registered();
+    crate::dev::pcie_ecam::mark_platform_registered();
     Ok(0)
 }
 
@@ -808,10 +804,10 @@ pub(super) fn register_pci_device(
     if !caller_has_platform(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    use crate::task::drivers::pcie_ecam::{register_device, Registration};
+    use crate::dev::pcie_ecam::{register_device, Registration};
     let registration = register_device(bdf, cls, bar0_base, bar0_size);
-    crate::task::drivers::pcie_ecam::mark_platform_registered();
-    crate::task::drivers::iommu::try_deferred_init();
+    crate::dev::pcie_ecam::mark_platform_registered();
+    crate::dev::iommu::try_deferred_init();
     match registration {
         Registration::Recorded => Ok(0),
         Registration::RecordedWithoutDriver => Ok(1),
@@ -829,7 +825,7 @@ pub(super) fn blk_flush(caller_id: usize) -> SyscallResult {
         return Err(SyscallError::PermissionDenied);
     }
 
-    match crate::task::drivers::block::flush() {
+    match crate::dev::block::flush() {
         Ok(()) => Ok(1),
         Err(_) => Ok(0),
     }
@@ -906,7 +902,7 @@ pub(super) fn blk_read(caller_id: usize, sector: u64, buf_ptr: usize) -> Syscall
     // wrong physical address without the bounce. Read into an on-stack buffer
     // (always identity-mapped), then copy to the user buffer under SUM=1.
     let mut bounce = [0u8; 512];
-    match crate::task::drivers::block::read_sector(sector, &mut bounce) {
+    match crate::dev::block::read_sector(sector, &mut bounce) {
         Ok(()) => {
             write_user_slice(caller_id, buf_ptr, &bounce, MAX_USER_BUF)?;
             Ok(1)
@@ -932,7 +928,7 @@ pub(super) fn blk_write(caller_id: usize, sector: u64, buf_ptr: usize) -> Syscal
     let user = read_user_slice(caller_id, buf_ptr, 512, MAX_USER_BUF)?;
     let mut bounce = [0u8; 512];
     bounce.copy_from_slice(&user);
-    match crate::task::drivers::block::write_sector(sector, &bounce) {
+    match crate::dev::block::write_sector(sector, &bounce) {
         Ok(()) => Ok(1),
         Err(error) => {
             log::warn!("[blk] write LBA={} failed: {:?}", sector, error);
@@ -1064,7 +1060,7 @@ pub(super) fn register_display_framebuffer(
             pitch,
         ) {
             #[cfg(target_arch = "x86_64")]
-            crate::task::drivers::fb_console::handover();
+            crate::dev::fb_console::handover();
             Ok(0)
         } else {
             // This cannot be recovered safely: pages are firmware-owned
@@ -1112,7 +1108,7 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     // interrupts by rewriting table entries.
     #[cfg(target_arch = "x86_64")]
     fn user_map_pcie_bar(base: usize, len: usize) {
-        for (start, size) in crate::task::drivers::pcie_msi::user_ranges(base, len) {
+        for (start, size) in crate::dev::pcie_msi::user_ranges(base, len) {
             crate::memory::paging::map_mmio_user_x86(start, size);
         }
     }
@@ -1206,7 +1202,7 @@ pub(super) fn probe_virtio_mmio(
     }
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     {
-        use crate::task::drivers::virtio_common::{probe_slot, SlotProbe};
+        use crate::dev::virtio_common::{probe_slot, SlotProbe};
         match probe_slot(base) {
             SlotProbe::Identity(identity) => Ok(identity),
             SlotProbe::NoTransport => Err(SyscallError::FileNotFound),
@@ -1246,7 +1242,7 @@ pub(super) fn blk_read_async(caller_id: usize, sector: u64, grant_id: usize) -> 
     // for 512 bytes of VirtIO DMA read.
 
     let buf = unsafe { core::slice::from_raw_parts_mut(buf_paddr as *mut u8, 512) };
-    match crate::task::drivers::block::read_sector(sector, buf) {
+    match crate::dev::block::read_sector(sector, buf) {
         Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
         Err(_) => Ok(0),
     }

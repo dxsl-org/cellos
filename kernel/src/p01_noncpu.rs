@@ -271,7 +271,7 @@ pub(crate) fn capture(sample: usize, metrics: &[crate::p01_resources::Metric; 16
                 error |= reason;
             }
         });
-        crate::task::drivers::iommu_x86::p01_visit_roots(|pa, role, holder, object, parent| {
+        crate::dev::iommu_x86::p01_visit_roots(|pa, role, holder, object, parent| {
             if let Err(reason) = snapshot.reference(pa, role, holder, object, parent) {
                 error |= reason;
             }

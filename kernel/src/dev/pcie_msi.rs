@@ -15,8 +15,8 @@ mod virtio_gate;
 
 pub use virtio_gate::dma_bypasses_iommu;
 
+use crate::dev::{irq_wait, pcie_ecam};
 use crate::sync::Spinlock;
-use crate::task::drivers::{irq_wait, pcie_ecam};
 use alloc::vec::Vec;
 use api::pcie_function::{
     PcieIrqAlloc, ViPcieFunctionV1, IRQ_KIND_MSI, IRQ_KIND_MSIX, IRQ_MODE_ALLOW_MSI,
@@ -61,7 +61,7 @@ static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 pub(crate) fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
     irq_wait::hint_msi_wake();
-    if crate::task::drivers::driver_cell::owns_registered_nic_irq(vector as u32) {
+    if crate::dev::driver_cell::owns_registered_nic_irq(vector as u32) {
         crate::task::waker::signal_net_rx();
     }
 }
@@ -77,7 +77,7 @@ pub fn init(firmware_forbids_msi: bool) {
         hal::x86_64::msi::VECTOR_FIRST,
         hal::x86_64::msi::VECTOR_LAST,
         firmware_forbids_msi as u8,
-        crate::task::drivers::iommu_x86::ir::is_ir_active() as u8
+        crate::dev::iommu_x86::ir::is_ir_active() as u8
     );
 }
 
@@ -113,7 +113,7 @@ pub fn allocate(
         PcieFunctionError::NotFound => PcieFunctionError::NotSupported,
         other => other,
     })?;
-    if !crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+    if !crate::dev::pcie_ecam::memory_bars_assigned(&dev.bars) {
         return Err(PcieFunctionError::NotSupported);
     }
     if !READY.load(Ordering::Acquire) || FIRMWARE_FORBIDS_MSI.load(Ordering::Acquire) {
@@ -374,7 +374,7 @@ mod tests {
         );
 
         // Register NIC driver.
-        crate::task::drivers::driver_cell::register_nic_driver(NIC_TID);
+        crate::dev::driver_cell::register_nic_driver(NIC_TID);
 
         // MSI for NIC driver: signals IRQ AND signals NET_RX.
         on_msi(nic_alloc.first_irq);
@@ -385,7 +385,7 @@ mod tests {
         );
 
         // Deregister NIC driver.
-        crate::task::drivers::driver_cell::deregister_nic_driver(NIC_TID);
+        crate::dev::driver_cell::deregister_nic_driver(NIC_TID);
         release_for(NIC_TID);
         release_for(OTHER_TID);
     }

@@ -207,7 +207,7 @@ fn task_exit_defers_timer_release() -> bool {
             task.completion_wait = Some(super::tcb::CompletionWait {
                 source: api::completion::source::TIMER,
                 slot,
-                irq_lines: super::drivers::irq_wait::IrqLineSet::EMPTY,
+                irq_lines: crate::dev::irq_wait::IrqLineSet::EMPTY,
             });
             task.state = TaskState::WaitCompletion {
                 source: api::completion::source::TIMER,

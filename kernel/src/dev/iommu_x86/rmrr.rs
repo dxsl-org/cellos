@@ -13,7 +13,7 @@ const CFG_SUBORDINATE_BUS: usize = 0x1A;
 /// Bus-number register `off` of the bridge at `bus:dev.func`, from config space.
 fn bridge_bus(bus: u8, dev: u8, func: u8, off: usize) -> Option<u8> {
     let bdf = canonical_bdf(bus, dev, func) as u32;
-    let ptr = crate::task::drivers::pcie_ecam::config_ptr(bdf, off)?;
+    let ptr = crate::dev::pcie_ecam::config_ptr(bdf, off)?;
     // SAFETY: `config_ptr` returns an address inside the identity-mapped ECAM window.
     Some(unsafe { core::ptr::read_volatile(ptr) })
 }

@@ -1,4 +1,4 @@
-#[path = "../../../kernel/src/task/drivers/iommu_riscv_cmd.rs"]
+#[path = "../../../kernel/src/dev/iommu_riscv_cmd.rs"]
 mod command;
 
 #[test]

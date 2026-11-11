@@ -496,11 +496,6 @@ arch = "x86_64"
 tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
-[[test]]
-name = "driver-registration-contract"
-arch = "default"
-tier = "manual"
-reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[test]]
 name = "e1000-dma-layout"
@@ -660,11 +655,6 @@ name = "pcie-bar-window"
 arch = "default"
 tier = "pr"
 
-[[test]]
-name = "pcie-bdf-ownership"
-arch = "default"
-tier = "manual"
-reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[test]]
 name = "pcie-multibus-x86"

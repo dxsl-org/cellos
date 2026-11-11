@@ -114,8 +114,8 @@ pub(crate) fn run_fixture() -> bool {
         scheduler.tasks.insert(PEER, peer);
     }
 
-    let _entropy = crate::task::drivers::virtio_rng::enable_test_entropy();
-    let entropy_before_rejections = crate::task::drivers::virtio_rng::test_entropy_requests();
+    let _entropy = crate::dev::virtio_rng::enable_test_entropy();
+    let entropy_before_rejections = crate::dev::virtio_rng::test_entropy_requests();
     let rejected = [
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, 0, 64, 0, 0),
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, usize::MAX - 31, 64, 0, 0),
@@ -139,7 +139,7 @@ pub(crate) fn run_fixture() -> bool {
         && rejected[4] == Err(syscall::SyscallError::InvalidInput)
         && rejected[5] == Err(syscall::SyscallError::InvalidInput)
         && rejected[6] == Err(syscall::SyscallError::InvalidInput)
-        && crate::task::drivers::virtio_rng::test_entropy_requests() == entropy_before_rejections;
+        && crate::dev::virtio_rng::test_entropy_requests() == entropy_before_rejections;
     let sibling_ok =
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, sibling_ptr, 65, 0, 0) == Ok(64);
     let caller_ok =
@@ -156,11 +156,11 @@ pub(crate) fn run_fixture() -> bool {
         };
     let grant_cases_ok = getrandom_sas_grant_cases::run(CALLER, caller_generation);
     drop(_entropy);
-    let zero_entropy_before = crate::task::drivers::virtio_rng::test_entropy_requests();
+    let zero_entropy_before = crate::dev::virtio_rng::test_entropy_requests();
     let zero_entropy_invalid =
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, peer_ptr, 64, 0, 0)
             == Err(syscall::SyscallError::InvalidInput)
-            && crate::task::drivers::virtio_rng::test_entropy_requests() == zero_entropy_before;
+            && crate::dev::virtio_rng::test_entropy_requests() == zero_entropy_before;
     let no_entropy_result = if cfg!(feature = "dev-weak-rng") {
         64
     } else {
@@ -169,7 +169,7 @@ pub(crate) fn run_fixture() -> bool {
     let zero_entropy_valid =
         syscall::dispatch_raw_for_test(CALLER, RAW_GETRANDOM, sibling_ptr, 65, 0, 0)
             == Ok(no_entropy_result)
-            && crate::task::drivers::virtio_rng::test_entropy_requests() == zero_entropy_before + 1;
+            && crate::dev::virtio_rng::test_entropy_requests() == zero_entropy_before + 1;
     let passed = rejection_results_ok
         && sibling_ok
         && caller_bytes_ok

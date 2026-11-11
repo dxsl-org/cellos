@@ -11,8 +11,8 @@
 //! all-ones `GCAP`, `iommu_x86`), so VMware guests keep their PVSCSI disk.
 
 use super::config::Config;
+use crate::dev::pcie_ecam::PciDevice;
 use crate::sync::Spinlock;
-use crate::task::drivers::pcie_ecam::PciDevice;
 use alloc::vec::Vec;
 
 const VIRTIO_VENDOR: u16 = 0x1AF4;
@@ -51,7 +51,7 @@ fn common_cfg(cfg: &Config) -> Option<(u8, u32)> {
 /// (a device's offer is fixed for the boot) and logged once, so a driver
 /// retrying discovery neither re-probes nor floods the console.
 pub fn dma_bypasses_iommu(dev: &PciDevice) -> bool {
-    if !crate::task::drivers::iommu::is_active() {
+    if !crate::dev::iommu::is_active() {
         return false;
     }
     let bdf = dev.canonical_bdf();

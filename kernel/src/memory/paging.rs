@@ -263,9 +263,8 @@ pub fn init_kernel_paging(
         // against a USER page because SUM=1 (set right after activate_paging).
         root_table
             .identity_map(
-                crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
-                crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
-                    + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
+                crate::dev::pcie_ecam::ECAM_BASE_RISCV,
+                crate::dev::pcie_ecam::ECAM_BASE_RISCV + crate::dev::pcie_ecam::ECAM_BUS0_SIZE,
                 mmio_flags,
                 &mut alloc_fn,
             )

@@ -109,7 +109,7 @@ def is_core_file(path: Path) -> bool:
     parts = relative.parts
     return not (
         is_test_file(path)
-        or (len(parts) > 1 and parts[0:2] == ("task", "drivers"))
+        or (len(parts) > 1 and parts[0] == "dev")
         or (parts and parts[0] == "hypervisor")
     )
 
@@ -135,7 +135,7 @@ def render() -> str:
 | Metric | Definition | Value |
 |---|---|---:|
 | Kernel nLOC | Non-blank, non-comment Rust lines under `kernel/src`; excludes files matching `*test*.rs` | **{count_nloc(production):,}** |
-| Core kernel nLOC | Kernel nLOC excluding `kernel/src/task/drivers/**` and `kernel/src/hypervisor/**` | **{count_nloc(core):,}** |
+| Core kernel nLOC | Kernel nLOC excluding `kernel/src/dev/**` and `kernel/src/hypervisor/**` | **{count_nloc(core):,}** |
 
 The first row is the canonical moving kernel-size metric. The second is the boundary-migration
 lens used by Spec 15. Neither number is a substitute for reviewing kernel responsibilities.

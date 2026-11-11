@@ -228,12 +228,12 @@ fn ack_unclaimed(irq: u32) -> bool {
 /// `sys_wait_irq` path above.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
-    let nic_irq = crate::task::drivers::driver_cell::owns_registered_nic_irq(irq);
+    let nic_irq = crate::dev::driver_cell::owns_registered_nic_irq(irq);
 
     // Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —
     // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
-    if crate::task::drivers::irq_wait::has_waiter(irq as u8) {
-        crate::task::drivers::irq_wait::signal_irq(irq as u8);
+    if crate::dev::irq_wait::has_waiter(irq as u8) {
+        crate::dev::irq_wait::signal_irq(irq as u8);
         if nic_irq {
             crate::task::waker::signal_net_rx();
         }
@@ -241,7 +241,7 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
     }
     // Input (keyboard) slot: ACK to prevent an interrupt storm before the input
     // service Cell is up; event routing lives entirely in that Cell.
-    if crate::task::drivers::input_irq_ack::ack_if_input(irq) {
+    if crate::dev::input_irq_ack::ack_if_input(irq) {
         return;
     }
     if ack_unclaimed(irq) {

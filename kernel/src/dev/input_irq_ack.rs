@@ -7,8 +7,8 @@
 //! All event routing is handled by the input service Cell (cells/services/input).
 //! Full deletion of this shim is a G2 task once input Cell reliability is confirmed.
 
+use crate::dev::virtio_hal::VirtioHal;
 use crate::sync::Spinlock;
-use crate::task::drivers::virtio_hal::VirtioHal;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
 use virtio_drivers::device::input::VirtIOInput;
@@ -26,7 +26,7 @@ static KEYBOARD_ACK: Spinlock<Option<InputAckDriver>> = Spinlock::new(None);
 
 /// Probe VirtIO MMIO slots for an input device and cache it for IRQ ACK.
 pub fn init_driver() {
-    use crate::task::drivers::virtio_common::virtio_slots;
+    use crate::dev::virtio_common::virtio_slots;
     for slot in virtio_slots() {
         let header = unsafe { NonNull::new_unchecked(slot.base as *mut VirtIOHeader) };
         if let Ok(transport) = unsafe { MmioTransport::new(header) } {
@@ -71,7 +71,7 @@ pub fn ack_if_input(irq: u32) -> bool {
         return false;
     }
     if let Some(drv) = KEYBOARD_ACK.lock().as_mut() {
-        crate::task::drivers::virtio_common::with_riscv_sum_for_virtio_ack(|| {
+        crate::dev::virtio_common::with_riscv_sum_for_virtio_ack(|| {
             drv.inner.ack_interrupt();
         });
     }

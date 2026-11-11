@@ -130,7 +130,7 @@ pub fn signal_irq(irq: u8) {
         // SAFETY: mmio_base was validated by sys_request_mmio before the Cell
         // stored it; the MMIO window is identity-mapped and within the known device
         // allowlist. ACK the exact pending status bits before PLIC completion.
-        let _ = crate::task::drivers::virtio_common::ack_virtio_interrupt_status(mmio_base);
+        let _ = crate::dev::virtio_common::ack_virtio_interrupt_status(mmio_base);
     }
 
     // Set pending AFTER the MMIO ack so the scheduler sweep races correctly:

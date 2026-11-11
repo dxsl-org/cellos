@@ -79,7 +79,7 @@ impl EarlyLoader {
 
         // ── Read header sector ───────────────────────────────────────────────
         let mut header_buf = [0u8; SECTOR_SIZE];
-        crate::task::drivers::block::read_sector(CELL_TABLE_BASE_LBA, &mut header_buf)?;
+        crate::dev::block::read_sector(CELL_TABLE_BASE_LBA, &mut header_buf)?;
 
         // SAFETY: header_buf is SECTOR_SIZE bytes aligned to u8; CellTableHeader
         // is repr(C) and also SECTOR_SIZE bytes.  Transmute is safe here.
@@ -108,7 +108,7 @@ impl EarlyLoader {
         for i in 0..count {
             let entry_lba = CELL_TABLE_BASE_LBA + 1 + i as u64;
             let mut entry_buf = [0u8; SECTOR_SIZE];
-            crate::task::drivers::block::read_sector(entry_lba, &mut entry_buf)?;
+            crate::dev::block::read_sector(entry_lba, &mut entry_buf)?;
             // SAFETY: entry_buf is SECTOR_SIZE bytes; CellEntry is repr(C) SECTOR_SIZE.
             let entry: CellEntry = unsafe { core::mem::transmute(entry_buf) };
             // A blob must sit after the entry array and end inside P2: past P2
@@ -208,7 +208,7 @@ impl EarlyLoader {
         buf.resize(size, 0);
         for i in 0..whole {
             let offset = i * SECTOR_SIZE;
-            crate::task::drivers::block::read_sector(
+            crate::dev::block::read_sector(
                 data_lba + i as u64,
                 &mut buf[offset..offset + SECTOR_SIZE],
             )?;
@@ -217,7 +217,7 @@ impl EarlyLoader {
             // Partial final sector: read it into a scratch buffer so the returned box
             // stays exactly `size` bytes without a shrink realloc.
             let mut sector = [0u8; SECTOR_SIZE];
-            crate::task::drivers::block::read_sector(data_lba + whole as u64, &mut sector)?;
+            crate::dev::block::read_sector(data_lba + whole as u64, &mut sector)?;
             buf[whole * SECTOR_SIZE..].copy_from_slice(&sector[..tail]);
         }
         Ok(buf.into_boxed_slice())

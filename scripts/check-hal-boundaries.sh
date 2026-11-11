@@ -17,7 +17,7 @@ if grep -nE 'pub (uart|plic|clint|rtc|virtio_mmio):' boards/src/descriptor.rs; t
     fail 'BoardDescriptor must not own SoC MMIO or IRQ facts'
 fi
 
-if grep -n 'feature = "board-' kernel/src/task/drivers/mmc/sdhci.rs; then
+if grep -n 'feature = "board-' kernel/src/dev/mmc/sdhci.rs; then
     fail 'the shared SDHCI mechanism must select policy at its integration boundary'
 fi
 

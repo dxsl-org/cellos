@@ -173,7 +173,7 @@ pub(crate) fn provider_epoch() -> u64 {
 /// neither exists, so the epoch is never the zero "absent" value.
 fn draw_epoch() -> u64 {
     let mut seed = [0u8; 8];
-    if super::drivers::virtio_rng::get_random(&mut seed) == seed.len() {
+    if crate::dev::virtio_rng::get_random(&mut seed) == seed.len() {
         let value = u64::from_le_bytes(seed);
         if value != 0 {
             return value;

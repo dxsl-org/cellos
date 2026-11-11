@@ -273,7 +273,7 @@ fn write_initial_stack(
         .ok_or(ViError::InvalidInput)?;
 
     let mut seed = [0u8; 16];
-    let random = (super::drivers::virtio_rng::get_random(&mut seed) == seed.len()).then_some(seed);
+    let random = (crate::dev::virtio_rng::get_random(&mut seed) == seed.len()).then_some(seed);
     let image = Image {
         phdrs,
         load_base: load_base as u64,

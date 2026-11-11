@@ -55,7 +55,7 @@ mod iommu_x86 {
 }
 
 #[allow(dead_code)]
-#[path = "../../../kernel/src/task/drivers/iommu.rs"]
+#[path = "../../../kernel/src/dev/iommu.rs"]
 mod iommu;
 
 use iommu::{classify_dma_publication, DmaMapResult};

@@ -1406,7 +1406,7 @@ pub(super) fn get_random(caller_id: usize, buf_ptr: usize, len: usize) -> Syscal
     let capped = len.min(64);
     preflight_user_output(caller_id, buf_ptr, capped)?;
     let mut kbuf = [0u8; 64];
-    let written = crate::task::drivers::virtio_rng::get_random(&mut kbuf[..capped]);
+    let written = crate::dev::virtio_rng::get_random(&mut kbuf[..capped]);
     let n = if written > 0 {
         written
     } else {

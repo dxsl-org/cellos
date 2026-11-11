@@ -5,7 +5,7 @@ use super::config::{
     CFG_SUBSYSTEM_VENDOR,
 };
 use super::layout::MsixLayout;
-use crate::task::drivers::pcie_ecam::{Bar, PciDevice};
+use crate::dev::pcie_ecam::{Bar, PciDevice};
 use api::pcie_function::{
     PcieBar, PcieCap, ViPcieFunctionV1, BAR_FLAG_MSIX_CARVED, BAR_FLAG_PREFETCHABLE,
     BAR_KIND_ABSENT, BAR_KIND_IO, BAR_KIND_MEM32, BAR_KIND_MEM64, FLAG_DMA_REMAPPED,
@@ -115,7 +115,7 @@ pub fn build(dev: &PciDevice, firmware_forbids_msi: bool) -> Option<ViPcieFuncti
     // Set while the kernel's VT-d translation is active. Until phase 12 programs
     // every DRHD, a function under an unprogrammed unit also gets the bit: that
     // errs toward requiring ACCESS_PLATFORM and is not proof of confinement.
-    if crate::task::drivers::iommu::is_active() {
+    if crate::dev::iommu::is_active() {
         rec.flags |= FLAG_DMA_REMAPPED;
     }
     if let Some((_, layout)) = msix_layout(&cfg) {

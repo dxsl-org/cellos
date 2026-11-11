@@ -109,7 +109,7 @@ pub(crate) fn commit_launch_routes(tid: usize, cell_id: CellId, routes: crate::t
         crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
     }
     if routes.input {
-        crate::task::drivers::driver_cell::set_input_cell(tid);
+        crate::dev::driver_cell::set_input_cell(tid);
     }
 }
 

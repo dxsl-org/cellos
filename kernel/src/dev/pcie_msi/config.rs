@@ -1,7 +1,7 @@
 //! Range-checked config-space access for one owned function, and the standard
 //! capability walk shared by the 434 record and the 435 programming path.
 
-use crate::task::drivers::pcie_ecam::config_ptr;
+use crate::dev::pcie_ecam::config_ptr;
 use alloc::vec::Vec;
 
 pub const CFG_COMMAND: usize = 0x04;

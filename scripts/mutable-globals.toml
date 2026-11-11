@@ -166,7 +166,7 @@ contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (BootOnce::initialize is cfg(any(test, riscv64, aarch64)) and platform::init is an empty fn on x86_64)"
 retirement = "no x86_64 accessor; dead storage on this image"
 rationale = "BootOnce writes the value then Release-stores `initialized`, and get() Acquire-loads it, which is correct write-once publication on the arches that use it. On x86_64 nothing initializes it and every platform::with caller is cfg(target_arch = \"riscv64\"), so the storage is never touched; a future x86 reader would panic in with()."
-review = "kernel/src/platform.rs:126-131; kernel/src/platform.rs:230-238; kernel/src/platform/boot_once.rs:BootOnce::initialize; kernel/src/task/drivers/virtio_common.rs:48-50; kernel/src/memory/paging.rs:179-182"
+review = "kernel/src/platform.rs:126-131; kernel/src/platform.rs:230-238; kernel/src/platform/boot_once.rs:BootOnce::initialize; kernel/src/dev/virtio_common.rs:48-50; kernel/src/memory/paging.rs:179-182"
 
 [[global]]
 key = "kernel::cpu_features::HAS_H_EXT"
@@ -485,7 +485,7 @@ contexts = ["boot", "normal", "irq", "exception", "nmi"]
 seal = "compare_exchange 0 -> config once at kmain:176, before the IDT is installed (kmain:244)"
 retirement = "never: lives for the whole run"
 rationale = "NMI/#DF/#MC reach it: x86_64_idt_dispatch routes vectors 2/8/18 to fatal::halt, which calls putchar -> config(); the UART IRQ reaches it via vi_handle_uart_irq -> poll_input. Because the CAS seals before the IDT exists, exception paths always see nonzero and config()'s assert cannot fire there; Relaxed suffices for a scalar sealed before APs start."
-review = "hal/arch/x86/src/x86_64/uart_16550.rs:configure; hal/arch/x86/src/x86_64/uart_16550.rs:putchar; hal/arch/x86/src/x86_64/idt/fatal.rs:halt; hal/arch/x86/src/x86_64/idt/policy.rs:50; kernel/src/task/drivers/uart.rs:vi_handle_uart_irq"
+review = "hal/arch/x86/src/x86_64/uart_16550.rs:configure; hal/arch/x86/src/x86_64/uart_16550.rs:putchar; hal/arch/x86/src/x86_64/idt/fatal.rs:halt; hal/arch/x86/src/x86_64/idt/policy.rs:50; kernel/src/dev/uart.rs:vi_handle_uart_irq"
 
 [[global]]
 key = "hal-x86::x86_64::syscall::CPU_LOCALS @cfg(target_arch = \"x86_64\")"
@@ -797,421 +797,421 @@ review = "hal/arch/x86/src/lib.rs:10-13; hal/arch/x86/src/x86_32.rs:12"
 
 # ---- slice B ----
 [[global]]
-key = "kernel::task::drivers::ps2_keyboard::STATE @cfg(any (target_arch = \"x86_64\" , target_arch = \"x86\"))"
+key = "kernel::dev::ps2_keyboard::STATE @cfg(any (target_arch = \"x86_64\" , target_arch = \"x86\"))"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::ps2_keyboard owns the PS/2 controller decode state; mutated by ps2_keyboard::init (boot) and poll/poll_event, which are reached only from console_drv::viConsole::poll (hart-0 timer tick and file_read fd 0)"
+owner = "dev::ps2_keyboard owns the PS/2 controller decode state; mutated by ps2_keyboard::init (boot) and poll/poll_event, which are reached only from console_drv::viConsole::poll (hart-0 timer tick and file_read fd 0)"
 contexts = ["boot", "normal", "irq"]
 seal = "none: init() programs the controller on the BSP (main.rs x86_64 block) before start_secondaries; decode/event state is mutated on every poll for the whole run"
 retirement = "never: lives for the whole run; not tied to any cell (input-cell death only switches console_drv to the ASCII fallback path)"
 rationale = "Spinlock::lock masks interrupts on the local CPU, so the hart-0 timer ISR (vi_timer_tick -> CONSOLE.lock().poll()) cannot self-deadlock against a file_read(fd 0) holder; every runtime accessor runs nested inside console_drv::CONSOLE (order CONSOLE -> ps2 STATE), and port I/O under the lock is bounded (POLL_LIMIT, 64 events per tick). No NMI/exception path touches it."
-review = "kernel/src/task/drivers/ps2_keyboard.rs:init; kernel/src/task/drivers/ps2_keyboard.rs:poll_event; kernel/src/task/drivers/ps2_keyboard.rs:poll; kernel/src/task/drivers/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
+review = "kernel/src/dev/ps2_keyboard.rs:init; kernel/src/dev/ps2_keyboard.rs:poll_event; kernel/src/dev/ps2_keyboard.rs:poll; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
-key = "kernel::task::drivers::irq_wait::IRQ_WAITERS"
+key = "kernel::dev::irq_wait::IRQ_WAITERS"
 lifetime = "global"
 mutation = "atomic"
-owner = "task::drivers::irq_wait; each slot is claimed for the calling Driver Cell tid by the WaitIrq syscall (register_waiter) and cleared by the scheduler sweep (clear_waiter) or the retirement funnel (release_waiters_for)"
+owner = "dev::irq_wait; each slot is claimed for the calling Driver Cell tid by the WaitIrq syscall (register_waiter) and cleared by the scheduler sweep (clear_waiter) or the retirement funnel (release_waiters_for)"
 contexts = ["normal", "irq"]
 seal = "none: claimed/cleared per WaitIrq round for the whole run"
 retirement = "release_waiters_for(tid) from task.rs:reap_retired_task_resources (yield_cpu retirement funnel) CASes the dead tid back to 0; otherwise clear_waiter on wake"
 rationale = "Claim is a SeqCst CAS (single waiter per line) and every clear is an atomic store/CAS, so the syscall, the pick_next sweep and the retirement funnel need no lock even though the latter two run inside the x86_64 timer/IPI ISR via yield_cpu. On x86_64 no interrupt handler reads it: has_waiter/signal_irq are reached only from vi_handle_virtio_irq, whose callers are the aarch64 trap and riscv64 PLIC dispatch (x86 IDT routes only timer/IPI/UART), so an x86 WaitIrq waiter can never be woken; no x86 cell issues WaitIrq today."
-review = "kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:clear_waiter; kernel/src/task/drivers/irq_wait.rs:release_waiters_for; kernel/src/task/syscall/mod.rs:7990 (WaitIrq); kernel/src/task/scheduler.rs:2158; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
+review = "kernel/src/dev/irq_wait.rs:register_waiter; kernel/src/dev/irq_wait.rs:clear_waiter; kernel/src/dev/irq_wait.rs:release_waiters_for; kernel/src/task/syscall/mod.rs:7990 (WaitIrq); kernel/src/task/scheduler.rs:2158; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
 
 [[global]]
-key = "kernel::task::drivers::irq_wait::IRQ_PENDING"
+key = "kernel::dev::irq_wait::IRQ_PENDING"
 lifetime = "global"
 mutation = "atomic"
-owner = "task::drivers::irq_wait; set by signal_irq (ISR, non-x86 only), consumed by take_pending in the WaitIrq lost-wakeup guard and the pick_next sweep, dropped by release_waiters_for on retirement"
+owner = "dev::irq_wait; set by signal_irq (ISR, non-x86 only), consumed by take_pending in the WaitIrq lost-wakeup guard and the pick_next sweep, dropped by release_waiters_for on retirement"
 contexts = ["normal", "irq"]
 seal = "none: set/consumed per interrupt for the whole run"
 retirement = "release_waiters_for(tid) stores false after the slot CAS succeeds, so a replacement driver never inherits the dead owner's wake"
 rationale = "swap(false, AcqRel) in take_pending pairs with the Release store in signal_irq, and the sweep consumer runs under SCHEDULER (possibly inside the timer/IPI ISR via yield_cpu) without any lock on this table. On x86_64 nothing ever stores true (signal_irq has no x86 caller), so only the take/clear paths touch it in this image."
-review = "kernel/src/task/drivers/irq_wait.rs:take_pending; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/irq_wait.rs:release_waiters_for; kernel/src/task/scheduler.rs:2158; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq"
+review = "kernel/src/dev/irq_wait.rs:take_pending; kernel/src/dev/irq_wait.rs:signal_irq; kernel/src/dev/irq_wait.rs:release_waiters_for; kernel/src/task/scheduler.rs:2158; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq"
 
 [[global]]
-key = "kernel::task::drivers::irq_wait::IRQ_MMIO_BASE"
+key = "kernel::dev::irq_wait::IRQ_MMIO_BASE"
 lifetime = "global"
 mutation = "atomic"
-owner = "task::drivers::irq_wait; stored by register_waiter from the WaitIrq syscall argument, cleared by clear_waiter / release_waiters_for, read by signal_irq (ISR) and get_mmio_base"
+owner = "dev::irq_wait; stored by register_waiter from the WaitIrq syscall argument, cleared by clear_waiter / release_waiters_for, read by signal_irq (ISR) and get_mmio_base"
 contexts = ["normal", "irq"]
 seal = "none: rewritten on every WaitIrq registration"
 retirement = "release_waiters_for(tid) clears the base before releasing the slot, so the ISR stops acking the dead owner's device"
 rationale = "Release/Acquire stores and loads order the base against the waiter CAS adequately for the ISR reader, and the clear-before-release order in release_waiters_for is correct. A nonzero base is accepted only if it is the exact base of an MMIO window the caller claimed (wait_irq_base_permitted -> resource_registry::lookup_mmio_owner), else WaitIrq returns PermissionDenied (CP1 p02-debt-semantic #4), so the riscv64/aarch64 ISR only touches the caller's own device. On x86_64 the value is stored and cleared but never dereferenced."
-review = "kernel/src/task/syscall/mod.rs:wait_irq_base_permitted; kernel/src/task/drivers/irq_wait.rs:register_waiter; kernel/src/task/drivers/irq_wait.rs:signal_irq; kernel/src/task/drivers/virtio_common.rs:ack_virtio_interrupt_status"
+review = "kernel/src/task/syscall/mod.rs:wait_irq_base_permitted; kernel/src/dev/irq_wait.rs:register_waiter; kernel/src/dev/irq_wait.rs:signal_irq; kernel/src/dev/virtio_common.rs:ack_virtio_interrupt_status"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::BLOCK_ROUTES"
+key = "kernel::dev::driver_cell::BLOCK_ROUTES"
 lifetime = "per-cell"
 mutation = "spinlock"
-owner = "task::drivers::driver_cell; per-device block route slots (key + provider tid/cell/generation) written by the RegisterBlockDriver syscall (register_block_device_route -> publish_block_route) after the caller's device ownership is proven, provider cleared by deregister_all_for, read by LookupBlockRoute (block_route_record) for the VFS and init"
+owner = "dev::driver_cell; per-device block route slots (key + provider tid/cell/generation) written by the RegisterBlockDriver syscall (register_block_device_route -> publish_block_route) after the caller's device ownership is proven, provider cleared by deregister_all_for, read by LookupBlockRoute (block_route_record) for the VFS and init"
 contexts = ["normal", "irq"]
 seal = "none: append-only for the boot; a slot's key is fixed at its first bind and only its provider is rebound by the device's owner"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) clears the provider of every slot naming exactly the dead tid and keeps the key"
 rationale = "Fixed array of MAX_BLOCK_ROUTES slots under one IRQ-masking spinlock, no allocation; lock order SCHEDULER -> ROLE_PUBLICATION -> BLOCK_ROUTES (leaf), shared by publication and teardown, so a provider is never published for a task already torn down. exit_task may run inside the timer/IPI ISR via yield_cpu and only touches this spinlock."
-review = "kernel/src/task/drivers/driver_cell.rs:publish_block_route; kernel/src/task/drivers/driver_cell.rs:block_route_record; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/syscall/mod.rs:register_block_device_route; kernel/src/task/scheduler.rs:exit_task"
+review = "kernel/src/dev/driver_cell.rs:publish_block_route; kernel/src/dev/driver_cell.rs:block_route_record; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/task/syscall/mod.rs:register_block_device_route; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::NIC_DRIVER_STATE"
+key = "kernel::dev::driver_cell::NIC_DRIVER_STATE"
 lifetime = "per-cell"
 mutation = "spinlock"
-owner = "task::drivers::driver_cell; (owner_tid, proven virtio IRQ) pair written by the RegisterNicDriver syscall, cleared by deregister_all_for, read by owns_registered_nic_irq from vi_handle_virtio_irq"
+owner = "dev::driver_cell; (owner_tid, proven virtio IRQ) pair written by the RegisterNicDriver syscall, cleared by deregister_all_for, read by owns_registered_nic_irq from vi_handle_virtio_irq"
 contexts = ["normal", "irq"]
 seal = "none: replaced on every RegisterNicDriver"
 retirement = "Scheduler::exit_task -> deregister_all_for -> deregister_nic_driver empties it when owner_tid matches the dead tid"
 rationale = "The owner and IRQ are published together under one IRQ-masking spinlock, so a reader sees both or neither (fail closed during replacement), and the ISR reader on aarch64/riscv64 cannot deadlock against a same-CPU holder. On x86_64 the ISR reader is unreachable; accessors are the syscall (under SCHEDULER -> ROLE_PUBLICATION) and exit_task teardown, which can run in the timer/IPI ISR via yield_cpu."
-review = "kernel/src/task/drivers/driver_cell.rs:register_nic_driver; kernel/src/task/drivers/driver_cell.rs:deregister_nic_driver; kernel/src/task/drivers/driver_cell.rs:owns_registered_nic_irq; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:exit_task"
+review = "kernel/src/dev/driver_cell.rs:register_nic_driver; kernel/src/dev/driver_cell.rs:deregister_nic_driver; kernel/src/dev/driver_cell.rs:owns_registered_nic_irq; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::GPU_DRIVER_CELL"
+key = "kernel::dev::driver_cell::GPU_DRIVER_CELL"
 lifetime = "per-cell"
 mutation = "atomic"
-owner = "task::drivers::driver_cell; written by register_gpu_driver from the RegisterService(GPU_DRIVER) self-registration path, cleared by deregister_all_for, read (Acquire) by the GPU flush syscalls to forward IPC"
+owner = "dev::driver_cell; written by register_gpu_driver from the RegisterService(GPU_DRIVER) self-registration path, cleared by deregister_all_for, read (Acquire) by the GPU flush syscalls to forward IPC"
 contexts = ["normal", "irq"]
 seal = "none: overwritten by each GPU self-registration"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
 rationale = "Release store / Acquire load / exact-tid CAS are sufficient for a single tid value. Role and service route publish together through driver_cell::publish_role_or_rollback under ROLE_PUBLICATION, the same transaction as block/NIC, so deregister_all_for cannot interleave and a rejected route rolls the role back."
-review = "kernel/src/task/syscall/mod.rs (GPU self-registration -> publish_role_or_rollback); kernel/src/task/drivers/driver_cell.rs:publish_role_or_rollback; kernel/src/task/drivers/driver_cell.rs:deregister_all_for"
+review = "kernel/src/task/syscall/mod.rs (GPU self-registration -> publish_role_or_rollback); kernel/src/dev/driver_cell.rs:publish_role_or_rollback; kernel/src/dev/driver_cell.rs:deregister_all_for"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::USB_HID_PRODUCER_CELL"
+key = "kernel::dev::driver_cell::USB_HID_PRODUCER_CELL"
 lifetime = "per-cell"
 mutation = "atomic"
-owner = "task::drivers::driver_cell; written by the RegisterUsbHidProducer syscall via publish_role_or_rollback, cleared by deregister_all_for; no non-test reader (the input producer gate resolves service::USB_HID_PRODUCER)"
+owner = "dev::driver_cell; written by the RegisterUsbHidProducer syscall via publish_role_or_rollback, cleared by deregister_all_for; no non-test reader (the input producer gate resolves service::USB_HID_PRODUCER)"
 contexts = ["normal", "irq"]
 seal = "none: overwritten by each registration"
 retirement = "Scheduler::exit_task -> deregister_all_for(tid) CASes it to 0 only if it still names the dead tid"
 rationale = "Release store and exact-tid AcqRel CAS under ROLE_PUBLICATION keep role and service publication atomic with respect to teardown; teardown may run in the timer/IPI ISR via yield_cpu and touches only the atomic."
-review = "kernel/src/task/drivers/driver_cell.rs:register_usb_hid_producer; kernel/src/task/drivers/driver_cell.rs:deregister_usb_hid_producer; kernel/src/task/syscall/mod.rs:register_usb_hid_producer_role; kernel/src/task/scheduler.rs:exit_task"
+review = "kernel/src/dev/driver_cell.rs:register_usb_hid_producer; kernel/src/dev/driver_cell.rs:deregister_usb_hid_producer; kernel/src/task/syscall/mod.rs:register_usb_hid_producer_role; kernel/src/task/scheduler.rs:exit_task"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::ROLE_PUBLICATION"
+key = "kernel::dev::driver_cell::ROLE_PUBLICATION"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::driver_cell; serializes role-state publication (publish_role_or_rollback, from role-registration syscalls holding SCHEDULER) with teardown (deregister_all_for from Scheduler::exit_task)"
+owner = "dev::driver_cell; serializes role-state publication (publish_role_or_rollback, from role-registration syscalls holding SCHEDULER) with teardown (deregister_all_for from Scheduler::exit_task)"
 contexts = ["normal", "irq"]
 seal = "none: taken on every registration and every task exit for the whole run"
 retirement = "never: lives for the whole run; it is the lock the retirement path itself takes"
 rationale = "Fixed order SCHEDULER -> ROLE_PUBLICATION -> service registry / role leaves on both sides; because Spinlock::lock masks interrupts, exit_task reached from the timer/IPI ISR via yield_cpu cannot self-deadlock. Work under it is bounded (one MMIO device-id read and a log line in register_nic_driver)."
-review = "kernel/src/task/drivers/driver_cell.rs:publish_role_or_rollback; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/scheduler.rs:1620; kernel/src/sync.rs:Spinlock::lock"
+review = "kernel/src/dev/driver_cell.rs:publish_role_or_rollback; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/task/scheduler.rs:1620; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
-key = "kernel::task::drivers::driver_cell::INPUT_CELL_TID"
+key = "kernel::dev::driver_cell::INPUT_CELL_TID"
 lifetime = "per-cell"
 mutation = "atomic"
-owner = "task::drivers::driver_cell; set by loader::commit_launch_routes when /bin/input is launched, cleared by deregister_all_for; read by console_drv::viConsole::poll (Relaxed) and task.rs:is_trusted_input_sender (Acquire)"
+owner = "dev::driver_cell; set by loader::commit_launch_routes when /bin/input is launched, cleared by deregister_all_for; read by console_drv::viConsole::poll (Relaxed) and task.rs:is_trusted_input_sender (Acquire)"
 contexts = ["normal", "irq"]
 seal = "none: set on each input-service launch, cleared on its death"
 retirement = "Scheduler::exit_task -> deregister_all_for -> clear_input_cell_if(tid) exact-tid CAS, so a newer registration is never clobbered"
 rationale = "set_input_cell is a plain Release store outside ROLE_PUBLICATION, but teardown is an exact-tid CAS so ordering between them cannot erase a newer owner. The Relaxed load in the hart-0 timer ISR console poll only selects an IPC target that ipc_post_nonblock re-validates under SCHEDULER, so a stale value just fails or defers delivery."
-review = "kernel/src/task/drivers/driver_cell.rs:set_input_cell; kernel/src/task/drivers/driver_cell.rs:clear_input_cell_if; kernel/src/loader.rs:commit_launch_routes; kernel/src/task/drivers/console_drv.rs:viConsole::poll; kernel/src/task.rs:is_trusted_input_sender"
+review = "kernel/src/dev/driver_cell.rs:set_input_cell; kernel/src/dev/driver_cell.rs:clear_input_cell_if; kernel/src/loader.rs:commit_launch_routes; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:is_trusted_input_sender"
 
 [[global]]
-key = "kernel::task::drivers::virtio_rng::x86_rng::FEATURES @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::virtio_rng::x86_rng::FEATURES @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "once"
-owner = "task::drivers::virtio_rng::x86_rng; lazily caches CPUID RDRAND/RDSEED bits on the first get_random call (GetRandom syscall, telemetry::provider_epoch)"
+owner = "dev::virtio_rng::x86_rng; lazily caches CPUID RDRAND/RDSEED bits on the first get_random call (GetRandom syscall, telemetry::provider_epoch)"
 contexts = ["normal"]
 seal = "written on the first get_random call (init_driver is never called on x86_64); idempotent thereafter"
 retirement = "never: lives for the whole run"
 rationale = "The cached byte is the entire state, so Relaxed load/store publishes nothing dependent and concurrent first probes store the same value. Assumes every CPU reports the same RDRAND/RDSEED CPUID bits, since the cache is global while CPUID is per-CPU. No ISR path calls get_random."
-review = "kernel/src/task/drivers/virtio_rng.rs:x86_rng::features; kernel/src/task/drivers/virtio_rng.rs:get_random; kernel/src/task/syscall/mod.rs:8939; kernel/src/task/telemetry.rs:draw_epoch"
+review = "kernel/src/dev/virtio_rng.rs:x86_rng::features; kernel/src/dev/virtio_rng.rs:get_random; kernel/src/task/syscall/mod.rs:8939; kernel/src/task/telemetry.rs:draw_epoch"
 
 [[global]]
-key = "kernel::task::drivers::pcie_ecam::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "task::drivers::pcie_ecam; stored once by kmain from validated ACPI MCFG (set_ecam_base_x86); read by pcie_ecam::init, register_device, enable_bus_master and quiesce_function via ecam_base_x86/ecam_window"
+owner = "dev::pcie_ecam; stored once by kmain from validated ACPI MCFG (set_ecam_base_x86); read by pcie_ecam::init, register_device, enable_bus_master and quiesce_function via ecam_base_x86/ecam_window"
 contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block before init_kernel_paging_x86) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "Single Relaxed store on the BSP before APs or any cell exist; start_secondaries and task dispatch give later readers happens-before, so Relaxed is sufficient. Readers include quiesce_function in teardown_dma_authority, reached from the yield_cpu retirement funnel, which can run in the timer/IPI ISR; the read is lock-free."
-review = "kernel/src/task/drivers/pcie_ecam.rs:set_ecam_base_x86; kernel/src/task/drivers/pcie_ecam.rs:ecam_window; kernel/src/task/drivers/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:535; kernel/src/task.rs:teardown_dma_authority"
+review = "kernel/src/dev/pcie_ecam.rs:set_ecam_base_x86; kernel/src/dev/pcie_ecam.rs:ecam_window; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:535; kernel/src/task.rs:teardown_dma_authority"
 
 [[global]]
-key = "kernel::task::drivers::pcie_ecam::X86_ECAM_BUS_START @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::X86_ECAM_BUS_START @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "task::drivers::pcie_ecam; first/last admitted ECAM bus (start) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
+owner = "dev::pcie_ecam; first/last admitted ECAM bus (start) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
 contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "The bus pair is two independent Relaxed stores, which would be tearable only against a concurrent reader; the sole store happens on the BSP before APs or cells exist, and start_secondaries/task dispatch order it before every reader, including quiesce_function on the retirement funnel that can run in the timer/IPI ISR."
-review = "kernel/src/task/drivers/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/task/drivers/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/task/drivers/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
+review = "kernel/src/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
 
 [[global]]
-key = "kernel::task::drivers::pcie_ecam::X86_ECAM_BUS_END @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::X86_ECAM_BUS_END @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "task::drivers::pcie_ecam; first/last admitted ECAM bus (end) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
+owner = "dev::pcie_ecam; first/last admitted ECAM bus (end) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
 contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "The bus pair is two independent Relaxed stores, which would be tearable only against a concurrent reader; the sole store happens on the BSP before APs or cells exist, and start_secondaries/task dispatch order it before every reader, including quiesce_function on the retirement funnel that can run in the timer/IPI ISR."
-review = "kernel/src/task/drivers/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/task/drivers/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/task/drivers/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
+review = "kernel/src/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
 
 [[global]]
-key = "kernel::task::drivers::pcie_ecam::PCI_DEVICES"
+key = "kernel::dev::pcie_ecam::PCI_DEVICES"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::pcie_ecam; filled by the boot ECAM scan (init/scan) and by register_device from the Platform Cell RegisterPciDevice syscall; read by find_class / find_vendor_device (FindPcieDevice syscalls)"
+owner = "dev::pcie_ecam; filled by the boot ECAM scan (init/scan) and by register_device from the Platform Cell RegisterPciDevice syscall; read by find_class / find_vendor_device (FindPcieDevice syscalls)"
 contexts = ["boot", "normal"]
 seal = "none: boot scan seeds it, then the Platform Cell appends at runtime"
 retirement = "never: entries describe hardware and are never removed; BDF ownership lives in resource_registry and is released by teardown_dma_authority"
 rationale = "IRQ-masking spinlock with no ISR accessor; the boot scan runs on the BSP before APs. register_device does a check-then-unlock-then-push with two separate acquisitions, so two concurrent registrations of the same BDF can both append (benign duplicate today because only the Platform Cell registers)."
-review = "kernel/src/task/drivers/pcie_ecam.rs:scan; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/drivers/pcie_ecam.rs:register_device; kernel/src/task/drivers/pcie_ecam.rs:find_class; kernel/src/task/syscall/mod.rs:8046"
+review = "kernel/src/dev/pcie_ecam.rs:scan; kernel/src/dev/pcie_ecam.rs:init; kernel/src/dev/pcie_ecam.rs:register_device; kernel/src/dev/pcie_ecam.rs:find_class; kernel/src/task/syscall/mod.rs:8046"
 
 [[global]]
-key = "kernel::task::drivers::pcie_ecam::PLATFORM_REGISTERED"
+key = "kernel::dev::pcie_ecam::PLATFORM_REGISTERED"
 lifetime = "global"
 mutation = "once"
-owner = "task::drivers::pcie_ecam; set by mark_platform_registered from the RegisterPcieBar / RegisterPciDevice syscalls of the Platform Cell; is_platform_registered has no caller"
+owner = "dev::pcie_ecam; set by mark_platform_registered from the RegisterPcieBar / RegisterPciDevice syscalls of the Platform Cell; is_platform_registered has no caller"
 contexts = ["normal"]
 seal = "set to true by the first Platform Cell BAR/device registration; never cleared"
 retirement = "never: survives Platform Cell death (not reset by the retirement funnel)"
 rationale = "Monotonic false->true flag with Release store / Acquire load and no reader in the image, so no ordering or IRQ hazard exists; no ISR touches it."
-review = "kernel/src/task/drivers/pcie_ecam.rs:mark_platform_registered; kernel/src/task/drivers/pcie_ecam.rs:is_platform_registered; kernel/src/task/syscall/mod.rs:8030; kernel/src/task/syscall/mod.rs:8047"
+review = "kernel/src/dev/pcie_ecam.rs:mark_platform_registered; kernel/src/dev/pcie_ecam.rs:is_platform_registered; kernel/src/task/syscall/mod.rs:8030; kernel/src/task/syscall/mod.rs:8047"
 
 [[global]]
-key = "kernel::task::drivers::iommu_x86::PRIMARY_BASE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::iommu_x86::PRIMARY_BASE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "task::drivers::iommu_x86; set once by init_hw from ACPI DMAR or q35 fallback"
+owner = "dev::iommu_x86; set once by init_hw from ACPI DMAR or q35 fallback"
 contexts = ["boot", "normal"]
 seal = "written once in iommu_x86::init_hw at boot on the BSP"
 retirement = "never: lives for the whole run"
 rationale = "Relaxed store at boot before AP start-up and cell dispatch"
-review = "kernel/src/task/drivers/iommu_x86.rs"
+review = "kernel/src/dev/iommu_x86.rs"
 
 [[global]]
-key = "kernel::task::drivers::iommu_x86::UNITS @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::iommu_x86::UNITS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::iommu_x86; multi-unit registry for up to 16 VT-d DRHD units"
+owner = "dev::iommu_x86; multi-unit registry for up to 16 VT-d DRHD units"
 contexts = ["boot", "normal", "irq"]
 seal = "units added at boot during init_hw; unit state mutated per domain/cell"
 retirement = "never: units live for the whole run"
 rationale = "IRQ-safe spinlock protecting multi-unit hardware list and per-unit domains"
-review = "kernel/src/task/drivers/iommu_x86.rs"
+review = "kernel/src/dev/iommu_x86.rs"
 
 [[global]]
-key = "kernel::task::drivers::iommu_x86::ir::IR_ACTIVE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::iommu_x86::ir::IR_ACTIVE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "task::drivers::iommu_x86::ir; set true when interrupt remapping is activated"
+owner = "dev::iommu_x86::ir; set true when interrupt remapping is activated"
 contexts = ["boot", "normal", "irq"]
 seal = "set once at boot during activate"
 retirement = "never: lives for the whole run"
 rationale = "Atomic flag indicating hardware interrupt remapping status"
-review = "kernel/src/task/drivers/iommu_x86/ir.rs"
+review = "kernel/src/dev/iommu_x86/ir.rs"
 
 [[global]]
-key = "kernel::task::drivers::fb_console::FB_ACTIVE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::fb_console::FB_ACTIVE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "task::drivers::fb_console; set true when framebuffer console is active"
+owner = "dev::fb_console; set true when framebuffer console is active"
 contexts = ["boot", "normal"]
 seal = "none: can be disabled at handover"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool flag gating writes to framebuffer console"
-review = "kernel/src/task/drivers/fb_console.rs"
+review = "kernel/src/dev/fb_console.rs"
 
 [[global]]
-key = "kernel::task::drivers::fb_console::FB_HANDED_OVER @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::fb_console::FB_HANDED_OVER @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "task::drivers::fb_console; set true when userspace display server takes over"
+owner = "dev::fb_console; set true when userspace display server takes over"
 contexts = ["normal"]
 seal = "none: set on first compositor handover"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool preventing kernel console output after userspace takeover"
-review = "kernel/src/task/drivers/fb_console.rs"
+review = "kernel/src/dev/fb_console.rs"
 
 [[global]]
-key = "kernel::task::drivers::fb_console::FB_STATE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::fb_console::FB_STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::fb_console; linear framebuffer dimensions, buffer pointer, cursor state"
+owner = "dev::fb_console; linear framebuffer dimensions, buffer pointer, cursor state"
 contexts = ["boot", "normal"]
 seal = "none: updated on each text write"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protecting cursor position and character rendering to screen"
-review = "kernel/src/task/drivers/fb_console.rs"
+review = "kernel/src/dev/fb_console.rs"
 [[global]]
-key = "kernel::task::drivers::iommu::IDENTITY_DMA_LOGGED"
+key = "kernel::dev::iommu::IDENTITY_DMA_LOGGED"
 lifetime = "global"
 mutation = "once"
-owner = "task::drivers::iommu; log-once latch set by map_dma_for_cell when a board without a remapper is allowed identity DMA"
+owner = "dev::iommu; log-once latch set by map_dma_for_cell when a board without a remapper is allowed identity DMA"
 contexts = ["normal"]
 seal = "set on the first identity-DMA grant; never cleared"
 retirement = "never: lives for the whole run"
 rationale = "swap(true, Relaxed) only deduplicates a warning and publishes no data; the sole caller is the GrantDma syscall path, never an ISR."
-review = "kernel/src/task/drivers/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
+review = "kernel/src/dev/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
 
 [[global]]
-key = "kernel::task::drivers::iommu::IOMMU_ISOLATED"
+key = "kernel::dev::iommu::IOMMU_ISOLATED"
 lifetime = "boot"
 mutation = "once"
-owner = "task::drivers::iommu; set by set_active from iommu_x86::activate once VT-d translation is confirmed; read by is_active (map_dma_for_cell) and try_deferred_init"
+owner = "dev::iommu; set by set_active from iommu_x86::activate once VT-d translation is confirmed; read by is_active (map_dma_for_cell) and try_deferred_init"
 contexts = ["boot", "normal"]
 seal = "set at most once by iommu_x86::activate, called from kmain (main.rs:864) on the BSP before start_secondaries; the deferred activation path is riscv64-only"
 retirement = "never: isolation is never deactivated"
 rationale = "On x86_64 the only store is at boot before APs/cells, so Relaxed loads in the GrantDma path are ordered by AP start-up and dispatch; the flag gates use of VT-d state that is itself boot-sealed. A Relaxed flag set from a syscall (the riscv64 try_deferred_init path) would be a publication finding, but that store is unreachable here."
-review = "kernel/src/task/drivers/iommu.rs:set_active; kernel/src/task/drivers/iommu.rs:is_active; kernel/src/task/drivers/iommu.rs:try_deferred_init; kernel/src/task/drivers/iommu_x86.rs:activate; kernel/src/main.rs:864"
+review = "kernel/src/dev/iommu.rs:set_active; kernel/src/dev/iommu.rs:is_active; kernel/src/dev/iommu.rs:try_deferred_init; kernel/src/dev/iommu_x86.rs:activate; kernel/src/main.rs:864"
 
 [[global]]
-key = "kernel::task::drivers::iommu::IOMMU_DEFERRED"
+key = "kernel::dev::iommu::IOMMU_DEFERRED"
 lifetime = "boot"
 mutation = "atomic"
-owner = "task::drivers::iommu; armed by set_deferred_init_pending (main.rs, cfg(target_arch = \"riscv64\")) and cleared by try_deferred_init; on x86_64 only read by try_deferred_init from the RegisterPciDevice syscall"
+owner = "dev::iommu; armed by set_deferred_init_pending (main.rs, cfg(target_arch = \"riscv64\")) and cleared by try_deferred_init; on x86_64 only read by try_deferred_init from the RegisterPciDevice syscall"
 contexts = ["normal"]
 seal = "never stored on x86_64 (set_deferred_init_pending call is cfg riscv64); stays false for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "On x86_64 it is a constant-false gate read with Relaxed by a syscall, so try_deferred_init returns immediately; no ISR touches it."
-review = "kernel/src/task/drivers/iommu.rs:set_deferred_init_pending; kernel/src/task/drivers/iommu.rs:try_deferred_init; kernel/src/main.rs:869; kernel/src/task/syscall/mod.rs:8048"
+review = "kernel/src/dev/iommu.rs:set_deferred_init_pending; kernel/src/dev/iommu.rs:try_deferred_init; kernel/src/main.rs:869; kernel/src/task/syscall/mod.rs:8048"
 
 [[global]]
-key = "kernel::task::drivers::input_irq_ack::INPUT_IRQ"
+key = "kernel::dev::input_irq_ack::INPUT_IRQ"
 lifetime = "boot"
 mutation = "atomic"
-owner = "task::drivers::input_irq_ack; stored by init_driver after probing a VirtIO-MMIO input device, read by ack_if_input from vi_handle_virtio_irq"
+owner = "dev::input_irq_ack; stored by init_driver after probing a VirtIO-MMIO input device, read by ack_if_input from vi_handle_virtio_irq"
 contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (stays 0)"
 retirement = "no x86_64 accessor; dead storage on this image"
-rationale = "Its only writer init_driver runs from task::drivers::init, called only under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")) (main.rs:797; snapshot try_restore is likewise cfg-gated), and its only reader ack_if_input is reached from vi_handle_virtio_irq, whose callers are the aarch64 trap and riscv64 PLIC dispatch."
-review = "kernel/src/task/drivers/input_irq_ack.rs:init_driver; kernel/src/task/drivers/input_irq_ack.rs:ack_if_input; kernel/src/task/drivers.rs:init; kernel/src/main.rs:797; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq"
+rationale = "Its only writer init_driver runs from dev::init, called only under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")) (main.rs:797; snapshot try_restore is likewise cfg-gated), and its only reader ack_if_input is reached from vi_handle_virtio_irq, whose callers are the aarch64 trap and riscv64 PLIC dispatch."
+review = "kernel/src/dev/input_irq_ack.rs:init_driver; kernel/src/dev/input_irq_ack.rs:ack_if_input; kernel/src/dev.rs:init; kernel/src/main.rs:797; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq"
 
 [[global]]
-key = "kernel::task::drivers::input_irq_ack::KEYBOARD_ACK"
+key = "kernel::dev::input_irq_ack::KEYBOARD_ACK"
 lifetime = "boot"
 mutation = "spinlock"
-owner = "task::drivers::input_irq_ack; VirtIO input ACK shim installed by init_driver, locked by ack_if_input in the VirtIO ISR and force-unlocked by force_unlock_locks"
+owner = "dev::input_irq_ack; VirtIO input ACK shim installed by init_driver, locked by ack_if_input in the VirtIO ISR and force-unlocked by force_unlock_locks"
 contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (stays None)"
 retirement = "no x86_64 accessor; dead storage on this image"
-rationale = "init_driver is reached only through task::drivers::init under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")), ack_if_input only through vi_handle_virtio_irq (aarch64 trap / riscv64 PLIC dispatch), and force_unlock_locks has no caller."
-review = "kernel/src/task/drivers/input_irq_ack.rs:init_driver; kernel/src/task/drivers/input_irq_ack.rs:ack_if_input; kernel/src/task/drivers/input_irq_ack.rs:force_unlock_locks; kernel/src/main.rs:797"
+rationale = "init_driver is reached only through dev::init under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")), ack_if_input only through vi_handle_virtio_irq (aarch64 trap / riscv64 PLIC dispatch), and force_unlock_locks has no caller."
+review = "kernel/src/dev/input_irq_ack.rs:init_driver; kernel/src/dev/input_irq_ack.rs:ack_if_input; kernel/src/dev/input_irq_ack.rs:force_unlock_locks; kernel/src/main.rs:797"
 
 [[global]]
-key = "kernel::task::drivers::mmc::MMC_DEVICE"
+key = "kernel::dev::mmc::MMC_DEVICE"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::mmc; SDHCI eMMC/SD device installed by mmc::init_driver; read by is_present (block::block_device) and the MmcBlock sector ops"
+owner = "dev::mmc; SDHCI eMMC/SD device installed by mmc::init_driver; read by is_present (block::block_device) and the MmcBlock sector ops"
 contexts = ["boot", "normal"]
-seal = "never written on x86_64: mmc::init_driver is reached only from task::drivers::init (cfg riscv64|aarch64), so it stays None for the whole run"
+seal = "never written on x86_64: mmc::init_driver is reached only from dev::init (cfg riscv64|aarch64), so it stays None for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "On x86_64 only is_present() locks it (boot-time loader/early and disk_layout reads, BlkRead/BlkWrite/flush syscalls) and always sees None, routing to NullBlock; the IRQ-masking spinlock has no ISR accessor."
-review = "kernel/src/task/drivers/mmc.rs:is_present; kernel/src/task/drivers/mmc.rs:init_driver; kernel/src/task/drivers/block.rs:block_device; kernel/src/task/drivers.rs:init; kernel/src/task/syscall/mod.rs:8156"
+review = "kernel/src/dev/mmc.rs:is_present; kernel/src/dev/mmc.rs:init_driver; kernel/src/dev/block.rs:block_device; kernel/src/dev.rs:init; kernel/src/task/syscall/mod.rs:8156"
 
 [[global]]
-key = "kernel::task::drivers::console_drv::PENDING_ASCII"
+key = "kernel::dev::console_drv::PENDING_ASCII"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::console_drv; one serial byte whose IPC relay to the input service failed, set and drained only by viConsole::poll"
+owner = "dev::console_drv; one serial byte whose IPC relay to the input service failed, set and drained only by viConsole::poll"
 contexts = ["normal", "irq"]
 seal = "none: filled and drained under input-service backpressure for the whole run"
 retirement = "never cleared on input-cell retirement; a retained byte is delivered to the next registered input service"
 rationale = "Always taken nested under console_drv::CONSOLE (order CONSOLE -> PENDING_ASCII -> PENDING_PS2 -> SCHEDULER via ipc_post_nonblock), from the hart-0 timer ISR and file_read; Spinlock masks IRQs so the ISR cannot self-deadlock."
-review = "kernel/src/task/drivers/console_drv.rs:viConsole::poll; kernel/src/task/drivers/console_drv.rs:relay_ascii_to_input; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:ipc_post_nonblock"
+review = "kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/dev/console_drv.rs:relay_ascii_to_input; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:ipc_post_nonblock"
 
 [[global]]
-key = "kernel::task::drivers::console_drv::PENDING_PS2 @cfg(any (target_arch = \"x86_64\" , target_arch = \"x86\"))"
+key = "kernel::dev::console_drv::PENDING_PS2 @cfg(any (target_arch = \"x86_64\" , target_arch = \"x86\"))"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::console_drv; one PS/2 evdev event whose IPC relay to the input service failed, set and drained only by viConsole::poll"
+owner = "dev::console_drv; one PS/2 evdev event whose IPC relay to the input service failed, set and drained only by viConsole::poll"
 contexts = ["normal", "irq"]
 seal = "none: filled and drained under input-service backpressure for the whole run"
 retirement = "never cleared on input-cell retirement; a retained event is delivered to the next registered input service"
 rationale = "Taken only inside viConsole::poll under CONSOLE (and, on the drain path, while PENDING_ASCII is still held), from the hart-0 timer ISR and file_read; IRQ masking prevents same-CPU re-entry and the nesting order is fixed."
-review = "kernel/src/task/drivers/console_drv.rs:viConsole::poll; kernel/src/task/drivers/console_drv.rs:relay_evdev_to_input; kernel/src/task.rs:vi_timer_tick"
+review = "kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/dev/console_drv.rs:relay_evdev_to_input; kernel/src/task.rs:vi_timer_tick"
 
 [[global]]
-key = "kernel::task::drivers::console_drv::CONSOLE"
+key = "kernel::dev::console_drv::CONSOLE"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::console_drv; legacy stdin buffer and input relay, polled by vi_timer_tick (hart 0 on x86_64) and by file_read(fd 0) on any hart"
+owner = "dev::console_drv; legacy stdin buffer and input relay, polled by vi_timer_tick (hart 0 on x86_64) and by file_read(fd 0) on any hart"
 contexts = ["normal", "irq"]
 seal = "none: polled and drained for the whole run (console_drv::init is not called on x86_64; the const initializer is the initial state)"
 retirement = "never: lives for the whole run"
 rationale = "IRQ-masking spinlock taken from the timer ISR and from syscalls; under it poll drains uart::RX_BUFFER, PS/2 and posts IPC (takes SCHEDULER), giving order CONSOLE -> PENDING_* / RX_BUFFER / ps2 STATE -> SCHEDULER, with no reverse path found. Buffer growth is capped at MAX_BUFFERED, so the ISR path allocates at most up to 4096 bytes."
-review = "kernel/src/task/drivers/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/task/drivers/uart.rs:getchar"
+review = "kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/dev/uart.rs:getchar"
 
 [[global]]
-key = "kernel::task::drivers::block::MMC_ZST"
+key = "kernel::dev::block::MMC_ZST"
 lifetime = "global"
 mutation = "immutable"
-owner = "task::drivers::block; zero-sized MmcBlock handle returned by block_device() when an MMC card is present"
+owner = "dev::block; zero-sized MmcBlock handle returned by block_device() when an MMC card is present"
 contexts = ["boot", "normal"]
 seal = "const zero-sized value; nothing to initialize"
 retirement = "never: lives for the whole run"
 rationale = "MmcBlock has no fields or interior mutability; all state lives behind mmc::MMC_DEVICE, which carries its own lock. Read by boot-time loader block reads and block syscalls, never by an ISR."
-review = "kernel/src/task/drivers/block.rs:block_device; kernel/src/task/drivers/mmc.rs:MmcBlock"
+review = "kernel/src/dev/block.rs:block_device; kernel/src/dev/mmc.rs:MmcBlock"
 
 [[global]]
-key = "kernel::task::drivers::block::NULL_ZST"
+key = "kernel::dev::block::NULL_ZST"
 lifetime = "global"
 mutation = "immutable"
-owner = "task::drivers::block; zero-sized NullBlock fallback returned by block_device() when no MMC card is present (always on x86_64)"
+owner = "dev::block; zero-sized NullBlock fallback returned by block_device() when no MMC card is present (always on x86_64)"
 contexts = ["boot", "normal"]
 seal = "const zero-sized value; nothing to initialize"
 retirement = "never: lives for the whole run"
 rationale = "NullBlock has no fields or interior mutability and every method is pure, so shared access from boot loader reads and block syscalls needs no synchronization."
-review = "kernel/src/task/drivers/block.rs:NullBlock; kernel/src/task/drivers/block.rs:block_device; kernel/src/loader/early.rs:82"
+review = "kernel/src/dev/block.rs:NullBlock; kernel/src/dev/block.rs:block_device; kernel/src/loader/early.rs:82"
 
 [[global]]
-key = "kernel::task::drivers::uart::SERIAL"
+key = "kernel::dev::uart::SERIAL"
 lifetime = "boot"
 mutation = "spinlock"
-owner = "task::drivers::uart; NS16550 MMIO base/handle used by uart::init, poll_rhr and the MMIO branch of vi_handle_uart_irq on RISC-V/AArch64"
+owner = "dev::uart; NS16550 MMIO base/handle used by uart::init, poll_rhr and the MMIO branch of vi_handle_uart_irq on RISC-V/AArch64"
 contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image"
 retirement = "no x86_64 accessor; dead storage on this image"
 rationale = "On x86_64 uart::init only touches it under cfg(target_arch = \"riscv64\"), vi_handle_uart_irq uses the HAL port-I/O path (the SERIAL branch is cfg(not(any(x86_64, x86, rpi3)))), and poll_rhr, though compiled, is called only from the cfg(any(riscv64, riscv32)) console poll paths."
-review = "kernel/src/task/drivers/uart.rs:init; kernel/src/task/drivers/uart.rs:poll_rhr; kernel/src/task/drivers/uart.rs:vi_handle_uart_irq; kernel/src/task/drivers/console_drv.rs:97"
+review = "kernel/src/dev/uart.rs:init; kernel/src/dev/uart.rs:poll_rhr; kernel/src/dev/uart.rs:vi_handle_uart_irq; kernel/src/dev/console_drv.rs:97"
 
 [[global]]
-key = "kernel::task::drivers::uart::CONSOLE"
+key = "kernel::dev::uart::CONSOLE"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::uart; console line-ownership state guarded together with UART output; taken by every kernel log record (begin_record) and every Cell sys_log write (write_user_record)"
+owner = "dev::uart; console line-ownership state guarded together with UART output; taken by every kernel log record (begin_record) and every Cell sys_log write (write_user_record)"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: mutated on every console record for the whole run"
 retirement = "never: lives for the whole run (per-writer line ownership is keyed by tid but not cleared on exit; a dead writer only affects the next line tag)"
 rationale = "IRQ-masking leaf lock (DirectWriter -> hal uart_16550::putchar takes no kernel lock), so logs from the timer/IPI/UART ISRs cannot self-deadlock with a same-CPU holder. Finding: it uses lock(), not try_lock, so a kernel fault raised while a record is being emitted would deadlock when vi_handle_page_fault logs; panic and fatal NMI/#MC/#DF paths bypass it with raw putchar. Records hold it with IRQs masked for the whole polled serial transmit."
-review = "kernel/src/task/drivers/uart.rs:begin_record; kernel/src/task/drivers/uart.rs:write_user_record; kernel/src/task/drivers/uart.rs:emit_record; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/main.rs:panic; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
+review = "kernel/src/dev/uart.rs:begin_record; kernel/src/dev/uart.rs:write_user_record; kernel/src/dev/uart.rs:emit_record; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/main.rs:panic; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
 
 [[global]]
-key = "kernel::task::drivers::uart::LOGGER"
+key = "kernel::dev::uart::LOGGER"
 lifetime = "global"
 mutation = "immutable"
-owner = "task::drivers::uart; stateless SimpleLogger registered once as the log backend by uart::init; invoked by every log macro"
+owner = "dev::uart; stateless SimpleLogger registered once as the log backend by uart::init; invoked by every log macro"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "registered once by log::set_logger in uart::init (main.rs:745) during boot"
 retirement = "never: lives for the whole run"
 rationale = "Zero-sized with no interior mutability; every invocation serializes through uart::CONSOLE, which carries the context hazards. log::set_logger is itself once-only."
-review = "kernel/src/task/drivers/uart.rs:SimpleLogger; kernel/src/task/drivers/uart.rs:init; kernel/src/main.rs:745"
+review = "kernel/src/dev/uart.rs:SimpleLogger; kernel/src/dev/uart.rs:init; kernel/src/main.rs:745"
 
 [[global]]
-key = "kernel::task::drivers::uart::RX_BUFFER"
+key = "kernel::dev::uart::RX_BUFFER"
 lifetime = "global"
 mutation = "spinlock"
-owner = "task::drivers::uart; COM1 receive ring allocated by init_input, filled by vi_handle_uart_irq (x86 IDT Uart route), drained by getchar from console_drv::viConsole::poll"
+owner = "dev::uart; COM1 receive ring allocated by init_input, filled by vi_handle_uart_irq (x86 IDT Uart route), drained by getchar from console_drv::viConsole::poll"
 contexts = ["boot", "normal", "irq"]
 seal = "allocated once by uart::init_input in kmain (main.rs:812) on the BSP; filled and drained for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "IRQ-masking spinlock shared by the UART ISR and the timer-ISR/file_read console poll, so neither can self-deadlock; capacity is preallocated (4096) and the ISR pushes only while len < MAX_RX_BUFFERED, so the ISR never allocates. init_input_irq is called before init_input; an RX interrupt in that window finds None and leaves the FIFO undrained until the next IRQ or poll."
-review = "kernel/src/task/drivers/uart.rs:init_input; kernel/src/task/drivers/uart.rs:vi_handle_uart_irq; kernel/src/task/drivers/uart.rs:getchar; kernel/src/main.rs:806-812; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
+review = "kernel/src/dev/uart.rs:init_input; kernel/src/dev/uart.rs:vi_handle_uart_irq; kernel/src/dev/uart.rs:getchar; kernel/src/main.rs:806-812; hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch"
 
 [[global]]
-key = "kernel::task::drivers::registry::DRIVER_REGISTRY"
+key = "kernel::dev::registry::DRIVER_REGISTRY"
 lifetime = "boot"
 mutation = "spinlock"
-owner = "task::drivers::registry; name->id map created by registry::init and accessed by resolve/register_driver"
+owner = "dev::registry; name->id map created by registry::init and accessed by resolve/register_driver"
 contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (stays None)"
 retirement = "no x86_64 accessor; dead storage on this image"
-rationale = "registry::init is called only from task::drivers::init, which kmain runs under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")) and snapshot try_restore under the same gate; resolve and register_driver have no caller anywhere in the kernel."
-review = "kernel/src/task/drivers/registry.rs:init; kernel/src/task/drivers/registry.rs:resolve; kernel/src/task/drivers/registry.rs:register_driver; kernel/src/task/drivers.rs:init; kernel/src/main.rs:797"
+rationale = "registry::init is called only from dev::init, which kmain runs under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")) and snapshot try_restore under the same gate; resolve and register_driver have no caller anywhere in the kernel."
+review = "kernel/src/dev/registry.rs:init; kernel/src/dev/registry.rs:resolve; kernel/src/dev/registry.rs:register_driver; kernel/src/dev.rs:init; kernel/src/main.rs:797"
 
 [[global]]
 key = "kernel::hypervisor::svm_registry::NEXT_ASID @cfg(target_arch = \"x86_64\")"
@@ -1245,7 +1245,7 @@ contexts = ["normal", "irq"]
 seal = "none: mutated for the whole run (monotonic counter from 1)"
 retirement = "never: lives for the whole run; ids are not recycled"
 rationale = "fetch_add(Relaxed) only needs RMW uniqueness and publishes no other data, so Relaxed is sufficient. Timer-IRQ access: hart 0's vi_timer_tick polls CONSOLE, whose console_drv posts via ipc_post_nonblock and draws an id in ISR context; AP bring-up does not touch it."
-review = "kernel/src/task.rs:next_delivery_id; kernel/src/task.rs:ipc_post_nonblock; kernel/src/task/drivers/console_drv.rs:259; kernel/src/task.rs:vi_timer_tick"
+review = "kernel/src/task.rs:next_delivery_id; kernel/src/task.rs:ipc_post_nonblock; kernel/src/dev/console_drv.rs:259; kernel/src/task.rs:vi_timer_tick"
 
 [[global]]
 key = "kernel::task::SCHEDULER"
@@ -1278,7 +1278,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: taken for the whole run"
 retirement = "never: lives for the whole run (guards no data)"
 rationale = "Callers are the CapRevoke(PCIE_DRIVER) syscall and yield_cpu's reap/retry (timer ISR, user-fault path, AP idle loop). The lock masks IF and is held across pcie_ecam::quiesce_function, iommu::revoke_dma_for_cell (bounded invalidation wait), resource_registry/frame release and logging: a long IF-off section (latency, not correctness). Lock order under it, verified 2026-11-01: IOMMU_CLEANUP_SERIAL -> BDF_OWNERS, then x86 VTD_DOMAINS -> VTD_CONTEXTS (riscv64 RISCV_DOMAINS -> CQ_TRANSACTION), then the pin registry and FRAME_ALLOCATOR. It is acquired only in teardown_dma_authority and no path takes any of those locks and then this one, so there is no inversion."
-review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/task/drivers/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/task/drivers/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540"
+review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/dev/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/dev/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540"
 
 [[global]]
 key = "kernel::task::TICKS"
@@ -1333,7 +1333,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "The only setter, signal_net_rx, is called from vi_handle_virtio_irq, which the x86 IDT never routes (only PLIC/GIC callers), so on x86 the flag is only read/cleared: consume_pending CAS(AcqRel) from WaitForEvent/WaitCompletion syscalls and Scheduler::pick_next (timer ISR via yield_cpu); has_any_pending is a Relaxed gate re-checked by that CAS. Not touched during AP bring-up; the AP's idle-loop pick_next can clear it afterwards."
-review = "kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/task/drivers/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:2069"
+review = "kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/task/scheduler.rs:2069"
 
 [[global]]
 key = "kernel::task::waker::net_rx_reservation::RESERVATION"
@@ -1834,7 +1834,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "Active is installed once (x86_64: main.rs:1486-1489 at boot) and never cleared; Pending only transiently inside the display syscall"
 retirement = "never: release_for deliberately keeps Active metadata until reboot (restart is fail-stop for display)"
 rationale = "Read from the x86_64 timer ISR on hart 0 via vi_timer_tick -> console_drv CONSOLE.poll -> ps2_keyboard::poll_absolute_mouse -> display_framebuffer_resolution; the crate Spinlock masks IRQs so a normal-context holder cannot be interrupted into a same-hart deadlock."
-review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/src/resource_registry.rs:display_framebuffer_resolution; kernel/src/task/drivers/ps2_keyboard.rs:poll_absolute_mouse; kernel/src/task.rs:1062; kernel/src/main.rs:1486"
+review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/src/resource_registry.rs:display_framebuffer_resolution; kernel/src/dev/ps2_keyboard.rs:poll_absolute_mouse; kernel/src/task.rs:1062; kernel/src/main.rs:1486"
 
 [[global]]
 key = "kernel::resource_registry::PCIE_BARS"
@@ -1845,7 +1845,7 @@ contexts = ["boot", "normal"]
 seal = "none: syscall 235 can add BAR windows for the whole run"
 retirement = "never: no removal path; windows announced by a Platform Cell outlive that cell"
 rationale = "Only boot enumeration and syscall handlers touch it, none from trap context; Spinlock is adequate. Entries are global device facts rather than per-cell grants, so not retiring them is consistent, though nothing re-validates them after the announcing cell dies."
-review = "kernel/src/resource_registry.rs:register_pcie_bar; kernel/src/resource_registry.rs:is_pcie_bar; kernel/src/task/drivers/pcie_ecam.rs:init; kernel/src/task/syscall/mod.rs:8023"
+review = "kernel/src/resource_registry.rs:register_pcie_bar; kernel/src/resource_registry.rs:is_pcie_bar; kernel/src/dev/pcie_ecam.rs:init; kernel/src/task/syscall/mod.rs:8023"
 
 [[global]]
 key = "kernel::resource_registry::BDF_OWNERS"
@@ -2351,7 +2351,7 @@ contexts = ["normal", "irq", "exception"]
 seal = "none: registrations change for the whole run"
 retirement = "clear_tid(tid) via driver_cell::deregister_all_for in Scheduler::exit_task, which runs in the yield_cpu funnel (retire_deferred_fault/exit) and the watchdog in pick_next_unaccounted"
 rationale = "exit_task runs under SCHEDULER inside yield_cpu, reachable from timer/IPI ISRs and the #PF funnel, so the IRQ-masking Spinlock is required and present; lock order SCHEDULER -> registry is respected."
-review = "kernel/src/cell/service_registry.rs:clear_tid; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/scheduler.rs:1620; kernel/src/cell/service_registry.rs:commit_paused"
+review = "kernel/src/cell/service_registry.rs:clear_tid; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/task/scheduler.rs:1620; kernel/src/cell/service_registry.rs:commit_paused"
 
 [[global]]
 key = "kernel::cell::hotswap::SWAP_CEILINGS"
@@ -2499,59 +2499,59 @@ rationale = "AtomicBool latch prevents duplicate warning logs when compositor op
 review = "kernel/src/task/gpu-scanout.rs:cursor"
 
 [[global]]
-key = "kernel::task::drivers::irq_wait::MSI_WAKE"
+key = "kernel::dev::irq_wait::MSI_WAKE"
 lifetime = "global"
 mutation = "atomic"
-owner = "kernel::task::drivers::irq_wait MSI early wake sweep request flag"
+owner = "kernel::dev::irq_wait MSI early wake sweep request flag"
 contexts = ["irq", "normal"]
 seal = "none: set by x86 MSI ISR, cleared by scheduler wake sweep"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool flag tells hart-0 scheduler to run wake sweep early without taking locks in ISR"
-review = "kernel/src/task/drivers/irq_wait.rs:MSI_WAKE"
+review = "kernel/src/dev/irq_wait.rs:MSI_WAKE"
 
 [[global]]
-key = "kernel::task::drivers::pcie_msi::STATE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_msi::STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::drivers::pcie_msi MSI vector allocator state"
+owner = "kernel::dev::pcie_msi MSI vector allocator state"
 contexts = ["boot", "normal"]
 seal = "none: vectors allocated and freed as PCIe devices bind/unbind"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protects MSI vector pool and allocation records across driver cells"
-review = "kernel/src/task/drivers/pcie_msi.rs:STATE"
+review = "kernel/src/dev/pcie_msi.rs:STATE"
 
 [[global]]
-key = "kernel::task::drivers::pcie_msi::READY @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_msi::READY @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "kernel::task::drivers::pcie_msi readiness flag"
+owner = "kernel::dev::pcie_msi readiness flag"
 contexts = ["boot", "normal"]
 seal = "set once during x86 MSI subsystem initialization"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool published when MSI handler and allocator are ready for device configuration"
-review = "kernel/src/task/drivers/pcie_msi.rs:READY"
+review = "kernel/src/dev/pcie_msi.rs:READY"
 
 [[global]]
-key = "kernel::task::drivers::pcie_msi::FIRMWARE_FORBIDS_MSI @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_msi::FIRMWARE_FORBIDS_MSI @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "kernel::task::drivers::pcie_msi ACPI FADT MSI-forbidden flag"
+owner = "kernel::dev::pcie_msi ACPI FADT MSI-forbidden flag"
 contexts = ["boot", "normal"]
 seal = "written during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool records firmware policy forbidding MSI allocation on platform"
-review = "kernel/src/task/drivers/pcie_msi.rs:FIRMWARE_FORBIDS_MSI"
+review = "kernel/src/dev/pcie_msi.rs:FIRMWARE_FORBIDS_MSI"
 
 [[global]]
-key = "kernel::task::drivers::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::drivers::pcie_msi::virtio_gate refused devices list"
+owner = "kernel::dev::pcie_msi::virtio_gate refused devices list"
 contexts = ["boot", "normal"]
 seal = "none: tracks BDFs that bypass IOMMU or fail gate check"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protects list of VirtIO devices refused MSI allocation due to missing IOMMU platform"
-review = "kernel/src/task/drivers/pcie_msi/virtio_gate.rs:REFUSED"
+review = "kernel/src/dev/pcie_msi/virtio_gate.rs:REFUSED"
 
 [[global]]
 key = "kernel::loader::va_alloc::SLOTS"
@@ -2749,7 +2749,7 @@ contexts = ["boot"]
 seal = "written by route_gsi on the BSP during boot (UART RX IRQ, ACPI SCI) before APs start; re-read once by iommu_x86::remap::activate"
 retirement = "never: lives for the whole run"
 rationale = "Fixed array of packed AtomicU64 route records (MAX_ROUTES = 64); Release store after the slot is chosen, Acquire loads by readers. All writers and readers run on the BSP during boot, so slot claiming needs no CAS."
-review = "hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; hal/arch/x86/src/x86_64/ioapic.rs:reprogram; kernel/src/task/drivers/iommu_x86/remap.rs:activate"
+review = "hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; hal/arch/x86/src/x86_64/ioapic.rs:reprogram; kernel/src/dev/iommu_x86/remap.rs:activate"
 
 [[global]]
 key = "hal-x86::x86_64::ioapic::REMAPPER @cfg(target_arch = \"x86_64\")"
@@ -2760,7 +2760,7 @@ contexts = ["boot", "normal"]
 seal = "set at most once on the BSP by iommu_x86::remap::activate before APs start"
 retirement = "never: lives for the whole run"
 rationale = "AtomicUsize holding a fn(&Route) -> Option<u64> address (0 = compatibility format); Release store / Acquire load publish the function before use, mirroring msi::HANDLER"
-review = "hal/arch/x86/src/x86_64/ioapic.rs:set_remapper; hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; kernel/src/task/drivers/iommu_x86/remap.rs:activate"
+review = "hal/arch/x86/src/x86_64/ioapic.rs:set_remapper; hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; kernel/src/dev/iommu_x86/remap.rs:activate"
 
 [[global]]
 key = "hal-x86::x86_64::invept::CAPS @cfg(target_arch = \"x86_64\")"

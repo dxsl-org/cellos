@@ -1121,8 +1121,8 @@ pub(super) fn reserve_authorized_dma_publication(
         return Err(DmaGrantError::BdfNotOwned);
     }
     #[cfg(target_arch = "x86_64")]
-    if let Some(dev) = crate::task::drivers::pcie_ecam::device(bdf) {
-        if !crate::task::drivers::pcie_ecam::memory_bars_assigned(&dev.bars) {
+    if let Some(dev) = crate::dev::pcie_ecam::device(bdf) {
+        if !crate::dev::pcie_ecam::memory_bars_assigned(&dev.bars) {
             return Err(DmaGrantError::BdfNotOwned);
         }
     }
@@ -1866,29 +1866,28 @@ pub(super) fn grant_dma(caller_id: usize, bdf: u32, phys: u64, size: usize) -> S
             return Err(SyscallError::Unknown);
         }
     };
-    let iova =
-        match crate::task::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size) {
-            crate::task::drivers::iommu::DmaMapResult::Mapped(iova) => iova,
-            crate::task::drivers::iommu::DmaMapResult::Rejected => {
-                let rolled_back = crate::memory::pin::rollback_pin(phys_base, size, caller_id);
-                debug_assert!(rolled_back, "rejected DMA map must release its exact pin");
-                drop(publication);
-                log::warn!("[iommu] Cell {caller_id} DMA grant denied: no active mapping backend");
-                return Err(SyscallError::Unknown);
-            }
-            crate::task::drivers::iommu::DmaMapResult::PublishedUnconfirmed => {
-                // A context/SLPT entry is already hardware-visible. Keep
-                // the pin and quota until task teardown clears and drains
-                // that exact requester; do not enable bus mastering.
-                publication.commit();
-                log::warn!(
-                    "[iommu] Cell {caller_id} DMA mapping unconfirmed: \
+    let iova = match crate::dev::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size) {
+        crate::dev::iommu::DmaMapResult::Mapped(iova) => iova,
+        crate::dev::iommu::DmaMapResult::Rejected => {
+            let rolled_back = crate::memory::pin::rollback_pin(phys_base, size, caller_id);
+            debug_assert!(rolled_back, "rejected DMA map must release its exact pin");
+            drop(publication);
+            log::warn!("[iommu] Cell {caller_id} DMA grant denied: no active mapping backend");
+            return Err(SyscallError::Unknown);
+        }
+        crate::dev::iommu::DmaMapResult::PublishedUnconfirmed => {
+            // A context/SLPT entry is already hardware-visible. Keep
+            // the pin and quota until task teardown clears and drains
+            // that exact requester; do not enable bus mastering.
+            publication.commit();
+            log::warn!(
+                "[iommu] Cell {caller_id} DMA mapping unconfirmed: \
                              retaining pin for BDF {bdf:08x}"
-                );
-                return Err(SyscallError::Unknown);
-            }
-        };
-    crate::task::drivers::pcie_ecam::enable_bus_master(bdf);
+            );
+            return Err(SyscallError::Unknown);
+        }
+    };
+    crate::dev::pcie_ecam::enable_bus_master(bdf);
     publication.commit();
     // warn, not info: the only record of what this device may DMA to
     // (see the matching line in `iommu_x86.rs`); at info level it does

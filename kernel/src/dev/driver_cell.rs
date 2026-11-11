@@ -94,7 +94,7 @@ const VIRTIO_DEVICE_ID_OFFSET: usize = 0x8;
 const VIRTIO_DEVICE_ID_NETWORK: u32 = 1;
 
 fn registered_virtio_irq_for_owner(tid: usize) -> Option<u32> {
-    crate::task::drivers::virtio_common::virtio_slots()
+    crate::dev::virtio_common::virtio_slots()
         .find(|slot| {
             if crate::resource_registry::lookup_mmio_owner(slot.base) != Some(tid) {
                 return false;
@@ -282,7 +282,7 @@ pub fn owns_registered_nic_irq(irq: u32) -> bool {
         return true;
     }
     #[cfg(target_arch = "x86_64")]
-    if irq <= 0xFF && crate::task::drivers::pcie_msi::irq_owned_by(irq as u8, owner_tid) {
+    if irq <= 0xFF && crate::dev::pcie_msi::irq_owned_by(irq as u8, owner_tid) {
         return true;
     }
     false
@@ -447,8 +447,8 @@ mod tests {
         reset_roles();
         const NIC_OWNER: usize = 88_001;
         const OTHER_OWNER: usize = 88_002;
-        let nic_alloc = crate::task::drivers::pcie_msi::allocate_for_test(NIC_OWNER, 0x0010, 2);
-        let other_alloc = crate::task::drivers::pcie_msi::allocate_for_test(OTHER_OWNER, 0x0020, 2);
+        let nic_alloc = crate::dev::pcie_msi::allocate_for_test(NIC_OWNER, 0x0010, 2);
+        let other_alloc = crate::dev::pcie_msi::allocate_for_test(OTHER_OWNER, 0x0020, 2);
 
         // Before registration, neither is recognized.
         assert!(!owns_registered_nic_irq(nic_alloc.first_irq as u32));
@@ -471,8 +471,8 @@ mod tests {
         deregister_all_for(NIC_OWNER);
         assert!(!owns_registered_nic_irq(nic_alloc.first_irq as u32));
 
-        crate::task::drivers::pcie_msi::release_for(NIC_OWNER);
-        crate::task::drivers::pcie_msi::release_for(OTHER_OWNER);
+        crate::dev::pcie_msi::release_for(NIC_OWNER);
+        crate::dev::pcie_msi::release_for(OTHER_OWNER);
         reset_roles();
     }
 

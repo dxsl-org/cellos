@@ -431,7 +431,7 @@ pub fn request_mmio_unchecked(tid: usize, base: usize, len: usize) -> ViResult<(
 /// kept even inside the window: the window comes from firmware (ACPI MCFG).
 pub fn request_ecam_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
     let end = checked_mmio_end(base, len)?;
-    let window = crate::task::drivers::pcie_ecam::admitted_ecam_range();
+    let window = crate::dev::pcie_ecam::admitted_ecam_range();
     let admitted = {
         let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         // No allocator means managed RAM is unknown: refuse rather than guess.

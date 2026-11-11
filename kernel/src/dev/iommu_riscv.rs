@@ -23,8 +23,8 @@ use super::iommu_pt::Sv39IommuPt;
 use super::iommu_riscv_cmd::{
     encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
 };
+use crate::dev::pcie_ecam;
 use crate::sync::Spinlock;
-use crate::task::drivers::pcie_ecam;
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
