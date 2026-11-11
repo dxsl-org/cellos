@@ -803,7 +803,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&SENDER) {
             task.syscall_allowlist = (1u64 << 62) | (1u64 << 63);
-            task.vfs_mutate = true;
+            task.rights.vfs_mutate = true;
         }
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver
@@ -845,7 +845,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
     // edge) attests nothing.
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&SENDER) {
-            task.vfs_mutate = false;
+            task.rights.vfs_mutate = false;
         }
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver

@@ -112,7 +112,10 @@ fn authority_is_current(
 ) -> bool {
     sched.tasks.get(&authority.tid).is_some_and(|task| {
         task.cell_generation == authority.generation
-            && super::cap::CapSet::of_task(task).intersect(authority.ceiling) == authority.ceiling
+            && sched
+                .cell_rights(authority.tid)
+                .intersect(authority.ceiling)
+                == authority.ceiling
     })
 }
 
@@ -627,26 +630,26 @@ impl SessionPublication {
         {
             return false;
         }
-        let Some(caller) = self
-            .state
-            .caller
-            .as_ref()
-            .and_then(|a| sched.tasks.get(&a.tid))
-        else {
+        let Some(caller_tid) = self.state.caller.as_ref().map(|a| a.tid) else {
             return false;
         };
+        // The caller's measured launch identity, never its task name (C-1).
+        let Some(identity) = super::syscall::launch_identity_in(sched, caller_tid) else {
+            return false;
+        };
+        let rights = sched.cell_rights(caller_tid);
         let Some(measurement) = self.state.measurement.as_ref() else {
             return false;
         };
         let state = crate::loader::launch_profile::CallerLaunchState {
-            name: &caller.name,
-            has_spawn: caller.spawn_cap.is_some(),
-            has_supervisor: caller.supervisor_cap.is_some(),
+            name: &identity,
+            has_spawn: rights.spawn,
+            has_supervisor: rights.supervisor,
         };
         crate::loader::launch_profile::authorize(state, self.route, &measurement.path).is_some_and(
             |profile| {
                 self.state.granted.intersect(profile.child_ceiling) == self.state.granted
-                    && (!profile.requires_lifecycle_authority || caller.spawn_cap.is_some())
+                    && (!profile.requires_lifecycle_authority || rights.spawn)
             },
         )
     }

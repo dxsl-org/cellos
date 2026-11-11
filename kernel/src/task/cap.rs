@@ -170,6 +170,7 @@ impl PlatformCapReservation {
     /// Permanently transfer the singleton grant into a complete unpublished TCB.
     pub(crate) fn commit_into(mut self, task: &mut super::tcb::Task) {
         task.platform_cap = Some(PlatformCap::new());
+        task.rights.platform = true;
         self.committed = true;
     }
 }
@@ -583,6 +584,26 @@ impl CapSet {
         flags
     }
 
+    /// This set minus the rights named by a `CapRevoke` mask
+    /// (`api::syscall::cap_mask`): the boolean caps it names, and the MMIO-class
+    /// and block-region bits in its parameterised fields.
+    pub fn without_revoke_mask(self, cap_mask: u32) -> CapSet {
+        use api::syscall::cap_mask as CM;
+        let keep = |bit: u32| cap_mask & bit == 0;
+        CapSet {
+            block_io: self.block_io && keep(CM::BLOCK_IO),
+            network: self.network && keep(CM::NETWORK),
+            spawn: self.spawn && keep(CM::SPAWN),
+            hypervisor: self.hypervisor && keep(CM::HYPERVISOR),
+            pcie_driver: self.pcie_driver && keep(CM::PCIE_DRIVER),
+            platform: self.platform && keep(CM::PLATFORM),
+            supervisor: self.supervisor && keep(CM::SUPERVISOR),
+            mmio_devices: self.mmio_devices & !((cap_mask >> CM::MMIO_SHIFT) as u8),
+            block_regions: self.block_regions & !((cap_mask >> CM::BLKREGION_SHIFT) as u8),
+            ..self
+        }
+    }
+
     /// Write the granted caps into a child Task's TCB fields. Pure data — block-IO
     /// VFS-handler registration and any other side effects stay in the loader,
     /// keyed off the *granted* (not requested) bits.
@@ -609,6 +630,10 @@ impl CapSet {
         t.kms_ssh_admin = self.kms_ssh_admin;
         // `platform_cap` is transferred only from `PlatformCapReservation`.
         // Applying a plain capability snapshot must never bypass the singleton.
+        t.rights = CapSet {
+            platform: t.platform_cap.is_some(),
+            ..self
+        };
     }
 
     /// Extract a plain-data CapSet snapshot from a Task's live TCB fields.

@@ -514,6 +514,19 @@ impl Default for Scheduler {
 }
 
 impl Scheduler {
+    /// Rights of the Cell incarnation `tid` belongs to: its root's record
+    /// (`Task::rights`). `EMPTY` when the task or its root is gone, so a gate
+    /// fails closed while an incarnation retires.
+    pub(crate) fn cell_rights(&self, tid: usize) -> super::cap::CapSet {
+        let Some(task) = self.tasks.get(&tid) else {
+            return super::cap::CapSet::EMPTY;
+        };
+        let Some(root) = self.tasks.get(&task.root_tid) else {
+            return super::cap::CapSet::EMPTY;
+        };
+        root.rights
+    }
+
     pub fn new() -> Self {
         // This fixed owner directory belongs to the scheduler, not to the
         // task whose execution or launch happens to trigger its construction.
@@ -605,11 +618,7 @@ impl Scheduler {
         if !owner.is_live() || !self.cell_owner_slot_is_empty(CellId(owner.cell_id)) {
             return false;
         }
-        let caps = self
-            .tasks
-            .get(&(owner.root_tid as usize))
-            .map(super::cap::CapSet::from_task)
-            .unwrap_or(super::cap::CapSet::EMPTY);
+        let caps = self.cell_rights(owner.root_tid as usize);
         if !crate::cell::cspace::register_cell_authority(
             CellId(owner.cell_id),
             owner.generation,
@@ -1098,7 +1107,6 @@ impl Scheduler {
             .clone();
         let (
             cell_id,
-            parent_caps,
             parent_allowlist,
             parent_pku,
             parent_user_cet,
@@ -1121,7 +1129,6 @@ impl Scheduler {
             };
             (
                 parent.cell_id,
-                super::cap::CapSet::of_task(parent),
                 parent.syscall_allowlist,
                 (parent.pku_key, parent.pku_value),
                 parent.user_cet,
@@ -1168,7 +1175,8 @@ impl Scheduler {
         task.state = TaskState::Ready;
         task.cell_generation = owner.generation;
         task.root_tid = owner.root_tid as usize;
-        parent_caps.apply_to(&mut task);
+        // No rights copy: a thread is gated on its Cell's record
+        // (`cell_rights` via `root_tid`), so it can never outlive a revoke.
         task.syscall_allowlist = parent_allowlist;
         task.pku_key = parent_pku.0;
         task.pku_value = parent_pku.1;

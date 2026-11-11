@@ -246,11 +246,13 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
         return Err(ViError::AlreadyExists);
     }
     let sched = scheduler.as_mut().ok_or(ViError::NotFound)?;
+    // The replacement is bounded by the frozen Cell's rights (its incarnation
+    // record), not by a per-thread copy.
+    let ceiling = sched.cell_rights(tid);
     let task = sched.tasks.get_mut(&tid).ok_or(ViError::NotFound)?;
     if task.is_critical || matches!(task.state, TaskState::Frozen { .. }) {
         return Err(ViError::PermissionDenied);
     }
-    let ceiling = crate::task::cap::CapSet::of_task(task);
     let generation = task.cell_generation;
     let freeze_nonce = next_freeze_nonce();
     enter_frozen_state(task, swap_id);

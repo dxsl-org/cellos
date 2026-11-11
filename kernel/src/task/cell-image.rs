@@ -52,7 +52,9 @@ pub(super) fn resolve_for_caller(
     if is_vfs_cell(caller.cell_id.0 as usize) {
         return sched.resolve_cell_image(CellId(request.cell_id), request.generation);
     }
-    caller.supervisor_cap.as_ref()?;
+    if !sched.cell_rights(caller_id).supervisor {
+        return None;
+    }
     let owner = sched.resolve_live_cell_owner(CellId(request.cell_id), request.generation)?;
     let root = sched.tasks.get(&(owner.root_tid as usize))?;
     if !root.launch_named {
@@ -163,7 +165,11 @@ mod tests {
             "supervisor",
             alloc::vec![],
         ));
-        supervisor.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
+        crate::task::cap::CapSet {
+            supervisor: true,
+            ..crate::task::cap::CapSet::EMPTY
+        }
+        .apply_to(&mut supervisor);
         sched.tasks.insert(SUPERVISOR_TID, supervisor);
         let request = CellOwnerRequest::new(CELL, generation);
         let no_vfs = |_: usize| false;

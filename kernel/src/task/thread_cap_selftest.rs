@@ -126,19 +126,24 @@ pub fn self_test() -> bool {
 
     // ── #7: thread identity inheritance ────────────────────────────────────────
     // Parent cell: a distinctive CellId, a restricted allowlist, a non-zero PKU
-    // domain, and one transferable cap (network) + SpawnCap (needed to spawn).
+    // domain, and one transferable cap (supervisor) + SpawnCap (needed to spawn).
     {
         let mut parent = mk_task(PARENT_TID, TEST_CELL_ID);
-        parent.network_cap = Some(super::cap::NetworkCap::new());
-        parent.spawn_cap = Some(super::cap::SpawnCap::new());
         // Two of the three S2-T/S2-W rights (memory withheld), so equality below
-        // proves each one is inherited rather than defaulted.
-        parent.observe_tasks = true;
-        parent.vfs_mutate = true;
+        // proves each one is the Cell's rather than defaulted.
+        // No `network`/`block_io`: those mark a system Cell, which `CapRevoke`
+        // refuses, and the Cell-wide revoke below must be admissible.
+        let parent_caps = CapSet {
+            supervisor: true,
+            spawn: true,
+            observe_tasks: true,
+            vfs_mutate: true,
+            ..CapSet::EMPTY
+        };
+        parent_caps.apply_to(&mut parent);
         parent.syscall_allowlist = TEST_ALLOWLIST;
         parent.pku_key = TEST_PKU_KEY;
         parent.pku_value = TEST_PKU_VALUE;
-        let parent_caps = CapSet::of_task(&parent);
         insert(parent);
 
         // Invoke the REAL Spawn path as if the parent called it. entry/arg are
@@ -156,7 +161,8 @@ pub fn self_test() -> bool {
                 if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                     if let Some(t) = sched.tasks.get(&thread_tid) {
                         let cell_ok = t.cell_id.0 == TEST_CELL_ID; // NOT CellId(0)
-                        let caps_ok = CapSet::of_task(t) == parent_caps;
+                                                                   // The thread is gated on its Cell's record, not a copy.
+                        let caps_ok = sched.cell_rights(thread_tid) == parent_caps;
                         let allow_ok = t.syscall_allowlist == TEST_ALLOWLIST; // NOT u64::MAX
                         let pku_ok = t.pku_key == TEST_PKU_KEY && t.pku_value == TEST_PKU_VALUE;
                         if !(cell_ok && caps_ok && allow_ok && pku_ok) {
@@ -175,6 +181,34 @@ pub fn self_test() -> bool {
                         log::error!("[selftest] THREAD-INHERIT: FAIL — thread tid absent");
                     }
                 }
+                // H-1: a revoke aimed at the thread removes the right from the
+                // whole Cell — the root included — and no thread keeps it.
+                let mut ctrl = mk_task(CTRL_TID, 0x2222);
+                CapSet {
+                    spawn: true,
+                    ..CapSet::EMPTY
+                }
+                .apply_to(&mut ctrl);
+                insert(ctrl);
+                let revoked = handle_syscall(
+                    CTRL_TID,
+                    Syscall::CapRevoke {
+                        target_tid: thread_tid,
+                        cap_mask: CM::SPAWN,
+                    },
+                );
+                let cell_wide = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+                    !sched.cell_rights(PARENT_TID).spawn && !sched.cell_rights(thread_tid).spawn
+                });
+                if !(revoked.is_ok() && cell_wide) {
+                    ok = false;
+                    log::error!(
+                        "[selftest] REVOKE-CELL-WIDE: FAIL r={:?} cell_wide={}",
+                        revoked,
+                        cell_wide
+                    );
+                }
+                remove(CTRL_TID);
                 remove(thread_tid);
             }
             _ => {
@@ -197,12 +231,20 @@ pub fn self_test() -> bool {
         // (`.agents/260712-1901` P01-P04 replaced P00's blanket refusal).
         // HYPERVISOR has no teardown path and must still be refused.
         let mut caller = mk_task(PARENT_TID, TEST_CELL_ID);
-        caller.spawn_cap = Some(super::cap::SpawnCap::new());
+        CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        }
+        .apply_to(&mut caller);
         insert(caller);
 
         let mut target = mk_task(TARGET_TID, 0x1111);
-        target.hypervisor_cap = Some(super::cap::HypervisorCap::new());
-        target.mmio_devices = crate::resource_registry::DEV_GPIO;
+        CapSet {
+            hypervisor: true,
+            mmio_devices: crate::resource_registry::DEV_GPIO,
+            ..CapSet::EMPTY
+        }
+        .apply_to(&mut target);
         insert(target);
 
         // (a) HYPERVISOR bit → NotSupported, cap untouched.
@@ -214,15 +256,10 @@ pub fn self_test() -> bool {
             },
         );
         let hyp_refused = matches!(r_hyp, Err(SyscallError::NotSupported))
-            && if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched
-                    .tasks
-                    .get(&TARGET_TID)
-                    .map(|t| t.hypervisor_cap.is_some())
-                    .unwrap_or(false)
-            } else {
-                false
-            };
+            && super::SCHEDULER
+                .lock()
+                .as_ref()
+                .is_some_and(|sched| sched.cell_rights(TARGET_TID).hypervisor);
         if !hyp_refused {
             ok = false;
             log::error!("[selftest] REVOKE-HYPERVISOR: FAIL r={:?}", r_hyp);
@@ -268,7 +305,8 @@ pub fn self_test() -> bool {
                             && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
                                 == CM::MMIO_MASK
                     });
-                (t.mmio_devices, t.hypervisor_cap.is_some(), notified)
+                let rights = sched.cell_rights(TARGET_TID);
+                (rights.mmio_devices, rights.hypervisor, notified)
             })
         });
         let window_released = window
@@ -327,7 +365,11 @@ pub fn self_test() -> bool {
         // (c) Positive control: SPAWN is a lazy (syscall-gated) bit — revoke of a
         // non-system target must still SUCCEED and clear the field.
         let mut ctrl = mk_task(CTRL_TID, 0x2222);
-        ctrl.spawn_cap = Some(super::cap::SpawnCap::new());
+        CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        }
+        .apply_to(&mut ctrl);
         insert(ctrl);
         let r_spawn = handle_syscall(
             PARENT_TID,
@@ -336,15 +378,9 @@ pub fn self_test() -> bool {
                 cap_mask: CM::SPAWN,
             },
         );
-        let cleared = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-            sched
-                .tasks
-                .get(&CTRL_TID)
-                .map(|t| t.spawn_cap.is_none())
-                .unwrap_or(false)
-        } else {
-            false
-        };
+        let cleared = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+            sched.tasks.contains_key(&CTRL_TID) && !sched.cell_rights(CTRL_TID).spawn
+        });
         if !(r_spawn.is_ok() && cleared) {
             ok = false;
             log::error!(
@@ -358,9 +394,15 @@ pub fn self_test() -> bool {
         //     P05): `pcie_driver` drains the DMA authority and releases the BDF,
         //     `platform` releases the ECAM window, `supervisor` is a field clear.
         let mut driver = mk_task(DRIVER_TID, 0x3333);
-        driver.pcie_driver_cap = Some(super::cap::PcieDriverCap::new());
-        driver.platform_cap = Some(super::cap::PlatformCap::new());
-        driver.supervisor_cap = Some(super::cap::SupervisorCap::new());
+        CapSet {
+            pcie_driver: true,
+            supervisor: true,
+            ..CapSet::EMPTY
+        }
+        .apply_to(&mut driver);
+        // `apply_to` never grants the Platform singleton; the fixture sets the
+        // record bit directly (no reservation is taken).
+        driver.rights.platform = true;
         insert(driver);
 
         let bdf_claimed = crate::resource_registry::claim_bdf_owner(DRIVER_BDF, DRIVER_TID);
@@ -386,11 +428,8 @@ pub fn self_test() -> bool {
                 },
             );
             let caps_intact = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
-                sched.tasks.get(&DRIVER_TID).is_some_and(|t| {
-                    t.pcie_driver_cap.is_some()
-                        && t.platform_cap.is_some()
-                        && t.supervisor_cap.is_some()
-                })
+                let rights = sched.cell_rights(DRIVER_TID);
+                rights.pcie_driver && rights.platform && rights.supervisor
             });
             let bdf_retained =
                 crate::resource_registry::owner_of_bdf(DRIVER_BDF) == Some(DRIVER_TID);
@@ -430,10 +469,11 @@ pub fn self_test() -> bool {
                             && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
                                 == CM::PCIE_DRIVER | CM::PLATFORM | CM::SUPERVISOR
                     });
+                let rights = sched.cell_rights(DRIVER_TID);
                 (
-                    t.pcie_driver_cap.is_none(),
-                    t.platform_cap.is_none(),
-                    t.supervisor_cap.is_none(),
+                    !rights.pcie_driver,
+                    !rights.platform,
+                    !rights.supervisor,
                     notified,
                 )
             })
@@ -482,7 +522,11 @@ pub fn self_test() -> bool {
     // real 65-frame stack allocations.
     {
         let mut parent = mk_task(PARENT_TID, DOS_CELL_ID);
-        parent.spawn_cap = Some(super::cap::SpawnCap::new());
+        CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        }
+        .apply_to(&mut parent);
         insert(parent);
 
         let filler: alloc::vec::Vec<usize> = (0..super::scheduler::MAX_THREADS_PER_CELL - 1)

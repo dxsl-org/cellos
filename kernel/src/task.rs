@@ -428,11 +428,7 @@ fn ipc_target_gone(sched: &Scheduler, target_id: usize) -> bool {
 fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) -> bool {
     // Lock order is SCHEDULER -> service registry. PauseService releases the
     // registry lock before checking scheduler drain state.
-    if sched
-        .tasks
-        .get(&caller_id)
-        .is_some_and(|task| task.supervisor_cap.is_some())
-    {
+    if sched.tasks.contains_key(&caller_id) && sched.cell_rights(caller_id).supervisor {
         return false;
     }
     let Some(target) = sched.tasks.get(&target_id) else {

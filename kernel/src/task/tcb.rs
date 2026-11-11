@@ -425,6 +425,12 @@ pub struct Task {
     /// (snapshot) have no bit — those ranges are kernel-only by construction.
     pub block_regions: u8,
 
+    /// The Cell incarnation's authority record (architecture review H-1). Read
+    /// only on the Cell's **root** task, through `Scheduler::cell_rights`, so
+    /// every thread of the incarnation sees one set of rights and a revoke
+    /// aimed at any of them applies to all. A thread's own copy is unused.
+    pub(crate) rights: super::cap::CapSet,
+
     /// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
     /// On other architectures this field exists but is always 0 and never consulted.
     /// Key assignment: 0 = trusted-core cells (block_io/network/spawn/hypervisor),
@@ -726,6 +732,7 @@ impl Task {
             kms_ssh_admin: false,
             mmio_devices: 0,
             block_regions: 0,
+            rights: super::cap::CapSet::EMPTY,
             pku_key: 0,
             pku_value: 0,
             user_cet: 0,

@@ -1974,17 +1974,17 @@ const MAX_LOG_MSG: usize = 4096;
 /// Returns `true` if the calling task satisfies the given capability check.
 ///
 /// Lock-ordering: acquires SCHEDULER, drops before returning.
-fn caller_has_cap<F: Fn(&crate::task::tcb::Task) -> bool>(caller_id: usize, check: F) -> bool {
-    super::SCHEDULER
-        .lock()
-        .as_ref()
-        .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(check)
-        .unwrap_or(false)
+/// Gate on the caller's **Cell** rights (`Scheduler::cell_rights`, the root's
+/// incarnation record), never on a per-thread copy: a revoke aimed at any
+/// thread of the Cell is seen by all of them. A missing task fails closed.
+fn caller_has_cap<F: Fn(&super::cap::CapSet) -> bool>(caller_id: usize, check: F) -> bool {
+    super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+        sched.tasks.contains_key(&caller_id) && check(&sched.cell_rights(caller_id))
+    })
 }
 
 fn caller_has_block_io(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.block_io_cap.is_some())
+    caller_has_cap(caller_id, |t| t.block_io)
 }
 
 /// `WaitIrq` admission for its `mmio_base` argument.
@@ -2031,9 +2031,7 @@ fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
     let regions = super::SCHEDULER
         .lock()
         .as_ref()
-        .and_then(|s| s.tasks.get(&caller_id))
-        .map(|t| t.block_regions)
-        .unwrap_or(0);
+        .map_or(0, |s| s.cell_rights(caller_id).block_regions);
     let end = match sector.checked_add(count) {
         Some(e) => e,
         None => return false,
@@ -2064,21 +2062,24 @@ fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
 }
 
 fn caller_has_network(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.network_cap.is_some())
+    caller_has_cap(caller_id, |t| t.network)
 }
 
 fn caller_has_hypervisor(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.hypervisor_cap.is_some())
+    caller_has_cap(caller_id, |t| t.hypervisor)
 }
 #[cfg(feature = "test-hooks")]
 fn caller_has_development_silo_registration(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |task| {
-        task.root_tid == caller_id && task.development_silo_registration_cap.is_some()
+    // A launch-route token on the root task, not a Cell right (not in CapSet).
+    super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+        sched.tasks.get(&caller_id).is_some_and(|task| {
+            task.root_tid == caller_id && task.development_silo_registration_cap.is_some()
+        })
     })
 }
 
 fn caller_has_spawn(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
+    caller_has_cap(caller_id, |t| t.spawn)
 }
 
 /// Tid of trusted init, published once by `loader::governed_spawn::spawn_init`
@@ -2158,17 +2159,17 @@ fn governed_spawn_request(
     let (generation, caller_authority, caller_root) = super::SCHEDULER
         .lock()
         .as_ref()
-        .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| {
+        .and_then(|sched| {
+            let task = sched.tasks.get(&caller_id)?;
             #[cfg(cellos_p01_trace)]
             if trace.is_some_and(|a| a.parent != crate::p01_measurement::Owner::of(task)) {
                 crate::p01_measurement::invalidate(crate::p01_measurement::IDENTITY);
             }
-            (
+            Some((
                 task.cell_generation,
-                super::cap::CapSet::of_task(task),
+                sched.cell_rights(caller_id),
                 task.root_tid,
-            )
+            ))
         })
         .ok_or(SyscallError::PermissionDenied)?;
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
@@ -2200,8 +2201,10 @@ fn governed_replacement_request(
     let (generation, caller_authority) = super::SCHEDULER
         .lock()
         .as_ref()
-        .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| (task.cell_generation, super::cap::CapSet::of_task(task)))
+        .and_then(|sched| {
+            let task = sched.tasks.get(&caller_id)?;
+            Some((task.cell_generation, sched.cell_rights(caller_id)))
+        })
         .ok_or(SyscallError::PermissionDenied)?;
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
     Ok(crate::loader::SpawnRequest::governed_replacement(
@@ -2224,26 +2227,32 @@ fn governed_replacement_request(
 /// (`Task::launch_named`), and empty otherwise — unsigned or unnamed images,
 /// caller-supplied ELF/Mem bytes, sandbox paths and aliases match no launch row. Threads share their Cell root's identity.
 fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
-    let init_tid = TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire);
     super::SCHEDULER.lock().as_ref().and_then(|sched| {
-        let task = sched.tasks.get(&caller_id)?;
-        let identity = if init_tid != 0 && task.root_tid == init_tid {
-            String::from("init")
-        } else {
-            sched
-                .tasks
-                .get(&task.root_tid)
-                .filter(|root| root.launch_named)
-                .and_then(|root| root.image())
-                .filter(|image| image.is_signed())
-                .and_then(|image| core::str::from_utf8(image.name()).ok().map(String::from))
-                .unwrap_or_default()
-        };
-        Some((
-            identity,
-            task.spawn_cap.is_some(),
-            task.supervisor_cap.is_some(),
-        ))
+        let identity = launch_identity_in(sched, caller_id)?;
+        let rights = sched.cell_rights(caller_id);
+        Some((identity, rights.spawn, rights.supervisor))
+    })
+}
+
+/// The launch identity of `caller_id` (see [`caller_launch_state`]) read under
+/// a scheduler the caller already holds. `None` when the task is gone.
+pub(super) fn launch_identity_in(
+    sched: &super::scheduler::Scheduler,
+    caller_id: usize,
+) -> Option<String> {
+    let init_tid = TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire);
+    let task = sched.tasks.get(&caller_id)?;
+    Some(if init_tid != 0 && task.root_tid == init_tid {
+        String::from("init")
+    } else {
+        sched
+            .tasks
+            .get(&task.root_tid)
+            .filter(|root| root.launch_named)
+            .and_then(|root| root.image())
+            .filter(|image| image.is_signed())
+            .and_then(|image| core::str::from_utf8(image.name()).ok().map(String::from))
+            .unwrap_or_default()
     })
 }
 
@@ -2346,7 +2355,9 @@ pub(super) fn session_launch_request(
             return Err(SyscallError::PermissionDenied);
         }
     }
-    let ceiling = super::cap::CapSet::of_task(task);
+    let ceiling = guard
+        .as_ref()
+        .map_or(super::cap::CapSet::EMPTY, |s| s.cell_rights(caller));
     Ok(crate::loader::SpawnRequest::governed_caller(
         caller,
         task.cell_generation,
@@ -2394,19 +2405,19 @@ pub(super) fn snapshot_grant_elf(
 }
 
 fn caller_has_supervisor(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.supervisor_cap.is_some())
+    caller_has_cap(caller_id, |t| t.supervisor)
 }
 
 fn caller_has_pcie_driver(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
+    caller_has_cap(caller_id, |t| t.pcie_driver)
 }
 
 fn caller_has_usb_driver(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.usb_driver_cap.is_some())
+    caller_has_cap(caller_id, |t| t.usb_driver)
 }
 
 fn caller_has_serial_port(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.serial_port_cap.is_some())
+    caller_has_cap(caller_id, |t| t.serial_port)
 }
 
 /// The 16550 mechanism exists only where a 16550 exists.
@@ -2475,9 +2486,12 @@ fn register_driver_service(
     let scheduler = crate::task::SCHEDULER.lock();
     let authorized = scheduler
         .as_ref()
-        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
-        .is_some_and(|task| {
-            (task.pcie_driver_cap.is_some() || task.usb_driver_cap.is_some())
+        .and_then(|scheduler| {
+            let rights = scheduler.cell_rights(caller_id);
+            Some((scheduler.tasks.get(&caller_id)?, rights))
+        })
+        .is_some_and(|(task, rights)| {
+            (rights.pcie_driver || rights.usb_driver)
                 && !matches!(
                     &task.state,
                     crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
@@ -2528,9 +2542,12 @@ fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallErro
     let scheduler = crate::task::SCHEDULER.lock();
     let authorized = scheduler
         .as_ref()
-        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
-        .is_some_and(|task| {
-            task.usb_driver_cap.is_some()
+        .and_then(|scheduler| {
+            let rights = scheduler.cell_rights(caller_id);
+            Some((scheduler.tasks.get(&caller_id)?, rights))
+        })
+        .is_some_and(|(task, rights)| {
+            rights.usb_driver
                 && !matches!(
                     &task.state,
                     crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
@@ -2597,14 +2614,13 @@ fn register_block_device_route(
         .ok_or(SyscallError::InvalidInput)?;
 
     let live_driver = |scheduler: &Option<super::Scheduler>| {
-        scheduler
-            .as_ref()
-            .and_then(|scheduler| scheduler.tasks.get(&caller_id))
-            .filter(|task| {
-                (task.pcie_driver_cap.is_some() || task.usb_driver_cap.is_some())
-                    && !matches!(&task.state, TaskState::Retiring | TaskState::Terminated)
-            })
-            .map(|task| (task.cell_id.0, task.cell_generation))
+        scheduler.as_ref().and_then(|scheduler| {
+            let rights = scheduler.cell_rights(caller_id);
+            let task = scheduler.tasks.get(&caller_id)?;
+            ((rights.pcie_driver || rights.usb_driver)
+                && !matches!(&task.state, TaskState::Retiring | TaskState::Terminated))
+            .then_some((task.cell_id.0, task.cell_generation))
+        })
     };
     if live_driver(&crate::task::SCHEDULER.lock()).is_none() {
         return Err(SyscallError::PermissionDenied);
@@ -2636,7 +2652,7 @@ fn register_block_device_route(
 }
 
 fn caller_has_platform(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.platform_cap.is_some())
+    caller_has_cap(caller_id, |t| t.platform)
 }
 
 /// ADR-0031 CP1 §6: 418/424 offer a function that is unowned or already the
@@ -3638,14 +3654,13 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     let sched = sched_guard.as_ref()?;
     let task = sched.tasks.get(&sender_tid)?;
     let owner = sched.resolve_live_cell_owner(task.cell_id, task.cell_generation)?;
-    let mut flags = vfs_mutate_caller_flag(task.syscall_allowlist, task.vfs_mutate);
-    // Network rights are a property of the Cell: read them from the Cell's root
-    // task, whose CapSet is the one spawn bounded by request ∩ ceiling ∩ policy.
-    // `resolve_live_cell_owner` has already proven that root is live and is this
-    // exact Cell generation, so a thread can neither claim more nor less than its
-    // Cell holds.
-    let root = sched.tasks.get(&(owner.root_tid as usize))?;
-    let root_caps = super::cap::CapSet::of_task(root);
+    // Every attested right is a property of the Cell: read from the
+    // incarnation record (`Scheduler::cell_rights`), the CapSet spawn bounded by
+    // request ∩ ceiling ∩ policy and revokes narrowed. `resolve_live_cell_owner`
+    // has already proven the root is live and is this exact Cell generation, so
+    // a thread can neither claim more nor less than its Cell holds.
+    let root_caps = sched.cell_rights(sender_tid);
+    let mut flags = vfs_mutate_caller_flag(task.syscall_allowlist, root_caps.vfs_mutate);
     flags |= root_caps.net_caller_flags();
     // Q (Phase 01 CP1) is a Cell right exactly like the network rights: read
     // from the same root CapSet, so a thread cannot hold more or less of it.
@@ -5405,6 +5420,80 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
 /// Gate 2: a system service cell (block_io/network) is refused — revoking I/O
 ///   authority from a running VFS/net service mid-flight corrupts driver state;
 ///   the supervisor freeze/replace flow is the supported path.
+/// Every task of `tid`'s Cell incarnation (root and threads), in a fixed
+/// buffer: no allocation, bounded by the per-Cell thread cap.
+fn incarnation_members(sched: &super::scheduler::Scheduler, tid: usize) -> incarnation_tids::Tids {
+    let mut out = incarnation_tids::Tids::default();
+    if let Some(target) = sched.tasks.get(&tid) {
+        let incarnation = (target.cell_id, target.cell_generation);
+        for (&id, task) in sched.tasks.iter() {
+            if (task.cell_id, task.cell_generation) == incarnation {
+                out.push(id);
+            }
+        }
+    }
+    out
+}
+
+mod incarnation_tids {
+    /// Root plus the per-Cell thread cap.
+    const CAP: usize = super::super::scheduler::MAX_THREADS_PER_CELL + 1;
+
+    pub(super) struct Tids {
+        ids: [usize; CAP],
+        len: usize,
+    }
+
+    impl Default for Tids {
+        fn default() -> Self {
+            Self {
+                ids: [0; CAP],
+                len: 0,
+            }
+        }
+    }
+
+    impl Tids {
+        pub(super) fn push(&mut self, id: usize) {
+            // The thread cap bounds an incarnation; a surplus id is a broken
+            // invariant, and dropping it would skip a teardown.
+            assert!(self.len < CAP, "Cell incarnation exceeds its thread cap");
+            self.ids[self.len] = id;
+            self.len += 1;
+        }
+
+        pub(super) fn iter(&self) -> core::slice::Iter<'_, usize> {
+            self.ids[..self.len].iter()
+        }
+    }
+}
+
+/// Withdraw `cap_mask` from the target's Cell incarnation after its Class-2
+/// teardown has finished: re-run the gate, then narrow the incarnation record
+/// (the root's `Task::rights`) that every thread of the Cell is gated on.
+/// Returns whether the target was still present. Takes `SCHEDULER` only.
+fn commit_cap_revoke(
+    caller_id: usize,
+    target_tid: usize,
+    cap_mask: u32,
+) -> Result<bool, SyscallError> {
+    let mut sched_opt = super::SCHEDULER.lock();
+    let sched = match sched_opt.as_mut() {
+        Some(s) => s,
+        None => return Err(SyscallError::InvalidCommand),
+    };
+    cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
+    // The target died while its authority was being torn down: its exit path
+    // cleared every capability, so the revoke holds.
+    let Some(root_tid) = sched.tasks.get(&target_tid).map(|t| t.root_tid) else {
+        return Ok(false);
+    };
+    if let Some(root) = sched.tasks.get_mut(&root_tid) {
+        root.rights = root.rights.without_revoke_mask(cap_mask);
+    }
+    Ok(true)
+}
+
 fn cap_revoke_gate(
     sched: &mut super::scheduler::Scheduler,
     caller_id: usize,
@@ -5413,12 +5502,7 @@ fn cap_revoke_gate(
 ) -> Result<(), SyscallError> {
     use api::syscall::cap_mask as CM;
 
-    let has_spawn = sched
-        .tasks
-        .get(&caller_id)
-        .map(|t| t.spawn_cap.is_some())
-        .unwrap_or(false);
-    if !has_spawn {
+    if !sched.tasks.contains_key(&caller_id) || !sched.cell_rights(caller_id).spawn {
         return Err(SyscallError::PermissionDenied);
     }
 
@@ -5436,11 +5520,8 @@ fn cap_revoke_gate(
         return Err(SyscallError::NotSupported);
     }
 
-    let target_is_system = sched
-        .tasks
-        .get(&target_tid)
-        .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
-        .unwrap_or(false);
+    let target_rights = sched.cell_rights(target_tid);
+    let target_is_system = target_rights.block_io || target_rights.network;
     if target_is_system {
         return Err(SyscallError::PermissionDenied);
     }
@@ -7012,22 +7093,16 @@ fn handle_syscall_inner(
             // self-exits between them, causing a spurious InvalidCommand return.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 // Gate 1: only SpawnCap holders (init/shell) may force-terminate tasks.
-                let has_spawn = sched
-                    .tasks
-                    .get(&caller_id)
-                    .map(|t| t.spawn_cap.is_some())
-                    .unwrap_or(false);
+                let has_spawn =
+                    sched.tasks.contains_key(&caller_id) && sched.cell_rights(caller_id).spawn;
                 if !has_spawn {
                     return Err(SyscallError::PermissionDenied);
                 }
 
                 // Gate 2: protect system service cells (VFS=block_io_cap, net=network_cap).
                 // Killing them mid-I/O leaves driver state inconsistent; use hot-swap instead.
-                let target_is_system = sched
-                    .tasks
-                    .get(&tid)
-                    .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
-                    .unwrap_or(false);
+                let target_rights = sched.cell_rights(tid);
+                let target_is_system = target_rights.block_io || target_rights.network;
                 if target_is_system {
                     return Err(SyscallError::PermissionDenied);
                 }
@@ -7087,123 +7162,73 @@ fn handle_syscall_inner(
             // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
             // this spinlock is not reentrant. Both passes re-run the gates, so
             // nothing is revoked on authority withdrawn while it ran.
-            let (target_cell, target_gen) = {
+            let members = {
                 let mut sched_opt = super::SCHEDULER.lock();
                 let sched = match sched_opt.as_mut() {
                     Some(s) => s,
                     None => return Err(SyscallError::InvalidCommand),
                 };
                 cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
-                match sched.tasks.get(&target_tid) {
-                    Some(t) => (t.cell_id, t.cell_generation),
-                    None => return Err(SyscallError::InvalidCommand),
+                let target = sched
+                    .tasks
+                    .get(&target_tid)
+                    .ok_or(SyscallError::InvalidCommand)?;
+                let incarnation = (target.cell_id, target.cell_generation);
+                // Rights are per Cell incarnation, so revoking a sibling thread
+                // is revoking oneself — refused like `target_tid == caller_id`.
+                if sched
+                    .tasks
+                    .get(&caller_id)
+                    .is_some_and(|c| (c.cell_id, c.cell_generation) == incarnation)
+                {
+                    return Err(SyscallError::InvalidCommand);
                 }
+                incarnation_members(sched, target_tid)
             };
 
-            // ── Class-2 teardown, BEFORE any TCB field changes ────────────────
+            // ── Class-2 teardown, BEFORE the record changes ──────────────────
             // Ambient authority — a mapped MMIO window, an already-shared grant —
             // is exercised without a per-use syscall re-check, so clearing the
-            // TCB field alone would leave it live. Fail-closed: a teardown that
-            // cannot finish returns with the capability intact.
+            // record alone would leave it live. Resources are owned by the tid
+            // that claimed them, so every thread of the incarnation is torn down.
+            // Fail-closed: a teardown that cannot finish returns with the
+            // capability intact.
             let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
-            if mmio_revoke != 0 {
-                revoke_mmio_classes(
-                    target_tid,
-                    mmio_revoke as crate::resource_registry::MmioClass,
-                )?;
-                // A revoked device class can be the authority behind a grant the
-                // target owns (grants carry no source-cap tag), so its owned
-                // grants are reclaimed with it. Frames a live pin still protects
-                // are quarantined rather than freed.
-                reclaim_owned_grants(target_tid);
-            }
-
-            if cap_mask & CM::PCIE_DRIVER != 0 {
-                // The DMA-anywhere surface: the whole domain, its requester
-                // entries, and the BAR windows the Cell claimed. Exactly the
-                // teardown a dying driver Cell gets.
-                if !crate::task::teardown_dma_authority(target_tid) {
-                    log::error!(
-                        "[kernel] CapRevoke: DMA teardown for task {target_tid} was not \
-                         acknowledged; capability left intact"
-                    );
-                    return Err(SyscallError::NotSupported);
+            for &tid in members.iter() {
+                if mmio_revoke != 0 {
+                    revoke_mmio_classes(tid, mmio_revoke as crate::resource_registry::MmioClass)?;
+                    // A revoked device class can be the authority behind a grant
+                    // the target owns (grants carry no source-cap tag), so its
+                    // owned grants are reclaimed with it. Frames a live pin still
+                    // protects are quarantined rather than freed.
+                    reclaim_owned_grants(tid);
                 }
-                revoke_mmio_classes(
-                    target_tid,
-                    crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
-                )?;
-                reclaim_owned_grants(target_tid);
-            }
 
-            if cap_mask & CM::PLATFORM != 0 {
-                // The Platform Cell's ECAM config-space window.
-                revoke_mmio_classes(target_tid, crate::resource_registry::CLASS_ECAM)?;
-            }
-
-            let mut target_present = true;
-            {
-                let mut sched_opt = super::SCHEDULER.lock();
-                let sched = match sched_opt.as_mut() {
-                    Some(s) => s,
-                    None => return Err(SyscallError::InvalidCommand),
-                };
-                cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
-
-                match sched.tasks.get_mut(&target_tid) {
-                    Some(task) => {
-                        // Apply revocation — clear each indicated cap field.
-                        if cap_mask & CM::BLOCK_IO != 0 {
-                            task.block_io_cap = None;
-                        }
-                        if cap_mask & CM::NETWORK != 0 {
-                            task.network_cap = None;
-                        }
-                        if cap_mask & CM::SPAWN != 0 {
-                            task.spawn_cap = None;
-                        }
-                        if cap_mask & CM::HYPERVISOR != 0 {
-                            task.hypervisor_cap = None;
-                        }
-                        if cap_mask & CM::PCIE_DRIVER != 0 {
-                            task.pcie_driver_cap = None;
-                        }
-                        if cap_mask & CM::PLATFORM != 0 {
-                            task.platform_cap = None;
-                        }
-                        if cap_mask & CM::SUPERVISOR != 0 {
-                            task.supervisor_cap = None;
-                        }
-
-                        // Parameterised sub-fields: clear the indicated bits,
-                        // preserving the rest.
-                        task.mmio_devices &= !mmio_revoke;
-                        let blk_revoke = ((cap_mask >> CM::BLKREGION_SHIFT) & 0xFF) as u8;
-                        task.block_regions &= !blk_revoke;
+                if cap_mask & CM::PCIE_DRIVER != 0 {
+                    // The DMA-anywhere surface: the whole domain, its requester
+                    // entries, and the BAR windows the Cell claimed. Exactly the
+                    // teardown a dying driver Cell gets.
+                    if !crate::task::teardown_dma_authority(tid) {
+                        log::error!(
+                            "[kernel] CapRevoke: DMA teardown for task {tid} was not \
+                             acknowledged; capability left intact"
+                        );
+                        return Err(SyscallError::NotSupported);
                     }
-                    // The target died while its authority was being torn down.
-                    // Its exit path cleared every capability, so the revoke holds.
-                    None => target_present = false,
+                    revoke_mmio_classes(
+                        tid,
+                        crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
+                    )?;
+                    reclaim_owned_grants(tid);
+                }
+
+                if cap_mask & CM::PLATFORM != 0 {
+                    // The Platform Cell's ECAM config-space window.
+                    revoke_mmio_classes(tid, crate::resource_registry::CLASS_ECAM)?;
                 }
             }
 
-            // Synchronize CSpace authority ceiling with the revoked TCB state.
-            // Lock order is SCHEDULER then CELL_AUTHORITIES, as in
-            // `register_cell_authority` and `finish_root_retirement`.
-            {
-                let sched = super::SCHEDULER.lock();
-                let new_caps = sched
-                    .as_ref()
-                    .and_then(|sched| sched.tasks.get(&target_tid))
-                    .map(super::cap::CapSet::from_task)
-                    .unwrap_or(super::cap::CapSet::EMPTY);
-                if let Some(auth) = crate::cell::cspace::CELL_AUTHORITIES
-                    .lock()
-                    .get_mut(&(target_cell.0, target_gen))
-                {
-                    auth.ceiling = auth.ceiling.intersect(new_caps);
-                }
-            }
+            let target_present = commit_cap_revoke(caller_id, target_tid, cap_mask)?;
 
             crate::audit::log_event(
                 crate::audit::AuditEvent::CapRevoked,
@@ -7243,10 +7268,8 @@ fn handle_syscall_inner(
                     Some(s) => s,
                     None => return Ok(0),
                 };
-                let has_spawn = sched
-                    .tasks
-                    .get(&caller_id)
-                    .is_some_and(|task| task.spawn_cap.is_some());
+                let has_spawn =
+                    sched.tasks.contains_key(&caller_id) && sched.cell_rights(caller_id).spawn;
                 if !has_spawn {
                     return Err(SyscallError::PermissionDenied);
                 }
@@ -8680,7 +8703,7 @@ fn handle_syscall_inner(
             }
             validate_user_buf(out_ptr, out_len, MAX_USER_BUF)?;
             let memory_allowed = flags & request::SYSTEM_MEMORY != 0
-                && caller_has_cap(caller_id, |task| task.observe_memory);
+                && caller_has_cap(caller_id, |rights| rights.observe_memory);
             let epoch = super::telemetry::provider_epoch();
             // Identity, membership and CPU in one SCHEDULER hold. The transient
             // rows are allocated there, charged to the caller like GetProcs2.
@@ -10457,9 +10480,7 @@ fn handle_syscall_inner(
                 let sched = super::SCHEDULER.lock();
                 sched
                     .as_ref()
-                    .and_then(|s| s.tasks.get(&caller_id))
-                    .map(|t| t.mmio_devices)
-                    .unwrap_or(0)
+                    .map_or(0, |s| s.cell_rights(caller_id).mmio_devices)
             };
             if allowed_devices == 0 {
                 return Err(SyscallError::PermissionDenied);
@@ -11607,21 +11628,17 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
 /// other opcode needs none, and neither does the kernel-context sentinel (tid 0),
 /// which has no task. A missing or terminal task is denied.
 fn observe_right_held(sc: ViSyscall, caller_id: usize) -> bool {
-    let held: fn(&super::Task) -> bool = match sc {
+    let held: fn(&super::cap::CapSet) -> bool = match sc {
         ViSyscall::GetProcs | ViSyscall::GetProcs2 | ViSyscall::TelemetrySnapshot => {
-            |task| task.observe_tasks
+            |rights| rights.observe_tasks
         }
-        ViSyscall::MemInfo => |task| task.observe_memory,
+        ViSyscall::MemInfo => |rights| rights.observe_memory,
         _ => return true,
     };
     if caller_id == 0 {
         return true;
     }
-    super::SCHEDULER
-        .lock()
-        .as_ref()
-        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
-        .is_some_and(held)
+    caller_has_cap(caller_id, held)
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -12133,6 +12150,70 @@ mod tests {
                 );
             });
         }
+    }
+
+    /// Architecture review H-1: a revoke aimed at one thread removes the right
+    /// from the whole Cell incarnation — the root and every sibling — so no
+    /// thread keeps authority the Cell lost.
+    #[test]
+    fn cap_revoke_on_a_worker_removes_the_right_from_every_thread_of_the_cell() {
+        use api::syscall::cap_mask as CM;
+        const CONTROLLER: usize = 201;
+        const ROOT: usize = 202;
+        const WORKER: usize = 203;
+        const SIBLING: usize = 204;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut previous = SCHEDULER.lock();
+        let saved = previous.take();
+        let mut scheduler = Scheduler::new();
+        let mut controller = Task::new(CONTROLLER, CellId(20), "init", alloc::vec::Vec::new());
+        super::super::cap::CapSet {
+            spawn: true,
+            ..super::super::cap::CapSet::EMPTY
+        }
+        .apply_to(&mut controller);
+        scheduler
+            .tasks
+            .insert(CONTROLLER, alloc::boxed::Box::new(controller));
+        let caps = super::super::cap::CapSet {
+            spawn: true,
+            supervisor: true,
+            ..super::super::cap::CapSet::EMPTY
+        };
+        for tid in [ROOT, WORKER, SIBLING] {
+            let mut task = Task::new(tid, CellId(21), "cell", alloc::vec::Vec::new());
+            task.root_tid = ROOT;
+            caps.apply_to(&mut task);
+            scheduler.tasks.insert(tid, alloc::boxed::Box::new(task));
+        }
+        *previous = Some(scheduler);
+        drop(previous);
+
+        assert!([ROOT, WORKER, SIBLING]
+            .iter()
+            .all(|&tid| super::caller_has_spawn(tid)));
+        // The CapRevoke arm minus its teardown (none for these bits) and the
+        // victim notification, which needs a live mailbox.
+        let mask = CM::SPAWN | CM::SUPERVISOR;
+        {
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().expect("scheduler");
+            assert_eq!(
+                super::cap_revoke_gate(sched, CONTROLLER, WORKER, mask),
+                Ok(())
+            );
+        }
+        assert_eq!(super::commit_cap_revoke(CONTROLLER, WORKER, mask), Ok(true));
+        for tid in [ROOT, WORKER, SIBLING] {
+            assert!(!super::caller_has_spawn(tid), "tid {tid} kept SpawnCap");
+            assert!(
+                !super::caller_has_supervisor(tid),
+                "tid {tid} kept SupervisorCap"
+            );
+        }
+
+        let mut restore = SCHEDULER.lock();
+        *restore = saved;
     }
 
     /// Raw opcode 502 (power-off) is accepted only from a Cell whose root image

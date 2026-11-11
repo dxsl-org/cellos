@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "One authority record per Cell incarnation"
-status: pending
+status: in-progress
 priority: P1
 effort: "8–12d"
 dependencies: [6]
@@ -96,4 +96,15 @@ Phase 08 may now move authority code out of `syscall.rs` into `task/authority/`.
 
 ## Deviation Log
 
-None.
+- **Before-result (step 1/4):** new host test `cap_revoke_on_a_worker_removes_the_right_from_every_thread_of_the_cell` on the unmodified tree: `tid 202 kept SpawnCap`. The root kept the right a revoke aimed at its worker thread removed. The revoke core was extracted into `commit_cap_revoke` so the test can run on the host; the full arm notifies the victim through a mailbox the host cannot provide.
+- **Decision (record shape, D2 deviation):** the incarnation record is the Cell root's `Task::rights: CapSet`, read through `Scheduler::cell_rights(tid)` (task → `root_tid` → record). It is not an `Arc<CellAuthority>`. Reasons:
+  - It needs no allocation. `Arc::new` is infallible, and spawn and thread paths must not panic on OOM.
+  - The gates already hold `SCHEDULER`, so the lookup is O(1) under it.
+  - The root lives exactly as long as the incarnation, and a retiring root fails closed with `EMPTY`.
+  - `CellAuthority.ceiling/current_rights` (written, never read) are removed in step 5, so CSpace stops being a second truth.
+  - NFR "gate without taking SCHEDULER" is not met: gates take it today as before. Lock ranks belong to Phase 10.
+- **Deviation (steps 2–4 merged):** a "parallel record + agreement assert" commit has nothing to compare once the record is the root's own field, and switching the gates without the selftest leaves every boot selftest red. So the gates, attestation, revoke, thread spawn (no copy) and the selftest rewrite land in one commit; field removal and audit follow.
+- **Behaviour change:** `CapRevoke` on a thread of the caller's own incarnation is refused (`InvalidCommand`), as `target_tid == caller_id` already was. With Cell-wide rights it would revoke the caller itself. Teardown (MMIO, DMA, grants) now runs for every tid of the target incarnation; resources stay tid-keyed, and the members are collected into a fixed 33-entry buffer with no allocation.
+- **Surprise (C-1 leftover):** `CellSessionV1` launch re-validation (`launch.rs` `PreparedSessionLaunch::current`) still authorised with `caller.name`, the task name. It now uses `syscall::launch_identity_in`, the same measured identity as `caller_launch_state`.
+- **File set (to confirm at close):** two gate readers outside request §2 had to switch: `kernel/src/task.rs` (`paused_target_rejects`, a SupervisorCap gate) and `kernel/src/task/cell-image.rs` (441 SupervisorCap gate). Every other change is inside §2 or is a kernel selftest that builds tasks with caps.
+- **Evidence (gate-switch commit):** 611 host tests pass, including the before-failing revoke test. Boot selftests on x86, RV64 and AArch64 all log `thread-cap self-test PASS`, which now includes the new `REVOKE-CELL-WIDE` check. Its first run failed because the parent held `network`, which marks a system Cell that `CapRevoke` refuses; the fixture now uses `supervisor`.

@@ -37,7 +37,11 @@ fn insert_parent() {
     ));
     parent.cell_generation = 1;
     parent.root_tid = PARENT_TID;
-    parent.spawn_cap = Some(super::cap::SpawnCap::new());
+    super::cap::CapSet {
+        spawn: true,
+        ..super::cap::CapSet::EMPTY
+    }
+    .apply_to(&mut parent);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         let owner = api::cell_owner::CellOwner::new(TEST_CELL_ID, 1, PARENT_TID as u64);
         sched.publish_live_cell_owner(owner);
