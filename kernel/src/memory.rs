@@ -48,6 +48,8 @@ pub mod paging;
 pub mod pin;
 pub mod rt_heap;
 pub mod stage2;
+// Uncalled allocator test runner; never compiled into a release kernel.
+#[cfg(not(cellos_posture = "release"))]
 pub mod tests;
 /// Completion boundary for changed translations before execution or memory reuse.
 pub mod tlb_shootdown;

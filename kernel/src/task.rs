@@ -105,6 +105,8 @@ mod gpu_scanout;
 pub mod ipc_guardrail_selftest;
 #[cfg(not(cellos_posture = "release"))]
 pub mod ipc_pending_selftest;
+// Uncalled scenario harness; never compiled into a release kernel.
+#[cfg(not(cellos_posture = "release"))]
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod path_selftest;
