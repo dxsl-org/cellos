@@ -33,6 +33,21 @@ fn cluster(elf: &[u8]) -> (u8, u64) {
         .unwrap_or((0, 0))
 }
 
+/// The task that asked for this launch, for audit records; the kernel for boot
+/// and trusted-init launches (no caller).
+fn spawner_subject(request: &super::SpawnRequest) -> crate::audit::Subject {
+    request
+        .caller
+        .as_ref()
+        .map_or(crate::audit::Subject::KERNEL, |caller| {
+            crate::audit::Subject {
+                cell_id: caller.cell_id,
+                generation: caller.generation,
+                tid: caller.tid as u64,
+            }
+        })
+}
+
 fn prepare_gated(
     elf: &[u8],
     path: &str,
@@ -48,7 +63,7 @@ fn prepare_gated(
         super::manifest_section::ManifestSection::Malformed => {
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellSpawnDenied,
-                &crate::audit::encode_u32x2(0, 1),
+                &crate::audit::encode_subject(spawner_subject(&request), 1, 0),
             );
             super::atomic_checkpoint("AP-00")?;
             return Err(ViError::PermissionDenied);
@@ -83,7 +98,7 @@ fn prepare_gated(
             Err(err) => {
                 crate::audit::log_event(
                     crate::audit::AuditEvent::CellSpawnDenied,
-                    &crate::audit::encode_u32x2(0, 3),
+                    &crate::audit::encode_subject(spawner_subject(&request), 3, 0),
                 );
                 return Err(err);
             }
@@ -99,7 +114,7 @@ fn prepare_gated(
                 if !crate::signing::unsigned_admitted() {
                     crate::audit::log_event(
                         crate::audit::AuditEvent::CellSpawnDenied,
-                        &crate::audit::encode_u32x2(0, 4),
+                        &crate::audit::encode_subject(spawner_subject(&request), 4, 0),
                     );
                     return Err(ViError::PermissionDenied);
                 }
@@ -117,7 +132,7 @@ fn prepare_gated(
     if let Err(err) = crate::admission::evaluate_owner_admission(&elf_digest) {
         crate::audit::log_event(
             crate::audit::AuditEvent::CellSpawnDenied,
-            &crate::audit::encode_u32x2(0, 2),
+            &crate::audit::encode_subject(spawner_subject(&request), 2, 0),
         );
         return Err(err);
     }
@@ -125,7 +140,7 @@ fn prepare_gated(
         if !path.starts_with("/bin/") && manifest.declares_any_privilege() {
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellSpawnDenied,
-                &crate::audit::encode_u32x2(manifest.flags as u32, 0),
+                &crate::audit::encode_subject(spawner_subject(&request), 0, manifest.flags as u32),
             );
             return Err(ViError::PermissionDenied);
         }

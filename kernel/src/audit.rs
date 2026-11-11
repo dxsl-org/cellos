@@ -47,6 +47,12 @@ pub enum AuditEvent {
     CellSpawn = 7,
     CellFault = 8,
     CellExit = 9,
+    /// A launch was refused before any task existed. Governed-spawn refusals
+    /// use [`encode_subject`] with the **spawner** as subject ([`Subject::KERNEL`]
+    /// for boot and trusted-init launches), `d0` = refusal code (1 malformed
+    /// manifest, 2 owner admission, 3 signature unverifiable, 4 unsigned in
+    /// release, 0 privileged manifest outside `/bin`), `d1` = manifest flags.
+    /// Domain-admission refusals still use `encode_u32x2(0, audit_code)`.
     CellSpawnDenied = 10,
     /// An RT-priority cell's `RecvTimeout` deadline elapsed before its awaited
     /// message arrived — a missed control-loop cycle. Payload: `encode_u32x2(cell_id,
@@ -61,8 +67,9 @@ pub enum AuditEvent {
     /// (deadlock / stuck loop) the CPU watchdog cannot detect. The kernel terminates it
     /// for supervised restart. Payload: `encode_u32x2(cell_id, tid)`.
     CellHung = 13,
-    /// A cell invoked a syscall not present in its `__ViCell_syscalls` allowlist.
-    /// Payload: `encode_u32x2(caller_tid, allowlist_bit)`.
+    /// A syscall was refused on an authority check: the allowlist bit (`d0` =
+    /// allowlist bit) or pipe-endpoint ownership (`d0` = raw handle).
+    /// Payload: [`encode_subject`] with the caller as subject, `d1` = 0.
     SyscallDenied = 14,
     /// A cell's ELF image was measured at spawn (integrity measurement, IMA-style).
     /// Payload: `encode_u32x2(tid, sha256_prefix_le_u32)`. The full digest and the
@@ -84,8 +91,10 @@ pub enum AuditEvent {
     /// bit13 observe_tasks, bit14 observe_memory, bit15 vfs_mutate,
     /// bit16 config_write, bit17 kms_ssh_sign, bit18 kms_ssh_admin).
     CapNarrowedByPolicy = 19,
-    /// Runtime revocation: a SpawnCap holder stripped capabilities from a live cell.
-    /// Payload: `encode_u32x2(target_tid, cap_mask)` where `cap_mask` matches
+    /// Runtime revocation: a SpawnCap holder stripped capabilities from a live
+    /// Cell incarnation (or was refused for HYPERVISOR). Payload:
+    /// [`encode_subject`] with the **caller** as subject, `d0` = target tid,
+    /// `d1` = `cap_mask`, where `cap_mask` matches
     /// `api::syscall::cap_mask` constants (bit0=block_io, bit1=network, bit2=spawn,
     /// bit3=hypervisor, bits8-15=mmio_devices, bits16-23=block_regions).
     CapRevoked = 20,
@@ -161,6 +170,53 @@ static RING: AuditRing = AuditRing {
 
 /// Bytes of the synthetic `RecordsDropped` record: header plus `encode_u32x2`.
 const DROP_RECORD_LEN: usize = 10 + 8;
+
+/// Who an authority record is about: the acting task and its Cell
+/// incarnation (architecture review H-1). [`Subject::KERNEL`] (all zero) marks
+/// a kernel- or boot-initiated action with no calling task.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Subject {
+    pub cell_id: u64,
+    pub generation: u64,
+    pub tid: u64,
+}
+
+impl Subject {
+    pub const KERNEL: Subject = Subject {
+        cell_id: 0,
+        generation: 0,
+        tid: 0,
+    };
+
+    /// The subject for `tid` read under a scheduler the caller already holds;
+    /// a missing task keeps its tid with a zero incarnation.
+    pub fn of(sched: &crate::task::scheduler::Scheduler, tid: usize) -> Subject {
+        sched.tasks.get(&tid).map_or(
+            Subject {
+                tid: tid as u64,
+                ..Subject::KERNEL
+            },
+            |task| Subject {
+                cell_id: task.cell_id.0,
+                generation: task.cell_generation,
+                tid: tid as u64,
+            },
+        )
+    }
+}
+
+/// Payload of an authority record (`SyscallDenied`, `CapRevoked`,
+/// `CellSpawnDenied`): `[cell u64][generation u64][tid u64][d0 u32][d1 u32]`,
+/// all little-endian — the subject, then two event-specific words.
+pub fn encode_subject(subject: Subject, d0: u32, d1: u32) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[0..8].copy_from_slice(&subject.cell_id.to_le_bytes());
+    out[8..16].copy_from_slice(&subject.generation.to_le_bytes());
+    out[16..24].copy_from_slice(&subject.tid.to_le_bytes());
+    out[24..28].copy_from_slice(&d0.to_le_bytes());
+    out[28..32].copy_from_slice(&d1.to_le_bytes());
+    out
+}
 
 /// Write a kernel audit event to the ring.
 ///

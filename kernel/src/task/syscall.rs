@@ -2156,7 +2156,7 @@ fn governed_spawn_request(
     priority: u8,
     #[cfg(cellos_p01_trace)] trace: Option<crate::p01_measurement::Attempt>,
 ) -> Result<crate::loader::SpawnRequest, SyscallError> {
-    let (generation, caller_authority, caller_root) = super::SCHEDULER
+    let (incarnation, caller_authority, caller_root) = super::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| {
@@ -2166,7 +2166,7 @@ fn governed_spawn_request(
                 crate::p01_measurement::invalidate(crate::p01_measurement::IDENTITY);
             }
             Some((
-                task.cell_generation,
+                (task.cell_id.0, task.cell_generation),
                 sched.cell_rights(caller_id),
                 task.root_tid,
             ))
@@ -2175,7 +2175,7 @@ fn governed_spawn_request(
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
     Ok(crate::loader::SpawnRequest::governed_caller(
         caller_id,
-        generation,
+        incarnation,
         caller_authority,
         child_ceiling,
         priority,
@@ -2198,18 +2198,21 @@ fn governed_replacement_request(
     route_ceiling: super::cap::CapSet,
     replacement: crate::cell::hotswap::ReplacementReservation,
 ) -> Result<crate::loader::SpawnRequest, SyscallError> {
-    let (generation, caller_authority) = super::SCHEDULER
+    let (incarnation, caller_authority) = super::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| {
             let task = sched.tasks.get(&caller_id)?;
-            Some((task.cell_generation, sched.cell_rights(caller_id)))
+            Some((
+                (task.cell_id.0, task.cell_generation),
+                sched.cell_rights(caller_id),
+            ))
         })
         .ok_or(SyscallError::PermissionDenied)?;
     let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
     Ok(crate::loader::SpawnRequest::governed_replacement(
         caller_id,
-        generation,
+        incarnation,
         caller_authority,
         route_ceiling,
         replacement,
@@ -2360,7 +2363,7 @@ pub(super) fn session_launch_request(
         .map_or(super::cap::CapSet::EMPTY, |s| s.cell_rights(caller));
     Ok(crate::loader::SpawnRequest::governed_caller(
         caller,
-        task.cell_generation,
+        (task.cell_id.0, task.cell_generation),
         ceiling,
         profile.child_ceiling,
         api::TaskPriority::Normal as u8,
@@ -5509,7 +5512,11 @@ fn cap_revoke_gate(
     if cap_mask & CM::HYPERVISOR != 0 {
         crate::audit::log_event(
             crate::audit::AuditEvent::CapRevoked,
-            &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
+            &crate::audit::encode_subject(
+                crate::audit::Subject::of(sched, caller_id),
+                target_tid as u32,
+                cap_mask,
+            ),
         );
         log::warn!(
             "[kernel] CapRevoke: refused ambient-authority bits mask={:#010x} from task {} \
@@ -5547,6 +5554,26 @@ fn revoke_mmio_classes(
         }
     }
     Ok(())
+}
+
+/// The audit subject of `tid` (its Cell incarnation). Takes `SCHEDULER`;
+/// callers that already hold it use `audit::Subject::of` directly.
+fn audit_subject(tid: usize) -> crate::audit::Subject {
+    super::SCHEDULER.lock().as_ref().map_or(
+        crate::audit::Subject {
+            tid: tid as u64,
+            ..crate::audit::Subject::KERNEL
+        },
+        |sched| crate::audit::Subject::of(sched, tid),
+    )
+}
+
+/// Audit a refused syscall against the caller's Cell incarnation.
+fn audit_syscall_denied(caller_id: usize, detail: u32) {
+    crate::audit::log_event(
+        crate::audit::AuditEvent::SyscallDenied,
+        &crate::audit::encode_subject(audit_subject(caller_id), detail, 0),
+    );
 }
 
 /// Notify `target_tid` that `mask` was revoked: `[0xAC, 0xF2, mask_le4]`, the
@@ -5653,10 +5680,7 @@ fn handle_syscall_inner(
                     caller_id,
                     allowed
                 );
-                crate::audit::log_event(
-                    crate::audit::AuditEvent::SyscallDenied,
-                    &crate::audit::encode_u32x2(caller_id as u32, bit as u32),
-                );
+                audit_syscall_denied(caller_id, bit as u32);
                 return Err(SyscallError::PermissionDenied);
             }
         }
@@ -6700,10 +6724,7 @@ fn handle_syscall_inner(
                 return Err(SyscallError::InvalidInput);
             };
             if handle.end != super::pipe::PipeEnd::Read || !caller_owns_pipe(caller_id, handle) {
-                crate::audit::log_event(
-                    crate::audit::AuditEvent::SyscallDenied,
-                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
-                );
+                audit_syscall_denied(caller_id, handle.to_raw() as u32);
                 return Err(SyscallError::PermissionDenied);
             }
             if len == 0 {
@@ -6759,10 +6780,7 @@ fn handle_syscall_inner(
                 return Err(SyscallError::InvalidInput);
             };
             if handle.end != super::pipe::PipeEnd::Write || !caller_owns_pipe(caller_id, handle) {
-                crate::audit::log_event(
-                    crate::audit::AuditEvent::SyscallDenied,
-                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
-                );
+                audit_syscall_denied(caller_id, handle.to_raw() as u32);
                 return Err(SyscallError::PermissionDenied);
             }
             if len == 0 {
@@ -6826,10 +6844,7 @@ fn handle_syscall_inner(
                 .map(|task| task.pipe_handles.remove(&handle))
                 .unwrap_or(false);
             if !owned {
-                crate::audit::log_event(
-                    crate::audit::AuditEvent::SyscallDenied,
-                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
-                );
+                audit_syscall_denied(caller_id, handle.to_raw() as u32);
                 return Err(SyscallError::PermissionDenied);
             }
             super::pipe::close_end(handle, caller_id);
@@ -6852,7 +6867,11 @@ fn handle_syscall_inner(
             if !owned {
                 crate::audit::log_event(
                     crate::audit::AuditEvent::SyscallDenied,
-                    &crate::audit::encode_u32x2(caller_id as u32, handle.to_raw() as u32),
+                    &crate::audit::encode_subject(
+                        crate::audit::Subject::of(sched, caller_id),
+                        handle.to_raw() as u32,
+                        0,
+                    ),
                 );
                 return Err(SyscallError::PermissionDenied);
             }
@@ -7232,7 +7251,11 @@ fn handle_syscall_inner(
 
             crate::audit::log_event(
                 crate::audit::AuditEvent::CapRevoked,
-                &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
+                &crate::audit::encode_subject(
+                    audit_subject(caller_id),
+                    target_tid as u32,
+                    cap_mask,
+                ),
             );
             log::info!(
                 "[kernel] CapRevoke: task {} revoked mask={:#010x} from task {}",

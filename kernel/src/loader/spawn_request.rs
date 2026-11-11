@@ -43,7 +43,7 @@ impl SpawnRequest {
     /// edge-specific child ceiling.
     pub(crate) fn governed_caller(
         tid: usize,
-        generation: u64,
+        (cell_id, generation): (u64, u64),
         caller_authority: crate::task::cap::CapSet,
         child_ceiling: crate::task::cap::CapSet,
         priority: u8,
@@ -54,6 +54,7 @@ impl SpawnRequest {
             spawner: crate::task::cap::Spawner::Ceiling(child_ceiling),
             caller: Some(crate::task::CallerLaunchAuthority {
                 tid,
+                cell_id,
                 generation,
                 ceiling: caller_authority,
             }),
@@ -71,7 +72,7 @@ impl SpawnRequest {
     /// the supervisor's independent launch-authority snapshot.
     pub(crate) fn governed_replacement(
         tid: usize,
-        generation: u64,
+        (cell_id, generation): (u64, u64),
         caller_authority: crate::task::cap::CapSet,
         route_ceiling: crate::task::cap::CapSet,
         replacement: crate::cell::hotswap::ReplacementReservation,
@@ -82,6 +83,7 @@ impl SpawnRequest {
             spawner: crate::task::cap::Spawner::Ceiling(child_ceiling),
             caller: Some(crate::task::CallerLaunchAuthority {
                 tid,
+                cell_id,
                 generation,
                 ceiling: caller_authority,
             }),
@@ -111,7 +113,7 @@ mod tests {
         };
         let request = SpawnRequest::governed_caller(
             7,
-            11,
+            (3, 11),
             caller_authority,
             CapSet::EMPTY,
             api::TaskPriority::Normal as u8,

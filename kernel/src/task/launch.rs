@@ -6,6 +6,7 @@ use types::{CellId, ViError};
 
 pub struct CallerLaunchAuthority {
     pub tid: usize,
+    pub cell_id: u64,
     pub generation: u64,
     pub ceiling: super::cap::CapSet,
 }
