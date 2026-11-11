@@ -212,12 +212,12 @@ KERNEL="$KERNEL_TARGET_DIR/$TARGET/release/cellos-kernel"
 
 # Line tables belong only to this private kernel. Resolve the actual shutdown
 # HLT/back-edge instructions before boot; an idle-loop HLT is never sufficient.
-"$PYTHON_BIN" - "$KERNEL" "$ROOT/kernel/src/task/syscall/mod.rs" "$EVIDENCE" <<'PY'
+"$PYTHON_BIN" - "$KERNEL" "$ROOT/kernel/src/task/syscall/dev.rs" "$EVIDENCE" <<'PY'
 import hashlib, json, os, re, subprocess, sys
 from pathlib import Path
 kernel, source, evidence = map(Path, sys.argv[1:])
 text = source.read_text()
-arm = re.search(r"Syscall::Shutdown => \{.*?\n        Syscall::BlkRead", text, re.S)
+arm = re.search(r"\npub\(super\) fn shutdown\(caller_id: usize\) -> SyscallResult \{.*?\n\}\n", text, re.S)
 if arm is None:
     raise SystemExit("FAIL: cannot identify the accepted shutdown source arm")
 halt = list(re.finditer(r'core::arch::asm!\("hlt", options\(nomem, nostack\)\);', arm.group()))
