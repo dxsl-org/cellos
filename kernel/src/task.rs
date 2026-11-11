@@ -143,7 +143,8 @@ use crate::sched::scheduler::Scheduler;
 use crate::sync::Spinlock;
 use alloc::collections::VecDeque;
 #[cfg(feature = "test-hooks")]
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::AtomicU8;
+use core::sync::atomic::{AtomicBool, Ordering};
 use log::info;
 /// Conservative fallback for every unmeasured or risk-sensitive task path.
 /// Measured Phase 07 paths use the post-reactor table below; unknown paths keep
@@ -701,6 +702,17 @@ extern "C" {
 
 pub fn get_kernel_gp_tp() -> (usize, usize) {
     crate::hal::arch::get_gp_tp()
+}
+
+/// Set by every producer of scheduler housekeeping (zombies, pending
+/// releases and reaps) while it holds `SCHEDULER`; `yield_cpu` drains only
+/// when it is set.
+static HOUSEKEEPING: AtomicBool = AtomicBool::new(false);
+
+/// Flag scheduler housekeeping for the next `yield_cpu` on any hart. Call
+/// after queuing the work, still under `SCHEDULER`.
+pub(crate) fn note_housekeeping() {
+    HOUSEKEEPING.store(true, Ordering::Release);
 }
 
 pub fn system_ticks() -> usize {
@@ -1446,205 +1458,222 @@ pub fn yield_cpu() {
     }
     #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
     let _ = deferred_retired;
-    let reaped = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_reapable_zombies()
-        } else {
-            alloc::vec::Vec::new()
-        }
-    };
-    let mut waiter_wakes = alloc::vec::Vec::new();
-    for reaped_task in reaped {
-        #[cfg(feature = "p01-trace")]
-        let p01_owner = crate::p01_resources::owner(&reaped_task.task);
-        drop(reaped_task.task);
-        #[cfg(feature = "p01-trace")]
-        crate::p01_resources::dropped(p01_owner);
-        waiter_wakes.extend(reaped_task.waiter_wakes);
-    }
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        sched.release_waiters_after_resource_drop(waiter_wakes);
-    }
-
-    // A task can die while its TIMER completion is parked. The queue is shared
-    // by every thread in the cell, so task teardown alone does not free that
-    // slot. Release it here, outside SCHEDULER, and clear the dead waiter before
-    // another thread reuses the queue.
-    let completion_releases = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_pending_completion_release()
-        } else {
-            alloc::vec::Vec::new()
-        }
-    };
-    for (tid, queue, slot) in completion_releases {
-        let _ = queue.clear_waiter(tid);
-        let _ = queue.release(slot);
-    }
-
     retry_retired_dma_cleanup();
     // Exports whose window drain was unacknowledged stay Revoking with their
     // owner range locked; retry each pass (ADR-0033 CP1 §5.3).
     crate::task::syscall::dma_export::retry_pending();
 
-    // The common retirement funnel owns every task-local release. Worker exits
-    // contribute one tid; a root contributes its entire quiesced generation.
-    let grant_tids = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_pending_grant_reap()
-        } else {
-            alloc::vec::Vec::new()
-        }
-    };
-    for tid in grant_tids {
-        reap_retired_task_resources(tid);
-    }
-
-    let root_retirements = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_quiescent_root_retirements()
-        } else {
-            alloc::vec::Vec::new()
-        }
-    };
-    for mut retirement in root_retirements {
-        // Leaks counted anywhere in this window are charged to this verdict:
-        // a concurrent leak elsewhere can only over-report, which fails closed.
-        let leaked_before = crate::task::syscall::leaked_pages();
-        let mut tally = crate::cell::retirement_verdict::RetirementTally {
-            member_threads: retirement.member_tids.len(),
-            remote_hart_mask: retirement.remote_hart_mask,
-            ..Default::default()
-        };
-        for tid in retirement.member_tids.iter().copied() {
-            let reap = reap_retired_task_resources(tid);
-            tally.dma_deferred += usize::from(reap.dma_deferred);
-            tally.pins_quarantined += reap.grants.pins_quarantined;
-            tally.grantee_refs_cleared += reap.grants.grantee_refs_cleared;
-            tally.writable_borrows += reap.grants.writable_borrows;
-            tally.grants_reclaimed += reap.grants.grants_reclaimed;
-            crate::task::syscall::release_vfs_holder_leases(tid);
-            #[cfg(feature = "p01-trace")]
-            if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
-                crate::task::syscall::p01_retirement_check(owner);
-                crate::memory::pin::p01_retirement_check(owner);
+    // Scheduler housekeeping: reap zombies, release completion slots, grants,
+    // quiesced root generations and VFS leases. Each drain takes SCHEDULER, so
+    // they run only when a producer flagged work (Phase 10 step 6); work that
+    // is not ready yet (a zombie still current on a remote hart) re-arms the
+    // flag below, so it is retried on the next pass exactly as before.
+    if HOUSEKEEPING.swap(false, Ordering::AcqRel) {
+        let reaped = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_reapable_zombies()
+            } else {
+                alloc::vec::Vec::new()
             }
-        }
-        tally.leaked_pages = crate::task::syscall::leaked_pages().wrapping_sub(leaked_before);
-        // Counted after every member released its own holder leases, so only
-        // obligations owed to live holders outside the incarnation remain.
-        tally.vfs_leases_pending = retirement
-            .member_tids
-            .iter()
-            .map(|&tid| crate::memory::pin::vfs_leases_pending_for_owner(tid))
-            .sum();
-        tally.quarantined_pages =
-            crate::memory::pin::quarantined_pages_attributed(&retirement.member_tids);
-        // `take_quiescent_root_retirements` removed these exact zombies while
-        // holding SCHEDULER after all remote switch proofs completed. Drop their
-        // stacks before exposing the CellId or quota to a new generation.
-        let waiter_wakes = core::mem::take(&mut retirement.waiter_wakes);
-        #[cfg(not(feature = "p01-trace"))]
-        drop(retirement.zombies);
-        #[cfg(feature = "p01-trace")]
-        for zombie in retirement.zombies {
-            let owner = crate::p01_resources::owner(&zombie);
-            drop(zombie);
-            crate::p01_resources::dropped(owner);
+        };
+        let mut waiter_wakes = alloc::vec::Vec::new();
+        for reaped_task in reaped {
+            #[cfg(feature = "p01-trace")]
+            let p01_owner = crate::p01_resources::owner(&reaped_task.task);
+            drop(reaped_task.task);
+            #[cfg(feature = "p01-trace")]
+            crate::p01_resources::dropped(p01_owner);
+            waiter_wakes.extend(reaped_task.waiter_wakes);
         }
         if let Some(sched) = SCHEDULER.lock().as_mut() {
             sched.release_waiters_after_resource_drop(waiter_wakes);
         }
-        crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
-        tally.shm_frames_released = crate::task::syscall::release_shm_for(
-            retirement.owner.cell_id,
-            retirement.owner.generation,
-        );
-        crate::cell::state_stash::release_retired(crate::cell::state_stash::Incarnation {
-            cell: retirement.owner.cell_id,
-            generation: retirement.owner.generation,
-        });
-        crate::cell::retirement_verdict::close(retirement.owner, tally);
-        #[cfg(feature = "p01-trace")]
-        if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
-        {
-            crate::p01_resources::checked(owner, 7);
+
+        // A task can die while its TIMER completion is parked. The queue is shared
+        // by every thread in the cell, so task teardown alone does not free that
+        // slot. Release it here, outside SCHEDULER, and clear the dead waiter before
+        // another thread reuses the queue.
+        let completion_releases = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_pending_completion_release()
+            } else {
+                alloc::vec::Vec::new()
+            }
+        };
+        for (tid, queue, slot) in completion_releases {
+            let _ = queue.clear_waiter(tid);
+            let _ = queue.release(slot);
         }
-        // The quota row is the admission gate for `reserve_next`. Keep it
-        // registered until every generation-scoped resource is gone and the
-        // retiring owner slot has been released; otherwise another hart can
-        // reserve this CellId while the scheduler still identifies it as
-        // `Retiring`.
-        let owner_slot_released = SCHEDULER
-            .lock()
-            .as_mut()
-            .is_some_and(|sched| sched.finish_root_retirement(retirement.owner));
-        #[cfg(feature = "p01-trace")]
-        if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
-        {
-            crate::p01_resources::slot_result(owner, owner_slot_released);
+
+        // The common retirement funnel owns every task-local release. Worker exits
+        // contribute one tid; a root contributes its entire quiesced generation.
+        let grant_tids = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_pending_grant_reap()
+            } else {
+                alloc::vec::Vec::new()
+            }
+        };
+        for tid in grant_tids {
+            reap_retired_task_resources(tid);
         }
-        if owner_slot_released {
-            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-            log::info!(
-                "[selftest] SMP-RETIREMENT: stage=owner-slot-released-before-quota cell={} generation={} root={}",
+
+        let root_retirements = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_quiescent_root_retirements()
+            } else {
+                alloc::vec::Vec::new()
+            }
+        };
+        for mut retirement in root_retirements {
+            // Leaks counted anywhere in this window are charged to this verdict:
+            // a concurrent leak elsewhere can only over-report, which fails closed.
+            let leaked_before = crate::task::syscall::leaked_pages();
+            let mut tally = crate::cell::retirement_verdict::RetirementTally {
+                member_threads: retirement.member_tids.len(),
+                remote_hart_mask: retirement.remote_hart_mask,
+                ..Default::default()
+            };
+            for tid in retirement.member_tids.iter().copied() {
+                let reap = reap_retired_task_resources(tid);
+                tally.dma_deferred += usize::from(reap.dma_deferred);
+                tally.pins_quarantined += reap.grants.pins_quarantined;
+                tally.grantee_refs_cleared += reap.grants.grantee_refs_cleared;
+                tally.writable_borrows += reap.grants.writable_borrows;
+                tally.grants_reclaimed += reap.grants.grants_reclaimed;
+                crate::task::syscall::release_vfs_holder_leases(tid);
+                #[cfg(feature = "p01-trace")]
+                if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
+                    crate::task::syscall::p01_retirement_check(owner);
+                    crate::memory::pin::p01_retirement_check(owner);
+                }
+            }
+            tally.leaked_pages = crate::task::syscall::leaked_pages().wrapping_sub(leaked_before);
+            // Counted after every member released its own holder leases, so only
+            // obligations owed to live holders outside the incarnation remain.
+            tally.vfs_leases_pending = retirement
+                .member_tids
+                .iter()
+                .map(|&tid| crate::memory::pin::vfs_leases_pending_for_owner(tid))
+                .sum();
+            tally.quarantined_pages =
+                crate::memory::pin::quarantined_pages_attributed(&retirement.member_tids);
+            // `take_quiescent_root_retirements` removed these exact zombies while
+            // holding SCHEDULER after all remote switch proofs completed. Drop their
+            // stacks before exposing the CellId or quota to a new generation.
+            let waiter_wakes = core::mem::take(&mut retirement.waiter_wakes);
+            #[cfg(not(feature = "p01-trace"))]
+            drop(retirement.zombies);
+            #[cfg(feature = "p01-trace")]
+            for zombie in retirement.zombies {
+                let owner = crate::p01_resources::owner(&zombie);
+                drop(zombie);
+                crate::p01_resources::dropped(owner);
+            }
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.release_waiters_after_resource_drop(waiter_wakes);
+            }
+            crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
+            tally.shm_frames_released = crate::task::syscall::release_shm_for(
                 retirement.owner.cell_id,
                 retirement.owner.generation,
-                retirement.owner.root_tid,
             );
-            crate::memory::cell_quota::deregister(types::CellId(retirement.owner.cell_id));
+            crate::cell::state_stash::release_retired(crate::cell::state_stash::Incarnation {
+                cell: retirement.owner.cell_id,
+                generation: retirement.owner.generation,
+            });
+            crate::cell::retirement_verdict::close(retirement.owner, tally);
             #[cfg(feature = "p01-trace")]
             if let Some(owner) =
                 crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
             {
-                crate::p01_resources::quota_result(owner, true);
+                crate::p01_resources::checked(owner, 7);
             }
-            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            // The quota row is the admission gate for `reserve_next`. Keep it
+            // registered until every generation-scoped resource is gone and the
+            // retiring owner slot has been released; otherwise another hart can
+            // reserve this CellId while the scheduler still identifies it as
+            // `Retiring`.
+            let owner_slot_released = SCHEDULER
+                .lock()
+                .as_mut()
+                .is_some_and(|sched| sched.finish_root_retirement(retirement.owner));
+            #[cfg(feature = "p01-trace")]
+            if let Some(owner) =
+                crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
             {
+                crate::p01_resources::slot_result(owner, owner_slot_released);
+            }
+            if owner_slot_released {
+                #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
                 log::info!(
-                    "[selftest] SMP-RETIREMENT: stage=quota-deregistered-after-owner-slot cell={} generation={} root={}",
+                    "[selftest] SMP-RETIREMENT: stage=owner-slot-released-before-quota cell={} generation={} root={}",
                     retirement.owner.cell_id,
                     retirement.owner.generation,
                     retirement.owner.root_tid,
                 );
-                retirement_selftest::observe_cell_id_release(retirement.owner);
+                crate::memory::cell_quota::deregister(types::CellId(retirement.owner.cell_id));
+                #[cfg(feature = "p01-trace")]
+                if let Some(owner) =
+                    crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
+                {
+                    crate::p01_resources::quota_result(owner, true);
+                }
+                #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+                {
+                    log::info!(
+                        "[selftest] SMP-RETIREMENT: stage=quota-deregistered-after-owner-slot cell={} generation={} root={}",
+                        retirement.owner.cell_id,
+                        retirement.owner.generation,
+                        retirement.owner.root_tid,
+                    );
+                    retirement_selftest::observe_cell_id_release(retirement.owner);
+                }
+            } else {
+                #[cfg(feature = "p01-trace")]
+                if let Some(owner) =
+                    crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
+                {
+                    crate::p01_resources::quota_result(owner, false);
+                }
+                log::error!(
+                    "[task] root retirement retained CellId quota: owner slot did not match retiring owner cell={} generation={} root={}",
+                    retirement.owner.cell_id,
+                    retirement.owner.generation,
+                    retirement.owner.root_tid,
+                );
             }
-        } else {
-            #[cfg(feature = "p01-trace")]
-            if let Some(owner) =
-                crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
-            {
-                crate::p01_resources::quota_result(owner, false);
+        }
+
+        let vfs_context_releases = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_pending_vfs_context_release()
+            } else {
+                alloc::vec::Vec::new()
             }
-            log::error!(
-                "[task] root retirement retained CellId quota: owner slot did not match retiring owner cell={} generation={} root={}",
-                retirement.owner.cell_id,
-                retirement.owner.generation,
-                retirement.owner.root_tid,
-            );
+        };
+        for release in vfs_context_releases {
+            crate::task::syscall::release_vfs_context_lease(release);
         }
-    }
 
-    let vfs_context_releases = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_pending_vfs_context_release()
-        } else {
-            alloc::vec::Vec::new()
+        let vfs_holder_tids = {
+            if let Some(sched) = SCHEDULER.lock().as_mut() {
+                sched.take_pending_vfs_holder_release()
+            } else {
+                alloc::vec::Vec::new()
+            }
+        };
+        for tid in vfs_holder_tids {
+            crate::task::syscall::release_vfs_holder_leases(tid);
         }
-    };
-    for release in vfs_context_releases {
-        crate::task::syscall::release_vfs_context_lease(release);
-    }
 
-    let vfs_holder_tids = {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_pending_vfs_holder_release()
-        } else {
-            alloc::vec::Vec::new()
+        if SCHEDULER
+            .lock()
+            .as_ref()
+            .is_some_and(|sched| sched.housekeeping_pending())
+        {
+            note_housekeeping();
         }
-    };
-    for tid in vfs_holder_tids {
-        crate::task::syscall::release_vfs_holder_leases(tid);
     }
 
     // Turn completion appends into scheduler wakes. An append may run in

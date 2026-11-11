@@ -160,3 +160,11 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
   - **Lanes, with the asserts on:**
     - pass: x86 boot, domain 1/2/4 CPU, lifecycle 3/3, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot;
     - AArch64 test-hooks: fixture PASS, lane still FAIL on the pre-existing `DOMAIN-LIVE` marker.
+- **Step 6: housekeeping gate.** `yield_cpu` took `SCHEDULER` six or seven times per pass for its drains, even with nothing to drain: zombies, completion slots, grant reap, quiesced root retirements, VFS context and holder releases.
+  - **Change:** those drains now run only when `task::HOUSEKEEPING` is set. Each producer sets it under `SCHEDULER` right after queuing (6 sites in `scheduler.rs`).
+  - **Re-arm:** after draining, the consumer re-checks `Scheduler::housekeeping_pending` under `SCHEDULER` and re-arms the flag. Work that is not ready yet (a zombie still current on a remote hart, a root waiting on switch completions) is therefore retried on every pass, as before.
+  - **Left outside the gate:** the IOMMU cleanup retry and `dma_export::retry_pending`. They do not take `SCHEDULER`, and the latter already has its own atomic gate.
+  - **Lanes pass:** x86 boot, domain 1/2/4 CPU, lifecycle 3/3, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot.
+- **Owner decisions for step 7 (2026-11-11):**
+  - RT placement uses a runtime RT-hart mask that defaults to every secondary hart. A task wakes on its last hart if that hart is in the set and online, otherwise on the least-loaded RT hart.
+  - The G1 barrier move is **deferred** until the G1 lane can run.

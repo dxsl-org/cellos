@@ -1639,6 +1639,7 @@ impl Scheduler {
                 requested_switch_completion: [0; crate::sched::smp::MAX_HARTS],
                 remote_hart_mask: 0,
             });
+            crate::task::note_housekeeping();
         }
     }
 
@@ -1772,6 +1773,7 @@ impl Scheduler {
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
             );
             self.pending_completion_release.push(release);
+            crate::task::note_housekeeping();
         }
 
         // Give the cell back the quota its thread stack was charged. Every death
@@ -1831,6 +1833,7 @@ impl Scheduler {
                     task.sched_stats.cpu_ns,
                 );
                 self.zombies.push(task);
+                crate::task::note_housekeeping();
             }
         }
         if !retiring_member {
@@ -1840,6 +1843,7 @@ impl Scheduler {
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
             );
             self.pending_vfs_holder_release.push(tid);
+            crate::task::note_housekeeping();
         }
 
         // Clear service routes and Driver Cell roles under the publication
@@ -2008,6 +2012,7 @@ impl Scheduler {
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
             );
             self.pending_grant_reap.push(tid);
+            crate::task::note_housekeeping();
         }
     }
 
@@ -2082,6 +2087,16 @@ impl Scheduler {
     /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
     /// remains pending until its outgoing saved context has stopped executing
     /// and every DMA publication reservation has committed or rolled back.
+    /// Whether `yield_cpu` still has housekeeping to drain.
+    pub(crate) fn housekeeping_pending(&self) -> bool {
+        !self.zombies.is_empty()
+            || !self.pending_grant_reap.is_empty()
+            || !self.pending_root_retirements.is_empty()
+            || !self.pending_vfs_holder_release.is_empty()
+            || !self.pending_vfs_context_release.is_empty()
+            || !self.pending_completion_release.is_empty()
+    }
+
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
         let mut reap = Vec::new();
         self.pending_grant_reap.retain(|tid| {
@@ -2545,6 +2560,9 @@ impl Scheduler {
             }
             self.tasks.retain_event_waiters();
             self.pending_vfs_context_release.extend(vfs_context_drops);
+            if !self.pending_vfs_context_release.is_empty() {
+                crate::task::note_housekeeping();
+            }
             for id in waking_tasks {
                 self.push_ready(id);
             }

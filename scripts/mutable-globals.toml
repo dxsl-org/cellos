@@ -1275,6 +1275,17 @@ rationale = "Expands to constants: `Rank(u16)` values and a `&[&str]` name table
 review = "kernel/src/sync/rank.rs:lock_ranks"
 
 [[global]]
+key = "kernel::task::HOUSEKEEPING"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::task: Scheduler producers (zombies, pending grant/VFS/completion releases, root retirements) set it under SCHEDULER via note_housekeeping; yield_cpu swaps it and drains"
+contexts = ["boot", "normal", "irq", "exception", "ap"]
+seal = "starts false; set after every queued housekeeping item, cleared by the draining yield_cpu which re-arms it while work remains"
+retirement = "never: lives for the whole run"
+rationale = "AtomicBool with Release store / AcqRel swap. A producer queues under SCHEDULER and then sets it; a consumer swaps it before draining and re-checks Scheduler::housekeeping_pending under SCHEDULER afterwards, so no queued item is left without the flag set (Phase 10 step 6)."
+review = "kernel/src/task.rs:note_housekeeping; kernel/src/task.rs:yield_cpu; kernel/src/sched/scheduler.rs:housekeeping_pending"
+
+[[global]]
 key = "kernel::task::SCHEDULER"
 lifetime = "global"
 mutation = "spinlock"
