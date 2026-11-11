@@ -64,10 +64,10 @@ pub(super) fn install_tasks(ok: &mut bool) -> bool {
         return false;
     }
     let task_a = Box::new(Task::new(TASK_A, CellId(0), "fstat-a", Vec::new()));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::task_backing(&task_a);
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -75,10 +75,10 @@ pub(super) fn install_tasks(ok: &mut bool) -> bool {
         scheduler.tasks.insert(TASK_A, task_a);
     }
     let task_b = Box::new(Task::new(TASK_B, CellId(0), "fstat-b", Vec::new()));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::task_backing(&task_b);
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -100,7 +100,7 @@ pub(super) fn cleanup(installed: bool) {
 pub(super) fn install_failing_file() {
     if let Some(scheduler) = super::super::SCHEDULER.lock().as_mut() {
         if let Some(task) = scheduler.tasks.get_mut(&TASK_A) {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 Some(crate::p01_resources::owner(task)),
                 crate::memory::heap::p01_owner::TASK_FIELDS,

@@ -76,7 +76,7 @@ pub struct Operation {
     /// `IpcWait`/`IpcTake`, which keep their level/consume semantics.
     notified: bool,
     reply: ipc_wire::IpcWireMessage,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     _p01_obligation: ObservedOperation,
 }
 
@@ -90,11 +90,11 @@ impl Operation {
     }
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 #[derive(Debug)]
 struct ObservedOperation(Option<crate::p01_resources::Obligation>);
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 impl Drop for ObservedOperation {
     fn drop(&mut self) {
         // This last field drops after reply storage, including a push rollback.
@@ -115,7 +115,7 @@ impl Operations {
     pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     fn observe_owner(&self, owner: crate::p01_measurement::Owner) {
         crate::memory::heap::p01_owner::runtime_vec(
             &self.0,
@@ -159,7 +159,7 @@ impl Operations {
                     kind: api::syscall::ipc_status::PEER_GONE,
                     len: 0,
                 };
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                 changed = true;
             }
@@ -299,7 +299,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     if len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         return Err(Failure::Invalid);
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let heap_owner;
     let (view, binding, peer_binding) = {
         let guard = SCHEDULER.lock();
@@ -324,7 +324,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         ) {
             return Err(Failure::Busy);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             heap_owner = crate::p01_resources::owner(task);
         }
@@ -348,7 +348,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         &view,
         ptr,
         len,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         heap_owner,
     )
     .map_err(|_| Failure::Invalid)?;
@@ -364,7 +364,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     let reply =
         ipc_wire::IpcWireMessage::try_new(reply_header, &[0u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD])
             .map_err(|_| Failure::Busy)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     reply.observe_owner(heap_owner, crate::memory::heap::p01_owner::REPLY);
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(Failure::PeerGone)?;
@@ -387,11 +387,11 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     if !peer_queue_admits(receiver, binding, PEER_QUEUE_HEADROOM) {
         return Err(Failure::Busy);
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let p01_obligation = ObservedOperation(crate::p01_resources::operation_obligation(
         crate::p01_resources::owner(caller),
     ));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _operations = crate::memory::heap::p01_owner::creation(
         Some(heap_owner),
         crate::memory::heap::p01_owner::OPERATIONS,
@@ -414,12 +414,12 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
             phase: Phase::Queued,
             notified: false,
             reply,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             _p01_obligation: p01_obligation,
         });
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_operations);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     sched
         .tasks
         .get(&owner)
@@ -522,7 +522,7 @@ fn terminal(
             kind: api::syscall::ipc_status::INDETERMINATE,
             len: 0,
         };
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
         wake(sched, owner_tid);
         return Err(Failure::Invalid);
@@ -540,7 +540,7 @@ fn terminal(
         },
         len: if copied.is_ok() { len } else { 0 },
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
     wake(sched, owner_tid);
     copied.map_err(|_| Failure::Invalid)
@@ -691,7 +691,7 @@ fn cancel_in_sched(sched: &mut Scheduler, owner: usize, token: usize) -> Result<
             },
             len: 0,
         };
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
         wake(sched, owner);
     }
@@ -931,7 +931,7 @@ pub(crate) fn cutover_peer(sched: &mut Scheduler, peer: usize, cell: u64, genera
                         kind: api::syscall::ipc_status::PEER_GONE,
                         len: 0,
                     };
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                     changed = true;
                 }
@@ -976,7 +976,7 @@ pub fn expire(sched: &mut Scheduler, now: u64) {
                         },
                         len: 0,
                     };
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     crate::p01_resources::reservation_terminal(&mut op._p01_obligation.0);
                     Some((op.id, op.peer_tid, queued))
                 }
@@ -1044,7 +1044,7 @@ pub(super) fn selftest_accept_dispatched(
             phase: Phase::Dispatched,
             notified: false,
             reply,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             _p01_obligation: ObservedOperation(None),
         })
         .ok()?;
@@ -1085,7 +1085,7 @@ mod tests {
             phase: Phase::Queued,
             notified: false,
             reply: test_reply(),
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             _p01_obligation: ObservedOperation(None),
         };
         assert_eq!(sched.tasks[&OWNER].async_operations.len(), MAX_OPERATIONS);
@@ -1369,7 +1369,7 @@ mod tests {
             phase,
             notified: false,
             reply: test_reply(),
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             _p01_obligation: ObservedOperation(None),
         }
     }
@@ -3101,7 +3101,7 @@ mod tests {
             + core::mem::size_of::<Phase>()
             + core::mem::size_of::<ipc_wire::IpcWireMessage>();
         let op_size = core::mem::size_of::<Operation>();
-        #[cfg(not(cellos_p01_trace))]
+        #[cfg(not(feature = "p01-trace"))]
         assert!(
             op_size <= pre_03d + 8,
             "Operation grew from {pre_03d} to {op_size}"

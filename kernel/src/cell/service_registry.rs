@@ -146,7 +146,7 @@ pub fn register_as(
     if !register(service_id, tid, cell_id, generation) {
         return Err(Refusal::Rejected);
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SERVICE_SHARED,
@@ -176,7 +176,7 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
         );
         return false;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SERVICE_SHARED,
@@ -189,7 +189,7 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
             generation,
         },
     );
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_semantic);
     log::info!(
         "[service-registry] {} -> tid {} (cell {} gen {})",

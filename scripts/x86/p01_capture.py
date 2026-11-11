@@ -87,7 +87,6 @@ def build(args):
     # Environment provenance includes overrides which could otherwise contaminate Cargo.
     for key in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "EMBEDDED_OVERRIDE", "CELLOS_P01_TRACE", "CELLOS_P01_FAULT", "CELLOS_G1_CPU"):
         env.pop(key, None)
-    env["CELLOS_P01_TRACE"] = "0"
     def run(argv, extra=None):
         callenv = dict(env, **(extra or {}))
         number = len(commands)
@@ -129,12 +128,11 @@ def build(args):
                 commands.append({"argv": ["mtype", "-i", str(override / "kernel_fs.img"), "::" + target], "returncode": returned.returncode, "readback_sha256": hashlib.sha256(returned.stdout).hexdigest()})
                 if returned.stdout != Path(source).read_bytes():
                     raise RuntimeError("packaged byte mismatch: " + target)
-            private_env = {"CELLOS_P01_TRACE": "1", "EMBEDDED_OVERRIDE": str(override), "RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"}
-            if args.g1:
-                private_env["CELLOS_G1_CPU"] = "1"
+            private_env = {"EMBEDDED_OVERRIDE": str(override), "RUSTFLAGS": "-C code-model=kernel -C no-redzone=yes -Z cf-protection=full -C relocation-model=static"}
             if args.fault:
                 private_env["CELLOS_P01_FAULT"] = args.fault
-            run(common + ["-p", "cellos-kernel", "--features", "test-hooks"], private_env)
+            features = "test-hooks,p01-trace" + (",g1-cpu-accounting" if args.g1 else "")
+            run(common + ["-p", "cellos-kernel", "--features", features], private_env)
             shutil.copyfile(release / "cellos-kernel", scenario / "kernel.elf")
             run(["bash", "scripts/x86/make-iso-ci.sh", str(scenario / "image.iso")], {"X86_KERNEL": str(scenario / "kernel.elf"), "X86_ISO_ROOT": str(scenario / "iso-root")})
             files[count] = {str(p.relative_to(root)): digest(p) for p in [scenario / "image.iso", scenario / "kernel.elf", *override.iterdir()] if p.is_file()}

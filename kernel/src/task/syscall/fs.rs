@@ -231,7 +231,7 @@ pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> 
         .as_mut()
         .and_then(|sched| sched.tasks.get_mut(&caller_id))
         .map(|task| {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 Some(crate::p01_resources::owner(task)),
                 crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -434,7 +434,7 @@ pub(super) fn pipe_share(caller_id: usize, handle: usize, target_tid: usize) -> 
         .tasks
         .get_mut(&target_tid)
         .expect("target task remained live while holding SCHEDULER");
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::TASK_FIELDS,

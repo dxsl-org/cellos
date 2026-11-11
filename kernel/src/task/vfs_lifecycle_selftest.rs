@@ -34,9 +34,9 @@ fn mk_task(tid: usize, cell: u64, name: &str) -> Box<Task> {
 
 fn insert(task: Box<Task>) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,

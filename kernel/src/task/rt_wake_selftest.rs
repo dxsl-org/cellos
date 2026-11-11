@@ -75,9 +75,9 @@ pub(crate) fn self_test() -> bool {
         (WAKING_OCCUPANT_TID, OCCUPANT_CELL, TaskPriority::RealTime),
     ] {
         let task = fixture_task(tid, cell, priority);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,

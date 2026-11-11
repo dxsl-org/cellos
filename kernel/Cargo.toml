@@ -201,6 +201,12 @@ ipc-trace = []
 # the `bench` cell through raw opcode 504. Off by default; measurement only.
 # The relaxed atomics cost time, so captures with it are a separate group.
 bench-counters = []
+# Private P01 allocation/ownership measurement trace (x86_64 only; driven by
+# scripts/x86/p01_capture.py). Measurement code: implies test-hooks, so a
+# release-posture kernel can never carry it.
+p01-trace = ["test-hooks"]
+# Intel development-only charged-occupancy accounting on top of the P01 trace.
+g1-cpu-accounting = ["p01-trace"]
 # Isolated RV64 boot path for the GetRandom SAS ownership fixture. Test-only;
 # exits QEMU before unrelated boot suites execute.
 getrandom-sas-test = ["native-domains", "test-hooks"]

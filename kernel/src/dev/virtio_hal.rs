@@ -19,7 +19,7 @@ unsafe impl Hal for VirtioHal {
         // SAFETY: layout is non-zero size and properly aligned (4096-byte alignment
         // satisfies VirtIO virtqueue alignment requirement of ≥16 bytes).
         let ptr = {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::DRIVER_SHARED,

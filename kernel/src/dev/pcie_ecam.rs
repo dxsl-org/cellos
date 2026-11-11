@@ -740,7 +740,7 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
                 );
             }
 
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -1231,7 +1231,7 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) -
                 prog_if,
                 bars[0].base_addr()
             );
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -1331,7 +1331,7 @@ unsafe fn record_in_window(
         mem_len
     );
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -1436,7 +1436,7 @@ pub fn memory_bars_assigned(bars: &[Bar; 6]) -> bool {
 /// Return a cloned snapshot of the discovered device list.
 pub fn devices() -> Vec<PciDevice> {
     let devices = PCI_DEVICES.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,

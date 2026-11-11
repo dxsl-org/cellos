@@ -22,20 +22,20 @@ fn main() {
     // Choose linker script based on target architecture (and board feature).
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    println!("cargo:rustc-check-cfg=cfg(cellos_p01_trace)");
-    println!("cargo:rerun-if-env-changed=CELLOS_P01_TRACE");
-    println!("cargo:rerun-if-env-changed=CELLOS_P01_FAULT");
-    let p01 = match std::env::var("CELLOS_P01_TRACE").as_deref() {
-        Err(std::env::VarError::NotPresent) | Ok("0") => false,
-        Ok("1")
-            if target_arch == "x86_64"
-                && std::env::var_os("CARGO_FEATURE_TEST_HOOKS").is_some() =>
-        {
-            true
+    // The private P01 trace and the G1 CPU accounting on top of it are Cargo
+    // features (`p01-trace`, `g1-cpu-accounting`); the old environment switches
+    // are refused rather than silently ignored.
+    for retired in ["CELLOS_P01_TRACE", "CELLOS_G1_CPU"] {
+        println!("cargo:rerun-if-env-changed={retired}");
+        if matches!(std::env::var(retired).as_deref(), Ok(value) if value != "0") {
+            panic!("{retired} is retired: build with the p01-trace / g1-cpu-accounting features");
         }
-        Ok("1") => panic!("CELLOS_P01_TRACE requires test-hooks and x86_64"),
-        Err(_) | Ok(_) => panic!("CELLOS_P01_TRACE must be absent, 0, or 1"),
-    };
+    }
+    println!("cargo:rerun-if-env-changed=CELLOS_P01_FAULT");
+    let p01 = std::env::var_os("CARGO_FEATURE_P01_TRACE").is_some();
+    if p01 && target_arch != "x86_64" {
+        panic!("feature p01-trace requires x86_64");
+    }
     let fault = match std::env::var("CELLOS_P01_FAULT") {
         Ok(value) => value,
         Err(std::env::VarError::NotPresent) => String::new(),
@@ -49,20 +49,14 @@ fn main() {
         panic!("CELLOS_P01_FAULT requires private trace and a supported observer fault");
     }
     if p01 {
-        println!("cargo:rustc-cfg=cellos_p01_trace");
         println!("cargo:rustc-env=CELLOS_P01_FAULT={fault}");
     }
-    println!("cargo:rustc-check-cfg=cfg(cellos_g1_cpu)");
-    println!("cargo:rerun-if-env-changed=CELLOS_G1_CPU");
-    match std::env::var("CELLOS_G1_CPU").as_deref() {
-        Err(std::env::VarError::NotPresent) | Ok("0") => {}
-        Ok("1") if p01 && fault.is_empty() && target_os == "none" => {
-            println!("cargo:rustc-cfg=cellos_g1_cpu");
-        }
-        Ok("1") => {
-            panic!("CELLOS_G1_CPU requires x86_64 test-hooks private trace without observer faults")
-        }
-        Err(_) | Ok(_) => panic!("CELLOS_G1_CPU must be absent, 0, or 1"),
+    if std::env::var_os("CARGO_FEATURE_G1_CPU_ACCOUNTING").is_some()
+        && !(fault.is_empty() && target_os == "none")
+    {
+        panic!(
+            "feature g1-cpu-accounting requires the x86_64 kernel trace without observer faults"
+        );
     }
     let board_rpi3 = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
     let board_rpi4 = std::env::var("CARGO_FEATURE_BOARD_RPI4").is_ok();

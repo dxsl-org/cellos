@@ -139,7 +139,7 @@ impl NestedPageTable {
     ///
     /// Returns `None` when the frame allocator is exhausted.
     pub fn new(format: NestedFormat) -> Option<Self> {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
         let root_pa = {
             let mut g = FRAME_ALLOCATOR.lock();
@@ -150,7 +150,7 @@ impl NestedPageTable {
         unsafe {
             core::ptr::write_bytes(root_va, 0, 512);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_noncpu::created_frame(
             root_pa,
             match format {
@@ -446,7 +446,7 @@ impl NestedPageTable {
 
 impl Drop for NestedPageTable {
     fn drop(&mut self) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
         // Translations must be gone before the root, tables or guest RAM can be
         // handed out again: a later VM whose root lands on the same frame would
@@ -473,7 +473,7 @@ impl Drop for NestedPageTable {
                     alloc.deallocate_frame(base + i * PAGE_SIZE);
                 }
             }
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_noncpu::released(self.root_pa);
         }
     }

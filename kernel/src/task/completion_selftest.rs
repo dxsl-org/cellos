@@ -48,9 +48,9 @@ pub(super) fn insert(tid: usize, cell: u64) {
             let owner = api::cell_owner::CellOwner::new(cell, 1, tid as u64);
             sched.publish_live_cell_owner(owner);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,

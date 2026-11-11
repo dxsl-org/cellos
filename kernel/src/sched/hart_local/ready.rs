@@ -129,7 +129,10 @@ fn promised(hart: usize, priority: u8) -> usize {
 /// Remove `queue[index]` for a selection that may still roll back: the vacated
 /// slot becomes a rollback promise and the number of entries ahead of it is
 /// recorded. Caller holds the hart's ready lock.
-#[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "g1-cpu-accounting", feature = "test-hooks")),
+    allow(dead_code)
+)]
 fn vacate(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> Option<usize> {
     debug_assert!(
         claims.rollback.load(PromiseOrdering::Relaxed) == 0,
@@ -144,7 +147,10 @@ fn vacate(queue: &mut VecDeque<usize>, claims: &BucketClaims, index: usize) -> O
 }
 /// Put a vacated selection back at its exact FIFO position: after the entries
 /// that preceded it and are still queued, before the ones that followed it.
-#[cfg_attr(not(any(cellos_g1_cpu, feature = "test-hooks")), allow(dead_code))]
+#[cfg_attr(
+    not(any(feature = "g1-cpu-accounting", feature = "test-hooks")),
+    allow(dead_code)
+)]
 fn reinsert(queue: &mut VecDeque<usize>, claims: &BucketClaims, tid: usize) {
     let rollback = claims.rollback.load(PromiseOrdering::Relaxed);
     assert!(
@@ -242,7 +248,7 @@ impl PublicationReservation {
             return Err(types::ViError::InvalidInput);
         }
         let mut ready = HART_LOCALS[hart].ready.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -400,7 +406,7 @@ const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 pub fn push_on_hart(hart_id: usize, id: usize, priority: u8) {
     if hart_id < MAX_HARTS {
         let mut ready = HART_LOCALS[hart_id].ready.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -442,14 +448,14 @@ pub fn owned_by_another_hart(hart_id: usize, task_id: usize) -> bool {
         })
 }
 
-#[cfg(cellos_g1_cpu)]
+#[cfg(feature = "g1-cpu-accounting")]
 pub(crate) struct SelectionReservation {
     hart: usize,
     priority: u8,
     tid: usize,
     armed: bool,
 }
-#[cfg(cellos_g1_cpu)]
+#[cfg(feature = "g1-cpu-accounting")]
 impl Drop for SelectionReservation {
     /// Successful selection (or abandoned rollback) releases the vacated slot.
     fn drop(&mut self) {
@@ -464,7 +470,7 @@ impl Drop for SelectionReservation {
     }
 }
 
-#[cfg(cellos_g1_cpu)]
+#[cfg(feature = "g1-cpu-accounting")]
 pub(crate) fn restore_selection(mut reservation: SelectionReservation) {
     // Stealing does not hold SCHEDULER, so the vacated slot is protected by
     // the rollback promise taken at removal, not by lock ownership. Steals that
@@ -485,17 +491,17 @@ pub(crate) fn restore_selection(mut reservation: SelectionReservation) {
 pub fn pick_local_eligible(hart_id: usize) -> Option<usize> {
     pick_local_eligible_with(
         hart_id,
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         &|_| true,
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         &mut None,
     )
 }
 
 pub(crate) fn pick_local_eligible_with(
     hart_id: usize,
-    #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
-    #[cfg(cellos_g1_cpu)] reservation: &mut Option<SelectionReservation>,
+    #[cfg(feature = "g1-cpu-accounting")] eligible: &impl Fn(usize) -> bool,
+    #[cfg(feature = "g1-cpu-accounting")] reservation: &mut Option<SelectionReservation>,
 ) -> Option<usize> {
     if hart_id >= MAX_HARTS {
         return None;
@@ -504,17 +510,17 @@ pub(crate) fn pick_local_eligible_with(
     for (&_priority, queue) in rq.iter_mut().rev() {
         if let Some(index) = queue.iter().position(|&id| {
             !owned_by_another_hart(hart_id, id) && {
-                #[cfg(cellos_g1_cpu)]
+                #[cfg(feature = "g1-cpu-accounting")]
                 {
                     eligible(id)
                 }
-                #[cfg(not(cellos_g1_cpu))]
+                #[cfg(not(feature = "g1-cpu-accounting"))]
                 {
                     true
                 }
             }
         }) {
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             {
                 // The removed slot stays promised to this selection until it is
                 // consumed (success drops the reservation) or reinserted.
@@ -528,7 +534,7 @@ pub(crate) fn pick_local_eligible_with(
                 });
                 return removed;
             }
-            #[cfg(not(cellos_g1_cpu))]
+            #[cfg(not(feature = "g1-cpu-accounting"))]
             return queue.remove(index);
         }
     }
@@ -718,7 +724,7 @@ pub fn any_hart_running(task_id: usize) -> bool {
 pub fn steal_from_busiest(thief: usize) {
     steal_from_busiest_with(
         thief,
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         &|_| true,
     );
 }
@@ -777,7 +783,7 @@ fn pick_victim(
 
 pub(crate) fn steal_from_busiest_with(
     thief: usize,
-    #[cfg(cellos_g1_cpu)] eligible: &impl Fn(usize) -> bool,
+    #[cfg(feature = "g1-cpu-accounting")] eligible: &impl Fn(usize) -> bool,
 ) {
     if thief >= MAX_HARTS || MAX_HARTS < 2 {
         return;
@@ -790,11 +796,11 @@ pub(crate) fn steal_from_busiest_with(
     // and can never permit simultaneous execution.
     let permits = |id: usize| -> bool {
         !owned_by_another_hart(thief, id) && !test_dispatch_reserved_by_another_hart(thief, id) && {
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             {
                 eligible(id)
             }
-            #[cfg(not(cellos_g1_cpu))]
+            #[cfg(not(feature = "g1-cpu-accounting"))]
             {
                 true
             }
@@ -814,7 +820,7 @@ pub(crate) fn steal_from_busiest_with(
     let (low, high) = (thief.min(victim), thief.max(victim));
     let mut g_low = HART_LOCALS[low].ready.lock();
     let mut g_high = HART_LOCALS[high].ready.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -871,7 +877,7 @@ pub(crate) fn steal_from_busiest_with(
 }
 
 /// Regression probe for selection rollback ordering, run by the publication
-/// tests on every hook build (the `cellos_g1_cpu` caller uses the same
+/// tests on every hook build (the `feature = "g1-cpu-accounting"` caller uses the same
 /// `vacate`/`reinsert`/`remove_tracked`/`forget_tracked` primitives): a vacated
 /// selection returns to its exact FIFO position even after entries ahead of it
 /// were stolen or forgotten. `base` is a tid range the caller owns.

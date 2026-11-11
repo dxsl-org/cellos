@@ -211,7 +211,7 @@ impl ViFatFS {
         match fatfs::FileSystem::new(stream, options) {
             Ok(fs) => {
                 // The Arc header and mounted FAT state are retained together.
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 let _semantic = crate::memory::heap::p01_owner::creation(
                     None,
                     crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
@@ -266,7 +266,7 @@ impl ViFileSystem for ViFatFS {
         // A created file is not kept open: every FatFile operation resolves the
         // path again under the filesystem lock.
 
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation_fallback(
             crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
         );
@@ -374,7 +374,7 @@ impl ViFile for FatFile {
                 // Important: Strip leading slash, same as open()
                 let rel_path = self.path.trim_start_matches('/');
                 let mut file = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 let _semantic = crate::memory::heap::p01_owner::creation_fallback(
                     crate::memory::heap::p01_owner::FILESYSTEM_SHARED,
                 );

@@ -183,7 +183,7 @@ pub(crate) fn create(
 
     let _kernel_allocation = PipeAllocationContext::enter();
     let mut buffer = Vec::new();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic =
         crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::PIPE_SHARED);
     if buffer.try_reserve_exact(capacity).is_err() {
@@ -192,7 +192,7 @@ pub(crate) fn create(
         return Err(crate::task::syscall::SyscallError::OutOfMemory);
     }
     buffer.resize(capacity, 0);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_semantic);
     let pipe = Pipe {
         buffer,
@@ -207,7 +207,7 @@ pub(crate) fn create(
     let id = next_pipe_id();
     {
         let mut pipes = PIPES.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::PIPE_SHARED,
@@ -343,7 +343,7 @@ pub(crate) fn park_reader(handle: PipeHandle, tid: usize) {
     let mut pipes = PIPES.lock();
     if let Some(pipe) = pipes.get_mut(&handle.pipe) {
         if !pipe.read_waiters.contains(&tid) {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::PIPE_SHARED,
@@ -358,7 +358,7 @@ pub(crate) fn park_writer(handle: PipeHandle, tid: usize) {
     let mut pipes = PIPES.lock();
     if let Some(pipe) = pipes.get_mut(&handle.pipe) {
         if !pipe.write_waiters.contains(&tid) {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::PIPE_SHARED,

@@ -91,7 +91,7 @@ struct Ring {
     drainable: [u16; QUEUE_CAPACITY],
     head: usize,
     len: usize,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_obligations: [Option<crate::p01_resources::Obligation>; QUEUE_CAPACITY],
 }
 
@@ -117,7 +117,7 @@ pub struct CompletionQueue {
     /// waiting. Kept for atomic single-waiter fast path.
     waiter: AtomicUsize,
     wake_requested: AtomicBool,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_tid: AtomicUsize,
 }
 
@@ -141,18 +141,18 @@ impl CompletionQueue {
                 drainable: [0; QUEUE_CAPACITY],
                 head: 0,
                 len: 0,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_obligations: [None; QUEUE_CAPACITY],
             }),
             waiters: Spinlock::new(waiters),
             waiter: AtomicUsize::new(0),
             wake_requested: AtomicBool::new(false),
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_tid: AtomicUsize::new(0),
         })
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_bind(&self, owner: crate::p01_measurement::Owner) {
         let refused = {
             let previous = self.p01_tid.load(Ordering::Acquire);
@@ -184,7 +184,7 @@ impl CompletionQueue {
     pub fn reserve(&self) -> Option<SlotId> {
         let mut ring = self.ring.lock();
         let Some(index) = ring.slots.iter().position(|s| *s == Slot::Free) else {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if let Some(owner) =
                 crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire))
             {
@@ -193,7 +193,7 @@ impl CompletionQueue {
             return None;
         };
         ring.slots[index] = Slot::Reserved;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(owner) =
             crate::p01_resources::owner_for_tid(self.p01_tid.load(Ordering::Acquire))
         {
@@ -235,7 +235,7 @@ impl CompletionQueue {
             match ring.slots.get(index) {
                 Some(Slot::Reserved) => {
                     ring.slots[index] = Slot::Done { source, result };
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     crate::p01_resources::reservation_terminal(&mut ring.p01_obligations[index]);
                     // Cannot overflow: `drainable` is as long as `slots`, and a
                     // slot is only pushed on the Reserved -> Done edge, which
@@ -291,7 +291,7 @@ impl CompletionQueue {
         match ring.slots.get(slot.index()) {
             Some(Slot::Reserved) => {
                 ring.slots[slot.index()] = Slot::Free;
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::p01_resources::finish(ring.p01_obligations[slot.index()].take(), 1);
                 true
             }
@@ -318,7 +318,7 @@ impl CompletionQueue {
             match ring.slots[index] {
                 Slot::Done { source, result } => {
                     ring.slots[index] = Slot::Free;
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     crate::p01_resources::finish(ring.p01_obligations[index].take(), 1);
                     Ok(Completion {
                         slot: SlotId(index as u16),
@@ -418,7 +418,7 @@ impl CompletionQueue {
     }
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 impl Drop for CompletionQueue {
     fn drop(&mut self) {
         let mut ring = self.ring.lock();
@@ -459,7 +459,7 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
     {
         Some(shared) => shared,
         None => {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::COMPLETION_SHARED,
@@ -471,7 +471,7 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
             created?
         }
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
         queue.p01_bind(owner);
     }

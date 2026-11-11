@@ -37,9 +37,9 @@ pub(super) fn prepare_root() -> Option<(usize, usize)> {
         {
             return None;
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&root);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,

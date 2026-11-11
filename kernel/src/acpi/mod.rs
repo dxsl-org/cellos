@@ -22,10 +22,10 @@ mod sdt;
 // The G1 private lane does not call `sci::init` (its x86 contract is pinned),
 // so the discovery half of these modules is unused there.
 #[cfg(target_arch = "x86_64")]
-#[cfg_attr(cellos_g1_cpu, allow(dead_code))]
+#[cfg_attr(feature = "g1-cpu-accounting", allow(dead_code))]
 pub mod power;
 #[cfg(target_arch = "x86_64")]
-#[cfg_attr(cellos_g1_cpu, allow(dead_code))]
+#[cfg_attr(feature = "g1-cpu-accounting", allow(dead_code))]
 pub mod sci;
 mod spcr;
 #[cfg(test)]

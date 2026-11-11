@@ -23,12 +23,12 @@ pub struct ContextTable {
 
 /// Allocate a zeroed 4 KiB table page of P01 lifetime `_kind`. Panics on OOM.
 pub fn alloc_table(_kind: u64) -> (usize, u64) {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _p01_activity = crate::p01_noncpu::activity();
     let layout = Layout::from_size_align(4096, 4096).expect("table layout");
     // SAFETY: layout is non-zero and 4 KiB aligned.
     let virt = {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -39,7 +39,7 @@ pub fn alloc_table(_kind: u64) -> (usize, u64) {
         panic!("[vtd] out of memory allocating table");
     }
     let phys = virt_to_phys(virt);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_noncpu::created_heap(phys, _kind, virt);
     (virt, phys)
 }

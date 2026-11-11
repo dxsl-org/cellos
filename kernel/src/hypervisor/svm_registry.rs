@@ -155,7 +155,7 @@ impl Drop for SvmVm {
 static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> = Spinlock::new(None);
 
 /// Registry references do not reconstruct root birth or exclusive ownership.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64)) {
     let registry = VM_REGISTRY.lock();
     if let Some(registry) = registry.as_ref() {
@@ -239,7 +239,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     }
     let map = guard.as_mut().unwrap();
     let id = map.keys().filter(|(o, _)| *o == owner).count() + 1;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SERVICE_SHARED,

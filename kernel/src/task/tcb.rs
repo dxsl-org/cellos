@@ -775,7 +775,7 @@ impl Task {
             attributes,
         };
 
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(self)),
             crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -796,7 +796,7 @@ impl Task {
     pub fn add_grant(&mut self, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -> usize {
         let id = self.next_grant_id;
         self.next_grant_id += 1;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(self)),
             crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -917,7 +917,7 @@ impl Task {
 
 impl Drop for Task {
     fn drop(&mut self) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_resources::prepare_drop(self);
         #[cfg(all(
             feature = "native-domains",
@@ -928,7 +928,7 @@ impl Drop for Task {
             )
         ))]
         if self.has_dynamic_stack_mapping {
-            #[cfg_attr(not(cellos_p01_trace), allow(unused_mut))]
+            #[cfg_attr(not(feature = "p01-trace"), allow(unused_mut))]
             if let (TaskAddressSpace::Domain(space), Some(mut kernel_stack), Some(mut user_stack)) = (
                 &self.address_space,
                 self.kernel_stack.take(),
@@ -944,7 +944,7 @@ impl Drop for Task {
                     // never reused, and the log says which teardown did it.
                     let pages = kernel_stack.pages + user_stack.pages;
                     crate::memory::deferred_release::note_leaked_stack_frames(pages);
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     {
                         let owner = crate::p01_resources::owner(self);
                         // Unlike the existing runtime leak counter, include guard frames.

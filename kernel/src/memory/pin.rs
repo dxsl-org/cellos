@@ -221,9 +221,9 @@ struct FrameHold {
     /// Zero marks a free slot.
     pages: usize,
     release: ReleaseKey,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_obligation: Option<crate::p01_resources::Obligation>,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_range: Option<crate::p01_retained::Token>,
 }
 
@@ -233,9 +233,9 @@ struct FrameHold {
 pub struct ReleasedRange {
     pub base: usize,
     pub pages: usize,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) p01_range: Option<crate::p01_retained::Token>,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 impl PartialEq for ReleasedRange {
@@ -314,9 +314,9 @@ const EMPTY_HOLD: FrameHold = FrameHold {
     base: 0,
     pages: 0,
     release: ReleaseKey::None,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_obligation: None,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_range: None,
 };
 
@@ -373,7 +373,7 @@ static REGISTRY: Spinlock<Registry> = Spinlock::new(Registry {
 /// while no holder anywhere has a lease (the common case).
 static LIVE_GRANT_LEASES: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_static_bytes() -> usize {
     // FrameHold was already eight-byte aligned; the added field has the same
     // alignment, so no additional per-entry padding is introduced on x86_64.
@@ -382,7 +382,7 @@ pub(crate) fn p01_static_bytes() -> usize {
             + core::mem::size_of::<Option<crate::p01_retained::Token>>())
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
     let tid = owner.tid as usize;
     let registry = REGISTRY.lock();
@@ -526,7 +526,7 @@ fn hold_quarantined_frames(
     if pages == 0 {
         return false;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let p01_owner = match release {
         ReleaseKey::Owner(tid) => crate::p01_resources::owner_for_tid(tid),
         ReleaseKey::VfsLease { grant_owner, .. } => {
@@ -543,10 +543,10 @@ fn hold_quarantined_frames(
             .and_then(|entry| crate::p01_resources::owner_for_tid(entry.owner)),
         _ => None,
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let p01_obligation = p01_owner
         .and_then(|owner| crate::p01_resources::obligation(owner, 3, (pages * PAGE_SIZE) as u64));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let p01_range = crate::p01_retained::begin(
         p01_owner,
         base,
@@ -563,15 +563,15 @@ fn hold_quarantined_frames(
                 base,
                 pages,
                 release,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_obligation,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_range,
             };
             true
         }
         None => {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             {
                 // Observe Full before frames lose their only structured release key.
                 crate::p01_retained::mark(p01_range, crate::p01_retained::Reason::PinFull);
@@ -595,9 +595,9 @@ where
             released.push(ReleasedRange {
                 base: hold.base,
                 pages: hold.pages,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_range: hold.p01_range,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_obligation: hold.p01_obligation,
             });
             *hold = EMPTY_HOLD;
@@ -1009,13 +1009,13 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         };
     }
 
-    #[cfg_attr(not(cellos_p01_trace), allow(unused_variables))]
+    #[cfg_attr(not(feature = "p01-trace"), allow(unused_variables))]
     if let Some(entry) = reg
         .cache_sync
         .iter()
         .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(owner) = crate::p01_resources::owner_for_tid(entry.owner) {
             // CacheSyncBootLifetime intentionally has no release owner. Save
             // attribution before replacing it with that permanent retention key.
@@ -1345,9 +1345,9 @@ fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> 
         released.push(ReleasedRange {
             base: hold.base,
             pages: hold.pages,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_range: hold.p01_range,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation: hold.p01_obligation,
         });
         reg.quarantine[i] = EMPTY_HOLD;
@@ -1467,9 +1467,9 @@ pub(crate) fn unlock_dma_export(export_id: u64) -> Vec<ReleasedRange> {
         released.push(ReleasedRange {
             base: hold.base,
             pages: hold.pages,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_range: hold.p01_range,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation: hold.p01_obligation,
         });
         reg.quarantine[i] = EMPTY_HOLD;

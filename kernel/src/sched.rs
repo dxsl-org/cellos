@@ -1,7 +1,7 @@
 //! Scheduling mechanism (Spec 15 category A): ready queues and the context-switch
 //! funnel, SMP bring-up, per-hart state, all-hart quiescence and CPU accounting.
 
-#[cfg(cellos_g1_cpu)]
+#[cfg(feature = "g1-cpu-accounting")]
 pub(crate) mod cpu_accounting;
 #[cfg(all(
     feature = "native-domains",

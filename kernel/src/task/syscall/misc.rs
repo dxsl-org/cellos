@@ -71,7 +71,7 @@ pub(super) fn new_domain_record(
     base: usize,
     size: usize,
 ) -> Option<DomainRecord> {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,

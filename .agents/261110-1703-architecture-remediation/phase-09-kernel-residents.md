@@ -71,7 +71,7 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 - [x] Snapshot gated
 - [x] Resident manifest + guard + Spec 15 amendment
 - [x] Directory hoist
-- [ ] Raw cfgs → features
+- [x] Raw cfgs → features (sites not confined; see log)
 - [ ] Metric corrected
 
 ## Success Criteria
@@ -152,3 +152,8 @@ Phases 10 and 14 both build on the new layout.
   - §3.1 exceptions are updated to the `dev/` paths and now list the real remaining device residents: ps2, the in-kernel text console, the input IRQ shim and the null block device. The `fb_console ✅` row was wrong and is corrected.
   - §3.2 records the snapshot gate.
   - §3.5 states the release-posture rule and the crypto known-answer-test carve-out.
+- **Raw cfgs → features (step 6).** `cellos_p01_trace` and `cellos_g1_cpu` are now the Cargo features `p01-trace` (implies `test-hooks`) and `g1-cpu-accounting` (implies `p01-trace`).
+  - `build.rs` keeps the x86_64 and fault-mode checks. It refuses the retired `CELLOS_P01_TRACE` and `CELLOS_G1_CPU` environment switches instead of ignoring them.
+  - `p01_capture.py` passes the features. The inventory's `cfg_false` list and one cfg-qualified key follow the rename.
+  - Checked: the `p01-trace` and `g1-cpu-accounting` builds (with a dummy manifest), and that `CELLOS_P01_TRACE=1` is refused.
+  - **Deviation: not confined to one module.** There are about 400 trace sites across 40 files: allocation-owner hooks in the frame, heap, paging and scheduler paths. Confining them needs a tracing facade, which is a redesign of a private measurement lane that cannot be run here. Recorded as open.

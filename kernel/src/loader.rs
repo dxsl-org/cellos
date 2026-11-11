@@ -95,7 +95,7 @@ pub fn spawn_gated(elf: &[u8], path: &str, request: SpawnRequest) -> ViResult<us
 pub fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
     governed_spawn::spawn_trusted_init(elf)
 }
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn spawn_bootstrap_init(elf: &[u8]) -> ViResult<usize> {
     governed_spawn::spawn_bootstrap_init(elf)
 }

@@ -63,19 +63,19 @@ pub mod loader;
 pub(crate) mod machine_facts; // Machine facts record for syscall 433 (ADR-0029 §3)
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 pub mod memory;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_measurement;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_noncpu;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_noncpu_topology;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_resources;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_retained;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_topology;
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) mod p01_vtd_topology;
 pub mod policy; // Signed operator policy (P5b) — headless consent
 #[cfg(test)]
@@ -479,7 +479,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         });
         // Power facts (`\_S5_`, reset register, GPE blocks) need the same
         // firmware-range mapper; the G1 private lane keeps its own contract.
-        #[cfg(not(cellos_g1_cpu))]
+        #[cfg(not(feature = "g1-cpu-accounting"))]
         crate::acpi::sci::init(&info, rsdp, &mut map_physical);
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
@@ -553,7 +553,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     let x86_interrupts_ready = x86_lapic_base != 0 && x86_ioapic_base != 0;
     #[cfg(target_arch = "x86_64")]
-    #[cfg_attr(cellos_g1_cpu, allow(unused_assignments))] // G1 assigns or panics on every path
+    #[cfg_attr(feature = "g1-cpu-accounting", allow(unused_assignments))]
+    // G1 assigns or panics on every path
     let mut x86_timer_ready = false;
 
     // 3. Paging (Virtual Memory) Setup
@@ -639,9 +640,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // appears, the CR3 switch returned to kmain with the UART mechanism live.
         crate::hal::uart_16550::putchar(b'Q');
         // The G1 private lane keeps its HPET-only contract.
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         let x86_timer_candidates = x86_interrupts_ready && x86_hpet_base != 0;
-        #[cfg(not(cellos_g1_cpu))]
+        #[cfg(not(feature = "g1-cpu-accounting"))]
         let x86_timer_candidates = x86_interrupts_ready;
         if x86_timer_candidates {
             crate::hal::apic::set_lapic_phys(x86_lapic_base);
@@ -651,7 +652,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             );
             register_x86_ioapics();
             crate::hal::set_hpet_base(x86_hpet_base as usize);
-            #[cfg(not(cellos_g1_cpu))]
+            #[cfg(not(feature = "g1-cpu-accounting"))]
             {
                 offer_x86_clock_candidates(&acpi_info);
                 match crate::hal::init_timers() {
@@ -669,7 +670,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     ),
                 }
             }
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             {
                 let vendor = core::arch::x86_64::__cpuid(0);
                 assert!(
@@ -718,7 +719,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             // Fail-closed decision: it must reach the console.
             log::error!("[x86-gate] timer CLOSED: validated MADT required");
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             panic!("G1 private measurement requires validated MADT and HPET");
         }
 
@@ -1637,9 +1638,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("ATOMIC_PUBLICATION_AP-15: armed for trusted init");
         }
         log_info("Publishing trusted init");
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let init_result = crate::loader::spawn_bootstrap_init(INIT_ELF);
-        #[cfg(not(cellos_p01_trace))]
+        #[cfg(not(feature = "p01-trace"))]
         let init_result = crate::loader::spawn_trusted_init(INIT_ELF);
         match init_result {
             Ok(tid) => {
@@ -1971,7 +1972,7 @@ fn register_x86_ioapics() {
 ///
 /// The frame is never freed: once registered, the host writes into it until
 /// reset.
-#[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
+#[cfg(all(target_arch = "x86_64", not(feature = "g1-cpu-accounting")))]
 fn offer_x86_clock_candidates(acpi_info: &crate::acpi::AcpiInfo) {
     if let Some(fadt) = acpi_info.fadt.filter(|fadt| !fadt.hw_reduced()) {
         let timer = fadt.pm_timer;

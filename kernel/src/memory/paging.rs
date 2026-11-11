@@ -105,7 +105,7 @@ pub fn init_kernel_paging(
     let root_frame = allocator
         .allocate_frame()
         .ok_or(PageTableError::OutOfMemory)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_retained::physical_table_created(root_frame, root_frame, 0);
 
     // SAFETY: root_frame is freshly allocated; we own it exclusively.
@@ -309,7 +309,7 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
 /// Read-only diagnostic path inspection under KERNEL_ROOT. Stop at blocks/huge
 /// leaves; never interpret leaf physical memory as another table.
 #[cfg(all(
-    cellos_p01_trace,
+    feature = "p01-trace",
     any(
         target_arch = "x86_64",
         target_arch = "riscv64",
@@ -366,23 +366,23 @@ pub fn map_page(
 ) -> PagingResult<()> {
     let root_lock = KERNEL_ROOT.lock();
     if let Some(root_phys) = *root_lock {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _physical_write = crate::p01_retained::physical_write();
         let root_table = unsafe { &mut *(root_phys as *mut PageTable) };
         let result = {
             let mut alloc_closure = || {
                 let frame = allocator.allocate_frame()?;
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
                 Some(frame)
             };
             root_table.map(vaddr, paddr, flags, &mut alloc_closure)
         };
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         p01_observe_table_path(root_phys, vaddr, result.is_err(), allocator);
         if result.is_err() {
             root_table.prune_empty(vaddr, &mut |frame| {
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_detached(frame);
                 allocator.deallocate_frame(frame);
             });
@@ -467,7 +467,7 @@ pub fn init_kernel_paging_x86(
     let pml4_phys = allocator
         .allocate_frame()
         .ok_or(PageTableError::OutOfMemory)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_retained::physical_table_created(pml4_phys, pml4_phys, 0);
     // SAFETY: pml4_phys is a freshly allocated 4KB frame; HHDM virt pointer is valid.
     unsafe {
@@ -531,7 +531,7 @@ pub fn init_kernel_paging_x86(
         while va < end {
             let mut alloc_fn = || {
                 let frame = allocator.allocate_frame()?;
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_created(frame, pml4_phys, va);
                 Some(frame)
             };
@@ -644,21 +644,21 @@ fn map_page_x86_unflushed(
 
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     let pml4_virt = phys_to_virt(root_phys) as *mut u64;
 
     let pte_ptr = {
         let mut alloc_fn = || {
             let frame = allocator.allocate_frame()?;
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
             Some(frame)
         };
         // SAFETY: pml4_virt is the kernel's active PML4 (stored at boot).
         unsafe { walk_create(pml4_virt, vaddr, &mut alloc_fn) }
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_observe_table_path(root_phys, vaddr, pte_ptr.is_none(), allocator);
     let Some(pte_ptr) = pte_ptr else {
         // SAFETY: `hal::PageTable` is the architecture's 4096-byte PML4 layout.
@@ -669,7 +669,7 @@ fn map_page_x86_unflushed(
         let mut retired = [0usize; 3];
         let mut count = 0;
         table.prune_empty(vaddr, &mut |frame| {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_detached(frame);
             assert!(count < retired.len(), "unexpected x86 pruning depth");
             retired[count] = frame;
@@ -1109,7 +1109,7 @@ impl ReclaimedPageTables {
         );
         self.frames[self.len] = frame;
         self.len += 1;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_retained::physical_table_detached(frame);
     }
 
@@ -1129,7 +1129,7 @@ impl ReclaimedPageTables {
 pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
     let mut reclaimed = ReclaimedPageTables::new();
     let root = KERNEL_ROOT.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     if let Some(root_phys) = *root {
         // SAFETY: KERNEL_ROOT names the live architecture page-table root.
@@ -1143,7 +1143,7 @@ pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
 pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
     let mut reclaimed = ReclaimedPageTables::new();
     let root = KERNEL_ROOT.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     if let Some(root_phys) = *root {
         let root_virt = crate::memory::frame::phys_to_virt(root_phys);
@@ -1236,7 +1236,7 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
         let table = unsafe { &mut *(*root_addr as *mut hal::paging::PageTable) };
         let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _physical_write = crate::p01_retained::physical_write();
             use hal::traits::PageTableTrait;
             let flags = PageFlags::from_bits(
@@ -1252,12 +1252,12 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
                 let addr = start + (i * PAGE_SIZE);
                 let mut alloc_closure = || {
                     let frame = allocator.allocate_frame()?;
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     crate::p01_retained::physical_table_created(frame, *root_addr, addr);
                     Some(frame)
                 };
                 let result = table.map(addr, addr, flags, &mut alloc_closure);
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_observe_table_path(*root_addr, addr, result.is_err(), allocator);
                 result.expect("Failed to map user stack page!");
             }
@@ -1293,7 +1293,7 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     let Some(root_phys) = *root else {
         return Err(PageTableError::NotSupported);
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     // SAFETY: KERNEL_ROOT names the active kernel-owned page table. The frame
     // allocator remains locked throughout this transaction, matching map_page.
@@ -1320,12 +1320,12 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
             .ok_or(PageTableError::InvalidAddress)?;
         let mut allocate_table_frame = || {
             let frame = allocator.allocate_frame()?;
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, root_phys, address);
             Some(frame)
         };
         let result = table.map(address, address, flags, &mut allocate_table_frame);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         p01_observe_table_path(root_phys, address, result.is_err(), allocator);
         if result.is_err() {
             for rollback in 0..index {

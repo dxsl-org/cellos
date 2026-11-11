@@ -146,7 +146,7 @@ impl EarlyLoader {
         }
 
         let mut table = CELL_TABLE.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::shared_vec(
             &entries,
             crate::memory::heap::p01_owner::BOOT_METADATA_SHARED,
@@ -190,7 +190,7 @@ impl EarlyLoader {
         let whole = size / SECTOR_SIZE;
         let tail = size % SECTOR_SIZE;
         let mut buf = Vec::new();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let scratch = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED,
@@ -203,7 +203,7 @@ impl EarlyLoader {
             );
             ViError::OutOfMemory
         })?;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         drop(scratch);
         buf.resize(size, 0);
         for i in 0..whole {

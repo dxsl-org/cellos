@@ -76,7 +76,7 @@ struct DeferredRelease {
     /// Confirming the tag also returns its architectural-tag lease slot (a root
     /// teardown whose `AsidLease::release` could not confirm the invalidation).
     release_tag_slot: bool,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 
@@ -121,7 +121,7 @@ fn defer(
     reason: &'static str,
     release_tag_slot: bool,
 ) {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let frames = {
         let owner = crate::p01_resources::owner_for_domain(domain);
         if owner.is_none()
@@ -142,7 +142,7 @@ fn defer(
     // must not leave a tag that other paths would take for confirmed. (A rollback
     // can have detached no table at all and still have retired a leaf.)
     if tag_abandoned(asid) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(owner) = crate::p01_resources::owner_for_domain(domain) {
             crate::p01_resources::retained(owner, 6);
             let token = crate::p01_resources::obligation(
@@ -205,7 +205,7 @@ fn place(
     frames: Vec<OwnedFrame>,
     release_tag_slot: bool,
 ) -> Placement {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let p01_obligation = crate::p01_resources::owner_for_domain(domain).and_then(|owner| {
         crate::p01_resources::obligation(
             owner,
@@ -214,7 +214,7 @@ fn place(
         )
     });
     let mut queue = DEFERRED.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DOMAIN_SHARED,
@@ -223,7 +223,7 @@ fn place(
         // One entry per tag: the invalidation is per tag, so a second retention
         // under the same tag is waiting on the same acknowledgement.
         let entry = &mut queue[index];
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             // Existing queue coalesces by tag, not retained allocation owner.
             // Keep the new chunk unknown before coalescing destroys its boundary.
@@ -240,7 +240,7 @@ fn place(
         }
         Placement::Merged(entry.frames.len())
     } else if queue.len() >= MAX_DEFERRED_ENTRIES {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             crate::p01_resources::finish(p01_obligation, 5);
             if let Some(owner) = crate::p01_resources::owner_for_domain(domain) {
@@ -257,7 +257,7 @@ fn place(
             frames,
             attempts: 0,
             release_tag_slot,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation,
         });
         Placement::Queued
@@ -402,7 +402,7 @@ fn complete(asid: usize) {
         super::address_space::release_tag_slot_after_invalidation(entry.asid, entry.domain);
     }
     drop(entry.frames);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         crate::p01_resources::finish(entry.p01_obligation, 1);
         if let Some(owner) = crate::p01_resources::owner_for_domain(entry.domain) {
@@ -419,7 +419,7 @@ fn note_attempt(asid: usize) {
         let mut queue = DEFERRED.lock();
         match queue.iter().position(|entry| entry.asid == asid) {
             Some(index) => {
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 if let Some(owner) = crate::p01_resources::owner_for_domain(queue[index].domain) {
                     crate::p01_resources::retry(owner, 6);
                 }
@@ -436,7 +436,7 @@ fn note_attempt(asid: usize) {
     let Some(entry) = exhausted else {
         return;
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         crate::p01_resources::finish(entry.p01_obligation, 5);
         if let Some(owner) = crate::p01_resources::owner_for_domain(entry.domain) {
@@ -478,7 +478,7 @@ fn mark_abandoned(asid: usize) {
         );
         return;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DOMAIN_SHARED,

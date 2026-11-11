@@ -80,16 +80,16 @@ fn without_bytes(word: usize, size: usize) -> usize {
     (word & !BYTES_MASK) | (word & BYTES_MASK).saturating_sub(size)
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 struct BoundQuota {
     ready: core::sync::atomic::AtomicBool,
     cell: core::sync::atomic::AtomicU64,
     generation: core::sync::atomic::AtomicU64,
     retired: core::sync::atomic::AtomicBool,
 }
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 static P01_SOURCE: crate::p01_resources::Source = crate::p01_resources::Source::new();
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 static P01_SUBJECTS: [BoundQuota; 9] = [const {
     BoundQuota {
         ready: core::sync::atomic::AtomicBool::new(false),
@@ -99,13 +99,13 @@ static P01_SUBJECTS: [BoundQuota; 9] = [const {
     }
 }; 9];
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_static_bytes() -> usize {
     core::mem::size_of_val(&P01_SOURCE) + core::mem::size_of_val(&P01_SUBJECTS)
 }
 /// Publication binds the quota row while the exact incarnation still owns it.
 /// This is a copy-only hook; it never takes QUOTA_LIMITS or allocator locks.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_bind(subject: u8, cell: u64, generation: u64) {
     let _write = P01_SOURCE.write();
     let Some(row) = P01_SUBJECTS.get(subject as usize) else {
@@ -124,7 +124,7 @@ pub(crate) fn p01_bind(subject: u8, cell: u64, generation: u64) {
     row.generation.store(generation, Ordering::SeqCst);
     row.ready.store(true, Ordering::SeqCst);
 }
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
     let before = P01_SOURCE.before();
     let mut charge = 0u64;
@@ -179,9 +179,9 @@ pub unsafe fn force_unlock_locks() {
 pub fn register(cell_id: CellId, limit: usize) {
     let id = cell_id.0 as usize;
     if id < MAX_CELLS {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _write = P01_SOURCE.write();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if P01_SUBJECTS.iter().any(|row| {
             row.ready.load(Ordering::SeqCst)
                 && !row.retired.load(Ordering::SeqCst)
@@ -201,7 +201,7 @@ pub fn register(cell_id: CellId, limit: usize) {
     crate::sched::hart_local::set_current_cell_id(0);
     {
         let mut limits = QUOTA_LIMITS.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::QUOTA_SHARED,
@@ -215,9 +215,9 @@ pub fn register(cell_id: CellId, limit: usize) {
 pub fn deregister(cell_id: CellId) {
     let id = cell_id.0 as usize;
     if id < MAX_CELLS {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _write = P01_SOURCE.write();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         for row in &P01_SUBJECTS {
             if row.ready.load(Ordering::SeqCst) && row.cell.load(Ordering::SeqCst) == cell_id.0 {
                 row.retired.store(true, Ordering::SeqCst);
@@ -324,7 +324,7 @@ pub(crate) fn charge_owner(cell_id_raw: usize, size: usize) -> Option<usize> {
     // Compare-and-add: checked_add refuses a hostile layout.size() near MAX
     // instead of wrapping past the limit, and the byte count can never carry
     // into the generation bits.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
     IN_USE[cell_id_raw]
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
@@ -345,7 +345,7 @@ pub fn refund(cell_id_raw: usize, size: usize) {
     if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
         return;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
     let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
         Some(without_bytes(word, size))
@@ -360,7 +360,7 @@ pub(crate) fn refund_owner(owner: usize, size: usize) {
     if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
         return;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
     let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
         (word & !BYTES_MASK == owner & !BYTES_MASK).then(|| without_bytes(word, size))

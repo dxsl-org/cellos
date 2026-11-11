@@ -276,7 +276,7 @@ pub(crate) fn test_register_region(tid: usize, base: usize, len: usize, class: M
         return false;
     }
     let mut registry = REGISTRY.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -358,7 +358,7 @@ pub fn register_pcie_bar(base: usize, len: usize) {
         return;
     }
     let mut bars = PCIE_BARS.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -504,7 +504,7 @@ pub fn request_dwc2_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
             return Err(ViError::AlreadyExists);
         }
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -573,7 +573,7 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
             return Err(ViError::AlreadyExists);
         }
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -752,7 +752,7 @@ pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(u
     REGISTRY.lock().retain(|&base, region| {
         let hit = region.owner_tid == tid && region.class & device_mask != 0;
         if hit {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -970,7 +970,7 @@ pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
     match owners.get(&bdf).copied() {
         Some(owner) => owner == tid,
         None => {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::DRIVER_SHARED,

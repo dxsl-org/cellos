@@ -322,13 +322,13 @@ fn may_watch_owner_deaths(watcher: &Task) -> bool {
 pub fn subscribe_death(watched: usize, watcher: usize) {
     let _allocation = KernelAllocationContext::enter();
     let mut subscribers = DEATH_SUBSCRIBERS.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::DEATH_SHARED,
     );
     let registered = subscribers.entry(watched).or_default();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if registered.capacity() != 0 {
         crate::memory::heap::p01_owner::shared_buffer(
             registered.as_ptr() as usize,
@@ -345,19 +345,19 @@ pub fn subscribe_death(watched: usize, watcher: usize) {
 pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: usize) {
     let _allocation = KernelAllocationContext::enter();
     if !task.pending_deaths.contains(&(watched, exit_reason)) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::runtime_vec(
             &task.pending_deaths,
             crate::p01_resources::owner(task),
             crate::memory::heap::p01_owner::DEATH_QUEUE,
         );
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(task)),
             crate::memory::heap::p01_owner::DEATH_QUEUE,
         );
         task.pending_deaths.push((watched, exit_reason));
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::runtime_vec(
             &task.pending_deaths,
             crate::p01_resources::owner(task),
@@ -535,7 +535,7 @@ impl Scheduler {
     pub fn new() -> Self {
         // This fixed owner directory belongs to the scheduler, not to the
         // task whose execution or launch happens to trigger its construction.
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -664,7 +664,7 @@ impl Scheduler {
     }
 
     fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::begin_retirement(
             self, owner,
         ));
@@ -677,13 +677,13 @@ impl Scheduler {
     /// The result is the admission invariant: callers MUST retain the matching
     /// CellId quota unless this exact `Retiring(owner)` slot became `Empty`.
     pub(crate) fn finish_root_retirement(&mut self, owner: api::cell_owner::CellOwner) -> bool {
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         if !matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Retiring(current)) if *current == owner)
         {
             return false;
         }
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         if !crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::finish_retirement(
             self, owner,
         )) {
@@ -743,7 +743,7 @@ impl Scheduler {
     /// generation. A zombie remains a member because its saved context can be
     /// the one still executing on another hart.
     fn root_generation_member_tids(&self, owner: api::cell_owner::CellOwner) -> Vec<usize> {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -792,7 +792,7 @@ impl Scheduler {
         }
         let owner = self.resolve_live_cell_owner(cell_id, generation)?;
         let token = self.take_cell_owner_watch_token()?;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DEATH_SHARED,
@@ -1062,11 +1062,11 @@ impl Scheduler {
             name, id, stack_base, stack_top, entry
         );
 
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
         {
             // Observe actual map-node allocations while its owner is locked.
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1086,7 +1086,7 @@ impl Scheduler {
         entry: usize,
         arg: usize,
     ) -> Result<usize, ViError> {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(parent) = self.tasks.get(&parent_id) {
             let owner = crate::p01_resources::owner(parent);
             if crate::p01_measurement::subject(owner).is_some() {
@@ -1151,7 +1151,7 @@ impl Scheduler {
                 _ => None,
             })
             .ok_or(ViError::PermissionDenied)?;
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         crate::sched::cpu_accounting::inherit(self, owner)
             .map_err(|_| ViError::PermissionDenied)?;
         let live = self
@@ -1259,7 +1259,7 @@ impl Scheduler {
                     // them loudly is the counted half of the fail-closed contract.
                     let pages = kstack.pages + ustack.pages;
                     crate::memory::deferred_release::note_leaked_stack_frames(pages);
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     if let Some(owner) = self
                         .tasks
                         .get(&parent_id)
@@ -1351,10 +1351,10 @@ impl Scheduler {
             );
         }
 
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
         {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1553,7 +1553,7 @@ impl Scheduler {
         self.pending_vfs_holder_release
             .retain(|pending_tid| !members.contains(pending_tid));
         {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1589,7 +1589,7 @@ impl Scheduler {
         {
             return;
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(task) = self.tasks.get(&tid) {
             crate::p01_resources::terminal(task);
             let owner = crate::p01_resources::owner(task);
@@ -1693,7 +1693,7 @@ impl Scheduler {
                 .map(|queue| (tid, queue.clone(), wait.slot))
         });
         if let Some(release) = timer_release {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1746,7 +1746,7 @@ impl Scheduler {
         // after the remote switch-completion proof.
         if !retiring_member {
             if let Some(task) = self.tasks.remove(&tid) {
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 let _semantic = crate::memory::heap::p01_owner::creation(
                     None,
                     crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1757,7 +1757,7 @@ impl Scheduler {
             }
         }
         if !retiring_member {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -1889,21 +1889,21 @@ impl Scheduler {
         for (token, watcher) in owner_watchers {
             self.cell_owner_watches.remove(&token);
             if let Some(task) = self.tasks.get_mut(&watcher) {
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::memory::heap::p01_owner::runtime_vec(
                     &task.pending_owner_deaths,
                     crate::p01_resources::owner(task),
                     crate::memory::heap::p01_owner::DEATH_QUEUE,
                 );
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 let _semantic = crate::memory::heap::p01_owner::creation(
                     Some(crate::p01_resources::owner(task)),
                     crate::memory::heap::p01_owner::DEATH_QUEUE,
                 );
                 task.pending_owner_deaths.push((token, tid, exit_reason));
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 drop(_semantic);
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 crate::memory::heap::p01_owner::runtime_vec(
                     &task.pending_owner_deaths,
                     crate::p01_resources::owner(task),
@@ -1928,7 +1928,7 @@ impl Scheduler {
         // resources are released only by the deferred retirement funnel after
         // completed context-switch proof.
         if root_owner.is_none() && !retiring_member {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 None,
                 crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -2033,7 +2033,7 @@ impl Scheduler {
         let mut pending = Vec::new();
         for mut retirement in core::mem::take(&mut self.pending_root_retirements) {
             let mut members_live = false;
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             if !crate::sched::cpu_accounting::quiescent(self, retirement.owner) {
                 members_live = true;
             }
@@ -2154,7 +2154,7 @@ impl Scheduler {
     /// Other harts only do the per-hart pick + work stealing.
     ///
     /// Returns: Option<(current_context_ptr, next_context_ptr)>
-    #[cfg(cellos_g1_cpu)]
+    #[cfg(feature = "g1-cpu-accounting")]
     pub fn pick_next(
         &mut self,
         hart_id: usize,
@@ -2182,7 +2182,7 @@ impl Scheduler {
         result
     }
 
-    #[cfg(not(cellos_g1_cpu))]
+    #[cfg(not(feature = "g1-cpu-accounting"))]
     pub fn pick_next(
         &mut self,
         hart_id: usize,
@@ -2209,7 +2209,7 @@ impl Scheduler {
         if hart_id != 0 {
             return self.pick_next_local(hart_id, now);
         }
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         {
             let join = crate::sched::cpu_accounting::require(
                 crate::sched::cpu_accounting::join_wait_target(self),
@@ -2506,7 +2506,7 @@ impl Scheduler {
             for id in polling_ids {
                 if let Some(task) = self.tasks.get_mut(&id) {
                     if task.state == TaskState::Polling {
-                        #[cfg(cellos_p01_trace)]
+                        #[cfg(feature = "p01-trace")]
                         let heap_owner = crate::p01_resources::owner(task);
                         if let Some(ref mut future_enum) = task.pending_future {
                             match future_enum {
@@ -2516,7 +2516,7 @@ impl Scheduler {
                                         Poll::Ready((file, res)) => {
                                             // Restore file handle
                                             // file is Box<dyn ViFile>
-                                            #[cfg(cellos_p01_trace)]
+                                            #[cfg(feature = "p01-trace")]
                                             let _semantic =
                                                 crate::memory::heap::p01_owner::creation(
                                                     Some(heap_owner),
@@ -2655,12 +2655,12 @@ impl Scheduler {
         // A wake may have queued a task while its origin still owns the old
         // Context. `pick_local_eligible` leaves that entry deferred until the
         // incoming completion hook releases the origin handoff state.
-        #[cfg(not(cellos_g1_cpu))]
+        #[cfg(not(feature = "g1-cpu-accounting"))]
         let next_id = rl::pick_local_eligible_with(hart_id).or_else(|| {
             rl::steal_from_busiest_with(hart_id);
             rl::pick_local_eligible_with(hart_id)
         });
-        #[cfg(cellos_g1_cpu)]
+        #[cfg(feature = "g1-cpu-accounting")]
         let next_id = {
             let mut accepted = None;
             // A normal precommit exhaustion defers that exact queue entry and
@@ -2719,7 +2719,7 @@ impl Scheduler {
                 return true;
             }
             rl::remove_from_all(*id);
-            #[cfg(cellos_g1_cpu)]
+            #[cfg(feature = "g1-cpu-accounting")]
             if Some(*id) != current_id {
                 // No raw switch or scheduler identity publication occurred.
                 crate::sched::cpu_accounting::require(unsafe {

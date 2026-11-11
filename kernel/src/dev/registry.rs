@@ -29,7 +29,7 @@ impl DriverRegistry {
         }
 
         let id = self.next_id;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -52,7 +52,7 @@ pub fn init() {
 
     // Manually register Console as ID 1 for now, to keep compatibility
     if let Some(r) = reg.as_mut() {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DRIVER_SHARED,

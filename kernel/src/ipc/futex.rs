@@ -71,7 +71,7 @@ static WAITERS: Spinlock<BTreeMap<FutexKey, VecDeque<usize>>> = Spinlock::new(BT
 
 fn enqueue(key: FutexKey, tid: usize) {
     let mut waiters = WAITERS.lock();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::FUTEX_SHARED,

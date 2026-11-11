@@ -58,7 +58,7 @@ pub(crate) fn resolve_path(cwd: &str, path: &str) -> core::result::Result<String
 
 struct ResolvedTaskPath {
     path: String,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     owner: crate::p01_measurement::Owner,
 }
 
@@ -75,7 +75,7 @@ fn resolve_task_path(caller_id: usize, path: &str) -> core::result::Result<Resol
     };
     Ok(ResolvedTaskPath {
         path,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         owner: crate::p01_resources::owner(task),
     })
 }
@@ -86,12 +86,12 @@ pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()
     let resolved = resolve_task_path(caller_id, path)?;
 
     use crate::fs::VIFS1;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let heap_owner = resolved.owner;
     let file = {
         let fs_lock = VIFS1.lock();
         let fs = fs_lock.as_ref().ok_or(())?;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(heap_owner),
             crate::memory::heap::p01_owner::TASK_IO,
@@ -106,7 +106,7 @@ pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()
         .and_then(|sched| sched.tasks.get_mut(&caller_id))
         .ok_or(())?;
     let fd = task.open_files.keys().max().map(|fd| fd + 1).unwrap_or(3);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         Some(crate::p01_resources::owner(task)),
         crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -279,7 +279,7 @@ pub fn file_chdir(caller_id: usize, path: &str) -> core::result::Result<usize, (
         .and_then(|sched| sched.tasks.get_mut(&caller_id))
         .ok_or(())?;
     task.cwd = full_path;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if task.cwd.capacity() != 0 {
         crate::memory::heap::p01_owner::runtime_buffer(
             task.cwd.as_ptr() as usize,

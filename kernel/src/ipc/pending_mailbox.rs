@@ -161,7 +161,7 @@ impl PendingMailbox {
         self.messages.iter()
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_owner(&self, owner: crate::p01_measurement::Owner) {
         crate::memory::heap::p01_owner::runtime_vec(
             &self.messages,
@@ -169,7 +169,7 @@ impl PendingMailbox {
             crate::memory::heap::p01_owner::MAILBOX,
         );
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_wire_commit(&self, owner: crate::p01_measurement::Owner) {
         if let Some(wire) = self
             .messages

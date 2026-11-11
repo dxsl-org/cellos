@@ -88,7 +88,7 @@ fn advance_aggregate(log: &mut Log, hash: &[u8; 32]) {
     log.aggregate = crate::sha256::sha256(&buf);
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 fn attribute_log_buffers(log: &Log) {
     if log.entries.capacity() != 0 {
         crate::memory::heap::p01_owner::shared_buffer(
@@ -99,7 +99,7 @@ fn attribute_log_buffers(log: &Log) {
     }
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 fn attribute_path(path: &String) {
     if path.capacity() != 0 {
         crate::memory::heap::p01_owner::shared_buffer(
@@ -127,12 +127,12 @@ fn emit_audit(tid: usize, hash: &[u8; 32]) {
 pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
     {
         let mut log = LOG.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::LOG_SHARED,
         );
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         attribute_log_buffers(&log);
         advance_aggregate(&mut log, &hash);
 
@@ -150,7 +150,7 @@ pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
                     log.entries.len()
                 );
             } else {
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 attribute_path(&path);
                 log.entries.push(MeasureEntry {
                     tid: tid as u32,
@@ -225,7 +225,7 @@ impl PublicationReservation {
             None
         };
         let additional = log.promises + 1;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::LOG_SHARED,
@@ -261,7 +261,7 @@ impl PublicationReservation {
     pub(crate) fn commit(mut self, tid: usize, path: String, hash: [u8; 32]) {
         {
             let mut log = LOG.lock();
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             attribute_log_buffers(&log);
             assert!(
                 log.promises != 0 && log.entries.len() < log.entries.capacity(),
@@ -281,7 +281,7 @@ impl PublicationReservation {
                     log.shares.swap_remove(i);
                 }
             }
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             attribute_path(&path);
             log.entries.push(MeasureEntry {
                 tid: tid as u32,

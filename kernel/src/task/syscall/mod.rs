@@ -1085,7 +1085,7 @@ pub(in crate::task) fn handle_syscall_kernel_origin(
 /// after `check_allowlist(raw opcode)`, [`handle_syscall`] after the same gate,
 /// and [`handle_syscall_kernel_origin`].
 fn dispatch_admitted(caller_id: usize, syscall: Syscall) -> SyscallResult {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let mut trace = {
         let route = match &syscall {
             Syscall::SpawnFromElf { .. } => 1,
@@ -1107,10 +1107,10 @@ fn dispatch_admitted(caller_id: usize, syscall: Syscall) -> SyscallResult {
     let result = handle_syscall_inner(
         caller_id,
         syscall,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         &mut trace,
     );
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         crate::p01_measurement::outcome(trace, result);
         crate::p01_measurement::safe_point();
@@ -1121,7 +1121,7 @@ fn dispatch_admitted(caller_id: usize, syscall: Syscall) -> SyscallResult {
 fn handle_syscall_inner(
     caller_id: usize,
     syscall: Syscall,
-    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     if syscall_allowlist_for(caller_id).is_none() {
         log::warn!("[kernel] syscall denied for non-live tid {}", caller_id);
@@ -1129,7 +1129,7 @@ fn handle_syscall_inner(
     }
 
     let _staged_spawn_argv_cleanup = staged_spawn_argv_cleanup(&syscall, caller_id);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         // These non-fixture routes do not have historical per-object provenance
         // in this observer. Preserve the uncertainty before any source can lose it.
@@ -1395,7 +1395,7 @@ fn handle_syscall_inner(
             caller_id,
             path_ptr,
             path_len,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace,
         ),
 
@@ -1469,7 +1469,7 @@ fn handle_syscall_inner(
             len,
             path_ptr,
             path_len,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace,
         ),
 
@@ -1484,7 +1484,7 @@ fn handle_syscall_inner(
             path_len,
             priority,
             core_id,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace,
         ),
 
@@ -1521,7 +1521,7 @@ fn handle_syscall_inner(
         Syscall::SpawnFromMem { args_ptr } => spawn::spawn_from_mem(
             caller_id,
             args_ptr,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace,
         ),
 

@@ -223,7 +223,7 @@ pub fn load_from_vifs1() {
             let mut policy = POLICY.lock();
             // The verified, parsed containers are now retained by POLICY.
             // Join their public capacities, never the temporary signed blob.
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             {
                 use crate::memory::heap::p01_owner::{self, SYSTEM_CONFIG_SHARED};
                 p01_owner::shared_vec(&loaded.entries, SYSTEM_CONFIG_SHARED);

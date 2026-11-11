@@ -27,17 +27,17 @@ pub static CPU_MPIDRS: mpidr::MpidrTable<MAX_HARTS> = mpidr::MpidrTable::new();
 /// - x86_64: the HAL's per-CPU table bound, `hal::x86_64::syscall::MAX_CPUS`
 ///   (64). 64 keeps every `u64` hart mask exact, including the published
 ///   `ViRetirementV1.remote_hart_mask` (plan 261103-2218 H-S2-5).
-/// - x86_64 G1 private lane (`cellos_g1_cpu`): 2, which
+/// - x86_64 G1 private lane (`feature = "g1-cpu-accounting"`): 2, which
 ///   `task::cpu_accounting` asserts equal to its own hart count.
 /// - aarch64: 32 (spin-table and PSCI boards with more than two cores).
 /// - riscv64 / 32-bit targets: 2 (QEMU virt `-smp 2`, G2 entry).
-#[cfg(all(target_arch = "x86_64", not(cellos_g1_cpu)))]
+#[cfg(all(target_arch = "x86_64", not(feature = "g1-cpu-accounting")))]
 pub const MAX_HARTS: usize = hal::x86_64::syscall::MAX_CPUS;
-#[cfg(all(target_arch = "aarch64", not(cellos_g1_cpu)))]
+#[cfg(all(target_arch = "aarch64", not(feature = "g1-cpu-accounting")))]
 pub const MAX_HARTS: usize = 32;
 #[cfg(not(any(
-    all(target_arch = "x86_64", not(cellos_g1_cpu)),
-    all(target_arch = "aarch64", not(cellos_g1_cpu))
+    all(target_arch = "x86_64", not(feature = "g1-cpu-accounting")),
+    all(target_arch = "aarch64", not(feature = "g1-cpu-accounting"))
 )))]
 pub const MAX_HARTS: usize = 2;
 // The HAL owns one GS record, GDT/TSS and IST set per logical CPU.

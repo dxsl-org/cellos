@@ -14,7 +14,7 @@ fn alloc_page() -> (usize, u64) {
     // The witness is the heap table allocation, including hardware-independent
     // boot probes, not the physical DMA frames later named by its leaf entries.
     let ptr = {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DRIVER_SHARED,
@@ -77,10 +77,10 @@ impl Default for Sv39IommuPt {
 
 impl Sv39IommuPt {
     pub fn new() -> Self {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
         let (v, p) = alloc_page();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_noncpu::created_heap(p, 3, v);
         Self {
             root_phys: p,
@@ -218,10 +218,10 @@ impl VtdSlpt {
     /// An empty table for a unit whose walks do (`coherent`) or do not snoop
     /// the CPU caches.
     pub fn new(coherent: bool) -> Self {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
         let (v, p) = alloc_page();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_noncpu::created_heap(p, 4, v);
         let slpt = Self {
             root_phys: p,
@@ -585,7 +585,7 @@ fn dart_span(phys: u64, size: usize) -> Option<(u64, u64)> {
 fn alloc_dart_page() -> (usize, u64) {
     let layout = Layout::from_size_align(16384, 16384).expect("iommu_pt: dart page");
     let ptr = {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::DRIVER_SHARED,

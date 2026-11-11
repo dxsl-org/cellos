@@ -66,7 +66,7 @@ impl IpcWireMessage {
         view: &crate::task::copy_glue::TaskCopyView,
         ptr: usize,
         len: usize,
-        #[cfg(cellos_p01_trace)] owner: crate::p01_measurement::Owner,
+        #[cfg(feature = "p01-trace")] owner: crate::p01_measurement::Owner,
     ) -> Result<Self, ()> {
         if len > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
@@ -84,7 +84,7 @@ impl IpcWireMessage {
             header,
             payload: allocated?,
         };
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         message.observe_owner(owner, crate::memory::heap::p01_owner::SENDER_WIRE);
         view.read_into(ptr, message.as_mut_slice())?;
         Ok(message)
@@ -111,7 +111,7 @@ impl IpcWireMessage {
         &mut self.payload
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_synthetic(&self) {
         if self.payload.is_empty() {
             return;
@@ -122,7 +122,7 @@ impl IpcWireMessage {
             crate::memory::heap::p01_owner::SYNTHETIC_WIRE,
         );
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_owner(&self, owner: crate::p01_measurement::Owner, kind: u64) {
         if self.payload.is_empty() {
             return;
@@ -135,7 +135,7 @@ impl IpcWireMessage {
         );
     }
     /// Called only after successful receiver queue commit under SCHEDULER.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_queue_commit(&self, receiver: crate::p01_measurement::Owner) {
         if self.payload.is_empty() {
             return;

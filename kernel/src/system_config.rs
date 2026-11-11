@@ -71,7 +71,7 @@ fn read_system() -> Result<Option<Vec<u8>>, &'static str> {
         }
         let size =
             usize::try_from(stat.size).map_err(|_| "configuration size is not representable")?;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _scratch = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED,
@@ -82,7 +82,7 @@ fn read_system() -> Result<Option<Vec<u8>>, &'static str> {
         (file, size)
     };
     let mut bytes = Vec::new();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let scratch = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::FILESYSTEM_SCRATCH_SHARED,
@@ -90,7 +90,7 @@ fn read_system() -> Result<Option<Vec<u8>>, &'static str> {
     bytes
         .try_reserve_exact(size)
         .map_err(|_| "cannot allocate configuration buffer")?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(scratch);
     bytes.resize(size, 0);
     let mut offset = 0;

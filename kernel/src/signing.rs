@@ -236,7 +236,7 @@ fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> 
     let mut scratch = PAYLOAD_SCRATCH.lock();
     // Retained verification workspace is shared signing state, not an
     // exclusive object of the unpublished task being verified.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SIGNING_SHARED,
@@ -254,7 +254,7 @@ fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> 
         })?;
     payload.extend_from_slice(&elf_bytes[..signature_offset]);
     payload.extend_from_slice(&elf_bytes[signature_offset + signature_size..]);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_semantic);
     Ok(crate::ed25519::verify(pubkey, payload, sig))
 }

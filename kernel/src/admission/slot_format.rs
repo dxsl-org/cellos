@@ -111,7 +111,7 @@ pub fn parse_slot(data: &[u8]) -> Result<ParsedSlot, SlotParseError> {
         return Err(SlotParseError::LengthMismatch);
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SIGNING_SHARED,

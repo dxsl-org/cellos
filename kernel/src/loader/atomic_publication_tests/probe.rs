@@ -35,7 +35,7 @@ fn observe_pages(pages: impl Iterator<Item = (usize, usize)>) {
     {
         return;
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
@@ -50,7 +50,7 @@ fn observe_pages(pages: impl Iterator<Item = (usize, usize)>) {
             })
         })
         .collect::<Option<Vec<_>>>();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_semantic);
     if mappings.is_some() {
         crate::memory::tlb_shootdown::begin_test_flush_observation();

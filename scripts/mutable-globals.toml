@@ -27,7 +27,7 @@ target_arch = "x86_64"
 target_os = "none"
 target_pointer_width = "64"
 # Build-script cfgs are off unless their env vars are set; `test` is host-only.
-cfg_false = ["test", "debug_assertions", "cellos_p01_trace", "cellos_g1_cpu"]
+cfg_false = ["test", "debug_assertions"]
 
 [[crate]]
 name = "kernel"
@@ -1253,7 +1253,7 @@ rationale = "crate::sync::Spinlock masks IF for the guard lifetime, so a timer/I
 review = "kernel/src/sync.rs:26-55,117-130 (Spinlock IRQ save/restore); kernel/src/task.rs:1314-1336 (yield_cpu cli / SIE save); kernel/src/task.rs:vi_timer_tick; hal/arch/x86/src/x86_64/idt/dispatch.rs:55-69; hal/arch/x86/src/x86_64/syscall.rs:45 (SYSCALL FMASK clears IF)"
 
 [[global]]
-key = "kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (cellos_p01_trace))"
+key = "kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = \"p01-trace\"))"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::task DMA retirement (queue_retired_dma_cleanup / retry_retired_dma_cleanup); holds tids whose IOMMU teardown was not acknowledged"

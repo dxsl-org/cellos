@@ -80,7 +80,7 @@ impl viConsole {
                     }
                     Route::Buffer(c) => {
                         if self.buffer.len() < Self::MAX_BUFFERED {
-                            #[cfg(cellos_p01_trace)]
+                            #[cfg(feature = "p01-trace")]
                             let _semantic = crate::memory::heap::p01_owner::creation(
                                 None,
                                 crate::memory::heap::p01_owner::DRIVER_SHARED,

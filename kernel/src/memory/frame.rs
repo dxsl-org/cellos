@@ -78,9 +78,9 @@ pub struct FrameAllocator {
     bitmap_range: usize,
     /// Index of the last allocated frame (for next-fit search)
     last_alloc_index: usize,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_epoch: u64,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_peak: usize,
 }
 
@@ -121,9 +121,9 @@ impl FrameAllocator {
             bitmap,
             bitmap_range: plan.bitmap_range,
             last_alloc_index: 0,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_epoch: 1,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_peak: 0,
         };
 
@@ -212,7 +212,7 @@ impl FrameAllocator {
         }
     }
 
-    #[cfg(any(cellos_p01_trace, feature = "test-hooks"))]
+    #[cfg(any(feature = "p01-trace", feature = "test-hooks"))]
     pub(crate) fn p01_allocated(&self, frame: PhysAddr) -> bool {
         frame.is_multiple_of(PAGE_SIZE)
             && self
@@ -256,11 +256,11 @@ impl FrameAllocator {
         if self.bitmap.slice()[u64_idx] & mask != 0 {
             return false;
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let p01_physical = crate::p01_retained::physical_write();
         self.bitmap.slice_mut()[u64_idx] |= mask;
         self.used_frames += 1;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(write) = p01_physical.as_ref() {
             self.p01_transition();
             crate::p01_retained::physical_allocated(
@@ -279,11 +279,11 @@ impl FrameAllocator {
         if self.bitmap.slice()[u64_idx] & mask == 0 {
             return false;
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let p01_physical = crate::p01_retained::physical_write();
         self.bitmap.slice_mut()[u64_idx] &= !mask;
         self.used_frames -= 1;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(write) = p01_physical.as_ref() {
             self.p01_transition();
             crate::p01_retained::physical_freed(
@@ -295,7 +295,7 @@ impl FrameAllocator {
         true
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     fn p01_transition(&mut self) {
         // The enclosing PhysicalWrite already owns admission through the bitmap
         // transition. A second admission could fail after the actual mutation,
@@ -311,7 +311,7 @@ impl FrameAllocator {
     /// Arm-time exact bitmap population, including bitmap backing reservations.
     /// Caller holds FRAME_ALLOCATOR and keeps admission closed through the census.
     /// This records unknown births, not synthetic allocations at the census epoch.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_seed_physical(&self) {
         let mut counted = 0usize;
         for (word_index, word) in self.bitmap.slice().iter().copied().enumerate() {
@@ -336,12 +336,12 @@ impl FrameAllocator {
         }
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_snapshot(&self) -> (u64, usize) {
         (self.p01_epoch, self.p01_peak)
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_reset_peak(&mut self) {
         if let Some(_observation) = crate::p01_measurement::observation() {
             self.p01_peak = self.used_frames;
@@ -618,7 +618,7 @@ pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
 /// A non-copyable allocation lease returned to the bitmap only on drop.
 pub struct OwnedFrame {
     physical: PhysAddr,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     p01_retained: Option<crate::p01_retained::Token>,
 }
 
@@ -630,7 +630,7 @@ impl OwnedFrame {
             .allocate_frame()
             .map(|physical| Self {
                 physical,
-                #[cfg(cellos_p01_trace)]
+                #[cfg(feature = "p01-trace")]
                 p01_retained: None,
             })
     }
@@ -639,7 +639,7 @@ impl OwnedFrame {
         self.physical
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_retain(
         &mut self,
         owner: Option<crate::p01_measurement::Owner>,
@@ -661,7 +661,7 @@ impl OwnedFrame {
         );
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_quarantine(&self) {
         crate::p01_retained::mark(
             self.p01_retained,
@@ -672,20 +672,20 @@ impl OwnedFrame {
 
 impl Drop for OwnedFrame {
     fn drop(&mut self) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _range_write = crate::p01_retained::release_write();
         if let Some(frames) = FRAME_ALLOCATOR.lock().as_mut() {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let released = frames.p01_allocated(self.physical);
             frames.deallocate_frame(self.physical);
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if released {
                 crate::p01_retained::retire(self.p01_retained.take());
             } else if self.p01_retained.is_some() {
                 crate::p01_retained::fault();
             }
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if self.p01_retained.is_some() {
             crate::p01_retained::fault();
         }
@@ -919,9 +919,9 @@ pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
         // The owned bitmap is outside managed memory; the boot heap would go in range 0.
         bitmap_range: 0,
         last_alloc_index: 0,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         p01_epoch: 1,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         p01_peak: 0,
     }
 }
@@ -1130,9 +1130,9 @@ mod tests {
             ),
             bitmap_range: 0,
             last_alloc_index: 0,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_epoch: 1,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_peak: 0,
         }
     }

@@ -256,7 +256,7 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
     let generation = task.cell_generation;
     let freeze_nonce = next_freeze_nonce();
     enter_frozen_state(task, swap_id);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SERVICE_SHARED,
@@ -360,7 +360,7 @@ pub(crate) fn commit_hotswap_barrier(
             continue;
         }
         let copied = {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 Some(crate::p01_resources::owner(
                     sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?,
@@ -382,12 +382,12 @@ pub(crate) fn commit_hotswap_barrier(
         };
         let pushed = copied.and_then(|message| {
             let target = sched.tasks.get_mut(&target_tid).ok_or(())?;
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             target
                 .pending_msgs
                 .observe_owner(crate::p01_resources::owner(target));
             let result = target.pending_msgs.try_push(message);
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             target
                 .pending_msgs
                 .observe_owner(crate::p01_resources::owner(target));

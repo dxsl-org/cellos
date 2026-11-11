@@ -72,10 +72,10 @@ fn install_tasks(ok: &mut bool) -> bool {
         return false;
     }
     let task_a = Box::new(Task::new(TASK_A, CellId(0), "cwd-a", Vec::new()));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::task_backing(&task_a);
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -83,10 +83,10 @@ fn install_tasks(ok: &mut bool) -> bool {
         scheduler.tasks.insert(TASK_A, task_a);
     }
     let task_b = Box::new(Task::new(TASK_B, CellId(0), "cwd-b", Vec::new()));
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::task_backing(&task_b);
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,

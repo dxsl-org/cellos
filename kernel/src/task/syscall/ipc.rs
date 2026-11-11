@@ -1014,7 +1014,7 @@ pub(super) fn try_recv(
 pub(super) fn wait(caller_id: usize, pid: usize) -> SyscallResult {
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         let already_reaped = if let Some(target) = sched.tasks.get_mut(&pid) {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 Some(crate::p01_resources::owner(target)),
                 crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -1025,7 +1025,7 @@ pub(super) fn wait(caller_id: usize, pid: usize) -> SyscallResult {
             // It exited but a hart may still hold its saved context.
             // The zombie reaper transfers these waiters only after the
             // exact selected/executing quiescence proof.
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(
                 Some(crate::p01_resources::owner(zombie)),
                 crate::memory::heap::p01_owner::TASK_FIELDS,
@@ -1081,7 +1081,7 @@ pub(super) fn futex_wake(caller_id: usize, addr: usize, count: usize) -> Syscall
 /// Handler for `Syscall::Log` (extracted from the dispatcher).
 pub(super) fn log(caller_id: usize, msg_ptr: usize, msg_len: usize) -> SyscallResult {
     if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             let owner = crate::task::SCHEDULER
                 .lock()

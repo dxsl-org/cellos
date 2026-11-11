@@ -272,7 +272,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::signing::PAYLOAD_SCRATCH` | `kernel/src/signing.rs` | static | spinlock | global | boot, normal | signing: verify_cell_with_key reuses it as the signed-payload buffer for every spawn-time signature check (loader::governed_spawn) | none: cleared and refilled on every verification for the whole run (grown once, never shrunk) | never: shared buffer lives for the whole run | reviewed: kernel/src/signing.rs:verify_cell_with_key; kernel/src/loader/governed_spawn.rs:61 |
 | `kernel::system_config::LOGGING_EXPLICIT` | `kernel/src/system_config.rs` | static | atomic | global | boot | kernel::system_config::load_from_vifs1 writes; kmain reads via logging_explicit() to decide the late log-level default | Release-stored once in load_from_vifs1 at kmain:918, before task::init and start_secondaries | never: lives for the whole run | reviewed: kernel/src/system_config.rs:load_from_vifs1; kernel/src/main.rs:918; kernel/src/main.rs:1671 |
 | `kernel::task::BOOT_CONTEXTS @cfg(target_arch = "x86_64")` | `kernel/src/task.rs` | static mut | static-mut | per-cpu | boot, normal, irq, exception, ap | kernel::task::yield_cpu via boot_context_for(hart_id): slot N is the idle/boot Context of logical CPU N, saved and restored only by Context::switch on CPU N | none: rewritten by every switch out of / into the idle context | never: lives for the whole run | reviewed: kernel/src/task.rs:boot_context_for; kernel/src/task.rs:yield_cpu; kernel/src/sched/smp.rs:x86_secondary_main |
-| `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (cellos_p01_trace))` | `kernel/src/task.rs` | static | spinlock | global | normal, irq, exception, ap | kernel::task DMA retirement (queue_retired_dma_cleanup / retry_retired_dma_cleanup); holds tids whose IOMMU teardown was not acknowledged | none: mutated for the whole run | entry removed when teardown_dma_authority(tid) is acknowledged on a later yield_cpu pass; otherwise retained fail-closed | reviewed: kernel/src/task.rs:queue_retired_dma_cleanup; kernel/src/task.rs:retry_retired_dma_cleanup; kernel/src/task.rs:yield_cpu |
+| `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` | `kernel/src/task.rs` | static | spinlock | global | normal, irq, exception, ap | kernel::task DMA retirement (queue_retired_dma_cleanup / retry_retired_dma_cleanup); holds tids whose IOMMU teardown was not acknowledged | none: mutated for the whole run | entry removed when teardown_dma_authority(tid) is acknowledged on a later yield_cpu pass; otherwise retained fail-closed | reviewed: kernel/src/task.rs:queue_retired_dma_cleanup; kernel/src/task.rs:retry_retired_dma_cleanup; kernel/src/task.rs:yield_cpu |
 | `kernel::task::IOMMU_CLEANUP_SERIAL` | `kernel/src/task.rs` | static | spinlock | global | normal, irq, exception, ap | kernel::task::teardown_dma_authority; serializes PCI quiesce + IOMMU revoke + BDF/frame release for a dying or revoked driver cell | none: taken for the whole run | never: lives for the whole run (guards no data) | reviewed: kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/dev/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/dev/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540 |
 | `kernel::task::LOG_RING` | `kernel/src/task.rs` | static | spinlock | global | normal | kernel::task user log ring: print_user_log pushes cell stdout bytes; read_log_ring drains for the ReadLog syscall (fb-console cell) | none: mutated for the whole run | never: lives for the whole run; ring overwrites oldest bytes | reviewed: kernel/src/task.rs:print_user_log; kernel/src/task.rs:read_log_ring; kernel/src/task/syscall/mod.rs:5742; kernel/src/task/syscall/mod.rs:8067 |
 | `kernel::task::NEXT_DELIVERY_ID` | `kernel/src/task.rs` | static | atomic | global | normal, irq | kernel::task IPC delivery (next_delivery_id); consumed by ipc_send_kernel, ipc_post_nonblock, ipc_try_send and async_ipc::submit to tag wire messages | none: mutated for the whole run (monotonic counter from 1) | never: lives for the whole run; ids are not recycled | reviewed: kernel/src/task.rs:next_delivery_id; kernel/src/task.rs:ipc_post_nonblock; kernel/src/dev/console_drv.rs:259; kernel/src/task.rs:vi_timer_tick |
@@ -496,12 +496,12 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/success.rs` | static | `crate::sync::Spinlock<Option<StateSnapshot>>` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_ALLOCATION_AFTER @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_NEXT_MAP @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicU8` | cfg inactive in this profile |
-| `kernel::memory::cell_quota::P01_SOURCE @cfg(cellos_p01_trace)` | `kernel/src/memory/cell_quota.rs` | static | `crate::p01_resources::Source` | cfg inactive in this profile |
-| `kernel::memory::cell_quota::P01_SUBJECTS @cfg(cellos_p01_trace)` | `kernel/src/memory/cell_quota.rs` | static | `[BoundQuota;9]` | cfg inactive in this profile |
-| `kernel::memory::heap::P01_EPOCH @cfg(cellos_p01_trace)` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
-| `kernel::memory::heap::P01_PEAK @cfg(cellos_p01_trace)` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
-| `kernel::memory::heap::p01_owner::CONTEXT @cfg(cellos_p01_trace)` | `kernel/src/memory/heap/p01_owner.rs` | static | `[AtomicU64;HARTS]` | cfg inactive in this profile |
-| `kernel::memory::heap::p01_owner::STORAGE @cfg(cellos_p01_trace)` | `kernel/src/memory/heap/p01_owner.rs` | static | `Storage` | cfg inactive in this profile |
+| `kernel::memory::cell_quota::P01_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `crate::p01_resources::Source` | cfg inactive in this profile |
+| `kernel::memory::cell_quota::P01_SUBJECTS @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `[BoundQuota;9]` | cfg inactive in this profile |
+| `kernel::memory::heap::P01_EPOCH @cfg(feature = "p01-trace")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
+| `kernel::memory::heap::P01_PEAK @cfg(feature = "p01-trace")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
+| `kernel::memory::heap::p01_owner::CONTEXT @cfg(feature = "p01-trace")` | `kernel/src/memory/heap/p01_owner.rs` | static | `[AtomicU64;HARTS]` | cfg inactive in this profile |
+| `kernel::memory::heap::p01_owner::STORAGE @cfg(feature = "p01-trace")` | `kernel/src/memory/heap/p01_owner.rs` | static | `Storage` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::ALLOC_BYTES @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::ALLOC_COUNT @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::FREE_BYTES @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
@@ -514,61 +514,61 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::memory::tlb_shootdown_selftest::PHASE @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/memory/tlb_shootdown_selftest.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::memory::tlb_shootdown_selftest::STORE_FAULTED @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/memory/tlb_shootdown_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::memory::tlb_shootdown_selftest::TEST_FRAME @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/memory/tlb_shootdown_selftest.rs` | static | `AtomicUsize` | cfg inactive in this profile |
-| `kernel::p01_measurement::ARMED @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::p01_measurement::ARM_ONCE @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::p01_measurement::ATTEMPTS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[AttemptState;10]` | cfg inactive in this profile |
-| `kernel::p01_measurement::ATTEMPT_COUNT @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::BOOT @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[AtomicU64;4]` | cfg inactive in this profile |
-| `kernel::p01_measurement::CLOSE_TICK @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::COLLECTOR @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::p01_measurement::COMPONENTS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[[Component;8];9]` | cfg inactive in this profile |
-| `kernel::p01_measurement::DENIED @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::p01_measurement::DRIVER_ATTEMPTS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::EXPECTED @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::EXPORTED @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::p01_measurement::FLAGS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::GATE @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::INDEX @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::LAST_FLAGS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::LAST_SAMPLE @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::LOGICAL_PENDING @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::MANIFEST @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `&[u8;96]` | cfg inactive in this profile |
-| `kernel::p01_measurement::NEXT_ATTEMPT @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::OBLIGATIONS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[Entry;128]` | cfg inactive in this profile |
-| `kernel::p01_measurement::OBLIGATION_COUNT @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::RECORDS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[Slot;256]` | cfg inactive in this profile |
-| `kernel::p01_measurement::SAMPLE_MASK @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::SAMPLE_TICKS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[AtomicU64;6]` | cfg inactive in this profile |
-| `kernel::p01_measurement::SNAPSHOTS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[[[AtomicU64;3];16];6]` | cfg inactive in this profile |
-| `kernel::p01_measurement::STAGE @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::START_TICK @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_measurement::SUBJECTS @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `[Subject;9]` | cfg inactive in this profile |
-| `kernel::p01_measurement::SUBJECT_COUNT @cfg(cellos_p01_trace)` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_noncpu::ACTIVITIES @cfg(cellos_p01_trace)` | `kernel/src/p01_noncpu.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_noncpu::LIFETIMES @cfg(cellos_p01_trace)` | `kernel/src/p01_noncpu.rs` | static | `Spinlock<Lifetimes>` | cfg inactive in this profile |
-| `kernel::p01_noncpu::SNAPSHOTS @cfg(cellos_p01_trace)` | `kernel/src/p01_noncpu.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
-| `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(cellos_p01_trace)` | `kernel/src/p01_noncpu_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
-| `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(cellos_p01_trace & test)` | `kernel/src/p01_noncpu_topology.rs` | static | `Spinlock<Snapshot>` | cfg inactive in this profile |
-| `kernel::p01_resources::COUNTERS @cfg(cellos_p01_trace)` | `kernel/src/p01_resources.rs` | static | `[AtomicU64;6]` | cfg inactive in this profile |
-| `kernel::p01_resources::LIVE_SUBJECTS @cfg(cellos_p01_trace)` | `kernel/src/p01_resources.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_resources::RESOURCE_SOURCE @cfg(cellos_p01_trace)` | `kernel/src/p01_resources.rs` | static | `Source` | cfg inactive in this profile |
-| `kernel::p01_resources::SCHEDULER_EPOCH @cfg(cellos_p01_trace)` | `kernel/src/p01_resources.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_resources::SUBJECTS @cfg(cellos_p01_trace)` | `kernel/src/p01_resources.rs` | static | `[Subject;9]` | cfg inactive in this profile |
-| `kernel::p01_retained::ENTRIES @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `[Entry;CAPACITY]` | cfg inactive in this profile |
-| `kernel::p01_retained::NEXT @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_retained::PHYSICAL @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `[PhysicalEntry;PHYSICAL_CAPACITY]` | cfg inactive in this profile |
-| `kernel::p01_retained::PHYSICAL_NEXT @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::p01_retained::PHYSICAL_SOURCE @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `Source` | cfg inactive in this profile |
-| `kernel::p01_retained::SOURCE @cfg(cellos_p01_trace)` | `kernel/src/p01_retained.rs` | static | `Source` | cfg inactive in this profile |
-| `kernel::p01_topology::SNAPSHOTS @cfg(cellos_p01_trace)` | `kernel/src/p01_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
-| `kernel::p01_vtd_topology::SNAPSHOTS @cfg(cellos_p01_trace)` | `kernel/src/p01_vtd_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
-| `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(cellos_p01_trace & test)` | `kernel/src/p01_vtd_topology.rs` | static | `Spinlock<Snapshot>` | cfg inactive in this profile |
+| `kernel::p01_measurement::ARMED @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::p01_measurement::ARM_ONCE @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::p01_measurement::ATTEMPTS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[AttemptState;10]` | cfg inactive in this profile |
+| `kernel::p01_measurement::ATTEMPT_COUNT @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::BOOT @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[AtomicU64;4]` | cfg inactive in this profile |
+| `kernel::p01_measurement::CLOSE_TICK @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::COLLECTOR @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::p01_measurement::COMPONENTS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[[Component;8];9]` | cfg inactive in this profile |
+| `kernel::p01_measurement::DENIED @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::p01_measurement::DRIVER_ATTEMPTS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::EXPECTED @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::EXPORTED @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::p01_measurement::FLAGS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::GATE @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::INDEX @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::LAST_FLAGS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::LAST_SAMPLE @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::LOGICAL_PENDING @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::MANIFEST @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `&[u8;96]` | cfg inactive in this profile |
+| `kernel::p01_measurement::NEXT_ATTEMPT @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::OBLIGATIONS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[Entry;128]` | cfg inactive in this profile |
+| `kernel::p01_measurement::OBLIGATION_COUNT @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::RECORDS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[Slot;256]` | cfg inactive in this profile |
+| `kernel::p01_measurement::SAMPLE_MASK @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::SAMPLE_TICKS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[AtomicU64;6]` | cfg inactive in this profile |
+| `kernel::p01_measurement::SNAPSHOTS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[[[AtomicU64;3];16];6]` | cfg inactive in this profile |
+| `kernel::p01_measurement::STAGE @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::START_TICK @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_measurement::SUBJECTS @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `[Subject;9]` | cfg inactive in this profile |
+| `kernel::p01_measurement::SUBJECT_COUNT @cfg(feature = "p01-trace")` | `kernel/src/p01_measurement.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_noncpu::ACTIVITIES @cfg(feature = "p01-trace")` | `kernel/src/p01_noncpu.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` | `kernel/src/p01_noncpu.rs` | static | `Spinlock<Lifetimes>` | cfg inactive in this profile |
+| `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` | `kernel/src/p01_noncpu.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
+| `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` | `kernel/src/p01_noncpu_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
+| `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` | `kernel/src/p01_noncpu_topology.rs` | static | `Spinlock<Snapshot>` | cfg inactive in this profile |
+| `kernel::p01_resources::COUNTERS @cfg(feature = "p01-trace")` | `kernel/src/p01_resources.rs` | static | `[AtomicU64;6]` | cfg inactive in this profile |
+| `kernel::p01_resources::LIVE_SUBJECTS @cfg(feature = "p01-trace")` | `kernel/src/p01_resources.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_resources::RESOURCE_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/p01_resources.rs` | static | `Source` | cfg inactive in this profile |
+| `kernel::p01_resources::SCHEDULER_EPOCH @cfg(feature = "p01-trace")` | `kernel/src/p01_resources.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_resources::SUBJECTS @cfg(feature = "p01-trace")` | `kernel/src/p01_resources.rs` | static | `[Subject;9]` | cfg inactive in this profile |
+| `kernel::p01_retained::ENTRIES @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `[Entry;CAPACITY]` | cfg inactive in this profile |
+| `kernel::p01_retained::NEXT @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_retained::PHYSICAL @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `[PhysicalEntry;PHYSICAL_CAPACITY]` | cfg inactive in this profile |
+| `kernel::p01_retained::PHYSICAL_NEXT @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::p01_retained::PHYSICAL_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `Source` | cfg inactive in this profile |
+| `kernel::p01_retained::SOURCE @cfg(feature = "p01-trace")` | `kernel/src/p01_retained.rs` | static | `Source` | cfg inactive in this profile |
+| `kernel::p01_topology::SNAPSHOTS @cfg(feature = "p01-trace")` | `kernel/src/p01_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
+| `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` | `kernel/src/p01_vtd_topology.rs` | static | `Spinlock<[Snapshot;6]>` | cfg inactive in this profile |
+| `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` | `kernel/src/p01_vtd_topology.rs` | static | `Spinlock<Snapshot>` | cfg inactive in this profile |
 | `kernel::resource_registry::mediation::vi_emulate_el0_mmio_aarch64()::ANNOUNCED @cfg(any (target_arch = "aarch64" , target_arch = "riscv64" , test) & target_arch = "aarch64")` | `kernel/src/resource_registry_mediation.rs` | static | `AtomicBool` | cfg inactive in this profile |
-| `kernel::sched::cpu_accounting::ACCOUNTING @cfg(cellos_g1_cpu)` | `kernel/src/sched/cpu_accounting.rs` | static | `Spinlock<Accounting>` | cfg inactive in this profile |
-| `kernel::sched::cpu_accounting::words!#1 @cfg(cellos_g1_cpu)` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
-| `kernel::sched::cpu_accounting::words!#2 @cfg(cellos_g1_cpu)` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
-| `kernel::sched::cpu_accounting::words!#3 @cfg(cellos_g1_cpu)` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
-| `kernel::sched::cpu_accounting::words!#4 @cfg(cellos_g1_cpu)` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
+| `kernel::sched::cpu_accounting::ACCOUNTING @cfg(feature = "g1-cpu-accounting")` | `kernel/src/sched/cpu_accounting.rs` | static | `Spinlock<Accounting>` | cfg inactive in this profile |
+| `kernel::sched::cpu_accounting::words!#1 @cfg(feature = "g1-cpu-accounting")` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
+| `kernel::sched::cpu_accounting::words!#2 @cfg(feature = "g1-cpu-accounting")` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
+| `kernel::sched::cpu_accounting::words!#3 @cfg(feature = "g1-cpu-accounting")` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
+| `kernel::sched::cpu_accounting::words!#4 @cfg(feature = "g1-cpu-accounting")` | `kernel/src/sched/cpu_accounting.rs` | item macro | `` | cfg inactive in this profile |
 | `kernel::sched::domain_switch_tests::CPU_SEEN_PRIVATE_ROOT @cfg(all (feature = "native-domains" , feature = "test-hooks" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")) & any (target_arch = "aarch64" , target_arch = "x86_64"))` | `kernel/src/sched/domain_switch_tests.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::sched::domain_switch_tests::observe_domain_teardown()::BASELINE @cfg(all (feature = "native-domains" , feature = "test-hooks" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")) & target_arch = "aarch64")` | `kernel/src/sched/domain_switch_tests.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::sched::domain_switch_tests::observe_domain_teardown()::BASELINE @cfg(all (feature = "native-domains" , feature = "test-hooks" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")) & target_arch = "x86_64")` | `kernel/src/sched/domain_switch_tests.rs` | static | `AtomicUsize` | cfg inactive in this profile |
@@ -647,7 +647,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::BOOT_CONTEXT @cfg(target_arch = "x86")` | `kernel/src/task.rs` | static mut | `crate::hal::arch::Context` | cfg inactive in this profile |
 | `kernel::task::BOOT_CONTEXTS @cfg(target_arch = "aarch64")` | `kernel/src/task.rs` | static mut | `[crate::hal::arch::Context;crate::sched::smp::MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::task::BOOT_CONTEXTS @cfg(target_arch = "riscv64")` | `kernel/src/task.rs` | static mut | `[crate::hal::arch::Context;crate::sched::smp::MAX_HARTS]` | cfg inactive in this profile |
-| `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(cellos_p01_trace)` | `kernel/src/task.rs` | static | `Spinlock<VecDeque<RetiredDmaCleanup>>` | cfg inactive in this profile |
+| `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` | `kernel/src/task.rs` | static | `Spinlock<VecDeque<RetiredDmaCleanup>>` | cfg inactive in this profile |
 | `kernel::task::STACK_BASELINE_EMITTED @cfg(feature = "test-hooks")` | `kernel/src/task.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::task::async_ipc::tests::alloc_probe::GLOBAL @cfg(test)` | `kernel/src/task/async_ipc.rs` | static | `Counting` | cfg inactive in this profile |
 | `kernel::task::async_ipc::tests::alloc_probe::thread_local!#1 @cfg(test)` | `kernel/src/task/async_ipc.rs` | item macro | `` | cfg inactive in this profile |

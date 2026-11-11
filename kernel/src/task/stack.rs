@@ -143,7 +143,7 @@ pub struct Stack {
     pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
     /// Test-only lifetime registration for a kernel stack selected by a
     /// native-domain private root.
@@ -336,7 +336,7 @@ impl Stack {
             pages,
             guard_pages,
             top,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation: None,
             #[cfg(all(
                 feature = "native-domains",
@@ -466,10 +466,10 @@ impl Drop for Stack {
             // Only now are the guard VAs identity-mapped again, so the loader's
             // collision check takes over from the reservation.
             STACK_RESERVATIONS.remove(self.base, self.base + total_pages * PAGE_SIZE);
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_resources::finish(self.p01_obligation.take(), 1);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
             if owner.is_some() {
@@ -506,7 +506,7 @@ pub struct CellSegments {
     /// built from these segments (`memory::address_space::create_cell_domain`)
     /// guards them too, not only the shared-address-space mapping.
     guarded_code: bool,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
 
@@ -517,7 +517,7 @@ impl CellSegments {
             writable_pages: alloc::vec::Vec::new(),
             va_slot,
             guarded_code: false,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation: None,
         }
     }
@@ -538,7 +538,7 @@ impl CellSegments {
             writable_pages,
             va_slot,
             guarded_code: false,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_obligation: None,
         }
     }
@@ -560,7 +560,7 @@ impl CellSegments {
 
     /// Exact capacities of this task's exclusive segment metadata, not frames.
     /// Publication calls this while holding SCHEDULER with the final identity.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) fn p01_backing(&self, owner: crate::p01_measurement::Owner) {
         crate::memory::heap::p01_owner::runtime_vec(
             &self.pages,
@@ -658,10 +658,10 @@ impl Drop for CellSegments {
             for &(_vaddr, frame) in &self.pages {
                 allocator.deallocate_frame(frame);
             }
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             crate::p01_resources::finish(self.p01_obligation.take(), 1);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }

@@ -48,9 +48,9 @@ pub struct TaskLaunchState {
     pub(crate) argv: Option<Vec<u8>>,
     pub(crate) routes: LaunchRoutes,
     pub(crate) measurement: Option<StagedMeasurement>,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) trace: Option<crate::p01_measurement::Attempt>,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) bootstrap_init: bool,
     /// This is the kernel's trusted init: the latch is published before the
     /// task becomes runnable, so init never runs with an unnamed identity.
@@ -97,9 +97,9 @@ impl TaskLaunchState {
             argv,
             routes,
             measurement,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace: None,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             bootstrap_init: false,
             trusted_init: false,
             is_domain,
@@ -184,7 +184,7 @@ pub fn publish_prepared(
     // this task's own `StateRestore` and by nothing else, and it is installed
     // before the task can ever be selected.
     task.inherited_argv = state.argv.take();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::adopt_task(&task);
     task.syscall_allowlist = state.syscall_allowlist;
     task.cluster_mode = state.cluster_mode;
@@ -224,11 +224,11 @@ pub fn publish_prepared(
         log_domain_admitted(&task.name);
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::task_backing(&task);
     // Private policy selection is tied to the measured artifact and the live
     // kernel-bootstrap publisher, never a caller-selected budget or task name.
-    #[cfg(cellos_g1_cpu)]
+    #[cfg(feature = "g1-cpu-accounting")]
     if let Some(measurement) = state.measurement.as_ref() {
         if measurement.path == "/bin/bench" {
             let attempt = state.trace.ok_or(ViError::PermissionDenied)?;
@@ -258,10 +258,10 @@ pub fn publish_prepared(
 
     // Scheduler maps/route/audit storage are kernel bookkeeping, not child
     // objects merely because they are allocated during a selected launch.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _heap_bookkeeping = crate::memory::heap::p01_owner::bookkeeping();
     {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::SCHEDULER_SHARED,
@@ -275,7 +275,7 @@ pub fn publish_prepared(
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
     crate::loader::commit_launch_routes(tid, cell_id, state.routes);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         let task = sched.tasks.get_mut(&tid).expect("committed publication");
         let diagnostic_owner = crate::p01_measurement::Owner::of(task);
@@ -441,7 +441,7 @@ fn admit_and_bind_domain(
         ks,
         us,
         seg,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_resources::owner(task),
     )
     .map_err(|_| ViError::OutOfMemory)?;
@@ -660,7 +660,7 @@ impl SessionPublication {
         if self.domain_lease.is_some() {
             log_domain_admitted(&self.task.name);
         }
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             crate::memory::heap::p01_owner::adopt_task(&self.task);
             crate::memory::heap::p01_owner::task_backing(&self.task);
@@ -670,7 +670,7 @@ impl SessionPublication {
         sched.publish_session_owner(self.owner);
         self.quota.commit();
         crate::loader::commit_launch_routes(tid, CellId(self.owner.cell_id), self.state.routes);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             let task = sched.tasks.get_mut(&tid).expect("committed publication");
             let diagnostic_owner = crate::p01_measurement::Owner::of(task);

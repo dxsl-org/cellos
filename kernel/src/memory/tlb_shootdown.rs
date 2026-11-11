@@ -205,7 +205,7 @@ fn local_tag_flush(asid: usize) {
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         let mut tags = TEST_FLUSHED_TAGS.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
@@ -394,7 +394,7 @@ pub fn flush_page(vaddr: VAddr) {
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         let mut pages = TEST_FLUSHED_PAGES.lock();
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
             crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,

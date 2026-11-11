@@ -140,14 +140,14 @@ pub fn prepare_elf_task(
         .map_err(|_| ViError::OutOfMemory)
         .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.final_flags))))
         .inspect_err(|_| {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_post_load_failure(&seg_pages, load_base, 2);
         })?;
     let mapped_pages = crate::loader::atomic_checkpoint("AP-RM")
         .map_err(|_| ViError::OutOfMemory)
         .and_then(|_| collect_reserved(seg_pages.iter().map(|p| (p.va, p.frame))))
         .inspect_err(|_| {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_post_load_failure(&seg_pages, load_base, 3);
         })?;
     let writable_count = seg_pages
@@ -163,7 +163,7 @@ pub fn prepare_elf_task(
                 .map_err(|_| ViError::OutOfMemory)
         })
         .map_err(|_| {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             p01_post_load_failure(&seg_pages, load_base, 4);
             ViError::OutOfMemory
         })?;
@@ -172,7 +172,7 @@ pub fn prepare_elf_task(
             writable_pages.push(page.va);
         }
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         // These exclusive backing arrays survive in CellSegments. Other loader
         // scratch/shared-helper allocations retain origin-only classification.
@@ -289,7 +289,7 @@ fn write_initial_stack(
 
 /// Observe each exact reserve failure while rollback still owns the live frames.
 /// This witness precedes real unwind; it is not a final retained-leak assertion.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 fn p01_post_load_failure(pages: &[crate::loader::elf::LoadedPage], load_base: usize, edge: u64) {
     // Source lock only, no scheduler/owner invention. Preserve one coherent
     // physical witness batch while the mapped leaves remain allocator-resident.

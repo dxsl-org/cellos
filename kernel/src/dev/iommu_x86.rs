@@ -106,7 +106,7 @@ pub fn init_hw(dma: DmaIsolationInput) {
 
 /// Current software references only; caller excludes local preemption before
 /// taking these locks and never holds FRAME_ALLOCATOR or the heap lock.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64, u64, u64)) {
     let units = UNITS.lock();
     for u in units.iter() {

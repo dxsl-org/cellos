@@ -8,7 +8,7 @@ use super::{authority::*, decode::*, dev::*, fs::*, grant::*, ipc::*, misc::*, v
 
 /// Called outside source locks after exact root teardown. Never infer pin/DMA or
 /// historical heap ownership from grant-table absence.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
     let page_clear =
         {
@@ -178,7 +178,7 @@ pub(in crate::task) fn snapshot_resume(
             Some(h) => (h.sender_cell_id, h.sender_generation),
             None => (0, 0),
         };
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
@@ -231,14 +231,14 @@ pub(super) fn governed_spawn_request(
     route: crate::loader::launch_profile::LaunchRoute,
     child_ceiling: crate::task::cap::CapSet,
     priority: u8,
-    #[cfg(cellos_p01_trace)] trace: Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: Option<crate::p01_measurement::Attempt>,
 ) -> Result<crate::loader::SpawnRequest, SyscallError> {
     let (incarnation, caller_authority, caller_root) = crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| {
             let task = sched.tasks.get(&caller_id)?;
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if trace.is_some_and(|a| a.parent != crate::p01_measurement::Owner::of(task)) {
                 crate::p01_measurement::invalidate(crate::p01_measurement::IDENTITY);
             }
@@ -707,7 +707,7 @@ pub(super) fn spawn_from_path(
     caller_id: usize,
     path_ptr: usize,
     path_len: usize,
-    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     let path_str = read_user_string(
         caller_id,
@@ -715,7 +715,7 @@ pub(super) fn spawn_from_path(
         path_len,
         crate::loader::disk_layout::MAX_CELL_PATH,
     )?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_measurement::classify(trace, &path_str);
     if !path_str.starts_with('/') {
         return Err(SyscallError::InvalidInput);
@@ -730,7 +730,7 @@ pub(super) fn spawn_from_path(
         crate::loader::launch_profile::LaunchRoute::Path,
         profile.child_ceiling,
         api::TaskPriority::Normal as u8,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         *trace,
     ) {
         Ok(request) => request,
@@ -739,14 +739,14 @@ pub(super) fn spawn_from_path(
             return Err(error);
         }
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let request = {
         let mut request = request;
         request.trace = *trace;
         request
     };
     let spawned = crate::loader::spawn_from_path(&path_str, request);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Err(error) = spawned {
         crate::p01_measurement::source_error(*trace, error);
     }
@@ -811,7 +811,7 @@ pub(super) fn spawn_from_elf(
     len: usize,
     path_ptr: usize,
     path_len: usize,
-    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     let elf = snapshot_grant_elf(caller_id, grant_id, len)?;
     let path_str = read_user_string(
@@ -820,7 +820,7 @@ pub(super) fn spawn_from_elf(
         path_len,
         crate::loader::disk_layout::MAX_CELL_PATH,
     )?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_measurement::classify(trace, &path_str);
     if !path_str.starts_with('/') {
         return Err(SyscallError::InvalidInput);
@@ -840,7 +840,7 @@ pub(super) fn spawn_from_elf(
         crate::loader::launch_profile::LaunchRoute::Elf,
         profile.child_ceiling,
         api::TaskPriority::Normal as u8,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         *trace,
     ) {
         Ok(request) => request,
@@ -849,14 +849,14 @@ pub(super) fn spawn_from_elf(
             return Err(error);
         }
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let request = {
         let mut request = request;
         request.trace = *trace;
         request
     };
     let spawned = crate::loader::spawn_gated(elf.bytes(), &path_str, request);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Err(error) = spawned {
         crate::p01_measurement::source_error(*trace, error);
     }
@@ -885,7 +885,7 @@ pub(super) fn spawn_pinned(
     path_len: usize,
     priority: u8,
     core_id: usize,
-    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     if core_id != 0 {
         return Err(SyscallError::NotSupported);
@@ -896,7 +896,7 @@ pub(super) fn spawn_pinned(
         path_len,
         crate::loader::disk_layout::MAX_CELL_PATH,
     )?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_measurement::classify(trace, &path_str);
     if !path_str.starts_with('/') {
         return Err(SyscallError::InvalidInput);
@@ -911,7 +911,7 @@ pub(super) fn spawn_pinned(
         crate::loader::launch_profile::LaunchRoute::Pinned,
         profile.child_ceiling,
         priority,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         *trace,
     ) {
         Ok(request) => request,
@@ -920,14 +920,14 @@ pub(super) fn spawn_pinned(
             return Err(error);
         }
     };
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let request = {
         let mut request = request;
         request.trace = *trace;
         request
     };
     let spawned = crate::loader::spawn_from_path(&path_str, request);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Err(error) = spawned {
         crate::p01_measurement::source_error(*trace, error);
     }
@@ -978,7 +978,7 @@ pub(super) fn spawn_pinned(
 pub(super) fn spawn_from_mem(
     caller_id: usize,
     args_ptr: usize,
-    #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
+    #[cfg(feature = "p01-trace")] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
     if args_ptr == 0 {
         return Err(SyscallError::InvalidInput);
@@ -1007,7 +1007,7 @@ pub(super) fn spawn_from_mem(
         crate::loader::launch_profile::LaunchRoute::Mem,
         profile.child_ceiling,
         api::TaskPriority::Normal as u8,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         *trace,
     ) {
         Ok(request) => request,

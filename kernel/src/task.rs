@@ -257,16 +257,16 @@ pub(crate) fn queue_pending_msg(
     if target.pending_msgs.len() >= max_depth {
         return Err(());
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::LEGACY_PAYLOAD,
     );
     let owned =
         crate::ipc::pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_semantic);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _mailbox = crate::memory::heap::p01_owner::creation(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
@@ -277,9 +277,9 @@ pub(crate) fn queue_pending_msg(
         wire: None,
         enqueued_tick: system_ticks() as u64,
     });
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_mailbox);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     target
         .pending_msgs
         .observe_owner(crate::p01_resources::owner(target));
@@ -305,7 +305,7 @@ pub(crate) fn queue_wire_msg(
         return Err(());
     }
     let sender_tid = message.header.sender_tid;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _mailbox = crate::memory::heap::p01_owner::creation(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
@@ -316,9 +316,9 @@ pub(crate) fn queue_wire_msg(
         wire: Some(message),
         enqueued_tick: system_ticks() as u64,
     });
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     drop(_mailbox);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         let owner = crate::p01_resources::owner(target);
         target.pending_msgs.observe_owner(owner);
@@ -525,15 +525,15 @@ const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 /// Dead tasks whose IOMMU teardown has not yet been hardware-acknowledged.
 /// One entry is retried per scheduler pass to bound teardown latency.
-#[cfg(not(cellos_p01_trace))]
+#[cfg(not(feature = "p01-trace"))]
 static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<usize>> = Spinlock::new(VecDeque::new());
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 struct RetiredDmaCleanup {
     tid: usize,
     owner: Option<crate::p01_measurement::Owner>,
     obligation: Option<crate::p01_resources::Obligation>,
 }
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 static IOMMU_CLEANUP_RETRIES: Spinlock<VecDeque<RetiredDmaCleanup>> =
     Spinlock::new(VecDeque::new());
 /// Prevents duplicate retirement paths from observing an in-progress domain as absent.
@@ -1167,7 +1167,7 @@ pub extern "C" fn vi_context_switch_complete() {
     } else {
         crate::sched::hart_local::ready::current_task_id_for(hart)
     };
-    #[cfg(cellos_g1_cpu)]
+    #[cfg(feature = "g1-cpu-accounting")]
     {
         let scheduler = SCHEDULER.lock();
         let sched = scheduler.as_ref().unwrap_or_else(|| {
@@ -1386,7 +1386,7 @@ pub fn yield_cpu() {
     };
     #[cfg(target_arch = "x86_64")]
     crate::sched::smp::capture_retirement_boundary(crate::sched::hart_local::current_hart_id());
-    #[cfg(cellos_g1_cpu)]
+    #[cfg(feature = "g1-cpu-accounting")]
     {
         let scheduler = SCHEDULER.lock();
         if let Some(sched) = scheduler.as_ref() {
@@ -1445,10 +1445,10 @@ pub fn yield_cpu() {
     };
     let mut waiter_wakes = alloc::vec::Vec::new();
     for reaped_task in reaped {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let p01_owner = crate::p01_resources::owner(&reaped_task.task);
         drop(reaped_task.task);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         crate::p01_resources::dropped(p01_owner);
         waiter_wakes.extend(reaped_task.waiter_wakes);
     }
@@ -1514,7 +1514,7 @@ pub fn yield_cpu() {
             tally.writable_borrows += reap.grants.writable_borrows;
             tally.grants_reclaimed += reap.grants.grants_reclaimed;
             crate::task::syscall::release_vfs_holder_leases(tid);
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if let Some(owner) = crate::p01_resources::owner_for_tid(tid) {
                 crate::task::syscall::p01_retirement_check(owner);
                 crate::memory::pin::p01_retirement_check(owner);
@@ -1534,9 +1534,9 @@ pub fn yield_cpu() {
         // holding SCHEDULER after all remote switch proofs completed. Drop their
         // stacks before exposing the CellId or quota to a new generation.
         let waiter_wakes = core::mem::take(&mut retirement.waiter_wakes);
-        #[cfg(not(cellos_p01_trace))]
+        #[cfg(not(feature = "p01-trace"))]
         drop(retirement.zombies);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         for zombie in retirement.zombies {
             let owner = crate::p01_resources::owner(&zombie);
             drop(zombie);
@@ -1555,7 +1555,7 @@ pub fn yield_cpu() {
             generation: retirement.owner.generation,
         });
         crate::cell::retirement_verdict::close(retirement.owner, tally);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
         {
             crate::p01_resources::checked(owner, 7);
@@ -1569,7 +1569,7 @@ pub fn yield_cpu() {
             .lock()
             .as_mut()
             .is_some_and(|sched| sched.finish_root_retirement(retirement.owner));
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(owner) = crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
         {
             crate::p01_resources::slot_result(owner, owner_slot_released);
@@ -1583,7 +1583,7 @@ pub fn yield_cpu() {
                 retirement.owner.root_tid,
             );
             crate::memory::cell_quota::deregister(types::CellId(retirement.owner.cell_id));
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if let Some(owner) =
                 crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
             {
@@ -1600,7 +1600,7 @@ pub fn yield_cpu() {
                 retirement_selftest::observe_cell_id_release(retirement.owner);
             }
         } else {
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             if let Some(owner) =
                 crate::p01_resources::owner_for_tid(retirement.owner.root_tid as usize)
             {
@@ -1649,9 +1649,9 @@ pub fn yield_cpu() {
 
     // Exit switches stacks without returning through the syscall wrapper.
     // Drain only here, after all retirement/cleanup owner locks are released.
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     crate::p01_measurement::safe_point();
-    #[cfg(cellos_g1_cpu)]
+    #[cfg(feature = "g1-cpu-accounting")]
     crate::sched::cpu_accounting::safe_point();
 
     // AArch64 reaches this point from the boot idle loop with IRQs unmasked,
@@ -1990,9 +1990,9 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
 fn queue_retired_dma_cleanup(tid: usize) {
     // Retirement emits each TID once per funnel. A failed retry moves its one
     // entry from front to back, so requeue stays constant-time.
-    #[cfg(not(cellos_p01_trace))]
+    #[cfg(not(feature = "p01-trace"))]
     IOMMU_CLEANUP_RETRIES.lock().push_back(tid);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     {
         let owner = crate::p01_resources::owner_for_tid(tid);
         let obligation = owner.and_then(|owner| crate::p01_resources::obligation(owner, 5, 0));
@@ -2006,7 +2006,7 @@ fn queue_retired_dma_cleanup(tid: usize) {
 
 fn retry_retired_dma_cleanup() {
     let retry = IOMMU_CLEANUP_RETRIES.lock().pop_front();
-    #[cfg(not(cellos_p01_trace))]
+    #[cfg(not(feature = "p01-trace"))]
     if let Some(tid) = retry {
         if !teardown_dma_authority(tid) {
             queue_retired_dma_cleanup(tid);
@@ -2014,7 +2014,7 @@ fn retry_retired_dma_cleanup() {
             crate::resource_registry::release_mmio_for(tid);
         }
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Some(cleanup) = retry {
         if !teardown_dma_authority(cleanup.tid) {
             if let Some(owner) = cleanup.owner {
@@ -2234,7 +2234,7 @@ pub fn ipc_send_kernel(
         return Err(IpcSendError::Backpressure);
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let heap_owner;
     let header = {
         let guard = SCHEDULER.lock();
@@ -2246,7 +2246,7 @@ pub fn ipc_send_kernel(
             return Err(IpcSendError::Backpressure);
         }
         let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             heap_owner = (sender_cell_id != 0 && sender_generation != 0)
                 .then(|| crate::p01_resources::owner(sched.tasks.get(&caller_id).unwrap()));
@@ -2261,7 +2261,7 @@ pub fn ipc_send_kernel(
     };
     let wire_msg = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, msg)
         .map_err(|_| IpcSendError::Backpressure)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Some(owner) = heap_owner {
         wire_msg.observe_owner(owner, crate::memory::heap::p01_owner::SENDER_WIRE);
     } else {
@@ -2367,7 +2367,7 @@ pub fn ipc_post_nonblock(
             async_op: 0,
         };
         let wire = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, msg)?;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         if let Some(sender) = sched
             .tasks
             .get(&sender_id)
@@ -2436,7 +2436,7 @@ pub fn ipc_recv(
         let sender_id = record.sender_tid;
         let wire = record.wire.as_ref().ok_or(())?;
         let header = wire.header;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(receiver_task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
@@ -2567,7 +2567,7 @@ pub fn ipc_try_recv(
         let sender_id = record.sender_tid;
         let wire = record.wire.as_ref().ok_or(())?;
         let header = wire.header;
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             Some(crate::p01_resources::owner(receiver_task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
@@ -2835,7 +2835,7 @@ pub fn ipc_try_send(
         async_op: 0,
     };
     let wire = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)?;
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Some(sender) = sched
         .tasks
         .get(&caller_id)

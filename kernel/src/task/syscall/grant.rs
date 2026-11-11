@@ -355,7 +355,7 @@ pub(super) fn free_grant_pages(base: usize, n_pages: usize) {
     free_grant_pages_inner(
         base,
         n_pages,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         None,
     );
 }
@@ -364,7 +364,7 @@ pub(super) fn free_released_range(range: crate::memory::pin::ReleasedRange) {
     free_grant_pages_inner(
         range.base,
         range.pages,
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         Some(range),
     );
 }
@@ -1051,7 +1051,7 @@ pub(super) fn shm_register(
     recipient: Option<u64>,
     rights: u32,
 ) {
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
@@ -1270,7 +1270,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 pub(super) fn free_grant_pages_inner(
     base: usize,
     n_pages: usize,
-    #[cfg(cellos_p01_trace)] range: Option<crate::memory::pin::ReleasedRange>,
+    #[cfg(feature = "p01-trace")] range: Option<crate::memory::pin::ReleasedRange>,
 ) {
     use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
@@ -1280,20 +1280,20 @@ pub(super) fn free_grant_pages_inner(
     );
 
     crate::task::stack::unpublish_user_frames(base, n_pages);
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let mut released = false;
     let mut fa = FRAME_ALLOCATOR.lock();
     if let Some(alloc) = fa.as_mut() {
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             released = true;
         }
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
             let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             {
                 released &= alloc.p01_allocated(f);
             }
@@ -1301,7 +1301,7 @@ pub(super) fn free_grant_pages_inner(
         }
     }
     crate::memory::paging::tlb_flush_all();
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     if let Some(range) = range {
         if released {
             crate::p01_retained::retire(range.p01_range);
@@ -1374,7 +1374,7 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
                     *table = Some(BTreeMap::new());
                 }
                 table.as_mut().is_some_and(|grants| {
-                    #[cfg(cellos_p01_trace)]
+                    #[cfg(feature = "p01-trace")]
                     let _semantic = crate::memory::heap::p01_owner::creation(
                         None,
                         crate::memory::heap::p01_owner::GRANT_SHARED,
@@ -2032,7 +2032,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     if table.is_none() {
         *table = Some(BTreeMap::new());
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
@@ -2405,7 +2405,7 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     if table.is_none() {
         *table = Some(BTreeMap::new());
     }
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,

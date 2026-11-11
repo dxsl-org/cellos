@@ -13,7 +13,7 @@ pub struct SpawnRequest {
     /// child may be named by its signed image. False for ELF/Mem bytes, whose
     /// path is advisory.
     pub(crate) kernel_resolved_path: bool,
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     pub(crate) trace: Option<crate::p01_measurement::Attempt>,
 }
 
@@ -28,7 +28,7 @@ impl SpawnRequest {
             inherit_from: 0,
             argv: None,
             kernel_resolved_path: true,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace: None,
         }
     }
@@ -63,7 +63,7 @@ impl SpawnRequest {
             inherit_from: tid,
             argv,
             kernel_resolved_path,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace: None,
         }
     }
@@ -93,7 +93,7 @@ impl SpawnRequest {
             argv,
             // Replacements always load through `spawn_from_path`.
             kernel_resolved_path: true,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             trace: None,
         }
     }

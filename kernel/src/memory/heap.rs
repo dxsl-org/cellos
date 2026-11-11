@@ -11,7 +11,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use linked_list_allocator::LockedHeap;
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 #[path = "heap/p01_owner.rs"]
 pub(crate) mod p01_owner;
 
@@ -23,13 +23,13 @@ pub(crate) mod p01_owner;
 static NULL_FROM_QUOTA: AtomicUsize = AtomicUsize::new(0);
 static NULL_FROM_HEAP: AtomicUsize = AtomicUsize::new(0);
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 static P01_EPOCH: AtomicUsize = AtomicUsize::new(1);
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 static P01_PEAK: AtomicUsize = AtomicUsize::new(0);
 
 // Called only with the existing heap lock held; never calls usage or allocates.
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 fn p01_transition(used: usize) {
     if p01_owner::tracking() {
         let epoch = P01_EPOCH.load(Ordering::Relaxed);
@@ -166,7 +166,7 @@ impl QuotaAlloc {
     unsafe fn alloc_impl(
         &self,
         layout: Layout,
-        #[cfg(cellos_p01_trace)] origin: Option<p01_owner::Provenance>,
+        #[cfg(feature = "p01-trace")] origin: Option<p01_owner::Provenance>,
     ) -> *mut u8 {
         let cell = crate::sched::scheduler::current_cell_id();
         let Some(owner) = crate::memory::cell_quota::charge_owner(cell, layout.size()) else {
@@ -182,9 +182,9 @@ impl QuotaAlloc {
         // A payload too large to carry the tag cannot be backed by the heap
         // either; it takes the inner-heap failure path below.
         let tagged = tagged_layout(layout);
-        #[cfg(not(cellos_p01_trace))]
+        #[cfg(not(feature = "p01-trace"))]
         let ptr = tagged.map_or(core::ptr::null_mut(), |tagged| self.inner.alloc(tagged));
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         let ptr = {
             let mut heap = self.inner.lock();
             let before = heap.used();
@@ -271,12 +271,12 @@ unsafe impl GlobalAlloc for QuotaAlloc {
         let _irq = HeapIrqMask::enter();
         self.alloc_impl(
             layout,
-            #[cfg(cellos_p01_trace)]
+            #[cfg(feature = "p01-trace")]
             None,
         )
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let _irq = HeapIrqMask::enter();
         let ptr = self.alloc_impl(layout, None);
@@ -286,7 +286,7 @@ unsafe impl GlobalAlloc for QuotaAlloc {
         ptr
     }
 
-    #[cfg(cellos_p01_trace)]
+    #[cfg(feature = "p01-trace")]
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         // Match GlobalAlloc's default allocate/copy/free behavior exactly.
         // Only diagnostic provenance differs: it follows the old object rather
@@ -314,9 +314,9 @@ unsafe impl GlobalAlloc for QuotaAlloc {
         crate::memory::cell_quota::refund_owner(owner, layout.size());
         let tagged =
             Layout::from_size_align_unchecked(layout.size() + OWNER_TAG_BYTES, layout.align());
-        #[cfg(not(cellos_p01_trace))]
+        #[cfg(not(feature = "p01-trace"))]
         self.inner.dealloc(ptr, tagged);
-        #[cfg(cellos_p01_trace)]
+        #[cfg(feature = "p01-trace")]
         {
             let mut heap = self.inner.lock();
             let before = heap.used();
@@ -354,7 +354,7 @@ pub fn usage() -> (usize, usize) {
     (heap.used(), heap.free())
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_snapshot() -> (usize, usize, usize, usize) {
     let _irq = HeapIrqMask::enter();
     let heap = ALLOCATOR.inner.lock();
@@ -366,7 +366,7 @@ pub(crate) fn p01_snapshot() -> (usize, usize, usize, usize) {
     )
 }
 
-#[cfg(cellos_p01_trace)]
+#[cfg(feature = "p01-trace")]
 pub(crate) fn p01_reset_peak() {
     let _irq = HeapIrqMask::enter();
     let heap = ALLOCATOR.inner.lock();
