@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Kernel residents, selftests and module layout"
-status: in-progress
+status: complete
 priority: P2
 effort: "7–10d"
 dependencies: [8]
