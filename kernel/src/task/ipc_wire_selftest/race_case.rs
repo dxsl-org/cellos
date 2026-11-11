@@ -4,8 +4,8 @@ use super::{
     cleanup_task, fill_page, read_page, RECEIVER_CELL, RECEIVER_TID, RECEIVER_VA, SENDER_CELL,
     SENDER_TID, SENDER_VA,
 };
+use crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD;
 use crate::memory::address_space::AddressSpace;
-use crate::task::ipc_wire::MAX_IPC_WIRE_PAYLOAD;
 use crate::task::tcb::TaskState;
 
 pub(super) fn run_race_case(sender_space: &AddressSpace, receiver_space: &AddressSpace) -> bool {

@@ -3,10 +3,10 @@
 
 use super::{
     copy_glue::TaskCopyView,
-    ipc_wire,
     tcb::{Task, TaskState},
     SCHEDULER,
 };
+use crate::ipc::ipc_wire;
 use crate::sched::scheduler::Scheduler;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};

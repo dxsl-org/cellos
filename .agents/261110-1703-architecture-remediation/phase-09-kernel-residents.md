@@ -129,3 +129,6 @@ Phases 10 and 14 both build on the new layout.
   - **Path-only re-pin.** The law-1 guard `check-multi-source-wait-law1-digests.sh` pins the scheduler's sweep call as source text. Its path moved from `super::completion_wait::irq_wake_due` to `crate::task::completion_wait::irq_wake_due`, with the same function and arguments. `K_SCHED` follows the file. This is not an ABI delta (S4b approval: "Law 1: no delta").
   - The `cellos_g1_cpu` + `cellos_p01_trace` build was checked locally using a dummy 96-byte manifest.
   - `qemu-tier3-ssh-guest-x86.sh` (manual) keeps its already-stale sha pins.
+- **Hoist 3/4 (`ipc/`).** Moved into `crate::ipc`: `ipc_wire` (and its tests), `pending_mailbox`, `pipe`, `futex` and `cell_session`. `ipc.rs` keeps `task`'s `clippy::result_unit_err` allowance.
+  - **Deviation:** `async_ipc` stays in `task`. Moving it would have meant widening 15 private `task` items to `pub(crate)`: the wait-state publication, source selection, block handoff and wake helpers. It is the task-blocking glue, not an IPC object.
+  - Widened to `pub(crate)` because the moved modules use them: `syscall::{session_launch_request, snapshot_grant_elf}` and `task::ipc_target_is_tombstone`.

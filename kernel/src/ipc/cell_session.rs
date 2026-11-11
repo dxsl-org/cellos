@@ -5,11 +5,9 @@
 //! abort, cancel and commit race through a single canonical owner funnel. The
 //! only bookkeeping that is not allocation-free is *reservation*: the final
 //! `commit_child` consumes capacity promised during `PrepareChild`.
-use super::{
-    child_context,
-    pipe::{self, PipeEnd, PipeHandle},
-};
+use crate::ipc::pipe::{self, PipeEnd, PipeHandle};
 use crate::sched::scheduler::{KernelAllocationContext, Scheduler};
+use crate::task::child_context;
 use alloc::vec::Vec;
 use api::cell_session::{
     ChildRefV1 as Child, ObjectRefV1 as Ref, PrincipalV1 as Principal, Reader, RequestHeaderV1,
@@ -132,7 +130,7 @@ struct Prepared {
     written: usize,
     context: Vec<u8>,
     parsed: Option<child_context::Context>,
-    publication: Option<super::launch::SessionPublication>,
+    publication: Option<crate::task::launch::SessionPublication>,
     state: u32,
     reason: u32,
     exit_code: i32,
@@ -862,7 +860,7 @@ impl State {
     /// left for the next dispatch or tick, so no request or timer tick can be made
     /// to hold SCHEDULER for super-linear time.
     fn maintenance(&mut self, sched: &mut Scheduler) {
-        let now = super::system_ticks() as u64;
+        let now = crate::task::system_ticks() as u64;
         let mut aborts = ABORT_BUDGET;
         for i in 0..self.prepared.len() {
             if aborts == 0 {
@@ -2204,7 +2202,7 @@ impl State {
             (p.preparer, p.operation, p.reference, p.deadline, p.intent)
         };
         self.op_active(parent, operation)?;
-        if super::system_ticks() as u64 >= deadline {
+        if crate::task::system_ticks() as u64 >= deadline {
             self.abort_prepared(sched, pi, true);
             return Err(Status::TimedOut);
         }
@@ -2260,12 +2258,12 @@ impl State {
             .as_ref()
             .map(|p| p.domain_commit(grant_live))
         {
-            Some(super::launch::DomainCommit::Drained) => {
-                super::launch::audit_domain_drain_refusal();
+            Some(crate::task::launch::DomainCommit::Drained) => {
+                crate::task::launch::audit_domain_drain_refusal();
                 return Err(Status::Revoked);
             }
-            Some(super::launch::DomainCommit::LiveGrant) => {
-                super::launch::audit_domain_live_grant_refusal();
+            Some(crate::task::launch::DomainCommit::LiveGrant) => {
+                crate::task::launch::audit_domain_live_grant_refusal();
                 return Err(Status::Denied);
             }
             _ => {}
@@ -2450,7 +2448,7 @@ impl State {
             .map_err(|_| Status::QuotaExceeded)?;
         let charge = Charge::reserve(actor, core::mem::size_of::<Bootstrap>())?;
         let reference = self.mint()?;
-        let deadline = (super::system_ticks() as u64)
+        let deadline = (crate::task::system_ticks() as u64)
             .checked_add(PREPARE_TICKS)
             .ok_or(Status::QuotaExceeded)?;
         let mut streams = [[ZERO; 2]; 4];
@@ -2933,10 +2931,11 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
     let ledgered = mutating(selector, body);
     // ADR-0019 §2.1 live-grant preflight for a domain commit: the grant tables
     // may only be queried before SCHEDULER is taken.
-    let commit_domain_grant_live = selector == 13 && super::launch::domain_grant_records_live();
+    let commit_domain_grant_live =
+        selector == 13 && crate::task::launch::domain_grant_records_live();
     let (principal, operation) = {
         let _kernel = KernelAllocationContext::enter();
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         let Some(sched) = guard.as_mut() else {
             return encode_result(header, Status::Denied, 0, result);
         };
@@ -2997,7 +2996,7 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
     };
     let len = render(header, outcome, result);
     let _kernel = KernelAllocationContext::enter();
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     if let Some(sched) = guard.as_mut() {
         if ledgered {
             sched.cell_session.finish_request(
@@ -3027,7 +3026,7 @@ fn prepare_child(
     body: &[u8],
     out: &mut [u8],
 ) -> Result<usize> {
-    let deadline = (super::system_ticks() as u64)
+    let deadline = (crate::task::system_ticks() as u64)
         .checked_add(PREPARE_TICKS)
         .ok_or(Status::QuotaExceeded)?;
     let mut r = Reader::new(body);
@@ -3049,7 +3048,7 @@ fn prepare_child(
     }
     let path = core::str::from_utf8(path).map_err(|_| Status::Malformed)?;
     {
-        let guard = super::SCHEDULER.lock();
+        let guard = crate::task::SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(Status::Revoked)?;
         sched.cell_session.op_active(principal, operation)?;
         if sched
@@ -3091,33 +3090,32 @@ fn prepare_child(
     } else {
         crate::loader::launch_profile::LaunchRoute::Path
     };
-    let request = super::syscall::session_launch_request(caller, path, launch_route)
+    let request = crate::task::syscall::session_launch_request(caller, path, launch_route)
         .map_err(|_| Status::Denied)?;
     let (prepared, state) = match elf {
         None => request.prepare_session_path(path),
         Some((grant_id, elf_len)) => {
-            let elf =
-                super::syscall::snapshot_grant_elf(caller, grant_id, elf_len).map_err(|error| {
-                    match error {
-                        super::syscall::SyscallError::OutOfMemory => Status::QuotaExceeded,
-                        _ => Status::Malformed,
-                    }
-                })?;
+            let elf = crate::task::syscall::snapshot_grant_elf(caller, grant_id, elf_len).map_err(
+                |error| match error {
+                    crate::task::syscall::SyscallError::OutOfMemory => Status::QuotaExceeded,
+                    _ => Status::Malformed,
+                },
+            )?;
             request.prepare_session_elf(elf.bytes(), path)
         }
     }
     .map_err(|error| refused(caller, path, error))?;
-    if super::system_ticks() as u64 >= deadline {
+    if crate::task::system_ticks() as u64 >= deadline {
         return Err(Status::TimedOut);
     }
     let _kernel = KernelAllocationContext::enter();
     // ADR-0019 §2.1 live-grant preflight for a domain child, before SCHEDULER
     // (grant-table → SCHEDULER lock order), exactly as `publish_prepared` does.
     if state.is_domain {
-        super::launch::refuse_while_domain_grant_live()
+        crate::task::launch::refuse_while_domain_grant_live()
             .map_err(|error| refused(caller, path, error))?;
     }
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(Status::Revoked)?;
     if resolve_actor(sched, caller)? != principal {
         return Err(Status::Revoked);
@@ -3143,15 +3141,19 @@ fn prepare_child(
         .prepared
         .try_reserve(1)
         .map_err(|_| Status::QuotaExceeded)?;
-    let publication =
-        match super::launch::SessionPublication::reserve(sched, prepared, state, launch_route) {
-            Ok(publication) => publication,
-            Err(error) => {
-                // Release SCHEDULER before logging the refusal.
-                drop(guard);
-                return Err(refused(caller, path, error));
-            }
-        };
+    let publication = match crate::task::launch::SessionPublication::reserve(
+        sched,
+        prepared,
+        state,
+        launch_route,
+    ) {
+        Ok(publication) => publication,
+        Err(error) => {
+            // Release SCHEDULER before logging the refusal.
+            drop(guard);
+            return Err(refused(caller, path, error));
+        }
+    };
     let child = Child {
         principal: Principal {
             cell_id: publication.owner.cell_id,
@@ -3207,7 +3209,7 @@ fn stream_io(
     let bytes = if selector == 6 { r.take(count)? } else { &[] };
     r.finish()?;
     loop {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         let sched = guard.as_mut().ok_or(Status::Revoked)?;
         if resolve_actor(sched, caller)? != principal {
             return Err(Status::Revoked);
@@ -3248,13 +3250,13 @@ fn stream_io(
         let wait = if deadline_ns == u64::MAX {
             None
         } else {
-            let now = super::telemetry::monotonic_ns().ok_or(Status::Unsupported)?;
+            let now = crate::task::telemetry::monotonic_ns().ok_or(Status::Unsupported)?;
             if now >= deadline_ns {
                 return Err(Status::TimedOut);
             }
             let ticks = (deadline_ns - now).div_ceil(TICK_NS);
             Some(
-                (super::system_ticks() as u64)
+                (crate::task::system_ticks() as u64)
                     .checked_add(ticks)
                     .and_then(|t| t.checked_add(1))
                     .ok_or(Status::Malformed)?,
@@ -3267,18 +3269,18 @@ fn stream_io(
         }
         let task = sched.tasks.get_mut(&caller).ok_or(Status::Revoked)?;
         task.state = if selector == 5 {
-            super::tcb::TaskState::PipeRead {
+            crate::task::tcb::TaskState::PipeRead {
                 handle: e.handle,
                 deadline: wait,
             }
         } else {
-            super::tcb::TaskState::PipeWrite {
+            crate::task::tcb::TaskState::PipeWrite {
                 handle: e.handle,
                 deadline: wait,
             }
         };
         drop(guard);
-        super::yield_cpu();
+        crate::task::yield_cpu();
     }
 }
 
@@ -3287,7 +3289,7 @@ fn stream_io(
 /// session child, which keeps the unchanged console path. A published child
 /// never falls back to the console, even if its root row is already gone.
 fn stdio_ref(caller: usize, fd: usize) -> Option<Result<(Principal, Ref)>> {
-    let guard = super::SCHEDULER.lock();
+    let guard = crate::task::SCHEDULER.lock();
     let sched = guard.as_ref()?;
     let task = sched.tasks.get(&caller)?;
     let principal = Principal {
@@ -3326,7 +3328,7 @@ pub(crate) fn delivered(caller: usize, request: &[u8]) {
     if !mutating(header.selector, request.get(HEADER_LEN..).unwrap_or(&[])) {
         return;
     }
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let Some(sched) = guard.as_mut() else {
         return;
     };
@@ -3430,7 +3432,7 @@ pub(crate) mod test_hooks {
         let reference = child.prepared_ref();
         let state = &mut sched.cell_session;
         let receipt = state.mint().ok()?;
-        let deadline = (super::super::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
+        let deadline = (crate::task::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
         state.prepared.try_reserve(1).ok()?;
         state.receipts.try_reserve(1).ok()?;
         state.prepared.push(Prepared {
@@ -3690,7 +3692,7 @@ pub(crate) mod test_hooks {
         };
         let reference = child.prepared_ref();
         let issuer = Binding::new(u64::MAX, u64::MAX, u64::MAX);
-        let deadline = (super::super::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
+        let deadline = (crate::task::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
         let state = &mut sched.cell_session;
         state.prepared.try_reserve(1).ok()?;
         state.receipts.try_reserve(1).ok()?;
@@ -3798,7 +3800,7 @@ pub(crate) mod test_hooks {
             root_tid: root,
             publication_generation: 0x5E55_F003,
         };
-        let deadline = (super::super::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
+        let deadline = (crate::task::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
         let state = &mut sched.cell_session;
         state.prepared.try_reserve(1).ok()?;
         state.prepared.push(Prepared {
@@ -3848,7 +3850,7 @@ pub(crate) mod test_hooks {
             root_tid: root,
             publication_generation: 0x5E55_F004,
         };
-        let deadline = (super::super::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
+        let deadline = (crate::task::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
         let state = &mut sched.cell_session;
         state.prepared.try_reserve(1).ok()?;
         state.receipts.try_reserve(1).ok()?;
@@ -3958,7 +3960,7 @@ pub(crate) mod test_hooks {
         context.extend_from_slice(&frontend.to_bytes());
         context.extend_from_slice(&0u64.to_le_bytes());
         let parsed = child_context::validate(&context, operation).ok()?;
-        let deadline = (super::super::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
+        let deadline = (crate::task::system_ticks() as u64).checked_add(PREPARE_TICKS)?;
         let state = &mut sched.cell_session;
         state.prepared.try_reserve(1).ok()?;
         state.prepared.push(Prepared {

@@ -11,8 +11,8 @@ mod copy_case;
 mod race_case;
 mod scatter_case;
 
-use super::ipc_wire::IpcWireMessage;
 use super::Task;
+use crate::ipc::ipc_wire::IpcWireMessage;
 use crate::memory::address_space::{AddressSpace, AddressSpaceBuilder, MappingKind};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::Flags;
@@ -157,7 +157,7 @@ pub fn run_primary(harts: usize) {
 
     // Sanity: wire bound constant stays within the documented maximum.
     let _ = IpcWireMessage::try_new(
-        super::ipc_wire::IpcWireHeader {
+        crate::ipc::ipc_wire::IpcWireHeader {
             sender_tid: 0,
             sender_cell_id: 0,
             sender_generation: 0,

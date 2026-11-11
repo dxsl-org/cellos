@@ -1666,7 +1666,7 @@ rationale = "KernelHarts has no fields, so the static has no mutable storage; it
 review = "kernel/src/sched/quiesce.rs:693; kernel/src/snapshot.rs:serialize_snapshot"
 
 [[global]]
-key = "kernel::task::pipe::PIPES"
+key = "kernel::ipc::pipe::PIPES"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::task::pipe kernel pipe objects; created by cell_session, read/written by syscalls, closed on task exit and deadline sweep"
@@ -1674,18 +1674,18 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "pipe removed and its ring freed (release_pipe) when the last end closes; pipe::on_task_leaves and disown_cell run from exit_task/cell retirement"
 rationale = "Leaf Spinlock under SCHEDULER (order SCHEDULER -> PIPES). exit_task (on_task_leaves) and pick_next's deadline sweep (on_deadline) run inside yield_cpu, so pipes are closed and freed from timer-ISR, user-fault and AP-idle contexts, with allocation attribution forced to the kernel by PipeAllocationContext."
-review = "kernel/src/task/pipe.rs:create; kernel/src/task/pipe.rs:release_pipe; kernel/src/sched/scheduler.rs:1485; kernel/src/sched/scheduler.rs:2105"
+review = "kernel/src/ipc/pipe.rs:create; kernel/src/ipc/pipe.rs:release_pipe; kernel/src/sched/scheduler.rs:1485; kernel/src/sched/scheduler.rs:2105"
 
 [[global]]
-key = "kernel::task::pipe::NEXT_PIPE_ID"
+key = "kernel::ipc::pipe::NEXT_PIPE_ID"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::pipe::next_pipe_id: pipe id source for pipe::create"
+owner = "kernel::ipc::pipe::next_pipe_id: pipe id source for pipe::create"
 contexts = ["normal"]
 seal = "none: mutated for the whole run"
 retirement = "never: ids are not recycled"
 rationale = "Spinlock<usize> gives unique ids across CPUs; only pipe::create (cell_session syscall path) calls it, no timer-IRQ or AP access. saturating_add means ids would repeat at usize::MAX, which is unreachable in practice."
-review = "kernel/src/task/pipe.rs:next_pipe_id; kernel/src/task/cell_session.rs:220"
+review = "kernel/src/ipc/pipe.rs:next_pipe_id; kernel/src/ipc/cell_session.rs:220"
 
 [[global]]
 key = "kernel::sched::hart_local::HART_LOCALS"
@@ -1721,7 +1721,7 @@ rationale = "Every access goes through claims() while the owning hart's ready Sp
 review = "kernel/src/sched/hart_local/ready.rs:claims; kernel/src/sched/hart_local/ready.rs:PublicationReservation::reserve; kernel/src/sched/hart_local/ready.rs:remove_from_all"
 
 [[global]]
-key = "kernel::task::futex::WAITERS"
+key = "kernel::ipc::futex::WAITERS"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::task::futex waiter queues keyed by FutexKey; wait/wake syscalls, deadline sweep and task-exit cleanup"
@@ -1729,7 +1729,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "a waiter is removed on wake, timeout (on_deadline) or exit (on_task_leaves_wait); empty keys are deleted"
 rationale = "Leaf Spinlock taken under SCHEDULER (order SCHEDULER -> WAITERS). on_deadline runs in pick_next's sweep and on_task_leaves_wait in exit_task, both reached from yield_cpu in the timer ISR, user-fault path and AP idle loop, where BTreeMap/VecDeque nodes may be freed."
-review = "kernel/src/task/futex.rs:enqueue; kernel/src/task/futex.rs:on_deadline; kernel/src/task/futex.rs:on_task_leaves_wait; kernel/src/sched/scheduler.rs:1474"
+review = "kernel/src/ipc/futex.rs:enqueue; kernel/src/ipc/futex.rs:on_deadline; kernel/src/ipc/futex.rs:on_task_leaves_wait; kernel/src/sched/scheduler.rs:1474"
 
 [[global]]
 key = "kernel::task::completion::WAKES_PENDING"

@@ -1426,7 +1426,7 @@ pub(super) fn free_released_grant_lease_frames(
 /// (`SpawnFromElf` and session route 2). Admission must never read the grant
 /// itself: the caller's other threads and grant peers can rewrite it between
 /// signature verification and segment load.
-pub(in crate::task) fn snapshot_grant_elf(
+pub(crate) fn snapshot_grant_elf(
     caller: usize,
     grant_id: usize,
     len: usize,

@@ -308,7 +308,7 @@ pub(crate) fn commit_hotswap_barrier(
     target_tid: usize,
     service_id: u16,
 ) -> ViResult<()> {
-    use crate::task::pending_mailbox::{PendingMsg, PendingMsgData};
+    use crate::ipc::pending_mailbox::{PendingMsg, PendingMsgData};
     use crate::task::tcb::{TaskState, HOTSWAP_MSG_QUEUE_DEPTH};
 
     let mut scheduler = crate::task::SCHEDULER.lock();

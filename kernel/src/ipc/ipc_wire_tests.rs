@@ -1,6 +1,6 @@
 //! Unit tests for bounded copied IPC wire message.
 
-use super::ipc_wire::*;
+use crate::ipc::ipc_wire::*;
 
 #[test]
 fn wire_message_bounds() {
@@ -38,10 +38,10 @@ fn wire_message_bounds() {
 // ---- OSD-3: a blocking send never targets a tombstone ---------------------
 
 mod tombstone_target {
-    use super::super::tcb::{Task, TaskState};
-    use super::super::{ipc_send_kernel, ipc_target_is_tombstone, IpcSendError, SCHEDULER};
     use crate::sched::scheduler::Scheduler;
     use crate::sync::SpinlockGuard;
+    use crate::task::tcb::{Task, TaskState};
+    use crate::task::{ipc_send_kernel, ipc_target_is_tombstone, IpcSendError, SCHEDULER};
     use types::CellId;
 
     const CALLER: usize = 52_001;

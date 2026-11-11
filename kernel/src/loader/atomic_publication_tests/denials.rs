@@ -442,12 +442,12 @@ fn session_header_contract() -> bool {
     request[4..6].copy_from_slice(&13u16.to_le_bytes());
     request[8..12].copy_from_slice(&(HEADER_LEN as u32).to_le_bytes());
     let mut result = [0u8; 64];
-    let len = crate::task::cell_session::dispatch(usize::MAX, &request, &mut result);
+    let len = crate::ipc::cell_session::dispatch(usize::MAX, &request, &mut result);
     let zero_id = len == HEADER_LEN
         && ResultHeaderV1::decode(&result[..len])
             .is_ok_and(|h| h.status == Status::Malformed && h.request_id == 0 && h.selector == 13);
     request[16..24].copy_from_slice(&7u64.to_le_bytes());
-    let len = crate::task::cell_session::dispatch(usize::MAX, &request, &mut result);
+    let len = crate::ipc::cell_session::dispatch(usize::MAX, &request, &mut result);
     let denied = len == HEADER_LEN
         && ResultHeaderV1::decode(&result[..len])
             .is_ok_and(|h| h.status == Status::Denied && h.request_id == 7 && h.selector == 13);
@@ -469,9 +469,9 @@ fn session_call(
     request.extend_from_slice(&id.to_le_bytes());
     request.extend_from_slice(body);
     let mut result = [0u8; 1536];
-    let len = crate::task::cell_session::dispatch(tid, &request, &mut result);
+    let len = crate::ipc::cell_session::dispatch(tid, &request, &mut result);
     // Mirror the syscall layer: the reply was copied out, so it is observed.
-    crate::task::cell_session::delivered(tid, &request);
+    crate::ipc::cell_session::delivered(tid, &request);
     match api::cell_session::ResultHeaderV1::decode(&result[..len]) {
         Ok(header) => (
             header.status,
@@ -589,7 +589,7 @@ fn session_owner_contract() -> bool {
     for (tid, cell) in [(OWNER_TID, cells[0]), (FOREIGN_TID, cells[1])] {
         remove(tid);
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            crate::task::cell_session::retired(
+            crate::ipc::cell_session::retired(
                 sched,
                 api::cell_owner::CellOwner::new(cell, GENERATION, tid as u64),
             );
@@ -628,7 +628,7 @@ fn retire_session_cells(tids: [usize; 2], cells: [u64; 2], generation: u64) {
     for (tid, cell) in tids.into_iter().zip(cells) {
         crate::task::thread_cap_selftest::remove(tid);
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            crate::task::cell_session::retired(
+            crate::ipc::cell_session::retired(
                 sched,
                 api::cell_owner::CellOwner::new(cell, generation, tid as u64),
             );
@@ -655,7 +655,7 @@ fn session_ledger_contract() -> bool {
             .lock()
             .as_ref()
             .map_or(usize::MAX, |sched| {
-                crate::task::cell_session::test_hooks::ledgers(sched, actor)
+                crate::ipc::cell_session::test_hooks::ledgers(sched, actor)
             })
     };
     let owner = Some((cells[0], GENERATION));
@@ -717,7 +717,7 @@ fn session_ledger_contract() -> bool {
 /// stale state-0 receipt would otherwise survive a running child); binding the
 /// same receipt moves the refusal on to the next, unrelated precondition.
 fn session_unbound_receipt_contract() -> bool {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_005;
     const OTHER_TID: usize = 92_006;
@@ -761,7 +761,7 @@ fn session_unbound_receipt_contract() -> bool {
 /// another child's, or another frontend's receipt is `InvalidChild`, and
 /// `BindOwnerReceipt` refuses another child's receipt outright.
 fn session_frontend_receipt_contract() -> bool {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     use api::service_binding::ServiceBinding;
     const OWNER_TID: usize = 92_017;
@@ -858,7 +858,7 @@ fn stage_operation(
     generation: u64,
     parent: api::cell_session::ObjectRefV1,
 ) -> Option<api::cell_session::ObjectRefV1> {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     let (status, bytes) = hooks::exec(sched, cell, generation, 1, &parent.to_bytes());
     if status != api::cell_session::Status::Ok {
         return None;
@@ -984,7 +984,7 @@ fn ready_rollback_fifo_contract() -> bool {
 /// consumer-loss cascade across a long producer chain reaches the first stage,
 /// an unrelated operation survives, and cancelling again is a no-op.
 fn session_cancel_contract() -> bool {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_011;
     const WORKER_TID: usize = 92_012;
@@ -1084,7 +1084,7 @@ fn session_cancel_contract() -> bool {
 /// cancels only the committed child writing to it: the controller's own holders,
 /// the other session of the same bootstrap operation and its child survive.
 fn session_close_scope_contract() -> bool {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_007;
     const CHILD_TID: usize = 92_008;
@@ -1145,7 +1145,7 @@ fn session_close_scope_contract() -> bool {
 /// even while another outcome of the same operation is still outstanding; the
 /// record an outstanding outcome names stays resolvable so its replay is exact.
 fn session_reclaim_contract() -> bool {
-    use crate::task::cell_session::test_hooks as hooks;
+    use crate::ipc::cell_session::test_hooks as hooks;
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_009;
     const PEER_TID: usize = 92_010;
@@ -1206,7 +1206,7 @@ fn session_reclaim_contract() -> bool {
 /// child is terminal the dead issuer's receipt is drained instead of pinning
 /// the shared receipt table.
 fn session_issuer_replacement_contract() -> bool {
-    use crate::task::cell_session::{self, test_hooks as hooks};
+    use crate::ipc::cell_session::{self, test_hooks as hooks};
     use api::cell_session::{ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_013;
     const CHILD_TID: usize = 92_014;
@@ -1277,7 +1277,7 @@ fn session_issuer_replacement_contract() -> bool {
 /// blocks `CloseOperation` once terminal and is released by it. A child that
 /// carried only a VFS cwd receipt keeps its record after the receipt is removed.
 fn session_query_child_contract() -> bool {
-    use crate::task::cell_session::{self, test_hooks as hooks};
+    use crate::ipc::cell_session::{self, test_hooks as hooks};
     use api::cell_session::{ChildRefV1, ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_015;
     const FOREIGN_TID: usize = 92_016;

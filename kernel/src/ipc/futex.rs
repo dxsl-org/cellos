@@ -115,15 +115,15 @@ fn take_waiters(key: FutexKey, count: usize, out: &mut VecDeque<usize>) {
 /// view. Null, kernel, unmapped, and peer-domain addresses fail here and become the
 /// ABI's recoverable error — the kernel never dereferences the raw pointer.
 pub(crate) fn read_word(
-    view: &super::copy_glue::TaskCopyView,
+    view: &crate::task::copy_glue::TaskCopyView,
     addr: VAddr,
-) -> Result<u32, super::syscall::SyscallError> {
+) -> Result<u32, crate::task::syscall::SyscallError> {
     if addr == 0 || !addr.is_multiple_of(core::mem::align_of::<u32>()) {
-        return Err(super::syscall::SyscallError::InvalidInput);
+        return Err(crate::task::syscall::SyscallError::InvalidInput);
     }
     let mut bytes = [0u8; 4];
     view.read_into(addr, &mut bytes)
-        .map_err(|_| super::syscall::SyscallError::InvalidInput)?;
+        .map_err(|_| crate::task::syscall::SyscallError::InvalidInput)?;
     Ok(u32::from_ne_bytes(bytes))
 }
 
@@ -136,14 +136,14 @@ pub(crate) fn wait(
     addr: VAddr,
     expected: u32,
     timeout_ticks: u64,
-) -> Result<usize, super::syscall::SyscallError> {
+) -> Result<usize, crate::task::syscall::SyscallError> {
     let key = key_for(addr);
 
     // The copy view is taken *before* `SCHEDULER`: building it locks the scheduler
     // (it snapshots the caller's task), so taking it under the lock would
     // self-deadlock. The view is a plain descriptor; the copy itself is lock-free
     // and validated per call, so using it under the lock is safe.
-    let view = super::syscall::caller_copy_view_for(caller_id)?;
+    let view = crate::task::syscall::caller_copy_view_for(caller_id)?;
 
     // First check, outside the lock: the common case is "the value already moved",
     // and it needs no queue traffic at all.
@@ -154,35 +154,35 @@ pub(crate) fn wait(
     let deadline = if timeout_ticks == 0 {
         None
     } else {
-        Some((super::system_ticks() as u64).saturating_add(timeout_ticks))
+        Some((crate::task::system_ticks() as u64).saturating_add(timeout_ticks))
     };
 
     // Decide and park under one lock: the word is re-read here, so a wake that
     // already ran (it must take this same lock to select waiters) is observed
     // instead of being lost.
-    let mut scheduler = super::SCHEDULER.lock();
+    let mut scheduler = crate::task::SCHEDULER.lock();
     let sched = scheduler
         .as_mut()
-        .ok_or(super::syscall::SyscallError::Unknown)?;
+        .ok_or(crate::task::syscall::SyscallError::Unknown)?;
     if read_word(&view, addr)? != expected {
         return Ok(OUTCOME_VALUE_MISMATCH);
     }
     match sched.tasks.get_mut(&caller_id) {
         Some(task) => {
             enqueue(key, caller_id);
-            task.state = super::tcb::TaskState::FutexWait { key, deadline };
+            task.state = crate::task::tcb::TaskState::FutexWait { key, deadline };
             // A waker writes the outcome into this slot before pushing the task to
             // a run queue; the handler reads it back after the park.
             task.trap_frame.regs[10] = OUTCOME_WOKEN as _;
         }
-        None => return Err(super::syscall::SyscallError::PermissionDenied),
+        None => return Err(crate::task::syscall::SyscallError::PermissionDenied),
     }
     drop(scheduler);
 
-    super::yield_cpu();
+    crate::task::yield_cpu();
 
     // Resumed: the waker or the deadline sweep published the outcome.
-    let outcome = super::SCHEDULER
+    let outcome = crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
@@ -198,14 +198,14 @@ pub(crate) fn wake(
     caller_id: usize,
     addr: VAddr,
     count: usize,
-) -> Result<usize, super::syscall::SyscallError> {
+) -> Result<usize, crate::task::syscall::SyscallError> {
     let key = key_for(addr);
-    let mut scheduler = super::SCHEDULER.lock();
+    let mut scheduler = crate::task::SCHEDULER.lock();
     let sched = scheduler
         .as_mut()
-        .ok_or(super::syscall::SyscallError::Unknown)?;
+        .ok_or(crate::task::syscall::SyscallError::Unknown)?;
     if !sched.tasks.contains_key(&caller_id) {
-        return Err(super::syscall::SyscallError::PermissionDenied);
+        return Err(crate::task::syscall::SyscallError::PermissionDenied);
     }
 
     let mut candidates = VecDeque::new();
@@ -216,8 +216,9 @@ pub(crate) fn wake(
         if let Some(task) = sched.tasks.get_mut(&tid) {
             // Only a task still parked on this key may be woken: a timeout or an
             // exit that raced this wake already removed it from the wait state.
-            if matches!(task.state, super::tcb::TaskState::FutexWait { key: k, .. } if k == key) {
-                task.state = super::tcb::TaskState::Ready;
+            if matches!(task.state, crate::task::tcb::TaskState::FutexWait { key: k, .. } if k == key)
+            {
+                task.state = crate::task::tcb::TaskState::Ready;
                 task.trap_frame.regs[10] = OUTCOME_WOKEN as _;
                 sched.push_ready(tid);
                 woken += 1;
@@ -292,7 +293,7 @@ pub(crate) fn run_selftest() {
 /// Deadline sweep arm: a parked waiter whose deadline elapsed.
 ///
 /// Called from the scheduler's global sweep, which already holds `SCHEDULER`.
-pub(crate) fn on_deadline(task: &mut super::tcb::Task, tid: usize, key: FutexKey) {
+pub(crate) fn on_deadline(task: &mut crate::task::tcb::Task, tid: usize, key: FutexKey) {
     remove_waiter(key, tid);
     task.trap_frame.regs[10] = OUTCOME_TIMED_OUT as _;
 }

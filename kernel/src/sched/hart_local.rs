@@ -682,7 +682,7 @@ pub(crate) fn current_domain() -> (u64, u64) {
 }
 
 /// Without a private-root backend every task shares the SAS root, so a futex key
-/// carries the documented SAS identity — `space = 0` (see `task::futex::FutexKey`)
+/// carries the documented SAS identity — `space = 0` (see `crate::ipc::futex::FutexKey`)
 /// — and no domain generation. The off-feature build previously failed to compile
 /// here because the caller is ungated.
 #[cfg(not(all(

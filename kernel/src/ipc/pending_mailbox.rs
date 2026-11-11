@@ -105,7 +105,7 @@ impl Drop for PendingMsgData {
 pub struct PendingMsg {
     pub sender_tid: usize,
     pub data: PendingMsgData,
-    pub wire: Option<super::ipc_wire::IpcWireMessage>,
+    pub wire: Option<crate::ipc::ipc_wire::IpcWireMessage>,
     pub enqueued_tick: u64,
 }
 
@@ -119,7 +119,7 @@ impl PendingMsg {
     }
 
     /// Scalar sender identity carried by the wire header, if published via IPC.
-    pub fn wire_header(&self) -> Option<super::ipc_wire::IpcWireHeader> {
+    pub fn wire_header(&self) -> Option<crate::ipc::ipc_wire::IpcWireHeader> {
         self.wire.as_ref().map(|message| message.header)
     }
 }

@@ -4,7 +4,6 @@
 #![allow(clippy::result_unit_err)]
 
 pub mod cap;
-pub(crate) mod cell_session;
 pub(crate) mod child_context;
 pub mod completion;
 #[cfg(not(cellos_posture = "release"))]
@@ -36,8 +35,6 @@ pub(crate) mod domain_grant_gate;
 mod elf_prepare;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod fstat_selftest;
-/// Futex wait queues — wait-on-address for cell threads (ADR-0018 §2.1).
-pub(crate) mod futex;
 /// Phase-01 containment witness for domain-backed zero-copy grants, and the
 /// phase-03 capability witness on every architecture whose lifecycle is open.
 #[cfg(all(
@@ -57,8 +54,6 @@ pub mod mmio_revoke_selftest;
 pub mod net_rx_selftest;
 #[cfg(not(cellos_posture = "release"))]
 pub mod p_trust_selftest;
-/// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
-pub(crate) mod pipe;
 /// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
 #[cfg(all(
     feature = "native-domains",
@@ -86,7 +81,6 @@ pub mod launch;
 pub use launch::{
     publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState,
 };
-pub mod ipc_wire;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
@@ -94,8 +88,6 @@ pub mod ipc_wire;
 ))]
 #[cfg(not(cellos_posture = "release"))]
 pub mod ipc_wire_selftest;
-#[cfg(test)]
-mod ipc_wire_tests;
 pub use tcb::Task;
 pub mod async_ipc;
 #[cfg(not(cellos_posture = "release"))]
@@ -116,7 +108,6 @@ pub mod ipc_pending_selftest;
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod path_selftest;
-pub mod pending_mailbox;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod retirement_selftest;
 pub mod stack;
@@ -269,7 +260,8 @@ pub(crate) fn queue_pending_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::LEGACY_PAYLOAD,
     );
-    let owned = pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
+    let owned =
+        crate::ipc::pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
     #[cfg(cellos_p01_trace)]
     drop(_semantic);
     #[cfg(cellos_p01_trace)]
@@ -304,7 +296,7 @@ pub(crate) fn queue_pending_msg(
 /// payload through `PendingMsg::payload()` which routes to `wire.as_slice()`.
 pub(crate) fn queue_wire_msg(
     target: &mut Task,
-    message: ipc_wire::IpcWireMessage,
+    message: crate::ipc::ipc_wire::IpcWireMessage,
     max_depth: usize,
 ) -> core::result::Result<(), ()> {
     if target.pending_msgs.len() >= max_depth {
@@ -318,7 +310,7 @@ pub(crate) fn queue_wire_msg(
     );
     let result = target.pending_msgs.try_push(tcb::PendingMsg {
         sender_tid,
-        data: pending_mailbox::PendingMsgData::empty(),
+        data: crate::ipc::pending_mailbox::PendingMsgData::empty(),
         wire: Some(message),
         enqueued_tick: system_ticks() as u64,
     });
@@ -400,7 +392,7 @@ pub enum IpcSendError {
 /// remote contexts see a terminal state, but never a receiver. `exit_task`
 /// sweeps `Sending` senders once at exit, so a send that lands on a tombstone
 /// afterwards would park its sender forever.
-fn ipc_target_is_tombstone(task: &Task) -> bool {
+pub(crate) fn ipc_target_is_tombstone(task: &Task) -> bool {
     matches!(task.state, TaskState::Retiring | TaskState::Terminated)
 }
 
@@ -2282,7 +2274,7 @@ pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()
 
 pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
     if fd == 0 {
-        if let Some(count) = cell_session::stdio_read(current_task_id(), buf) {
+        if let Some(count) = crate::ipc::cell_session::stdio_read(current_task_id(), buf) {
             return count;
         }
         // Stdin (Keyboard)
@@ -2318,7 +2310,7 @@ pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
 
 pub fn file_write(fd: usize, buf: &[u8]) -> usize {
     if fd == 1 || fd == 2 {
-        if let Some(count) = cell_session::stdio_write(current_task_id(), fd, buf) {
+        if let Some(count) = crate::ipc::cell_session::stdio_write(current_task_id(), fd, buf) {
             return count;
         }
         // Stdout/Stderr
@@ -2521,7 +2513,7 @@ pub fn ipc_send(
     msg_ptr: VAddr,
     msg_len: usize,
 ) -> core::result::Result<usize, IpcSendError> {
-    if msg_len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+    if msg_len > crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         return Err(IpcSendError::Backpressure);
     }
 
@@ -2561,7 +2553,7 @@ pub fn ipc_send_kernel(
     target_id: usize,
     msg: &[u8],
 ) -> core::result::Result<usize, IpcSendError> {
-    if msg.len() > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+    if msg.len() > crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         return Err(IpcSendError::Backpressure);
     }
 
@@ -2582,7 +2574,7 @@ pub fn ipc_send_kernel(
             heap_owner = (sender_cell_id != 0 && sender_generation != 0)
                 .then(|| crate::p01_resources::owner(sched.tasks.get(&caller_id).unwrap()));
         }
-        ipc_wire::IpcWireHeader {
+        crate::ipc::ipc_wire::IpcWireHeader {
             sender_tid: caller_id,
             sender_cell_id,
             sender_generation,
@@ -2590,8 +2582,8 @@ pub fn ipc_send_kernel(
             async_op: 0,
         }
     };
-    let wire_msg =
-        ipc_wire::IpcWireMessage::try_new(header, msg).map_err(|_| IpcSendError::Backpressure)?;
+    let wire_msg = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, msg)
+        .map_err(|_| IpcSendError::Backpressure)?;
     #[cfg(cellos_p01_trace)]
     if let Some(owner) = heap_owner {
         wire_msg.observe_owner(owner, crate::memory::heap::p01_owner::SENDER_WIRE);
@@ -2677,7 +2669,7 @@ pub fn ipc_post_nonblock(
         if paused_target_rejects(sched, sender_id, target_id) {
             return Err(());
         }
-        if msg.len() > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+        if msg.len() > crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
 
@@ -2690,14 +2682,14 @@ pub fn ipc_post_nonblock(
             .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
 
         let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
-        let header = ipc_wire::IpcWireHeader {
+        let header = crate::ipc::ipc_wire::IpcWireHeader {
             sender_tid: sender_id,
             sender_cell_id,
             sender_generation,
             delivery_id: next_delivery_id(),
             async_op: 0,
         };
-        let wire = ipc_wire::IpcWireMessage::try_new(header, msg)?;
+        let wire = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, msg)?;
         #[cfg(cellos_p01_trace)]
         if let Some(sender) = sched
             .tasks
@@ -2948,7 +2940,7 @@ pub(crate) fn wake_sender_token(
     sched: &mut Scheduler,
     sender_id: usize,
     target_id: usize,
-    header: ipc_wire::IpcWireHeader,
+    header: crate::ipc::ipc_wire::IpcWireHeader,
 ) {
     let Some(sender_task) = sched.tasks.get(&sender_id) else {
         return;
@@ -3066,7 +3058,7 @@ pub fn ipc_try_send(
             TrySendAction::Reject("target-missing", "gone")
         } else if paused_target_rejects(sched, caller_id, target_id) {
             TrySendAction::Reject("paused", "paused")
-        } else if msg_len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
+        } else if msg_len > crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD {
             TrySendAction::Reject("payload-too-big", "n/a")
         } else {
             let target_ready = sched
@@ -3158,14 +3150,14 @@ pub fn ipc_try_send(
         }
     }
     let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
-    let header = ipc_wire::IpcWireHeader {
+    let header = crate::ipc::ipc_wire::IpcWireHeader {
         sender_tid: caller_id,
         sender_cell_id,
         sender_generation,
         delivery_id: next_delivery_id(),
         async_op: 0,
     };
-    let wire = ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)?;
+    let wire = crate::ipc::ipc_wire::IpcWireMessage::try_new(header, &msg_bytes)?;
     #[cfg(cellos_p01_trace)]
     if let Some(sender) = sched
         .tasks

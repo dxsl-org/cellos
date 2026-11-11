@@ -133,7 +133,7 @@ pub(in crate::task) enum ResumeSnapshot {
     /// (wire) or `sender_tid` (inline) — whichever is `Some`/applicable.
     Message {
         sender_tid: usize,
-        wire_header: Option<crate::task::ipc_wire::IpcWireHeader>,
+        wire_header: Option<crate::ipc::ipc_wire::IpcWireHeader>,
         delivery_id: Option<u64>,
         sender_cell_id: u64,
         sender_generation: u64,
@@ -347,7 +347,7 @@ pub(super) fn authorize_launch_edge(
     Ok(profile)
 }
 
-pub(in crate::task) fn session_launch_request(
+pub(crate) fn session_launch_request(
     caller: usize,
     path: &str,
     route: crate::loader::launch_profile::LaunchRoute,
@@ -462,7 +462,7 @@ pub(super) fn cell_session_v1(
     let header = api::cell_session::RequestHeaderV1::decode(&request[..request_len]);
     let mut result = [0u8; 1536];
     if let Ok(header) = header {
-        let required = crate::task::cell_session::required_result(
+        let required = crate::ipc::cell_session::required_result(
             header.selector,
             &request[api::cell_session::HEADER_LEN..request_len],
         );
@@ -480,11 +480,11 @@ pub(super) fn cell_session_v1(
             return Ok(0);
         }
     }
-    let len = crate::task::cell_session::dispatch(caller_id, &request[..request_len], &mut result);
+    let len = crate::ipc::cell_session::dispatch(caller_id, &request[..request_len], &mut result);
     view.write_bytes(result_ptr, &result[..len])
         .map_err(|_| SyscallError::InvalidInput)?;
     // Only a reply that reached the caller may be acknowledged.
-    crate::task::cell_session::delivered(caller_id, &request[..request_len]);
+    crate::ipc::cell_session::delivered(caller_id, &request[..request_len]);
     Ok(0)
 }
 

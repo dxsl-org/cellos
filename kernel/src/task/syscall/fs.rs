@@ -213,7 +213,7 @@ pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> 
         .and_then(|sched| sched.tasks.get(&caller_id))
         .map(|task| task.cell_id.0 as usize)
         .ok_or(SyscallError::PermissionDenied)?;
-    let (read_handle, write_handle) = crate::task::pipe::create(capacity, owner_cell)?;
+    let (read_handle, write_handle) = crate::ipc::pipe::create(capacity, owner_cell)?;
     let mut out = [0u8; 16];
     let mut offset = 0usize;
     for word in [read_handle.to_raw(), write_handle.to_raw()] {
@@ -222,8 +222,8 @@ pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> 
         offset += bytes.len();
     }
     if let Err(error) = write_user_slice(caller_id, out_ptr, &out[..offset], 64) {
-        crate::task::pipe::close_end(read_handle, caller_id);
-        crate::task::pipe::close_end(write_handle, caller_id);
+        crate::ipc::pipe::close_end(read_handle, caller_id);
+        crate::ipc::pipe::close_end(write_handle, caller_id);
         return Err(error);
     }
     let installed = crate::task::SCHEDULER
@@ -241,8 +241,8 @@ pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> 
         })
         .is_some();
     if !installed {
-        crate::task::pipe::close_end(read_handle, caller_id);
-        crate::task::pipe::close_end(write_handle, caller_id);
+        crate::ipc::pipe::close_end(read_handle, caller_id);
+        crate::ipc::pipe::close_end(write_handle, caller_id);
         return Err(SyscallError::PermissionDenied);
     }
     Ok(0)
@@ -257,10 +257,10 @@ pub(super) fn pipe_read(
     timeout_ticks: u64,
 ) -> SyscallResult {
     const CHUNK: usize = 512;
-    let Some(handle) = crate::task::pipe::PipeHandle::from_raw(handle) else {
+    let Some(handle) = crate::ipc::pipe::PipeHandle::from_raw(handle) else {
         return Err(SyscallError::InvalidInput);
     };
-    if handle.end != crate::task::pipe::PipeEnd::Read || !caller_owns_pipe(caller_id, handle) {
+    if handle.end != crate::ipc::pipe::PipeEnd::Read || !caller_owns_pipe(caller_id, handle) {
         audit_syscall_denied(caller_id, handle.to_raw() as u32);
         return Err(SyscallError::PermissionDenied);
     }
@@ -275,14 +275,14 @@ pub(super) fn pipe_read(
     let count = len.min(CHUNK);
     let mut scratch = [0u8; CHUNK];
     loop {
-        match crate::task::pipe::try_read(handle, &mut scratch[..count], caller_id) {
-            Some(crate::task::pipe::ReadOutcome::Read(read)) => {
+        match crate::ipc::pipe::try_read(handle, &mut scratch[..count], caller_id) {
+            Some(crate::ipc::pipe::ReadOutcome::Read(read)) => {
                 write_user_slice(caller_id, buf_ptr, &scratch[..read], MAX_USER_BUF)?;
                 return Ok(read);
             }
             // EOF: the ring is empty and no writer end remains.
-            Some(crate::task::pipe::ReadOutcome::Eof) => return Ok(0),
-            Some(crate::task::pipe::ReadOutcome::Empty) => {
+            Some(crate::ipc::pipe::ReadOutcome::Eof) => return Ok(0),
+            Some(crate::ipc::pipe::ReadOutcome::Empty) => {
                 if deadline.is_some_and(|d| crate::task::system_ticks() as u64 >= d) {
                     return Ok(0);
                 }
@@ -293,7 +293,7 @@ pub(super) fn pipe_read(
                 if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
-                            crate::task::pipe::park_reader(handle, caller_id);
+                            crate::ipc::pipe::park_reader(handle, caller_id);
                             task.state = crate::task::tcb::TaskState::PipeRead { handle, deadline };
                         }
                         None => return Err(SyscallError::PermissionDenied),
@@ -315,10 +315,10 @@ pub(super) fn pipe_write(
     timeout_ticks: u64,
 ) -> SyscallResult {
     const CHUNK: usize = 512;
-    let Some(handle) = crate::task::pipe::PipeHandle::from_raw(handle) else {
+    let Some(handle) = crate::ipc::pipe::PipeHandle::from_raw(handle) else {
         return Err(SyscallError::InvalidInput);
     };
-    if handle.end != crate::task::pipe::PipeEnd::Write || !caller_owns_pipe(caller_id, handle) {
+    if handle.end != crate::ipc::pipe::PipeEnd::Write || !caller_owns_pipe(caller_id, handle) {
         audit_syscall_denied(caller_id, handle.to_raw() as u32);
         return Err(SyscallError::PermissionDenied);
     }
@@ -330,7 +330,7 @@ pub(super) fn pipe_write(
                 task.pipe_handles.remove(&handle);
             }
         }
-        crate::task::pipe::close_end(handle, caller_id);
+        crate::ipc::pipe::close_end(handle, caller_id);
         return Ok(0);
     }
     let deadline = if timeout_ticks == 0 {
@@ -346,20 +346,20 @@ pub(super) fn pipe_write(
             .map_err(|_| SyscallError::InvalidInput)?;
     }
     loop {
-        match crate::task::pipe::try_write(handle, &scratch[..count], caller_id) {
-            Some(crate::task::pipe::WriteOutcome::Wrote(written)) => return Ok(written),
+        match crate::ipc::pipe::try_write(handle, &scratch[..count], caller_id) {
+            Some(crate::ipc::pipe::WriteOutcome::Wrote(written)) => return Ok(written),
             // No reader end remains: the stream is broken, not full.
-            Some(crate::task::pipe::WriteOutcome::NoReader) => {
+            Some(crate::ipc::pipe::WriteOutcome::NoReader) => {
                 return Err(SyscallError::BrokenPipe);
             }
-            Some(crate::task::pipe::WriteOutcome::Full) => {
+            Some(crate::ipc::pipe::WriteOutcome::Full) => {
                 if deadline.is_some_and(|d| crate::task::system_ticks() as u64 >= d) {
                     return Ok(0);
                 }
                 if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
-                            crate::task::pipe::park_writer(handle, caller_id);
+                            crate::ipc::pipe::park_writer(handle, caller_id);
                             task.state =
                                 crate::task::tcb::TaskState::PipeWrite { handle, deadline };
                         }
@@ -375,7 +375,7 @@ pub(super) fn pipe_write(
 
 /// Handler for `Syscall::PipeClose` (extracted from the dispatcher).
 pub(super) fn pipe_close(caller_id: usize, handle: usize) -> SyscallResult {
-    let Some(handle) = crate::task::pipe::PipeHandle::from_raw(handle) else {
+    let Some(handle) = crate::ipc::pipe::PipeHandle::from_raw(handle) else {
         return Err(SyscallError::InvalidInput);
     };
     let owned = crate::task::SCHEDULER
@@ -388,13 +388,13 @@ pub(super) fn pipe_close(caller_id: usize, handle: usize) -> SyscallResult {
         audit_syscall_denied(caller_id, handle.to_raw() as u32);
         return Err(SyscallError::PermissionDenied);
     }
-    crate::task::pipe::close_end(handle, caller_id);
+    crate::ipc::pipe::close_end(handle, caller_id);
     Ok(0)
 }
 
 /// Handler for `Syscall::PipeShare` (extracted from the dispatcher).
 pub(super) fn pipe_share(caller_id: usize, handle: usize, target_tid: usize) -> SyscallResult {
-    let Some(handle) = crate::task::pipe::PipeHandle::from_raw(handle) else {
+    let Some(handle) = crate::ipc::pipe::PipeHandle::from_raw(handle) else {
         return Err(SyscallError::InvalidInput);
     };
     // Owner-only: a task cannot hand out an endpoint it does not hold. That
@@ -427,7 +427,7 @@ pub(super) fn pipe_share(caller_id: usize, handle: usize, target_tid: usize) -> 
     if already_granted {
         return Ok(0);
     }
-    if !crate::task::pipe::duplicate_end(handle) {
+    if !crate::ipc::pipe::duplicate_end(handle) {
         return Err(SyscallError::InvalidInput);
     }
     let target = sched

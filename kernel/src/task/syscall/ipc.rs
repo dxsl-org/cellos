@@ -28,7 +28,7 @@ pub(super) fn encode_ipc_result(result: SyscallResult) -> usize {
 
 /// Does this task hold the pipe endpoint? Takes `SCHEDULER`, so it must not be
 /// called while that lock is held.
-pub(super) fn caller_owns_pipe(caller_id: usize, handle: crate::task::pipe::PipeHandle) -> bool {
+pub(super) fn caller_owns_pipe(caller_id: usize, handle: crate::ipc::pipe::PipeHandle) -> bool {
     crate::task::SCHEDULER
         .lock()
         .as_ref()
@@ -1066,12 +1066,12 @@ pub(super) fn futex_wait(
     // (woken / value mismatch / timed out) is the syscall's return value,
     // so it needs no error encoding. An invalid address is a recoverable
     // error, never a kernel fault.
-    crate::task::futex::wait(caller_id, addr, expected, timeout_ticks)
+    crate::ipc::futex::wait(caller_id, addr, expected, timeout_ticks)
 }
 
 /// Handler for `Syscall::FutexWake` (extracted from the dispatcher).
 pub(super) fn futex_wake(caller_id: usize, addr: usize, count: usize) -> SyscallResult {
-    if let Ok(n) = crate::task::futex::wake(caller_id, addr, count) {
+    if let Ok(n) = crate::ipc::futex::wake(caller_id, addr, count) {
         Ok(n)
     } else {
         Err(SyscallError::Unknown) // Should not fail typically

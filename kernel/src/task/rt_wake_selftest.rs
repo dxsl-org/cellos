@@ -15,9 +15,9 @@
 //!      is deliberately busy with an equal-priority task, which the old
 //!      current-hart predicate treated as "no preemption needed".
 
-use super::ipc_wire::IpcWireHeader;
 use super::tcb::{Task, TaskState};
 use super::{wake_sender_token, SCHEDULER};
+use crate::ipc::ipc_wire::IpcWireHeader;
 use crate::sched::smp::{is_rt_hart_online, HART_RT};
 use alloc::boxed::Box;
 use alloc::vec::Vec;

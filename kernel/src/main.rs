@@ -56,6 +56,7 @@ pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
+pub mod ipc; // Kernel IPC objects: wire copy, mailboxes, pipes, futex, sessions
 pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod loader;
 pub(crate) mod machine_facts; // Machine facts record for syscall 433 (ADR-0029 §3)
@@ -1384,7 +1385,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::user_copy_tests::run_primary();
         task::ipc_wire_selftest::run_primary(crate::sched::smp::online_hart_count());
         crate::loader::domain_admission::run_selftest();
-        task::futex::run_selftest();
+        crate::ipc::futex::run_selftest();
         task::domain_grant::run_selftest();
         task::grant_gate_selftest::run_primary();
         task::rt_wake_selftest::self_test();

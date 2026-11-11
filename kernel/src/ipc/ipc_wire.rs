@@ -63,7 +63,7 @@ impl IpcWireMessage {
     /// without a second heap allocation or an intermediate payload copy.
     pub(crate) fn try_from_user(
         header: IpcWireHeader,
-        view: &super::copy_glue::TaskCopyView,
+        view: &crate::task::copy_glue::TaskCopyView,
         ptr: usize,
         len: usize,
         #[cfg(cellos_p01_trace)] owner: crate::p01_measurement::Owner,

@@ -660,8 +660,11 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
             .expect("synthetic receiver exists");
         receiver.pending_msgs.try_push(super::tcb::PendingMsg {
             sender_tid: SENDER,
-            data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
-                .expect("inline payload copy must fit"),
+            data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                payload,
+                TEST_CELL as usize,
+            )
+            .expect("inline payload copy must fit"),
             wire: None,
             enqueued_tick: 0,
         })
@@ -722,8 +725,11 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             .expect("synthetic receiver exists");
         receiver.pending_msgs.try_push(super::tcb::PendingMsg {
             sender_tid: SENDER,
-            data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
-                .expect("inline payload copy must fit"),
+            data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                payload,
+                TEST_CELL as usize,
+            )
+            .expect("inline payload copy must fit"),
             wire: None,
             enqueued_tick: 0,
         })
@@ -774,7 +780,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 .pending_msgs
                 .try_push(super::tcb::PendingMsg {
                     sender_tid: SENDER,
-                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
                         payload,
                         TEST_CELL as usize,
                     )
@@ -817,7 +823,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 .pending_msgs
                 .try_push(super::tcb::PendingMsg {
                     sender_tid: SENDER,
-                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
                         payload,
                         TEST_CELL as usize,
                     )
@@ -859,7 +865,7 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
                 .pending_msgs
                 .try_push(super::tcb::PendingMsg {
                     sender_tid: SENDER,
-                    data: super::pending_mailbox::PendingMsgData::try_copy(
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
                         payload,
                         TEST_CELL as usize,
                     )

@@ -475,7 +475,7 @@ pub struct Scheduler {
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
     pub next_task_id: usize,
-    pub(crate) cell_session: crate::task::cell_session::State,
+    pub(crate) cell_session: crate::ipc::cell_session::State,
     /// Task IDs whose grant pages must be reaped outside the SCHEDULER lock.
     ///
     /// Watchdog kill paths push here instead of calling reap_grants_for_task directly,
@@ -547,7 +547,7 @@ impl Scheduler {
             cell_owner_watches: BTreeMap::new(),
             next_cell_owner_watch: 1,
             next_task_id: 1,
-            cell_session: crate::task::cell_session::State::new(),
+            cell_session: crate::ipc::cell_session::State::new(),
             pending_grant_reap: Vec::new(),
             pending_root_retirements: Vec::new(),
             pending_vfs_holder_release: Vec::new(),
@@ -696,7 +696,7 @@ impl Scheduler {
         }
         self.cell_owners.remove(&owner.cell_id);
         crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
-        crate::task::cell_session::retired(self, owner);
+        crate::ipc::cell_session::retired(self, owner);
         true
     }
 
@@ -1524,7 +1524,7 @@ impl Scheduler {
                 owner.root_tid,
             );
         }
-        crate::task::cell_session::retiring(self, owner, exit_reason);
+        crate::ipc::cell_session::retiring(self, owner, exit_reason);
         let live_members: Vec<usize> = self
             .tasks
             .iter()
@@ -1612,18 +1612,18 @@ impl Scheduler {
         }
         // A dying waiter must not leave a queue entry behind: a later wake on the
         // same key would otherwise spend a wake slot on a task that no longer waits.
-        crate::task::futex::on_task_leaves_wait(tid);
+        crate::ipc::futex::on_task_leaves_wait(tid);
         // A dying owner must cancel or indeterminate its queued/dispatched operations.
         crate::task::async_ipc::on_owner_exits(self, tid);
         // A dying pipe owner must not leave an endpoint behind either: closing its
         // ends is what turns a faulted writer into an EOF for its readers.
-        let owned: alloc::vec::Vec<crate::task::pipe::PipeHandle> = self
+        let owned: alloc::vec::Vec<crate::ipc::pipe::PipeHandle> = self
             .tasks
             .get(&tid)
             .map(|task| task.pipe_handles.iter().copied().collect())
             .unwrap_or_default();
         if !owned.is_empty() {
-            crate::task::pipe::on_task_leaves(tid, &owned);
+            crate::ipc::pipe::on_task_leaves(tid, &owned);
             if let Some(task) = self.tasks.get_mut(&tid) {
                 task.pipe_handles.clear();
             }
@@ -2223,7 +2223,7 @@ impl Scheduler {
             for tid in start.into_iter().flatten() {
                 let task = self.tasks.get_mut(&tid).expect("locked G1 start target");
                 let data =
-                    crate::task::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
+                    crate::ipc::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
                         .expect("three-byte inline G1 compute barrier");
                 if task
                     .pending_msgs
@@ -2247,7 +2247,7 @@ impl Scheduler {
                 // Existing inline mailbox after ACCOUNTING unlock: either the
                 // root has installed a real Wait, or checked HPET reached16P.
                 let task = self.tasks.get_mut(&tid).expect("locked G1 wait target");
-                let data = crate::task::pending_mailbox::PendingMsgData::try_copy(&token, 0)
+                let data = crate::ipc::pending_mailbox::PendingMsgData::try_copy(&token, 0)
                     .expect("two-byte inline G1 notification");
                 if task
                     .pending_msgs
@@ -2280,7 +2280,7 @@ impl Scheduler {
             }
 
             crate::task::async_ipc::expire(self, now as u64);
-            crate::task::cell_session::sweep(self);
+            crate::ipc::cell_session::sweep(self);
             // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
             //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
             //    RecvTimeout's a peer that never replies would block forever — the
@@ -2308,10 +2308,10 @@ impl Scheduler {
                     TaskState::PipeRead { handle, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        crate::task::pipe::on_deadline(
+                        crate::ipc::pipe::on_deadline(
                             *handle,
                             *id,
-                            crate::task::pipe::PipeEnd::Read,
+                            crate::ipc::pipe::PipeEnd::Read,
                         );
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
@@ -2319,10 +2319,10 @@ impl Scheduler {
                     TaskState::PipeWrite { handle, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        crate::task::pipe::on_deadline(
+                        crate::ipc::pipe::on_deadline(
                             *handle,
                             *id,
-                            crate::task::pipe::PipeEnd::Write,
+                            crate::ipc::pipe::PipeEnd::Write,
                         );
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
@@ -2338,7 +2338,7 @@ impl Scheduler {
                     TaskState::FutexWait { key, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        crate::task::futex::on_deadline(task, *id, *key);
+                        crate::ipc::futex::on_deadline(task, *id, *key);
                         should_wake = true;
                     }
                     TaskState::WaitEvent { mask, deadline } => {

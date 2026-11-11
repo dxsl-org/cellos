@@ -1,4 +1,5 @@
-//! Hoisted from `task/` (architecture remediation Phase 09).
+//! Scheduling mechanism (Spec 15 category A): ready queues and the context-switch
+//! funnel, SMP bring-up, per-hart state, all-hart quiescence and CPU accounting.
 
 #[cfg(cellos_g1_cpu)]
 pub(crate) mod cpu_accounting;

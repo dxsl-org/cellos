@@ -1,7 +1,7 @@
-use super::pending_mailbox::PendingMailbox;
-pub use super::pending_mailbox::PendingMsg;
 use crate::hal::arch::Context;
 use crate::hal::arch::ViTrapFrame;
+use crate::ipc::pending_mailbox::PendingMailbox;
+pub use crate::ipc::pending_mailbox::PendingMsg;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
@@ -71,20 +71,20 @@ pub enum TaskState {
     Retiring,
     /// Blocked in a pipe read (ring empty, a writer end still open).
     PipeRead {
-        handle: super::pipe::PipeHandle,
+        handle: crate::ipc::pipe::PipeHandle,
         deadline: Option<u64>,
     },
     /// Blocked in a pipe write (ring full).
     PipeWrite {
-        handle: super::pipe::PipeHandle,
+        handle: crate::ipc::pipe::PipeHandle,
         deadline: Option<u64>,
     },
     /// Blocked on a futex wait.
     /// `key`: `(address-space identity, generation, word address)` — see
-    ///        [`super::futex`] for why the identity is part of the key.
+    ///        [`crate::ipc::futex`] for why the identity is part of the key.
     /// `deadline`: absolute `system_ticks`; `None` blocks indefinitely.
     FutexWait {
-        key: super::futex::FutexKey,
+        key: crate::ipc::futex::FutexKey,
         deadline: Option<u64>,
     },
     /// Waiting for another task to exit (Join).
@@ -253,7 +253,7 @@ pub struct Task {
     pub trap_frame: ViTrapFrame,
     /// Pipe endpoints this task owns. A handle is usable by exactly the task that
     /// holds it; `PipeShare` moves a copy into another task's table.
-    pub pipe_handles: alloc::collections::BTreeSet<super::pipe::PipeHandle>,
+    pub pipe_handles: alloc::collections::BTreeSet<crate::ipc::pipe::PipeHandle>,
     /// User thread pointer (TLS base) for this task. Opaque to the kernel: the cell
     /// allocates its own TLS blocks and sets the value with `SetTlsBase`. See
     /// [`tls`](super::tls) for which register carries it per architecture.
