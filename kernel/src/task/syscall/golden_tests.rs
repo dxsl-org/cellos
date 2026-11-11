@@ -124,3 +124,48 @@ fn syscall_golden() {
         "libs/api/abi/syscalls.golden.json differs from the code; the syscall surface moved"
     );
 }
+
+/// CP1 §3.2: one gate. For every opcode the trap decodes, the in-kernel entry
+/// (`handle_syscall`, gated on `opcode_of` of the decoded variant) admits under
+/// exactly the allowlists the trap admits — except where a raw alias shares a
+/// kernel variant with a gated api row (raw 100 and `Call` both decode to
+/// `ServiceLookup`), where the in-kernel entry may only be stricter.
+#[test]
+fn in_kernel_gate_matches_the_trap_gate() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    let mut task = alloc::boxed::Box::new(Task::new(TID, CellId(7), "gate", Vec::new()));
+    CapSet::ALL.apply_to(&mut task);
+    scheduler.tasks.insert(TID, task);
+    *SCHEDULER.lock() = Some(scheduler);
+
+    let mut allowlists: Vec<u64> = (0..64).map(|bit| !(1u64 << bit)).collect();
+    allowlists.extend([0, u64::MAX]);
+    let mut stricter = Vec::new();
+    for id in 0..=OPCODE_SPAN {
+        let Some(decoded) = map_syscall(id, 0, 0, 0, 0) else {
+            continue;
+        };
+        let opcode = super::opcode_of(&decoded);
+        for &allowlist in &allowlists {
+            set_allowlist(allowlist);
+            let trap = check_allowlist(id, TID).is_ok();
+            let kernel = check_allowlist(opcode, TID).is_ok();
+            if trap != kernel {
+                assert!(
+                    trap && !kernel,
+                    "opcode {id}: the in-kernel entry admits what the trap refuses"
+                );
+                stricter.push(id);
+            }
+        }
+    }
+    *SCHEDULER.lock() = saved;
+    stricter.dedup();
+    assert_eq!(
+        stricter,
+        [100],
+        "only the raw ServiceLookup alias may differ"
+    );
+}

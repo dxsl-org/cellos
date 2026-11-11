@@ -112,8 +112,12 @@ forbid_in "$RECORD" "reserved" "record has no reserved field"
 # ── client wrapper and kernel plumbing (record §1 items 2, 13) ────────────────
 require_in "$OSTD" "pub fn sys_lookup_service_bound(" "client wrapper present"
 require_in "$K_SYSCALL" "    LookupServiceBound {" "kernel Syscall variant present"
-require_in "$K_SYSCALL" "Syscall::LookupServiceBound { .. } => V::LookupServiceBound," \
-    "kernel allowlist mapping present"
+# The kernel's variant → opcode map (`opcode_of`) is generated from the table row:
+# the same-named kernel variant maps to 429 unless the row names another one.
+if ! python3 -c 'import sys, tomllib; r = [x for x in tomllib.load(open(sys.argv[1], "rb"))["syscall"] if x["name"] == "LookupServiceBound"]; sys.exit(0 if len(r) == 1 and "kernel" not in r[0] else 1)' "$TABLE"; then
+    echo "FAIL: kernel allowlist mapping present — $TABLE row LookupServiceBound names another kernel variant" >&2
+    failures=$((failures + 1))
+fi
 require_in "$K_SYSCALL" "ViSyscall::LookupServiceBound => Syscall::LookupServiceBound {" \
     "kernel decode arm present"
 require_in "$K_SYSCALL" "SyscallError::BufferTooSmall" \

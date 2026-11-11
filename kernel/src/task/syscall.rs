@@ -1951,15 +1951,7 @@ fn encode_syscall_result(
 /// Syscalls whose callers decode the typed out-of-memory sentinel
 /// (`error_sentinel - 1`); every other syscall keeps the single generic error.
 fn supports_typed_oom(syscall: &Syscall) -> bool {
-    matches!(
-        syscall,
-        Syscall::SpawnFromMem { .. }
-            | Syscall::SpawnFromPath { .. }
-            | Syscall::SpawnFromElf { .. }
-            | Syscall::SpawnReplacement { .. }
-            | Syscall::SpawnPinned { .. }
-            | Syscall::TelemetrySnapshot { .. }
-    )
+    syscall_to_vi(syscall).is_some_and(api::syscall::ViSyscall::typed_oom)
 }
 
 /// Maximum bytes a single syscall may read/write through a user buffer.
@@ -5248,168 +5240,20 @@ fn syscall_allowlist_for(caller_id: usize) -> Option<u64> {
         .map(|task| task.syscall_allowlist)
 }
 
-/// Map a kernel-internal `Syscall` variant to its `ViSyscall` representation
-/// for allowlist bit lookup.
-///
-/// Returns `None` for:
-/// - Raw block-I/O ops (500-503): ZST-gated via `BlockIoCap`, not filtered here.
-/// - Legacy/internal variants (FutexWait, BorrowRead, Lend, …): no bit assigned.
-/// - Always-permitted syscalls (Yield, Exit, …): `allowlist_bit()` returns `None`.
+/// The `ViSyscall` a decoded [`Syscall`] corresponds to, from the generated
+/// [`opcode_of`] (`libs/api/abi/syscalls.toml`). `None` for raw opcodes
+/// outside `ViSyscall` (500–503, 100/110/111, 502, bench 504) and for kernel
+/// variants with no opcode. Total over every api row, unlike the hand-written
+/// map it replaces (architecture review H-5).
 fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
-    use api::syscall::ViSyscall as V;
-    Some(match syscall {
-        Syscall::IpcSubmit { .. } => V::IpcSubmit,
-        Syscall::IpcTake { .. } => V::IpcTake,
-        Syscall::IpcWait { .. } => V::IpcWait,
-        Syscall::IpcCancel { .. } => V::IpcCancel,
-        Syscall::IpcCurrent => V::IpcCurrent,
-        Syscall::IpcReply { .. } => V::IpcReply,
-        Syscall::Send { .. } => V::Send,
-        Syscall::TrySend { .. } => V::TrySend,
-        Syscall::Recv { .. } => V::Recv,
-        Syscall::TryRecv { .. } => V::TryRecv,
-        Syscall::RecvTimeout { .. } => V::RecvTimeout,
-        Syscall::SendGather { .. } => V::SendGather,
-        Syscall::RecvScatter { .. } => V::RecvScatter,
-        Syscall::Reply { .. } => V::Reply,
-        Syscall::Spawn { .. } => V::Spawn,
-        Syscall::SpawnFromMem { .. } => V::SpawnFromMem,
-        Syscall::SpawnFromPath { .. } => V::SpawnFromPath,
-        Syscall::SpawnFromElf { .. } => V::SpawnFromElf,
-        Syscall::SpawnPinned { .. } => V::SpawnPinned,
-        Syscall::Wait { .. } => V::Wait,
-        Syscall::SetTlsBase { .. } => V::SetTlsBase,
-        Syscall::FutexWait { .. } => V::FutexWait,
-        Syscall::FutexWake { .. } => V::FutexWake,
-        Syscall::PipeCreate { .. } => V::PipeCreate,
-        Syscall::PipeRead { .. } => V::PipeRead,
-        Syscall::PipeWrite { .. } => V::PipeWrite,
-        Syscall::PipeClose { .. } => V::PipeClose,
-        Syscall::PipeShare { .. } => V::PipeShare,
-        Syscall::CellSessionV1 { .. } => return None,
-        Syscall::GetCpuCount => V::GetCpuCount,
-        Syscall::Log { .. } => V::Log,
-        Syscall::SetTimer { .. } => V::SetTimer,
-        Syscall::ShmAlloc { .. } => V::ShmAlloc,
-        Syscall::ShmMap { .. } => V::ShmMap,
-        Syscall::GetProcs { .. } => V::GetProcs,
-        Syscall::GetProcs2 { .. } => V::GetProcs2,
-        Syscall::MemInfo { .. } => V::MemInfo,
-        Syscall::TelemetrySnapshot { .. } => V::TelemetrySnapshot,
-        Syscall::OpenCap { .. } => V::OpenCap,
-        Syscall::ReadCap { .. } => V::ReadCap,
-        Syscall::CloseCap { .. } => V::CloseCap,
-        Syscall::SeekCap { .. } => V::SeekCap,
-        Syscall::WriteCap { .. } => V::WriteCap,
-        Syscall::StatCap { .. } => V::StatCap,
-        Syscall::TruncateCap { .. } => V::TruncateCap,
-        Syscall::SyncCap { .. } => V::SyncCap,
-        Syscall::GrantDma { .. } => V::GrantDma,
-        Syscall::Open { .. } => V::Open,
-        Syscall::Read { .. } => V::Read,
-        Syscall::Write { .. } => V::Write,
-        Syscall::Close { .. } => V::Close,
-        Syscall::ReadDir { .. } => V::ReadDir,
-        Syscall::Fstat { .. } => V::Fstat,
-        Syscall::Rename { .. } => V::Rename,
-        Syscall::Seek { .. } => V::Seek,
-        Syscall::FileOp { .. } => V::FileOp,
-        Syscall::ChDir { .. } => V::Chdir,
-        Syscall::GetCwd { .. } => V::Getcwd,
-        Syscall::GetTime { .. } => V::GetTime,
-        Syscall::GpuFlush { .. } => V::GpuFlush,
-        Syscall::AudioPlay { .. } => V::AudioPlay,
-        Syscall::GpuCursor { .. } => V::GpuCursor,
-        Syscall::GpuGetResolution => V::GpuGetResolution,
-        Syscall::NetTx { .. } => V::NetTx,
-        Syscall::NetRx { .. } => V::NetRx,
-        Syscall::HotSwapReady => V::HotSwapReady,
-        Syscall::Snapshot => V::Snapshot,
-        Syscall::StateStash { .. } => V::StateStash,
-        Syscall::StateRestore { .. } => V::StateRestore,
-        Syscall::StateStashClear { .. } => V::StateStashClear,
-        Syscall::FreezeCell { .. } => V::FreezeCell,
-        Syscall::ResumeCell { .. } => V::ResumeCell,
-        Syscall::KillCell { .. } => V::KillCell,
-        Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
-        Syscall::SpawnReplacement { .. } => V::SpawnReplacement,
-        Syscall::PauseService { .. } => V::PauseService,
-        Syscall::RegisterBlockDriver { .. } => V::RegisterBlockDriver,
-        Syscall::RegisterNicDriver => V::RegisterNicDriver,
-        Syscall::RegisterUsbHidProducer => V::RegisterUsbHidProducer,
-        Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
-        Syscall::FindPcieDeviceByVendor { .. } => V::FindPcieDeviceByVendor,
-        Syscall::QueryPcieFunction { .. } => V::QueryPcieFunction,
-        Syscall::AllocPcieIrq { .. } => V::AllocPcieIrq,
-        Syscall::SystemPower { .. } => V::SystemPower,
-        Syscall::MapDmaExport { .. } => V::MapDmaExport,
-        Syscall::SerialPortInfo { .. } => V::SerialPortInfo,
-        Syscall::SerialWrite { .. } => V::SerialWrite,
-        Syscall::SerialRead { .. } => V::SerialRead,
-        Syscall::SerialConfigure { .. } => V::SerialConfigure,
-        Syscall::Exec { .. } => V::Exec,
-        Syscall::LookupService { .. } => V::LookupService,
-        Syscall::LookupServiceBound { .. } => V::LookupServiceBound,
-        Syscall::Heartbeat { .. } => V::Heartbeat,
-        Syscall::GrantAlloc { .. } => V::GrantAlloc,
-        Syscall::GrantShare { .. } => V::GrantShare,
-        Syscall::GrantSlice { .. } => V::GrantSlice,
-        Syscall::GrantFree { .. } => V::GrantFree,
-        Syscall::BlkReadAsync { .. } => V::BlkReadAsync,
-        Syscall::RequestMmio { .. } => V::RequestMmio,
-        Syscall::ProbeVirtioMmio { .. } => V::ProbeVirtioMmio,
-        Syscall::GetRandom { .. } => V::GetRandom,
-        Syscall::GrantRegister { .. } => V::GrantRegister,
-        Syscall::GrantUnregister { .. } => V::GrantUnregister,
-        Syscall::WaitForEvent { .. } => V::WaitForEvent,
-        Syscall::GrantCacheSyncBegin { .. } => V::GrantCacheSyncBegin,
-        Syscall::GrantCacheSyncComplete { .. } => V::GrantCacheSyncComplete,
-        Syscall::RegisterDisplayFramebuffer { .. } => V::RegisterDisplayFramebuffer,
-        Syscall::WaitCompletion { .. } => V::WaitCompletion,
-        Syscall::CreateVm { .. } => V::CreateVm,
-        Syscall::CreateVcpu { .. } => V::CreateVcpu,
-        Syscall::MapGuestMemory { .. } => V::MapGuestMemory,
-        Syscall::RunVcpu { .. } => V::RunVcpu,
-        Syscall::VcpuRegs { .. } => V::VcpuRegs,
-        Syscall::InjectIrq { .. } => V::InjectIrq,
-        Syscall::WriteGuestMemory { .. } => V::WriteGuestMemory,
-        Syscall::ReadGuestMemory { .. } => V::ReadGuestMemory,
-        Syscall::WaitIrq { .. } => V::WaitIrq,
-        Syscall::RegisterPcieBar { .. } => V::RegisterPcieBar,
-        Syscall::RegisterPciDevice { .. } => V::RegisterPciDevice,
-        Syscall::ReadLog { .. } => V::ReadLog,
-        // Always-permitted; allowlist_bit() returns None → filter is a no-op.
-        Syscall::Yield
-        | Syscall::Exit { .. }
-        | Syscall::ForceExit { .. }
-        | Syscall::NotifyOnExit { .. }
-        | Syscall::QueryRetirement { .. }
-        | Syscall::LookupBlockRoute { .. }
-        | Syscall::QueryMachineFacts { .. }
-        | Syscall::RegisterService { .. }
-        | Syscall::CapRevoke { .. }
-        // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
-        | Syscall::SpawnSetDirs { .. }
-        | Syscall::QueryDirHandles { .. }
-        | Syscall::ResolveCellOwner { .. }
-        | Syscall::WatchCellOwner { .. }
-        | Syscall::CancelCellOwnerWatch { .. }
-        | Syscall::ResolveCellOwnerRecord { .. }
-        | Syscall::WatchCellOwnerRecord { .. }
-        | Syscall::ResolveCellImage { .. }
-        | Syscall::AnonMemory { .. }
-        // 437/439: own memory / lease party is the dispatch gate (CP1 D-G9).
-        | Syscall::ExportDmaRange { .. }
-        | Syscall::RevokeDmaExport { .. } => return None,
-        // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
-        Syscall::BlkRead { .. }
-        | Syscall::BlkWrite { .. }
-        | Syscall::BlkFlush
-        | Syscall::Shutdown => return None,
-        // Legacy / internal variants without allowlist bits.
-        _ => return None,
-    })
+    match api::syscall::ViSyscall::from(opcode_of(syscall)) {
+        api::syscall::ViSyscall::Unknown => None,
+        vi => Some(vi),
+    }
 }
+
+// `opcode_of` and `RAW_OPCODES`, generated by `kernel/build.rs`.
+include!(concat!(env!("OUT_DIR"), "/syscall_opcodes.rs"));
 
 /// Every task of `tid`'s Cell incarnation (root and threads), in a fixed
 /// buffer: no allocation, bounded by the per-Cell thread cap.
@@ -5639,10 +5483,40 @@ pub(crate) fn send_cap_revoked_event(target_tid: usize, mask: u32) -> bool {
     super::ipc_post_nonblock(0, target_tid, &msg).is_ok()
 }
 
-/// Dispatches a system call to the appropriate handler.
+/// Run a decoded syscall for an in-kernel caller (selftests, fixtures) through
+/// the same admission gate a trap uses — `check_allowlist` on the opcode the
+/// variant corresponds to ([`opcode_of`]) — then dispatch it. This is the one
+/// allowlist gate (architecture review H-5); a denial is audited.
 ///
-/// `caller_id` is the ID of the task invoking the syscall.
+/// `caller_id` is the ID of the task the call is made as.
 pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
+    if let Err(error) = check_allowlist(opcode_of(&syscall), caller_id) {
+        // A live caller refused by its allowlist is audited, as the variant
+        // gate this replaces did; a missing task is refused silently.
+        if syscall_allowlist_for(caller_id).is_some() {
+            audit_syscall_denied(
+                caller_id,
+                syscall_to_vi(&syscall)
+                    .and_then(api::syscall::ViSyscall::allowlist_bit)
+                    .map_or(u32::MAX, u32::from),
+            );
+        }
+        return Err(error);
+    }
+    dispatch_admitted(caller_id, syscall)
+}
+
+/// Dispatch a syscall the kernel itself issues on a Cell's behalf (for example
+/// the GPU scanout path allocating a Grant for the GPU Cell). Kernel origin is
+/// trusted: the Cell's allowlist is not consulted. Never reachable from a trap.
+pub(crate) fn handle_syscall_kernel_origin(caller_id: usize, syscall: Syscall) -> SyscallResult {
+    dispatch_admitted(caller_id, syscall)
+}
+
+/// Dispatch an already-admitted syscall to its handler. Callers: the trap entry
+/// after `check_allowlist(raw opcode)`, [`handle_syscall`] after the same gate,
+/// and [`handle_syscall_kernel_origin`].
+fn dispatch_admitted(caller_id: usize, syscall: Syscall) -> SyscallResult {
     #[cfg(cellos_p01_trace)]
     let mut trace = {
         let route = match &syscall {
@@ -5681,10 +5555,10 @@ fn handle_syscall_inner(
     syscall: Syscall,
     #[cfg(cellos_p01_trace)] trace: &mut Option<crate::p01_measurement::Attempt>,
 ) -> SyscallResult {
-    let Some(allowed) = syscall_allowlist_for(caller_id) else {
+    if syscall_allowlist_for(caller_id).is_none() {
         log::warn!("[kernel] syscall denied for non-live tid {}", caller_id);
         return Err(SyscallError::PermissionDenied);
-    };
+    }
 
     let _staged_spawn_argv_cleanup = staged_spawn_argv_cleanup(&syscall, caller_id);
     #[cfg(cellos_p01_trace)]
@@ -5713,24 +5587,6 @@ fn handle_syscall_inner(
         if let Some(class) = class {
             if let Some(owner) = crate::p01_resources::owner_for_tid(caller_id) {
                 crate::p01_resources::unknown(owner, class);
-            }
-        }
-    }
-
-    // Syscall allowlist enforcement: reject if this syscall's bit is not set in
-    // the per-Cell bitset loaded from ELF section `__ViCell_syscalls`.
-    // Cells without that section retain their TCB's `u64::MAX` allowlist.
-    if let Some(vi) = syscall_to_vi(&syscall) {
-        if let Some(bit) = vi.allowlist_bit() {
-            if (allowed >> bit) & 1 == 0 {
-                log::warn!(
-                    "[kernel] syscall {:?} denied for tid {} (allowlist={:#018x})",
-                    vi,
-                    caller_id,
-                    allowed
-                );
-                audit_syscall_denied(caller_id, bit as u32);
-                return Err(SyscallError::PermissionDenied);
             }
         }
     }
@@ -11627,7 +11483,7 @@ pub(crate) fn dispatch_raw_for_test(
 ) -> SyscallResult {
     check_allowlist(syscall_id, caller_id)?;
     let syscall = map_syscall(syscall_id, a0, a1, a2, a3).ok_or(SyscallError::InvalidCommand)?;
-    with_test_sum(|| handle_syscall(caller_id, syscall))
+    with_test_sum(|| dispatch_admitted(caller_id, syscall))
 }
 
 /// Per-cell syscall allowlist gate.
@@ -11650,13 +11506,10 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     #[cfg(not(feature = "bench-counters"))]
     let gate_sc = sc;
     let bit = gate_sc.allowlist_bit();
-    // Bit 36 gates raw block-I/O opcodes (500/501/503) and BlkReadAsync (212).
-    let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) {
-        Some(36)
-    } else {
-        None
-    };
-    let rename_bit: Option<u8> = if syscall_id == 255 { Some(62) } else { None };
+    // Raw opcodes outside `ViSyscall` carry their gate bit in the table
+    // (`RAW_OPCODES`: 500/501/503 → bit 36; 100/110/111/502 always permitted).
+    let raw = RAW_OPCODES.iter().find(|(id, _)| *id == syscall_id);
+    let raw_bit: Option<u8> = raw.and_then(|(_, bit)| *bit);
 
     // Raw opcodes with a dedicated `map_syscall` fallback mapping. These are
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
@@ -11664,8 +11517,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     // 500/501/503 are gated by bit 36 below + the ZST BlockIoCap at the handler;
     // 502 and the legacy raw ops (3/100/110/111) predate the bitmap and stay
     // always-permitted, matching their pre-Phase-31b behavior.
-    let known_raw = matches!(syscall_id, 3 | 100 | 110 | 111 | 500 | 501 | 502 | 503)
-        || (cfg!(feature = "bench-counters") && syscall_id == 504);
+    let known_raw = raw.is_some() || (cfg!(feature = "bench-counters") && syscall_id == 504);
 
     let Some(allowlist) = syscall_allowlist_for(caller_id) else {
         log::warn!(
@@ -11697,7 +11549,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
         );
         return Err(SyscallError::PermissionDenied);
     }
-    if let Some(b) = bit.or(rename_bit) {
+    if let Some(b) = bit {
         if allowlist & (1u64 << b) == 0 {
             log::warn!(
                 "[kernel] syscall {:?} (bit {}) denied for tid {} (allowlist={:#018x})",
@@ -11709,12 +11561,13 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             return Err(SyscallError::PermissionDenied);
         }
     }
-    if let Some(b) = blk_io_bit {
+    if let Some(b) = raw_bit {
         if allowlist & (1u64 << b) == 0 {
             log::warn!(
-                "[kernel] raw block opcode {} denied for tid {} (no bit 36)",
+                "[kernel] raw opcode {} denied for tid {} (no bit {})",
                 syscall_id,
-                caller_id
+                caller_id,
+                b
             );
             return Err(SyscallError::PermissionDenied);
         }
@@ -11822,7 +11675,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     let pcie_function = is_pcie_function_call(&syscall);
     let power_call = matches!(syscall, Syscall::SystemPower { .. });
     let dma_export_call = is_dma_export_call(&syscall);
-    let result = handle_syscall(caller_id, syscall);
+    let result = dispatch_admitted(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
     unsafe {
@@ -11893,7 +11746,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
     let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_errors = has_typed_errors(&syscall);
-    let result = handle_syscall(caller_id, syscall);
+    let result = dispatch_admitted(caller_id, syscall);
 
     unsafe {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
@@ -12672,7 +12525,11 @@ mod tests {
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
         }
-        assert_eq!(syscall_to_vi(&syscall), None);
+        // No allowlist bit: admitted past an empty allowlist; dispatch decides.
+        assert_eq!(
+            syscall_to_vi(&syscall).and_then(ViSyscall::allowlist_bit),
+            None
+        );
         assert!(super::has_typed_errors(&syscall));
         let len = api::retirement::RETIREMENT_RECORD_LEN;
         let query = |tid, root_tid, out_ptr, out_len| {
@@ -12951,7 +12808,11 @@ mod tests {
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
         }
-        assert_eq!(syscall_to_vi(&syscall), None);
+        // No allowlist bit: admitted past an empty allowlist; dispatch decides.
+        assert_eq!(
+            syscall_to_vi(&syscall).and_then(ViSyscall::allowlist_bit),
+            None
+        );
         assert!(super::has_typed_errors(&syscall));
         let len = BLOCK_ROUTE_RECORD_LEN;
         let lookup = |tid, index, out_ptr, out_len, reserved| {
@@ -13066,7 +12927,11 @@ mod tests {
             }
             other => panic!("decoded wrong syscall variant: {other:?}"),
         }
-        assert_eq!(syscall_to_vi(&syscall), None);
+        // No allowlist bit: admitted past an empty allowlist; dispatch decides.
+        assert_eq!(
+            syscall_to_vi(&syscall).and_then(ViSyscall::allowlist_bit),
+            None
+        );
         assert!(super::has_typed_errors(&syscall));
         let query = |tid, out_len, a2, a3| {
             super::handle_syscall(

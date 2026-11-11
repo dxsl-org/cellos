@@ -12,7 +12,7 @@
 //! the same view in bounded chunks and never dereferences the user pointer.
 
 use super::copy_glue::TaskCopyView;
-use super::syscall::{handle_syscall, Syscall, SyscallError};
+use super::syscall::{handle_syscall_kernel_origin, Syscall, SyscallError};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// One 64×64 BGRA8888 sprite, the only size `VirtIOGpu::setup_cursor` takes.
@@ -68,7 +68,7 @@ fn stage_for_gpu(
     if ptr == 0 || len == 0 || ptr.checked_add(len).is_none() {
         return Err(SyscallError::InvalidInput);
     }
-    let grant = match handle_syscall(gpu_cell, Syscall::GrantAlloc { size: len }) {
+    let grant = match handle_syscall_kernel_origin(gpu_cell, Syscall::GrantAlloc { size: len }) {
         Ok(base) if base != 0 => base,
         _ => return Err(SyscallError::Unknown),
     };
@@ -114,7 +114,7 @@ fn copy_pinned(
     grant: usize,
     len: usize,
 ) -> Result<(), SyscallError> {
-    let still_owned = handle_syscall(
+    let still_owned = handle_syscall_kernel_origin(
         gpu_cell,
         Syscall::GrantSlice {
             grant_id: grant,
@@ -142,7 +142,7 @@ fn copy_pinned(
 /// Return a staged Grant that will not reach the GPU Cell. A row a concurrent
 /// reclaim already removed is simply not found.
 fn release_staged(gpu_cell: usize, grant: usize) {
-    let _ = handle_syscall(gpu_cell, Syscall::GrantFree { grant_id: grant });
+    let _ = handle_syscall_kernel_origin(gpu_cell, Syscall::GrantFree { grant_id: grant });
 }
 
 /// Post `msg`, which names the staged Grant `grant`, to the GPU Cell; a post

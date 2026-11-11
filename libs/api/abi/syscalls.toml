@@ -6,7 +6,16 @@
 #
 # Fields: name, number, group (section), bit (absent = always permitted),
 # doc (rustdoc of the variant), group_note (comment opening its section),
-# bit_note (why the bit is what it is), comment (a plain source remark).
+# bit_note (why the bit is what it is), comment (a plain source remark),
+# kernel (the kernel `Syscall` variant when its name differs), result
+# ("typed_oom": the call decodes the typed out-of-memory sentinel).
+#
+# [[raw]] rows are kernel-only opcodes outside `ViSyscall` (Law 1 keeps them
+# out of the stable ABI): id, kernel variant, gate bit (absent = always
+# permitted), feature (cargo feature that adds the opcode).
+#
+# [[internal]] rows are kernel `Syscall` variants with no opcode at all: no
+# trap decodes them. An in-kernel caller is gated on them as an unknown opcode.
 # Rows keep the historical order.
 
 [[syscall]]
@@ -37,6 +46,7 @@ Opting in reserves that tail; see that module for the invariants.
 name = "Call"
 number = 2
 group = "IPC (0-9)"
+kernel = "ServiceLookup"
 bit = 4
 
 [[syscall]]
@@ -106,6 +116,7 @@ Deprecated/Legacy
 name = "SpawnFromMem"
 number = 10
 group = "Process Management (10-49)"
+result = "typed_oom"
 bit = 6
 doc = '''
 Spawn a cell from caller-supplied ELF bytes already resident in memory.
@@ -120,6 +131,7 @@ this route fail-closed for shell/user cells.
 name = "SpawnFromPath"
 number = 12
 group = "Process Management (10-49)"
+result = "typed_oom"
 bit = 7
 doc = '''
 Spawn a cell by reading its ELF from a VFS path.
@@ -318,6 +330,7 @@ Declare with `ReadLog` in the cell manifest to enable.
 name = "SpawnFromElf"
 number = 238
 group = "Process Management (10-49)"
+result = "typed_oom"
 bit = 7
 doc = '''
 Spawn a cell from ELF bytes supplied in a caller-owned Grant region.
@@ -380,6 +393,7 @@ MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
 name = "SpawnPinned"
 number = 16
 group = "Process Management (10-49)"
+result = "typed_oom"
 bit = 8
 doc = '''
 Spawn a cell pinned to a specific hardware core.
@@ -651,6 +665,7 @@ Rename, Remove
 name = "Chdir"
 number = 252
 group = "Filesystem (100-199)"
+kernel = "ChDir"
 bit = 60
 bit_note = '''
 CWD operations (bit 60): caller-scoped chdir and getcwd.
@@ -661,6 +676,7 @@ Bounded lexical traversal that preserves task isolation.
 name = "Getcwd"
 number = 253
 group = "Filesystem (100-199)"
+kernel = "GetCwd"
 bit = 60
 
 [[syscall]]
@@ -1297,6 +1313,7 @@ ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.
 name = "SpawnReplacement"
 number = 421
 group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+result = "typed_oom"
 bit = 57
 doc = '''
 421: Spawn a replacement for a frozen Cell using its recorded capability ceiling.
@@ -1488,6 +1505,7 @@ resolve its binding tomorrow.
 name = "TelemetrySnapshot"
 number = 430
 group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+result = "typed_oom"
 bit = 55
 doc = '''
 430: Capture one Cell-aware telemetry snapshot into a caller buffer
@@ -2061,3 +2079,73 @@ Always permitted (no allowlist bit). Required by `std::thread::available_paralle
 bit_note = '''
 GetCpuCount returns scalar online hart count; carries no authority
 '''
+
+[[raw]]
+id = 100
+kernel = "ServiceLookup"
+comment = '''
+Legacy raw service lookup; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 110
+kernel = "MkDir"
+comment = '''
+Legacy raw mkdir; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 111
+kernel = "Create"
+comment = '''
+Legacy raw create; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 500
+kernel = "BlkRead"
+bit = 36
+comment = '''
+Raw block read; bit 36 plus BlockIoCap at the handler.
+'''
+
+[[raw]]
+id = 501
+kernel = "BlkWrite"
+bit = 36
+
+[[raw]]
+id = 502
+kernel = "Shutdown"
+comment = '''
+Raw power-off; gated by the measured `shutdown` identity at dispatch, not by a bit.
+'''
+
+[[raw]]
+id = 503
+kernel = "BlkFlush"
+bit = 36
+
+[[raw]]
+id = 504
+kernel = "BenchCounters"
+feature = "bench-counters"
+gate_as = "MemInfo"
+comment = '''
+Benchmark counters; borrows MemInfo's gate exactly (bit 56 and observe_memory).
+'''
+
+[[internal]]
+kernel = "Lend"
+
+[[internal]]
+kernel = "BorrowRead"
+
+[[internal]]
+kernel = "BorrowWrite"
+
+[[internal]]
+kernel = "Grant"
+
+[[internal]]
+kernel = "Map"
