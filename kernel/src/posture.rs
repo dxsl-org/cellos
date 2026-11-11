@@ -30,6 +30,7 @@ pub const FORBIDDEN_IN_RELEASE: &[&str] = &[
     "x86-mmio-smoke",
     "ipc-trace",
     "cell-scale-experiment",
+    "bench-counters",
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
