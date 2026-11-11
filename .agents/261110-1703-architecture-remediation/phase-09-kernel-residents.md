@@ -72,14 +72,14 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 - [x] Resident manifest + guard + Spec 15 amendment
 - [x] Directory hoist
 - [x] Raw cfgs → features (sites not confined; see log)
-- [ ] Metric corrected
+- [x] Metric corrected
 
 ## Success Criteria
 
-- [ ] Default-posture x86 boot log contains no `self-test` line; test-posture image still reports all of them PASS.
-- [x] `strings`/symbol check: no `*_selftest` symbol in a release-posture kernel.
-- [ ] `python3 scripts/check-kernel-residents.py` fails on an unlisted new file under `kernel/src/dev/` (negative control).
-- [ ] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, release-posture boot; regenerated metric committed; review recorded.
+- [x] Default-posture x86 boot log contains no `self-test` line; test-posture image still reports all of them PASS. *(Amended by owner decision "not-release": a **release** kernel contains no fixture, and dev/test images keep and pass them: 26 PASS / 0 FAIL per arch.)*
+- [x] `strings`/symbol check: no `*_selftest` symbol in a release-posture kernel. *(x86 and RV64: 0; the guard is negative-controlled.)*
+- [x] `python3 scripts/check-kernel-residents.py` fails on an unlisted new file under `kernel/src/dev/` (negative control).
+- [x] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, release-posture boot; regenerated metric committed; review recorded. *(Local TCG; see [evidence](reports/phase-09-evidence.md).)*
 
 ## Risk Assessment
 
@@ -172,3 +172,5 @@ Phases 10 and 14 both build on the new layout.
   - **LOW, accepted:**
     - `run_ipi_selftest` stays gated off release. It only logs whether a hart answers IPIs and enforces nothing, so it is diagnostic code under §3.5, unlike the crypto KATs, which gate trust. Raised with the owner at close.
     - ADR-0031 keeps its historical `cellos_g1_cpu` wording, because ADRs are not rewritten.
+- **Deviation (no `selftest/` directory).** The self-test files keep their paths. They are marked `test` in `kernel/residents.toml`, which is checked in CI, and they are gated at their module declarations. Moving them would rewrite every inventory key and source pin again without adding information.
+- **Checkpoint.** Ran the full lane set and then the final-tree lanes: all green except known items. `xhci` hub 3/7 fails as on the base. `lifecycle` 2/3 failed once; the rerun passed 3/3. Evidence is in [reports/phase-09-evidence.md](reports/phase-09-evidence.md). Phase closure waits for owner sign-off on S4b.
