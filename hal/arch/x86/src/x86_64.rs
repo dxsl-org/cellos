@@ -22,6 +22,8 @@ pub mod gdt;
 #[cfg(target_arch = "x86_64")]
 pub mod guest_cpuid;
 #[cfg(target_arch = "x86_64")]
+pub mod guest_mem;
+#[cfg(target_arch = "x86_64")]
 pub mod hpet;
 #[cfg(target_arch = "x86_64")]
 pub mod idt;

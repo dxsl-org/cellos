@@ -10,13 +10,17 @@
 use types::ViResult;
 
 use super::super::vmcs::*;
-use super::VmxVcpu;
+use super::{queue_gp, VmxVcpu, CR0_CD, CR0_NW, CR0_PE, CR0_PG};
 
 const ACCESS_MOV_TO_CR: u64 = 0;
 const ACCESS_MOV_FROM_CR: u64 = 1;
 const REG_RSP: usize = 4;
-/// VM-entry interruption info: valid, hardware exception, error code, #GP.
-const INJECT_GP: u64 = (1 << 31) | (1 << 11) | (3 << 8) | 13;
+const CR4_PAE: u64 = 1 << 5;
+const CR4_PCIDE: u64 = 1 << 17;
+const EFER_LME: u64 = 1 << 8;
+const EFER_LMA: u64 = 1 << 10;
+/// Guest CS access rights: L (64-bit code segment).
+const CS_AR_L: u64 = 1 << 13;
 
 /// Result of emulating one CR-access exit.
 pub(super) enum CrOutcome {
@@ -40,27 +44,60 @@ impl VmxVcpu {
                 let value = self.read_gpr(reg)?;
                 if value > 0xF {
                     // SDM: MOV to CR8 with bits 63:4 set raises #GP(0).
-                    vmwrite(VM_ENTRY_INTR_INFO_FIELD, INJECT_GP)?;
-                    vmwrite(VM_ENTRY_EXCEPTION_ERROR_CODE, 0)?;
+                    queue_gp()?;
                     return Ok(CrOutcome::Faulted);
                 }
                 self.vtpr = value as u8;
             }
             (8, ACCESS_MOV_FROM_CR) => self.write_gpr(reg, u64::from(self.vtpr))?,
             (0, ACCESS_MOV_TO_CR) => {
-                // CR0 write turning on paging: enable IA-32e mode on entry.
+                // Only writes that change a host-owned bit (NE, CD, NW)
+                // against the read shadow exit here. The write is applied by
+                // VMWRITE, so the long-mode switch the CPU would make on a
+                // native PG=1 write (EFER.LMA from LME) is made here, after the
+                // #GP checks the CPU would make.
                 let value = self.read_gpr(reg)?;
-                if value & (1 << 31) != 0 {
-                    let entry_msr = if has_true_ctls() {
-                        MSR_IA32_VMX_TRUE_ENTRY_CTLS
-                    } else {
-                        MSR_IA32_VMX_ENTRY_CTLS
-                    };
-                    let entry_ctls = adjust_vmx_ctrl(ENTRY_IA32E_MODE_GUEST, entry_msr);
-                    vmwrite(VM_ENTRY_CONTROLS, u64::from(entry_ctls))?;
-                    vmwrite(GUEST_CR0, value)?;
-                    vmwrite(CR0_READ_SHADOW, value)?;
+                let allowed = super::super::msr::read(MSR_IA32_VMX_CR0_FIXED1);
+                let efer = vmread(GUEST_IA32_EFER)?;
+                let paging = value & CR0_PG != 0;
+                let enters_long_mode = paging && efer & EFER_LME != 0;
+                let leaves_paging_in_64bit_code = !paging
+                    && efer & EFER_LMA != 0
+                    && vmread(GUEST_CS_AR_BYTES)? & CS_AR_L != 0;
+                if value & !allowed != 0
+                    || (paging && value & CR0_PE == 0)
+                    || (value & CR0_NW != 0 && value & CR0_CD == 0)
+                    || (enters_long_mode && vmread(GUEST_CR4)? & CR4_PAE == 0)
+                    || leaves_paging_in_64bit_code
+                {
+                    queue_gp()?;
+                    return Ok(CrOutcome::Faulted);
                 }
+                let lma = if enters_long_mode { EFER_LMA } else { 0 };
+                vmwrite(GUEST_IA32_EFER, (efer & !EFER_LMA) | lma)?;
+                // CD/NW stay 0 in hardware; the guest keeps its values in the shadow.
+                let fixed1 = vmread(CR0_GUEST_HOST_MASK)? & !(CR0_CD | CR0_NW);
+                vmwrite(GUEST_CR0, (value | fixed1) & !(CR0_CD | CR0_NW))?;
+                vmwrite(CR0_READ_SHADOW, value)?;
+            }
+            (4, ACCESS_MOV_TO_CR) => {
+                // Only writes that change a host-owned bit (the VMX fixed-1
+                // bits, e.g. VMXE) against the read shadow exit here. The
+                // guest sees its own value; the CPU keeps the fixed-1 bits.
+                let value = self.read_gpr(reg)?;
+                let allowed = super::super::msr::read(MSR_IA32_VMX_CR4_FIXED1);
+                let long_mode = vmread(GUEST_IA32_EFER)? & EFER_LMA != 0;
+                let enables_pcide =
+                    value & CR4_PCIDE != 0 && vmread(GUEST_CR4)? & CR4_PCIDE == 0;
+                let pcide_refused =
+                    enables_pcide && (!long_mode || vmread(GUEST_CR3)? & 0xFFF != 0);
+                if value & !allowed != 0 || (long_mode && value & CR4_PAE == 0) || pcide_refused {
+                    queue_gp()?;
+                    return Ok(CrOutcome::Faulted);
+                }
+                let fixed1 = vmread(CR4_GUEST_HOST_MASK)?;
+                vmwrite(GUEST_CR4, value | fixed1)?;
+                vmwrite(CR4_READ_SHADOW, value)?;
             }
             // Other CR exits are not configured; skipping the instruction
             // keeps the pre-existing behavior for capability-forced exits.

@@ -2,9 +2,12 @@
 
 > Legacy name: Tier 3b. Run Linux workloads in a hypervisor-isolated VM.
 > **Current direction:** [Intel x86-64 C2C Anywhere](../decisions/0022-intel-x86-64-c2c-only-direction.md).
-> Intel VMX is not implemented; SVM/QEMU and ARM evidence below remains reference
-> material, not Intel qualification or permission to resume those platform programs.
-> Tier 3 C2C guest adapters are a required target; browser/GUI expansion is parked.
+> Intel VMX boots the Alpine console guest under nested KVM
+> (`HV_ACCEL=kvm scripts/qemu-hypervisor-smoke-x86.sh`); it is not yet qualified on
+> physical Intel hardware. SVM/QEMU and ARM evidence below remains reference
+> material, not permission to resume those platform programs. Tier 3 C2C guest
+> adapters are a required target; the Tier 3 Chrome desktop app is unparked
+> (ADR-0017 §5d), other browser/GUI expansion stays parked.
 
 ---
 
@@ -26,12 +29,13 @@ Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightwe
 | Platform | Status | Hypervisor | Notes |
 |----------|--------|-----------|-------|
 | **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console. The QEMU-TCG machinery lane asserts the guest's `~ #` shell prompt |
-| **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`); the primary application gate `scripts/qemu-x86-python-gate.sh` installs CPython in a 256 MiB Alpine guest and processes JSON into CSV in separate Linux processes. Nginx remains a secondary regression in the same CI job. Intel VT-x guest execution is not implemented |
+| **x86_64** | ✅ Working in QEMU (G2) | SVM (AMD, TCG-testable); VMX (Intel, nested KVM) | Boots Alpine to a shell under QEMU-TCG 10.2.0 (`scripts/qemu-hypervisor-smoke-x86.sh boot`) and, on an Intel host, under `-accel kvm -cpu host` in about 6 s (`HV_ACCEL=kvm`, same lane); the primary application gate `scripts/qemu-x86-python-gate.sh` installs CPython in a 256 MiB Alpine guest and processes JSON into CSV in separate Linux processes. Nginx remains a secondary regression in the same CI job. VMX has no physical-hardware evidence yet |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
 Tier 3 is an Intel C2C prerequisite, not gated behind a G2/G4 product release.
-Existing ARM/SVM guest paths do not qualify Intel; complete and exercise VMX
-under its own entry/authority gates before claiming Intel guest participation.
+ARM/SVM guest paths do not qualify Intel. VMX now boots the console guest under
+nested KVM; physical Intel hardware and its entry/authority gates are still
+required before claiming Intel guest participation.
 
 ### Raspberry Pi 3 (Cortex-A53, QEMU-first)
 
@@ -431,8 +435,8 @@ boot, read back on the second).
 
 - See [system-architecture.md](../system-architecture.md) § Tier 3 for hypervisor design.
 - For ARM64 EL2 MMU setup: `kernel/src/memory/stage2.rs` (Stage-2 builder) and `hal/arch/arm/src/aarch64/`.
-- For x86: SVM-first world-switch (stage-2 NPT) in `kernel/src/hypervisor/svm_registry.rs` and
-  `hal/arch/x86/src/x86_64/svm.rs`, with the device models in `cells/services/hypervisor/`. Intel VT-x
-  root operation is not implemented and is deliberately not attempted under a hypervisor (VMXON faults).
+- For x86: SVM and VMX world switches (stage-2 NPT/EPT) in `kernel/src/hypervisor/svm_registry.rs`,
+  `hal/arch/x86/src/x86_64/svm_vcpu.rs` and `vmx_vcpu.rs` (MSR, CR0/CR4 and MMIO exit emulation in
+  `vmx_vcpu/`), with the device models in `cells/services/hypervisor/`.
 - Build the guest image: `bash scripts/make-hypervisor-fs.sh` (ARM64) or `bash scripts/make-hypervisor-fs-x86.sh` (x86_64);
   `scripts/fetch-alpine-artifacts.sh` / `scripts/fetch-alpine-x86.sh` pull the pinned netboot artifacts.

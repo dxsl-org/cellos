@@ -456,7 +456,8 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
             cr0
         );
     }
-    if matches!(exit, HalVmExit::Unknown { ec: 0x400, .. }) {
+    // 0x400: SVM NPF; 48: VMX EPT violation (info1 is then the exit qualification).
+    if matches!(exit, HalVmExit::Unknown { ec: 0x400 | 48, .. }) {
         let (info1, gpa, rip) = vcpu.npf_diagnostics();
         log::error!(
             "[hv-x86] unsupported NPF: info1={:#x} gpa={:#x} rip={:#x}",

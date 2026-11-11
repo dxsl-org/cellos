@@ -9,16 +9,20 @@
 
 mod cr_access;
 mod host_state;
+mod mmio_access;
+mod msr_access;
 mod vmcs_scope;
 
 use hal_hypervisor::ViVmExit;
 use types::{ViError, ViResult};
 
 use super::guest_cpuid;
+use super::guest_mem::GuestRam;
 use super::vmcs::*;
 use super::vmx;
 use super::world_switch::{vmx_vmrun, VmxGuestRegs};
 use cr_access::CrOutcome;
+use msr_access::MsrOutcome;
 use vmcs_scope::with_vmcs;
 
 /// Primary controls the isolation model depends on; refused if the CPU's
@@ -29,6 +33,15 @@ const PROC_REQUIRED: u32 = PROC_UNCONDITIONAL_IO
     | PROC_CR8_STORE_EXITING
     | PROC_ACTIVATE_SECONDARY_CONTROLS;
 
+/// I/O-instruction exit qualification: string instruction (INS/OUTS).
+const IO_STRING: u64 = 1 << 4;
+/// VM-exit reason bit 31: the exit is a failed VM entry.
+const EXIT_REASON_ENTRY_FAILURE: u64 = 1 << 31;
+const CR0_PE: u64 = 1 << 0;
+const CR0_PG: u64 = 1 << 31;
+const CR0_NW: u64 = 1 << 29;
+const CR0_CD: u64 = 1 << 30;
+
 /// An Intel VMX virtual CPU.
 pub struct VmxVcpu {
     /// Guest GPRs, indexed 0=RAX, 1=RCX, 2=RDX, 3=RBX, 4=RSP, 5=RBP, 6=RSI, 7=RDI, 8..15=R8..R15.
@@ -38,12 +51,10 @@ pub struct VmxVcpu {
     vmcs_va: *mut u8,
     /// Guest-visible TPR (CR8[3:0]); never reaches the physical LAPIC.
     vtpr: u8,
-    /// Guest PKRU / KERNEL_GS_BASE carried across exits by the world switch.
+    /// Guest PKRU / KERNEL_GS_BASE / SYSCALL MSRs carried across exits by the world switch.
     guest_regs: VmxGuestRegs,
-    #[allow(dead_code)]
-    guest_ram: *const u8,
-    #[allow(dead_code)]
-    guest_ram_len: usize,
+    /// Guest RAM, read only to fetch the instruction behind an MMIO exit.
+    guest_ram: GuestRam,
 }
 
 unsafe impl Send for VmxVcpu {}
@@ -79,8 +90,8 @@ impl VmxVcpu {
             vmcs_va,
             vtpr: 0,
             guest_regs: VmxGuestRegs::default(),
-            guest_ram,
-            guest_ram_len,
+            // SAFETY: the caller's contract covers the guest carve.
+            guest_ram: GuestRam::new(guest_ram, guest_ram_len),
         })
     }
 
@@ -173,7 +184,10 @@ unsafe fn program_pvh(entry_pc: u64, eptp: u64) -> ViResult<()> {
         SEC_ENABLE_EPT | SEC_ENABLE_RDTSCP | SEC_UNRESTRICTED_GUEST,
         MSR_IA32_VMX_PROCBASED_CTLS2,
     );
-    if sec_ctls & SEC_ENABLE_EPT == 0 {
+    // Unrestricted guest: the PVH entry runs with CR0.PG=0, and CR0.PE/PG are
+    // left out of the host-owned mask below.
+    const SEC_REQUIRED: u32 = SEC_ENABLE_EPT | SEC_UNRESTRICTED_GUEST;
+    if sec_ctls & SEC_REQUIRED != SEC_REQUIRED {
         return Err(ViError::NotSupported);
     }
     vmwrite(SECONDARY_VM_EXEC_CONTROL, sec_ctls as u64)?;
@@ -182,11 +196,23 @@ unsafe fn program_pvh(entry_pc: u64, eptp: u64) -> ViResult<()> {
     // vector pending in the LAPIC IRR, so the host IDT takes it (and EOIs it)
     // once IF is re-enabled. Acking on exit would park it in the ISR with no
     // handler and no EOI, masking every lower-priority vector.
-    let exit_ctls = adjust_vmx_ctrl(EXIT_HOST_ADDR_SPACE_SIZE, exit_msr);
+    // EFER is switched by the CPU: the guest's on entry, saved on exit, the
+    // host's reloaded on exit. Without the exit load, the host would resume
+    // with the guest's NXE/SCE; without the entry load, the guest could not
+    // set LME (WRMSR is emulated into GUEST_IA32_EFER).
+    const EXIT_EFER: u32 = EXIT_SAVE_IA32_EFER | EXIT_LOAD_IA32_EFER;
+    let exit_ctls = adjust_vmx_ctrl(EXIT_HOST_ADDR_SPACE_SIZE | EXIT_EFER, exit_msr);
+    if exit_ctls & EXIT_EFER != EXIT_EFER {
+        return Err(ViError::NotSupported);
+    }
     vmwrite(VM_EXIT_CONTROLS, exit_ctls as u64)?;
 
-    // VM entry: 32-bit guest (IA-32e mode guest bit = 0)
-    let entry_ctls = adjust_vmx_ctrl(0, entry_msr);
+    // VM entry: 32-bit guest (IA-32e mode guest bit = 0); `sync_ia32e_mode`
+    // tracks EFER.LMA after every exit.
+    let entry_ctls = adjust_vmx_ctrl(ENTRY_LOAD_IA32_EFER, entry_msr);
+    if entry_ctls & ENTRY_LOAD_IA32_EFER == 0 {
+        return Err(ViError::NotSupported);
+    }
     vmwrite(VM_ENTRY_CONTROLS, entry_ctls as u64)?;
 
     vmwrite(EPT_POINTER, eptp)?;
@@ -215,19 +241,27 @@ unsafe fn program_pvh(entry_pc: u64, eptp: u64) -> ViResult<()> {
     vmwrite(GUEST_IA32_EFER, 0)?;
     vmwrite(GUEST_IA32_PERF_GLOBAL_CTRL, 0)?;
 
-    let mut host_efer: u64 = 0;
-    core::arch::asm!("rdmsr", in("ecx") 0xC000_0080u32, out("eax") host_efer, out("edx") _, options(nomem, nostack));
     vmwrite(HOST_IA32_PAT, 0x0007_0406_0007_0406)?;
-    vmwrite(HOST_IA32_EFER, host_efer)?;
     vmwrite(HOST_IA32_PERF_GLOBAL_CTRL, 0)?;
     // ── 3. Guest State Setup (PVH 32-bit Protected Mode) ─────────────────
     // Linux PVH entry: CR0.PE=1, CR0.ET=1, CR0.NE=1 (0x31), CR4=0, EFER=0, paging off
     vmwrite(GUEST_CR0, 0x31)?;
     vmwrite(CR0_READ_SHADOW, 0x31)?;
+    // Host-owned CR0 bits: the VMX fixed-1 bits other than PE/PG (relaxed by
+    // unrestricted guest), i.e. NE — Linux's PVH entry loads CR0 = PG|PE,
+    // which would #GP natively — and CD/NW, which a VM exit does not reload
+    // from HOST_CR0: a guest-set CD would leave the host running uncached.
+    // The guest's values live in the read shadow (cr_access).
+    let cr0_fixed1 = super::msr::read(MSR_IA32_VMX_CR0_FIXED0) & !(CR0_PE | CR0_PG);
+    vmwrite(CR0_GUEST_HOST_MASK, cr0_fixed1 | CR0_CD | CR0_NW)?;
     vmwrite(GUEST_CR3, 0)?;
-    let mut cr4_f0: u32 = 0;
-    core::arch::asm!("rdmsr", in("ecx") 0x488u32, out("eax") cr4_f0, out("edx") _, options(nomem, nostack));
-    vmwrite(GUEST_CR4, cr4_f0 as u64)?;
+    // The VMX fixed-1 CR4 bits (VMXE) are host-owned: the guest reads its own
+    // value from the shadow, so Linux writing a fresh CR4 without VMXE neither
+    // #GPs nor clears it (cr_access).
+    let cr4_f0 = super::msr::read(MSR_IA32_VMX_CR4_FIXED0);
+    vmwrite(GUEST_CR4, cr4_f0)?;
+    vmwrite(CR4_GUEST_HOST_MASK, cr4_f0)?;
+    vmwrite(CR4_READ_SHADOW, 0)?;
     vmwrite(GUEST_RFLAGS, 0x2)?; // Bit 1 is always 1 in RFLAGS
     vmwrite(GUEST_RIP, entry_pc)?;
     vmwrite(GUEST_RSP, 0)?;
@@ -327,16 +361,26 @@ impl VmxVcpu {
         // The scope VMCLEARed the VMCS since the last run: launch state clear.
         let mut launched = false;
         loop {
+            self.sync_ia32e_mode()?;
             let status = vmx_vmrun(self.gpr.as_mut_ptr(), launched as u64, &mut self.guest_regs);
             if status != 0 {
                 return Ok(ViVmExit::Shutdown);
             }
             launched = true;
 
-            let exit_reason = (vmread(VM_EXIT_REASON)? & 0xFFFF) as u32;
+            let raw_reason = vmread(VM_EXIT_REASON)?;
+            if raw_reason & EXIT_REASON_ENTRY_FAILURE != 0 {
+                // Invalid guest state / MSR load / #MC during entry: no
+                // instruction ran, so RIP stays; the VM stops.
+                return Ok(ViVmExit::Unknown {
+                    ec: raw_reason as u32,
+                    iss: 0,
+                });
+            }
+            let exit_reason = (raw_reason & 0xFFFF) as u32;
             let insn_len = vmread(VM_EXIT_INSTRUCTION_LEN).unwrap_or(0);
             let guest_rip = vmread(GUEST_RIP)?;
-            let advance = || vmwrite(GUEST_RIP, guest_rip + insn_len);
+            let advance = || vmwrite(GUEST_RIP, guest_rip.wrapping_add(insn_len));
 
             match exit_reason {
                 EXIT_REASON_HLT => {
@@ -348,6 +392,14 @@ impl VmxVcpu {
                 }
                 EXIT_REASON_IO_INSTRUCTION => {
                     let qual = vmread(EXIT_QUALIFICATION)?;
+                    if qual & IO_STRING != 0 {
+                        // INS/OUTS are not modelled (as on SVM): stop loud,
+                        // RIP unchanged.
+                        return Ok(ViVmExit::Unknown {
+                            ec: exit_reason,
+                            iss: qual as u32,
+                        });
+                    }
                     let size = (qual & 0x7) as u8 + 1; // 0=1 byte, 1=2 bytes, 3=4 bytes
                     let is_in = (qual & (1 << 3)) != 0;
                     let port = ((qual >> 16) & 0xFFFF) as u16;
@@ -364,24 +416,13 @@ impl VmxVcpu {
                     let val = (self.gpr[0] & mask) as u32;
                     return Ok(ViVmExit::PortOut { port, size, val });
                 }
-                EXIT_REASON_EPT_VIOLATION => {
-                    let gpa = vmread(GUEST_PHYSICAL_ADDRESS)?;
-                    let qual = vmread(EXIT_QUALIFICATION)?;
-                    let is_write = (qual & (1 << 1)) != 0;
-                    let _ = advance();
-
-                    if is_write {
-                        return Ok(ViVmExit::MmioWrite {
-                            ipa: gpa,
-                            size: 4,
-                            val: self.gpr[0],
-                        });
+                EXIT_REASON_EPT_VIOLATION => return self.handle_ept_violation(),
+                EXIT_REASON_MSR_READ | EXIT_REASON_MSR_WRITE => {
+                    let write = exit_reason == EXIT_REASON_MSR_WRITE;
+                    if let MsrOutcome::Done = self.handle_msr(write)? {
+                        let _ = advance();
                     }
-                    return Ok(ViVmExit::MmioRead {
-                        ipa: gpa,
-                        size: 4,
-                        reg: 0,
-                    });
+                    continue;
                 }
                 EXIT_REASON_CPUID => {
                     let [a, b, c, d] = guest_cpuid::query(self.gpr[0] as u32, self.gpr[1] as u32);
@@ -403,7 +444,6 @@ impl VmxVcpu {
                     return Ok(ViVmExit::Shutdown);
                 }
                 other => {
-                    let _ = advance();
                     return Ok(ViVmExit::Unknown {
                         ec: other,
                         iss: insn_len as u32,
@@ -411,5 +451,39 @@ impl VmxVcpu {
                 }
             }
         }
+    }
+
+    /// Keep the "IA-32e mode guest" entry control equal to the guest's
+    /// EFER.LMA (saved on exit): the CPU sets LMA when the guest enables paging
+    /// with LME, and VM entry fails if the two disagree.
+    ///
+    /// # Safety
+    /// This vCPU's VMCS is current.
+    unsafe fn sync_ia32e_mode(&mut self) -> ViResult<()> {
+        const EFER_LMA: u64 = 1 << 10;
+        let long_mode = vmread(GUEST_IA32_EFER)? & EFER_LMA != 0;
+        let entry = vmread(VM_ENTRY_CONTROLS)?;
+        let mode_bit = u64::from(ENTRY_IA32E_MODE_GUEST);
+        if (entry & mode_bit != 0) != long_mode {
+            vmwrite(VM_ENTRY_CONTROLS, entry ^ mode_bit)?;
+        }
+        Ok(())
+    }
+}
+
+/// Queue #GP(0) for the next entry. Real mode (CR0.PE=0, reachable with
+/// unrestricted guest) delivers exceptions without an error code, and
+/// injecting one there fails the VM-entry checks.
+///
+/// # Safety
+/// The target VMCS is current.
+unsafe fn queue_gp() -> ViResult<()> {
+    const GP: u64 = (1 << 31) | (3 << 8) | 13;
+    const DELIVER_ERROR_CODE: u64 = 1 << 11;
+    if vmread(GUEST_CR0)? & CR0_PE != 0 {
+        vmwrite(VM_ENTRY_INTR_INFO_FIELD, GP | DELIVER_ERROR_CODE)?;
+        vmwrite(VM_ENTRY_EXCEPTION_ERROR_CODE, 0)
+    } else {
+        vmwrite(VM_ENTRY_INTR_INFO_FIELD, GP)
     }
 }

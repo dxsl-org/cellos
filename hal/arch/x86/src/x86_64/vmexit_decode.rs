@@ -121,35 +121,44 @@ fn size_mask(size: u8) -> u64 {
     }
 }
 
-/// Decode one x86 MMIO `MOV` instruction captured at an NPF.
+/// Decode one x86 MMIO `MOV`/`MOVZX` instruction captured at a nested-paging fault.
 ///
-/// VirtIO transport registers use 32-bit accesses; device-specific config may
-/// use byte accesses. Other forms fail closed instead of advancing guest RIP.
+/// VirtIO transport registers use 32-bit accesses; device-specific config uses
+/// byte, word and dword accesses (Linux `readb`/`readw` compile to
+/// `movzbl`/`movzwl`). A zero-extending load clears its destination register
+/// in `gprs` before returning the read, so the cell's sized merge of the
+/// loaded bytes leaves exactly the zero-extended value. Other forms (string
+/// ops, 64-bit operands, high-byte registers, RSP) fail closed instead of
+/// advancing guest RIP.
 pub fn decode_mmio(
     info1: u64,
     ipa: u64,
     instruction: &[u8],
-    gprs: &[u64; 16],
+    gprs: &mut [u64; 16],
 ) -> Option<(ViVmExit, u8)> {
     let mut cursor = 0usize;
     let mut rex = 0u8;
+    let mut operand_16 = false;
     while let Some(&byte) = instruction.get(cursor) {
         match byte {
-            0x40..=0x4f => {
-                rex = byte;
-                cursor += 1;
-            }
+            0x40..=0x4f => rex = byte,
+            0x66 if rex == 0 => operand_16 = true,
             0x66 | 0xf2 | 0xf3 => return None,
             _ => break,
         }
+        cursor += 1;
     }
 
-    let opcode = *instruction.get(cursor)?;
+    let mut opcode = u16::from(*instruction.get(cursor)?);
     cursor += 1;
+    if opcode == 0x0f {
+        opcode = 0x0f00 | u16::from(*instruction.get(cursor)?);
+        cursor += 1;
+    }
     let modrm = *instruction.get(cursor)?;
     cursor += 1;
-    if modrm >> 6 == 3 {
-        return None;
+    if modrm >> 6 == 3 || rex & 8 != 0 {
+        return None; // register operand, or a 64-bit access
     }
     let reg = ((modrm >> 3) & 7) | ((rex & 4) << 1);
     if reg == 4 || (matches!(opcode, 0x88 | 0x8a) && rex == 0 && reg >= 4) {
@@ -157,28 +166,38 @@ pub fn decode_mmio(
     }
     cursor = consume_address(instruction, cursor, modrm, rex)?;
     let is_write_fault = info1 & NPF_WRITE != 0;
+    let width: u8 = if operand_16 { 2 } else { 4 };
 
     let exit = match opcode {
-        0x88 if is_write_fault => ViVmExit::MmioWrite {
+        0x88 if is_write_fault && !operand_16 => ViVmExit::MmioWrite {
             ipa,
             size: 1,
             val: gprs[reg as usize] & 0xff,
         },
-        0x8a if !is_write_fault => ViVmExit::MmioRead { ipa, size: 1, reg },
-        0x89 if is_write_fault && rex & 8 == 0 => ViVmExit::MmioWrite {
+        0x8a if !is_write_fault && !operand_16 => ViVmExit::MmioRead { ipa, size: 1, reg },
+        0x89 if is_write_fault => ViVmExit::MmioWrite {
             ipa,
-            size: 4,
-            val: gprs[reg as usize] & 0xffff_ffff,
+            size: width,
+            val: gprs[reg as usize] & size_mask(width),
         },
-        0x8b if !is_write_fault && rex & 8 == 0 => ViVmExit::MmioRead { ipa, size: 4, reg },
-        0xc7 if is_write_fault && rex & 8 == 0 && reg == 0 => {
-            let immediate = instruction.get(cursor..cursor.checked_add(4)?)?;
-            cursor += 4;
+        // A 32-bit load writes the whole register; a 16-bit one merges.
+        0x8b if !is_write_fault => ViVmExit::MmioRead { ipa, size: width, reg },
+        0xc7 if is_write_fault && reg == 0 => {
+            let bytes = usize::from(width);
+            let immediate = instruction.get(cursor..cursor.checked_add(bytes)?)?;
+            cursor += bytes;
+            let mut value = [0u8; 4];
+            value[..bytes].copy_from_slice(immediate);
             ViVmExit::MmioWrite {
                 ipa,
-                size: 4,
-                val: u32::from_le_bytes(immediate.try_into().ok()?) as u64,
+                size: width,
+                val: u64::from(u32::from_le_bytes(value)),
             }
+        }
+        0x0fb6 | 0x0fb7 if !is_write_fault && !operand_16 => {
+            gprs[reg as usize] = 0;
+            let size = if opcode == 0x0fb6 { 1 } else { 2 };
+            ViVmExit::MmioRead { ipa, size, reg }
         }
         _ => return None,
     };
@@ -214,7 +233,7 @@ mod tests {
         let mut gprs = [0u64; 16];
         gprs[8] = 0xfeed_beef_dead_cafe;
         assert!(matches!(
-            decode_mmio(NPF_WRITE, 0xd000_0000, &[0x44, 0x89, 0x07], &gprs),
+            decode_mmio(NPF_WRITE, 0xd000_0000, &[0x44, 0x89, 0x07], &mut gprs),
             Some((
                 ViVmExit::MmioWrite {
                     size: 4,
@@ -225,7 +244,7 @@ mod tests {
             ))
         ));
         assert!(matches!(
-            decode_mmio(0, 0xd000_0000, &[0x41, 0x8b, 0x04, 0x24], &gprs),
+            decode_mmio(0, 0xd000_0000, &[0x41, 0x8b, 0x04, 0x24], &mut gprs),
             Some((
                 ViVmExit::MmioRead {
                     size: 4,
@@ -242,7 +261,7 @@ mod tests {
         let mut gprs = [0u64; 16];
         gprs[0] = 0x52;
         assert!(matches!(
-            decode_mmio(NPF_WRITE, 0xd000_0300, &[0x88, 0x02], &gprs),
+            decode_mmio(NPF_WRITE, 0xd000_0300, &[0x88, 0x02], &mut gprs),
             Some((
                 ViVmExit::MmioWrite {
                     size: 1,
@@ -253,7 +272,7 @@ mod tests {
             ))
         ));
         assert!(matches!(
-            decode_mmio(0, 0xd000_0300, &[0x8a, 0x06], &gprs),
+            decode_mmio(0, 0xd000_0300, &[0x8a, 0x06], &mut gprs),
             Some((
                 ViVmExit::MmioRead {
                     size: 1,
@@ -267,13 +286,13 @@ mod tests {
 
     #[test]
     fn decodes_immediate_write_and_rejects_wrong_direction() {
-        let gprs = [0u64; 16];
+        let mut gprs = [0u64; 16];
         assert!(matches!(
             decode_mmio(
                 NPF_WRITE,
                 0xd000_0070,
                 &[0xc7, 0x47, 0x70, 0x04, 0x00, 0x00, 0x00],
-                &gprs,
+                &mut gprs,
             ),
             Some((
                 ViVmExit::MmioWrite {
@@ -284,14 +303,56 @@ mod tests {
                 7
             ))
         ));
-        assert!(decode_mmio(0, 0xd000_0000, &[0x89, 0x07], &gprs).is_none());
+        assert!(decode_mmio(0, 0xd000_0000, &[0x89, 0x07], &mut gprs).is_none());
+    }
+
+    #[test]
+    fn zero_extending_loads_clear_the_destination_before_the_sized_read() {
+        let mut gprs = [u64::MAX; 16];
+        // movzbl 0x100(%rdi),%eax
+        assert!(matches!(
+            decode_mmio(0, 0xd000_0900, &[0x0f, 0xb6, 0x87, 0x00, 0x01, 0x00, 0x00], &mut gprs),
+            Some((ViVmExit::MmioRead { size: 1, reg: 0, .. }, 7))
+        ));
+        assert_eq!(gprs[0], 0);
+        // movzwl (%rsi),%r9d
+        gprs[9] = u64::MAX;
+        assert!(matches!(
+            decode_mmio(0, 0xd000_0904, &[0x44, 0x0f, 0xb7, 0x0e], &mut gprs),
+            Some((ViVmExit::MmioRead { size: 2, reg: 9, .. }, 4))
+        ));
+        assert_eq!(gprs[9], 0);
+        // A plain byte load merges and must leave the register alone.
+        gprs[2] = u64::MAX;
+        assert!(decode_mmio(0, 0xd000_0900, &[0x8a, 0x16], &mut gprs).is_some());
+        assert_eq!(gprs[2], u64::MAX);
+    }
+
+    #[test]
+    fn decodes_16_bit_moves_and_refuses_64_bit_ones() {
+        let mut gprs = [0u64; 16];
+        gprs[0] = 0x1234_5678;
+        assert!(matches!(
+            decode_mmio(NPF_WRITE, 0xd000_0900, &[0x66, 0x89, 0x07], &mut gprs),
+            Some((ViVmExit::MmioWrite { size: 2, val: 0x5678, .. }, 3))
+        ));
+        assert!(matches!(
+            decode_mmio(0, 0xd000_0900, &[0x66, 0x8b, 0x07], &mut gprs),
+            Some((ViVmExit::MmioRead { size: 2, reg: 0, .. }, 3))
+        ));
+        assert!(matches!(
+            decode_mmio(NPF_WRITE, 0xd000_0900, &[0x66, 0xc7, 0x07, 0x34, 0x12], &mut gprs),
+            Some((ViVmExit::MmioWrite { size: 2, val: 0x1234, .. }, 5))
+        ));
+        assert!(decode_mmio(0, 0xd000_0900, &[0x48, 0x8b, 0x07], &mut gprs).is_none());
+        assert!(decode_mmio(NPF_WRITE, 0xd000_0900, &[0x48, 0x89, 0x07], &mut gprs).is_none());
     }
 
     #[test]
     fn rejects_rsp_operands_outside_the_caller_managed_gpr_bank() {
-        let gprs = [0u64; 16];
-        assert!(decode_mmio(NPF_WRITE, 0xd000_0000, &[0x89, 0x23], &gprs).is_none());
-        assert!(decode_mmio(0, 0xd000_0000, &[0x8b, 0x23], &gprs).is_none());
+        let mut gprs = [0u64; 16];
+        assert!(decode_mmio(NPF_WRITE, 0xd000_0000, &[0x89, 0x23], &mut gprs).is_none());
+        assert!(decode_mmio(0, 0xd000_0000, &[0x8b, 0x23], &mut gprs).is_none());
     }
 
     #[test]

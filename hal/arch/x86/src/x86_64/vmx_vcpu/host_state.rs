@@ -17,6 +17,7 @@ use super::super::vmcs::*;
 
 const MSR_FS_BASE: u32 = 0xC000_0100;
 const MSR_GS_BASE: u32 = 0xC000_0101;
+const MSR_EFER: u32 = 0xC000_0080;
 
 #[repr(C, packed)]
 struct Dtr {
@@ -84,5 +85,7 @@ pub(super) unsafe fn refresh(host_cr3: u64) -> ViResult<()> {
     // `CpuLocal`, FS the calling cell's own value.
     vmwrite(HOST_FS_BASE, msr::read(MSR_FS_BASE))?;
     vmwrite(HOST_GS_BASE, msr::read(MSR_GS_BASE))?;
+    // Loaded on exit (EXIT_LOAD_IA32_EFER); this CPU's value, like the rest.
+    vmwrite(HOST_IA32_EFER, msr::read(MSR_EFER))?;
     Ok(())
 }

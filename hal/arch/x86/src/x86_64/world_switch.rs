@@ -17,11 +17,12 @@
 //!   `#VMEXIT` clears IF in hardware, so no host handler ever runs inside the
 //!   fence — see the inline comment at the `sti`).
 //!
-//! - **XCR0 / PKRU** (both backends) and, on VMX, **CR8 (TPR)** and
-//!   **IA32_KERNEL_GS_BASE** — no exit reloads them, so the Rust wrappers
-//!   [`svm_vmrun`] / [`vmx_vmrun`] snapshot the host values before entry and
-//!   restore them right after the exit (see `host_ext_state`). SVM's
-//!   KernelGSBase is already covered by the VMSAVE/VMLOAD pair.
+//! - **XCR0 / PKRU** (both backends) and, on VMX, **CR8 (TPR)**,
+//!   **IA32_KERNEL_GS_BASE** and the **SYSCALL MSRs (STAR/LSTAR/CSTAR/SFMASK)**
+//!   — no exit reloads them, so the Rust wrappers [`svm_vmrun`] / [`vmx_vmrun`]
+//!   snapshot the host values before entry and restore them right after the
+//!   exit (see `host_ext_state`). SVM's KernelGSBase and SYSCALL MSRs are
+//!   already covered by the VMSAVE/VMLOAD pair.
 //!
 //! # gpr[] index = x86 register number
 //! 0=RAX 1=RCX 2=RDX 3=RBX 4=RSP 5=RBP 6=RSI 7=RDI 8..15=R8..R15.
@@ -68,6 +69,17 @@ pub unsafe fn svm_vmrun(
     host.exit(guest_pkru);
 }
 
+/// The SYSCALL MSRs, in the order [`VmxGuestRegs::syscall`] stores them.
+#[derive(Clone, Copy)]
+pub enum SyscallMsr {
+    Star = 0,
+    Lstar = 1,
+    Cstar = 2,
+    Sfmask = 3,
+}
+
+const SYSCALL_MSRS: [u32; 4] = [0xC000_0081, 0xC000_0082, 0xC000_0083, 0xC000_0084];
+
 /// Guest values of the registers a VMX exit leaves holding guest state.
 #[derive(Default)]
 pub struct VmxGuestRegs {
@@ -75,20 +87,25 @@ pub struct VmxGuestRegs {
     /// The guest's `swapgs` partner; without the swap-back the VMM cell would
     /// resume with a guest-chosen user GS base.
     pub kernel_gs_base: u64,
+    /// Guest STAR/LSTAR/CSTAR/SFMASK, indexed by [`SyscallMsr`]. VMX switches
+    /// none of them, and the guest writes them only through emulated `WRMSR`
+    /// (no MSR bitmap), so they are loaded before entry and never read back.
+    pub syscall: [u64; 4],
 }
 
 /// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume`.
 ///
 /// Returns 0 on VM exit, 1 on VMfailInvalid, 2 on VMfailValid. The host's
-/// PKRU, XCR0, KERNEL_GS_BASE and CR8 are identical before and after the call;
-/// `guest` carries the guest's PKRU/KERNEL_GS_BASE across exits. CR8 is
-/// restored only as a backstop: the VMCS sets CR8-load/store exiting, so the
-/// guest never reaches the physical TPR.
+/// PKRU, XCR0, KERNEL_GS_BASE, SYSCALL MSRs and CR8 are identical before and
+/// after the call; `guest` carries the guest's PKRU/KERNEL_GS_BASE across
+/// exits. CR8 is restored only as a backstop: the VMCS sets CR8-load/store
+/// exiting, so the guest never reaches the physical TPR.
 ///
 /// # Safety
 /// VMX root operation, this vCPU's VMCS current and fully initialised
 /// (host-state fields describing the *current* CPU), `gpr_ptr` a live
-/// `[u64; 16]`, and IF=0 for the whole call.
+/// `[u64; 16]`, and IF=0 for the whole call: between the SYSCALL-MSR load and
+/// the restore, a host `syscall` would enter the guest's LSTAR.
 #[inline]
 pub unsafe fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64, guest: &mut VmxGuestRegs) -> u32 {
     let host_tpr: u64;
@@ -97,9 +114,21 @@ pub unsafe fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64, guest: &mut VmxGuestRe
     if guest.kernel_gs_base != host_kgs {
         msr::write(MSR_KERNEL_GS_BASE, guest.kernel_gs_base);
     }
+    let mut host_syscall = [0u64; 4];
+    for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
+        host_syscall[slot] = msr::read(index);
+        if guest.syscall[slot] != host_syscall[slot] {
+            msr::write(index, guest.syscall[slot]);
+        }
+    }
     let host = HostExtState::enter(guest.pkru);
     let status = vmx_world_switch(gpr_ptr, launched);
     host.exit(&mut guest.pkru);
+    for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
+        if guest.syscall[slot] != host_syscall[slot] {
+            msr::write(index, host_syscall[slot]);
+        }
+    }
     let kgs = msr::read(MSR_KERNEL_GS_BASE);
     guest.kernel_gs_base = kgs;
     if kgs != host_kgs {

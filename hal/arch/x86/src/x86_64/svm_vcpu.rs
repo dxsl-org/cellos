@@ -9,6 +9,7 @@
 use hal_hypervisor::ViVmExit;
 
 use super::guest_cpuid;
+use super::guest_mem::GuestRam;
 use super::vmcb::{
     VmcbView, EFER_SVME, OFF_CR0, OFF_CR3, OFF_CR4, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1,
     OFF_EXITINFO2, OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP, VMEXIT_CLGI,
@@ -62,8 +63,7 @@ pub struct SvmVcpu {
     /// access.
     apic_va: *mut u8,
     /// Host-visible contiguous guest RAM used only to fetch a faulting instruction.
-    guest_ram: *const u8,
-    guest_ram_len: usize,
+    guest_ram: GuestRam,
     /// HPET timestamp of the last PAUSE-path tick delivery (pacing state).
     last_pause_tick_ns: u64,
     /// Swallowed-PAUSE counter for the no-HPET fallback pace.
@@ -109,8 +109,8 @@ impl SvmVcpu {
             vmcb_pa,
             host_pa,
             apic_va,
-            guest_ram,
-            guest_ram_len,
+            // SAFETY: the caller's frame contract covers the guest carve.
+            guest_ram: unsafe { GuestRam::new(guest_ram, guest_ram_len) },
             last_pause_tick_ns: 0,
             pause_backlog: 0,
             guest_pkru: 0,
@@ -226,68 +226,13 @@ impl SvmVcpu {
             return Some((bytes, assisted_len));
         }
 
-        let rip = self.vmcb.r64(OFF_RIP);
-        let mut bytes = [0u8; 15];
-        let mut available = 0;
-        for (index, byte) in bytes.iter_mut().enumerate() {
-            let Some(gpa) = rip
-                .checked_add(index as u64)
-                .and_then(|address| self.translate_guest_virtual(address))
-            else {
-                break;
-            };
-            let Some(value) = self.read_guest_byte(gpa) else {
-                break;
-            };
-            *byte = value;
-            available += 1;
-        }
-        (available != 0).then_some((bytes, available))
-    }
-
-    fn translate_guest_virtual(&self, address: u64) -> Option<u64> {
-        if self.vmcb.r64(OFF_CR0) & (1 << 31) == 0 {
-            return (address < self.guest_ram_len as u64).then_some(address);
-        }
-        if self.vmcb.r64(OFF_CR4) & (1 << 12) != 0 {
-            return None; // LA57 is outside the pinned x86 guest contract.
-        }
-
-        let mut table = self.vmcb.r64(OFF_CR3) & 0x000f_ffff_ffff_f000;
-        for (level, shift) in [(4u8, 39u8), (3, 30), (2, 21), (1, 12)] {
-            let index = (address >> shift) & 0x1ff;
-            let entry = self.read_guest_u64(table.checked_add(index * 8)?)?;
-            if entry & 1 == 0 {
-                return None;
-            }
-            if entry & (1 << 7) != 0 {
-                return match level {
-                    3 => Some((entry & 0x000f_ffff_c000_0000) | (address & ((1 << 30) - 1))),
-                    2 => Some((entry & 0x000f_ffff_ffe0_0000) | (address & ((1 << 21) - 1))),
-                    _ => None,
-                };
-            }
-            table = entry & 0x000f_ffff_ffff_f000;
-        }
-        Some(table | (address & 0xfff))
-    }
-
-    fn read_guest_byte(&self, gpa: u64) -> Option<u8> {
-        let offset: usize = gpa.try_into().ok()?;
-        if offset >= self.guest_ram_len {
-            return None;
-        }
-        // SAFETY: constructor contract pins `guest_ram` for this vCPU lifetime;
-        // the bounds check keeps the read inside the contiguous guest carve.
-        Some(unsafe { core::ptr::read(self.guest_ram.add(offset)) })
-    }
-
-    fn read_guest_u64(&self, gpa: u64) -> Option<u64> {
-        let mut bytes = [0u8; 8];
-        for (index, byte) in bytes.iter_mut().enumerate() {
-            *byte = self.read_guest_byte(gpa.checked_add(index as u64)?)?;
-        }
-        Some(u64::from_le_bytes(bytes))
+        self.guest_ram.fetch_instruction(
+            self.vmcb.r64(OFF_CR0),
+            self.vmcb.r64(OFF_CR3),
+            self.vmcb.r64(OFF_CR4),
+            self.vmcb.r64(OFF_EFER),
+            self.vmcb.r64(OFF_RIP),
+        )
     }
 
     /// World-switch into the guest, handling internal exits, and return the
@@ -468,7 +413,7 @@ impl SvmVcpu {
                         };
                     };
                     let Some((exit, length)) =
-                        decode_mmio(info1, info2, &instruction[..available], &self.gpr)
+                        decode_mmio(info1, info2, &instruction[..available], &mut self.gpr)
                     else {
                         return ViVmExit::Unknown {
                             ec: VMEXIT_NPF as u32,

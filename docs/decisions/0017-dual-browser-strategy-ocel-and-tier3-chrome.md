@@ -344,6 +344,18 @@ Footprint and latency claims must be backed by release-image and runtime
 measurements on the qualified target. Reserved heap, ELF size and observed
 peak memory are different quantities; none should be presented as the others.
 
+## 5d. Tier 3 Chrome unparked for the desktop (2026-11-11)
+
+The maintainer chose to build the real §2.2 path for the x86 desktop: the taskbar
+"Chrome" runs Chromium in an Alpine guest under the Cellos hypervisor on Intel
+VT-x, and the existing `cells/apps/chrome` launcher, which draws its own
+browser UI and fabricates page text, is replaced rather than restyled. Ocel
+viewer keeps its §5c scope. Rendering stays software (`--disable-gpu`): the
+hypervisor's virtio-gpu is 2D-only and no Cellos GPU driver offers graphics
+(ADR-0033 is compute-only), so guest GPU acceleration is a separate later plan.
+Plan: `.agents/261111-1700-tier3-chrome/plan.md`. ADR-0025 §3.2 is unchanged:
+Chrome is the approved Tier 3 workload, not a general-purpose hypervisor.
+
 ## 6. Cross-references
 
 | Topic | Document |

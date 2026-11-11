@@ -21,13 +21,14 @@
 #     packaged x86 shell reaches its `Cellos >` prompt. Guest SVM failure after
 #     the prompt is outside this mode's contract.
 #
-# All modes run under QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm`. Nested SVM
-# through host KVM is Intel-host-incompatible (KVM exposes VT-x, not AMD-V), so
-# unlike the ARM lane there is no KVM fast path here; TCG emulation of SVM makes
-# the runs slow — give BOOT_WINDOW generous headroom.
-# QEMU-TCG 10.2.0 is qualified for this lane at 1G and 2G. Ubuntu 24.04's
+# HV_ACCEL=tcg (default) runs QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm`: the
+# AMD SVM backend, slow under emulation — give BOOT_WINDOW generous headroom.
+# QEMU-TCG 10.2.0 is qualified for this mode at 1G and 2G. Ubuntu 24.04's
 # 8.2.2 build deterministically triple-faults on the same ISO; select another
 # runtime with QEMU_X86_BIN.
+# HV_ACCEL=kvm runs `-accel kvm -cpu host` on an Intel host with nested KVM:
+# the Intel VMX backend, and additionally requires the kernel's VMX
+# root-operation marker. The Alpine guest reaches its prompt in seconds.
 #
 # Usage:
 #   bash scripts/qemu-hypervisor-smoke-x86.sh [iso]
@@ -35,6 +36,7 @@
 #
 # Environment:
 #   HV_SMOKE_MODE  machinery (default) | boot | host-shell
+#   HV_ACCEL       tcg (default, SVM) | kvm (Intel VMX via nested KVM)
 #   BOOT_WINDOW    seconds to wait (default: 900; host-shell: 60)
 #   QEMU_X86_BIN   emulator executable (default: qemu-system-x86_64)
 #   QEMU_MEMORY    outer Cellos VM memory (default: 1G)
@@ -66,11 +68,30 @@ if ! command -v "$QEMU_X86_BIN" &>/dev/null; then
     exit 1
 fi
 
-QEMU_VERSION_LINE="$("$QEMU_X86_BIN" --version 2>&1 | sed -n '1p')"
-if [[ "$QEMU_VERSION_LINE" != "QEMU emulator version 10.2.0"* ]]; then
-    echo "BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got '$QEMU_VERSION_LINE' from $QEMU_X86_BIN)" >&2
-    exit 1
-fi
+HV_ACCEL="${HV_ACCEL:-tcg}"
+case "$HV_ACCEL" in
+    tcg)
+        QEMU_ACCEL_ARGS=(-accel tcg -cpu qemu64,+pdpe1gb,+svm)
+        QEMU_VERSION_LINE="$("$QEMU_X86_BIN" --version 2>&1 | sed -n '1p')"
+        if [[ "$QEMU_VERSION_LINE" != "QEMU emulator version 10.2.0"* ]]; then
+            echo "BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got '$QEMU_VERSION_LINE' from $QEMU_X86_BIN)" >&2
+            exit 1
+        fi
+        ;;
+    kvm)
+        # Intel VT-x through nested KVM: the host CPU's VMX is passed to Cellos.
+        # The 10.2.0 pin guards TCG's SVM emulation and does not apply here.
+        if [[ "${QEMU_X86_BIN,,}" == *.exe || ! -w /dev/kvm ]] || ! grep -qw vmx /proc/cpuinfo; then
+            echo "BLOCKED_ENVIRONMENT: HV_ACCEL=kvm needs a writable /dev/kvm on an Intel VMX host" >&2
+            exit 1
+        fi
+        QEMU_ACCEL_ARGS=(-accel kvm -cpu host)
+        ;;
+    *)
+        echo "FAIL: HV_ACCEL must be 'tcg' or 'kvm' (got '$HV_ACCEL')" >&2
+        exit 1
+        ;;
+esac
 
 if [[ ! -f "$ISO" ]]; then
     echo "FAIL: ISO not found: $ISO" >&2
@@ -91,15 +112,14 @@ if [[ "${QEMU_X86_BIN,,}" == *.exe ]]; then
 fi
 QEMU_VERSION="$("$QEMU_X86_BIN" --version | sed -n '1p')"
 
-echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
+echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE accel=$HV_ACCEL iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
 echo "[hv-smoke-x86] $QEMU_VERSION"
 
 # Spawn QEMU and poll for the required terminal marker.
 # Early exit on success avoids waiting out the full BOOT_WINDOW under TCG.
 "$QEMU_X86_BIN" \
     -machine q35 \
-    -accel tcg \
-    -cpu qemu64,+pdpe1gb,+svm \
+    "${QEMU_ACCEL_ARGS[@]}" \
     -m "$QEMU_MEMORY" \
     -nographic \
     -cdrom "$QEMU_ISO" \
@@ -171,6 +191,13 @@ fi
 LIVENESS_MARKER='[hv-x86] vCPU ready'
 if ! grep -qF "$LIVENESS_MARKER" qemu-hv-x86.log; then
     echo "FAIL: liveness marker '$LIVENESS_MARKER' not seen — VMM never brought the guest up" >&2
+    dump_log
+    exit 1
+fi
+
+# KVM mode exists to qualify the VMX backend; an SVM run would prove nothing.
+if [[ "$HV_ACCEL" == "kvm" ]] && ! grep -qF "x86 virt: root operation active (VMX)" qemu-hv-x86.log; then
+    echo "FAIL: HV_ACCEL=kvm but the kernel did not enter VMX root operation" >&2
     dump_log
     exit 1
 fi
