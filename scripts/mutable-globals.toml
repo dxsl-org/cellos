@@ -2371,17 +2371,6 @@ rationale = "exit_task runs under SCHEDULER inside yield_cpu, reachable from tim
 review = "kernel/src/cell/service_registry.rs:clear_tid; kernel/src/task/drivers/driver_cell.rs:deregister_all_for; kernel/src/task/scheduler.rs:1620; kernel/src/cell/service_registry.rs:commit_paused"
 
 [[global]]
-key = "kernel::cell::registry::CELL_REGISTRY"
-lifetime = "global"
-mutation = "spinlock"
-owner = "cell::registry declares it; no module reads or writes it"
-contexts = ["none"]
-seal = "no x86_64 accessor; dead storage on this image"
-retirement = "no x86_64 accessor; dead storage on this image"
-rationale = "No reference to CELL_REGISTRY exists anywhere in kernel, hal or libs; the only occurrence is the declaration itself."
-review = "kernel/src/cell/registry.rs:13"
-
-[[global]]
 key = "kernel::cell::hotswap::SWAP_CEILINGS"
 lifetime = "per-thread"
 mutation = "spinlock"

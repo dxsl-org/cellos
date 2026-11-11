@@ -215,10 +215,9 @@ pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: u
         && task.segment_mem.is_some()
         && (expected & trusted == 0
             || (task.is_critical
-                && task.supervisor_cap.is_some()
+                && task.rights.supervisor
                 && task.priority == api::TaskPriority::Normal as u8
-                && crate::task::cap::CapSet::of_task(task)
-                    == super::super::boot_ceiling::boot_ceiling("/bin/init")));
+                && task.rights == super::super::boot_ceiling::boot_ceiling("/bin/init")));
     if complete {
         LAST_OBSERVED.fetch_or(expected, Ordering::Release);
     } else {

@@ -618,12 +618,7 @@ impl Scheduler {
         if !owner.is_live() || !self.cell_owner_slot_is_empty(CellId(owner.cell_id)) {
             return false;
         }
-        let caps = self.cell_rights(owner.root_tid as usize);
-        if !crate::cell::cspace::register_cell_authority(
-            CellId(owner.cell_id),
-            owner.generation,
-            caps,
-        ) {
+        if !crate::cell::cspace::register_cell_authority(CellId(owner.cell_id), owner.generation) {
             return false;
         }
         self.insert_cell_owner_slot(owner.cell_id, CellOwnerSlot::Live(owner));

@@ -63,7 +63,7 @@ pub(super) fn snapshot() -> StateSnapshot {
                     cluster: (task.cluster_mode, task.cluster_id),
                     allowlist: task.syscall_allowlist,
                     protection: (task.pku_key, task.pku_value),
-                    caps: crate::task::cap::CapSet::of_task(task),
+                    caps: task.rights,
                     critical: task.is_critical,
                     replacement: task.hotswap_source_tid,
                     dirs: (

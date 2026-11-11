@@ -6,14 +6,13 @@
 use crate::cell::cspace::{
     register_cell_authority, ControlStatus, Principal, ResourceKind, CELL_AUTHORITIES,
 };
-use crate::task::cap::CapSet;
 use api::cap::CapPerms;
 use types::CellId;
 
 pub fn run() {
     let cell = CellId(63);
     let gen = 1u64;
-    register_cell_authority(cell, gen, CapSet::EMPTY);
+    register_cell_authority(cell, gen);
     let mut auths = CELL_AUTHORITIES.lock();
     let auth = auths.get_mut(&(cell.0, gen)).expect("authority registered");
     let ticket = auth

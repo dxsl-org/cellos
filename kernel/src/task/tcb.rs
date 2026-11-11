@@ -357,78 +357,16 @@ pub struct Task {
     // Async Kernel Support
     pub pending_future: Option<SyscallFuture>,
 
-    /// Raw block-device access (BlkRead/BlkWrite/BlkFlush).  Granted at spawn for `/bin/vfs`.
-    pub block_io_cap: Option<super::cap::BlockIoCap>,
-    /// Network transmit/receive (NetTx/NetRx).  Granted at spawn for `/bin/net`.
-    pub network_cap: Option<super::cap::NetworkCap>,
-    /// Cell spawning + hot-swap (SpawnFromPath/SpawnPinned/HotSwap).
-    /// Granted at spawn for `/bin/init` and `/bin/cellbox`.
-    pub spawn_cap: Option<super::cap::SpawnCap>,
-    /// RISC-V H-extension CSR access for VMM cells.
-    /// Granted when manifest declares `hypervisor = true` AND the firmware reported H-ext.
-    pub hypervisor_cap: Option<super::cap::HypervisorCap>,
     /// Test-hooks-only, exact-path authority to self-register `service::SILO`.
+    /// A launch-route token on the root task, not a Cell right (not in `CapSet`).
     #[cfg(feature = "test-hooks")]
     pub development_silo_registration_cap: Option<super::cap::DevelopmentSiloRegistrationCap>,
-    /// Supervisor authority: sys_freeze_cell / sys_resume_cell / sys_kill_cell.
-    /// Set ONLY by kernel init (direct TCB write). Never propagated through CapSet.
-    pub supervisor_cap: Option<super::cap::SupervisorCap>,
-    /// PCIe Driver Cell: claim BAR MMIO + authorise DMA via GrantDma.
-    /// Granted when manifest declares `pcie_driver = true`.
-    pub pcie_driver_cap: Option<super::cap::PcieDriverCap>,
-    /// x86 serial-port authority (`/bin/serial`): drives only probed 16550 ports.
-    pub serial_port_cap: Option<super::cap::SerialPortCap>,
-    /// Platform Cell: singleton capability gating `sys_register_pcie_bar`.
-    /// Granted by path match `/bin/platform` in loader.rs; at most one holder ever.
-    pub platform_cap: Option<super::cap::PlatformCap>,
-    /// USB Host Driver Cell: claim DWC2 MMIO + manage USB IRQ.
-    /// Granted when manifest/policy grants `usb_driver = true`.
-    pub usb_driver_cap: Option<super::cap::UsbDriverCap>,
-    /// Coarse network rights (`CapSet::net_*`). The kernel gates no syscall on
-    /// them; `attested_identity_of` exports the Cell root's copy as
-    /// `CALLER_FLAG_NET_*` trailer flags and service-net enforces them. Threads
-    /// inherit them through the same `CapSet` copy as every other cap.
-    pub net_resolve: bool,
-    pub net_connect: bool,
-    pub net_listen: bool,
-    pub net_l2: bool,
-    /// S2-T/S2-W rights (`CapSet::observe_tasks`, `observe_memory`,
-    /// `vfs_mutate`). `check_allowlist` refuses `GetProcs`/`GetProcs2` without
-    /// `observe_tasks` and `MemInfo` without `observe_memory`;
-    /// `attested_identity_of` attests `CALLER_FLAG_VFS_MUTATE` only with
-    /// `vfs_mutate`. Threads inherit them through the same `CapSet` copy.
-    pub observe_tasks: bool,
-    pub observe_memory: bool,
-    pub vfs_mutate: bool,
-    /// Q right (`CapSet::config_write`, Phase 01 CP1). `attested_identity_of`
-    /// attests `CALLER_FLAG_CONFIG_WRITE` from the Cell root's copy; service-config
-    /// enforces it. Threads inherit it through the same `CapSet` copy.
-    pub config_write: bool,
-    /// KSSH K3 sign right (`CapSet::kms_ssh_sign`). `attested_identity_of`
-    /// attests `CALLER_FLAG_KMS_SSH_SIGN` from the Cell root's copy; service-kms
-    /// enforces it. Threads inherit it through the same `CapSet` copy.
-    pub kms_ssh_sign: bool,
-    /// KSSH K3 admin right (`CapSet::kms_ssh_admin`), attested as
-    /// `CALLER_FLAG_KMS_SSH_ADMIN` from the Cell root's copy. No edge grants it yet.
-    pub kms_ssh_admin: bool,
 
-    /// MMIO device-class capability bitmask (`DEV_*` from
-    /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
-    /// A cell may `sys_request_mmio` only ranges whose matching device class is
-    /// present here. `0` = no MMIO access.
-    pub mmio_devices: u8,
-
-    /// Block-I/O partition range grants (Milestone 2.5 P03) — bitmask:
-    /// bit 0 = P1 FAT32 (`MANIFEST_FLAG_PART_DATA`), bit 1 = P4 littlefs
-    /// (`MANIFEST_FLAG_PART_LFS`). Checked by `check_block_access` for every
-    /// raw block syscall, on top of `block_io_cap`. P2 (cell table) and P3
-    /// (snapshot) have no bit — those ranges are kernel-only by construction.
-    pub block_regions: u8,
-
-    /// The Cell incarnation's authority record (architecture review H-1). Read
-    /// only on the Cell's **root** task, through `Scheduler::cell_rights`, so
-    /// every thread of the incarnation sees one set of rights and a revoke
-    /// aimed at any of them applies to all. A thread's own copy is unused.
+    /// The Cell incarnation's authority record (architecture review H-1): every
+    /// kernel cap, service right, MMIO class and block region the Cell holds.
+    /// Read only on the Cell's **root** task, through `Scheduler::cell_rights`,
+    /// so every thread of the incarnation sees one set of rights and a revoke
+    /// aimed at any of them applies to all. A thread's own record stays `EMPTY`.
     pub(crate) rights: super::cap::CapSet,
 
     /// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
@@ -709,29 +647,8 @@ impl Task {
             pending_owner_deaths: Vec::new(),
             pending_exit_reason: None,
             pending_future: None,
-            block_io_cap: None,
-            network_cap: None,
-            spawn_cap: None,
-            hypervisor_cap: None,
             #[cfg(feature = "test-hooks")]
             development_silo_registration_cap: None,
-            supervisor_cap: None,
-            pcie_driver_cap: None,
-            serial_port_cap: None,
-            platform_cap: None,
-            usb_driver_cap: None,
-            net_resolve: false,
-            net_connect: false,
-            net_listen: false,
-            net_l2: false,
-            observe_tasks: false,
-            observe_memory: false,
-            vfs_mutate: false,
-            config_write: false,
-            kms_ssh_sign: false,
-            kms_ssh_admin: false,
-            mmio_devices: 0,
-            block_regions: 0,
             rights: super::cap::CapSet::EMPTY,
             pku_key: 0,
             pku_value: 0,

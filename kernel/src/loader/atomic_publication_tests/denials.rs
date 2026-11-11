@@ -391,9 +391,7 @@ fn authority_reservation_contract() -> bool {
     if reservations0 != 0 || CELL_AUTHORITIES.lock().get_mut(&key).is_some() {
         return false;
     }
-    let Ok(aborted) =
-        AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
-    else {
+    let Ok(aborted) = AuthorityReservation::reserve(cell, generation) else {
         return false;
     };
     let addressable = CELL_AUTHORITIES.lock().get_mut(&key).is_some();
@@ -401,9 +399,7 @@ fn authority_reservation_contract() -> bool {
     let hidden = !addressable && promised == 1;
     drop(aborted);
     let (rows1, _, reservations1) = CELL_AUTHORITIES.lock().test_shape();
-    let Ok(reservation) =
-        AuthorityReservation::reserve(cell, generation, crate::task::cap::CapSet::EMPTY)
-    else {
+    let Ok(reservation) = AuthorityReservation::reserve(cell, generation) else {
         return false;
     };
     let (_, capacity_before, _) = CELL_AUTHORITIES.lock().test_shape();

@@ -580,11 +580,7 @@ impl SessionPublication {
                 .then(super::cap::DevelopmentSiloRegistrationCap::new);
         }
         let owner = api::cell_owner::CellOwner::new(cell.0, task.cell_generation, tid as u64);
-        let authority = crate::cell::cspace::AuthorityReservation::reserve(
-            cell,
-            owner.generation,
-            state.granted,
-        )?;
+        let authority = crate::cell::cspace::AuthorityReservation::reserve(cell, owner.generation)?;
         let path_len = state.measurement.as_ref().map_or(0, |m| m.path.len());
         let claim = PublicationClaim::charge(
             creator,

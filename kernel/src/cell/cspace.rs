@@ -9,7 +9,6 @@
 //! - **D03**: Single shared `CellAuthority` per `(CellId, generation)`; 64-byte CSpace request;
 //!   single-parent revocation hierarchy with `AdmissionCut` and quiescence tracking.
 
-use crate::task::cap::CapSet;
 use alloc::vec::Vec;
 use types::CellId;
 
@@ -380,12 +379,12 @@ impl Default for SlotEntry {
     }
 }
 
-/// Shared Cell Authority per (CellId, generation).
+/// CSpace slot arena per (CellId, generation): BootFS file tickets and other
+/// slot-held resources. The Cell's rights are not here; they are the root's
+/// `Task::rights` (`Scheduler::cell_rights`, architecture review H-1).
 pub struct CellAuthority {
     pub cell_id: CellId,
     pub generation: u64,
-    pub ceiling: CapSet,
-    pub current_rights: CapSet,
     pub slots: Vec<SlotEntry>,
     pub next_ticket_counter: u64,
     pub revoking: bool,
@@ -393,7 +392,7 @@ pub struct CellAuthority {
 }
 
 impl CellAuthority {
-    pub fn new(cell_id: CellId, generation: u64, ceiling: CapSet) -> Self {
+    pub fn new(cell_id: CellId, generation: u64) -> Self {
         let mut slots = Vec::with_capacity(MAX_SLOTS_PER_CELL);
         for _ in 0..MAX_SLOTS_PER_CELL {
             slots.push(SlotEntry::default());
@@ -401,19 +400,13 @@ impl CellAuthority {
         Self {
             cell_id,
             generation,
-            ceiling,
-            current_rights: ceiling,
             slots,
             next_ticket_counter: 1,
             revoking: false,
             quiesced: false,
         }
     }
-    pub(crate) fn try_new(
-        cell_id: CellId,
-        generation: u64,
-        ceiling: CapSet,
-    ) -> Result<Self, types::ViError> {
+    pub(crate) fn try_new(cell_id: CellId, generation: u64) -> Result<Self, types::ViError> {
         let mut slots = Vec::new();
         slots
             .try_reserve_exact(MAX_SLOTS_PER_CELL)
@@ -422,8 +415,6 @@ impl CellAuthority {
         Ok(Self {
             cell_id,
             generation,
-            ceiling,
-            current_rights: ceiling,
             slots,
             next_ticket_counter: 1,
             revoking: false,
@@ -749,12 +740,8 @@ pub static CELL_AUTHORITIES: crate::sync::Spinlock<AuthorityTable> =
 
 pub(crate) struct AuthorityReservation(Option<CellAuthority>);
 impl AuthorityReservation {
-    pub(crate) fn reserve(
-        cell: CellId,
-        generation: u64,
-        ceiling: CapSet,
-    ) -> Result<Self, types::ViError> {
-        let authority = CellAuthority::try_new(cell, generation, ceiling)?;
+    pub(crate) fn reserve(cell: CellId, generation: u64) -> Result<Self, types::ViError> {
+        let authority = CellAuthority::try_new(cell, generation)?;
         let mut table = CELL_AUTHORITIES.lock();
         let additional = table.reservations + 1;
         table
@@ -784,7 +771,7 @@ impl Drop for AuthorityReservation {
         }
     }
 }
-pub fn register_cell_authority(cell_id: CellId, generation: u64, ceiling: CapSet) -> bool {
+pub fn register_cell_authority(cell_id: CellId, generation: u64) -> bool {
     if cell_id.0 == 0 || cell_id.0 as usize >= crate::memory::cell_quota::MAX_CELLS {
         return false;
     }
@@ -795,7 +782,7 @@ pub fn register_cell_authority(cell_id: CellId, generation: u64, ceiling: CapSet
     {
         return true;
     }
-    match AuthorityReservation::reserve(cell_id, generation, ceiling) {
+    match AuthorityReservation::reserve(cell_id, generation) {
         Ok(reservation) => {
             reservation.commit();
             true
@@ -1103,7 +1090,7 @@ mod tests {
 
     #[test]
     fn test_slot_allocation_and_verify() {
-        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(10), 1);
         let ticket = auth
             .allocate_slot(
                 Principal::Cell {
@@ -1126,7 +1113,7 @@ mod tests {
 
     #[test]
     fn test_lineage_depth_bound() {
-        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(10), 1);
         let mut cur_ticket = auth
             .allocate_slot(
                 Principal::Kernel,
@@ -1165,7 +1152,7 @@ mod tests {
 
     #[test]
     fn test_close_vs_revoke_semantics() {
-        let mut auth = CellAuthority::new(CellId(20), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(20), 1);
         // P (parent)
         let p_ticket = auth
             .allocate_slot(
@@ -1217,7 +1204,7 @@ mod tests {
 
     #[test]
     fn closed_parent_cannot_be_reused_to_revoke_surviving_child() {
-        let mut auth = CellAuthority::new(CellId(21), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(21), 1);
         let parent = auth
             .allocate_slot(
                 Principal::Kernel,
@@ -1259,7 +1246,7 @@ mod tests {
 
     #[test]
     fn revocation_traverses_closed_ancestors_and_last_child_reclaims_chain() {
-        let mut auth = CellAuthority::new(CellId(22), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(22), 1);
         let root = auth
             .allocate_slot(
                 Principal::Kernel,
@@ -1300,7 +1287,7 @@ mod tests {
 
     #[test]
     fn opaque_tickets_cross_u32_boundary_without_rebinding_closed_handles() {
-        let mut auth = CellAuthority::new(CellId(23), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(23), 1);
         auth.next_ticket_counter = u32::MAX as u64;
         let old = auth
             .allocate_slot(
@@ -1341,7 +1328,7 @@ mod tests {
 
     #[test]
     fn ticket_exhaustion_leaves_arena_and_parent_references_unchanged() {
-        let mut auth = CellAuthority::new(CellId(24), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(24), 1);
         auth.next_ticket_counter = u64::MAX - 1;
         let parent = auth
             .allocate_slot(
@@ -1372,7 +1359,7 @@ mod tests {
 
     #[test]
     fn expired_ticket_is_denied() {
-        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(10), 1);
         let ticket = auth
             .allocate_slot(
                 Principal::Kernel,
@@ -1412,8 +1399,8 @@ mod tests {
     #[test]
     fn derive_admits_only_live_self_destination_and_preserves_issuer() {
         let (a, b) = ((41u64, 3u64), (42u64, 5u64));
-        assert!(register_cell_authority(CellId(a.0), a.1, CapSet::EMPTY));
-        assert!(register_cell_authority(CellId(b.0), b.1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(a.0), a.1));
+        assert!(register_cell_authority(CellId(b.0), b.1));
         let (root, file) = {
             let mut auths = CELL_AUTHORITIES.lock();
             let auth = auths.get_mut(&a).unwrap();
@@ -1475,8 +1462,8 @@ mod tests {
     fn retirement_removes_exact_row_and_ticket_files() {
         use crate::cell::cap_registry::{has_ticket_file, InertFile};
         let (old, new) = ((47u64, 9u64), (47u64, 10u64));
-        assert!(register_cell_authority(CellId(old.0), old.1, CapSet::EMPTY));
-        assert!(register_cell_authority(CellId(new.0), new.1, CapSet::EMPTY));
+        assert!(register_cell_authority(CellId(old.0), old.1));
+        assert!(register_cell_authority(CellId(new.0), new.1));
         let (file, root) = {
             let mut auths = CELL_AUTHORITIES.lock();
             let auth = auths.get_mut(&old).unwrap();
@@ -1519,7 +1506,7 @@ mod tests {
 
     #[test]
     fn child_is_never_more_delegable_than_parent() {
-        let mut auth = CellAuthority::new(CellId(10), 1, CapSet::EMPTY);
+        let mut auth = CellAuthority::new(CellId(10), 1);
         let root = auth
             .mint_kernel_root(ResourceKind::CSpaceAuthority, 0x3, false)
             .unwrap();

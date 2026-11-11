@@ -10,7 +10,6 @@ use super::cspace::{
     dispatch_handle_control, register_cell_authority, retire_cell_authority, ControlStatus,
     Principal, ResourceKind, CELL_AUTHORITIES,
 };
-use crate::task::cap::CapSet;
 use core::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use types::CellId;
 
@@ -83,8 +82,8 @@ fn report(hart: usize, result: Result<(), &'static str>) -> bool {
 }
 
 pub fn run_primary() {
-    if !register_cell_authority(CellId(SOURCE.0), SOURCE.1, CapSet::EMPTY)
-        || !register_cell_authority(CellId(PEER.0), PEER.1, CapSet::EMPTY)
+    if !register_cell_authority(CellId(SOURCE.0), SOURCE.1)
+        || !register_cell_authority(CellId(PEER.0), PEER.1)
     {
         log::error!("[selftest] AUTHORITY-PROVENANCE: FAIL hart=0 (authority registration)");
         return;

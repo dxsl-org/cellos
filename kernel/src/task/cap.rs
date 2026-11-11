@@ -1,63 +1,11 @@
-//! Kernel-internal capability tokens.
+//! Kernel-internal capability state.
 //!
-//! Each token is a zero-sized type (ZST).  Constructors are `pub(crate)` so
-//! only kernel code can create them — Cell crates are separate Rust
-//! compilation units and cannot call `pub(crate)` items from this crate.
-//!
-//! `Option<ZST>` uses Rust's niche optimization: exactly 1 byte on the wire.
-//! Three caps together are 3 bytes, smaller than the previous `KernelPerms(u32)`.
+//! A Cell's rights are one [`CapSet`] record per incarnation, held on the Cell's
+//! root task (`Task::rights`) and read through `Scheduler::cell_rights`
+//! (architecture review H-1). The names `SpawnCap`, `SupervisorCap`,
+//! `PcieDriverCap`, … in comments and logs denote the matching `CapSet` field.
+//! Only kernel code can construct or change a record.
 
-/// Permits raw block-device syscalls (BlkRead, BlkWrite, BlkFlush).
-/// Granted to `/bin/vfs` at spawn.
-#[derive(Copy, Clone, Debug)]
-pub struct BlockIoCap(());
-
-/// Permits network transmit and receive syscalls (NetTx, NetRx).
-/// Granted to `/bin/net` at spawn.
-#[derive(Copy, Clone, Debug)]
-pub struct NetworkCap(());
-
-/// Permits lifecycle operations such as restart supervision, hot-swap, and
-/// unrestricted spawn-family syscalls.
-/// Granted to `/bin/init` and other reviewed supervisors, never to `/bin/cellbox`.
-#[derive(Copy, Clone, Debug)]
-pub struct SpawnCap(());
-
-impl BlockIoCap {
-    /// Create a `BlockIoCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-impl NetworkCap {
-    /// Create a `NetworkCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-impl SpawnCap {
-    /// Create a `SpawnCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-/// Permits use of RISC-V H-extension CSRs (`hstatus`, `hgatp`, `vsatp`, etc.).
-///
-/// Granted only when BOTH the ELF manifest declares `hypervisor = true` AND
-/// `cpu_features::has_h_ext()` confirms the firmware reported H-ext at boot.
-/// Always absent on non-riscv64 targets.
-#[derive(Copy, Clone, Debug)]
-pub struct HypervisorCap(());
-
-impl HypervisorCap {
-    /// Create a `HypervisorCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
 /// Test-hooks-only authority to publish the caller as `service::SILO`.
 ///
 /// Minted only by the exact governed `/bin/silo` launch route. It is neither
@@ -73,93 +21,17 @@ impl DevelopmentSiloRegistrationCap {
     }
 }
 
-/// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
-///
-/// Carried in `CapSet` (P-TRUST) and gated by the spawn-time ceiling: the
-/// `/bin/supervisor` install path *requests* it (`with_path_caps`), and the
-/// request is intersected against the spawner's ceiling like every other cap, so
-/// a cell can only receive it if its spawner (ultimately init) holds it. A
-/// supervisor cell still cannot forge it into a child beyond its own authority
-/// (monotonic downgrade). init also holds it directly (root authority) so it can
-/// unfreeze orphaned targets if the Supervisor Cell crashes.
-#[derive(Copy, Clone, Debug)]
-pub struct SupervisorCap(());
-
-impl SupervisorCap {
-    /// Create a `SupervisorCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-/// Permits claiming PCIe BAR MMIO ranges and authorising DMA via `GrantDma`.
-///
-/// Granted by exact path match in `loader.rs` (`/bin/nvme`, `/bin/e1000`,
-/// `/bin/igb`).
-/// The v1 manifest has no free flag bits for this cap — it is NOT manifest-based.
-/// Required before `RequestMmio` can claim a PCIe BAR range.
-#[derive(Copy, Clone, Debug)]
-pub struct PcieDriverCap(());
-
-impl PcieDriverCap {
-    /// Create a `PcieDriverCap` token.  Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-/// Permits USB Host Controller operation and DWC2 MMIO/IRQ access.
-///
-/// Required before `RequestMmio` can claim the DWC2 host controller register aperture.
-#[derive(Copy, Clone, Debug)]
-pub struct UsbDriverCap(());
-
-impl UsbDriverCap {
-    /// Create a `UsbDriverCap` token. Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-/// Permits driving the x86 16550 serial ports the kernel probed.
-///
-/// Granted by exact path match to `/bin/serial` only, and installed through the
-/// same `∩ ceiling` intersection as every other cap. It authorises no DMA and no
-/// MMIO: the reachable set is exactly the ports the kernel registered after a
-/// successful probe, so it cannot be used to touch port space the machine did
-/// not prove it has.
-#[derive(Copy, Clone, Debug)]
-pub struct SerialPortCap(());
-
-impl SerialPortCap {
-    /// Create a `SerialPortCap` token. Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
-
-/// Permits PCIe ECAM enumeration and BAR registration via `sys_register_pcie_bar`.
-///
-/// Granted by exact path match in `loader.rs` to `/bin/platform` ONLY, and is a
-/// singleton — the kernel refuses to grant it a second time (second `/bin/platform`
-/// spawn is rejected). This prevents any cell other than the one trusted Platform
-/// Cell from declaring fake BARs in the allowlist.
-#[derive(Copy, Clone, Debug)]
-pub struct PlatformCap(());
-
 use core::sync::atomic::{AtomicBool, Ordering};
 
+/// The Platform right (`CapSet::platform`) is a singleton: at most one Cell
+/// ever holds it, so no second `/bin/platform` can declare fake BARs in the
+/// allowlist. Granted only through [`reserve_platform`] and
+/// [`PlatformCapReservation::commit_into`].
+///
 /// Singleton latch: held by either the one live reservation or the permanently
 /// committed Platform task. A reservation owns the only transition back to
 /// `false`; once committed, the latch intentionally remains set forever.
 static PLATFORM_CAP_GRANTED: AtomicBool = AtomicBool::new(false);
-
-impl PlatformCap {
-    /// Create a `PlatformCap` token. Only callable within the kernel crate.
-    pub(crate) fn new() -> Self {
-        Self(())
-    }
-}
 
 /// Rollback owner for the Platform singleton while a task is unpublished.
 pub(crate) struct PlatformCapReservation {
@@ -169,7 +41,6 @@ pub(crate) struct PlatformCapReservation {
 impl PlatformCapReservation {
     /// Permanently transfer the singleton grant into a complete unpublished TCB.
     pub(crate) fn commit_into(mut self, task: &mut super::tcb::Task) {
-        task.platform_cap = Some(PlatformCap::new());
         task.rights.platform = true;
         self.committed = true;
     }
@@ -360,33 +231,6 @@ impl CapSet {
         kms_ssh_sign: true,
         kms_ssh_admin: true,
     };
-
-    /// Snapshot a (running) Task's current capabilities.
-    pub fn of_task(t: &super::tcb::Task) -> CapSet {
-        CapSet {
-            block_io: t.block_io_cap.is_some(),
-            network: t.network_cap.is_some(),
-            spawn: t.spawn_cap.is_some(),
-            hypervisor: t.hypervisor_cap.is_some(),
-            mmio_devices: t.mmio_devices,
-            block_regions: t.block_regions,
-            pcie_driver: t.pcie_driver_cap.is_some(),
-            platform: t.platform_cap.is_some(),
-            supervisor: t.supervisor_cap.is_some(),
-            usb_driver: t.usb_driver_cap.is_some(),
-            serial_port: t.serial_port_cap.is_some(),
-            net_resolve: t.net_resolve,
-            net_connect: t.net_connect,
-            net_listen: t.net_listen,
-            net_l2: t.net_l2,
-            observe_tasks: t.observe_tasks,
-            observe_memory: t.observe_memory,
-            vfs_mutate: t.vfs_mutate,
-            config_write: t.config_write,
-            kms_ssh_sign: t.kms_ssh_sign,
-            kms_ssh_admin: t.kms_ssh_admin,
-        }
-    }
 
     /// Derive the caps a manifest *requests*. Mirrors the historical loader grant
     /// logic exactly — in particular `block_regions` replicates the SRV-bit
@@ -604,63 +448,16 @@ impl CapSet {
         }
     }
 
-    /// Write the granted caps into a child Task's TCB fields. Pure data — block-IO
-    /// VFS-handler registration and any other side effects stay in the loader,
-    /// keyed off the *granted* (not requested) bits.
+    /// Install the granted caps as `t`'s incarnation record (`Task::rights`).
+    /// Pure data — block-IO VFS-handler registration and any other side
+    /// effects stay in the loader, keyed off the *granted* (not requested) bits.
+    /// The Platform singleton is never set here: only
+    /// `PlatformCapReservation::commit_into` grants it.
     pub fn apply_to(self, t: &mut super::tcb::Task) {
-        t.block_io_cap = self.block_io.then(BlockIoCap::new);
-        t.network_cap = self.network.then(NetworkCap::new);
-        t.spawn_cap = self.spawn.then(SpawnCap::new);
-        t.hypervisor_cap = self.hypervisor.then(HypervisorCap::new);
-        t.mmio_devices = self.mmio_devices;
-        t.block_regions = self.block_regions;
-        t.pcie_driver_cap = self.pcie_driver.then(PcieDriverCap::new);
-        t.supervisor_cap = self.supervisor.then(SupervisorCap::new);
-        t.usb_driver_cap = self.usb_driver.then(UsbDriverCap::new);
-        t.serial_port_cap = self.serial_port.then(SerialPortCap::new);
-        t.net_resolve = self.net_resolve;
-        t.net_connect = self.net_connect;
-        t.net_listen = self.net_listen;
-        t.net_l2 = self.net_l2;
-        t.observe_tasks = self.observe_tasks;
-        t.observe_memory = self.observe_memory;
-        t.vfs_mutate = self.vfs_mutate;
-        t.config_write = self.config_write;
-        t.kms_ssh_sign = self.kms_ssh_sign;
-        t.kms_ssh_admin = self.kms_ssh_admin;
-        // `platform_cap` is transferred only from `PlatformCapReservation`.
-        // Applying a plain capability snapshot must never bypass the singleton.
         t.rights = CapSet {
-            platform: t.platform_cap.is_some(),
+            platform: t.rights.platform,
             ..self
         };
-    }
-
-    /// Extract a plain-data CapSet snapshot from a Task's live TCB fields.
-    pub fn from_task(t: &super::tcb::Task) -> Self {
-        Self {
-            block_io: t.block_io_cap.is_some(),
-            network: t.network_cap.is_some(),
-            spawn: t.spawn_cap.is_some(),
-            hypervisor: t.hypervisor_cap.is_some(),
-            mmio_devices: t.mmio_devices,
-            block_regions: t.block_regions,
-            pcie_driver: t.pcie_driver_cap.is_some(),
-            platform: t.platform_cap.is_some(),
-            supervisor: t.supervisor_cap.is_some(),
-            usb_driver: t.usb_driver_cap.is_some(),
-            serial_port: t.serial_port_cap.is_some(),
-            net_resolve: t.net_resolve,
-            net_connect: t.net_connect,
-            net_listen: t.net_listen,
-            net_l2: t.net_l2,
-            observe_tasks: t.observe_tasks,
-            observe_memory: t.observe_memory,
-            vfs_mutate: t.vfs_mutate,
-            config_write: t.config_write,
-            kms_ssh_sign: t.kms_ssh_sign,
-            kms_ssh_admin: t.kms_ssh_admin,
-        }
     }
 }
 
@@ -1371,38 +1168,5 @@ mod tests {
         let shell = CapSet::EMPTY.with_path_caps("/bin/cellbox");
         assert_eq!(shell.kms_caller_flags(), 0);
         assert_eq!(shell.config_caller_flags(), CALLER_FLAG_CONFIG_WRITE);
-    }
-
-    /// KSSH K3: the grant survives the plain-data round trip through the TCB
-    /// (`apply_to` / `of_task` / `from_task`) and is cleared by an empty set.
-    #[test]
-    fn kms_ssh_rights_round_trip_through_the_task_control_block() {
-        let mut task = crate::task::tcb::Task::new(
-            1,
-            types::CellId(7),
-            "kms-ssh-round-trip",
-            alloc::vec::Vec::new(),
-        );
-        assert!(!task.kms_ssh_sign && !task.kms_ssh_admin);
-        for grant in [
-            CapSet {
-                kms_ssh_sign: true,
-                ..CapSet::EMPTY
-            },
-            CapSet {
-                kms_ssh_admin: true,
-                ..CapSet::EMPTY
-            },
-        ] {
-            grant.apply_to(&mut task);
-            assert_eq!(
-                (task.kms_ssh_sign, task.kms_ssh_admin),
-                (grant.kms_ssh_sign, grant.kms_ssh_admin)
-            );
-            assert_eq!(CapSet::of_task(&task), grant);
-            assert_eq!(CapSet::from_task(&task), grant);
-            CapSet::EMPTY.apply_to(&mut task);
-            assert!(!task.kms_ssh_sign && !task.kms_ssh_admin);
-        }
     }
 }
