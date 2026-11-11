@@ -136,6 +136,35 @@ pub enum TaskState {
     },
 }
 
+impl TaskState {
+    /// Absolute `system_ticks` at which the timer sweep must look at a task
+    /// parked in this state, if it has a deadline.
+    pub(crate) fn wake_deadline(&self) -> Option<u64> {
+        match self {
+            TaskState::Sleeping { until } => Some(*until as u64),
+            TaskState::Recv { deadline, .. }
+            | TaskState::PipeRead { deadline, .. }
+            | TaskState::PipeWrite { deadline, .. }
+            | TaskState::FutexWait { deadline, .. }
+            | TaskState::WaitEvent { deadline, .. }
+            | TaskState::WaitCompletion { deadline, .. }
+            | TaskState::WaitIpc { deadline } => *deadline,
+            _ => None,
+        }
+    }
+
+    /// Whether the sweep must poll a task parked in this state for an event
+    /// (an IRQ, NET_RX, or a completion source) on every pass.
+    pub(crate) fn waits_for_events(&self) -> bool {
+        matches!(
+            self,
+            TaskState::WaitEvent { .. }
+                | TaskState::WaitCompletion { .. }
+                | TaskState::WaitIrq { .. }
+        )
+    }
+}
+
 /// Short name for a task state, for admission-failure diagnostics.
 ///
 /// The scheduler already has `TaskState` as a value everywhere an admission is

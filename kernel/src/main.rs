@@ -1442,6 +1442,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log::error!("park-hook fixture did not witness the park hook; see its marker");
     }
 
+    // Phase 10: the timer sweep runs on any hart, so a deadline passes while
+    // hart 0 is held. Last of the boot fixtures:
+    // it needs the secondaries online and leaves a retiring task behind.
+    #[cfg(all(
+        feature = "test-hooks",
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
+    ))]
+    crate::sched::off_hart0_timeout_selftest::run_primary();
+
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
     #[cfg(any(

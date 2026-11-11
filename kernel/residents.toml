@@ -273,6 +273,7 @@
 "kernel/src/sched/domain_switch.rs" = { category = "A", owner = "sched" }
 "kernel/src/sched/domain_switch_tests.rs" = { category = "test", owner = "sched" }
 "kernel/src/sched/hart_local.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/off_hart0_timeout_selftest.rs" = { category = "test", owner = "sched" }
 "kernel/src/sched/hart_local/ready.rs" = { category = "A", owner = "sched" }
 "kernel/src/sched/quiesce.rs" = { category = "A", owner = "sched" }
 "kernel/src/sched/scheduler.rs" = { category = "A", owner = "sched" }

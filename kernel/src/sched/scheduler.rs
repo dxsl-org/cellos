@@ -121,13 +121,77 @@ impl Drop for KernelAllocationContext {
 pub struct TaskTable {
     rows: Vec<(usize, Box<Task>)>,
     reservations: usize,
+    /// `(deadline, tid)` of parked tasks, sorted; at most one row per task.
+    /// Rows go stale when the task wakes early and are checked before use.
+    deadlines: Vec<(u64, usize)>,
+    /// Parked tasks the sweep polls for events on every pass.
+    event_waiters: Vec<usize>,
 }
 impl TaskTable {
     fn new() -> Self {
         Self {
             rows: Vec::new(),
             reservations: 0,
+            deadlines: Vec::new(),
+            event_waiters: Vec::new(),
         }
+    }
+
+    /// Keep the sweep-interest tables able to hold one row per task slot, so
+    /// parking never allocates.
+    fn reserve_interest(&mut self) -> Result<(), alloc::collections::TryReserveError> {
+        let want = self.rows.capacity();
+        self.deadlines
+            .try_reserve(want.saturating_sub(self.deadlines.len()))?;
+        self.event_waiters
+            .try_reserve(want.saturating_sub(self.event_waiters.len()))
+    }
+
+    /// Record what the sweep must watch for `id`, which just switched out in
+    /// `state`: its deadline, if any, and whether it waits for events.
+    /// Called on every switch-out, so it also forgets a task that left a
+    /// parked state.
+    pub(crate) fn note_parked(&mut self, id: usize, state: &TaskState) {
+        if let Some(at) = self.deadlines.iter().position(|&(_, t)| t == id) {
+            self.deadlines.remove(at);
+        }
+        if let Some(deadline) = state.wake_deadline() {
+            let at = self.deadlines.partition_point(|&row| row < (deadline, id));
+            self.deadlines.insert(at, (deadline, id));
+        }
+        if state.waits_for_events() {
+            if !self.event_waiters.contains(&id) {
+                self.event_waiters.push(id);
+            }
+        } else if let Some(at) = self.event_waiters.iter().position(|&t| t == id) {
+            self.event_waiters.swap_remove(at);
+        }
+    }
+
+    /// Tasks the sweep must examine at `now`, ascending by tid: every deadline
+    /// that has passed (removed from the queue) and every event waiter.
+    fn sweep_candidates(&mut self, now: u64) -> Vec<usize> {
+        let due = self
+            .deadlines
+            .partition_point(|&(deadline, _)| deadline <= now);
+        let mut candidates: Vec<usize> = self
+            .deadlines
+            .drain(..due)
+            .map(|(_, id)| id)
+            .chain(self.event_waiters.iter().copied())
+            .collect();
+        candidates.sort_unstable();
+        candidates.dedup();
+        candidates
+    }
+
+    /// Drop event waiters that no longer wait for events.
+    fn retain_event_waiters(&mut self) {
+        let rows = &self.rows;
+        self.event_waiters.retain(|id| {
+            rows.binary_search_by_key(id, |r| r.0)
+                .is_ok_and(|i| rows[i].1.state.waits_for_events())
+        });
     }
     pub fn get(&self, id: &usize) -> Option<&Task> {
         self.rows
@@ -184,6 +248,8 @@ impl TaskTable {
         self.rows[start..end].iter().map(pair as TaskRangePair)
     }
     pub fn remove(&mut self, id: &usize) -> Option<Box<Task>> {
+        self.deadlines.retain(|&(_, t)| t != *id);
+        self.event_waiters.retain(|t| t != id);
         self.rows
             .binary_search_by_key(id, |r| r.0)
             .ok()
@@ -194,6 +260,8 @@ impl TaskTable {
             Ok(i) => Some(core::mem::replace(&mut self.rows[i].1, task)),
             Err(i) => {
                 self.rows.reserve(self.reservations + 1);
+                self.reserve_interest()
+                    .expect("sweep interest grows with the task table");
                 self.rows.insert(i, (id, task));
                 None
             }
@@ -202,6 +270,8 @@ impl TaskTable {
     pub(crate) fn reserve_publication(&mut self) -> Result<(), types::ViError> {
         self.rows
             .try_reserve(self.reservations + 1)
+            .map_err(|_| types::ViError::OutOfMemory)?;
+        self.reserve_interest()
             .map_err(|_| types::ViError::OutOfMemory)?;
         self.reservations += 1;
         Ok(())
@@ -2198,6 +2268,33 @@ impl Scheduler {
         self.pick_next_unaccounted(hart_id)
     }
 
+    /// Test kernels and host tests: every parked task the full scan would have
+    /// examined is tracked by the deadline queue or the event-waiter list,
+    /// unless it is still current on a hart (it parked but has not switched
+    /// out yet).
+    #[cfg(any(feature = "test-hooks", test))]
+    fn assert_sweep_interest_tracked(&self) {
+        for (&id, task) in self.tasks.iter() {
+            let current = (0..crate::sched::smp::MAX_HARTS)
+                .any(|hart| crate::sched::hart_local::ready::current_task_id_for(hart) == id);
+            if current {
+                continue;
+            }
+            if let Some(deadline) = task.state.wake_deadline() {
+                assert!(
+                    self.tasks.deadlines.contains(&(deadline, id)),
+                    "task {id} parked with deadline {deadline} but is not in the deadline queue"
+                );
+            }
+            if task.state.waits_for_events() {
+                assert!(
+                    self.tasks.event_waiters.contains(&id),
+                    "task {id} waits for events but is not an event waiter"
+                );
+            }
+        }
+    }
+
     fn pick_next_unaccounted(
         &mut self,
         hart_id: usize,
@@ -2209,13 +2306,13 @@ impl Scheduler {
         // S6-1 K1: charge before any selection or watchdog decision, so every
         // pass — timer or voluntary — closes the outgoing interval exactly once.
         self.charge_cpu(hart_id, crate::task::telemetry::monotonic_ns());
-        // Global sweep (timer wakes, heartbeat, async-poll, watchdog) runs on hart 0 only
-        // to prevent double-wake races on multihart setups.
-        if hart_id != 0 {
-            return self.pick_next_local(hart_id, now);
-        }
+        // The global sweep (timer wakes, heartbeat, async-poll) runs on whichever
+        // hart passes first after the tick advances or an event is hinted: it is
+        // serialized by SCHEDULER and gated by `last_global_sweep_tick`, so a
+        // busy hart 0 no longer delays every timeout (Phase 10 step 5). The G1
+        // barrier stays on hart 0.
         #[cfg(feature = "g1-cpu-accounting")]
-        {
+        if hart_id == 0 {
             let join = crate::sched::cpu_accounting::require(
                 crate::sched::cpu_accounting::join_wait_target(self),
             );
@@ -2291,9 +2388,19 @@ impl Scheduler {
             //    RecvTimeout's a peer that never replies would block forever — the
             //    infinite-block-on-dead-peer hazard. Deadlines are absolute
             //    `system_ticks` (the dispatch stores `system_ticks() + timeout`).
+            //    Only tasks whose deadline passed (from the deadline queue) and
+            //    event waiters can wake here; every other parked task is left
+            //    as the full scan left it. Candidates are visited by tid, the
+            //    order the full scan used.
+            #[cfg(any(feature = "test-hooks", test))]
+            self.assert_sweep_interest_tracked();
+            let candidates = self.tasks.sweep_candidates(now as u64);
             let mut waking_tasks = VecDeque::new();
             let mut vfs_context_drops = Vec::new();
-            for (id, task) in self.tasks.iter_mut() {
+            for id in candidates.iter() {
+                let Some(task) = self.tasks.get_mut(id) else {
+                    continue;
+                };
                 let mut should_wake = false;
                 let mut timed_out = false;
                 match &task.state {
@@ -2436,6 +2543,7 @@ impl Scheduler {
                     waking_tasks.push_back(*id);
                 }
             }
+            self.tasks.retain_event_waiters();
             self.pending_vfs_context_release.extend(vfs_context_drops);
             for id in waking_tasks {
                 self.push_ready(id);
@@ -2640,6 +2748,10 @@ impl Scheduler {
                 } else {
                     task.sched_stats.run_ticks = 0;
                     task.sched_stats.rt_overrun_warned = false;
+                    // Every deadline or event wait is a self-park, so this
+                    // switch-out is where the sweep learns to watch it.
+                    let state = task.state;
+                    self.tasks.note_parked(cid, &state);
                 }
             }
             match action {

@@ -23,6 +23,16 @@ pub(crate) mod domain_switch;
 ))]
 pub(crate) mod domain_switch_tests;
 pub mod hart_local;
+/// Phase 10 fixture: a timeout fires while hart 0 is held.
+#[cfg(all(
+    feature = "test-hooks",
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    )
+))]
+pub(crate) mod off_hart0_timeout_selftest;
 /// All-hart quiescence for the snapshot capture preflight (phase 07 step 3).
 pub mod quiesce;
 pub mod scheduler;

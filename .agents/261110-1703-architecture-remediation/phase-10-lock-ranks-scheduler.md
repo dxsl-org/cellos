@@ -74,7 +74,7 @@ Turn lock order from comments into a checked property, and remove the O(tasks) w
 - [x] Rank assert on, violations fixed (none found: the order was learned from the lanes)
 - [x] Spin hook injected
 - [x] Token index
-- [ ] Deadline heap
+- [x] Deadline heap (sorted queue; see log)
 - [ ] RT set / affinity
 
 ## Success Criteria
@@ -142,3 +142,21 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
   - Capacity for both tables is reserved at submit (`Busy` on OOM, like the operation record), so delivery and removal do not allocate.
   - **Agreement asserts:** test kernels and host tests compare the index with the old scan, for owners and for holders of the replied token. They stay for one release cycle, then go.
   - Lanes pass with the asserts on: x86 domain 1/2/4 CPU, x86 boot, RV64 and AArch64 boots, `pcie-bar-window`, and lifecycle 3/3 on two reruns (the first run hit the known `multi_source_wait` timeout).
+- **Step 5: deadline queue and per-hart sweep.**
+  - **Data structure (deviation from "min-heap"):** a sorted `TaskTable::deadlines` vector with at most one row per task. It pops due rows in order and dedupes on re-arm, which a heap does not do cheaply. Next to it, `event_waiters` lists tasks in `WaitEvent`, `WaitCompletion` or `WaitIrq`.
+  - **Where rows come from:** the switch-out branch of `pick_next_local` (`TaskTable::note_parked`), since every deadline or event wait is a self-park. There is no hook at each site that sets a state.
+  - **Capacity** follows the task rows: `insert` / `reserve_publication`, so parking never allocates. `TaskTable::remove` drops a task's rows.
+  - **The sweep** examines only due deadlines and event waiters, ascending by tid like the old scan, with the same per-task body. Before, it scanned every task. Test kernels and host tests assert that every parked task (one not current on any hart) is tracked.
+  - **Any hart sweeps.** The hart-0-only gate is removed, so the sweep runs on any hart, still serialized by `SCHEDULER` and gated by `last_global_sweep_tick`. The G1 barrier block stays on hart 0.
+  - **Behaviour changes:**
+    - Woken tasks are queued on the sweeping hart, not hart 0 (`push_ready` targets the current hart).
+    - A task that parks with an already-expired deadline wakes on the next sweep instead of the current one.
+    - x86 still advances `system_ticks` only on hart 0, so on x86 time itself stops while hart 0 is held.
+  - **Still scanning (out of scope, logged):** the heartbeat sweep and the `Polling` future scan.
+  - **New fixture** `sched/off_hart0_timeout_selftest.rs` (test-hooks): a real kernel task parks in `Sleeping`, and hart 0 is held with interrupts masked.
+    - AArch64 `-smp 2`: `OFF-HART0-TIMEOUT: PASS harts=2 deadline=17 woke_at=17`.
+    - Negative control, with the hart-0 gate restored: `FAIL … still sleeping`.
+    - x86 reports SKIP (ticks advance on hart 0 only), as do single-hart boots.
+  - **Lanes, with the asserts on:**
+    - pass: x86 boot, domain 1/2/4 CPU, lifecycle 3/3, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot;
+    - AArch64 test-hooks: fixture PASS, lane still FAIL on the pre-existing `DOMAIN-LIVE` marker.
