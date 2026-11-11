@@ -1935,6 +1935,70 @@ mod tests {
         ));
     }
 
+    /// A cancelled request leaves the receiver it woke with nothing to take.
+    /// The receive must park again, not complete as a message from the
+    /// cancelled caller over the receiver's previous buffer contents (the
+    /// provider then counted its previous request a second time).
+    #[test]
+    fn a_receiver_woken_for_a_cancelled_request_parks_again() {
+        use super::super::syscall::resume_or_repark;
+        let mut sched = fixture();
+        serve(&mut sched, PROVIDER, OWNER, 10);
+        sched.tasks.get_mut(&PROVIDER).unwrap().state = TaskState::Recv {
+            mask: OWNER,
+            buf_ptr: 0,
+            buf_len: 0,
+            deadline: None,
+        };
+        add_operation(&mut sched, OWNER, PROVIDER, 11, Phase::Queued);
+        queue_op_wire(&mut sched, OWNER, PROVIDER, 11);
+        let provider = sched.tasks.get_mut(&PROVIDER).unwrap();
+        assert!(super::super::wake_after_ipc_publish(provider, true).made_runnable());
+        cancel_in_sched(&mut sched, OWNER, 11).unwrap();
+        assert!(sched.tasks[&PROVIDER].pending_msgs.is_empty());
+
+        let resumed = resume_or_repark(&mut sched, PROVIDER, OWNER, 0, 0, None).unwrap();
+        assert!(
+            resumed.is_none(),
+            "the receive completed with nothing to deliver"
+        );
+        assert!(matches!(
+            sched.tasks[&PROVIDER].state,
+            TaskState::Recv {
+                mask: OWNER,
+                deadline: None,
+                ..
+            }
+        ));
+    }
+
+    /// A timed receive woken with nothing to take parks again with its
+    /// deadline until that deadline passes, and then reports a timeout.
+    #[test]
+    fn a_timed_receive_woken_with_nothing_parks_until_its_deadline() {
+        use super::super::syscall::{resume_or_repark, ResumeSnapshot};
+        let mut sched = fixture();
+        serve(&mut sched, PROVIDER, OWNER, 10);
+        sched.tasks.get_mut(&PROVIDER).unwrap().state = TaskState::Ready;
+
+        let early = resume_or_repark(&mut sched, PROVIDER, OWNER, 0, 0, Some(u64::MAX)).unwrap();
+        assert!(early.is_none());
+        assert!(matches!(
+            sched.tasks[&PROVIDER].state,
+            TaskState::Recv {
+                deadline: Some(u64::MAX),
+                ..
+            }
+        ));
+
+        sched.tasks.get_mut(&PROVIDER).unwrap().state = TaskState::Ready;
+        let expired = resume_or_repark(&mut sched, PROVIDER, OWNER, 0, 0, Some(0)).unwrap();
+        assert!(
+            matches!(expired, Some(ResumeSnapshot::Wake { sender_tid: 0 })),
+            "a timeout must not name the previous caller"
+        );
+    }
+
     /// Records without a wire (interrupt-produced inline data) keep the
     /// position rule; a wire whose delivery id is gone is never guessed at.
     #[test]

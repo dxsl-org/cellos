@@ -378,20 +378,28 @@ pub(super) fn recv(
                 let res = crate::task::ipc_recv(caller_id, mask, buf_ptr, buf_len);
                 match res {
                     Ok(0) => {
-                        crate::task::yield_cpu();
-                        // Peek the next event without removing it,
+                        // A wake with nothing to take parks again (see
+                        // `resume_or_repark`); only a message or a death ends
+                        // this receive. Peek the event without removing it,
                         // copy payload, then commit the exact record.
-                        let snap = {
-                            let mut guard = crate::task::SCHEDULER.lock();
-                            guard
-                                .as_mut()
-                                .map_or(Ok(ResumeSnapshot::Wake { sender_tid: 0 }), |sched| {
-                                    snapshot_resume_dispatched(sched, caller_id, mask)
-                                })
-                        };
-                        let snap = match snap {
-                            Err(()) => return Err(SyscallError::OutOfMemory),
-                            Ok(s) => s,
+                        let snap = loop {
+                            crate::task::yield_cpu();
+                            let snap = {
+                                let mut guard = crate::task::SCHEDULER.lock();
+                                guard.as_mut().map_or(
+                                    Ok(Some(ResumeSnapshot::Wake { sender_tid: 0 })),
+                                    |sched| {
+                                        resume_or_repark(
+                                            sched, caller_id, mask, buf_ptr, buf_len, None,
+                                        )
+                                    },
+                                )
+                            };
+                            match snap {
+                                Err(()) => return Err(SyscallError::OutOfMemory),
+                                Ok(Some(s)) => break s,
+                                Ok(None) => {}
+                            }
                         };
                         // Copy-out before any commit.
                         let sender = match &snap {
@@ -765,19 +773,32 @@ pub(super) fn recv_timeout(
                                 }
                             }
                         }
-                        // Yield so the scheduler runs other tasks and can fire the timeout.
-                        crate::task::yield_cpu();
-                        let snap = {
-                            let mut guard = crate::task::SCHEDULER.lock();
-                            guard
-                                .as_mut()
-                                .map_or(Ok(ResumeSnapshot::Wake { sender_tid: 0 }), |sched| {
-                                    snapshot_resume_dispatched(sched, caller_id, mask)
-                                })
-                        };
-                        let snap = match snap {
-                            Err(()) => return Err(SyscallError::OutOfMemory),
-                            Ok(s) => s,
+                        // Yield so the scheduler runs other tasks and can fire the
+                        // timeout. A wake with nothing to take before the deadline
+                        // parks again (see `resume_or_repark`).
+                        let snap = loop {
+                            crate::task::yield_cpu();
+                            let snap = {
+                                let mut guard = crate::task::SCHEDULER.lock();
+                                guard.as_mut().map_or(
+                                    Ok(Some(ResumeSnapshot::Wake { sender_tid: 0 })),
+                                    |sched| {
+                                        resume_or_repark(
+                                            sched,
+                                            caller_id,
+                                            mask,
+                                            buf_ptr,
+                                            buf_len,
+                                            Some(deadline),
+                                        )
+                                    },
+                                )
+                            };
+                            match snap {
+                                Err(()) => return Err(SyscallError::OutOfMemory),
+                                Ok(Some(s)) => break s,
+                                Ok(None) => {}
+                            }
                         };
                         let sender = match &snap {
                             ResumeSnapshot::Death {

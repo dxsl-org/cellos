@@ -412,6 +412,50 @@ pub(super) fn snapshot_resume_dispatched(
     Ok(snap)
 }
 
+/// Take a blocked receive's resume snapshot, or park the receiver again when it
+/// woke with nothing to take.
+///
+/// Messages reach a receiver only through its mailbox, and deaths only through
+/// the death fields, so a `Wake` snapshot means the receiver was made runnable
+/// for a message that is gone: a submitted request that was cancelled before the
+/// receiver ran, or a post that `mask` does not admit. Completing the receive
+/// would hand userspace a sender tid over its previous buffer contents. Instead,
+/// under the same lock that found the mailbox empty, the receiver parks again
+/// with the same mask, buffer and deadline, so the next matching publish wakes
+/// it as usual.
+///
+/// A receive whose `deadline` has passed reports the timeout as sender 0.
+///
+/// Returns `Ok(None)` when the receiver parked again: the caller yields and
+/// retries. `Err(())` is the snapshot's allocation failure.
+pub(in crate::task) fn resume_or_repark(
+    sched: &mut crate::sched::scheduler::Scheduler,
+    caller_id: usize,
+    mask: usize,
+    buf_ptr: usize,
+    buf_len: usize,
+    deadline: Option<u64>,
+) -> Result<Option<ResumeSnapshot>, ()> {
+    let snap = snapshot_resume_dispatched(sched, caller_id, mask)?;
+    if !matches!(snap, ResumeSnapshot::Wake { .. }) {
+        return Ok(Some(snap));
+    }
+    if deadline.is_some_and(|deadline| crate::task::system_ticks() as u64 >= deadline) {
+        return Ok(Some(ResumeSnapshot::Wake { sender_tid: 0 }));
+    }
+    let Some(task) = sched.tasks.get_mut(&caller_id) else {
+        return Ok(Some(snap));
+    };
+    crate::task::arm_ipc_block_handoff(caller_id);
+    task.state = crate::task::tcb::TaskState::Recv {
+        mask,
+        buf_ptr,
+        buf_len,
+        deadline,
+    };
+    Ok(None)
+}
+
 pub(super) fn snapshot_process_info_v2(
     task: &crate::task::tcb::Task,
     sample_ticks: u64,

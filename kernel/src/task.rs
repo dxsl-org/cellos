@@ -428,7 +428,7 @@ fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) 
 /// syscall reaches `yield_cpu`; the handoff guard bridges that interval until
 /// the raw switch has saved this stack.
 #[inline(always)]
-fn arm_ipc_block_handoff(caller_id: usize) {
+pub(crate) fn arm_ipc_block_handoff(caller_id: usize) {
     let hart = crate::sched::hart_local::current_hart_id();
     if crate::sched::hart_local::ready::current_task_id_for(hart) == caller_id {
         crate::sched::hart_local::ready::begin_outgoing_context_save(hart, caller_id);
