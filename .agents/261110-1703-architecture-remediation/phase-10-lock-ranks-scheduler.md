@@ -1,7 +1,7 @@
 ---
 phase: 10
 title: "Lock ranks and scheduler hot paths"
-status: pending
+status: in-progress
 priority: P2
 effort: "6–9d"
 dependencies: [9]
