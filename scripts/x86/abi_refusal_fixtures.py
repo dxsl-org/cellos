@@ -213,6 +213,13 @@ def u32x2(payload: bytes) -> tuple[int, int] | None:
     return struct.unpack("<II", payload) if len(payload) == 8 else None
 
 
+def spawn_denial(payload: bytes) -> tuple[int, int] | None:
+    """`(code, flags)` of a governed-spawn `CellSpawnDenied`: the 32-byte subject
+    record `[cell u64][generation u64][tid u64][code u32][flags u32]`
+    (`audit::encode_subject`, architecture remediation Phase 07)."""
+    return struct.unpack_from("<II", payload, 24) if len(payload) == 32 else None
+
+
 def attempts(records: list[tuple[int, bytes]]) -> list[list[tuple[int, bytes]]]:
     """Group admission records into attempts, each closed by a terminal record."""
     groups, current = [], []
@@ -232,8 +239,8 @@ def classify(attempt: list[tuple[int, bytes]]) -> tuple[str, int | None]:
     """Map one attempt to an outcome using only the kernel's own records."""
     events = [event for event, _ in attempt]
     last_event, last_payload = attempt[-1]
-    if events == [EV_SPAWN_DENIED] and u32x2(last_payload) == (0, 1):
-        # The pre-signature manifest branch (governed_spawn.rs) is the only (0, 1)
+    if events == [EV_SPAWN_DENIED] and spawn_denial(last_payload) == (1, 0):
+        # The pre-signature manifest branch (governed_spawn.rs) is the only code-1
         # denial that is not preceded by CellSignatureVerified for a signed ELF.
         return FORMAT, None
     if events == [EV_SIG_FAILED] and u32x2(last_payload) == (0, 0):

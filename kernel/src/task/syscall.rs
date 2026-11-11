@@ -5411,18 +5411,6 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
     })
 }
 
-/// Authority gates for `CapRevoke`.
-///
-/// Runs twice — before the teardown and before the fields are cleared — so a
-/// `SpawnCap` withdrawn while the teardown runs cannot authorize the clear.
-///
-/// Gate 1: the caller must hold `SpawnCap`, the same authority `ForceExit` needs.
-/// Gate 1b: refuse bits whose authority is AMBIENT with no teardown path —
-///   `HYPERVISOR` (H-extension CSR access is not syscall-gated). MMIO device
-///   windows and the privileged path caps are torn down by the revoke itself.
-/// Gate 2: a system service cell (block_io/network) is refused — revoking I/O
-///   authority from a running VFS/net service mid-flight corrupts driver state;
-///   the supervisor freeze/replace flow is the supported path.
 /// Every task of `tid`'s Cell incarnation (root and threads), in a fixed
 /// buffer: no allocation, bounded by the per-Cell thread cap.
 fn incarnation_members(sched: &super::scheduler::Scheduler, tid: usize) -> incarnation_tids::Tids {
@@ -5471,13 +5459,64 @@ mod incarnation_tids {
     }
 }
 
+/// One `CapRevoke` at a time: the pending mask on a root is a single word, and
+/// two overlapping revokes must not clear each other's bits. A concurrent
+/// caller gets `TryAgain`.
+static REVOKE_IN_PROGRESS: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+struct RevokeSerial;
+
+impl RevokeSerial {
+    fn acquire() -> Option<Self> {
+        use core::sync::atomic::Ordering;
+        REVOKE_IN_PROGRESS
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+            .then_some(Self)
+    }
+}
+
+impl Drop for RevokeSerial {
+    fn drop(&mut self) {
+        REVOKE_IN_PROGRESS.store(false, core::sync::atomic::Ordering::Release);
+    }
+}
+
+/// The revoke's mask published as pending on the target incarnation's root.
+/// Dropping it (every early return, including a failed teardown) withdraws the
+/// pending bits again; a committed revoke has already folded them into
+/// `Task::rights`, so the clear is then a no-op.
+struct PendingRevoke {
+    root_tid: usize,
+    incarnation: (types::CellId, u64),
+    mask: u32,
+}
+
+impl Drop for PendingRevoke {
+    fn drop(&mut self) {
+        if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+            if let Some(root) = sched.tasks.get_mut(&self.root_tid) {
+                if (root.cell_id, root.cell_generation) == self.incarnation {
+                    root.revoke_pending &= !self.mask;
+                }
+            }
+        }
+    }
+}
+
 /// Withdraw `cap_mask` from the target's Cell incarnation after its Class-2
 /// teardown has finished: re-run the gate, then narrow the incarnation record
-/// (the root's `Task::rights`) that every thread of the Cell is gated on.
-/// Returns whether the target was still present. Takes `SCHEDULER` only.
+/// (`root_tid`'s `Task::rights`, captured before the teardown) that every
+/// thread of the Cell is gated on. The record is narrowed even if the target
+/// thread exited meanwhile; only a retired incarnation (root gone) has nothing
+/// left to narrow. Returns whether the target itself is still present. Takes
+/// `SCHEDULER` only.
 fn commit_cap_revoke(
     caller_id: usize,
     target_tid: usize,
+    root_tid: usize,
+    incarnation: (types::CellId, u64),
     cap_mask: u32,
 ) -> Result<bool, SyscallError> {
     let mut sched_opt = super::SCHEDULER.lock();
@@ -5486,17 +5525,27 @@ fn commit_cap_revoke(
         None => return Err(SyscallError::InvalidCommand),
     };
     cap_revoke_gate(sched, caller_id, target_tid, cap_mask)?;
-    // The target died while its authority was being torn down: its exit path
-    // cleared every capability, so the revoke holds.
-    let Some(root_tid) = sched.tasks.get(&target_tid).map(|t| t.root_tid) else {
-        return Ok(false);
-    };
     if let Some(root) = sched.tasks.get_mut(&root_tid) {
-        root.rights = root.rights.without_revoke_mask(cap_mask);
+        if (root.cell_id, root.cell_generation) == incarnation {
+            root.rights = root.rights.without_revoke_mask(cap_mask);
+            root.revoke_pending &= !cap_mask;
+        }
     }
-    Ok(true)
+    Ok(sched.tasks.contains_key(&target_tid))
 }
 
+/// Authority gates for `CapRevoke`.
+///
+/// Runs twice — before the teardown and before the fields are cleared — so a
+/// `SpawnCap` withdrawn while the teardown runs cannot authorize the clear.
+///
+/// Gate 1: the caller must hold `SpawnCap`, the same authority `ForceExit` needs.
+/// Gate 1b: refuse bits whose authority is AMBIENT with no teardown path —
+///   `HYPERVISOR` (H-extension CSR access is not syscall-gated). MMIO device
+///   windows and the privileged path caps are torn down by the revoke itself.
+/// Gate 2: a system service cell (block_io/network) is refused — revoking I/O
+///   authority from a running VFS/net service mid-flight corrupts driver state;
+///   the supervisor freeze/replace flow is the supported path.
 fn cap_revoke_gate(
     sched: &mut super::scheduler::Scheduler,
     caller_id: usize,
@@ -7176,12 +7225,17 @@ fn handle_syscall_inner(
                 return Err(SyscallError::InvalidCommand);
             }
 
+            let _serial = RevokeSerial::acquire().ok_or(SyscallError::TryAgain)?;
+
             // Gates, then the facts the teardown needs. The teardown itself runs
             // with SCHEDULER released: the grant reclaim reaches
             // `live_task_binding` and the notify reaches `ipc_post_nonblock`, and
             // this spinlock is not reentrant. Both passes re-run the gates, so
-            // nothing is revoked on authority withdrawn while it ran.
-            let members = {
+            // nothing is revoked on authority withdrawn while it ran. The mask is
+            // published as pending on the root first, so no task of the Cell —
+            // including one spawned during the teardown — can re-claim what is
+            // being torn down.
+            let (members, pending) = {
                 let mut sched_opt = super::SCHEDULER.lock();
                 let sched = match sched_opt.as_mut() {
                     Some(s) => s,
@@ -7202,7 +7256,22 @@ fn handle_syscall_inner(
                 {
                     return Err(SyscallError::InvalidCommand);
                 }
-                incarnation_members(sched, target_tid)
+                let root_tid = target.root_tid;
+                // Same incarnation guard as the commit and `PendingRevoke::drop`,
+                // so the bits set here are exactly the bits cleared there.
+                if let Some(root) = sched.tasks.get_mut(&root_tid) {
+                    if (root.cell_id, root.cell_generation) == incarnation {
+                        root.revoke_pending |= cap_mask;
+                    }
+                }
+                (
+                    incarnation_members(sched, target_tid),
+                    PendingRevoke {
+                        root_tid,
+                        incarnation,
+                        mask: cap_mask,
+                    },
+                )
             };
 
             // ── Class-2 teardown, BEFORE the record changes ──────────────────
@@ -7211,7 +7280,9 @@ fn handle_syscall_inner(
             // record alone would leave it live. Resources are owned by the tid
             // that claimed them, so every thread of the incarnation is torn down.
             // Fail-closed: a teardown that cannot finish returns with the
-            // capability intact.
+            // capability still in the record (the pending mask is withdrawn on
+            // return). Members torn down before the failure stay torn down; a
+            // retry of the same revoke is idempotent.
             let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
             for &tid in members.iter() {
                 if mmio_revoke != 0 {
@@ -7230,7 +7301,7 @@ fn handle_syscall_inner(
                     if !crate::task::teardown_dma_authority(tid) {
                         log::error!(
                             "[kernel] CapRevoke: DMA teardown for task {tid} was not \
-                             acknowledged; capability left intact"
+                             acknowledged; capability left in the record, retry the revoke"
                         );
                         return Err(SyscallError::NotSupported);
                     }
@@ -7247,7 +7318,15 @@ fn handle_syscall_inner(
                 }
             }
 
-            let target_present = commit_cap_revoke(caller_id, target_tid, cap_mask)?;
+            let target_present = commit_cap_revoke(
+                caller_id,
+                target_tid,
+                pending.root_tid,
+                pending.incarnation,
+                cap_mask,
+            )?;
+            let root_tid = pending.root_tid;
+            drop(pending);
 
             crate::audit::log_event(
                 crate::audit::AuditEvent::CapRevoked,
@@ -7266,10 +7345,16 @@ fn handle_syscall_inner(
 
             // Courtesy notification, last and best-effort: the teardown above is
             // what enforces the revocation, so a target that is gone or whose
-            // mailbox is full does not fail the call.
+            // mailbox is full does not fail the call. The Cell's root (its app
+            // loop) is told too, since the revoke applied to the whole Cell.
             if target_present && !send_cap_revoked_event(target_tid, cap_mask) {
                 log::warn!(
                     "[kernel] CapRevoke: task {target_tid} not notified (exited or mailbox full)"
+                );
+            }
+            if root_tid != target_tid && !send_cap_revoked_event(root_tid, cap_mask) {
+                log::warn!(
+                    "[kernel] CapRevoke: Cell root {root_tid} not notified (exited or mailbox full)"
                 );
             }
 
@@ -12206,6 +12291,7 @@ mod tests {
         for tid in [ROOT, WORKER, SIBLING] {
             let mut task = Task::new(tid, CellId(21), "cell", alloc::vec::Vec::new());
             task.root_tid = ROOT;
+            task.cell_generation = 0; // one incarnation: (cell, 0)
             caps.apply_to(&mut task);
             scheduler.tasks.insert(tid, alloc::boxed::Box::new(task));
         }
@@ -12226,7 +12312,10 @@ mod tests {
                 Ok(())
             );
         }
-        assert_eq!(super::commit_cap_revoke(CONTROLLER, WORKER, mask), Ok(true));
+        assert_eq!(
+            super::commit_cap_revoke(CONTROLLER, WORKER, ROOT, (CellId(21), 0), mask),
+            Ok(true)
+        );
         for tid in [ROOT, WORKER, SIBLING] {
             assert!(!super::caller_has_spawn(tid), "tid {tid} kept SpawnCap");
             assert!(
@@ -12234,6 +12323,99 @@ mod tests {
                 "tid {tid} kept SupervisorCap"
             );
         }
+
+        let mut restore = SCHEDULER.lock();
+        *restore = saved;
+    }
+
+    /// Review of Phase 07: the record is narrowed even when the targeted thread
+    /// exits during the teardown, and while the teardown runs the pending mask
+    /// already withholds the right from every task of the Cell.
+    #[test]
+    fn cap_revoke_pending_mask_holds_and_survives_target_exit() {
+        use api::syscall::cap_mask as CM;
+        const CONTROLLER: usize = 211;
+        const ROOT: usize = 212;
+        const WORKER: usize = 213;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut previous = SCHEDULER.lock();
+        let saved = previous.take();
+        let mut scheduler = Scheduler::new();
+        let mut controller = Task::new(CONTROLLER, CellId(22), "init", alloc::vec::Vec::new());
+        super::super::cap::CapSet {
+            spawn: true,
+            ..super::super::cap::CapSet::EMPTY
+        }
+        .apply_to(&mut controller);
+        scheduler
+            .tasks
+            .insert(CONTROLLER, alloc::boxed::Box::new(controller));
+        for tid in [ROOT, WORKER] {
+            let mut task = Task::new(tid, CellId(23), "cell", alloc::vec::Vec::new());
+            task.root_tid = ROOT;
+            task.cell_generation = 0; // one incarnation: (cell, 0)
+            super::super::cap::CapSet {
+                pcie_driver: true,
+                supervisor: true,
+                ..super::super::cap::CapSet::EMPTY
+            }
+            .apply_to(&mut task);
+            scheduler.tasks.insert(tid, alloc::boxed::Box::new(task));
+        }
+        *previous = Some(scheduler);
+        drop(previous);
+
+        let mask = CM::PCIE_DRIVER;
+        let pending = super::PendingRevoke {
+            root_tid: ROOT,
+            incarnation: (CellId(23), 0),
+            mask,
+        };
+        SCHEDULER
+            .lock()
+            .as_mut()
+            .and_then(|s| s.tasks.get_mut(&ROOT))
+            .expect("root")
+            .revoke_pending |= mask;
+        // During the teardown: withheld from both tasks, the rest kept.
+        assert!(!super::caller_has_pcie_driver(WORKER) && !super::caller_has_pcie_driver(ROOT));
+        assert!(super::caller_has_supervisor(ROOT));
+        // The targeted worker exits before the commit.
+        SCHEDULER
+            .lock()
+            .as_mut()
+            .expect("sched")
+            .tasks
+            .remove(&WORKER);
+        assert_eq!(
+            super::commit_cap_revoke(CONTROLLER, WORKER, ROOT, (CellId(23), 0), mask),
+            Ok(false)
+        );
+        drop(pending);
+        assert!(
+            !super::caller_has_pcie_driver(ROOT),
+            "root kept the revoked right"
+        );
+        assert!(super::caller_has_supervisor(ROOT));
+
+        // A failed teardown withdraws only the pending bits.
+        let failed = super::PendingRevoke {
+            root_tid: ROOT,
+            incarnation: (CellId(23), 0),
+            mask: CM::SUPERVISOR,
+        };
+        SCHEDULER
+            .lock()
+            .as_mut()
+            .and_then(|s| s.tasks.get_mut(&ROOT))
+            .expect("root")
+            .revoke_pending |= CM::SUPERVISOR;
+        assert!(!super::caller_has_supervisor(ROOT));
+        drop(failed);
+        assert!(
+            super::caller_has_supervisor(ROOT),
+            "failed revoke left the right withheld"
+        );
 
         let mut restore = SCHEDULER.lock();
         *restore = saved;

@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "One authority record per Cell incarnation"
-status: in-progress
+status: complete
 priority: P1
 effort: "8–12d"
 dependencies: [6]
@@ -67,19 +67,21 @@ Make "what a Cell holds" one kernel record keyed by `(cell_id, generation)`, rea
 
 ## Todo List
 
-- [ ] Reader/writer inventory
-- [ ] Parallel record with agreement assert
-- [ ] Gates, attestation, revoke switched
-- [ ] Selftest rewritten
-- [ ] TCB fields removed
-- [ ] Audit subject tuple
+- [x] Reader/writer inventory
+- [x] Parallel record with agreement assert — merged into the switch (see log)
+- [x] Gates, attestation, revoke switched
+- [x] Selftest rewritten
+- [x] TCB fields removed
+- [x] Audit subject tuple
 
 ## Success Criteria
 
-- [ ] Selftest: after `CapRevoke` targeting a worker tid, the root and all siblings fail the gate (fails on the tree before this phase — record the before-result).
-- [ ] Kernel host tests and x86/RV64/AArch64 boot lanes pass.
-- [ ] No non-test reader of a per-TCB cap field remains (grep/LSP zero).
-- [ ] Checkpoint: full `pr`-tier suite, `x86-c2c`, 2-CPU x86 domain lane, independent review of the diff recorded.
+Evidence: [reports/phase-07-evidence.md](reports/phase-07-evidence.md).
+
+- [x] Selftest: after `CapRevoke` targeting a worker tid, the root and all siblings fail the gate (fails on the tree before this phase — record the before-result).
+- [x] Kernel host tests and x86/RV64/AArch64 boot lanes pass.
+- [x] No non-test reader of a per-TCB cap field remains (grep/LSP zero).
+- [x] Checkpoint: full `pr`-tier suite, `x86-c2c`, 2-CPU x86 domain lane, independent review of the diff recorded.
 
 ## Risk Assessment
 
@@ -110,3 +112,15 @@ Phase 08 may now move authority code out of `syscall.rs` into `task/authority/`.
 - **Evidence (gate-switch commit):** 611 host tests pass, including the before-failing revoke test. Boot selftests on x86, RV64 and AArch64 all log `thread-cap self-test PASS`, which now includes the new `REVOKE-CELL-WIDE` check. Its first run failed because the parent held `network`, which marks a system Cell that `CapRevoke` refuses; the fixture now uses `supervisor`.
 - **Step 5 (field removal):** removed from the TCB: the 10 `*_cap` tokens, the 12 boolean or bitmask right fields, `CapSet::of_task` / `from_task`, and the ZST token types. The exception is `DevelopmentSiloRegistrationCap`, a test-hooks launch-route token on the root task that is not in `CapSet`. `apply_to` now installs the record, and the Platform singleton is still granted only by its reservation. `CellAuthority.ceiling` and `current_rights` are deleted along with their constructor parameter, as are the unused `cell/registry.rs` and its inventory row. The wiring test `kms_ssh_rights_round_trip_through_the_task_control_block` pinned the deleted copy helpers and is deleted. Grep finds no reader of a per-TCB cap field. Host tests: 610 pass under both feature sets. All 13 boot selftests PASS on x86, RV64 and AArch64.
 - **Step 6 (audit subject):** new `audit::Subject {cell, generation, tid}` and `encode_subject(subject, d0, d1)`, a 32-byte payload. `SyscallDenied` (allowlist and pipe ownership), `CapRevoked` (caller as subject, target tid, mask) and governed-spawn `CellSpawnDenied` (the **spawner** as subject; kernel for boot and trusted init) now carry it. `CallerLaunchAuthority` gains `cell_id`. **Deviation:** domain-admission refusals (policy draining, live domain grant) and the diagnostic events (IPC, net, RT, CellExit/Fault) keep their old payloads. The domain refusals run below the publication commit, which has no caller handle, and they are policy-wide, not caller-specific. No parser of the ring exists (`docs/abi-boundary-records.md` §4 item 9), so the payload change is not an ABI delta.
+- **Independent review (haily-reviewer, read-only, verdict PASS_WITH_RISK). All 8 findings addressed:**
+  1. **High:** a revoke was lost when the targeted thread exited during teardown. The commit now narrows the root captured before the teardown, so it no longer depends on the target. Regression test: `cap_revoke_pending_mask_holds_and_survives_target_exit`.
+  2. **Medium:** a member could re-claim MMIO, or a new thread could claim it, during the teardown. The revoke mask is now published as `Task::revoke_pending` on the root first, and `cell_rights` subtracts it. `RevokeSerial` keeps one `CapRevoke` running at a time; a concurrent call gets `TryAgain`.
+  3. **Medium:** the ABI refusal witness parsed the old 8-byte `CellSpawnDenied`. `abi_refusal_fixtures.py` now reads the subject layout, its 12 host tests pass, and `docs/abi-boundary-records.md` is updated.
+  4. **Low:** partial teardown on failure. The failure message and comment now state the outcome: the record keeps the right, members already torn down stay torn down, and a retry is idempotent.
+  5. **Low:** the Cell root is now notified as well as the target.
+  6. **Low:** the gate doc block is back on `cap_revoke_gate`.
+  7. **Low:** `cell_rights` checks that `root_tid` names the task's own incarnation and fails closed otherwise.
+  8. **Low:** the ostd `CapRevoke` error docs are updated.
+- **Surprise:** the checkpoint domain lane failed at `ATOMIC_PUBLICATION_AP-00 field=denial-audit`. The harness assumed every audit record is 18 bytes, but the governed-spawn denial is now 42. The harness now counts audit **bytes** per case: a subject record is 42, an `encode_u32x2` record is 18.
+- **Re-review Lows:** the pending-bit set now has the incarnation guard. The ostd `sys_cap_revoke` docs now state that every refusal is one error and that a concurrent or failed-teardown refusal is retry-safe; distinguishing them is a Law-1 return-code change and is not done. A ceiling snapshot taken while a revoke is pending fails closed; accepted.
+- **File set (to confirm at close):** beyond request §2, the phase touched `kernel/src/task.rs`, `kernel/src/task/cell-image.rs` (gate readers), `kernel/src/cell.rs` (module removal), `libs/ostd/src/{cap,syscall}.rs` (error docs only), `scripts/x86/{abi_refusal_fixtures,test_abi_refusal_fixtures}.py` and `docs/abi-boundary-records.md` (the audit payload consumer and its record), and `kernel/src/loader/atomic_publication_tests/*` (audit sizing).

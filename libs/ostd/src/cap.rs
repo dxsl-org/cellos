@@ -48,13 +48,15 @@ impl CapHandle {
         }
     }
 
-    /// Revoke all capabilities this handle represents from the live target cell.
+    /// Revoke all capabilities this handle represents from the target's whole
+    /// Cell incarnation (root and every thread), whichever of its tasks
+    /// `target_tid` names.
     ///
     /// Equivalent to calling `sys_cap_revoke(target_tid, cap_mask)`.
     ///
     /// # Errors
-    /// See [`sys_cap_revoke`] — `PermissionDenied` if caller lacks `SpawnCap`,
-    /// target is a system cell, or `InvalidCommand` if the target no longer exists.
+    /// See [`sys_cap_revoke`]: every refusal is reported as `PermissionDenied`,
+    /// and a concurrent revoke or an unfinished teardown is transient.
     pub fn revoke(&self) -> Result<(), SyscallError> {
         sys_cap_revoke(self.target_tid, self.cap_mask)
     }

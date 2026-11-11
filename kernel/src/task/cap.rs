@@ -78,10 +78,18 @@ pub(crate) fn platform_reserved_or_committed() -> bool {
 
 // ─── Capability set + spawn-delegation (P2 — monotonic downgrade) ────────────
 
-/// A plain-data snapshot of a Task's capabilities, used to enforce spawn-time
-/// **intersection**: a child is granted `manifest ∩ spawner`, so no cell can
-/// hand a child a capability it does not itself hold (Fuchsia/Genode monotonic
-/// downgrade). Single source of truth for "what caps does X hold".
+/// A Cell's rights: the incarnation record (`Task::rights` on the root, read
+/// through `Scheduler::cell_rights`) and the value spawn-time **intersection**
+/// works on — a child is granted `request ∩ ceiling`, so no Cell can hand a
+/// child a capability it does not itself hold (Fuchsia/Genode monotonic
+/// downgrade). Single source of truth for "what caps does a Cell hold".
+///
+/// **Frozen set (architecture remediation Phase 07).** Besides the kernel caps,
+/// this carries service rights the kernel only attests in the caller trailer
+/// (`net_*`, `observe_*`, `vfs_mutate`, `config_write`, `kms_ssh_*`). That set is
+/// closed: a new service-specific right does not get a field here; it belongs
+/// in the owning service's own authority (review Medium "CapSet as a
+/// service-rights carrier").
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct CapSet {
     pub block_io: bool,

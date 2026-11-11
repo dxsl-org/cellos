@@ -258,6 +258,16 @@ for G2 HMI (sensitive caps only). Hard invariant: the manifest is a **ceiling, n
 kernel enforces** (consent feeds the syscall-boundary check). LBI already closes the TCC "permission-laundering
 via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 
+**One rights record per Cell incarnation (2026-11-11, architecture remediation Phase 07).** Every capability
+gate, caller-trailer attestation, launch ceiling and hot-swap ceiling reads the Cell's rights from one record,
+the root task's `Task::rights` (`Scheduler::cell_rights`); threads hold no copy. `CapRevoke` narrows that record,
+so a revoke aimed at any thread removes the right from the whole incarnation, and the MMIO/DMA/grant teardown
+runs for every task of it. Revoking a sibling of the caller is refused like revoking oneself. Authority audit
+records (`SyscallDenied`, `CapRevoked`, `CellSpawnDenied` from governed spawn) name the acting task as
+`(cell, generation, tid)`. Device, BDF and service ownership remain keyed by tid. While a revoke's teardown
+runs, its mask is already withheld from every task of the Cell (`Task::revoke_pending`), so nothing can be
+re-claimed mid-teardown; one `CapRevoke` runs at a time (a concurrent one is refused and may be retried).
+
 **Launch and device authority key on measured identity (2026-11-10, architecture remediation Phase 06).**
 A child's ceiling on a reviewed launch edge comes from the edge row, not from the caller's own caps,
 so the edge key is load-bearing. It used to be the caller's **task name** — the basename of a path its

@@ -1732,6 +1732,17 @@ rationale = "Release store after the per-queue wake_requested store, swap(AcqRel
 review = "kernel/src/task/completion.rs:complete_from; kernel/src/task/completion.rs:deliver_pending_wakes; kernel/src/task.rs:1551"
 
 [[global]]
+key = "kernel::task::syscall::REVOKE_IN_PROGRESS"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::task::syscall CapRevoke serialisation: RevokeSerial::acquire / Drop"
+contexts = ["normal"]
+seal = "none: set for the duration of one CapRevoke syscall, cleared by the guard's Drop on every exit"
+retirement = "never retired; false whenever no CapRevoke is running"
+rationale = "Acquire compare_exchange admits one CapRevoke at a time so the single-word Task::revoke_pending mask is never cleared by an overlapping revoke; a concurrent caller gets TryAgain. Release store in Drop. Syscall context only, no IRQ or AP access."
+review = "kernel/src/task/syscall.rs:RevokeSerial; kernel/src/task/syscall.rs:PendingRevoke"
+
+[[global]]
 key = "kernel::task::cap::PLATFORM_CAP_GRANTED"
 lifetime = "global"
 mutation = "atomic"

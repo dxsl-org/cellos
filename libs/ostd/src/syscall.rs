@@ -2506,10 +2506,16 @@ pub fn sys_get_random(buf: &mut [u8]) -> usize {
 /// `cap_mask` selects which capability classes to revoke — use the constants in
 /// `api::syscall::cap_mask` (e.g. `SPAWN`, `NETWORK`, `MMIO_MASK`).
 ///
+/// The revoke applies to the target's whole Cell incarnation (root and every
+/// thread), whichever of its tasks `target_tid` names.
+///
 /// # Errors
-/// - `PermissionDenied` if the caller lacks `SpawnCap`.
-/// - `PermissionDenied` if the target is a system cell (`block_io` / `network` holder).
-/// - `InvalidCommand` if `target_tid == caller` or target does not exist.
+/// The kernel returns one generic error sentinel for every refusal, reported
+/// here as `PermissionDenied`: no `SpawnCap`; a system-cell target (`block_io` /
+/// `network` holder); a missing target or one in the caller's own Cell
+/// incarnation; a HYPERVISOR bit; a teardown that could not finish (the right
+/// is kept); or another `CapRevoke` in progress. The last two are transient and
+/// a retry is safe.
 ///
 /// # Panics
 /// Never panics — all failures surface as `Err`.

@@ -19,6 +19,11 @@ def rec(event, a=0, b=0):
     return (event, struct.pack("<II", a, b))
 
 
+def denied(code, flags=0, subject=(0, 0, 0)):
+    """Governed-spawn `CellSpawnDenied`: `audit::encode_subject` layout."""
+    return (fx.EV_SPAWN_DENIED, struct.pack("<3QII", *subject, code, flags))
+
+
 def admitted(tid):
     return [rec(fx.EV_SIG_VERIFIED), rec(fx.EV_MEASURE, tid, 0xAB), rec(fx.EV_CELL_SPAWN, tid)]
 
@@ -33,7 +38,7 @@ def fixture_stream(routes=2, tid=40, noise=True):
             out.append(rec(9, tid, 1))  # its exit
             tid += 1
         elif fixture.expect == fx.FORMAT:
-            out += [rec(fx.EV_SPAWN_DENIED, 0, 1)] * routes
+            out += [denied(1)] * routes
         else:
             out += [rec(fx.EV_SIG_FAILED, 0, 0)] * routes
     return out
@@ -111,26 +116,26 @@ class Evaluate(unittest.TestCase):
 
     def test_format_refusal_after_signature_verification_fails(self):
         stream = fixture_stream()
-        index = stream.index(rec(fx.EV_SPAWN_DENIED, 0, 1))
+        index = stream.index(denied(1))
         stream.insert(index, rec(fx.EV_SIG_VERIFIED))
         ok, lines, _ = fx.evaluate(stream)
         self.assertFalse(ok)
 
     def test_signature_fixture_refused_as_format_fails(self):
-        stream = [rec(fx.EV_SPAWN_DENIED, 0, 1) if r == rec(fx.EV_SIG_FAILED) else r
+        stream = [denied(1) if r == rec(fx.EV_SIG_FAILED) else r
                   for r in fixture_stream()]
         ok, _, _ = fx.evaluate(stream)
         self.assertFalse(ok)
 
     def test_admitted_malformed_record_fails(self):
         stream = fixture_stream(routes=1)
-        index = stream.index(rec(fx.EV_SPAWN_DENIED, 0, 1))
+        index = stream.index(denied(1))
         stream[index:index + 1] = admitted(99)
         ok, _, _ = fx.evaluate(stream)
         self.assertFalse(ok)
 
     def test_other_denial_code_is_not_a_format_refusal(self):
-        self.assertNotEqual(fx.classify([rec(fx.EV_SPAWN_DENIED, 0, 2)])[0], fx.FORMAT)
+        self.assertNotEqual(fx.classify([denied(2)])[0], fx.FORMAT)
 
 
 if __name__ == "__main__":

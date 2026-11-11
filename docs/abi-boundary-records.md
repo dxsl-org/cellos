@@ -99,7 +99,7 @@ current behavior.
 6. **POLICY.BIN accepts trailing bytes and has no sequence.** It returns after the last entry without an end-of-body check (`kernel/src/policy.rs:426`). An older, validly signed blob is replayable [INFERENCE: the header has no epoch field].
 7. **The P2 cell table has no version** and does not check its padding (`kernel/src/loader/disk_layout.rs:62-69`).
 8. **There is no syscall ABI version.** Unknown numbers fail closed without an audit record (`kernel/src/task/syscall.rs:10036-10038`).
-9. **The audit denial codes collide.** `CellSpawnDenied(0, 1)` means "malformed manifest" in `governed_spawn.rs:49-52` and "domain admission feature disabled" in `kernel/src/loader/domain_admission.rs:49`, :262-265; codes 2 to 4 collide the same way. The ring has no consumer (`kernel/src/audit.rs:250-251`), so this is not a public ABI. The Phase 06 witness separates the two by record sequence (§5).
+9. **The audit denial codes collide.** `CellSpawnDenied(0, 1)` means "malformed manifest" in `governed_spawn.rs:49-52` and "domain admission feature disabled" in `kernel/src/loader/domain_admission.rs:49`, :262-265; codes 2 to 4 collide the same way. The ring has no consumer (`kernel/src/audit.rs:250-251`), so this is not a public ABI. The Phase 06 witness separates the two by record sequence (§5). **Update 2026-11-11 (architecture remediation Phase 07):** governed-spawn denials now use the 32-byte `audit::encode_subject` payload (spawner `(cell, generation, tid)`, then code, then manifest flags), while domain-admission denials keep the 8-byte `encode_u32x2(0, code)`. The payload length now tells the two families apart; the codes themselves are unchanged.
 10. **The audit docs have drifted.** `AuditEvent::CellSignatureFailed` says "Path is logged separately via `log::warn!`" (`kernel/src/audit.rs:95`), but the signature branch logs nothing (`governed_spawn.rs:72-78`). The module header says new writes are dropped when the ring is full (`audit.rs:16-18`), but the ring evicts the oldest records (`audit.rs:180-185`).
 
 ## 5. CellManifest record and refusal evidence
@@ -108,7 +108,7 @@ current behavior.
 
 **Order on the real admission path** (`kernel/src/loader/governed_spawn.rs`), reached from `SpawnFromElf` and `SpawnFromPath` (`kernel/src/task/syscall.rs:6753`, :6499) after the launch-edge gate (`syscall.rs:1959-1994`):
 
-1. `manifest_section::classify` (:45). `Malformed` writes `CellSpawnDenied(0, 1)` and returns `PermissionDenied` (:48-55). No signature work happens, and no task, TID, CSpace, measurement, route or capability is created.
+1. `manifest_section::classify` (:45). `Malformed` writes `CellSpawnDenied` with code 1 (since 2026-11-11 the subject layout `[spawner cell, generation, tid][1][0]`; before that `(0, 1)`) and returns `PermissionDenied` (:48-55). No signature work happens, and no task, TID, CSpace, measurement, route or capability is created.
 2. Signature (:60-89). A mismatch writes `CellSignatureFailed(0, 0)` and returns `PermissionDenied`.
 3. Owner admission (:113), privilege check (:121), capability derivation (:130), platform reservation (:176-183), task preparation (:206), then publication (:241). A published task writes `CellMeasure(tid, …)` and `CellSpawn(tid, 0)` (`kernel/src/task/launch.rs:262-267`).
 
@@ -173,7 +173,7 @@ ABI-FX: PASS
 What this shows:
 
 - **Refused before effect.** None of the 14 format attempts or the 2 signature attempts has a `CellSignatureVerified`, `CellMeasure` or `CellSpawn` record. The controls on either side were published as consecutive TIDs 7, 8 and 9, so the 16 refused attempts allocated no TID. A format refusal stops before the signature check.
-- **Signature-invalid and format-invalid are distinct.** A signature refusal is `CellSignatureFailed(0, 0)`. A format refusal is `CellSpawnDenied(0, 1)` with no preceding `CellSignatureVerified`, even though every format fixture's signature is valid on the host. That sequence excludes the colliding domain-admission code (gap 9), which can only follow a verified signature for a signed ELF.
+- **Signature-invalid and format-invalid are distinct.** A signature refusal is `CellSignatureFailed(0, 0)`. A format refusal is `CellSpawnDenied` with code 1 (`(0, 1)` in the transcript above; the subject layout since 2026-11-11, which `abi_refusal_fixtures.py` reads) with no preceding `CellSignatureVerified`, even though every format fixture's signature is valid on the host. That sequence excludes the colliding domain-admission code (gap 9), which can only follow a verified signature for a signed ELF.
 - **Compatible records still run.** v1 and current v2 were admitted, published, ran and exited with status 0. In the same boot the image's real cells with built-in v2 manifests were also admitted: platform, ahci, vfs (flags `0x00c1`) and input. `serial` has no manifest section.
 
 Ceiling: x86 q35 QEMU/TCG, one vCPU, private image. It is not KVM evidence or

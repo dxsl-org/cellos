@@ -3,7 +3,10 @@ use types::ViError;
 
 use super::harness::{arm_failure, failure_reached};
 
+/// One audit record with an `encode_u32x2` payload: 10-byte header + 8.
 pub(super) const AUDIT_RECORD_BYTES: usize = 18;
+/// One authority record with an `audit::encode_subject` payload: 10 + 32.
+pub(super) const SUBJECT_AUDIT_RECORD_BYTES: usize = 42;
 
 #[derive(Debug, PartialEq)]
 pub(super) struct TaskSnapshot {
@@ -147,13 +150,10 @@ pub(super) fn exclude_proven_audit_delta(
     expected: &StateSnapshot,
     before_teardown: &StateSnapshot,
     observed: &mut StateSnapshot,
-    audit_records: usize,
+    audit_bytes: usize,
 ) -> bool {
     let expected_audit = (
-        expected
-            .audit
-            .0
-            .wrapping_add(AUDIT_RECORD_BYTES.wrapping_mul(audit_records)),
+        expected.audit.0.wrapping_add(audit_bytes),
         expected.audit.1,
         expected.audit.2,
     );
@@ -527,6 +527,7 @@ pub(super) fn denied_with_governed_rollback(
     arm_failure(case);
     let denied = action().is_err();
     let mut after = snapshot();
+    // Governed-flow records here are `encode_u32x2` records (18 bytes each).
     let expected_audit = (
         before
             .audit
@@ -556,8 +557,9 @@ pub(super) fn denied_with_logged_denial(
     arm_failure(case);
     let denied = action().is_err();
     let mut after = snapshot();
+    // The governed-spawn denial names its spawner (`audit::encode_subject`).
     let expected_audit = (
-        before.audit.0.wrapping_add(AUDIT_RECORD_BYTES),
+        before.audit.0.wrapping_add(SUBJECT_AUDIT_RECORD_BYTES),
         before.audit.1,
         before.audit.2,
     );

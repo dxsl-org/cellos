@@ -368,6 +368,11 @@ pub struct Task {
     /// so every thread of the incarnation sees one set of rights and a revoke
     /// aimed at any of them applies to all. A thread's own record stays `EMPTY`.
     pub(crate) rights: super::cap::CapSet,
+    /// `CapRevoke` mask whose teardown is in flight on this root. Gates already
+    /// see it withdrawn (`Scheduler::cell_rights`), so no task of the Cell can
+    /// re-claim a resource while the revoke tears its holders down; the commit
+    /// narrows `rights` and clears it, a failed teardown clears it.
+    pub(crate) revoke_pending: u32,
 
     /// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
     /// On other architectures this field exists but is always 0 and never consulted.
@@ -650,6 +655,7 @@ impl Task {
             #[cfg(feature = "test-hooks")]
             development_silo_registration_cap: None,
             rights: super::cap::CapSet::EMPTY,
+            revoke_pending: 0,
             pku_key: 0,
             pku_value: 0,
             user_cet: 0,

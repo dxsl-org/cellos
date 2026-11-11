@@ -34,11 +34,11 @@ unsafe fn preexisting_vfs_handler(
 }
 
 /// Run a denial against the same populated owners that production admission
-/// observes. `audit_records` is the documented request evidence the denial
+/// observes. `audit_bytes` is the documented request evidence the denial
 /// appends; fixture installation and teardown must append no audit records.
 pub(super) fn with_populated_baseline(
     case: &'static str,
-    audit_records: usize,
+    audit_bytes: usize,
     contract: impl FnOnce() -> bool,
 ) -> bool {
     let original = snapshot();
@@ -54,12 +54,8 @@ pub(super) fn with_populated_baseline(
     let after_contract = snapshot();
     drop(baseline);
     let mut after_teardown = snapshot();
-    let audit_preserved = exclude_proven_audit_delta(
-        &original,
-        &after_contract,
-        &mut after_teardown,
-        audit_records,
-    );
+    let audit_preserved =
+        exclude_proven_audit_delta(&original, &after_contract, &mut after_teardown, audit_bytes);
     if !audit_preserved {
         log::error!(
             "ATOMIC_PUBLICATION_{}: MISMATCH stage=fixture-teardown field=audit-delta",

@@ -524,7 +524,12 @@ impl Scheduler {
         let Some(root) = self.tasks.get(&task.root_tid) else {
             return super::cap::CapSet::EMPTY;
         };
-        root.rights
+        // A `root_tid` that does not name this task's own incarnation fails
+        // closed rather than lending another Cell's rights.
+        if (root.cell_id, root.cell_generation) != (task.cell_id, task.cell_generation) {
+            return super::cap::CapSet::EMPTY;
+        }
+        root.rights.without_revoke_mask(root.revoke_pending)
     }
 
     pub fn new() -> Self {

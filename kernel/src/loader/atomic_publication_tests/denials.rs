@@ -4,10 +4,14 @@ use super::snapshot::{
     denied_without_frame_allocator, platform_singleton_denial,
 };
 
-const NO_AUDIT_RECORDS: usize = 0;
-const LOGGED_DENIAL_AUDIT_RECORDS: usize = 1;
-const GOVERNED_DENIAL_AUDIT_RECORDS: usize = 2;
-const PLATFORM_SINGLETON_AUDIT_RECORDS: usize = 4;
+use super::snapshot::{AUDIT_RECORD_BYTES, SUBJECT_AUDIT_RECORD_BYTES};
+
+// Audit bytes each denial appends (record sizes differ by payload layout).
+const NO_AUDIT_BYTES: usize = 0;
+const SUBJECT_DENIAL_AUDIT_BYTES: usize = SUBJECT_AUDIT_RECORD_BYTES;
+const ONE_RECORD_AUDIT_BYTES: usize = AUDIT_RECORD_BYTES;
+const GOVERNED_DENIAL_AUDIT_BYTES: usize = 2 * AUDIT_RECORD_BYTES;
+const PLATFORM_SINGLETON_AUDIT_BYTES: usize = 4 * AUDIT_RECORD_BYTES;
 
 fn record(case: &'static str, failures: &mut usize, contract: impl FnOnce() -> bool) {
     if contract() {
@@ -21,7 +25,7 @@ fn record(case: &'static str, failures: &mut usize, contract: impl FnOnce() -> b
 pub(super) fn run() -> usize {
     let mut failures = 0;
     record("AP-00", &mut failures, || {
-        with_populated_baseline("AP-00", LOGGED_DENIAL_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-00", SUBJECT_DENIAL_AUDIT_BYTES, || {
             denied_with_logged_denial("AP-00", || {
                 super::super::spawn_gated(
                     &[],
@@ -36,7 +40,7 @@ pub(super) fn run() -> usize {
         "AP-01", "AP-02", "AP-03", "AP-04", "AP-RF", "AP-RM", "AP-RW",
     ] {
         record(case, &mut failures, || {
-            with_populated_baseline(case, NO_AUDIT_RECORDS, || {
+            with_populated_baseline(case, NO_AUDIT_BYTES, || {
                 denied_with_full_rollback(case, || {
                     crate::task::prepare_elf_task(
                         crate::INIT_ELF,
@@ -50,7 +54,7 @@ pub(super) fn run() -> usize {
         });
     }
     record("AP-FA", &mut failures, || {
-        with_populated_baseline("AP-FA", NO_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-FA", NO_AUDIT_BYTES, || {
             denied_without_frame_allocator(|| {
                 crate::task::prepare_elf_task(
                     crate::INIT_ELF,
@@ -65,12 +69,12 @@ pub(super) fn run() -> usize {
     record("AP-05", &mut failures, || {
         with_populated_baseline(
             "AP-05",
-            PLATFORM_SINGLETON_AUDIT_RECORDS,
+            PLATFORM_SINGLETON_AUDIT_BYTES,
             platform_singleton_denial,
         )
     });
     record("AP-06", &mut failures, || {
-        with_populated_baseline("AP-06", GOVERNED_DENIAL_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-06", GOVERNED_DENIAL_AUDIT_BYTES, || {
             denied_with_governed_rollback("AP-06", 2, || {
                 super::spawn_governed_platform(super::super::SpawnRequest::governed_boot())
                     .map(|_| ())
@@ -79,7 +83,7 @@ pub(super) fn run() -> usize {
     });
     for case in ["AP-07", "AP-08"] {
         record(case, &mut failures, || {
-            with_populated_baseline(case, NO_AUDIT_RECORDS, || {
+            with_populated_baseline(case, NO_AUDIT_BYTES, || {
                 denied_with_full_rollback(case, || {
                     super::super::spawn_trusted_init(crate::INIT_ELF).map(|_| ())
                 })
@@ -87,7 +91,7 @@ pub(super) fn run() -> usize {
         });
     }
     record("AP-09", &mut failures, || {
-        with_populated_baseline("AP-09", LOGGED_DENIAL_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-09", ONE_RECORD_AUDIT_BYTES, || {
             denied_with_governed_rollback("AP-09", 1, || {
                 super::super::spawn_from_path(
                     "/bin/vfs",
@@ -98,7 +102,7 @@ pub(super) fn run() -> usize {
         })
     });
     record("AP-10", &mut failures, || {
-        with_populated_baseline("AP-10", GOVERNED_DENIAL_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-10", GOVERNED_DENIAL_AUDIT_BYTES, || {
             denied_with_governed_rollback("AP-10", 2, || {
                 let mut request = super::super::SpawnRequest::governed_boot();
                 request.priority = u8::MAX;
@@ -107,7 +111,7 @@ pub(super) fn run() -> usize {
         })
     });
     record("AP-11", &mut failures, || {
-        with_populated_baseline("AP-11", GOVERNED_DENIAL_AUDIT_RECORDS, || {
+        with_populated_baseline("AP-11", GOVERNED_DENIAL_AUDIT_BYTES, || {
             denied_with_governed_rollback("AP-11", 2, || {
                 let mut request = super::super::SpawnRequest::governed_boot();
                 request.replacement =
