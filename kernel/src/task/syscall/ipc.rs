@@ -1405,7 +1405,7 @@ pub(super) fn wait_for_event(caller_id: usize, mask: u32, deadline: Option<u64>)
             task.state = crate::task::tcb::TaskState::WaitEvent { mask, deadline };
         }
     }
-    // Yield; wake happens in pick_next's global sweep (hart 0).
+    // Yield; wake happens in pick_next's global sweep (on any hart).
     crate::task::yield_cpu();
     // After re-schedule: timer sweep wrote the fired mask into trap_frame.regs[10].
     // Return it so ViCell_syscall_dispatch writes the correct value back.

@@ -126,6 +126,8 @@ pub struct TaskTable {
     deadlines: Vec<(u64, usize)>,
     /// Parked tasks the sweep polls for events on every pass.
     event_waiters: Vec<usize>,
+    /// Reused candidate list for the sweep, so the timer path never allocates.
+    sweep_scratch: Vec<usize>,
 }
 impl TaskTable {
     fn new() -> Self {
@@ -134,6 +136,7 @@ impl TaskTable {
             reservations: 0,
             deadlines: Vec::new(),
             event_waiters: Vec::new(),
+            sweep_scratch: Vec::new(),
         }
     }
 
@@ -144,7 +147,11 @@ impl TaskTable {
         self.deadlines
             .try_reserve(want.saturating_sub(self.deadlines.len()))?;
         self.event_waiters
-            .try_reserve(want.saturating_sub(self.event_waiters.len()))
+            .try_reserve(want.saturating_sub(self.event_waiters.len()))?;
+        // A sweep lists every due deadline and every event waiter at most once
+        // each.
+        self.sweep_scratch
+            .try_reserve((2 * want).saturating_sub(self.sweep_scratch.len()))
     }
 
     /// Record what the sweep must watch for `id`, which just switched out in
@@ -162,6 +169,10 @@ impl TaskTable {
         if state.waits_for_events() {
             if !self.event_waiters.contains(&id) {
                 self.event_waiters.push(id);
+                // An event that fired between the park and this switch-out
+                // may have had its MSI hint consumed by a sweep that did not
+                // know this waiter yet; ask for another sweep.
+                crate::dev::irq_wait::hint_msi_wake();
             }
         } else if let Some(at) = self.event_waiters.iter().position(|&t| t == id) {
             self.event_waiters.swap_remove(at);
@@ -169,20 +180,24 @@ impl TaskTable {
     }
 
     /// Tasks the sweep must examine at `now`, ascending by tid: every deadline
-    /// that has passed (removed from the queue) and every event waiter.
+    /// that has passed (removed from the queue) and every event waiter. The
+    /// list is the reserved scratch buffer; hand it back with
+    /// [`return_sweep_scratch`](Self::return_sweep_scratch).
     fn sweep_candidates(&mut self, now: u64) -> Vec<usize> {
+        let mut candidates = core::mem::take(&mut self.sweep_scratch);
+        candidates.clear();
         let due = self
             .deadlines
             .partition_point(|&(deadline, _)| deadline <= now);
-        let mut candidates: Vec<usize> = self
-            .deadlines
-            .drain(..due)
-            .map(|(_, id)| id)
-            .chain(self.event_waiters.iter().copied())
-            .collect();
+        candidates.extend(self.deadlines.drain(..due).map(|(_, id)| id));
+        candidates.extend(self.event_waiters.iter().copied());
         candidates.sort_unstable();
         candidates.dedup();
         candidates
+    }
+
+    fn return_sweep_scratch(&mut self, scratch: Vec<usize>) {
+        self.sweep_scratch = scratch;
     }
 
     /// Drop event waiters that no longer wait for events.
@@ -257,7 +272,12 @@ impl TaskTable {
     }
     pub fn insert(&mut self, id: usize, task: Box<Task>) -> Option<Box<Task>> {
         match self.rows.binary_search_by_key(&id, |r| r.0) {
-            Ok(i) => Some(core::mem::replace(&mut self.rows[i].1, task)),
+            Ok(i) => {
+                let state = task.state;
+                let old = core::mem::replace(&mut self.rows[i].1, task);
+                self.note_parked(id, &state);
+                Some(old)
+            }
             Err(i) => {
                 self.rows.reserve(self.reservations + 1);
                 self.reserve_interest()
@@ -563,9 +583,10 @@ pub struct Scheduler {
     /// Task IDs whose task-local resources must be reaped outside SCHEDULER.
     /// Root-member IDs remain in `pending_root_retirements` until every hart
     /// has completed a switch away from the retiring generation.
-    /// Async operation token → owner / retired receiver (Phase 10).
-    pub(crate) async_index: crate::task::async_ipc::AsyncIndex,
     pub(in crate::sched) pending_grant_reap: Vec<usize>,
+    /// Async operation token → owner, and the last token each task received
+    /// (Phase 10).
+    pub(crate) async_index: crate::task::async_ipc::AsyncIndex,
     /// Root retirements awaiting completed context switches before CellId-wide
     /// resource release and owner-slot reuse.
     pending_root_retirements: Vec<RootRetirement>,
@@ -936,9 +957,6 @@ impl Scheduler {
             None
         }
         .unwrap_or_else(crate::sched::hart_local::current_hart_id);
-        if let Some(task) = self.tasks.get_mut(&id) {
-            task.last_hart = Some(target_hart);
-        }
         crate::sched::hart_local::ready::push_on_hart(target_hart, id, priority);
         Wake {
             priority,
@@ -2097,9 +2115,6 @@ impl Scheduler {
             }
         }
     }
-    /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
-    /// remains pending until its outgoing saved context has stopped executing
-    /// and every DMA publication reservation has committed or rolled back.
     /// Whether `yield_cpu` still has housekeeping to drain.
     pub(crate) fn housekeeping_pending(&self) -> bool {
         !self.zombies.is_empty()
@@ -2110,6 +2125,9 @@ impl Scheduler {
             || !self.pending_completion_release.is_empty()
     }
 
+    /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
+    /// remains pending until its outgoing saved context has stopped executing
+    /// and every DMA publication reservation has committed or rolled back.
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
         let mut reap = Vec::new();
         self.pending_grant_reap.retain(|tid| {
@@ -2299,13 +2317,14 @@ impl Scheduler {
     /// Test kernels and host tests: every parked task the full scan would have
     /// examined is tracked by the deadline queue or the event-waiter list,
     /// unless it is still current on a hart (it parked but has not switched
-    /// out yet).
+    /// out yet) or has never been dispatched (a fixture's synthetic task,
+    /// which parks without a switch-out).
     #[cfg(any(feature = "test-hooks", test))]
     fn assert_sweep_interest_tracked(&self) {
         for (&id, task) in self.tasks.iter() {
             let current = (0..crate::sched::smp::MAX_HARTS)
                 .any(|hart| crate::sched::hart_local::ready::current_task_id_for(hart) == id);
-            if current {
+            if current || task.last_hart.is_none() {
                 continue;
             }
             if let Some(deadline) = task.state.wake_deadline() {
@@ -2409,7 +2428,12 @@ impl Scheduler {
                 self.last_global_sweep_tick = now;
             }
 
-            crate::task::async_ipc::expire(self, now as u64);
+            // Expiry and the heartbeat check compare deadlines with `now`; an
+            // event-only pass has the same `now` as the last sweep, so they run
+            // only when the tick advanced.
+            if time_advanced {
+                crate::task::async_ipc::expire(self, now as u64);
+            }
             crate::ipc::cell_session::sweep(self);
             // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
             //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
@@ -2571,6 +2595,7 @@ impl Scheduler {
                     waking_tasks.push_back(*id);
                 }
             }
+            self.tasks.return_sweep_scratch(candidates);
             self.tasks.retain_event_waiters();
             self.pending_vfs_context_release.extend(vfs_context_drops);
             if !self.pending_vfs_context_release.is_empty() {
@@ -2586,7 +2611,7 @@ impl Scheduler {
             //     death flows through the normal path so the supervisor restarts it. Collect
             //     first, then `exit_task` outside the iteration (it mutates self.tasks).
             let mut hung: Vec<(usize, u64)> = Vec::new();
-            for (id, task) in self.tasks.iter() {
+            for (id, task) in self.tasks.iter().filter(|_| time_advanced) {
                 if let Some(d) = task.heartbeat_deadline {
                     if now as u64 >= d {
                         hung.push((*id, task.cell_id.0));
@@ -2631,18 +2656,16 @@ impl Scheduler {
             }
         }
 
-        // 2. Poll Async Tasks: filter directly for active polling tasks
-        let polling_ids: Vec<usize> = self
-            .tasks
-            .iter()
-            .filter_map(|(&id, t)| {
-                if t.state == TaskState::Polling {
-                    Some(id)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        // 2. Poll Async Tasks: filter directly for active polling tasks. Hart 0
+        // only, every pass, as before the sweep moved to any hart.
+        let polling_ids: Vec<usize> = if hart_id == 0 {
+            self.tasks
+                .iter()
+                .filter_map(|(&id, t)| (t.state == TaskState::Polling).then_some(id))
+                .collect()
+        } else {
+            Vec::new()
+        };
         if !polling_ids.is_empty() {
             let mut polled_tasks = Vec::new();
             let waker = dummy_waker();

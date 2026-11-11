@@ -79,10 +79,10 @@ Turn lock order from comments into a checked property, and remove the O(tasks) w
 
 ## Success Criteria
 
-- [ ] Host test: acquiring two ranked locks in descending order panics under the test posture.
-- [ ] x86 2-CPU and 4-CPU domain lanes, RV64 `--harts 2`, AArch64 2-CPU lane pass with the assert enabled.
-- [ ] A timeout registered on a hart other than 0 fires while hart 0 is held in a busy loop (new kernel fixture).
-- [ ] No `for task in tasks` scan remains on the reply path (code review + grep).
+- [x] Host test: acquiring two ranked locks in descending order panics under the test posture. *(`sync::rank::tests::descending_acquisition_panics`, `same_rank_twice_panics`.)*
+- [x] x86 2-CPU and 4-CPU domain lanes, RV64 `--harts 2`, AArch64 2-CPU lane pass with the assert enabled. *(x86 1/2/4 pass. RV64 `--harts 2` and AArch64 2-CPU test-hooks fail on the base `c2776928b` too, and show no `[lockrank]` report.)*
+- [x] A timeout registered on a hart other than 0 fires while hart 0 is held in a busy loop (new kernel fixture). *(AArch64 `-smp 2` PASS; negative control FAIL; x86 SKIP, since ticks advance on hart 0 only.)*
+- [x] No `for task in tasks` scan remains on the reply path (code review + grep).
 
 ## Risk Assessment
 
@@ -180,3 +180,21 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
   - **Deleted:** the nine uncalled `force_unlock_locks` functions, `force_unlock_bdf_locks`, and `pin::force_unlock` with its stale `force_unlock_all_kernel_locks` reference. `Spinlock::force_unlock` stays, for `task_entry_point`.
   - **Deferred (owner):** moving the G1 barrier out of `pick_next` into a wake API, until the G1 lane can run.
   - **Lanes pass:** x86 boot, domain 1/2/4 CPU, lifecycle, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot.
+- **Independent review** (`haily-reviewer`, read-only, range `c2776928b..4f84b29d2`). Verdict: BLOCKED. It confirmed the holder index, the housekeeping gate, RT placement consistency and the sweep's state coverage. Dispositions:
+  - **HIGH, fixed: the fixture broke mutual exclusion.** It ran a real `spawn`ed task. Once readied, that task was dispatched into `task_entry_point`, which force-unlocks a `SCHEDULER` hart 0 may hold and, on RV64, installs hart 0's trap vector. The fixture now parks a synthetic, never-dispatched `Task`: hart 0 publishes it as its selected task, so other harts defer its ready entry, and the fixture removes it before restoring that selection.
+  - **MED, fixed: per-pass cost.** The `Polling` scan sits outside the sweep gate and ran on every hart's pass; it is back to hart 0 only. Expiry and the heartbeat scan now run only when the tick advanced. An event-only pass (for example while the `NET_RX` level is set) has the same `now`, so they had nothing new to find.
+  - **MED, fixed: allocation in timer context.** The sweep allocated its candidate list in timer context. It now reuses `TaskTable::sweep_scratch`, reserved with the task rows.
+  - **MED, fixed: lost MSI hint.** An MSI hint could be consumed by a sweep before a new event waiter switched out. `note_parked` re-raises the hint when it adds an event waiter.
+  - **MED, fixed: uninstalled harts.** An RV64 secondary takes `KERNEL_ROOT` before its hart-local state exists, so the rank mask used hart 0's slot. The hart hook is now `hart_local::installed_hart_id() -> Option<usize>`, and uninstalled harts keep no held set. The spin answer still uses hart 0's mailbox for them, as before.
+  - **LOW, fixed:**
+    - `note_holder` growth past the submit reservation is charged to the kernel, not to the receiving Cell.
+    - The tracking assert skips never-dispatched tasks, because fixtures park synthetic tasks without a switch-out. `last_hart` is therefore set at dispatch only.
+    - `TaskTable::insert`'s replace branch notes a parked replacement.
+    - `is_rt_hart_online()` regains its meaning ("hart 1 is online") for the fixtures that pair with `HART_RT`. Placement does not use it.
+    - Stale inventory text and misplaced doc comments are fixed.
+    - Hook loads are `Relaxed`.
+  - **LOW, accepted (logged):** instance locks (per-hart ready, completion ring, grant gate) stay unranked, as planned, so edges through them are not checked. Release kernels now make an indirect call per spin iteration for the flush answer: two Relaxed loads and a call.
+- **Final tree lanes** (after the review fixes, with the asserts on):
+  - pass: x86 boot, domain 1/2/4 CPU, lifecycle 3/3, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot, `phase09-ssh` (34 checks), release posture (fails closed, no fixture symbol);
+  - AArch64 test-hooks `-smp 2`: `OFF-HART0-TIMEOUT: PASS harts=2 deadline=18 woke_at=18`. With the hart-0 gate restored: `FAIL … still sleeping`.
+  - Not run green: RV64 `--harts 2` (native-domain) and AArch64 test-hooks. Both fail on `c2776928b` with the same pre-existing panic or marker; neither shows a `[lockrank]` report.

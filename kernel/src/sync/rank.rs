@@ -174,20 +174,24 @@ mod check {
         /// interrupts masked (every ranked lock masks them), so `Relaxed`.
         static HELD: [[AtomicU64; 2]; HARTS] = [ZERO; HARTS];
 
-        fn slot() -> &'static [AtomicU64; 2] {
-            &HELD[super::super::super::hart_id() % HARTS]
+        /// This hart's slot; `None` before its hart-local state is installed
+        /// (it would otherwise share hart 0's slot and race it).
+        fn slot() -> Option<&'static [AtomicU64; 2]> {
+            super::super::super::installed_hart_id().and_then(|hart| HELD.get(hart))
         }
 
         pub(in super::super) fn get() -> u128 {
-            let s = slot();
-            u128::from(s[0].load(Ordering::Relaxed))
-                | (u128::from(s[1].load(Ordering::Relaxed)) << 64)
+            slot().map_or(0, |s| {
+                u128::from(s[0].load(Ordering::Relaxed))
+                    | (u128::from(s[1].load(Ordering::Relaxed)) << 64)
+            })
         }
 
         pub(in super::super) fn set(mask: u128) {
-            let s = slot();
-            s[0].store(mask as u64, Ordering::Relaxed);
-            s[1].store((mask >> 64) as u64, Ordering::Relaxed);
+            if let Some(s) = slot() {
+                s[0].store(mask as u64, Ordering::Relaxed);
+                s[1].store((mask >> 64) as u64, Ordering::Relaxed);
+            }
         }
     }
 

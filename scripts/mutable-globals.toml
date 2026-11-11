@@ -1079,12 +1079,12 @@ review = "kernel/src/dev/input_irq_ack.rs:init_driver; kernel/src/dev/input_irq_
 key = "kernel::dev::input_irq_ack::KEYBOARD_ACK"
 lifetime = "boot"
 mutation = "spinlock"
-owner = "dev::input_irq_ack; VirtIO input ACK shim installed by init_driver, locked by ack_if_input in the VirtIO ISR and force-unlocked by force_unlock_locks"
+owner = "dev::input_irq_ack; VirtIO input ACK shim installed by init_driver, locked by ack_if_input in the VirtIO ISR"
 contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (stays None)"
 retirement = "no x86_64 accessor; dead storage on this image"
-rationale = "init_driver is reached only through dev::init under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")), ack_if_input only through vi_handle_virtio_irq (aarch64 trap / riscv64 PLIC dispatch), and force_unlock_locks has no caller."
-review = "kernel/src/dev/input_irq_ack.rs:init_driver; kernel/src/dev/input_irq_ack.rs:ack_if_input; kernel/src/dev/input_irq_ack.rs:force_unlock_locks; kernel/src/main.rs:797"
+rationale = "init_driver is reached only through dev::init under cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\")), ack_if_input only through vi_handle_virtio_irq (aarch64 trap / riscv64 PLIC dispatch)."
+review = "kernel/src/dev/input_irq_ack.rs:init_driver; kernel/src/dev/input_irq_ack.rs:ack_if_input; kernel/src/main.rs:797"
 
 [[global]]
 key = "kernel::dev::mmc::MMC_DEVICE"
@@ -1871,7 +1871,7 @@ owner = "resource_registry: MMIO window ownership keyed by base, owner CellId; w
 contexts = ["normal", "irq", "exception"]
 seal = "none: grants and releases happen for the whole run"
 retirement = "release_for(cell_id) in the yield_cpu root-retirement funnel (task.rs:1470) drops every window of the retiring CellId before cell_quota::deregister frees the id; revoke_mmio_for drops selected classes at runtime"
-rationale = "release_for runs inside task.rs:yield_cpu root-retirement funnel (task.rs:1358-1523), reached from vi_timer_tick (task.rs:1075), vi_ipi_service (task.rs:968) and the #PF/user-trap funnel (paging.rs:fault_kill_cell -> task.rs:terminate_current_cell_on_fault), so IRQ and exception contexts mutate it; the crate Spinlock masks interrupts so a same-hart re-entry cannot deadlock. Keyed by CellId without generation, which is safe only because release precedes the quota row release that allows CellId reuse. force_unlock_locks has no caller."
+rationale = "release_for runs inside task.rs:yield_cpu root-retirement funnel (task.rs:1358-1523), reached from vi_timer_tick (task.rs:1075), vi_ipi_service (task.rs:968) and the #PF/user-trap funnel (paging.rs:fault_kill_cell -> task.rs:terminate_current_cell_on_fault), so IRQ and exception contexts mutate it; the crate Spinlock masks interrupts so a same-hart re-entry cannot deadlock. Keyed by CellId without generation, which is safe only because release precedes the quota row release that allows CellId reuse."
 review = "kernel/src/resource_registry.rs:release_for; kernel/src/resource_registry.rs:request_mmio; kernel/src/task.rs:1470; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
@@ -1915,7 +1915,7 @@ owner = "policy: load_from_vifs1/mark_invalid write the verified operator policy
 contexts = ["boot", "normal"]
 seal = "written once by policy::load_from_vifs1 (main.rs:928) before start_secondaries (main.rs:1075)"
 retirement = "never: lives for the whole run"
-rationale = "Set-once at boot on the BSP, then read-only lookups from governed_spawn; no trap path reads it. A Spinlock is heavier than needed for a sealed value but correct. force_unlock_locks has no caller."
+rationale = "Set-once at boot on the BSP, then read-only lookups from governed_spawn; no trap path reads it. A Spinlock is heavier than needed for a sealed value but correct."
 review = "kernel/src/policy.rs:load_from_vifs1; kernel/src/policy.rs:lookup; kernel/src/loader/governed_spawn.rs:156"
 
 [[global]]
@@ -1937,7 +1937,7 @@ owner = "memory::rt_heap: TLSF allocator for RealTime cell stacks; init at boot,
 contexts = ["boot"]
 seal = "initialised once by rt_heap::init (main.rs:727) before APs"
 retirement = "never: lives for the whole run"
-rationale = "Only init touches it on x86_64 (rt_heap::alloc/dealloc have no callers), so the Spinlock is uncontended; if callers are added, the IRQ-masking Spinlock would also cover ISR use. force_unlock_locks has no caller."
+rationale = "Only init touches it on x86_64 (rt_heap::alloc/dealloc have no callers), so the Spinlock is uncontended; if callers are added, the IRQ-masking Spinlock would also cover ISR use."
 review = "kernel/src/memory/rt_heap.rs:init; kernel/src/memory/rt_heap.rs:alloc; kernel/src/main.rs:727"
 
 [[global]]
@@ -2311,7 +2311,7 @@ owner = "measurement_log: task::launch commits a SHA-256 entry per spawned cell 
 contexts = ["boot", "normal"]
 seal = "none: append-only for the whole run"
 retirement = "never: per-cell entries are attestation evidence and are not removed on cell retirement; only a creator's own oldest entry is evicted to honour its share"
-rationale = "Only spawn/launch code touches it, never from a trap path; the Spinlock (IRQs masked) covers a short SHA-256 aggregate update, and reserve-then-commit keeps commit allocation-free. force_unlock_locks has no caller."
+rationale = "Only spawn/launch code touches it, never from a trap path; the Spinlock (IRQs masked) covers a short SHA-256 aggregate update, and reserve-then-commit keeps commit allocation-free."
 review = "kernel/src/measurement_log.rs:commit_staged; kernel/src/measurement_log.rs:PublicationReservation::reserve; kernel/src/task/launch.rs:262"
 
 [[global]]

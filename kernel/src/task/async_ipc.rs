@@ -324,11 +324,22 @@ impl AsyncIndex {
     }
 
     /// Record that `tid`'s request context now names `token` (0: none).
+    ///
+    /// Submit reserved a row per accepted operation, so this normally does not
+    /// allocate; a token delivered twice (a wire that outlived its operation)
+    /// can still need a row, which is then charged to the kernel, never to the
+    /// receiving Cell.
     pub(crate) fn note_holder(&mut self, tid: usize, token: usize) {
         if let Some(at) = self.holders.iter().position(|&(_, t)| t == tid) {
             self.holders.swap_remove(at);
         }
         if token != 0 {
+            if self.holders.len() == self.holders.capacity() {
+                let previous = crate::sched::hart_local::current_cell_id();
+                crate::sched::hart_local::set_current_cell_id(0);
+                self.holders.reserve(1);
+                crate::sched::hart_local::set_current_cell_id(previous);
+            }
             self.holders.push((token, tid));
         }
     }

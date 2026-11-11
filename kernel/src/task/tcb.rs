@@ -489,8 +489,8 @@ pub struct Task {
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
-    /// Hart this task was last queued on or dispatched to; RT placement
-    /// prefers it (Phase 10 step 7).
+    /// Hart this task last ran on (set at dispatch); RT placement prefers it
+    /// (Phase 10 step 7).
     pub last_hart: Option<usize>,
 
     /// Cluster participation mode parsed from `__ViCell_cluster` ELF section.

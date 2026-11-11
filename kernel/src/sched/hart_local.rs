@@ -396,6 +396,33 @@ pub unsafe fn current_hart() -> &'static ViHartLocal {
 ///
 /// Returns 0 if called before `install()` (safe — hart 0 is hart 0).
 #[inline(always)]
+/// This hart's id once its hart-local state is installed, else `None`: an
+/// RV64 secondary runs with `tp = 0` until `install`, and an AArch64 core the
+/// topology does not describe has no slot. The lock-rank check keeps its
+/// per-hart held set only for installed harts.
+pub fn installed_hart_id() -> Option<usize> {
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+    {
+        let tp: usize;
+        unsafe {
+            core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
+        }
+        (tp != 0).then(current_hart_id)
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        physical_cpu_index().and_then(|cpu| CPU_TOPOLOGY.logical(cpu))
+    }
+    #[cfg(not(any(
+        target_arch = "riscv64",
+        target_arch = "riscv32",
+        target_arch = "aarch64"
+    )))]
+    {
+        Some(owned_slot_index())
+    }
+}
+
 pub fn current_hart_id() -> usize {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {

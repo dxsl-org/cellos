@@ -1844,14 +1844,11 @@ pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
     }
 }
 
-/// Returns `true` when at least one RealTime hart came online.
-///
-/// Used by the scheduler to fall back to the current hart on single-hart
-/// systems (e.g. QEMU without `-smp 2`) so RT-priority tasks still get
-/// scheduled.
+/// Returns `true` when [`HART_RT`], the hart two-hart fixtures pair with hart
+/// 0, came online. RT placement does not use it: see [`rt_destination`].
 #[inline]
 pub fn is_rt_hart_online() -> bool {
-    (0..MAX_HARTS).any(|hart| is_rt_hart(hart) && HART_ONLINE[hart].load(Ordering::Relaxed))
+    HART_ONLINE[HART_RT].load(core::sync::atomic::Ordering::Relaxed)
 }
 
 /// Entry point for secondary harts, called from `_secondary_entry` asm.

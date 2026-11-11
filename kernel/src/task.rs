@@ -842,7 +842,7 @@ pub fn init() {
     // From here every lock spin answers peers' TLB-flush requests, and the
     // test-posture rank check keeps its held set per hart.
     crate::sync::install_hart_hooks(
-        crate::sched::hart_local::current_hart_id,
+        crate::sched::hart_local::installed_hart_id,
         crate::sched::smp::answer_tlb_flush_in_spin,
     );
     // Hart 0 is online from here on, on every architecture, so every later

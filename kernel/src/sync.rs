@@ -13,24 +13,28 @@ pub use rank::Rank;
 /// with interrupts masked. Set once by SMP bring-up ([`install_hart_hooks`]);
 /// until then there are no peers and nothing is owed.
 static SPIN_HOOK: AtomicUsize = AtomicUsize::new(0);
-/// Current hart id, for the per-hart held-rank mask. Hart 0 until installed.
+/// This hart's id if its hart-local state is installed (`None` before), for
+/// the spin hook and the per-hart held-rank mask. Hart 0 until the hook is set.
 static HART_ID_HOOK: AtomicUsize = AtomicUsize::new(0);
 
 /// Installs the hart-id reader and the spin hook. Called once on the boot hart
 /// before any secondary starts; the hooks are plain functions that take no lock,
 /// allocate nothing and never log.
-pub fn install_hart_hooks(hart_id: fn() -> usize, spin: fn(usize)) {
+pub fn install_hart_hooks(hart_id: fn() -> Option<usize>, spin: fn(usize)) {
     HART_ID_HOOK.store(hart_id as usize, Ordering::Release);
     SPIN_HOOK.store(spin as usize, Ordering::Release);
 }
 
 // Host tests neither spin-answer nor keep per-hart masks (they use a thread-local).
 #[cfg_attr(all(test, not(target_os = "none")), allow(dead_code))]
-fn hart_id() -> usize {
-    match HART_ID_HOOK.load(Ordering::Acquire) {
-        0 => 0,
-        // SAFETY: only `install_hart_hooks` stores here, always a `fn() -> usize`.
-        hook => unsafe { core::mem::transmute::<usize, fn() -> usize>(hook)() },
+fn installed_hart_id() -> Option<usize> {
+    // Relaxed: the hook is published once, before any secondary starts; a hart
+    // that still reads 0 is the single boot hart.
+    match HART_ID_HOOK.load(Ordering::Relaxed) {
+        0 => Some(0),
+        // SAFETY: only `install_hart_hooks` stores here, always a
+        // `fn() -> Option<usize>`.
+        hook => unsafe { core::mem::transmute::<usize, fn() -> Option<usize>>(hook)() },
     }
 }
 
@@ -94,10 +98,14 @@ impl<T> Spinlock<T> {
                 ),
                 not(all(test, not(target_os = "none")))
             ))]
-            match SPIN_HOOK.load(Ordering::Acquire) {
+            match SPIN_HOOK.load(Ordering::Relaxed) {
                 0 => {}
                 // SAFETY: only `install_hart_hooks` stores here, always a `fn(usize)`.
-                hook => unsafe { core::mem::transmute::<usize, fn(usize)>(hook)(hart_id()) },
+                // An uninstalled hart answers hart 0's mailbox, as
+                // `current_hart_id` always did.
+                hook => unsafe {
+                    core::mem::transmute::<usize, fn(usize)>(hook)(installed_hart_id().unwrap_or(0))
+                },
             }
             if self
                 .lock
