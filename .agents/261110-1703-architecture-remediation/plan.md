@@ -35,7 +35,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 07 | [One authority record per Cell incarnation](phase-07-incarnation-authority.md) — completed 2026-11-11 ([evidence](reports/phase-07-evidence.md)); S3 closed | S3 | 06 | — | ✓ |
 | 08 | [Generated syscall table and split dispatcher](phase-08-syscall-table.md) — completed 2026-11-11 ([CP2](cp2-syscall-table.md) confirmed; dispatcher match extraction moved to Phase 09); S4 closed | S4 kernel shape | 07 | CP1/CP2 | |
 | 09 | [Kernel residents, selftests and module layout](phase-09-kernel-residents.md) — completed 2026-11-11 ([evidence](reports/phase-09-evidence.md)); S4b closed | S4 | 08 | — | ✓ |
-| 10 | [Lock ranks and scheduler hot paths](phase-10-lock-ranks-scheduler.md) | S5 IPC | 09 | — | |
+| 10 | [Lock ranks and scheduler hot paths](phase-10-lock-ranks-scheduler.md) — completed 2026-11-11 (G1 barrier move deferred by owner); S5 closed | S5 IPC | 09 | — | |
 | 11 | [One IPC operation model](phase-11-ipc-model.md) | S5 | 10 | CP1/CP2 | ✓ |
 | 12 | [Shared service runtime and wire modules](phase-12-service-runtime.md) | S6 userspace | 11 | CP1/CP2 | |
 | 13 | [Init reduction, hot-swap decision, `api` split](phase-13-init-hotswap-api.md) | S6 | 12 | CP1/CP2 | ✓ |
