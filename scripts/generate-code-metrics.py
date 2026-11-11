@@ -6,11 +6,16 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import sys
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "code-metrics.generated.md"
+RESIDENTS = ROOT / "kernel" / "residents.toml"
+CFG_TEST = re.compile(r"^\s*#\[cfg\(test\)\]\s*$")
+INLINE_MOD = re.compile(r"^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{")
 
 
 @dataclass
@@ -100,8 +105,17 @@ def skip_quoted_string(line: str, index: int) -> int:
     return index
 
 
+def test_residents() -> set[str]:
+    """Files `kernel/residents.toml` classifies as test, fixture or measurement code."""
+    residents = tomllib.loads(RESIDENTS.read_text(encoding="utf-8"))["residents"]
+    return {path for path, entry in residents.items() if entry["category"] == "test"}
+
+
+TEST_RESIDENTS = test_residents()
+
+
 def is_test_file(path: Path) -> bool:
-    return "test" in path.stem.lower()
+    return str(path.relative_to(ROOT)) in TEST_RESIDENTS
 
 
 def is_core_file(path: Path) -> bool:
@@ -109,17 +123,34 @@ def is_core_file(path: Path) -> bool:
     parts = relative.parts
     return not (
         is_test_file(path)
-        or (len(parts) > 1 and parts[0] == "dev")
+        or (parts and parts[0] in ("dev", "dev.rs"))
         or (parts and parts[0] == "hypervisor")
     )
 
 
 def count_nloc(paths: list[Path]) -> int:
+    """Count code lines, skipping inline `#[cfg(test)] mod … { … }` blocks."""
     total = 0
     for path in paths:
         state = LexerState()
+        held = 0  # attribute lines after `#[cfg(test)]`, dropped if a module follows
+        skip_depth = None  # brace depth that ends the skipped module
+        depth = 0
         for line in path.read_text(encoding="utf-8").splitlines():
-            total += int(line_has_code(line, state))
+            code = line_has_code(line, state)
+            if skip_depth is None:
+                if CFG_TEST.match(line) or (held and line.lstrip().startswith("#[")):
+                    held += 1
+                elif held and INLINE_MOD.match(line):
+                    held = 0
+                    skip_depth = depth
+                else:
+                    total += held + int(code)
+                    held = 0
+            depth += line.count("{") - line.count("}")
+            if skip_depth is not None and depth <= skip_depth:
+                skip_depth = None
+        total += held
     return total
 
 
@@ -134,8 +165,8 @@ def render() -> str:
 
 | Metric | Definition | Value |
 |---|---|---:|
-| Kernel nLOC | Non-blank, non-comment Rust lines under `kernel/src`; excludes files matching `*test*.rs` | **{count_nloc(production):,}** |
-| Core kernel nLOC | Kernel nLOC excluding `kernel/src/dev/**` and `kernel/src/hypervisor/**` | **{count_nloc(core):,}** |
+| Kernel nLOC | Non-blank, non-comment Rust lines under `kernel/src`; excludes `test` residents of `kernel/residents.toml` and inline `#[cfg(test)]` modules | **{count_nloc(production):,}** |
+| Core kernel nLOC | Kernel nLOC excluding `kernel/src/dev.rs`, `kernel/src/dev/**` and `kernel/src/hypervisor/**` | **{count_nloc(core):,}** |
 
 The first row is the canonical moving kernel-size metric. The second is the boundary-migration
 lens used by Spec 15. Neither number is a substitute for reviewing kernel responsibilities.
