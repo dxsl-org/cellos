@@ -29,7 +29,9 @@
 //! also never taken while `SCHEDULER` is held, so an interrupt on another hart
 //! never waits behind a scheduler critical section.
 
-pub(super) use self::net_rx_reservation::{DisarmResult, PendingCompletion};
+pub(super) use self::net_rx_reservation::DisarmResult;
+#[cfg(not(cellos_posture = "release"))]
+pub(super) use self::net_rx_reservation::PendingCompletion;
 use super::completion::{CompletionQueue, SlotId};
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -78,10 +80,12 @@ pub fn disarm_net_rx(queue: &Arc<CompletionQueue>) -> DisarmResult {
     net_rx_reservation::disarm(queue)
 }
 
+#[cfg(not(cellos_posture = "release"))]
 pub(super) fn begin_signal_net_rx_for_test() -> Option<PendingCompletion> {
     net_rx_reservation::begin_signal()
 }
 
+#[cfg(not(cellos_posture = "release"))]
 pub(super) fn finish_signal_net_rx_for_test(pending: PendingCompletion) {
     net_rx_reservation::finish_signal(pending, api::syscall::events::NET_RX as isize);
 }

@@ -105,3 +105,9 @@ Phases 10 and 14 both build on the new layout.
     - two non-x86 and non-display branches add `caller_id` to their unused-argument tuple, since the parameter is now the handler's own;
     - four handlers that collided with existing helpers are renamed (`*_syscall`, and `yield_now` for `Yield`).
   - **Result.** `mod.rs` goes from 6 635 to 2 207 lines. Host tests 615 pass, including `syscall_golden` and the gate-equivalence test. Clippy is clean on 3 arches, and `test-hooks`, `bench-counters` and `getrandom-sas-test` check.
+- **Decision (selftest gate, owner 2026-11-11 "not-release"):** boot fixtures are gated on `not(cellos_posture = "release")`, not on `test-hooks`. 13 integration-test files and 4 lane scripts read selftest markers from dev images, and those lanes stay as they are. Success criterion 1 therefore reads "release kernel" instead of "default posture".
+  - Before this change, these fixtures ran on every 64-bit boot outside `test-hooks`: the 7a trust-model block, AArch64 `run_ipi_selftest`, P-TRUST, boot-ceiling, the MMIO allowlist and Manifest-v2. Their 13 always-compiled modules, plus the test-only helpers that only they use, are now compiled out of release kernels.
+  - The `test-hooks` ones were already absent from release kernels, which forbid `test-hooks` (Phase 04).
+  - **Kept in release on purpose:** the power-on known-answer tests for ed25519, signed-policy verify+parse and cell signing. They decide whether the crypto that admits code can be trusted at all, so they are not fixtures.
+  - **Evidence.** The x86 release kernel has 0 symbols matching `selftest`/`self_test`. Its only matching strings belong to those three known-answer tests. `qemu-release-posture-test.sh` now fails if any such symbol appears.
+- **Deviation (no move into `selftest/` yet):** the files stay where they are for now and move with the directory hoist, which updates every path-keyed inventory in one go.

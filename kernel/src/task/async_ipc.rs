@@ -998,6 +998,7 @@ pub fn expire(sched: &mut Scheduler, now: u64) {
     }
 }
 
+#[cfg(not(cellos_posture = "release"))]
 /// Boot self-test seam for the multi-source wait: record one accepted,
 /// already-dispatched operation from `owner` to `peer` without a user copy.
 ///

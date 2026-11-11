@@ -35,6 +35,15 @@ CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS="-C code-model=kernel -C no-redzone=y
     cargo build --locked --release -p cellos-kernel --target x86_64-unknown-none \
     -Z build-std=core,alloc --no-default-features --features release-posture
 
+# Boot fixtures never ship (Spec 15 §3.5, architecture remediation Phase 09):
+# a release kernel carries no `*selftest*` / `*self_test*` symbol.
+if nm -C "$WORK/kernel/x86_64-unknown-none/release/cellos-kernel" | grep -qiE 'selftest|self_test'; then
+    echo "FAIL: release-posture kernel contains self-test code:" >&2
+    nm -C "$WORK/kernel/x86_64-unknown-none/release/cellos-kernel" | grep -iE 'selftest|self_test' | head -5 >&2
+    exit 1
+fi
+echo "  ok: no self-test symbol in the release kernel"
+
 X86_KERNEL="$WORK/kernel/x86_64-unknown-none/release/cellos-kernel" \
 X86_ISO_ROOT="$WORK/iso-root" bash scripts/x86/make-iso-ci.sh "$WORK/release.iso"
 

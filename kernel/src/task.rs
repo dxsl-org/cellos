@@ -7,6 +7,7 @@ pub mod cap;
 pub(crate) mod cell_session;
 pub(crate) mod child_context;
 pub mod completion;
+#[cfg(not(cellos_posture = "release"))]
 pub mod completion_selftest;
 pub mod completion_wait;
 pub(crate) mod copy_glue;
@@ -63,14 +64,18 @@ pub(crate) mod futex;
     feature = "test-hooks",
     any(target_arch = "riscv64", target_arch = "aarch64")
 ))]
+#[cfg(not(cellos_posture = "release"))]
 pub(crate) mod grant_gate_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod grant_reclaim_selftest;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
 /// Selective MMIO revocation for runtime revocation (`.agents/260712-1901` P03).
 #[cfg(feature = "test-hooks")]
 pub mod mmio_revoke_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod net_rx_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod p_trust_selftest;
 /// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
 pub(crate) mod pipe;
@@ -82,14 +87,18 @@ pub mod quiesce;
     feature = "test-hooks",
     target_arch = "riscv64"
 ))]
+#[cfg(not(cellos_posture = "release"))]
 pub(crate) mod rt_wake_selftest;
 pub mod smp;
 pub mod syscall;
 #[cfg(feature = "test-hooks")]
 pub mod task_id_selftest;
 pub mod tcb;
+#[cfg(not(cellos_posture = "release"))]
 pub mod thread_cap_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod thread_quota_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod thread_user_entry_selftest;
 /// Per-task user thread pointer (TLS base) — ADR-0018 §2.1 primitive.
 pub(crate) mod tls;
@@ -106,11 +115,13 @@ pub mod ipc_wire;
     feature = "test-hooks",
     target_arch = "riscv64"
 ))]
+#[cfg(not(cellos_posture = "release"))]
 pub mod ipc_wire_selftest;
 #[cfg(test)]
 mod ipc_wire_tests;
 pub use tcb::Task;
 pub mod async_ipc;
+#[cfg(not(cellos_posture = "release"))]
 pub mod cap_file_selftest;
 #[path = "task/cell-image.rs"]
 mod cell_image;
@@ -124,7 +135,9 @@ pub mod drivers;
 pub(crate) mod getrandom_sas_tests;
 #[path = "task/gpu-scanout.rs"]
 mod gpu_scanout;
+#[cfg(not(cellos_posture = "release"))]
 pub mod ipc_guardrail_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod ipc_pending_selftest;
 pub mod ipc_test;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
@@ -264,6 +277,7 @@ pub(crate) fn prime_user_mode_entry_at(task: &mut Task, entry: usize, arg: usize
 use tcb::TaskState;
 use types::*;
 
+#[cfg(not(cellos_posture = "release"))]
 /// Queue an owned IPC message without invoking the infallible allocation path.
 ///
 /// Returns `Err(())` when the mailbox is full or the sender's cell cannot fund

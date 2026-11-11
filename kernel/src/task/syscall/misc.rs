@@ -450,6 +450,7 @@ pub(in crate::task) enum ResumeDelivery {
     Wake,
 }
 
+#[cfg(not(cellos_posture = "release"))]
 /// Consume the next matching delivery event and return it. Selftest-only;
 /// production callers use `snapshot_resume` + `commit_resume`.
 pub(in crate::task) fn take_resume_delivery(

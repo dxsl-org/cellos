@@ -23,10 +23,12 @@
 
 use crate::task::cap::CapSet;
 
+#[cfg(not(cellos_posture = "release"))]
 mod selftest;
 
 /// Boot self-test of the table's load-bearing properties — that it is per-path
 /// rather than a union, and that no row is over-tightened. See `selftest`.
+#[cfg(not(cellos_posture = "release"))]
 pub use selftest::run as self_test;
 
 /// The expected ceiling for `path`, or `None` when `path` is not a boot cell.

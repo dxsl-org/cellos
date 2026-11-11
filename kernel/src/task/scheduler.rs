@@ -696,6 +696,7 @@ impl Scheduler {
         true
     }
 
+    #[cfg(not(cellos_posture = "release"))]
     pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
         if matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Live(current)) if *current == owner)

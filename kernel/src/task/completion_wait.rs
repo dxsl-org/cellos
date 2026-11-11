@@ -33,6 +33,7 @@ pub(super) struct WaiterRegistration<'a> {
 }
 
 impl<'a> WaiterRegistration<'a> {
+    #[cfg(not(cellos_posture = "release"))]
     /// A registration for a wait that does not name `IRQ`.
     pub(super) fn new(
         queue: &'a CompletionQueue,

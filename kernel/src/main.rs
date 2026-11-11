@@ -1066,10 +1066,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
     // synthetic thread it spawns cannot be raced onto another hart before teardown.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
+    // Fixtures that drive the live scheduler: never compiled into a release
+    // kernel (Spec 15 §3.5; architecture remediation Phase 09).
+    #[cfg(all(
+        not(cellos_posture = "release"),
+        any(
+            target_arch = "riscv64",
+            target_arch = "aarch64",
+            target_arch = "x86_64"
+        )
     ))]
     {
         if task::thread_cap_selftest::self_test() {
@@ -1159,7 +1164,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
     // SGI delivery path is exercised here: a hart that is online but deaf to the
     // kernel's cross-hart IPI would otherwise look perfectly healthy.
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_arch = "aarch64", not(cellos_posture = "release")))]
     task::smp::run_ipi_selftest();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
@@ -1475,6 +1480,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // P-TRUST: privileged path-caps are bounded by the spawn ceiling. Pure
         // CapSet logic (no scheduler), so it runs here alongside the crypto tests,
         // before any cap-bearing cell spawns.
+        #[cfg(not(cellos_posture = "release"))]
         if crate::task::p_trust_selftest::self_test() {
             log_info("P-TRUST self-test PASS (privileged path-caps ceiling-bounded)");
         } else {
@@ -1483,6 +1489,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Boot ceiling: the per-path table is per-path (not a union) and no boot
         // cell is over-tightened out of the cap it needs. Runs BEFORE the first
         // Root spawn below, so a bad row is reported before it breaks a cell.
+        #[cfg(not(cellos_posture = "release"))]
         if crate::loader::boot_ceiling::self_test() {
             log_info("boot-ceiling self-test PASS (per-path table, no union collapse)");
         } else {
@@ -1491,6 +1498,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // MMIO allowlist: the production table must still authorize its known
         // windows and must keep denying the DWC2 USB window (USB host authority
         // awaits policy v3 with a signed byte). Runs on the REAL allowlist.
+        #[cfg(not(cellos_posture = "release"))]
         if crate::resource_registry::self_test() {
             log_info("mmio-allowlist self-test PASS (known windows live, DWC2 denied)");
         } else {
@@ -1498,6 +1506,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
         // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
         // no scheduler — runs alongside the other crypto/trust self-tests.
+        #[cfg(not(cellos_posture = "release"))]
         if crate::task::manifest_v2_selftest::self_test() {
             log_info("Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)");
         } else {

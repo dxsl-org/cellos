@@ -293,6 +293,7 @@ pub(crate) fn test_register_region(tid: usize, base: usize, len: usize, class: M
         .is_none()
 }
 
+#[cfg(not(cellos_posture = "release"))]
 /// The per-arch static allowlist, for callers that must reason about which
 /// windows this board can grant at all (the boot self-tests, which have to stay
 /// board-agnostic, and `request_mmio`'s class derivation below).
