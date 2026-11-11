@@ -67,8 +67,8 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 
 ## Todo List
 
-- [ ] Selftests gated
-- [ ] Snapshot gated
+- [x] Selftests gated
+- [x] Snapshot gated
 - [ ] Resident manifest + guard + Spec 15 amendment
 - [ ] Directory hoist
 - [ ] Raw cfgs → features
@@ -77,7 +77,7 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 ## Success Criteria
 
 - [ ] Default-posture x86 boot log contains no `self-test` line; test-posture image still reports all of them PASS.
-- [ ] `strings`/symbol check: no `*_selftest` symbol in a release-posture kernel.
+- [x] `strings`/symbol check: no `*_selftest` symbol in a release-posture kernel.
 - [ ] `python3 scripts/check-kernel-residents.py` fails on an unlisted new file under `kernel/src/dev/` (negative control).
 - [ ] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, release-posture boot; regenerated metric committed; review recorded.
 
@@ -111,3 +111,9 @@ Phases 10 and 14 both build on the new layout.
   - **Kept in release on purpose:** the power-on known-answer tests for ed25519, signed-policy verify+parse and cell signing. They decide whether the crypto that admits code can be trusted at all, so they are not fixtures.
   - **Evidence.** The x86 release kernel has 0 symbols matching `selftest`/`self_test`. Its only matching strings belong to those three known-answer tests. `qemu-release-posture-test.sh` now fails if any such symbol appears.
 - **Deviation (no move into `selftest/` yet):** the files stay where they are for now and move with the directory hoist, which updates every path-keyed inventory in one go.
+- **Snapshot gate.** `snapshot.rs` became `snapshot_engine.rs` (5.7k lines). It compiles only with `snapshot-qualified` or under `cfg(test)`, so the host tests keep running.
+  - Every other kernel gets `snapshot_disabled.rs` behind the unchanged `crate::snapshot` facade. That file keeps exactly the closed-gate behaviour: no scratch reservation, capture → `GateClosed`, and a cold boot that clears a stale header (read first, write only on magic).
+  - The shared header identity (magic, base LBA, sector size) lives in `snapshot_format.rs`.
+  - The four engine statics were removed from `mutable-globals.toml`, because the tool requires entries only for declarations linked in its profile. A note there asks for re-review when the qualified profile ships.
+  - No lane exercised the qualified profile before this change, and none does now. Clippy is clean with `snapshot-qualified` on all 3 arches.
+- **Fix:** the `WEAK_RNG_WARNED` inventory key had gone stale in commit `1e0d135ab` (the dispatcher extraction moved it into `ipc::get_random`). It is re-keyed here.

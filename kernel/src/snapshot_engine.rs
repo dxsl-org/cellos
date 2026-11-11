@@ -253,9 +253,7 @@ use core::mem::MaybeUninit;
 #[cfg(any(feature = "test-hooks", test))]
 use core::sync::atomic::{AtomicU64, Ordering};
 
-/// Reserved LBA range for snapshot storage in `disk_v3.img` — MBR partition P3.
-/// Sector 0 = header; sector 1+ = address inventory then frame payload.
-pub const SNAPSHOT_BASE_LBA: u64 = crate::loader::disk_layout::PART_SNAPSHOT_BASE_LBA;
+pub use crate::snapshot_format::SNAPSHOT_BASE_LBA;
 
 /// Size of the reserved P3 partition in sectors (the capacity bound).
 pub const SNAPSHOT_SECTOR_COUNT: u64 = crate::loader::disk_layout::PART_SNAPSHOT_SECTORS;
@@ -267,11 +265,10 @@ pub const SNAPSHOT_END_LBA: u64 = SNAPSHOT_BASE_LBA + SNAPSHOT_SECTOR_COUNT;
 /// v1 was never shipped; a v1 header is rejected here and cold boots.
 pub const SNAPSHOT_FORMAT_VERSION: u16 = 2;
 
-/// Magic bytes identifying a ViCell snapshot image (little-endian `VICU`).
-pub const SNAPSHOT_MAGIC: u32 = 0x5543_4956; // 'U','C','I','V' as bytes on disk
+pub use crate::snapshot_format::SNAPSHOT_MAGIC;
 
 /// Sector size assumed by the format (and checked against the device).
-pub const SECTOR_SIZE: usize = 512;
+pub use crate::snapshot_format::SECTOR_SIZE;
 
 /// Snapshot frame size — one physical page.
 pub const FRAME_SIZE: usize = 4096;

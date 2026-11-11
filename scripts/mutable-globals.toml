@@ -1457,7 +1457,7 @@ rationale = "Spinlock ordered after PAGE_GRANT_TABLE and before SCHEDULER; relea
 review = "kernel/src/task/syscall/mod.rs:reg_grant_table_lock; kernel/src/task/syscall/mod.rs:release_deferred_domain_row; kernel/src/task/syscall/mod.rs:reap_grants_for_task"
 
 [[global]]
-key = "kernel::task::syscall::handle_syscall_inner()::WEAK_RNG_WARNED"
+key = "kernel::task::syscall::ipc::get_random()::WEAK_RNG_WARNED"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::task::syscall GetRandom weak-xorshift fallback one-shot warning latch (feature dev-weak-rng, not qemu-dev-https)"
@@ -1798,49 +1798,10 @@ rationale = "IRQ-masking Spinlock held only for a few atomic loads/stores, never
 review = "kernel/src/fast_ipc.rs:VFS_HANDLER_WRITE; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/loader.rs:commit_launch_routes"
 
 # ---- slice D ----
-[[global]]
-key = "kernel::snapshot::SNAPSHOT_SCRATCH"
-lifetime = "boot"
-mutation = "spinlock"
-owner = "snapshot: written only by reserve_scratch_region_at_boot; read by serialize_snapshot (capture syscall) through scratch_region()"
-contexts = ["boot", "normal"]
-seal = "written at most once by snapshot::reserve_scratch_region_at_boot (main.rs:776, before start_secondaries at main.rs:1075); a no-op unless feature snapshot-qualified"
-retirement = "never: the reserved frames stay allocated for the kernel's lifetime and the Option is never cleared"
-rationale = "Set-once Option<ScratchRegion> (Copy) published under the crate Spinlock (which masks IRQs) before APs exist, then only copied out by the capture syscall; no IRQ/exception path touches it, so the lock is uncontended and correct."
-review = "kernel/src/snapshot.rs:reserve_scratch_region_at_boot; kernel/src/snapshot.rs:scratch_region; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall/mod.rs:8204"
-
-[[global]]
-key = "kernel::snapshot::global_asm!#1 @cfg(target_arch = \"x86_64\")"
-lifetime = "global"
-mutation = "none"
-owner = "snapshot capture: defines __cellos_snapshot_stack_run, called only by snapshot::run_on_stack from capture_planned"
-contexts = ["normal"]
-seal = "none: the block emits only .text code (push/mov/call/ret) and defines no .data/.bss storage"
-retirement = "never: code lives for the whole run"
-rationale = "The x86_64 global_asm! switches rsp to the reserved scratch stack and calls back; it declares no writable symbol, so there is no shared state to own. It runs only from the capture syscall path (serialize_snapshot -> capture_planned), not from any trap handler."
-review = "kernel/src/snapshot.rs:1502; kernel/src/snapshot.rs:run_on_stack; kernel/src/snapshot.rs:capture_planned"
-
-[[global]]
-key = "kernel::snapshot::KERNEL_DEVICE"
-lifetime = "global"
-mutation = "immutable"
-owner = "snapshot: zero-sized adapter passed by reference to serialize_snapshot, try_restore and invalidate_snapshot"
-contexts = ["boot", "normal"]
-seal = "const-initialised unit struct; nothing to seal"
-retirement = "never: lives for the whole run"
-rationale = "KernelDevice is a stateless ZST; its methods forward to task::drivers::block, which owns the device serialisation. Used at boot by try_restore (main.rs:882) and from the capture syscall."
-review = "kernel/src/snapshot.rs:2213; kernel/src/snapshot.rs:try_restore; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/snapshot.rs:invalidate_snapshot"
-
-[[global]]
-key = "kernel::snapshot::KERNEL_MEMORY"
-lifetime = "global"
-mutation = "immutable"
-owner = "snapshot: zero-sized physical-frame accessor passed to capture and restore"
-contexts = ["boot", "normal"]
-seal = "const-initialised unit struct; nothing to seal"
-retirement = "never: lives for the whole run"
-rationale = "KernelMemory is a stateless ZST; the raw physical copies it performs rely on the capture/restore quiesce contract, not on this static. Used by try_restore at boot and serialize_snapshot from syscall."
-review = "kernel/src/snapshot.rs:2234; kernel/src/snapshot.rs:try_restore; kernel/src/snapshot.rs:serialize_snapshot"
+# kernel::snapshot_engine (SNAPSHOT_SCRATCH, the x86 stack-switch global_asm!,
+# KERNEL_DEVICE, KERNEL_MEMORY) is compiled only with `snapshot-qualified`
+# since architecture remediation Phase 09, so it is not linked in this profile.
+# Re-review those four declarations when that profile becomes a shipping one.
 
 [[global]]
 key = "kernel::signing::PAYLOAD_SCRATCH"

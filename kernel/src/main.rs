@@ -81,7 +81,20 @@ pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod smbios; // Bounded SMBIOS type 1 reader (x86 boot identity)
-pub mod snapshot;
+                // The snapshot engine is compiled only for the qualified profile (and the host
+                // tests); every other kernel gets the gate-closed API (Phase 09). Callers use
+                // `crate::snapshot::*` either way.
+#[cfg(not(any(feature = "snapshot-qualified", test)))]
+mod snapshot_disabled;
+#[cfg(any(feature = "snapshot-qualified", test))]
+pub mod snapshot_engine;
+pub mod snapshot_format;
+pub mod snapshot {
+    #[cfg(not(any(feature = "snapshot-qualified", test)))]
+    pub use crate::snapshot_disabled::*;
+    #[cfg(any(feature = "snapshot-qualified", test))]
+    pub use crate::snapshot_engine::*;
+}
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
