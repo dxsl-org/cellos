@@ -4,6 +4,19 @@
 // generated from `libs/api/abi/syscalls.toml` by `libs/api/build.rs`.
 include!(concat!(env!("OUT_DIR"), "/syscall_table.rs"));
 
+/// Error sentinels of the generic syscall return encoding, as offsets below the
+/// all-ones "error" register value (`usize::MAX` on 64-bit, `u32::MAX` on RV32).
+/// One definition for the kernel encoder and the `ostd` decoders (architecture
+/// remediation Phase 08, Law-1 CP1); the values are frozen.
+pub mod result_sentinel {
+    /// Every refusal of a syscall without a typed encoding.
+    pub const GENERIC: usize = 0;
+    /// Out of memory, for the syscalls whose row says `result = "typed_oom"`.
+    pub const OUT_OF_MEMORY: usize = 1;
+    /// A stream write with no reader end left.
+    pub const BROKEN_PIPE: usize = 2;
+}
+
 /// Fixed-width little-endian status written only by a successful `IpcTake`.
 /// Words: version=1, kind, reply byte length, reserved=0.
 pub const IPC_STATUS_LEN: usize = 16;

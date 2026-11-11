@@ -39,10 +39,11 @@ pub enum SyscallError {
     OutOfMemory,
 }
 
-const SYSCALL_OOM: isize = -2;
-const SYSCALL_DENIED: isize = -1;
-/// `error_sentinel - 2`: a stream write with no reader end left.
-const SYSCALL_BROKEN_PIPE: isize = -3;
+// Shared with the kernel encoder: `api::syscall::result_sentinel`.
+const SYSCALL_DENIED: isize = -1 - api::syscall::result_sentinel::GENERIC as isize;
+const SYSCALL_OOM: isize = -1 - api::syscall::result_sentinel::OUT_OF_MEMORY as isize;
+/// A stream write with no reader end left.
+const SYSCALL_BROKEN_PIPE: isize = -1 - api::syscall::result_sentinel::BROKEN_PIPE as isize;
 
 fn decode_spawn_result(ret: isize) -> SyscallResult {
     if ret > 0 {

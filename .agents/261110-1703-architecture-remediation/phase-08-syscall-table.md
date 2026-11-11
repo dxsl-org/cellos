@@ -127,3 +127,4 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
   - **Values.** Byte-identical. The only diff is whitespace alignment and the markers.
   - **CI.** A new step, "Check generated syscall headers", runs `--check`.
   - **Negative control.** Hand-editing `VI_SYS_YIELD` to 105 fails `--check`.
+- **Step 7 (shared encoding):** new `api::syscall::result_sentinel` (`GENERIC = 0`, `OUT_OF_MEMORY = 1`, `BROKEN_PIPE = 2`, as offsets below the all-ones error value). The kernel `encode_syscall_result` and the `ostd` decoder constants (`-1`, `-2`, `-3`) are now derived from it, with the same values. The kernel enum stays richer than `ostd`'s; only the wire sentinels are shared. (`api` does not check on `riscv32imac` because `ring_channel.rs` uses `AtomicU64`. That fails the same way on the tree before this step, so it is pre-existing.)

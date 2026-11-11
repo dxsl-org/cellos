@@ -1940,11 +1940,15 @@ fn encode_syscall_result(
 ) -> usize {
     match result {
         Ok(value) => value,
-        Err(SyscallError::OutOfMemory) if supports_typed_oom => error_sentinel - 1,
+        Err(SyscallError::OutOfMemory) if supports_typed_oom => {
+            error_sentinel - api::syscall::result_sentinel::OUT_OF_MEMORY
+        }
         // A broken pipe is a distinct, actionable condition for a stream write, so
         // it gets its own sentinel rather than collapsing into the generic error.
-        Err(SyscallError::BrokenPipe) => error_sentinel - 2,
-        Err(_) => error_sentinel,
+        Err(SyscallError::BrokenPipe) => {
+            error_sentinel - api::syscall::result_sentinel::BROKEN_PIPE
+        }
+        Err(_) => error_sentinel - api::syscall::result_sentinel::GENERIC,
     }
 }
 
