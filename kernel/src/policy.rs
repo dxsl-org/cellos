@@ -170,14 +170,6 @@ enum PolicyState {
 
 static POLICY: Spinlock<Option<PolicyState>> = Spinlock::ranked(None, crate::sync::rank::POLICY);
 
-/// Force-release this module's lock during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    POLICY.force_unlock();
-}
-
 /// Load + verify the operator policy from VIFS1. Call once at boot AFTER
 /// `fs::init()` and BEFORE the first cap-bearing cell spawns. Eager-only (no
 /// lazy path — VIFS1 is kernel-embedded and available this early).

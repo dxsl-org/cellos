@@ -44,9 +44,45 @@ pub const MAX_HARTS: usize = 2;
 #[cfg(target_arch = "x86_64")]
 const _: () = assert!(MAX_HARTS <= hal::x86_64::syscall::MAX_CPUS);
 
-/// Hart dedicated to RealTime-priority cells.  RT tasks are enqueued here by
-/// `push_ready` and never stolen (Phase 03 steal filter excludes RT).
+/// The first RealTime hart: the remote hart that two-hart fixtures and RV64's
+/// SBI targets pair with hart 0. RT placement itself uses [`RT_HARTS`].
 pub const HART_RT: usize = 1;
+
+/// Harts that take RealTime-priority tasks (bit n: hart n). Every secondary
+/// hart by default, so RT work spreads instead of piling onto hart 1. RT tasks
+/// are never stolen (Phase 03 steal filter), so this mask and each task's last
+/// hart decide where they run (Phase 10 step 7).
+static RT_HARTS: AtomicUsize = AtomicUsize::new(!1);
+
+/// Whether `hart` is in the RealTime set.
+pub(crate) fn is_rt_hart(hart: usize) -> bool {
+    hart < usize::BITS as usize && RT_HARTS.load(Ordering::Relaxed) & (1 << hart) != 0
+}
+
+/// Where a RealTime task becomes runnable: its `last` hart when that hart is an
+/// online RT hart, otherwise the online RT hart with the fewest queued RT tasks
+/// (lowest hart on ties). `None` when no RT hart is online.
+pub(crate) fn rt_destination(last: Option<usize>) -> Option<usize> {
+    choose_rt_hart(
+        last,
+        |hart| is_rt_hart(hart) && HART_ONLINE[hart].load(Ordering::Acquire),
+        crate::sched::hart_local::ready::rt_queued,
+    )
+}
+
+/// [`rt_destination`]'s policy over explicit inputs.
+fn choose_rt_hart(
+    last: Option<usize>,
+    eligible: impl Fn(usize) -> bool,
+    queued: impl Fn(usize) -> usize,
+) -> Option<usize> {
+    if let Some(hart) = last.filter(|&hart| hart < MAX_HARTS && eligible(hart)) {
+        return Some(hart);
+    }
+    (0..MAX_HARTS)
+        .filter(|&hart| eligible(hart))
+        .min_by_key(|&hart| (queued(hart), hart))
+}
 
 /// Set to `true` by each secondary hart once its trap vector and timer are ready.
 /// Hart 0's bounded wait reads this via `Acquire` to observe all preceding stores.
@@ -1808,13 +1844,14 @@ pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
     }
 }
 
-/// Returns `true` when the RT hart (hart 1) successfully came online.
+/// Returns `true` when at least one RealTime hart came online.
 ///
-/// Used by the scheduler to fall back to hart 0 on single-hart systems
-/// (e.g. QEMU without `-smp 2`) so RT-priority tasks still get scheduled.
+/// Used by the scheduler to fall back to the current hart on single-hart
+/// systems (e.g. QEMU without `-smp 2`) so RT-priority tasks still get
+/// scheduled.
 #[inline]
 pub fn is_rt_hart_online() -> bool {
-    HART_ONLINE[HART_RT].load(core::sync::atomic::Ordering::Relaxed)
+    (0..MAX_HARTS).any(|hart| is_rt_hart(hart) && HART_ONLINE[hart].load(Ordering::Relaxed))
 }
 
 /// Entry point for secondary harts, called from `_secondary_entry` asm.
@@ -2079,5 +2116,39 @@ mod tests {
         assert!(set.first_outstanding(retirement_switch_completed).is_none());
         complete_retirement_switch(harts.start);
         assert_eq!(again.first_outstanding(retirement_switch_completed), None);
+    }
+}
+
+#[cfg(test)]
+mod rt_placement_tests {
+    use super::choose_rt_hart;
+
+    const QUEUED: [usize; 4] = [9, 2, 0, 0];
+
+    fn queued(hart: usize) -> usize {
+        QUEUED.get(hart).copied().unwrap_or(usize::MAX)
+    }
+
+    #[test]
+    fn an_eligible_last_hart_keeps_its_task() {
+        assert_eq!(
+            choose_rt_hart(Some(1), |h| (1..4).contains(&h), queued),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn otherwise_the_least_loaded_lowest_eligible_hart_wins() {
+        // Last hart 0 is not in the RT set; harts 2 and 3 tie on load.
+        assert_eq!(
+            choose_rt_hart(Some(0), |h| (1..4).contains(&h), queued),
+            Some(2)
+        );
+        assert_eq!(choose_rt_hart(None, |h| h == 1 || h == 3, queued), Some(3));
+    }
+
+    #[test]
+    fn no_eligible_hart_means_no_rt_destination() {
+        assert_eq!(choose_rt_hart(Some(1), |_| false, queued), None);
     }
 }

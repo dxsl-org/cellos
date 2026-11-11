@@ -75,7 +75,7 @@ Turn lock order from comments into a checked property, and remove the O(tasks) w
 - [x] Spin hook injected
 - [x] Token index
 - [x] Deadline heap (sorted queue; see log)
-- [ ] RT set / affinity
+- [x] RT set / affinity (G1 barrier move deferred by owner)
 
 ## Success Criteria
 
@@ -168,3 +168,15 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
 - **Owner decisions for step 7 (2026-11-11):**
   - RT placement uses a runtime RT-hart mask that defaults to every secondary hart. A task wakes on its last hart if that hart is in the set and online, otherwise on the least-loaded RT hart.
   - The G1 barrier move is **deferred** until the G1 lane can run.
+- **Step 7: RT placement and dead force-unlocks.**
+  - **RT set:** `smp::RT_HARTS` is a mask of the harts that take RealTime tasks, defaulting to every secondary hart.
+  - **Placement:** `rt_destination(last)` keeps an RT task on its last hart when that hart is an online RT hart, otherwise picks the online RT hart with the fewest queued RT tasks (lowest on ties). `Task::last_hart` is set when a task is queued or dispatched.
+  - **Preemption check:** `push_ready` now returns `Wake { priority, hart }`, and `pend_preempt_if_needed` takes it, so the check targets the hart actually chosen; this replaces a recomputation that could disagree.
+  - **Unchanged:**
+    - With 2 CPUs placement is the same as before (hart 1).
+    - `HART_RT` stays as the remote hart that two-hart fixtures and the RV64 SBI targets pair with hart 0.
+    - Publication reservations use `rt_destination(None)`.
+  - **Host tests:** the policy is covered by `rt_placement_tests`.
+  - **Deleted:** the nine uncalled `force_unlock_locks` functions, `force_unlock_bdf_locks`, and `pin::force_unlock` with its stale `force_unlock_all_kernel_locks` reference. `Spinlock::force_unlock` stays, for `task_entry_point`.
+  - **Deferred (owner):** moving the G1 barrier out of `pick_next` into a wake API, until the G1 lane can run.
+  - **Lanes pass:** x86 boot, domain 1/2/4 CPU, lifecycle, two-node C2C, RV64 boot and `pcie-bar-window`, AArch64 boot.

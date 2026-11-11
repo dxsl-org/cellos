@@ -75,15 +75,6 @@ static LOG: Spinlock<Log> = Spinlock::ranked(
     crate::sync::rank::MEASUREMENT_LOG,
 );
 
-/// Force-release this module's lock during fault teardown.
-///
-/// # Safety
-/// Single-hart kernel; called only from the fault/panic path with interrupts
-/// disabled. Force-unlocking an already-free Spinlock is a no-op.
-pub unsafe fn force_unlock_locks() {
-    LOG.force_unlock();
-}
-
 fn advance_aggregate(log: &mut Log, hash: &[u8; 32]) {
     let mut buf = [0u8; 64];
     buf[..32].copy_from_slice(&log.aggregate);

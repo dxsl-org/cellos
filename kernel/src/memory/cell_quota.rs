@@ -156,14 +156,6 @@ pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
     P01_SOURCE.metric(charge, before, 5)
 }
 
-/// Force-release this module's locks during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    QUOTA_LIMITS.force_unlock();
-}
-
 /// Register a new Cell with the given heap quota.
 ///
 /// Call this at spawn, OUTSIDE the allocator.

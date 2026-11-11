@@ -173,11 +173,3 @@ pub fn init_driver() {
 pub fn is_present() -> bool {
     MMC_DEVICE.lock().is_some()
 }
-
-/// Force-release the `MMC_DEVICE` lock from the fault/panic path.
-///
-/// # Safety
-/// Single-hart, interrupts disabled, called only from the fault/panic handler.
-pub unsafe fn force_unlock_locks() {
-    MMC_DEVICE.force_unlock();
-}

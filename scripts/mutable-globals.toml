@@ -1286,6 +1286,17 @@ rationale = "AtomicBool with Release store / AcqRel swap. A producer queues unde
 review = "kernel/src/task.rs:note_housekeeping; kernel/src/task.rs:yield_cpu; kernel/src/sched/scheduler.rs:housekeeping_pending"
 
 [[global]]
+key = "kernel::sched::smp::RT_HARTS"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::sched::smp: the RealTime hart set read by rt_destination (push_ready, publication reservations) and is_rt_hart_online"
+contexts = ["boot", "normal", "irq", "exception", "ap"]
+seal = "const-initialized to every secondary hart (!1); no writer in this tree, so a policy change is one store"
+retirement = "never: lives for the whole run"
+rationale = "AtomicUsize mask read with Relaxed: it names a placement policy, not an ordering edge; online state comes from HART_ONLINE with Acquire (Phase 10 step 7)."
+review = "kernel/src/sched/smp.rs:RT_HARTS; kernel/src/sched/smp.rs:rt_destination; kernel/src/sched/scheduler.rs:push_ready"
+
+[[global]]
 key = "kernel::task::SCHEDULER"
 lifetime = "global"
 mutation = "spinlock"

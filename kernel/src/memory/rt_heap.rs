@@ -30,14 +30,6 @@ static mut RT_POOL_MEM: RtPoolMem = RtPoolMem([core::mem::MaybeUninit::uninit();
 
 static RT_HEAP: Spinlock<Option<RtTlsf>> = Spinlock::ranked(None, crate::sync::rank::RT_HEAP);
 
-/// Force-release this module's lock during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    RT_HEAP.force_unlock();
-}
-
 /// Initialise the RT heap.
 ///
 /// Must be called once after `memory::heap::init_heap()`.  Subsequent calls

@@ -306,6 +306,14 @@ impl core::ops::Index<&usize> for TaskTable {
     }
 }
 
+/// Where [`Scheduler::push_ready`] queued a task, for the preemption check that
+/// follows it.
+#[derive(Clone, Copy, Debug)]
+pub struct Wake {
+    pub priority: u8,
+    pub hart: usize,
+}
+
 /// Scheduler-owned lifetime record for a bounded reusable CellId slot.
 ///
 /// Keyed by CellId, not a task-table lookup: CellIds are quota slots and task
@@ -912,23 +920,30 @@ impl Scheduler {
     /// `pend_preempt_if_needed(priority)` to trigger zero-latency RT preemption.
     ///
     /// Call while holding SCHEDULER (lock order: SCHEDULER → per-hart ready).
-    pub fn push_ready(&mut self, id: usize) -> u8 {
-        let priority = self
+    pub fn push_ready(&mut self, id: usize) -> Wake {
+        let (priority, last_hart) = self
             .tasks
             .get(&id)
-            .map(|t| t.priority)
-            .unwrap_or(api::TaskPriority::Normal as u8);
-        // RT tasks target the dedicated RT hart when it is online; fall back to
-        // the current hart on single-hart systems (e.g. QEMU without -smp 2).
-        let target_hart = if priority >= api::TaskPriority::RealTime as u8
-            && crate::sched::smp::is_rt_hart_online()
-        {
-            crate::sched::smp::HART_RT
+            .map_or((api::TaskPriority::Normal as u8, None), |t| {
+                (t.priority, t.last_hart)
+            });
+        // RT tasks go back to their last RT hart, else to the least-loaded
+        // online RT hart; without one (single-hart systems, e.g. QEMU without
+        // -smp 2) they fall back to the current hart like everything else.
+        let target_hart = if priority >= api::TaskPriority::RealTime as u8 {
+            crate::sched::smp::rt_destination(last_hart)
         } else {
-            crate::sched::hart_local::current_hart_id()
-        };
+            None
+        }
+        .unwrap_or_else(crate::sched::hart_local::current_hart_id);
+        if let Some(task) = self.tasks.get_mut(&id) {
+            task.last_hart = Some(target_hart);
+        }
         crate::sched::hart_local::ready::push_on_hart(target_hart, id, priority);
-        priority
+        Wake {
+            priority,
+            hart: target_hart,
+        }
     }
 
     /// Pend an S-mode software interrupt if `new_priority` exceeds the priority of
@@ -939,17 +954,15 @@ impl Scheduler {
     /// within the same syscall return, rather than waiting for the next timer tick.
     ///
     /// The comparison deliberately reads the target hart's running priority, not
-    /// the calling hart's: an RT task always lands on `HART_RT`, so a wake handled
-    /// on a busy hart would otherwise swallow the interrupt and a wake handled on
-    /// an idle hart would send a pointless IPI.
+    /// the calling hart's: `wake` names the hart [`push_ready`](Self::push_ready)
+    /// chose, so a wake handled on a busy hart does not swallow the interrupt and
+    /// a wake handled on an idle hart does not send a pointless IPI.
     ///
     /// The interrupt fires when the trap handler returns via `sret` and
     /// `sstatus.SIE` is restored by hardware.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-    pub fn pend_preempt_if_needed(&self, new_priority: u8) {
-        // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
-        let target_hart = crate::sched::hart_local::ready::destination_hart(new_priority);
-        self.pend_preempt_on_hart(target_hart, new_priority);
+    pub fn pend_preempt_if_needed(&self, wake: Wake) {
+        self.pend_preempt_on_hart(wake.hart, wake.priority);
     }
 
     /// Preemption notification for a destination chosen earlier (a publication
@@ -986,7 +999,7 @@ impl Scheduler {
     }
 
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    pub fn pend_preempt_if_needed(&self, _new_priority: u8) {
+    pub fn pend_preempt_if_needed(&self, _wake: Wake) {
         // These targets keep timer-driven selection.
     }
 
@@ -2899,6 +2912,7 @@ impl Scheduler {
         if let Some(nid) = next_id {
             if let Some(next_task) = self.tasks.get_mut(&nid) {
                 next_task.state = TaskState::Running;
+                next_task.last_hart = Some(hart_id);
                 crate::sched::hart_local::set_current_cell_context(
                     next_task.cell_id.0 as usize,
                     next_task.cell_generation,

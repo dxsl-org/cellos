@@ -1540,15 +1540,6 @@ pub fn quarantined_pages_attributed(tids: &[usize]) -> usize {
         .sum()
 }
 
-/// Release the registry lock unconditionally during fault teardown.
-///
-/// # Safety
-/// Only valid from `force_unlock_all_kernel_locks`, with interrupts disabled and
-/// no other context able to observe a half-written table.
-pub unsafe fn force_unlock() {
-    REGISTRY.force_unlock();
-}
-
 #[cfg(test)]
 #[path = "pin_tests.rs"]
 mod tests;

@@ -126,7 +126,10 @@ pub(crate) fn self_test() -> bool {
 
     // 3. The decision follows the target hart's running priority.
     crate::sched::smp::reset_preempt_pends();
-    sched.pend_preempt_if_needed(TaskPriority::RealTime as u8);
+    sched.pend_preempt_if_needed(crate::sched::scheduler::Wake {
+        priority: TaskPriority::RealTime as u8,
+        hart: target_hart,
+    });
     let target_hart_decides = !cross_hart || crate::sched::smp::preempt_pends_for(target_hart) == 1;
     let waking_hart_quiet = !cross_hart || crate::sched::smp::preempt_pends_for(waking_hart) == 0;
 

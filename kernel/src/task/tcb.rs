@@ -489,6 +489,9 @@ pub struct Task {
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
+    /// Hart this task was last queued on or dispatched to; RT placement
+    /// prefers it (Phase 10 step 7).
+    pub last_hart: Option<usize>,
 
     /// Cluster participation mode parsed from `__ViCell_cluster` ELF section.
     /// `0` = Isolated (default, no section present).  See `api::cluster::ClusterMode`.
@@ -712,6 +715,7 @@ impl Task {
             pku_value: 0,
             user_cet: 0,
             priority: api::TaskPriority::Normal as u8,
+            last_hart: None,
             cluster_mode: 0,
             cluster_id: 0,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read

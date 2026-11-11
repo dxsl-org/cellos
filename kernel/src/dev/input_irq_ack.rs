@@ -54,14 +54,6 @@ pub fn init_driver() {
     }
 }
 
-/// Force-release this module's locks during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    KEYBOARD_ACK.force_unlock();
-}
-
 /// ACK the input IRQ to prevent interrupt storms.
 ///
 /// Returns `true` if this IRQ belonged to the input device and was acknowledged.

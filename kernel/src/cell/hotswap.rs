@@ -31,15 +31,6 @@ static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SWAP_CEILINGS);
 static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::ranked(1, crate::sync::rank::NEXT_FREEZE_NONCE);
 
-/// Force-release this module's locks during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    SWAP_CEILINGS.force_unlock();
-    NEXT_FREEZE_NONCE.force_unlock();
-}
-
 fn next_freeze_nonce() -> u64 {
     let mut next = NEXT_FREEZE_NONCE.lock();
     let nonce = *next;

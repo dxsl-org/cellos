@@ -333,20 +333,6 @@ fn static_range_class(
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Force-release this module's lock during fault teardown.
-///
-/// # Safety
-/// Single-hart kernel; called only from the fault/panic path with interrupts
-/// disabled.  Force-unlocking an already-free Spinlock is a no-op.
-pub unsafe fn force_unlock_locks() {
-    REGISTRY.force_unlock();
-    DISPLAY_FRAMEBUFFER.force_unlock();
-    // SAFETY: same contract as REGISTRY above.
-    unsafe {
-        PCIE_BARS.force_unlock();
-    }
-}
-
 /// Register a PCIe BAR window discovered during ECAM scan.
 ///
 /// Called by `pcie_ecam::init()` for every non-zero BAR on every device.
@@ -1006,14 +992,6 @@ pub fn bdfs_owned_by(tid: usize) -> alloc::vec::Vec<u32> {
 /// Release all BDF ownerships held by task `tid` (called on Cell exit).
 pub fn release_bdfs_for(tid: usize) {
     BDF_OWNERS.lock().retain(|_bdf, &mut owner| owner != tid);
-}
-
-/// Force-unlock BDF_OWNERS during fault teardown.
-///
-/// # Safety
-/// See `force_unlock_locks` above — same contract.
-pub unsafe fn force_unlock_bdf_locks() {
-    BDF_OWNERS.force_unlock();
 }
 
 #[cfg(feature = "test-hooks")]

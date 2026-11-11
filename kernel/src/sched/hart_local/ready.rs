@@ -216,14 +216,28 @@ fn drop_unused_bucket(ready: &mut BTreeMap<u8, VecDeque<usize>>, hart: usize, pr
     }
 }
 
-/// Hart selected for a newly runnable task of `priority` (RealTime goes to the
-/// dedicated hart when online, otherwise the calling hart).
+/// Hart selected for a newly runnable task of `priority` that has no last
+/// hart yet (RealTime goes to the least-loaded online RT hart, otherwise the
+/// calling hart).
 pub(crate) fn destination_hart(priority: u8) -> usize {
-    if priority >= RT_PRIO && crate::sched::smp::is_rt_hart_online() {
-        crate::sched::smp::HART_RT
-    } else {
-        super::current_hart_id()
+    if priority >= RT_PRIO {
+        if let Some(hart) = crate::sched::smp::rt_destination(None) {
+            return hart;
+        }
     }
+    super::current_hart_id()
+}
+
+/// RealTime tasks queued on `hart`, the load measure for RT placement.
+pub(crate) fn rt_queued(hart: usize) -> usize {
+    HART_LOCALS.get(hart).map_or(0, |local| {
+        local
+            .ready
+            .lock()
+            .range(RT_PRIO..)
+            .map(|(_, queue)| queue.len())
+            .sum()
+    })
 }
 
 /// Canonical queue slot promised to a prepared child, pinned to the hart that

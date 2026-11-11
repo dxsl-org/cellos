@@ -110,15 +110,6 @@ pub enum Refusal {
     Rejected,
 }
 
-/// Force-release this module's locks during fault teardown.
-///
-/// # Safety
-/// Single-hart; called only from the fault/panic path with interrupts disabled.
-pub unsafe fn force_unlock_locks() {
-    OWNERS.force_unlock();
-    REGISTRY.force_unlock();
-}
-
 /// Publish `tid` as the provider of `service_id` on behalf of `registrar`.
 ///
 /// A [`Registrar::Spawner`] may publish only a private id, and only one that no
